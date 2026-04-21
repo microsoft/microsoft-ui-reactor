@@ -403,86 +403,90 @@ Ships in three sub-phases so the 80% case lands before the full protocol.
 ### 6a — Typed In-Process DnD
 
 #### 6a.1 Core types (`src/Reactor/Input/DragData.cs`, `DragOperations.cs`, `DragTargetArgs.cs`)
-- [ ] `[Flags] enum DragOperations { None, Copy, Move, Link, All }`
-- [ ] `DragData` class — start with typed-payload only (text/URI/HTML etc. come
+- [x] `[Flags] enum DragOperations { None, Copy, Move, Link, All }`
+- [x] `DragData` class — start with typed-payload only (text/URI/HTML etc. come
       in phase 6b)
-  - [ ] `DragData.Typed<T>(T)` static factory
-  - [ ] `WithTypedPayload<T>(T)` instance method
-  - [ ] `TryGetTypedPayload<T>(out T)` accessor
-  - [ ] `HasFormat(string)` + `AvailableFormats`
-- [ ] `DragUIOverrideHandle`: `Caption`, `IsCaptionVisible`, `IsContentVisible`,
+  - [x] `DragData.Typed<T>(T)` static factory
+  - [x] `WithTypedPayload<T>(T)` instance method
+  - [x] `TryGetTypedPayload<T>(out T)` accessor
+  - [x] `HasFormat(string)` + `AvailableFormats`
+- [x] `DragUIOverrideHandle`: `Caption`, `IsCaptionVisible`, `IsContentVisible`,
       `IsGlyphVisible`
-- [ ] `DragTargetArgs`: `Data`, `Position`, `AllowedOperations`, `Modifiers`,
+- [x] `DragTargetArgs`: `Data`, `Position`, `AllowedOperations`, `Modifiers`,
       `AcceptedOperation { get; set; }`, `UIOverride`
-- [ ] `DragEndContext(DragOperations CompletedOperation, bool WasCancelled)`
+- [x] `DragEndContext(DragOperations CompletedOperation, bool WasCancelled)`
       readonly record struct
 
 #### 6a.2 Typed-payload storage
-- [ ] Custom format identifier convention: `$"reactor/typed/{typeof(T).FullName}"`
-- [ ] `ConditionalWeakTable<DataPackage, object>` stores the actual object ref
-      (since `DataPackage.SetData` requires serializable content)
-- [ ] Hidden same-process marker format (`"reactor/proc-id"` → current
+- [x] Custom format identifier convention: `$"reactor/typed/{typeof(T).FullName}"`
+      (see `DragData.TypedFormatId<T>`)
+- [x] In-process transfer registry keyed by per-drag GUID written into
+      `DataPackage.Properties[reactor/transfer-id]` — stores typed payload
+      object refs out-of-band since WinUI's `SetData` requires serializable content
+- [x] Hidden same-process marker format (`"reactor/proc-id"` → current
       `Process.GetCurrentProcess().Id`) added to every `DragData` so
       `OnDrop<T>` can reject cross-process forwards with a typed key collision
 
 #### 6a.3 Source-side modifier
-- [ ] `.OnDragStart<T, TPayload>(Func<TPayload> getPayload, DragOperations? allowedOperations,
-      Func<TPayload, Element>? dragVisual, Action<DragEndContext>? onEnd)`
-- [ ] `.DraggableWhen<T>(Func<bool> canDrag)` guard
-- [ ] Reconciler: when `OnDragStart` is present, auto-set `fe.CanDrag = true`
-- [ ] Subscribe once (trampoline) to `DragStarting` + `DropCompleted`
+- [x] `.OnDragStart<T, TPayload>(Func<TPayload> getPayload, DragOperations? allowedOperations,
+      Action<DragEndContext>? onEnd)` (dragVisual overload deferred to 6a.5)
+- [x] `.OnDragStart<T>(Func<DragData> getData, ...)` raw overload
+- [x] `.DraggableWhen<T>(Func<bool> canDrag)` guard
+- [x] Reconciler: when `OnDragStart` is present, auto-set `fe.CanDrag = true`
+- [x] Subscribe once (trampoline) to `DragStarting` + `DropCompleted`
 
 #### 6a.4 Target-side modifiers
-- [ ] `.OnDrop<T, TPayload>(Action<TPayload> onDrop, DragOperations acceptedOps)`
-- [ ] `.OnDragEnter<T>(Action<DragTargetArgs>)`
-- [ ] `.OnDragOver<T>(Action<DragTargetArgs>)`
-- [ ] `.OnDragLeave<T>(Action<DragTargetArgs>)`
-- [ ] Reconciler: when any `OnDrop*`/`OnDragEnter`/`OnDragOver`/`OnDragLeave`
+- [x] `.OnDrop<T, TPayload>(Action<TPayload> onDrop, DragOperations acceptedOps)`
+- [x] `.OnDrop<T>(Action<DragTargetArgs>)` raw overload
+- [x] `.OnDragEnter<T>(Action<DragTargetArgs>)`
+- [x] `.OnDragOver<T>(Action<DragTargetArgs>)`
+- [x] `.OnDragLeave<T>(Action<DragTargetArgs>)`
+- [x] Reconciler: when any `OnDrop*`/`OnDragEnter`/`OnDragOver`/`OnDragLeave`
       is present, auto-set `fe.AllowDrop = true`
-- [ ] Subscribe once (trampoline) to `DragEnter`, `DragOver`, `DragLeave`, `Drop`
+- [x] Subscribe once (trampoline) to `DragEnter`, `DragOver`, `DragLeave`, `Drop`
 
 #### 6a.5 Drag-visual rendering
 - [ ] `dragVisual` callback → Reactor mounts the returned `Element` in a
       detached subtree, renders via `RenderTargetBitmap.RenderAsync`, converts
       to `SoftwareBitmap`, assigns to `DragStartingEventArgs.DragUI.SetContentFromSoftwareBitmap`
+      (deferred — WinUI default source-control screenshot is shipped in 6a)
 - [ ] Fallback when `dragVisual` is null: screenshot of source element via
-      same path
+      same path (WinUI default handles this without Reactor involvement)
 
 #### 6a.6 Operation negotiation
-- [ ] Source declares `allowedOperations` → mapped onto
+- [x] Source declares `allowedOperations` → mapped onto
       `DragStartingEventArgs.AllowedOperations`
-- [ ] Target sets `args.AcceptedOperation` → mapped onto
+- [x] Target sets `args.AcceptedOperation` → mapped onto
       `DragEventArgs.AcceptedOperation`
-- [ ] Modifier keys (Ctrl/Shift/Alt) read from `DragEventArgs.Modifiers` into
+- [x] Modifier keys (Ctrl/Shift/Alt) read from `DragEventArgs.Modifiers` into
       `DragTargetArgs.Modifiers`
-- [ ] `DropCompleted` routes the final `DragDropOperation` back into
+- [x] `DropCompleted` routes the final `DataPackageOperation` back into
       `DragEndContext`
 
 #### 6a.7 Unit tests (`tests/Reactor.Tests/DragDataTests.cs`, `DragModifierTests.cs`)
-- [ ] `DragData.Typed<T>(payload)` round-trips via `TryGetTypedPayload`
-- [ ] `DragData` advertises the typed format in `AvailableFormats`
-- [ ] Same-process marker is added automatically
-- [ ] `.OnDragStart<T, TPayload>` sets `ElementModifiers` source fields
-- [ ] `.OnDrop<T, TPayload>` sets `ElementModifiers` drop fields
-- [ ] Operation flags negotiate: `Copy | Move` source + `Move` target → `Move`
+- [x] `DragData.Typed<T>(payload)` round-trips via `TryGetTypedPayload`
+- [x] `DragData` advertises the typed format in `AvailableFormats`
+- [x] Same-process marker is added automatically
+- [x] `.OnDragStart<T, TPayload>` sets `ElementModifiers` source fields
+- [x] `.OnDrop<T, TPayload>` sets `ElementModifiers` drop fields
+- [x] Operation flags negotiate: `Copy | Move` source + `Move` target → `Move`
 
 #### 6a.8 Selftest fixtures (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/DragDropFixtures.cs`)
-- [ ] `OnDragStartAutoSetsCanDrag` — mount, assert `fe.CanDrag == true`
-- [ ] `OnDropAutoSetsAllowDrop` — mount, assert `fe.AllowDrop == true`
-- [ ] `DraggableWhenFalseSuppressesDrag` — `DraggableWhen(() => false)` →
-      `DragStarting` handler cancels the drag
-- [ ] `TypedPayloadDroppedInvokesHandler` — programmatically raise
-      `DragStarting` → `Drop` (using WinUI's API + our stored `DataPackage`),
-      verify target handler receives the typed payload
-- [ ] `DragVisualRendersElementToBitmap` — supply a `dragVisual`, raise
-      `DragStarting`, assert `DragUI` bitmap content is non-null and matches
-      approximate dimensions of the rendered element
-- [ ] `OperationNegotiationHonoursAcceptedOperation` — source `Copy | Move`,
-      target accepts `Move`, assert `DragEndContext.CompletedOperation == Move`
+- [x] `OnDragStartAutoSetsCanDrag` — mount, assert `fe.CanDrag == true`
+- [x] `OnDropAutoSetsAllowDrop` — mount, assert `fe.AllowDrop == true`
+- [x] `RawOnDropAutoSetsAllowDrop`, `DragEnterHandlerAutoSetsAllowDrop`,
+      `SourceAndTargetOnSameElement`, `DraggableWhenWithoutPayloadStillSetsCanDrag`
+- [ ] `DraggableWhenFalseSuppressesDrag` — deferred to E2E (DragStartingEventArgs
+      is not constructible outside the WinUI input pipeline)
+- [ ] `TypedPayloadDroppedInvokesHandler` — deferred to E2E (same args-sealed
+      limitation; covered in Phase 6d `DragDropTests`)
+- [ ] `DragVisualRendersElementToBitmap` — deferred to 6a.5 / Phase 6b
+- [ ] `OperationNegotiationHonoursAcceptedOperation` — deferred to E2E
+- [x] Register all fixtures in `SelfTestFixtureRegistry`
 
 #### 6a.9 Gallery sample
 - [ ] Add three-column kanban to `samples/Reactor.TestApp` using typed-payload
-      drag reordering
+      drag reordering (deferred alongside Phase 7 adoption)
 
 ---
 

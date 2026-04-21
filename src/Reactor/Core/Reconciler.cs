@@ -2108,6 +2108,9 @@ public sealed partial class Reconciler : IDisposable
         // Gesture recognizers (.OnPan / .OnPinch / .OnRotate)
         ApplyGestureHandlers(fe, oldM, m);
 
+        // Drag-and-drop (.OnDragStart / .OnDrop / .OnDragEnter / .OnDragOver / .OnDragLeave)
+        ApplyDragDropHandlers(fe, oldM, m);
+
         // OnMountAction — only run on initial mount (oldM is null)
         if (m.OnMountAction is not null && oldM is null)
             m.OnMountAction(fe);

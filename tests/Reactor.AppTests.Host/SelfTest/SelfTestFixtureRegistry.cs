@@ -606,6 +606,14 @@ internal static class SelfTestFixtureRegistry
         "Commanding_ToggleButtonCommandFiresOnToggle",
         "Commanding_RepeatButtonCommandInvokesExecute",
         "Commanding_DisabledCommandDisablesControl",
+
+        // Drag-and-drop — spec 027 Tier 6 (Phase 6a)
+        "DragDrop_OnDragStartAutoSetsCanDrag",
+        "DragDrop_OnDropAutoSetsAllowDrop",
+        "DragDrop_RawOnDropAutoSetsAllowDrop",
+        "DragDrop_DragEnterHandlerAutoSetsAllowDrop",
+        "DragDrop_SourceAndTargetOnSameElement",
+        "DragDrop_DraggableWhenWithoutPayloadStillSetsCanDrag",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1208,6 +1216,14 @@ internal static class SelfTestFixtureRegistry
         "Commanding_ToggleButtonCommandFiresOnToggle" => new CommandingCoverageFixtures.ToggleButtonCommandFiresOnToggle(harness),
         "Commanding_RepeatButtonCommandInvokesExecute" => new CommandingCoverageFixtures.RepeatButtonCommandInvokesExecute(harness),
         "Commanding_DisabledCommandDisablesControl" => new CommandingCoverageFixtures.DisabledCommandDisablesControl(harness),
+
+        // Drag-and-drop — spec 027 Tier 6 (Phase 6a)
+        "DragDrop_OnDragStartAutoSetsCanDrag" => new DragDropFixtures.OnDragStartAutoSetsCanDrag(harness),
+        "DragDrop_OnDropAutoSetsAllowDrop" => new DragDropFixtures.OnDropAutoSetsAllowDrop(harness),
+        "DragDrop_RawOnDropAutoSetsAllowDrop" => new DragDropFixtures.RawOnDropAutoSetsAllowDrop(harness),
+        "DragDrop_DragEnterHandlerAutoSetsAllowDrop" => new DragDropFixtures.DragEnterHandlerAutoSetsAllowDrop(harness),
+        "DragDrop_SourceAndTargetOnSameElement" => new DragDropFixtures.SourceAndTargetOnSameElement(harness),
+        "DragDrop_DraggableWhenWithoutPayloadStillSetsCanDrag" => new DragDropFixtures.DraggableWhenWithoutPayloadStillSetsCanDrag(harness),
 
         _ => null,
     };

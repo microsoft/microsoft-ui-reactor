@@ -567,6 +567,10 @@ public record ElementModifiers
     public Microsoft.UI.Reactor.Input.RotateGestureConfig? Rotate { get; init; }
     public Microsoft.UI.Reactor.Input.LongPressGestureConfig? LongPress { get; init; }
 
+    // ── Drag-and-drop (spec 027 Tier 6 — Phase 6a typed in-process) ─
+    public Microsoft.UI.Reactor.Input.DragSourceConfig? DragSource { get; init; }
+    public Microsoft.UI.Reactor.Input.DropTargetConfig? DropTarget { get; init; }
+
     // ── Logical (BiDi-aware) layout properties ──────────────────────
     // These resolve to physical left/right based on FlowDirection at mount/update time.
     // InlineStart = left in LTR, right in RTL. InlineEnd = right in LTR, left in RTL.
@@ -664,6 +668,8 @@ public record ElementModifiers
             Pinch = other.Pinch ?? Pinch,
             Rotate = other.Rotate ?? Rotate,
             LongPress = other.LongPress ?? LongPress,
+            DragSource = other.DragSource ?? DragSource,
+            DropTarget = other.DropTarget ?? DropTarget,
             MarginInlineStart = other.MarginInlineStart ?? MarginInlineStart,
             MarginInlineEnd = other.MarginInlineEnd ?? MarginInlineEnd,
             PaddingInlineStart = other.PaddingInlineStart ?? PaddingInlineStart,

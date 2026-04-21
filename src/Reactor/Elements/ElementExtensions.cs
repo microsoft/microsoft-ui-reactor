@@ -353,6 +353,135 @@ public static class ElementExtensions
     public static T OnDoubleTap<T>(this T el, Action<global::Windows.Foundation.Point> handler) where T : Element =>
         el.OnDoubleTapped((s, e) => handler(e.GetPosition(s as UIElement)));
 
+    // ── Drag-and-drop (spec 027 Tier 6 / Phase 6a) ──────────────────
+
+    /// <summary>
+    /// Typed drag source. Auto-sets <see cref="UIElement.CanDrag"/> so the element reports
+    /// as draggable. <paramref name="getPayload"/> is called each time a drag starts;
+    /// the returned value is wrapped in a typed-payload <see cref="Microsoft.UI.Reactor.Input.DragData"/>
+    /// keyed by <typeparamref name="TPayload"/>. Use <paramref name="allowedOperations"/> to
+    /// declare which final operations (Copy/Move/Link) the source will accept.
+    /// <paramref name="onEnd"/> fires after <c>DropCompleted</c> with the final negotiated
+    /// operation (or <see cref="Microsoft.UI.Reactor.Input.DragOperations.None"/> on cancel).
+    /// </summary>
+    public static T OnDragStart<T, TPayload>(this T el,
+        Func<TPayload> getPayload,
+        Microsoft.UI.Reactor.Input.DragOperations? allowedOperations = null,
+        Action<Microsoft.UI.Reactor.Input.DragEndContext>? onEnd = null) where T : Element =>
+        Modify(el, new ElementModifiers
+        {
+            DragSource = new Microsoft.UI.Reactor.Input.DragSourceConfig(
+                () => Microsoft.UI.Reactor.Input.DragData.Typed(getPayload()))
+            {
+                AllowedOperations = allowedOperations,
+                OnEnd = onEnd,
+            },
+        });
+
+    /// <summary>
+    /// Raw drag source — the caller builds the <see cref="Microsoft.UI.Reactor.Input.DragData"/>
+    /// directly. Useful when advertising multiple formats at once (Phase 6b) or attaching
+    /// additional metadata.
+    /// </summary>
+    public static T OnDragStart<T>(this T el,
+        Func<Microsoft.UI.Reactor.Input.DragData> getData,
+        Microsoft.UI.Reactor.Input.DragOperations? allowedOperations = null,
+        Action<Microsoft.UI.Reactor.Input.DragEndContext>? onEnd = null) where T : Element =>
+        Modify(el, new ElementModifiers
+        {
+            DragSource = new Microsoft.UI.Reactor.Input.DragSourceConfig(getData)
+            {
+                AllowedOperations = allowedOperations,
+                OnEnd = onEnd,
+            },
+        });
+
+    /// <summary>
+    /// Gates an attached <c>.OnDragStart</c> — when <paramref name="canDrag"/> returns false,
+    /// the drag is cancelled in <c>DragStarting</c> before any UI feedback appears. Merge with
+    /// an existing <see cref="Microsoft.UI.Reactor.Input.DragSourceConfig"/> so previously-set
+    /// allowed ops / onEnd are preserved.
+    /// </summary>
+    public static T DraggableWhen<T>(this T el, Func<bool> canDrag) where T : Element
+    {
+        var existing = el.Modifiers?.DragSource;
+        var cfg = existing is not null
+            ? existing with { CanDrag = canDrag }
+            : new Microsoft.UI.Reactor.Input.DragSourceConfig(() => new Microsoft.UI.Reactor.Input.DragData()) { CanDrag = canDrag };
+        return Modify(el, new ElementModifiers { DragSource = cfg });
+    }
+
+    /// <summary>
+    /// Typed drop target. Auto-sets <see cref="UIElement.AllowDrop"/>. The handler is invoked
+    /// when a drag with a matching typed payload is dropped on this element; the accepted
+    /// operation is set to the intersection of <paramref name="acceptedOps"/> and the source's
+    /// allowed operations (preferring Move &gt; Copy &gt; Link).
+    /// </summary>
+    public static T OnDrop<T, TPayload>(this T el,
+        Action<TPayload> onDrop,
+        Microsoft.UI.Reactor.Input.DragOperations acceptedOps = Microsoft.UI.Reactor.Input.DragOperations.All) where T : Element
+    {
+        var existing = el.Modifiers?.DropTarget ?? new Microsoft.UI.Reactor.Input.DropTargetConfig();
+        var typedCallback = new Action<Microsoft.UI.Reactor.Input.DragTargetArgs>(args =>
+        {
+            if (args.Data.TryGetTypedPayload<TPayload>(out var payload))
+            {
+                onDrop(payload);
+                // Auto-accept if caller didn't already set.
+                if (args.AcceptedOperation == Microsoft.UI.Reactor.Input.DragOperations.None)
+                {
+                    args.AcceptedOperation = Microsoft.UI.Reactor.Input.DragOperationNegotiation.Negotiate(
+                        args.AllowedOperations, acceptedOps);
+                }
+            }
+        });
+        var cfg = existing with
+        {
+            TypedDrop = typedCallback,
+            AcceptedOperations = acceptedOps,
+        };
+        return Modify(el, new ElementModifiers { DropTarget = cfg });
+    }
+
+    /// <summary>Raw drop handler — receives the full <see cref="Microsoft.UI.Reactor.Input.DragTargetArgs"/>
+    /// so multi-format targets can inspect available formats and accept operation manually.</summary>
+    public static T OnDrop<T>(this T el,
+        Action<Microsoft.UI.Reactor.Input.DragTargetArgs> onDrop,
+        Microsoft.UI.Reactor.Input.DragOperations acceptedOps = Microsoft.UI.Reactor.Input.DragOperations.All) where T : Element
+    {
+        var existing = el.Modifiers?.DropTarget ?? new Microsoft.UI.Reactor.Input.DropTargetConfig();
+        var cfg = existing with
+        {
+            OnDrop = onDrop,
+            AcceptedOperations = acceptedOps,
+        };
+        return Modify(el, new ElementModifiers { DropTarget = cfg });
+    }
+
+    /// <summary>DragEnter callback — caller updates <see cref="Microsoft.UI.Reactor.Input.DragTargetArgs.UIOverride"/>
+    /// to customize the drop indicator, or sets <see cref="Microsoft.UI.Reactor.Input.DragTargetArgs.AcceptedOperation"/>
+    /// to override default negotiation.</summary>
+    public static T OnDragEnter<T>(this T el, Action<Microsoft.UI.Reactor.Input.DragTargetArgs> handler) where T : Element
+    {
+        var existing = el.Modifiers?.DropTarget ?? new Microsoft.UI.Reactor.Input.DropTargetConfig();
+        return Modify(el, new ElementModifiers { DropTarget = existing with { OnDragEnter = handler } });
+    }
+
+    /// <summary>DragOver callback — fires repeatedly as the pointer moves. Use for hover highlighting
+    /// that depends on position within the target.</summary>
+    public static T OnDragOver<T>(this T el, Action<Microsoft.UI.Reactor.Input.DragTargetArgs> handler) where T : Element
+    {
+        var existing = el.Modifiers?.DropTarget ?? new Microsoft.UI.Reactor.Input.DropTargetConfig();
+        return Modify(el, new ElementModifiers { DropTarget = existing with { OnDragOver = handler } });
+    }
+
+    /// <summary>DragLeave callback — fires when the drag exits the target without dropping.</summary>
+    public static T OnDragLeave<T>(this T el, Action<Microsoft.UI.Reactor.Input.DragTargetArgs> handler) where T : Element
+    {
+        var existing = el.Modifiers?.DropTarget ?? new Microsoft.UI.Reactor.Input.DropTargetConfig();
+        return Modify(el, new ElementModifiers { DropTarget = existing with { OnDragLeave = handler } });
+    }
+
     // ── Decoration ──────────────────────────────────────────────────
 
     public static T ToolTip<T>(this T el, string tip) where T : Element =>
