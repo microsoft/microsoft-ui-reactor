@@ -96,25 +96,49 @@ the manipulation completes before the threshold is crossed, neither `onBegan`
 nor `onEnded` fire.
 
 `PanGesture.Translation` is cumulative since `Began`; `PanGesture.Delta` is
-per-callback. Prefer `Translation` for position-as-state — manipulation events
-can drain several ticks between re-renders, so a `setOffset(offset + g.Delta)`
-pattern reads a stale `offset` closure and produces visibly choppy panning.
-For accumulation across separate gestures, hold the committed position in a
-ref and snapshot it on `onEnded`:
+per-callback.
+
+### Keep pans at 60 Hz: write Translation directly
+
+Reactor's render loop re-enqueues at `DispatcherQueuePriority.Low` on every
+tick so layout and paint aren't starved by back-to-back setState calls. That's
+correct for general UI, but it means a per-event `setState` during pan drops
+frames — by the time the Low-priority render drains, several manipulation
+events have already piled up. `setOffset(offset + g.Delta)` would also read a
+stale `offset` closure, compounding the problem.
+
+For smooth 60 Hz panning, grab a ref to the mounted element and write
+`Translation` directly inside `onChanged`. No reconciler round-trip; the
+compositor property update is cheap enough to run on every tick. Only call
+setState at gesture end — once per drag, not 60× per second.
 
 ```csharp
+var cardRef = UseRef<FrameworkElement?>(null);
 var committedRef = UseRef(Vector2.Zero);
 var (offset, setOffset) = UseState(Vector2.Zero);
 
-card.OnPan(
-    onChanged: g => setOffset(committedRef.Current +
-        new Vector2((float)g.Translation.X, (float)g.Translation.Y)),
-    onEnded: g =>
-    {
-        committedRef.Current += new Vector2((float)g.Translation.X, (float)g.Translation.Y);
-        setOffset(committedRef.Current);
-    });
+card
+    .Translation(offset.X, offset.Y, 0)
+    .OnMount(fe => cardRef.Current = fe)
+    .OnPan(
+        onChanged: g =>
+        {
+            var next = committedRef.Current +
+                new Vector2((float)g.Translation.X, (float)g.Translation.Y);
+            if (cardRef.Current is { } fe)
+                fe.Translation = new Vector3(next.X, next.Y, 0);
+        },
+        onEnded: g =>
+        {
+            committedRef.Current += new Vector2(
+                (float)g.Translation.X, (float)g.Translation.Y);
+            setOffset(committedRef.Current);
+        });
 ```
+
+If the panned position doesn't drive anything else on the screen (no adjacent
+counter, no snap-to-grid indicator), you can even skip the setState at
+gesture end and treat the ref as the single source of truth.
 
 `axis: PanAxis.Horizontal` restricts to X-axis translation; `withInertia: true`
 adds the inertia flag so WinUI continues to emit callbacks after the pointer

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
@@ -31,20 +32,27 @@ sealed class GesturePanSample : Component
 {
     public override Element Render()
     {
-        // Two pieces of state that survive stale-closure races during panning:
-        //   committedRef — the offset at the last gesture-end (source of truth).
-        //   offset       — the current display position (drives re-render / Translation).
+        // Pan smoothly at 60 Hz by writing directly to the mounted element's
+        // Translation inside the onChanged callback. Going through setState
+        // would queue a Low-priority re-render (see ReactorHost.RenderLoop),
+        // which gets starved during active input — the square only catches up
+        // to the cursor every few frames.
         //
-        // Using g.Translation (cumulative since gesture start) + committedRef means
-        // every onChanged callback reads accurate data. `setOffset(offset + g.Delta)`
-        // would use the *last-rendered* offset, which is stale when the dispatcher
-        // drains several manipulation events between renders — the square lags.
+        // The committedRef holds the position at the last gesture end, so
+        // successive drags accumulate. We only call setOffset at gesture end
+        // (+ reset on double-tap) so React-style state stays in sync — the
+        // label below updates on a small number of renders per gesture, not
+        // on every manipulation tick.
+        var cardRef = UseRef<FrameworkElement?>(null);
         var committedRef = UseRef(Vector2.Zero);
         var (offset, setOffset) = UseState(Vector2.Zero);
+        var (eps, setEps) = UseState(0);
+        var eventCountRef = UseRef(0);
+        var lastTickRef = UseRef(Environment.TickCount64);
 
         return InputGesturesSampleCard.Build(
             "Pan with inertia",
-            "Drag the blue square. Release fast to see inertia. Double-tap to reset.",
+            $"Drag the blue square. Release fast to see inertia. Double-tap to reset. Current: ({offset.X:F0}, {offset.Y:F0}) · pan events/sec: {eps}",
             Border(
                 Border(TextBlock("drag me").Foreground("#ffffff")
                     .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
@@ -52,9 +60,26 @@ sealed class GesturePanSample : Component
                     .Background("#3A7BD5")
                     .CornerRadius(8)
                     .Translation(offset.X, offset.Y, 0)
+                    .OnMount(fe => cardRef.Current = fe)
                     .OnPan(
-                        onChanged: g => setOffset(committedRef.Current +
-                            new Vector2((float)g.Translation.X, (float)g.Translation.Y)),
+                        onChanged: g =>
+                        {
+                            var next = committedRef.Current + new Vector2((float)g.Translation.X, (float)g.Translation.Y);
+
+                            // Direct compositor property — no reconciler round-trip.
+                            if (cardRef.Current is { } fe)
+                                fe.Translation = new Vector3(next.X, next.Y, 0);
+
+                            // Running events/sec counter, repainted once per second.
+                            eventCountRef.Current++;
+                            var now = Environment.TickCount64;
+                            if (now - lastTickRef.Current >= 1000)
+                            {
+                                setEps(eventCountRef.Current);
+                                eventCountRef.Current = 0;
+                                lastTickRef.Current = now;
+                            }
+                        },
                         onEnded: g =>
                         {
                             committedRef.Current += new Vector2((float)g.Translation.X, (float)g.Translation.Y);
@@ -65,6 +90,7 @@ sealed class GesturePanSample : Component
                     {
                         committedRef.Current = Vector2.Zero;
                         setOffset(Vector2.Zero);
+                        if (cardRef.Current is { } fe) fe.Translation = Vector3.Zero;
                     })
             ).Height(220).Background("#f3f3f3").CornerRadius(8).Padding(8)
         );
