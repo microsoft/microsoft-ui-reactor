@@ -75,19 +75,53 @@ public static class Factories
 
     /// <summary>
     /// Creates a Button driven by a Command. Maps Label → Content, Execute → Click,
-    /// IsEnabled → IsEnabled, Description → Tooltip.
+    /// IsEnabled → IsEnabled. Description / Accelerator / AccessKey are wired via
+    /// a Setter so per-site overrides win via the normal modifier ordering.
     /// </summary>
     public static ButtonElement Button(Core.Command command) =>
-        new(command.Label, command.Execute) { IsEnabled = command.IsEnabled };
+        new ButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
+        {
+            IsEnabled = command.IsEnabled,
+            Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
+        };
 
     public static HyperlinkButtonElement HyperlinkButton(string content, Uri? navigateUri = null, Action? onClick = null) =>
         new(content, navigateUri, onClick);
 
+    /// <summary>
+    /// Creates a HyperlinkButton driven by a Command. Maps Label → Content, Execute →
+    /// Click. For external navigation combine with <c>.NavigateUri(...)</c> via
+    /// <c>.Set()</c>.
+    /// </summary>
+    public static HyperlinkButtonElement HyperlinkButton(Core.Command command) =>
+        new HyperlinkButtonElement(command.Label, null, () => Core.CommandBindings.Invoke(command))
+        {
+            Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
+        };
+
     public static RepeatButtonElement RepeatButton(string label, Action? onClick = null) =>
         new(label, onClick);
 
+    /// <summary>Creates a RepeatButton driven by a Command. Click auto-repeats while held.</summary>
+    public static RepeatButtonElement RepeatButton(Core.Command command) =>
+        new RepeatButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
+        {
+            Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
+        };
+
     public static ToggleButtonElement ToggleButton(string label, bool isChecked = false, Action<bool>? onToggled = null) =>
         new(label, isChecked, onToggled);
+
+    /// <summary>
+    /// Creates a ToggleButton driven by a Command. The command fires on each toggle
+    /// (both check and uncheck) — per the spec's "Option A" semantics. Use the
+    /// <c>isChecked</c> parameter to seed the initial state.
+    /// </summary>
+    public static ToggleButtonElement ToggleButton(Core.Command command, bool isChecked = false) =>
+        new ToggleButtonElement(command.Label, isChecked, _ => Core.CommandBindings.Invoke(command))
+        {
+            Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
+        };
 
     public static DropDownButtonElement DropDownButton(string label, Element? flyout = null) =>
         new(label, flyout);
@@ -95,8 +129,25 @@ public static class Factories
     public static SplitButtonElement SplitButton(string label, Action? onClick = null, Element? flyout = null) =>
         new(label, onClick, flyout);
 
+    /// <summary>
+    /// Creates a SplitButton driven by a Command for the primary action. The flyout
+    /// (dropdown portion) is independent and supplied separately.
+    /// </summary>
+    public static SplitButtonElement SplitButton(Core.Command command, Element? flyout = null) =>
+        new SplitButtonElement(command.Label, () => Core.CommandBindings.Invoke(command), flyout)
+        {
+            Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
+        };
+
     public static ToggleSplitButtonElement ToggleSplitButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, Element? flyout = null) =>
         new(label, isChecked, onIsCheckedChanged, flyout);
+
+    /// <summary>Creates a ToggleSplitButton driven by a Command (fires on each toggle).</summary>
+    public static ToggleSplitButtonElement ToggleSplitButton(Core.Command command, bool isChecked = false, Element? flyout = null) =>
+        new ToggleSplitButtonElement(command.Label, isChecked, _ => Core.CommandBindings.Invoke(command), flyout)
+        {
+            Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
+        };
 
     // ── Input controls ──────────────────────────────────────────────
 

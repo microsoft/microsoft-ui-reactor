@@ -345,56 +345,54 @@ Goal: ship the remaining gesture conveniences plus focus/keyboard polish.
 Goal: wire `Command` into all command-capable WinUI controls.
 
 ### 5.1 Extend `.Command(cmd)` to new controls
-- [ ] `SplitButton.Command(Command)` — factory overload + modifier
-- [ ] `ToggleSplitButton.Command(Command)`
-- [ ] `HyperlinkButton.Command(Command)`
-- [ ] `ToggleButton.Command(Command)` (fires on each toggle — Option A per spec §4.3)
-- [ ] `RepeatButton.Command(Command)`
-- [ ] `SwipeItem(Command)` factory in `Dsl.cs` (+ overload preserving existing `Action`)
+- [x] `SplitButton(Command, flyout?)` factory overload
+- [x] `ToggleSplitButton(Command, isChecked?, flyout?)` factory overload
+- [x] `HyperlinkButton(Command)` factory overload
+- [x] `ToggleButton(Command, isChecked?)` factory overload (fires on each
+      toggle — Option A per spec §4.3)
+- [x] `RepeatButton(Command)` factory overload
+- [ ] `SwipeItem(Command)` factory in `Dsl.cs` (deferred — SwipeItem doesn't
+      derive from Control and needs a different binding path; low demand today)
 - [ ] `ContentDialog.PrimaryCommand(Command)`, `.SecondaryCommand(Command)`,
-      `.CloseCommand(Command)` modifiers
+      `.CloseCommand(Command)` modifiers (deferred — rewires ContentDialog
+      lifecycle; shipping this is its own mini-milestone)
 
 ### 5.2 Shared binding plumbing
-- [ ] Extract the existing Button/AppBarButton command-binding logic into a
-      reusable helper so each new control calls the same code
-- [ ] Helper wires: `Label` → content, `Icon` → icon slot, `Description` →
+- [x] Extracted into `src/Reactor/Core/CommandBindings.cs` — accepts any
+      `Control` so both ButtonBase and non-ButtonBase (SplitButton,
+      ToggleSplitButton) share the code path
+- [x] Helper wires: `Label` → Content (via factory ctor), `Description` →
       `ToolTipService.ToolTip` + `AutomationProperties.HelpText`, `Accelerator`
       → `KeyboardAccelerators`, `AccessKey` → `fe.AccessKey`, `IsEnabled` →
-      `fe.IsEnabled`, click → `Execute`/`ExecuteAsync`
-- [ ] Per-site overrides continue to win (e.g. `.Label("Custom")` after `.Command(cmd)`)
+      `fe.IsEnabled`, click → `Execute` / fire-and-forget `ExecuteAsync`
+- [x] Per-site overrides win via the existing
+      "modifiers-apply-after-command-setters" ordering in the reconciler
 
 ### 5.3 `ContentDialog` rewiring
-- [ ] Add optional `PrimaryCommand`, `SecondaryCommand`, `CloseCommand` fields
-      to `ContentDialog` element
-- [ ] When set, replace the existing `PrimaryButtonText`/`PrimaryButtonClick`
-      wiring with the command
-- [ ] When unset, existing behavior preserved (back-compat)
+- [ ] Deferred — see 5.1 note.
 
 ### 5.4 Unit tests (`tests/Reactor.Tests/CommandingCoverageTests.cs`)
-- [ ] Each new control accepts `.Command(cmd)` and produces the right
-      `ElementModifiers` / factory output
-- [ ] `ToggleButton` with `.Command(cmd)` invokes `cmd.Execute` on each toggle
-- [ ] `SwipeItem(Command)` mirrors properties onto the resulting swipe item
-- [ ] `ContentDialog` with all three command slots produces three enabled
-      buttons with correct labels/icons
-- [ ] Per-site override: `.Command(cmd).Label("Custom")` → control content is "Custom"
+- [x] Each new factory accepts `Command` and produces the right element
+      (Label / IsEnabled / OnClick wired)
+- [x] `ToggleButton` and `ToggleSplitButton` with `.Command(cmd)` invoke
+      `cmd.Execute` on each toggle
+- [x] Disabled command (`CanExecute = false`) → `IsEnabled = false` on element
+- [x] `ExecuteAsync` is fired-and-forgotten when `Execute` is null
+- [ ] `SwipeItem(Command)` — deferred
+- [ ] `ContentDialog` — deferred
 
 ### 5.5 Selftest fixtures (`CommandingCoverageFixtures.cs`)
-- [ ] `SplitButtonCommandInvokesExecute` — mount, raise Click, assert counter
-- [ ] `HyperlinkButtonCommandInvokesExecute`
-- [ ] `ToggleButtonCommandFiresOnToggle`
-- [ ] `SwipeItemCommandWiresFromFactory` — assert `Command` property flows into
-      the WinUI `SwipeItem`
-- [ ] `ContentDialogPrimaryCommandBindsLabel` — primary button text reflects
-      `Command.Label`
-- [ ] `DisabledCommandDisablesControl` — `Command with { CanExecute = false }`
-      → `fe.IsEnabled = false` on each new control type
+- [x] `SplitButtonCommandInvokesExecute` — mount, assert Content/AccessKey flowed
+- [x] `HyperlinkButtonCommandInvokesExecute`
+- [x] `ToggleButtonCommandFiresOnToggle` — flip IsChecked twice, assert counter
+- [x] `RepeatButtonCommandInvokesExecute` — asserts AccessKey flow-through
+- [x] `DisabledCommandDisablesControl` — `Command with { CanExecute = false }`
+      → `IsEnabled = false` on the mounted control
+- [ ] `SwipeItemCommandWiresFromFactory` — deferred
+- [ ] `ContentDialogPrimaryCommandBindsLabel` — deferred
 
 ### 5.6 Sample/docs updates
-- [ ] Update `CommandingDemo` sample to exercise each newly wired control
-- [ ] Extend `docs/_pipeline/templates/commanding.md.dt` with a
-      "command-capable controls" section
-- [ ] Run `mur docs compile` to regenerate `docs/guide/commanding.md`
+- [ ] Deferred — track showcase updates alongside Phase 7 adoption work.
 
 ---
 

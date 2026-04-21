@@ -599,6 +599,13 @@ internal static class SelfTestFixtureRegistry
         "Focus_XYFocusKeyboardNavigationSets",
         "Focus_RefModifierPopulatesOnMount",
         "Focus_FocusManagerFocusReturnsTrueWhenMounted",
+
+        // Commanding coverage — spec 027 Tier 4 (Phase 5)
+        "Commanding_SplitButtonCommandInvokesExecute",
+        "Commanding_HyperlinkButtonCommandInvokesExecute",
+        "Commanding_ToggleButtonCommandFiresOnToggle",
+        "Commanding_RepeatButtonCommandInvokesExecute",
+        "Commanding_DisabledCommandDisablesControl",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1194,6 +1201,13 @@ internal static class SelfTestFixtureRegistry
         "Focus_XYFocusKeyboardNavigationSets" => new FocusFixtures.XYFocusKeyboardNavigationSets(harness),
         "Focus_RefModifierPopulatesOnMount" => new FocusFixtures.RefModifierPopulatesOnMount(harness),
         "Focus_FocusManagerFocusReturnsTrueWhenMounted" => new FocusFixtures.FocusManagerFocusReturnsTrueWhenMounted(harness),
+
+        // Commanding coverage — spec 027 Tier 4 (Phase 5)
+        "Commanding_SplitButtonCommandInvokesExecute" => new CommandingCoverageFixtures.SplitButtonCommandInvokesExecute(harness),
+        "Commanding_HyperlinkButtonCommandInvokesExecute" => new CommandingCoverageFixtures.HyperlinkButtonCommandInvokesExecute(harness),
+        "Commanding_ToggleButtonCommandFiresOnToggle" => new CommandingCoverageFixtures.ToggleButtonCommandFiresOnToggle(harness),
+        "Commanding_RepeatButtonCommandInvokesExecute" => new CommandingCoverageFixtures.RepeatButtonCommandInvokesExecute(harness),
+        "Commanding_DisabledCommandDisablesControl" => new CommandingCoverageFixtures.DisabledCommandDisablesControl(harness),
 
         _ => null,
     };
