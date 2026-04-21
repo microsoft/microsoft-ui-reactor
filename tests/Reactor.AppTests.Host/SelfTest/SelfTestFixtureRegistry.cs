@@ -553,6 +553,22 @@ internal static class SelfTestFixtureRegistry
         "CovBoost_FlexPanelUnloadCleanup",
         "CovBoost_ElementPoolDetach",
         "CovBoost_UseWindowSizeBreakpoint",
+        // Coverage boost wave 2 — Reconciler, validation, animation, semantic
+        "CovBoost2_SemanticElement",
+        "CovBoost2_ValidationVisualizerStyles",
+        "CovBoost2_TitleBarMountUpdate",
+        "CovBoost2_ReconcileChildPaths",
+        "CovBoost2_RichToolTipUpdate",
+        "CovBoost2_FlexChildPropChange",
+        "CovBoost2_ResourceOverrideCleanup",
+        "CovBoost2_NavigationViewExercise",
+        "CovBoost2_TemplatedListExercise",
+        "CovBoost2_CompositionTransition",
+        "CovBoost2_AnimationCurveExercise",
+        "CovBoost2_RichTextRebuild",
+        "CovBoost2_ElementPoolInteractiveReset",
+        "CovBoost2_DataGridSearchSort",
+        "CovBoost2_FocusTrapExercise",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1102,6 +1118,22 @@ internal static class SelfTestFixtureRegistry
         "CovBoost_FlexPanelUnloadCleanup" => new CoverageBoostFixtures.FlexPanelUnloadCleanup(harness),
         "CovBoost_ElementPoolDetach" => new CoverageBoostFixtures.ElementPoolDetach(harness),
         "CovBoost_UseWindowSizeBreakpoint" => new CoverageBoostFixtures.UseWindowSizeBreakpoint(harness),
+        // Coverage boost wave 2
+        "CovBoost2_SemanticElement" => new CoverageBoostFixtures2.SemanticElementExercise(harness),
+        "CovBoost2_ValidationVisualizerStyles" => new CoverageBoostFixtures2.ValidationVisualizerStyles(harness),
+        "CovBoost2_TitleBarMountUpdate" => new CoverageBoostFixtures2.TitleBarMountUpdate(harness),
+        "CovBoost2_ReconcileChildPaths" => new CoverageBoostFixtures2.ReconcileChildPaths(harness),
+        "CovBoost2_RichToolTipUpdate" => new CoverageBoostFixtures2.RichToolTipUpdate(harness),
+        "CovBoost2_FlexChildPropChange" => new CoverageBoostFixtures2.FlexChildPropChange(harness),
+        "CovBoost2_ResourceOverrideCleanup" => new CoverageBoostFixtures2.ResourceOverrideCleanup(harness),
+        "CovBoost2_NavigationViewExercise" => new CoverageBoostFixtures2.NavigationViewExercise(harness),
+        "CovBoost2_TemplatedListExercise" => new CoverageBoostFixtures2.TemplatedListExercise(harness),
+        "CovBoost2_CompositionTransition" => new CoverageBoostFixtures2.CompositionTransitionExercise(harness),
+        "CovBoost2_AnimationCurveExercise" => new CoverageBoostFixtures2.AnimationCurveExercise(harness),
+        "CovBoost2_RichTextRebuild" => new CoverageBoostFixtures2.RichTextRebuild(harness),
+        "CovBoost2_ElementPoolInteractiveReset" => new CoverageBoostFixtures2.ElementPoolInteractiveReset(harness),
+        "CovBoost2_DataGridSearchSort" => new CoverageBoostFixtures2.DataGridSearchSort(harness),
+        "CovBoost2_FocusTrapExercise" => new CoverageBoostFixtures2.SplitViewExercise(harness),
         _ => null,
     };
 }
