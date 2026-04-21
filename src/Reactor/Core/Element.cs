@@ -543,8 +543,22 @@ public record ElementModifiers
     public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? OnPointerPressed { get; init; }
     public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? OnPointerMoved { get; init; }
     public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? OnPointerReleased { get; init; }
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? OnPointerEntered { get; init; }
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? OnPointerExited { get; init; }
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? OnPointerCanceled { get; init; }
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? OnPointerCaptureLost { get; init; }
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? OnPointerWheelChanged { get; init; }
     public Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? OnTapped { get; init; }
+    public Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? OnDoubleTapped { get; init; }
+    public Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? OnRightTapped { get; init; }
+    public Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? OnHolding { get; init; }
     public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? OnKeyDown { get; init; }
+    public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? OnKeyUp { get; init; }
+    public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? OnPreviewKeyDown { get; init; }
+    public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? OnPreviewKeyUp { get; init; }
+    public Action<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? OnCharacterReceived { get; init; }
+    public Action<object, RoutedEventArgs>? OnGotFocus { get; init; }
+    public Action<object, RoutedEventArgs>? OnLostFocus { get; init; }
 
     // ── Logical (BiDi-aware) layout properties ──────────────────────
     // These resolve to physical left/right based on FlowDirection at mount/update time.
@@ -614,8 +628,22 @@ public record ElementModifiers
             OnPointerPressed = other.OnPointerPressed ?? OnPointerPressed,
             OnPointerMoved = other.OnPointerMoved ?? OnPointerMoved,
             OnPointerReleased = other.OnPointerReleased ?? OnPointerReleased,
+            OnPointerEntered = other.OnPointerEntered ?? OnPointerEntered,
+            OnPointerExited = other.OnPointerExited ?? OnPointerExited,
+            OnPointerCanceled = other.OnPointerCanceled ?? OnPointerCanceled,
+            OnPointerCaptureLost = other.OnPointerCaptureLost ?? OnPointerCaptureLost,
+            OnPointerWheelChanged = other.OnPointerWheelChanged ?? OnPointerWheelChanged,
             OnTapped = other.OnTapped ?? OnTapped,
+            OnDoubleTapped = other.OnDoubleTapped ?? OnDoubleTapped,
+            OnRightTapped = other.OnRightTapped ?? OnRightTapped,
+            OnHolding = other.OnHolding ?? OnHolding,
             OnKeyDown = other.OnKeyDown ?? OnKeyDown,
+            OnKeyUp = other.OnKeyUp ?? OnKeyUp,
+            OnPreviewKeyDown = other.OnPreviewKeyDown ?? OnPreviewKeyDown,
+            OnPreviewKeyUp = other.OnPreviewKeyUp ?? OnPreviewKeyUp,
+            OnCharacterReceived = other.OnCharacterReceived ?? OnCharacterReceived,
+            OnGotFocus = other.OnGotFocus ?? OnGotFocus,
+            OnLostFocus = other.OnLostFocus ?? OnLostFocus,
             MarginInlineStart = other.MarginInlineStart ?? MarginInlineStart,
             MarginInlineEnd = other.MarginInlineEnd ?? MarginInlineEnd,
             PaddingInlineStart = other.PaddingInlineStart ?? PaddingInlineStart,

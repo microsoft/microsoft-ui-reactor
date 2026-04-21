@@ -193,6 +193,48 @@ public static class ElementExtensions
     public static T OnKeyDown<T>(this T el, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs> handler) where T : Element =>
         Modify(el, new ElementModifiers { OnKeyDown = handler });
 
+    public static T OnPointerEntered<T>(this T el, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnPointerEntered = handler });
+
+    public static T OnPointerExited<T>(this T el, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnPointerExited = handler });
+
+    public static T OnPointerCanceled<T>(this T el, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnPointerCanceled = handler });
+
+    public static T OnPointerCaptureLost<T>(this T el, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnPointerCaptureLost = handler });
+
+    public static T OnPointerWheelChanged<T>(this T el, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnPointerWheelChanged = handler });
+
+    public static T OnDoubleTapped<T>(this T el, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnDoubleTapped = handler });
+
+    public static T OnRightTapped<T>(this T el, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnRightTapped = handler });
+
+    public static T OnHolding<T>(this T el, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnHolding = handler });
+
+    public static T OnKeyUp<T>(this T el, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnKeyUp = handler });
+
+    public static T OnPreviewKeyDown<T>(this T el, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnPreviewKeyDown = handler });
+
+    public static T OnPreviewKeyUp<T>(this T el, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnPreviewKeyUp = handler });
+
+    public static T OnCharacterReceived<T>(this T el, Action<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnCharacterReceived = handler });
+
+    public static T OnGotFocus<T>(this T el, Action<object, RoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnGotFocus = handler });
+
+    public static T OnLostFocus<T>(this T el, Action<object, RoutedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnLostFocus = handler });
+
     // ── Decoration ──────────────────────────────────────────────────
 
     public static T ToolTip<T>(this T el, string tip) where T : Element =>

@@ -2220,8 +2220,22 @@ public sealed partial class Reconciler : IDisposable
         public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerPressed;
         public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerMoved;
         public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerReleased;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerEntered;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerExited;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerCanceled;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerCaptureLost;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerWheelChanged;
         public Microsoft.UI.Xaml.Input.TappedEventHandler? Tapped;
+        public Microsoft.UI.Xaml.Input.DoubleTappedEventHandler? DoubleTapped;
+        public Microsoft.UI.Xaml.Input.RightTappedEventHandler? RightTapped;
+        public Microsoft.UI.Xaml.Input.HoldingEventHandler? Holding;
         public Microsoft.UI.Xaml.Input.KeyEventHandler? KeyDown;
+        public Microsoft.UI.Xaml.Input.KeyEventHandler? KeyUp;
+        public Microsoft.UI.Xaml.Input.KeyEventHandler? PreviewKeyDown;
+        public Microsoft.UI.Xaml.Input.KeyEventHandler? PreviewKeyUp;
+        public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CharacterReceived;
+        public RoutedEventHandler? GotFocus;
+        public RoutedEventHandler? LostFocus;
     }
 
     // Key for storing EventHandlerState in a dictionary attached to the element.
@@ -2239,14 +2253,32 @@ public sealed partial class Reconciler : IDisposable
         return state;
     }
 
+    private static bool HasAnyEventHandler(ElementModifiers? m)
+    {
+        if (m is null) return false;
+        return m.OnSizeChanged is not null
+            || m.OnPointerPressed is not null || m.OnPointerMoved is not null || m.OnPointerReleased is not null
+            || m.OnPointerEntered is not null || m.OnPointerExited is not null || m.OnPointerCanceled is not null
+            || m.OnPointerCaptureLost is not null || m.OnPointerWheelChanged is not null
+            || m.OnTapped is not null || m.OnDoubleTapped is not null || m.OnRightTapped is not null || m.OnHolding is not null
+            || m.OnKeyDown is not null || m.OnKeyUp is not null
+            || m.OnPreviewKeyDown is not null || m.OnPreviewKeyUp is not null
+            || m.OnCharacterReceived is not null
+            || m.OnGotFocus is not null || m.OnLostFocus is not null;
+    }
+
+    private static bool HasAnyPointerHandler(ElementModifiers m)
+    {
+        return m.OnPointerPressed is not null || m.OnPointerMoved is not null || m.OnPointerReleased is not null
+            || m.OnPointerEntered is not null || m.OnPointerExited is not null || m.OnPointerCanceled is not null
+            || m.OnPointerCaptureLost is not null || m.OnPointerWheelChanged is not null
+            || m.OnTapped is not null || m.OnDoubleTapped is not null || m.OnRightTapped is not null || m.OnHolding is not null;
+    }
+
     private static void ApplyEventHandlers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {
         // Fast path: nothing to do
-        if (m.OnSizeChanged is null && m.OnPointerPressed is null && m.OnPointerMoved is null &&
-            m.OnPointerReleased is null && m.OnTapped is null && m.OnKeyDown is null &&
-            oldM?.OnSizeChanged is null && oldM?.OnPointerPressed is null && oldM?.OnPointerMoved is null &&
-            oldM?.OnPointerReleased is null && oldM?.OnTapped is null && oldM?.OnKeyDown is null)
-            return;
+        if (!HasAnyEventHandler(m) && !HasAnyEventHandler(oldM)) return;
 
         var state = GetOrCreateEventState(fe);
 
@@ -2298,6 +2330,66 @@ public sealed partial class Reconciler : IDisposable
             }
         }
 
+        // PointerEntered
+        if (!ReferenceEquals(m.OnPointerEntered, oldM?.OnPointerEntered))
+        {
+            if (state.PointerEntered is not null) { fe.PointerEntered -= state.PointerEntered; state.PointerEntered = null; }
+            if (m.OnPointerEntered is not null)
+            {
+                var handler = m.OnPointerEntered;
+                state.PointerEntered = (s, e) => handler(s!, e);
+                fe.PointerEntered += state.PointerEntered;
+            }
+        }
+
+        // PointerExited
+        if (!ReferenceEquals(m.OnPointerExited, oldM?.OnPointerExited))
+        {
+            if (state.PointerExited is not null) { fe.PointerExited -= state.PointerExited; state.PointerExited = null; }
+            if (m.OnPointerExited is not null)
+            {
+                var handler = m.OnPointerExited;
+                state.PointerExited = (s, e) => handler(s!, e);
+                fe.PointerExited += state.PointerExited;
+            }
+        }
+
+        // PointerCanceled
+        if (!ReferenceEquals(m.OnPointerCanceled, oldM?.OnPointerCanceled))
+        {
+            if (state.PointerCanceled is not null) { fe.PointerCanceled -= state.PointerCanceled; state.PointerCanceled = null; }
+            if (m.OnPointerCanceled is not null)
+            {
+                var handler = m.OnPointerCanceled;
+                state.PointerCanceled = (s, e) => handler(s!, e);
+                fe.PointerCanceled += state.PointerCanceled;
+            }
+        }
+
+        // PointerCaptureLost
+        if (!ReferenceEquals(m.OnPointerCaptureLost, oldM?.OnPointerCaptureLost))
+        {
+            if (state.PointerCaptureLost is not null) { fe.PointerCaptureLost -= state.PointerCaptureLost; state.PointerCaptureLost = null; }
+            if (m.OnPointerCaptureLost is not null)
+            {
+                var handler = m.OnPointerCaptureLost;
+                state.PointerCaptureLost = (s, e) => handler(s!, e);
+                fe.PointerCaptureLost += state.PointerCaptureLost;
+            }
+        }
+
+        // PointerWheelChanged
+        if (!ReferenceEquals(m.OnPointerWheelChanged, oldM?.OnPointerWheelChanged))
+        {
+            if (state.PointerWheelChanged is not null) { fe.PointerWheelChanged -= state.PointerWheelChanged; state.PointerWheelChanged = null; }
+            if (m.OnPointerWheelChanged is not null)
+            {
+                var handler = m.OnPointerWheelChanged;
+                state.PointerWheelChanged = (s, e) => handler(s!, e);
+                fe.PointerWheelChanged += state.PointerWheelChanged;
+            }
+        }
+
         // Tapped
         if (!ReferenceEquals(m.OnTapped, oldM?.OnTapped))
         {
@@ -2307,6 +2399,62 @@ public sealed partial class Reconciler : IDisposable
                 var handler = m.OnTapped;
                 state.Tapped = (s, e) => handler(s!, e);
                 fe.Tapped += state.Tapped;
+                fe.IsTapEnabled = true;
+            }
+            else if (oldM?.OnTapped is not null)
+            {
+                fe.IsTapEnabled = false;
+            }
+        }
+
+        // DoubleTapped
+        if (!ReferenceEquals(m.OnDoubleTapped, oldM?.OnDoubleTapped))
+        {
+            if (state.DoubleTapped is not null) { fe.DoubleTapped -= state.DoubleTapped; state.DoubleTapped = null; }
+            if (m.OnDoubleTapped is not null)
+            {
+                var handler = m.OnDoubleTapped;
+                state.DoubleTapped = (s, e) => handler(s!, e);
+                fe.DoubleTapped += state.DoubleTapped;
+                fe.IsDoubleTapEnabled = true;
+            }
+            else if (oldM?.OnDoubleTapped is not null)
+            {
+                fe.IsDoubleTapEnabled = false;
+            }
+        }
+
+        // RightTapped
+        if (!ReferenceEquals(m.OnRightTapped, oldM?.OnRightTapped))
+        {
+            if (state.RightTapped is not null) { fe.RightTapped -= state.RightTapped; state.RightTapped = null; }
+            if (m.OnRightTapped is not null)
+            {
+                var handler = m.OnRightTapped;
+                state.RightTapped = (s, e) => handler(s!, e);
+                fe.RightTapped += state.RightTapped;
+                fe.IsRightTapEnabled = true;
+            }
+            else if (oldM?.OnRightTapped is not null)
+            {
+                fe.IsRightTapEnabled = false;
+            }
+        }
+
+        // Holding
+        if (!ReferenceEquals(m.OnHolding, oldM?.OnHolding))
+        {
+            if (state.Holding is not null) { fe.Holding -= state.Holding; state.Holding = null; }
+            if (m.OnHolding is not null)
+            {
+                var handler = m.OnHolding;
+                state.Holding = (s, e) => handler(s!, e);
+                fe.Holding += state.Holding;
+                fe.IsHoldingEnabled = true;
+            }
+            else if (oldM?.OnHolding is not null)
+            {
+                fe.IsHoldingEnabled = false;
             }
         }
 
@@ -2320,6 +2468,85 @@ public sealed partial class Reconciler : IDisposable
                 state.KeyDown = (s, e) => handler(s!, e);
                 fe.KeyDown += state.KeyDown;
             }
+        }
+
+        // KeyUp
+        if (!ReferenceEquals(m.OnKeyUp, oldM?.OnKeyUp))
+        {
+            if (state.KeyUp is not null) { fe.KeyUp -= state.KeyUp; state.KeyUp = null; }
+            if (m.OnKeyUp is not null)
+            {
+                var handler = m.OnKeyUp;
+                state.KeyUp = (s, e) => handler(s!, e);
+                fe.KeyUp += state.KeyUp;
+            }
+        }
+
+        // PreviewKeyDown
+        if (!ReferenceEquals(m.OnPreviewKeyDown, oldM?.OnPreviewKeyDown))
+        {
+            if (state.PreviewKeyDown is not null) { fe.PreviewKeyDown -= state.PreviewKeyDown; state.PreviewKeyDown = null; }
+            if (m.OnPreviewKeyDown is not null)
+            {
+                var handler = m.OnPreviewKeyDown;
+                state.PreviewKeyDown = (s, e) => handler(s!, e);
+                fe.PreviewKeyDown += state.PreviewKeyDown;
+            }
+        }
+
+        // PreviewKeyUp
+        if (!ReferenceEquals(m.OnPreviewKeyUp, oldM?.OnPreviewKeyUp))
+        {
+            if (state.PreviewKeyUp is not null) { fe.PreviewKeyUp -= state.PreviewKeyUp; state.PreviewKeyUp = null; }
+            if (m.OnPreviewKeyUp is not null)
+            {
+                var handler = m.OnPreviewKeyUp;
+                state.PreviewKeyUp = (s, e) => handler(s!, e);
+                fe.PreviewKeyUp += state.PreviewKeyUp;
+            }
+        }
+
+        // CharacterReceived
+        if (!ReferenceEquals(m.OnCharacterReceived, oldM?.OnCharacterReceived))
+        {
+            if (state.CharacterReceived is not null) { fe.CharacterReceived -= state.CharacterReceived; state.CharacterReceived = null; }
+            if (m.OnCharacterReceived is not null)
+            {
+                var handler = m.OnCharacterReceived;
+                state.CharacterReceived = (s, e) => handler(s, e);
+                fe.CharacterReceived += state.CharacterReceived;
+            }
+        }
+
+        // GotFocus
+        if (!ReferenceEquals(m.OnGotFocus, oldM?.OnGotFocus))
+        {
+            if (state.GotFocus is not null) { fe.GotFocus -= state.GotFocus; state.GotFocus = null; }
+            if (m.OnGotFocus is not null)
+            {
+                var handler = m.OnGotFocus;
+                state.GotFocus = (s, e) => handler(s!, e);
+                fe.GotFocus += state.GotFocus;
+            }
+        }
+
+        // LostFocus
+        if (!ReferenceEquals(m.OnLostFocus, oldM?.OnLostFocus))
+        {
+            if (state.LostFocus is not null) { fe.LostFocus -= state.LostFocus; state.LostFocus = null; }
+            if (m.OnLostFocus is not null)
+            {
+                var handler = m.OnLostFocus;
+                state.LostFocus = (s, e) => handler(s!, e);
+                fe.LostFocus += state.LostFocus;
+            }
+        }
+
+        // Shape auto-fill: Shape subclasses need a non-null Fill to hit-test pointer events.
+        // If any pointer-family handler is attached and Fill is null, set transparent brush.
+        if (fe is Microsoft.UI.Xaml.Shapes.Shape shape && shape.Fill is null && HasAnyPointerHandler(m))
+        {
+            shape.Fill = new SolidColorBrush(global::Microsoft.UI.Colors.Transparent);
         }
     }
 

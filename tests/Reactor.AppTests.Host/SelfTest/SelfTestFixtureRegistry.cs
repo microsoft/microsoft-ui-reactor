@@ -569,6 +569,15 @@ internal static class SelfTestFixtureRegistry
         "CovBoost2_ElementPoolInteractiveReset",
         "CovBoost2_DataGridSearchSort",
         "CovBoost2_FocusTrapExercise",
+
+        // Input modifiers — spec 027 Tier 1
+        "PointerMod_DoubleTappedAutoEnables",
+        "PointerMod_RightTappedAutoEnables",
+        "PointerMod_HoldingAutoEnables",
+        "PointerMod_ShapePointerHandlerAutoFillsTransparent",
+        "PointerMod_ShapeWithExplicitFillNotOverwritten",
+        "PointerMod_GotLostFocusFires",
+        "PointerMod_AutoEnableClearsOnDetach",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1134,6 +1143,16 @@ internal static class SelfTestFixtureRegistry
         "CovBoost2_ElementPoolInteractiveReset" => new CoverageBoostFixtures2.ElementPoolInteractiveReset(harness),
         "CovBoost2_DataGridSearchSort" => new CoverageBoostFixtures2.DataGridSearchSort(harness),
         "CovBoost2_FocusTrapExercise" => new CoverageBoostFixtures2.SplitViewExercise(harness),
+
+        // Input modifiers — spec 027 Tier 1
+        "PointerMod_DoubleTappedAutoEnables" => new PointerModifierFixtures.DoubleTappedAutoEnables(harness),
+        "PointerMod_RightTappedAutoEnables" => new PointerModifierFixtures.RightTappedAutoEnables(harness),
+        "PointerMod_HoldingAutoEnables" => new PointerModifierFixtures.HoldingAutoEnables(harness),
+        "PointerMod_ShapePointerHandlerAutoFillsTransparent" => new PointerModifierFixtures.ShapePointerHandlerAutoFillsTransparent(harness),
+        "PointerMod_ShapeWithExplicitFillNotOverwritten" => new PointerModifierFixtures.ShapeWithExplicitFillNotOverwritten(harness),
+        "PointerMod_GotLostFocusFires" => new PointerModifierFixtures.GotLostFocusFires(harness),
+        "PointerMod_AutoEnableClearsOnDetach" => new PointerModifierFixtures.AutoEnableClearsOnDetach(harness),
+
         _ => null,
     };
 }
