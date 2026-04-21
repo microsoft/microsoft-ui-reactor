@@ -634,13 +634,9 @@ Per the critical-review concern: features aren't "done" until a showcase app
 adopts them. Each tier's work is blocked on at least one real consumer migrating
 off `.Set()`.
 
-### 7.1 Outlook clone
-- [ ] List-item hover: migrate to `.OnPointerEntered` / `.OnPointerExited`
-      (delete previous `.Set()` passthrough code)
-- [ ] Draggable divider between message list and preview: `.OnPan(axis: Horizontal)`
-- [ ] Move message to folder: `.OnDragStart<MailItem, Message>` on list items,
-      `.OnDrop<FolderNode, Message>` on folder tree nodes
-- [ ] Regression: existing E2E passes
+### 7.1 Outlook clone — N/A (sample deleted)
+The outlook clone was deprecated and removed from the repo, so there is no
+consumer to migrate. Phase 7.2 / 7.3 cover the remaining real adopters.
 
 ### 7.2 ReactorFiles (file manager sample)
 - [ ] Double-click to open: `.OnDoubleTapped`
