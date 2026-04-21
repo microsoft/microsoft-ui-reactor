@@ -46,6 +46,7 @@ internal sealed class ReactorEventSource : EventSource
         public const EventKeywords Mcp = (EventKeywords)0x8;
         public const EventKeywords Lifecycle = (EventKeywords)0x10;
         public const EventKeywords Errors = (EventKeywords)0x20;
+        public const EventKeywords EventDispatch = (EventKeywords)0x40;
     }
 
     public static class Tasks
@@ -175,6 +176,24 @@ internal sealed class ReactorEventSource : EventSource
     {
         if (IsEnabled(EventLevel.Informational, Keywords.Reconcile))
             WriteEvent(13);
+    }
+
+    // ── Event trampoline lifecycle ───────────────────────────────────────
+
+    [Event(14, Level = EventLevel.Verbose, Keywords = Keywords.EventDispatch,
+        Message = "Event trampoline attached (event={eventName}, controlType={controlType})")]
+    public void EventTrampolineAttached(string eventName, string controlType)
+    {
+        if (IsEnabled(EventLevel.Verbose, Keywords.EventDispatch))
+            WriteEvent(14, eventName ?? string.Empty, controlType ?? string.Empty);
+    }
+
+    [Event(15, Level = EventLevel.Verbose, Keywords = Keywords.EventDispatch,
+        Message = "Event trampoline dispatched (event={eventName})")]
+    public void EventTrampolineDispatch(string eventName)
+    {
+        if (IsEnabled(EventLevel.Verbose, Keywords.EventDispatch))
+            WriteEvent(15, eventName ?? string.Empty);
     }
 
     // ── Errors ───────────────────────────────────────────────────────────

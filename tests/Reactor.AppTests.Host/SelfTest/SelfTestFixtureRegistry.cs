@@ -578,6 +578,11 @@ internal static class SelfTestFixtureRegistry
         "PointerMod_ShapeWithExplicitFillNotOverwritten",
         "PointerMod_GotLostFocusFires",
         "PointerMod_AutoEnableClearsOnDetach",
+
+        // Trampoline dispatch — spec 027 Tier 2
+        "Trampoline_LatestHandlerWinsAfterRerender",
+        "Trampoline_HandlerRemovedBecomesNoOp",
+        "Trampoline_ReRenderSameControlUnderlyingRefStable",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1152,6 +1157,11 @@ internal static class SelfTestFixtureRegistry
         "PointerMod_ShapeWithExplicitFillNotOverwritten" => new PointerModifierFixtures.ShapeWithExplicitFillNotOverwritten(harness),
         "PointerMod_GotLostFocusFires" => new PointerModifierFixtures.GotLostFocusFires(harness),
         "PointerMod_AutoEnableClearsOnDetach" => new PointerModifierFixtures.AutoEnableClearsOnDetach(harness),
+
+        // Trampoline dispatch — spec 027 Tier 2
+        "Trampoline_LatestHandlerWinsAfterRerender" => new TrampolineFixtures.LatestHandlerWinsAfterRerender(harness),
+        "Trampoline_HandlerRemovedBecomesNoOp" => new TrampolineFixtures.HandlerRemovedBecomesNoOp(harness),
+        "Trampoline_ReRenderSameControlUnderlyingRefStable" => new TrampolineFixtures.ReRenderSameControlUnderlyingRefStable(harness),
 
         _ => null,
     };

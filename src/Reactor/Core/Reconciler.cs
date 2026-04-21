@@ -2214,28 +2214,58 @@ public sealed partial class Reconciler : IDisposable
     /// can be detached before new ones are attached. Stored as the element's Tag
     /// (or alongside it in a wrapper if Tag is already used for pool identity).
     /// </summary>
+    /// <summary>
+    /// Per-element handler state. Holds the <b>current</b> user delegate for each event
+    /// plus a bit tracking whether the stable trampoline has been attached yet. The
+    /// trampoline reads from the mutable <c>Current*</c> field when it fires, so updating
+    /// a handler just swaps the field — no WinUI subscribe/unsubscribe churn.
+    /// </summary>
     internal sealed class EventHandlerState
     {
-        public SizeChangedEventHandler? SizeChanged;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerPressed;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerMoved;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerReleased;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerEntered;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerExited;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerCanceled;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerCaptureLost;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerWheelChanged;
-        public Microsoft.UI.Xaml.Input.TappedEventHandler? Tapped;
-        public Microsoft.UI.Xaml.Input.DoubleTappedEventHandler? DoubleTapped;
-        public Microsoft.UI.Xaml.Input.RightTappedEventHandler? RightTapped;
-        public Microsoft.UI.Xaml.Input.HoldingEventHandler? Holding;
-        public Microsoft.UI.Xaml.Input.KeyEventHandler? KeyDown;
-        public Microsoft.UI.Xaml.Input.KeyEventHandler? KeyUp;
-        public Microsoft.UI.Xaml.Input.KeyEventHandler? PreviewKeyDown;
-        public Microsoft.UI.Xaml.Input.KeyEventHandler? PreviewKeyUp;
-        public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CharacterReceived;
-        public RoutedEventHandler? GotFocus;
-        public RoutedEventHandler? LostFocus;
+        // Current user handlers (mutable; null means "no-op")
+        public Action<object, SizeChangedEventArgs>? CurrentSizeChanged;
+        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerPressed;
+        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerMoved;
+        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerReleased;
+        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerEntered;
+        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerExited;
+        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerCanceled;
+        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerCaptureLost;
+        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerWheelChanged;
+        public Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? CurrentTapped;
+        public Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? CurrentDoubleTapped;
+        public Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? CurrentRightTapped;
+        public Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? CurrentHolding;
+        public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? CurrentKeyDown;
+        public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? CurrentKeyUp;
+        public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? CurrentPreviewKeyDown;
+        public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? CurrentPreviewKeyUp;
+        public Action<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CurrentCharacterReceived;
+        public Action<object, RoutedEventArgs>? CurrentGotFocus;
+        public Action<object, RoutedEventArgs>? CurrentLostFocus;
+
+        // Stable trampoline delegates — captured for reference-equality detach (never used)
+        // and to prevent GC collection of the compiler-generated closure.
+        public SizeChangedEventHandler? SizeChangedTrampoline;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerPressedTrampoline;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerMovedTrampoline;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerReleasedTrampoline;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerEnteredTrampoline;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerExitedTrampoline;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerCanceledTrampoline;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerCaptureLostTrampoline;
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerWheelChangedTrampoline;
+        public Microsoft.UI.Xaml.Input.TappedEventHandler? TappedTrampoline;
+        public Microsoft.UI.Xaml.Input.DoubleTappedEventHandler? DoubleTappedTrampoline;
+        public Microsoft.UI.Xaml.Input.RightTappedEventHandler? RightTappedTrampoline;
+        public Microsoft.UI.Xaml.Input.HoldingEventHandler? HoldingTrampoline;
+        public Microsoft.UI.Xaml.Input.KeyEventHandler? KeyDownTrampoline;
+        public Microsoft.UI.Xaml.Input.KeyEventHandler? KeyUpTrampoline;
+        public Microsoft.UI.Xaml.Input.KeyEventHandler? PreviewKeyDownTrampoline;
+        public Microsoft.UI.Xaml.Input.KeyEventHandler? PreviewKeyUpTrampoline;
+        public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CharacterReceivedTrampoline;
+        public RoutedEventHandler? GotFocusTrampoline;
+        public RoutedEventHandler? LostFocusTrampoline;
     }
 
     // Key for storing EventHandlerState in a dictionary attached to the element.
@@ -2282,271 +2312,352 @@ public sealed partial class Reconciler : IDisposable
 
         var state = GetOrCreateEventState(fe);
 
-        // SizeChanged
-        if (!ReferenceEquals(m.OnSizeChanged, oldM?.OnSizeChanged))
-        {
-            if (state.SizeChanged is not null) { fe.SizeChanged -= state.SizeChanged; state.SizeChanged = null; }
-            if (m.OnSizeChanged is not null)
-            {
-                var handler = m.OnSizeChanged;
-                state.SizeChanged = (s, e) => handler(s!, e);
-                fe.SizeChanged += state.SizeChanged;
-            }
-        }
-
-        // PointerPressed
-        if (!ReferenceEquals(m.OnPointerPressed, oldM?.OnPointerPressed))
-        {
-            if (state.PointerPressed is not null) { fe.PointerPressed -= state.PointerPressed; state.PointerPressed = null; }
-            if (m.OnPointerPressed is not null)
-            {
-                var handler = m.OnPointerPressed;
-                state.PointerPressed = (s, e) => handler(s!, e);
-                fe.PointerPressed += state.PointerPressed;
-            }
-        }
-
-        // PointerMoved
-        if (!ReferenceEquals(m.OnPointerMoved, oldM?.OnPointerMoved))
-        {
-            if (state.PointerMoved is not null) { fe.PointerMoved -= state.PointerMoved; state.PointerMoved = null; }
-            if (m.OnPointerMoved is not null)
-            {
-                var handler = m.OnPointerMoved;
-                state.PointerMoved = (s, e) => handler(s!, e);
-                fe.PointerMoved += state.PointerMoved;
-            }
-        }
-
-        // PointerReleased
-        if (!ReferenceEquals(m.OnPointerReleased, oldM?.OnPointerReleased))
-        {
-            if (state.PointerReleased is not null) { fe.PointerReleased -= state.PointerReleased; state.PointerReleased = null; }
-            if (m.OnPointerReleased is not null)
-            {
-                var handler = m.OnPointerReleased;
-                state.PointerReleased = (s, e) => handler(s!, e);
-                fe.PointerReleased += state.PointerReleased;
-            }
-        }
-
-        // PointerEntered
-        if (!ReferenceEquals(m.OnPointerEntered, oldM?.OnPointerEntered))
-        {
-            if (state.PointerEntered is not null) { fe.PointerEntered -= state.PointerEntered; state.PointerEntered = null; }
-            if (m.OnPointerEntered is not null)
-            {
-                var handler = m.OnPointerEntered;
-                state.PointerEntered = (s, e) => handler(s!, e);
-                fe.PointerEntered += state.PointerEntered;
-            }
-        }
-
-        // PointerExited
-        if (!ReferenceEquals(m.OnPointerExited, oldM?.OnPointerExited))
-        {
-            if (state.PointerExited is not null) { fe.PointerExited -= state.PointerExited; state.PointerExited = null; }
-            if (m.OnPointerExited is not null)
-            {
-                var handler = m.OnPointerExited;
-                state.PointerExited = (s, e) => handler(s!, e);
-                fe.PointerExited += state.PointerExited;
-            }
-        }
-
-        // PointerCanceled
-        if (!ReferenceEquals(m.OnPointerCanceled, oldM?.OnPointerCanceled))
-        {
-            if (state.PointerCanceled is not null) { fe.PointerCanceled -= state.PointerCanceled; state.PointerCanceled = null; }
-            if (m.OnPointerCanceled is not null)
-            {
-                var handler = m.OnPointerCanceled;
-                state.PointerCanceled = (s, e) => handler(s!, e);
-                fe.PointerCanceled += state.PointerCanceled;
-            }
-        }
-
-        // PointerCaptureLost
-        if (!ReferenceEquals(m.OnPointerCaptureLost, oldM?.OnPointerCaptureLost))
-        {
-            if (state.PointerCaptureLost is not null) { fe.PointerCaptureLost -= state.PointerCaptureLost; state.PointerCaptureLost = null; }
-            if (m.OnPointerCaptureLost is not null)
-            {
-                var handler = m.OnPointerCaptureLost;
-                state.PointerCaptureLost = (s, e) => handler(s!, e);
-                fe.PointerCaptureLost += state.PointerCaptureLost;
-            }
-        }
-
-        // PointerWheelChanged
-        if (!ReferenceEquals(m.OnPointerWheelChanged, oldM?.OnPointerWheelChanged))
-        {
-            if (state.PointerWheelChanged is not null) { fe.PointerWheelChanged -= state.PointerWheelChanged; state.PointerWheelChanged = null; }
-            if (m.OnPointerWheelChanged is not null)
-            {
-                var handler = m.OnPointerWheelChanged;
-                state.PointerWheelChanged = (s, e) => handler(s!, e);
-                fe.PointerWheelChanged += state.PointerWheelChanged;
-            }
-        }
-
-        // Tapped
-        if (!ReferenceEquals(m.OnTapped, oldM?.OnTapped))
-        {
-            if (state.Tapped is not null) { fe.Tapped -= state.Tapped; state.Tapped = null; }
-            if (m.OnTapped is not null)
-            {
-                var handler = m.OnTapped;
-                state.Tapped = (s, e) => handler(s!, e);
-                fe.Tapped += state.Tapped;
-                fe.IsTapEnabled = true;
-            }
-            else if (oldM?.OnTapped is not null)
-            {
-                fe.IsTapEnabled = false;
-            }
-        }
-
-        // DoubleTapped
-        if (!ReferenceEquals(m.OnDoubleTapped, oldM?.OnDoubleTapped))
-        {
-            if (state.DoubleTapped is not null) { fe.DoubleTapped -= state.DoubleTapped; state.DoubleTapped = null; }
-            if (m.OnDoubleTapped is not null)
-            {
-                var handler = m.OnDoubleTapped;
-                state.DoubleTapped = (s, e) => handler(s!, e);
-                fe.DoubleTapped += state.DoubleTapped;
-                fe.IsDoubleTapEnabled = true;
-            }
-            else if (oldM?.OnDoubleTapped is not null)
-            {
-                fe.IsDoubleTapEnabled = false;
-            }
-        }
-
-        // RightTapped
-        if (!ReferenceEquals(m.OnRightTapped, oldM?.OnRightTapped))
-        {
-            if (state.RightTapped is not null) { fe.RightTapped -= state.RightTapped; state.RightTapped = null; }
-            if (m.OnRightTapped is not null)
-            {
-                var handler = m.OnRightTapped;
-                state.RightTapped = (s, e) => handler(s!, e);
-                fe.RightTapped += state.RightTapped;
-                fe.IsRightTapEnabled = true;
-            }
-            else if (oldM?.OnRightTapped is not null)
-            {
-                fe.IsRightTapEnabled = false;
-            }
-        }
-
-        // Holding
-        if (!ReferenceEquals(m.OnHolding, oldM?.OnHolding))
-        {
-            if (state.Holding is not null) { fe.Holding -= state.Holding; state.Holding = null; }
-            if (m.OnHolding is not null)
-            {
-                var handler = m.OnHolding;
-                state.Holding = (s, e) => handler(s!, e);
-                fe.Holding += state.Holding;
-                fe.IsHoldingEnabled = true;
-            }
-            else if (oldM?.OnHolding is not null)
-            {
-                fe.IsHoldingEnabled = false;
-            }
-        }
-
-        // KeyDown
-        if (!ReferenceEquals(m.OnKeyDown, oldM?.OnKeyDown))
-        {
-            if (state.KeyDown is not null) { fe.KeyDown -= state.KeyDown; state.KeyDown = null; }
-            if (m.OnKeyDown is not null)
-            {
-                var handler = m.OnKeyDown;
-                state.KeyDown = (s, e) => handler(s!, e);
-                fe.KeyDown += state.KeyDown;
-            }
-        }
-
-        // KeyUp
-        if (!ReferenceEquals(m.OnKeyUp, oldM?.OnKeyUp))
-        {
-            if (state.KeyUp is not null) { fe.KeyUp -= state.KeyUp; state.KeyUp = null; }
-            if (m.OnKeyUp is not null)
-            {
-                var handler = m.OnKeyUp;
-                state.KeyUp = (s, e) => handler(s!, e);
-                fe.KeyUp += state.KeyUp;
-            }
-        }
-
-        // PreviewKeyDown
-        if (!ReferenceEquals(m.OnPreviewKeyDown, oldM?.OnPreviewKeyDown))
-        {
-            if (state.PreviewKeyDown is not null) { fe.PreviewKeyDown -= state.PreviewKeyDown; state.PreviewKeyDown = null; }
-            if (m.OnPreviewKeyDown is not null)
-            {
-                var handler = m.OnPreviewKeyDown;
-                state.PreviewKeyDown = (s, e) => handler(s!, e);
-                fe.PreviewKeyDown += state.PreviewKeyDown;
-            }
-        }
-
-        // PreviewKeyUp
-        if (!ReferenceEquals(m.OnPreviewKeyUp, oldM?.OnPreviewKeyUp))
-        {
-            if (state.PreviewKeyUp is not null) { fe.PreviewKeyUp -= state.PreviewKeyUp; state.PreviewKeyUp = null; }
-            if (m.OnPreviewKeyUp is not null)
-            {
-                var handler = m.OnPreviewKeyUp;
-                state.PreviewKeyUp = (s, e) => handler(s!, e);
-                fe.PreviewKeyUp += state.PreviewKeyUp;
-            }
-        }
-
-        // CharacterReceived
-        if (!ReferenceEquals(m.OnCharacterReceived, oldM?.OnCharacterReceived))
-        {
-            if (state.CharacterReceived is not null) { fe.CharacterReceived -= state.CharacterReceived; state.CharacterReceived = null; }
-            if (m.OnCharacterReceived is not null)
-            {
-                var handler = m.OnCharacterReceived;
-                state.CharacterReceived = (s, e) => handler(s, e);
-                fe.CharacterReceived += state.CharacterReceived;
-            }
-        }
-
-        // GotFocus
-        if (!ReferenceEquals(m.OnGotFocus, oldM?.OnGotFocus))
-        {
-            if (state.GotFocus is not null) { fe.GotFocus -= state.GotFocus; state.GotFocus = null; }
-            if (m.OnGotFocus is not null)
-            {
-                var handler = m.OnGotFocus;
-                state.GotFocus = (s, e) => handler(s!, e);
-                fe.GotFocus += state.GotFocus;
-            }
-        }
-
-        // LostFocus
-        if (!ReferenceEquals(m.OnLostFocus, oldM?.OnLostFocus))
-        {
-            if (state.LostFocus is not null) { fe.LostFocus -= state.LostFocus; state.LostFocus = null; }
-            if (m.OnLostFocus is not null)
-            {
-                var handler = m.OnLostFocus;
-                state.LostFocus = (s, e) => handler(s!, e);
-                fe.LostFocus += state.LostFocus;
-            }
-        }
+        // Trampoline pattern: each Ensure* helper points the current-handler field at
+        // the new delegate and, if the trampoline isn't attached yet, attaches it once.
+        // Subsequent renders that just hand us a fresh closure touch only the field —
+        // no add_/remove_ COM traffic on the underlying WinUI event.
+        EnsureSizeChangedSubscribed(fe, state, m.OnSizeChanged);
+        EnsurePointerPressedSubscribed(fe, state, m.OnPointerPressed);
+        EnsurePointerMovedSubscribed(fe, state, m.OnPointerMoved);
+        EnsurePointerReleasedSubscribed(fe, state, m.OnPointerReleased);
+        EnsurePointerEnteredSubscribed(fe, state, m.OnPointerEntered);
+        EnsurePointerExitedSubscribed(fe, state, m.OnPointerExited);
+        EnsurePointerCanceledSubscribed(fe, state, m.OnPointerCanceled);
+        EnsurePointerCaptureLostSubscribed(fe, state, m.OnPointerCaptureLost);
+        EnsurePointerWheelChangedSubscribed(fe, state, m.OnPointerWheelChanged);
+        EnsureTappedSubscribed(fe, state, m.OnTapped, oldM?.OnTapped);
+        EnsureDoubleTappedSubscribed(fe, state, m.OnDoubleTapped, oldM?.OnDoubleTapped);
+        EnsureRightTappedSubscribed(fe, state, m.OnRightTapped, oldM?.OnRightTapped);
+        EnsureHoldingSubscribed(fe, state, m.OnHolding, oldM?.OnHolding);
+        EnsureKeyDownSubscribed(fe, state, m.OnKeyDown);
+        EnsureKeyUpSubscribed(fe, state, m.OnKeyUp);
+        EnsurePreviewKeyDownSubscribed(fe, state, m.OnPreviewKeyDown);
+        EnsurePreviewKeyUpSubscribed(fe, state, m.OnPreviewKeyUp);
+        EnsureCharacterReceivedSubscribed(fe, state, m.OnCharacterReceived);
+        EnsureGotFocusSubscribed(fe, state, m.OnGotFocus);
+        EnsureLostFocusSubscribed(fe, state, m.OnLostFocus);
 
         // Shape auto-fill: Shape subclasses need a non-null Fill to hit-test pointer events.
         // If any pointer-family handler is attached and Fill is null, set transparent brush.
         if (fe is Microsoft.UI.Xaml.Shapes.Shape shape && shape.Fill is null && HasAnyPointerHandler(m))
         {
             shape.Fill = new SolidColorBrush(global::Microsoft.UI.Colors.Transparent);
+        }
+    }
+
+    // ── Trampoline Ensure* helpers ──────────────────────────────────────
+    // Each helper:
+    //   1. Updates state.Current<Event> to the new user handler (may be null).
+    //   2. On first non-null handler, allocates the stable trampoline, attaches
+    //      it to the WinUI event, emits reactor:event.reattach once.
+    //   3. Never detaches — the trampoline stays bound for the element's lifetime.
+    //      When the user handler becomes null again, the trampoline dispatches no-op.
+
+    private static void EnsureSizeChangedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, SizeChangedEventArgs>? handler)
+    {
+        state.CurrentSizeChanged = handler;
+        if (state.SizeChangedTrampoline is null && handler is not null)
+        {
+            state.SizeChangedTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("SizeChanged");
+                state.CurrentSizeChanged?.Invoke(s!, e);
+            };
+            fe.SizeChanged += state.SizeChangedTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("SizeChanged", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsurePointerPressedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    {
+        state.CurrentPointerPressed = handler;
+        if (state.PointerPressedTrampoline is null && handler is not null)
+        {
+            state.PointerPressedTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("PointerPressed");
+                state.CurrentPointerPressed?.Invoke(s!, e);
+            };
+            fe.PointerPressed += state.PointerPressedTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("PointerPressed", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsurePointerMovedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    {
+        state.CurrentPointerMoved = handler;
+        if (state.PointerMovedTrampoline is null && handler is not null)
+        {
+            state.PointerMovedTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("PointerMoved");
+                state.CurrentPointerMoved?.Invoke(s!, e);
+            };
+            fe.PointerMoved += state.PointerMovedTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("PointerMoved", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsurePointerReleasedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    {
+        state.CurrentPointerReleased = handler;
+        if (state.PointerReleasedTrampoline is null && handler is not null)
+        {
+            state.PointerReleasedTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("PointerReleased");
+                state.CurrentPointerReleased?.Invoke(s!, e);
+            };
+            fe.PointerReleased += state.PointerReleasedTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("PointerReleased", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsurePointerEnteredSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    {
+        state.CurrentPointerEntered = handler;
+        if (state.PointerEnteredTrampoline is null && handler is not null)
+        {
+            state.PointerEnteredTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("PointerEntered");
+                state.CurrentPointerEntered?.Invoke(s!, e);
+            };
+            fe.PointerEntered += state.PointerEnteredTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("PointerEntered", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsurePointerExitedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    {
+        state.CurrentPointerExited = handler;
+        if (state.PointerExitedTrampoline is null && handler is not null)
+        {
+            state.PointerExitedTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("PointerExited");
+                state.CurrentPointerExited?.Invoke(s!, e);
+            };
+            fe.PointerExited += state.PointerExitedTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("PointerExited", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsurePointerCanceledSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    {
+        state.CurrentPointerCanceled = handler;
+        if (state.PointerCanceledTrampoline is null && handler is not null)
+        {
+            state.PointerCanceledTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("PointerCanceled");
+                state.CurrentPointerCanceled?.Invoke(s!, e);
+            };
+            fe.PointerCanceled += state.PointerCanceledTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("PointerCanceled", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsurePointerCaptureLostSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    {
+        state.CurrentPointerCaptureLost = handler;
+        if (state.PointerCaptureLostTrampoline is null && handler is not null)
+        {
+            state.PointerCaptureLostTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("PointerCaptureLost");
+                state.CurrentPointerCaptureLost?.Invoke(s!, e);
+            };
+            fe.PointerCaptureLost += state.PointerCaptureLostTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("PointerCaptureLost", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsurePointerWheelChangedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    {
+        state.CurrentPointerWheelChanged = handler;
+        if (state.PointerWheelChangedTrampoline is null && handler is not null)
+        {
+            state.PointerWheelChangedTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("PointerWheelChanged");
+                state.CurrentPointerWheelChanged?.Invoke(s!, e);
+            };
+            fe.PointerWheelChanged += state.PointerWheelChangedTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("PointerWheelChanged", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsureTappedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? oldHandler)
+    {
+        state.CurrentTapped = handler;
+        if (state.TappedTrampoline is null && handler is not null)
+        {
+            state.TappedTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("Tapped");
+                state.CurrentTapped?.Invoke(s!, e);
+            };
+            fe.Tapped += state.TappedTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("Tapped", fe.GetType().Name);
+        }
+        if (handler is not null) fe.IsTapEnabled = true;
+        else if (oldHandler is not null) fe.IsTapEnabled = false;
+    }
+
+    private static void EnsureDoubleTappedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? oldHandler)
+    {
+        state.CurrentDoubleTapped = handler;
+        if (state.DoubleTappedTrampoline is null && handler is not null)
+        {
+            state.DoubleTappedTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("DoubleTapped");
+                state.CurrentDoubleTapped?.Invoke(s!, e);
+            };
+            fe.DoubleTapped += state.DoubleTappedTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("DoubleTapped", fe.GetType().Name);
+        }
+        if (handler is not null) fe.IsDoubleTapEnabled = true;
+        else if (oldHandler is not null) fe.IsDoubleTapEnabled = false;
+    }
+
+    private static void EnsureRightTappedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? oldHandler)
+    {
+        state.CurrentRightTapped = handler;
+        if (state.RightTappedTrampoline is null && handler is not null)
+        {
+            state.RightTappedTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("RightTapped");
+                state.CurrentRightTapped?.Invoke(s!, e);
+            };
+            fe.RightTapped += state.RightTappedTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("RightTapped", fe.GetType().Name);
+        }
+        if (handler is not null) fe.IsRightTapEnabled = true;
+        else if (oldHandler is not null) fe.IsRightTapEnabled = false;
+    }
+
+    private static void EnsureHoldingSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? oldHandler)
+    {
+        state.CurrentHolding = handler;
+        if (state.HoldingTrampoline is null && handler is not null)
+        {
+            state.HoldingTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("Holding");
+                state.CurrentHolding?.Invoke(s!, e);
+            };
+            fe.Holding += state.HoldingTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("Holding", fe.GetType().Name);
+        }
+        if (handler is not null) fe.IsHoldingEnabled = true;
+        else if (oldHandler is not null) fe.IsHoldingEnabled = false;
+    }
+
+    private static void EnsureKeyDownSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+    {
+        state.CurrentKeyDown = handler;
+        if (state.KeyDownTrampoline is null && handler is not null)
+        {
+            state.KeyDownTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("KeyDown");
+                state.CurrentKeyDown?.Invoke(s!, e);
+            };
+            fe.KeyDown += state.KeyDownTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("KeyDown", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsureKeyUpSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+    {
+        state.CurrentKeyUp = handler;
+        if (state.KeyUpTrampoline is null && handler is not null)
+        {
+            state.KeyUpTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("KeyUp");
+                state.CurrentKeyUp?.Invoke(s!, e);
+            };
+            fe.KeyUp += state.KeyUpTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("KeyUp", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsurePreviewKeyDownSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+    {
+        state.CurrentPreviewKeyDown = handler;
+        if (state.PreviewKeyDownTrampoline is null && handler is not null)
+        {
+            state.PreviewKeyDownTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("PreviewKeyDown");
+                state.CurrentPreviewKeyDown?.Invoke(s!, e);
+            };
+            fe.PreviewKeyDown += state.PreviewKeyDownTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("PreviewKeyDown", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsurePreviewKeyUpSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+    {
+        state.CurrentPreviewKeyUp = handler;
+        if (state.PreviewKeyUpTrampoline is null && handler is not null)
+        {
+            state.PreviewKeyUpTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("PreviewKeyUp");
+                state.CurrentPreviewKeyUp?.Invoke(s!, e);
+            };
+            fe.PreviewKeyUp += state.PreviewKeyUpTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("PreviewKeyUp", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsureCharacterReceivedSubscribed(FrameworkElement fe, EventHandlerState state, Action<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? handler)
+    {
+        state.CurrentCharacterReceived = handler;
+        if (state.CharacterReceivedTrampoline is null && handler is not null)
+        {
+            state.CharacterReceivedTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("CharacterReceived");
+                state.CurrentCharacterReceived?.Invoke(s, e);
+            };
+            fe.CharacterReceived += state.CharacterReceivedTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("CharacterReceived", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsureGotFocusSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, RoutedEventArgs>? handler)
+    {
+        state.CurrentGotFocus = handler;
+        if (state.GotFocusTrampoline is null && handler is not null)
+        {
+            state.GotFocusTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("GotFocus");
+                state.CurrentGotFocus?.Invoke(s!, e);
+            };
+            fe.GotFocus += state.GotFocusTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("GotFocus", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsureLostFocusSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, RoutedEventArgs>? handler)
+    {
+        state.CurrentLostFocus = handler;
+        if (state.LostFocusTrampoline is null && handler is not null)
+        {
+            state.LostFocusTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("LostFocus");
+                state.CurrentLostFocus?.Invoke(s!, e);
+            };
+            fe.LostFocus += state.LostFocusTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("LostFocus", fe.GetType().Name);
         }
     }
 
