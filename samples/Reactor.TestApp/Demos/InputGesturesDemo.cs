@@ -31,6 +31,15 @@ sealed class GesturePanSample : Component
 {
     public override Element Render()
     {
+        // Two pieces of state that survive stale-closure races during panning:
+        //   committedRef — the offset at the last gesture-end (source of truth).
+        //   offset       — the current display position (drives re-render / Translation).
+        //
+        // Using g.Translation (cumulative since gesture start) + committedRef means
+        // every onChanged callback reads accurate data. `setOffset(offset + g.Delta)`
+        // would use the *last-rendered* offset, which is stale when the dispatcher
+        // drains several manipulation events between renders — the square lags.
+        var committedRef = UseRef(Vector2.Zero);
         var (offset, setOffset) = UseState(Vector2.Zero);
 
         return InputGesturesSampleCard.Build(
@@ -44,9 +53,19 @@ sealed class GesturePanSample : Component
                     .CornerRadius(8)
                     .Translation(offset.X, offset.Y, 0)
                     .OnPan(
-                        onChanged: g => setOffset(offset + new Vector2((float)g.Delta.X, (float)g.Delta.Y)),
+                        onChanged: g => setOffset(committedRef.Current +
+                            new Vector2((float)g.Translation.X, (float)g.Translation.Y)),
+                        onEnded: g =>
+                        {
+                            committedRef.Current += new Vector2((float)g.Translation.X, (float)g.Translation.Y);
+                            setOffset(committedRef.Current);
+                        },
                         withInertia: true)
-                    .OnDoubleTap(() => setOffset(Vector2.Zero))
+                    .OnDoubleTap(() =>
+                    {
+                        committedRef.Current = Vector2.Zero;
+                        setOffset(Vector2.Zero);
+                    })
             ).Height(220).Background("#f3f3f3").CornerRadius(8).Padding(8)
         );
     }
@@ -183,14 +202,21 @@ sealed class UseFocusSample : Component
     {
         var (name, setName) = UseState("");
         var (inputRef, requestFocus) = this.UseElementFocus();
-        UseEffect(() => requestFocus(), Array.Empty<object>());
 
+        // Deliberately NOT auto-focusing on mount in this gallery: a TextField
+        // deep inside a ScrollView that takes focus pulls the viewport down via
+        // WinUI's BringIntoView — and it re-triggers every time the window
+        // regains foreground. Real apps that auto-focus a first input (login
+        // forms, modals) typically live on their own page and aren't scrolled.
         return InputGesturesSampleCard.Build(
-            "UseElementFocus: auto-focus on mount",
-            "Switching to this tab should place the caret in the first input via ctx.UseElementFocus().",
+            "UseElementFocus: imperative focus via ref",
+            "Click the button to imperatively focus the input via ctx.UseElementFocus().",
             VStack(8,
                 TextField(name, setName, placeholder: "name").Width(280).Ref(inputRef),
-                HStack(6, TextBlock("focused via"), TextBlock("UseElementFocus()").FontFamily("Consolas"))
+                HStack(8,
+                    Button("Focus input", () => requestFocus()),
+                    TextBlock("wired via UseElementFocus()").FontFamily("Consolas")
+                )
             )
         );
     }

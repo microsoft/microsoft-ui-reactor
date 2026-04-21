@@ -95,6 +95,27 @@ threshold, nothing dispatches. On first crossing the reconciler emits `onBegan`
 the manipulation completes before the threshold is crossed, neither `onBegan`
 nor `onEnded` fire.
 
+`PanGesture.Translation` is cumulative since `Began`; `PanGesture.Delta` is
+per-callback. Prefer `Translation` for position-as-state — manipulation events
+can drain several ticks between re-renders, so a `setOffset(offset + g.Delta)`
+pattern reads a stale `offset` closure and produces visibly choppy panning.
+For accumulation across separate gestures, hold the committed position in a
+ref and snapshot it on `onEnded`:
+
+```csharp
+var committedRef = UseRef(Vector2.Zero);
+var (offset, setOffset) = UseState(Vector2.Zero);
+
+card.OnPan(
+    onChanged: g => setOffset(committedRef.Current +
+        new Vector2((float)g.Translation.X, (float)g.Translation.Y)),
+    onEnded: g =>
+    {
+        committedRef.Current += new Vector2((float)g.Translation.X, (float)g.Translation.Y);
+        setOffset(committedRef.Current);
+    });
+```
+
 `axis: PanAxis.Horizontal` restricts to X-axis translation; `withInertia: true`
 adds the inertia flag so WinUI continues to emit callbacks after the pointer
 lifts.

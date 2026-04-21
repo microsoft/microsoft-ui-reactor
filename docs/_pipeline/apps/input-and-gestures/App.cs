@@ -42,6 +42,12 @@ class PanGestureExample : Component
 {
     public override Element Render()
     {
+        // Track the committed offset in a ref and derive display from
+        // g.Translation (cumulative since gesture start). Using
+        // `setOffset(offset + g.Delta)` would read a stale `offset` closure
+        // whenever multiple manipulation events drain between renders,
+        // producing visibly choppy panning.
+        var committedRef = UseRef(Vector2.Zero);
         var (offset, setOffset) = UseState(Vector2.Zero);
 
         return Border(
@@ -53,9 +59,19 @@ class PanGestureExample : Component
                 .CornerRadius(8)
                 .Translation(offset.X, offset.Y, 0)
                 .OnPan(
-                    onChanged: g => setOffset(offset + new Vector2((float)g.Delta.X, (float)g.Delta.Y)),
+                    onChanged: g => setOffset(committedRef.Current +
+                        new Vector2((float)g.Translation.X, (float)g.Translation.Y)),
+                    onEnded: g =>
+                    {
+                        committedRef.Current += new Vector2((float)g.Translation.X, (float)g.Translation.Y);
+                        setOffset(committedRef.Current);
+                    },
                     withInertia: true)
-                .OnDoubleTap(() => setOffset(Vector2.Zero))
+                .OnDoubleTap(() =>
+                {
+                    committedRef.Current = Vector2.Zero;
+                    setOffset(Vector2.Zero);
+                })
         ).Height(260).Background("#f3f3f3").CornerRadius(8).Padding(16);
     }
 }
