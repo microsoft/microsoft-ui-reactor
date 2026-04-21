@@ -12,13 +12,17 @@ rather than a principled declarative UI framework.
 Reactor is an ambitious attempt to bring React-style declarative UI to WinUI 3.
 It has impressive breadth of control coverage (94% of WinUI controls wrapped),
 a now-solid component model foundation, and a faithful hooks system. The last
-72 hours alone landed four substantial systems: async resources (a React
+four days alone landed five substantial systems: async resources (a React
 Query-equivalent), a full charting accessibility layer (8 layers across 18
-commits), an MCP devtools surface for AI-agent-driven automation, and ETW
-tracing. The framework is no longer short on features — it is now short on
-the integration and polish to make those features compose reliably in real
-apps. Significant problems remain, and several of the new shipments have
-implementation concerns that temper the enthusiasm:
+commits), an MCP devtools surface for AI-agent-driven automation, ETW
+tracing, and — shipped in the last 24 hours — spec 027's declarative input
+system (73 files, +7.2k LoC) that closes the long-standing pointer /
+gesture / drag-drop / focus gaps and replaces per-render COM event churn
+with a trampoline-dispatch model. The framework is no longer short on
+features — it is now short on the integration and polish to make those
+features compose reliably in real apps. Significant problems remain, and
+several of the new shipments have implementation concerns that temper the
+enthusiasm:
 
 1. **The component model is now a real framework foundation** — context system,
    memoization, generic hook state, persisted state, and post-render effect
@@ -70,9 +74,11 @@ implementation concerns that temper the enthusiasm:
    (Reactor hosts WinForms), with E2E tests for Tab navigation, rendering, and
    accessibility across boundaries. One direction is blocked (Reactor-primary
    hosting WinForms) due to WinUI's compositor-only rendering
-9. **The `.Set()` escape hatch is still load-bearing** — navigation and commanding
-   reduce its surface area, but the majority of input handling, gestures, advanced
-   styling, and composition-layer access still require it
+9. **The `.Set()` escape hatch is load-bearing, but meaningfully narrower** — spec 027
+   pulled pointer / tap / keyboard / focus events, pan/pinch/rotate gestures, and
+   drag-and-drop out of `.Set()` and into first-class modifiers. What remains:
+   composition-layer effects, materials, windowing, ink input, shape geometry,
+   and pointer-capture ergonomics
 10. **Async data is now a framework feature, not a developer chore** — `UseResource`,
     `UseInfiniteResource`, `UseMutation`, and a shared `QueryCache` cover the
     React Query / SWR territory in-framework, with a `Pending` element for
@@ -103,6 +109,26 @@ implementation concerns that temper the enthusiasm:
     from Section 13, but it's coarse-grained (no per-component render
     timing) and requires external tooling (PerfView, dotnet-trace) to
     consume
+14. **Declarative input shipped (spec 027)** — pointer enter/exit/wheel/
+    capture-lost, tap / double-tap / right-tap / holding, key-up /
+    preview-key / character-received, focus modifiers + `UseElementFocus`
+    hook, typed pan/pinch/rotate gestures, and drag-and-drop with
+    eager + sync-provider + async-provider format overloads wired to
+    `DataPackage.SetDataProvider`. Event dispatch now uses a stable
+    trampoline per event per element lifetime, eliminating the previous
+    per-render COM detach/attach cost on hot input paths. But gesture
+    composition (`.simultaneously`/`.sequenced`) is absent, long-press is
+    an event rather than a typed gesture, the trampoline refactor has
+    zero benchmark evidence (just "all 6,390 unit tests pass"), and
+    drag-drop's 370-line `DragData` has no showcase consumer
+15. **Selftest coverage crossed 85%** — commits `e85f4d8` (1,264 new
+    unit tests, 4,222 LoC) and `1870868` (30 new selftest fixtures,
+    1,426 LoC) bring coverage materially higher. Real reliability
+    investment, but whether the new tests catch actual regressions or
+    just inflate the percentage is a later question
+16. **Two XAML-based samples were removed** (`FlexPanelGallery`,
+    `regedit-winui`) to stop teaching anti-patterns, trimming confusion
+    for newcomers without adding new proof points
 
 **Verdict:** Reactor has crossed a third important threshold. The first was the
 component model foundation (context, memoization, hooks). The second was the
@@ -126,16 +152,21 @@ and whether it pays off depends on adoption patterns nobody can predict
 yet. The critical path now runs through: (1) stress-testing async resources
 and QueryCache under realistic load — this is a brand-new subsystem with
 no production miles; (2) the showcase apps still not using the framework's
-own features (Outlook clone still uses `UseState<string>` for navigation);
-(3) fixing the UseColorScheme/RequestedTheme composition bug; (4) custom
-branded theme resources (still missing after multiple iterations); (5)
-remaining imperative accessibility hooks (UseAnnounce, UseReducedMotion);
-(6) chart sonification and hit-target-always-on; (7) devtools state
-mutation and source mapping; (8) reducing the `.Set()` surface area. The
-framework is no longer blocked on any single P0 gap, but the sum of its
-P1/P2 gaps has grown slightly larger as new features arrive faster than
-integration testing. "Features exist" now outpaces "features compose
-correctly in real apps" by a wider margin than a quarter ago.
+own features (Outlook clone still uses `UseState<string>` for navigation,
+and now also doesn't use `.OnPan`, `.OnDrop`, or `UseElementFocus`); (3)
+benchmarking the spec 027 trampoline claim — ETW events prove the
+"one-time attach" invariant held after the refactor, but no one has
+measured a render-cycle before/after delta on a real app; (4) fixing the
+UseColorScheme/RequestedTheme composition bug; (5) custom branded theme
+resources (still missing after multiple iterations); (6) remaining
+imperative accessibility hooks (UseAnnounce, UseReducedMotion); (7) chart
+sonification and hit-target-always-on; (8) devtools state mutation and
+source mapping; (9) gesture composition and a typed long-press primitive;
+(10) composition-layer / materials / windowing — the remaining fat `.Set()`
+surface. The framework is no longer blocked on any single P0 gap, but the
+sum of its P1/P2 gaps has grown slightly larger as new features arrive
+faster than integration testing. "Features exist" now outpaces "features
+compose correctly in real apps" by a wider margin than a quarter ago.
 
 ---
 
@@ -3156,49 +3187,178 @@ summarizer output. The foundation is strong; the field evidence is zero.
 
 ## 12. Input Handling and Events
 
-### What Reactor has
+### What Reactor has — after spec 027
+
+This section was largely rewritten by commit `76d0f51` (spec 027 —
+"declarative pointer, gesture, focus, and drag-drop modifiers," 73 files,
++7,249 / −2,137). Four previous critiques are closed, and a fifth (event
+handler re-attachment churn) is addressed by a new trampoline dispatch
+model. What now exists:
 
 - **Semantic events on controls:** `OnClick`, `OnChanged`, `OnSelectionChanged`
-  — well-covered for all wrapped controls
-- **Declarative event modifiers:** `.OnPointerPressed()`, `.OnPointerMoved()`,
-  `.OnPointerReleased()`, `.OnTapped()`, `.OnKeyDown()`, `.OnSizeChanged()`
-- **Keyboard accelerators:** `Accelerator(key, modifiers)` data records
-- **Everything else:** `.Set()` passthrough
+  — unchanged, well-covered for all wrapped controls.
+- **Pointer modifiers (full surface):** `.OnPointerPressed`, `.OnPointerMoved`,
+  `.OnPointerReleased`, `.OnPointerEntered`, `.OnPointerExited`,
+  `.OnPointerCanceled`, `.OnPointerCaptureLost`, `.OnPointerWheelChanged`.
+  Eleven previously-absent handlers shipped as first-class modifiers.
+- **Tap-family modifiers:** `.OnTapped`, `.OnDoubleTapped`, `.OnRightTapped`,
+  `.OnHolding` — with the corresponding `Is{Tap,DoubleTap,RightTap,Holding}Enabled`
+  flags auto-toggled by the reconciler when a handler is attached/detached.
+- **Keyboard modifiers:** `.OnKeyDown`, `.OnKeyUp`, `.OnPreviewKeyDown`,
+  `.OnPreviewKeyUp`, `.OnCharacterReceived`.
+- **Focus modifiers + hook:** `.OnGotFocus`, `.OnLostFocus`, plus a
+  `UseElementFocus()` hook and a `FocusManager` helper for programmatic
+  focus — the first imperative focus primitive the framework has had.
+- **Gesture recognizers (Tier 3):** `.OnPan(minimumDistance, axis, withInertia)`,
+  `.OnPinch(withInertia)`, `.OnRotate(withInertia)` with typed
+  `PanGesture`/`PinchGesture`/`RotateGesture` records carrying phase,
+  translation/delta/velocity (pan), scale/anchor (pinch), angle (rotate),
+  and an `IsInertial` flag. Backed by a single
+  `ManipulationStarted/Delta/Completed` subscription per element,
+  `ManipulationMode` auto-computed from attached configs.
+- **Drag-and-drop:** `.OnDragStart<TPayload>` + `.OnDrop<TPayload>` for typed
+  round-trip (same-process), plus untyped overloads for cross-process, plus
+  `.OnDragEnter` / `.OnDragOver` / `.OnDragLeave`. `DragData` supports typed
+  payloads, standard formats (text / URI / HTML / RTF / files / bitmap), and
+  custom format ids; each format has eager / sync-provider / async-provider
+  overloads wired to `DataPackage.SetDataProvider` so rendering HTML or
+  rasterizing a bitmap only happens if a drop target actually asks for it.
+  `CanDrag` / `AllowDrop` auto-set. `DragOperationNegotiation` picks an
+  operation when source and target disagree.
+- **Event dispatch model (Tier 2 trampolines):** `EventHandlerState` now
+  attaches a stable trampoline delegate to each WinUI event once per
+  element lifetime; updating the user handler is a single field write, not
+  a detach/attach round-trip. ETW (keyword `EventDispatch`, 0x40) emits
+  `EventTrampolineAttached` (first attach) and `EventTrampolineDispatch`
+  (per fire) so the one-time-attach invariant is observable.
+- **Keyboard accelerators:** unchanged — `Accelerator(key, modifiers)` data
+  records (Section 8).
+- **Escape hatch:** `.Set()` is still available for truly exotic events
+  (`UIElement.ProcessKeyboardAccelerators`, `CharacterReceived` on
+  non-FrameworkElements, ink input, etc.).
 
 ### Critiques
 
-**1. No gesture system.** SwiftUI has `.gesture()` with `DragGesture`,
-`TapGesture`, `LongPressGesture`, and gesture composition (`.simultaneously`,
-`.sequenced`). Compose has `Modifier.pointerInput { detectDragGestures {} }`.
-Reactor has individual pointer events with no abstraction — you're back to manual
-hit testing and state tracking for any gesture more complex than a tap.
+**1. Gesture composition is missing.** SwiftUI's gesture API provides
+`.simultaneously(with:)`, `.sequenced(before:)`, and `.exclusively(before:)`
+so you can declare "pinch and pan at the same time" or "long-press then
+drag." Reactor has three discrete gesture primitives, but they don't
+compose declaratively — if you want simultaneous pan+pinch on the same
+element you can just attach both (the single ManipulationStarted/Delta/
+Completed subscription handles it), but conditional sequencing or priority
+ordering has no API. Compose's `pointerInput { detectTransformGestures { }
+}` handles pan+pinch+rotate in one callback with a shared event loop;
+Reactor's three separate callbacks get separate delta events and have to
+reconcile across them if a component wants unified transform state.
 
-**2. Event handler re-attachment is wasteful.** Declarative event handlers
-(`.OnPointerPressed()` etc.) "re-attach on every update" per the documentation.
-The reconciler detaches the previous handler and attaches the new one on every
-render cycle. This is O(n) COM interop calls per render per element with event
-handlers. React avoids this with event delegation (one handler on the document).
-SwiftUI and Compose handle it at the framework level.
+**2. LongPressGesture is an event, not a typed gesture.** SwiftUI has
+`LongPressGesture(minimumDuration:)` that fires with phase and passes the
+recognized duration. Reactor has `.OnHolding` which surfaces the raw
+`HoldingRoutedEventArgs` — no phase-typed record, no min-duration
+configuration on the modifier (the caller filters inside the handler by
+reading `HoldingState`), and no unification with `.OnPan` for the common
+"long-press to begin drag" interaction. Android and iOS both treat this as
+a single composable gesture.
 
-**3. Commanding exists but doesn't cover all input surfaces.** The new
-commanding system (Section 8) closes the P0 gap — `Command` bundles
-execute + canExecute + metadata, and `UseCommand` handles async lifecycle. But
-the commanding system only integrates with `Button`, `AppBarButton`, and
-`MenuItem`. Other command-capable controls (`SplitButton`, `SwipeItem`,
-`ContentDialog` actions) still use bare `Action` callbacks. And the absence of
-command routing to the focused view (Section 8, critique #3) means Cut/Copy/
-Paste in multi-panel apps still requires manual wiring.
+**3. Gesture recognizers rely on WinUI manipulations and inherit its
+constraints.** `.OnPan/.OnPinch/.OnRotate` wrap
+`UIElement.ManipulationStarted/Delta/Completed`. This means: pan only
+reports translation in screen-axis-aligned space (no rotated-container
+coordinate math), rail behavior is WinUI-native (can't be disabled on
+inertia), `ManipulationCompleted` fires once for all gestures that
+completed together, and inertia deceleration rate isn't exposed — the
+`withInertia` bool toggles inertia on/off but you can't tune the decay.
+Compose and SwiftUI both expose per-axis deceleration parameters.
 
-**4. Six pointer events but no PointerEntered/Exited modifiers.** The
-declarative event handlers include pressed/moved/released but not entered/exited.
-Hover effects — one of the most common interaction patterns — require `.Set()`
-to wire `PointerEntered`/`PointerExited`. This is an odd omission given that
-hover is more common than pointer-move tracking.
+**4. Drag-and-drop has 370 lines of new `DragData` with no field
+evidence.** The API is thoughtfully designed (eager + sync-provider +
+async-provider per format, typed round-trip via
+`reactor/typed/<typeof(T).FullName>` format ids, per-drag GUID in
+`DataPackage.Properties` for same-process transfer). But:
 
-**5. No RightTapped, DoubleTapped, or Holding modifiers.** These common
-interactions are passthrough only, requiring `.Set()`. Context menus need
-right-tap. Double-click is common in desktop apps. Long-press is common in
-touch apps.
+- The typed-format-id is `typeof(T).FullName` — if a class is renamed or
+  moved to a different namespace between the drag source and drop target
+  (during a hot-reload session, or across two differently-versioned
+  assemblies in a multi-process app), the payload won't round-trip. There's
+  no typed-format-id versioning story.
+- The format dictionary uses `StringComparer.Ordinal` over string keys.
+  Reactor's theme throughout this review — "stringly-typed APIs at
+  boundaries" — applies here too.
+- No DnD-specific devtools: you can't inspect what formats a drag is
+  advertising, trace which provider was invoked, or see negotiation
+  outcomes. For a subsystem this large, the observability gap is
+  conspicuous.
+- Zero field evidence. The feature is in spec 027 phase 6-8 plus the E2E
+  fixtures landed the same day; no showcase app consumes it. This is the
+  "feature velocity outpaces integration velocity" pattern from the
+  conclusion, landing again.
+
+**5. Trampoline dispatch is unverified at scale.** Phase 2's claim is
+that attaching a stable trampoline once per event per element lifetime
+eliminates per-render COM churn on the hot `.OnPointer*`/`.OnKey*`
+path. This is architecturally correct and the ETW instrumentation lets
+you confirm the invariant after the fact. But:
+
+- It introduces a new category of bugs: the trampoline is attached
+  permanently, so if the `EventHandlerState` isn't cleaned up on unmount
+  or element-pool return, handlers leak. The PR adds
+  `TrampolineFixtures` covering "latest-handler-wins across 100
+  re-renders" but not "trampoline detached on unmount" explicitly.
+- There's no benchmark yet showing the hot-path delta. "N × events ×
+  subscribe/unsubscribe COM calls per update" was the previous
+  observed cost; the new model claims a single field write, but
+  nobody has measured a real app render cycle before/after. The
+  ETW events exist; running a trace isn't the same as running a
+  benchmark.
+- All 6,390 unit tests still pass, and the Phase 2 commit message
+  calls that out, but the unit suite is largely WinUI-free and
+  doesn't exercise the COM interop path the claim depends on.
+
+**6. Auto-enable / auto-fill is convenient but silently mutates control
+state.** When you attach `.OnTapped`, the reconciler sets
+`IsTapEnabled = true`; when you attach any pointer-family handler on a
+`Shape`, it auto-fills a null `Shape.Fill` with a transparent brush so
+hit-testing works. Both are right defaults — but they mean a developer
+inspecting the live visual tree will see properties they didn't set,
+without any breadcrumb pointing at the modifier that set them. The
+reverse path (detach the last handler → clear the auto-flag) is
+implemented, but conflicts with user-set values (what if the user set
+`IsTapEnabled = true` via `.Set()`?) aren't handled explicitly.
+
+**7. Commanding still doesn't cover all input surfaces.** Unchanged from
+the previous review. `Command` bundles execute + canExecute + metadata,
+but only `Button`, `AppBarButton`, and `MenuItem` integrate. `SplitButton`,
+`SwipeItem`, `ContentDialog` actions still take bare `Action` callbacks.
+And command routing to the focused view is still missing, so Cut/Copy/
+Paste in multi-panel apps continues to require manual wiring.
+
+**8. Focus hook ships but stops short of `@FocusState`.** `UseElementFocus`
+returns `(ElementRef, Action RequestFocus)`, and the new `.Ref(target)`
+modifier binds the ref fluently — that's the right ergonomic shape and
+closes the "wire it via `.Set()`" concern cleanly. What it doesn't give
+you is a *scoped* focus state: SwiftUI's `@FocusState var field: Field?`
+models "which of these N fields is focused" as a single binding;
+Compose's `FocusRequester` composes into `Modifier.focusRequester()`.
+Reactor's pattern is one `ElementRef` per element you might want to
+focus, each with its own `RequestFocus` closure — fine for "focus the
+first input on mount," awkward for "the last-edited row of a datagrid."
+Focus restoration after navigation or dialog dismissal (Section 11
+critique #8) is still unaddressed.
+
+**9. No pointer-capture ergonomics.** `.OnPointerCaptureLost` fires on
+loss, but there's no declarative `.CapturePointer(when:)` modifier.
+Implementing a drag-to-draw surface still requires calling
+`CapturePointer` / `ReleasePointerCapture` manually inside the handler —
+a `.Set()` pattern. Compose's `awaitPointerEventScope` and SwiftUI's
+`DragGesture` hide capture semantics entirely.
+
+**10. Wheel and touchpad gestures are still second-class.**
+`.OnPointerWheelChanged` exists, but there's no typed wheel delta
+record, no momentum-vs-discrete classification (trackpad glide vs. mouse
+scroll), and no horizontal-wheel shortcut. Scroll is handled by
+`ScrollView` via virtualization; anything custom (zoomable canvases,
+custom scrollable surfaces) has to parse `PointerPointProperties` by
+hand.
 
 ---
 
@@ -3565,19 +3725,25 @@ about).
 unless you manually track and remove them. The framework provides no lifecycle
 hook for this — no "cleanup on unmount" for Set-based side effects.
 
-**3. A huge fraction of WinUI is .Set()-only.** From the gap analysis:
-- All pointer events (entered, exited, pressed, released, moved)
-- All gesture events (tapped, double-tapped, right-tapped, holding)
-- All manipulation events
-- All keyboard events (except OnKeyDown modifier)
-- Drag and drop
-- Custom storyboard animations
-- Composition layer access
-- Materials and effects
-- Most windowing APIs
+**3. A meaningful fraction of WinUI is still .Set()-only.** Spec 027 pulled a
+significant chunk out of the escape-hatch list — pointer/tap/keyboard/focus
+events, manipulation gestures, and drag-and-drop all shipped as first-class
+modifiers in commit `76d0f51`. What's left:
+- `ProcessKeyboardAccelerators`, ink input, and a few other specialty event
+  surfaces
+- Custom storyboard animations (outside the compositor-property set
+  covered by `.Animate()` / interaction states)
+- Composition layer access beyond `.Shadow()` / `.Animate()`
+- Materials and effects (`AcrylicBrush` customization, `Compositor.CreateSpriteVisual`)
+- Pointer capture (`CapturePointer` / `ReleasePointerCapture`)
+- Most windowing APIs (`AppWindow`, `OverlappedPresenter`, backdrop configuration)
+- Shape-specific drawing APIs (`Path` data, `Geometry`, stroke dash arrays)
 
-When this much of the platform requires the escape hatch, the abstraction is
-too thin.
+The abstraction is meaningfully thicker than a quarter ago — the input
+critique that dominated this section for three review cycles is mostly
+resolved. But composition, materials, and windowing remain flat-out
+absent, and those are the surfaces customers notice in "polished desktop
+app" territory.
 
 **4. .Set() runs on every render.** The documentation for `OnMount` says it runs
 once at mount time, but `.Set()` Setters are `Action<TControl>[]` arrays stored
@@ -3604,7 +3770,7 @@ SwiftUI, Compose).
 | **Local State** | A- | A | A | A | Generic hooks, post-render cleanup, persisted state; dep arrays still box |
 | **Global State** | B+ | A | A | A | Context + UseContext + .Provide(); boxing in scope stack, no selector |
 | **Async Data** | B+ | A (TanStack) | B+ | C | **NEW section 3a.** UseResource/UseInfiniteResource/UseMutation/Pending, AsyncValue ADT, QueryCache with TTL+pattern invalidation, focus revalidation, DataGrid hook-paging. In-process cache only, no retry default, zero field evidence |
-| **Reconciler** | B- | A | A- | A | Works but monolithic, no concurrent mode; Grid-children-on-type-flip fix (e86ff69) closes a real bug |
+| **Reconciler** | B- | A | A- | A | Works but monolithic, no concurrent mode; Grid-children-on-type-flip fix (e86ff69) closes a real bug; spec 027 Phase 2 trampoline dispatch removes per-render COM detach/attach on pointer/key/focus events — architecturally right, unmeasured in the field |
 | **Layout** | B+ | B+ | A | A | Flex is good; Grid is stringly-typed; FlexPanel CSS semantics just got corrected (commit 397f274) — previous behavior was drift-prone |
 | **Theming** | B- | B+ | A | A | Style caching fixes XamlReader.Load perf; RequestedTheme modifier; UseColorScheme hook (reads app theme, not element effective); 3 ThemeRef props; no custom resources |
 | **Navigation** | B+ | A | A | A | Type-safe routes, dev-owned stack, GPU transitions, source+destination guards, caching, serialization, enhanced deep linking, diagnostics; ConnectedTransition still a stub, no adaptive multi-pane |
@@ -3613,9 +3779,9 @@ SwiftUI, Compose).
 | **Animation** | B- | B | A | A | Curve DSL, enter+exit, interaction states, keyframes, stagger, WithAnimation; compositor-property-bound ceiling; no per-frame hooks |
 | **Accessibility** | B | B | A | A | 16 modifiers + SemanticPanel, UseFocusTrap, 3 Roslyn a11y analyzers, runtime WCAG scanner; SemanticPanel limited to 2 patterns, focus trap doesn't cycle, remaining hooks unbuilt. **Grade rose from B- to B** mostly because of charting a11y (below) — the general surface is unchanged |
 | **Charting + Chart A11y** | B+ | N/A | A (Apple Charts) | C (Vico/ad-hoc) | **NEW section 11a.** 43 samples + 8-layer a11y (ChartAutomationPeer, ChartPalette.Harden/ColorblindSimulate, keyboard nav, live announcer, alternate view, forced-colors, 12 scanner rules). No sonification, ForceGraph a11y decorative-only, hit-target expansion opt-in |
-| **Input/Events** | C | B | A | A | Semantic events good; no gesture system, no pointer enter/exit, rest is .Set() |
+| **Input/Events** | B | B | A | A | **Rose from C to B.** Spec 027 shipped: full pointer modifier surface (entered/exited/canceled/wheel), tap/double/right/holding, key-up/preview/character, focus modifiers + `UseElementFocus`, typed `.OnPan`/`.OnPinch`/`.OnRotate` gestures, drag-and-drop with eager+lazy format providers. Trampoline dispatch eliminates per-render COM churn. Still missing: gesture composition (.simultaneously/.sequenced), typed long-press, pointer capture ergonomics, tuned inertia, wheel momentum classification |
 | **Styling** | B- | B+ | A | A | Lightweight styling is a genuine differentiator; ResourceBuilder fluent API; 3 Roslyn analyzers; stringly-typed resource keys; analyzer coverage shallow; DUCT_/REACTOR_ ID inconsistency |
-| **Developer Experience** | B | A | B+ | B+ | **Rose from C+ to B.** Hot reload works; MCP devtools + ETW + 4 hook analyzers + 4,222 lines of new coverage tests close real gaps. Still no GUI devtools, preview is screenshot-only, no per-component render timing, no cache inspector |
+| **Developer Experience** | B | A | B+ | B+ | **Rose from C+ to B.** Hot reload works; MCP devtools + ETW + 4 hook analyzers + ~5,600 lines of new coverage tests (4,222 unit + 1,426 selftest wave 1+2) pushed selftest coverage past 85%. Still no GUI devtools, preview is screenshot-only, no per-component render timing, no cache inspector |
 | **Devtools + Tracing** | B | B+ (DevTools) | A (Instruments) | B+ (LI) | **NEW section 13a.** MCP server (HTTP+stdio), 12+ MCP tools, stable node ids, supervisor, CLI parity, ETW provider with 6 keywords. State is read-only, no diff in v1, no source map in v1, no cache inspection, ETW has no per-component timing |
 | **Control Coverage** | A | N/A | A | A | 94% of WinUI wrapped |
 | **Error Handling** | B | B+ | D | D | ErrorBoundary exists (rare feature) |
@@ -3775,6 +3941,17 @@ This is a red flag for a framework that wants to be production-ready.
     the first real performance-profiling infrastructure the framework has
     had, closing part of Section 13's "no performance profiling" critique.
 
+19. **Declarative input is a real system now.** Spec 027 closed the
+    single longest-standing "Reactor is a thin WinUI wrapper" critique:
+    pointer / tap / keyboard / focus modifiers are no longer `.Set()`
+    territory, pan/pinch/rotate ship as typed gesture records with
+    phase/delta/velocity/inertia metadata, drag-and-drop supports
+    typed + standard + custom formats with eager / sync / async provider
+    overloads, and the reconciler's event-dispatch model changed from
+    "detach + attach on every render" to a stable-trampoline model that
+    only rewrites a field. No other C# declarative framework ships this
+    breadth of input on top of a Retained UI platform.
+
 ### What prevents Reactor from being production-ready
 
 1. **The showcase apps don't use the framework's own features.** This is the
@@ -3816,14 +3993,17 @@ This is a red flag for a framework that wants to be production-ready.
    means Width, CornerRadius, Margin, FontSize, and arbitrary colors can't
    animate. This is a WinUI platform constraint, not a Reactor design failure.
 
-5. **.Set() still carries too much weight.** Navigation, commanding, and styling
-   have all reclaimed meaningful surface area — `.RequestedTheme()` eliminates
-   another `.Set()` workaround, and lightweight styling eliminates `.Set()`
-   for per-control resource overrides. But gestures, pointer enter/exit,
-   right-tap, double-tap, drag-and-drop, composition-layer effects, materials,
-   and most windowing APIs still require `.Set()`. The abstraction is thicker
-   than before but still not thick enough for a "you don't need to know WinUI"
-   claim.
+5. **.Set() still carries too much weight, but less of it.** Navigation,
+   commanding, and styling reclaimed application-architecture surface; spec 027
+   just reclaimed most of the input surface (pointer enter/exit/wheel,
+   right-tap, double-tap, holding, key-up/preview/character, focus, pan/pinch/
+   rotate gestures, and drag-and-drop). What still requires `.Set()`: composition-
+   layer effects, materials (`AcrylicBrush` internals, sprite visuals), most
+   windowing APIs (`AppWindow`, presenters, backdrop config), custom
+   `Path`/`Geometry` drawing, ink input, and pointer-capture ergonomics. The
+   abstraction is materially thicker than a quarter ago, but "you don't need
+   to know WinUI" is still overclaimed for anything that touches composition
+   or the window chrome.
 
 6. **Performance concerns accumulate (but one is fixed).** Style caching
    eliminates the XamlReader.Load-per-themed-element concern. But reflection-
@@ -3861,22 +4041,52 @@ This is a red flag for a framework that wants to be production-ready.
    for the cache — TanStack Query Devtools is a major productivity feature
    that Reactor has no equivalent of.
 
-10. **The velocity is creating an integration deficit.** In three days the
+10. **The velocity is creating an integration deficit.** In four days the
     framework shipped: async resources (full subsystem, ~40 commits), charting
     accessibility (8 layers, ~18 commits, 3,000+ lines of src), devtools MCP
     (24 tools, HTTP + stdio, ~25 commits), ETW tracing, FlexPanel CSS
-    compliance fix, 4,222 lines of new coverage tests, and a partial
+    compliance fix, spec 027 declarative input (73 files, ~7,200 LoC in a
+    single PR), ~5,600 lines of new coverage tests, and a partial
     analyzer rename. Each feature is individually well-engineered. But the
     showcase apps (Outlook clone, file manager, registry editor, word
     puzzle game) — the only proof that features compose in a real UI — still
     don't use any of this. The charting gallery was retrofitted (a real
     proof point); the apps that were supposed to prove navigation,
-    commanding, context, and memoization compose together still don't use
-    any of them. The pipeline of "ship feature + isolated demo + move on to
-    next feature" accelerates each iteration while the integration debt
-    quietly compounds.
+    commanding, context, memoization, *and now input* compose together
+    still don't use any of them. The pipeline of "ship feature + isolated
+    demo + move on to next feature" accelerates each iteration while the
+    integration debt quietly compounds.
 
-11. **Naming and conceptual churn.** Spec 018 renamed Duct → Reactor;
+11. **The spec 027 trampoline refactor is unvalidated where it matters
+    most.** Phase 2 rewrote event dispatch from "detach + attach on every
+    render" to a stable-trampoline-per-event model. The architectural
+    argument is right, and the ETW telemetry lets you verify the
+    one-time-attach invariant after the fact. What's missing is a
+    render-cycle benchmark — the original critique was "O(n) COM interop
+    calls per render per element with event handlers." The fix claims to
+    eliminate those. But "all 6,390 unit tests pass" doesn't measure
+    the thing being claimed: unit tests don't exercise the COM interop
+    path, and no real app has been profiled before/after. The
+    `TrampolineFixtures` added to selftest cover "latest-handler-wins
+    across 100 re-renders" — useful for correctness, not for the
+    performance claim. Performance refactors that ship without a
+    before/after number are always a risk: they can regress in
+    unexpected dimensions (memory, first-render latency, teardown cost)
+    while nominally delivering on the headline metric.
+
+12. **Drag-and-drop ships with 370 lines of new `DragData` and zero
+    consumers.** `DragData` is genuinely thoughtful — eager / sync /
+    async provider overloads per format, `DataPackage.SetDataProvider`
+    for cross-process laziness, typed round-trip via
+    `reactor/typed/<typeof(T).FullName>` keys, origin-process-id tagging
+    so same-process transfers can stash the live object pointer. But no
+    sample app uses drag-and-drop today, the typed-format-id is unversioned
+    (rename `Models.EmailMessage` and the round-trip breaks), and there's
+    no devtools surface for watching DnD negotiation. This is the
+    integration-deficit critique in miniature: a carefully-designed
+    subsystem landing with no production exercise.
+
+13. **Naming and conceptual churn.** Spec 018 renamed Duct → Reactor;
     commit 55dc53f renamed half the analyzer ids (A11Y + Loc) while
     leaving the theming ids (DUCT001-003) alone; `Factories.Text` →
     `TextBlock`; `--preview` → `--devtools`; Monaco moved out of core into
@@ -3925,22 +4135,29 @@ SemanticPanel solves the hardest architectural problem, the three-layer
 diagnostic approach (compile-time + runtime + E2E) is now more comprehensive
 than any other C# UI framework, and UseFocusTrap is the first behavioral hook.
 But the layers are still thin — SemanticPanel covers 2 of ~20 automation
-patterns, and the remaining imperative hooks are unbuilt. WinForms interop
-opens a migration path that didn't exist before. The `.Set()` surface area is
-smaller but still too large.
+patterns, and the remaining imperative hooks are unbuilt. Input took its own
+threshold-crossing step in the last 24 hours (spec 027) — pointer / tap /
+keyboard / focus / gesture / drag-drop are no longer passthrough, event
+dispatch is now trampoline-based, and the hot-path COM churn the previous
+review called out has been architecturally addressed (though not yet
+benchmarked). WinForms interop opens a migration path that didn't exist
+before. The `.Set()` surface area is meaningfully smaller but still too
+large in the composition / materials / windowing region.
 
 ### To become production-ready, Reactor needs to:
 
 1. **Adopt its own features in the showcase apps.** This has been the
    dominant critique for three review cycles now. The Outlook clone should
    use `UseNavigation`, `Context`, `StandardCommand`, `SemanticPanel`,
-   `UsePersisted`, *and now* `UseResource`. The charting gallery getting
-   fully retrofitted with accessibility in one pass (commit 229e41b) proves
-   the team can do this work — they just haven't prioritized it for the
-   flagship apps. The gap between "ReactorCharting.Gallery uses all the
-   new chart a11y features" and "the Outlook clone still uses
-   `UseState<string>` for navigation" is where production confidence lives
-   or dies.
+   `UsePersisted`, `UseResource`, *and now* the spec 027 input modifiers
+   (`.OnRightTapped` for message context menus, `.OnDrop<EmailMessage>` for
+   folder drag-drop, `UseElementFocus` for "focus the reading pane after
+   message selection"). The charting gallery getting fully retrofitted with
+   accessibility in one pass (commit 229e41b) proves the team can do this
+   work — they just haven't prioritized it for the flagship apps. The gap
+   between "ReactorCharting.Gallery uses all the new chart a11y features"
+   and "the Outlook clone still uses `UseState<string>` for navigation" is
+   where production confidence lives or dies.
 2. **Stress-test async resources before claiming production-ready.** Large
    caches, concurrent fetches, long-running sessions, memory growth under
    churn, per-key lock contention, subscription ref-count correctness under
@@ -3949,16 +4166,19 @@ smaller but still too large.
    equivalent for `QueryCache` would also materially improve debugging.
 3. **Audit and harden the CI pipeline.** The E2E test filter bug (44 invisible
    tests) was a process failure. What other test configurations are silently
-   broken? Commit `a0ea276` added 4,222 lines of coverage tests, which is
-   real investment, but a CI health check that validates test counts and
-   alerts on regression in test discovery would prevent recurrence.
-4. **Do a performance pass using the new ETW infrastructure.** ETW tracing
-   now exists — use it. Profile a real render cycle. Measure: reflection-
-   based ShouldUpdate, XamlReader.Load theming, accelerator rebuild, wrapper
-   elements (now 5 types: Border, Grid×2, SemanticPanel, potentially
-   ChartAlternateViewWrapper), AccessibilityScanner overhead, ChartPointProvider
-   allocation rate on large charts, QueryCache eviction cost. Per-component
-   render timing is missing from ETW; add it.
+   broken? Commits `e85f4d8` + `1870868` added ~5,600 lines of coverage
+   tests, which is real investment, but a CI health check that validates
+   test counts and alerts on regression in test discovery would prevent
+   recurrence.
+4. **Do a performance pass using the new ETW infrastructure — starting
+   with the trampoline refactor.** ETW tracing exists — use it. The spec
+   027 Phase 2 claim is that event dispatch no longer detaches/reattaches
+   per render; that's verifiable with a trace but nobody has run one.
+   Also measure: reflection-based ShouldUpdate, XamlReader.Load theming,
+   accelerator rebuild, wrapper elements (now 5 types: Border, Grid×2,
+   SemanticPanel, potentially ChartAlternateViewWrapper), AccessibilityScanner
+   overhead, ChartPointProvider allocation rate on large charts, QueryCache
+   eviction cost. Per-component render timing is missing from ETW; add it.
 5. **Localize StandardCommand labels.** Still unfixed. The framework's own
    commanding system should use the framework's own localization system.
 6. **Fix UseColorScheme to read element effective theme, not app theme.**
@@ -3985,14 +4205,25 @@ smaller but still too large.
 14. **Finish exhaustive-deps analyzer.** `REACTOR_HOOKS_002/003` are deferred
     pending control-flow analysis. This is the single most valuable ESLint
     rule React developers rely on.
+15. **Add gesture composition.** Spec 027 shipped three discrete gesture
+    primitives but no `.simultaneously` / `.sequenced` / `.exclusively`
+    combinators and no typed `LongPressGesture(minimumDuration:)`. A common
+    "long-press to begin drag" interaction still has to be hand-rolled
+    across `.OnHolding` and `.OnPan`.
+16. **Version typed drag formats.** `DragData`'s
+    `reactor/typed/<typeof(T).FullName>` format id breaks when models are
+    renamed or moved. Add either an explicit version arg or surface-level
+    opt-in versioning before the API is used in shipping apps.
 
 The trajectory is right, and the velocity is notable — probably *too*
-notable. In the last 72 hours: async resources (full subsystem, closing
+notable. In the last 96 hours: async resources (full subsystem, closing
 the biggest remaining capability gap), charting accessibility (8-layer
 system, uniquely comprehensive), devtools MCP (unconventional but
 correctly built), ETW tracing (infrastructure for profiling), FlexPanel
-CSS compliance fix (closes a silent behavioral drift), and 4,222 lines of
-coverage tests.
+CSS compliance fix (closes a silent behavioral drift), spec 027
+declarative input (pointer/gesture/focus/drag-drop modifier surface plus
+a trampoline-dispatch refactor — 73 files in one PR), and ~5,600 lines of
+coverage tests pushing selftest past 85%.
 
 Navigation and commanding moved Reactor from "component library with hooks"
 to "framework with application architecture." The accessibility diff moved
@@ -4003,8 +4234,10 @@ resources now moves the data story from "do it yourself" to "first-class
 subsystem." Charting accessibility moves chart a11y from "WinUI has no
 charts anyway" to "Reactor's charts are more accessible than most native
 iOS/Android chart libraries." Devtools MCP moves the testing story from
-"write Appium tests" to "AI agents can drive your app." These are real
-capability expansions, not just polish.
+"write Appium tests" to "AI agents can drive your app." Spec 027 moves
+the input story from "everything non-trivial is `.Set()`-passthrough" to
+"pointer, gesture, focus, and drag-drop are first-class declarative
+modifiers." These are real capability expansions, not just polish.
 
 But the velocity is outpacing the integration. Three review cycles in a
 row have flagged the same critique: the showcase apps don't use the
@@ -4038,18 +4271,21 @@ But three themes keep recurring across every feature area:
    Outlook clone, file manager, registry editor, and word puzzle game — the
    framework's most complex and most public *general-purpose* apps — still
    don't use navigation, commanding, context, memoization, persisted state,
-   async resources, SemanticPanel, or UseFocusTrap. Until they do, "these
-   features compose in real apps" is a claim supported by demos, not proof.
+   async resources, SemanticPanel, UseFocusTrap, *or* any of the new spec
+   027 input modifiers. Until they do, "these features compose in real
+   apps" is a claim supported by demos, not proof.
 
 4. **New theme: feature velocity now outpaces integration velocity by a
-   widening margin.** In 72 hours: one new subsystem (async resources), one
+   widening margin.** In 96 hours: one new subsystem (async resources), one
    new sub-framework (charting + chart a11y), one new paradigm (MCP
-   devtools), one new profiling story (ETW). None of these are small. And
-   they land before the previous cycle's features (SemanticPanel,
-   UseFocusTrap, NavigationDemo, StandardCommand) have been integrated into
-   the flagship apps. The ratio of feature-land-time to feature-integration-
-   time is getting worse, not better. Sustainable framework development
-   requires the second to keep up with the first.
+   devtools), one new profiling story (ETW), and one major input rewrite
+   (spec 027 — pointer / gesture / focus / drag-drop modifiers +
+   trampoline dispatch). None of these are small. And they land before
+   the previous cycle's features (SemanticPanel, UseFocusTrap,
+   NavigationDemo, StandardCommand) have been integrated into the flagship
+   apps. The ratio of feature-land-time to feature-integration-time is
+   getting worse, not better. Sustainable framework development requires
+   the second to keep up with the first.
 
 Reactor now has *five* features where it's genuinely ahead of the
 competition:
@@ -4071,11 +4307,12 @@ matter if customers can reach them. The gap between "features exist" and
 "features compose correctly in real apps, under production load, in a
 maintained showcase" is where the remaining work lives. That gap has
 narrowed on charting (one gallery fully retrofitted), but widened on
-everything else (async resources, devtools, ETW, accessibility
-improvements to the general surface all sit behind isolated demos). Net
-direction: the framework is more capable than it was a week ago *and*
-further from "production-ready" because the new capability hasn't been
-integration-tested.
+everything else (async resources, devtools, ETW, spec 027 input
+modifiers, accessibility improvements to the general surface all sit
+behind isolated demos or selftest fixtures). Net direction: the
+framework is more capable than it was a week ago *and* further from
+"production-ready" because the new capability hasn't been integration-
+tested.
 
 The honest final grade for this review: **Reactor is a remarkable
 framework being developed at a pace that is both impressive and

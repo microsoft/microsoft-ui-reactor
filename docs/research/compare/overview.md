@@ -109,10 +109,10 @@ to understand the gap, not to declare winners.
 | **Layout** | D+ | A- | A- | B+ | B+ |
 | **Styling & Theming** | D | A- | A | B | B- |
 | **Navigation** | F | C | C+ | B | B+ |
-| **Animation** | F | B+ | A | C | C+ |
+| **Animation** | F | B+ | A | C | B- |
 | **Accessibility** | D+ | A- | A | B | B |
-| **Input & Gestures** | C | B+ | B+ | B+ | C |
-| **Developer Experience** | B | B- | B- | B | C+ |
+| **Input & Gestures** | C | B+ | B+ | B+ | B |
+| **Developer Experience** | B | B- | B- | B | B |
 | **Platform Reach** | D | D | D | B+ | D |
 | **Testing** | D+ | B | B- | A- | B- |
 | **Error Handling** | C | C | C | B+ | B |
@@ -215,9 +215,28 @@ libraries. Flutter provides only `setState()`.
   store — ecosystem uses Fluxor, Blazor-State, observable libraries. **No
   automatic reactivity tracking** — Blazor's biggest ergonomic weakness
 - **Reactor (B+):** React-style hooks (UseState, UseReducer, UseEffect, UseMemo,
-  UseContext). Context for shared state. UseObservable bridges to MVVM.
-  No fine-grained property tracking (unlike SwiftUI's @Observable), but the
-  hook model is proven and well-understood
+  UseRef, UseContext, UsePersisted). Hook state is now generic (no boxing for
+  value types via `ValueHookState<T>`). Effect cleanup is post-render, not
+  synchronous — matching React's behavior. Default-on memoization: propless
+  components skip re-renders unless self-triggered or context-changed;
+  `Component<TProps>` with record props gets structural equality comparison
+  for free. Context system (`Context<T>` + `.Provide()` + `UseContext`)
+  provides tree-scoped ambient state — `LocaleProvider` was migrated from a
+  thread-static hack to Context, validating the primitive with a real use
+  case. `UsePersisted<T>(key, initial)` survives unmount/remount (in-process
+  static cache — unbounded, no eviction, string keys with no collision
+  protection). `UseObservable` family (tree, property, collection) bridges
+  MVVM. Async resources ship as a separate subsystem (see Data Loading &
+  Async). **Implementation concerns:** `ShouldUpdateWithProps` uses reflection
+  on every memo check with no `MethodInfo` caching — 50 components in a tree
+  = 50 reflection calls per parent re-render. Context scope stores values as
+  `object?` so value-typed context values (`Context<int>`) box on every
+  provide. `UseCallback` is literally `UseMemo(() => callback, deps)` — the
+  lambda captures callback, so reference stability is only as fresh as the
+  deps (correct behavior, undocumented nuance). No `startTransition`
+  equivalent for priority-scheduled updates. Dependency arrays still box
+  into `object[]` and compare with `Equals`, and there's no
+  `exhaustive-deps` analyzer (deferred as control-flow-analysis work)
 
 **Gap:** No Microsoft framework has automatic fine-grained state tracking.
 WPF/WinUI3's INotifyPropertyChanged is functionally equivalent to Flutter's
@@ -288,13 +307,21 @@ system). Flutter's constraint model is powerful but has a steep learning curve.
   system available
 - **Reactor (B+):** FlexPanel (full Flexbox implementation) is ambitious and
   useful — provides layout capabilities WinUI itself doesn't have. Grid is
-  stringly-typed (`["*", "Auto", "200"]`). No custom layout protocol
+  stringly-typed (`["*", "Auto", "200"]`). No custom layout protocol. A
+  silent correctness gap was just closed: FlexPanel's measure pass was not
+  CSS-equivalent until commit `397f274` (April 2026), paired with a 526-line
+  fixture suite that pins behavior against a real WebView-rendered layout.
+  The fix is the right shape; the fact that there was no parity harness from
+  day one is a process gap — any app built against the earlier FlexPanel may
+  have subtly wrong layouts
 
 **Gap:** WPF and WinUI 3 have **no gap** in layout — they're competitive with
 or ahead of most declarative frameworks. Reactor's FlexPanel is a genuine
 addition. The only missing piece is WPF/WinUI3's lack of a single-line
 responsive layout primitive (SwiftUI's ViewThatFits, Compose's
-adaptive Scenes).
+adaptive Scenes). Responsive hooks (`UseWindowSize`, `UseBreakpoint`) in
+Reactor force a full component re-render on resize — SwiftUI's
+`@Environment(\.horizontalSizeClass)` only invalidates views that read it.
 
 ---
 
@@ -324,24 +351,37 @@ Material-centric.
   component. Limitation: third-party components don't participate (open issue
   dotnet/aspnetcore#63091). No built-in design system — ecosystem relies on
   Fluent UI Blazor, MudBlazor, Telerik, Syncfusion, DevExpress
-- **Reactor (B-):** 37 semantic theme tokens (accent, text, surface, control,
-  stroke, signal colors) with `Theme.Ref(key)` for custom resources.
-  ResourceBuilder supports 5 resource types (color string, Brush, ThemeRef,
-  double, CornerRadius) with full WinUI visual state support (hover, pressed,
-  disabled via lightweight styling). Style caching with deterministic sorted
-  keys in a ConcurrentDictionary avoids repeated XamlReader.Load() calls.
-  Three Roslyn analyzers (DUCT001-003) guide developers toward theme tokens
-  and lightweight styling with code fix providers. Sophisticated theme
-  resolution respects per-element RequestedTheme overrides. Still limited to
-  what WinUI lightweight styling exposes — no control template redefinition,
-  no global stylesheets, no style inheritance or composition
+- **Reactor (B-):** ~40 semantic theme tokens with `Theme.Ref(key)` for
+  custom resources. `ResourceBuilder` lightweight styling is Reactor's first
+  genuinely unique styling feature — no other C# declarative framework
+  surfaces WinUI's per-control resource key overrides. Style caching with
+  deterministic sorted keys in a `ConcurrentDictionary` eliminates the
+  XamlReader.Load-per-element perf concern that was the previous review's
+  biggest theming critique. `.RequestedTheme()` modifier and `UseColorScheme`
+  hook shipped. Three Roslyn analyzers (still carrying the old `DUCT001-003`
+  IDs — the `REACTOR_*` rename is partial; `DUCT_LOC001` and `DUCT_A11Y_*`
+  were migrated, the theming IDs were not). **Two headline features don't
+  compose correctly with each other:** `UseColorScheme` reads
+  `Application.Current.RequestedTheme` (app-level), not the element's
+  effective theme — so a component inside `.RequestedTheme(ElementTheme.Dark)`
+  sees `ColorScheme.Light` in a light-mode app. `{ThemeResource}` bindings in
+  dynamically-loaded styles also resolve against the app theme, not
+  per-element `RequestedTheme`. The "dark sidebar in a light app" scenario —
+  exactly what both features were designed for — is broken. **Custom branded
+  theme resources still don't exist** after multiple iterations; `Theme.Ref`
+  only references existing WinUI resources. Only 3 properties support
+  ThemeRef bindings (Background, Foreground, BorderBrush). Lightweight
+  styling resource keys are stringly-typed with no validation or IntelliSense
 
 **Gap:** WPF's styling power exceeds every competitor. WinUI 3's Fluent Design
 with lightweight styling is competitive with SwiftUI/Compose. Reactor's theming
-has improved substantially (from C+ to B-) with 37 theme tokens, resource
-overrides, caching, and analyzers, but remains behind its own platform —
-resource key overrides cannot match WinUI 3's ControlTemplate power for
-deep visual customization.
+has improved (from C+ to B-) — style caching fixed the major perf concern,
+lightweight styling is a genuine differentiator, analyzers provide static
+guidance — but the grade stays at B- because the composition bug between
+`UseColorScheme` and `.RequestedTheme()` defeats the scenario they were built
+for, custom theme resources remain missing, and the pieces don't compose.
+Resource key overrides cannot match WinUI 3's ControlTemplate power for deep
+visual customization.
 
 ---
 
@@ -367,22 +407,34 @@ notoriously complex.
   native deep linking. **No type-safe navigation** — `NavigateTo(string)` is
   not compile-checked against route templates
 - **Reactor (B+):** Type-safe routes via C# records, developer-owned back stack,
-  GPU-powered composition-layer transitions, lifecycle guards, LRU caching,
-  serialization, deep linking with `DeepLinkMap<TRoute>` supporting URI
-  pattern matching (typed parameters `{id:int}`, optional segments `{name?}`,
-  wildcards `/**`, query string extraction, synthetic back stacks).
-  **NavigationDiagnostics** provides a static event system for observing
-  navigation operations (requests, completions, cancellations, cache hits/
-  misses, transitions, deep link resolutions). 29 stress tests covering
-  concurrent cache access, rapid forward/back cycles, serialization round-trips,
-  and deep link edge cases. Architecturally competitive with Compose Nav 3.
-  ConnectedTransition is stub, no adaptive multi-pane
+  GPU-powered composition-layer transitions, lifecycle guards on both source
+  AND destination sides (`NavigatingToContext.Cancel()` lets destinations
+  reject navigation for authorization), LRU caching, JSON state serialization,
+  deep linking with `DeepLinkMap<TRoute>` supporting typed parameters
+  `{id:int}`, optional segments `{name?}`, wildcards `/**`, and query string
+  extraction. `NavigationDiagnostics` emits observability events. A test
+  infrastructure bug was just discovered and fixed: 44 of 46 E2E tests were
+  invisible behind a broken `ClassName=InteractiveTests` filter (should have
+  been `ClassName!=SelfTestBatch`); 43 Appium tests now run across 6 classes.
+  The fix is real, but the fact that 44 tests went unexecuted for the entire
+  dev cycle is a CI process gap. Architecturally on par with Compose Nav 3.
+  **Remaining gaps:** `ConnectedTransition` is a documented API that falls
+  back to a slide animation with only a debug-log message — a shipped name
+  that doesn't do what it says. No adaptive multi-pane layout (Compose Nav 3
+  has `Scene`/`SceneStrategy`). Deep link patterns are stringly-typed at the
+  URI→route boundary — `"/detail/{id:int}"` is a string, `RouteArgs.Get<T>("id")`
+  is a string-keyed lookup, so the type safety stops at the edge. Destination
+  guards are synchronous — React Router's async loaders have no equivalent.
+  `UseSystemBackButton` is opt-in rather than default. **The showcase apps
+  (Outlook clone, file manager) still use `UseState<string>` for navigation**
+  and haven't adopted the system that was built to solve their problem
 
-**Gap:** Reactor's navigation is its strongest competitive position — architecturally
-on par with Compose Nav 3 and ahead of SwiftUI's type-erased NavigationPath.
-The deep linking system is now comprehensive (typed params, optionals, wildcards,
-query strings) and competitive with web-grade routers. WPF and WinUI 3's
-navigation is a full generation behind.
+**Gap:** Reactor's navigation is architecturally competitive with Compose Nav 3
+and ahead of SwiftUI's type-erased NavigationPath. Deep linking covers the
+common patterns but loses type safety at the URI boundary. WPF and WinUI 3's
+navigation is a full generation behind. The trajectory is right; the last
+15% (adaptive layouts, working connected transitions, async guards, showcase
+adoption) separates "competitive" from "best-in-class."
 
 ---
 
@@ -408,24 +460,43 @@ has no built-in animation.
   the floor. Small fragmented ecosystem (Blazor.Animate, blazor-transition-
   group, Toolbelt.ViewTransition). Exit animations are awkward because Blazor
   removes DOM nodes synchronously on state change
-- **Reactor (C+):** Spring, ease, and linear curves on compositor properties
-  (Opacity, Offset, Scale, Rotation, CenterPoint). Enter **and exit**
-  transitions now work — the ChildReconciler defers removal until exit
-  animations complete, with proper index tracking. KeyframeBuilder provides
-  multi-keyframe animations with per-keyframe easing and looping.
-  ScrollAnimation enables scroll-linked expression animations (parallax,
-  fade, scale). InteractionStates handle hover/pressed/focused with
-  compositor animations. WithAnimation scope provides ambient animation
-  context. Still limited to 5 compositor visual properties — no layout/size
-  animations. Pressed state merges with PointerOver rather than being fully
-  independent. Connected animation support remains stub-level
+- **Reactor (B-):** The previous review graded this C+ with four integration
+  bugs. All four are now fixed (commit `d38c6ef`), plus three additional
+  runtime issues (async scope persistence across the DispatcherQueue render
+  boundary, Opacity routing for `.Animate()`, pool crash with
+  compositor-tainted elements). The animation system now delivers what its
+  API promises. Curves (spring, bezier, linear, 7 easing presets) feed an
+  eight-tier system: implicit property transitions, theme transitions, the
+  `Curve` DSL, `.Animate()` modifier, layout animations, enter/exit
+  transitions with `+` (parallel) and `|` (asymmetric) composition operators,
+  interaction states (pointer/pressed/focused all wired), keyframes with
+  per-step easing and looping, staggered children integrated with enter
+  transitions, scroll-linked expression animations, and `AnimationScope.WithAnimation`
+  / `WithAnimationAsync` for ambient curve propagation. 47 regression tests
+  guard the bug fixes. **The ceiling is structural, not fixable:** the system
+  can only animate what the WinUI compositor exposes on the `Visual` —
+  Opacity, Scale, Rotation, Translation, CenterPoint, plus 3 brush swaps
+  in InteractionStates. Width, Height, CornerRadius, Margin, Padding,
+  FontSize, and arbitrary colors cannot animate. SwiftUI animates any state
+  change that produces a different view body; Compose's `animateAsState`
+  works for any type with a `TwoWayConverter`; Flutter's `Tween` works for
+  anything with `lerp`. Reactor has an increasingly sophisticated control
+  model over the same narrow set of properties. There is also no per-frame
+  hook (`UseAnimation`/`UseSpring` equivalents) — compositor runs the
+  animation, component code can't observe intermediate values. Connected
+  animations still use string-key coordination (typos fail silently).
+  Keyframes can only target the same compositor properties. No cross-element
+  orchestration beyond stagger
 
-**Gap:** WinUI 3's Composition API is genuinely world-class — competitive with
-SwiftUI's animation ergonomics while offering more low-level control. WPF is
-solid. Reactor's animation has improved (exit transitions fixed, keyframes and
-scroll animations added) but remains its weakest category relative to its
-own platform — most real UI animations (height changes, layout transitions)
-can't be expressed in 5 compositor properties.
+**Gap:** WinUI 3's Composition API is world-class. WPF is solid. Reactor's
+animation moved from C+ to B- because all four integration bugs are fixed
+and the API is now faithful to what it advertises. The remaining gap is the
+compositor-property ceiling — a WinUI platform constraint, not a Reactor
+design failure, but real. A developer who wants a button's CornerRadius to
+animate on hover, or a sidebar's Width to animate on expand, still has no
+declarative path and must fall back to `.Set()` and WinUI's `DoubleAnimation`.
+Per-frame hooks, typed connected-animation keys, and cross-element orchestration
+are design omissions rather than broken promises.
 
 ---
 
@@ -452,39 +523,57 @@ gaps on web.
   Quality depends entirely on component library choice: Fluent UI Blazor,
   Telerik (WCAG 2.2), Syncfusion (WCAG 2.2 / Section 508 / ADA) all provide
   comprehensive a11y
-- **Reactor (B):** 16+ accessibility modifiers covering automation name, help
-  text, landmarks, heading levels, live regions (Polite/Assertive), required
-  fields, position-in-set, hierarchy level, tab navigation, and accessibility
-  view. Smart lazy allocation (tier 1 inline, tier 2/3 on-demand). 12 E2E
-  Appium tests with explicit WCAG 2.1 criterion mapping (1.1.1, 1.3.1,
-  2.1.1, 3.3.2, 4.1.2, 4.1.3) testing the real UIA pipeline. Full RTL/BiDi
-  support with CLDR-based locale detection and logical layout modifiers
-  (MarginInlineStart/End, PaddingInlineStart/End). **SemanticPanel** wraps
-  composite components in a Panel with a custom AutomationPeer exposing UIA
-  roles (17 mappings including slider, progressbar, list, menu), IValueProvider,
-  and IRangeValueProvider — partially addresses the "no custom automation
-  peers" gap. **UseAnnounce** hook provides imperative screen reader
-  announcements via RaiseNotificationEvent with live-region fallback.
-  **UseFocusTrap** hook traps keyboard focus within a container (modal dialog
-  pattern), though focus cycling is not yet implemented. **AccessibilityScanner**
-  performs 8 WCAG-mapped runtime diagnostics (icon-only buttons, missing alt
-  text, unlabeled form fields, headings without HeadingLevel, concrete brushes
-  on interactive controls, missing Main landmark, non-sequential TabIndex gaps,
-  unresolved LabeledBy references) with structured JSON export. Three **Roslyn
-  analyzers** (REACTOR_A11Y_001–003) catch accessibility issues at compile time
-  with code fix providers. Still limited: SemanticPanel is a workaround (not
-  true per-component AutomationPeer), `LabeledBy()` is still a no-op,
-  UseFocusTrap doesn't cycle focus, and AccessibilityScanner only runs in
-  DEBUG builds
+- **Reactor (B):** 16 first-class accessibility modifiers across two storage
+  tiers (tier 1 inline on `ElementModifiers`, tier 2 lazy sub-record) —
+  common case pays zero cost. 12-13 E2E Appium tests through the real UIA
+  pipeline with explicit WCAG 2.1 criterion mapping (1.1.1, 1.3.1, 2.1.1,
+  3.3.2, 4.1.2, 4.1.3). `SemanticPanel` + `.Semantics()` modifier wraps
+  composite components in a real WinUI `Panel` subclass with a custom
+  `SemanticPanelAutomationPeer` that exposes role, value, and range through
+  `IValueProvider` and `IRangeValueProvider` — this closes the previously
+  "architecturally blocked" composite-automation gap. `LabeledBy` is now
+  wired with deferred resolution (targets not yet in the tree at mount time
+  resolve on `Loaded`). `ElementPool` clears 14 UIA properties on return.
+  `Heading()` and `SubHeading()` factories auto-set `HeadingLevel.Level1`/
+  `Level2`. `UseFocusTrap` hook handles modal focus containment via the
+  `LosingFocus` event. `AccessibilityScanner` runs post-reconciliation WCAG
+  diagnostics with rich context (parent names, nearest heading, WCAG
+  criterion, code-snippet fix suggestions) designed for AI-agent consumption.
+  Three Roslyn analyzers (`REACTOR_A11Y_001/002/003`) cover icon-button,
+  image, and interactive-element missing-AutomationName at edit time.
+  **Remaining gaps:** `SemanticPanel` only implements 2 of ~20 UIA patterns
+  (Value, RangeValue) — no `IToggleProvider`, `IExpandCollapseProvider`,
+  `ISelectionProvider`. Semantic role is a bare string with no enum
+  (`"slidre"` silently maps to `Custom`). `UseFocusTrap` traps but doesn't
+  cycle — tabbing past the last focusable element stays put rather than
+  wrapping, which is the WAI-ARIA Dialog Pattern expectation. `UseFocusTrap`
+  requires `.Set(el => trap.SetContainer(el))` to wire the container, a
+  reach-through-the-declarative-model pattern. `UseAnnounce`,
+  `UseReducedMotion`, and `UseScreenReaderActive` are still unbuilt.
+  `AccessibilityScanner` is DEBUG-only and runtime-only (requires a
+  rendered UI). Analyzer coverage is narrow — `REACTOR_A11Y_001` matches
+  `Button` by identifier name, missing `AppBarButton`, `ToggleButton`,
+  `SplitButton`, `RepeatButton`; `REACTOR_A11Y_003` misses `RadioButton`,
+  `TextBox`, `PasswordBox`, `AutoSuggestBox`. Programmatic focus control
+  (`FocusRequester` / `@FocusState` equivalent), XYFocus directional
+  navigation, and focus restoration on back-navigation are all still
+  missing. SemanticPanel adds a fourth invisible wrapper to the visual
+  tree (after component Border, NavigationHost Grid, CommandHost Grid).
+  **The showcase apps still don't use any accessibility modifiers** —
+  a11y-showcase is an isolated demo; Outlook clone, file manager,
+  registry editor, and word puzzle game still have no headings, landmarks,
+  or live regions
 
 **Gap:** WPF and WinUI 3 have **no gap** in accessibility — UIA is the most
-comprehensive accessibility API on any platform. Reactor has improved (from B-
-to B) with SemanticPanel for custom UIA semantics, UseAnnounce/UseFocusTrap
-hooks, and compile-time + runtime a11y scanning. The AccessibilityScanner
-with WCAG-mapped diagnostics is developer tooling that no competitor provides
-built-in. The remaining gaps are `LabeledBy()` no-op (correctness bug) and
-SemanticPanel being a wrapper approach rather than true custom AutomationPeer
-support per component.
+comprehensive accessibility API on any platform. Reactor moved from B- to B
+in the last cycle on the strength of SemanticPanel (solves the hardest
+architectural problem), a three-layer diagnostic approach (compile-time +
+runtime + E2E) that no other C# UI framework has, and auto-HeadingLevel as
+pit-of-success design. The layered accessibility *system* is real; the
+layers are thin. SwiftUI's `.accessibilityRepresentation {}` and Compose's
+`Modifier.semantics {}` are open — SemanticPanel is closed to two patterns.
+The trajectory is right; the last imperative hooks (announce, reduced motion)
+and the focus-cycling correctness bug are concrete, specific gaps.
 
 ---
 
@@ -510,14 +599,62 @@ capable. React has no built-in gesture system.
   Declarative `@onclick:stopPropagation="true"` / `:preventDefault="true"`.
   Typed form inputs (`<InputText>`, `<InputNumber>`, `<InputDate>`) with
   two-way binding and validation integration. No gesture system
-- **Reactor (C):** Semantic events (OnClick, OnToggle) are good. Commanding
-  system provides focus-scoped keyboard accelerators. But no gesture system,
-  no pointer enter/exit, no right-click/double-click without `.Set()`. Most
-  input still requires the escape hatch
+- **Reactor (B):** Spec 027 (commit `76d0f51`, 73 files, +7.2k LoC) closed the
+  longest-standing "Reactor is a thin WinUI wrapper" critique in one PR.
+  What shipped: the full pointer modifier surface (`.OnPointerPressed`,
+  `Moved`, `Released`, `Entered`, `Exited`, `Canceled`, `CaptureLost`,
+  `WheelChanged`); tap family (`.OnTapped`, `.OnDoubleTapped`, `.OnRightTapped`,
+  `.OnHolding`) with `IsTapEnabled`-family flags auto-toggled by the
+  reconciler; keyboard (`.OnKeyDown`, `.OnKeyUp`, `.OnPreviewKeyDown`,
+  `.OnPreviewKeyUp`, `.OnCharacterReceived`); focus (`.OnGotFocus`,
+  `.OnLostFocus`, plus a `UseElementFocus()` hook with typed `ElementRef`
+  and `.Ref(target)` modifier, and a `FocusManager` helper — the first
+  imperative focus primitive the framework has had); typed pan/pinch/rotate
+  gestures (`.OnPan`, `.OnPinch`, `.OnRotate`) with `PanGesture`/`PinchGesture`/
+  `RotateGesture` records carrying phase, translation/delta/velocity, scale/anchor,
+  angle, and an `IsInertial` flag; drag-and-drop with eager/sync-provider/
+  async-provider format overloads (text, URI, HTML, RTF, files, bitmap, custom)
+  wired through `DataPackage.SetDataProvider` so expensive formats only
+  render if a drop target asks. The event dispatch model also changed: a
+  stable trampoline is attached once per event per element lifetime, replacing
+  the previous "detach + attach on every render" COM churn on hot input
+  paths. ETW events (`EventTrampolineAttached`, `EventTrampolineDispatch`,
+  keyword 0x40) let the one-time-attach invariant be verified from a trace.
+  Commanding remains a real differentiator: define-once `Command` records
+  bundle execute + canExecute + label + icon + accelerator + description;
+  16 standard commands (Cut/Copy/Paste/Undo/Redo/etc.); focus-scoped
+  accelerators via `CommandHost`; ICommand interop. **Remaining gaps:**
+  gesture composition (SwiftUI's `.simultaneously`/`.sequenced`/`.exclusively`)
+  doesn't exist. Long-press is a raw event, not a typed
+  `LongPressGesture(minimumDuration:)`, so "long-press to begin drag" must
+  be hand-rolled across `.OnHolding` and `.OnPan`. Inertia deceleration isn't
+  tunable — `withInertia` is on/off. Pan inherits WinUI's manipulation
+  constraints (screen-axis-aligned translation only). Pointer capture
+  (`CapturePointer`/`ReleasePointerCapture`) still requires `.Set()`. Wheel
+  handling has no typed delta record and no mouse-vs-trackpad momentum
+  classification. StandardCommand labels are English-only (surprising given
+  Reactor has a full ICU localization system). Command routing to the focused
+  view is still missing — Cut/Copy/Paste in multi-panel apps continues to
+  require manual wiring. Accelerators rebuild on every render (O(commands)
+  COM calls per CommandHost per render). **Zero field evidence for the
+  trampoline perf claim** — all 6,390 unit tests pass, but the suite is
+  WinUI-free and doesn't exercise the COM interop path. No before/after
+  render-cycle benchmark exists; the architectural argument is right, the
+  measurement isn't there. **Zero field evidence for drag-and-drop** — 370
+  lines of new `DragData` shipped with no showcase consumer. Typed format
+  ids use `typeof(T).FullName`, unversioned, so renames break round-trips
 
-**Gap:** WPF and WinUI 3 are competitive. Reactor's commanding system is a genuine
-differentiator (no competitor has it built-in), but the lack of a gesture
-system is a significant gap.
+**Gap:** WPF and WinUI 3 are competitive. Reactor moved from C to B in a
+single PR — pointer/gesture/focus/drag-drop are no longer passthrough, and
+commanding remains a unique industry-first (no competitor ships define-once
+commands with metadata bundling). The remaining gaps are composition
+primitives (simultaneous/sequenced gesture chains, typed long-press), command
+routing to focus, typed pointer-capture and wheel-momentum APIs, and the
+uncomfortable fact that Reactor's own showcase apps don't use any of these
+new modifiers. The Outlook clone has no `.OnRightTapped` for message
+context menus, no `.OnDrop<EmailMessage>` for folder drop, no
+`UseElementFocus` for "focus the reading pane after selection." The feature
+exists; the integration evidence doesn't.
 
 ---
 
@@ -546,13 +683,52 @@ and Preview are excellent.
   end-to-end. **No component DevTools** — no render tree inspector, no
   parameter inspector, no render-count profiler. WebAssembly debugging has
   debug-proxy handshake fragility
-- **Reactor (C+):** Hot reload works (via WinUI 3 XAML Hot Reload). Preview is
-  screenshot-only. No DevTools for component inspection. No recomposition
-  count tracking. No profiling tools
+- **Reactor (B):** Hot reload works via .NET's `MetadataUpdateHandler` —
+  UI updates on code change while hook state survives (`UseState` values
+  persist because `RenderContext` stays in memory). Works with both VS and
+  `dotnet watch`. Limited by .NET hot reload's inherent restrictions: adding
+  fields, changing type hierarchies, and lambda shape changes still require
+  a restart. Spec 024+025 shipped an MCP (Model Context Protocol) devtools
+  server — `mur devtools ./App.csproj` spawns a supervisor that exposes
+  ~12 tools over HTTP JSON-RPC and stdio: `reactor.tree`, `reactor.click`,
+  `reactor.type`, `reactor.state`, `reactor.screenshot`, `reactor.logs`,
+  `reactor.windows`, `reactor.waitFor`, `reactor.fire`, `reactor.reload`.
+  Stable window-scoped node ids (`r:main/Counter.btn-inc`) survive re-renders.
+  UIA-based automation means any test an agent can write is also a test that
+  Narrator can see. **No C# declarative framework has an MCP server** — this
+  is genuinely unique, but it's a bet: agents-first debugging. The
+  traditional-developer equivalent (React DevTools panel, Compose Layout
+  Inspector) still doesn't exist; "preview" was renamed to "devtools" and
+  replaced rather than augmented. ETW tracing via `Microsoft-UI-Reactor`
+  EventSource (commit `310a299`) emits reconcile/render/state/MCP/lifecycle/
+  event-dispatch events to classic ETW and EventPipe. Consumers use PerfView
+  or dotnet-trace. Four hook-rule Roslyn analyzers (`REACTOR_HOOKS_001/004/
+  005/006`) catch conditional hooks, unstable deps, hooks-outside-render,
+  and UseResource-on-mutation at edit time — the `eslint-plugin-react-hooks`
+  equivalent that was previously absent. The most valuable ESLint rule
+  (`exhaustive-deps`) is still deferred as control-flow-analysis work.
+  ~5,600 lines of new coverage tests pushed selftest coverage past 85%.
+  **Remaining gaps:** state is read-only in MCP (no `reactor.setState`);
+  tree diffing is deferred (agents must cache client-side); source mapping
+  from tree nodes to authored C# lines is v1.1; no cache inspection
+  surface (`QueryCache` is invisible to devtools — contrast with TanStack
+  Query Devtools); ETW has no per-component render timing or per-hook
+  execution breakdown, only aggregate boundaries; PerfView's learning curve
+  is real; the DEBUG-gated devtools surface has a risk of Release-build leak
+  if environment flags misconfigure. The VS Code extension's interactive
+  preview has regressed relative to the old `--preview` flag — screenshots
+  are now a sub-capability of devtools rather than a first-class command
 
-**Gap:** All Microsoft options lag significantly in developer experience. No
-equivalent to React DevTools, Flutter Widget Inspector, or Compose Layout
-Inspector. Reactor's lack of tooling is its most significant DX gap.
+**Gap:** All Microsoft options lag in developer experience. Reactor moved
+from C+ to B on the strength of MCP devtools (unique industry-wide), ETW
+tracing, and the hook-rule analyzers — but "unique" is not the same as
+"better for humans." There is still no equivalent to React DevTools'
+component tree inspector, Compose Layout Inspector's per-composable
+recomposition counts, or SwiftUI Xcode Previews' inline interactive
+rendering. Reactor's bet is that AI agents are a primary UI-debugging
+audience; if that bet doesn't play out, the traditional-developer story
+is still behind. Per-component render timing is the largest concrete
+profiling gap.
 
 ---
 
@@ -690,15 +866,45 @@ runtime. Flutter's `FutureBuilder` is built-in but considered low-level.
   interactive double-fetch gap. Auto-`StateHasChanged` after `OnInitializedAsync`
   removes boilerplate. No Suspense equivalent in Interactive mode — manual
   loading-state booleans. No built-in caching/retry (no TanStack Query peer)
-- **Reactor (B+):** `UseEffect` provides lifecycle-scoped side effects matching
-  React's model. `UseState` for loading/error management. `UseObservable`
-  bridges async ViewModel patterns. No built-in Suspense equivalent, but
-  ErrorBoundary can catch render errors
+- **Reactor (B+):** Spec 020 (PR #29, `3814def..9f2f5de`, ~40 sub-commits)
+  shipped a full async data subsystem in 72 hours. `UseResource<T>` for
+  single-fetch; `UseInfiniteResource<T>` for cursor pagination;
+  `UseMutation<TIn,TOut>` for writes with pattern-based cache invalidation.
+  The return type is an `AsyncValue<T>` sealed record ADT —
+  `Loading` / `Data` / `Error` / `Reloading` — which expresses
+  stale-while-revalidate as a type-level concept (Reloading carries the
+  old value while the new fetch runs). `Pending` / `PendingScope` provide
+  Suspense-style fallback regions. Hook-owned `CancellationToken` means
+  unmount cancels in-flight requests automatically. `QueryCache.Default`
+  has per-key `SemaphoreSlim` locks preventing duplicate concurrent
+  fetches, ref-counted subscriptions, TTL + pattern invalidation
+  (`Invalidate("employees.*")`), focus revalidation, and an `EntryChanged`
+  event for mutation-driven invalidation. `DataGrid` row-commit was
+  migrated to `UseMutation` and hook-based paging is on by default —
+  a real production-sized control consuming the new API, not just a demo.
+  Four `REACTOR_HOOKS_*` analyzers back it up. **Remaining concerns:**
+  Cache is in-process-only — lost on app exit. No automatic retry;
+  transient network errors throw straight into `AsyncValue.Error<T>`.
+  `StaleTime` defaults to zero (refetch on every mount). `InvalidateKeys`
+  is `string[]` — no partial-match arrays like TanStack Query's
+  `queryKey`. Cache keys derive from `CallerHookId + DepsHash` by default,
+  which differs from TanStack Query where cache sharing is by named
+  key by default — two sibling components calling the same fetcher get
+  different cache entries unless they specify `CacheKey`. **No devtools
+  for the cache** — `reactor.state` exposes hook shape but not
+  `QueryCache` state. Diagnosing "why is this query stale" requires
+  reading source. **No stress tests** — 15 self-host fixtures cover
+  correctness but nothing profiles eviction (O(n) per tick) or per-key
+  lock contention under thousands of live queries. Zero field evidence
 
 **Gap:** Declarative frameworks have lifecycle-scoped async (`.task`,
-`LaunchedEffect`, Suspense). Microsoft frameworks use imperative MVVM async
-patterns. Reactor's `UseEffect` matches React's model but lacks Suspense-style
-declarative loading boundaries.
+`LaunchedEffect`, Suspense + TanStack Query). Reactor now competes on the
+primitives — ADT-based state, hook-owned cancellation, shared cache, typed
+analyzers — but TanStack Query has persistence adapters, devtools, retry,
+prefetching, and a multi-year production track record that Reactor's
+brand-new subsystem lacks. The gap to React's ecosystem is smaller than in
+any other category (this is the closest competitive position), but it
+hasn't been battle-tested.
 
 ---
 
@@ -917,6 +1123,124 @@ and binding-level validation integration.
 
 ---
 
+### 20. Charting & Chart Accessibility (Reactor-specific)
+
+**What this measures:** Built-in charting, chart accessibility for screen
+readers, keyboard navigation of charts, color-blindness accommodation. No
+competitor scorecard slot because only Reactor and Apple Charts ship this
+as a framework concern.
+
+**Competitor standard:** Apple Charts (iOS 16+, 50+ chart types, audio
+graphs/sonification via VoiceOver) is the benchmark. Compose has Vico and
+community libraries. React has D3 and countless charting libs (not
+framework-integrated). WinUI ships no chart library — enterprise WinUI
+apps use LiveCharts, OxyPlot, or Telerik/DevExpress/Syncfusion.
+
+**Reactor:** Spec 026 + 9 implementation phases shipped a full charting
+sub-framework in 72 hours: 43 D3-ported samples, plus an 8-layer
+accessibility infrastructure:
+
+1. **Automation peer infrastructure.** `ChartAutomationPeer` implements
+   `IGridProvider` (series × points) and `ITableProvider`; `ChartPointProvider`
+   exposes per-point `IValueProvider`; `IScrollProvider` for large datasets
+2. **Per-point labels + auto-summarization** via `ChartSummarizer` —
+   "Line chart, 5 series, 120 points. Revenue trending upward by 12%"
+3. **Alternate-view convention.** `.AlternateView(Element)` attaches a
+   developer-supplied DataGrid; T-key toggle, focus save/restore, live
+   announcement handled by the framework
+4. **Keyboard navigation.** Arrow keys walk points/series, Home/End jump
+   to edges, Ctrl+arrow steps by series/axis, +/- zoom, Shift+arrow brush,
+   L focuses legend. Highcharts/Power BI model translated to WinUI
+5. **Focus context** preserves focused point across view transitions
+6. **Live announcements** via debounced (400ms trailing) `ChartLiveAnnouncer`
+7. **Forced colors, reduced motion, double encoding.** `ChartPalette.ForcedColors`
+   swaps to `[CanvasText, Highlight, LinkText, GrayText]` under high
+   contrast. `ChartPalette.Harden` runs deterministic LCH-space lightness
+   adjustment to meet WCAG AA contrast — no other C# declarative framework
+   ships this. `ColorblindSimulate` uses Brettel matrices. Series are
+   double-encoded (color + shape + dash) by default; `.ColorOnly()` warns
+   via the scanner. `ReactorHost` honors `WindowsThemeSettings.HighContrast`
+   and `UISettings.AnimationsEnabled`
+8. **Scanner rules.** 12 chart-specific rules (`A11Y_CHART_001..012`):
+   missing title, missing axis labels, missing point labels, color-only
+   encoding, insufficient contrast, tiny hit targets, etc. Fix suggestions
+   include CLI commands (`reactor charts harden`) for AI-agent consumption
+
+The 43-sample gallery got retrofitted to use all of this in one pass
+(commit `229e41b`) — a real counter-example to the "features exist in
+isolation" pattern that dominates the rest of the review.
+
+**Remaining gaps:** No sonification / audio graphs — Apple Charts and
+Highcharts both ship this. Spec explicitly lists it as "A+ ceiling deferred."
+ForceGraph a11y is explicitly decorative-only — screen reader users get the
+node/edge list but no interactive exploration of dense graphs. Hit-target
+expansion (24×24px minimum for WCAG 2.5.8) requires `.Interactive()` opt-in;
+static analytics charts don't get it. Forced-colors palette clips to 4
+series — beyond that, colors collide under high contrast. `ChartPointProvider`
+peer allocation is unbounded — 10,000-point scatterplot creates 10,000 peer
+instances on each UIA walk, unprofiled. "Alternate view" depends entirely
+on app-supplied DataGrid content — no canonical fully-integrated sample
+that syncs sort/filter state between chart and table. Live-region debounce
+is hard-coded at 400ms. Chart scanner rules don't merge with general a11y
+scanner rules, so `A11Y_001` + `A11Y_CHART_001` both fire on a titleless
+chart. E2E Appium coverage for charts is thin (~153 lines). No third-party
+dashboard has adopted this — zero field evidence, no 10k-point stress
+testing, no screen-reader-user survey.
+
+**Gap:** Reactor's chart accessibility is arguably the most comprehensive
+*system* in any C# declarative framework and ahead of everything except
+Apple Charts on most dimensions. Only sonification and ForceGraph
+interaction remain as clear competitive gaps. Grade: **B+** as a new
+category; would be **A-** with sonification and always-on hit-target
+expansion.
+
+---
+
+### 21. Devtools & Tracing Infrastructure (Reactor-specific)
+
+**What this measures:** Framework-integrated debugging, tree inspection,
+automation, tracing.
+
+**Competitor standard:** React DevTools (component tree, props, hook
+inspection, Profiler flame graphs). Compose Layout Inspector (per-composable
+recomposition counts). SwiftUI Xcode Previews (interactive preview). Apple
+Instruments (sophisticated profiling). None ship an MCP server.
+
+**Reactor:** An unusual position. Spec 024+025 shipped a Model Context
+Protocol devtools server — `reactor.tree`, `reactor.click`, `reactor.type`,
+`reactor.state`, `reactor.screenshot`, `reactor.logs`, `reactor.reload`,
+`reactor.waitFor`, `reactor.fire`, `reactor.switchComponent` — over HTTP
+JSON-RPC and stdio. `mur devtools` is a supervisor; `mur devtools call`
+provides CLI parity for humans. Stable window-scoped node ids
+(`r:<window>/<local>`) survive re-renders. UIA-based automation means
+tests authored against the devtools surface also validate accessibility.
+Single-instance lockfile with pid probe + HTTP liveness check. ETW
+tracing via `Microsoft-UI-Reactor` EventSource emits 6 keyword categories
+to classic ETW and EventPipe; consumers use PerfView or dotnet-trace.
+
+**What's missing:** `reactor.state` is read-only — no `reactor.setState`.
+Tree diffing deferred to a later phase (agents must cache client-side).
+Source mapping (tree node → C# file/line) is v1.1. No cache inspection
+for `QueryCache`. No performance profiling via MCP. ETW has no
+per-component render timing or per-hook execution breakdown — only
+aggregate boundaries. DEBUG-gated with risk of Release-build leak if
+env vars misconfigure. The previous `--preview` flag was replaced
+(renamed to `--devtools`), so non-agent developers have a regression
+in mental model — screenshots are now a devtools sub-capability rather
+than a first-class command. Traditional-developer tooling (live component
+tree in an IDE panel, per-component Profiler) still doesn't exist.
+
+**Gap:** No other C# UI framework — and for that matter, no other
+declarative UI framework on any platform — ships an MCP server. The
+architectural choices (UIA as the bus, MCP as the protocol, stable
+node ids, CLI parity, single-instance lockfile) are correct. The bet
+is that AI agents are a primary UI-debugging audience. If that bet
+pays off, Reactor is uniquely positioned; if developers still prefer
+React DevTools-style GUI devtools, Reactor shipped the supplement
+before the primary. Grade: **B** as a new category.
+
+---
+
 ## Gap Analysis: Microsoft vs Competitor Median
 
 | Category | Competitor Median | Best MS | MS Grade | Gap |
@@ -930,8 +1254,8 @@ and binding-level validation integration.
 | Navigation | B+ | Reactor (B+) | B+ | **Matched** |
 | Animation | B+ | WinUI 3 (A) | A | **Ahead** |
 | Accessibility | B+ | WinUI 3 (A) | A | **Ahead** |
-| Input & Gestures | B+ | WPF/WinUI 3/Blazor (B+) | B+ | **Matched** |
-| Developer Experience | A- | WinForms/Blazor (B) | B | **1 grade behind** |
+| Input & Gestures | B+ | WPF/WinUI 3/Blazor/Reactor (B+/B) | B+ | **Matched** |
+| Developer Experience | A- | WinForms/Blazor/Reactor (B) | B | **1 grade behind** |
 | Platform Reach | A- | Blazor (B+) | B+ | **Half grade behind** |
 | Testing | B+ | Blazor (A-) | A- | **Ahead** |
 | Error Handling | C+ | Blazor (B+) | B+ | **Ahead** |
@@ -940,6 +1264,8 @@ and binding-level validation integration.
 | Internationalization | B+ | Blazor/Reactor/WinUI 3 (B+) | B+ | **Matched** |
 | Interop & Adoption | A- | Blazor/Reactor (A-) | A- | **Matched** |
 | Forms & Data Entry | B | WPF (A) | A | **Ahead** |
+| Charting + Chart A11y | C (Compose/median) | Reactor (B+) | B+ | **Ahead** |
+| Devtools & Tracing (MCP) | — (unique) | Reactor (B) | B | **Unique industry position** |
 
 ### Where Microsoft leads or matches:
 1. **Forms & Data Entry** (WPF) — The richest validation system of any
@@ -1096,42 +1422,114 @@ type safety and no XAML.
 
 **Profile:** The only Microsoft-ecosystem option with a modern declarative
 component model: function components, hooks, reconciler, context, navigation,
-commanding. 94% of WinUI controls wrapped. Navigation is architecturally
-competitive with comprehensive deep linking (typed params, wildcards, query
-strings) and runtime diagnostics. Commanding is a genuine industry-first.
-ErrorBoundary exists (rare). Interop with existing WinUI/MVVM code is
-excellent (`ReactorHostControl`, `UseObservable`, `XamlHostElement`) and now
-extends to WinForms via `XamlIslandControl` with designer support and focus
-bridging. ICU localization closes WinUI 3's plural/gender gap. Form
-validation system with automatic validation pipeline, 10+ built-in
-validators, FormField component, and ValidationVisualizer. **DataGrid** with
-paged LRU caching, server-side sort/filter, inline cell/row editing with
-validation, async commit with optimistic updates, multi-selection, and full
-keyboard navigation. 37 theme tokens with ResourceBuilder lightweight
-styling, style caching, and Roslyn analyzers. Accessibility: 16+ modifiers
-with WCAG-mapped E2E tests, full RTL/BiDi support, SemanticPanel for custom
-UIA roles/values on composite components, UseAnnounce hook for screen reader
-announcements, UseFocusTrap for modal focus management, AccessibilityScanner
-with 8 WCAG-mapped runtime diagnostics, and 3 compile-time Roslyn analyzers.
-Enter/exit transitions, keyframe animations, and scroll-linked animations.
-But: pre-release, animation limited to 5 compositor properties, `LabeledBy()`
-is a no-op, SemanticPanel is a workaround not true per-component
-AutomationPeer, `.Set()` escape hatch is still load-bearing for many
-scenarios, no DevTools or component inspector.
+commanding. 94% of WinUI controls wrapped. Solid component foundation
+(context system, default-on memoization via record prop equality, generic
+hook state without boxing, persisted state, post-render effect cleanup).
+Navigation is architecturally competitive with comprehensive deep linking
+(typed params, wildcards, query strings) and runtime diagnostics.
+Commanding is a genuine industry-first (define-once commands bundling
+execute + canExecute + label + icon + accelerator + description, 16 standard
+commands, async lifecycle, focus-scoped accelerators). ErrorBoundary exists
+(rare). Interop with existing WinUI/MVVM code is excellent (`ReactorHostControl`,
+`UseObservable`, `XamlHostElement`) and extends to WinForms via
+`XamlIslandControl`. ICU localization closes WinUI 3's plural/gender gap.
+Form validation (FormField + 10+ validators + ValidationVisualizer).
+`DataGrid` with paged LRU caching, server-side sort/filter, inline editing,
+async commit with optimistic updates. ~40 theme tokens with `ResourceBuilder`
+lightweight styling (a genuinely unique feature — no other C# declarative
+framework wraps WinUI's per-control resource key overrides), style caching
+that eliminates the XamlReader.Load-per-element perf concern, and Roslyn
+analyzers. Accessibility has crossed a threshold: `SemanticPanel` solves the
+hardest architectural problem (custom automation peers for composites),
+`AccessibilityScanner` runtime WCAG diagnostics + 3 Roslyn analyzers
+(`REACTOR_A11Y_001–003`) = a three-layer diagnostic system (compile-time +
+runtime + E2E) no other C# UI framework has. **Async data is now a full
+framework subsystem** — `UseResource`, `UseInfiniteResource`, `UseMutation`,
+`Pending`/`PendingScope`, `AsyncValue<T>` ADT, `QueryCache` with per-key
+locks, ref-counted subscriptions, TTL + pattern invalidation, focus
+revalidation; `DataGrid` migrated to `UseMutation` as a real integration
+test. Four `REACTOR_HOOKS_*` analyzers cover the most common hook mistakes.
+**Spec 027 made input declarative**: pointer/tap/keyboard/focus modifiers,
+typed pan/pinch/rotate gestures with phase+delta+velocity+inertia metadata,
+drag-and-drop with eager/sync/async provider overloads; stable trampoline
+dispatch replaces per-render COM detach/attach. **Charting + chart a11y**
+is an 8-layer sub-framework (43 samples, 12 scanner rules, WCAG-hardening
+palette, forced-colors remap, keyboard navigation, debounced live
+announcements) — arguably the most comprehensive chart accessibility on
+any platform except Apple Charts' sonification. **Animation** is now
+operational (all 4 previously-identified integration bugs fixed), though
+compositor-property-bound (Opacity, Scale, Rotation, Translation, CenterPoint
++ 3 brush swaps). **MCP devtools** is unique industry-wide (`reactor.tree`,
+`reactor.click`, `reactor.state`, etc. over HTTP + stdio). **ETW tracing**
+closes part of the profiling gap. ~5,600 lines of new coverage tests pushed
+selftest past 85%. **WinForms interop** via `XamlIslandControl` opens
+brownfield adoption.
 
-**Competitive position:** Reactor is the most interesting Microsoft option from
-a declarative-framework perspective. It's the only one that competes on
-the same playing field as SwiftUI, Compose, and React. Its component model,
-navigation, commanding, and interop are competitive. Accessibility now
-includes both compile-time and runtime scanning — developer tooling that no
-competitor provides built-in. The DataGrid with paged caching and inline
-editing is a genuine LOB capability. Theming and forms have improved
-substantially but remain behind the platform (WinUI 3/WPF) in depth.
-Animation and developer tooling are the largest remaining gaps. The
-trajectory is right — six categories improved in the latest development
-cycle (accessibility, lists/virtualization, navigation deep linking,
-interop/WinForms, developer diagnostics, DataGrid) — but significant work
-remains before production-readiness.
+**But — and it's a growing list:** `UseColorScheme` reads app-level theme,
+not element effective theme, so the headline RequestedTheme + UseColorScheme
+scenario doesn't compose. Custom branded theme resources still don't exist
+(multiple review cycles). Only 3 properties support ThemeRef bindings.
+`SemanticPanel` covers 2 of ~20 UIA patterns. `UseFocusTrap` doesn't cycle —
+the WAI-ARIA Dialog Pattern expectation isn't met. `UseAnnounce`,
+`UseReducedMotion`, and `UseScreenReaderActive` are still unbuilt. Animation
+ceiling is structural: Width, CornerRadius, Margin, FontSize, arbitrary
+colors can't animate. `StandardCommand` labels are English-only (ironic —
+Reactor has a full ICU localization system the commands don't use). No
+command routing to the focused view. Accelerators rebuild on every render.
+Delegate equality on `Command` records defeats the memoization system.
+The reconciler is a giant type-based switch — no open/closed extensibility
+for built-in types. Tag-based event dispatch is a fragile workaround.
+Every component adds an invisible `Border` wrapper; NavigationHost adds
+a `Grid`; CommandHost adds a `Grid`; SemanticPanel is a fourth wrapper —
+a well-structured Reactor component can accumulate 4+ framework wrappers
+between a component and its content. `ConnectedTransition` is a shipped
+API that silently falls back to a slide animation. Async `QueryCache` has
+no persistence, no automatic retry, no devtools surface, no stress tests,
+zero field evidence. Drag-and-drop has 370 lines of new code with zero
+showcase consumer. Typed drag format ids are unversioned — rename a model,
+round-trip breaks. Trampoline dispatch is unvalidated at the thing it
+promises (no before/after render benchmark; 6,390 unit tests that don't
+exercise COM interop don't measure COM interop). The `REACTOR_*` analyzer
+rename is partial (`DUCT001-003` still carry the old product name).
+E2E tests were just discovered to be 95% invisible behind a broken filter
+(now fixed, but the blind spot for the entire dev period is telling).
+Three to four invisible wrapper element types, and a running theme of
+string-typed APIs at boundaries (deep link patterns, semantic roles,
+lightweight styling keys, connected-animation keys, drag-format ids).
+`.Set()` surface is materially thinner than a quarter ago but still carries
+composition-layer effects, materials, windowing, pointer-capture, custom
+geometry, and ink. And the single most damning critique that's been
+constant for three review cycles: **the showcase apps don't use the
+framework's own features.** Outlook clone still uses `UseState<string>`
+for navigation. File manager still needs `SynchronizationContext` capture
+for off-thread state updates. None of the four flagship apps use context,
+memoization, persisted state, commanding, navigation, SemanticPanel,
+async resources, UseFocusTrap, or any of the spec 027 input modifiers.
+The charting gallery is the one bright exception — all 43 samples were
+retrofitted in one pass, which proves the work is possible; it just isn't
+being prioritized for the general-purpose flagship apps.
+
+**Competitive position:** Reactor now has *five* features where it's ahead
+of the entire industry: commanding (no competitor has define-once commands
+with metadata bundling), lightweight styling (no competitor wraps WinUI's
+per-control resource overrides), the AccessibilityScanner + chart a11y
+system (no C# UI framework ships framework-integrated runtime WCAG
+diagnostics, and no declarative framework ships an 8-layer chart
+accessibility system), MCP devtools (no framework ships an MCP server —
+whether this bet pays off depends on adoption patterns that don't exist
+yet), and ErrorBoundary (shared with React). These are real differentiators,
+not catch-up. But "features exist in isolated demos" and "features compose
+correctly in real apps under production load" are different claims.
+Reactor's velocity is impressive; the integration debt is accumulating
+at a rate that's also impressive in a less comforting way. Each review
+cycle, new capability arrives faster than the previous cycle's features
+get integrated into the flagship apps. Navigation and commanding moved
+Reactor from "component library with hooks" to "framework with application
+architecture." Accessibility moved it from "annotations on primitives" to
+"a layered system." Async resources closed the largest remaining capability
+gap. Spec 027 closed the largest remaining "this is just a wrapper" gap.
+But the Outlook clone still uses `UseState<string>` for navigation.
+Production-readiness is where that gap closes or the framework stalls.
 
 ---
 
@@ -1192,22 +1590,37 @@ Reactor already does better. **Reactor's native-rendering, native-UIA,
 native-look positioning is its structural advantage over Blazor Hybrid on
 Windows desktop** — positioning that's worth stating explicitly in marketing.
 
-### 4. Reactor addresses the right gaps
+### 4. Reactor addresses the right gaps — but feature velocity is outpacing integration
 
 Reactor's declarative model, navigation, and commanding are not random feature
 additions — they directly address the areas where WPF/WinUI 3 are weakest
 relative to competitors (declarative syntax, component model, navigation
 type safety). The commanding system is genuinely novel. Recent work has
-deepened coverage in theming (37 tokens, ResourceBuilder, analyzers),
-forms (automatic validation pipeline, FormField, ValidationVisualizer),
-accessibility (SemanticPanel for custom UIA semantics, UseAnnounce/
-UseFocusTrap hooks, 8-rule WCAG scanner, 3 compile-time analyzers),
-animation (exit transitions, keyframes, scroll-linked), data grids (paged
-caching, inline editing, server-side sort/filter), navigation (typed deep
-linking with wildcards and query strings, diagnostics), and interop
-(WinForms adoption via XamlIslandControl with designer support). The key
-remaining gaps are animation depth (5 compositor properties), developer
-tooling (no inspector or profiler), and `LabeledBy()` no-op.
+deepened coverage across the board: theming (style caching + lightweight
+styling + analyzers), forms (automatic validation + FormField), accessibility
+(SemanticPanel + AccessibilityScanner + 3 analyzers + UseFocusTrap), animation
+(all 4 integration bugs fixed, API now faithful), DataGrid (paged caching +
+inline editing + server-side sort/filter), navigation (destination guards,
+wildcards, diagnostics), interop (WinForms via XamlIslandControl), **async
+data (full subsystem — UseResource/UseInfiniteResource/UseMutation with
+AsyncValue ADT and QueryCache)**, **charting + chart a11y (8-layer system
+with WCAG-hardening palette + scanner rules)**, **MCP devtools (unique
+industry-wide)**, **ETW tracing**, and **spec 027 declarative input
+(pointer/gesture/focus/drag-drop modifiers + trampoline dispatch)**. The key
+remaining gaps are structural (animation compositor-property ceiling, no
+custom theme resources, SemanticPanel covering 2 of ~20 UIA patterns),
+compositional (UseColorScheme/RequestedTheme don't compose correctly,
+StandardCommand labels aren't localized despite Reactor having a full ICU
+system, no command routing to focused view), and — most uncomfortably —
+integrative. The showcase apps (Outlook clone, file manager, registry
+editor, word puzzle game) don't use navigation, commanding, context,
+memoization, persisted state, SemanticPanel, UseFocusTrap, async resources,
+or any of the spec 027 input modifiers. Every new feature ships with an
+isolated demo; the flagship apps freeze in time. The charting gallery is
+the one bright exception (43 samples retrofitted in one pass, proving the
+team *can* do integration work). Production-readiness doesn't live in
+"features exist" — it lives in "features compose in real apps under real
+load." That gap is widening, not closing.
 
 ### 5. Error handling is an industry-wide gap — but Microsoft has two answers
 
@@ -1299,10 +1712,32 @@ Every framework has embarrassing gaps:
   DevTools, hefty WebAssembly payload, Server-mode latency sensitivity,
   CSS isolation doesn't cover third-party components, no type-safe routing,
   Hybrid renders in a WebView (not native), no built-in animation system
-- **Reactor:** Animation limited to 5 compositor properties, no DevTools or
-  component inspector, `LabeledBy()` no-op, SemanticPanel is a workaround
-  not true per-component AutomationPeer, `.Set()` escape hatch still
-  load-bearing for many scenarios, DataGrid has no grouping
+- **Reactor:** Animation capped at 5 compositor properties + 3 brush swaps
+  (Width/CornerRadius/Margin/FontSize/colors can't animate).
+  `UseColorScheme` reads app theme, not element effective theme — so
+  RequestedTheme + UseColorScheme don't compose in the exact "dark sidebar
+  in light app" scenario they were built for. Custom branded theme
+  resources still don't exist. SemanticPanel covers 2 of ~20 UIA patterns.
+  `UseFocusTrap` doesn't cycle (WAI-ARIA Dialog Pattern expects wrapping).
+  `UseAnnounce`/`UseReducedMotion`/`UseScreenReaderActive` are still
+  unbuilt. `StandardCommand` labels are hard-coded English. No command
+  routing to focused view. Accelerators rebuild on every render. Delegate
+  equality on Command records defeats memoization. 4+ invisible wrapper
+  element types accumulate in the visual tree. `.Set()` still needed for
+  composition layer, materials, windowing, pointer capture, custom
+  geometry, ink. `ConnectedTransition` is shipped but silently falls back
+  to slide. Trampoline dispatch has no render-cycle benchmark proving the
+  perf claim it makes. Async `QueryCache` has no persistence, no auto-retry,
+  no devtools surface, no stress tests. Drag-and-drop has zero consumer
+  apps and unversioned typed format ids that break on model renames.
+  Stringly-typed APIs at every platform boundary (deep link patterns,
+  semantic roles, resource keys, connected-animation keys, drag formats).
+  Analyzer IDs half-renamed (DUCT001-003 still carry the old product name).
+  And the constant-across-three-review-cycles critique: **showcase apps
+  don't use the framework's own features** — Outlook clone still uses
+  `UseState<string>` for navigation; nothing uses SemanticPanel, commanding,
+  context, UseFocusTrap, async resources, or spec 027 input modifiers
+  except isolated demos
 
 The "perfect framework" doesn't exist. The question is which gaps matter
 most for your specific application.
