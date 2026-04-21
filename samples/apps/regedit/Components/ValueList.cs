@@ -82,17 +82,14 @@ internal sealed class ValueList : Component<ValueListProps>
                 })
                 .VAlign(VerticalAlignment.Center)
                 .Grid(row: 0, column: 2)
-        ).Set(g =>
-        {
-            g.Padding = new Thickness(8, 0, 8, 0);
-            g.PointerEntered += (s, _) =>
-                ((Microsoft.UI.Xaml.Controls.Grid)s!).Background =
-                    (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"];
-            g.PointerExited += (s, _) =>
-                ((Microsoft.UI.Xaml.Controls.Grid)s!).Background = null;
-            g.Tapped += (_, _) => Props.OnSelectionChanged(index);
-            g.DoubleTapped += (_, _) => Props.OnModify(value);
-        });
+        ).Padding(8, 0, 8, 0)
+         .OnPointerEntered((s, _) =>
+             ((Microsoft.UI.Xaml.Controls.Grid)s).Background =
+                 (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"])
+         .OnPointerExited((s, _) =>
+             ((Microsoft.UI.Xaml.Controls.Grid)s).Background = null)
+         .OnTapped((_, _) => Props.OnSelectionChanged(index))
+         .OnDoubleTapped((_, _) => Props.OnModify(value));
 
         // Context flyout for right-click
         return MenuFlyout(

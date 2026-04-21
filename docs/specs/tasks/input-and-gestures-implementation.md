@@ -640,18 +640,36 @@ The outlook clone was deprecated and removed from the repo, so there is no
 consumer to migrate. Phase 7.2 / 7.3 cover the remaining real adopters.
 
 ### 7.2 ReactorFiles (file manager sample)
-- [ ] Double-click to open: `.OnDoubleTapped`
-- [ ] Right-click context menu: `.OnRightTapped`
-- [ ] Reorder files: `.OnDragStart` / `.OnDrop` with typed payload
-- [ ] Accept Explorer drops: `.OnDrop<T>` raw overload reading `args.Data.TryGetFiles`
+- [x] Double-click to open: `.OnDoubleTapped` (was `.Set(sp => sp.DoubleTapped += ...)`
+      in `FileListPane.cs` — 4 call sites migrated)
+- [x] Hover highlight on rows: `.OnPointerEntered` / `.OnPointerExited`
+      (was `.Set(g => { g.PointerEntered += ...; g.PointerExited += ... })`)
+- [x] Draggable divider (`SplitPanel.cs`): migrated to `.OnPointer{Entered,Exited,
+      Pressed,Moved,Released}` modifiers. Drag still uses imperative
+      CapturePointer + direct column mutation for 60fps without re-renders.
+- [ ] Right-click context menu: `.OnRightTapped` — deferred; ReactorFiles
+      currently has no context menu
+- [ ] Reorder files via drag: `.OnDragStart` / `.OnDrop` — deferred; not in
+      the sample today
+- [ ] Accept Explorer drops: `.OnDrop<T>` raw with `args.Data.TryGetFiles` — deferred
+
+### 7.2.b regedit sample (bonus adoption)
+- [x] `ValueList.cs`: row hover → `.OnPointerEntered`/`.OnPointerExited`;
+      select click → `.OnTapped`; modify → `.OnDoubleTapped`
+- [x] `SplitPanel.cs`: same grip migration as ReactorFiles
 
 ### 7.3 Word-puzzle game
-- [ ] Tile drag within the board: `.OnPan` (no data transfer needed)
-- [ ] If racks ever move tiles between each other: typed `.OnDragStart`/`.OnDrop`
+- [ ] Tile drag within the board: `.OnPan` — deferred. The game is click-only
+      today (Button per tile); adding drag would be a new feature, not a
+      migration, and isn't required to prove the modifiers work in a real app
+      (ReactorFiles + regedit cover that).
+- [ ] Typed `.OnDragStart`/`.OnDrop` rack-to-rack — same reason, not present today
 
 ### 7.4 Success-criteria verification
-- [ ] Grep showcase apps: zero `.Set(r => r.Pointer*)` / `.Set(r => r.KeyUp*)`
-      occurrences remain
+- [x] Grep showcase apps: zero `.Set(r => r.Pointer*)` / `.Set(r => r.KeyUp*)`
+      / `.Set(g => g.DoubleTapped += ...)` occurrences remain in the Reactor
+      samples (`regedit-winui/MainWindow.cs` is a raw-WinUI comparison app,
+      not a Reactor consumer, so its `DoubleTapped +=` stays)
 - [ ] Re-run critical-review rescore; input/events grade moves from C toward A-
 - [ ] Microbenchmark numbers from Phase 2 recorded in repo
 

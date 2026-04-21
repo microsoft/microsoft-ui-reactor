@@ -69,53 +69,48 @@ internal sealed class SplitPanel : Component<SplitPanelProps>
         var startXRef = UseRef(0.0);
         var startWidthRef = UseRef(0.0);
 
+        // Pointer hover + imperative drag via the declarative pointer modifiers.
+        // The drag still uses CapturePointer + direct grid-column mutation for
+        // 60fps resize without re-renders; that's the same pattern as the
+        // ReactorFiles SplitPanel.
         var splitter = new CursorBorderElement(Empty(), InputSystemCursorShape.SizeWestEast)
             { Background = DividerBrush() }
             .Width(4)
-            .OnMount(fe =>
+            .OnPointerEntered((s, _) =>
             {
-                var grip = (CursorPanel)fe;
-
-                grip.PointerEntered += (s, _) =>
-                {
-                    if (!draggingRef.Current)
-                        ((CursorPanel)s!).Background = HoverBrush();
-                };
-
-                grip.PointerExited += (s, _) =>
-                {
-                    if (!draggingRef.Current)
-                        ((CursorPanel)s!).Background = DividerBrush();
-                };
-
-                grip.PointerPressed += (s, e) =>
-                {
-                    var el = (UIElement)s!;
-                    el.CapturePointer(e.Pointer);
-                    draggingRef.Current = true;
-                    startXRef.Current = e.GetCurrentPoint(null).Position.X;
-                    startWidthRef.Current = widthRef.Current;
+                if (!draggingRef.Current)
                     ((CursorPanel)s).Background = HoverBrush();
-                    e.Handled = true;
-                };
-
-                grip.PointerMoved += (s, e) =>
-                {
-                    if (!draggingRef.Current) return;
-                    var x = e.GetCurrentPoint(null).Position.X;
-                    var newWidth = Math.Max(Props.MinWidth, startWidthRef.Current + (x - startXRef.Current));
-                    widthRef.Current = newWidth;
-                    if (((FrameworkElement)s!).Parent is Grid grid)
-                        grid.ColumnDefinitions[0].Width = new GridLength(newWidth, GridUnitType.Pixel);
-                };
-
-                grip.PointerReleased += (s, e) =>
-                {
-                    var el = (UIElement)s!;
-                    el.ReleasePointerCapture(e.Pointer);
-                    draggingRef.Current = false;
-                    e.Handled = true;
-                };
+            })
+            .OnPointerExited((s, _) =>
+            {
+                if (!draggingRef.Current)
+                    ((CursorPanel)s).Background = DividerBrush();
+            })
+            .OnPointerPressed((s, e) =>
+            {
+                var el = (UIElement)s;
+                el.CapturePointer(e.Pointer);
+                draggingRef.Current = true;
+                startXRef.Current = e.GetCurrentPoint(null).Position.X;
+                startWidthRef.Current = widthRef.Current;
+                ((CursorPanel)s).Background = HoverBrush();
+                e.Handled = true;
+            })
+            .OnPointerMoved((s, e) =>
+            {
+                if (!draggingRef.Current) return;
+                var x = e.GetCurrentPoint(null).Position.X;
+                var newWidth = Math.Max(Props.MinWidth, startWidthRef.Current + (x - startXRef.Current));
+                widthRef.Current = newWidth;
+                if (((FrameworkElement)s).Parent is Grid grid)
+                    grid.ColumnDefinitions[0].Width = new GridLength(newWidth, GridUnitType.Pixel);
+            })
+            .OnPointerReleased((s, e) =>
+            {
+                var el = (UIElement)s;
+                el.ReleasePointerCapture(e.Pointer);
+                draggingRef.Current = false;
+                e.Handled = true;
             });
 
         return Grid(

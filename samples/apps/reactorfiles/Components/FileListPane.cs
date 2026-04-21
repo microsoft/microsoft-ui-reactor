@@ -89,16 +89,13 @@ internal sealed class FileListPane : Component<FileListPaneProps>
             TextBlock(file.Modified.ToString("g")).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 2),
             TextBlock(file.TypeDescription).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 3),
             TextBlock(file.FormattedSize).HAlign(HorizontalAlignment.Right).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 4)
-        ).Set(g =>
-        {
-            g.Padding = new Thickness(4, 0, 4, 0);
-            g.PointerEntered += (s, _) =>
-                ((Microsoft.UI.Xaml.Controls.Grid)s!).Background =
-                    (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"];
-            g.PointerExited += (s, _) =>
-                ((Microsoft.UI.Xaml.Controls.Grid)s!).Background = null;
-            g.DoubleTapped += (_, _) => Props.OnItemActivated(file);
-        });
+        ).Padding(4, 0, 4, 0)
+         .OnPointerEntered((s, _) =>
+             ((Microsoft.UI.Xaml.Controls.Grid)s).Background =
+                 (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"])
+         .OnPointerExited((s, _) =>
+             ((Microsoft.UI.Xaml.Controls.Grid)s).Background = null)
+         .OnDoubleTapped((_, _) => Props.OnItemActivated(file));
     }
 
     private Element RenderList(IReadOnlyList<FileEntry> files)
@@ -118,11 +115,8 @@ internal sealed class FileListPane : Component<FileListPaneProps>
                 return HStack(6,
                     icon.VAlign(VerticalAlignment.Center),
                     TextBlock(file.Name).VAlign(VerticalAlignment.Center)
-                ).Set(sp =>
-                {
-                    sp.Padding = new Thickness(4, 2, 4, 2);
-                    sp.DoubleTapped += (_, _) => Props.OnItemActivated(file);
-                });
+                ).Padding(4, 2, 4, 2)
+                 .OnDoubleTapped((_, _) => Props.OnItemActivated(file));
             }
         ) with { EstimatedItemSize = 28, Spacing = 0 };
     }
@@ -156,13 +150,10 @@ internal sealed class FileListPane : Component<FileListPaneProps>
                             tb.TextTrimming = TextTrimming.CharacterEllipsis;
                             tb.MaxWidth = itemWidth - 8;
                         })
-                    ).Set(sp =>
-                    {
-                        sp.Width = itemWidth;
-                        sp.Height = itemHeight;
-                        sp.Padding = new Thickness(4);
-                        sp.DoubleTapped += (_, _) => Props.OnItemActivated(file);
-                    });
+                    ).Width(itemWidth)
+                     .Height(itemHeight)
+                     .Padding(4)
+                     .OnDoubleTapped((_, _) => Props.OnItemActivated(file));
                 }
                 else
                 {
@@ -173,11 +164,8 @@ internal sealed class FileListPane : Component<FileListPaneProps>
                             tb.TextTrimming = TextTrimming.CharacterEllipsis;
                             tb.MaxWidth = itemWidth - 40;
                         }).VAlign(VerticalAlignment.Center)
-                    ).Set(sp =>
-                    {
-                        sp.Padding = new Thickness(4, 2, 4, 2);
-                        sp.DoubleTapped += (_, _) => Props.OnItemActivated(file);
-                    });
+                    ).Padding(4, 2, 4, 2)
+                     .OnDoubleTapped((_, _) => Props.OnItemActivated(file));
                 }
             }
         ) with { EstimatedItemSize = itemHeight, Spacing = 0 };
