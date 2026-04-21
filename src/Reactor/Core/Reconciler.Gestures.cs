@@ -318,11 +318,21 @@ public sealed partial class Reconciler
 
         // For pinch/rotate, WinUI dispatches the first Delta right away with meaningful values;
         // we defer Began to the first delta so the gesture args carry real scale/angle data.
+
+        // Mark handled so an outer ScrollViewer doesn't grab the same manipulation as
+        // a scroll and drag the viewport along with the child.
+        if (state.Pan is not null || state.Pinch is not null || state.Rotate is not null)
+            e.Handled = true;
     }
 
     private static void OnManipulationDelta(FrameworkElement fe, GestureState state, ManipulationDeltaRoutedEventArgs e)
     {
         var inertial = state.InertiaActive || e.IsInertial;
+
+        // Mark handled so the delta doesn't bubble to an ancestor ScrollViewer (which
+        // would then treat our drag as a scroll and move the viewport underneath us).
+        if (state.Pan is not null || state.Pinch is not null || state.Rotate is not null)
+            e.Handled = true;
 
         // ── Pan ──
         if (state.Pan is { } pan)
@@ -407,6 +417,11 @@ public sealed partial class Reconciler
 
     private static void OnManipulationCompleted(GestureState state, ManipulationCompletedRoutedEventArgs e)
     {
+        // Mark handled so the completion (and any post-release inertia frames) don't
+        // bubble to an ancestor ScrollViewer.
+        if (state.Pan is not null || state.Pinch is not null || state.Rotate is not null)
+            e.Handled = true;
+
         // Pan — only fire Ended if Began fired (honor the minimum-distance contract).
         if (state.Pan is { } pan && state.PanBeganDispatched)
         {

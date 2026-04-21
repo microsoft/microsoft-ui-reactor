@@ -40,9 +40,15 @@ sealed class GesturePanSample : Component
         //
         // The committedRef holds the position at the last gesture end, so
         // successive drags accumulate. We only call setOffset at gesture end
-        // (+ reset on double-tap) so React-style state stays in sync — the
+        // (+ reset on Reset button) so React-style state stays in sync — the
         // label below updates on a small number of renders per gesture, not
         // on every manipulation tick.
+        //
+        // Why a Reset button instead of OnDoubleTap? WinUI suppresses the
+        // tap/double-tap/right-tap/holding recognizers whenever ManipulationMode
+        // is anything other than `System`. Adding `.OnPan` sets ManipulationMode
+        // to TranslateX|TranslateY, which disables the double-tap recognizer
+        // on the same element. An explicit button is also easier to discover.
         var cardRef = UseRef<FrameworkElement?>(null);
         var committedRef = UseRef(Vector2.Zero);
         var (offset, setOffset) = UseState(Vector2.Zero);
@@ -50,49 +56,54 @@ sealed class GesturePanSample : Component
         var eventCountRef = UseRef(0);
         var lastTickRef = UseRef(Environment.TickCount64);
 
+        void Reset()
+        {
+            committedRef.Current = Vector2.Zero;
+            setOffset(Vector2.Zero);
+            if (cardRef.Current is { } fe) fe.Translation = Vector3.Zero;
+        }
+
         return InputGesturesSampleCard.Build(
             "Pan with inertia",
-            $"Drag the blue square. Release fast to see inertia. Double-tap to reset. Current: ({offset.X:F0}, {offset.Y:F0}) · pan events/sec: {eps}",
-            Border(
-                Border(TextBlock("drag me").Foreground("#ffffff")
-                    .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
-                    .Width(120).Height(120)
-                    .Background("#3A7BD5")
-                    .CornerRadius(8)
-                    .Translation(offset.X, offset.Y, 0)
-                    .OnMount(fe => cardRef.Current = fe)
-                    .OnPan(
-                        onChanged: g =>
-                        {
-                            var next = committedRef.Current + new Vector2((float)g.Translation.X, (float)g.Translation.Y);
-
-                            // Direct compositor property — no reconciler round-trip.
-                            if (cardRef.Current is { } fe)
-                                fe.Translation = new Vector3(next.X, next.Y, 0);
-
-                            // Running events/sec counter, repainted once per second.
-                            eventCountRef.Current++;
-                            var now = Environment.TickCount64;
-                            if (now - lastTickRef.Current >= 1000)
+            $"Drag the blue square. Release fast to see inertia. Current: ({offset.X:F0}, {offset.Y:F0}) · pan events/sec: {eps}",
+            VStack(8,
+                Border(
+                    Border(TextBlock("drag me").Foreground("#ffffff")
+                        .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+                        .Width(120).Height(120)
+                        .Background("#3A7BD5")
+                        .CornerRadius(8)
+                        .Translation(offset.X, offset.Y, 0)
+                        .OnMount(fe => cardRef.Current = fe)
+                        .OnPan(
+                            onChanged: g =>
                             {
-                                setEps(eventCountRef.Current);
-                                eventCountRef.Current = 0;
-                                lastTickRef.Current = now;
-                            }
-                        },
-                        onEnded: g =>
-                        {
-                            committedRef.Current += new Vector2((float)g.Translation.X, (float)g.Translation.Y);
-                            setOffset(committedRef.Current);
-                        },
-                        withInertia: true)
-                    .OnDoubleTap(() =>
-                    {
-                        committedRef.Current = Vector2.Zero;
-                        setOffset(Vector2.Zero);
-                        if (cardRef.Current is { } fe) fe.Translation = Vector3.Zero;
-                    })
-            ).Height(220).Background("#f3f3f3").CornerRadius(8).Padding(8)
+                                var next = committedRef.Current + new Vector2((float)g.Translation.X, (float)g.Translation.Y);
+
+                                // Direct compositor property — no reconciler round-trip.
+                                if (cardRef.Current is { } fe)
+                                    fe.Translation = new Vector3(next.X, next.Y, 0);
+
+                                // Running events/sec counter, repainted once per second.
+                                eventCountRef.Current++;
+                                var now = Environment.TickCount64;
+                                if (now - lastTickRef.Current >= 1000)
+                                {
+                                    setEps(eventCountRef.Current);
+                                    eventCountRef.Current = 0;
+                                    lastTickRef.Current = now;
+                                }
+                            },
+                            onEnded: g =>
+                            {
+                                committedRef.Current += new Vector2((float)g.Translation.X, (float)g.Translation.Y);
+                                setOffset(committedRef.Current);
+                            },
+                            withInertia: true)
+                ).Height(220).Background("#f3f3f3").CornerRadius(8).Padding(8),
+
+                Button("Reset position", Reset)
+            )
         );
     }
 }

@@ -46,43 +46,50 @@ class PanGestureExample : Component
         // Translation inside onChanged. Going through setState would queue
         // Low-priority re-renders that get starved by the manipulation event
         // stream itself, producing a laggy drag. The committedRef holds the
-        // position at the last gesture end so successive drags accumulate;
-        // we only setState on onEnded / double-tap.
+        // position at the last gesture end so successive drags accumulate.
+        // Reset lives on a sibling Button because WinUI suppresses the tap
+        // recognizer when ManipulationMode ≠ System — .OnDoubleTap on the same
+        // element as .OnPan wouldn't fire.
         var cardRef = UseRef<FrameworkElement?>(null);
         var committedRef = UseRef(Vector2.Zero);
         var (offset, setOffset) = UseState(Vector2.Zero);
 
-        return Border(
-            Border(TextBlock("drag me")
-                .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
-                .Width(120).Height(120)
-                .Background("#3A7BD5")
-                .Foreground("#ffffff")
-                .CornerRadius(8)
-                .Translation(offset.X, offset.Y, 0)
-                .OnMount(fe => cardRef.Current = fe)
-                .OnPan(
-                    onChanged: g =>
-                    {
-                        var next = committedRef.Current +
-                            new Vector2((float)g.Translation.X, (float)g.Translation.Y);
-                        if (cardRef.Current is { } fe)
-                            fe.Translation = new System.Numerics.Vector3(next.X, next.Y, 0);
-                    },
-                    onEnded: g =>
-                    {
-                        committedRef.Current += new Vector2((float)g.Translation.X, (float)g.Translation.Y);
-                        setOffset(committedRef.Current);
-                    },
-                    withInertia: true)
-                .OnDoubleTap(() =>
-                {
-                    committedRef.Current = Vector2.Zero;
-                    setOffset(Vector2.Zero);
-                    if (cardRef.Current is { } fe)
-                        fe.Translation = System.Numerics.Vector3.Zero;
-                })
-        ).Height(260).Background("#f3f3f3").CornerRadius(8).Padding(16);
+        void Reset()
+        {
+            committedRef.Current = Vector2.Zero;
+            setOffset(Vector2.Zero);
+            if (cardRef.Current is { } fe)
+                fe.Translation = System.Numerics.Vector3.Zero;
+        }
+
+        return VStack(8,
+            Border(
+                Border(TextBlock("drag me")
+                    .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+                    .Width(120).Height(120)
+                    .Background("#3A7BD5")
+                    .Foreground("#ffffff")
+                    .CornerRadius(8)
+                    .Translation(offset.X, offset.Y, 0)
+                    .OnMount(fe => cardRef.Current = fe)
+                    .OnPan(
+                        onChanged: g =>
+                        {
+                            var next = committedRef.Current +
+                                new Vector2((float)g.Translation.X, (float)g.Translation.Y);
+                            if (cardRef.Current is { } fe)
+                                fe.Translation = new System.Numerics.Vector3(next.X, next.Y, 0);
+                        },
+                        onEnded: g =>
+                        {
+                            committedRef.Current += new Vector2((float)g.Translation.X, (float)g.Translation.Y);
+                            setOffset(committedRef.Current);
+                        },
+                        withInertia: true)
+            ).Height(260).Background("#f3f3f3").CornerRadius(8).Padding(16),
+
+            Button("Reset position", Reset)
+        );
     }
 }
 // </snippet:pan-gesture>

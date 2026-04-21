@@ -140,6 +140,16 @@ If the panned position doesn't drive anything else on the screen (no adjacent
 counter, no snap-to-grid indicator), you can even skip the setState at
 gesture end and treat the ref as the single source of truth.
 
+### Can I combine `.OnPan` with `.OnTapped` / `.OnDoubleTapped` on the same element?
+
+Not reliably. WinUI suppresses the tap, double-tap, right-tap, and hold
+recognizers whenever `ManipulationMode` is set to anything other than `System`
+— adding `.OnPan` (or `.OnPinch` / `.OnRotate`) flips the mode to the
+specific gesture bits, so taps stop firing on the same element. If you need
+"drag, but also click to reset," put the click target on a separate sibling
+(a Reset button, an overlay, a parent Border) rather than the drag surface
+itself.
+
 `axis: PanAxis.Horizontal` restricts to X-axis translation; `withInertia: true`
 adds the inertia flag so WinUI continues to emit callbacks after the pointer
 lifts.
