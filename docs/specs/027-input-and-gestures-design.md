@@ -1748,8 +1748,20 @@ All "Post-spec ✓" rows in the table above have shipped as of this snapshot:
 
 E2E parity: `GestureTests` and `DragDropTests` exercise pan / double-tap /
 right-tap / long-press and typed reorder / cancelled drag / text-format
-round-trip end-to-end via Appium/WinAppDriver. Unit + selftest tiers already
-covered the declarative surface before E2E landed.
+round-trip end-to-end via Appium/WinAppDriver — all 7 green as of this
+snapshot. Unit + selftest tiers already covered the declarative surface
+before E2E landed. Two reconciler hardening notes shipped alongside the
+E2E work: `.OnLongPress` now subscribes to `PointerPressed`/`Released`/
+`CaptureLost`/`Moved` via `AddHandler(handledEventsToo: true)` so mouse
+emulation still arms on Controls (like Button) that mark the press
+handled for their own Click logic, and drop-target trampolines
+(`DragEnter`/`DragOver`/`DragLeave`/`Drop`) do the same so `.OnDrop` fires
+even when the target Control consumes the routed drag event internally.
+
+Showcase adoption: `ReactorFiles` (file list + split panel grip) and
+`regedit` (value list + split panel) have migrated off
+`.Set(ctrl => ctrl.X += ...)` onto the Tier 1 declarative modifiers; the
+outlook clone was deprecated and deleted.
 
 ---
 

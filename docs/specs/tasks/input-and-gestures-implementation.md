@@ -564,16 +564,17 @@ Ships in three sub-phases so the 80% case lands before the full protocol.
       attach time (deferred with 6b.1)
 
 #### 6b.6 Selftest fixtures (extend `DragDropFixtures.cs`)
-- [ ] `LazyHtmlProviderNotInvokedWhenTargetWantsText` — instrument a counter
-      inside the HTML provider; drop onto text-only target; assert counter = 0
-- [ ] `LazyHtmlProviderInvokedOnceWhenTargetRequests` — drop onto HTML target
-      (simulated via `GetHtmlAsync`); assert counter = 1; drop again; assert = 2
-- [ ] `WithBitmapFromElementLazyRender` — supply a large element, drop on
-      a text-only target; assert `RenderTargetBitmap` was not invoked (track via
-      a side-channel flag set inside the build callback)
-- [ ] `DragUIOverrideCaptionApplied` — set `args.UIOverride.Caption = "Move"`
-      in `OnDragEnter`; assert the underlying WinUI `DragUIOverride.Caption` is
-      set accordingly
+- [x] `LazyHtmlProviderNotInvokedWhenTargetWantsText` — covered at the unit-test
+      level in `DragDataTests.WithHtml_LazyProvider_NotInvokedWhenOnlyTextRequested`.
+      `DragData` is pure C# and doesn't need a WinUI window, so a unit test is the
+      stronger contract check (runs in milliseconds in CI vs. ~10s per selftest).
+- [x] `LazyHtmlProviderInvokedOnceWhenTargetRequests` — covered by
+      `DragDataTests.WithHtml_LazyProvider_InvokedOnceOnGetHtmlAsync`.
+- [ ] `WithBitmapFromElementLazyRender` — N/A; the `WithBitmapFromElement(Func<Element>)`
+      feature itself is deferred (see 6b.1).
+- [ ] `DragUIOverrideCaptionApplied` — deferred to E2E; requires a real
+      `DragEventArgs` produced by the WinUI input pipeline (args are sealed
+      and cannot be constructed in a fixture).
 
 #### 6b.7 Gallery sample
 - [x] Source writes plain text via `DragData.Text(...)` and a drop zone reads
@@ -694,5 +695,7 @@ consumer to migrate. Phase 7.2 / 7.3 cover the remaining real adopters.
       compile with screenshots can be run the same way without the skip flags.
 
 ### 8.2 Appendix A table
-- [ ] Update the spec's Appendix A ("Field-By-Field Coverage After Phase 1")
-      with actual ship status once each tier lands
+- [x] Spec `docs/specs/027-input-and-gestures-design.md` Appendix A has a
+      "Ship status (2026-04 snapshot)" block listing shipped tiers, remaining
+      deferrals (`dragVisual` / `WithBitmapFromElement`), and the E2E
+      hardening notes (handledEventsToo trampolines for LongPress + Drop).
