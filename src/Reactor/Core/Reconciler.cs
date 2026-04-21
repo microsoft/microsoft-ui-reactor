@@ -44,7 +44,7 @@ public sealed partial class Reconciler : IDisposable
     /// dictionaries with the same entries in different enumeration order produce
     /// the same key.
     /// </summary>
-    private static string BuildCacheKey(string targetType, IReadOnlyDictionary<string, ThemeRef> bindings)
+    internal static string BuildCacheKey(string targetType, IReadOnlyDictionary<string, ThemeRef> bindings)
     {
         // Format: "TargetType|Prop1=Key1|Prop2=Key2" with properties sorted by Ordinal
         var sortedKeys = bindings.Keys.ToArray();
