@@ -155,6 +155,13 @@ internal static class DevtoolsPropertyTools
                 var filter = DevtoolsTools.ReadString(@params, "filter");
                 var windowId = DevtoolsTools.ReadString(@params, "window");
 
+                // Validate scope.
+                if (scope is not ("element" or "window" or "app"))
+                    throw new McpToolException($"Invalid scope '{scope}'. Must be 'element', 'window', or 'app'.", JsonRpcErrorCodes.InvalidParams);
+
+                if (scope is "element" or "window" && selector is null)
+                    throw new McpToolException($"Scope '{scope}' requires a selector.", JsonRpcErrorCodes.InvalidParams);
+
                 Regex? filterRe = null;
                 if (filter is not null)
                 {
@@ -466,10 +473,15 @@ internal static class DevtoolsPropertyTools
         return value switch
         {
             SolidColorBrush b => $"#{b.Color.A:X2}{b.Color.R:X2}{b.Color.G:X2}{b.Color.B:X2}",
-            Thickness t => $"{t.Left},{t.Top},{t.Right},{t.Bottom}",
-            CornerRadius cr => $"{cr.TopLeft},{cr.TopRight},{cr.BottomRight},{cr.BottomLeft}",
+            Thickness t => string.Create(
+                CultureInfo.InvariantCulture,
+                $"{t.Left},{t.Top},{t.Right},{t.Bottom}"),
+            CornerRadius cr => string.Create(
+                CultureInfo.InvariantCulture,
+                $"{cr.TopLeft},{cr.TopRight},{cr.BottomRight},{cr.BottomLeft}"),
             global::Windows.UI.Color c => $"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}",
             Brush _ => value.GetType().Name, // LinearGradientBrush etc. — just report type
+            IFormattable f => f.ToString(format: null, formatProvider: CultureInfo.InvariantCulture),
             _ => value.ToString(),
         };
     }
@@ -524,6 +536,10 @@ internal static class DevtoolsPropertyTools
         // Double fallback for numeric strings.
         if (double.TryParse(raw, CultureInfo.InvariantCulture, out var dbl)) return dbl;
 
+        // If a targetType was specified and we fell through, the input is invalid for that type.
+        if (targetType is not null)
+            throw new McpToolException($"Cannot parse '{raw}' as {targetType.Name}.", JsonRpcErrorCodes.InvalidParams);
+
         // String fallback.
         return raw;
     }
@@ -575,6 +591,13 @@ internal static class DevtoolsPropertyTools
         {
             switch (h.Length)
             {
+                case 3:
+                    // Expand #RGB → #RRGGBB
+                    color = global::Windows.UI.Color.FromArgb(0xFF,
+                        byte.Parse($"{h[0]}{h[0]}", NumberStyles.HexNumber),
+                        byte.Parse($"{h[1]}{h[1]}", NumberStyles.HexNumber),
+                        byte.Parse($"{h[2]}{h[2]}", NumberStyles.HexNumber));
+                    return true;
                 case 6:
                     color = global::Windows.UI.Color.FromArgb(0xFF,
                         byte.Parse(h[0..2], NumberStyles.HexNumber),

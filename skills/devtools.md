@@ -298,7 +298,7 @@ supervisor return 0 so the `mur.exe` binary frees up.
 11. **`properties` isLocal semantics.** The `isLocal` flag uses `ReadLocalValue` which only distinguishes locally-set values from everything else — it cannot tell you whether a non-local value came from a style, animation, template, or default. A value with `isLocal: false` may still differ from the DP's default if it was set via a style or template binding.
 12. **`set-resource` shadows, it doesn't merge.** Writing a resource at element scope creates a new entry in that element's ResourceDictionary — it does not modify the app-level or theme dictionary. The response includes `replaced: true` when overwriting an existing key at the same scope, or `replaced: false` when creating a new shadowing entry. Downstream elements that already resolved the old value won't update until they re-query.
 
-## Raw MCP(escape hatch)
+## Raw MCP (escape hatch)
 
 If you have to talk MCP directly — another MCP client, an existing script,
 or a structured argument shape the CLI flattens — the endpoint is

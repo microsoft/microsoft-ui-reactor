@@ -98,9 +98,19 @@ public class DevtoolsPropertyToolTests
     }
 
     [Fact]
+    public void TryParseColor_ThreeDigitShorthand_ExpandsToSix()
+    {
+        Assert.True(DevtoolsPropertyTools.TryParseColor("#ABC", out var c));
+        Assert.Equal(0xFF, c.A);
+        Assert.Equal(0xAA, c.R);
+        Assert.Equal(0xBB, c.G);
+        Assert.Equal(0xCC, c.B);
+    }
+
+    [Fact]
     public void TryParseColor_InvalidLength_ReturnsFalse()
     {
-        Assert.False(DevtoolsPropertyTools.TryParseColor("#ABC", out _));
+        Assert.False(DevtoolsPropertyTools.TryParseColor("#ABCD", out _));
     }
 
     [Fact]
@@ -330,6 +340,23 @@ public class DevtoolsPropertyToolTests
         var result = DevtoolsPropertyTools.ParseValue("1.5", typeof(double));
         Assert.IsType<double>(result);
         Assert.Equal(1.5, result);
+    }
+
+    [Fact]
+    public void ParseValue_TargetTypeMismatch_Throws()
+    {
+        // "hello" is not parseable as an int — should throw when targetType is provided.
+        var ex = Assert.Throws<McpToolException>(() =>
+            DevtoolsPropertyTools.ParseValue("hello", typeof(int)));
+        Assert.Contains("Cannot parse", ex.Message);
+    }
+
+    [Fact]
+    public void FormatValue_Double_InvariantCulture()
+    {
+        // Ensures doubles format with '.' decimal separator regardless of locale.
+        var result = DevtoolsPropertyTools.FormatValue(3.14);
+        Assert.Equal("3.14", result);
     }
 
     // ─── KnownVerbs registry ────────────────────────────────────────────
