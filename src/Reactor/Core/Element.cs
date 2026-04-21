@@ -560,6 +560,12 @@ public record ElementModifiers
     public Action<object, RoutedEventArgs>? OnGotFocus { get; init; }
     public Action<object, RoutedEventArgs>? OnLostFocus { get; init; }
 
+    // ── Declarative gesture recognizers (spec 027 Tier 3) ───────────
+    // Drive a single ManipulationStarted/Delta/Completed subscription per element.
+    public Microsoft.UI.Reactor.Input.PanGestureConfig? Pan { get; init; }
+    public Microsoft.UI.Reactor.Input.PinchGestureConfig? Pinch { get; init; }
+    public Microsoft.UI.Reactor.Input.RotateGestureConfig? Rotate { get; init; }
+
     // ── Logical (BiDi-aware) layout properties ──────────────────────
     // These resolve to physical left/right based on FlowDirection at mount/update time.
     // InlineStart = left in LTR, right in RTL. InlineEnd = right in LTR, left in RTL.
@@ -644,6 +650,9 @@ public record ElementModifiers
             OnCharacterReceived = other.OnCharacterReceived ?? OnCharacterReceived,
             OnGotFocus = other.OnGotFocus ?? OnGotFocus,
             OnLostFocus = other.OnLostFocus ?? OnLostFocus,
+            Pan = other.Pan ?? Pan,
+            Pinch = other.Pinch ?? Pinch,
+            Rotate = other.Rotate ?? Rotate,
             MarginInlineStart = other.MarginInlineStart ?? MarginInlineStart,
             MarginInlineEnd = other.MarginInlineEnd ?? MarginInlineEnd,
             PaddingInlineStart = other.PaddingInlineStart ?? PaddingInlineStart,

@@ -186,75 +186,74 @@ Goal: ship `.OnPan`, `.OnPinch`, `.OnRotate` with value-typed gesture records,
 driven by a single `ManipulationDelta` subscription per element.
 
 ### 3.1 Define gesture types (`src/Reactor/Input/Gestures.cs`)
-- [ ] `GesturePhase` enum: `Began`, `Changed`, `Ended`, `Cancelled` (with XML doc)
-- [ ] `PanGesture` readonly record struct: `Translation`, `Delta`, `Velocity`,
+- [x] `GesturePhase` enum: `Began`, `Changed`, `Ended`, `Cancelled` (with XML doc)
+- [x] `PanGesture` readonly record struct: `Translation`, `Delta`, `Velocity`,
       `Position`, `StartPosition`, `Phase`, `IsInertial`
-- [ ] `PinchGesture` readonly record struct: `Scale`, `ScaleDelta`, `Center`,
+- [x] `PinchGesture` readonly record struct: `Scale`, `ScaleDelta`, `Center`,
       `Phase`, `IsInertial`
-- [ ] `RotateGesture` readonly record struct: `Angle`, `AngleDelta`, `Center`,
+- [x] `RotateGesture` readonly record struct: `Angle`, `AngleDelta`, `Center`,
       `Phase`, `IsInertial`
-- [ ] `PanAxis` enum: `Both`, `Horizontal`, `Vertical`
+- [x] `PanAxis` enum: `Both`, `Horizontal`, `Vertical`
 
 ### 3.2 Gesture state storage
-- [ ] Add `GestureState` class alongside `EventHandlerState` holding the
-      registered gesture callbacks + per-gesture cursors (e.g. `PanStartPosition`,
-      `PinchStartScale`)
-- [ ] Single `ManipulationStartedTrampoline` / `ManipulationDeltaTrampoline` /
-      `ManipulationCompletedTrampoline` per element (never detached, same
-      pattern as Tier 2)
+- [x] Add `GestureState` class alongside `EventHandlerState` holding the
+      registered gesture callbacks + per-gesture cursors (e.g. `PanStart`,
+      `PanLastTranslation`, `*BeganDispatched`)
+- [x] Single `StartedTrampoline` / `DeltaTrampoline` /
+      `CompletedTrampoline` / `InertiaStartingTrampoline` per element (never
+      detached, same pattern as Tier 2)
 
 ### 3.3 Modifiers in `ElementExtensions.cs`
-- [ ] `.OnPan<T>(onChanged, onEnded?, onBegan?, onCancelled?, minimumDistance=0.0,
+- [x] `.OnPan<T>(onChanged, onEnded?, onBegan?, onCancelled?, minimumDistance=0.0,
       axis=PanAxis.Both, withInertia=false)`
-- [ ] `.OnPinch<T>(onChanged, onEnded?, onBegan?, withInertia=false)`
-- [ ] `.OnRotate<T>(onChanged, onEnded?, onBegan?, withInertia=false)`
+- [x] `.OnPinch<T>(onChanged, onEnded?, onBegan?, withInertia=false)`
+- [x] `.OnRotate<T>(onChanged, onEnded?, onBegan?, withInertia=false)`
 
 ### 3.4 ManipulationMode auto-wire
-- [ ] Compute `ManipulationMode` as the union of flags required by all attached
+- [x] Compute `ManipulationMode` as the union of flags required by all attached
       gestures:
-  - [ ] Pan horizontal → `TranslateX [| TranslateInertia]`
-  - [ ] Pan vertical → `TranslateY [| TranslateInertia]`
-  - [ ] Pan both → `TranslateX | TranslateY [| TranslateInertia]`
-  - [ ] Pinch → `Scale [| ScaleInertia]`
-  - [ ] Rotate → `Rotate [| RotateInertia]`
-- [ ] Recompute whenever the set of attached gestures changes
-- [ ] When no manipulation gesture is attached, leave `ManipulationMode` at its
+  - [x] Pan horizontal → `TranslateX [| TranslateInertia]`
+  - [x] Pan vertical → `TranslateY [| TranslateInertia]`
+  - [x] Pan both → `TranslateX | TranslateY [| TranslateInertia]`
+  - [x] Pinch → `Scale [| ScaleInertia]`
+  - [x] Rotate → `Rotate [| RotateInertia]`
+- [x] Recompute whenever the set of attached gestures changes
+- [x] When no manipulation gesture is attached, leave `ManipulationMode` at its
       prior value (don't clobber user's `.Set()`-configured mode)
 
 ### 3.5 Minimum-distance gating for `.OnPan`
-- [ ] Until cumulative `|e.Cumulative.Translation|` exceeds `minimumDistance`,
+- [x] Until cumulative `|e.Cumulative.Translation|` exceeds `minimumDistance`,
       suppress all callbacks
-- [ ] On first crossing, emit synthetic `onBegan` with `Phase = Began`, then the
+- [x] On first crossing, emit synthetic `onBegan` with `Phase = Began`, then the
       current-delta as `Phase = Changed`
-- [ ] If the manipulation completes before the threshold is crossed, never emit
-      `onBegan` (and never emit `onCancelled` either — the gesture never started)
+- [x] If the manipulation completes before the threshold is crossed, never emit
+      `onBegan`/`onEnded` (honored by `PanBeganDispatched` gate in
+      `OnManipulationCompleted`)
 
 ### 3.6 Coordinate space
-- [ ] Use `e.Position` from manipulation event args (already element-local)
-- [ ] For pointer-event-driven code (e.g. `PanStartPosition`), use
-      `e.GetCurrentPoint(fe).Position`
+- [x] Use `e.Position` from manipulation event args (already element-local)
+- [x] `PanStart` recorded from `ManipulationStartedRoutedEventArgs.Position`
 
 ### 3.7 Unit tests (`tests/Reactor.Tests/GestureTypesTests.cs`)
-- [ ] `PanGesture` / `PinchGesture` / `RotateGesture` record-struct equality
-- [ ] `ManipulationMode` union computation: `.OnPan(axis: Horizontal) + .OnPinch()`
+- [x] `PanGesture` / `PinchGesture` / `RotateGesture` record-struct equality
+- [x] `ManipulationMode` union computation: `.OnPan(axis: Horizontal) + .OnPinch()`
       → `TranslateX | Scale` (no `TranslateY`)
-- [ ] Inertia flags added when any gesture opts in
-- [ ] Minimum-distance gating: simulated deltas below threshold produce no callbacks;
-      first over-threshold delta produces both `Began` and `Changed`
+- [x] Inertia flags added when any gesture opts in
+- [ ] Minimum-distance gating: end-to-end coverage deferred to E2E
+      `GestureTests` (requires real manipulation args)
 
 ### 3.8 Selftest fixtures (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/GestureFixtures.cs`)
-- [ ] `OnPanSetsManipulationMode` — mount with `.OnPan(axis: Both)`, assert
+- [x] `OnPanSetsManipulationMode` — mount with `.OnPan(axis: Both)`, assert
       `fe.ManipulationMode == TranslateX | TranslateY`
-- [ ] `OnPanWithInertiaAddsInertiaFlag` — assert `TranslateInertia` bit is set
-- [ ] `OnPinchSetsScaleFlag` — assert `Scale` bit is set
-- [ ] `OnRotateSetsRotateFlag` — assert `Rotate` bit is set
-- [ ] `PanAndPinchCombine` — both flags present on one element
-- [ ] `PanThresholdSuppressesEarlyCallbacks` — raise synthetic `ManipulationDelta`
-      events; verify `onChanged` isn't called until threshold crossed
-- [ ] `PanEmitsBeganBeforeFirstChanged` — on threshold crossing, `onBegan` is
-      called exactly once, before `onChanged`
-- [ ] `ManipulationCompletedFiresEnded` — verify phase transitions
-- [ ] Register all fixtures in `SelfTestFixtureRegistry`
+- [x] `OnPanWithInertiaAddsInertiaFlag` — assert `TranslateInertia` bit is set
+- [x] `OnPinchSetsScaleFlag` — assert `Scale` bit is set
+- [x] `OnRotateSetsRotateFlag` — assert `Rotate` bit is set
+- [x] `PanAndPinchCombine` — both flags present on one element
+- [ ] `PanThresholdSuppressesEarlyCallbacks` — deferred to E2E (manipulation
+      args are sealed and cannot be constructed in a fixture)
+- [ ] `PanEmitsBeganBeforeFirstChanged` — deferred to E2E
+- [ ] `ManipulationCompletedFiresEnded` — deferred to E2E
+- [x] Register all fixtures in `SelfTestFixtureRegistry`
 
 ### 3.9 Gallery sample
 - [ ] Add `GesturePanSample` to `samples/Reactor.TestApp` — a card you can

@@ -2102,6 +2102,9 @@ public sealed partial class Reconciler : IDisposable
         // Handlers are stored in Tag via a wrapper so we can find them for detach.
         ApplyEventHandlers(fe, oldM, m);
 
+        // Gesture recognizers (.OnPan / .OnPinch / .OnRotate)
+        ApplyGestureHandlers(fe, oldM, m);
+
         // OnMountAction — only run on initial mount (oldM is null)
         if (m.OnMountAction is not null && oldM is null)
             m.OnMountAction(fe);

@@ -583,6 +583,13 @@ internal static class SelfTestFixtureRegistry
         "Trampoline_LatestHandlerWinsAfterRerender",
         "Trampoline_HandlerRemovedBecomesNoOp",
         "Trampoline_ReRenderSameControlUnderlyingRefStable",
+
+        // Gesture recognizers — spec 027 Tier 3
+        "Gesture_OnPanSetsManipulationMode",
+        "Gesture_OnPanWithInertiaAddsInertiaFlag",
+        "Gesture_OnPinchSetsScaleFlag",
+        "Gesture_OnRotateSetsRotateFlag",
+        "Gesture_PanAndPinchCombine",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1162,6 +1169,13 @@ internal static class SelfTestFixtureRegistry
         "Trampoline_LatestHandlerWinsAfterRerender" => new TrampolineFixtures.LatestHandlerWinsAfterRerender(harness),
         "Trampoline_HandlerRemovedBecomesNoOp" => new TrampolineFixtures.HandlerRemovedBecomesNoOp(harness),
         "Trampoline_ReRenderSameControlUnderlyingRefStable" => new TrampolineFixtures.ReRenderSameControlUnderlyingRefStable(harness),
+
+        // Gesture recognizers — spec 027 Tier 3
+        "Gesture_OnPanSetsManipulationMode" => new GestureFixtures.OnPanSetsManipulationMode(harness),
+        "Gesture_OnPanWithInertiaAddsInertiaFlag" => new GestureFixtures.OnPanWithInertiaAddsInertiaFlag(harness),
+        "Gesture_OnPinchSetsScaleFlag" => new GestureFixtures.OnPinchSetsScaleFlag(harness),
+        "Gesture_OnRotateSetsRotateFlag" => new GestureFixtures.OnRotateSetsRotateFlag(harness),
+        "Gesture_PanAndPinchCombine" => new GestureFixtures.PanAndPinchCombine(harness),
 
         _ => null,
     };

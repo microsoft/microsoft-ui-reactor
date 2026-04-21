@@ -235,6 +235,74 @@ public static class ElementExtensions
     public static T OnLostFocus<T>(this T el, Action<object, RoutedEventArgs> handler) where T : Element =>
         Modify(el, new ElementModifiers { OnLostFocus = handler });
 
+    // ── Gesture recognizers (spec 027 Tier 3) ───────────────────────
+
+    /// <summary>
+    /// Attaches a pan (single-finger translation) gesture recognizer. The reconciler
+    /// wires <see cref="FrameworkElement.ManipulationDelta"/> and computes
+    /// <see cref="UIElement.ManipulationMode"/> based on the chosen <paramref name="axis"/>
+    /// and <paramref name="withInertia"/> flag. <paramref name="minimumDistance"/> gates
+    /// callbacks until the cumulative translation exceeds that distance — on first
+    /// crossing, <paramref name="onBegan"/> fires once with <see cref="Microsoft.UI.Reactor.Input.GesturePhase.Began"/>,
+    /// then a <see cref="Microsoft.UI.Reactor.Input.GesturePhase.Changed"/> follows.
+    /// </summary>
+    public static T OnPan<T>(this T el,
+        Action<Microsoft.UI.Reactor.Input.PanGesture> onChanged,
+        Action<Microsoft.UI.Reactor.Input.PanGesture>? onEnded = null,
+        Action<Microsoft.UI.Reactor.Input.PanGesture>? onBegan = null,
+        Action<Microsoft.UI.Reactor.Input.PanGesture>? onCancelled = null,
+        double minimumDistance = 0.0,
+        Microsoft.UI.Reactor.Input.PanAxis axis = Microsoft.UI.Reactor.Input.PanAxis.Both,
+        bool withInertia = false) where T : Element =>
+        Modify(el, new ElementModifiers
+        {
+            Pan = new Microsoft.UI.Reactor.Input.PanGestureConfig(onChanged)
+            {
+                OnBegan = onBegan,
+                OnEnded = onEnded,
+                OnCancelled = onCancelled,
+                MinimumDistance = minimumDistance,
+                Axis = axis,
+                WithInertia = withInertia,
+            },
+        });
+
+    /// <summary>Attaches a pinch (two-finger scale) gesture recognizer.</summary>
+    public static T OnPinch<T>(this T el,
+        Action<Microsoft.UI.Reactor.Input.PinchGesture> onChanged,
+        Action<Microsoft.UI.Reactor.Input.PinchGesture>? onEnded = null,
+        Action<Microsoft.UI.Reactor.Input.PinchGesture>? onBegan = null,
+        Action<Microsoft.UI.Reactor.Input.PinchGesture>? onCancelled = null,
+        bool withInertia = false) where T : Element =>
+        Modify(el, new ElementModifiers
+        {
+            Pinch = new Microsoft.UI.Reactor.Input.PinchGestureConfig(onChanged)
+            {
+                OnBegan = onBegan,
+                OnEnded = onEnded,
+                OnCancelled = onCancelled,
+                WithInertia = withInertia,
+            },
+        });
+
+    /// <summary>Attaches a rotate (two-finger twist) gesture recognizer.</summary>
+    public static T OnRotate<T>(this T el,
+        Action<Microsoft.UI.Reactor.Input.RotateGesture> onChanged,
+        Action<Microsoft.UI.Reactor.Input.RotateGesture>? onEnded = null,
+        Action<Microsoft.UI.Reactor.Input.RotateGesture>? onBegan = null,
+        Action<Microsoft.UI.Reactor.Input.RotateGesture>? onCancelled = null,
+        bool withInertia = false) where T : Element =>
+        Modify(el, new ElementModifiers
+        {
+            Rotate = new Microsoft.UI.Reactor.Input.RotateGestureConfig(onChanged)
+            {
+                OnBegan = onBegan,
+                OnEnded = onEnded,
+                OnCancelled = onCancelled,
+                WithInertia = withInertia,
+            },
+        });
+
     // ── Decoration ──────────────────────────────────────────────────
 
     public static T ToolTip<T>(this T el, string tip) where T : Element =>
