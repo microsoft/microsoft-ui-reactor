@@ -36,8 +36,12 @@ public class DragDropTests : AppTestBase
         var card = FindById("Card_c1");
         var doneColumn = FindById("Col_Done");
 
+        // Intermediate MoveByOffset forces WinUI to observe continuous pointer motion
+        // beyond its drag-detection threshold; a single MoveToElement is too abrupt
+        // and the drag gesture never kicks in under synthesized Appium events.
         new Actions(Session)
             .ClickAndHold(card)
+            .MoveByOffset(20, 0).MoveByOffset(20, 0)
             .MoveToElement(doneColumn)
             .Release()
             .Perform();
@@ -88,8 +92,10 @@ public class DragDropTests : AppTestBase
         var source = FindById("TextDragSource");
         var target = FindById("TextDropZone");
 
+        // See TypedReorder_MovesCard for why intermediate MoveByOffset is required.
         new Actions(Session)
             .ClickAndHold(source)
+            .MoveByOffset(20, 0).MoveByOffset(20, 0)
             .MoveToElement(target)
             .Release()
             .Perform();

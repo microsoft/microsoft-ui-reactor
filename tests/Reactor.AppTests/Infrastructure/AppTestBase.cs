@@ -43,8 +43,16 @@ public class AppTestBase
     /// Forces re-navigation to the fixture even if it's the current one.
     /// Use when the test modifies fixture state and needs a fresh start.
     /// </summary>
+    /// <remarks>
+    /// Resets the host to "Ready" first (which un-mounts the fixture's component
+    /// tree, discarding any useState) and then clicks the Nav_ button to remount.
+    /// Without the reset step, clicking the same nav button a second time is a
+    /// no-op in TestHost (setFixture is called with the same value), and state
+    /// from the previous run leaks into the next test.
+    /// </remarks>
     protected void NavigateToFixtureFresh(string name)
     {
+        ResetFixture();
         _currentFixture = null;
         NavigateToFixture(name);
     }

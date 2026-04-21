@@ -174,25 +174,29 @@ public sealed partial class Reconciler
                 fe.Holding += state.LongPressHoldingTrampoline;
             }
 
+            // Use AddHandler with handledEventsToo:true so mouse emulation still arms when
+            // the target is a Control like Button that marks PointerPressed as handled
+            // to drive its own Click logic. Without this, .OnLongPress on a Button would
+            // silently no-op under mouse input.
             if (state.LongPressPointerPressedTrampoline is null)
             {
                 state.LongPressPointerPressedTrampoline = (s, e) => OnLongPressPointerPressed(fe, state, e);
-                fe.PointerPressed += state.LongPressPointerPressedTrampoline;
+                fe.AddHandler(UIElement.PointerPressedEvent, state.LongPressPointerPressedTrampoline, handledEventsToo: true);
             }
             if (state.LongPressPointerReleasedTrampoline is null)
             {
                 state.LongPressPointerReleasedTrampoline = (s, e) => OnLongPressPointerEnded(fe, state, e, cancelled: false);
-                fe.PointerReleased += state.LongPressPointerReleasedTrampoline;
+                fe.AddHandler(UIElement.PointerReleasedEvent, state.LongPressPointerReleasedTrampoline, handledEventsToo: true);
             }
             if (state.LongPressPointerCaptureLostTrampoline is null)
             {
                 state.LongPressPointerCaptureLostTrampoline = (s, e) => OnLongPressPointerEnded(fe, state, e, cancelled: true);
-                fe.PointerCaptureLost += state.LongPressPointerCaptureLostTrampoline;
+                fe.AddHandler(UIElement.PointerCaptureLostEvent, state.LongPressPointerCaptureLostTrampoline, handledEventsToo: true);
             }
             if (state.LongPressPointerMovedTrampoline is null)
             {
                 state.LongPressPointerMovedTrampoline = (s, e) => OnLongPressPointerMoved(fe, state, e);
-                fe.PointerMoved += state.LongPressPointerMovedTrampoline;
+                fe.AddHandler(UIElement.PointerMovedEvent, state.LongPressPointerMovedTrampoline, handledEventsToo: true);
             }
         }
     }

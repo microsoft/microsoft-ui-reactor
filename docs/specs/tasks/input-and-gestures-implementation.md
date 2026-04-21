@@ -492,10 +492,11 @@ Ships in three sub-phases so the 80% case lands before the full protocol.
 - [x] `OnDropAutoSetsAllowDrop` — mount, assert `fe.AllowDrop == true`
 - [x] `RawOnDropAutoSetsAllowDrop`, `DragEnterHandlerAutoSetsAllowDrop`,
       `SourceAndTargetOnSameElement`, `DraggableWhenWithoutPayloadStillSetsCanDrag`
+- [x] `TypedPayloadDroppedInvokesHandler` — covered by E2E
+      `DragDropTests.DragDrop_TypedReorder_MovesCard` (source `.OnDragStart<_, CardPayload>`
+      + target `.OnDrop<_, CardPayload>` across two columns)
 - [ ] `DraggableWhenFalseSuppressesDrag` — deferred to E2E (DragStartingEventArgs
       is not constructible outside the WinUI input pipeline)
-- [ ] `TypedPayloadDroppedInvokesHandler` — deferred to E2E (same args-sealed
-      limitation; covered in Phase 6d `DragDropTests`)
 - [ ] `DragVisualRendersElementToBitmap` — deferred to 6a.5 / Phase 6b
 - [ ] `OperationNegotiationHonoursAcceptedOperation` — deferred to E2E
 - [x] Register all fixtures in `SelfTestFixtureRegistry`

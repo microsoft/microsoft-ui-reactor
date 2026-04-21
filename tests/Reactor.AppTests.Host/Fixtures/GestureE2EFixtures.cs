@@ -23,10 +23,12 @@ internal static class GestureE2EFixtures
             var (ty, setTy) = UseState(0.0);
             var (phase, setPhase) = UseState("idle");
 
+            // Button has a default AutomationPeer so WinAppDriver's FindById can locate it.
+            // Pan uses the ManipulationDelta pipeline, which is independent of Button.Click,
+            // so attaching .OnPan to a Button works cleanly.
             return VStack(8,
-                Border(TextBlock("Pan me").HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+                Button("Pan me", null)
                     .Width(220).Height(160)
-                    .Background("#3A7BD5")
                     .AutomationId("PanTarget")
                     .OnPan(
                         onChanged: g =>

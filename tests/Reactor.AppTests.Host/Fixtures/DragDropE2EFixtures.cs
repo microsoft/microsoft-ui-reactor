@@ -37,10 +37,12 @@ internal static class DragDropE2EFixtures
                 foreach (var c in cards)
                 {
                     var captured = c;
+                    // TextBlock drag source — Button consumes PointerPressed, which
+                    // prevents WinUI's CanDrag detection from seeing the drag gesture.
                     kids.Add(
-                        Button(captured.Title, null)
-                            .Padding(10)
-                            .OnDragStart<ButtonElement, CardPayload>(
+                        TextBlock(captured.Title)
+                            .Padding(10).Width(200)
+                            .OnDragStart<TextBlockElement, CardPayload>(
                                 getPayload: () => captured,
                                 allowedOperations: DragOperations.Move,
                                 onEnd: ctx =>
@@ -51,24 +53,34 @@ internal static class DragDropE2EFixtures
                             .AutomationId($"Card_{captured.Id}")
                     );
                 }
-                return VStack(6, kids.ToArray())
-                    .OnDrop<StackElement, CardPayload>(
-                        onDrop: card =>
-                        {
-                            if (!cards.Any(x => x.Id == card.Id))
-                                setThis(cards.Append(card).ToList());
-                        },
-                        acceptedOps: DragOperations.Move);
+                return VStack(6, kids.ToArray());
             }
 
+            void AcceptDrop(IReadOnlyList<CardPayload> cards,
+                Action<IReadOnlyList<CardPayload>> setThis,
+                CardPayload card)
+            {
+                if (!cards.Any(x => x.Id == card.Id))
+                    setThis(cards.Append(card).ToList());
+            }
+
+            // Drop-zone columns are Buttons so they expose an AutomationPeer that
+            // WinAppDriver can locate via FindById. OnDrop is attached to the Button
+            // itself so the drop target is the outermost visible element.
             return HStack(12,
-                Border(RenderCards(todo, setTodo, "Todo"))
+                Button(RenderCards(todo, setTodo, "Todo"), null)
                     .Width(260).Height(220)
-                    .Background("#F7F7F7").CornerRadius(6).Padding(8)
+                    .Padding(8)
+                    .OnDrop<ButtonElement, CardPayload>(
+                        onDrop: card => AcceptDrop(todo, setTodo, card),
+                        acceptedOps: DragOperations.Move)
                     .AutomationId("Col_Todo"),
-                Border(RenderCards(done, setDone, "Done"))
+                Button(RenderCards(done, setDone, "Done"), null)
                     .Width(260).Height(220)
-                    .Background("#F1FFF4").CornerRadius(6).Padding(8)
+                    .Padding(8)
+                    .OnDrop<ButtonElement, CardPayload>(
+                        onDrop: card => AcceptDrop(done, setDone, card),
+                        acceptedOps: DragOperations.Move)
                     .AutomationId("Col_Done")
             );
         }
@@ -85,10 +97,14 @@ internal static class DragDropE2EFixtures
         {
             var (dropped, setDropped) = UseState("(none)");
 
+            // TextBlock is the drag source: it has an AutomationPeer (so WinAppDriver
+            // can locate it) but doesn't consume PointerPressed the way Button does,
+            // which lets WinUI's CanDrag detection see the gesture.
             return VStack(12,
-                Button("drag source", null)
+                TextBlock("drag source")
                     .Padding(12)
-                    .OnDragStart<ButtonElement>(() => DragData.Text("dragged-text"),
+                    .Width(180)
+                    .OnDragStart<TextBlockElement>(() => DragData.Text("dragged-text"),
                         allowedOperations: DragOperations.Copy | DragOperations.Move)
                     .AutomationId("TextDragSource"),
 

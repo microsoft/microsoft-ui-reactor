@@ -79,25 +79,28 @@ public sealed partial class Reconciler
         {
             fe.AllowDrop = true;
 
+            // AddHandler(handledEventsToo:true) — Button and other Controls may mark drag
+            // events handled internally; without this, .OnDrop on a Button would silently
+            // no-op because the trampoline never sees handled events via the += operator.
             if (state.DragEnterTrampoline is null)
             {
                 state.DragEnterTrampoline = (s, e) => OnDragEnter(fe, state, e);
-                fe.DragEnter += state.DragEnterTrampoline;
+                fe.AddHandler(UIElement.DragEnterEvent, state.DragEnterTrampoline, handledEventsToo: true);
             }
             if (state.DragOverTrampoline is null)
             {
                 state.DragOverTrampoline = (s, e) => OnDragOver(fe, state, e);
-                fe.DragOver += state.DragOverTrampoline;
+                fe.AddHandler(UIElement.DragOverEvent, state.DragOverTrampoline, handledEventsToo: true);
             }
             if (state.DragLeaveTrampoline is null)
             {
                 state.DragLeaveTrampoline = (s, e) => OnDragLeave(fe, state, e);
-                fe.DragLeave += state.DragLeaveTrampoline;
+                fe.AddHandler(UIElement.DragLeaveEvent, state.DragLeaveTrampoline, handledEventsToo: true);
             }
             if (state.DropTrampoline is null)
             {
                 state.DropTrampoline = (s, e) => OnDrop(fe, state, e);
-                fe.Drop += state.DropTrampoline;
+                fe.AddHandler(UIElement.DropEvent, state.DropTrampoline, handledEventsToo: true);
             }
         }
         else if (oldM?.DropTarget is not null)
