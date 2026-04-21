@@ -33,6 +33,7 @@ internal static class DevtoolsUiaTools
         Register_Select(server, resolver);
         Register_Scroll(server, resolver);
         Register_Expand(server, resolver);
+        DevtoolsPropertyTools.Register(server, resolver);
     }
 
     // -- invoke / toggle / select / scroll ---------------------------------------

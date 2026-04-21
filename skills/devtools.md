@@ -114,6 +114,12 @@ indented JSON.
 | `state [--selector S]` | Dump every hook value (useState/useReducer/etc.) across mounted components. |
 | `logs [--tail N] [--since SEQ] [--filter RE] [--source stdout\|stderr\|debug\|trace] [--follow]` | Drain captured `Debug.WriteLine` / `Trace.WriteLine` / `Console.Out` / `Console.Error`. Ring buffer installed at `--devtools run` startup — late-attaching agents still see startup output. `--follow` long-polls until Ctrl+C. |
 | `fire <Component>.<event> [--args JSON]` | Call a NAMED METHOD on a live component by reflection. **Inline lambdas aren't reachable**. |
+| `properties <selector> [--name PropName]` | Read dependency properties on an element. Omit `--name` to enumerate all DPs with values, types, and local-vs-default status. Supports attached properties via `Grid.Row` syntax. |
+| `set-property <selector> <name> <value>` | Set a dependency property. Value is parsed from string (Thickness, CornerRadius, Brush hex `#RRGGBB`, enums, bool, double, int). |
+| `resources [--selector S] [--scope element\|window\|app] [--filter RE]` | Browse ResourceDictionary entries. Walks element → ancestor elements → window → app (including MergedDictionaries and ThemeDictionaries). |
+| `set-resource <key> <value> [--scope app\|window\|element] [--selector S]` | Set or add a XAML resource. Reports whether the write replaced an existing entry or created a new shadowing entry. |
+| `styles <selector>` | Inspect the explicitly-assigned Style: TargetType, Setters (property + value), BasedOn chain. Returns `hasStyle: false` when only a default/theme style is active. |
+| `ancestors <selector>` | Walk the visual tree upward — returns type, name, and automationId for each ancestor up to the root. |
 | `call <tool\|method> [--args JSON]` | Generic JSON-RPC passthrough — parity escape hatch. |
 
 ### Session management
@@ -210,6 +216,61 @@ it catches startup output too — attach late and you still see what booted.
 `--devtools-logs-capacity <MB>` on the app's launch if you're losing
 entries. Set `--devtools-logs off` on launch to disable capture entirely.
 
+### Inspecting properties and styles
+
+```bash
+# Enumerate all dependency properties on an element
+mur devtools properties "#my-button" --pretty
+
+# Read a specific property (supports attached properties)
+mur devtools properties "#my-button" --name Margin
+mur devtools properties "#my-button" --name Grid.Row
+
+# Mutate a property at runtime
+mur devtools set-property "#my-button" Background "#FF0000"
+mur devtools set-property "#my-button" Margin "10,5,10,5"
+mur devtools set-property "#my-button" Visibility Collapsed
+
+# Inspect the applied style (explicit only — theme/default styles return hasStyle:false)
+mur devtools styles "#my-button" --pretty
+```
+
+`properties` reports `isLocal: true` when a value was set directly (via
+code or XAML attribute) vs inherited from style/template/default. Use
+`set-property` to hot-patch layout or color at runtime without a rebuild.
+
+### Browsing resources and themes
+
+```bash
+# List all app-level resources
+mur devtools resources --pretty
+
+# Filter to color-related resources
+mur devtools resources --filter "Color|Brush" --pretty
+
+# Scope to a specific element's ResourceDictionary chain
+mur devtools resources --selector "#my-panel" --scope element
+
+# Override a resource at runtime
+mur devtools set-resource ButtonBackground "#00FF00"
+```
+
+Resources are listed with their scope (`element`, `ancestor:Grid`, `app`,
+`app/merged`, `app/theme:Light`, etc.) so you can trace where a value
+came from. `set-resource` at a higher scope may **shadow** a value
+defined in a merged/theme dictionary — check the `replaced` flag in the
+response.
+
+### Understanding the visual tree hierarchy
+
+```bash
+# Walk ancestors from an element to the root
+mur devtools ancestors "#my-button" --pretty
+```
+
+Useful for understanding layout containers, resource scoping, and which
+parent element is providing inherited property values.
+
 ### Cleaning up when done
 
 ```bash
@@ -233,8 +294,11 @@ supervisor return 0 so the `mur.exe` binary frees up.
 7. **Devtools log is authoritative.** Every call lands in `%LOCALAPPDATA%\Reactor\devtools\{pid}.log` (tab-separated: ts, tool, selector, latency, ok/err, rpc code). Tail it to reconstruct a failed run.
 8. **Single-instance per project.** Two `mur devtools` against the same `.csproj` is a hard error (exit 3). Use `mur devtools shutdown` or close the window to release the lockfile before starting another.
 9. **Log capture starts inside `ReactorApp.Run()`.** Anything the app's `Program.cs` writes via `Console.WriteLine` / `Debug.WriteLine` **before** the `Run()` call is not captured — install happens as the first side-effect of the devtools bring-up, not at process start. Move diagnostic writes inside your root `Component.Render()`, an effect, or any code reached from `Run()` and they'll show up in `mur devtools logs`. The buffer is in-memory only in v1 — a crash takes it with it; attach early or run `--follow` if you need the final moments.
+10. **`styles` only returns explicitly-assigned styles.** WinUI 3 `FrameworkElement.Style` is null when the element uses a theme/default style (implicit style). A null result does **not** mean the element is unstyled — it means the style was applied by the theme system, not by explicit assignment in XAML or code. There is no WinUI 3 API to inspect the resolved implicit style at runtime.
+11. **`properties` isLocal semantics.** The `isLocal` flag uses `ReadLocalValue` which only distinguishes locally-set values from everything else — it cannot tell you whether a non-local value came from a style, animation, template, or default. A value with `isLocal: false` may still differ from the DP's default if it was set via a style or template binding.
+12. **`set-resource` shadows, it doesn't merge.** Writing a resource at element scope creates a new entry in that element's ResourceDictionary — it does not modify the app-level or theme dictionary. The response includes `replaced: true` when overwriting an existing key at the same scope, or `replaced: false` when creating a new shadowing entry. Downstream elements that already resolved the old value won't update until they re-query.
 
-## Raw MCP (escape hatch)
+## Raw MCP(escape hatch)
 
 If you have to talk MCP directly — another MCP client, an existing script,
 or a structured argument shape the CLI flattens — the endpoint is
@@ -255,7 +319,7 @@ else.
 
 - Specs: `docs/specs/024-ai-agent-devtools.md`, `docs/specs/025-devtools-cli-parity.md`
 - Server: `src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs`
-- Tool registration: `DevtoolsTools.cs`, `DevtoolsUiaTools.cs`, `DevtoolsFireTool.cs`, `DevtoolsStateTool.cs`, `DevtoolsLogsTool.cs`
+- Tool registration: `DevtoolsTools.cs`, `DevtoolsUiaTools.cs`, `DevtoolsFireTool.cs`, `DevtoolsStateTool.cs`, `DevtoolsLogsTool.cs`, `DevtoolsPropertyTools.cs`
 - Log capture: `LogCaptureBuffer.cs`, `LogCaptureInstall.cs`
 - CLI verbs: `src/Reactor.Cli/Devtools/DevtoolsVerbs.cs`
 - Selector grammar / parser: `SelectorParser.cs`

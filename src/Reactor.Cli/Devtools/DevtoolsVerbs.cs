@@ -19,7 +19,8 @@ internal static class DevtoolsVerbs
         "version", "windows", "components", "switch", "tree", "screenshot",
         "state", "click", "type", "focus", "invoke", "toggle", "select",
         "scroll", "expand", "collapse", "wait", "fire", "reload", "shutdown",
-        "call", "logs",
+        "call", "logs", "properties", "set-property", "resources",
+        "set-resource", "styles", "ancestors",
     };
 
     public static int Run(string verb, string[] args)
@@ -62,6 +63,12 @@ internal static class DevtoolsVerbs
                 "reload" => Reload(client, verbArgs, shared),
                 "shutdown" => Simple(client, "shutdown", verbArgs, shared),
                 "logs" => Logs(client, verbArgs, shared),
+                "properties" => Properties(client, verbArgs, shared),
+                "set-property" => SetProperty(client, verbArgs, shared),
+                "resources" => Resources(client, verbArgs, shared),
+                "set-resource" => SetResource(client, verbArgs, shared),
+                "styles" => UnarySelector(client, "styles", verbArgs, shared),
+                "ancestors" => UnarySelector(client, "ancestors", verbArgs, shared),
                 _ => UsageError($"Unknown devtools verb: {verb}"),
             };
         }
@@ -504,6 +511,103 @@ internal static class DevtoolsVerbs
             ? client.InvokeMethod(target, @params)
             : client.InvokeTool(target, @params ?? EmptyArgs());
         return EmitResult(doc, shared);
+    }
+
+    // -- Output / error mapping ----------------------------------------------
+
+    // -- property / resource / style verbs -----------------------------------
+
+    private static int Properties(McpCliClient client, string[] args, SharedFlags shared)
+    {
+        string? selector = null, name = null, window = null;
+        for (int i = 0; i < args.Length; i++)
+        {
+            var a = args[i];
+            if (a == "--name" && i + 1 < args.Length) name = args[++i];
+            else if (a == "--window" && i + 1 < args.Length) window = args[++i];
+            else if (selector is null && !a.StartsWith("-")) selector = a;
+            else return UsageError("properties <selector> [--name PropName] [--window W]");
+        }
+        if (selector is null) return UsageError("properties <selector> [--name PropName] [--window W]");
+        var fields = new Dictionary<string, object?>
+        {
+            ["selector"] = selector,
+            ["name"] = name,
+            ["window"] = window,
+        };
+        return EmitResult(client.InvokeTool("properties", ArgsFromDict(fields)), shared);
+    }
+
+    private static int SetProperty(McpCliClient client, string[] args, SharedFlags shared)
+    {
+        string? selector = null, name = null, value = null, window = null;
+        for (int i = 0; i < args.Length; i++)
+        {
+            var a = args[i];
+            if (a == "--window" && i + 1 < args.Length) window = args[++i];
+            else if (selector is null) selector = a;
+            else if (name is null) name = a;
+            else if (value is null) value = a;
+            else return UsageError("set-property <selector> <name> <value> [--window W]");
+        }
+        if (selector is null || name is null || value is null)
+            return UsageError("set-property <selector> <name> <value> [--window W]");
+        var fields = new Dictionary<string, object?>
+        {
+            ["selector"] = selector,
+            ["name"] = name,
+            ["value"] = value,
+            ["window"] = window,
+        };
+        return EmitResult(client.InvokeTool("setProperty", ArgsFromDict(fields)), shared);
+    }
+
+    private static int Resources(McpCliClient client, string[] args, SharedFlags shared)
+    {
+        string? selector = null, scope = null, filter = null, window = null;
+        for (int i = 0; i < args.Length; i++)
+        {
+            var a = args[i];
+            if (a == "--selector" && i + 1 < args.Length) selector = args[++i];
+            else if (a == "--scope" && i + 1 < args.Length) scope = args[++i];
+            else if (a == "--filter" && i + 1 < args.Length) filter = args[++i];
+            else if (a == "--window" && i + 1 < args.Length) window = args[++i];
+            else return UsageError("resources [--selector S] [--scope element|window|app] [--filter RE] [--window W]");
+        }
+        var fields = new Dictionary<string, object?>
+        {
+            ["selector"] = selector,
+            ["scope"] = scope,
+            ["filter"] = filter,
+            ["window"] = window,
+        };
+        return EmitResult(client.InvokeTool("resources", ArgsFromDict(fields)), shared);
+    }
+
+    private static int SetResource(McpCliClient client, string[] args, SharedFlags shared)
+    {
+        string? key = null, value = null, scope = null, selector = null, window = null;
+        for (int i = 0; i < args.Length; i++)
+        {
+            var a = args[i];
+            if (a == "--scope" && i + 1 < args.Length) scope = args[++i];
+            else if (a == "--selector" && i + 1 < args.Length) selector = args[++i];
+            else if (a == "--window" && i + 1 < args.Length) window = args[++i];
+            else if (key is null) key = a;
+            else if (value is null) value = a;
+            else return UsageError("set-resource <key> <value> [--scope app|window|element] [--selector S] [--window W]");
+        }
+        if (key is null || value is null)
+            return UsageError("set-resource <key> <value> [--scope app|window|element] [--selector S] [--window W]");
+        var fields = new Dictionary<string, object?>
+        {
+            ["key"] = key,
+            ["value"] = value,
+            ["scope"] = scope,
+            ["selector"] = selector,
+            ["window"] = window,
+        };
+        return EmitResult(client.InvokeTool("setResource", ArgsFromDict(fields)), shared);
     }
 
     // -- Output / error mapping ----------------------------------------------
