@@ -139,14 +139,11 @@ public sealed partial class Reconciler
         e.Data.Properties[DragData.ProcIdFormatId] =
             data.OriginProcessId.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
 
-        // Publish format sentinels so HasFormat()/AvailableFormats on a view could be
-        // wired in Phase 6b. Typed payloads stay out-of-band in the transfer registry.
-        foreach (var fmt in data.AvailableFormats)
-        {
-            if (fmt == DragData.ProcIdFormatId) continue;
-            if (!e.Data.Properties.ContainsKey(fmt))
-                e.Data.Properties[fmt] = fmt;
-        }
+        // Populate the DataPackage with eager formats (text / uri / html / rtf / files /
+        // bitmap / custom) and register DataProviderHandler adapters for lazy providers.
+        // Cross-process consumers see those formats natively; same-process consumers still
+        // prefer the in-memory transfer registry.
+        data.PopulatePackage(e.Data);
     }
 
     private static void OnDropCompleted(DragDropState state, UIElement sender, DropCompletedEventArgs e)
@@ -178,9 +175,37 @@ public sealed partial class Reconciler
             && idObj is string idStr
             && Guid.TryParseExact(idStr, "N", out var id))
         {
-            return DragData.Resolve(id);
+            var registered = DragData.Resolve(id);
+            if (registered is not null) return registered;
         }
-        return null;
+
+        // Cross-process path: wrap the DataPackageView so TryGetText/GetTextAsync/… work.
+        return BuildViewBackedDragData(e.DataView);
+    }
+
+    private static DragData BuildViewBackedDragData(DataPackageView view)
+    {
+        var data = new DragData();
+        foreach (var format in view.AvailableFormats)
+        {
+            if (format == StandardDataFormats.Text)
+                data.WithText(async ct => await view.GetTextAsync().AsTask(ct).ConfigureAwait(false));
+            else if (format == StandardDataFormats.WebLink)
+                data.WithUri(async ct => await view.GetWebLinkAsync().AsTask(ct).ConfigureAwait(false));
+            else if (format == StandardDataFormats.Html)
+                data.WithHtml(async ct => await view.GetHtmlFormatAsync().AsTask(ct).ConfigureAwait(false));
+            else if (format == StandardDataFormats.Rtf)
+                data.WithRtf(async ct => await view.GetRtfAsync().AsTask(ct).ConfigureAwait(false));
+            else if (format == StandardDataFormats.StorageItems)
+                data.WithFiles(async ct =>
+                {
+                    var items = await view.GetStorageItemsAsync().AsTask(ct).ConfigureAwait(false);
+                    return (IEnumerable<global::Windows.Storage.IStorageItem>)items;
+                });
+            else if (format == StandardDataFormats.Bitmap)
+                data.WithBitmap(async ct => await view.GetBitmapAsync().AsTask(ct).ConfigureAwait(false));
+        }
+        return data;
     }
 
     private static void InvokeTargetCallback(

@@ -493,49 +493,53 @@ Ships in three sub-phases so the 80% case lands before the full protocol.
 ### 6b — Cross-Process + Rich Data Transfer
 
 #### 6b.1 Extend `DragData` with standard formats
-- [ ] `WithText` / `WithUri` / `WithHtml` / `WithRtf` / `WithFiles` / `WithBitmap`
+- [x] `WithText` / `WithUri` / `WithHtml` / `WithRtf` / `WithFiles` / `WithBitmap`
       — eager overload for each
-- [ ] Lazy sync overload `Func<T>` for each
-- [ ] Lazy async overload `Func<CancellationToken, Task<T>>` for each
+- [x] Lazy sync overload `Func<T>` for each
+- [x] Lazy async overload `Func<CancellationToken, Task<T>>` for each
 - [ ] `WithBitmapFromElement(Func<Element>)` convenience — renders via
       `RenderTargetBitmap` only when a paint target requests the bitmap
-- [ ] `WithCustomFormat(string formatId, object payload / Func<object> / Func<CT, Task<object>>)`
+      (deferred — pairs with 6a.5 drag-visual rendering)
+- [x] `WithCustomFormat(string formatId, object payload / Func<object> / Func<CT, Task<object>>)`
 
 #### 6b.2 Target-side accessors
-- [ ] Sync: `TryGetText` / `TryGetUri` / `TryGetHtml` / `TryGetRtf` /
+- [x] Sync: `TryGetText` / `TryGetUri` / `TryGetHtml` / `TryGetRtf` /
       `TryGetFiles` / `TryGetBitmap` / `TryGetCustomFormat<T>`
-- [ ] Async: `GetTextAsync` / `GetUriAsync` / `GetHtmlAsync` / `GetRtfAsync` /
+- [x] Async: `GetTextAsync` / `GetUriAsync` / `GetHtmlAsync` / `GetRtfAsync` /
       `GetFilesAsync` / `GetBitmapAsync` / `GetCustomFormatAsync<T>`
-- [ ] Raw `.OnDrop<T>(Action<DragTargetArgs>)` overload for multi-format targets
+- [x] Raw `.OnDrop<T>(Action<DragTargetArgs>)` overload for multi-format targets
+      (shipped in 6a)
 
 #### 6b.3 `DataProviderHandler` adapter
-- [ ] Every lazy `With*` overload registers via
-      `DataPackage.SetDataProvider(formatId, handler)`
-- [ ] Adapter: take the caller's `Func<CT, Task<T>>`, wrap in a
+- [x] Every lazy `With*` overload registers via
+      `DataPackage.SetDataProvider(formatId, handler)` in
+      `DragData.PopulatePackage`
+- [x] Adapter: take the caller's `Func<CT, Task<T>>`, wrap in a
       `DataProviderHandler` that:
-  - [ ] Calls `request.GetDeferral()`
-  - [ ] Invokes the user provider on a background thread
-  - [ ] Calls `request.SetData(result)` on completion
-  - [ ] Completes the deferral in a `finally`
-- [ ] Respect cancellation: if the target drops without requesting the format,
+  - [x] Calls `request.GetDeferral()`
+  - [x] Invokes the user provider on a background thread (via `Task.Run`)
+  - [x] Calls `request.SetData(result)` on completion
+  - [x] Completes the deferral in a `finally`
+- [x] Respect cancellation: if the target drops without requesting the format,
       the provider is never invoked (guaranteed by the WinUI contract)
 
 #### 6b.4 `DragUIOverride` plumbing
-- [ ] Apply `DragTargetArgs.UIOverride.Caption` / `IsCaptionVisible` /
+- [x] Apply `DragTargetArgs.UIOverride.Caption` / `IsCaptionVisible` /
       `IsContentVisible` / `IsGlyphVisible` into `DragEventArgs.DragUIOverride`
       after every `OnDragEnter` / `OnDragOver` callback returns
+      (shipped in 6a `InvokeTargetCallback`)
 
 #### 6b.5 Unit tests (extend `DragDataTests.cs`)
-- [ ] Eager text: `DragData.Text("hi")` → `TryGetText` returns `"hi"`
-- [ ] Lazy text provider not invoked when only `TryGetText` called without
-      request resolution
-- [ ] `GetTextAsync` resolves a lazy `Func<string>` provider
-- [ ] `GetTextAsync` resolves a lazy `Func<CT, Task<string>>` provider
-- [ ] `WithHtml` lazy provider is not invoked when target only calls
+- [x] Eager text: `new DragData().WithText("hi")` → `TryGetText` returns `"hi"`
+- [x] Lazy text provider not invoked when only text format is requested
+      (`WithHtml_LazyProvider_NotInvokedWhenOnlyTextRequested`)
+- [x] `GetTextAsync` resolves a lazy `Func<string>` provider
+- [x] `GetTextAsync` resolves a lazy `Func<CT, Task<string>>` provider
+- [x] `WithHtml` lazy provider is not invoked when target only calls
       `GetTextAsync` (different format)
-- [ ] Custom format round-trips by formatId
+- [x] Custom format round-trips by formatId
 - [ ] `WithBitmapFromElement` registers a provider but doesn't render at
-      attach time
+      attach time (deferred with 6b.1)
 
 #### 6b.6 Selftest fixtures (extend `DragDropFixtures.cs`)
 - [ ] `LazyHtmlProviderNotInvokedWhenTargetWantsText` — instrument a counter
