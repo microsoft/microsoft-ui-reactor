@@ -1,0 +1,232 @@
+---
+title: "Input and gestures"
+app: input-and-gestures
+order: 13
+audience: intermediate
+goal: |
+  Cover the declarative input surface: pointer, tap, keyboard, and focus
+  modifiers (Tier 1); trampoline dispatch; continuous gestures (pan, pinch,
+  rotate, long-press); imperative focus via ElementRef + UseElementFocus;
+  and access-key wiring for Command-driven controls.
+---
+
+# Input and gestures
+
+Reactor's input surface is declarative: attach handlers via `.On*` modifiers and
+the reconciler wires WinUI events, auto-enables the matching flags (for example
+`IsDoubleTapEnabled`), and survives re-renders without re-subscribing the
+underlying WinUI event.
+
+This page covers the modifiers you'll reach for on most screens, the higher-level
+gesture recognizers for continuous input, and the imperative escape hatches —
+ref-based focus and access keys — that round out the commanding story.
+
+## Pointer, tap, and keyboard modifiers
+
+Every [component](components.md) exposes the full WinUI input event surface as
+`.On*` modifiers. Attach a handler; Reactor auto-enables the matching flag and
+installs a trampoline so re-renders don't re-subscribe the underlying event.
+
+```csharp
+Rectangle()
+    .Fill(Brushes.SteelBlue)
+    .OnPointerEntered((_, _) => logger.Debug("enter"))
+    .OnPointerExited((_, _) => logger.Debug("exit"))
+    .OnTapped((_, _) => OnClicked())
+    .OnDoubleTapped((_, _) => Open())
+    .OnRightTapped((_, _) => ShowContextMenu())
+    .OnHolding((_, _) => ShowContextMenu());
+```
+
+Auto-enablement keeps handlers honest: attaching `.OnDoubleTapped(...)` sets
+`IsDoubleTapEnabled = true` on the mounted control so the WinUI event actually
+fires. Remove the handler on a later render and the flag goes back to its
+default. Shape subclasses (for example `Rectangle` and `Ellipse`) also get a
+transparent `Fill` auto-assigned when a pointer handler is attached and no fill
+was set — otherwise hit-testing would miss the unfilled shape entirely.
+
+### Keyboard events
+
+```csharp
+TextField(value, setValue)
+    .OnKeyDown((_, e) => { if (e.Key == VirtualKey.Enter) Submit(); })
+    .OnPreviewKeyDown((_, e) => Trace("preview"))
+    .OnCharacterReceived((_, e) => Validate(e.Character));
+```
+
+`OnPreviewKeyDown` / `OnPreviewKeyUp` map to the WinUI tunneling events and fire
+before the bubbling `OnKeyDown` / `OnKeyUp` pair, which is the right spot for
+shortcut interception that needs to suppress further routing.
+
+### Focus events
+
+```csharp
+TextField(value, setValue)
+    .OnGotFocus((_, _) => ShowValidationHint())
+    .OnLostFocus((_, _) => HideValidationHint());
+```
+
+Focus events flow through the same trampoline pattern as pointer events, so the
+handler closure is updated in-place on each render and the WinUI subscription is
+installed exactly once per element.
+
+## Continuous gestures
+
+Pan, pinch, and rotate are continuous gestures: a single user interaction
+produces a stream of callbacks with deltas relative to the gesture start. Each
+gesture takes an `onChanged` action plus optional `onBegan` / `onEnded`
+callbacks that fire exactly once per interaction.
+
+### Pan
+
+```csharp
+Rectangle()
+    .OnPan(
+        onChanged: g => Translate(g.Translation),
+        onEnded: g => SnapToGrid(g.Translation),
+        minimumDistance: 8.0,
+        axis: PanAxis.Both,
+        withInertia: true);
+```
+
+`minimumDistance` gates callbacks: until the cumulative translation exceeds the
+threshold, nothing dispatches. On first crossing the reconciler emits `onBegan`
+(with `Phase = Began`) followed by the current delta as `Phase = Changed`. If
+the manipulation completes before the threshold is crossed, neither `onBegan`
+nor `onEnded` fire.
+
+`axis: PanAxis.Horizontal` restricts to X-axis translation; `withInertia: true`
+adds the inertia flag so WinUI continues to emit callbacks after the pointer
+lifts.
+
+### Pinch and rotate
+
+```csharp
+Image(uri)
+    .OnPinch(
+        onChanged: g => Scale(g.Scale),
+        withInertia: true)
+    .OnRotate(
+        onChanged: g => Rotate(g.Angle));
+```
+
+Both gestures share the same `Phase` lifecycle as pan. `ScaleDelta` and
+`AngleDelta` report the per-callback delta; `Scale` and `Angle` are cumulative
+since `Began`. Combining gestures on one element is expected — the reconciler
+unions the required `ManipulationModes` flags.
+
+### Long press
+
+```csharp
+listItem
+    .OnLongPress(
+        g => ShowContextMenu(g.Position),
+        minimumDuration: TimeSpan.FromMilliseconds(500),
+        cancelDistance: 10.0);
+```
+
+Long-press is touch-and-pen first: the reconciler routes `Holding` events into
+the callback and sets `IsHoldingEnabled = true`. Mouse long-press is off by
+default because WinUI's `Holding` event doesn't fire for mouse pointers; opt in
+with `enableMouseEmulation: true` and the reconciler arms a `DispatcherTimer`
+that cancels on release, capture loss, or pointer motion past `cancelDistance`.
+
+```csharp
+listItem.OnLongPress(() => ShowContextMenu(), enableMouseEmulation: true);
+```
+
+## Focus and access keys
+
+### Declarative focus modifiers
+
+```csharp
+Button("Submit", onClick)
+    .TabIndex(3)
+    .AccessKey("S")
+    .IsTabStop();   // default-true overload
+```
+
+`AccessKey` bound on a `.Command(...)` can be overridden per-site: a later
+`.AccessKey(...)` wins via the normal modifier-after-command ordering.
+
+```csharp
+var save = new Command { Label = "Save", Execute = OnSave, AccessKey = "S" };
+Button(save).AccessKey("F");   // "F" wins on this site
+```
+
+Advanced focus knobs are first-class too:
+
+```csharp
+container
+    .TabNavigation(KeyboardNavigationMode.Once)
+    .XYFocusKeyboardNavigation(XYFocusKeyboardNavigationMode.Enabled);
+```
+
+### Imperative focus with refs
+
+Sometimes you need to focus a control from an effect or event handler — for
+example, auto-focusing the first input on mount. Use `UseElementFocus` to get a
+stable `ElementRef` plus a `RequestFocus` action that schedules the focus on the
+UI dispatcher so it runs after the current reconcile pass.
+
+```csharp
+public class LoginForm : Component
+{
+    public override Element Render()
+    {
+        var (inputRef, requestFocus) = Context.UseElementFocus();
+
+        Context.UseEffect(() => requestFocus(), Array.Empty<object>());
+
+        return VStack(
+            TextField(email, setEmail).Ref(inputRef),
+            Button("Sign in", OnSubmit));
+    }
+}
+```
+
+`ElementRef.Current` is null until the referenced element mounts; the ref
+survives re-renders so the same instance reliably points at the currently
+mounted control. Call `Microsoft.UI.Reactor.Input.FocusManager.Focus(ref)` for
+a synchronous focus attempt or `FocusManager.FocusAsync(ref)` for WinUI's
+async API with a success result.
+
+## Behind the scenes: trampoline dispatch
+
+Re-rendering an element with a fresh handler closure is the common case in a
+data-driven UI. Naively subscribing / unsubscribing on every render costs a COM
+round-trip per event per element — enough to dominate a 1,000-item list's frame
+budget. Reactor installs one stable *trampoline* delegate per event per element
+and updates a mutable field that the trampoline reads. Re-renders swap the
+field; the WinUI subscription is untouched.
+
+You don't opt in or configure this — every `.On*` modifier routes through the
+trampoline path automatically. Inspect the
+[devtools](dev-tooling.md) ETW `EventDispatch` keyword (`0x40`) to see exactly
+when each trampoline attaches and dispatches.
+
+## Migration from `.Set(...)` passthrough
+
+Pre-Tier-1 code often reaches through `.Set(...)` to subscribe to an event that
+the element type didn't model declaratively:
+
+```csharp
+// Before — escapes the declarative surface and bypasses trampoline dispatch.
+Rectangle().Set(r =>
+{
+    r.PointerEntered += (_, _) => Hover();
+    r.PointerExited += (_, _) => Unhover();
+});
+```
+
+After Tier 1 lands, every pointer, tap, keyboard, and focus event has a
+first-class modifier. Replace the `.Set(...)` block with one modifier call per
+event — shorter, re-render-safe, and covered by the reconciler's auto-enable
+logic:
+
+```csharp
+// After
+Rectangle()
+    .OnPointerEntered((_, _) => Hover())
+    .OnPointerExited((_, _) => Unhover());
+```

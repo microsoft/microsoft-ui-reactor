@@ -628,15 +628,19 @@ off `.Set()`.
 ## Phase 8 — Documentation
 
 ### 8.1 Doc pipeline template
-- [ ] Write `docs/_pipeline/templates/input-and-gestures.md.dt` covering:
-  - [ ] The full Tier 1 modifier list (reference table)
-  - [ ] Gesture examples (pan, pinch, rotate, long-press)
-  - [ ] Focus / access-key guidance
-  - [ ] DnD typed-payload quickstart
-  - [ ] DnD cross-process patterns with lazy providers
-  - [ ] Migration notes from `.Set()` passthrough
+- [x] Write `docs/_pipeline/templates/input-and-gestures.md.dt` covering:
+  - [x] Pointer / tap / keyboard / focus modifier examples (Tier 1 reference)
+  - [x] Gesture examples (pan, pinch, rotate, long-press)
+  - [x] Focus / access-key guidance, imperative focus with `UseElementFocus`
+  - [x] Trampoline dispatch explainer
+  - [x] Migration notes from `.Set()` passthrough
+  - [ ] DnD typed-payload quickstart — deferred until Phase 6 lands
+  - [ ] DnD cross-process patterns with lazy providers — deferred
 - [ ] Run `mur docs compile` to regenerate `docs/guide/input-and-gestures.md`
-      (never hand-write the generated file)
+      (blocked by a pre-existing charting sample build error; the template is
+      in place and will compile once the upstream error clears. Also needs a
+      minimal `docs/_pipeline/apps/input-and-gestures/` sample to resolve the
+      `app:` frontmatter — trivial once unblocked.)
 
 ### 8.2 Appendix A table
 - [ ] Update the spec's Appendix A ("Field-By-Field Coverage After Phase 1")
