@@ -1,3 +1,5 @@
+using global::Windows.ApplicationModel.DataTransfer;
+using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Input;
 using Xunit;
 
@@ -257,5 +259,41 @@ public class DragDataTests
         Assert.Equal("A1", card.Id);
         Assert.True(data.TryGetText(out var text));
         Assert.Equal("A1 title", text);
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  Phase 6c — DropCompleted → DragEndContext mapping
+    // ══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void BuildDragEndContext_Move_SucceedsUncancelled()
+    {
+        var ctx = Reconciler.BuildDragEndContext(DataPackageOperation.Move);
+        Assert.Equal(DragOperations.Move, ctx.CompletedOperation);
+        Assert.False(ctx.WasCancelled);
+    }
+
+    [Fact]
+    public void BuildDragEndContext_Copy_SucceedsUncancelled()
+    {
+        var ctx = Reconciler.BuildDragEndContext(DataPackageOperation.Copy);
+        Assert.Equal(DragOperations.Copy, ctx.CompletedOperation);
+        Assert.False(ctx.WasCancelled);
+    }
+
+    [Fact]
+    public void BuildDragEndContext_None_IsCancelled()
+    {
+        var ctx = Reconciler.BuildDragEndContext(DataPackageOperation.None);
+        Assert.Equal(DragOperations.None, ctx.CompletedOperation);
+        Assert.True(ctx.WasCancelled);
+    }
+
+    [Fact]
+    public void BuildDragEndContext_Link_SucceedsUncancelled()
+    {
+        var ctx = Reconciler.BuildDragEndContext(DataPackageOperation.Link);
+        Assert.Equal(DragOperations.Link, ctx.CompletedOperation);
+        Assert.False(ctx.WasCancelled);
     }
 }

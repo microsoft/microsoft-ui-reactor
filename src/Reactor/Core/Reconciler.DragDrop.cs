@@ -152,18 +152,30 @@ public sealed partial class Reconciler
         var transferId = state.ActiveTransferId;
         state.ActiveTransferId = Guid.Empty;
 
-        var completed = FromWinUI(e.DropResult);
-        var cancelled = e.DropResult == DataPackageOperation.None;
-
         try
         {
-            src.OnEnd?.Invoke(new DragEndContext(completed, cancelled));
+            src.OnEnd?.Invoke(BuildDragEndContext(e.DropResult));
         }
         finally
         {
             if (transferId != Guid.Empty)
                 DragData.Unregister(transferId);
         }
+    }
+
+    /// <summary>
+    /// Maps a final <see cref="DataPackageOperation"/> onto the user-facing
+    /// <see cref="DragEndContext"/>. <see cref="DataPackageOperation.None"/> means the
+    /// drop target refused the drop (ESC, drop outside a valid target, system abort) —
+    /// <see cref="DragEndContext.WasCancelled"/> is true and
+    /// <see cref="DragEndContext.CompletedOperation"/> is <see cref="DragOperations.None"/>.
+    /// Any other value is a successful drop and flows through untouched.
+    /// </summary>
+    internal static DragEndContext BuildDragEndContext(DataPackageOperation dropResult)
+    {
+        var completed = FromWinUI(dropResult);
+        var cancelled = dropResult == DataPackageOperation.None;
+        return new DragEndContext(completed, cancelled);
     }
 
     // ── Target-side handlers ─────────────────────────────────────────

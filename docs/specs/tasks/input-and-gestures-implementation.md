@@ -564,21 +564,25 @@ Ships in three sub-phases so the 80% case lands before the full protocol.
 ### 6c — `DropCompleted` Finalization
 
 #### 6c.1 Source-side `onEnd` wiring
-- [ ] Route `DragSource.DropCompleted` → `Action<DragEndContext>? onEnd` with
-      the final operation
-- [ ] Route drag cancellation (ESC / invalid target) → `onEnd` with
+- [x] Route `DragSource.DropCompleted` → `Action<DragEndContext>? onEnd` with
+      the final operation (via `OnDropCompleted`/`BuildDragEndContext`)
+- [x] Route drag cancellation (ESC / invalid target) → `onEnd` with
       `WasCancelled = true`, `CompletedOperation = None`
 
 #### 6c.2 Move pattern documentation
-- [ ] Document in `docs/_pipeline/templates/input-and-gestures.md.dt`: the source
+- [x] Document in `docs/_pipeline/templates/input-and-gestures.md.dt`: the source
       should **not** remove the item optimistically; wait for `Move` in `onEnd`
 - [ ] Add example to the kanban sample showing the move-on-confirmation pattern
+      (deferred alongside Phase 7 adoption work)
 
 #### 6c.3 Unit + selftest coverage
-- [ ] Unit test: cancelled drag → `WasCancelled = true`, `CompletedOperation = None`
+- [x] Unit test: cancelled drag → `WasCancelled = true`, `CompletedOperation = None`
+      (`BuildDragEndContext_None_IsCancelled`)
+- [x] Unit test: Move / Copy / Link map through untouched and uncancelled
 - [ ] Selftest: source declares `Copy | Move`; target accepts via Ctrl modifier
       (which forces Copy); verify source's `onEnd` receives `Copy`, not `Move`,
-      so the source retains the item
+      so the source retains the item (deferred to E2E — modifier-key simulation
+      requires the full Appium/WinAppDriver pipeline)
 
 ---
 

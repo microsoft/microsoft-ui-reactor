@@ -230,3 +230,115 @@ Rectangle()
     .OnPointerEntered((_, _) => Hover())
     .OnPointerExited((_, _) => Unhover());
 ```
+
+## Drag and drop
+
+Reactor's DnD surface is a declarative wrapper over the full Windows drag-and-drop
+protocol (`CanDrag` sources, `AllowDrop` targets, `DragStarting` / `Drop` /
+`DropCompleted`, `DataPackage` with text / URI / HTML / RTF / files / bitmap /
+custom formats, `DragUIOverride` drop-indicator tweaks). Sources and targets
+auto-wire the underlying flags — you set a modifier, the reconciler flips the
+bit and subscribes once via the same trampoline path every other event uses.
+
+### Typed in-process payloads
+
+For reorder-within-one-app scenarios (kanban columns, sortable lists), attach a
+typed payload on the source and a matching typed drop handler on the target.
+The payload is ferried through an in-memory transfer registry keyed by a GUID
+written into `DataPackage.Properties`, so arbitrary CLR objects can round-trip
+without a serializer.
+
+```csharp
+record Card(string Id, string Title);
+
+Element RenderCard(Card card) =>
+    Border(Text(card.Title))
+        .OnDragStart<BorderElement, Card>(() => card);
+
+Element RenderColumn(IEnumerable<Card> cards, Action<Card> onDrop) =>
+    VStack(cards.Select(RenderCard).ToArray())
+        .OnDrop<VStackElement, Card>(onDrop);
+```
+
+### Standard formats + cross-process interop
+
+Eager setters (`.WithText`, `.WithUri`, `.WithHtml`, `.WithRtf`, `.WithFiles`,
+`.WithBitmap`, `.WithCustomFormat`) write directly to the `DataPackage`, so
+Notepad / Word / File Explorer pick the drop up natively. On the target side,
+`TryGetText(out string)` and `GetTextAsync(CancellationToken)` work the same
+whether the drag originated from the same process or a different one.
+
+```csharp
+Border(Text("Drag me to Notepad"))
+    .OnDragStart<BorderElement>(() => new DragData().WithText("hello world"));
+
+Rectangle()
+    .OnDrop<RectangleElement>(args =>
+    {
+        if (args.Data.TryGetText(out var text))
+            Log(text);
+        args.AcceptedOperation = DragOperations.Copy;
+    });
+```
+
+### Lazy providers — pay only when the target asks
+
+If producing the payload is expensive (rendering HTML from a view model,
+reading a large file, round-tripping through a server), register a provider
+instead of an eager value. Reactor adapts your `Func<T>` or
+`Func<CancellationToken, Task<T>>` onto WinUI's `DataProviderHandler`: the
+deferral is acquired, your code runs on the thread pool, and the result is
+published when the target requests that format. A target that only reads text
+never pays the HTML cost.
+
+```csharp
+Border(Text("Rich content"))
+    .OnDragStart<BorderElement>(() => new DragData()
+        .WithText("plain fallback")
+        .WithHtml(ct => RenderExpensiveHtmlAsync(ct)));
+```
+
+### Drop indicator overrides
+
+Drop-over callbacks can tweak the caption, glyph, and content-preview
+visibility via `DragTargetArgs.UIOverride` — Reactor writes the changes back
+onto WinUI's `DragUIOverride` after your callback returns.
+
+```csharp
+VStack(children)
+    .OnDragOver(args =>
+    {
+        args.UIOverride.Caption = "Move to Inbox";
+        args.UIOverride.IsGlyphVisible = false;
+        args.AcceptedOperation = DragOperations.Move;
+    })
+    .OnDrop<VStackElement, Card>(card => inbox.Add(card));
+```
+
+### The move-on-confirmation pattern
+
+When a source declares `DragOperations.Move`, the source is responsible for
+removing the moved item — but only after the drop is confirmed. Never remove
+optimistically in `getPayload`: the user might cancel (ESC), the drop might
+land outside any target, or a Ctrl-drag might downgrade Move to Copy. Wait for
+`onEnd` and branch on `CompletedOperation`:
+
+```csharp
+Border(Text(card.Title))
+    .OnDragStart<BorderElement, Card>(
+        getPayload: () => card,
+        allowedOperations: DragOperations.Move | DragOperations.Copy,
+        onEnd: ctx =>
+        {
+            if (ctx.WasCancelled) return;
+            if (ctx.CompletedOperation == DragOperations.Move)
+                column.Remove(card);  // confirmed move — safe to remove
+            // else: Copy succeeded, source keeps the item
+        });
+```
+
+`DragEndContext.WasCancelled` is true when the drop fell outside every valid
+target (ESC, dropped on empty space, system abort).
+`DragEndContext.CompletedOperation` carries the final negotiated operation
+— whatever the target set via `DragTargetArgs.AcceptedOperation` — or
+`DragOperations.None` when cancelled.
