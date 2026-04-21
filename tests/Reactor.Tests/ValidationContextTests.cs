@@ -375,4 +375,276 @@ public class ValidationContextTests
         Assert.Equal(Severity.Error, ctx.HighestSeverity("password"));
         Assert.False(ctx.IsValid());
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Field registration
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void RegisterField_And_Query()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+        ctx.RegisterField("name");
+        Assert.Contains("email", ctx.RegisteredFields);
+        Assert.Contains("name", ctx.RegisteredFields);
+        Assert.Equal(2, ctx.RegisteredFields.Count);
+    }
+
+    [Fact]
+    public void RegisterField_Idempotent()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+        ctx.RegisterField("email");
+        Assert.Single(ctx.RegisteredFields);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  ClearInternal
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ClearInternal_Preserves_External()
+    {
+        var ctx = new ValidationContext();
+        ctx.Add("email", "Required");
+        ctx.AddExternal("email", "Taken");
+        ctx.ClearInternal("email");
+        var msgs = ctx.GetMessages("email");
+        Assert.Single(msgs);
+        Assert.Equal("Taken", msgs[0].Text);
+    }
+
+    [Fact]
+    public void ClearInternal_NonExistent_No_Version_Bump()
+    {
+        var ctx = new ValidationContext();
+        var v0 = ctx.Version;
+        ctx.ClearInternal("nonexistent");
+        Assert.Equal(v0, ctx.Version);
+    }
+
+    [Fact]
+    public void ClearExternal_NonExistent_No_Version_Bump()
+    {
+        var ctx = new ValidationContext();
+        var v0 = ctx.Version;
+        ctx.ClearExternal("nonexistent");
+        Assert.Equal(v0, ctx.Version);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  HighestSeverity with external messages
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void HighestSeverity_Considers_External()
+    {
+        var ctx = new ValidationContext();
+        ctx.Add("email", "Hmm", Severity.Info);
+        ctx.AddExternal("email", "Nope", Severity.Error);
+        Assert.Equal(Severity.Error, ctx.HighestSeverity("email"));
+    }
+
+    [Fact]
+    public void HighestSeverity_Info_Only()
+    {
+        var ctx = new ValidationContext();
+        ctx.Add("f", "msg", Severity.Info);
+        Assert.Equal(Severity.Info, ctx.HighestSeverity("f"));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Touched state
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void IsTouched_False_Initially()
+    {
+        var ctx = new ValidationContext();
+        Assert.False(ctx.IsTouched("email"));
+    }
+
+    [Fact]
+    public void MarkTouched_Sets_Touched()
+    {
+        var ctx = new ValidationContext();
+        ctx.MarkTouched("email");
+        Assert.True(ctx.IsTouched("email"));
+    }
+
+    [Fact]
+    public void MarkTouched_Idempotent_No_Double_Version_Bump()
+    {
+        var ctx = new ValidationContext();
+        ctx.MarkTouched("email");
+        var v1 = ctx.Version;
+        ctx.MarkTouched("email");
+        Assert.Equal(v1, ctx.Version);
+    }
+
+    [Fact]
+    public void MarkAllTouched_Touches_All_Registered()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+        ctx.RegisterField("name");
+        ctx.MarkAllTouched();
+        Assert.True(ctx.IsTouched("email"));
+        Assert.True(ctx.IsTouched("name"));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Dirty state
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void IsDirty_False_After_SetInitialValue()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("email", "test@example.com");
+        Assert.False(ctx.IsDirty("email"));
+    }
+
+    [Fact]
+    public void IsDirty_True_After_ValueChange()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("email", "old@test.com");
+        ctx.NotifyValueChanged("email", "new@test.com");
+        Assert.True(ctx.IsDirty("email"));
+    }
+
+    [Fact]
+    public void IsDirty_False_After_Revert_To_Initial()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("email", "same@test.com");
+        ctx.NotifyValueChanged("email", "different");
+        ctx.NotifyValueChanged("email", "same@test.com");
+        Assert.False(ctx.IsDirty("email"));
+    }
+
+    [Fact]
+    public void IsDirty_Field_Without_InitialValue_Returns_False()
+    {
+        var ctx = new ValidationContext();
+        Assert.False(ctx.IsDirty("unknown"));
+    }
+
+    [Fact]
+    public void IsDirty_Global_False_When_All_Clean()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+        ctx.SetInitialValue("email", "test");
+        Assert.False(ctx.IsDirty());
+    }
+
+    [Fact]
+    public void IsDirty_Global_True_When_Any_Dirty()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+        ctx.RegisterField("name");
+        ctx.SetInitialValue("email", "old");
+        ctx.SetInitialValue("name", "Bob");
+        ctx.NotifyValueChanged("email", "new");
+        Assert.True(ctx.IsDirty());
+    }
+
+    [Fact]
+    public void NotifyValueChanged_Clears_External_Messages()
+    {
+        var ctx = new ValidationContext();
+        ctx.AddExternal("email", "Already taken");
+        ctx.NotifyValueChanged("email", "different@email.com");
+        Assert.Empty(ctx.GetMessages("email"));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Reset
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Reset_Single_Field_Restores_Initial_Value()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+        ctx.SetInitialValue("email", "initial@test.com");
+        ctx.NotifyValueChanged("email", "changed");
+        ctx.MarkTouched("email");
+        ctx.Add("email", "Invalid");
+
+        var result = ctx.Reset("email");
+        Assert.Equal("initial@test.com", result);
+        Assert.False(ctx.IsTouched("email"));
+        Assert.Empty(ctx.GetMessages("email"));
+        Assert.False(ctx.IsDirty("email"));
+    }
+
+    [Fact]
+    public void Reset_Field_Without_InitialValue()
+    {
+        var ctx = new ValidationContext();
+        var result = ctx.Reset("unknown");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ResetAll_Restores_Everything()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+        ctx.RegisterField("name");
+        ctx.SetInitialValue("email", "a@b.com");
+        ctx.SetInitialValue("name", "Alice");
+        ctx.NotifyValueChanged("email", "changed");
+        ctx.MarkTouched("email");
+        ctx.Add("email", "Bad");
+        ctx.AddExternal("name", "Taken");
+
+        var result = ctx.ResetAll();
+        Assert.Equal("a@b.com", result["email"]);
+        Assert.Equal("Alice", result["name"]);
+        Assert.False(ctx.IsTouched("email"));
+        Assert.Empty(ctx.GetAllMessages());
+        Assert.False(ctx.IsDirty());
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Version tracking for non-message mutations
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Version_Increments_On_Touch_And_Reset()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.SetInitialValue("f", "v");
+
+        var v0 = ctx.Version;
+        ctx.MarkTouched("f");
+        Assert.True(ctx.Version > v0);
+
+        var v1 = ctx.Version;
+        ctx.Reset("f");
+        Assert.True(ctx.Version > v1);
+
+        ctx.SetInitialValue("f", "v2");
+        var v2 = ctx.Version;
+        ctx.ResetAll();
+        Assert.True(ctx.Version > v2);
+    }
+
+    [Fact]
+    public void Version_Increments_On_MarkAllTouched()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+        var v0 = ctx.Version;
+        ctx.MarkAllTouched();
+        Assert.True(ctx.Version > v0);
+    }
 }
