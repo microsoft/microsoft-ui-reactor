@@ -158,4 +158,67 @@ public class GestureTypesTests
         var mode = Reconciler.ComputeManipulationMode(new ElementModifiers());
         Assert.Equal(ManipulationModes.None, mode);
     }
+
+    // ── LongPress (spec 027 Tier 3 Part 2) ──────────────────────────
+
+    [Fact]
+    public void LongPressGesture_EqualityIsStructural()
+    {
+        var a = new LongPressGesture(
+            Position: new Point(10, 20),
+            Duration: TimeSpan.FromMilliseconds(500),
+            Phase: GesturePhase.Began);
+        var b = a with { };
+        var c = a with { Phase = GesturePhase.Ended };
+
+        Assert.Equal(a, b);
+        Assert.NotEqual(a, c);
+    }
+
+    [Fact]
+    public void OnLongPress_StoresConfigWithDefaults()
+    {
+        var el = TextBlock("x").OnLongPress(_ => { });
+        var config = el.Modifiers!.LongPress;
+
+        Assert.NotNull(config);
+        Assert.Equal(TimeSpan.FromMilliseconds(500), config!.MinimumDuration);
+        Assert.Equal(10.0, config.CancelDistance);
+        Assert.False(config.EnableMouseEmulation);
+    }
+
+    [Fact]
+    public void OnLongPress_OverridesDuration()
+    {
+        var el = TextBlock("x").OnLongPress(
+            _ => { },
+            minimumDuration: TimeSpan.FromSeconds(1),
+            cancelDistance: 5.0,
+            enableMouseEmulation: true);
+        var config = el.Modifiers!.LongPress!;
+
+        Assert.Equal(TimeSpan.FromSeconds(1), config.MinimumDuration);
+        Assert.Equal(5.0, config.CancelDistance);
+        Assert.True(config.EnableMouseEmulation);
+    }
+
+    [Fact]
+    public void OnLongPress_ZeroArgOverload_RoutesToOnTriggered()
+    {
+        int count = 0;
+        var el = TextBlock("x").OnLongPress(() => count++);
+
+        // Invoke the wrapped action directly to verify the adapter closes over the zero-arg.
+        el.Modifiers!.LongPress!.OnTriggered(new LongPressGesture(
+            Position: new Point(0, 0), Duration: TimeSpan.Zero, Phase: GesturePhase.Began));
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public void OnDoubleTap_ZeroArg_WiresToOnDoubleTapped()
+    {
+        int count = 0;
+        var el = TextBlock("x").OnDoubleTap(() => count++);
+        Assert.NotNull(el.Modifiers!.OnDoubleTapped);
+    }
 }

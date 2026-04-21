@@ -56,3 +56,23 @@ public sealed record RotateGestureConfig(
     public Action<RotateGesture>? OnCancelled { get; init; }
     public bool WithInertia { get; init; }
 }
+
+/// <summary>
+/// Immutable configuration for a <c>.OnLongPress</c> gesture recognizer.
+/// Touch/pen input routes through <see cref="Microsoft.UI.Xaml.UIElement.Holding"/>.
+/// Mouse input is opt-in via <see cref="EnableMouseEmulation"/>; when enabled,
+/// the reconciler arms a dispatcher timer on <see cref="Microsoft.UI.Xaml.UIElement.PointerPressed"/>
+/// and cancels it on release, capture loss, or pointer motion beyond <see cref="CancelDistance"/>.
+/// </summary>
+public sealed record LongPressGestureConfig(
+    Action<LongPressGesture> OnTriggered)
+{
+    /// <summary>Minimum press duration before the gesture triggers.</summary>
+    public TimeSpan MinimumDuration { get; init; } = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>Cumulative pointer motion (device pixels) that cancels an in-progress press.</summary>
+    public double CancelDistance { get; init; } = 10.0;
+
+    /// <summary>When true, mouse input arms a dispatcher timer in addition to touch/pen Holding.</summary>
+    public bool EnableMouseEmulation { get; init; }
+}

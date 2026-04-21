@@ -84,3 +84,17 @@ public readonly record struct RotateGesture(
     Point Center,
     GesturePhase Phase,
     bool IsInertial);
+
+/// <summary>
+/// Immutable snapshot of a long-press gesture. Fires <see cref="GesturePhase.Began"/>
+/// the moment the press threshold is crossed, <see cref="GesturePhase.Ended"/> when
+/// the pointer is released after that point, or <see cref="GesturePhase.Cancelled"/>
+/// if the pointer moves beyond the cancel distance or capture is lost.
+/// </summary>
+/// <param name="Position">Pointer position in element-local space at the moment of the event.</param>
+/// <param name="Duration">Elapsed time since the initial press.</param>
+/// <param name="Phase">Current gesture phase.</param>
+public readonly record struct LongPressGesture(
+    Point Position,
+    TimeSpan Duration,
+    GesturePhase Phase);

@@ -565,6 +565,7 @@ public record ElementModifiers
     public Microsoft.UI.Reactor.Input.PanGestureConfig? Pan { get; init; }
     public Microsoft.UI.Reactor.Input.PinchGestureConfig? Pinch { get; init; }
     public Microsoft.UI.Reactor.Input.RotateGestureConfig? Rotate { get; init; }
+    public Microsoft.UI.Reactor.Input.LongPressGestureConfig? LongPress { get; init; }
 
     // ── Logical (BiDi-aware) layout properties ──────────────────────
     // These resolve to physical left/right based on FlowDirection at mount/update time.
@@ -589,6 +590,15 @@ public record ElementModifiers
     public bool? IsTabStop { get; init; }
     public int? TabIndex { get; init; }
     public string? AccessKey { get; init; }
+    public Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode? XYFocusKeyboardNavigation { get; init; }
+    public Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? OnAccessKeyDisplayRequested { get; init; }
+
+    /// <summary>
+    /// Imperative ref slot (spec 027 Tier 5). The reconciler writes the mounted
+    /// <see cref="FrameworkElement"/> into <see cref="Microsoft.UI.Reactor.Input.ElementRef._current"/>
+    /// so <c>FocusManager.Focus(ref)</c> (and future ref-based imperative APIs) can target it.
+    /// </summary>
+    public Microsoft.UI.Reactor.Input.ElementRef? Ref { get; init; }
 
     // ── Accessibility — Tier 2/3 (lazy sub-record, zero allocation unless used) ─
     public AccessibilityModifiers? Accessibility { get; init; }
@@ -653,6 +663,7 @@ public record ElementModifiers
             Pan = other.Pan ?? Pan,
             Pinch = other.Pinch ?? Pinch,
             Rotate = other.Rotate ?? Rotate,
+            LongPress = other.LongPress ?? LongPress,
             MarginInlineStart = other.MarginInlineStart ?? MarginInlineStart,
             MarginInlineEnd = other.MarginInlineEnd ?? MarginInlineEnd,
             PaddingInlineStart = other.PaddingInlineStart ?? PaddingInlineStart,
@@ -663,6 +674,9 @@ public record ElementModifiers
             IsTabStop = other.IsTabStop ?? IsTabStop,
             TabIndex = other.TabIndex ?? TabIndex,
             AccessKey = other.AccessKey ?? AccessKey,
+            XYFocusKeyboardNavigation = other.XYFocusKeyboardNavigation ?? XYFocusKeyboardNavigation,
+            OnAccessKeyDisplayRequested = other.OnAccessKeyDisplayRequested ?? OnAccessKeyDisplayRequested,
+            Ref = other.Ref ?? Ref,
             Accessibility = other.Accessibility is not null
                 ? (Accessibility is not null ? Accessibility.Merge(other.Accessibility) : other.Accessibility)
                 : Accessibility,

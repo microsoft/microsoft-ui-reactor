@@ -303,6 +303,56 @@ public static class ElementExtensions
             },
         });
 
+    /// <summary>
+    /// Attaches a long-press gesture recognizer (spec 027 Tier 3 Part 2). Touch and pen
+    /// route through <see cref="UIElement.Holding"/> (<c>IsHoldingEnabled = true</c> is auto-set).
+    /// Mouse input is ignored by default — WinUI's <c>Holding</c> event does not raise for
+    /// mouse pointers. Pass <paramref name="enableMouseEmulation"/> <c>true</c> to arm a
+    /// dispatcher timer on <see cref="UIElement.PointerPressed"/> that fires after
+    /// <paramref name="minimumDuration"/> and cancels on motion &gt; <paramref name="cancelDistance"/>,
+    /// pointer release, or capture loss.
+    /// </summary>
+    /// <example>card.OnLongPress(g => ShowContextMenu(g.Position))</example>
+    public static T OnLongPress<T>(this T el,
+        Action<Microsoft.UI.Reactor.Input.LongPressGesture> onTriggered,
+        TimeSpan? minimumDuration = null,
+        double cancelDistance = 10.0,
+        bool enableMouseEmulation = false) where T : Element =>
+        Modify(el, new ElementModifiers
+        {
+            LongPress = new Microsoft.UI.Reactor.Input.LongPressGestureConfig(onTriggered)
+            {
+                MinimumDuration = minimumDuration ?? TimeSpan.FromMilliseconds(500),
+                CancelDistance = cancelDistance,
+                EnableMouseEmulation = enableMouseEmulation,
+            },
+        });
+
+    /// <summary>
+    /// Zero-argument convenience overload for long-press. Use when you don't need the
+    /// gesture snapshot (Position, Duration, Phase).
+    /// </summary>
+    public static T OnLongPress<T>(this T el,
+        Action onTriggered,
+        TimeSpan? minimumDuration = null,
+        double cancelDistance = 10.0,
+        bool enableMouseEmulation = false) where T : Element =>
+        el.OnLongPress(_ => onTriggered(), minimumDuration, cancelDistance, enableMouseEmulation);
+
+    /// <summary>
+    /// Zero-argument convenience overload for double-tap. Equivalent to
+    /// <c>.OnDoubleTapped((_, _) =&gt; handler())</c>.
+    /// </summary>
+    public static T OnDoubleTap<T>(this T el, Action handler) where T : Element =>
+        el.OnDoubleTapped((_, _) => handler());
+
+    /// <summary>
+    /// Position-aware convenience overload for double-tap. Hands back the tap position
+    /// in element-local space.
+    /// </summary>
+    public static T OnDoubleTap<T>(this T el, Action<global::Windows.Foundation.Point> handler) where T : Element =>
+        el.OnDoubleTapped((s, e) => handler(e.GetPosition(s as UIElement)));
+
     // ── Decoration ──────────────────────────────────────────────────
 
     public static T ToolTip<T>(this T el, string tip) where T : Element =>
@@ -1181,7 +1231,7 @@ public static class ElementExtensions
     /// Works on any element type (Panel, Control, etc.) in WinUI 3.
     /// </summary>
     /// <example>Border(content).IsTabStop(false)</example>
-    public static T IsTabStop<T>(this T el, bool isTabStop) where T : Element =>
+    public static T IsTabStop<T>(this T el, bool isTabStop = true) where T : Element =>
         Modify(el, new ElementModifiers { IsTabStop = isTabStop });
 
     /// <summary>
@@ -1193,10 +1243,46 @@ public static class ElementExtensions
 
     /// <summary>
     /// Sets UIElement.AccessKey — the Alt+Key shortcut (underlined hint shown on Alt press).
+    /// When used on a button bound to a <see cref="Command"/>, this per-site access key
+    /// overrides <see cref="Command.AccessKey"/> (per-site override always wins).
     /// </summary>
     /// <example>Button("File", onClick).AccessKey("F")</example>
     public static T AccessKey<T>(this T el, string key) where T : Element =>
         Modify(el, new ElementModifiers { AccessKey = key });
+
+    /// <summary>
+    /// Sets UIElement.XYFocusKeyboardNavigation — enables directional (Xbox-style)
+    /// focus navigation with arrow keys or gamepad DPad.
+    /// </summary>
+    /// <example>Grid(tiles).XYFocusKeyboardNavigation(XYFocusKeyboardNavigationMode.Enabled)</example>
+    public static T XYFocusKeyboardNavigation<T>(this T el, Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode mode) where T : Element =>
+        Modify(el, new ElementModifiers { XYFocusKeyboardNavigation = mode });
+
+    /// <summary>
+    /// Handler for UIElement.AccessKeyDisplayRequested — fires when the access-key
+    /// bubble should appear (e.g., user pressed Alt). Use to customize the visual.
+    /// </summary>
+    public static T AccessKeyDisplayRequested<T>(this T el, Action handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnAccessKeyDisplayRequested = (_, _) => handler() });
+
+    /// <summary>
+    /// Handler for UIElement.AccessKeyDisplayRequested with full event args.
+    /// </summary>
+    public static T AccessKeyDisplayRequested<T>(this T el, Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs> handler) where T : Element =>
+        Modify(el, new ElementModifiers { OnAccessKeyDisplayRequested = handler });
+
+    /// <summary>
+    /// Binds this element to an imperative <see cref="Microsoft.UI.Reactor.Input.ElementRef"/>.
+    /// Obtain the ref from <c>ctx.UseElementFocus()</c> (or construct one manually) and use
+    /// <see cref="Microsoft.UI.Reactor.Input.FocusManager.Focus"/> to imperatively focus the
+    /// referenced element after mount.
+    /// </summary>
+    /// <example>
+    /// var (inputRef, requestFocus) = ctx.UseElementFocus();
+    /// return TextField(value, setValue).Ref(inputRef);
+    /// </example>
+    public static T Ref<T>(this T el, Microsoft.UI.Reactor.Input.ElementRef target) where T : Element =>
+        Modify(el, new ElementModifiers { Ref = target });
 
     // ════════════════════════════════════════════════════════════════
     //  Accessibility — Tier 2/3 (lazy AccessibilityModifiers sub-record)

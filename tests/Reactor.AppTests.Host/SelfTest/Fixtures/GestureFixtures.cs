@@ -114,4 +114,39 @@ internal static class GestureFixtures
                 rect is not null && rect.ManipulationMode.HasFlag(ManipulationModes.Scale));
         }
     }
+
+    // ── Phase 4 LongPress (spec 027 Tier 3 Part 2) ──────────────────
+
+    internal class OnLongPressAutoEnablesHolding(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("lp-target")
+                .OnLongPress(_ => { }));
+            await Harness.Render();
+
+            var target = H.FindText("lp-target");
+            H.Check("OnLongPress_Mounted", target is not null);
+            H.Check("OnLongPress_IsHoldingEnabled",
+                target is not null && target.IsHoldingEnabled);
+        }
+    }
+
+    internal class OnLongPressMouseEmulationOptIn(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx => TextBlock("lp-mouse")
+                .OnLongPress(_ => { }, enableMouseEmulation: true));
+            await Harness.Render();
+
+            var target = H.FindText("lp-mouse");
+            H.Check("OnLongPressMouseEmulation_Mounted", target is not null);
+            // IsHoldingEnabled still true so touch/pen keeps working.
+            H.Check("OnLongPressMouseEmulation_IsHoldingEnabled",
+                target is not null && target.IsHoldingEnabled);
+        }
+    }
 }

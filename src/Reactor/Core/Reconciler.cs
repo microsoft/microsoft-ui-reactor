@@ -2059,6 +2059,9 @@ public sealed partial class Reconciler : IDisposable
         else if (m.AccessKey is null && oldM?.AccessKey is not null)
             fe.AccessKey = "";
 
+        if (m.XYFocusKeyboardNavigation.HasValue && m.XYFocusKeyboardNavigation != oldM?.XYFocusKeyboardNavigation)
+            fe.XYFocusKeyboardNavigation = m.XYFocusKeyboardNavigation.Value;
+
         // ── Accessibility — Tier 2/3 (lazy sub-record) ─────────────
         var a11y = m.Accessibility;
         var oldA11y = oldM?.Accessibility;
@@ -2108,6 +2111,12 @@ public sealed partial class Reconciler : IDisposable
         // OnMountAction — only run on initial mount (oldM is null)
         if (m.OnMountAction is not null && oldM is null)
             m.OnMountAction(fe);
+
+        // Element ref — populate on mount/update so imperative APIs (FocusManager.Focus)
+        // can target the mounted control. Writing on every update is cheap (single field
+        // write) and keeps the ref fresh when the pool recycles elements.
+        if (m.Ref is not null)
+            m.Ref._current = fe;
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -2246,6 +2255,7 @@ public sealed partial class Reconciler : IDisposable
         public Action<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CurrentCharacterReceived;
         public Action<object, RoutedEventArgs>? CurrentGotFocus;
         public Action<object, RoutedEventArgs>? CurrentLostFocus;
+        public Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? CurrentAccessKeyDisplayRequested;
 
         // Stable trampoline delegates — captured for reference-equality detach (never used)
         // and to prevent GC collection of the compiler-generated closure.
@@ -2269,6 +2279,7 @@ public sealed partial class Reconciler : IDisposable
         public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CharacterReceivedTrampoline;
         public RoutedEventHandler? GotFocusTrampoline;
         public RoutedEventHandler? LostFocusTrampoline;
+        public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? AccessKeyDisplayRequestedTrampoline;
     }
 
     // Key for storing EventHandlerState in a dictionary attached to the element.
@@ -2297,7 +2308,8 @@ public sealed partial class Reconciler : IDisposable
             || m.OnKeyDown is not null || m.OnKeyUp is not null
             || m.OnPreviewKeyDown is not null || m.OnPreviewKeyUp is not null
             || m.OnCharacterReceived is not null
-            || m.OnGotFocus is not null || m.OnLostFocus is not null;
+            || m.OnGotFocus is not null || m.OnLostFocus is not null
+            || m.OnAccessKeyDisplayRequested is not null;
     }
 
     private static bool HasAnyPointerHandler(ElementModifiers m)
@@ -2339,6 +2351,7 @@ public sealed partial class Reconciler : IDisposable
         EnsureCharacterReceivedSubscribed(fe, state, m.OnCharacterReceived);
         EnsureGotFocusSubscribed(fe, state, m.OnGotFocus);
         EnsureLostFocusSubscribed(fe, state, m.OnLostFocus);
+        EnsureAccessKeyDisplayRequestedSubscribed(fe, state, m.OnAccessKeyDisplayRequested);
 
         // Shape auto-fill: Shape subclasses need a non-null Fill to hit-test pointer events.
         // If any pointer-family handler is attached and Fill is null, set transparent brush.
@@ -2661,6 +2674,21 @@ public sealed partial class Reconciler : IDisposable
             };
             fe.LostFocus += state.LostFocusTrampoline;
             Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("LostFocus", fe.GetType().Name);
+        }
+    }
+
+    private static void EnsureAccessKeyDisplayRequestedSubscribed(FrameworkElement fe, EventHandlerState state, Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? handler)
+    {
+        state.CurrentAccessKeyDisplayRequested = handler;
+        if (state.AccessKeyDisplayRequestedTrampoline is null && handler is not null)
+        {
+            state.AccessKeyDisplayRequestedTrampoline = (s, e) =>
+            {
+                Diagnostics.ReactorEventSource.Log.EventTrampolineDispatch("AccessKeyDisplayRequested");
+                state.CurrentAccessKeyDisplayRequested?.Invoke(s!, e);
+            };
+            fe.AccessKeyDisplayRequested += state.AccessKeyDisplayRequestedTrampoline;
+            Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("AccessKeyDisplayRequested", fe.GetType().Name);
         }
     }
 

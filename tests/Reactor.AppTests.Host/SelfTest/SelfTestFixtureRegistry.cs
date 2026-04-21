@@ -590,6 +590,15 @@ internal static class SelfTestFixtureRegistry
         "Gesture_OnPinchSetsScaleFlag",
         "Gesture_OnRotateSetsRotateFlag",
         "Gesture_PanAndPinchCombine",
+
+        // LongPress + focus — spec 027 Tier 3 Part 2 / Tier 5 (Phase 4)
+        "Gesture_OnLongPressAutoEnablesHolding",
+        "Gesture_OnLongPressMouseEmulationOptIn",
+        "Focus_AccessKeySetsProperty",
+        "Focus_IsTabStopFalseSkipsTabNav",
+        "Focus_XYFocusKeyboardNavigationSets",
+        "Focus_RefModifierPopulatesOnMount",
+        "Focus_FocusManagerFocusReturnsTrueWhenMounted",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1176,6 +1185,15 @@ internal static class SelfTestFixtureRegistry
         "Gesture_OnPinchSetsScaleFlag" => new GestureFixtures.OnPinchSetsScaleFlag(harness),
         "Gesture_OnRotateSetsRotateFlag" => new GestureFixtures.OnRotateSetsRotateFlag(harness),
         "Gesture_PanAndPinchCombine" => new GestureFixtures.PanAndPinchCombine(harness),
+
+        // LongPress + focus — spec 027 Tier 3 Part 2 / Tier 5 (Phase 4)
+        "Gesture_OnLongPressAutoEnablesHolding" => new GestureFixtures.OnLongPressAutoEnablesHolding(harness),
+        "Gesture_OnLongPressMouseEmulationOptIn" => new GestureFixtures.OnLongPressMouseEmulationOptIn(harness),
+        "Focus_AccessKeySetsProperty" => new FocusFixtures.AccessKeySetsProperty(harness),
+        "Focus_IsTabStopFalseSkipsTabNav" => new FocusFixtures.IsTabStopFalseSkipsTabNav(harness),
+        "Focus_XYFocusKeyboardNavigationSets" => new FocusFixtures.XYFocusKeyboardNavigationSets(harness),
+        "Focus_RefModifierPopulatesOnMount" => new FocusFixtures.RefModifierPopulatesOnMount(harness),
+        "Focus_FocusManagerFocusReturnsTrueWhenMounted" => new FocusFixtures.FocusManagerFocusReturnsTrueWhenMounted(harness),
 
         _ => null,
     };

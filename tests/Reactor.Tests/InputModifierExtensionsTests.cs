@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using static Microsoft.UI.Reactor.Factories;
@@ -193,5 +194,93 @@ public class InputModifierExtensionsTests
             .Merge(new ElementModifiers());
 
         Assert.Same(gotFocus, merged.OnGotFocus);
+    }
+
+    // ── Phase 4 focus & keyboard modifiers (spec 027 Tier 5) ─────────
+
+    [Fact]
+    public void IsTabStop_DefaultParam_IsTrue()
+    {
+        var el = TextBlock("x").IsTabStop();
+        Assert.True(el.Modifiers!.IsTabStop);
+    }
+
+    [Fact]
+    public void IsTabStop_ExplicitFalse_Stores()
+    {
+        var el = TextBlock("x").IsTabStop(false);
+        Assert.False(el.Modifiers!.IsTabStop);
+    }
+
+    [Fact]
+    public void TabIndex_Stores()
+    {
+        var el = Button("Submit", () => { }).TabIndex(3);
+        Assert.Equal(3, el.Modifiers!.TabIndex);
+    }
+
+    [Fact]
+    public void AccessKey_Stores()
+    {
+        var el = Button("File", () => { }).AccessKey("F");
+        Assert.Equal("F", el.Modifiers!.AccessKey);
+    }
+
+    [Fact]
+    public void AccessKey_PerSiteOverride_WinsOverLeft()
+    {
+        // Simulates the conflict rule: a later .AccessKey(...) on the same element
+        // overrides an earlier one via Merge. This is the same path Command's
+        // AccessKey flows through (command wiring runs first, modifiers apply after).
+        var merged = new ElementModifiers { AccessKey = "F" }
+            .Merge(new ElementModifiers { AccessKey = "S" });
+        Assert.Equal("S", merged.AccessKey);
+    }
+
+    [Fact]
+    public void XYFocusKeyboardNavigation_Stores()
+    {
+        var el = TextBlock("x").XYFocusKeyboardNavigation(
+            Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Enabled);
+        Assert.Equal(Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Enabled,
+            el.Modifiers!.XYFocusKeyboardNavigation);
+    }
+
+    [Fact]
+    public void AccessKeyDisplayRequested_ZeroArg_WiresHandler()
+    {
+        var el = TextBlock("x").AccessKeyDisplayRequested(() => { });
+        Assert.NotNull(el.Modifiers!.OnAccessKeyDisplayRequested);
+    }
+
+    [Fact]
+    public void Ref_Stores_ElementRef()
+    {
+        var r = new Microsoft.UI.Reactor.Input.ElementRef();
+        var el = TextBlock("x").Ref(r);
+        Assert.Same(r, el.Modifiers!.Ref);
+    }
+
+    // ── Focus hook (UseElementFocus) ────────────────────────────────
+
+    [Fact]
+    public void UseElementFocus_Returns_StableRef_AcrossRenders()
+    {
+        var ctx = new RenderContext();
+
+        ctx.BeginRender(() => { });
+        var (ref1, _) = ctx.UseElementFocus();
+
+        ctx.BeginRender(() => { });
+        var (ref2, _) = ctx.UseElementFocus();
+
+        Assert.Same(ref1, ref2);
+    }
+
+    [Fact]
+    public void FocusManager_Focus_ReturnsFalse_WhenRefEmpty()
+    {
+        var r = new Microsoft.UI.Reactor.Input.ElementRef();
+        Assert.False(Microsoft.UI.Reactor.Input.FocusManager.Focus(r));
     }
 }

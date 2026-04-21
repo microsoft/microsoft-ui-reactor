@@ -18,6 +18,7 @@ public sealed partial class Reconciler
         public PanGestureConfig? Pan;
         public PinchGestureConfig? Pinch;
         public RotateGestureConfig? Rotate;
+        public LongPressGestureConfig? LongPress;
 
         // Pan cursor — tracks whether we've crossed the MinimumDistance threshold.
         public bool PanBeganDispatched;
@@ -38,6 +39,21 @@ public sealed partial class Reconciler
 
         // Whether inertia has started on the current manipulation.
         public bool InertiaActive;
+
+        // LongPress trampolines (attached once per element lifetime).
+        public HoldingEventHandler? LongPressHoldingTrampoline;
+        public PointerEventHandler? LongPressPointerPressedTrampoline;
+        public PointerEventHandler? LongPressPointerReleasedTrampoline;
+        public PointerEventHandler? LongPressPointerMovedTrampoline;
+        public PointerEventHandler? LongPressPointerCaptureLostTrampoline;
+
+        // LongPress mouse-emulation cursor.
+        public Microsoft.UI.Xaml.DispatcherTimer? LongPressMouseTimer;
+        public Point LongPressPressedPosition;
+        public DateTime LongPressPressedTime;
+        public uint LongPressActivePointerId;
+        public bool LongPressMouseArmed;
+        public bool LongPressTriggeredForCurrentPress;
     }
 
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, GestureState> _gestureStates = new();
@@ -104,14 +120,15 @@ public sealed partial class Reconciler
     private static void ApplyGestureHandlers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {
         // Fast path
-        if (m.Pan is null && m.Pinch is null && m.Rotate is null
-            && oldM?.Pan is null && oldM?.Pinch is null && oldM?.Rotate is null)
+        if (m.Pan is null && m.Pinch is null && m.Rotate is null && m.LongPress is null
+            && oldM?.Pan is null && oldM?.Pinch is null && oldM?.Rotate is null && oldM?.LongPress is null)
             return;
 
         var state = GetOrCreateGestureState(fe);
         state.Pan = m.Pan;
         state.Pinch = m.Pinch;
         state.Rotate = m.Rotate;
+        state.LongPress = m.LongPress;
 
         // Recompute ManipulationMode only when the set of gestures is non-empty —
         // respects a user-set .Set(r => r.ManipulationMode = ...) otherwise.
@@ -119,26 +136,174 @@ public sealed partial class Reconciler
         if (mode != ManipulationModes.None)
             fe.ManipulationMode = mode;
 
-        // Lazy-attach trampolines (one-time).
-        if (state.StartedTrampoline is null)
+        // Lazy-attach manipulation trampolines (one-time). Skip when only LongPress is wired.
+        bool needsManipulation = m.Pan is not null || m.Pinch is not null || m.Rotate is not null
+            || oldM?.Pan is not null || oldM?.Pinch is not null || oldM?.Rotate is not null;
+        if (needsManipulation)
         {
-            state.StartedTrampoline = (s, e) => OnManipulationStarted(state, e);
-            fe.ManipulationStarted += state.StartedTrampoline;
+            if (state.StartedTrampoline is null)
+            {
+                state.StartedTrampoline = (s, e) => OnManipulationStarted(state, e);
+                fe.ManipulationStarted += state.StartedTrampoline;
+            }
+            if (state.DeltaTrampoline is null)
+            {
+                state.DeltaTrampoline = (s, e) => OnManipulationDelta(fe, state, e);
+                fe.ManipulationDelta += state.DeltaTrampoline;
+            }
+            if (state.CompletedTrampoline is null)
+            {
+                state.CompletedTrampoline = (s, e) => OnManipulationCompleted(state, e);
+                fe.ManipulationCompleted += state.CompletedTrampoline;
+            }
+            if (state.InertiaStartingTrampoline is null)
+            {
+                state.InertiaStartingTrampoline = (s, e) => { state.InertiaActive = true; };
+                fe.ManipulationInertiaStarting += state.InertiaStartingTrampoline;
+            }
         }
-        if (state.DeltaTrampoline is null)
+
+        // LongPress trampolines — touch/pen via Holding; mouse via pointer timer.
+        if (m.LongPress is not null)
         {
-            state.DeltaTrampoline = (s, e) => OnManipulationDelta(fe, state, e);
-            fe.ManipulationDelta += state.DeltaTrampoline;
+            fe.IsHoldingEnabled = true;
+
+            if (state.LongPressHoldingTrampoline is null)
+            {
+                state.LongPressHoldingTrampoline = (s, e) => OnLongPressHolding(fe, state, e);
+                fe.Holding += state.LongPressHoldingTrampoline;
+            }
+
+            if (state.LongPressPointerPressedTrampoline is null)
+            {
+                state.LongPressPointerPressedTrampoline = (s, e) => OnLongPressPointerPressed(fe, state, e);
+                fe.PointerPressed += state.LongPressPointerPressedTrampoline;
+            }
+            if (state.LongPressPointerReleasedTrampoline is null)
+            {
+                state.LongPressPointerReleasedTrampoline = (s, e) => OnLongPressPointerEnded(fe, state, e, cancelled: false);
+                fe.PointerReleased += state.LongPressPointerReleasedTrampoline;
+            }
+            if (state.LongPressPointerCaptureLostTrampoline is null)
+            {
+                state.LongPressPointerCaptureLostTrampoline = (s, e) => OnLongPressPointerEnded(fe, state, e, cancelled: true);
+                fe.PointerCaptureLost += state.LongPressPointerCaptureLostTrampoline;
+            }
+            if (state.LongPressPointerMovedTrampoline is null)
+            {
+                state.LongPressPointerMovedTrampoline = (s, e) => OnLongPressPointerMoved(fe, state, e);
+                fe.PointerMoved += state.LongPressPointerMovedTrampoline;
+            }
         }
-        if (state.CompletedTrampoline is null)
+    }
+
+    // ── LongPress dispatch ──────────────────────────────────────────────
+
+    private static void OnLongPressHolding(FrameworkElement fe, GestureState state, HoldingRoutedEventArgs e)
+    {
+        if (state.LongPress is not { } cfg) return;
+
+        var phase = e.HoldingState switch
         {
-            state.CompletedTrampoline = (s, e) => OnManipulationCompleted(state, e);
-            fe.ManipulationCompleted += state.CompletedTrampoline;
+            Microsoft.UI.Input.HoldingState.Started => GesturePhase.Began,
+            Microsoft.UI.Input.HoldingState.Completed => GesturePhase.Ended,
+            Microsoft.UI.Input.HoldingState.Canceled => GesturePhase.Cancelled,
+            _ => GesturePhase.Began,
+        };
+
+        var pos = e.GetPosition(fe);
+        cfg.OnTriggered(new LongPressGesture(
+            Position: pos,
+            Duration: cfg.MinimumDuration,
+            Phase: phase));
+    }
+
+    private static void OnLongPressPointerPressed(FrameworkElement fe, GestureState state, PointerRoutedEventArgs e)
+    {
+        if (state.LongPress is not { } cfg) return;
+        if (!cfg.EnableMouseEmulation) return;
+        if (e.Pointer.PointerDeviceType != Microsoft.UI.Input.PointerDeviceType.Mouse) return;
+
+        state.LongPressActivePointerId = e.Pointer.PointerId;
+        state.LongPressPressedPosition = e.GetCurrentPoint(fe).Position;
+        state.LongPressPressedTime = DateTime.UtcNow;
+        state.LongPressTriggeredForCurrentPress = false;
+        state.LongPressMouseArmed = true;
+
+        // Arm timer (lazily created, reused).
+        var timer = state.LongPressMouseTimer;
+        if (timer is null)
+        {
+            timer = new DispatcherTimer();
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                if (!state.LongPressMouseArmed) return;
+                if (state.LongPress is not { } liveCfg) return;
+                state.LongPressMouseArmed = false;
+                state.LongPressTriggeredForCurrentPress = true;
+                liveCfg.OnTriggered(new LongPressGesture(
+                    Position: state.LongPressPressedPosition,
+                    Duration: liveCfg.MinimumDuration,
+                    Phase: GesturePhase.Began));
+            };
+            state.LongPressMouseTimer = timer;
         }
-        if (state.InertiaStartingTrampoline is null)
+        timer.Interval = cfg.MinimumDuration;
+        timer.Start();
+    }
+
+    private static void OnLongPressPointerEnded(FrameworkElement fe, GestureState state, PointerRoutedEventArgs e, bool cancelled)
+    {
+        if (state.LongPress is not { } cfg) return;
+        if (!cfg.EnableMouseEmulation) return;
+        if (e.Pointer.PointerDeviceType != Microsoft.UI.Input.PointerDeviceType.Mouse) return;
+        if (e.Pointer.PointerId != state.LongPressActivePointerId && state.LongPressActivePointerId != 0) return;
+
+        var wasArmed = state.LongPressMouseArmed;
+        var didTrigger = state.LongPressTriggeredForCurrentPress;
+        state.LongPressMouseTimer?.Stop();
+        state.LongPressMouseArmed = false;
+
+        if (didTrigger)
         {
-            state.InertiaStartingTrampoline = (s, e) => { state.InertiaActive = true; };
-            fe.ManipulationInertiaStarting += state.InertiaStartingTrampoline;
+            var pos = e.GetCurrentPoint(fe).Position;
+            cfg.OnTriggered(new LongPressGesture(
+                Position: pos,
+                Duration: DateTime.UtcNow - state.LongPressPressedTime,
+                Phase: cancelled ? GesturePhase.Cancelled : GesturePhase.Ended));
+        }
+        else if (wasArmed && cancelled)
+        {
+            // Capture lost before trigger — report cancellation.
+            var pos = e.GetCurrentPoint(fe).Position;
+            cfg.OnTriggered(new LongPressGesture(
+                Position: pos,
+                Duration: DateTime.UtcNow - state.LongPressPressedTime,
+                Phase: GesturePhase.Cancelled));
+        }
+
+        state.LongPressTriggeredForCurrentPress = false;
+        state.LongPressActivePointerId = 0;
+    }
+
+    private static void OnLongPressPointerMoved(FrameworkElement fe, GestureState state, PointerRoutedEventArgs e)
+    {
+        if (state.LongPress is not { } cfg) return;
+        if (!cfg.EnableMouseEmulation) return;
+        if (!state.LongPressMouseArmed) return;
+        if (e.Pointer.PointerDeviceType != Microsoft.UI.Input.PointerDeviceType.Mouse) return;
+        if (e.Pointer.PointerId != state.LongPressActivePointerId) return;
+
+        var pos = e.GetCurrentPoint(fe).Position;
+        var dx = pos.X - state.LongPressPressedPosition.X;
+        var dy = pos.Y - state.LongPressPressedPosition.Y;
+        var distance = Math.Sqrt(dx * dx + dy * dy);
+        if (distance > cfg.CancelDistance)
+        {
+            state.LongPressMouseTimer?.Stop();
+            state.LongPressMouseArmed = false;
+            // Never fired Began, so no Cancelled callback per spec contract.
         }
     }
 
