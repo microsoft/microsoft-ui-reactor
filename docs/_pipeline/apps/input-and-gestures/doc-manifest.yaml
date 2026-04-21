@@ -1,0 +1,32 @@
+app:
+  title: "Input and Gestures"
+  width: 640
+  height: 520
+  startup-delay: 1500
+
+screenshots:
+  - id: pointer-modifiers
+    description: "Rectangle with pointer, tap, and double-tap modifiers"
+    component: PointerModifiersExample
+    region: client
+    format: png
+  - id: pan-gesture
+    description: "Card you can drag around with .OnPan"
+    component: PanGestureExample
+    region: client
+    format: png
+  - id: long-press
+    description: "Long-press gesture showing last-trigger info"
+    component: LongPressExample
+    region: client
+    format: png
+  - id: use-element-focus
+    description: "UseElementFocus auto-focusing the first input on mount"
+    component: UseElementFocusExample
+    region: client
+    format: png
+  - id: kanban-dnd
+    description: "Typed kanban drag-and-drop with move-on-confirmation"
+    component: KanbanDndExample
+    region: client
+    format: png

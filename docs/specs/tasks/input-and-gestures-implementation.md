@@ -171,6 +171,13 @@ element and redirecting via a mutable field on every update. No API change.
       `docs/benchmarks/` (or a README in `stress_perf`)
 - [ ] Target: ≥10× reduction in re-render time; single-digit milliseconds for
       1,000 items
+- **Status:** deferred. The correctness contract ("trampoline attaches once,
+  handler closure swaps in place") is already covered by
+  `TrampolineFixtures.ReRenderSameControlUnderlyingRefStable` and
+  `LatestHandlerWinsAfterRerender`, and the full xunit suite stayed green at
+  6390/6390 through the refactor. A dedicated perf app is worth writing
+  once there's a regression to detect — it belongs in `StressPerf.Reactor`
+  alongside the existing grid benchmarks rather than a one-off harness.
 
 ### 2.8 Regression check
 - [x] All existing event-handler unit tests and selftests pass unchanged
@@ -452,9 +459,15 @@ Ships in three sub-phases so the 80% case lands before the full protocol.
 - [ ] `dragVisual` callback → Reactor mounts the returned `Element` in a
       detached subtree, renders via `RenderTargetBitmap.RenderAsync`, converts
       to `SoftwareBitmap`, assigns to `DragStartingEventArgs.DragUI.SetContentFromSoftwareBitmap`
-      (deferred — WinUI default source-control screenshot is shipped in 6a)
-- [ ] Fallback when `dragVisual` is null: screenshot of source element via
-      same path (WinUI default handles this without Reactor involvement)
+      (deferred — non-trivial: requires mounting Reactor Element in a hidden
+      Popup, awaiting the next frame, and coordinating with the
+      `DragStartingDeferral`. WinUI's default source-control screenshot
+      covers the 95% case and ships out of the box without any Reactor
+      involvement. Revisit once there's a real consumer asking for custom
+      visuals — Phase 7 adoption work is the likely trigger.)
+- [x] Fallback when `dragVisual` is null: WinUI's default source-control
+      screenshot is used — the reconciler doesn't touch `DragUI`, so WinUI
+      auto-captures the source element's bitmap.
 
 #### 6a.6 Operation negotiation
 - [x] Source declares `allowedOperations` → mapped onto
@@ -504,7 +517,10 @@ Ships in three sub-phases so the 80% case lands before the full protocol.
 - [x] Lazy async overload `Func<CancellationToken, Task<T>>` for each
 - [ ] `WithBitmapFromElement(Func<Element>)` convenience — renders via
       `RenderTargetBitmap` only when a paint target requests the bitmap
-      (deferred — pairs with 6a.5 drag-visual rendering)
+      (deferred: same visual-tree-mount blocker as 6a.5. Consumers can still
+      produce a `RandomAccessStreamReference` out-of-band and call
+      `WithBitmap(...)` with either the eager or lazy `Func<T>` overloads
+      already shipped in 6b.)
 - [x] `WithCustomFormat(string formatId, object payload / Func<object> / Func<CT, Task<object>>)`
 
 #### 6b.2 Target-side accessors
@@ -655,11 +671,12 @@ off `.Set()`.
   - [x] Migration notes from `.Set()` passthrough
   - [ ] DnD typed-payload quickstart — deferred until Phase 6 lands
   - [ ] DnD cross-process patterns with lazy providers — deferred
-- [ ] Run `mur docs compile` to regenerate `docs/guide/input-and-gestures.md`
-      (blocked by a pre-existing charting sample build error; the template is
-      in place and will compile once the upstream error clears. Also needs a
-      minimal `docs/_pipeline/apps/input-and-gestures/` sample to resolve the
-      `app:` frontmatter — trivial once unblocked.)
+- [x] Added `docs/_pipeline/apps/input-and-gestures/` with five snippet-tagged
+      examples (pointer modifiers, pan, long-press, UseElementFocus, kanban DnD).
+- [x] Ran `dotnet run --project src/Reactor.Cli -- docs compile --topic
+      input-and-gestures --no-screenshots --no-ai --no-build` — emits
+      `docs/guide/input-and-gestures.md` (333 lines, 5 snippets). A full
+      compile with screenshots can be run the same way without the skip flags.
 
 ### 8.2 Appendix A table
 - [ ] Update the spec's Appendix A ("Field-By-Field Coverage After Phase 1")

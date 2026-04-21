@@ -1,0 +1,333 @@
+
+# Input and gestures
+
+Reactor's input surface is declarative: attach handlers via `.On*` modifiers and
+the reconciler wires WinUI events, auto-enables the matching flags (for example
+`IsDoubleTapEnabled`), and survives re-renders without re-subscribing the
+underlying WinUI event.
+
+This page covers the modifiers you'll reach for on most screens, the higher-level
+gesture recognizers for continuous input, and the imperative escape hatches —
+ref-based focus and access keys — that round out the commanding story.
+
+## Pointer, tap, and keyboard modifiers
+
+Every [component](components.md) exposes the full WinUI input event surface as
+`.On*` modifiers. Attach a handler; Reactor auto-enables the matching flag and
+installs a trampoline so re-renders don't re-subscribe the underlying event.
+
+```csharp
+Rectangle()
+    .Fill(Brushes.SteelBlue)
+    .OnPointerEntered((_, _) => logger.Debug("enter"))
+    .OnPointerExited((_, _) => logger.Debug("exit"))
+    .OnTapped((_, _) => OnClicked())
+    .OnDoubleTapped((_, _) => Open())
+    .OnRightTapped((_, _) => ShowContextMenu())
+    .OnHolding((_, _) => ShowContextMenu());
+```
+
+Auto-enablement keeps handlers honest: attaching `.OnDoubleTapped(...)` sets
+`IsDoubleTapEnabled = true` on the mounted control so the WinUI event actually
+fires. Remove the handler on a later render and the flag goes back to its
+default. Shape subclasses (for example `Rectangle` and `Ellipse`) also get a
+transparent `Fill` auto-assigned when a pointer handler is attached and no fill
+was set — otherwise hit-testing would miss the unfilled shape entirely.
+
+### Keyboard events
+
+```csharp
+TextField(value, setValue)
+    .OnKeyDown((_, e) => { if (e.Key == VirtualKey.Enter) Submit(); })
+    .OnPreviewKeyDown((_, e) => Trace("preview"))
+    .OnCharacterReceived((_, e) => Validate(e.Character));
+```
+
+`OnPreviewKeyDown` / `OnPreviewKeyUp` map to the WinUI tunneling events and fire
+before the bubbling `OnKeyDown` / `OnKeyUp` pair, which is the right spot for
+shortcut interception that needs to suppress further routing.
+
+### Focus events
+
+```csharp
+TextField(value, setValue)
+    .OnGotFocus((_, _) => ShowValidationHint())
+    .OnLostFocus((_, _) => HideValidationHint());
+```
+
+Focus events flow through the same trampoline pattern as pointer events, so the
+handler closure is updated in-place on each render and the WinUI subscription is
+installed exactly once per element.
+
+## Continuous gestures
+
+Pan, pinch, and rotate are continuous gestures: a single user interaction
+produces a stream of callbacks with deltas relative to the gesture start. Each
+gesture takes an `onChanged` action plus optional `onBegan` / `onEnded`
+callbacks that fire exactly once per interaction.
+
+### Pan
+
+```csharp
+Rectangle()
+    .OnPan(
+        onChanged: g => Translate(g.Translation),
+        onEnded: g => SnapToGrid(g.Translation),
+        minimumDistance: 8.0,
+        axis: PanAxis.Both,
+        withInertia: true);
+```
+
+`minimumDistance` gates callbacks: until the cumulative translation exceeds the
+threshold, nothing dispatches. On first crossing the reconciler emits `onBegan`
+(with `Phase = Began`) followed by the current delta as `Phase = Changed`. If
+the manipulation completes before the threshold is crossed, neither `onBegan`
+nor `onEnded` fire.
+
+`axis: PanAxis.Horizontal` restricts to X-axis translation; `withInertia: true`
+adds the inertia flag so WinUI continues to emit callbacks after the pointer
+lifts.
+
+### Pinch and rotate
+
+```csharp
+Image(uri)
+    .OnPinch(
+        onChanged: g => Scale(g.Scale),
+        withInertia: true)
+    .OnRotate(
+        onChanged: g => Rotate(g.Angle));
+```
+
+Both gestures share the same `Phase` lifecycle as pan. `ScaleDelta` and
+`AngleDelta` report the per-callback delta; `Scale` and `Angle` are cumulative
+since `Began`. Combining gestures on one element is expected — the reconciler
+unions the required `ManipulationModes` flags.
+
+### Long press
+
+```csharp
+listItem
+    .OnLongPress(
+        g => ShowContextMenu(g.Position),
+        minimumDuration: TimeSpan.FromMilliseconds(500),
+        cancelDistance: 10.0);
+```
+
+Long-press is touch-and-pen first: the reconciler routes `Holding` events into
+the callback and sets `IsHoldingEnabled = true`. Mouse long-press is off by
+default because WinUI's `Holding` event doesn't fire for mouse pointers; opt in
+with `enableMouseEmulation: true` and the reconciler arms a `DispatcherTimer`
+that cancels on release, capture loss, or pointer motion past `cancelDistance`.
+
+```csharp
+listItem.OnLongPress(() => ShowContextMenu(), enableMouseEmulation: true);
+```
+
+## Focus and access keys
+
+### Declarative focus modifiers
+
+```csharp
+Button("Submit", onClick)
+    .TabIndex(3)
+    .AccessKey("S")
+    .IsTabStop();   // default-true overload
+```
+
+`AccessKey` bound on a `.Command(...)` can be overridden per-site: a later
+`.AccessKey(...)` wins via the normal modifier-after-command ordering.
+
+```csharp
+var save = new Command { Label = "Save", Execute = OnSave, AccessKey = "S" };
+Button(save).AccessKey("F");   // "F" wins on this site
+```
+
+Advanced focus knobs are first-class too:
+
+```csharp
+container
+    .TabNavigation(KeyboardNavigationMode.Once)
+    .XYFocusKeyboardNavigation(XYFocusKeyboardNavigationMode.Enabled);
+```
+
+### Imperative focus with refs
+
+Sometimes you need to focus a control from an effect or event handler — for
+example, auto-focusing the first input on mount. Use `UseElementFocus` to get a
+stable `ElementRef` plus a `RequestFocus` action that schedules the focus on the
+UI dispatcher so it runs after the current reconcile pass.
+
+```csharp
+public class LoginForm : Component
+{
+    public override Element Render()
+    {
+        var (inputRef, requestFocus) = Context.UseElementFocus();
+
+        Context.UseEffect(() => requestFocus(), Array.Empty<object>());
+
+        return VStack(
+            TextField(email, setEmail).Ref(inputRef),
+            Button("Sign in", OnSubmit));
+    }
+}
+```
+
+`ElementRef.Current` is null until the referenced element mounts; the ref
+survives re-renders so the same instance reliably points at the currently
+mounted control. Call `Microsoft.UI.Reactor.Input.FocusManager.Focus(ref)` for
+a synchronous focus attempt or `FocusManager.FocusAsync(ref)` for WinUI's
+async API with a success result.
+
+## Behind the scenes: trampoline dispatch
+
+Re-rendering an element with a fresh handler closure is the common case in a
+data-driven UI. Naively subscribing / unsubscribing on every render costs a COM
+round-trip per event per element — enough to dominate a 1,000-item list's frame
+budget. Reactor installs one stable *trampoline* delegate per event per element
+and updates a mutable field that the trampoline reads. Re-renders swap the
+field; the WinUI subscription is untouched.
+
+You don't opt in or configure this — every `.On*` modifier routes through the
+trampoline path automatically. Inspect the
+[devtools](dev-tooling.md) ETW `EventDispatch` keyword (`0x40`) to see exactly
+when each trampoline attaches and dispatches.
+
+## Migration from `.Set(...)` passthrough
+
+Pre-Tier-1 code often reaches through `.Set(...)` to subscribe to an event that
+the element type didn't model declaratively:
+
+```csharp
+// Before — escapes the declarative surface and bypasses trampoline dispatch.
+Rectangle().Set(r =>
+{
+    r.PointerEntered += (_, _) => Hover();
+    r.PointerExited += (_, _) => Unhover();
+});
+```
+
+After Tier 1 lands, every pointer, tap, keyboard, and focus event has a
+first-class modifier. Replace the `.Set(...)` block with one modifier call per
+event — shorter, re-render-safe, and covered by the reconciler's auto-enable
+logic:
+
+```csharp
+// After
+Rectangle()
+    .OnPointerEntered((_, _) => Hover())
+    .OnPointerExited((_, _) => Unhover());
+```
+
+## Drag and drop
+
+Reactor's DnD surface is a declarative wrapper over the full Windows drag-and-drop
+protocol (`CanDrag` sources, `AllowDrop` targets, `DragStarting` / `Drop` /
+`DropCompleted`, `DataPackage` with text / URI / HTML / RTF / files / bitmap /
+custom formats, `DragUIOverride` drop-indicator tweaks). Sources and targets
+auto-wire the underlying flags — you set a modifier, the reconciler flips the
+bit and subscribes once via the same trampoline path every other event uses.
+
+### Typed in-process payloads
+
+For reorder-within-one-app scenarios (kanban columns, sortable lists), attach a
+typed payload on the source and a matching typed drop handler on the target.
+The payload is ferried through an in-memory transfer registry keyed by a GUID
+written into `DataPackage.Properties`, so arbitrary CLR objects can round-trip
+without a serializer.
+
+```csharp
+record Card(string Id, string Title);
+
+Element RenderCard(Card card) =>
+    Border(Text(card.Title))
+        .OnDragStart<BorderElement, Card>(() => card);
+
+Element RenderColumn(IEnumerable<Card> cards, Action<Card> onDrop) =>
+    VStack(cards.Select(RenderCard).ToArray())
+        .OnDrop<VStackElement, Card>(onDrop);
+```
+
+### Standard formats + cross-process interop
+
+Eager setters (`.WithText`, `.WithUri`, `.WithHtml`, `.WithRtf`, `.WithFiles`,
+`.WithBitmap`, `.WithCustomFormat`) write directly to the `DataPackage`, so
+Notepad / Word / File Explorer pick the drop up natively. On the target side,
+`TryGetText(out string)` and `GetTextAsync(CancellationToken)` work the same
+whether the drag originated from the same process or a different one.
+
+```csharp
+Border(Text("Drag me to Notepad"))
+    .OnDragStart<BorderElement>(() => new DragData().WithText("hello world"));
+
+Rectangle()
+    .OnDrop<RectangleElement>(args =>
+    {
+        if (args.Data.TryGetText(out var text))
+            Log(text);
+        args.AcceptedOperation = DragOperations.Copy;
+    });
+```
+
+### Lazy providers — pay only when the target asks
+
+If producing the payload is expensive (rendering HTML from a view model,
+reading a large file, round-tripping through a server), register a provider
+instead of an eager value. Reactor adapts your `Func<T>` or
+`Func<CancellationToken, Task<T>>` onto WinUI's `DataProviderHandler`: the
+deferral is acquired, your code runs on the thread pool, and the result is
+published when the target requests that format. A target that only reads text
+never pays the HTML cost.
+
+```csharp
+Border(Text("Rich content"))
+    .OnDragStart<BorderElement>(() => new DragData()
+        .WithText("plain fallback")
+        .WithHtml(ct => RenderExpensiveHtmlAsync(ct)));
+```
+
+### Drop indicator overrides
+
+Drop-over callbacks can tweak the caption, glyph, and content-preview
+visibility via `DragTargetArgs.UIOverride` — Reactor writes the changes back
+onto WinUI's `DragUIOverride` after your callback returns.
+
+```csharp
+VStack(children)
+    .OnDragOver(args =>
+    {
+        args.UIOverride.Caption = "Move to Inbox";
+        args.UIOverride.IsGlyphVisible = false;
+        args.AcceptedOperation = DragOperations.Move;
+    })
+    .OnDrop<VStackElement, Card>(card => inbox.Add(card));
+```
+
+### The move-on-confirmation pattern
+
+When a source declares `DragOperations.Move`, the source is responsible for
+removing the moved item — but only after the drop is confirmed. Never remove
+optimistically in `getPayload`: the user might cancel (ESC), the drop might
+land outside any target, or a Ctrl-drag might downgrade Move to Copy. Wait for
+`onEnd` and branch on `CompletedOperation`:
+
+```csharp
+Border(Text(card.Title))
+    .OnDragStart<BorderElement, Card>(
+        getPayload: () => card,
+        allowedOperations: DragOperations.Move | DragOperations.Copy,
+        onEnd: ctx =>
+        {
+            if (ctx.WasCancelled) return;
+            if (ctx.CompletedOperation == DragOperations.Move)
+                column.Remove(card);  // confirmed move — safe to remove
+            // else: Copy succeeded, source keeps the item
+        });
+```
+
+`DragEndContext.WasCancelled` is true when the drop fell outside every valid
+target (ESC, dropped on empty space, system abort).
+`DragEndContext.CompletedOperation` carries the final negotiated operation
+— whatever the target set via `DragTargetArgs.AcceptedOperation` — or
+`DragOperations.None` when cancelled.
