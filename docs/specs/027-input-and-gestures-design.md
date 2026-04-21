@@ -1727,6 +1727,30 @@ For each WinUI routed event, the status after Phase 1:
 | DropCompleted | ✗ | ✓ (Tier 6, via onEnd callback) |
 | AccessKey events | ✗ | ✓ (Tier 5) |
 
+### Ship status (2026-04 snapshot)
+
+All "Post-spec ✓" rows in the table above have shipped as of this snapshot:
+
+- Pointer / tap / keyboard / focus routed events (Tier 1) — `ElementModifiers`
+  plus matching `.On*` extension methods in `ElementExtensions.cs`.
+- Manipulation pipeline (Tier 3) — driven by `Reconciler.Gestures.cs`; exposed
+  via `.OnPan` / `.OnPinch` / `.OnRotate` / `.OnLongPress` / `.OnDoubleTap`.
+- DnD surface (Tier 6) — `DragData`, `DragSourceConfig`, `DropTargetConfig`,
+  reconciler wiring in `Reconciler.DragDrop.cs`. Cross-process rich formats
+  (6b) ship alongside the typed-payload fast path (6a) and `DropCompleted`
+  finalization (6c). Remaining deferrals: custom `dragVisual` rendering via
+  `RenderTargetBitmap` (6a.5) and the paired `WithBitmapFromElement` lazy
+  provider (6b.1) — WinUI's default source-element screenshot covers the
+  common case without Reactor involvement.
+- Access-key events (Tier 5) — `.AccessKey` / `.AccessKeyDisplayRequested`
+  modifiers, with per-site override beating `Command.AccessKey` by the
+  modifier-after-command ordering rule.
+
+E2E parity: `GestureTests` and `DragDropTests` exercise pan / double-tap /
+right-tap / long-press and typed reorder / cancelled drag / text-format
+round-trip end-to-end via Appium/WinAppDriver. Unit + selftest tiers already
+covered the declarative surface before E2E landed.
+
 ---
 
 ## Appendix B — Why Not Copy Compose's `pointerInput`?
