@@ -134,7 +134,7 @@ internal static class TransitionEngine
         inVisual.StartAnimation("Opacity", inFade);
     }
 
-    private static SlideDirection ReverseDirection(SlideDirection direction) => direction switch
+    internal static SlideDirection ReverseDirection(SlideDirection direction) => direction switch
     {
         SlideDirection.FromRight => SlideDirection.FromLeft,
         SlideDirection.FromLeft => SlideDirection.FromRight,
@@ -143,7 +143,7 @@ internal static class TransitionEngine
         _ => direction,
     };
 
-    private static (Vector3 OutEnd, Vector3 InStart) GetSlideOffsets(SlideDirection direction, float distance = 200f)
+    internal static (Vector3 OutEnd, Vector3 InStart) GetSlideOffsets(SlideDirection direction, float distance = 200f)
     {
         return direction switch
         {
