@@ -73,6 +73,7 @@ internal static class SelfTestRunner
                     }
 
                     Console.WriteLine($"# Total failures: {harness.Failures}");
+                    harness.FinalizeTaskbarProgress();
                 }
                 catch (Exception ex)
                 {

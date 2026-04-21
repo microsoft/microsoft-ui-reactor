@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
@@ -19,6 +20,11 @@ internal sealed class Harness
     private TextBlock? _subtitleText;
     private readonly List<Border> _testSegments = new();
     private Border? _contentArea;
+
+    // Windows taskbar progress via ITaskbarList3 COM interface
+    private IntPtr _hwnd;
+    private ITaskbarList3? _taskbar;
+    private int _totalTests;
 
     public Harness(Window window) { _window = window; _currentWindow = window; }
     public Window Window => _window;
@@ -84,12 +90,40 @@ internal sealed class Harness
         _window.Content = rootGrid;
         _window.ExtendsContentIntoTitleBar = true;
         _window.SetTitleBar(titleBarArea);
+
+        // Initialize Windows taskbar progress overlay
+        _totalTests = totalTests;
+        try
+        {
+            _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
+            _taskbar = (ITaskbarList3)new TaskbarList();
+            _taskbar.HrInit();
+            _taskbar.SetProgressState(_hwnd, TaskbarProgressFlags.Normal);
+            _taskbar.SetProgressValue(_hwnd, 0, (ulong)totalTests);
+        }
+        catch
+        {
+            _taskbar = null; // graceful fallback if COM init fails
+        }
     }
 
     public void UpdateProgress(int current, string fixtureName)
     {
         if (_subtitleText is not null)
             _subtitleText.Text = $"{current}/{_testSegments.Count} \u2014 {fixtureName}";
+
+        _taskbar?.SetProgressValue(_hwnd, (ulong)current, (ulong)_totalTests);
+    }
+
+    /// <summary>
+    /// Sets the taskbar to green (complete) or red (error) when all tests finish.
+    /// </summary>
+    public void FinalizeTaskbarProgress()
+    {
+        if (_taskbar is null) return;
+        _taskbar.SetProgressValue(_hwnd, (ulong)_totalTests, (ulong)_totalTests);
+        _taskbar.SetProgressState(_hwnd,
+            _failures > 0 ? TaskbarProgressFlags.Error : TaskbarProgressFlags.NoProgress);
     }
 
     /// <summary>
@@ -269,3 +303,40 @@ internal sealed class Harness
             FindAllInTree(VisualTreeHelper.GetChild(root, i), predicate, results);
     }
 }
+
+// -- ITaskbarList3 COM interop for taskbar progress overlay ---------------
+
+[Flags]
+internal enum TaskbarProgressFlags
+{
+    NoProgress = 0x00,
+    Indeterminate = 0x01,
+    Normal = 0x02,
+    Error = 0x04,
+    Paused = 0x08,
+}
+
+[ComImport]
+[Guid("ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface ITaskbarList3
+{
+    // ITaskbarList
+    void HrInit();
+    void AddTab(IntPtr hwnd);
+    void DeleteTab(IntPtr hwnd);
+    void ActivateTab(IntPtr hwnd);
+    void SetActiveAlt(IntPtr hwnd);
+
+    // ITaskbarList2
+    void MarkFullscreenWindow(IntPtr hwnd, [MarshalAs(UnmanagedType.Bool)] bool fFullscreen);
+
+    // ITaskbarList3
+    void SetProgressValue(IntPtr hwnd, ulong ullCompleted, ulong ullTotal);
+    void SetProgressState(IntPtr hwnd, TaskbarProgressFlags flags);
+}
+
+[ComImport]
+[Guid("56fdf344-fd6d-11d0-958a-006097c9a090")]
+[ClassInterface(ClassInterfaceType.None)]
+internal class TaskbarList { }
