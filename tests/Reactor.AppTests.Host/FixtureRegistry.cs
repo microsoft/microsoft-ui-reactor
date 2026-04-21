@@ -129,6 +129,14 @@ internal static class FixtureRegistry
 
         // DataGrid
         "DataGrid_EditableGrid",
+
+        // Input & Gestures (spec 027 — E2E validation via WinAppDriver)
+        "Gesture_Pan",
+        "Gesture_DoubleTap",
+        "Gesture_RightTap",
+        "Gesture_LongPress",
+        "DragDrop_TypedReorder",
+        "DragDrop_TextFormat",
     ];
 
     public static Element? Build(string name, RenderContext ctx) => name switch
@@ -249,6 +257,14 @@ internal static class FixtureRegistry
 
         // DataGrid
         "DataGrid_EditableGrid" => DataGridFixtures.EditableGrid(ctx),
+
+        // Input & Gestures (spec 027 — E2E validation)
+        "Gesture_Pan" => GestureE2EFixtures.PanTest(ctx),
+        "Gesture_DoubleTap" => GestureE2EFixtures.DoubleTapTest(ctx),
+        "Gesture_RightTap" => GestureE2EFixtures.RightTapTest(ctx),
+        "Gesture_LongPress" => GestureE2EFixtures.LongPressTest(ctx),
+        "DragDrop_TypedReorder" => DragDropE2EFixtures.TypedReorderTest(ctx),
+        "DragDrop_TextFormat" => DragDropE2EFixtures.TextFormatTest(ctx),
 
         _ => null,
     };

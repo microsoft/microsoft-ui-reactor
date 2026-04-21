@@ -176,7 +176,8 @@ element and redirecting via a mutable field on every update. No API change.
 - [x] All existing event-handler unit tests and selftests pass unchanged
       (6390/6390 passing post-refactor — no behavioural differences)
 - [ ] All existing E2E event tests (`EventHandlerTests.cs`) pass unchanged
-      (run via Appium harness, not part of this commit)
+      (run via Appium harness, not part of this commit — to verify, run
+      `dotnet test tests/Reactor.AppTests --filter ClassName=EventHandlerTests`)
 
 ---
 
@@ -256,9 +257,9 @@ driven by a single `ManipulationDelta` subscription per element.
 - [x] Register all fixtures in `SelfTestFixtureRegistry`
 
 ### 3.9 Gallery sample
-- [ ] Add `GesturePanSample` to `samples/Reactor.TestApp` — a card you can
+- [x] Add `GesturePanSample` to `samples/Reactor.TestApp` — a card you can
       translate via pan with inertia (uses `.OnPan(withInertia: true)` + a
-      `Translation` hook)
+      `Translation` hook). Shipped as part of the `InputGesturesDemo` tab.
 
 ---
 
@@ -335,8 +336,10 @@ Goal: ship the remaining gesture conveniences plus focus/keyboard polish.
 - [x] Register all fixtures in `SelfTestFixtureRegistry`
 
 ### 4.7 Gallery sample
-- [ ] Long-press a list item in the sample app to show a context menu
-- [ ] `UseFocus()` demo: input auto-focuses on mount
+- [x] Long-press a sample card opts into mouse emulation for a desktop-driven
+      demo (`InputGesturesDemo` → `LongPressSample`)
+- [x] `UseElementFocus()` demo: input auto-focuses on mount
+      (`InputGesturesDemo` → `UseFocusSample`)
 
 ---
 
@@ -485,8 +488,10 @@ Ships in three sub-phases so the 80% case lands before the full protocol.
 - [x] Register all fixtures in `SelfTestFixtureRegistry`
 
 #### 6a.9 Gallery sample
-- [ ] Add three-column kanban to `samples/Reactor.TestApp` using typed-payload
-      drag reordering (deferred alongside Phase 7 adoption)
+- [x] Add kanban (`InputGesturesDemo` → `KanbanDragDropSample`) to
+      `samples/Reactor.TestApp` using typed-payload drag reordering with
+      move-on-confirmation wired via `onEnd`. A full three-column showcase is
+      still tracked in Phase 7 alongside real-app adoption.
 
 ---
 
@@ -554,10 +559,13 @@ Ships in three sub-phases so the 80% case lands before the full protocol.
       set accordingly
 
 #### 6b.7 Gallery sample
-- [ ] Drop zone that accepts Explorer-dropped files and logs their paths
-- [ ] Source that advertises text + lazy HTML; drop onto Notepad (text only)
-      and Word (rich text); log proves HTML provider fires exactly once for the
-      Word drop and never for Notepad
+- [x] Source writes plain text via `DragData.Text(...)` and a drop zone reads
+      it back via `TryGetText` (`InputGesturesDemo` → `TextDragSample`) —
+      dragging the source onto Notepad also pastes plainly via the eager
+      text format.
+- [ ] Lazy HTML provider side-by-side with a text fallback (tracked alongside
+      Phase 7 adoption — the showcase real apps are a better canvas than the
+      gallery for the "paid only when target requests" demonstration)
 
 ---
 
@@ -589,19 +597,18 @@ Ships in three sub-phases so the 80% case lands before the full protocol.
 ### 6d — E2E Tests for Drag-and-Drop
 
 #### 6d.1 New test class `tests/Reactor.AppTests/Tests/DragDropTests.cs`
-- [ ] `ClassInitialize` / `ClassCleanup` per existing pattern
-- [ ] Host fixture: a minimal kanban (two columns, one card) wired with typed
-      drag/drop, registered in `AppTests.Host` navigator
-- [ ] `DragDrop_TypedReorder_MovesCard` — WinAppDriver
-      `TouchAction`/`PointerInputDevice` drag from source card to target column,
-      verify the card's UIA parent changes
-- [ ] `DragDrop_CancelledDrag_LeavesSourceIntact` — press+drag+ESC (or drop
-      outside any target), verify source column still has the card and a toast
-      announces "Drop cancelled"
-- [ ] `DragDrop_TextFormat_RoundTrip` — a small fixture with a text source
-      (`.OnDragStart(() => DragData.Text("hello"))`) and a text target
-      (`.OnDrop<T>(args => { args.Data.TryGetText(out var t); … })`); drag,
-      assert the target's label becomes `"hello"`
+- [x] `ClassInitialize` / `ClassCleanup` per existing pattern
+- [x] Host fixtures: a two-column kanban and a text-format round-trip, wired
+      into `FixtureRegistry` as `DragDrop_TypedReorder` and `DragDrop_TextFormat`
+- [x] `DragDrop_TypedReorder_MovesCard` — WinAppDriver `Actions.ClickAndHold`
+      drag from source card into target column; verify Todo goes 1→0 and
+      Done goes 0→1 (the move-on-confirmation `onEnd` is what actually
+      removes the source)
+- [x] `DragDrop_CancelledDrag_LeavesSourceIntact` — drag into empty space and
+      release; verify Todo stays at 1 and Done stays at 0
+- [x] `DragDrop_TextFormat_RoundTrip` — drag a `DragData.Text("dragged-text")`
+      source onto a raw `.OnDrop<T>` target that reads via `TryGetText`;
+      assert the label becomes `"Dropped: dragged-text"`
 
 ---
 

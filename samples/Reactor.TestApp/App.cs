@@ -21,7 +21,7 @@ ReactorApp.Run<DemoApp>("Reactor Demo", width: 1200, height: 800
 
 // ─── Root application component ────────────────────────────────────────────────
 
-enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding }
+enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures }
 
 class DemoApp : Component
 {
@@ -55,6 +55,7 @@ class DemoApp : Component
             Tab.Slots => ("Slots", "slots"),
             Tab.Navigation => ("Navigation", "navigation"),
             Tab.Commanding => ("Commanding", "commanding"),
+            Tab.InputGestures => ("Input & Gestures", "counter"),
             _ => (tab.ToString(), "counter")
         }).ToArray();
 
@@ -105,6 +106,7 @@ class DemoApp : Component
                     Tab.Slots => Component<SlotsDemo>(),
                     Tab.Navigation => Component<NavigationDemo>(),
                     Tab.Commanding => Component<CommandingTestDemo>(),
+                    Tab.InputGestures => Component<InputGesturesDemo>(),
                     _ => TextBlock("Select a tab")
                 }
             ).Padding(24).Margin(16).Flex(grow: 1)

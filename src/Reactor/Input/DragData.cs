@@ -51,7 +51,11 @@ public sealed class DragData
     private readonly Dictionary<string, FormatEntry> _formatEntries = new(StringComparer.Ordinal);
     private readonly int _originProcessId = Process.GetCurrentProcess().Id;
 
-    internal DragData() { }
+    /// <summary>Create an empty <see cref="DragData"/>. Use <c>With…</c> methods to populate formats.</summary>
+    public DragData() { }
+
+    /// <summary>Convenience factory — creates a <see cref="DragData"/> pre-populated with plain text.</summary>
+    public static DragData Text(string text) => new DragData().WithText(text);
 
     /// <summary>Origin process id — stored so cross-process drops can be detected/rejected.</summary>
     public int OriginProcessId => _originProcessId;
