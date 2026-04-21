@@ -214,3 +214,4 @@ samples/apps/reactorfiles/Native/reactorfs/target/
 # Local coverage collector outputs (see CONTRIBUTING.md § Code coverage).
 # Cobertura reports are regenerated on demand and should never be committed.
 coverage/
+*.cobertura.xml

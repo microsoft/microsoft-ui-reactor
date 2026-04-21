@@ -16,7 +16,7 @@ public class InfiniteResourceTests
         Assert.Null(resource.TotalCount);
         Assert.IsType<LoadState.Loading>(resource.LoadState);
         Assert.True(resource.HasMore);
-        Assert.Equal(0, resource.Items.Count);
+        Assert.Empty(resource.Items);
     }
 
     [Fact]

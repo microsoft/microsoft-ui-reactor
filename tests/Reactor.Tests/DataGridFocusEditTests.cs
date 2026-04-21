@@ -605,7 +605,7 @@ public class DataGridFocusEditTests
         var state = await CreateLoadedState();
         state.PinColumn("Id", PinPosition.Left);
         var groups = state.GetPinnedColumnGroups();
-        Assert.NotNull(groups);
+        _ = groups; // value type – just verify it can be retrieved
     }
 
     [Fact]

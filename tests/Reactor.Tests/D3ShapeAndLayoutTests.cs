@@ -95,7 +95,7 @@ public class D3ShapeAndLayoutTests
         arc.SetOuterRadius(100);
         string? path = arc.Generate(0, Math.PI);
         Assert.NotNull(path);
-        Assert.True(path.StartsWith("M"));
+        Assert.StartsWith("M", path);
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public class D3ShapeAndLayoutTests
         arc.SetOuterRadius(50);
         string? path = arc.Generate(0, 2 * Math.PI);
         Assert.NotNull(path);
-        Assert.True(path.Contains("A")); // Arc command
+        Assert.Contains("A", path); // Arc command
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public class D3ShapeAndLayoutTests
         var gen = SymbolGenerator.Create<object?>(D3Symbol.Circle, 64);
         string? path = gen.Generate(null);
         Assert.NotNull(path);
-        Assert.True(path.Contains("M"));
+        Assert.Contains("M", path);
     }
 
     [Theory]
@@ -286,7 +286,7 @@ public class D3ShapeAndLayoutTests
         var link = graph.Links.First();
         string? path = SankeyLayout.LinkPath(link);
         Assert.NotNull(path);
-        Assert.True(path.Contains("M"));
+        Assert.Contains("M", path);
     }
 
     [Fact]
@@ -461,7 +461,7 @@ public class D3ShapeAndLayoutTests
     {
         var bin = BinGenerator.Create();
         var bins = bin.Generate(Array.Empty<double>());
-        Assert.Equal(0, bins.Length);
+        Assert.Empty(bins);
     }
 
     [Fact]
@@ -486,7 +486,7 @@ public class D3ShapeAndLayoutTests
         Assert.Equal(3, groups.Count);
         Assert.Equal(2, groups['a'].Count);
         Assert.Equal(2, groups['b'].Count);
-        Assert.Equal(1, groups['c'].Count);
+        Assert.Single(groups['c']);
     }
 
     [Fact]
@@ -580,7 +580,7 @@ public class D3ShapeAndLayoutTests
         var link = LinkGenerator.Vertical<(double x, double y)>(n => n.x, n => n.y);
         string? path = link.Generate((source: (0.0, 0.0), target: (100.0, 100.0)));
         Assert.NotNull(path);
-        Assert.True(path.StartsWith("M"));
+        Assert.StartsWith("M", path);
     }
 
     [Fact]
@@ -616,7 +616,7 @@ public class D3ShapeAndLayoutTests
         };
         string? path = area.Generate(data);
         Assert.NotNull(path);
-        Assert.True(path.StartsWith("M"));
+        Assert.StartsWith("M", path);
     }
 
     [Fact]

@@ -35,7 +35,7 @@ public class ChildReconcilerLisTests
     public void ComputeLIS_ReverseSorted()
     {
         var result = ChildReconciler.ComputeLIS(new[] { 5, 4, 3, 2, 1 });
-        Assert.Equal(1, result.Count); // only one element in LIS
+        Assert.Single(result); // only one element in LIS
     }
 
     [Fact]

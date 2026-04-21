@@ -285,14 +285,14 @@ public class D3UtilityTests
     public void Format_SiPrefix()
     {
         var result = D3Format.FormatValue(1500, ".2s");
-        Assert.True(result.Contains("k"));
+        Assert.Contains("k", result);
     }
 
     [Fact]
     public void Format_GroupSeparator()
     {
         var result = D3Format.FormatValue(1234567, ",.0f");
-        Assert.True(result.Contains(","));
+        Assert.Contains(",", result);
     }
 
     [Fact]
@@ -328,7 +328,7 @@ public class D3UtilityTests
     {
         var fmt = D3Format.FormatPrefix(".1", 1e6);
         string result = fmt(1.23e6);
-        Assert.True(result.Contains("M"));
+        Assert.Contains("M", result);
     }
 
     [Fact]
@@ -461,7 +461,7 @@ public class D3UtilityTests
         var data = new (double, double)[] { (0, 0), (50, 100), (100, 0) };
         string? path = line.Generate(data);
         Assert.NotNull(path);
-        Assert.True(path.StartsWith("M"));
+        Assert.StartsWith("M", path);
     }
 
     [Fact]
@@ -591,7 +591,7 @@ public class D3UtilityTests
     {
         var c = new D3Color(255, 0, 128);
         string hex = c.ToHex();
-        Assert.True(hex.StartsWith("#"));
+        Assert.StartsWith("#", hex);
         Assert.Equal(7, hex.Length);
     }
 
@@ -600,7 +600,7 @@ public class D3UtilityTests
     {
         var c = new D3Color(100, 200, 50);
         string rgb = c.ToRgb();
-        Assert.True(rgb.StartsWith("rgb("));
+        Assert.StartsWith("rgb(", rgb);
     }
 
     [Fact]
