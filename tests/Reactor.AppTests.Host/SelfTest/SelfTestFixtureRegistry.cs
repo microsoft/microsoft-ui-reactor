@@ -537,6 +537,22 @@ internal static class SelfTestFixtureRegistry
         "Devtools_WaitForTimeoutLoggedAsErr",
         "Devtools_InitializeHandshake",
         "Devtools_SwitchComponentInvalidatesIds",
+        // Coverage boost — targeting remaining gaps to reach 85%
+        "CovBoost_ComponentHookWrappers",
+        "CovBoost_ThemeTokenResolution",
+        "CovBoost_ElementPoolExercise",
+        "CovBoost_FlexPanelAttachedProps",
+        "CovBoost_FlexPanelContainerProps",
+        "CovBoost_UseSystemBackButton",
+        "CovBoost_UseHighContrastScheme",
+        "CovBoost_UseAnnounce",
+        "CovBoost_ElementPoolLifecycle",
+        "CovBoost_ThemeRefExplicitResolution",
+        "CovBoost_ComponentUseMutation",
+        "CovBoost_ComponentUseResource",
+        "CovBoost_FlexPanelUnloadCleanup",
+        "CovBoost_ElementPoolDetach",
+        "CovBoost_UseWindowSizeBreakpoint",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1070,6 +1086,22 @@ internal static class SelfTestFixtureRegistry
         "Devtools_WaitForTimeoutLoggedAsErr" => new DevtoolsFixtures.WaitForTimeoutLoggedAsErr(harness),
         "Devtools_InitializeHandshake" => new DevtoolsFixtures.InitializeHandshake(harness),
         "Devtools_SwitchComponentInvalidatesIds" => new DevtoolsFixtures.SwitchComponentInvalidatesIds(harness),
+        // Coverage boost
+        "CovBoost_ComponentHookWrappers" => new CoverageBoostFixtures.ComponentHookWrappers(harness),
+        "CovBoost_ThemeTokenResolution" => new CoverageBoostFixtures.ThemeTokenResolution(harness),
+        "CovBoost_ElementPoolExercise" => new CoverageBoostFixtures.ElementPoolExercise(harness),
+        "CovBoost_FlexPanelAttachedProps" => new CoverageBoostFixtures.FlexPanelAttachedProps(harness),
+        "CovBoost_FlexPanelContainerProps" => new CoverageBoostFixtures.FlexPanelContainerProps(harness),
+        "CovBoost_UseSystemBackButton" => new CoverageBoostFixtures.UseSystemBackButtonExercise(harness),
+        "CovBoost_UseHighContrastScheme" => new CoverageBoostFixtures.UseHighContrastSchemeExercise(harness),
+        "CovBoost_UseAnnounce" => new CoverageBoostFixtures.UseAnnounceExercise(harness),
+        "CovBoost_ElementPoolLifecycle" => new CoverageBoostFixtures.ElementPoolLifecycle(harness),
+        "CovBoost_ThemeRefExplicitResolution" => new CoverageBoostFixtures.ThemeRefExplicitResolution(harness),
+        "CovBoost_ComponentUseMutation" => new CoverageBoostFixtures.ComponentUseMutationExercise(harness),
+        "CovBoost_ComponentUseResource" => new CoverageBoostFixtures.ComponentUseResourceExercise(harness),
+        "CovBoost_FlexPanelUnloadCleanup" => new CoverageBoostFixtures.FlexPanelUnloadCleanup(harness),
+        "CovBoost_ElementPoolDetach" => new CoverageBoostFixtures.ElementPoolDetach(harness),
+        "CovBoost_UseWindowSizeBreakpoint" => new CoverageBoostFixtures.UseWindowSizeBreakpoint(harness),
         _ => null,
     };
 }
