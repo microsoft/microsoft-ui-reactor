@@ -73,8 +73,15 @@ sealed class GesturePanSample : Component
                         .Width(120).Height(120)
                         .Background("#3A7BD5")
                         .CornerRadius(8)
-                        .Translation(offset.X, offset.Y, 0)
-                        .OnMount(fe => cardRef.Current = fe)
+                        // Translation is driven imperatively in OnPan.onChanged via cardRef to
+                        // keep pan at compositor speed. A declarative .Translation(offset) here
+                        // would reset the live position whenever setEps re-renders mid-gesture.
+                        // On Reset we zero fe.Translation directly (see Reset above).
+                        .OnMount(fe =>
+                        {
+                            cardRef.Current = fe;
+                            fe.Translation = new Vector3(committedRef.Current.X, committedRef.Current.Y, 0);
+                        })
                         .OnPan(
                             onChanged: g =>
                             {

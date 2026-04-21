@@ -270,14 +270,17 @@ public sealed class DragData
     //  Entries are removed on DropCompleted (success or cancel).
     // ══════════════════════════════════════════════════════════════════
 
-    private static readonly Dictionary<Guid, WeakReference<DragData>> _transfers = new();
+    // Strong references: a typed-only DragData (no FormatEntry) has no other live root
+    // once DragStarting returns, so a WeakReference could be collected mid-drag. The
+    // reconciler is responsible for calling Unregister in DropCompleted (success or cancel).
+    private static readonly Dictionary<Guid, DragData> _transfers = new();
     private static readonly object _transfersLock = new();
 
     internal static Guid Register(DragData data)
     {
         var id = Guid.NewGuid();
         lock (_transfersLock)
-            _transfers[id] = new WeakReference<DragData>(data);
+            _transfers[id] = data;
         return id;
     }
 
@@ -285,10 +288,8 @@ public sealed class DragData
     {
         lock (_transfersLock)
         {
-            if (_transfers.TryGetValue(id, out var weak) && weak.TryGetTarget(out var data))
-                return data;
+            return _transfers.TryGetValue(id, out var data) ? data : null;
         }
-        return null;
     }
 
     internal static void Unregister(Guid id)

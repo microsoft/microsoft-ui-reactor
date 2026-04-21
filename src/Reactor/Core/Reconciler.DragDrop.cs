@@ -241,13 +241,17 @@ public sealed partial class Reconciler
             modifiers: e.Modifiers,
             uiOverride: uiOverride);
 
+        // Pre-populate with the negotiated default: leaving AcceptedOperation untouched
+        // (e.g. when the handler only adjusts UIOverride) keeps the drop accepted per
+        // DropTargetConfig.AcceptedOperations. Callers wanting to reject still set None explicitly.
+        args.AcceptedOperation = DragOperationNegotiation.Negotiate(
+            FromWinUI(e.AllowedOperations),
+            cfg.AcceptedOperations);
+
         callback(args);
 
-        // Propagate accepted operation.
-        if (args.AcceptedOperation != DragOperations.None)
-            e.AcceptedOperation = ToWinUI(args.AcceptedOperation);
-        else
-            e.AcceptedOperation = DataPackageOperation.None;
+        // Propagate whatever the callback left on args — including None for an explicit reject.
+        e.AcceptedOperation = ToWinUI(args.AcceptedOperation);
 
         // Propagate UI override (caption, visibility flags).
         if (uiOverride.Caption is not null)

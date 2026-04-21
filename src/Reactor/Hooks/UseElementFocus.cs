@@ -28,15 +28,23 @@ public static class UseElementFocusExtensions
         FocusState state = FocusState.Programmatic)
     {
         var (elRef, _) = ctx.UseState(new ElementRef());
+        // Capture the UI dispatcher at render time — RequestFocus may be called from a
+        // background thread (e.g. from UseEffect cleanup, task continuations), where
+        // GetForCurrentThread() would return the wrong queue or null.
+        // Guard the call itself: in unit-test / headless contexts the WinUI activation
+        // factory isn't registered and GetForCurrentThread throws a COMException.
+        Microsoft.UI.Dispatching.DispatcherQueue? uiQueue;
+        try { uiQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread(); }
+        catch { uiQueue = null; }
         Action requestFocus = () =>
         {
-            var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-            if (queue is null)
+            if (uiQueue is null)
             {
+                // No dispatcher available (headless/tests) — invoke synchronously.
                 Microsoft.UI.Reactor.Input.FocusManager.Focus(elRef, state);
                 return;
             }
-            queue.TryEnqueue(() => Microsoft.UI.Reactor.Input.FocusManager.Focus(elRef, state));
+            uiQueue.TryEnqueue(() => Microsoft.UI.Reactor.Input.FocusManager.Focus(elRef, state));
         };
         return (elRef, requestFocus);
     }

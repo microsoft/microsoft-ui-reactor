@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -32,15 +33,28 @@ internal static class CommandBindings
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(btn, cmd.Description);
         }
         if (cmd.AccessKey is not null) btn.AccessKey = cmd.AccessKey;
+
+        // Remove any prior command-added accelerator before adding the new one, so
+        // rerunning this setter on update/reconcile doesn't stack duplicates that
+        // would cause the command to fire multiple times per chord.
+        if (_commandAccelerators.TryGetValue(btn, out var prior))
+        {
+            btn.KeyboardAccelerators.Remove(prior);
+            _commandAccelerators.Remove(btn);
+        }
         if (cmd.Accelerator is not null)
         {
-            btn.KeyboardAccelerators.Add(new KeyboardAccelerator
+            var accel = new KeyboardAccelerator
             {
                 Key = cmd.Accelerator.Key,
                 Modifiers = cmd.Accelerator.Modifiers,
-            });
+            };
+            btn.KeyboardAccelerators.Add(accel);
+            _commandAccelerators.Add(btn, accel);
         }
     }
+
+    private static readonly ConditionalWeakTable<Control, KeyboardAccelerator> _commandAccelerators = new();
 
     /// <summary>
     /// Invokes <see cref="Command.Execute"/> or fires-and-forgets
