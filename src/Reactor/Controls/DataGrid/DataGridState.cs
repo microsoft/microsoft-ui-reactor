@@ -1381,6 +1381,7 @@ public class DataGridState<T>
 
     // ── Client-side sort/filter fallback ─────────────────────────
 
+#pragma warning disable IL2090 // Generic type parameter flows through without DynamicallyAccessedMembers annotation
     private static List<T> ApplyClientSort(List<T> items, List<SortDescriptor> sorts)
     {
         if (sorts.Count == 0 || items.Count == 0) return items;
@@ -1408,6 +1409,7 @@ public class DataGridState<T>
         return ordered?.ToList() ?? items;
     }
 
+#pragma warning disable IL2090 // Generic type parameter flows through without DynamicallyAccessedMembers annotation
     private static List<T> ApplyClientFilters(List<T> items, List<FilterDescriptor> filters)
     {
         if (filters.Count == 0 || items.Count == 0) return items;
@@ -1433,6 +1435,7 @@ public class DataGridState<T>
 
         return query.ToList();
     }
+#pragma warning restore IL2090
 
     private static int SafeCompare(object? a, object? b)
     {

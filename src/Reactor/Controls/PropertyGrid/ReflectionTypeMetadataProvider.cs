@@ -19,7 +19,9 @@ public static class ReflectionTypeMetadataProvider
     /// public instance properties and reading attributes.
     /// </summary>
     public static TypeMetadata CreateMetadata(Type type)
+#pragma warning disable IL2111 // Method with DynamicallyAccessedMembers parameter accessed via reflection
         => _cache.GetOrAdd(type, BuildMetadata);
+#pragma warning restore IL2111
 
     /// <summary>
     /// Generates a FieldDescriptor for a single PropertyInfo (unbound — for registry use).
@@ -236,6 +238,8 @@ public static class ReflectionTypeMetadataProvider
         bool Filterable,
         PinPosition Pin);
 
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "BuildInitOnlySetter uses reflection to compose init-only properties.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "BuildInitOnlySetter uses reflection to compose init-only properties.")]
     internal static Func<object, object?, object>? BuildInitOnlySetter(PropertyInfo property)
     {
         var type = property.DeclaringType!;

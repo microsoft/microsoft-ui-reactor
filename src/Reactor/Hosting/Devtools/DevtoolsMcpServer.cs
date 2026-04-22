@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
@@ -126,6 +127,8 @@ internal sealed class DevtoolsMcpServer : IDisposable
     /// Emits the one-time <c>[devtools] ready</c> line after the first render
     /// completes. Callers invoke this from the reconciler's first-commit hook.
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization for devtools ready announcement.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization for devtools ready announcement.")]
     public void AnnounceReady()
     {
         BannerWriter.WriteLine($"[devtools] ready (build {_buildTag})");
@@ -205,6 +208,8 @@ internal sealed class DevtoolsMcpServer : IDisposable
         }
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization for MCP HTTP request/response handling.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization for MCP HTTP request/response handling.")]
     private void HandleRequest(HttpListenerContext ctx)
     {
         var path = ctx.Request.Url?.AbsolutePath ?? "/";
@@ -327,7 +332,9 @@ internal sealed class DevtoolsMcpServer : IDisposable
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+#pragma warning disable IL2026, IL3050 // DefaultJsonTypeInfoResolver is intentional fallback for non-AOT builds
         TypeInfoResolverChain = { DevtoolsJsonContext.Default, new global::System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver() },
+#pragma warning restore IL2026, IL3050
     };
 
     /// <summary>
@@ -389,6 +396,7 @@ internal sealed class DevtoolsMcpServer : IDisposable
     /// Derives a stable build tag from the entry assembly's compile timestamp (or
     /// informational version, if richer). Agents use this to confirm a reload took.
     /// </summary>
+    [UnconditionalSuppressMessage("AOT", "IL3000", Justification = "Assembly.Location used for diagnostic build tag.")]
     private static string ResolveBuildTag()
     {
         var asm = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();

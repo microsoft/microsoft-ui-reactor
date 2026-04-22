@@ -74,7 +74,7 @@ internal static class DevtoolsStateTool
     /// property is <c>internal</c> so we resolve it once reflectively here —
     /// avoids adding a public accessor just for devtools.
     /// </summary>
-    [RequiresUnreferencedCode("Devtools state tool uses reflection to access internal Component.Context property.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools state tool uses reflection to access internal Component.Context.")]
     private static RenderContext GetContext(Component c)
     {
         var prop = typeof(Component).GetProperty(
@@ -89,7 +89,8 @@ internal static class DevtoolsStateTool
     /// pass through; everything else becomes <c>{ $type, $shape }</c>. Null is
     /// returned as-is (JsonSerializer writes <c>null</c>).
     /// </summary>
-    [RequiresUnreferencedCode("Devtools state tool uses reflection to inspect hook values and collection shapes.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools state tool uses reflection to inspect hook values.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Devtools state tool uses reflection to inspect hook values.")]
     internal static object? ShapeValue(object? value)
     {
         if (value is null) return null;
@@ -148,7 +149,8 @@ internal static class DevtoolsStateTool
     // reflecting a generic `Count` property for ICollection<T> /
     // IReadOnlyCollection<T>. Returns null when the source doesn't advertise
     // its size — we refuse to force enumeration to find out.
-    [RequiresUnreferencedCode("Devtools state tool uses reflection to read collection Count property.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools state tool uses reflection to read collection Count.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Devtools state tool uses reflection to read collection Count.")]
     private static int? TryReadCollectionCount(object value)
     {
         if (value is global::System.Collections.ICollection coll) return coll.Count;

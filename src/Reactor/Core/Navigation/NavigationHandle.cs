@@ -247,7 +247,8 @@ public sealed class NavigationHandle<TRoute> : INavigationHandle where TRoute : 
     /// For polymorphic route hierarchies, use <c>[JsonPolymorphic]</c> and <c>[JsonDerivedType]</c>
     /// attributes on the base route type.
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization of navigation state may require unreferenced types.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization of navigation state; callers provide appropriate types.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization of navigation state; callers provide appropriate types.")]
     public string GetState(JsonSerializerOptions? options = null)
     {
         var state = new NavigationState<TRoute>
@@ -263,7 +264,8 @@ public sealed class NavigationHandle<TRoute> : INavigationHandle where TRoute : 
     /// Restores the full navigation state from JSON. Replaces back stack, current, and forward stack.
     /// Fires <see cref="Navigated"/> with <see cref="NavigationMode.Reset"/>.
     /// </summary>
-    [RequiresUnreferencedCode("JSON deserialization of navigation state may require unreferenced types.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON deserialization of navigation state; callers provide appropriate types.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON deserialization of navigation state; callers provide appropriate types.")]
     public void SetState(string json, JsonSerializerOptions? options = null)
     {
         var state = JsonSerializer.Deserialize<NavigationState<TRoute>>(json, options)

@@ -7,6 +7,13 @@
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
+  <!-- Suppress trimming/AOT warnings in consumer projects (tests, samples, CLI).
+       The core Reactor library is already warning-free; these projects intentionally
+       call reflection-based APIs and will not be AOT-published. -->
+  <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0')) And '$(MSBuildProjectName)' != 'Reactor'">
+    <NoWarn>$(NoWarn);IL2026;IL2062;IL2065;IL2067;IL2070;IL2072;IL2075;IL2090;IL2091;IL3000;IL3050</NoWarn>
+  </PropertyGroup>
+
   <!-- Prevent PublishAot from leaking into netstandard projects (e.g. Roslyn
        analyzers/generators) when passed as a global property. -->
   <PropertyGroup Condition="!$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">

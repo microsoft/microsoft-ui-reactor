@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
@@ -202,6 +203,7 @@ public static class ReactorApp
         }
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Activator.CreateInstance for component types resolved by reflection.")]
     private static bool RunScreenshotSubverb(DevtoolsCliOptions options, int width, int height, Action<ReactorHost>? configure, Type? hostRoot = null)
     {
         if (string.IsNullOrEmpty(options.ScreenshotOutputPath))
@@ -281,6 +283,8 @@ public static class ReactorApp
         return true;
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Activator.CreateInstance for component types resolved by reflection.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "Generic type parameter flows through for component instantiation.")]
     private static bool RunRunSubverb(DevtoolsCliOptions options, string title, int width, int height, Action<ReactorHost>? configure, Type? hostRoot = null)
     {
         _ = title;
@@ -455,6 +459,7 @@ public static class ReactorApp
     /// <summary>
     /// Finds a Component type by name across all loaded assemblies (case-insensitive).
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Assembly.GetTypes for devtools component discovery.")]
     internal static Type? FindComponentType(string name)
     {
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
@@ -473,6 +478,7 @@ public static class ReactorApp
         return null;
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Assembly.GetTypes for devtools component enumeration.")]
     internal static IEnumerable<string> FindAllComponentNames()
     {
         return AppDomain.CurrentDomain.GetAssemblies()
@@ -483,6 +489,7 @@ public static class ReactorApp
             .OrderBy(n => n);
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Assembly.GetTypes for devtools detailed component listing.")]
     internal static IEnumerable<Hosting.Devtools.ComponentInfo> FindAllComponentsDetailed()
     {
         return AppDomain.CurrentDomain.GetAssemblies()
@@ -503,6 +510,7 @@ public static class ReactorApp
     /// didn't pass <c>--devtools-project</c>. Falls back to the entry assembly
     /// location — stable per build output, sufficient for single-instance.
     /// </summary>
+    [UnconditionalSuppressMessage("AOT", "IL3000", Justification = "Assembly.Location used for diagnostic project identifier.")]
     private static string? DeriveProjectIdentifier()
     {
         try

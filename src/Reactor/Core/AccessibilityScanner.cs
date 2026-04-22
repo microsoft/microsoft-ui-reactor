@@ -1096,5 +1096,7 @@ public static partial class AccessibilityScanner
         PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonSerializable(typeof(A11yReport))]
-    private partial class A11yJsonContext : JsonSerializerContext;
+    private partial class A11yJsonContext : JsonSerializerContext
+    {
+    }
 }

@@ -23,6 +23,8 @@ internal sealed class McpDispatcher
         _logger = logger;
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON deserialization for MCP JSON-RPC dispatch.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON deserialization for MCP JSON-RPC dispatch.")]
     public JsonRpcResponse Dispatch(string body)
     {
         JsonRpcRequest? request;
@@ -216,7 +218,8 @@ internal sealed class McpDispatcher
     /// whose value is explicitly <c>false</c>. Used to translate tool-level soft
     /// failures into <c>err</c> log lines.
     /// </summary>
-    [RequiresUnreferencedCode("HasOkFalse uses reflection to read the 'ok' property from result objects.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "HasOkFalse uses reflection on result objects for devtools logging.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "HasOkFalse uses reflection on result objects for devtools logging.")]
     private static bool HasOkFalse(object? result)
     {
         if (result is null) return false;

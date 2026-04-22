@@ -34,7 +34,8 @@ internal class ObservableTreeTracker : IDisposable
     /// Filters to: public instance properties, getter accessible,
     /// property type is class or interface (value types can't be INPC).
     /// </summary>
-    [RequiresUnreferencedCode("ObservableTreeTracker uses reflection to discover INPC-candidate properties.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "ObservableTreeTracker uses reflection to discover INPC-candidate properties.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "ObservableTreeTracker uses reflection to discover INPC-candidate properties.")]
     internal static PropertyInfo[] GetInpcCandidateProperties(Type type)
         => _inpcPropertyCache.GetOrAdd(type, t =>
             t.GetProperties(BindingFlags.Public | BindingFlags.Instance)
@@ -108,7 +109,8 @@ internal class ObservableTreeTracker : IDisposable
         _visiting.Remove(node);
     }
 
-    [RequiresUnreferencedCode("ObservableTreeTracker uses reflection to inspect property changes on INPC objects.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "ObservableTreeTracker uses reflection to inspect property changes.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "ObservableTreeTracker uses reflection to inspect property changes.")]
     private void OnNestedPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         _requestRerender();

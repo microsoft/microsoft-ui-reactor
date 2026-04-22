@@ -284,7 +284,8 @@ public sealed class IntlAccessor
         return null;
     }
 
-    [RequiresUnreferencedCode("ToArgsDictionary uses reflection to enumerate properties of anonymous types.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "ToArgsDictionary uses reflection on anonymous types for localization args.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "ToArgsDictionary uses reflection on anonymous types for localization args.")]
     private static IDictionary<string, object> ToArgsDictionary(object args)
     {
         if (args is IDictionary<string, object> dict)

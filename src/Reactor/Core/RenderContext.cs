@@ -1026,7 +1026,8 @@ public sealed class RenderContext
     /// we have access; devtools code consumes the boxed values and does the
     /// JSON shaping. Must be called on the UI dispatcher.
     /// </summary>
-    [RequiresUnreferencedCode("SnapshotHooks uses reflection to read Value fields from generic hook state types.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "SnapshotHooks uses reflection on internal hook state types.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "SnapshotHooks uses reflection on internal hook state types.")]
     internal IReadOnlyList<HookSnapshot> SnapshotHooks()
     {
         var list = new List<HookSnapshot>(_hooks.Count);

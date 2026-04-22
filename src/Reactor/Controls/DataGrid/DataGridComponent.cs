@@ -45,7 +45,9 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
         // affecting CellRenderers). Auto-columns are cached by UseMemo.
         var columns = el.Columns is not null
             ? el.Columns
+#pragma warning disable IL2091 // Generic type parameter flows through without DynamicallyAccessedMembers annotation
             : UseMemo(() => ColumnDsl.AutoColumns<T>(registry, el.ColumnOverrides));
+#pragma warning restore IL2091
 
         // Create the headless state machine once and hold it in a ref.
         var stateRef = UseRef<DataGridState<T>>(null!);

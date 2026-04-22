@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -41,7 +42,9 @@ internal static class LockfileRegistry
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+#pragma warning disable IL2026, IL3050 // DefaultJsonTypeInfoResolver is intentional fallback for non-AOT builds
         TypeInfoResolverChain = { DevtoolsJsonContext.Default, new global::System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver() },
+#pragma warning restore IL2026, IL3050
     };
 
     /// <summary>
@@ -90,6 +93,8 @@ internal static class LockfileRegistry
     /// on-disk content already matches so a reload loop doesn't thrash
     /// filesystem watchers.
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization for lockfile write.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization for lockfile write.")]
     public static void Write(string path, LockfileEntry entry)
     {
         var dir = Path.GetDirectoryName(path);
@@ -129,6 +134,8 @@ internal static class LockfileRegistry
         try { if (File.Exists(path)) File.Delete(path); } catch { }
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON deserialization for lockfile read.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON deserialization for lockfile read.")]
     public static bool TryRead(string path, out LockfileEntry? entry)
     {
         entry = null;

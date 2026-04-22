@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
 namespace Microsoft.UI.Reactor.Hosting.Devtools;
@@ -46,6 +47,8 @@ internal sealed class StdioMcpLoop : IDisposable
     /// so tests can exercise the request/response contract without spawning a
     /// background thread.
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization for stdio MCP response.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization for stdio MCP response.")]
     public string ProcessLine(string line)
     {
         var response = _dispatcher.Dispatch(line);

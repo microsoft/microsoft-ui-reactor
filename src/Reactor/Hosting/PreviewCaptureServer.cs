@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Net;
@@ -264,6 +265,8 @@ internal sealed class PreviewCaptureServer : IDisposable
         response.Close();
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization for preview capture switch-component response.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization for preview capture switch-component response.")]
     private void HandleSwitchComponent(HttpListenerRequest request, HttpListenerResponse response)
     {
         if (request.HttpMethod != "POST")
@@ -299,7 +302,7 @@ internal sealed class PreviewCaptureServer : IDisposable
         var success = SwitchComponent(componentName);
         var result = success
             ? $"{{\"ok\":true,\"component\":{JsonSerializer.Serialize(componentName)}}}"
-            : $"{{\"ok\":false,\"error\":\"Component '{componentName}' not found\"}}";
+            : $"{{\"ok\":false,\"error\":{JsonSerializer.Serialize($"Component '{componentName}' not found")}}}";
         var resultBytes = Encoding.UTF8.GetBytes(result);
 
         response.StatusCode = success ? 200 : 404;
@@ -360,4 +363,8 @@ internal sealed class PreviewComponentsPayload
 }
 
 [global::System.Text.Json.Serialization.JsonSerializable(typeof(PreviewComponentsPayload))]
-internal partial class PreviewJsonContext : global::System.Text.Json.Serialization.JsonSerializerContext;
+[global::System.Text.Json.Serialization.JsonSourceGenerationOptions(
+    PropertyNamingPolicy = global::System.Text.Json.Serialization.JsonKnownNamingPolicy.CamelCase)]
+internal partial class PreviewJsonContext : global::System.Text.Json.Serialization.JsonSerializerContext
+{
+}

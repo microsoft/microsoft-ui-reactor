@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Microsoft.UI.Reactor.Data.Providers;
 
@@ -10,7 +11,7 @@ namespace Microsoft.UI.Reactor.Data.Providers;
 /// The collection is the authoritative source — mutations go through the collection,
 /// not through the data source's CRUD methods.
 /// </summary>
-public class ObservableListDataSource<T> : ListDataSource<T>, IObservableDataSource<T>, IDisposable
+public class ObservableListDataSource<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T> : ListDataSource<T>, IObservableDataSource<T>, IDisposable
 {
     private readonly ObservableCollection<T> _collection;
     private readonly HashSet<T> _subscribedItems = new();
