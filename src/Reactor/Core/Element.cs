@@ -1870,19 +1870,17 @@ public abstract record LazyStackElementBase : Element
     public abstract double Spacing { get; init; }
     public abstract double EstimatedItemSize { get; init; }
     public abstract object GetItemsSource();
-#pragma warning disable CS8305 // ElementFactory is experimental; we coordinate with WinUI team
-    public abstract ElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool);
+    public abstract IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool);
     /// <summary>
     /// Update an existing factory's items and viewBuilder in place, avoiding
     /// ItemsRepeater re-realization. Returns true if the factory was updated.
     /// </summary>
-    public abstract bool TryUpdateFactory(ElementFactory existingFactory);
+    public abstract bool TryUpdateFactory(IElementFactory existingFactory);
     /// <summary>
     /// After updating the factory in place, reconcile all realized items
     /// with the new viewBuilder output (property diffs only, no collection changes).
     /// </summary>
-    public abstract void RefreshRealizedItems(ElementFactory factory, WinUI.ItemsRepeater repeater);
-#pragma warning restore CS8305
+    public abstract void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater);
     internal Action<WinUI.ScrollViewer>[] ScrollViewerSetters { get; init; } = [];
     internal Action<WinUI.ItemsRepeater>[] RepeaterSetters { get; init; } = [];
 }
@@ -1900,21 +1898,19 @@ public record LazyVStackElement<T>(
     public override object GetItemsSource() =>
         Enumerable.Range(0, Items.Count).ToList();
 
-#pragma warning disable CS8305
-    public override ElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool) =>
+    public override IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool) =>
         new ElementFactory<T>(Items, ViewBuilder, reconciler, requestRerender, pool);
 
-    public override bool TryUpdateFactory(ElementFactory existingFactory)
+    public override bool TryUpdateFactory(IElementFactory existingFactory)
     {
         if (existingFactory is ElementFactory<T> f) { f.UpdateInPlace(Items, ViewBuilder); return true; }
         return false;
     }
 
-    public override void RefreshRealizedItems(ElementFactory factory, WinUI.ItemsRepeater repeater)
+    public override void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater)
     {
         if (factory is ElementFactory<T> f) f.RefreshRealizedItems(repeater);
     }
-#pragma warning restore CS8305
 }
 
 public record LazyHStackElement<T>(
@@ -1930,21 +1926,19 @@ public record LazyHStackElement<T>(
     public override object GetItemsSource() =>
         Enumerable.Range(0, Items.Count).ToList();
 
-#pragma warning disable CS8305
-    public override ElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool) =>
+    public override IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool) =>
         new ElementFactory<T>(Items, ViewBuilder, reconciler, requestRerender, pool);
 
-    public override bool TryUpdateFactory(ElementFactory existingFactory)
+    public override bool TryUpdateFactory(IElementFactory existingFactory)
     {
         if (existingFactory is ElementFactory<T> f) { f.UpdateInPlace(Items, ViewBuilder); return true; }
         return false;
     }
 
-    public override void RefreshRealizedItems(ElementFactory factory, WinUI.ItemsRepeater repeater)
+    public override void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater)
     {
         if (factory is ElementFactory<T> f) f.RefreshRealizedItems(repeater);
     }
-#pragma warning restore CS8305
 }
 
 // ════════════════════════════════════════════════════════════════════════

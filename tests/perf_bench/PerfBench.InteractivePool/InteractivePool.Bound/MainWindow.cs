@@ -101,14 +101,13 @@ public sealed class MainWindow : Window
     }
 }
 
-#pragma warning disable CS8305 // ElementFactory is experimental
-internal sealed class BoundElementFactory : ElementFactory
+internal sealed class BoundElementFactory : IElementFactory
 {
     private readonly InteractiveItemViewModel[] _vms;
 
     public BoundElementFactory(InteractiveItemViewModel[] vms) => _vms = vms;
 
-    protected override UIElement GetElementCore(ElementFactoryGetArgs args)
+    public UIElement GetElement(ElementFactoryGetArgs args)
     {
         var i = args.Data is int idx ? idx : 0;
         var vm = _vms[i];
@@ -145,6 +144,5 @@ internal sealed class BoundElementFactory : ElementFactory
         return row;
     }
 
-    protected override void RecycleElementCore(ElementFactoryRecycleArgs args) { }
+    public void RecycleElement(ElementFactoryRecycleArgs args) { }
 }
-#pragma warning restore CS8305

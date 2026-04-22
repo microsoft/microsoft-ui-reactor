@@ -89,10 +89,9 @@ public sealed class MainWindow : Window
     }
 }
 
-#pragma warning disable CS8305 // ElementFactory is experimental
-internal sealed class DirectElementFactory : ElementFactory
+internal sealed class DirectElementFactory : IElementFactory
 {
-    protected override UIElement GetElementCore(ElementFactoryGetArgs args)
+    public UIElement GetElement(ElementFactoryGetArgs args)
     {
         var i = args.Data is int idx ? idx : 0;
         var row = new StackPanel { Orientation = Orientation.Horizontal, Padding = new Thickness(2), Spacing = 8 };
@@ -102,6 +101,5 @@ internal sealed class DirectElementFactory : ElementFactory
         return row;
     }
 
-    protected override void RecycleElementCore(ElementFactoryRecycleArgs args) { }
+    public void RecycleElement(ElementFactoryRecycleArgs args) { }
 }
-#pragma warning restore CS8305

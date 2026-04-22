@@ -124,10 +124,10 @@ If you're building line-of-business applications:
 ### Prerequisites
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- Windows App SDK 2.0 (experimental) — pulled automatically on `dotnet restore`
+- Windows App SDK 2.0 (preview) — pulled automatically on `dotnet restore`
 - Visual Studio 2022 (17.8+) or just the .NET 8 CLI
 
-> This project uses the **experimental** Windows App SDK 2.0 (`Microsoft.WindowsAppSDK` 2.0.0-experimental6). The package comes from NuGet — no manual SDK installer is needed.
+> This project uses the **preview** Windows App SDK 2.0 (`Microsoft.WindowsAppSDK` 2.0.0-preview2). The package comes from NuGet — no manual SDK installer is needed.
 
 ### Create a new app
 
@@ -147,7 +147,7 @@ Or create a `.csproj` manually:
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.0-experimental6" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.0-preview2" />
     <ProjectReference Include="..\Reactor\Reactor.csproj" />
   </ItemGroup>
 </Project>

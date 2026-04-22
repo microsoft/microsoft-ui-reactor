@@ -4,12 +4,10 @@ using Microsoft.UI.Xaml.Controls;
 namespace Microsoft.UI.Reactor.Core;
 
 /// <summary>
-/// Bridges WinUI's ItemsRepeater/ElementFactory to Reactor's Reconciler.
-/// GetElementCore calls the view builder then mounts; RecycleElementCore unmounts.
+/// Bridges WinUI's ItemsRepeater/IElementFactory to Reactor's Reconciler.
+/// GetElement calls the view builder then mounts; RecycleElement unmounts.
 /// </summary>
-#pragma warning disable CS8305 // ElementFactory is experimental; we coordinate with WinUI team
-public sealed partial class ElementFactory<T> : ElementFactory
-#pragma warning restore CS8305
+public sealed partial class ElementFactory<T> : IElementFactory
 {
     private IReadOnlyList<T> _items;
     private Func<T, int, Element> _viewBuilder;
@@ -85,7 +83,7 @@ public sealed partial class ElementFactory<T> : ElementFactory
         }
     }
 
-    protected override UIElement GetElementCore(ElementFactoryGetArgs args)
+    public UIElement GetElement(ElementFactoryGetArgs args)
     {
         var index = args.Data is int i ? i : 0;
         if (index < 0 || index >= _items.Count)
@@ -98,7 +96,7 @@ public sealed partial class ElementFactory<T> : ElementFactory
         return control ?? new TextBlock { Text = "" };
     }
 
-    protected override void RecycleElementCore(ElementFactoryRecycleArgs args)
+    public void RecycleElement(ElementFactoryRecycleArgs args)
     {
         if (args.Element is null) return;
 

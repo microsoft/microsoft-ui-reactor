@@ -13,11 +13,11 @@ When filing an issue, include the platform (`x64` / `ARM64`), .NET SDK version, 
 ## Prerequisites
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- Windows App SDK 2.0 (experimental) — restored automatically from NuGet, no manual install required
+- Windows App SDK 2.0 (preview) — restored automatically from NuGet, no manual install required
 - Visual Studio 2022 (17.8+) or VS Code with C# Dev Kit
 - (Optional) [Rust toolchain](https://rustup.rs/) via rustup — only needed for the native differ
 
-> **Package version:** All projects reference `Microsoft.WindowsAppSDK` **2.0.0-experimental6** (public NuGet). The version is centralized in `Directory.Build.props` — update it there to change the version for every project at once.
+> **Package version:** All projects reference `Microsoft.WindowsAppSDK` **2.0.0-preview2** (public NuGet). The version is centralized in `Directory.Build.props` — update it there to change the version for every project at once.
 
 ---
 

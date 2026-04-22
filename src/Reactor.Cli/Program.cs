@@ -196,7 +196,7 @@ string GenerateCsproj() =>
         <WindowsSdkPackageVersion>10.0.22621.52</WindowsSdkPackageVersion>
       </PropertyGroup>
       <ItemGroup>
-        <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.0-experimental6" />
+        <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.0-preview2" />
       </ItemGroup>
       <ItemGroup>
         <ProjectReference Include="..\Reactor\Reactor.csproj" />

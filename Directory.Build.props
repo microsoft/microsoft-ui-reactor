@@ -6,7 +6,7 @@
     To install: dotnet restore (NuGet will pull the package automatically).
   -->
   <PropertyGroup>
-    <WindowsAppSDKVersion>2.0.0-experimental6</WindowsAppSDKVersion>
+    <WindowsAppSDKVersion>2.0.0-preview2</WindowsAppSDKVersion>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
