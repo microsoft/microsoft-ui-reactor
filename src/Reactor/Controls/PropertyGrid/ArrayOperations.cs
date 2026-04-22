@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Microsoft.UI.Reactor.Controls;
 
@@ -11,6 +12,7 @@ internal static class ArrayOperations
     /// <summary>
     /// Adds an item to the end of the list. For arrays, returns a new array.
     /// </summary>
+    [RequiresDynamicCode("Array.CreateInstance requires dynamic code for array creation at runtime.")]
     public static object Add(object collection, object item, Type elementType)
     {
         if (collection is IList list && !collection.GetType().IsArray)
@@ -34,6 +36,7 @@ internal static class ArrayOperations
     /// <summary>
     /// Removes an item at the given index. For arrays, returns a new array.
     /// </summary>
+    [RequiresDynamicCode("Array.CreateInstance requires dynamic code for array creation at runtime.")]
     public static object RemoveAt(object collection, int index, Type elementType)
     {
         if (index < 0)

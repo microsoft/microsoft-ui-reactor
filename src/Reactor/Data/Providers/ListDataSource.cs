@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace Microsoft.UI.Reactor.Data.Providers;
@@ -7,7 +8,7 @@ namespace Microsoft.UI.Reactor.Data.Providers;
 /// In-memory data source backed by a list. Supports client-side sorting,
 /// filtering, text search, paging, and CRUD mutations.
 /// </summary>
-public class ListDataSource<T> : IDataSource<T>, IMutableDataSource<T>
+public class ListDataSource<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T> : IDataSource<T>, IMutableDataSource<T>
 {
     private readonly List<T> _items;
     private readonly Func<T, RowKey> _getRowKey;

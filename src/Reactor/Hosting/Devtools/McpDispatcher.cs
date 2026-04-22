@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 
@@ -215,6 +216,7 @@ internal sealed class McpDispatcher
     /// whose value is explicitly <c>false</c>. Used to translate tool-level soft
     /// failures into <c>err</c> log lines.
     /// </summary>
+    [RequiresUnreferencedCode("HasOkFalse uses reflection to read the 'ok' property from result objects.")]
     private static bool HasOkFalse(object? result)
     {
         if (result is null) return false;

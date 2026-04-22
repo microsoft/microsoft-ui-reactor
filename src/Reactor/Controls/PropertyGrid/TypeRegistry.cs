@@ -51,6 +51,7 @@ public class TypeRegistry
     /// 4. Array/IList&lt;T&gt; — array editor
     /// 5. Record/class/struct — reflection-based decomposition
     /// </summary>
+    [RequiresUnreferencedCode("Resolve may use Activator.CreateInstance on runtime-determined element types.")]
     public TypeMetadata Resolve(Type type)
     {
         // 1. Exact match
@@ -201,6 +202,7 @@ public class TypeRegistry
         return false;
     }
 
+    [RequiresUnreferencedCode("TryResolveArray uses Activator.CreateInstance on runtime-determined element types.")]
     private static bool TryResolveArray(Type type, [NotNullWhen(true)] out TypeMetadata? metadata)
     {
         metadata = null;

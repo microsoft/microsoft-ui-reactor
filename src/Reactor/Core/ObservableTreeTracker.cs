@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace Microsoft.UI.Reactor.Core;
@@ -33,6 +34,7 @@ internal class ObservableTreeTracker : IDisposable
     /// Filters to: public instance properties, getter accessible,
     /// property type is class or interface (value types can't be INPC).
     /// </summary>
+    [RequiresUnreferencedCode("ObservableTreeTracker uses reflection to discover INPC-candidate properties.")]
     internal static PropertyInfo[] GetInpcCandidateProperties(Type type)
         => _inpcPropertyCache.GetOrAdd(type, t =>
             t.GetProperties(BindingFlags.Public | BindingFlags.Instance)
@@ -106,6 +108,7 @@ internal class ObservableTreeTracker : IDisposable
         _visiting.Remove(node);
     }
 
+    [RequiresUnreferencedCode("ObservableTreeTracker uses reflection to inspect property changes on INPC objects.")]
     private void OnNestedPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         _requestRerender();

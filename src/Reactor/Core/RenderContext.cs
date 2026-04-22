@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor.Hooks;
 
 namespace Microsoft.UI.Reactor.Core;
@@ -1025,6 +1026,7 @@ public sealed class RenderContext
     /// we have access; devtools code consumes the boxed values and does the
     /// JSON shaping. Must be called on the UI dispatcher.
     /// </summary>
+    [RequiresUnreferencedCode("SnapshotHooks uses reflection to read Value fields from generic hook state types.")]
     internal IReadOnlyList<HookSnapshot> SnapshotHooks()
     {
         var list = new List<HookSnapshot>(_hooks.Count);
