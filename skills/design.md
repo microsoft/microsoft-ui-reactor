@@ -442,7 +442,9 @@ if (showCounter)
 
 ### 7. Accessibility
 
-#### Tier 1: Essential (Every Control)
+#### Tier 1 Modifiers (Every Control)
+
+These modifiers are zero-cost — apply them by default:
 
 ```csharp
 // Icon-only buttons MUST have AutomationName
@@ -452,42 +454,210 @@ Button(Content: Image(iconSource), onClick)
 // Headings for screen reader navigation
 Heading("Settings").HeadingLevel(AutomationHeadingLevel.Level1)
 SubHeading("General").HeadingLevel(AutomationHeadingLevel.Level2)
+
+// Tab order and access keys
+Button("Save", onSave).IsTabStop(true).TabIndex(0).AccessKey("S")
 ```
 
-#### Keyboard Navigation
+| Modifier | Purpose |
+|----------|---------|
+| `.AutomationName("text")` | Screen reader label — required on icon-only controls |
+| `.HeadingLevel(Level1..Level9)` | Heading hierarchy for screen reader navigation |
+| `.IsTabStop(true/false)` | Include/exclude from tab order |
+| `.TabIndex(n)` | Explicit tab order |
+| `.AccessKey("X")` | Alt+X keyboard shortcut |
+
+#### Tier 2 Modifiers (Lazy-Allocated)
+
+These allocate an `AutomationProperties` peer only when set:
 
 ```csharp
-Button("Tab stop", onClick)
-    .IsTabStop(true)
-    .TabIndex(0)
-    .AccessKey("S")  // Alt+S
-```
+TextField(name, setName)
+    .HelpText("Enter your full legal name")
+    .Required()
 
-#### Tier 2: Lists and Collections
+// Hide decorative elements from screen readers
+Image(decorativeSource).AccessibilityHidden()
 
-```csharp
-// Position-in-set for screen readers
+// Position-in-set for screen readers on list items
 items.Select((item, i) =>
     TextBlock(item.Name)
         .PositionInSet(i + 1, items.Count)
         .WithKey(item.Id))
 ```
 
-#### Live Regions
+| Modifier | Purpose |
+|----------|---------|
+| `.HelpText("text")` | Extended description (read after name) |
+| `.FullDescription("text")` | Detailed description for complex elements |
+| `.AccessibilityHidden()` | Hide decorative elements from AT |
+| `.AccessibilityView(Raw/Control/Content)` | Control AT tree visibility |
+| `.Landmark(LandmarkType)` | Navigation landmark (see below) |
+| `.Required()` | Marks a field as required for AT |
+| `.LiveRegion(Polite/Assertive)` | Announce dynamic content changes |
+| `.PositionInSet(pos, size)` | Position in a virtual list for AT |
+
+#### Navigation Landmarks
+
+Landmarks let screen reader users jump between page regions:
 
 ```csharp
-// Announce dynamic content changes to screen readers
-TextBlock(statusMessage)
-    .LiveRegion(AutomationLiveSetting.Polite)
+NavigationView(navItems, content)
+    .Landmark(AutomationLandmarkType.Navigation)
+
+FlexColumn(mainContent)
+    .Landmark(AutomationLandmarkType.Main)
+
+VStack(searchControls)
+    .Landmark(AutomationLandmarkType.Search)
+
+VStack(formFields)
+    .Landmark(AutomationLandmarkType.Form)
 ```
 
-**Rules:**
+#### Heading Hierarchy
+
+Maintain a logical heading structure for screen reader navigation:
+
+```csharp
+// Good: proper hierarchy
+Heading("Settings").HeadingLevel(AutomationHeadingLevel.Level1)
+SubHeading("General").HeadingLevel(AutomationHeadingLevel.Level2)
+SubHeading("Advanced").HeadingLevel(AutomationHeadingLevel.Level2)
+
+// Bad: skipping levels
+Heading("Settings").HeadingLevel(AutomationHeadingLevel.Level1)
+Caption("Detail").HeadingLevel(AutomationHeadingLevel.Level4) // skipped 2 and 3
+```
+
+#### Focus Trapping (Dialogs / Modals)
+
+Use `UseFocusTrap` to keep focus inside a modal:
+
+```csharp
+var trap = UseFocusTrap(isActive: true);
+
+return Border(
+    VStack(12,
+        Heading("Confirm"),
+        TextBlock("Are you sure?"),
+        HStack(8,
+            Button("Cancel", onCancel),
+            Button("Confirm", onConfirm))
+    ).Padding(24)
+).FocusTrap(trap);  // Tab cycles within this container
+```
+
+`UseFocusTrap(isActive)` returns a `FocusTrapHandle`. Apply it with
+`.FocusTrap(handle)`. Focus is trapped while `isActive` is true.
+
+#### UseAnnounce (Live Announcements)
+
+For dynamic status updates that aren't tied to a visible element:
+
+```csharp
+var announce = UseAnnounce();
+
+// The announce region must be in the visual tree
+return VStack(12,
+    announce.Region,  // invisible — just hosts the live region
+    Button("Save", async () =>
+    {
+        await Save();
+        announce.Announce("Document saved successfully");
+    }),
+    Button("Error demo", () =>
+        announce.Announce("Upload failed — check your connection", assertive: true))
+);
+```
+
+**Important:** `announce.Region` must be in the visual tree or announcements
+are silently lost. Place it once near the root of your page.
+
+#### SemanticPanel (Custom Roles)
+
+For controls that don't map to standard WinUI automation peers:
+
+```csharp
+Border(child).Semantics(
+    role: "Slider",
+    value: $"{percent}%",
+    rangeMin: 0,
+    rangeMax: 100,
+    rangeValue: percent);
+```
+
+#### AccessibilityScanner (Automated Testing)
+
+Run WCAG checks programmatically:
+
+```csharp
+var results = AccessibilityScanner.Scan(rootElement);
+
+// Built-in checks include:
+// - Missing AutomationName on interactive controls
+// - Missing HeadingLevel on heading text
+// - Color contrast ratio < 4.5:1
+// - Touch target size < 44x44
+// - Missing landmark regions
+// - Tab order gaps
+// - Missing PositionInSet on list items
+// - AccessKey conflicts
+
+AccessibilityScanner.ExportJson(results, "a11y-report.json");
+```
+
+#### Roslyn Analyzers
+
+Three compile-time analyzers catch accessibility issues:
+
+| Analyzer | Checks |
+|----------|--------|
+| `REACTOR_A11Y_001` | Icon-only Button/ToggleButton missing `.AutomationName()` |
+| `REACTOR_A11Y_002` | Image missing `.AutomationName()` or `.AccessibilityHidden()` |
+| `REACTOR_A11Y_003` | Form field (TextField/NumberBox/PasswordBox) missing label |
+
+These run as warnings by default. Promote to errors in CI:
+
+```xml
+<WarningsAsErrors>REACTOR_A11Y_001;REACTOR_A11Y_002;REACTOR_A11Y_003</WarningsAsErrors>
+```
+
+#### Accessible Forms Pattern
+
+Combine validation with accessibility:
+
+```csharp
+var validation = UseValidationContext();
+var (email, setEmail) = UseState("");
+
+return FormField("Email",
+    TextField(email, setEmail)
+        .Validate(validation, "email", Validators.Required(), Validators.Email())
+        .Required(true)
+        .HelpText("We'll send a confirmation to this address"),
+    required: true,
+    showErrorWhen: ShowWhen.Touched)
+.Landmark(AutomationLandmarkType.Form);
+```
+
+`FormField` automatically wires `AutomationName` from the label and
+associates error messages with the input via `DescribedBy`.
+
+#### Accessibility Rules
+
 - Set `AutomationName` on every control without visible text.
+- Maintain heading hierarchy — don't skip levels.
+- Use landmarks on major page regions.
+- Focus-trap all dialogs and modals.
+- Place `announce.Region` in the tree before calling `.Announce()`.
+- Test with Narrator + keyboard-only navigation.
 - Test Light, Dark, and High Contrast themes (especially NightSky).
 - Test at 100%, 150%, 200%, 250% display scaling.
 - Test with maximum text scaling (Settings > Accessibility > Text size).
 - Hit-test targets for light-dismiss must be visible: `Background("#00000000")`.
 - Use `DividerStrokeColorDefaultBrush` for dividers — custom brushes with opacity break in HC.
+- Enable Roslyn analyzers in CI to catch common issues at build time.
 
 See [code-review-checklist.md](design-docs/code-review-checklist.md) for the full accessibility checklist.
 
