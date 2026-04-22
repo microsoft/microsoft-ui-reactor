@@ -137,15 +137,7 @@ internal sealed class DevtoolsMcpServer : IDisposable
             ? $"http://127.0.0.1:{Port}/mcp"
             : "stdio";
         var pid = global::System.Diagnostics.Process.GetCurrentProcess().Id;
-        var readyJson = JsonSerializer.Serialize(new
-        {
-            @event = "devtools-ready",
-            endpoint,
-            transport = transportStr,
-            port = Port,
-            pid,
-            buildTag = _buildTag,
-        });
+        var readyJson = $"{{\"event\":\"devtools-ready\",\"endpoint\":{JsonSerializer.Serialize(endpoint, JsonOpts)},\"transport\":\"{transportStr}\",\"port\":{Port},\"pid\":{pid},\"buildTag\":{JsonSerializer.Serialize(_buildTag, JsonOpts)}}}";
         BannerWriter.WriteLine(readyJson);
         BannerWriter.Flush();
 
@@ -335,6 +327,7 @@ internal sealed class DevtoolsMcpServer : IDisposable
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        TypeInfoResolverChain = { DevtoolsJsonContext.Default, new global::System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver() },
     };
 
     /// <summary>

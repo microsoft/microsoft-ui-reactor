@@ -109,7 +109,7 @@ public record A11yContext
 /// content) so an AI agent can generate semantically correct fixes in
 /// a single pass without re-reading source code.
 /// </summary>
-public static class AccessibilityScanner
+public static partial class AccessibilityScanner
 {
     /// <summary>
     /// Scans the virtual element tree for accessibility issues.
@@ -145,18 +145,11 @@ public static class AccessibilityScanner
             Diagnostics = diagnostics,
         };
 
-        var options = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        };
-
         var dir = global::System.IO.Path.GetDirectoryName(filePath);
         if (!string.IsNullOrEmpty(dir) && !global::System.IO.Directory.Exists(dir))
             global::System.IO.Directory.CreateDirectory(dir);
 
-        var json = JsonSerializer.Serialize(report, options);
+        var json = JsonSerializer.Serialize(report, A11yJsonContext.Default.A11yReport);
         global::System.IO.File.WriteAllText(filePath, json);
     }
 
@@ -1094,4 +1087,14 @@ public static class AccessibilityScanner
         public required Dictionary<string, int> ByCheck { get; init; }
         public required List<A11yDiagnostic> Diagnostics { get; init; }
     }
+
+    // Source-generated serialization options matching the inline options
+    // previously constructed in ExportToJson. Keeps the camelCase + ignore-null
+    // policy while enabling Native AOT.
+    [JsonSourceGenerationOptions(
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonSerializable(typeof(A11yReport))]
+    private partial class A11yJsonContext : JsonSerializerContext;
 }

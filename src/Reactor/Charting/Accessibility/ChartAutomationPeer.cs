@@ -9,7 +9,7 @@ namespace Microsoft.UI.Reactor.Charting.Accessibility;
 /// Root UIA peer for all Reactor chart types. Exposes the chart as a navigable
 /// grid/table so screen readers see data points with series headers and axis labels.
 /// </summary>
-internal sealed class ChartAutomationPeer : FrameworkElementAutomationPeer, IGridProvider, ITableProvider, IScrollProvider
+internal sealed partial class ChartAutomationPeer : FrameworkElementAutomationPeer, IGridProvider, ITableProvider, IScrollProvider
 {
     private readonly IChartAccessibilityData _data;
 
@@ -222,7 +222,7 @@ internal sealed class ChartAutomationPeer : FrameworkElementAutomationPeer, IGri
 /// <summary>
 /// Lightweight peer used as a row header (series name) in the table pattern.
 /// </summary>
-internal sealed class ChartSeriesHeaderPeer : AutomationPeer
+internal sealed partial class ChartSeriesHeaderPeer : AutomationPeer
 {
     private readonly ChartAutomationPeer _parent;
     private readonly string _name;
@@ -250,7 +250,7 @@ internal sealed class ChartSeriesHeaderPeer : AutomationPeer
 /// <summary>
 /// Lightweight peer used as a column header (x-axis label) in the table pattern.
 /// </summary>
-internal sealed class ChartColumnHeaderPeer : AutomationPeer
+internal sealed partial class ChartColumnHeaderPeer : AutomationPeer
 {
     private readonly ChartAutomationPeer _parent;
     private readonly string _label;

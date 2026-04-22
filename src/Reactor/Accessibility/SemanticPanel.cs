@@ -21,7 +21,7 @@ namespace Microsoft.UI.Reactor.Accessibility;
 ///       .Semantics(role: "slider", value: "3 of 5 stars",
 ///                  rangeValue: 3, rangeMin: 0, rangeMax: 5)
 /// </summary>
-public sealed class SemanticPanel : Panel
+public sealed partial class SemanticPanel : Panel
 {
     // ── Dependency properties for semantic description ──
 
@@ -113,7 +113,7 @@ public sealed class SemanticPanel : Panel
 /// role, value, and range. Analogous to SwiftUI's .accessibilityRepresentation {}
 /// and Compose's Modifier.semantics { role = Role.Slider }.
 /// </summary>
-public sealed class SemanticPanelAutomationPeer : FrameworkElementAutomationPeer,
+public sealed partial class SemanticPanelAutomationPeer : FrameworkElementAutomationPeer,
     IRangeValueProvider, IValueProvider
 {
     private SemanticPanel Panel => (SemanticPanel)Owner;

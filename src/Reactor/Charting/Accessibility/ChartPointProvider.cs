@@ -9,7 +9,7 @@ namespace Microsoft.UI.Reactor.Charting.Accessibility;
 /// table-item, and value patterns so screen readers can navigate and
 /// read individual data points without per-point XAML elements.
 /// </summary>
-internal sealed class ChartPointProvider : AutomationPeer,
+internal sealed partial class ChartPointProvider : AutomationPeer,
     IGridItemProvider,
     ITableItemProvider,
     IValueProvider

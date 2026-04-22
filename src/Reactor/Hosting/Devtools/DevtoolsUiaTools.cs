@@ -882,7 +882,7 @@ internal sealed record WaitForPredicate(
     private static bool IsUnknownSelector(McpToolException ex)
     {
         if (ex.Payload is null) return false;
-        var json = JsonSerializer.Serialize(ex.Payload);
+        var json = JsonSerializer.Serialize(ex.Payload, DevtoolsMcpServer.JsonOpts);
         return json.Contains("unknown-selector");
     }
 

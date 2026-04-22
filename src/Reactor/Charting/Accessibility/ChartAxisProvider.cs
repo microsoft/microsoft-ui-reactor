@@ -7,7 +7,7 @@ namespace Microsoft.UI.Reactor.Charting.Accessibility;
 /// Virtual UIA peer for a chart axis. Exposes <see cref="IRangeValueProvider"/>
 /// so assistive technology can read the axis range and step values.
 /// </summary>
-internal sealed class ChartAxisProvider : AutomationPeer, IRangeValueProvider
+internal sealed partial class ChartAxisProvider : AutomationPeer, IRangeValueProvider
 {
     private readonly ChartAutomationPeer _chartPeer;
     private readonly ChartAxisDescriptor _axis;
