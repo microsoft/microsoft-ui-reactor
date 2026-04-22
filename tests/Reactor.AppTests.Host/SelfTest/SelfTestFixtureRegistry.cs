@@ -614,6 +614,11 @@ internal static class SelfTestFixtureRegistry
         "DragDrop_DragEnterHandlerAutoSetsAllowDrop",
         "DragDrop_SourceAndTargetOnSameElement",
         "DragDrop_DraggableWhenWithoutPayloadStillSetsCanDrag",
+
+        // Devtools UX — spec 028
+        "DevtoolsUx_MenuHiddenWhenDisabled",
+        "DevtoolsUx_MenuVisibleWhenEnabled",
+        "DevtoolsUx_ObservableToggleRerendersSubscribers",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1224,6 +1229,11 @@ internal static class SelfTestFixtureRegistry
         "DragDrop_DragEnterHandlerAutoSetsAllowDrop" => new DragDropFixtures.DragEnterHandlerAutoSetsAllowDrop(harness),
         "DragDrop_SourceAndTargetOnSameElement" => new DragDropFixtures.SourceAndTargetOnSameElement(harness),
         "DragDrop_DraggableWhenWithoutPayloadStillSetsCanDrag" => new DragDropFixtures.DraggableWhenWithoutPayloadStillSetsCanDrag(harness),
+
+        // Devtools UX — spec 028 (DevtoolsMenu + UseDevtools + Observable<T>)
+        "DevtoolsUx_MenuHiddenWhenDisabled" => new DevtoolsUxTests.MenuHiddenWhenDisabled(harness),
+        "DevtoolsUx_MenuVisibleWhenEnabled" => new DevtoolsUxTests.MenuVisibleWhenEnabled(harness),
+        "DevtoolsUx_ObservableToggleRerendersSubscribers" => new DevtoolsUxTests.ObservableToggleRerendersSubscribers(harness),
 
         _ => null,
     };

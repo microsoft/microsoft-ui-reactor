@@ -43,6 +43,17 @@ public static class ReactorApp
 
     private static int _previewParamDeprecationWarned;
 
+    // Session-scoped flag. True iff the process was launched with a devtools
+    // subverb (--devtools app / --devtools run) AND the developer passed
+    // devtools: true to Run. Frozen after startup; read by UseDevtools() and
+    // by the DevtoolsMenu component to decide whether to render themselves.
+    private static int _devtoolsEnabled;
+    public static bool DevtoolsEnabled
+    {
+        get => Volatile.Read(ref _devtoolsEnabled) != 0;
+        internal set => Volatile.Write(ref _devtoolsEnabled, value ? 1 : 0);
+    }
+
     // Unpackaged WinUI apps (WindowsPackageType=None) don't inherit DPI awareness from an
     // MSIX manifest, so the process defaults to DPI-unaware and Windows applies blurry bitmap
     // scaling. Setting PerMonitorV2 awareness before any window is created tells the OS the
@@ -191,12 +202,19 @@ public static class ReactorApp
             case DevtoolsSubverb.List:
                 return RunListSubverb(options);
             case DevtoolsSubverb.Run:
+                DevtoolsEnabled = true;
                 return RunRunSubverb(options, title, width, height, configure, hostRoot);
             case DevtoolsSubverb.Screenshot:
                 return RunScreenshotSubverb(options, width, height, configure, hostRoot);
             case DevtoolsSubverb.Tree:
                 Console.Error.WriteLine($"[devtools] '--devtools tree' (headless) is not implemented yet.");
                 return true;
+            case DevtoolsSubverb.App:
+                // Pass-through mode: enable the in-app dev UI flag and let the
+                // caller's normal run loop proceed (returning false skips the
+                // short-circuit in Run<TRoot>).
+                DevtoolsEnabled = true;
+                return false;
             default:
                 return false;
         }
@@ -518,6 +536,11 @@ public static class ReactorApp
     internal static void ResetDeprecationWarningForTests()
     {
         Interlocked.Exchange(ref _previewParamDeprecationWarned, 0);
+    }
+
+    internal static void ResetDevtoolsEnabledForTests()
+    {
+        Interlocked.Exchange(ref _devtoolsEnabled, 0);
     }
 
     /// <summary>

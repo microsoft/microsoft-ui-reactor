@@ -6,6 +6,7 @@ internal enum DevtoolsSubverb
     List,
     Screenshot,
     Tree,
+    App,
 }
 
 /// <summary>
@@ -205,6 +206,7 @@ internal static class DevtoolsCliParser
             "list" => (DevtoolsSubverb.List, devtoolsIdx + 2),
             "screenshot" => (DevtoolsSubverb.Screenshot, devtoolsIdx + 2),
             "tree" => (DevtoolsSubverb.Tree, devtoolsIdx + 2),
+            "app" => (DevtoolsSubverb.App, devtoolsIdx + 2),
             _ => (DevtoolsSubverb.Run, devtoolsIdx + 1),
         };
     }

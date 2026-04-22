@@ -137,6 +137,9 @@ internal static class FixtureRegistry
         "Gesture_LongPress",
         "DragDrop_TypedReorder",
         "DragDrop_TextFormat",
+
+        // Devtools UX (spec 028 — E2E validation)
+        "DevtoolsUx_MenuAndToggle",
     ];
 
     public static Element? Build(string name, RenderContext ctx) => name switch
@@ -257,6 +260,9 @@ internal static class FixtureRegistry
 
         // DataGrid
         "DataGrid_EditableGrid" => DataGridFixtures.EditableGrid(ctx),
+
+        // Devtools UX (spec 028 — E2E validation)
+        "DevtoolsUx_MenuAndToggle" => DevtoolsUxFixtures.DevtoolsUxTest(ctx),
 
         // Input & Gestures (spec 027 — E2E validation)
         "Gesture_Pan" => GestureE2EFixtures.PanTest(ctx),

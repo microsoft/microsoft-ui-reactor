@@ -19,6 +19,16 @@ ReactorApp.Run<DemoApp>("Reactor Demo", width: 1200, height: 800
 #endif
 );
 
+// ─── Global dev flags ──────────────────────────────────────────────────────────
+// Declared as static Observable<T> cells so any component can read/write without
+// prop-drilling. Toggled from the Dev menu in the titlebar when the app is
+// launched with `--devtools app` (and built with devtools: true).
+static class AppFlags
+{
+    public static readonly Observable<bool> DebugUI = new(false);
+    public static readonly Observable<bool> OutlineLayout = new(false);
+}
+
 // ─── Root application component ────────────────────────────────────────────────
 
 enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures }
@@ -70,12 +80,29 @@ class DemoApp : Component
         var (currentTab, setTab) = UseState(Tab.Counter);
         var (langIndex, setLangIndex) = UseState(0);
 
+        // Subscribe so toggling a flag from the Dev menu re-renders the root
+        // (which rebuilds the menu's checkmarks and the conditional overlays).
+        var debugUI = UseObservable(AppFlags.DebugUI).Value;
+        var outline = UseObservable(AppFlags.OutlineLayout).Value;
+
         return FlexColumn(
             (TitleBar("TestApp") with
             {
                 Content = HStack(8,
                     ComboBox(TabElements, (int)currentTab, i => setTab((Tab)i)).Width(240),
-                    ComboBox(Languages, langIndex, setLangIndex)
+                    ComboBox(Languages, langIndex, setLangIndex),
+                    DevtoolsMenu(() => new MenuFlyoutItemBase[]
+                    {
+                        ToggleMenuItem("Debug UI",
+                            debugUI,
+                            v => AppFlags.DebugUI.Value = v),
+                        ToggleMenuItem("Outline layout",
+                            outline,
+                            v => AppFlags.OutlineLayout.Value = v),
+                        MenuSeparator(),
+                        MenuItem("Log tab change",
+                            () => Debug.WriteLine($"[devtools] current tab = {currentTab}")),
+                    })
                 ),
             }).Flex(shrink: 0),
 
@@ -109,7 +136,25 @@ class DemoApp : Component
                     Tab.InputGestures => Component<InputGesturesDemo>(),
                     _ => TextBlock("Select a tab")
                 }
-            ).Padding(24).Margin(16).Flex(grow: 1)
+            )
+            .Padding(24).Margin(16)
+            .WithBorder(outline ? "#FF00AA" : "#00000000", outline ? 2 : 0)
+            .Flex(grow: 1),
+
+            // Dev-only debug strip — only constructed when UseDevtools() AND
+            // the Debug UI flag are both on. Retail cost is one bool check.
+            debugUI ? DebugStrip(currentTab) : null
         );
     }
+
+    static Element DebugStrip(Tab currentTab) =>
+        Border(
+            HStack(12,
+                TextBlock("debug").Foreground("#FFAA00"),
+                TextBlock($"tab: {currentTab}"),
+                TextBlock($"@ {DateTime.Now:HH:mm:ss.fff}")
+            ).Padding(8, 4)
+        )
+        .Background("#2B000000")
+        .Flex(shrink: 0);
 }

@@ -1682,7 +1682,10 @@ public sealed partial class Reconciler
             var menuFlyout = new WinUI.MenuFlyout();
             foreach (var item in mfEl.Items) menuFlyout.Items.Add(CreateMenuFlyoutItem(item));
             SetElementTag(targetFe, mfEl);
-            WinPrim.FlyoutBase.SetAttachedFlyout(targetFe, menuFlyout);
+            // Use SetFlyoutOnControl so clicking a Button/SplitButton target opens
+            // the flyout via .Flyout; non-button targets fall back to attached-flyout
+            // metadata (still requires explicit ShowAttachedFlyout to open).
+            SetFlyoutOnControl(targetFe, menuFlyout);
             ApplySetters(mfEl.Setters, menuFlyout);
         }
         return target;

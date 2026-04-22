@@ -28,7 +28,7 @@ namespace Microsoft.UI.Reactor;
 ///       count > 5 ? TextBlock("Wow!") : null
 ///   )
 /// </summary>
-public static class Factories
+public static partial class Factories
 {
     // ── Localization ──────────────────────────────────────────────────
 
