@@ -25,7 +25,7 @@ namespace Microsoft.UI.Reactor.Interop.WinForms;
 ///
 /// To exit: call <see cref="SWF.Application.Exit()"/> (not XamlApp.Current.Exit).
 /// </summary>
-public static class XamlIslandBootstrap
+public static partial class XamlIslandBootstrap
 {
     private static Action? _onReady;
 
@@ -87,7 +87,7 @@ public static class XamlIslandBootstrap
     /// keyboard message filter, and fires the <see cref="_onReady"/> callback.
     /// No WinUI Window is created — the WinForms app owns the windows.
     /// </summary>
-    private class IslandApplication : XamlApp, IXamlMetadataProvider
+    private partial class IslandApplication : XamlApp, IXamlMetadataProvider
     {
         private readonly IXamlMetadataProvider _provider =
             new Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider();

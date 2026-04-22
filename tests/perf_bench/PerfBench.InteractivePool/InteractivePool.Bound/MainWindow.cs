@@ -101,7 +101,7 @@ public sealed class MainWindow : Window
     }
 }
 
-internal sealed class BoundElementFactory : IElementFactory
+internal sealed partial class BoundElementFactory : IElementFactory
 {
     private readonly InteractiveItemViewModel[] _vms;
 

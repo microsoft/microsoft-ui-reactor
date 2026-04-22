@@ -89,7 +89,7 @@ public sealed class MainWindow : Window
     }
 }
 
-internal sealed class DirectElementFactory : IElementFactory
+internal sealed partial class DirectElementFactory : IElementFactory
 {
     public UIElement GetElement(ElementFactoryGetArgs args)
     {
