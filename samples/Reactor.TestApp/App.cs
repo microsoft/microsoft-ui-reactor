@@ -141,8 +141,10 @@ class DemoApp : Component
             .WithBorder(outline ? "#FF00AA" : "#00000000", outline ? 2 : 0)
             .Flex(grow: 1),
 
-            // Dev-only debug strip — only constructed when UseDevtools() AND
-            // the Debug UI flag are both on. Retail cost is one bool check.
+            // Debug strip — only constructed when the Debug UI flag is on.
+            // The flag can only be toggled from the DevtoolsMenu above, which
+            // itself only renders in devtools sessions, so in practice this
+            // strip is dev-only. Retail cost is one bool check.
             debugUI ? DebugStrip(currentTab) : null
         );
     }

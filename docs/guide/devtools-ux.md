@@ -1,0 +1,156 @@
+
+# In-App Devtools UX
+
+Reactor's external devtools (MCP server, VS Code preview) are great when you're
+pair-programming with an agent or a preview panel. This page covers a different
+need: **dev-only UX that lives inside a running app** — a "Dev" menu in the
+titlebar that appears only when the person running the app explicitly asks for
+it, with toggles for feature-in-progress flags, debug overlays, and one-off
+commands.
+
+The pattern is three small pieces:
+
+- `UseDevtools()` — a bool that is `true` only when the developer opted in at
+  build time **and** the session opted in at the command line.
+- `DevtoolsMenu(...)` — a component that renders itself only when
+  `UseDevtools()` is true, so its subtree costs nothing in retail.
+- `Observable<T>` — a one-line INPC cell for declaring small flags without
+  writing a full `INotifyPropertyChanged` class.
+
+No new state primitive. No attributes. No reflection.
+
+## Turning on devtools
+
+Two independent signals combine:
+
+1. **Build-time opt-in** — pass `devtools: true` to `ReactorApp.Run`:
+
+   ```csharp
+   ReactorApp.Run<App>("My App", devtools: true);
+   ```
+
+   Typical pattern: always pass `true` in internal builds, or guard with
+   `#if DEBUG`. This is a capability gate — it does **not** by itself show
+   any dev UI.
+
+2. **Session opt-in** — run the app with `--devtools app`:
+
+   ```
+   myapp.exe --devtools app
+   ```
+
+   Without this flag, the app runs in retail mode even if built with
+   `devtools: true`. Use it for the occasional "I want the dev menu for this
+   session" workflow.
+
+`UseDevtools()` returns `true` only when **both** are present. Ship retail
+binaries with `devtools: true` safely — end users don't see anything unless
+they type the flag.
+
+## Gating dev-only UX
+
+Call `UseDevtools()` inside `Render()` and guard any dev-only element with a
+ternary:
+
+```csharp
+public override Element Render()
+{
+    var dev = ctx.UseDevtools();
+    return VStack(
+        MainContent(),
+        dev ? DebugOverlay() : null
+    );
+}
+```
+
+`DebugOverlay()` is only **constructed** when `dev` is true. In retail that
+line is one bool read + one branch — `DebugOverlay`'s body never runs, no
+element tree is allocated, no children are reconciled.
+
+## Adding a Dev menu
+
+Drop `DevtoolsMenu` anywhere in the tree — most commonly in the titlebar.
+Pass a lambda that returns the menu items. When devtools is off, the lambda
+is never invoked and the whole subtree is skipped.
+
+```csharp
+class TitleBar : Component
+{
+    public override Element Render() => HStack(
+        Text("My App"), Spacer(),
+        DevtoolsMenu(() => new MenuFlyoutItemBase[]
+        {
+            ToggleMenuItem("Debug UI",
+                AppFlags.DebugUI.Value,
+                v => AppFlags.DebugUI.Value = v),
+            MenuSeparator(),
+            MenuItem("Clear cache", () => CacheService.Clear()),
+            MenuItem("Reload",      () => Application.Current.Reload()),
+        })
+    );
+}
+```
+
+You're writing plain Reactor menu elements, so submenus, separators, disabled
+items, and icons all work the same way they do in any other flyout.
+
+## Declaring a flag
+
+`Observable<T>` is a tiny INPC cell. Declare flags as `static readonly`
+fields — reachable from anywhere, no DI, no prop drilling:
+
+```csharp
+public static class AppFlags
+{
+    public static readonly Observable<bool> DebugUI   = new(false);
+    public static readonly Observable<bool> SlowMode  = new(false);
+    public static readonly Observable<bool> ForceDark = new(false);
+}
+```
+
+Any component that wants to react to changes subscribes via
+`ctx.UseObservable`:
+
+```csharp
+public override Element Render()
+{
+    var debugUI = ctx.UseObservable(AppFlags.DebugUI).Value;
+    return VStack(
+        Content(),
+        debugUI ? DebugOverlay() : null
+    );
+}
+```
+
+Flipping the flag — from the Dev menu or from anywhere else in your code —
+re-renders every subscribed component:
+
+```csharp
+AppFlags.DebugUI.Value = true;
+```
+
+## When to use Observable<T> vs Context<T> vs a plain INPC class
+
+| What you need | Use |
+|---|---|
+| One value, mutable from anywhere, subscribers re-render | `Observable<T>` |
+| Value varies by where in the tree you are (theme for a section, scoped logger) | `Context<T>` + `.Provide()` |
+| Multiple related properties, computed properties, XAML binding | Plain INPC class + `ctx.UseObservable(obj)` |
+
+`Observable<T>` is deliberately minimal — a single value cell. It's the
+right choice for dev flags, light/dark toggles, and similar one-value state.
+Anything richer (a user profile, an editor document) is a better fit for a
+hand-rolled INPC class that groups related fields together.
+
+## Cost model
+
+| Scenario | Per-render cost |
+|---|---|
+| Retail (devtools off): `DevtoolsMenu` present | 1 bool read + 1 `Empty()` return |
+| Retail: `flag ? X : null` at call site | 1 field read + 1 branch; `X` never constructed |
+| Dev session: menu rendered | Same as any flyout |
+| Flag toggle (dev session) | Subscribers re-render; untouched components are unaffected |
+
+The "compile away" is standard C# ternary short-circuit — `false ? X : null`
+does not evaluate `X`. No IL is stripped, but no work is done at runtime
+either.

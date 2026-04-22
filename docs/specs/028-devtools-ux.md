@@ -26,7 +26,7 @@ repeat the "is devtools on?" check at every call site. This spec adds:
 1. `UseDevtools()` — a one-bit ambient signal that's the AND of a build-time
    opt-in (`Run(devtools: true)`) and a session opt-in (`--devtools app` on
    the command line).
-2. `DevtoolsMenu(...)` — a component that renders `null` when devtools is
+2. `DevtoolsMenu(...)` — a factory that returns `Empty()` when devtools is
    off, so its subtree is never constructed in retail sessions.
 3. `Observable<T>` — a tiny INPC-backed cell so the state for dev flags (and
    any other app-global toggles) can be declared in one line without
@@ -96,7 +96,9 @@ Why a new subverb and not a bool flag or overloading bare `--devtools`:
 ### `UseDevtools()`
 
 ```csharp
-namespace Microsoft.UI.Reactor;
+// Shipped in namespace Microsoft.UI.Reactor.Hooks —
+// consumers need `using Microsoft.UI.Reactor.Hooks;` to call it.
+namespace Microsoft.UI.Reactor.Hooks;
 
 public static class UseDevtoolsExtensions
 {
@@ -111,33 +113,48 @@ the state never changes). `ReactorApp.DevtoolsEnabled` is also exposed as
 a public static for non-component code paths (CLI integration, ad-hoc
 diagnostics).
 
-### `DevtoolsMenu` component
+### `DevtoolsMenu` factory
 
 ```csharp
-public sealed class DevtoolsMenu : Component
+// Lives on the Microsoft.UI.Reactor.Factories partial class so it's
+// available via `using static Microsoft.UI.Reactor.Factories;`.
+public static partial class Factories
 {
-    public Func<IEnumerable<MenuFlyoutItemBase>>? Items { get; init; }
-    public string Label { get; init; } = "Dev";
-    public string? Icon { get; init; } = "";  // Developer Tools glyph
-
-    public override Element Render()
+    public static Element DevtoolsMenu(
+        Func<IEnumerable<MenuFlyoutItemBase>> items,
+        string glyph = "⚡",
+        string toolTip = "Devtools",
+        string? automationId = null)
     {
-        if (!ctx.UseDevtools()) return Null();
+        if (!ReactorApp.DevtoolsEnabled) return Empty();
 
-        var items = Items?.Invoke().ToArray() ?? Array.Empty<MenuFlyoutItemBase>();
-        return DropDownButton(Label, MenuItems(items));
+        var materialized = items?.Invoke()?.ToArray()
+            ?? Array.Empty<MenuFlyoutItemBase>();
+
+        var trigger = Button(glyph)
+            .Foreground("#F59E0B")
+            .Background("#00000000")
+            .WithBorder("#00000000", 0)
+            .Padding(8, 4)
+            .FontSize(16)
+            .ToolTip(toolTip)
+            .AutomationName(toolTip);   // glyph-only content → explicit a11y name
+
+        if (automationId is not null)
+            trigger = trigger.AutomationId(automationId);
+
+        return MenuFlyout(trigger, materialized);
     }
 }
-
-// Factory method in Microsoft.UI.Reactor.Factories:
-public static DevtoolsMenu DevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>> items, ...) => ...;
 ```
 
-Key property: when `UseDevtools()` returns `false`, `Render()` returns
-`Null()` and the `Items` lambda is **not invoked**. Any `Observable<T>`
-reads or element constructions inside the lambda are not executed. The
-reconciler skips the subtree entirely. Retail cost per render ≈ one bool
-check + one null return.
+Key properties: when `ReactorApp.DevtoolsEnabled` is `false`, the factory
+returns `Empty()` and the `items` lambda is **not invoked**. Any
+`Observable<T>` reads or element constructions inside the lambda are not
+executed. The reconciler skips the subtree entirely. Retail cost per
+render ≈ one bool check + one `Empty` return. The on-state uses a
+`MenuFlyout`-wrapped `Button` (not `DropDownButton`) so there is no
+chevron — a bare ⚡ glyph, intentionally distinct from normal app chrome.
 
 ### `Observable<T>`
 
@@ -239,7 +256,7 @@ class SomeScreen : Component
 
 | Scenario | Per-render cost |
 |---|---|
-| Retail (devtools off): `DevtoolsMenu` present | 1 static bool read + 1 `null` return |
+| Retail (devtools off): `DevtoolsMenu` present | 1 static bool read + 1 `Empty` return |
 | Retail: `debugUI ? X : null` at call site | 1 instance field read + 1 branch |
 | Dev session (devtools on): menu rendered | Same as any other small flyout |
 | Flag toggle (dev session) | PropertyChanged → subscribing components rerender |
@@ -279,10 +296,10 @@ of this would be duplicating infrastructure developers already have.
    `TryRunDevtools` when `Subverb` is `App` or `Run` and the Run bool is set.
    When `Subverb == App`, the method sets the flag and returns `false` so
    the app falls through to the normal render loop.
-3. Add `UseDevtools()` extension, `Observable<T>` helper,
-   `DevtoolsMenu` component + factory method.
-4. Unit tests for the AND gate, parser, Observable semantics, menu null
-   return.
+3. Add `UseDevtools()` extension, `Observable<T>` helper, and
+   `Factories.DevtoolsMenu(...)` factory.
+4. Unit tests for the AND gate, parser, Observable semantics, menu
+   disabled-path early-out.
 5. Guide page template.
 
 No deprecations. No migration. Features are additive.
