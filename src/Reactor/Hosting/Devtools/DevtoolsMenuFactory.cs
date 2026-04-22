@@ -53,7 +53,8 @@ public static partial class Factories
             .WithBorder("#00000000", 0)
             .Padding(8, 4)
             .FontSize(16)
-            .ToolTip(toolTip);
+            .ToolTip(toolTip)
+            .AutomationName(toolTip);
 
         if (automationId is not null)
             trigger = trigger.AutomationId(automationId);
