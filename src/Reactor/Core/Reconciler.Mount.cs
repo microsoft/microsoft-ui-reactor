@@ -162,7 +162,11 @@ public sealed partial class Reconciler
         }
 
         if (control is not null)
+        {
             DebugUIElementsCreated++;
+            if (_highlightMounted is not null)
+                _highlightMounted.Add(control);
+        }
 
         // Apply inline modifiers after mounting
         if (modifiers is not null && control is FrameworkElement fe)

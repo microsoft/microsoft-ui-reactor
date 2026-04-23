@@ -61,6 +61,12 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private volatile bool _disposed;
     private Curve? _pendingAnimationCurve;
 
+    // ── Reconcile highlight overlay (gated by ReactorFeatureFlags.HighlightReconcileChanges) ──
+    private Grid? _wrapperRoot;
+    private Canvas? _overlayCanvas;
+    private ReconcileHighlightOverlay? _highlightOverlay;
+    private bool _highlightPending;
+
     // Render phase timing instrumentation
     private readonly Stopwatch _phaseSw = new();
     private double _treeBuildSum;
@@ -289,8 +295,16 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             if (newControl != _currentControl)
             {
-                Content = newControl;
+                if (ReactorFeatureFlags.HighlightReconcileChanges)
+                    SetContentViaWrapper(newControl);
+                else
+                    Content = newControl;
                 AttachThemeListener(newControl);
+            }
+            else if (ReactorFeatureFlags.HighlightReconcileChanges && _wrapperRoot is null)
+            {
+                // Flag was toggled on after initial render — install wrapper now
+                SetContentViaWrapper(newControl);
             }
 
             _currentControl = newControl;
@@ -298,6 +312,14 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             // Start any connected animations now that the new tree is in the visual tree
             _reconciler.FlushConnectedAnimations();
+
+            // Schedule highlight overlay update after layout so elements have final bounds
+            if (ReactorFeatureFlags.HighlightReconcileChanges && !_highlightPending
+                && (_reconciler.LastMountedElements.Count > 0 || _reconciler.LastModifiedElements.Count > 0))
+            {
+                _highlightPending = true;
+                _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, FlushHighlightOverlay);
+            }
 
             double reconcileMs = _phaseSw.Elapsed.TotalMilliseconds;
 
@@ -404,9 +426,64 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 IsTextSelectionEnabled = true,
             }
         };
-        Content = errorPanel;
+        if (_wrapperRoot is not null)
+        {
+            ((ContentControl)_wrapperRoot.Children[0]).Content = errorPanel;
+        }
+        else
+        {
+            Content = errorPanel;
+        }
         _currentControl = errorPanel;
         _currentTree = null;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Reconcile highlight overlay helpers
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Places <paramref name="newControl"/> inside a persistent wrapper Grid that
+    /// also hosts the transparent highlight overlay Canvas. The wrapper is created
+    /// once and reused; subsequent calls swap only the content child.
+    /// </summary>
+    private void SetContentViaWrapper(UIElement? newControl)
+    {
+        if (_wrapperRoot is null)
+        {
+            _overlayCanvas = new Canvas { IsHitTestVisible = false };
+            _wrapperRoot = new Grid();
+            _wrapperRoot.Children.Add(new ContentControl
+            {
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                VerticalContentAlignment = VerticalAlignment.Stretch,
+            });
+            _wrapperRoot.Children.Add(_overlayCanvas);
+            Content = _wrapperRoot;
+        }
+
+        var slot = (ContentControl)_wrapperRoot.Children[0];
+        slot.Content = newControl;
+    }
+
+    /// <summary>
+    /// Called on a low-priority dispatcher tick after reconcile so that newly
+    /// mounted elements have had a layout pass. Reads the reconciler snapshots
+    /// and draws composition overlay sprites.
+    /// </summary>
+    private void FlushHighlightOverlay()
+    {
+        _highlightPending = false;
+        if (_disposed || _overlayCanvas is null) return;
+
+        _highlightOverlay ??= new ReconcileHighlightOverlay(_overlayCanvas);
+
+        var mounted = _reconciler.LastMountedElements;
+        var modified = _reconciler.LastModifiedElements;
+
+        if (mounted.Count == 0 && modified.Count == 0) return;
+
+        _highlightOverlay.Show(this, mounted, modified);
     }
 
     public void Dispose()
@@ -425,6 +502,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _funcContext = null;
         _currentTree = null;
         _currentControl = null;
+        _highlightOverlay = null;
+        _overlayCanvas = null;
+        _wrapperRoot = null;
         Content = null;
     }
 }

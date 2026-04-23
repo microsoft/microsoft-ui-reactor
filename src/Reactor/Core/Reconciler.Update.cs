@@ -283,6 +283,11 @@ public sealed partial class Reconciler
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
         var target = result ?? control;
+
+        // Record the control for highlight overlay only when it was patched in-place
+        // (result == null). Remounts go through Mount() → _highlightMounted instead.
+        if (result is null && _highlightModified is not null)
+            _highlightModified.Add(control);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
 

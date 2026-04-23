@@ -109,6 +109,24 @@ public sealed partial class Reconciler : IDisposable
     public int DebugUIElementsModified;
     private int _debugReconcileDepth;
 
+    // ── Reconcile-highlight capture (gated by ReactorFeatureFlags.HighlightReconcileChanges) ──
+    private List<UIElement>? _highlightMounted;
+    private List<UIElement>? _highlightModified;
+
+    /// <summary>
+    /// UIElements that were newly mounted during the last top-level Reconcile pass.
+    /// Only populated when <see cref="ReactorFeatureFlags.HighlightReconcileChanges"/> is true.
+    /// </summary>
+    public IReadOnlyList<UIElement> LastMountedElements =>
+        _highlightMounted ?? (IReadOnlyList<UIElement>)Array.Empty<UIElement>();
+
+    /// <summary>
+    /// UIElements that were modified in-place during the last top-level Reconcile pass.
+    /// Only populated when <see cref="ReactorFeatureFlags.HighlightReconcileChanges"/> is true.
+    /// </summary>
+    public IReadOnlyList<UIElement> LastModifiedElements =>
+        _highlightModified ?? (IReadOnlyList<UIElement>)Array.Empty<UIElement>();
+
     /// <summary>
     /// The element pool used by this reconciler. Disable via Pool.Enabled = false
     /// to prevent recycled controls from retaining stale property state.
@@ -251,6 +269,11 @@ public sealed partial class Reconciler : IDisposable
             DebugElementsSkipped = 0;
             DebugUIElementsCreated = 0;
             DebugUIElementsModified = 0;
+            if (ReactorFeatureFlags.HighlightReconcileChanges)
+            {
+                (_highlightMounted ??= new()).Clear();
+                (_highlightModified ??= new()).Clear();
+            }
         }
         try {
         try
