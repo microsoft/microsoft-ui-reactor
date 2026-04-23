@@ -55,7 +55,6 @@ public static class FormFieldDsl
     /// Resolves the editor from TypeRegistry, sets label/description from the descriptor,
     /// detects required from validators, and wires validation.
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "TypeRegistry.Resolve uses Activator.CreateInstance; acceptable for non-AOT builds.")]
     public static FormFieldElement FormField(
         FieldDescriptor field,
         object value,

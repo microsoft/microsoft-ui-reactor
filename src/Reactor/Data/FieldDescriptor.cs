@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Controls.Validation;
 
@@ -18,6 +19,7 @@ public record FieldDescriptor
     public string? DisplayName { get; init; }
 
     /// <summary>The CLR type of this field's value.</summary>
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)]
     public required Type FieldType { get; init; }
 
     // ── Access ──────────────────────────────────────────────────

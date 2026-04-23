@@ -5,6 +5,14 @@
        so that TargetFramework from the project file is already resolved. -->
   <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">
     <IsAotCompatible>true</IsAotCompatible>
+    <!-- Show every individual trimmer warning instead of collapsing them. -->
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+  </PropertyGroup>
+
+  <!-- Promote IL trimming/AOT warnings to errors on the core Reactor library.
+       This ensures new reflection usage must be annotated before it can merge. -->
+  <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0')) And '$(MSBuildProjectName)' == 'Reactor'">
+    <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL2062;IL2065;IL2067;IL2069;IL2070;IL2072;IL2073;IL2075;IL2087;IL2090;IL2091;IL2111;IL3000;IL3050</WarningsAsErrors>
   </PropertyGroup>
 
   <!-- Suppress trimming/AOT warnings in consumer projects (tests, samples, CLI).

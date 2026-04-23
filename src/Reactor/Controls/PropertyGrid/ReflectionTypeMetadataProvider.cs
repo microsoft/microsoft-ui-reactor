@@ -20,14 +20,16 @@ public static class ReflectionTypeMetadataProvider
     /// Generates TypeMetadata for a CLR type by reflecting over its
     /// public instance properties and reading attributes.
     /// </summary>
-    public static TypeMetadata CreateMetadata(Type type)
-#pragma warning disable IL2111 // Method with DynamicallyAccessedMembers parameter accessed via reflection
-        => _cache.GetOrAdd(type, BuildMetadata);
-#pragma warning restore IL2111
+    [UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "ConcurrentDictionary.GetOrAdd resolves BuildMetadata via delegate; the DAM annotation on the lambda parameter is not visible to the trimmer through the Func<> signature.")]
+    public static TypeMetadata CreateMetadata(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] Type type)
+        => _cache.GetOrAdd(type,
+            static ([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] Type t) => BuildMetadata(t));
 
     /// <summary>
     /// Generates a FieldDescriptor for a single PropertyInfo (unbound — for registry use).
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "PropertyInfo.PropertyType does not carry DynamicallyAccessedMembers; the original type was annotated at the TypeRegistry entry point.")]
     public static FieldDescriptor CreateDescriptor(PropertyInfo property, int defaultOrder)
     {
         var attrs = ComputeAttributeData(property, defaultOrder);
@@ -172,6 +174,7 @@ public static class ReflectionTypeMetadataProvider
     ///   - Immutable: constructs new object, returns new reference
     ///   - Read-only: null
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "PropertyInfo.PropertyType does not carry DynamicallyAccessedMembers; the original type was annotated at the TypeRegistry entry point.")]
     private static FieldDescriptor CreateDescriptorBound(
         PropertyInfo property, PropertyAttributeData attrs, object owner,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] Type ownerType)
@@ -296,8 +299,8 @@ public static class ReflectionTypeMetadataProvider
         bool Filterable,
         PinPosition Pin);
 
-    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "BuildInitOnlySetter uses reflection to compose init-only properties.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "BuildInitOnlySetter uses reflection to compose init-only properties.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "PropertyInfo.DeclaringType cannot carry DynamicallyAccessedMembers; type was originally annotated at the call site.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "PropertyInfo.DeclaringType cannot carry DynamicallyAccessedMembers; type was originally annotated at the call site.")]
     internal static Func<object, object?, object>? BuildInitOnlySetter(PropertyInfo property)
     {
         var type = property.DeclaringType!;
