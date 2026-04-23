@@ -2,6 +2,7 @@
   "profiles": {
     "Patch.TestApp": {
       "commandName": "Project",
+      "commandLineArgs": "--devtools",
       "nativeDebugging": false
     }
   }

@@ -450,6 +450,19 @@ internal static class SelfTestFixtureRegistry
         "ControlsCov_FormatterPipeline",
         "ControlsCov_AutoSuggestElement",
         "ControlsCov_SearchManager",
+        // Echo-suppression — programmatic Update* writes must not re-enter onChange
+        "EchoSuppress_ColorPicker",
+        "EchoSuppress_NumberBox",
+        "EchoSuppress_ToggleSwitch",
+        "EchoSuppress_CheckBox",
+        "EchoSuppress_Slider",
+        "EchoSuppress_RatingControl",
+        "EchoSuppress_DatePicker",
+        "EchoSuppress_CalendarDatePicker",
+        "EchoSuppress_TimePicker",
+        "EchoSuppress_PasswordBox",
+        "EchoSuppress_TextField",
+        "EchoSuppress_ToggleSplitButton",
         // Hooks coverage — FocusManager, UseFocus
         "HooksCov_FocusManagerRegistration",
         "HooksCov_FocusManagerNavigation",
@@ -639,6 +652,16 @@ internal static class SelfTestFixtureRegistry
         "ValueEvt_RatingControl",
         "ValueEvt_PasswordBox",
         "ValueEvt_ColorPicker",
+
+        // Specialized editors — HitTable-style typed editors
+        "Editors_CheckBoxMounts",
+        "Editors_ToggleMounts",
+        "Editors_NumberMounts",
+        "Editors_DateMounts",
+        "Editors_ColorMounts",
+        "Editors_ColorCompactMounts",
+        "Renderers_HyperlinkMounts",
+        "Renderers_ColorSwatchMounts",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1083,6 +1106,19 @@ internal static class SelfTestFixtureRegistry
         "ControlsCov_InputFormattersFiltering" => new ControlsCoverageFixtures.InputFormattersFiltering(harness),
         "ControlsCov_FormatterPipeline" => new ControlsCoverageFixtures.FormatterPipelineExercise(harness),
         "ControlsCov_AutoSuggestElement" => new ControlsCoverageFixtures.AutoSuggestElementCreation(harness),
+        // Echo-suppression regression coverage
+        "EchoSuppress_ColorPicker" => new EchoSuppressionFixtures.ColorPickerNoEcho(harness),
+        "EchoSuppress_NumberBox" => new EchoSuppressionFixtures.NumberBoxNoEcho(harness),
+        "EchoSuppress_ToggleSwitch" => new EchoSuppressionFixtures.ToggleSwitchNoEcho(harness),
+        "EchoSuppress_CheckBox" => new EchoSuppressionFixtures.CheckBoxNoEcho(harness),
+        "EchoSuppress_Slider" => new EchoSuppressionFixtures.SliderNoEcho(harness),
+        "EchoSuppress_RatingControl" => new EchoSuppressionFixtures.RatingControlNoEcho(harness),
+        "EchoSuppress_DatePicker" => new EchoSuppressionFixtures.DatePickerNoEcho(harness),
+        "EchoSuppress_CalendarDatePicker" => new EchoSuppressionFixtures.CalendarDatePickerNoEcho(harness),
+        "EchoSuppress_TimePicker" => new EchoSuppressionFixtures.TimePickerNoEcho(harness),
+        "EchoSuppress_PasswordBox" => new EchoSuppressionFixtures.PasswordBoxNoEcho(harness),
+        "EchoSuppress_TextField" => new EchoSuppressionFixtures.TextFieldNoEcho(harness),
+        "EchoSuppress_ToggleSplitButton" => new EchoSuppressionFixtures.ToggleSplitButtonNoEcho(harness),
         "ControlsCov_SearchManager" => new ControlsCoverageFixtures.SearchManagerExercise(harness),
         // Hooks coverage
         "HooksCov_FocusManagerRegistration" => new HooksCoverageFixtures.FocusManagerRegistration(harness),
@@ -1274,6 +1310,16 @@ internal static class SelfTestFixtureRegistry
         "ValueEvt_RatingControl" => new ValueChangeEventFixtures.RatingControlValueFires(harness),
         "ValueEvt_PasswordBox" => new ValueChangeEventFixtures.PasswordBoxChangeFires(harness),
         "ValueEvt_ColorPicker" => new ValueChangeEventFixtures.ColorPickerChangeFires(harness),
+
+        // Specialized editors — mount each editor standalone under real WinUI.
+        "Editors_CheckBoxMounts" => new SpecializedEditorsTests.CheckBoxEditorMounts(harness),
+        "Editors_ToggleMounts" => new SpecializedEditorsTests.ToggleEditorMounts(harness),
+        "Editors_NumberMounts" => new SpecializedEditorsTests.NumberEditorMounts(harness),
+        "Editors_DateMounts" => new SpecializedEditorsTests.DateEditorMounts(harness),
+        "Editors_ColorMounts" => new SpecializedEditorsTests.ColorEditorMounts(harness),
+        "Editors_ColorCompactMounts" => new SpecializedEditorsTests.ColorCompactEditorMounts(harness),
+        "Renderers_HyperlinkMounts" => new SpecializedEditorsTests.HyperlinkRendererMounts(harness),
+        "Renderers_ColorSwatchMounts" => new SpecializedEditorsTests.ColorSwatchRendererMounts(harness),
 
         _ => null,
     };

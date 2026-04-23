@@ -672,17 +672,29 @@ public sealed partial class Reconciler
 
     private UIElement? UpdateToggleSplitButton(ToggleSplitButtonElement n, WinUI.ToggleSplitButton tsb)
     {
-        tsb.Content = n.Label; tsb.IsChecked = n.IsChecked; SetElementTag(tsb, n);
+        SetElementTag(tsb, n);
+        tsb.Content = n.Label;
+        if (tsb.IsChecked != n.IsChecked)
+        {
+            ChangeEchoSuppressor.BeginSuppress(tsb);
+            tsb.IsChecked = n.IsChecked;
+        }
         ApplySetters(n.Setters, tsb);
         return null;
     }
 
     private UIElement? UpdateTextField(TextFieldElement o, TextFieldElement n, TextBox tb)
     {
+        // Tag first so any echoed TextChanged sees this element.
+        SetElementTag(tb, n);
         if (o.Value != n.Value)
         {
             // Element value changed — always enforce
-            tb.Text = n.Value;
+            if (tb.Text != n.Value)
+            {
+                ChangeEchoSuppressor.BeginSuppress(tb);
+                tb.Text = n.Value;
+            }
         }
         else if (n.OnChanged is not null && tb.Text != n.Value)
         {
@@ -690,6 +702,7 @@ public sealed partial class Reconciler
             // The TextBox text diverges from the controlled value because the
             // callback filtered it to the same state (e.g. digits-only rejecting alpha).
             var caret = tb.SelectionStart;
+            ChangeEchoSuppressor.BeginSuppress(tb);
             tb.Text = n.Value;
             tb.SelectionStart = Math.Min(caret, tb.Text.Length);
         }
@@ -711,108 +724,183 @@ public sealed partial class Reconciler
         // Apply selection position after text — must come after Text is set so the range is valid
         if (n.SelectionStart.HasValue) tb.SelectionStart = Math.Min(n.SelectionStart.Value, tb.Text.Length);
         if (n.SelectionLength.HasValue) tb.SelectionLength = Math.Min(n.SelectionLength.Value, tb.Text.Length - tb.SelectionStart);
-        SetElementTag(tb, n);
         ApplySetters(n.Setters, tb);
         return null;
     }
 
     private UIElement? UpdatePasswordBox(PasswordBoxElement n, WinUI.PasswordBox pb)
     {
-        pb.Password = n.Password; pb.PlaceholderText = n.PlaceholderText ?? ""; SetElementTag(pb, n);
+        SetElementTag(pb, n);
+        if (pb.Password != n.Password)
+        {
+            ChangeEchoSuppressor.BeginSuppress(pb);
+            pb.Password = n.Password;
+        }
+        pb.PlaceholderText = n.PlaceholderText ?? "";
         ApplySetters(n.Setters, pb);
         return null;
     }
 
     private UIElement? UpdateNumberBox(NumberBoxElement n, WinUI.NumberBox nb)
     {
-        nb.Value = n.Value; nb.Minimum = n.Minimum; nb.Maximum = n.Maximum;
+        SetElementTag(nb, n);
+        // Set Min/Max first so coerced Value stays inside range.
+        nb.Minimum = n.Minimum;
+        nb.Maximum = n.Maximum;
+        if (nb.Value != n.Value)
+        {
+            ChangeEchoSuppressor.BeginSuppress(nb);
+            nb.Value = n.Value;
+        }
         nb.SmallChange = n.SmallChange; nb.LargeChange = n.LargeChange;
         nb.SpinButtonPlacementMode = n.SpinButtonPlacement;
         if (n.Header is not null) nb.Header = n.Header;
-        SetElementTag(nb, n);
         ApplySetters(n.Setters, nb);
         return null;
     }
 
     private UIElement? UpdateAutoSuggestBox(AutoSuggestBoxElement n, WinUI.AutoSuggestBox asb)
     {
-        asb.Text = n.Text; asb.PlaceholderText = n.PlaceholderText ?? "";
-        if (n.Suggestions.Length > 0) asb.ItemsSource = n.Suggestions;
+        // AutoSuggestBox already filters TextChanged to UserInput only, so
+        // programmatic Text= is already safe. Suppress anyway for consistency
+        // with the other editors (covers future handler changes).
         SetElementTag(asb, n);
+        if (asb.Text != n.Text)
+        {
+            ChangeEchoSuppressor.BeginSuppress(asb);
+            asb.Text = n.Text;
+        }
+        asb.PlaceholderText = n.PlaceholderText ?? "";
+        if (n.Suggestions.Length > 0) asb.ItemsSource = n.Suggestions;
         ApplySetters(n.Setters, asb);
         return null;
     }
 
     private UIElement? UpdateCheckBox(CheckBoxElement n, WinUI.CheckBox cb)
     {
+        SetElementTag(cb, n);
         cb.Content = n.Label;
         cb.IsThreeState = n.IsThreeState;
-        cb.IsChecked = n.IsThreeState ? n.CheckedState : n.IsChecked;
-        SetElementTag(cb, n);
+        var target = n.IsThreeState ? n.CheckedState : n.IsChecked;
+        if (cb.IsChecked != target)
+        {
+            ChangeEchoSuppressor.BeginSuppress(cb);
+            cb.IsChecked = target;
+        }
         ApplySetters(n.Setters, cb);
         return null;
     }
 
     private UIElement? UpdateRadioButton(RadioButtonElement n, WinUI.RadioButton rb)
     {
-        rb.Content = n.Label; rb.IsChecked = n.IsChecked;
-        if (n.GroupName is not null) rb.GroupName = n.GroupName;
         SetElementTag(rb, n);
+        rb.Content = n.Label;
+        if (rb.IsChecked != n.IsChecked)
+        {
+            ChangeEchoSuppressor.BeginSuppress(rb);
+            rb.IsChecked = n.IsChecked;
+        }
+        if (n.GroupName is not null) rb.GroupName = n.GroupName;
         ApplySetters(n.Setters, rb);
         return null;
     }
 
     private UIElement? UpdateSlider(SliderElement n, WinUI.Slider s)
     {
-        s.Minimum = n.Min; s.Maximum = n.Max; s.Value = n.Value;
+        SetElementTag(s, n);
+        // Min/Max first so coerced Value stays inside range.
+        s.Minimum = n.Min;
+        s.Maximum = n.Max;
+        if (s.Value != n.Value)
+        {
+            ChangeEchoSuppressor.BeginSuppress(s);
+            s.Value = n.Value;
+        }
         s.StepFrequency = n.StepFrequency;
         if (n.Header is not null) s.Header = n.Header;
-        SetElementTag(s, n);
         ApplySetters(n.Setters, s);
         return null;
     }
 
     private UIElement? UpdateToggleSwitch(ToggleSwitchElement n, WinUI.ToggleSwitch ts)
     {
-        ts.IsOn = n.IsOn; ts.OnContent = n.OnContent; ts.OffContent = n.OffContent;
-        if (n.Header is not null) ts.Header = n.Header;
         SetElementTag(ts, n);
+        if (ts.IsOn != n.IsOn)
+        {
+            ChangeEchoSuppressor.BeginSuppress(ts);
+            ts.IsOn = n.IsOn;
+        }
+        ts.OnContent = n.OnContent; ts.OffContent = n.OffContent;
+        if (n.Header is not null) ts.Header = n.Header;
         ApplySetters(n.Setters, ts);
         return null;
     }
 
     private UIElement? UpdateRatingControl(RatingControlElement n, WinUI.RatingControl r)
     {
-        r.Value = n.Value; r.MaxRating = n.MaxRating; r.IsReadOnly = n.IsReadOnly;
-        r.Caption = n.Caption ?? ""; SetElementTag(r, n);
+        SetElementTag(r, n);
+        r.MaxRating = n.MaxRating;
+        if (r.Value != n.Value)
+        {
+            ChangeEchoSuppressor.BeginSuppress(r);
+            r.Value = n.Value;
+        }
+        r.IsReadOnly = n.IsReadOnly;
+        r.Caption = n.Caption ?? "";
         ApplySetters(n.Setters, r);
         return null;
     }
 
     private UIElement? UpdateColorPicker(ColorPickerElement n, WinUI.ColorPicker cp)
     {
-        cp.Color = n.Color; cp.IsAlphaEnabled = n.IsAlphaEnabled; SetElementTag(cp, n);
+        // Tag FIRST so the ColorChanged echo (fired synchronously from the
+        // programmatic Color= assignment in some WinAppSDK builds) resolves
+        // against this element, not the previous one. Suppressor then drops
+        // the echo entirely — preventing the cross-row value-swap observed
+        // when a PropertyGrid bound to a selection re-renders.
+        SetElementTag(cp, n);
+        if (cp.Color != n.Color)
+        {
+            ChangeEchoSuppressor.BeginSuppress(cp);
+            cp.Color = n.Color;
+        }
+        cp.IsAlphaEnabled = n.IsAlphaEnabled;
         ApplySetters(n.Setters, cp);
         return null;
     }
 
     private UIElement? UpdateCalendarDatePicker(CalendarDatePickerElement n, WinUI.CalendarDatePicker cdp)
     {
-        cdp.Date = n.Date; SetElementTag(cdp, n);
+        SetElementTag(cdp, n);
+        if (cdp.Date != n.Date)
+        {
+            ChangeEchoSuppressor.BeginSuppress(cdp);
+            cdp.Date = n.Date;
+        }
         ApplySetters(n.Setters, cdp);
         return null;
     }
 
     private UIElement? UpdateDatePicker(DatePickerElement n, WinUI.DatePicker dp)
     {
-        dp.Date = n.Date; SetElementTag(dp, n);
+        SetElementTag(dp, n);
+        if (dp.Date != n.Date)
+        {
+            ChangeEchoSuppressor.BeginSuppress(dp);
+            dp.Date = n.Date;
+        }
         ApplySetters(n.Setters, dp);
         return null;
     }
 
     private UIElement? UpdateTimePicker(TimePickerElement n, WinUI.TimePicker tp)
     {
-        tp.Time = n.Time; SetElementTag(tp, n);
+        SetElementTag(tp, n);
+        if (tp.Time != n.Time)
+        {
+            ChangeEchoSuppressor.BeginSuppress(tp);
+            tp.Time = n.Time;
+        }
         ApplySetters(n.Setters, tp);
         return null;
     }

@@ -373,6 +373,7 @@ public sealed partial class Reconciler
         tsb.IsCheckedChanged += (s, _) =>
         {
             var t = (WinUI.ToggleSplitButton)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(t)) return;
             (GetElementTag(t) as ToggleSplitButtonElement)?.OnIsCheckedChanged?.Invoke(t.IsChecked);
         };
         if (tspBtn.Flyout is not null)
@@ -385,6 +386,14 @@ public sealed partial class Reconciler
     {
         var rented = _pool.TryRent(typeof(TextBox));
         var textBox = rented as TextBox ?? new TextBox();
+        // SetElementTag BEFORE writing Text: pooled controls retain their
+        // previous tag, and programmatic Text= fires TextChanged on the pooled
+        // event handler. Setting the new tag first ensures the handler reads
+        // this mount's element, not the pool's last owner. The BeginSuppress
+        // guard below is additional belt-and-suspenders against echo.
+        SetElementTag(textBox, tf);
+        if (rented is not null && textBox.Text != tf.Value)
+            ChangeEchoSuppressor.BeginSuppress(textBox);
         textBox.Text = tf.Value;
         textBox.PlaceholderText = tf.Placeholder ?? "";
         if (tf.Header is not null) textBox.Header = tf.Header;
@@ -393,11 +402,11 @@ public sealed partial class Reconciler
         if (tf.TextWrapping.HasValue) textBox.TextWrapping = tf.TextWrapping.Value;
         if (tf.SelectionStart.HasValue) textBox.SelectionStart = tf.SelectionStart.Value;
         if (tf.SelectionLength.HasValue) textBox.SelectionLength = tf.SelectionLength.Value;
-        SetElementTag(textBox, tf);
         if (rented is null) // Only wire events on fresh controls — pooled controls retain their handler
         {
             textBox.TextChanged += (_, _) =>
             {
+                if (ChangeEchoSuppressor.ShouldSuppress(textBox)) return;
                 var tag = GetElementTag(textBox) as TextFieldElement;
                 tag?.OnChanged?.Invoke(textBox.Text);
                 // Controlled input: when onChange is wired, always request a
@@ -417,7 +426,12 @@ public sealed partial class Reconciler
     {
         var pb = new WinUI.PasswordBox { Password = pw.Password, PlaceholderText = pw.PlaceholderText ?? "" };
         SetElementTag(pb, pw);
-        pb.PasswordChanged += (s, _) => (GetElementTag((UIElement)s!) as PasswordBoxElement)?.OnPasswordChanged?.Invoke(((WinUI.PasswordBox)s!).Password);
+        pb.PasswordChanged += (s, _) =>
+        {
+            var c = (UIElement)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
+            (GetElementTag(c) as PasswordBoxElement)?.OnPasswordChanged?.Invoke(((WinUI.PasswordBox)c).Password);
+        };
         ApplySetters(pw.Setters, pb);
         return pb;
     }
@@ -436,6 +450,7 @@ public sealed partial class Reconciler
         numBox.ValueChanged += (s, _) =>
         {
             var box = (WinUI.NumberBox)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(box)) return;
             (GetElementTag(box) as NumberBoxElement)?.OnValueChanged?.Invoke(box.Value);
         };
         ApplySetters(nb.Setters, numBox);
@@ -475,19 +490,25 @@ public sealed partial class Reconciler
         SetElementTag(checkBox, cb);
         checkBox.Checked += (s, _) =>
         {
-            var el = GetElementTag((UIElement)s!) as CheckBoxElement;
+            var c = (UIElement)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
+            var el = GetElementTag(c) as CheckBoxElement;
             el?.OnChanged?.Invoke(true);
             el?.OnCheckedStateChanged?.Invoke(true);
         };
         checkBox.Unchecked += (s, _) =>
         {
-            var el = GetElementTag((UIElement)s!) as CheckBoxElement;
+            var c = (UIElement)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
+            var el = GetElementTag(c) as CheckBoxElement;
             el?.OnChanged?.Invoke(false);
             el?.OnCheckedStateChanged?.Invoke(false);
         };
         checkBox.Indeterminate += (s, _) =>
         {
-            var el = GetElementTag((UIElement)s!) as CheckBoxElement;
+            var c = (UIElement)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
+            var el = GetElementTag(c) as CheckBoxElement;
             el?.OnCheckedStateChanged?.Invoke(null);
         };
         ApplySetters(cb.Setters, checkBox);
@@ -499,8 +520,18 @@ public sealed partial class Reconciler
         var radio = new WinUI.RadioButton { Content = rb.Label, IsChecked = rb.IsChecked };
         if (rb.GroupName is not null) radio.GroupName = rb.GroupName;
         SetElementTag(radio, rb);
-        radio.Checked += (s, _) => (GetElementTag((UIElement)s!) as RadioButtonElement)?.OnChecked?.Invoke(true);
-        radio.Unchecked += (s, _) => (GetElementTag((UIElement)s!) as RadioButtonElement)?.OnChecked?.Invoke(false);
+        radio.Checked += (s, _) =>
+        {
+            var c = (UIElement)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
+            (GetElementTag(c) as RadioButtonElement)?.OnChecked?.Invoke(true);
+        };
+        radio.Unchecked += (s, _) =>
+        {
+            var c = (UIElement)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
+            (GetElementTag(c) as RadioButtonElement)?.OnChecked?.Invoke(false);
+        };
         ApplySetters(rb.Setters, radio);
         return radio;
     }
@@ -514,6 +545,7 @@ public sealed partial class Reconciler
         rbGroup.SelectionChanged += (s, _) =>
         {
             var g = (WinUI.RadioButtons)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(g)) return;
             (GetElementTag(g) as RadioButtonsElement)?.OnSelectionChanged?.Invoke(g.SelectedIndex);
         };
         ApplySetters(rbs.Setters, rbGroup);
@@ -537,6 +569,7 @@ public sealed partial class Reconciler
         cb.SelectionChanged += (s, _) =>
         {
             var c = (WinUI.ComboBox)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
             (GetElementTag(c) as ComboBoxElement)?.OnSelectionChanged?.Invoke(c.SelectedIndex);
         };
         ApplySetters(combo.Setters, cb);
@@ -548,7 +581,11 @@ public sealed partial class Reconciler
         var slider = new WinUI.Slider { Value = sl.Value, Minimum = sl.Min, Maximum = sl.Max, StepFrequency = sl.StepFrequency };
         if (sl.Header is not null) slider.Header = sl.Header;
         SetElementTag(slider, sl);
-        slider.ValueChanged += (_, args) => (GetElementTag(slider) as SliderElement)?.OnChanged?.Invoke(args.NewValue);
+        slider.ValueChanged += (_, args) =>
+        {
+            if (ChangeEchoSuppressor.ShouldSuppress(slider)) return;
+            (GetElementTag(slider) as SliderElement)?.OnChanged?.Invoke(args.NewValue);
+        };
         ApplySetters(sl.Setters, slider);
         return slider;
     }
@@ -557,15 +594,21 @@ public sealed partial class Reconciler
     {
         var rented = _pool.TryRent(typeof(WinUI.ToggleSwitch));
         var toggle = rented as WinUI.ToggleSwitch ?? new WinUI.ToggleSwitch();
+        // SetElementTag BEFORE IsOn= so a pooled control's retained handler
+        // sees this mount's element, not the pool's last owner. Suppress the
+        // echo fired by the programmatic IsOn write when it actually changes.
+        SetElementTag(toggle, ts);
+        if (rented is not null && toggle.IsOn != ts.IsOn)
+            ChangeEchoSuppressor.BeginSuppress(toggle);
         toggle.IsOn = ts.IsOn;
         toggle.OnContent = ts.OnContent;
         toggle.OffContent = ts.OffContent;
         if (ts.Header is not null) toggle.Header = ts.Header;
-        SetElementTag(toggle, ts);
         if (rented is null) // Only wire events on fresh controls — pooled controls retain their handler
             toggle.Toggled += (s, _) =>
             {
                 var t = (WinUI.ToggleSwitch)s!;
+                if (ChangeEchoSuppressor.ShouldSuppress(t)) return;
                 (GetElementTag(t) as ToggleSwitchElement)?.OnChanged?.Invoke(t.IsOn);
             };
         ApplySetters(ts.Setters, toggle);
@@ -579,6 +622,7 @@ public sealed partial class Reconciler
         rating.ValueChanged += (s, _) =>
         {
             var r = (WinUI.RatingControl)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(r)) return;
             (GetElementTag(r) as RatingControlElement)?.OnValueChanged?.Invoke(r.Value);
         };
         ApplySetters(rc.Setters, rating);
@@ -594,7 +638,12 @@ public sealed partial class Reconciler
             IsColorChannelTextInputVisible = cp.IsColorChannelTextInputVisible, IsHexInputVisible = cp.IsHexInputVisible,
         };
         SetElementTag(picker, cp);
-        picker.ColorChanged += (s, args) => (GetElementTag((UIElement)s!) as ColorPickerElement)?.OnColorChanged?.Invoke(args.NewColor);
+        picker.ColorChanged += (s, args) =>
+        {
+            var c = (UIElement)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
+            (GetElementTag(c) as ColorPickerElement)?.OnColorChanged?.Invoke(args.NewColor);
+        };
         ApplySetters(cp.Setters, picker);
         return picker;
     }
@@ -609,6 +658,7 @@ public sealed partial class Reconciler
         cal.DateChanged += (s, _) =>
         {
             var c = (WinUI.CalendarDatePicker)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
             (GetElementTag(c) as CalendarDatePickerElement)?.OnDateChanged?.Invoke(c.Date);
         };
         ApplySetters(cdp.Setters, cal);
@@ -622,7 +672,12 @@ public sealed partial class Reconciler
         if (dp.MinYear.HasValue) picker.MinYear = dp.MinYear.Value;
         if (dp.MaxYear.HasValue) picker.MaxYear = dp.MaxYear.Value;
         SetElementTag(picker, dp);
-        picker.DateChanged += (s, args) => (GetElementTag((UIElement)s!) as DatePickerElement)?.OnDateChanged?.Invoke(args.NewDate);
+        picker.DateChanged += (s, args) =>
+        {
+            var c = (UIElement)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
+            (GetElementTag(c) as DatePickerElement)?.OnDateChanged?.Invoke(args.NewDate);
+        };
         ApplySetters(dp.Setters, picker);
         return picker;
     }
@@ -632,7 +687,12 @@ public sealed partial class Reconciler
         var picker = new WinUI.TimePicker { Time = tp.Time, MinuteIncrement = tp.MinuteIncrement };
         if (tp.Header is not null) picker.Header = tp.Header;
         SetElementTag(picker, tp);
-        picker.TimeChanged += (s, args) => (GetElementTag((UIElement)s!) as TimePickerElement)?.OnTimeChanged?.Invoke(args.NewTime);
+        picker.TimeChanged += (s, args) =>
+        {
+            var c = (UIElement)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
+            (GetElementTag(c) as TimePickerElement)?.OnTimeChanged?.Invoke(args.NewTime);
+        };
         ApplySetters(tp.Setters, picker);
         return picker;
     }
@@ -1529,7 +1589,10 @@ public sealed partial class Reconciler
             flyout.Opened += (_, _) => flyEl.OnOpened?.Invoke();
             flyout.Closed += (_, _) => flyEl.OnClosed?.Invoke();
             SetElementTag(targetFe, flyEl);
-            WinPrim.FlyoutBase.SetAttachedFlyout(targetFe, flyout);
+            // SetFlyoutOnControl wires .Flyout on Button/SplitButton targets so
+            // clicking opens the flyout natively; non-button targets fall back
+            // to SetAttachedFlyout metadata (opened only via ShowAttachedFlyout).
+            SetFlyoutOnControl(targetFe, flyout);
             ApplySetters(flyEl.Setters, flyout);
             if (flyEl.IsOpen) WinPrim.FlyoutBase.ShowAttachedFlyout(targetFe);
         }
