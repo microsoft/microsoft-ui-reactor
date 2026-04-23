@@ -22,7 +22,7 @@ public static class TypedColumns
     //  The accessor's declared property type drives value-conversion.
     // ══════════════════════════════════════════════════════════════
 
-    public static ColumnBuilder<T> NumberColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+    public static ColumnBuilder<T> NumberColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
         string name,
         Func<T, object?> accessor,
         double? min = null,
@@ -45,7 +45,7 @@ public static class TypedColumns
     //  Bool
     // ══════════════════════════════════════════════════════════════
 
-    public static ColumnBuilder<T> CheckBoxColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+    public static ColumnBuilder<T> CheckBoxColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
         string name,
         Func<T, object?> accessor,
         string? displayName = null,
@@ -56,7 +56,7 @@ public static class TypedColumns
             .WithEditor(Editors.CheckBox())
             .CellRenderer(CellRenderers.CheckMark());
 
-    public static ColumnBuilder<T> ToggleSwitchColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+    public static ColumnBuilder<T> ToggleSwitchColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
         string name,
         Func<T, object?> accessor,
         string? onContent = null,
@@ -73,7 +73,7 @@ public static class TypedColumns
     //  Date / Time
     // ══════════════════════════════════════════════════════════════
 
-    public static ColumnBuilder<T> DateColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+    public static ColumnBuilder<T> DateColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
         string name,
         Func<T, object?> accessor,
         string format = "d",
@@ -94,7 +94,7 @@ public static class TypedColumns
             .CellRenderer(CellRenderers.Date(format));
     }
 
-    public static ColumnBuilder<T> TimeColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+    public static ColumnBuilder<T> TimeColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
         string name,
         Func<T, object?> accessor,
         string format = "t",
@@ -117,7 +117,7 @@ public static class TypedColumns
     //  Combo / Enum
     // ══════════════════════════════════════════════════════════════
 
-    public static ColumnBuilder<T> ComboBoxColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T, TValue>(
+    public static ColumnBuilder<T> ComboBoxColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T, TValue>(
         string name,
         Func<T, object?> accessor,
         IReadOnlyList<TValue> choices,
@@ -133,7 +133,7 @@ public static class TypedColumns
     //  Hyperlink — underlying type may be Uri or string.
     // ══════════════════════════════════════════════════════════════
 
-    public static ColumnBuilder<T> HyperlinkColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+    public static ColumnBuilder<T> HyperlinkColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
         string name,
         Func<T, object?> accessor,
         string? displayTextFormat = null,
@@ -156,7 +156,7 @@ public static class TypedColumns
     //  Color
     // ══════════════════════════════════════════════════════════════
 
-    public static ColumnBuilder<T> ColorColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+    public static ColumnBuilder<T> ColorColumn<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
         string name,
         Func<T, object?> accessor,
         string? displayName = null,

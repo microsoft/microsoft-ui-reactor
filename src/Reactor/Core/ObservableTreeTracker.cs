@@ -34,13 +34,16 @@ internal class ObservableTreeTracker : IDisposable
     /// Filters to: public instance properties, getter accessible,
     /// property type is class or interface (value types can't be INPC).
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "ObservableTreeTracker uses reflection to discover INPC-candidate properties.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "ObservableTreeTracker uses reflection to discover INPC-candidate properties.")]
-    internal static PropertyInfo[] GetInpcCandidateProperties(Type type)
-        => _inpcPropertyCache.GetOrAdd(type, t =>
-            t.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-             .Where(p => p.CanRead && !p.PropertyType.IsValueType)
-             .ToArray());
+    [UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "CreateInpcCandidateProperties has DynamicallyAccessedMembers; ConcurrentDictionary.GetOrAdd resolves it via delegate.")]
+    internal static PropertyInfo[] GetInpcCandidateProperties(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type)
+        => _inpcPropertyCache.GetOrAdd(type, CreateInpcCandidateProperties);
+
+    private static PropertyInfo[] CreateInpcCandidateProperties(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type)
+        => type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+               .Where(p => p.CanRead && !p.PropertyType.IsValueType)
+               .ToArray();
 
     /// <summary>
     /// Synchronize subscriptions to match the current object graph.
@@ -85,6 +88,7 @@ internal class ObservableTreeTracker : IDisposable
         _subscriptions.Clear();
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Object.GetType() does not carry DynamicallyAccessedMembers; INPC types are preserved because they implement INotifyPropertyChanged.")]
     private void Walk(INotifyPropertyChanged? node, HashSet<INotifyPropertyChanged> desiredSet)
     {
         if (node is null || !_visiting.Add(node))

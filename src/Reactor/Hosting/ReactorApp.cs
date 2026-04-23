@@ -73,6 +73,7 @@ public static class ReactorApp
     /// The <c>preview</c> parameter is deprecated and is kept for one release. When both are
     /// passed, <c>devtools</c> wins.
     /// </remarks>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools uses Assembly.GetTypes(); non-devtools code paths are trim-safe.")]
     public static void Run<TRoot>(
         string title = "Reactor App",
         int width = 1024,
@@ -112,6 +113,7 @@ public static class ReactorApp
     /// Launches the app with a render function instead of a Component subclass.
     /// See the generic overload for <c>devtools</c> semantics.
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools uses Assembly.GetTypes(); non-devtools code paths are trim-safe.")]
     public static void Run(
         string title,
         Func<RenderContext, Element> rootRender,
@@ -166,6 +168,7 @@ public static class ReactorApp
     /// With <c>--vscode</c>, starts the capture server for the VS Code preview panel. Only
     /// active when the caller passes <c>devtools: true</c>.
     /// </summary>
+    [RequiresUnreferencedCode("Devtools uses Assembly.GetTypes() for component discovery.")]
     private static bool TryRunDevtools(string title, int width, int height, Action<ReactorHost>? configure, Type? hostRoot = null)
     {
         var args = Environment.GetCommandLineArgs();
@@ -221,7 +224,7 @@ public static class ReactorApp
         }
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Activator.CreateInstance for component types resolved by reflection.")]
+    [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes().")]
     private static bool RunScreenshotSubverb(DevtoolsCliOptions options, int width, int height, Action<ReactorHost>? configure, Type? hostRoot = null)
     {
         if (string.IsNullOrEmpty(options.ScreenshotOutputPath))
@@ -290,6 +293,7 @@ public static class ReactorApp
         return true;
     }
 
+    [RequiresUnreferencedCode("Devtools component listing uses Assembly.GetTypes().")]
     private static bool RunListSubverb(DevtoolsCliOptions options)
     {
         var names = FindAllComponentNames().ToList();
@@ -301,8 +305,7 @@ public static class ReactorApp
         return true;
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Activator.CreateInstance for component types resolved by reflection.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "Generic type parameter flows through for component instantiation.")]
+    [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes() and Activator.CreateInstance.")]
     private static bool RunRunSubverb(DevtoolsCliOptions options, string title, int width, int height, Action<ReactorHost>? configure, Type? hostRoot = null)
     {
         _ = title;
@@ -477,7 +480,7 @@ public static class ReactorApp
     /// <summary>
     /// Finds a Component type by name across all loaded assemblies (case-insensitive).
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Assembly.GetTypes for devtools component discovery.")]
+    [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes().")]
     internal static Type? FindComponentType(string name)
     {
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
@@ -496,7 +499,7 @@ public static class ReactorApp
         return null;
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Assembly.GetTypes for devtools component enumeration.")]
+    [RequiresUnreferencedCode("Assembly.GetTypes() is incompatible with trimming. Devtools-only code path.")]
     internal static IEnumerable<string> FindAllComponentNames()
     {
         return AppDomain.CurrentDomain.GetAssemblies()
@@ -507,7 +510,7 @@ public static class ReactorApp
             .OrderBy(n => n);
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Assembly.GetTypes for devtools detailed component listing.")]
+    [RequiresUnreferencedCode("Assembly.GetTypes() is incompatible with trimming. Devtools-only code path.")]
     internal static IEnumerable<Hosting.Devtools.ComponentInfo> FindAllComponentsDetailed()
     {
         return AppDomain.CurrentDomain.GetAssemblies()

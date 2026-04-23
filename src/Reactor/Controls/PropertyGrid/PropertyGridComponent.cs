@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Reactor.Layout;
@@ -25,6 +26,7 @@ public class PropertyGridComponent : Component<PropertyGridElement>
             b.HorizontalContentAlignment = HorizontalAlignment.Stretch;
         }).HAlign(HorizontalAlignment.Stretch);
 
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Object.GetType() does not carry DynamicallyAccessedMembers; PropertyGrid resolves types at runtime.")]
     public override Element Render()
     {
         var el = Props;

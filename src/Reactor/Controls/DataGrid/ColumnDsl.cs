@@ -16,7 +16,7 @@ public static class ColumnDsl
     /// <summary>
     /// Define a column from a property accessor expression.
     /// </summary>
-    public static ColumnBuilder<T> Column<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+    public static ColumnBuilder<T> Column<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
         string name,
         Func<T, object?> accessor,
         bool editable = false,
@@ -53,7 +53,7 @@ public static class ColumnDsl
     /// <summary>
     /// Auto-generate columns from a type using reflection and TypeRegistry.
     /// </summary>
-    public static IReadOnlyList<FieldDescriptor> AutoColumns<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(
+    public static IReadOnlyList<FieldDescriptor> AutoColumns<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
         TypeRegistry? registry = null,
         Func<FieldDescriptor, FieldDescriptor>? overrides = null)
     {
@@ -100,6 +100,9 @@ public static class ColumnDsl
         return descriptors;
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "PropertyInfo.PropertyType does not carry DynamicallyAccessedMembers.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2073", Justification = "PropertyInfo.PropertyType does not carry DynamicallyAccessedMembers.")]
+    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)]
     private static Type InferFieldType<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string name, Func<T, object?> accessor)
     {
         var prop = typeof(T).GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
@@ -110,7 +113,7 @@ public static class ColumnDsl
     /// Build a SetValue delegate from reflection. For mutable properties, mutates in place.
     /// For init-only (record) properties, uses the copy constructor.
     /// </summary>
-    private static Func<object, object?, object>? BuildSetValue<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string propertyName)
+    private static Func<object, object?, object>? BuildSetValue<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(string propertyName)
     {
         var prop = typeof(T).GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
         if (prop is null || !prop.CanWrite) return null;
