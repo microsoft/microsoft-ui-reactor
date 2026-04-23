@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Net;
@@ -6,6 +5,7 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
@@ -265,8 +265,6 @@ internal sealed class PreviewCaptureServer : IDisposable
         response.Close();
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization for preview capture switch-component response.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization for preview capture switch-component response.")]
     private void HandleSwitchComponent(HttpListenerRequest request, HttpListenerResponse response)
     {
         if (request.HttpMethod != "POST")
@@ -300,10 +298,10 @@ internal sealed class PreviewCaptureServer : IDisposable
         }
 
         var success = SwitchComponent(componentName);
-        var result = success
-            ? $"{{\"ok\":true,\"component\":{JsonSerializer.Serialize(componentName)}}}"
-            : $"{{\"ok\":false,\"error\":{JsonSerializer.Serialize($"Component '{componentName}' not found")}}}";
-        var resultBytes = Encoding.UTF8.GetBytes(result);
+        var resultNode = success
+            ? (JsonNode)new JsonObject { ["ok"] = true, ["component"] = componentName }
+            : new JsonObject { ["ok"] = false, ["error"] = $"Component '{componentName}' not found" };
+        var resultBytes = Encoding.UTF8.GetBytes(resultNode.ToJsonString());
 
         response.StatusCode = success ? 200 : 404;
         response.ContentType = "application/json";

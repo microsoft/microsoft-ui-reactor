@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -27,6 +26,17 @@ internal sealed class LockfileEntry
     [JsonPropertyName("startedAt")] public string StartedAt { get; set; } = "";
 }
 
+// Dedicated context with WriteIndented so humans `cat`-ing the lockfile see
+// pretty-printed JSON. DevtoolsJsonContext is shared for wire traffic and
+// stays compact.
+[JsonSourceGenerationOptions(
+    WriteIndented = true,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(LockfileEntry))]
+internal partial class LockfileJsonContext : JsonSerializerContext
+{
+}
+
 /// <summary>
 /// Reads, writes, and liveness-probes devtools session lockfiles under
 /// <c>%TEMP%/reactor-devtools/</c>. Owned by the server so the producer controls
@@ -37,15 +47,6 @@ internal static class LockfileRegistry
 {
     public const string SchemaTag = "reactor-devtools-lockfile/1";
     public const string McpSchemaTag = "reactor-devtools-mcp/1";
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-#pragma warning disable IL2026, IL3050 // DefaultJsonTypeInfoResolver is intentional fallback for non-AOT builds
-        TypeInfoResolverChain = { DevtoolsJsonContext.Default, new global::System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver() },
-#pragma warning restore IL2026, IL3050
-    };
 
     /// <summary>
     /// <c>%TEMP%/reactor-devtools/</c> on Windows. On non-Windows hosts this
@@ -93,14 +94,12 @@ internal static class LockfileRegistry
     /// on-disk content already matches so a reload loop doesn't thrash
     /// filesystem watchers.
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization for lockfile write.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization for lockfile write.")]
     public static void Write(string path, LockfileEntry entry)
     {
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) global::System.IO.Directory.CreateDirectory(dir);
 
-        var json = JsonSerializer.Serialize(entry, JsonOpts);
+        var json = JsonSerializer.Serialize(entry, LockfileJsonContext.Default.LockfileEntry);
 
         if (File.Exists(path))
         {
@@ -134,8 +133,6 @@ internal static class LockfileRegistry
         try { if (File.Exists(path)) File.Delete(path); } catch { }
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON deserialization for lockfile read.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON deserialization for lockfile read.")]
     public static bool TryRead(string path, out LockfileEntry? entry)
     {
         entry = null;
@@ -143,7 +140,7 @@ internal static class LockfileRegistry
         try
         {
             var json = File.ReadAllText(path);
-            entry = JsonSerializer.Deserialize<LockfileEntry>(json, JsonOpts);
+            entry = JsonSerializer.Deserialize(json, LockfileJsonContext.Default.LockfileEntry);
             return entry is not null;
         }
         catch

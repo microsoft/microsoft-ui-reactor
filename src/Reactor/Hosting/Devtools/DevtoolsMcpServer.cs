@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
@@ -127,8 +128,6 @@ internal sealed class DevtoolsMcpServer : IDisposable
     /// Emits the one-time <c>[devtools] ready</c> line after the first render
     /// completes. Callers invoke this from the reconciler's first-commit hook.
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization for devtools ready announcement.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization for devtools ready announcement.")]
     public void AnnounceReady()
     {
         BannerWriter.WriteLine($"[devtools] ready (build {_buildTag})");
@@ -140,8 +139,16 @@ internal sealed class DevtoolsMcpServer : IDisposable
             ? $"http://127.0.0.1:{Port}/mcp"
             : "stdio";
         var pid = global::System.Diagnostics.Process.GetCurrentProcess().Id;
-        var readyJson = $"{{\"event\":\"devtools-ready\",\"endpoint\":{JsonSerializer.Serialize(endpoint, JsonOpts)},\"transport\":\"{transportStr}\",\"port\":{Port},\"pid\":{pid},\"buildTag\":{JsonSerializer.Serialize(_buildTag, JsonOpts)}}}";
-        BannerWriter.WriteLine(readyJson);
+        var readyNode = new JsonObject
+        {
+            ["event"] = "devtools-ready",
+            ["endpoint"] = endpoint,
+            ["transport"] = transportStr,
+            ["port"] = Port,
+            ["pid"] = pid,
+            ["buildTag"] = _buildTag,
+        };
+        BannerWriter.WriteLine(readyNode.ToJsonString());
         BannerWriter.Flush();
 
         WriteLockfile();
