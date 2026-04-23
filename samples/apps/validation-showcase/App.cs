@@ -193,7 +193,7 @@ class PasswordFormDemo : Component
                     ctx.MarkAllTouched();
                 }),
                 When(submitted && ctx.IsValid(), () =>
-                    TextBlock("Password set!").Foreground("#107c10").FontSize(13)
+                    TextBlock("Password set!").Foreground(Theme.SystemSuccess)
                         .VAlign(VerticalAlignment.Center))
             ).Margin(0, 8, 0, 0)
         ).Padding(24)
@@ -232,47 +232,46 @@ class MaskedInputDemo : Component
             Caption("Input masks enforce structured formats. Formatters transform text live."),
 
             VStack(8,
-                TextBlock("Phone (US) — digits only").FontSize(13).Opacity(0.7),
+                TextBlock("Phone (US) — digits only").Foreground(Theme.SecondaryText),
                 TextField(phone, v => setPhone(new string(v.Where(char.IsDigit).ToArray())),
                     placeholder: "5551234567"),
                 When(phone.Length > 0, () =>
                     HStack(8,
-                        TextBlock($"Formatted: {phoneFormatted}").FontSize(12).Opacity(0.6),
-                        TextBlock($"Raw: {phoneMask.GetRawValue(phoneFormatted)}").FontSize(12).Opacity(0.6),
+                        TextBlock($"Formatted: {phoneFormatted}").Foreground(Theme.SecondaryText),
+                        TextBlock($"Raw: {phoneMask.GetRawValue(phoneFormatted)}").Foreground(Theme.SecondaryText),
                         TextBlock(phoneMask.IsComplete(phoneFormatted) ? "Complete" : "Incomplete")
-                            .FontSize(12)
-                            .Foreground(phoneMask.IsComplete(phoneFormatted) ? "#107c10" : "#d13438")
+                            .Foreground(phoneMask.IsComplete(phoneFormatted) ? Theme.SystemSuccess : Theme.SystemCritical)
                     ))
             ),
 
             VStack(8,
-                TextBlock("SSN — digits only").FontSize(13).Opacity(0.7),
+                TextBlock("SSN — digits only").Foreground(Theme.SecondaryText),
                 TextField(ssn, v => setSsn(new string(v.Where(char.IsDigit).ToArray())),
                     placeholder: "123456789"),
                 When(ssn.Length > 0, () =>
-                    TextBlock($"Formatted: {ssnFormatted}").FontSize(12).Opacity(0.6))
+                    TextBlock($"Formatted: {ssnFormatted}").Foreground(Theme.SecondaryText))
             ),
 
             VStack(8,
-                TextBlock("ZIP Code — digits only").FontSize(13).Opacity(0.7),
+                TextBlock("ZIP Code — digits only").Foreground(Theme.SecondaryText),
                 TextField(zip, v => setZip(new string(v.Where(char.IsDigit).ToArray())),
                     placeholder: "90210"),
                 When(zip.Length > 0, () =>
-                    TextBlock($"Formatted: {zipFormatted}").FontSize(12).Opacity(0.6))
+                    TextBlock($"Formatted: {zipFormatted}").Foreground(Theme.SecondaryText))
             ),
 
             VStack(8,
-                TextBlock("Currency (InputFormatter)").FontSize(13).Opacity(0.7),
+                TextBlock("Currency (InputFormatter)").Foreground(Theme.SecondaryText),
                 TextField(amount,
                     v => setAmount(new string(v.Where(c => char.IsDigit(c) || c == '.').ToArray())),
                     placeholder: "1234.56"),
                 When(amount.Length > 0, () =>
                     TextBlock($"Display: {currencyResult.Output}  |  Raw: {currencyFmt.Parse(currencyResult.Output)}")
-                        .FontSize(12).Opacity(0.6))
+                        .Foreground(Theme.SecondaryText))
             ),
 
             VStack(8,
-                TextBlock("Uppercase Formatter").FontSize(13).Opacity(0.7),
+                TextBlock("Uppercase Formatter").Foreground(Theme.SecondaryText),
                 TextField(shout, v => setShout(v.ToUpperInvariant()),
                     placeholder: "auto uppercased")
                     .Set(tb => tb.CharacterCasing = CharacterCasing.Upper)
@@ -310,25 +309,25 @@ class DirtyResetDemo : Component
             Caption("Tracks whether fields changed from initial values or were interacted with."),
 
             VStack(4,
-                TextBlock("Name").FontSize(13)
+                TextBlock("Name")
                     .Set(t => t.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold),
                 TextField(name, v => { setName(v); ctx.MarkTouched("name"); }),
-                TextBlock("Initial: \"John Doe\"").FontSize(12).Foreground("#888888")
+                TextBlock("Initial: \"John Doe\"").Foreground(Theme.SecondaryText)
             ),
 
             VStack(4,
-                TextBlock("Favorite Color").FontSize(13)
+                TextBlock("Favorite Color")
                     .Set(t => t.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold),
                 ComboBox(colors, color, v => { setColor(v); ctx.MarkTouched("color"); }),
-                TextBlock("Initial: Red").FontSize(12).Foreground("#888888")
+                TextBlock("Initial: Red").Foreground(Theme.SecondaryText)
             ),
 
             VStack(4,
                 TextBlock($"name — touched: {ctx.IsTouched("name")}, dirty: {ctx.IsDirty("name")}")
-                    .FontSize(12).Opacity(0.6),
+                    .Foreground(Theme.SecondaryText),
                 TextBlock($"color — touched: {ctx.IsTouched("color")}, dirty: {ctx.IsDirty("color")}")
-                    .FontSize(12).Opacity(0.6),
-                TextBlock($"Form dirty: {ctx.IsDirty()}").FontSize(12).Opacity(0.6)
+                    .Foreground(Theme.SecondaryText),
+                TextBlock($"Form dirty: {ctx.IsDirty()}").Foreground(Theme.SecondaryText)
             ),
 
             HStack(12,
@@ -384,7 +383,7 @@ class FocusDemo : Component
             ),
 
             When(log.Length > 0, () =>
-                TextBlock(log).FontSize(12).Opacity(0.6).Margin(0, 4, 0, 0))
+                TextBlock(log).Foreground(Theme.SecondaryText).Margin(0, 4, 0, 0))
         ).Padding(24);
     }
 }

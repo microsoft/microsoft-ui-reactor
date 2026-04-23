@@ -29,20 +29,22 @@ public class CounterDemo : Component
         }, auto, step);
 
         return VStack(12,
-            TextBlock("Counter").FontSize(20).Bold().Margin(16, 16, 16, 0),
+            SubHeading("Counter").Margin(16, 16, 16, 0),
 
             TextBlock($"{count}")
-                .FontSize(48).Bold()
+                .FontSize(48).SemiBold()
                 .HAlign(HorizontalAlignment.Center)
                 .Margin(0, 8),
 
             HStack(8,
-                Button("-", () => setCount(count - (int)step)).Width(60),
+                Button("-", () => setCount(count - (int)step)).Width(60)
+                    .AutomationName("Decrement"),
                 Button("Reset", () => setCount(0)),
                 Button("+", () => setCount(count + (int)step)).Width(60)
+                    .AutomationName("Increment")
             ).HAlign(HorizontalAlignment.Center),
 
-            Slider(step, min: 1, max: 10, onChanged: v => setStep(v))
+            Slider(step, min: 1, max: 10, onChanged: setStep)
                 .Margin(16, 8),
 
             TextBlock($"Step size: {(int)step}").HAlign(HorizontalAlignment.Center),

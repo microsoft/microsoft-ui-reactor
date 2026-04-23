@@ -5,7 +5,7 @@ VisualStudioVersion = 18.4.11605.240
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TodoApp", "TodoApp.csproj", "{81119FD0-90EC-4FB0-B5E8-6FB9C5C4ECB5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Reactor", "..\..\Reactor\Reactor.csproj", "{DDA8F21F-21A2-4496-9A07-3F9EC517B7C4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Reactor", "..\..\src\Reactor\Reactor.csproj", "{DDA8F21F-21A2-4496-9A07-3F9EC517B7C4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

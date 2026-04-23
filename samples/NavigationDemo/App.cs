@@ -37,7 +37,11 @@ if (dlIdx >= 0 && dlIdx + 1 < args.Length)
     }
 }
 
-ReactorApp.Run<AppShell>("Navigation Demo", width: 1200, height: 800);
+ReactorApp.Run<AppShell>("Navigation Demo", width: 1200, height: 800
+#if DEBUG
+    , devtools: true
+#endif
+);
 
 // ─── Deep link state (static, consumed once by AppShell) ──────────────────────
 
@@ -205,23 +209,23 @@ class AppShell : Component
 
     static Element DiagnosticsPanel(List<string> log, NavigationHandle<AppRoute> nav)
     {
+        // Left-side divider. WithBorder applies uniform thickness, and we only
+        // want a 1px edge on the left, so set BorderThickness directly and use
+        // the themed DividerStroke brush for the color.
         return Border(
             VStack(4,
-                TextBlock("Navigation Diagnostics").FontSize(12).SemiBold().Opacity(0.6),
-                TextBlock($"Depth: {nav.Depth} | CanGoBack: {nav.CanGoBack} | Route: {nav.CurrentRoute}")
-                    .FontSize(11).Opacity(0.5),
+                Caption("Navigation Diagnostics").SemiBold().Foreground(SecondaryText),
+                Caption($"Depth: {nav.Depth} | CanGoBack: {nav.CanGoBack} | Route: {nav.CurrentRoute}")
+                    .Foreground(TertiaryText),
                 VStack(0, log.Select(line =>
                     TextBlock(line).FontSize(10).Opacity(line.Contains("BLOCKED") ? 1.0 : 0.7)
                         .Foreground(line.Contains("BLOCKED") ? SystemCritical :
                                     line.Contains("HIT") ? SystemSuccess : SecondaryText)
                 ).ToArray())
             ).Padding(8)
-        ).Width(320).Set(b =>
-        {
-            b.BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                global::Windows.UI.Color.FromArgb(30, 128, 128, 128));
-            b.BorderThickness = new Thickness(1, 0, 0, 0);
-        });
+        ).Width(320)
+         .WithBorder(DividerStroke, 1)
+         .Set(b => b.BorderThickness = new Thickness(1, 0, 0, 0));
     }
 
     static string RouteDescription(AppRoute route) => route switch
@@ -262,8 +266,8 @@ class HomePage : Component
 
         return ScrollView(
             VStack(16,
-                TextBlock("Home").FontSize(28).SemiBold(),
-                TextBlock("Select an item, try deep links, or test the destination guard below.").Opacity(0.7),
+                Heading("Home"),
+                TextBlock("Select an item, try deep links, or test the destination guard below.").Foreground(SecondaryText),
 
                 When(loaded, () =>
                     VStack(8, SampleData.Items.Select(item =>
@@ -274,8 +278,8 @@ class HomePage : Component
                 ),
 
                 // Deep link examples
-                TextBlock("Deep Link Examples").FontSize(18).SemiBold().Margin(0, 24, 0, 0),
-                TextBlock("These simulate URI-based deep links with query strings, optional params, and wildcards.").Opacity(0.6),
+                SubHeading("Deep Link Examples").Margin(0, 24, 0, 0),
+                Caption("These simulate URI-based deep links with query strings, optional params, and wildcards.").Foreground(SecondaryText),
                 HStack(8,
                     Button("/detail/3?tab=related", () =>
                     {
@@ -304,8 +308,8 @@ class HomePage : Component
                 ),
 
                 // Transition distance demo
-                TextBlock("Slide Distance").FontSize(18).SemiBold().Margin(0, 24, 0, 0),
-                TextBlock("Custom slide distance — compare 100px vs 400px.").Opacity(0.6),
+                SubHeading("Slide Distance").Margin(0, 24, 0, 0),
+                Caption("Custom slide distance — compare 100px vs 400px.").Foreground(SecondaryText),
                 HStack(8,
                     Button("Slide 100px to Settings", () =>
                         nav.Navigate(new Settings(),
@@ -316,8 +320,8 @@ class HomePage : Component
                 ),
 
                 // Destination guard demo
-                TextBlock("Destination Guard").FontSize(18).SemiBold().Margin(0, 24, 0, 0),
-                TextBlock("The Admin page has a destination-side guard (onNavigatingTo). Toggle auth, then try to navigate.").Opacity(0.6),
+                SubHeading("Destination Guard").Margin(0, 24, 0, 0),
+                Caption("The Admin page has a destination-side guard (onNavigatingTo). Toggle auth, then try to navigate.").Foreground(SecondaryText),
                 HStack(8,
                     ToggleSwitch(isAuthorized, v => { AuthState.IsAuthorized = v; setIsAuthorized(v); },
                         header: $"Authorized: {(isAuthorized ? "Yes" : "No")}"),
@@ -325,7 +329,7 @@ class HomePage : Component
                 ),
                 When(!isAuthorized, () =>
                     TextBlock("Try clicking 'Go to Admin' — the destination guard will block. Toggle the switch first to allow it.")
-                        .Opacity(0.6).FontSize(12))
+                        .Foreground(SecondaryText))
             ).Padding(24)
         );
     }
@@ -352,12 +356,12 @@ class DetailPage : Component<Detail>
 
         return ScrollView(
             VStack(16,
-                TextBlock(title).FontSize(28).SemiBold(),
-                TextBlock(description).FontSize(16).Opacity(0.8),
-                TextBlock($"Item ID: {id}  |  Tab: {tab}").Opacity(0.5),
+                Heading(title),
+                TextBlock(description).Foreground(SecondaryText),
+                Caption($"Item ID: {id}  |  Tab: {tab}").Foreground(TertiaryText),
 
                 // Tab selection — demonstrates query string deep link result
-                TextBlock("Tabs (from query string)").FontSize(18).SemiBold().Margin(0, 16, 0, 0),
+                SubHeading("Tabs (from query string)").Margin(0, 16, 0, 0),
                 HStack(8,
                     TabButton("Overview", "overview", tab, id, nav),
                     TabButton("Related", "related", tab, id, nav),
@@ -369,7 +373,7 @@ class DetailPage : Component<Detail>
                     tab switch
                     {
                         "related" => VStack(8,
-                            TextBlock("Related Items").FontSize(16).SemiBold(),
+                            TextBlock("Related Items").SemiBold(),
                             When(prevId.HasValue, () =>
                                 Button($"Previous (#{prevId})", () =>
                                     nav.Navigate(new Detail(prevId!.Value),
@@ -380,12 +384,12 @@ class DetailPage : Component<Detail>
                                         new NavigateOptions { Transition = NavigationTransition.DrillIn() })))
                         ),
                         "history" => VStack(8,
-                            TextBlock("History").FontSize(16).SemiBold(),
+                            TextBlock("History").SemiBold(),
                             TextBlock($"Item #{id} was created on day {id} of the project."),
                             TextBlock($"Last modified: {id * 3} days ago.")
                         ),
                         _ => VStack(8,
-                            TextBlock("Overview").FontSize(16).SemiBold(),
+                            TextBlock("Overview").SemiBold(),
                             TextBlock(description),
                             TextBlock($"This is item #{id} of {SampleData.Items.Length} total items.")
                         ),
@@ -393,7 +397,7 @@ class DetailPage : Component<Detail>
                 ).Padding(16).Margin(0, 8, 0, 0),
 
                 // Transition demos
-                TextBlock("Transition Demos").FontSize(18).SemiBold().Margin(0, 16, 0, 0),
+                SubHeading("Transition Demos").Margin(0, 16, 0, 0),
                 HStack(8,
                     Button("Slide to Home", () =>
                         nav.Navigate(new Home(),
@@ -428,15 +432,15 @@ class DocsPageView : Component<string>
 
         return ScrollView(
             VStack(16,
-                TextBlock("Documentation").FontSize(28).SemiBold(),
-                TextBlock($"Path: /docs/{path}").FontSize(14).Opacity(0.6),
+                Heading("Documentation"),
+                Caption($"Path: /docs/{path}").Foreground(SecondaryText),
 
                 // Breadcrumb from wildcard path
-                TextBlock("Breadcrumb").FontSize(18).SemiBold().Margin(0, 16, 0, 0),
+                SubHeading("Breadcrumb").Margin(0, 16, 0, 0),
                 HStack(4,
                     Button("docs", () => nav.Navigate(new DocsPage("index"),
                         new NavigateOptions { PushToBackStack = false })),
-                    TextBlock("/").Opacity(0.3),
+                    TextBlock("/").Foreground(TertiaryText),
                     HStack(4, segments.Select((seg, i) => (Element)HStack(4,
                         Button(seg, () =>
                         {
@@ -444,18 +448,18 @@ class DocsPageView : Component<string>
                             nav.Navigate(new DocsPage(subPath),
                                 new NavigateOptions { PushToBackStack = false });
                         }),
-                        When(i < segments.Length - 1, () => TextBlock("/").Opacity(0.3))
+                        When(i < segments.Length - 1, () => TextBlock("/").Foreground(TertiaryText))
                     )).ToArray())
                 ),
 
                 // Simulated doc content
-                TextBlock("Content").FontSize(18).SemiBold().Margin(0, 16, 0, 0),
+                SubHeading("Content").Margin(0, 16, 0, 0),
                 TextBlock($"This is the documentation page for '{segments[^1]}'."),
                 TextBlock("Wildcard routes (/docs/**) capture the entire remaining path,"),
                 TextBlock("enabling documentation-style hierarchical navigation."),
 
                 // Navigate to child paths
-                TextBlock("Sub-pages").FontSize(18).SemiBold().Margin(0, 16, 0, 0),
+                SubHeading("Sub-pages").Margin(0, 16, 0, 0),
                 HStack(8,
                     Button($"{path}/overview", () =>
                         nav.Navigate(new DocsPage($"{path}/overview"))),
@@ -497,7 +501,7 @@ class AdminPageView : Component
         // This content only shows if authorized (guard allows navigation through)
         return ScrollView(
             VStack(16,
-                TextBlock("Admin Panel").FontSize(28).SemiBold(),
+                Heading("Admin Panel"),
                 TextBlock("You are authorized.").Foreground(SystemSuccess),
                 TextBlock("This page uses a destination-side guard (onNavigatingTo)."),
                 TextBlock("Navigation here was allowed because AuthState.IsAuthorized was true."),
@@ -517,7 +521,7 @@ class SettingsPage : Component
         var nestedNav = UseNavigation<SettingsRoute>(new GeneralSettings());
 
         return VStack(0,
-            TextBlock("Settings").FontSize(28).SemiBold().Margin(24, 24, 24, 8),
+            Heading("Settings").Margin(24, 24, 24, 8),
 
             HStack(8,
                 SettingsTab("General", new GeneralSettings(), nestedNav),
@@ -544,7 +548,7 @@ class SettingsPage : Component
 
     static Element GeneralSettingsContent() =>
         VStack(12,
-            TextBlock("General Settings").FontSize(18).SemiBold(),
+            SubHeading("General Settings"),
             TextBlock("Application Name: Navigation Demo"),
             TextBlock("Version: 2.0.0"),
             TextBlock("Language: English")
@@ -552,7 +556,7 @@ class SettingsPage : Component
 
     static Element DisplaySettingsContent() =>
         VStack(12,
-            TextBlock("Display Settings").FontSize(18).SemiBold(),
+            SubHeading("Display Settings"),
             TextBlock("Theme: System Default"),
             TextBlock("Font Size: Medium"),
             TextBlock("Compact Mode: Off")
@@ -560,7 +564,7 @@ class SettingsPage : Component
 
     static Element AboutSettingsContent() =>
         VStack(12,
-            TextBlock("About").FontSize(18).SemiBold(),
+            SubHeading("About"),
             TextBlock("Navigation Demo App"),
             TextBlock("Built with Reactor — a functional UI framework for WinUI 3."),
             TextBlock("Features: type-safe routes, GPU transitions, lifecycle guards,"),
@@ -600,7 +604,7 @@ class ProfilePage : Component<string>
 
         return ScrollView(
             VStack(16,
-                TextBlock($"Profile: {name}").FontSize(28).SemiBold(),
+                Heading($"Profile: {name}"),
 
                 VStack(8,
                     TextBlock("Display Name"),
@@ -622,7 +626,7 @@ class ProfilePage : Component<string>
                 ),
 
                 // Serialization demo
-                TextBlock("State Serialization").FontSize(18).SemiBold().Margin(0, 24, 0, 0),
+                SubHeading("State Serialization").Margin(0, 24, 0, 0),
                 TextBlock("Save and restore the entire navigation stack as JSON."),
                 HStack(8,
                     Button("Save State", () =>

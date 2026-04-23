@@ -92,15 +92,19 @@ sealed class App : Component
         //  └──────────────────────────────────────────────────────────┘
 
         return VStack(0,
-            // Header bar
-            HStack(12,
-                TextBlock("NetPulse").FontSize(18).Bold().Margin(12, 8, 0, 4),
-                TextBlock($"TCP: {tcpActive} active").FontSize(11).Foreground(Gray(100)).Margin(0, 10, 0, 0),
-                TextBlock($"UDP: {udpEndpoints.Length} endpoints").FontSize(11).Foreground(Gray(100)).Margin(0, 10, 0, 0),
-                TextBlock($"Sparklines: {sparklineData.Length}").FontSize(11).Foreground(Gray(100)).Margin(0, 10, 0, 0),
-                TextBlock($"Renders: {renderCountRef.Current}").FontSize(11).Foreground(Gray(80)).Margin(0, 10, 0, 0),
-                TextBlock($"History: {trafficHistory.Count} samples").FontSize(11).Foreground(Gray(80)).Margin(0, 10, 0, 0)
-            ),
+            // Real Windows title bar — stats live in the RightHeader so the
+            // window caption and in-app chrome share one visual layer.
+            TitleBar("NetPulse") with
+            {
+                Subtitle = "Network Traffic Visualizer",
+                RightHeader = HStack(16,
+                    Caption($"TCP: {tcpActive} active").Foreground(Theme.SecondaryText),
+                    Caption($"UDP: {udpEndpoints.Length} endpoints").Foreground(Theme.SecondaryText),
+                    Caption($"Sparklines: {sparklineData.Length}").Foreground(Theme.SecondaryText),
+                    Caption($"Renders: {renderCountRef.Current}").Foreground(Theme.TertiaryText),
+                    Caption($"History: {trafficHistory.Count}").Foreground(Theme.TertiaryText)
+                ),
+            },
 
             // Row 1: Area chart + Donut
             HStack(0,

@@ -7,7 +7,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Text;
 using static Microsoft.UI.Reactor.Factories;
 
-ReactorApp.Run<WordPuzzleApp>("Reactor Word Puzzle", width: 520, height: 620);
+ReactorApp.Run<WordPuzzleApp>("Reactor Word Puzzle", width: 520, height: 680
+#if DEBUG
+    , devtools: true
+#endif
+);
 
 // ─── Main game component ───────────────────────────────────────────────────────
 
@@ -173,24 +177,31 @@ class WordPuzzleApp : Component
 
         var randomizeCmd = new Command { Label = "Randomize", Execute = OnRandomize };
 
-        return VStack(12,
-            // Header
-            VStack(8,
-                Button(randomizeCmd)
-                    .HAlign(HorizontalAlignment.Center),
-                TextBlock(timeDisplay).FontSize(26).Bold()
-                    .HAlign(HorizontalAlignment.Center)
-            ).Margin(0, 12, 0, 4),
+        return VStack(0,
+            (TitleBar("Reactor Word Puzzle") with
+            {
+                Subtitle = hasWon ? "Solved!" : (isPlaying ? timeDisplay : "Tap Randomize to begin"),
+            }),
 
-            // Game board
-            Grid(
-                ["*", "*", "*", "*"],
-                ["*", "*", "*", "*"],
-                BuildCells(tiles, showWinText, OnTileClicked)
+            VStack(12,
+                // Header
+                VStack(8,
+                    Button(randomizeCmd)
+                        .HAlign(HorizontalAlignment.Center),
+                    TextBlock(timeDisplay).FontSize(26).SemiBold()
+                        .HAlign(HorizontalAlignment.Center)
+                ).Margin(0, 16, 0, 4),
+
+                // Game board
+                Grid(
+                    ["*", "*", "*", "*"],
+                    ["*", "*", "*", "*"],
+                    BuildCells(tiles, showWinText, OnTileClicked)
+                )
+                .Width(440).Height(440)
+                .Set(g => { g.RowSpacing = 4; g.ColumnSpacing = 4; })
+                .HAlign(HorizontalAlignment.Center)
             )
-            .Width(440).Height(440)
-            .Set(g => { g.RowSpacing = 4; g.ColumnSpacing = 4; })
-            .HAlign(HorizontalAlignment.Center)
         );
     }
 
@@ -209,14 +220,15 @@ class WordPuzzleApp : Component
             int capturedPos = pos;
 
             var tile = Button(label, () => onTileClicked(capturedPos))
-                .FontSize(32).FontWeight(FontWeights.Bold)
+                .FontSize(32).FontWeight(FontWeights.SemiBold)
                 .HAlign(HorizontalAlignment.Stretch)
                 .VAlign(VerticalAlignment.Stretch)
+                .CornerRadius(4)
+                .AutomationName($"Tile {label}")
                 .Set(b =>
                 {
                     b.HorizontalContentAlignment = HorizontalAlignment.Center;
                     b.VerticalContentAlignment = VerticalAlignment.Center;
-                    b.CornerRadius = new CornerRadius(6);
                 })
                 .WithKey($"tile-{tileIndex}")
                 .Grid(row: row, column: col);

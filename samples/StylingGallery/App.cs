@@ -5,57 +5,32 @@ using static Microsoft.UI.Reactor.Factories;
 using static StylingHelpers;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<StylingGalleryApp>("Styling Gallery", width: 900, height: 750);
+ReactorApp.Run<StylingGalleryApp>("Styling Gallery", width: 960, height: 780
+#if DEBUG
+    , devtools: true
+#endif
+);
 
 // ════════════════════════════════════════════════════════════════════════
-//  Root app — tab-based navigation between styling feature demos
+//  Root app — TabView navigates between styling feature demos
 // ════════════════════════════════════════════════════════════════════════
 
 class StylingGalleryApp : Component
 {
-    public override Element Render()
-    {
-        var (tab, setTab) = UseState(0);
-
-        return VStack(0,
-            // Tab bar
-            HStack(0,
-                TabButton("Theme Tokens", 0, tab, setTab),
-                TabButton("RequestedTheme", 1, tab, setTab),
-                TabButton("UseColorScheme", 2, tab, setTab),
-                TabButton("Lightweight Styling", 3, tab, setTab),
-                TabButton("Style Caching", 4, tab, setTab)
-            ).Background(Theme.SolidBackground)
-             .Padding(8, 8, 8, 0),
-
-            // Content area
-            ScrollView(
-                tab switch
-                {
-                    0 => Component<ThemeTokensDemo>(),
-                    1 => Component<RequestedThemeDemo>(),
-                    2 => Component<ColorSchemeDemo>(),
-                    3 => Component<LightweightStylingDemo>(),
-                    4 => Component<StyleCachingDemo>(),
-                    _ => TextBlock("Unknown tab"),
-                }
-            )
-        );
-    }
-
-    static Element TabButton(string label, int index, int current, Action<int> setTab) =>
-        Button(label, () => setTab(index))
-            .Resources(r =>
+    public override Element Render() =>
+        Grid(
+            columns: ["*"], rows: ["Auto", "*"],
+            (TitleBar("Styling Gallery") with
             {
-                if (index == current)
-                {
-                    r.Set("ButtonBackground", Theme.Accent)
-                     .Set("ButtonBackgroundPointerOver", Theme.AccentSecondary)
-                     .Set("ButtonForeground", "#FFFFFF")
-                     .Set("ButtonForegroundPointerOver", "#FFFFFF");
-                }
-            })
-            .Margin(0, 0, 4, 0);
+                Subtitle = "Theme tokens · RequestedTheme · Lightweight styling",
+            }).Grid(row: 0),
+            TabView(
+                Tab("Theme Tokens",         ScrollView(Component<ThemeTokensDemo>())) with { IsClosable = false },
+                Tab("RequestedTheme",       ScrollView(Component<RequestedThemeDemo>())) with { IsClosable = false },
+                Tab("UseColorScheme",       ScrollView(Component<ColorSchemeDemo>())) with { IsClosable = false },
+                Tab("Lightweight Styling",  ScrollView(Component<LightweightStylingDemo>())) with { IsClosable = false },
+                Tab("Style Caching",        ScrollView(Component<StyleCachingDemo>())) with { IsClosable = false }
+            ).Grid(row: 1));
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -75,7 +50,7 @@ class ThemeTokensDemo : Component
                 TextBlock("SecondaryText").Foreground(Theme.SecondaryText),
                 TextBlock("TertiaryText").Foreground(Theme.TertiaryText),
                 TextBlock("DisabledText").Foreground(Theme.DisabledText),
-                TextBlock("AccentText").Foreground(Theme.AccentText).SemiBold()
+                TextBlock("AccentText").SemiBold().Foreground(Theme.AccentText)
             ),
 
             SubHeading("Accent Colors"),
@@ -114,10 +89,10 @@ class ThemeTokensDemo : Component
 
     static Element ColorSwatch(string label, ThemeRef color) =>
         VStack(4,
-            Border(TextBlock(""))
+            Border(Empty())
                 .Background(color)
                 .Width(80).Height(40)
-                .CornerRadius(6)
+                .CornerRadius(4)
                 .WithBorder(Theme.ControlStroke),
             Caption(label).Foreground(Theme.SecondaryText)
                 .HAlign(HorizontalAlignment.Center)
@@ -143,20 +118,19 @@ class RequestedThemeDemo : Component
             SubHeading("Dark Sidebar + Light Content"),
             HStack(0,
                 // Dark sidebar — native controls get dark styling automatically.
-                // Use a static dark background; text/buttons adopt dark theme natively.
                 VStack(12,
-                    TextBlock("Sidebar").Bold(),
-                    TextBlock("Navigation").Opacity(0.7),
-                    TextBlock("Settings").Opacity(0.7),
-                    TextBlock("Profile").Opacity(0.7)
+                    TextBlock("Sidebar").SemiBold(),
+                    TextBlock("Navigation").Foreground(Theme.SecondaryText),
+                    TextBlock("Settings").Foreground(Theme.SecondaryText),
+                    TextBlock("Profile").Foreground(Theme.SecondaryText)
                 ).Padding(16)
-                 .Background("#1E1E1E")
+                 .Background(Theme.SolidBackground)
                  .RequestedTheme(ElementTheme.Dark)
                  .Width(180),
 
-                // Light content (system theme)
+                // Light content area (system theme)
                 VStack(12,
-                    TextBlock("Main Content").Bold(),
+                    TextBlock("Main Content").SemiBold(),
                     TextBlock("This area uses the system theme."),
                     Button("Action", () => { })
                 ).Padding(16)
@@ -168,41 +142,39 @@ class RequestedThemeDemo : Component
 
             SubHeading("Toggle Theme Override"),
             ToggleSwitch(isDark, setIsDark, onContent: "Dark", offContent: "Light"),
-            // RequestedTheme makes native controls adopt the theme automatically.
-            // Background uses a static color matching the theme variant.
             Border(
                 VStack(12,
                     TextBlock("This panel follows the toggle."),
-                    TextBlock("Native controls adapt automatically."),
+                    TextBlock("Native controls adapt automatically.").Foreground(Theme.SecondaryText),
                     HStack(8,
                         Button("Primary", () => { }),
                         Button("Secondary", () => { }),
                         ToggleSwitch(false, _ => { }, onContent: "On", offContent: "Off")
                     )
                 ).Padding(16)
-            ).Background(isDark ? "#2D2D2D" : "#F3F3F3")
+            ).Background(Theme.SolidBackground)
              .CornerRadius(8)
              .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light),
 
             SubHeading("ElementTheme.Default (System Inheritance)"),
             TextBlock("Setting RequestedTheme to Default restores the system theme:"),
             HStack(12,
-                ThemeBox("Dark", ElementTheme.Dark, "#2D2D2D"),
-                ThemeBox("Default", ElementTheme.Default, null),
-                ThemeBox("Light", ElementTheme.Light, "#F3F3F3")
+                ThemeBox("Dark", ElementTheme.Dark),
+                ThemeBox("Default", ElementTheme.Default),
+                ThemeBox("Light", ElementTheme.Light)
             )
         ).Padding(24);
     }
 
-    static Element ThemeBox(string label, ElementTheme theme, string? bg) =>
+    static Element ThemeBox(string label, ElementTheme theme) =>
         Border(
             VStack(4,
-                TextBlock(label).Bold(),
-                TextBlock("Sample text"),
+                TextBlock(label).SemiBold(),
+                TextBlock("Sample text").Foreground(Theme.SecondaryText),
                 Button("Button", () => { })
             ).Padding(12)
-        ).Background(bg ?? "#F9F9F9")
-         .CornerRadius(6)
+        ).Background(Theme.CardBackground)
+         .CornerRadius(4)
          .RequestedTheme(theme)
          .Width(150);
 }
@@ -234,10 +206,10 @@ class ColorSchemeDemo : Component
 
             Border(
                 HStack(16,
-                    TextBlock(isDark ? "\U0001F319" : "\u2600\uFE0F").FontSize(48),
+                    TextBlock(isDark ? "\U0001F319" : "☀️").FontSize(48),
                     VStack(4,
                         TextBlock(isDark ? "Dark Mode Active" : "Light Mode Active")
-                            .Bold().Foreground(Theme.PrimaryText),
+                            .SemiBold().Foreground(Theme.PrimaryText),
                         TextBlock(isDark
                                 ? "UI is optimized for low-light viewing"
                                 : "UI is optimized for well-lit environments")
@@ -249,7 +221,8 @@ class ColorSchemeDemo : Component
              .WithBorder(Theme.CardStroke),
 
             SubHeading("Opacity Adjustment"),
-            TextBlock("Decorative elements use lower opacity in light mode to reduce visual noise:")
+            TextBlock("Decorative accent bars use lower opacity in Light mode to reduce visual noise. " +
+                      "For text, prefer themed Secondary/Tertiary foregrounds — opacity breaks in High Contrast.")
                 .Foreground(Theme.SecondaryText),
             HStack(12,
                 DecorativeBox("Normal", 1.0),
@@ -268,19 +241,19 @@ class ColorSchemeDemo : Component
         Border(
             VStack(4,
                 Caption(label).Foreground(Theme.SecondaryText),
-                TextBlock(value).FontSize(20).Bold().Foreground(Theme.AccentText)
+                SubHeading(value).Foreground(Theme.AccentText)
             ).Padding(12)
         ).Background(Theme.CardBackground)
-         .CornerRadius(6)
+         .CornerRadius(4)
          .WithBorder(Theme.CardStroke)
          .Width(160);
 
     static Element DecorativeBox(string label, double opacity) =>
         VStack(4,
-            Border(TextBlock(""))
+            Border(Empty())
                 .Background(Theme.Accent)
                 .Width(80).Height(50)
-                .CornerRadius(6)
+                .CornerRadius(4)
                 .Opacity(opacity),
             Caption(label).Foreground(Theme.SecondaryText)
                 .HAlign(HorizontalAlignment.Center)
@@ -305,7 +278,6 @@ class LightweightStylingDemo : Component
                  "to create branded buttons without custom templates.")
                 .Foreground(Theme.SecondaryText),
             HStack(12,
-                // Blue brand button
                 Button("Primary Action", () => { })
                     .Resources(r => r
                         .Set("ButtonBackground", "#0078D4")
@@ -315,7 +287,6 @@ class LightweightStylingDemo : Component
                         .Set("ButtonForegroundPointerOver", "#FFFFFF")
                         .Set("ButtonForegroundPressed", "#FFFFFF")),
 
-                // Green success button
                 Button("Confirm", () => { })
                     .Resources(r => r
                         .Set("ButtonBackground", "#107C10")
@@ -325,7 +296,6 @@ class LightweightStylingDemo : Component
                         .Set("ButtonForegroundPointerOver", "#FFFFFF")
                         .Set("ButtonForegroundPressed", "#FFFFFF")),
 
-                // Red danger button
                 Button("Delete", () => { })
                     .Resources(r => r
                         .Set("ButtonBackground", "#D13438")
@@ -335,7 +305,6 @@ class LightweightStylingDemo : Component
                         .Set("ButtonForegroundPointerOver", "#FFFFFF")
                         .Set("ButtonForegroundPressed", "#FFFFFF")),
 
-                // Default button for comparison
                 Button("Default", () => { })
             ),
 
@@ -413,20 +382,21 @@ class StyleCachingDemo : Component
 
             HStack(12,
                 Button("-10", () => setCount(Math.Max(10, count - 10))),
-                TextBlock($"{count} items").Foreground(Theme.PrimaryText).VAlign(VerticalAlignment.Center),
+                TextBlock($"{count} items").VAlign(VerticalAlignment.Center),
                 Button("+10", () => setCount(Math.Min(200, count + 10)))
             ),
 
             WrapGrid(
                 Enumerable.Range(0, count).Select(i =>
                     Border(
-                        TextBlock($"#{i + 1}").Foreground(Theme.SecondaryText).FontSize(11)
+                        Caption($"#{i + 1}").Foreground(Theme.SecondaryText)
                             .HAlign(HorizontalAlignment.Center)
                             .VAlign(VerticalAlignment.Center)
                     ).Background(Theme.CardBackground)
                      .WithBorder(Theme.CardStroke)
                      .CornerRadius(4)
                      .Width(55).Height(36)
+                     .WithKey(i.ToString())
                 ).ToArray()
             ),
 
@@ -440,8 +410,7 @@ class StyleCachingDemo : Component
 }
 
 // ════════════════════════════════════════════════════════════════════════
-//  Shared helpers — called as SectionHeader() from components via
-//  'using static StylingHelpers'
+//  Shared helpers
 // ════════════════════════════════════════════════════════════════════════
 
 static class StylingHelpers

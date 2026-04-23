@@ -131,7 +131,8 @@ class GalleryShell : Component
                     Button(isDark ? "\uE706" : "\uE708", () => setIsDark(!isDark))
                         .Set(b => b.FontFamily = new FontFamily("Segoe MDL2 Assets"))
                         .Width(40).Height(36)
-                        .ToolTip(isDark ? "Switch to Light" : "Switch to Dark"),
+                        .ToolTip(isDark ? "Switch to Light" : "Switch to Dark")
+                        .AutomationName(isDark ? "Switch to Light theme" : "Switch to Dark theme"),
                 IsPaneToggleButtonVisible = true,
                 OnPaneToggleRequested = () => setIsPaneOpen(!isPaneOpen),
                 IsBackButtonVisible = true,
@@ -183,6 +184,6 @@ class GalleryShell : Component
 
         return Border(shell)
             .Background(Theme.SolidBackground)
-            .Set(b => b.RequestedTheme = isDark ? ElementTheme.Dark : ElementTheme.Light);
+            .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light);
     }
 }

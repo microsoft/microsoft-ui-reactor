@@ -16,6 +16,9 @@ if (args.Contains("--self-test"))
 else
 {
     ReactorApp.Run<GalleryApp>("Reactor Charting Gallery", width: 1400, height: 900,
+#if DEBUG
+        devtools: true,
+#endif
         configure: host => XamlInterop.Register(host.Reconciler));
 }
 
@@ -100,7 +103,7 @@ class GalleryApp : Component
             )
         )
         .Background(Theme.SolidBackground)
-        .Set(b => b.RequestedTheme = isDark ? ElementTheme.Dark : ElementTheme.Light);
+        .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light);
     }
 
     static string SubtitleFor(GalleryRoute route) => route switch
@@ -116,16 +119,18 @@ class GalleryApp : Component
     static Element ThemeToggle(bool isDark, Action<bool> setIsDark) =>
         Button(isDark ? "\uE793" : "\uE708", () => setIsDark(!isDark))
             .Foreground(Theme.AccentText)
+            .AutomationName(isDark ? "Switch to Light theme" : "Switch to Dark theme")
+            .ToolTip(isDark ? "Switch to Light" : "Switch to Dark")
+            .Size(36, 36)
+            .Resources(r => r
+                .Set("ButtonBackground", Theme.Ref("SubtleFillColorTransparentBrush"))
+                .Set("ButtonBorderBrush", Theme.Ref("SubtleFillColorTransparentBrush")))
             .Set(b =>
             {
                 b.FontFamily = new FontFamily("Segoe MDL2 Assets");
-                b.Width = 36;
-                b.Height = 36;
                 b.Padding = new Thickness(0);
                 b.MinWidth = 0;
                 b.MinHeight = 0;
-                b.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-                b.BorderThickness = new Thickness(0);
             });
 }
 
@@ -149,10 +154,12 @@ class LandingPage : Component
                         Button(
                             VStack(6,
                                 SampleIcon(sample, 36),
-                                TextBlock(sample.Title) with { FontSize = 12 }
+                                Caption(sample.Title)
                             ).MaxWidth(100).HAlign(HorizontalAlignment.Center),
                             () => nav.Navigate(new SampleDetail(sample.Title))
                         ).Width(130).Height(90)
+                         .WithKey(sample.Title)
+                         .AutomationName(sample.Title)
                     ).ToArray()
                 )
                 {
@@ -173,7 +180,7 @@ class LandingPage : Component
         global::System.IO.Path.Combine(AppContext.BaseDirectory, "Icons", $"{sample.IconName}.svg");
 
     static Element SampleIcon(GallerySample sample, double size) =>
-        Image(IconPath(sample)) with { Width = size, Height = size };
+        Image(IconPath(sample)).Size(size, size).AccessibilityHidden();
 
     static int CategoryOrder(string category) => category switch
     {

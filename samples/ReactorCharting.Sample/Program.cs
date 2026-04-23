@@ -7,7 +7,11 @@ using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Charting.ChartDsl;
 
-ReactorApp.Run<ChartGallery>("Reactor Chart Gallery", width: 1200, height: 800);
+ReactorApp.Run<ChartGallery>("Reactor Chart Gallery", width: 1200, height: 800
+#if DEBUG
+    , devtools: true
+#endif
+);
 
 // ── Data types ──────────────────────────────────────────────────────────────
 
@@ -61,11 +65,15 @@ class ChartGallery : Component
 
         string[] tabs = ["Line", "Bar", "Area", "Pie", "Tree", "Force"];
 
-        return VStack(8,
-            Heading("Reactor Charting — D3-Powered Charts"),
-            Caption($"Tick {tick} — data changes every 800 ms"),
-            HStack(8, tabs.Select((name, i) =>
-                Button(tab == i ? $"● {name}" : name, () => setTab(i))).ToArray()),
+        return Grid(
+            columns: ["*"], rows: ["Auto", "*"],
+            (TitleBar("Reactor Chart Gallery") with
+            {
+                Subtitle = $"D3-powered live charts · tick {tick}",
+            }).Grid(row: 0),
+            VStack(8,
+                SelectorBar(tabs.Select(t => SelectorBarItem(t)).ToArray(),
+                    selectedIndex: tab, onSelectionChanged: setTab).Margin(24, 16, 24, 0),
             ScrollView(
                 Border(
                     tab switch
@@ -103,8 +111,8 @@ class ChartGallery : Component
                         _ => TextBlock("Select a tab"),
                     }
                 ).Padding(16)
-            )
-        ).Padding(24);
+            )).Padding(0).Grid(row: 1)
+        );
     }
 
     // ── Data generators — pure functions of tick ─────────────────────────

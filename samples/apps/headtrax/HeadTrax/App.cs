@@ -56,10 +56,10 @@ internal class App : Component
             ),
 
             RightHeader = HStack(12,
-                TextBlock(ReactorFeatureFlags.UseHookBasedPaging ? "hook paging" : "legacy paging")
-                    .FontSize(11).Opacity(0.45)
+                Caption(ReactorFeatureFlags.UseHookBasedPaging ? "hook paging" : "legacy paging")
+                    .Foreground(Theme.TertiaryText)
                     .Set(t => t.IsHitTestVisible = false),
-                TextBlock($"{rowsLoaded:N0} rows fetched").FontSize(12).Opacity(0.6)
+                Caption($"{rowsLoaded:N0} rows fetched").Foreground(Theme.SecondaryText)
                     .LiveRegion(Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite)
                     .Set(t => t.IsHitTestVisible = false)
             ),

@@ -30,7 +30,11 @@ using Path = System.IO.Path;
 public static class Program
 {
     [STAThread]
-    static void Main() => ReactorApp.Run<EditorApp>("Monaco Editor", width: 1200, height: 800, configure: host =>
+    static void Main() => ReactorApp.Run<EditorApp>("Monaco Editor", width: 1200, height: 800,
+#if DEBUG
+        devtools: true,
+#endif
+        configure: host =>
     {
         host.Window.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
         // Register the custom MonacoEditorElement so the reconciler knows how to
@@ -218,9 +222,9 @@ class EditorApp : Component
         .Grid(row: 1, columnSpan: columns.Length);
 
         var statusBar = (FlexRow(
-            TextBlock(title).FontSize(12),
-            TextBlock("").Flex(grow: 1),
-            TextBlock(status).FontSize(12).Opacity(0.7)
+            Caption(title),
+            Flex().Flex(grow: 1),
+            Caption(status).Foreground(SecondaryText)
         ) with { ColumnGap = 12 })
         .Padding(8, 4)
         .Grid(row: 3, columnSpan: columns.Length);
