@@ -74,9 +74,15 @@ internal static class CommandingCoverageFixtures
             H.Check("ToggleButton_Command_Mounted", tb is not null);
             if (tb is not null)
             {
-                // Simulate toggles by flipping IsChecked — Checked/Unchecked fires on change.
-                tb.IsChecked = true;
-                tb.IsChecked = false;
+                // OnToggled binds to Click, which fires for real user toggles
+                // (mouse, keyboard, and AutomationPeer.Invoke) — programmatic
+                // IsChecked writes don't, by design. Simulate user toggles via
+                // the toggle automation pattern.
+                var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(tb);
+                var toggle = peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Toggle)
+                    as Microsoft.UI.Xaml.Automation.Provider.IToggleProvider;
+                toggle?.Toggle();
+                toggle?.Toggle();
             }
             H.Check("ToggleButton_Command_InvokedOnEachToggle", count == 2);
         }

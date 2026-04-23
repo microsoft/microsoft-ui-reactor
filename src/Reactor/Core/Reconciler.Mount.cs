@@ -340,9 +340,9 @@ public sealed partial class Reconciler
     {
         var tb = new WinPrim.ToggleButton { Content = togBtn.Label, IsChecked = togBtn.IsChecked };
         SetElementTag(tb, togBtn);
-        // Use Click (not Checked/Unchecked) so programmatic IsChecked writes from
-        // UpdateToggleButton don't re-fire the callback and start a loop when the
-        // parent's state-driven render flips another toggle in the same group.
+        // Bind to Click — fires only for real user toggles. Checked/Unchecked
+        // would also fire when UpdateToggleButton rewrites IsChecked during a
+        // state-driven rerender, which would re-enter the callback and loop.
         tb.Click += (s, _) =>
         {
             var t = (WinPrim.ToggleButton)s!;
@@ -1047,7 +1047,7 @@ public sealed partial class Reconciler
                 Header = tabItem.Header, IsClosable = tabItem.IsClosable,
                 Content = Mount(tabItem.Content, requestRerender),
             };
-            if (tabItem.Icon is not null) tvi.IconSource = new WinUI.SymbolIconSource { Symbol = ParseSymbol(tabItem.Icon) };
+            if (tabItem.Icon is not null) tvi.IconSource = ResolveIconSource(tabItem.Icon);
             tv.TabItems.Add(tvi);
         }
         SetElementTag(tv, tab);
@@ -1781,6 +1781,22 @@ public sealed partial class Reconciler
             return new WinUI.SymbolIcon(symbol);
         // Treat as a Segoe Fluent / MDL2 glyph codepoint.
         return new WinUI.FontIcon
+        {
+            Glyph = iconSymbol,
+            FontFamily = Microsoft.UI.Xaml.Application.Current?.Resources["SymbolThemeFontFamily"] as Microsoft.UI.Xaml.Media.FontFamily
+                         ?? new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons"),
+        };
+    }
+
+    // IconSource counterpart for controls (TabView, etc.) that take an
+    // IconSource instead of IconElement. Same glyph-fallback semantics as
+    // ResolveIconString.
+    internal static WinUI.IconSource? ResolveIconSource(string? iconSymbol)
+    {
+        if (string.IsNullOrEmpty(iconSymbol)) return null;
+        if (Enum.TryParse<Symbol>(iconSymbol, ignoreCase: true, out var symbol))
+            return new WinUI.SymbolIconSource { Symbol = symbol };
+        return new WinUI.FontIconSource
         {
             Glyph = iconSymbol,
             FontFamily = Microsoft.UI.Xaml.Application.Current?.Resources["SymbolThemeFontFamily"] as Microsoft.UI.Xaml.Media.FontFamily
