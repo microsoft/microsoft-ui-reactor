@@ -619,6 +619,26 @@ internal static class SelfTestFixtureRegistry
         "DevtoolsUx_MenuHiddenWhenDisabled",
         "DevtoolsUx_MenuVisibleWhenEnabled",
         "DevtoolsUx_ObservableToggleRerendersSubscribers",
+
+        // Selection-event wiring (Tier 2 gap closure)
+        "SelectionEvt_ComboBox",
+        "SelectionEvt_RadioButtons",
+        "SelectionEvt_ListView",
+        "SelectionEvt_GridView",
+        "SelectionEvt_FlipView",
+        "SelectionEvt_TabView",
+        "SelectionEvt_Pivot",
+        "SelectionEvt_NavigationView",
+
+        // Value-change / toggle event wiring (Tier 2 gap closure)
+        "ValueEvt_CheckBox",
+        "ValueEvt_RadioButton",
+        "ValueEvt_ToggleSwitch",
+        "ValueEvt_Slider",
+        "ValueEvt_NumberBox",
+        "ValueEvt_RatingControl",
+        "ValueEvt_PasswordBox",
+        "ValueEvt_ColorPicker",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1234,6 +1254,26 @@ internal static class SelfTestFixtureRegistry
         "DevtoolsUx_MenuHiddenWhenDisabled" => new DevtoolsUxTests.MenuHiddenWhenDisabled(harness),
         "DevtoolsUx_MenuVisibleWhenEnabled" => new DevtoolsUxTests.MenuVisibleWhenEnabled(harness),
         "DevtoolsUx_ObservableToggleRerendersSubscribers" => new DevtoolsUxTests.ObservableToggleRerendersSubscribers(harness),
+
+        // Selection-event wiring
+        "SelectionEvt_ComboBox" => new SelectionEventFixtures.ComboBoxSelectionFires(harness),
+        "SelectionEvt_RadioButtons" => new SelectionEventFixtures.RadioButtonsSelectionFires(harness),
+        "SelectionEvt_ListView" => new SelectionEventFixtures.ListViewSelectionFires(harness),
+        "SelectionEvt_GridView" => new SelectionEventFixtures.GridViewSelectionFires(harness),
+        "SelectionEvt_FlipView" => new SelectionEventFixtures.FlipViewSelectionFires(harness),
+        "SelectionEvt_TabView" => new SelectionEventFixtures.TabViewSelectionFires(harness),
+        "SelectionEvt_Pivot" => new SelectionEventFixtures.PivotSelectionFires(harness),
+        "SelectionEvt_NavigationView" => new SelectionEventFixtures.NavigationViewSelectionFires(harness),
+
+        // Value-change / toggle event wiring
+        "ValueEvt_CheckBox" => new ValueChangeEventFixtures.CheckBoxToggleFires(harness),
+        "ValueEvt_RadioButton" => new ValueChangeEventFixtures.RadioButtonToggleFires(harness),
+        "ValueEvt_ToggleSwitch" => new ValueChangeEventFixtures.ToggleSwitchToggleFires(harness),
+        "ValueEvt_Slider" => new ValueChangeEventFixtures.SliderValueFires(harness),
+        "ValueEvt_NumberBox" => new ValueChangeEventFixtures.NumberBoxValueFires(harness),
+        "ValueEvt_RatingControl" => new ValueChangeEventFixtures.RatingControlValueFires(harness),
+        "ValueEvt_PasswordBox" => new ValueChangeEventFixtures.PasswordBoxChangeFires(harness),
+        "ValueEvt_ColorPicker" => new ValueChangeEventFixtures.ColorPickerChangeFires(harness),
 
         _ => null,
     };

@@ -321,4 +321,11 @@ internal static class RareControlFixtures
                 H.FindControl<Microsoft.UI.Xaml.Controls.RadioButtons>(_ => true) is not null);
         }
     }
+
+    // MapControl is intentionally not exercised here — mounting it into a real
+    // WinUI window blocks on networking/graphics initialization in the self-test
+    // harness, which causes the whole run to hang. MapControl requires a
+    // MapServiceToken and a realistic host environment (packaged identity,
+    // network access) to initialize cleanly; it is better exercised in a
+    // dedicated interactive sample, not a unit-style selftest.
 }
