@@ -8,25 +8,28 @@ using Microsoft.UI.Xaml.Hosting;
 namespace Microsoft.UI.Reactor.Hosting;
 
 /// <summary>
-/// Draws semi-transparent overlay rectangles over UIElements that were mounted (red)
-/// or modified (yellow) during a reconcile pass. Uses the Composition visual layer
+/// Draws diagonal-striped overlay rectangles over UIElements that were mounted (red, 45°)
+/// or modified (yellow, 135°) during a reconcile pass. Uses the Composition visual layer
 /// to avoid creating XAML elements (which would themselves show up as reconcile churn).
 /// Each overlay fades out over <see cref="FadeDurationMs"/> milliseconds.
 /// </summary>
 internal sealed class ReconcileHighlightOverlay
 {
-    private const float MountedOpacity = 0.35f;
-    private const float ModifiedOpacity = 0.25f;
+    private const float MountedOpacity = 0.45f;
+    private const float ModifiedOpacity = 0.35f;
     private const int FadeDurationMs = 600;
+    private const float StripeWidth = 5f;
 
     private static readonly global::Windows.UI.Color MountedColor =
-        global::Windows.UI.Color.FromArgb(255, 220, 40, 40);   // red
+        global::Windows.UI.Color.FromArgb(255, 220, 40, 40);   // red at 45°
     private static readonly global::Windows.UI.Color ModifiedColor =
-        global::Windows.UI.Color.FromArgb(255, 240, 200, 20);  // yellow
+        global::Windows.UI.Color.FromArgb(255, 240, 200, 20);  // yellow at 135°
 
     private readonly Canvas _overlayCanvas;
     private ContainerVisual? _container;
     private Compositor? _compositor;
+    private CompositionBrush? _mountedBrush;
+    private CompositionBrush? _modifiedBrush;
 
     public ReconcileHighlightOverlay(Canvas overlayCanvas)
     {
@@ -46,14 +49,17 @@ internal sealed class ReconcileHighlightOverlay
         EnsureCompositor();
         if (_compositor is null || _container is null) return;
 
+        _mountedBrush ??= CreateStripeBrush(MountedColor, 45f);
+        _modifiedBrush ??= CreateStripeBrush(ModifiedColor, 135f);
+
         foreach (var element in mounted)
-            TryAddHighlight(host, element, MountedColor, MountedOpacity);
+            TryAddHighlight(host, element, _mountedBrush, MountedOpacity);
 
         foreach (var element in modified)
-            TryAddHighlight(host, element, ModifiedColor, ModifiedOpacity);
+            TryAddHighlight(host, element, _modifiedBrush, ModifiedOpacity);
     }
 
-    private void TryAddHighlight(UIElement host, UIElement target, global::Windows.UI.Color color, float opacity)
+    private void TryAddHighlight(UIElement host, UIElement target, CompositionBrush brush, float opacity)
     {
         if (_compositor is null || _container is null) return;
 
@@ -70,7 +76,7 @@ internal sealed class ReconcileHighlightOverlay
             sprite.Size = new Vector2((float)fe.ActualWidth, (float)fe.ActualHeight);
             sprite.Offset = new Vector3((float)position.X, (float)position.Y, 0);
             sprite.Opacity = opacity;
-            sprite.Brush = _compositor.CreateColorBrush(color);
+            sprite.Brush = brush;
 
             _container.Children.InsertAtTop(sprite);
 
@@ -93,6 +99,34 @@ internal sealed class ReconcileHighlightOverlay
         {
             // TransformToVisual throws if target is in a different visual tree (popup/flyout)
         }
+    }
+
+    /// <summary>
+    /// Creates a repeating diagonal-stripe brush. The gradient tiles with
+    /// <see cref="CompositionGradientExtendMode.Wrap"/> and is rotated to
+    /// the requested angle (e.g. 45° or 135°).
+    /// </summary>
+    private CompositionBrush CreateStripeBrush(global::Windows.UI.Color color, float angleDegrees)
+    {
+        var brush = _compositor!.CreateLinearGradientBrush();
+        brush.MappingMode = CompositionMappingMode.Absolute;
+        brush.ExtendMode = CompositionGradientExtendMode.Wrap;
+
+        // Vertical gradient over one period (stripe + gap), then rotate
+        float period = StripeWidth * 2f;
+        brush.StartPoint = new Vector2(0, 0);
+        brush.EndPoint = new Vector2(0, period);
+
+        var transparent = global::Windows.UI.Color.FromArgb(0, color.R, color.G, color.B);
+        brush.ColorStops.Add(_compositor.CreateColorGradientStop(0f, color));
+        brush.ColorStops.Add(_compositor.CreateColorGradientStop(0.5f, color));
+        brush.ColorStops.Add(_compositor.CreateColorGradientStop(0.5f, transparent));
+        brush.ColorStops.Add(_compositor.CreateColorGradientStop(1f, transparent));
+
+        float radians = angleDegrees * MathF.PI / 180f;
+        brush.TransformMatrix = Matrix3x2.CreateRotation(radians);
+
+        return brush;
     }
 
     private void EnsureCompositor()

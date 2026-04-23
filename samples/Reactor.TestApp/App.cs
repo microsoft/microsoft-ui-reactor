@@ -13,7 +13,6 @@ using Microsoft.UI.Reactor.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
 
-ReactorFeatureFlags.HighlightReconcileChanges = true;
 ReactorApp.Run<DemoApp>("Reactor Demo", width: 1200, height: 800
 #if DEBUG
     , devtools: true
