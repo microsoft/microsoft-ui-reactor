@@ -44,7 +44,13 @@ public class TypeRegistry
     {
         if (_cellRenderers.TryGetValue(type, out var renderer))
             return renderer;
-        return TryResolveCellRendererFallback(type);
+        // TryResolveCellRendererFallback constructs a fresh delegate each call
+        // (CellRenderers.* factory methods return lambdas). Cache the first
+        // resolution so DataGrid's per-cell render path doesn't re-allocate.
+        renderer = TryResolveCellRendererFallback(type);
+        if (renderer is not null)
+            _cellRenderers[type] = renderer;
+        return renderer;
     }
 
     /// <summary>Try to get a registered formatter for a type.</summary>

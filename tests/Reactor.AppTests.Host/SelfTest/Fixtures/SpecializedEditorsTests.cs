@@ -125,8 +125,11 @@ internal static class SpecializedEditorsTests
             });
             await Harness.Render();
 
-            // Find the hex TextBox — proves swatch+hex layout rendered.
-            var tb = H.FindControl<TextBox>(_ => true);
+            // Find the hex TextBox by its expected initial Crimson hex value —
+            // proves the compact swatch+hex layout rendered and avoids matching
+            // an unrelated TextBox elsewhere in the host window.
+            var tb = H.FindControl<TextBox>(textBox =>
+                textBox.Text is string s && s.Equals("#DC143C", StringComparison.OrdinalIgnoreCase));
             H.Check("Editors_ColorCompact_HexField", tb is not null);
         }
     }

@@ -744,9 +744,20 @@ public sealed partial class Reconciler
     private UIElement? UpdateNumberBox(NumberBoxElement n, WinUI.NumberBox nb)
     {
         SetElementTag(nb, n);
-        // Set Min/Max first so coerced Value stays inside range.
-        nb.Minimum = n.Minimum;
-        nb.Maximum = n.Maximum;
+        // Set Min/Max before Value so a new, in-range Value doesn't get
+        // coerced by a stale range. But Min/Max writes can themselves coerce
+        // the existing Value, which raises ValueChanged — suppress those
+        // echoes too, one token per write that might fire.
+        if (nb.Minimum != n.Minimum)
+        {
+            if (nb.Value < n.Minimum) ChangeEchoSuppressor.BeginSuppress(nb);
+            nb.Minimum = n.Minimum;
+        }
+        if (nb.Maximum != n.Maximum)
+        {
+            if (nb.Value > n.Maximum) ChangeEchoSuppressor.BeginSuppress(nb);
+            nb.Maximum = n.Maximum;
+        }
         if (nb.Value != n.Value)
         {
             ChangeEchoSuppressor.BeginSuppress(nb);
@@ -808,9 +819,20 @@ public sealed partial class Reconciler
     private UIElement? UpdateSlider(SliderElement n, WinUI.Slider s)
     {
         SetElementTag(s, n);
-        // Min/Max first so coerced Value stays inside range.
-        s.Minimum = n.Min;
-        s.Maximum = n.Max;
+        // Min/Max before Value so a new, in-range Value doesn't get coerced
+        // by a stale range. But Min/Max writes can themselves coerce the
+        // existing Value, which raises ValueChanged — suppress those echoes
+        // too, one token per write that might fire.
+        if (s.Minimum != n.Min)
+        {
+            if (s.Value < n.Min) ChangeEchoSuppressor.BeginSuppress(s);
+            s.Minimum = n.Min;
+        }
+        if (s.Maximum != n.Max)
+        {
+            if (s.Value > n.Max) ChangeEchoSuppressor.BeginSuppress(s);
+            s.Maximum = n.Max;
+        }
         if (s.Value != n.Value)
         {
             ChangeEchoSuppressor.BeginSuppress(s);

@@ -314,14 +314,4 @@ public static class Editors
 
     internal static string ToHexString(this WinUIColor c)
         => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
-
-    private static string ToBrushHex(WinUIColor c)
-        => $"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}";
-
-    private static string ContrastForeground(WinUIColor c)
-    {
-        // Simple luminance threshold — white text on dark, black on light.
-        var l = (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) / 255.0;
-        return l > 0.55 ? "#000000" : "#FFFFFF";
-    }
 }

@@ -124,16 +124,14 @@ public class TypedEditorsTests
     // ══════════════════════════════════════════════════════════════
 
     [Fact]
-    public void Number_Editor_For_Int_Hands_Int_To_Callback()
+    public void Number_Editor_For_Int_Returns_Factory()
     {
+        // Unit tests run without a WinUI window, so we can't exercise the
+        // onChange path end-to-end here. The invariant we can assert is
+        // that resolving the numeric editor for int type succeeds and
+        // returns a usable factory delegate.
         var factory = Editors.Number(typeof(int));
-        object? captured = null;
-        // We don't construct the Element here (no WinUI host in unit tests);
-        // instead we reach the onChange callback by directly invoking the
-        // editor factory — but since the factory returns an Element, we just
-        // assert the factory doesn't blow up at type-resolution time.
         Assert.NotNull(factory);
-        _ = captured;
     }
 
     [Fact]
@@ -197,9 +195,12 @@ public class TypedEditorsTests
     }
 
     [Fact]
-    public void DateColumn_Picks_DateOnly_Editor_For_DateOnly_Property()
+    public void DateColumn_Wires_Editor_For_DateTime_Property()
     {
-        // Uses the DateColumn factory's type-inference branch.
+        // Target.When is DateTime — exercises the default branch of DateColumn's
+        // type dispatch (falls through to Editors.Date()). The DateOnly /
+        // DateTimeOffset branches are covered by selftest fixtures mounting
+        // against real WinUI controls.
         FieldDescriptor col = TypedColumns.DateColumn<Target>(
             nameof(Target.When), t => t.When);
         Assert.NotNull(col.Editor);

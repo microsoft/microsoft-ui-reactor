@@ -204,6 +204,78 @@ internal static class EchoSuppressionFixtures
         }
     }
 
+    /// <summary>
+    /// Min/Max coercion can itself raise ValueChanged before we reach the
+    /// explicit Value= write. Verifies that when the range shifts such that
+    /// the current Value is forced in-range, the user's onChange is still
+    /// not called. This is the regression coverage for the gap Copilot
+    /// flagged on the initial PR review.
+    /// </summary>
+    internal class SliderMinMaxCoercionNoEcho(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var calls = new List<double>();
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                // Phase 0: Value=25 inside [0,100]. Phase 1: Min=50 shifts the
+                // range so Value=25 is out of range. If Min= coerces Value
+                // without suppression, the echo fires. Also note the explicit
+                // Value jumps to 75 to exercise the Value= path on the same
+                // reconcile as the Min= coercion.
+                var (min, max, v) = phase == 0 ? (0.0, 100.0, 25.0) : (50.0, 100.0, 75.0);
+                return VStack(
+                    Button("Go_SL_MM", () => setPhase(1)),
+                    Slider(v, min, max, d => calls.Add(d))
+                );
+            });
+            await Harness.Render();
+            H.Check("EchoSuppress_SliderMinMax_MountNoFire", calls.Count == 0);
+
+            H.ClickButton("Go_SL_MM");
+            await Harness.Render();
+
+            var sl = H.FindControl<Slider>(_ => true);
+            H.Check("EchoSuppress_SliderMinMax_UpdateApplied",
+                sl is not null && sl.Minimum == 50.0 && sl.Value == 75.0);
+            H.Check("EchoSuppress_SliderMinMax_NoEchoCall", calls.Count == 0);
+        }
+    }
+
+    /// <summary>
+    /// Same coercion scenario for NumberBox. Min shift forces the existing
+    /// Value out of range; we must suppress that echo too.
+    /// </summary>
+    internal class NumberBoxMinMaxCoercionNoEcho(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var calls = new List<double>();
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var (min, max, v) = phase == 0 ? (0.0, 100.0, 25.0) : (50.0, 100.0, 75.0);
+                return VStack(
+                    Button("Go_NB_MM", () => setPhase(1)),
+                    NumberBox(v, d => calls.Add(d)) with { Minimum = min, Maximum = max }
+                );
+            });
+            await Harness.Render();
+            H.Check("EchoSuppress_NumberBoxMinMax_MountNoFire", calls.Count == 0);
+
+            H.ClickButton("Go_NB_MM");
+            await Harness.Render();
+
+            var nb = H.FindControl<NumberBox>(_ => true);
+            H.Check("EchoSuppress_NumberBoxMinMax_UpdateApplied",
+                nb is not null && nb.Minimum == 50.0 && nb.Value == 75.0);
+            H.Check("EchoSuppress_NumberBoxMinMax_NoEchoCall", calls.Count == 0);
+        }
+    }
+
     // ── RatingControl ─────────────────────────────────────────────────
 
     internal class RatingControlNoEcho(Harness h) : SelfTestFixtureBase(h)

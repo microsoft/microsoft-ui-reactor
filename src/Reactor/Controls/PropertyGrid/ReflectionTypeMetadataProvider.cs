@@ -75,8 +75,8 @@ public static class ReflectionTypeMetadataProvider
     /// Maps a small set of <see cref="System.ComponentModel.DataAnnotations"/>
     /// attributes onto Reactor editors/renderers:
     /// <list type="bullet">
-    ///   <item><c>[DataType(DataType.Url)]</c> on string → Hyperlink display + URL text input</item>
-    ///   <item><c>[DataType(DataType.MultilineText)]</c> on string → multi-line text (renderer only, editor left to TypeRegistry)</item>
+    ///   <item><c>[DataType(DataType.Url)]</c> on string → URL text input + Hyperlink display</item>
+    ///   <item><c>[DataType(DataType.Url)]</c> on <see cref="System.Uri"/> → Uri editor + Hyperlink display</item>
     ///   <item><c>[Range(min, max)]</c> on a numeric type → NumberBox with min/max bounds</item>
     /// </list>
     /// Returns null for either slot when no attribute dictates that slot, so

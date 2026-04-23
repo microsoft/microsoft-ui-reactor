@@ -453,9 +453,11 @@ internal static class SelfTestFixtureRegistry
         // Echo-suppression — programmatic Update* writes must not re-enter onChange
         "EchoSuppress_ColorPicker",
         "EchoSuppress_NumberBox",
+        "EchoSuppress_NumberBoxMinMaxCoercion",
         "EchoSuppress_ToggleSwitch",
         "EchoSuppress_CheckBox",
         "EchoSuppress_Slider",
+        "EchoSuppress_SliderMinMaxCoercion",
         "EchoSuppress_RatingControl",
         "EchoSuppress_DatePicker",
         "EchoSuppress_CalendarDatePicker",
@@ -1109,9 +1111,11 @@ internal static class SelfTestFixtureRegistry
         // Echo-suppression regression coverage
         "EchoSuppress_ColorPicker" => new EchoSuppressionFixtures.ColorPickerNoEcho(harness),
         "EchoSuppress_NumberBox" => new EchoSuppressionFixtures.NumberBoxNoEcho(harness),
+        "EchoSuppress_NumberBoxMinMaxCoercion" => new EchoSuppressionFixtures.NumberBoxMinMaxCoercionNoEcho(harness),
         "EchoSuppress_ToggleSwitch" => new EchoSuppressionFixtures.ToggleSwitchNoEcho(harness),
         "EchoSuppress_CheckBox" => new EchoSuppressionFixtures.CheckBoxNoEcho(harness),
         "EchoSuppress_Slider" => new EchoSuppressionFixtures.SliderNoEcho(harness),
+        "EchoSuppress_SliderMinMaxCoercion" => new EchoSuppressionFixtures.SliderMinMaxCoercionNoEcho(harness),
         "EchoSuppress_RatingControl" => new EchoSuppressionFixtures.RatingControlNoEcho(harness),
         "EchoSuppress_DatePicker" => new EchoSuppressionFixtures.DatePickerNoEcho(harness),
         "EchoSuppress_CalendarDatePicker" => new EchoSuppressionFixtures.CalendarDatePickerNoEcho(harness),
