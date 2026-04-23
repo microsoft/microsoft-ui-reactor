@@ -638,22 +638,39 @@ public static class ReactorApp
 /// </summary>
 public partial class ReactorApplication : Application, IXamlMetadataProvider
 {
-    private IXamlMetadataProvider? _controlsProvider;
+    // The Reactor library's XAML build pipeline generates
+    // Microsoft.UI.Reactor.Reactor_XamlTypeInfo.XamlMetaDataProvider — a full provider
+    // that covers ReactorDefaultResources, XamlControlsResources, ResourceDictionary,
+    // system primitives, and chains to XamlControlsXamlMetaDataProvider for control
+    // types. That generated provider is the right primary delegate: it's AOT-safe,
+    // preserves type registration via compile-time code rather than runtime reflection,
+    // and correctly handles the schema-only lookups WinUI performs during Application
+    // startup when theme dictionaries load.
+    //
+    // We resolve the generated type at runtime because referencing the generated name
+    // directly would make the C# pre-compile (run by the XAML compiler itself) fail with
+    // CS0246 — the generated class doesn't exist yet when that check runs. The
+    // DynamicDependency keeps the type alive under AOT trimming.
+    private IXamlMetadataProvider? _reactorProvider;
 
-    private IXamlMetadataProvider ControlsProvider
+    private IXamlMetadataProvider ReactorProvider => _reactorProvider ??= CreateReactorProvider();
+
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors,
+        "Microsoft.UI.Reactor.Reactor_XamlTypeInfo.XamlMetaDataProvider", "Reactor")]
+    private static IXamlMetadataProvider CreateReactorProvider()
     {
-        get
-        {
-            if (_controlsProvider == null)
-            {
-                // Activate the WinUI controls' built-in metadata provider.
-                // This knows about all control types (TextCommandBarFlyout, etc.)
-                var provider = new Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider();
-                _controlsProvider = provider;
-            }
-            return _controlsProvider;
-        }
+        var t = global::System.Type.GetType("Microsoft.UI.Reactor.Reactor_XamlTypeInfo.XamlMetaDataProvider, Reactor", throwOnError: false);
+        return t is null
+            ? new Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider()
+            : (IXamlMetadataProvider)global::System.Activator.CreateInstance(t)!;
     }
+
+    // Fallback provider covering types WinUI may look up by-string that are not in the
+    // generated library provider (e.g. user-defined types in the consuming project
+    // referenced by ResourceDictionary keys). Additive safety net — in the normal path
+    // the Reactor provider already satisfies queries.
+    private IXamlMetadataProvider? _coreProvider;
+    private IXamlMetadataProvider CoreProvider => _coreProvider ??= new Hosting.ReactorCoreXamlMetaDataProvider();
 
     /// <summary>
     /// Optional callback for unhandled exceptions. If set, called before deciding whether to handle.
@@ -665,6 +682,13 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
 
     public ReactorApplication()
     {
+        // Loads ReactorApplication.xaml (which references XamlControlsResources) via the
+        // XAML-compiled, XBF-deserialized path. Under native AOT, constructing
+        // XamlControlsResources programmatically crashes — putting it in an Application-level
+        // XAML and letting the XAML runtime activate it through LoadComponent during
+        // Application construction matches what App.xaml-based projects do and is AOT-safe.
+        InitializeComponent();
+
         UnhandledException += (_, e) =>
         {
             _logger.LogError(e.Exception, "UnhandledException: {ExceptionType}: {ExceptionMessage}", e.Exception.GetType().Name, e.Exception.Message);
@@ -677,8 +701,6 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        // Load WinUI control theme resources programmatically.
-        Resources.MergedDictionaries.Add(new XamlControlsResources());
 
         var opts = ReactorApp.Options;
         var window = new Window { Title = opts.WindowTitle };
@@ -703,9 +725,14 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         window.Activate();
     }
 
-    // IXamlMetadataProvider — delegates to the WinUI controls' built-in provider
-    // so custom control types can be resolved from XBF theme resources.
-    public IXamlType GetXamlType(Type type) => ControlsProvider.GetXamlType(type);
-    public IXamlType GetXamlType(string fullName) => ControlsProvider.GetXamlType(fullName);
-    public XmlnsDefinition[] GetXmlnsDefinitions() => ControlsProvider.GetXmlnsDefinitions();
+    // IXamlMetadataProvider — delegate to the library's generated provider (which already
+    // chains to XamlControlsXamlMetaDataProvider internally) and fall back to the core
+    // provider for any schema-only types the generated one doesn't carry. Returning null
+    // here is the WinUI convention for "unknown type" even though the WinRT interface
+    // types it as non-nullable.
+    public IXamlType GetXamlType(Type type)
+        => (ReactorProvider.GetXamlType(type) ?? CoreProvider.GetXamlType(type))!;
+    public IXamlType GetXamlType(string fullName)
+        => (ReactorProvider.GetXamlType(fullName) ?? CoreProvider.GetXamlType(fullName))!;
+    public XmlnsDefinition[] GetXmlnsDefinitions() => ReactorProvider.GetXmlnsDefinitions();
 }
