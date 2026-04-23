@@ -66,6 +66,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private Canvas? _overlayCanvas;
     private ReconcileHighlightOverlay? _highlightOverlay;
     private bool _highlightPending;
+    private List<UIElement>? _pendingMounted;
+    private List<UIElement>? _pendingModified;
 
     // Render phase timing instrumentation
     private readonly Stopwatch _phaseSw = new();
@@ -313,12 +315,21 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             // Start any connected animations now that the new tree is in the visual tree
             _reconciler.FlushConnectedAnimations();
 
-            // Schedule highlight overlay update after layout so elements have final bounds
-            if (ReactorFeatureFlags.HighlightReconcileChanges && !_highlightPending
+            // Schedule highlight overlay update after layout so elements have final bounds.
+            // Snapshot the lists now — a re-render may clear them before the callback fires.
+            if (ReactorFeatureFlags.HighlightReconcileChanges
                 && (_reconciler.LastMountedElements.Count > 0 || _reconciler.LastModifiedElements.Count > 0))
             {
-                _highlightPending = true;
-                _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, FlushHighlightOverlay);
+                var mounted = _reconciler.LastMountedElements;
+                var modified = _reconciler.LastModifiedElements;
+                (_pendingMounted ??= new(mounted.Count)).AddRange(mounted);
+                (_pendingModified ??= new(modified.Count)).AddRange(modified);
+
+                if (!_highlightPending)
+                {
+                    _highlightPending = true;
+                    _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, FlushHighlightOverlay);
+                }
             }
 
             double reconcileMs = _phaseSw.Elapsed.TotalMilliseconds;
@@ -468,22 +479,30 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
     /// <summary>
     /// Called on a low-priority dispatcher tick after reconcile so that newly
-    /// mounted elements have had a layout pass. Reads the reconciler snapshots
-    /// and draws composition overlay sprites.
+    /// mounted elements have had a layout pass. Uses snapshotted element lists
+    /// (not the reconciler's live lists, which may have been cleared by re-renders).
     /// </summary>
     private void FlushHighlightOverlay()
     {
         _highlightPending = false;
         if (_disposed || _overlayCanvas is null) return;
+        if (_pendingMounted is null && _pendingModified is null) return;
 
         _highlightOverlay ??= new ReconcileHighlightOverlay(_overlayCanvas);
 
-        var mounted = _reconciler.LastMountedElements;
-        var modified = _reconciler.LastModifiedElements;
+        var mounted = _pendingMounted;
+        var modified = _pendingModified;
+        _pendingMounted = null;
+        _pendingModified = null;
 
-        if (mounted.Count == 0 && modified.Count == 0) return;
+        if ((mounted is null || mounted.Count == 0) && (modified is null || modified.Count == 0)) return;
 
-        _highlightOverlay.Show(this, mounted, modified);
+        // Use the overlay canvas as the coordinate reference so sprite positions
+        // align with the canvas's visual space (where the composition visuals render).
+        _highlightOverlay.Show(
+            _overlayCanvas,
+            mounted ?? (IReadOnlyList<UIElement>)Array.Empty<UIElement>(),
+            modified ?? (IReadOnlyList<UIElement>)Array.Empty<UIElement>());
     }
 
     public void Dispose()
@@ -505,6 +524,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _highlightOverlay = null;
         _overlayCanvas = null;
         _wrapperRoot = null;
+        _pendingMounted = null;
+        _pendingModified = null;
         Content = null;
     }
 }
