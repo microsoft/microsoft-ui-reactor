@@ -8,9 +8,9 @@ using static Microsoft.UI.Reactor.Factories;
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
-/// Verifies that OnSelectionChanged / OnItemInvoked callbacks wired by the
-/// reconciler actually fire through to user code when the underlying WinUI
-/// control raises its native selection event.
+/// Verifies that OnSelectionChanged callbacks wired by the reconciler
+/// actually fire through to user code when the underlying WinUI control
+/// raises its native selection event.
 ///
 /// Each fixture mounts the control with a counter-incrementing callback,
 /// waits for initial mount to settle, resets the counter (initial selection
@@ -93,8 +93,7 @@ internal static class SelectionEventFixtures
                 {
                     SelectedIndex = -1,
                     OnSelectionChanged = i => { count++; lastIndex = i; },
-                    Setters = [l => l.Name = "lvSel"],
-                }
+                }.Set(l => l.Name = "lvSel")
             ));
             await Harness.Render();
 
@@ -126,8 +125,7 @@ internal static class SelectionEventFixtures
                 {
                     SelectedIndex = -1,
                     OnSelectionChanged = i => { count++; lastIndex = i; },
-                    Setters = [g => g.Name = "gvSel"],
-                }
+                }.Set(g => g.Name = "gvSel")
             ));
             await Harness.Render();
 
@@ -159,8 +157,7 @@ internal static class SelectionEventFixtures
                 {
                     SelectedIndex = 0,
                     OnSelectionChanged = i => { count++; lastIndex = i; },
-                    Setters = [f => f.Name = "fvSel"],
-                }
+                }.Set(f => f.Name = "fvSel")
             ));
             await Harness.Render();
 
@@ -192,8 +189,7 @@ internal static class SelectionEventFixtures
                 {
                     SelectedIndex = 0,
                     OnSelectionChanged = i => { count++; lastIndex = i; },
-                    Setters = [t => t.Name = "tvSel"],
-                }
+                }.Set(t => t.Name = "tvSel")
             ));
             await Harness.Render();
 
@@ -225,8 +221,7 @@ internal static class SelectionEventFixtures
                 {
                     SelectedIndex = 0,
                     OnSelectionChanged = i => { count++; lastIndex = i; },
-                    Setters = [p => p.Name = "pivSel"],
-                }
+                }.Set(p => p.Name = "pivSel")
             ));
             await Harness.Render();
 
@@ -260,8 +255,7 @@ internal static class SelectionEventFixtures
                 {
                     OnSelectionChanged = tag => { count++; lastTag = tag; },
                     IsSettingsVisible = false,
-                    Setters = [n => n.Name = "navSel"],
-                }
+                }.Set(n => n.Name = "navSel")
             ));
             await Harness.Render();
 
