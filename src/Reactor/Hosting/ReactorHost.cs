@@ -50,6 +50,9 @@ public sealed class ReactorHost : IDisposable
     // We capture the curve here so the reconcile pass can restore it.
     private Curve? _pendingAnimationCurve;
 
+    // ── Reconcile highlight overlay (gated by ReactorFeatureFlags.HighlightReconcileChanges) ──
+    private HighlightOverlayWiring? _highlightWiring;
+
     // Render phase timing instrumentation
     private readonly Stopwatch _phaseSw = new();
     private double _treeBuildSum;
@@ -313,11 +316,28 @@ public sealed class ReactorHost : IDisposable
 
             if (newControl != _currentControl)
             {
+                UIElement? contentToSet = newControl;
+                if (ReactorFeatureFlags.HighlightReconcileChanges)
+                {
+                    _highlightWiring ??= new HighlightOverlayWiring(_dispatcherQueue);
+                    contentToSet = _highlightWiring.SetContentViaWrapper(newControl);
+                }
+
                 if (ContentTarget is not null)
-                    ContentTarget.Child = newControl;
+                    ContentTarget.Child = contentToSet;
                 else
-                    _window.Content = newControl;
+                    _window.Content = contentToSet;
                 AttachThemeListener(newControl);
+            }
+            else if (ReactorFeatureFlags.HighlightReconcileChanges && _highlightWiring?.WrapperRoot is null)
+            {
+                // Flag was toggled on after initial render — install wrapper now
+                _highlightWiring ??= new HighlightOverlayWiring(_dispatcherQueue);
+                var wrapper = _highlightWiring.SetContentViaWrapper(newControl);
+                if (ContentTarget is not null)
+                    ContentTarget.Child = wrapper;
+                else
+                    _window.Content = wrapper;
             }
 
             _currentControl = newControl;
@@ -325,6 +345,9 @@ public sealed class ReactorHost : IDisposable
 
             // Start any connected animations now that the new tree is in the visual tree
             _reconciler.FlushConnectedAnimations();
+
+            // Schedule highlight overlay after layout so elements have final bounds.
+            _highlightWiring?.ScheduleHighlightFlush(_reconciler);
 
             double reconcileMs = _phaseSw.Elapsed.TotalMilliseconds;
 
@@ -509,6 +532,8 @@ public sealed class ReactorHost : IDisposable
         _funcContext = null;
         _currentTree = null;
         _currentControl = null;
+        _highlightWiring?.Dispose();
+        _highlightWiring = null;
         ReactorApp.ActiveHost = null;
     }
 
@@ -527,10 +552,18 @@ public sealed class ReactorHost : IDisposable
                 IsTextSelectionEnabled = true,
             }
         };
-        if (ContentTarget is not null)
+        if (_highlightWiring is not null)
+        {
+            _highlightWiring.TryShowErrorInWrapper(errorPanel);
+        }
+        else if (ContentTarget is not null)
+        {
             ContentTarget.Child = errorPanel;
+        }
         else
+        {
             _window.Content = errorPanel;
+        }
         _currentControl = errorPanel;
         _currentTree = null;
     }
