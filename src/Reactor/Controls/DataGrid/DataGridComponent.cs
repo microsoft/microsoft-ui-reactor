@@ -618,6 +618,19 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
                 {
                     Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                     {
+                        // Commit any in-flight edit BEFORE starting a new one.
+                        // BeginEdit unconditionally overwrites _editingValue with the
+                        // new cell's current value, which would destroy the in-flight
+                        // edit's pending value if we didn't commit first.
+                        if (state.IsEditing)
+                        {
+                            var editKey = state.EditingRowKey;
+                            var origItem = editKey is not null
+                                ? GetOriginalItem(state, editKey.Value) : default;
+                            var result = state.CommitEdit();
+                            if (result is not null && el.OnRowChanged is not null)
+                                HandleAsyncCommit(state, el, result.Value.Key, result.Value.NewItem, origItem!);
+                        }
                         state.SetFocus(capturedRow, capturedCol);
                         state.BeginEdit(capturedRow, capturedCol);
                     });
@@ -784,33 +797,39 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
 
     // ── Cell rendering ──────────────────────────────────────────────
 
+    // Shared cell padding: left, top, right, bottom. The extra right padding
+    // creates a forced gutter between adjacent columns so content — including
+    // right-aligned numbers and colored pills — can't visually merge into the
+    // neighbor cell.
+    private const double CellPadLeft = 8, CellPadTop = 4, CellPadRight = 12, CellPadBottom = 4;
+
     private static Element RenderCell(
         FieldDescriptor col, object? value, TypeRegistry registry)
     {
         if (col.CellRenderer is not null && value is not null)
-            return col.CellRenderer(value).Padding(8, 4);
+            return col.CellRenderer(value).Padding(CellPadLeft, CellPadTop, CellPadRight, CellPadBottom);
 
         if (col.FormatValue is not null)
-            return TextBlock(col.FormatValue(value)).Padding(8, 4);
+            return TextBlock(col.FormatValue(value)).Padding(CellPadLeft, CellPadTop, CellPadRight, CellPadBottom);
 
         var registryRenderer = registry.GetCellRenderer(col.FieldType);
         if (registryRenderer is not null && value is not null)
-            return registryRenderer(value).Padding(8, 4);
+            return registryRenderer(value).Padding(CellPadLeft, CellPadTop, CellPadRight, CellPadBottom);
 
         var registryFormatter = registry.GetFormatter(col.FieldType);
         if (registryFormatter is not null)
-            return TextBlock(registryFormatter(value)).Padding(8, 4);
+            return TextBlock(registryFormatter(value)).Padding(CellPadLeft, CellPadTop, CellPadRight, CellPadBottom);
 
         if (value is bool boolVal)
-            return TextBlock(boolVal ? "\u2713" : "").Padding(8, 4);
+            return TextBlock(boolVal ? "\u2713" : "").Padding(CellPadLeft, CellPadTop, CellPadRight, CellPadBottom);
 
         if (value is double d)
-            return TextBlock(d.ToString("G")).Padding(8, 4);
+            return TextBlock(d.ToString("G")).Padding(CellPadLeft, CellPadTop, CellPadRight, CellPadBottom);
 
         if (value is float f)
-            return TextBlock(f.ToString("G")).Padding(8, 4);
+            return TextBlock(f.ToString("G")).Padding(CellPadLeft, CellPadTop, CellPadRight, CellPadBottom);
 
-        return TextBlock(value?.ToString() ?? "").Padding(8, 4);
+        return TextBlock(value?.ToString() ?? "").Padding(CellPadLeft, CellPadTop, CellPadRight, CellPadBottom);
     }
 
     private static Element RenderEditingCell(
@@ -1264,7 +1283,7 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
     {
         // Vary the bar width per column so it looks organic, not uniform
         var barText = new string('\u2003', Math.Max(1, (int)(colWidth / 24)));
-        return TextBlock(barText).Padding(8, 4)
+        return TextBlock(barText).Padding(CellPadLeft, CellPadTop, CellPadRight, CellPadBottom)
             .Background("#e0e0e0").Opacity(0.5);
     }
 

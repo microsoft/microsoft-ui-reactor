@@ -184,6 +184,30 @@ public class ColumnBuilder<T>
         return this;
     }
 
+    /// <summary>
+    /// Set a custom inline editor for this column. The delegate receives the
+    /// current value and an onChange callback and returns the editor Element.
+    /// See <see cref="Editors"/> for pre-built factories.
+    /// </summary>
+    public ColumnBuilder<T> WithEditor(Func<object, Action<object>, Element> editor)
+    {
+        _descriptor = _descriptor with { Editor = editor };
+        return this;
+    }
+
+    /// <summary>Width / min / max / flex for the column.</summary>
+    public ColumnBuilder<T> Width(double? width = null, double? min = null, double? max = null, double? flex = null)
+    {
+        _descriptor = _descriptor with
+        {
+            Width = width ?? _descriptor.Width,
+            MinWidth = min ?? _descriptor.MinWidth,
+            MaxWidth = max ?? _descriptor.MaxWidth,
+            Flex = flex ?? _descriptor.Flex,
+        };
+        return this;
+    }
+
     /// <summary>Set sortable state.</summary>
     public ColumnBuilder<T> NotSortable()
     {

@@ -35,9 +35,17 @@ public class TypeRegistry
         return this;
     }
 
-    /// <summary>Try to get a registered cell renderer for a type.</summary>
+    /// <summary>
+    /// Try to get a cell renderer for a type. Falls back to built-in defaults
+    /// for common primitive/date/uri/color types so <c>AutoColumns</c> picks
+    /// up sensible display renderers without requiring explicit registration.
+    /// </summary>
     public Func<object, Element>? GetCellRenderer(Type type)
-        => _cellRenderers.TryGetValue(type, out var renderer) ? renderer : null;
+    {
+        if (_cellRenderers.TryGetValue(type, out var renderer))
+            return renderer;
+        return TryResolveCellRendererFallback(type);
+    }
 
     /// <summary>Try to get a registered formatter for a type.</summary>
     public Func<object?, string>? GetFormatter(Type type)
@@ -122,10 +130,64 @@ public class TypeRegistry
 
         if (type == typeof(bool))
         {
+            // Density-aware: PropertyGrid (Standard) renders a ToggleSwitch — it's
+            // roomier and reads better as a standalone field. DataGrid (Compact)
+            // renders a CheckBox so the cell stays dense. Both are wired via the
+            // shared Editors catalog so behavior stays consistent with any typed
+            // column factory a caller uses explicitly.
             metadata = new TypeMetadata
             {
-                Editor = (value, onChange) =>
-                    ToggleSwitch((bool)(value ?? false), v => onChange(v))
+                Editor = Editors.Toggle(),
+                CompactEditor = Editors.CheckBox(),
+            };
+            return true;
+        }
+
+        if (type == typeof(global::System.DateTime))
+        {
+            metadata = new TypeMetadata { Editor = Editors.Date() };
+            return true;
+        }
+
+        if (type == typeof(global::System.DateTimeOffset))
+        {
+            metadata = new TypeMetadata { Editor = Editors.DateOffset() };
+            return true;
+        }
+
+        if (type == typeof(global::System.DateOnly))
+        {
+            metadata = new TypeMetadata { Editor = Editors.DateOnly() };
+            return true;
+        }
+
+        if (type == typeof(global::System.TimeSpan))
+        {
+            metadata = new TypeMetadata { Editor = Editors.TimeSpanEditor() };
+            return true;
+        }
+
+        if (type == typeof(global::System.TimeOnly))
+        {
+            metadata = new TypeMetadata { Editor = Editors.TimeOnlyEditor() };
+            return true;
+        }
+
+        if (type == typeof(global::System.Uri))
+        {
+            metadata = new TypeMetadata { Editor = Editors.Uri() };
+            return true;
+        }
+
+        if (type == typeof(global::Windows.UI.Color))
+        {
+            // Standard tier (PropertyGrid) gets the full ColorPicker inline;
+            // Compact tier (DataGrid cells) gets swatch + hex text input so a
+            // cell doesn't blow up into a huge picker at row height.
+            metadata = new TypeMetadata
+            {
+                Editor = Editors.Color(),
+                CompactEditor = Editors.ColorCompact(),
             };
             return true;
         }
@@ -201,6 +263,26 @@ public class TypeRegistry
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Default cell renderers for common display types. Mirrors the fallback
+    /// pattern of <see cref="TryResolvePrimitive"/> for editors — so a
+    /// <c>AutoColumns&lt;T&gt;()</c> call on a type with a Uri or Color
+    /// property gets a hyperlink / color swatch display without any explicit
+    /// registration step.
+    /// </summary>
+    private static Func<object, Element>? TryResolveCellRendererFallback(Type type)
+    {
+        if (type == typeof(bool)) return CellRenderers.CheckMark();
+        if (type == typeof(global::System.DateTime)) return CellRenderers.Date();
+        if (type == typeof(global::System.DateTimeOffset)) return CellRenderers.Date();
+        if (type == typeof(global::System.DateOnly)) return CellRenderers.Date();
+        if (type == typeof(global::System.TimeSpan)) return CellRenderers.Time();
+        if (type == typeof(global::System.TimeOnly)) return CellRenderers.Time();
+        if (type == typeof(global::System.Uri)) return CellRenderers.Hyperlink();
+        if (type == typeof(global::Windows.UI.Color)) return CellRenderers.ColorSwatch();
+        return null;
     }
 
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "TryResolveArray uses Activator.CreateInstance; acceptable for non-AOT builds.")]

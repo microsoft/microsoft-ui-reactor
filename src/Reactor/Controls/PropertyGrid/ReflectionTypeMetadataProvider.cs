@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Data;
 
 namespace Microsoft.UI.Reactor.Controls;
@@ -45,6 +47,8 @@ public static class ReflectionTypeMetadataProvider
             setter = BuildInitOnlySetter(property);
         }
 
+        var (editorFromAttrs, rendererFromAttrs) = ResolveEditorFromDataAnnotations(property);
+
         return new FieldDescriptor
         {
             Name = property.Name,
@@ -62,8 +66,62 @@ public static class ReflectionTypeMetadataProvider
             Sortable = attrs.Sortable,
             Filterable = attrs.Filterable,
             Pin = attrs.Pin,
+            Editor = editorFromAttrs,
+            CellRenderer = rendererFromAttrs,
         };
     }
+
+    /// <summary>
+    /// Maps a small set of <see cref="System.ComponentModel.DataAnnotations"/>
+    /// attributes onto Reactor editors/renderers:
+    /// <list type="bullet">
+    ///   <item><c>[DataType(DataType.Url)]</c> on string → Hyperlink display + URL text input</item>
+    ///   <item><c>[DataType(DataType.MultilineText)]</c> on string → multi-line text (renderer only, editor left to TypeRegistry)</item>
+    ///   <item><c>[Range(min, max)]</c> on a numeric type → NumberBox with min/max bounds</item>
+    /// </list>
+    /// Returns null for either slot when no attribute dictates that slot, so
+    /// TypeRegistry-driven defaults still apply.
+    /// </summary>
+    private static (Func<object, Action<object>, Element>? Editor, Func<object, Element>? CellRenderer)
+        ResolveEditorFromDataAnnotations(PropertyInfo property)
+    {
+        Func<object, Action<object>, Element>? editor = null;
+        Func<object, Element>? renderer = null;
+
+        var dataType = property.GetCustomAttribute<DataTypeAttribute>();
+        if (dataType is not null)
+        {
+            if (dataType.DataType == DataType.Url && property.PropertyType == typeof(string))
+            {
+                editor = Editors.Text(placeholder: "https://...");
+                renderer = CellRenderers.Hyperlink();
+            }
+            else if (dataType.DataType == DataType.Url && property.PropertyType == typeof(global::System.Uri))
+            {
+                editor = Editors.Uri();
+                renderer = CellRenderers.Hyperlink();
+            }
+        }
+
+        var range = property.GetCustomAttribute<RangeAttribute>();
+        if (range is not null && IsNumericType(property.PropertyType))
+        {
+            double? min = range.Minimum is IConvertible minC
+                ? minC.ToDouble(global::System.Globalization.CultureInfo.InvariantCulture)
+                : null;
+            double? max = range.Maximum is IConvertible maxC
+                ? maxC.ToDouble(global::System.Globalization.CultureInfo.InvariantCulture)
+                : null;
+            editor = Editors.Number(property.PropertyType, min, max);
+        }
+
+        return (editor, renderer);
+    }
+
+    private static bool IsNumericType(Type t) =>
+        t == typeof(int) || t == typeof(long) || t == typeof(short) || t == typeof(byte) ||
+        t == typeof(sbyte) || t == typeof(ushort) || t == typeof(uint) || t == typeof(ulong) ||
+        t == typeof(float) || t == typeof(double) || t == typeof(decimal);
 
     private static TypeMetadata BuildMetadata([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] Type type)
     {
