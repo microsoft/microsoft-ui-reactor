@@ -298,8 +298,8 @@ internal sealed class PreviewCaptureServer : IDisposable
         }
 
         var success = SwitchComponent(componentName);
-        var resultNode = success
-            ? (JsonNode)new JsonObject { ["ok"] = true, ["component"] = componentName }
+        JsonObject resultNode = success
+            ? new JsonObject { ["ok"] = true, ["component"] = componentName }
             : new JsonObject { ["ok"] = false, ["error"] = $"Component '{componentName}' not found" };
         var resultBytes = Encoding.UTF8.GetBytes(resultNode.ToJsonString());
 
