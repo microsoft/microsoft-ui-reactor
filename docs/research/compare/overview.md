@@ -18,6 +18,7 @@ relative to the industry.
 | Competitor | [Avalonia](avalonia.md) | Windows, macOS, Linux, iOS, Android, Web, Embedded | 2023 |
 | Microsoft | WinForms | Windows | 2002 |
 | Microsoft | WPF | Windows | 2006 |
+| Microsoft | WinUI 2 | Windows (UWP: desktop, Xbox, HoloLens, Surface Hub) | 2018 |
 | Microsoft | WinUI 3 | Windows | 2021 |
 | Microsoft | [Blazor](blazor.md) | Web (+ Desktop/Mobile via Hybrid WebView) | 2020 |
 | Microsoft | Reactor | Windows (on WinUI 3) | Pre-release |
@@ -32,14 +33,16 @@ application needs, not relative to each other — an "A" means the framework
 handles this area comprehensively with minimal gaps; a "D" means critical
 functionality is missing.
 
-The Microsoft frameworks (WinForms, WPF, WinUI 3, Reactor) are rated using the
-same scale, then compared against the competitor median to identify where
-they lead, match, or lag. Reactor grades come from the existing
+The Microsoft frameworks (WinForms, WPF, WinUI 2, WinUI 3, Reactor) are rated
+using the same scale, then compared against the competitor median to identify
+where they lead, match, or lag. Reactor grades come from the existing
 [critical-review.md](../critical-review.md).
 
 **Important context:** The competitors are cross-platform or single-vendor-
 platform frameworks with billions of dollars of investment and millions of
 developers. WinForms and WPF are 20+ year old frameworks in maintenance mode.
+WinUI 2 is the NuGet-delivered UWP control library — servicing-only as of 2025,
+but still the only modern Fluent path on Xbox, HoloLens, and Surface Hub.
 WinUI 3 is actively developed but Windows-only. Reactor is a pre-release
 experimental framework. The comparison is intentionally unfair — the goal is
 to understand the gap, not to declare winners.
@@ -100,27 +103,27 @@ to understand the gap, not to declare winners.
 
 ### Microsoft Frameworks
 
-| Category | WinForms | WPF | WinUI 3 | Blazor | Reactor |
-|---|---|---|---|---|---|
-| **Declarative Syntax** | F | C+ | C+ | B+ | B |
-| **Component Architecture** | D | B- | B- | B | B+ |
-| **State & Reactivity** | D | B | B | C+ | B+ |
-| **Rendering & Performance** | C+ | B | B+ | B | B- |
-| **Layout** | D+ | A- | A- | B+ | B+ |
-| **Styling & Theming** | D | A- | A | B | B- |
-| **Navigation** | F | C | C+ | B | B+ |
-| **Animation** | F | B+ | A | C | B- |
-| **Accessibility** | D+ | A- | A | B | B |
-| **Input & Gestures** | C | B+ | B+ | B+ | B |
-| **Developer Experience** | B | B- | B- | B | B |
-| **Platform Reach** | D | D | D | B+ | D |
-| **Testing** | D+ | B | B- | A- | B- |
-| **Error Handling** | C | C | C | B+ | B |
-| **Data Loading & Async** | D+ | B | B | B+ | B+ |
-| **Lists & Virtualization** | C+ | A- | A- | B+ | B+ |
-| **Internationalization** | C+ | B | B+ | B+ | B+ |
-| **Interop & Adoption** | B+ | A- | B+ | A- | A- |
-| **Forms & Data Entry** | B | A | B | A- | B |
+| Category | WinForms | WPF | WinUI 2 | WinUI 3 | Blazor | Reactor |
+|---|---|---|---|---|---|---|
+| **Declarative Syntax** | F | C+ | C+ | C+ | B+ | B |
+| **Component Architecture** | D | B- | B- | B- | B | B+ |
+| **State & Reactivity** | D | B | B | B | C+ | B+ |
+| **Rendering & Performance** | C+ | B | B | B+ | B | B- |
+| **Layout** | D+ | A- | A- | A- | B+ | B+ |
+| **Styling & Theming** | D | A- | A- | A | B | B- |
+| **Navigation** | F | C | C+ | C+ | B | B+ |
+| **Animation** | F | B+ | A- | A | C | B- |
+| **Accessibility** | D+ | A- | A | A | B | B |
+| **Input & Gestures** | C | B+ | B+ | B+ | B+ | B |
+| **Developer Experience** | B | B- | C+ | B- | B | B |
+| **Platform Reach** | D | D | D+ | D | B+ | D |
+| **Testing** | D+ | B | C+ | B- | A- | B- |
+| **Error Handling** | C | C | C | C | B+ | B |
+| **Data Loading & Async** | D+ | B | B | B | B+ | B+ |
+| **Lists & Virtualization** | C+ | A- | A- | A- | B+ | B+ |
+| **Internationalization** | C+ | B | B+ | B+ | B+ | B+ |
+| **Interop & Adoption** | B+ | A- | C+ | B+ | A- | A- |
+| **Forms & Data Entry** | B | A | B | B | A- | B |
 
 ---
 
@@ -142,6 +145,13 @@ constructors are the weakest of the four but still declarative.
 - **WPF (C+):** XAML is declarative but verbose. Angle brackets, explicit
   closing tags, and namespace declarations add noise. Decades old but
   functional
+- **WinUI 2 (C+):** UWP XAML dialect, identical parser and schema to WinUI 3.
+  `x:Bind` compiled bindings, `x:Phase`, `x:Load`. Because WinUI 2 layers
+  `Microsoft.UI.Xaml.Controls.*` over the in-box `Windows.UI.Xaml` framework,
+  apps must alias the namespace (`xmlns:muxc="using:Microsoft.UI.Xaml.Controls"`)
+  to disambiguate the NuGet-shipped WinUI 2 controls from the identically-named
+  UWP-SDK controls — a stylistic wart specific to WinUI 2 that WinUI 3 removed
+  by making `Microsoft.UI.Xaml` first-class
 - **WinUI 3 (C+):** Same XAML model as WPF/UWP with minor improvements.
   `x:Bind` is compile-time checked (unlike WPF's runtime binding), which
   is a genuine advantage, but the syntax is equally verbose
@@ -176,6 +186,11 @@ Flutter's StatefulWidget two-class pattern is the most verbose.
 - **WPF (B-):** MVVM enables clean separation. Controls are classes with
   DependencyProperty. DataTemplate enables data-driven composition. Verbose
   but architecturally sound
+- **WinUI 2 (B-):** Same UWP-XAML component model as WinUI 3 —
+  `DependencyProperty`/`DependencyObject` base in `Windows.UI.Xaml`, composite
+  WinUI 2 controls layered on top from the NuGet package. `UserControl`,
+  templated controls, and DataTemplate for data-driven composition. Community
+  Toolkit MVVM source generators work identically here. No hook equivalent
 - **WinUI 3 (B-):** Same model as WPF with `x:Bind` improvements. Community
   Toolkit MVVM source generators reduce boilerplate significantly
 - **Blazor (B):** Class-based `ComponentBase` with `[Parameter]`/
@@ -205,6 +220,11 @@ libraries. Flutter provides only `setState()`.
 - **WinForms (D):** Manual property setting. Limited data binding
 - **WPF (B):** DependencyProperty + INotifyPropertyChanged + rich binding
   engine. Architecturally sound but verbose. ReactiveUI brings Rx integration
+- **WinUI 2 (B):** `x:Bind` compiled bindings, `INotifyPropertyChanged`,
+  `ObservableCollection<T>`, `ICommand`, `x:Load` for lazy element
+  realization. CommunityToolkit.Mvvm `[ObservableProperty]` and
+  `[RelayCommand]` source generators work identically. Functionally
+  equivalent to WinUI 3 at the reactivity layer
 - **WinUI 3 (B):** `x:Bind` (compiled) is faster and safer than WPF's
   reflection-based binding. CommunityToolkit.Mvvm source generators
   (`[ObservableProperty]`) dramatically reduce boilerplate
@@ -263,6 +283,13 @@ concurrent rendering with priority scheduling. SwiftUI's AttributeGraph.
 - **WPF (B):** DirectX retained-mode rendering. GPU-accelerated transforms
   and animations. Higher memory (40-80MB), slower startup (1-3s cold).
   VirtualizingStackPanel for lists
+- **WinUI 2 (B):** Runs on `Windows.UI.Xaml` + CoreWindow inside the UWP
+  AppContainer sandbox. Same DirectComposition / `Windows.UI.Composition`
+  pipeline as UWP with the independent animation thread. `x:Phase` and
+  `ItemsRepeater` available. UWP lifecycle (Suspend/Resume) and AppContainer
+  broker overhead cost a little vs WinUI 3 on heavy desktop scenarios; for
+  typical LOB UIs the runtime perf is competitive. AOT compilation via
+  CsWinRT 2.2.0 + .NET 9 became usable in WinUI 2.8.7 (Feb 2025)
 - **WinUI 3 (B+):** Composition layer provides independent animation thread
   at 60fps even when UI thread is blocked. Better than WPF for modern
   scenarios. `x:Phase` for incremental list loading
@@ -299,6 +326,11 @@ system). Flutter's constraint model is powerful but has a steep learning curve.
   Canvas). Two-pass Measure/Arrange. Custom panels via MeasureOverride/
   ArrangeOverride. This is WPF's strongest area — architecturally on par with
   modern frameworks
+- **WinUI 2 (A-):** Same panel inventory as UWP/WinUI 3: Grid, StackPanel,
+  RelativePanel, VariableSizedWrapGrid, Canvas, plus `AdaptiveTrigger` for
+  responsive breakpoints driven by `VisualStateManager`. `ItemsRepeater`
+  layouts (StackLayout, UniformGridLayout, FlowLayout) ship in WinUI 2.
+  Parity with WinUI 3 at the layout primitive level
 - **WinUI 3 (A-):** Inherits WPF's panel model plus RelativePanel (constraint-
   based) and AdaptiveTrigger for responsive layouts. Strong
 - **Blazor (B+):** Delegates entirely to CSS — Flexbox, Grid, container queries.
@@ -343,6 +375,13 @@ Material-centric.
   ControlTemplate, DataTemplate, Triggers, ResourceDictionary. Can completely
   redefine any control's visual tree. The power is unmatched but verbosity
   is extreme (50+ lines for a custom button)
+- **WinUI 2 (A-):** Fluent Design styling with the `XamlControlsResources`
+  dictionary. Mica brush shipped in WinUI 2.6 (June 2021) — before it landed
+  in WinUI 3. Acrylic, RevealBrush, and Reveal focus available. Lightweight
+  styling via resource-key overrides. ThemeResource light/dark/high-contrast
+  works identically. Behind WinUI 3 (A) only because new Fluent refinements
+  and updated expressive-design tokens are landing in WinUI 3 first; WinUI 2
+  is frozen at the 2.8 visual language
 - **WinUI 3 (A):** Fluent Design with Mica/Acrylic materials. Lightweight
   styling (override resources without re-templating). ThemeResource for
   automatic light/dark/high-contrast. This is a genuine strength
@@ -399,6 +438,13 @@ notoriously complex.
 - **WinForms (F):** No navigation framework. MDI or manual form swapping
 - **WPF (C):** NavigationWindow/Frame/Page exists but rarely used. Most apps
   use MVVM navigation via ContentControl + DataTemplate
+- **WinUI 2 (C+):** Same `NavigationView` + `Frame.Navigate(typeof(Page))`
+  pattern — NavigationView was actually introduced in WinUI 2 (2.0), then
+  inherited by WinUI 3. `BreadcrumbBar` (WinUI 2.6) is also an in-package
+  navigation primitive. UWP `ApplicationView`-based multi-window is more
+  awkward than WinUI 3's HWND-per-window. Back-stack management via `Frame`
+  and UWP's `SystemNavigationManager.BackRequested`. No type-safe route
+  parameters
 - **WinUI 3 (C+):** NavigationView + Frame.Navigate(typeof(Page)). Functional
   but imperative and not type-safe for parameters
 - **Blazor (B):** `@page "/products/{id:int}"` directive with route constraints
@@ -452,6 +498,14 @@ has no built-in animation.
 - **WPF (B+):** Storyboard/Timeline animation with GPU acceleration, easing
   functions, PropertyPath targeting. Blend provides visual timeline editor.
   Architecturally strong but API is verbose
+- **WinUI 2 (A-):** Full `Windows.UI.Composition` API — ExpressionAnimations,
+  ImplicitAnimations, SpringAnimations, connected animations via
+  `ConnectedAnimationService`, Lights, Shadows. `AnimatedVisualPlayer` for
+  Lottie-Windows playback shipped in WinUI 2.1; `AnimatedIcon` (WinUI 2.6)
+  brings Lottie into control templates. `AnimationOptimization` added in
+  WinUI 2.8. This is essentially the same animation stack as WinUI 3; half
+  a grade behind (A-) only because the composition layer's newer desktop-
+  specific extensions are landing in WinUI 3 first and WinUI 2 is frozen
 - **WinUI 3 (A):** Composition API provides independent animation thread,
   implicit animations, connected animations, expression animations, spring
   animations. **Best animation system of any Microsoft framework and
@@ -515,6 +569,12 @@ gaps on web.
 - **WinForms (D+):** MSAA (older API). Limited automation support
 - **WPF (A-):** Full UIA support. AutomationPeer for every control. Custom
   peers for custom controls. Screen readers work well. This is a strength
+- **WinUI 2 (A):** Full UIA support — inherits UWP's accessibility
+  implementation unchanged. All WinUI 2 controls ship with AutomationPeer
+  implementations. Narrator, Voice Access, Magnifier, and High Contrast
+  themes work out of the box. WinUI 2.8 release notes explicitly call out
+  accessibility and high-contrast improvements. Functionally identical to
+  WinUI 3 here
 - **WinUI 3 (A):** Full UIA support, same as UWP. All standard controls
   accessible. High contrast mode via theme resources. Narrator integration
   is strong. Competitive with SwiftUI
@@ -592,6 +652,12 @@ capable. React has no built-in gesture system.
 - **WPF (B+):** Rich input system: mouse, keyboard, touch, stylus, multi-touch.
   Command binding for keyboard shortcuts. Manipulation events for pinch/rotate.
   UIElement.Focus() for focus management
+- **WinUI 2 (B+):** Same UIElement pointer/keyboard/tap/holding event surface
+  as WinUI 3, inherited from `Windows.UI.Xaml`. `GestureRecognizer` for manual
+  gesture pipelines, `ManipulationDelta` for multi-touch pinch/rotate, touch
+  and pen parity. `XYFocus` directional navigation is available and is a
+  genuine strength for Xbox / 10-foot UI. Same composition interaction tracker
+  for smooth gesture-driven animation
 - **WinUI 3 (B+):** Same as WPF with improved touch/pen support. Composition
   interaction for smooth gesture-driven animations
 - **Blazor (B+):** Typed event argument types (`MouseEventArgs`,
@@ -674,6 +740,17 @@ and Preview are excellent.
 - **WPF (B-):** XAML designer, XAML Hot Reload (UI only), Live Visual Tree.
   But steep learning curve (XAML verbosity, DependencyProperty, MVVM
   boilerplate). Blend for animations
+- **WinUI 2 (C+):** XAML designer for UWP in VS 2019/2022, XAML Hot Reload,
+  Live Visual Tree, Live Property Explorer. But: XAML Hot Reload on UWP has
+  narrower coverage than on desktop (resource-dictionary edits and many
+  template changes still require redeploy). C# Edit-and-Continue on UWP was
+  historically hobbled by .NET Native compilation; CsWinRT projections on
+  .NET 9 (introduced in WinUI 2.8.7, Feb 2025) improved the story but it
+  still lags WinUI 3's modern .NET desktop Hot Reload. UWP deployment is
+  slower than desktop (appx build + deploy + AppContainer launch). Visual
+  Studio's UWP workload got renamed to "WinUI application development"
+  in VS 17.10 (May 2024), with Microsoft messaging a deliberate steer toward
+  WinUI 3
 - **WinUI 3 (B-):** XAML Hot Reload, Live Visual Tree. But packaging complexity,
   deployment issues, smaller community for troubleshooting. Documentation
   has gaps for advanced scenarios
@@ -746,6 +823,13 @@ SwiftUI covers all Apple platforms.
 - **WinForms, WPF, WinUI 3, Reactor (D):** Windows only. Full stop. WPF and
   WinForms have no cross-platform story. WinUI 3 is Windows-only by design.
   Reactor inherits WinUI 3's limitation
+- **WinUI 2 (D+):** Windows-only, but **the only framework in this analysis
+  that ships to Xbox, HoloLens / HoloLens 2, and Surface Hub** via UWP's
+  device-family model. Also the only Fluent-design option for remaining IoT
+  Core devices. Half a grade above WinUI 3/Reactor on pure "number of Windows
+  device families" — at the cost of being locked to UWP's AppContainer. Does
+  not run on Windows 7/8; min OS is Windows 10 1809 (build 17763) since
+  WinUI 2.8. Still single-vendor, single-ecosystem
 - **Blazor (B+):** **The only Microsoft framework with genuine cross-platform
   reach.** Same Razor components run on Web (Server/WASM), Windows (WPF,
   WinForms, MAUI), Mac/iOS/Android (MAUI) via `BlazorWebView`. Caveat: Hybrid
@@ -763,6 +847,11 @@ its desktop story.
 
 **Gap:** This is the largest gap between Microsoft's *native* frameworks and
 competitors. WinForms, WPF, WinUI 3, and Reactor target one platform.
+WinUI 2 is still Windows-only but is the only first-party framework reaching
+Xbox, HoloLens, and Surface Hub (via UWP's device-family model) — a
+non-trivial distinction for console, mixed-reality, and meeting-room
+scenarios, even though none of those are "cross-platform" in the iOS/
+Android/macOS sense.
 **Blazor Hybrid is the only first-party Microsoft framework that targets
 multiple platforms** — at the cost of rendering in a WebView rather than
 native controls. Avalonia provides a cross-platform native-ish path for .NET
@@ -787,6 +876,13 @@ is fast and comprehensive. SwiftUI has the weakest testing story.
   testing via WinAppDriver/FlaUI
 - **WPF (B):** MVVM enables excellent ViewModel unit testing. UI testing via
   WinAppDriver/FlaUI. Binding errors are silent at runtime (a testing gap)
+- **WinUI 2 (C+):** Same MVVM + `x:Bind` compile-time checking as WinUI 3.
+  UI automation via WinAppDriver and legacy `Microsoft.Windows.Apps.Test`
+  (TAEF). But the UWP AppContainer lifecycle complicates test orchestration —
+  test runners must be UWP-packaged or use broker processes, and Suspend/
+  Resume events are implicit state machines that test harnesses have to
+  accommodate. Community tooling (WinUITest, Appium UWP driver) exists but
+  is thinner than the desktop equivalent
 - **WinUI 3 (B-):** MVVM + `x:Bind` compile-time checking catches binding
   errors. UI testing via WinAppDriver. Test infrastructure still evolving
 - **Blazor (A-):** **bUnit is the best testing story in the Microsoft
@@ -822,6 +918,11 @@ view errors.
   No granular recovery
 - **WPF (C):** Dispatcher.UnhandledException. Silent binding errors (a mixed
   blessing). No error boundary concept
+- **WinUI 2 (C):** `Application.UnhandledException` on the UWP `Application`
+  class. `x:Bind` compile-time checking prevents binding errors. UWP's
+  Suspend/Resume lifecycle implicitly masks some error recovery — a handler
+  throwing during navigation typically tears down the page rather than
+  isolating the fault. No error boundary concept
 - **WinUI 3 (C):** Application.UnhandledException. `x:Bind` compile-time
   checking prevents binding errors. No error boundary
 - **Blazor (B+):** `<ErrorBoundary>` component with `Recover()` method. Puts
@@ -857,6 +958,12 @@ runtime. Flutter's `FutureBuilder` is built-in but considered low-level.
   `SynchronizationContext` auto-marshals to UI thread. `IsBusy` property
   pattern. CommunityToolkit.Mvvm's `IAsyncRelayCommand` provides `IsRunning`.
   ReactiveUI provides reactive command lifecycle
+- **WinUI 2 (B):** Same async/await pattern. UWP's `CoreDispatcher` and
+  `DispatcherQueue` marshal to UI thread. `ISupportIncrementalLoading` is a
+  first-class UWP contract that `ListViewBase` (and WinUI 2's `ItemsRepeater`)
+  consume automatically for cursor-pagination. IAsyncOperation/IAsyncAction
+  WinRT types are idiomatic. No lifecycle-scoped async primitive; no built-in
+  caching, retry, or Suspense-style framework
 - **WinUI 3 (B):** Same async/await + MVVM pattern as WPF with
   `DispatcherQueue` instead of `Dispatcher`. `ISupportIncrementalLoading`
   for automatic pagination in lists. No built-in async loading framework
@@ -926,6 +1033,13 @@ React has **no built-in virtualization** — a genuine gap.
   for sorting, filtering, grouping. Virtualized grouping (since .NET 4.5).
   Deferred scrolling. `DataGrid` column+row virtualization. This is one of
   WPF's strongest areas
+- **WinUI 2 (A-):** `ItemsRepeater` was **introduced in WinUI 2.1** (April
+  2019) before WinUI 3 existed. `ListView`/`GridView` with container
+  recycling, `x:Phase` for incremental loading, `ContainerContentChanging`
+  for efficient row reuse, `ISupportIncrementalLoading` for automatic
+  pagination. Community Toolkit ships `DataGrid` for the WinUI 2 / UWP
+  flavor. No built-in grouping-with-virtualization story as rich as WPF's
+  `ICollectionView`. Parity with WinUI 3 here
 - **WinUI 3 (A-):** `ItemsRepeater` (flexible virtualizing layout) + `ListView`/
   `GridView` with container recycling. `x:Phase` for incremental loading.
   `ContainerContentChanging` for efficient recycling. `ISupportIncrementalLoading`
@@ -980,6 +1094,12 @@ has no built-in i18n.
 - **WPF (B):** `.resx` + `x:Static` binding. Satellite assemblies. No built-in
   plural/gender. RTL via `FlowDirection`. Dynamic switching requires UI reload
   or INPC wrapper on resources
+- **WinUI 2 (B+):** Same UWP i18n stack: `.resw` resource files, MRT (Modern
+  Resource Technology, i.e. `resources.pri`), `x:Uid` for XAML-level resource
+  binding, `ResourceLoader` / `ResourceManager` for programmatic access.
+  `ApplicationLanguages.PrimaryLanguageOverride` enables per-app language
+  switching without a logoff. RTL via `FlowDirection`. No built-in CLDR
+  plural/gender — same gap as WPF/WinUI 3
 - **WinUI 3 (B+):** `.resw` + MRT (Modern Resource Technology). `x:Uid` for
   XAML resource binding. `ResourceLoader` for code access. No plural/gender
   built-in. `ApplicationLanguages.PrimaryLanguageOverride` for per-app language.
@@ -1018,6 +1138,21 @@ is mature. Flutter's add-to-app works but platform views are costly.
 - **WPF (A-):** `ElementHost`/`WindowsFormsHost` for bidirectional WinForms
   interop. `HwndHost` for Win32. Rich COM interop. Can embed in and host from
   WinForms. Mature migration path from WinForms
+- **WinUI 2 (C+):** **XAML Islands is WinUI 2's headline interop** — WPF,
+  WinForms, and C++ Win32 apps can host WinUI 2 controls via
+  `WindowsXamlHost` and the Community Toolkit's wrapped controls
+  (`Microsoft.Toolkit.Wpf.UI.XamlHost`, `Microsoft.Toolkit.Forms.UI.XamlHost`).
+  `InkCanvas`, `MediaPlayerElement`, and `MapControl` have first-class
+  WPF/WinForms wrappers. **But three real limitations:** (1) XAML Islands
+  hosting only supports **.NET Core 3.x** hosts — **not** .NET Framework
+  and **not** modern .NET 5+, which effectively froze this path for new
+  work; (2) the UWP AppContainer sandbox restricts arbitrary Win32 P/Invoke
+  to the broker-mediated surface, so true native interop requires Desktop
+  Bridge; (3) `x:Bind` is not supported inside hosted XAML Islands content.
+  WinRT contract-based API access (Bluetooth, Geolocation, Sensors) is
+  first-class via capability declarations in `Package.appxmanifest`. WebView2
+  became available only in WinUI 2.8 (July 2022). Net result: the interop
+  story is real but stuck at the end of the .NET Core 3.x era
 - **WinUI 3 (B+):** XAML Islands for WPF/WinForms hosting. WebView2 for web
   content. `AppWindow` for Win32 access. Migration from UWP is non-trivial
   (sandbox removal, API changes)
@@ -1075,6 +1210,13 @@ built-in validation.
   level validation. `ErrorTemplate` for custom error visuals. `BindingGroup`
   for transactional edits. `IValueConverter`/`IMultiValueConverter` for
   transforms. This is WPF's strongest category relative to competitors
+- **WinUI 2 (B):** `x:Bind` compiled two-way binding. `NumberBox` with
+  min/max/increment validation shipped in WinUI 2.3 (Nov 2019). No built-in
+  validation framework — CommunityToolkit.Mvvm's `ObservableValidator` and
+  `DataAnnotations` attributes fill the gap identically to WinUI 3. `XYFocus`
+  directional navigation is particularly relevant here since WinUI 2 is the
+  only modern stack for Xbox 10-foot forms. `InputScope` hints for touch
+  keyboards. Functional parity with WinUI 3 at the primitive level
 - **WinUI 3 (B):** `x:Bind` compiled two-way binding. `NumberBox` with built-in
   min/max/increment validation. No built-in validation framework (unlike WPF).
   CommunityToolkit.Mvvm's `ObservableValidator` fills the gap. `XYFocus` for
@@ -1353,6 +1495,120 @@ in layout, styling, accessibility, forms, and virtualized lists remains
 competitive or superior to modern alternatives. The gap is in ergonomics
 and developer experience, not in what's possible.
 
+### WinUI 2 — "The NuGet Backport"
+
+**Best for:** UWP applications that need modern Fluent controls and
+backward compatibility to older Windows 10 builds. The only first-party
+Fluent/WinUI path for Xbox, HoloLens / HoloLens 2, Surface Hub, and
+remaining Windows 10 IoT Core estate. Existing LOB apps invested in the
+UWP runtime that are not ready for a WinUI 3 port.
+
+**Profile:** Ships as the `Microsoft.UI.Xaml` NuGet package (plus the
+lower-level `Microsoft.UI.Xaml.Core.Direct` for middleware). Controls live
+in `Microsoft.UI.Xaml.Controls` but base types (`UIElement`,
+`FrameworkElement`, `DependencyObject`, `Window`) come from the in-box
+`Windows.UI.Xaml` UWP framework. The NuGet package layers composite,
+newer-Fluent controls on top of the stable UWP XAML primitive — which is
+why the same code renders identically on Windows 10 1809 and Windows 11.
+
+Three properties that matter:
+
+1. **Backport compatibility.** `NavigationView`, `TabView`, `TreeView`,
+   `ColorPicker`, `TeachingTip`, `ItemsRepeater`, `NumberBox`,
+   `RadioButtons`, `InfoBar`, `Expander`, `BreadcrumbBar`, `ImageIcon`,
+   `AnimatedIcon`, `PipsPager`, `Mica`, `InfoBadge`, `WebView2` — all
+   introduced in WinUI 2 releases (2.0 through 2.8) and available on every
+   targeted Windows 10 build via the NuGet package without OS updates
+2. **Unique device-family reach.** Xbox, HoloLens, and Surface Hub do not
+   run WinUI 3. They run UWP. WinUI 2 is the only modern Fluent design
+   language on those device families
+3. **Still maintained, servicing-only.** WinUI 2.8.7 (February 5, 2025) is
+   the current latest — a servicing release whose headline is new .NET 9 +
+   Native AOT projections via CsWinRT 2.2.0, keeping WinUI 2 usable on
+   modern .NET without breaking UWP packaging. No WinUI 2.9 has been
+   announced. No formal end-of-life date has been published
+
+**Version history at a glance:**
+
+| Version | Released | Highlights |
+|---|---|---|
+| 2.0 | Oct 2018 | Initial release; Fluent controls for UWP |
+| 2.1 | Apr 2019 | Open-source on GitHub; ItemsRepeater, TeachingTip, AnimatedVisualPlayer |
+| 2.2–2.3 | 2019 | TabView; NumberBox, RadioButtons |
+| 2.4 | May 2020 | Lottie-based ProgressRing, hierarchical NavigationView |
+| 2.5 | Dec 2020 | InfoBar, NavigationView FooterMenuItems |
+| 2.6 | Jun 2021 | **Mica**, Expander, BreadcrumbBar, ImageIcon, AnimatedIcon, PipsPager |
+| 2.7 | Sep 2021 | InfoBadge, horizontal ColorPicker |
+| 2.8 | Jul 2022 | **WebView2**, AnimationOptimization; min OS bumped to Win10 1809 |
+| 2.8.3–2.8.7 | 2023–2025 | Servicing; .NET 9 + Native AOT via CsWinRT 2.2.0 |
+
+**Competitive position:** WinUI 2 and WinUI 3 are the **same XAML dialect,
+same controls, same reactivity model, same accessibility, same animation
+stack, same layout primitives**. They differ in the *platform* underneath.
+WinUI 2 lives in UWP's AppContainer sandbox with `Windows.UI.Xaml` as the
+framework core; WinUI 3 lives in full Win32 with `Microsoft.UI.Xaml` as
+the entire framework, shipped out-of-band in the Windows App SDK. For new
+desktop apps, WinUI 3 is Microsoft's official recommendation and the path
+where all new features and tooling improvements land. WinUI 2 is the right
+choice only when you specifically need UWP reach (Xbox / HoloLens /
+Surface Hub) or are extending an existing UWP codebase. On the
+[VS workload rename](https://visualstudiomagazine.com/articles/2024/07/02/winui-focus.aspx)
+in VS 17.10 (May 2024), Microsoft made this steer explicit: the "Universal
+Windows Platform development" workload was replaced by "WinUI application
+development," with UWP tools accessible as a sub-option rather than a
+peer.
+
+**Gaps vs WinUI 3 (the migration surface):**
+
+- **App model:** UWP AppContainer vs packaged/unpackaged Win32 desktop.
+  WinUI 3 runs with full Win32 reach by default
+- **Namespace & framework:** WinUI 2 = `Windows.UI.Xaml` (in-box) +
+  `Microsoft.UI.Xaml` (NuGet, composite controls). WinUI 3 =
+  `Microsoft.UI.Xaml` fully, no in-box dependency
+- **Windowing:** UWP's `ApplicationView`/CoreWindow model (awkward multi-
+  window) vs WinUI 3's `Microsoft.UI.Xaml.Window` with normal HWND-per-
+  window
+- **Win32 interop:** Broker-mediated, capability-gated in WinUI 2
+  (limited P/Invoke); unrestricted in WinUI 3
+- **Deployment:** AppX/MSIX Store or Desktop Bridge for WinUI 2; MSIX,
+  unpackaged, traditional installers, or Store for WinUI 3
+- **XAML Islands:** WinUI 2 content hosts in WPF/WinForms via
+  `WindowsXamlHost`, but only **.NET Core 3.x** hosts are supported —
+  not modern .NET 5+. This froze the WinUI 2 interop path for new work
+- **Hot Reload:** WinUI 3 gets richer modern .NET desktop Hot Reload;
+  WinUI 2 is constrained by UWP's narrower coverage and slower deploy
+  cycle
+- **Feature velocity:** All new controls and framework features land in
+  WinUI 3 / Windows App SDK; WinUI 2 is servicing-only
+- **Declarative-model gaps (same as WinUI 3):** no hooks, no function-as-
+  component, no error boundary, no lifecycle-scoped async, no automatic
+  reactivity tracking. WinUI 2 carries every WinUI 3 declarative-model
+  gap *plus* the UWP-sandbox constraints
+
+**Gaps vs Reactor (on top of the shared WinUI-3 declarative-model gaps):**
+
+- Reactor is built against WinUI 3 / Windows App SDK. **Reactor does not
+  target UWP and does not run on WinUI 2 device families** (Xbox,
+  HoloLens, Surface Hub). Reactor's interop story (`ReactorHostControl`,
+  `XamlIslandControl`) plugs into WinUI 3 and WinForms — not WinUI 2
+  content inside UWP apps
+- No declarative component model, no hooks (`UseState`, `UseEffect`,
+  `UseContext`, `UseResource`), no ErrorBoundary, no type-safe navigation
+  with typed routes and deep linking, no commanding system, no
+  SemanticPanel, no AccessibilityScanner, no ICU plural/gender, no
+  FlexPanel, no MCP devtools, no async data subsystem (UseResource /
+  UseMutation / QueryCache), no FormField + ValidationVisualizer
+- For a team on WinUI 2 that wants Reactor's programming model, the only
+  path is a WinUI 3 migration first, then Reactor adoption — UWP is the
+  end of the road for declarative Reactor-style UI on Microsoft's stack
+
+**Net:** WinUI 2 is a well-maintained backport library with the strongest
+Fluent control set of any Microsoft framework at its release points, and
+it remains the only path to Xbox / HoloLens / Surface Hub Fluent UIs.
+Architecturally it is WinUI 3 minus the Win32 desktop reach, minus the
+modern windowing model, minus the forward-feature pipeline, minus the
+Reactor-ecosystem programming model.
+
 ### WinUI 3 — "The Modern Platform"
 
 **Best for:** New Windows apps requiring Fluent Design, modern animation,
@@ -1565,6 +1821,13 @@ the most powerful animation system across all frameworks analyzed. The gap
 is in developer experience and the declarative programming model, not in
 the underlying platform.
 
+**And WinUI 2 is still the only first-party Fluent path to Xbox, HoloLens,
+and Surface Hub.** WinUI 2.8.7 (Feb 2025) added .NET 9 + Native AOT
+projections via CsWinRT 2.2.0, keeping the UWP-delivery story modern even
+while WinUI 2 remains servicing-only. For apps that specifically need
+those device families, WinUI 2 is not legacy — it is the shipped answer.
+Everyone else should target WinUI 3.
+
 ### 3. Blazor is Reactor's closest cousin — but the bets are opposite
 
 Blazor and Reactor are both C#-first declarative component frameworks in the
@@ -1706,6 +1969,14 @@ Every framework has embarrassing gaps:
   model is a generation behind function-as-component
 - **WPF:** No hot reload for code, MVVM boilerplate, in maintenance mode,
   no lifecycle-scoped async
+- **WinUI 2:** Stuck in UWP AppContainer sandbox, servicing-only since 2022
+  (WinUI 2.8 was the last feature release; 2.8.7 in Feb 2025 was a .NET 9 /
+  Native AOT enablement), XAML Islands path to WPF/WinForms is frozen at
+  .NET Core 3.x (not modern .NET), UWP multi-window via `ApplicationView`
+  is awkward, Hot Reload is narrower than desktop .NET, WebView2 only
+  arrived in 2.8 (July 2022), namespace-disambiguation boilerplate
+  (`xmlns:muxc`) in every XAML file. No new controls on any roadmap — all
+  new investment is on WinUI 3
 - **WinUI 3:** Packaging complexity, small community, Windows-only, no
   plural/gender i18n
 - **Blazor:** Manual `StateHasChanged` (no auto-reactivity), no component
@@ -1760,11 +2031,20 @@ most for your specific application.
 - [Microsoft Learn: WinForms Overview](https://learn.microsoft.com/en-us/dotnet/desktop/winforms/overview)
 - [Microsoft Learn: WPF Architecture](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/advanced/wpf-architecture)
 - [Microsoft Learn: Windows App SDK](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/)
+- [Microsoft Learn: WinUI 2 (UWP applications)](https://learn.microsoft.com/en-us/windows/apps/winui/winui2/)
+- [Microsoft Learn: WinUI 2 release notes](https://learn.microsoft.com/en-us/windows/apps/winui/winui2/release-notes/)
+- [Microsoft Learn: WinUI 2.8 release notes](https://learn.microsoft.com/en-us/windows/apps/winui/winui2/release-notes/winui-2.8)
+- [Microsoft Learn: Get started with WinUI 2 for UWP](https://learn.microsoft.com/en-us/windows/apps/winui/winui2/getting-started)
+- [microsoft/microsoft-ui-xaml (GitHub)](https://github.com/microsoft/microsoft-ui-xaml)
+- [Microsoft.UI.Xaml on NuGet](https://www.nuget.org/packages/Microsoft.UI.Xaml)
+- [WinUI 2.8.7 release notes (GitHub)](https://github.com/microsoft/microsoft-ui-xaml/releases/tag/v2.8.7)
 - [Microsoft Learn: WinUI 3](https://learn.microsoft.com/en-us/windows/apps/winui/winui3/)
 - [Microsoft Learn: Blazor](https://learn.microsoft.com/en-us/aspnet/core/blazor/)
 - [Microsoft Learn: Blazor Hybrid](https://learn.microsoft.com/en-us/aspnet/core/blazor/hybrid/)
 - [Microsoft Learn: Composition API](https://learn.microsoft.com/en-us/windows/uwp/composition/)
 - [Microsoft Learn: UI Automation](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/controls/ui-automation-of-a-wpf-custom-control)
+- [Microsoft Learn: XAML Islands](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/xaml-islands/xaml-islands)
+- [Visual Studio Magazine — New VS WinUI workload (July 2024)](https://visualstudiomagazine.com/articles/2024/07/02/winui-focus.aspx)
 
 ### Avalonia
 - [Avalonia 12 Release](https://avaloniaui.net/blog/avalonia-12)
