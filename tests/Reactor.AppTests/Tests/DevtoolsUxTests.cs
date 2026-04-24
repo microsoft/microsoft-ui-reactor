@@ -53,7 +53,11 @@ public class DevtoolsUxTests : AppTestBase
     [TestMethod]
     public void Devtools_Menu_Toggle_Flows_Through_To_Subscribers()
     {
-        NavigateToFixture("DevtoolsUx_MenuAndToggle");
+        // Fresh navigation re-mounts the fixture component, which runs the
+        // one-shot DebugUI reset inside DevtoolsUxTestComponent.Render. A plain
+        // NavigateToFixture is a no-op when the fixture is already loaded,
+        // leaving prior-test toggle state in place.
+        NavigateToFixtureFresh("DevtoolsUx_MenuAndToggle");
         WaitForText("DebugUiState", "debug-off");
 
         // Open the flyout.
@@ -78,7 +82,8 @@ public class DevtoolsUxTests : AppTestBase
     [TestMethod]
     public void Devtools_Menu_Toggle_Is_Reversible()
     {
-        NavigateToFixture("DevtoolsUx_MenuAndToggle");
+        // See Flows_Through_To_Subscribers for why Fresh is required.
+        NavigateToFixtureFresh("DevtoolsUx_MenuAndToggle");
         WaitForText("DebugUiState", "debug-off");
 
         // Toggle on.

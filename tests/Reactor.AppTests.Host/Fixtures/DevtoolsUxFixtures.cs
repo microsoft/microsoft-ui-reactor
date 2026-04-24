@@ -22,6 +22,23 @@ internal static class DevtoolsUxFixtures
     {
         public override Element Render()
         {
+            // One-shot reset on first render. Done synchronously *before* reading the
+            // observable, not in a UseEffect, for two reasons:
+            //   (1) Reactor re-renders from the root, so putting the reset in the
+            //       factory above would clobber every toggle the moment its
+            //       notification loops back around.
+            //   (2) UseEffect runs *after* Render completes, so a reset there would
+            //       not influence the already-captured `debugUI` value on the first
+            //       mount — the initial UI would still reflect stale state from a
+            //       prior test, and no further re-render would be triggered because
+            //       the new value matches the subscribed one.
+            var hasReset = UseRef(false);
+            if (!hasReset.Current)
+            {
+                DebugUI.Value = false;
+                hasReset.Current = true;
+            }
+
             // Subscribe so the enclosing component re-renders when the flag flips,
             // which rebuilds the DevtoolsMenu flyout with fresh IsChecked state and
             // toggles the mirrored TextBlock below.
@@ -62,9 +79,6 @@ internal static class DevtoolsUxFixtures
         // would only be reached when both Run(devtools:true) AND `--devtools app`
         // CLI were present.
         ReactorApp.DevtoolsEnabled = true;
-        // Reset the backing Observable so the fixture always starts in "off" state
-        // even if a prior navigation toggled it on.
-        DebugUI.Value = false;
         return Component<DevtoolsUxTestComponent>();
     }
 }

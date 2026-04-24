@@ -117,11 +117,22 @@ public class AppTestBase
         };
         wait.IgnoreExceptionTypes(typeof(WebDriverException));
 
-        wait.Until(driver =>
+        string lastSeen = "<not found>";
+        try
         {
-            var element = driver.FindElement(MobileBy.AccessibilityId(automationId));
-            return element.Text == expectedText ? element : null;
-        });
+            wait.Until(driver =>
+            {
+                var element = driver.FindElement(MobileBy.AccessibilityId(automationId));
+                lastSeen = element.Text ?? "<null>";
+                return lastSeen == expectedText ? element : null;
+            });
+        }
+        catch (WebDriverTimeoutException)
+        {
+            throw new WebDriverTimeoutException(
+                $"Timed out after {timeoutMs}ms waiting for AutomationId='{automationId}' " +
+                $"to have text '{expectedText}'. Last-seen text: '{lastSeen}'.");
+        }
     }
 
     /// <summary>
