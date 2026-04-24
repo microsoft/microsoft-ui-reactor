@@ -34,16 +34,29 @@ internal sealed class ReconcileHighlightOverlay
         global::Windows.UI.Color.FromArgb(255, 240, 200, 20);  // yellow at 135°
 
     private readonly Canvas _overlayCanvas;
-    private ContainerVisual? _container;
-    private Compositor? _compositor;
+    private readonly ContainerVisual _parentContainer;
+    private readonly Compositor _compositor;
+    private readonly ContainerVisual _container;
     private CompositionBrush? _mountedBrush;
     private CompositionBrush? _modifiedBrush;
     private ScalarKeyFrameAnimation? _fadeMountedAnim;
     private ScalarKeyFrameAnimation? _fadeModifiedAnim;
 
-    public ReconcileHighlightOverlay(Canvas overlayCanvas)
+    /// <summary>
+    /// Ctor takes both the Canvas (for hit-testing / size queries) and the
+    /// shared parent <see cref="ContainerVisual"/> owned by
+    /// <see cref="OverlayHostWiring"/>. This overlay creates its own
+    /// sub-container as a child of <paramref name="parentContainer"/>, so
+    /// every dev overlay can paint into the same Canvas without fighting
+    /// for the single <c>SetElementChildVisual</c> slot.
+    /// </summary>
+    public ReconcileHighlightOverlay(Canvas overlayCanvas, ContainerVisual parentContainer)
     {
         _overlayCanvas = overlayCanvas;
+        _parentContainer = parentContainer;
+        _compositor = parentContainer.Compositor;
+        _container = _compositor.CreateContainerVisual();
+        _parentContainer.Children.InsertAtTop(_container);
     }
 
     /// <summary>
@@ -56,9 +69,6 @@ internal sealed class ReconcileHighlightOverlay
         IReadOnlyList<UIElement> mounted,
         IReadOnlyList<UIElement> modified)
     {
-        EnsureCompositor();
-        if (_compositor is null || _container is null) return;
-
         // Back-pressure: if too many sprites are already animating, skip this flush entirely
         if (_container.Children.Count >= MaxLiveSprites) return;
 
@@ -127,8 +137,6 @@ internal sealed class ReconcileHighlightOverlay
     private bool TryAddHighlight(UIElement host, UIElement target, CompositionBrush brush,
         float opacity, ScalarKeyFrameAnimation fadeAnim)
     {
-        if (_compositor is null || _container is null) return false;
-
         if (target is not FrameworkElement fe) return false;
         if (fe.ActualWidth <= 0 || fe.ActualHeight <= 0) return false;
 
@@ -156,7 +164,7 @@ internal sealed class ReconcileHighlightOverlay
 
     private ScalarKeyFrameAnimation CreateFadeAnimation(float fromOpacity)
     {
-        var anim = _compositor!.CreateScalarKeyFrameAnimation();
+        var anim = _compositor.CreateScalarKeyFrameAnimation();
         anim.InsertKeyFrame(0f, fromOpacity);
         anim.InsertKeyFrame(1f, 0f);
         anim.Duration = TimeSpan.FromMilliseconds(FadeDurationMs);
@@ -170,7 +178,7 @@ internal sealed class ReconcileHighlightOverlay
     /// </summary>
     private CompositionBrush CreateStripeBrush(global::Windows.UI.Color color, float angleDegrees)
     {
-        var brush = _compositor!.CreateLinearGradientBrush();
+        var brush = _compositor.CreateLinearGradientBrush();
         brush.MappingMode = CompositionMappingMode.Absolute;
         brush.ExtendMode = CompositionGradientExtendMode.Wrap;
 
@@ -191,13 +199,11 @@ internal sealed class ReconcileHighlightOverlay
         return brush;
     }
 
-    private void EnsureCompositor()
+    public void Dispose()
     {
-        if (_compositor is not null) return;
-
-        var visual = ElementCompositionPreview.GetElementVisual(_overlayCanvas);
-        _compositor = visual.Compositor;
-        _container = _compositor.CreateContainerVisual();
-        ElementCompositionPreview.SetElementChildVisual(_overlayCanvas, _container);
+        _parentContainer.Children.Remove(_container);
+        _container.Dispose();
+        _mountedBrush?.Dispose();
+        _modifiedBrush?.Dispose();
     }
 }

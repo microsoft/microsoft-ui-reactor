@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hosting.Etw;
+using Microsoft.UI.Reactor.Hosting.LayoutCost;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
@@ -61,8 +63,16 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private volatile bool _disposed;
     private Curve? _pendingAnimationCurve;
 
-    // ── Reconcile highlight overlay (gated by ReactorFeatureFlags.HighlightReconcileChanges) ──
-    private HighlightOverlayWiring? _highlightWiring;
+    // ── Single shared overlay surface (see OverlayHostWiring) ──
+    private OverlayHostWiring? _overlayWiring;
+
+    // ── Layout cost data pipeline (attribution + ETW) ──
+    private LayoutEtwConsumer? _etwConsumer;
+    private EventPairing? _eventPairing;
+    private LayoutEventRing? _eventRing;
+    private PointerMap? _pointerMap;
+    private SpatialIndex? _spatialIndex;
+    private LayoutCostAttribution? _attribution;
 
     // Render phase timing instrumentation
     private readonly Stopwatch _phaseSw = new();
@@ -125,8 +135,64 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // Register built-in custom element types
         Controls.ResizeGripRegistration.Register(_reconciler);
 
+        if (ReactorFeatureFlags.ShowLayoutCost)
+            StartEtwPipeline();
+
         if (component is not null)
             Mount(component);
+    }
+
+    /// <summary>Build attribution + subscribe the reconciler + attach it to the overlay wiring. Idempotent.</summary>
+    private void EnsureLayoutCostPipeline()
+    {
+        if (_etwConsumer is null)
+            StartEtwPipeline();
+        else if (_attribution is null)
+        {
+            _pointerMap ??= new PointerMap();
+            _spatialIndex ??= new SpatialIndex();
+            _attribution = new LayoutCostAttribution(_eventRing!, _pointerMap, _spatialIndex);
+            _attribution.BindReconciler(_reconciler);
+        }
+        _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
+        if (_attribution is not null)
+            _overlayWiring.AttachLayoutCostAttribution(_attribution);
+    }
+
+    private bool AnyOverlayFlagOn =>
+        ReactorFeatureFlags.HighlightReconcileChanges || ReactorFeatureFlags.ShowLayoutCost;
+
+    private void StartEtwPipeline()
+    {
+        if (_etwConsumer is not null) return;
+        _eventPairing ??= new EventPairing();
+        _eventRing ??= new LayoutEventRing();
+        _etwConsumer = new LayoutEtwConsumer();
+        var pairing = _eventPairing;
+        var ring = _eventRing;
+        _eventPairing.Paired += paired => ring.Publish(paired);
+        _etwConsumer.EventReceived += raw => pairing.OnEvent(raw);
+
+        _pointerMap ??= new PointerMap();
+        _spatialIndex ??= new SpatialIndex();
+        _attribution ??= new LayoutCostAttribution(_eventRing, _pointerMap, _spatialIndex);
+        _attribution.BindReconciler(_reconciler);
+
+        try
+        {
+            _etwConsumer.Start();
+            if (_etwConsumer.IsUnavailable)
+            {
+                _attribution.IsEtwUnavailable = true;
+                Debug.WriteLine(
+                    $"[Reactor.LayoutCost] ETW unavailable: {_etwConsumer.UnavailableReason}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _attribution.IsEtwUnavailable = true;
+            Debug.WriteLine($"[Reactor.LayoutCost] StartLayoutCostPipeline failed: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -290,33 +356,35 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                     AnimationScope.PopScope();
             }
 
+            bool anyOverlayOn = AnyOverlayFlagOn;
             if (newControl != _currentControl)
             {
-                if (ReactorFeatureFlags.HighlightReconcileChanges)
+                UIElement? contentToSet = newControl;
+                if (anyOverlayOn)
                 {
-                    _highlightWiring ??= new HighlightOverlayWiring(_dispatcherQueue);
-                    Content = _highlightWiring.SetContentViaWrapper(newControl);
+                    if (ReactorFeatureFlags.ShowLayoutCost) EnsureLayoutCostPipeline();
+                    _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
+                    contentToSet = _overlayWiring.SetContentViaWrapper(newControl);
                 }
-                else
-                {
-                    Content = newControl;
-                }
+                Content = contentToSet;
                 AttachThemeListener(newControl);
             }
-            else if (ReactorFeatureFlags.HighlightReconcileChanges && _highlightWiring?.WrapperRoot is null)
+            else if (anyOverlayOn && _overlayWiring?.WrapperRoot is null)
             {
-                // Flag was toggled on after initial render — install wrapper now
-                _highlightWiring ??= new HighlightOverlayWiring(_dispatcherQueue);
-                Content = _highlightWiring.SetContentViaWrapper(newControl);
+                // Flag flipped on mid-session. Detach current Content before
+                // re-parenting into the wrapper slot (WinUI throws "Element
+                // already has a logical parent" otherwise).
+                if (ReactorFeatureFlags.ShowLayoutCost) EnsureLayoutCostPipeline();
+                _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
+                Content = null;
+                Content = _overlayWiring.SetContentViaWrapper(newControl);
             }
-            else if (!ReactorFeatureFlags.HighlightReconcileChanges && _highlightWiring?.WrapperRoot is not null)
+            else if (!anyOverlayOn && _overlayWiring?.WrapperRoot is not null)
             {
-                // Flag was toggled off while preserving the same root control — tear down
-                // the wrapper and reinstate the raw control so we don't pay for an extra
-                // layout layer when the feature is disabled.
+                // All overlay flags off — tear down the wrapper.
                 Content = newControl;
-                _highlightWiring.Dispose();
-                _highlightWiring = null;
+                _overlayWiring.Dispose();
+                _overlayWiring = null;
             }
 
             _currentControl = newControl;
@@ -325,8 +393,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             // Start any connected animations now that the new tree is in the visual tree
             _reconciler.FlushConnectedAnimations();
 
-            // Schedule highlight overlay after layout so elements have final bounds.
-            _highlightWiring?.ScheduleHighlightFlush(_reconciler);
+            // Schedule overlay flushes after layout; each is a no-op when its
+            // own flag is off.
+            _overlayWiring?.ScheduleHighlightFlush(_reconciler);
+            _overlayWiring?.ScheduleLayoutCostFlush();
 
             double reconcileMs = _phaseSw.Elapsed.TotalMilliseconds;
 
@@ -433,9 +503,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 IsTextSelectionEnabled = true,
             }
         };
-        if (_highlightWiring is not null)
+        if (_overlayWiring is not null && _overlayWiring.TryShowErrorInWrapper(errorPanel))
         {
-            _highlightWiring.TryShowErrorInWrapper(errorPanel);
+            // shared overlay wrapper took it
         }
         else
         {
@@ -461,8 +531,17 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _funcContext = null;
         _currentTree = null;
         _currentControl = null;
-        _highlightWiring?.Dispose();
-        _highlightWiring = null;
+        try { _overlayWiring?.Dispose(); } catch { /* best effort */ }
+        _overlayWiring = null;
+        try { _attribution?.UnbindReconciler(); } catch { /* best effort */ }
+        _attribution = null;
+        _pointerMap = null;
+        _spatialIndex = null;
+        try { _etwConsumer?.Dispose(); } catch { /* best effort */ }
+        _etwConsumer = null;
+        _eventPairing = null;
+        _eventRing = null;
+
         Content = null;
     }
 }

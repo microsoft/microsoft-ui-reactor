@@ -2277,6 +2277,8 @@ public sealed partial class Reconciler
         };
         _componentNodes[wrapper] = node;
 
+        RaiseLayoutCostComponentMounted(wrapper, component.GetType().Name);
+
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
         var componentRerender = CreateComponentRerender(node, requestRerender);
@@ -2293,7 +2295,13 @@ public sealed partial class Reconciler
             _logger.LogError(ex, "Component Render() threw during mount: {ComponentName}", compElement.GetType().Name);
             childElement = new TextBlockElement($"⚠ Render error: {ex.Message}");
         }
-        var childControl = Mount(childElement, componentRerender);
+        _layoutCostComponentDepth++;
+        UIElement? childControl;
+        try
+        {
+            childControl = Mount(childElement, componentRerender);
+        }
+        finally { _layoutCostComponentDepth--; }
 
         wrapper.Child = childControl;
         node.RenderedElement = childElement;
@@ -2309,6 +2317,8 @@ public sealed partial class Reconciler
             Context = ctx, RenderedElement = null, Element = funcElement,
         };
         _componentNodes[wrapper] = node;
+
+        RaiseLayoutCostComponentMounted(wrapper, funcElement.GetType().Name);
 
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
@@ -2326,7 +2336,13 @@ public sealed partial class Reconciler
             _logger.LogError(ex, "FuncComponent Render() threw during mount");
             childElement = new TextBlockElement($"⚠ Render error: {ex.Message}");
         }
-        var childControl = Mount(childElement, componentRerender);
+        _layoutCostComponentDepth++;
+        UIElement? childControl;
+        try
+        {
+            childControl = Mount(childElement, componentRerender);
+        }
+        finally { _layoutCostComponentDepth--; }
 
         wrapper.Child = childControl;
         node.RenderedElement = childElement;
@@ -2344,6 +2360,8 @@ public sealed partial class Reconciler
         };
         _componentNodes[wrapper] = node;
 
+        RaiseLayoutCostComponentMounted(wrapper, memoElement.GetType().Name);
+
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
         var componentRerender = CreateComponentRerender(node, requestRerender);
@@ -2360,7 +2378,13 @@ public sealed partial class Reconciler
             _logger.LogError(ex, "MemoComponent Render() threw during mount");
             childElement = new TextBlockElement($"⚠ Render error: {ex.Message}");
         }
-        var childControl = Mount(childElement, componentRerender);
+        _layoutCostComponentDepth++;
+        UIElement? childControl;
+        try
+        {
+            childControl = Mount(childElement, componentRerender);
+        }
+        finally { _layoutCostComponentDepth--; }
 
         wrapper.Child = childControl;
         node.RenderedElement = childElement;

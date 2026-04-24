@@ -24,6 +24,14 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
     <PackageReference Include="System.Drawing.Common" Version="9.0.4" />
     <PackageReference Include="MessageFormat" Version="8.0.0" />
+    <!-- In-process ETW consumer for the layout-cost overlay (spec 032). Pure managed;
+         no native dependencies. Only loaded when ReactorFeatureFlags.ShowLayoutCost is
+         flipped on.
+         PrivateAssets=none (default) so consuming projects (samples, tests) get the
+         runtime assemblies. -->
+    <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.16">
+      <GeneratePathProperty>true</GeneratePathProperty>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

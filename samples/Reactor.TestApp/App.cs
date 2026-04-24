@@ -31,7 +31,7 @@ static class AppFlags
 
 // ─── Root application component ────────────────────────────────────────────────
 
-enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors }
+enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, LayoutCost }
 
 class DemoApp : Component
 {
@@ -67,6 +67,7 @@ class DemoApp : Component
             Tab.Commanding => ("Commanding", "commanding"),
             Tab.InputGestures => ("Input & Gestures", "counter"),
             Tab.SpecializedEditors => ("Specialized Editors", "propertygrid"),
+            Tab.LayoutCost => ("Layout Cost", "perfstress"),
             _ => (tab.ToString(), "counter")
         }).ToArray();
 
@@ -136,6 +137,7 @@ class DemoApp : Component
                     Tab.Commanding => Component<CommandingTestDemo>(),
                     Tab.InputGestures => Component<InputGesturesDemo>(),
                     Tab.SpecializedEditors => Component<SpecializedEditorsDemo>(),
+                    Tab.LayoutCost => Component<LayoutCostDemo>(),
                     _ => TextBlock("Select a tab")
                 }
             )

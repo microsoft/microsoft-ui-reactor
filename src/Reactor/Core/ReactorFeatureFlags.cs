@@ -52,4 +52,21 @@ public static class ReactorFeatureFlags
     /// the reconciler skips all collection work so there is zero overhead.
     /// </remarks>
     public static bool HighlightReconcileChanges { get; set; }
+
+    /// <summary>
+    /// When true, Reactor hosts start an in-process ETW session on the
+    /// <c>Microsoft-Windows-XAML</c> provider, attribute measure/arrange events to
+    /// the owning Reactor <c>Component</c>, and render a per-Component cost-meter
+    /// overlay (layout ms + authored vs rendered element count). See
+    /// <c>docs/specs/032-layout-cost-overlay-design.md</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>Default: <c>false</c>. Toggling this flag after host initialization
+    /// requires a host teardown/restart to take full effect — the ETW session and
+    /// mount-path bookkeeping are wired at host construction. Tests that mutate the
+    /// flag must save and restore the previous value.</para>
+    /// <para>When off, no ETW session is started, no overlay is constructed, and the
+    /// reconciler's mount path pays only a single boolean check.</para>
+    /// </remarks>
+    public static bool ShowLayoutCost { get; set; }
 }

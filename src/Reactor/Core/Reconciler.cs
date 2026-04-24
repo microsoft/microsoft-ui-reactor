@@ -113,6 +113,53 @@ public sealed partial class Reconciler : IDisposable
     private List<UIElement>? _highlightMounted;
     private List<UIElement>? _highlightModified;
 
+    // ── Layout-cost component lifecycle (gated by ReactorFeatureFlags.ShowLayoutCost) ──
+    // Fired from the three MountComponent/MountFunc/MountMemo paths and from
+    // Unmount. Subscribers wire the attribution aggregator without the core
+    // reconciler taking a dependency on the Hosting.LayoutCost layer. Only
+    // raised when the flag is on so the no-op cost is a single bool check.
+    /// <summary>Fired when a Component (class/func/memo) is mounted. Args: wrapper Border, display name, depth.</summary>
+    internal event Action<UIElement, string, int>? LayoutCostComponentMounted;
+    /// <summary>Fired when a Component is unmounted. Arg: wrapper Border.</summary>
+    internal event Action<UIElement>? LayoutCostComponentUnmounted;
+
+    private int _layoutCostComponentDepth;
+
+    internal void RaiseLayoutCostComponentMounted(UIElement wrapper, string displayName)
+    {
+        if (!ReactorFeatureFlags.ShowLayoutCost) return;
+        LayoutCostComponentMounted?.Invoke(wrapper, displayName, _layoutCostComponentDepth);
+    }
+    internal void RaiseLayoutCostComponentUnmounted(UIElement wrapper)
+    {
+        if (!ReactorFeatureFlags.ShowLayoutCost) return;
+        LayoutCostComponentUnmounted?.Invoke(wrapper);
+    }
+
+    /// <summary>
+    /// Enumerate every currently-mounted Component wrapper + its display name.
+    /// Used by the layout-cost overlay to back-fill rollups when the flag is
+    /// flipped on mid-session (Components mounted before the flip never fired
+    /// <see cref="LayoutCostComponentMounted"/>).
+    /// </summary>
+    /// <remarks>
+    /// Depth is not tracked per-node, so this method reports depth 0 for all
+    /// entries. Depth is only used by spatial attribution's innermost-wins
+    /// tiebreak; getting it wrong for back-filled components just biases that
+    /// tiebreak — acceptable for a dev-time overlay.
+    /// </remarks>
+    internal IEnumerable<(UIElement Wrapper, string DisplayName)> EnumerateComponentWrappers()
+    {
+        foreach (var kv in _componentNodes)
+        {
+            var node = kv.Value;
+            var name = node.Component?.GetType().Name
+                ?? node.Element?.GetType().Name
+                ?? "Component";
+            yield return (kv.Key, name);
+        }
+    }
+
     /// <summary>
     /// UIElements that were newly mounted during the last top-level Reconcile pass.
     /// Only populated when <see cref="ReactorFeatureFlags.HighlightReconcileChanges"/> is true;
@@ -794,6 +841,7 @@ public sealed partial class Reconciler : IDisposable
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);
+            RaiseLayoutCostComponentUnmounted(control);
         }
 
         _errorBoundaryNodes.Remove(control);
@@ -985,6 +1033,7 @@ public sealed partial class Reconciler : IDisposable
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);
+            RaiseLayoutCostComponentUnmounted(control);
         }
 
         if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
