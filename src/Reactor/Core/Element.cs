@@ -164,6 +164,16 @@ public abstract record Element
     // ════════════════════════════════════════════════════════════════════════
 
     /// <summary>
+    /// True if this element exposes any non-null event-handler delegate (OnClick,
+    /// OnChanged, etc.). Dispatch goes through the Tag trampoline, so when the
+    /// reconciler skips Update it must still refresh the control's Tag so clicks
+    /// invoke the current render's closure rather than a stale one. Elements with
+    /// no handlers at all don't need the Tag refresh — their controls never fire
+    /// into Reactor code. Override on each callback-bearing leaf.
+    /// </summary>
+    internal virtual bool HasCallbacks => false;
+
+    /// <summary>
     /// Returns true if two elements are structurally identical AND the child can be
     /// completely skipped during reconciliation (no need to call Update at all).
     /// This is stricter than ShallowEquals: elements with ThemeBindings must still
@@ -198,12 +208,111 @@ public abstract record Element
                 && ta.HorizontalAlignment == tb.HorizontalAlignment
                 && ta.Setters.Length == 0 && tb.Setters.Length == 0,
 
+            // Callbacks (OnClick, OnChanged, etc.) are intentionally not compared:
+            // dispatch goes through the Tag trampoline, and the Update.cs skip path
+            // refreshes Tag when HasCallbacks is true. So identity of the delegate
+            // on the element is irrelevant to dispatch correctness — only presence
+            // mattered historically (and presence is still captured by HasCallbacks).
             (ButtonElement ba, ButtonElement bb) =>
                 ba.Label == bb.Label
                 && ba.IsEnabled == bb.IsEnabled
-                && ReferenceEquals(ba.OnClick, bb.OnClick)
                 && ba.ContentElement is null && bb.ContentElement is null
                 && ba.Setters.Length == 0 && bb.Setters.Length == 0,
+
+            (HyperlinkButtonElement ha, HyperlinkButtonElement hb) =>
+                ha.Content == hb.Content
+                && ha.NavigateUri == hb.NavigateUri
+                && ha.Setters.Length == 0 && hb.Setters.Length == 0,
+
+            (RepeatButtonElement ra, RepeatButtonElement rb) =>
+                ra.Label == rb.Label
+                && ra.Delay == rb.Delay
+                && ra.Interval == rb.Interval
+                && ra.Setters.Length == 0 && rb.Setters.Length == 0,
+
+            (ToggleButtonElement ta, ToggleButtonElement tb) =>
+                ta.Label == tb.Label
+                && ta.IsChecked == tb.IsChecked
+                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+
+            (SliderElement sa, SliderElement sb) =>
+                sa.Value == sb.Value
+                && sa.Min == sb.Min
+                && sa.Max == sb.Max
+                && sa.StepFrequency == sb.StepFrequency
+                && sa.Header == sb.Header
+                && sa.Setters.Length == 0 && sb.Setters.Length == 0,
+
+            (ToggleSwitchElement ta, ToggleSwitchElement tb) =>
+                ta.IsOn == tb.IsOn
+                && ta.OnContent == tb.OnContent
+                && ta.OffContent == tb.OffContent
+                && ta.Header == tb.Header
+                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+
+            (CheckBoxElement ca, CheckBoxElement cb) =>
+                ca.IsChecked == cb.IsChecked
+                && ca.Label == cb.Label
+                && ca.IsThreeState == cb.IsThreeState
+                && ca.CheckedState == cb.CheckedState
+                && ca.Setters.Length == 0 && cb.Setters.Length == 0,
+
+            (RadioButtonElement ra, RadioButtonElement rb) =>
+                ra.Label == rb.Label
+                && ra.IsChecked == rb.IsChecked
+                && ra.GroupName == rb.GroupName
+                && ra.Setters.Length == 0 && rb.Setters.Length == 0,
+
+            (ComboBoxElement ca, ComboBoxElement cb) =>
+                ReferenceEquals(ca.Items, cb.Items)
+                && ca.SelectedIndex == cb.SelectedIndex
+                && ca.PlaceholderText == cb.PlaceholderText
+                && ca.Header == cb.Header
+                && ca.IsEditable == cb.IsEditable
+                && ReferenceEquals(ca.ItemElements, cb.ItemElements)
+                && ca.Setters.Length == 0 && cb.Setters.Length == 0,
+
+            (TextFieldElement ta, TextFieldElement tb) =>
+                ta.Value == tb.Value
+                && ta.Placeholder == tb.Placeholder
+                && ta.Header == tb.Header
+                && ta.IsReadOnly == tb.IsReadOnly
+                && ta.AcceptsReturn == tb.AcceptsReturn
+                && ta.TextWrapping == tb.TextWrapping
+                && ta.SelectionStart == tb.SelectionStart
+                && ta.SelectionLength == tb.SelectionLength
+                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+
+            (NumberBoxElement na, NumberBoxElement nb) =>
+                na.Value == nb.Value
+                && na.Minimum == nb.Minimum
+                && na.Maximum == nb.Maximum
+                && na.SmallChange == nb.SmallChange
+                && na.LargeChange == nb.LargeChange
+                && na.Header == nb.Header
+                && na.PlaceholderText == nb.PlaceholderText
+                && na.SpinButtonPlacement == nb.SpinButtonPlacement
+                && na.Setters.Length == 0 && nb.Setters.Length == 0,
+
+            (PasswordBoxElement pa, PasswordBoxElement pb) =>
+                pa.Password == pb.Password
+                && pa.PlaceholderText == pb.PlaceholderText
+                && pa.Setters.Length == 0 && pb.Setters.Length == 0,
+
+            (ProgressElement pa, ProgressElement pb) =>
+                pa.Value == pb.Value
+                && pa.Minimum == pb.Minimum
+                && pa.Maximum == pb.Maximum
+                && pa.ShowError == pb.ShowError
+                && pa.ShowPaused == pb.ShowPaused
+                && pa.Setters.Length == 0 && pb.Setters.Length == 0,
+
+            (ProgressRingElement pa, ProgressRingElement pb) =>
+                pa.Value == pb.Value
+                && pa.Minimum == pb.Minimum
+                && pa.Maximum == pb.Maximum
+                && pa.IsActive == pb.IsActive
+                && pa.Setters.Length == 0 && pb.Setters.Length == 0,
 
             (ImageElement ia, ImageElement ib) =>
                 ia.Source == ib.Source
@@ -1134,11 +1243,13 @@ public record ButtonElement(string Label, Action? OnClick = null) : Element
     public bool IsEnabled { get; init; } = true;
     public Element? ContentElement { get; init; }
     internal Action<WinUI.Button>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnClick is not null;
 }
 
 public record HyperlinkButtonElement(string Content, Uri? NavigateUri = null, Action? OnClick = null) : Element
 {
     internal Action<WinUI.HyperlinkButton>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnClick is not null;
 }
 
 public record RepeatButtonElement(string Label, Action? OnClick = null) : Element
@@ -1146,11 +1257,13 @@ public record RepeatButtonElement(string Label, Action? OnClick = null) : Elemen
     public int Delay { get; init; } = 250;
     public int Interval { get; init; } = 50;
     internal Action<WinPrim.RepeatButton>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnClick is not null;
 }
 
 public record ToggleButtonElement(string Label, bool IsChecked = false, Action<bool>? OnToggled = null) : Element
 {
     internal Action<WinPrim.ToggleButton>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnToggled is not null;
 }
 
 public record DropDownButtonElement(string Label, Element? Flyout = null) : Element
@@ -1161,11 +1274,13 @@ public record DropDownButtonElement(string Label, Element? Flyout = null) : Elem
 public record SplitButtonElement(string Label, Action? OnClick = null, Element? Flyout = null) : Element
 {
     internal Action<WinUI.SplitButton>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnClick is not null;
 }
 
 public record ToggleSplitButtonElement(string Label, bool IsChecked = false, Action<bool>? OnIsCheckedChanged = null, Element? Flyout = null) : Element
 {
     internal Action<WinUI.ToggleSplitButton>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnIsCheckedChanged is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1189,6 +1304,7 @@ public record TextFieldElement(
     /// <summary>Selection length. Set alongside SelectionStart to control the selection range.</summary>
     public int? SelectionLength { get; init; }
     internal Action<WinUI.TextBox>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnChanged is not null || OnSelectionChanged is not null;
 }
 
 public record PasswordBoxElement(
@@ -1198,6 +1314,7 @@ public record PasswordBoxElement(
 ) : Element
 {
     internal Action<WinUI.PasswordBox>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnPasswordChanged is not null;
 }
 
 public record NumberBoxElement(
@@ -1213,6 +1330,7 @@ public record NumberBoxElement(
     public double SmallChange { get; init; } = 1;
     public double LargeChange { get; init; } = 10;
     internal Action<WinUI.NumberBox>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnValueChanged is not null;
 }
 
 public record AutoSuggestBoxElement(
@@ -1225,6 +1343,7 @@ public record AutoSuggestBoxElement(
     public string[] Suggestions { get; init; } = [];
     public string? PlaceholderText { get; init; }
     internal Action<WinUI.AutoSuggestBox>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnTextChanged is not null || OnQuerySubmitted is not null || OnSuggestionChosen is not null;
 }
 
 public record CheckBoxElement(
@@ -1237,6 +1356,7 @@ public record CheckBoxElement(
     public bool? CheckedState { get; init; }
     public Action<bool?>? OnCheckedStateChanged { get; init; }
     internal Action<WinUI.CheckBox>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnChanged is not null || OnCheckedStateChanged is not null;
 }
 
 public record RadioButtonElement(
@@ -1247,6 +1367,7 @@ public record RadioButtonElement(
 ) : Element
 {
     internal Action<WinUI.RadioButton>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnChecked is not null;
 }
 
 public record RadioButtonsElement(
@@ -1257,6 +1378,7 @@ public record RadioButtonsElement(
 {
     public string? Header { get; init; }
     internal Action<WinUI.RadioButtons>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnSelectionChanged is not null;
 }
 
 public record ComboBoxElement(
@@ -1270,6 +1392,7 @@ public record ComboBoxElement(
     public bool IsEditable { get; init; }
     public Element[]? ItemElements { get; init; }
     internal Action<WinUI.ComboBox>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnSelectionChanged is not null;
 }
 
 public record SliderElement(
@@ -1282,6 +1405,7 @@ public record SliderElement(
     public double StepFrequency { get; init; } = 1;
     public string? Header { get; init; }
     internal Action<WinUI.Slider>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnChanged is not null;
 }
 
 public record ToggleSwitchElement(
@@ -1293,6 +1417,7 @@ public record ToggleSwitchElement(
 {
     public string? Header { get; init; }
     internal Action<WinUI.ToggleSwitch>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnChanged is not null;
 }
 
 public record RatingControlElement(
@@ -1304,6 +1429,7 @@ public record RatingControlElement(
     public bool IsReadOnly { get; init; }
     public string? Caption { get; init; }
     internal Action<WinUI.RatingControl>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnValueChanged is not null;
 }
 
 public record ColorPickerElement(
@@ -1318,6 +1444,7 @@ public record ColorPickerElement(
     public bool IsColorChannelTextInputVisible { get; init; } = true;
     public bool IsHexInputVisible { get; init; } = true;
     internal Action<WinUI.ColorPicker>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnColorChanged is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1334,6 +1461,7 @@ public record CalendarDatePickerElement(
     public DateTimeOffset? MinDate { get; init; }
     public DateTimeOffset? MaxDate { get; init; }
     internal Action<WinUI.CalendarDatePicker>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnDateChanged is not null;
 }
 
 public record DatePickerElement(
@@ -1348,6 +1476,7 @@ public record DatePickerElement(
     public bool MonthVisible { get; init; } = true;
     public bool YearVisible { get; init; } = true;
     internal Action<WinUI.DatePicker>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnDateChanged is not null;
 }
 
 public record TimePickerElement(
@@ -1359,6 +1488,7 @@ public record TimePickerElement(
     public int MinuteIncrement { get; init; } = 1;
     public int ClockIdentifier { get; init; } = 12;
     internal Action<WinUI.TimePicker>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnTimeChanged is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1411,6 +1541,7 @@ public record WebView2Element(Uri? Source = null) : Element
     public Action<Uri>? OnNavigationStarting { get; init; }
     public Action<Uri>? OnNavigationCompleted { get; init; }
     internal Action<WinUI.WebView2>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnNavigationStarting is not null || OnNavigationCompleted is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1426,6 +1557,7 @@ public record RichEditBoxElement(
     public string? PlaceholderText { get; init; }
     public Action<string>? OnTextChanged { get; init; }
     internal Action<WinUI.RichEditBox>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnTextChanged is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1507,6 +1639,7 @@ public record ExpanderElement(
 {
     public ExpandDirection ExpandDirection { get; init; } = ExpandDirection.Down;
     internal Action<WinUI.Expander>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnExpandedChanged is not null;
 }
 
 public record SplitViewElement(
@@ -1520,6 +1653,7 @@ public record SplitViewElement(
     public SplitViewDisplayMode DisplayMode { get; init; } = SplitViewDisplayMode.Overlay;
     public Action<bool>? OnPaneOpenChanged { get; init; }
     internal Action<WinUI.SplitView>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnPaneOpenChanged is not null;
 }
 
 public record ViewboxElement(Element Child) : Element
@@ -1611,6 +1745,7 @@ public record NavigationViewElement(
     public bool IsSettingsVisible { get; init; } = true;
     public string? PaneTitle { get; init; }
     internal Action<WinUI.NavigationView>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnSelectionChanged is not null || OnBackRequested is not null;
 }
 
 public record TitleBarElement(
@@ -1626,6 +1761,7 @@ public record TitleBarElement(
     public Element? Content { get; init; }
     public Element? RightHeader { get; init; }
     internal Action<WinUI.TitleBar>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnBackRequested is not null || OnPaneToggleRequested is not null;
 }
 
 public record TabViewElement(
@@ -1638,6 +1774,7 @@ public record TabViewElement(
     public Action? OnAddTabButtonClick { get; init; }
     public bool IsAddTabButtonVisible { get; init; }
     internal Action<WinUI.TabView>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnSelectionChanged is not null || OnTabCloseRequested is not null || OnAddTabButtonClick is not null;
 }
 
 public record BreadcrumbBarElement(
@@ -1646,6 +1783,7 @@ public record BreadcrumbBarElement(
 ) : Element
 {
     internal Action<WinUI.BreadcrumbBar>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnItemClicked is not null;
 }
 
 public record PivotElement(
@@ -1656,6 +1794,7 @@ public record PivotElement(
     public Action<int>? OnSelectionChanged { get; init; }
     public string? Title { get; init; }
     internal Action<WinUI.Pivot>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnSelectionChanged is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1672,6 +1811,7 @@ public record ListViewElement(
     public ListViewSelectionMode SelectionMode { get; init; } = ListViewSelectionMode.Single;
     public string? Header { get; init; }
     internal Action<WinUI.ListView>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnSelectionChanged is not null || OnItemClick is not null;
 }
 
 public record GridViewElement(
@@ -1684,6 +1824,7 @@ public record GridViewElement(
     public ListViewSelectionMode SelectionMode { get; init; } = ListViewSelectionMode.Single;
     public string? Header { get; init; }
     internal Action<WinUI.GridView>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnSelectionChanged is not null || OnItemClick is not null;
 }
 
 public record TreeViewElement(
@@ -1697,6 +1838,7 @@ public record TreeViewElement(
     public bool AllowDrop { get; init; }
     public bool CanReorderItems { get; init; }
     internal Action<WinUI.TreeView>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnItemInvoked is not null || OnExpanding is not null;
 }
 
 public record FlipViewElement(
@@ -1706,6 +1848,7 @@ public record FlipViewElement(
     public int SelectedIndex { get; init; } = 0;
     public Action<int>? OnSelectionChanged { get; init; }
     internal Action<WinUI.FlipView>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnSelectionChanged is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1728,6 +1871,7 @@ public record ContentDialogElement(
     public ContentDialogButton DefaultButton { get; init; } = ContentDialogButton.Primary;
     public Action<ContentDialogResult>? OnClosed { get; init; }
     internal Action<WinUI.ContentDialog>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnClosed is not null;
 }
 
 /// <summary>
@@ -1743,6 +1887,7 @@ public record FlyoutElement(
     public Action? OnOpened { get; init; }
     public Action? OnClosed { get; init; }
     internal Action<WinUI.Flyout>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnOpened is not null || OnClosed is not null;
 }
 
 /// <summary>
@@ -1775,6 +1920,7 @@ public record TeachingTipElement(
     public string? CloseButtonContent { get; init; }
     public Action? OnClosed { get; init; }
     internal Action<WinUI.TeachingTip>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnActionButtonClick is not null || OnClosed is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1792,6 +1938,7 @@ public record InfoBarElement(
     public string? ActionButtonContent { get; init; }
     public Action? OnActionButtonClick { get; init; }
     public Action? OnClosed { get; init; }
+    internal override bool HasCallbacks => OnActionButtonClick is not null || OnClosed is not null;
     internal Action<WinUI.InfoBar>[] Setters { get; init; } = [];
 }
 
@@ -1885,6 +2032,7 @@ public record TemplatedListViewElement<T>(
         OnItemClick?.Invoke(index >= 0 && index < Items.Count ? Items[index] : default!);
     public override void ApplyControlSetters(object control) =>
         Reconciler.ApplySetters(Setters, (WinUI.ListView)control);
+    internal override bool HasCallbacks => OnSelectionChanged is not null || OnItemClick is not null;
 }
 
 public record TemplatedGridViewElement<T>(
@@ -1914,6 +2062,7 @@ public record TemplatedGridViewElement<T>(
         OnItemClick?.Invoke(index >= 0 && index < Items.Count ? Items[index] : default!);
     public override void ApplyControlSetters(object control) =>
         Reconciler.ApplySetters(Setters, (WinUI.GridView)control);
+    internal override bool HasCallbacks => OnSelectionChanged is not null || OnItemClick is not null;
 }
 
 public record TemplatedFlipViewElement<T>(
@@ -1939,6 +2088,7 @@ public record TemplatedFlipViewElement<T>(
     public override void InvokeItemClick(int index) { }
     public override void ApplyControlSetters(object control) =>
         Reconciler.ApplySetters(Setters, (WinUI.FlipView)control);
+    internal override bool HasCallbacks => OnSelectionChanged is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -2120,6 +2270,7 @@ public record ListBoxElement(string[] Items) : Element
     public int SelectedIndex { get; init; } = -1;
     public Action<int>? OnSelectionChanged { get; init; }
     internal Action<WinUI.ListBox>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnSelectionChanged is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -2131,6 +2282,7 @@ public record SelectorBarElement(SelectorBarItemData[] Items) : Element
     public int SelectedIndex { get; init; } = 0;
     public Action<int>? OnSelectionChanged { get; init; }
     internal Action<WinUI.SelectorBar>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnSelectionChanged is not null;
 }
 
 public record SelectorBarItemData(string Text, string? Icon = null);
@@ -2140,6 +2292,7 @@ public record PipsPagerElement(int NumberOfPages) : Element
     public int SelectedPageIndex { get; init; }
     public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.PipsPager>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
 }
 
 public record AnnotatedScrollBarElement() : Element

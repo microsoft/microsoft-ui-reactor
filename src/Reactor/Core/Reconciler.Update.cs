@@ -60,6 +60,12 @@ public sealed partial class Reconciler
         if (Element.ShallowEquals(oldEl, newEl) && ReferenceEquals(oldModifiers, modifiers))
         {
             DebugElementsSkipped++;
+            // Refresh Tag so the event trampoline dispatches into the new element's
+            // closure on next click/value-change. Gated on HasCallbacks so we skip
+            // the DependencyProperty write entirely for leaves with no handlers
+            // (TextBlock, Image, Border, etc.) — which is most of them.
+            if (newEl.HasCallbacks && control is FrameworkElement tagFeSE)
+                tagFeSE.Tag = newEl;
             if (newEl.ThemeBindings is not null && control is FrameworkElement thFeSE)
                 ApplyThemeBindings(thFeSE, newEl.ThemeBindings);
             // Re-resolve ThemeRef-based resource overrides on theme change
