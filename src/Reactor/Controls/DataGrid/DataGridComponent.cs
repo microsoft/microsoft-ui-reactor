@@ -614,10 +614,25 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
             {
                 var capturedRow = index;
                 var capturedCol = c;
+                var capturedRowKey = rowKey;
+                var capturedColName = col.Name;
                 cell = cell.OnTapped((sender, e) =>
                 {
                     Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                     {
+                        // Idempotency guard: if we're already editing exactly this cell,
+                        // skip commit+begin. The underlying native element may have
+                        // accumulated multiple Tapped subscriptions across re-renders
+                        // (multiple C# wrappers of the same native control), causing one
+                        // click to invoke this handler more than once; without this guard
+                        // the second invocation would commit the freshly-begun edit with
+                        // the unchanged value, clobbering the previous row's commit.
+                        if (state.IsEditing
+                            && state.EditingRowKey?.Equals(capturedRowKey) == true
+                            && state.EditingColumnName == capturedColName)
+                        {
+                            return;
+                        }
                         // Commit any in-flight edit BEFORE starting a new one.
                         // BeginEdit unconditionally overwrites _editingValue with the
                         // new cell's current value, which would destroy the in-flight
