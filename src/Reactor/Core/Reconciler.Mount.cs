@@ -1632,15 +1632,18 @@ public sealed partial class Reconciler
             Title = ib.Title ?? "", Message = ib.Message ?? "",
             Severity = ib.Severity, IsOpen = ib.IsOpen, IsClosable = ib.IsClosable,
         };
+        // Tag the parent InfoBar first so both the Closed handler (wired on
+        // infoBar) and the ActionButton handler (captures infoBar in its
+        // closure, reads Tag from there) dispatch through a Tag that the
+        // Update/skip paths will keep refreshed.
+        SetElementTag(infoBar, ib);
         if (ib.ActionButtonContent is not null)
         {
             infoBar.ActionButton = new WinUI.Button { Content = ib.ActionButtonContent };
-            SetElementTag(infoBar.ActionButton, ib);
             if (ib.OnActionButtonClick is not null)
-                ((WinUI.Button)infoBar.ActionButton).Click += (s, _) =>
-                    (GetElementTag((UIElement)s!) as InfoBarElement)?.OnActionButtonClick?.Invoke();
+                ((WinUI.Button)infoBar.ActionButton).Click += (_, _) =>
+                    (GetElementTag(infoBar) as InfoBarElement)?.OnActionButtonClick?.Invoke();
         }
-        SetElementTag(infoBar, ib);
         if (ib.OnClosed is not null)
             infoBar.Closed += (s, _) => (GetElementTag((UIElement)s!) as InfoBarElement)?.OnClosed?.Invoke();
         ApplySetters(ib.Setters, infoBar);
@@ -1714,14 +1717,14 @@ public sealed partial class Reconciler
     {
         var tip = new WinUI.TeachingTip { Title = ttEl.Title, Subtitle = ttEl.Subtitle ?? "", IsOpen = ttEl.IsOpen };
         if (ttEl.Content is not null) tip.Content = Mount(ttEl.Content, requestRerender);
-        if (ttEl.ActionButtonContent is not null)
-        {
-            tip.ActionButtonContent = ttEl.ActionButtonContent;
-            if (ttEl.OnActionButtonClick is not null)
-                tip.ActionButtonClick += (_, _) => ttEl.OnActionButtonClick?.Invoke();
-        }
+        if (ttEl.ActionButtonContent is not null) tip.ActionButtonContent = ttEl.ActionButtonContent;
         if (ttEl.CloseButtonContent is not null) tip.CloseButtonContent = ttEl.CloseButtonContent;
+        // Tag BEFORE wires so trampolines see the current element from the first tick.
         SetElementTag(tip, ttEl);
+        // Route through the Tag trampoline (not a captured local) so skip-path
+        // Tag refresh / Update can swap the dispatch target without re-wiring.
+        if (ttEl.OnActionButtonClick is not null)
+            tip.ActionButtonClick += (s, _) => (GetElementTag((UIElement)s!) as TeachingTipElement)?.OnActionButtonClick?.Invoke();
         if (ttEl.OnClosed is not null)
             tip.Closed += (s, _) => (GetElementTag((UIElement)s!) as TeachingTipElement)?.OnClosed?.Invoke();
         ApplySetters(ttEl.Setters, tip);

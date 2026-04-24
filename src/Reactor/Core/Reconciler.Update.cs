@@ -61,7 +61,16 @@ public sealed partial class Reconciler
         // .Width(200).Margin(10) produce a fresh ElementModifiers each render —
         // identical values, new instance. Use structural equality so we skip
         // when nothing actually changed.
-        if (Element.ShallowEquals(oldEl, newEl) && Element.ModifiersEqual(oldModifiers, modifiers))
+        //
+        // Callback-presence (oldEl.HasCallbacks == newEl.HasCallbacks) must
+        // also match: ShallowEquals ignores delegate identity, so a null→non-null
+        // OnClick transition would otherwise be skipped and the lazy-wire path
+        // in UpdateXxx never gets to attach the WinRT event. If presence
+        // changes, force Update so EnsureXxxWiring (poolable) or the diff-based
+        // null→non-null checks (non-poolable) can subscribe.
+        if (Element.ShallowEquals(oldEl, newEl)
+            && Element.ModifiersEqual(oldModifiers, modifiers)
+            && oldEl.HasCallbacks == newEl.HasCallbacks)
         {
             DebugElementsSkipped++;
             // Refresh Tag so the event trampoline dispatches into the new element's
@@ -660,7 +669,8 @@ public sealed partial class Reconciler
     private UIElement? UpdateHyperlinkButton(HyperlinkButtonElement o, HyperlinkButtonElement n, WinUI.HyperlinkButton hb)
     {
         hb.Content = n.Content;
-        if (n.NavigateUri is not null) hb.NavigateUri = n.NavigateUri;
+        // Unconditional: a transition to null must clear the stale navigation target.
+        if (o.NavigateUri != n.NavigateUri) hb.NavigateUri = n.NavigateUri;
         SetElementTag(hb, n);
         if (o.OnClick is null && n.OnClick is not null)
             hb.Click += (s, _) => (GetElementTag((UIElement)s!) as HyperlinkButtonElement)?.OnClick?.Invoke();
@@ -2374,10 +2384,16 @@ public sealed partial class Reconciler
         SetElementTag(ib, n);
         if (o.OnClosed is null && n.OnClosed is not null)
             ib.Closed += (s, _) => (GetElementTag((UIElement)s!) as InfoBarElement)?.OnClosed?.Invoke();
-        // Note: action button wire cannot be added here lazily because the
-        // action button itself only exists when ActionButtonContent is set
-        // at mount time. If you need OnActionButtonClick to appear after mount,
-        // wire it from the mount path by providing the content upfront.
+        // Lazy-wire ActionButton.Click on null→non-null. The ActionButton
+        // control itself only exists when ActionButtonContent was authored,
+        // and Mount handles the case where both content and handler are
+        // present. If the handler appears later without the button, WinUI
+        // still won't render one — that's an author-side constraint.
+        // Dispatch captures infoBar (not the button) so it reads the parent
+        // InfoBar's Tag, which Update keeps fresh via SetElementTag above.
+        if (o.OnActionButtonClick is null && n.OnActionButtonClick is not null
+            && ib.ActionButton is WinUI.Button actionButton)
+            actionButton.Click += (_, _) => (GetElementTag(ib) as InfoBarElement)?.OnActionButtonClick?.Invoke();
         ApplySetters(n.Setters, ib);
         return null;
     }
@@ -2402,7 +2418,13 @@ public sealed partial class Reconciler
         SetElementTag(tip, n);
         if (o.OnClosed is null && n.OnClosed is not null)
             tip.Closed += (s, _) => (GetElementTag((UIElement)s!) as TeachingTipElement)?.OnClosed?.Invoke();
-        // OnActionButtonClick only wired if ActionButtonContent was present at mount.
+        // Lazy-wire ActionButtonClick on null→non-null. The event is on the
+        // TeachingTip itself (not a sub-control), so Tag refresh on the tip
+        // keeps the dispatch target fresh. Note: WinUI only raises this event
+        // when ActionButtonContent is set; callers who bind OnActionButtonClick
+        // after mount also need to provide ActionButtonContent.
+        if (o.OnActionButtonClick is null && n.OnActionButtonClick is not null)
+            tip.ActionButtonClick += (s, _) => (GetElementTag((UIElement)s!) as TeachingTipElement)?.OnActionButtonClick?.Invoke();
         ApplySetters(n.Setters, tip);
         return null;
     }

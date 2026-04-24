@@ -165,11 +165,21 @@ public abstract record Element
 
     /// <summary>
     /// True if this element exposes any non-null event-handler delegate (OnClick,
-    /// OnChanged, etc.). Dispatch goes through the Tag trampoline, so when the
-    /// reconciler skips Update it must still refresh the control's Tag so clicks
-    /// invoke the current render's closure rather than a stale one. Elements with
-    /// no handlers at all don't need the Tag refresh — their controls never fire
-    /// into Reactor code. Override on each callback-bearing leaf.
+    /// OnChanged, etc.). Two roles:
+    ///
+    /// 1. When the reconciler takes a skip fast-path, it must still refresh the
+    ///    control's Tag so the event trampoline dispatches into the current
+    ///    render's closure rather than a stale one. Handler-free elements don't
+    ///    need the Tag refresh — their controls never fire into Reactor code.
+    ///
+    /// 2. Callback *presence* is part of the skip invariant: when
+    ///    <c>oldEl.HasCallbacks != newEl.HasCallbacks</c>, skipping is unsafe
+    ///    because <see cref="ShallowEquals"/> intentionally ignores delegate
+    ///    identity — a null→non-null transition wouldn't trigger the lazy-wire
+    ///    path in UpdateXxx, so the WinRT event would never be subscribed.
+    ///    The skip fast-paths therefore guard on this equality.
+    ///
+    /// Override on each callback-bearing leaf.
     /// </summary>
     internal virtual bool HasCallbacks => false;
 
@@ -177,11 +187,15 @@ public abstract record Element
     /// Returns true if two elements are structurally identical AND the child can be
     /// completely skipped during reconciliation (no need to call Update at all).
     /// This is stricter than ShallowEquals: elements with ThemeBindings must still
-    /// go through Update so bindings can be re-evaluated against the current theme.
+    /// go through Update so bindings can be re-evaluated against the current theme,
+    /// and a change in callback *presence* must run Update so the lazy-wire path
+    /// can subscribe to the WinRT event on a null→non-null transition.
     /// IMPORTANT: keep in sync with the ShallowEquals fast-path in Reconciler.Update().
     /// </summary>
     internal static bool CanSkipUpdate(Element oldEl, Element newEl)
-        => ShallowEquals(oldEl, newEl) && newEl.ThemeBindings is null;
+        => ShallowEquals(oldEl, newEl)
+            && newEl.ThemeBindings is null
+            && oldEl.HasCallbacks == newEl.HasCallbacks;
 
     /// <summary>
     /// Fast structural comparison that avoids the pitfalls of record Equals
