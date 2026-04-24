@@ -115,17 +115,23 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// UIElements that were newly mounted during the last top-level Reconcile pass.
-    /// Only populated when <see cref="ReactorFeatureFlags.HighlightReconcileChanges"/> is true.
+    /// Only populated when <see cref="ReactorFeatureFlags.HighlightReconcileChanges"/> is true;
+    /// returns an empty list otherwise so callers never see stale data after the flag is toggled off.
     /// </summary>
     public IReadOnlyList<UIElement> LastMountedElements =>
-        _highlightMounted ?? (IReadOnlyList<UIElement>)Array.Empty<UIElement>();
+        ReactorFeatureFlags.HighlightReconcileChanges
+            ? (IReadOnlyList<UIElement>?)_highlightMounted ?? Array.Empty<UIElement>()
+            : Array.Empty<UIElement>();
 
     /// <summary>
     /// UIElements that were modified in-place during the last top-level Reconcile pass.
-    /// Only populated when <see cref="ReactorFeatureFlags.HighlightReconcileChanges"/> is true.
+    /// Only populated when <see cref="ReactorFeatureFlags.HighlightReconcileChanges"/> is true;
+    /// returns an empty list otherwise so callers never see stale data after the flag is toggled off.
     /// </summary>
     public IReadOnlyList<UIElement> LastModifiedElements =>
-        _highlightModified ?? (IReadOnlyList<UIElement>)Array.Empty<UIElement>();
+        ReactorFeatureFlags.HighlightReconcileChanges
+            ? (IReadOnlyList<UIElement>?)_highlightModified ?? Array.Empty<UIElement>()
+            : Array.Empty<UIElement>();
 
     /// <summary>
     /// The element pool used by this reconciler. Disable via Pool.Enabled = false

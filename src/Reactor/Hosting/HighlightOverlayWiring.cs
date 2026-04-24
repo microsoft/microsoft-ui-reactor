@@ -110,7 +110,14 @@ internal sealed class HighlightOverlayWiring
                 return;
 
             _flushPending = true;
-            _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, Flush);
+            if (!_dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, Flush))
+            {
+                // Queue shutting down — drop the pending batch and reset so we don't
+                // deadlock future flushes or accumulate indefinitely.
+                _flushPending = false;
+                _pendingMounted = null;
+                _pendingModified = null;
+            }
         }
     }
 

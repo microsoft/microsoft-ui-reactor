@@ -2010,8 +2010,12 @@ public sealed partial class Reconciler
                 // No existing flyout or type mismatch — create fresh.
                 var flyoutContent = Mount(n.FlyoutContent, requestRerender);
                 var newFlyout = new WinUI.Flyout { Content = flyoutContent, Placement = n.Placement };
-                newFlyout.Opened += (_, _) => n.OnOpened?.Invoke();
-                newFlyout.Closed += (_, _) => n.OnClosed?.Invoke();
+                // Route handlers through the target's Tag (already set to n above) so future
+                // Update() calls that refresh the tag keep Opened/Closed pointing at the
+                // current FlyoutElement's delegates.
+                var handlerTarget = targetFe;
+                newFlyout.Opened += (_, _) => (GetElementTag(handlerTarget) as FlyoutElement)?.OnOpened?.Invoke();
+                newFlyout.Closed += (_, _) => (GetElementTag(handlerTarget) as FlyoutElement)?.OnClosed?.Invoke();
                 SetFlyoutOnControl(targetFe, newFlyout);
                 ApplySetters(n.Setters, newFlyout);
             }

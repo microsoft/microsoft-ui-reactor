@@ -51,14 +51,14 @@ public static partial class Factories
 
         var userItems = items?.Invoke()?.ToArray() ?? Array.Empty<MenuFlyoutItemBase>();
 
-        // Built-in devtools items appended after a separator.
-        var builtInItems = new MenuFlyoutItemBase[]
-        {
-            MenuSeparator(),
-            ToggleMenuItem("Highlight reconcile changes",
-                ReactorFeatureFlags.HighlightReconcileChanges,
-                v => ReactorFeatureFlags.HighlightReconcileChanges = v),
-        };
+        var builtInToggle = ToggleMenuItem("Highlight reconcile changes",
+            ReactorFeatureFlags.HighlightReconcileChanges,
+            v => ReactorFeatureFlags.HighlightReconcileChanges = v);
+
+        // Separator only makes sense when there are user items to separate from.
+        var builtInItems = userItems.Length > 0
+            ? new MenuFlyoutItemBase[] { MenuSeparator(), builtInToggle }
+            : new MenuFlyoutItemBase[] { builtInToggle };
 
         var materialized = userItems.Concat(builtInItems).ToArray();
 

@@ -69,39 +69,59 @@ internal sealed class ReconcileHighlightOverlay
 
         int budget = MaxSpritesPerFlush;
 
-        // Single scoped batch for ALL sprites in this flush — avoids per-sprite batch overhead
+        // Single scoped batch for ALL sprites in this flush — avoids per-sprite batch overhead.
+        // CompositionScopedBatch is IDisposable; we dispose it from the Completed handler
+        // (or from the catch path below) so long debugging sessions don't leak COM/resource
+        // pressure one batch at a time.
         var batch = _compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
-
-        for (int i = 0; i < mounted.Count && budget > 0; i++)
-        {
-            if (TryAddHighlight(host, mounted[i], _mountedBrush, MountedOpacity, _fadeMountedAnim))
-                budget--;
-        }
-
-        for (int i = 0; i < modified.Count && budget > 0; i++)
-        {
-            if (TryAddHighlight(host, modified[i], _modifiedBrush, ModifiedOpacity, _fadeModifiedAnim))
-                budget--;
-        }
-
-        batch.End();
-
-        // When all animations in this batch complete, bulk-remove the sprites
         var container = _container;
-        batch.Completed += (_, _) =>
+        bool disposeInCompleted = false;
+
+        try
         {
-            // Remove sprites that have fully faded (opacity ≈ 0).
-            // Walk in reverse to safely remove while iterating.
-            for (int i = container.Children.Count - 1; i >= 0; i--)
+            for (int i = 0; i < mounted.Count && budget > 0; i++)
             {
-                var child = container.Children.ElementAt(i);
-                if (child.Opacity <= 0.001f)
-                {
-                    container.Children.Remove(child);
-                    child.Dispose();
-                }
+                if (TryAddHighlight(host, mounted[i], _mountedBrush, MountedOpacity, _fadeMountedAnim))
+                    budget--;
             }
-        };
+
+            for (int i = 0; i < modified.Count && budget > 0; i++)
+            {
+                if (TryAddHighlight(host, modified[i], _modifiedBrush, ModifiedOpacity, _fadeModifiedAnim))
+                    budget--;
+            }
+
+            // When all animations in this batch complete, bulk-remove the sprites.
+            batch.Completed += (_, _) =>
+            {
+                try
+                {
+                    // Remove sprites that have fully faded (opacity ≈ 0).
+                    // Walk in reverse to safely remove while iterating.
+                    for (int i = container.Children.Count - 1; i >= 0; i--)
+                    {
+                        var child = container.Children.ElementAt(i);
+                        if (child.Opacity <= 0.001f)
+                        {
+                            container.Children.Remove(child);
+                            child.Dispose();
+                        }
+                    }
+                }
+                finally
+                {
+                    batch.Dispose();
+                }
+            };
+
+            disposeInCompleted = true;
+            batch.End();
+        }
+        catch
+        {
+            if (!disposeInCompleted) batch.Dispose();
+            throw;
+        }
     }
 
     private bool TryAddHighlight(UIElement host, UIElement target, CompositionBrush brush,

@@ -339,6 +339,18 @@ public sealed class ReactorHost : IDisposable
                 else
                     _window.Content = wrapper;
             }
+            else if (!ReactorFeatureFlags.HighlightReconcileChanges && _highlightWiring?.WrapperRoot is not null)
+            {
+                // Flag was toggled off while preserving the same root control — tear down
+                // the wrapper and reinstate the raw control so we don't pay for an extra
+                // layout layer when the feature is disabled.
+                if (ContentTarget is not null)
+                    ContentTarget.Child = newControl;
+                else
+                    _window.Content = newControl;
+                _highlightWiring.Dispose();
+                _highlightWiring = null;
+            }
 
             _currentControl = newControl;
             _currentTree = newTree;

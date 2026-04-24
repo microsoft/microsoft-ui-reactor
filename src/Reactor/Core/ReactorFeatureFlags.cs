@@ -41,10 +41,11 @@ public static class ReactorFeatureFlags
 
     /// <summary>
     /// When true, the reconciler records which <c>UIElement</c>s were mounted or
-    /// modified during each pass and <see cref="Hosting.ReactorHostControl"/> draws
-    /// semi-transparent overlays (red = new mount, yellow = property update) so you
-    /// can visualize reconcile impact. The overlay is rendered via Composition
-    /// visuals and is hit-test invisible.
+    /// modified during each pass and Reactor hosts (<see cref="Hosting.ReactorHost"/>
+    /// and <see cref="Hosting.ReactorHostControl"/>, via the shared
+    /// <c>HighlightOverlayWiring</c>) draw semi-transparent overlays
+    /// (red = new mount, yellow = property update) so you can visualize reconcile
+    /// impact. The overlay is rendered via Composition visuals and is hit-test invisible.
     /// </summary>
     /// <remarks>
     /// Default: <c>false</c>. Intended for interactive debugging sessions. When off,

@@ -1596,9 +1596,12 @@ public sealed partial class Reconciler
         {
             var flyoutContent = Mount(flyEl.FlyoutContent, requestRerender);
             var flyout = new WinUI.Flyout { Content = flyoutContent, Placement = flyEl.Placement };
-            flyout.Opened += (_, _) => flyEl.OnOpened?.Invoke();
-            flyout.Closed += (_, _) => flyEl.OnClosed?.Invoke();
             SetElementTag(targetFe, flyEl);
+            // Route handlers through the target's Tag so Update() refreshing the tag to the
+            // new FlyoutElement causes subsequent Opened/Closed to fire the current delegates —
+            // capturing flyEl directly would freeze handlers to the mount-time element.
+            flyout.Opened += (_, _) => (GetElementTag(targetFe) as FlyoutElement)?.OnOpened?.Invoke();
+            flyout.Closed += (_, _) => (GetElementTag(targetFe) as FlyoutElement)?.OnClosed?.Invoke();
             // SetFlyoutOnControl wires .Flyout on Button/SplitButton targets so
             // clicking opens the flyout natively; non-button targets fall back
             // to SetAttachedFlyout metadata (opened only via ShowAttachedFlyout).

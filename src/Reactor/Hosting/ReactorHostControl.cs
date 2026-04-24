@@ -309,6 +309,15 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 _highlightWiring ??= new HighlightOverlayWiring(_dispatcherQueue);
                 Content = _highlightWiring.SetContentViaWrapper(newControl);
             }
+            else if (!ReactorFeatureFlags.HighlightReconcileChanges && _highlightWiring?.WrapperRoot is not null)
+            {
+                // Flag was toggled off while preserving the same root control — tear down
+                // the wrapper and reinstate the raw control so we don't pay for an extra
+                // layout layer when the feature is disabled.
+                Content = newControl;
+                _highlightWiring.Dispose();
+                _highlightWiring = null;
+            }
 
             _currentControl = newControl;
             _currentTree = newTree;
