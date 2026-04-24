@@ -15,8 +15,8 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// </summary>
 internal sealed class ReconcileHighlightOverlay
 {
-    private const float MountedOpacity = 0.45f;
-    private const float ModifiedOpacity = 0.35f;
+    private const float MountedOpacity = 0.22f;
+    private const float ModifiedOpacity = 0.17f;
     private const int FadeDurationMs = 600;
     private const float StripeWidth = 5f;
 
