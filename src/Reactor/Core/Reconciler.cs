@@ -188,16 +188,16 @@ public sealed partial class Reconciler : IDisposable
     // per-RCW would return a different EventHandlerState for each wrapper
     // and attach duplicate trampolines on the native event source.
     //
-    // Lifecycle notes:
-    //   - SetElementTag/GetElementTag/ClearElementTag operate on the Element
-    //     field only. On pool return we *preserve* the EventHandlerState so
-    //     that already-attached trampolines survive recycling; the trampoline
-    //     dispatches through state.Current*, which Ensure*Subscribed refreshes
-    //     on next mount/update. Re-attaching subscriptions on every rent would
-    //     re-introduce the duplicate-subscription bug.
-    //   - For controls that are truly being discarded (XamlHostElement unmount,
-    //     ListView item recycle), callers don't need to worry about the state —
-    //     the DP dies with the native DO.
+    // Lifecycle:
+    //   - Pool return / ListView recycle: ClearElementTag nulls state.Element
+    //     only, preserving state.Events. Attached trampolines survive; next
+    //     rent/realize flows through Ensure*Subscribed which refreshes
+    //     state.Current* rather than attaching duplicates. Re-attaching on
+    //     every rent would re-introduce the bug this module exists to fix.
+    //   - Permanent unmount (XamlHost/XamlPage — not pooled, may stay rooted
+    //     by app code): DetachReactorState nulls Element, clears Current*,
+    //     drops state.Events. Any orphan trampoline still on the native event
+    //     source becomes a no-op if it fires.
     internal sealed class ReactorState
     {
         public Element? Element;
@@ -248,13 +248,32 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// Clears the Element pointer while preserving EventHandlerState. Call on
-    /// pool return / XamlHost unmount — attached trampolines stay valid so
-    /// that rent/re-mount reuses the same subscriptions.
+    /// pool return — attached trampolines stay valid so that rent/re-mount
+    /// reuses the same subscriptions (re-attaching would re-introduce the
+    /// duplicate-subscription bug).
     /// </summary>
     internal static void ClearElementTag(FrameworkElement fe)
     {
         if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
             state.Element = null;
+    }
+
+    /// <summary>
+    /// Fully detaches reactor state from a control: nulls the Element and
+    /// clears the EventHandlerState's Current* delegates so any already-
+    /// attached trampoline on the native event source becomes a no-op if it
+    /// fires. Use when the control leaves reactor's ownership for good
+    /// (XamlHost / XamlPage unmount) but may remain alive because the app
+    /// holds a reference — without this, captured closures stay reachable
+    /// and stale reactor callbacks can still fire.
+    /// </summary>
+    internal static void DetachReactorState(FrameworkElement fe)
+    {
+        if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
+            return;
+        state.Element = null;
+        state.Events?.ClearCurrentHandlers();
+        state.Events = null;
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -801,10 +820,12 @@ public sealed partial class Reconciler : IDisposable
 
         // XamlHostElement children were created outside Reactor's tree —
         // do NOT recurse into them (they may have stale parent references
-        // or be types Reactor doesn't know how to clean).
+        // or be types Reactor doesn't know how to clean). Fully detach
+        // reactor state so retained-by-app references can't fire stale
+        // callbacks through orphaned trampolines.
         if (control is FrameworkElement hostFe && GetElementTag(hostFe) is XamlHostElement)
         {
-            ClearElementTag(hostFe);
+            DetachReactorState(hostFe);
             return;
         }
 
@@ -812,7 +833,7 @@ public sealed partial class Reconciler : IDisposable
         if (control is WinUI.Frame pageFrame && GetElementTag(pageFrame) is XamlPageElement)
         {
             pageFrame.Content = null;
-            ClearElementTag(pageFrame);
+            DetachReactorState(pageFrame);
             return;
         }
 
@@ -2416,6 +2437,37 @@ public sealed partial class Reconciler : IDisposable
         public RoutedEventHandler? GotFocusTrampoline;
         public RoutedEventHandler? LostFocusTrampoline;
         public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? AccessKeyDisplayRequestedTrampoline;
+
+        /// <summary>
+        /// Null out every Current* user delegate so trampolines already attached
+        /// on the native event source become no-ops. Trampoline delegate fields
+        /// are left intact — they're rooted by WinUI's subscription list and
+        /// can't be detached here without access to the native element.
+        /// </summary>
+        public void ClearCurrentHandlers()
+        {
+            CurrentSizeChanged = null;
+            CurrentPointerPressed = null;
+            CurrentPointerMoved = null;
+            CurrentPointerReleased = null;
+            CurrentPointerEntered = null;
+            CurrentPointerExited = null;
+            CurrentPointerCanceled = null;
+            CurrentPointerCaptureLost = null;
+            CurrentPointerWheelChanged = null;
+            CurrentTapped = null;
+            CurrentDoubleTapped = null;
+            CurrentRightTapped = null;
+            CurrentHolding = null;
+            CurrentKeyDown = null;
+            CurrentKeyUp = null;
+            CurrentPreviewKeyDown = null;
+            CurrentPreviewKeyUp = null;
+            CurrentCharacterReceived = null;
+            CurrentGotFocus = null;
+            CurrentLostFocus = null;
+            CurrentAccessKeyDisplayRequested = null;
+        }
     }
 
     // EventHandlerState lives on the ReactorState wrapper attached to the

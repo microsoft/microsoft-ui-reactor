@@ -91,7 +91,11 @@ public static class XamlInterop
                 // Do NOT recurse into children — they were never managed by Reactor
                 // and must not be pooled (they may have stale parent references
                 // or be types Reactor doesn't know how to clean).
-                Reconciler.ClearElementTag(control);
+                //
+                // Fully detach reactor state: the host control may outlive this
+                // unmount (app may retain a reference and reuse it). Clearing
+                // Current* handlers ensures stale reactor callbacks can't fire.
+                Reconciler.DetachReactorState(control);
             });
     }
 }
