@@ -471,6 +471,35 @@ public abstract record Element
                 pa.IsOpen == pb.IsOpen
                 && pa.IsLightDismissEnabled == pb.IsLightDismissEnabled,
 
+            // TitleBar: own-props check (ignore Content/RightHeader slots which
+            // recurse as children). Without this, TitleBar flashes yellow on
+            // every reconcile even when only descendants changed.
+            (TitleBarElement ta, TitleBarElement tb) =>
+                ta.Title == tb.Title
+                && ta.Subtitle == tb.Subtitle
+                && ta.IsBackButtonVisible == tb.IsBackButtonVisible
+                && ta.IsBackButtonEnabled == tb.IsBackButtonEnabled
+                && ta.IsPaneToggleButtonVisible == tb.IsPaneToggleButtonVisible
+                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+
+            // Pure composition wrappers — they never write their own WinUI
+            // properties; their rendered output is diffed separately. Returning
+            // true here prevents the overlay from flashing the entire content
+            // block every time the component re-renders.
+            (ComponentElement, ComponentElement) => true,
+            (FuncElement, FuncElement) => true,
+            (MemoElement, MemoElement) => true,
+            (ModifiedElement, ModifiedElement) => true,
+            (GroupElement, GroupElement) => true,
+            (ErrorBoundaryElement, ErrorBoundaryElement) => true,
+
+            // MenuFlyout attaches a flyout to its Target but doesn't have its
+            // own WinUI props that change across renders.
+            (MenuFlyoutElement, MenuFlyoutElement) => true,
+            (ContentFlyoutElement, ContentFlyoutElement) => true,
+            (MenuFlyoutContentElement, MenuFlyoutContentElement) => true,
+            (FlyoutElement, FlyoutElement) => true,
+
             // Non-container / leaf types: return false → always captured
             _ => false,
         };
