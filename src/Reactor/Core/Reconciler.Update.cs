@@ -57,7 +57,11 @@ public sealed partial class Reconciler
         // the resolved brush value depends on the control's effective theme,
         // which can change independently of the element tree (e.g., parent
         // RequestedTheme toggle).
-        if (Element.ShallowEquals(oldEl, newEl) && ReferenceEquals(oldModifiers, modifiers))
+        // ReferenceEquals would fail constantly because fluent chains like
+        // .Width(200).Margin(10) produce a fresh ElementModifiers each render —
+        // identical values, new instance. Use structural equality so we skip
+        // when nothing actually changed.
+        if (Element.ShallowEquals(oldEl, newEl) && Element.ModifiersEqual(oldModifiers, modifiers))
         {
             DebugElementsSkipped++;
             // Refresh Tag so the event trampoline dispatches into the new element's
@@ -301,7 +305,7 @@ public sealed partial class Reconciler
         // Containers whose only change is children references are excluded — the
         // individual children will be captured if they change.
         if (result is null && _highlightModified is not null
-            && (!Element.OwnPropsEqual(oldEl, newEl) || !ReferenceEquals(oldModifiers, modifiers)))
+            && (!Element.OwnPropsEqual(oldEl, newEl) || !Element.ModifiersEqual(oldModifiers, modifiers)))
             _highlightModified.Add(control);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
