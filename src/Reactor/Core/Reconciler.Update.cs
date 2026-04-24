@@ -2908,7 +2908,16 @@ public sealed partial class Reconciler
             // g.Children[i] read entirely. ShallowEquals already checks modifiers
             // and attached (GridAttached), so grid placement is also covered.
             if (Element.CanSkipUpdate(oldChild, newChild))
+            {
+                // Must still refresh Tag when the element exposes callbacks,
+                // otherwise the event trampoline dispatches through the previous
+                // render's stale closure. Pays one children.Get COM call only
+                // for callback-bearing elements; handler-free leaves stay free.
+                if (newChild.HasCallbacks && i < g.Children.Count
+                    && g.Children[i] is FrameworkElement fe)
+                    fe.Tag = newChild;
                 continue;
+            }
 
             // Guard: recursive Reconcile may have modified g.Children (e.g., via
             // component re-renders that remove children from this grid).

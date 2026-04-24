@@ -70,6 +70,14 @@ internal static class ChildReconciler
             if (Element.CanSkipUpdate(oldEl, newEl))
             {
                 reconciler.DebugElementsSkipped++;
+                // Refresh Tag when the element carries callbacks. The skip short-
+                // circuits Update, so without this the event trampoline keeps
+                // dispatching through the previous render's closure — stale state
+                // (e.g., Counter's `() => setCount(count + 1)` would keep capturing
+                // the initial count). For callback-free elements we still avoid
+                // the children.Get COM call.
+                if (newEl.HasCallbacks && children.Get(i) is FrameworkElement fe)
+                    fe.Tag = newEl;
                 continue;
             }
 
