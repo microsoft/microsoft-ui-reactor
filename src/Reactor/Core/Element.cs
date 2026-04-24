@@ -500,6 +500,68 @@ public abstract record Element
             (MenuFlyoutContentElement, MenuFlyoutContentElement) => true,
             (FlyoutElement, FlyoutElement) => true,
 
+            // Collection-style elements: compare own props only (SelectedIndex,
+            // mode flags, header). Item/children arrays are compared separately
+            // in ShallowEquals via ReferenceEquals — a fresh items array does
+            // NOT mean own props changed, so the highlight overlay should not
+            // light up the ComboBox/ListView/etc. when only the authored items
+            // projection allocated a new array.
+            (ComboBoxElement ca, ComboBoxElement cb) =>
+                ca.SelectedIndex == cb.SelectedIndex
+                && ca.PlaceholderText == cb.PlaceholderText
+                && ca.Header == cb.Header
+                && ca.IsEditable == cb.IsEditable
+                && ca.Setters.Length == 0 && cb.Setters.Length == 0,
+
+            (ListViewElement la, ListViewElement lb) =>
+                la.SelectedIndex == lb.SelectedIndex
+                && la.SelectionMode == lb.SelectionMode
+                && la.Header == lb.Header
+                && la.Setters.Length == 0 && lb.Setters.Length == 0,
+
+            (GridViewElement ga, GridViewElement gb) =>
+                ga.SelectedIndex == gb.SelectedIndex
+                && ga.SelectionMode == gb.SelectionMode
+                && ga.Header == gb.Header
+                && ga.Setters.Length == 0 && gb.Setters.Length == 0,
+
+            (FlipViewElement fa, FlipViewElement fb) =>
+                fa.SelectedIndex == fb.SelectedIndex
+                && fa.Setters.Length == 0 && fb.Setters.Length == 0,
+
+            (PivotElement pa, PivotElement pb) =>
+                pa.SelectedIndex == pb.SelectedIndex
+                && pa.Title == pb.Title
+                && pa.Setters.Length == 0 && pb.Setters.Length == 0,
+
+            (TabViewElement ta, TabViewElement tb) =>
+                ta.SelectedIndex == tb.SelectedIndex
+                && ta.IsAddTabButtonVisible == tb.IsAddTabButtonVisible
+                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+
+            (TreeViewElement ta, TreeViewElement tb) =>
+                ta.SelectionMode == tb.SelectionMode
+                && ta.CanDragItems == tb.CanDragItems
+                && ta.AllowDrop == tb.AllowDrop
+                && ta.CanReorderItems == tb.CanReorderItems
+                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+
+            (SelectorBarElement sa, SelectorBarElement sb) =>
+                sa.SelectedIndex == sb.SelectedIndex
+                && sa.Setters.Length == 0 && sb.Setters.Length == 0,
+
+            (ListBoxElement la, ListBoxElement lb) =>
+                la.SelectedIndex == lb.SelectedIndex
+                && la.Setters.Length == 0 && lb.Setters.Length == 0,
+
+            (RadioButtonsElement ra, RadioButtonsElement rb) =>
+                ra.SelectedIndex == rb.SelectedIndex
+                && ra.Header == rb.Header
+                && ra.Setters.Length == 0 && rb.Setters.Length == 0,
+
+            (BreadcrumbBarElement ba, BreadcrumbBarElement bb) =>
+                ba.Setters.Length == 0 && bb.Setters.Length == 0,
+
             // Non-container / leaf types: return false → always captured
             _ => false,
         };
