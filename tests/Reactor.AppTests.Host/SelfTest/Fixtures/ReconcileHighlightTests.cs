@@ -228,16 +228,17 @@ internal static class ReconcileHighlightTests
                 var (label, setLabel) = ctx.UseState("Item1");
                 return VStack(
                     MenuFlyout(
-                        Button("mfTarget", () => setLabel("Item2")),
+                        Button("mfTarget"),
                         MenuItem(label)
-                    )
+                    ),
+                    Button("mfTrigger", () => setLabel("Item2"))
                 );
             });
 
             await Harness.Render();
 
             // Trigger update — the menu flyout item label changes.
-            H.ClickButton("mfTarget");
+            H.ClickButton("mfTrigger");
             await Harness.Render();
 
             // No new elements should be created (Update path, not Mount).
