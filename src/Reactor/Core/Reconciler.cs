@@ -182,6 +182,35 @@ public sealed partial class Reconciler : IDisposable
         control is FrameworkElement fe ? fe.Tag as Element : null;
 
     // ════════════════════════════════════════════════════════════════════
+    //  Lazy event wiring for poolable types
+    // ════════════════════════════════════════════════════════════════════
+    //
+    // Non-poolable controls are created fresh on every Mount, so lazy wiring
+    // works off the (oldEl, newEl) diff alone — wire at Mount when the handler
+    // is non-null, wire at Update when it transitions null → non-null.
+    //
+    // Poolable controls (Button, TextBox, ToggleSwitch) are different: the pool
+    // intentionally retains WinRT event subscriptions across rent/return (see
+    // ElementPool.CleanElement), but clears Tag. So "Tag is null" on rent does
+    // NOT mean "unwired" — the control may already have a trampoline attached.
+    // We need a per-control flag that survives pool cycles to avoid double-
+    // subscription. A ConditionalWeakTable gives us that with zero cross-ABI
+    // cost and weak keys so GC isn't blocked.
+
+    internal sealed class PoolableWireFlags
+    {
+        public bool ButtonClick;
+        public bool TextBoxTextChanged;
+        public bool TextBoxSelectionChanged;
+        public bool ToggleSwitchToggled;
+    }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, PoolableWireFlags> _poolableWireFlags = new();
+
+    internal static PoolableWireFlags GetPoolableWireFlags(FrameworkElement fe) =>
+        _poolableWireFlags.GetValue(fe, static _ => new PoolableWireFlags());
+
+    // ════════════════════════════════════════════════════════════════════
     //  Extensible type registry (Feature 1: RegisterType API)
     // ════════════════════════════════════════════════════════════════════
 
