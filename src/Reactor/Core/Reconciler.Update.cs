@@ -159,6 +159,8 @@ public sealed partial class Reconciler
                 => UpdateScrollView(o, n, sv, newEl, requestRerender),
             (BorderElement o, BorderElement n, WinUI.Border b)
                 => UpdateBorder(o, n, b, newEl, requestRerender),
+            (ViewboxElement o, ViewboxElement n, WinUI.Viewbox vb)
+                => UpdateViewbox(o, n, vb, requestRerender),
             (ExpanderElement o, ExpanderElement n, WinUI.Expander exp)
                 => UpdateExpander(o, n, exp, requestRerender),
             (SplitViewElement o, SplitViewElement n, WinUI.SplitView sv)
@@ -239,6 +241,10 @@ public sealed partial class Reconciler
                 => UpdatePopup(o, n, popupWrap, requestRerender),
             (RefreshContainerElement o, RefreshContainerElement n, WinUI.RefreshContainer rc)
                 => UpdateRefreshContainer(o, n, rc, requestRerender),
+            (MenuFlyoutElement o, MenuFlyoutElement n, UIElement mfTarget)
+                => UpdateMenuFlyout(o, n, mfTarget, requestRerender),
+            (FlyoutElement o, FlyoutElement n, UIElement flyTarget)
+                => UpdateFlyoutElement(o, n, flyTarget, requestRerender),
             (CommandBarFlyoutElement o, CommandBarFlyoutElement n, UIElement cbfTarget)
                 => UpdateCommandBarFlyout(o, n, cbfTarget, requestRerender),
             (CalendarViewElement, CalendarViewElement n, WinUI.CalendarView cv)
@@ -284,9 +290,12 @@ public sealed partial class Reconciler
         // stale values (same principle as the flex attached-property fix).
         var target = result ?? control;
 
-        // Record the control for highlight overlay only when it was patched in-place
-        // (result == null). Remounts go through Mount() → _highlightMounted instead.
-        if (result is null && _highlightModified is not null)
+        // Record the control for highlight overlay only when the element's own
+        // WinUI properties were actually updated (not just children recursed).
+        // Containers whose only change is children references are excluded — the
+        // individual children will be captured if they change.
+        if (result is null && _highlightModified is not null
+            && (!Element.OwnPropsEqual(oldEl, newEl) || !ReferenceEquals(oldModifiers, modifiers)))
             _highlightModified.Add(control);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
@@ -1914,6 +1923,120 @@ public sealed partial class Reconciler
             }
         }
         return updated == targetControl ? null : updated;
+    }
+
+    private UIElement? UpdateMenuFlyout(MenuFlyoutElement o, MenuFlyoutElement n, UIElement targetControl, Action requestRerender)
+    {
+        UIElement? updated = targetControl;
+        if (CanUpdate(o.Target, n.Target))
+        {
+            var replacement = Update(o.Target, n.Target, targetControl, requestRerender);
+            if (replacement is not null) updated = replacement;
+        }
+        else
+        {
+            Unmount(targetControl);
+            updated = Mount(n.Target, requestRerender);
+        }
+
+        if (updated is FrameworkElement targetFe)
+        {
+            SetElementTag(targetFe, n);
+            // Retrieve the existing MenuFlyout and update items in place.
+            WinPrim.FlyoutBase? existingFlyout = targetFe switch
+            {
+                WinUI.SplitButton sb => sb.Flyout,
+                WinUI.Button btn => btn.Flyout,
+                _ => WinPrim.FlyoutBase.GetAttachedFlyout(targetFe),
+            };
+            if (existingFlyout is WinUI.MenuFlyout mf)
+            {
+                UpdateMenuFlyoutItems(mf.Items, o.Items, n.Items);
+                ApplySetters(n.Setters, mf);
+            }
+            else
+            {
+                // Flyout type changed or was missing — create fresh.
+                var menuFlyout = new WinUI.MenuFlyout();
+                foreach (var item in n.Items) menuFlyout.Items.Add(CreateMenuFlyoutItem(item));
+                SetFlyoutOnControl(targetFe, menuFlyout);
+                ApplySetters(n.Setters, menuFlyout);
+            }
+        }
+        return updated == targetControl ? null : updated;
+    }
+
+    private UIElement? UpdateFlyoutElement(FlyoutElement o, FlyoutElement n, UIElement targetControl, Action requestRerender)
+    {
+        UIElement? updated = targetControl;
+        if (CanUpdate(o.Target, n.Target))
+        {
+            var replacement = Update(o.Target, n.Target, targetControl, requestRerender);
+            if (replacement is not null) updated = replacement;
+        }
+        else
+        {
+            Unmount(targetControl);
+            updated = Mount(n.Target, requestRerender);
+        }
+
+        if (updated is FrameworkElement targetFe)
+        {
+            SetElementTag(targetFe, n);
+            WinPrim.FlyoutBase? existingFlyout = targetFe switch
+            {
+                WinUI.SplitButton sb => sb.Flyout,
+                WinUI.Button btn => btn.Flyout,
+                _ => WinPrim.FlyoutBase.GetAttachedFlyout(targetFe),
+            };
+
+            if (existingFlyout is WinUI.Flyout flyout)
+            {
+                if (flyout.Content is UIElement existingContent && CanUpdate(o.FlyoutContent, n.FlyoutContent))
+                {
+                    var contentRepl = Update(o.FlyoutContent, n.FlyoutContent, existingContent, requestRerender);
+                    if (contentRepl is not null) flyout.Content = contentRepl;
+                }
+                else
+                {
+                    if (flyout.Content is UIElement stale) Unmount(stale);
+                    flyout.Content = Mount(n.FlyoutContent, requestRerender);
+                }
+                flyout.Placement = n.Placement;
+                ApplySetters(n.Setters, flyout);
+            }
+            else
+            {
+                // No existing flyout or type mismatch — create fresh.
+                var flyoutContent = Mount(n.FlyoutContent, requestRerender);
+                var newFlyout = new WinUI.Flyout { Content = flyoutContent, Placement = n.Placement };
+                newFlyout.Opened += (_, _) => n.OnOpened?.Invoke();
+                newFlyout.Closed += (_, _) => n.OnClosed?.Invoke();
+                SetFlyoutOnControl(targetFe, newFlyout);
+                ApplySetters(n.Setters, newFlyout);
+            }
+            if (n.IsOpen && !o.IsOpen) WinPrim.FlyoutBase.ShowAttachedFlyout(targetFe);
+        }
+        return updated == targetControl ? null : updated;
+    }
+
+    private UIElement? UpdateViewbox(ViewboxElement o, ViewboxElement n, WinUI.Viewbox vb, Action requestRerender)
+    {
+        if (CanUpdate(o.Child, n.Child))
+        {
+            if (vb.Child is UIElement existingChild)
+            {
+                var childRepl = Update(o.Child, n.Child, existingChild, requestRerender);
+                if (childRepl is not null) vb.Child = childRepl as UIElement;
+            }
+        }
+        else
+        {
+            if (vb.Child is UIElement stale) Unmount(stale);
+            vb.Child = Mount(n.Child, requestRerender) as UIElement;
+        }
+        ApplySetters(n.Setters, vb);
+        return null;
     }
 
     private UIElement? UpdateSwipeControl(SwipeControlElement o, SwipeControlElement n, WinUI.SwipeControl sc, Action requestRerender)

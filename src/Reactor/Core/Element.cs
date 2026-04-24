@@ -283,6 +283,91 @@ public abstract record Element
     }
 
     /// <summary>
+    /// Like ShallowEquals but for container types, ignores child/children references.
+    /// Returns true when the element's own WinUI-mapped properties are unchanged,
+    /// meaning the only reason Update was entered is to recurse into children.
+    /// Used by the highlight overlay to avoid marking containers yellow when only
+    /// their children changed (the children themselves will be individually captured).
+    /// Conservative: returns false for unknown/non-container types (assume props changed).
+    /// </summary>
+    internal static bool OwnPropsEqual(Element a, Element b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a.GetType() != b.GetType()) return false;
+
+        return (a, b) switch
+        {
+            // Container types: same checks as ShallowEquals minus Children/Child refs
+            (StackElement sa, StackElement sb) =>
+                sa.Orientation == sb.Orientation
+                && sa.Spacing == sb.Spacing
+                && sa.HorizontalAlignment == sb.HorizontalAlignment
+                && sa.VerticalAlignment == sb.VerticalAlignment
+                && sa.Setters.Length == 0 && sb.Setters.Length == 0,
+
+            (Core.GridElement ga, Core.GridElement gb) =>
+                ga.RowSpacing == gb.RowSpacing
+                && ga.ColumnSpacing == gb.ColumnSpacing
+                && ReferenceEquals(ga.Definition, gb.Definition)
+                && ga.Setters.Length == 0 && gb.Setters.Length == 0,
+
+            (BorderElement ba, BorderElement bb) =>
+                ReferenceEquals(ba.Background, bb.Background)
+                && ReferenceEquals(ba.BorderBrush, bb.BorderBrush)
+                && ba.CornerRadius == bb.CornerRadius
+                && ba.Padding == bb.Padding
+                && ba.BorderThickness == bb.BorderThickness
+                && ba.Setters.Length == 0 && bb.Setters.Length == 0,
+
+            (ScrollViewElement sva, ScrollViewElement svb) =>
+                sva.Orientation == svb.Orientation
+                && sva.HorizontalScrollBarVisibility == svb.HorizontalScrollBarVisibility
+                && sva.VerticalScrollBarVisibility == svb.VerticalScrollBarVisibility
+                && sva.HorizontalScrollMode == svb.HorizontalScrollMode
+                && sva.VerticalScrollMode == svb.VerticalScrollMode
+                && sva.ZoomMode == svb.ZoomMode
+                && sva.Setters.Length == 0 && svb.Setters.Length == 0,
+
+            (FlexElement fa, FlexElement fb) =>
+                fa.Direction == fb.Direction
+                && fa.JustifyContent == fb.JustifyContent
+                && fa.AlignItems == fb.AlignItems
+                && fa.AlignContent == fb.AlignContent
+                && fa.Wrap == fb.Wrap
+                && fa.ColumnGap == fb.ColumnGap
+                && fa.RowGap == fb.RowGap
+                && fa.FlexPadding == fb.FlexPadding
+                && fa.Setters.Length == 0 && fb.Setters.Length == 0,
+
+            (CanvasElement ca, CanvasElement cb) =>
+                ca.Setters.Length == 0 && cb.Setters.Length == 0,
+
+            (WrapGridElement wa, WrapGridElement wb) =>
+                wa.Orientation == wb.Orientation
+                && wa.ItemWidth == wb.ItemWidth
+                && wa.ItemHeight == wb.ItemHeight
+                && wa.MaximumRowsOrColumns == wb.MaximumRowsOrColumns
+                && wa.Setters.Length == 0 && wb.Setters.Length == 0,
+
+            (RelativePanelElement ra, RelativePanelElement rb) =>
+                ra.Setters.Length == 0 && rb.Setters.Length == 0,
+
+            (ViewboxElement va, ViewboxElement vb) =>
+                va.Setters.Length == 0 && vb.Setters.Length == 0,
+
+            // Structural wrappers that only contain children
+            (NavigationHostElement, NavigationHostElement) => true,
+            (CommandHostElement, CommandHostElement) => true,
+            (PopupElement pa, PopupElement pb) =>
+                pa.IsOpen == pb.IsOpen
+                && pa.IsLightDismissEnabled == pb.IsLightDismissEnabled,
+
+            // Non-container / leaf types: return false → always captured
+            _ => false,
+        };
+    }
+
+    /// <summary>
     /// Structural comparison of RichTextParagraph arrays.
     /// Compares each paragraph's inlines using record equality.
     /// </summary>

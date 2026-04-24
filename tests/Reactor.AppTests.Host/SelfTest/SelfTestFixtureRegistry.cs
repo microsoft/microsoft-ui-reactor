@@ -680,6 +680,9 @@ internal static class SelfTestFixtureRegistry
         "ReconcileHighlight_MountCapturesElements",
         "ReconcileHighlight_UpdateCapturesModified",
         "ReconcileHighlight_NoCaptureWhenFlagOff",
+        "ReconcileHighlight_ContainerNotModifiedWhenOnlyChildrenChange",
+        "ReconcileHighlight_UpdatePathNotRemount",
+        "ReconcileHighlight_MenuFlyoutUpdatesInPlace",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1354,6 +1357,9 @@ internal static class SelfTestFixtureRegistry
         "ReconcileHighlight_MountCapturesElements" => new ReconcileHighlightTests.MountCapturesElements(harness),
         "ReconcileHighlight_UpdateCapturesModified" => new ReconcileHighlightTests.UpdateCapturesModified(harness),
         "ReconcileHighlight_NoCaptureWhenFlagOff" => new ReconcileHighlightTests.NoCaptureWhenFlagOff(harness),
+        "ReconcileHighlight_ContainerNotModifiedWhenOnlyChildrenChange" => new ReconcileHighlightTests.ContainerNotModifiedWhenOnlyChildrenChange(harness),
+        "ReconcileHighlight_UpdatePathNotRemount" => new ReconcileHighlightTests.UpdatePathNotRemount(harness),
+        "ReconcileHighlight_MenuFlyoutUpdatesInPlace" => new ReconcileHighlightTests.MenuFlyoutUpdatesInPlace(harness),
 
         _ => null,
     };
