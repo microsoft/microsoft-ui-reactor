@@ -55,7 +55,7 @@ internal static class ResizeGripRegistration
                     var child = r.Mount(el.Child, rerender);
                     if (child is not null) panel.Children.Add(child);
                 }
-                panel.Tag = el;
+                Reconciler.SetElementTag(panel, el);
                 return panel;
             },
             update: (r, oldEl, newEl, panel, rerender) =>
@@ -83,7 +83,7 @@ internal static class ResizeGripRegistration
                     panel.Children.Clear();
                 }
 
-                panel.Tag = newEl;
+                Reconciler.SetElementTag(panel, newEl);
                 return null;
             });
     }

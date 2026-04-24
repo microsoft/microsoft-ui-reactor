@@ -215,3 +215,6 @@ samples/apps/reactorfiles/Native/reactorfs/target/
 # Cobertura reports are regenerated on demand and should never be committed.
 coverage/
 *.cobertura.xml
+
+# Stress-perf benchmark run artifacts (local measurement data).
+tests/stress_perf/bench-results/

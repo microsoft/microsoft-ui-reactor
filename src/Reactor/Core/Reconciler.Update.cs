@@ -78,7 +78,7 @@ public sealed partial class Reconciler
             // the DependencyProperty write entirely for leaves with no handlers
             // (TextBlock, Image, Border, etc.) — which is most of them.
             if (newEl.HasCallbacks && control is FrameworkElement tagFeSE)
-                tagFeSE.Tag = newEl;
+                SetElementTag(tagFeSE, newEl);
             if (newEl.ThemeBindings is not null && control is FrameworkElement thFeSE)
                 ApplyThemeBindings(thFeSE, newEl.ThemeBindings);
             // Re-resolve ThemeRef-based resource overrides on theme change
@@ -2508,7 +2508,7 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// Walks visible (realized) containers and reconciles each item's Element
-    /// using the stored ContentControl.Tag as the old element.
+    /// using the stored reactor element (attached DP) as the old element.
     /// Null containers (virtualized out) are skipped — ContainerContentChanging handles them on scroll.
     /// </summary>
     private void RefreshRealizedContainers(WinUI.ListViewBase listViewBase, TemplatedListElementBase newEl, Action requestRerender)
@@ -2518,7 +2518,7 @@ public sealed partial class Reconciler
             var container = listViewBase.ContainerFromIndex(i) as WinUI.ListViewItem;
             if (container?.ContentTemplateRoot is not ContentControl cc) continue;
 
-            var oldItemElement = cc.Tag as Element;
+            var oldItemElement = GetElementTag(cc);
             var newItemElement = newEl.BuildItemView(i);
 
             if (oldItemElement is not null && cc.Content is UIElement existingCtrl && CanUpdate(oldItemElement, newItemElement))
@@ -2533,7 +2533,7 @@ public sealed partial class Reconciler
                     Unmount(oldCtrl);
                 cc.Content = Mount(newItemElement, requestRerender);
             }
-            cc.Tag = newItemElement;
+            SetElementTag(cc, newItemElement);
         }
     }
 
@@ -2937,7 +2937,7 @@ public sealed partial class Reconciler
                 // for callback-bearing elements; handler-free leaves stay free.
                 if (newChild.HasCallbacks && i < g.Children.Count
                     && g.Children[i] is FrameworkElement fe)
-                    fe.Tag = newChild;
+                    SetElementTag(fe, newChild);
                 continue;
             }
 

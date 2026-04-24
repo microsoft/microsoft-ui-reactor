@@ -22,7 +22,7 @@ internal static class AnimationHelper
         // Resolve animation curve: prefer ambient WithAnimation scope,
         // fall back to element's .Animate() config curve.
         var curve = AnimationScope.HasScope ? AnimationScope.Current : null;
-        curve ??= (element is FrameworkElement fe && fe.Tag is Element tagEl)
+        curve ??= (element is FrameworkElement fe && Reconciler.GetElementTag(fe) is Element tagEl)
             ? tagEl.AnimationConfig?.Curve : null;
 
         if (curve is null)
@@ -240,7 +240,7 @@ internal static class AnimationHelper
     internal static void SetOrAnimateVector3(UIElement element, string property, Vector3 value)
     {
         var curve = AnimationScope.HasScope ? AnimationScope.Current : null;
-        curve ??= (element is FrameworkElement fe && fe.Tag is Element tagEl)
+        curve ??= (element is FrameworkElement fe && Reconciler.GetElementTag(fe) is Element tagEl)
             ? tagEl.AnimationConfig?.Curve : null;
 
         if (curve is null)

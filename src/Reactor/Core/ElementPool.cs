@@ -195,6 +195,7 @@ public sealed class ElementPool : IDisposable
     internal static void CleanElement(FrameworkElement fe)
     {
         // Common properties
+        Reconciler.ClearElementTag(fe);
         fe.Tag = null;
         fe.Margin = new Thickness(0);
         fe.Width = double.NaN;

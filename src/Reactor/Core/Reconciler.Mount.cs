@@ -15,9 +15,9 @@ namespace Microsoft.UI.Reactor.Core;
 // AI-HINT: Reconciler.Mount.cs — creates real WinUI controls from Element descriptions.
 // Mount() is a big switch over all Element subtypes → MountXxx() methods.
 // Each MountXxx allocates (or rents from pool) a WinUI control, sets properties,
-// wires event handlers via Tag pattern, and recurses for children.
-// The Tag pattern: event handlers read the current Element from control.Tag to
-// dispatch callbacks, so handlers are wired once and survive element recycling.
+// wires event handlers that look up the current Element via the ReactorAttached
+// DP (see Reconciler.SetElementTag), so handlers are wired once and survive
+// element recycling — the trampoline re-reads the current Element on each fire.
 // Context values are pushed/popped around child processing.
 
 public sealed partial class Reconciler
@@ -1509,7 +1509,7 @@ public sealed partial class Reconciler
                 if (oldCc.Content is UIElement oldCtrl)
                     UnmountChild(oldCtrl);
                 oldCc.Content = null;
-                oldCc.Tag = null;
+                ClearElementTag(oldCc);
             }
             return;
         }
@@ -1522,7 +1522,7 @@ public sealed partial class Reconciler
             var itemElement = currentEl.BuildItemView(args.ItemIndex);
             var ctrl = Mount(itemElement, requestRerender);
             cc.Content = ctrl;
-            cc.Tag = itemElement; // Store for later reconciliation
+            SetElementTag(cc, itemElement); // Store for later reconciliation
         }
     }
 

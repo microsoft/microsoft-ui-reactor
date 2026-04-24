@@ -77,7 +77,7 @@ internal static class ChildReconciler
                 // the initial count). For callback-free elements we still avoid
                 // the children.Get COM call.
                 if (newEl.HasCallbacks && children.Get(i) is FrameworkElement fe)
-                    fe.Tag = newEl;
+                    Reconciler.SetElementTag(fe, newEl);
                 continue;
             }
 
@@ -280,7 +280,7 @@ internal static class ChildReconciler
         for (int i = prefixLen; i < searchEnd && i < children.Count; i++)
         {
             var child = children.Get(i);
-            if (child is FrameworkElement fe && fe.Tag is Element tagElement)
+            if (child is FrameworkElement fe && Reconciler.GetElementTag(fe) is Element tagElement)
             {
                 var key = GetKey(tagElement, i);
                 keyToIndex.TryAdd(key, i);
@@ -358,7 +358,7 @@ internal static class ChildReconciler
         for (int i = searchStart; i < searchEnd && i < children.Count; i++)
         {
             var child = children.Get(i);
-            if (child is FrameworkElement fe && fe.Tag is Element tagElement)
+            if (child is FrameworkElement fe && Reconciler.GetElementTag(fe) is Element tagElement)
             {
                 if (oldIndex < oldElements.Length &&
                     GetKey(tagElement, -1) == GetKey(oldElements[oldIndex], oldIndex))

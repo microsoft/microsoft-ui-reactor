@@ -96,11 +96,11 @@ internal static class TypeRegistrationMismatchFixtures
                 update: (r, oldEl, newEl, ctrl, rerender) => null,
                 unmount: (r, ctrl) => { unmountHandlerCalled = true; });
 
-            // Create a TextBlock and stamp it with a WidgetElement Tag,
-            // as the reconciler does during mount. This mimics a control
-            // that ended up in the wrong slot after a dynamic reorder.
+            // Create a TextBlock and stamp it with a WidgetElement via the
+            // reactor attached DP, as the reconciler does during mount. This
+            // mimics a control that ended up in the wrong slot after a dynamic reorder.
             var mismatchedControl = new TextBlock();
-            mismatchedControl.Tag = new WidgetElement("Stale");
+            Reconciler.SetElementTag(mismatchedControl, new WidgetElement("Stale"));
 
             // Unmount should silently skip — not throw InvalidCastException
             bool didNotThrow = true;

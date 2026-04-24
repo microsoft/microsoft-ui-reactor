@@ -53,14 +53,14 @@ public static class XamlInterop
             {
                 var frame = new Frame();
                 frame.Navigate(el.PageType, el.Parameter);
-                frame.Tag = el;
+                Reconciler.SetElementTag(frame, el);
                 return frame;
             },
             update: (r, oldEl, newEl, frame, rerender) =>
             {
                 if (oldEl.PageType != newEl.PageType || !Equals(oldEl.Parameter, newEl.Parameter))
                     frame.Navigate(newEl.PageType, newEl.Parameter);
-                frame.Tag = newEl;
+                Reconciler.SetElementTag(frame, newEl);
                 return null; // updated in place
             },
             unmount: (r, frame) =>
@@ -76,13 +76,13 @@ public static class XamlInterop
             {
                 var control = el.Factory();
                 el.Updater?.Invoke(control);
-                control.Tag = el;
+                Reconciler.SetElementTag(control, el);
                 return control;
             },
             update: (r, oldEl, newEl, control, rerender) =>
             {
                 newEl.Updater?.Invoke(control);
-                control.Tag = newEl;
+                Reconciler.SetElementTag(control, newEl);
                 return null; // updated in place
             },
             unmount: (r, control) =>
@@ -91,7 +91,7 @@ public static class XamlInterop
                 // Do NOT recurse into children — they were never managed by Reactor
                 // and must not be pooled (they may have stale parent references
                 // or be types Reactor doesn't know how to clean).
-                control.Tag = null;
+                Reconciler.ClearElementTag(control);
             });
     }
 }
