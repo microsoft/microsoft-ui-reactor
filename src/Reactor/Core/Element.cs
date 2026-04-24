@@ -344,8 +344,8 @@ public abstract record Element
                 && sa.Setters.Length == 0 && sb.Setters.Length == 0,
 
             (BorderElement ba, BorderElement bb) =>
-                ReferenceEquals(ba.Background, bb.Background)
-                && ReferenceEquals(ba.BorderBrush, bb.BorderBrush)
+                BrushesEqual(ba.Background, bb.Background)
+                && BrushesEqual(ba.BorderBrush, bb.BorderBrush)
                 && ba.CornerRadius == bb.CornerRadius
                 && ba.Padding == bb.Padding
                 && ba.BorderThickness == bb.BorderThickness
@@ -421,8 +421,8 @@ public abstract record Element
                 && ga.Setters.Length == 0 && gb.Setters.Length == 0,
 
             (BorderElement ba, BorderElement bb) =>
-                ReferenceEquals(ba.Background, bb.Background)
-                && ReferenceEquals(ba.BorderBrush, bb.BorderBrush)
+                BrushesEqual(ba.Background, bb.Background)
+                && BrushesEqual(ba.BorderBrush, bb.BorderBrush)
                 && ba.CornerRadius == bb.CornerRadius
                 && ba.Padding == bb.Padding
                 && ba.BorderThickness == bb.BorderThickness
@@ -538,8 +538,33 @@ public abstract record Element
     }
 
     /// <summary>
+    /// Structural brush comparison. BrushHelper.Parse caches the parsed Color
+    /// but returns a fresh SolidColorBrush instance on every call (Brushes have
+    /// thread affinity), so ReferenceEquals always fails for ".Background("#x")"
+    /// style fluent chains. Unwrap the underlying Color for the common
+    /// SolidColorBrush case and fall back to ReferenceEquals for everything else.
+    /// </summary>
+    private static bool BrushesEqual(Brush? a, Brush? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+        if (a is SolidColorBrush sa && b is SolidColorBrush sb)
+            return sa.Color == sb.Color && sa.Opacity == sb.Opacity;
+        return false;
+    }
+
+    private static bool FontFamiliesEqual(Microsoft.UI.Xaml.Media.FontFamily? a, Microsoft.UI.Xaml.Media.FontFamily? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+        return a.Source == b.Source;
+    }
+
+    /// <summary>
     /// Compare two ElementModifiers for rendering equivalence.
-    /// Uses ReferenceEquals for Brush properties (BrushHelper.Parse caches instances).
+    /// Brushes and FontFamily are compared structurally because fluent helpers
+    /// (<c>.Background("#color")</c>, <c>.FontFamily("Segoe UI")</c>) allocate
+    /// fresh instances on every render even when the underlying values match.
     /// Ignores OnMountAction (only runs at mount time, not during update).
     /// </summary>
     internal static bool ModifiersEqual(ElementModifiers? a, ElementModifiers? b)
@@ -566,12 +591,12 @@ public abstract record Element
             && a.ToolTip == b.ToolTip
             && a.AutomationName == b.AutomationName
             && a.AutomationId == b.AutomationId
-            && ReferenceEquals(a.Background, b.Background)
-            && ReferenceEquals(a.Foreground, b.Foreground)
-            && ReferenceEquals(a.BorderBrush, b.BorderBrush)
+            && BrushesEqual(a.Background, b.Background)
+            && BrushesEqual(a.Foreground, b.Foreground)
+            && BrushesEqual(a.BorderBrush, b.BorderBrush)
             && a.FontSize == b.FontSize
             && a.FontWeight == b.FontWeight
-            && ReferenceEquals(a.FontFamily, b.FontFamily)
+            && FontFamiliesEqual(a.FontFamily, b.FontFamily)
             // Skip OnMountAction — only runs at mount time
             // Skip event handlers — delegate comparison is unreliable, conservative false
             && a.OnSizeChanged is null && b.OnSizeChanged is null
