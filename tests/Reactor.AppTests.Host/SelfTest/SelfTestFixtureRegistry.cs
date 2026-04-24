@@ -465,6 +465,17 @@ internal static class SelfTestFixtureRegistry
         "EchoSuppress_PasswordBox",
         "EchoSuppress_TextField",
         "EchoSuppress_ToggleSplitButton",
+        // Control identity preservation under unrelated sibling re-render.
+        // Regression coverage for the "Update falls through to Mount" bug
+        // fixed in #76 — verifies the 14 controls' WinUI instances survive.
+        "IdentityPreserve_ComboBox",
+        "IdentityPreserve_ComboBoxElements",
+        "IdentityPreserve_RadioButtons",
+        "IdentityPreserve_TabView",
+        "IdentityPreserve_Pivot",
+        "IdentityPreserve_ListBox",
+        "IdentityPreserve_SelectorBar",
+        "IdentityPreserve_SplitView",
         // Hooks coverage — FocusManager, UseFocus
         "HooksCov_FocusManagerRegistration",
         "HooksCov_FocusManagerNavigation",
@@ -1123,6 +1134,15 @@ internal static class SelfTestFixtureRegistry
         "EchoSuppress_PasswordBox" => new EchoSuppressionFixtures.PasswordBoxNoEcho(harness),
         "EchoSuppress_TextField" => new EchoSuppressionFixtures.TextFieldNoEcho(harness),
         "EchoSuppress_ToggleSplitButton" => new EchoSuppressionFixtures.ToggleSplitButtonNoEcho(harness),
+        // Control identity preservation
+        "IdentityPreserve_ComboBox" => new IdentityPreservationFixtures.ComboBoxSurvivesSiblingUpdate(harness),
+        "IdentityPreserve_ComboBoxElements" => new IdentityPreservationFixtures.ComboBoxElementItemsSurvivesSiblingUpdate(harness),
+        "IdentityPreserve_RadioButtons" => new IdentityPreservationFixtures.RadioButtonsSurvivesSiblingUpdate(harness),
+        "IdentityPreserve_TabView" => new IdentityPreservationFixtures.TabViewSurvivesSiblingUpdate(harness),
+        "IdentityPreserve_Pivot" => new IdentityPreservationFixtures.PivotSurvivesSiblingUpdate(harness),
+        "IdentityPreserve_ListBox" => new IdentityPreservationFixtures.ListBoxSurvivesSiblingUpdate(harness),
+        "IdentityPreserve_SelectorBar" => new IdentityPreservationFixtures.SelectorBarSurvivesSiblingUpdate(harness),
+        "IdentityPreserve_SplitView" => new IdentityPreservationFixtures.SplitViewSurvivesSiblingUpdate(harness),
         "ControlsCov_SearchManager" => new ControlsCoverageFixtures.SearchManagerExercise(harness),
         // Hooks coverage
         "HooksCov_FocusManagerRegistration" => new HooksCoverageFixtures.FocusManagerRegistration(harness),
