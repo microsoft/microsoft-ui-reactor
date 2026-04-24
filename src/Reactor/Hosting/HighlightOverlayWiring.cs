@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -10,10 +11,18 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// <see cref="ReactorHost"/> and <see cref="ReactorHostControl"/>.
 /// Encapsulates the wrapper Grid (content slot + overlay Canvas),
 /// snapshot-based scheduling, and the post-layout flush callback.
+/// Includes throttling and caps to stay responsive under high update cadence.
 /// </summary>
 internal sealed class HighlightOverlayWiring
 {
+    /// <summary>Max elements to buffer per list between flushes.</summary>
+    private const int MaxPendingElements = 200;
+
+    /// <summary>Minimum interval between flush dispatches.</summary>
+    private const int MinFlushIntervalMs = 80;
+
     private readonly DispatcherQueue _dispatcherQueue;
+    private readonly Stopwatch _flushCooldown = new();
     private Grid? _wrapperRoot;
     private Canvas? _overlayCanvas;
     private ReconcileHighlightOverlay? _overlay;
@@ -62,21 +71,44 @@ internal sealed class HighlightOverlayWiring
 
     /// <summary>
     /// Snapshots the reconciler's highlight lists and schedules a low-priority
-    /// flush so the overlay renders after layout completes.
+    /// flush so the overlay renders after layout completes. Caps pending lists
+    /// and throttles flush frequency to stay responsive under high cadence.
     /// </summary>
     public void ScheduleHighlightFlush(Reconciler reconciler)
     {
         if (!ReactorFeatureFlags.HighlightReconcileChanges) return;
         if (reconciler.LastMountedElements.Count == 0 && reconciler.LastModifiedElements.Count == 0) return;
 
-        // Snapshot now — the reconciler clears these lists at the start of the next pass.
-        (_pendingMounted ??= new(reconciler.LastMountedElements.Count))
-            .AddRange(reconciler.LastMountedElements);
-        (_pendingModified ??= new(reconciler.LastModifiedElements.Count))
-            .AddRange(reconciler.LastModifiedElements);
+        // Cap pending lists — drop excess elements (best-effort display)
+        if (reconciler.LastMountedElements.Count > 0)
+        {
+            _pendingMounted ??= new(Math.Min(reconciler.LastMountedElements.Count, MaxPendingElements));
+            int room = MaxPendingElements - _pendingMounted.Count;
+            if (room > 0)
+            {
+                int take = Math.Min(reconciler.LastMountedElements.Count, room);
+                for (int i = 0; i < take; i++)
+                    _pendingMounted.Add(reconciler.LastMountedElements[i]);
+            }
+        }
+        if (reconciler.LastModifiedElements.Count > 0)
+        {
+            _pendingModified ??= new(Math.Min(reconciler.LastModifiedElements.Count, MaxPendingElements));
+            int room = MaxPendingElements - _pendingModified.Count;
+            if (room > 0)
+            {
+                int take = Math.Min(reconciler.LastModifiedElements.Count, room);
+                for (int i = 0; i < take; i++)
+                    _pendingModified.Add(reconciler.LastModifiedElements[i]);
+            }
+        }
 
         if (!_flushPending)
         {
+            // Throttle: skip scheduling if we flushed very recently
+            if (_flushCooldown.IsRunning && _flushCooldown.ElapsedMilliseconds < MinFlushIntervalMs)
+                return;
+
             _flushPending = true;
             _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, Flush);
         }
@@ -106,6 +138,8 @@ internal sealed class HighlightOverlayWiring
     private void Flush()
     {
         _flushPending = false;
+        _flushCooldown.Restart();
+
         if (_overlayCanvas is null) return;
         if (_pendingMounted is null && _pendingModified is null) return;
 

@@ -12,6 +12,8 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// or modified (yellow, 135°) during a reconcile pass. Uses the Composition visual layer
 /// to avoid creating XAML elements (which would themselves show up as reconcile churn).
 /// Each overlay fades out over <see cref="FadeDurationMs"/> milliseconds.
+/// Designed for best-effort display under high update cadence — caps sprites and
+/// uses a single scoped batch per flush to avoid swamping the compositor.
 /// </summary>
 internal sealed class ReconcileHighlightOverlay
 {
@@ -19,6 +21,12 @@ internal sealed class ReconcileHighlightOverlay
     private const float ModifiedOpacity = 0.17f;
     private const int FadeDurationMs = 600;
     private const float StripeWidth = 5f;
+
+    /// <summary>Max sprites to add per flush call (excess elements are dropped).</summary>
+    private const int MaxSpritesPerFlush = 200;
+
+    /// <summary>Max live sprites in the container — skip adding more if exceeded.</summary>
+    private const int MaxLiveSprites = 500;
 
     private static readonly global::Windows.UI.Color MountedColor =
         global::Windows.UI.Color.FromArgb(255, 220, 40, 40);   // red at 45°
@@ -30,6 +38,8 @@ internal sealed class ReconcileHighlightOverlay
     private Compositor? _compositor;
     private CompositionBrush? _mountedBrush;
     private CompositionBrush? _modifiedBrush;
+    private ScalarKeyFrameAnimation? _fadeMountedAnim;
+    private ScalarKeyFrameAnimation? _fadeModifiedAnim;
 
     public ReconcileHighlightOverlay(Canvas overlayCanvas)
     {
@@ -49,23 +59,58 @@ internal sealed class ReconcileHighlightOverlay
         EnsureCompositor();
         if (_compositor is null || _container is null) return;
 
+        // Back-pressure: if too many sprites are already animating, skip this flush entirely
+        if (_container.Children.Count >= MaxLiveSprites) return;
+
         _mountedBrush ??= CreateStripeBrush(MountedColor, 45f);
         _modifiedBrush ??= CreateStripeBrush(ModifiedColor, 135f);
+        _fadeMountedAnim ??= CreateFadeAnimation(MountedOpacity);
+        _fadeModifiedAnim ??= CreateFadeAnimation(ModifiedOpacity);
 
-        foreach (var element in mounted)
-            TryAddHighlight(host, element, _mountedBrush, MountedOpacity);
+        int budget = MaxSpritesPerFlush;
 
-        foreach (var element in modified)
-            TryAddHighlight(host, element, _modifiedBrush, ModifiedOpacity);
+        // Single scoped batch for ALL sprites in this flush — avoids per-sprite batch overhead
+        var batch = _compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+
+        for (int i = 0; i < mounted.Count && budget > 0; i++)
+        {
+            if (TryAddHighlight(host, mounted[i], _mountedBrush, MountedOpacity, _fadeMountedAnim))
+                budget--;
+        }
+
+        for (int i = 0; i < modified.Count && budget > 0; i++)
+        {
+            if (TryAddHighlight(host, modified[i], _modifiedBrush, ModifiedOpacity, _fadeModifiedAnim))
+                budget--;
+        }
+
+        batch.End();
+
+        // When all animations in this batch complete, bulk-remove the sprites
+        var container = _container;
+        batch.Completed += (_, _) =>
+        {
+            // Remove sprites that have fully faded (opacity ≈ 0).
+            // Walk in reverse to safely remove while iterating.
+            for (int i = container.Children.Count - 1; i >= 0; i--)
+            {
+                var child = container.Children.ElementAt(i);
+                if (child.Opacity <= 0.001f)
+                {
+                    container.Children.Remove(child);
+                    child.Dispose();
+                }
+            }
+        };
     }
 
-    private void TryAddHighlight(UIElement host, UIElement target, CompositionBrush brush, float opacity)
+    private bool TryAddHighlight(UIElement host, UIElement target, CompositionBrush brush,
+        float opacity, ScalarKeyFrameAnimation fadeAnim)
     {
-        if (_compositor is null || _container is null) return;
+        if (_compositor is null || _container is null) return false;
 
-        // Skip elements with no layout or not in the visual tree
-        if (target is not FrameworkElement fe) return;
-        if (fe.ActualWidth <= 0 || fe.ActualHeight <= 0) return;
+        if (target is not FrameworkElement fe) return false;
+        if (fe.ActualWidth <= 0 || fe.ActualHeight <= 0) return false;
 
         try
         {
@@ -79,26 +124,23 @@ internal sealed class ReconcileHighlightOverlay
             sprite.Brush = brush;
 
             _container.Children.InsertAtTop(sprite);
-
-            // Animate opacity to 0 then remove
-            var fadeAnim = _compositor.CreateScalarKeyFrameAnimation();
-            fadeAnim.InsertKeyFrame(0f, opacity);
-            fadeAnim.InsertKeyFrame(1f, 0f);
-            fadeAnim.Duration = TimeSpan.FromMilliseconds(FadeDurationMs);
-
-            var batch = _compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
             sprite.StartAnimation("Opacity", fadeAnim);
-            batch.End();
-            batch.Completed += (_, _) =>
-            {
-                _container.Children.Remove(sprite);
-                sprite.Dispose();
-            };
+            return true;
         }
         catch (ArgumentException)
         {
             // TransformToVisual throws if target is in a different visual tree (popup/flyout)
+            return false;
         }
+    }
+
+    private ScalarKeyFrameAnimation CreateFadeAnimation(float fromOpacity)
+    {
+        var anim = _compositor!.CreateScalarKeyFrameAnimation();
+        anim.InsertKeyFrame(0f, fromOpacity);
+        anim.InsertKeyFrame(1f, 0f);
+        anim.Duration = TimeSpan.FromMilliseconds(FadeDurationMs);
+        return anim;
     }
 
     /// <summary>
