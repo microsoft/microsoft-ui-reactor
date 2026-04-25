@@ -904,6 +904,82 @@ the plumbing switches on later.
 
 ---
 
+## 8.1 Threading model — current state and one rejected alternative
+
+Every mutable type the async system owns is protected by an internal
+`Monitor` lock or a `threadSafe: true` reducer. Today's split:
+
+| Component | Sync mechanism | Reasoning |
+|---|---|---|
+| `QueryCache` slot | Per-slot `Monitor` lock (`QueryCache.cs`) | Cross-cutting shared state; eviction runs on a thread-pool timer; tests use the cache without a dispatcher. Decoupling the cache from UI affinity is a feature. |
+| `QueryCache._timerLock` | `Monitor` + `Interlocked` | Timer create/dispose is rare and can run from any thread. |
+| `MutationHookState._lock` | `Monitor` lock | `RunAsync` is intentionally callable from any thread; the lock protects `_pendingCount` / `_lastResult` / `_error` against the cross-thread caller. |
+| `InfiniteResource._lock` | `Monitor` lock | Documented thread-safe contract; `UseInfiniteResourceThreadingTests` drive `ItemAt` / `EnsureRange` from background threads to verify it. Production callers (virtualized list controls during layout) are UI-thread-affined, but the contract is the broader one. |
+| `PendingScope._lock` | `Monitor` lock | All production callers are UI-thread-affined, but the no-dispatcher edge (headless host, certain test paths) can fire `SetLoading` from a Task completion thread. The lock keeps that path safe in Release as well as DEBUG. |
+| `FocusRevalidationService._lock` | `Monitor` lock | Same shape as `PendingScope`. WinUI's activation/resume callbacks fire on the UI thread, but the lock keeps misuse from corrupting the enrolled set. |
+| `UseResource` / `UseInfiniteResource` / `UseMutation` rerender reducer | `threadSafe: true` | The hook continuation `Apply` runs on the dispatcher thread in production, but the test-suite `InlineDispatcher` runs `Apply` on whatever thread completed the underlying `Task`. The `threadSafe` reducer is what makes those test paths safe. |
+| `Pending`'s rerender reducer | `threadSafe: true` | `PendingScope.Changed` *should* fire on the UI thread, but the no-dispatcher edge can land it on a thread-pool thread; the `threadSafe` reducer is the rerender-path safety net. |
+
+The locks are uniformly uncontested in production — the UI thread reaches
+them through the dispatcher and competing background-thread callers only
+appear in test fixtures that deliberately exercise the thread-safe contract.
+Keeping them is cheap (a few ns per uncontested `Monitor` take) and guarantees
+serialization in **all** builds, not just DEBUG.
+
+### Rejected alternative: replace UI-affined locks with dispatcher affinity
+
+A previous attempt (PR #93, branch `async/dispatcher-affinity`) proposed
+flipping `PendingScope` and `FocusRevalidationService` from internal locks to
+DEBUG-only thread-affinity assertions. The framing was "the UI thread,
+reached through `IHookDispatcher.Post`, *is* the synchronization mechanism —
+defensive locks are redundant." The change was rejected after review. The
+reasoning, captured here so the same proposal doesn't get re-litigated:
+
+- **No measurable benefit.** Both locks are uncontested and off the hot
+  path. `PendingScope` is touched once per hook lifecycle event; the
+  `FocusRevalidationService` lives behind a feature flag that is off by
+  default. Removing them is not a perf win.
+- **Net correctness regression in Release builds.** A
+  `[Conditional("DEBUG")]` `AssertOwnerThread()` is compiled away in Release.
+  The lock guaranteed serialization unconditionally; the assertion does not.
+  The no-dispatcher edge case (`state.Dispatcher == null`, headless hosts,
+  certain test paths where `UseResource` applies completions inline on the
+  Task completion thread) is real enough that the same PR kept
+  `Pending`'s rerender reducer `threadSafe: true` as belt-and-suspenders —
+  but `PendingScope`'s dictionary itself had no equivalent fallback. Trading
+  unconditional serialization for "it shouldn't happen, and if it does, only
+  DEBUG catches it" is a worse contract than what we have.
+- **Two paradigms, not one.** The proposal explicitly deferred migrating
+  `QueryCache`, `MutationHookState`, `InfiniteResource`, and the three async
+  reducers (each defer was load-bearing — `InfiniteResource`'s lock backs a
+  documented thread-safe contract that threading tests deliberately
+  exercise; the reducers' `threadSafe: true` exists because the test
+  `InlineDispatcher` runs `Apply` off the UI thread). The end state would
+  have been a codebase with two synchronization paradigms (lock-based and
+  affinity-based) where it previously had one — harder to reason about, not
+  easier.
+- **Test-side regression.** The proposal rewrote three `PendingTests` to
+  drop `await Task.Delay(...)` settle-loops, replacing them with a hard
+  dependency on default-mode `TaskCompletionSource` running continuations
+  inline on `SetResult`. That couples the tests to an SDK behavior detail —
+  anyone later wrapping `SetResult` in `Task.Run` or constructing the TCS
+  with `RunContinuationsAsynchronously` would get a mystery affinity-assert
+  failure.
+
+If a future migration wants to fully embrace "the dispatcher is the
+synchronization mechanism," it should land all subsystems at once
+(including a marshalling test dispatcher that lets the reducers drop
+`threadSafe: true`), not partially. Until then the locks stay.
+
+One artifact from that branch is worth keeping in mind even though we did
+not adopt it: a typed `IHookDispatcher.InvokeAsync<T>(Func<T>)` extension
+that wraps `Post` in a `TaskCompletionSource<T>` so background code can
+read UI-affined state and get a value back. We chose not to add it
+speculatively — there is no current caller — but it is the right shape
+for the rare cross-thread read should one ever need it.
+
+---
+
 ## 9. Threading and race-condition argument
 
 The overall property we want to prove is:
