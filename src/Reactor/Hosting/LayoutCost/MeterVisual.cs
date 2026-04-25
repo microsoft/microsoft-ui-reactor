@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 using Microsoft.UI.Composition;
 using WColor = global::Windows.UI.Color;
@@ -25,7 +26,16 @@ internal sealed class MeterVisual
 
     /// <summary>Time window each bucket represents, in milliseconds. 60 buckets × 100 ms = 6 s of history.</summary>
     public const long BucketDurationMs = 100;
-    private static readonly long BucketDurationTicks = BucketDurationMs * TimeSpan.TicksPerMillisecond;
+
+    /// <summary>
+    /// Bucket duration measured in <see cref="Stopwatch.GetTimestamp"/>
+    /// ticks. We use the monotonic Stopwatch clock (rather than
+    /// <c>DateTime.UtcNow.Ticks</c>) so system clock adjustments — DST,
+    /// NTP, manual changes — can't make buckets advance backwards or get
+    /// stuck in a long catch-up loop.
+    /// </summary>
+    private static readonly long BucketDurationStopwatchTicks =
+        Stopwatch.Frequency * BucketDurationMs / 1000;
 
     /// <summary>Width of each sample column in DIPs.</summary>
     public const float ColumnWidth = 1f;
@@ -113,7 +123,7 @@ internal sealed class MeterVisual
     public void UpdateFromSnapshot(in ComponentSnapshot s, in MeterBox _)
     {
         double ms = double.IsNaN(s.LastFrameMs) ? 0 : global::System.Math.Max(0, s.LastFrameMs);
-        long now = DateTime.UtcNow.Ticks;
+        long now = Stopwatch.GetTimestamp();
         if (_liveBucketStartTicks == 0) _liveBucketStartTicks = now;
 
         // Max-accumulate into the live bucket.
@@ -121,11 +131,11 @@ internal sealed class MeterVisual
 
         // Advance as many buckets as time elapsed. Idle periods show as
         // trailing zeros — we don't collapse them.
-        while (now - _liveBucketStartTicks >= BucketDurationTicks)
+        while (now - _liveBucketStartTicks >= BucketDurationStopwatchTicks)
         {
             _writeIdx = (_writeIdx + 1) % SampleCount;
             _samples[_writeIdx] = 0;
-            _liveBucketStartTicks += BucketDurationTicks;
+            _liveBucketStartTicks += BucketDurationStopwatchTicks;
         }
         Redraw();
     }

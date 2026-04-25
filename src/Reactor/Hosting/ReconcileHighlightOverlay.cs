@@ -15,7 +15,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// Designed for best-effort display under high update cadence — caps sprites and
 /// uses a single scoped batch per flush to avoid swamping the compositor.
 /// </summary>
-internal sealed class ReconcileHighlightOverlay
+internal sealed class ReconcileHighlightOverlay : IDisposable
 {
     private const float MountedOpacity = 0.22f;
     private const float ModifiedOpacity = 0.17f;
@@ -201,9 +201,24 @@ internal sealed class ReconcileHighlightOverlay
 
     public void Dispose()
     {
+        // Dispose any in-flight sprite children before tearing down the
+        // container itself. They hold animations + brushes that the
+        // compositor would otherwise leak across long debug sessions.
+        try
+        {
+            for (int i = _container.Children.Count - 1; i >= 0; i--)
+            {
+                var child = _container.Children.ElementAt(i);
+                try { _container.Children.Remove(child); } catch { }
+                try { child.Dispose(); } catch { }
+            }
+        }
+        catch { }
         try { _parentContainer.Children.Remove(_container); } catch { }
         try { _container.Dispose(); } catch { }
         try { _mountedBrush?.Dispose(); } catch { }
         try { _modifiedBrush?.Dispose(); } catch { }
+        try { _fadeMountedAnim?.Dispose(); } catch { }
+        try { _fadeModifiedAnim?.Dispose(); } catch { }
     }
 }

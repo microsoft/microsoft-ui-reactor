@@ -94,7 +94,14 @@ internal sealed class OverlayHostWiring : IDisposable
             {
                 IsHitTestVisible = false,
             };
-            LayoutCostOverlayAttached.SetIsOverlayChrome(_overlayCanvas, true);
+            // Note: overlay-chrome filtering (so events fired by the
+            // overlay's own visuals don't pollute attribution rollups) is
+            // currently a manual API — `LayoutCostAttribution.MarkOverlayChrome(elementId)`.
+            // It needs a UIElement → ETW ElementId mapping to auto-discover
+            // marked elements in the visual tree, which depends on the
+            // native-pointer interop that v1 punted on (see spec §
+            // "Future ETW improvements"). The canvas is also Composition-
+            // pure (no XAML descendants) so this is moot for now.
 
             _wrapperRoot = new Grid();
             _wrapperRoot.Children.Add(new ContentControl

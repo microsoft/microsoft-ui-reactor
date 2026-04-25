@@ -57,6 +57,13 @@ internal sealed class LayoutEtwConsumer : IDisposable
     private Thread? _consumerThread;
     private volatile bool _running;
     private volatile bool _disposed;
+    /// <summary>
+    /// Set once per instance the first time it registers with
+    /// <see cref="s_liveConsumers"/>. Stop/Start cycles that bring the
+    /// session back up don't add a second weak ref — without this guard
+    /// the static list would grow unboundedly across toggles.
+    /// </summary>
+    private bool _registeredInLiveConsumers;
 
     // Diagnostic counters — written from the ETW callback thread, read from
     // the UI thread for debug logging. Volatile reads are good enough; exact
@@ -108,7 +115,20 @@ internal sealed class LayoutEtwConsumer : IDisposable
         UnavailableReason = null;
 
         RegisterProcessExitHookOnce();
-        lock (s_liveConsumers) s_liveConsumers.Add(new WeakReference<LayoutEtwConsumer>(this));
+        if (!_registeredInLiveConsumers)
+        {
+            lock (s_liveConsumers)
+            {
+                // Prune any GC'd weak refs while we're holding the lock.
+                for (int i = s_liveConsumers.Count - 1; i >= 0; i--)
+                {
+                    if (!s_liveConsumers[i].TryGetTarget(out _))
+                        s_liveConsumers.RemoveAt(i);
+                }
+                s_liveConsumers.Add(new WeakReference<LayoutEtwConsumer>(this));
+            }
+            _registeredInLiveConsumers = true;
+        }
 
         try
         {
@@ -443,6 +463,11 @@ internal sealed class LayoutEtwConsumer : IDisposable
         catch { return 0f; }
     }
 
+    /// <summary>
+    /// Stop any sessions named <c>{SessionNamePrefix}{pid}</c> whose pid
+    /// suffix no longer corresponds to a running process. Sessions belonging
+    /// to other live Reactor processes are left alone.
+    /// </summary>
     private void CloseOrphanSessions()
     {
         foreach (var name in TraceEventSession.GetActiveSessionNames())
@@ -451,16 +476,42 @@ internal sealed class LayoutEtwConsumer : IDisposable
             if (!name.StartsWith(SessionNamePrefix, StringComparison.Ordinal)) continue;
             if (name.Equals(_sessionName, StringComparison.Ordinal)) continue;
 
+            // Parse the pid suffix and only stop the session if that
+            // process is gone. A live sibling Reactor process owns its
+            // own session — leaving its overlay alone is the correct
+            // behavior.
+            var suffix = name.AsSpan(SessionNamePrefix.Length);
+            if (!int.TryParse(suffix, out var ownerPid)) continue;
+            if (IsProcessAlive(ownerPid)) continue;
+
             try
             {
                 using var orphan = TraceEventSession.GetActiveSession(name);
                 orphan.Stop(noThrow: true);
+                Debug.WriteLine($"[Reactor.LayoutCost] closed orphan session '{name}' (pid {ownerPid} not running)");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[Reactor.LayoutCost] failed to close orphan session '{name}': {ex.Message}");
             }
         }
+    }
+
+    private static bool IsProcessAlive(int pid)
+    {
+        if (pid <= 0) return false;
+        try
+        {
+            using var p = global::System.Diagnostics.Process.GetProcessById(pid);
+            // GetProcessById throws ArgumentException for non-existent pids;
+            // if we got here, p represents a real process. HasExited may
+            // throw on access-denied (e.g. system process); treat that as
+            // "alive" — we'd rather leave the session than wrongly kill it.
+            try { return !p.HasExited; }
+            catch { return true; }
+        }
+        catch (ArgumentException) { return false; }
+        catch (Exception) { return true; }
     }
 
     private void SafeDisposeSession()

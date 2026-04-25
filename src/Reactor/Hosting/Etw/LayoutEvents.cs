@@ -30,7 +30,11 @@ internal readonly record struct RawLayoutEvent(
     ulong ElementId,
     LayoutEventKind Kind,
     LayoutEventPhase Phase,
-    long TimestampTicks,      // 100-ns units, as QPC from ETW
+    long TimestampTicks,      // 100-ns DateTime ticks (TraceEvent.TimeStamp.Ticks).
+                              // Originates from ETW's QPC capture but TraceEvent
+                              // converts to DateTime ticks for us. Only used as
+                              // an interval source — paired-event durations are
+                              // (endTicks - beginTicks).
     int ThreadId,
     float RectX,
     float RectY,
