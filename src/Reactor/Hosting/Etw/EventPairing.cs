@@ -24,6 +24,15 @@ internal sealed class EventPairing
         public ulong ElementId;
         public long BeginTicks;
         public long ChildInclusiveTicks;
+        /// <summary>
+        /// Root-relative origin of this element's content area, in DIPs.
+        /// Computed at Begin time as (parent.OriginX + thisProposedLeft).
+        /// Children of this element will use this as their parent origin.
+        /// Tracked on the Arrange stack only; Measure events don't carry
+        /// placement data.
+        /// </summary>
+        public float RootOriginX;
+        public float RootOriginY;
     }
 
     private readonly Dictionary<(int threadId, LayoutEventKind kind), Stack<PairingFrame>> _stacks = new();
@@ -44,11 +53,28 @@ internal sealed class EventPairing
 
         if (raw.Phase == LayoutEventPhase.Begin)
         {
+            // Compose root-relative origin by accumulating parent-relative
+            // offsets up the stack. ETW gives us Left/Top in the parent's
+            // coord space on Arrange/Begin; without this composition,
+            // attribution sees small offsets and lands events on whichever
+            // Component happens to sit at the top-left of the screen.
+            float parentX = 0, parentY = 0;
+            if (stack.Count > 0)
+            {
+                var parentTop = stack.Peek();
+                parentX = parentTop.RootOriginX;
+                parentY = parentTop.RootOriginY;
+            }
             stack.Push(new PairingFrame
             {
                 ElementId = raw.ElementId,
                 BeginTicks = raw.TimestampTicks,
                 ChildInclusiveTicks = 0,
+                // For Arrange, raw.RectX/Y is the proposed Left/Top in parent
+                // coords. For Measure, raw.RectX/Y is 0 (no placement on
+                // Measure) — the inherited parent origin is the best we have.
+                RootOriginX = parentX + raw.RectX,
+                RootOriginY = parentY + raw.RectY,
             });
             return;
         }
@@ -81,20 +107,34 @@ internal sealed class EventPairing
         long self = inclusive - top.ChildInclusiveTicks;
         if (self < 0) self = 0;
 
-        // Add our inclusive duration to the parent's child-time accumulator, if any.
+        // Compose root-relative rect for downstream attribution. On
+        // Arrange/End, raw.RectX/Y is VisualOffset in the parent's coord
+        // space — add it to the parent's accumulated root origin (which
+        // is on top of the stack now, after we popped this element).
+        // Without this, attribution sees small parent-relative offsets
+        // and lands events on whichever Component happens to sit at the
+        // top-left of the screen.
+        float parentRootX = 0, parentRootY = 0;
         if (stack.Count > 0)
         {
+            var parentTop = stack.Peek();
+            parentRootX = parentTop.RootOriginX;
+            parentRootY = parentTop.RootOriginY;
+
+            // Bubble inclusive time into the parent's child-time accumulator.
             var parent = stack.Pop();
             parent.ChildInclusiveTicks += inclusive;
             stack.Push(parent);
         }
+        float rootX = parentRootX + raw.RectX;
+        float rootY = parentRootY + raw.RectY;
 
         var paired = new PairedLayoutEvent(
             raw.ElementId,
             raw.Kind,
             inclusive,
             self,
-            raw.RectX, raw.RectY, raw.RectW, raw.RectH);
+            rootX, rootY, raw.RectW, raw.RectH);
         Paired?.Invoke(paired);
     }
 

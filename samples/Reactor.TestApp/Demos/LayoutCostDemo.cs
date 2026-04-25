@@ -13,13 +13,15 @@ class LayoutCostDemo : Component
 {
     public override Element Render()
     {
+        // FakeDataGrid uses LazyVStack so only visible rows are materialized;
+        // changing this slider doesn't allocate row-count UIElements per tick.
         var (rows, setRows) = UseState(100);
         return VStack(16,
             Heading("Layout cost overlay"),
             TextBlock("Toggle via Dev menu → \"Show layout cost overlay\". "
-                    + "Each child Component below gets its own badge showing "
-                    + "measure+arrange time (top bar) and authored-vs-rendered "
-                    + "element count (bottom bar).")
+                    + "Each child Component below gets a green outline + a "
+                    + "sparkline badge showing measure+arrange time over the "
+                    + "last ~6 s.")
                 .Foreground(TertiaryText),
 
             HStack(8,
@@ -70,20 +72,27 @@ file class FakeDataGrid : Component<FakeDataGridProps>
 {
     public override Element Render()
     {
-        var rows = Props?.Rows ?? 100;
-        var rowElements = Enumerable.Range(0, rows).Select(i =>
-            HStack(12,
-                TextBlock($"#{i:D4}").Width(60),
-                TextBlock($"Item {i}").Width(120),
-                TextBlock((i * 37 % 1000).ToString("N0")).Width(80),
-                TextBlock(i % 2 == 0 ? "active" : "idle").Width(60)
-            ) as Element).ToArray();
+        var rows = Props?.Rows ?? 50;
+
+        // LazyVStack virtualizes — only the visible rows are realized as
+        // UIElements, so the slider stays responsive even at the high end
+        // of the range.
+        var items = Enumerable.Range(0, rows).ToList();
 
         return Border(
             VStack(4,
                 SubHeading("FakeDataGrid"),
                 TextBlock($"{rows} rows — high inflation ratio (templated cells)."),
-                ScrollView(VStack(2, rowElements)).Height(240)
+                LazyVStack<int>(
+                    items,
+                    i => i.ToString(),
+                    (i, _) => HStack(12,
+                        TextBlock($"#{i:D4}").Width(60),
+                        TextBlock($"Item {i}").Width(120),
+                        TextBlock((i * 37 % 1000).ToString("N0")).Width(80),
+                        TextBlock(i % 2 == 0 ? "active" : "idle").Width(60)
+                    )
+                ).Height(240)
             ).Padding(8)
         ).WithBorder("#30C0C0C0", 1).Padding(4);
     }

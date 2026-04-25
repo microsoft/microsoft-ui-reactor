@@ -116,12 +116,18 @@ internal sealed class LayoutCostAttribution : ILayoutCostReporter
         var id = new ComponentIdentity(++_nextComponentId);
         _wrapperToId[wrapper] = id;
         RegisterComponent(id, displayName, depth);
+        global::System.Diagnostics.Debug.WriteLine(
+            $"[Reactor.LayoutCost] +mounted {displayName}@{id.Value} depth={depth} (total={_wrapperToId.Count})");
     }
 
     private void OnReconcilerComponentUnmounted(UIElement wrapper)
     {
         if (_wrapperToId.Remove(wrapper, out var id))
+        {
             UnregisterComponent(id);
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[Reactor.LayoutCost] -unmounted @{id.Value} (total={_wrapperToId.Count})");
+        }
     }
 
     /// <summary>
@@ -173,26 +179,26 @@ internal sealed class LayoutCostAttribution : ILayoutCostReporter
     {
         if (_wrapperToId.Count == 0) return;
 
-        int sized = 0, unsized = 0, detached = 0, transformFailed = 0;
+        // Bounds-only refresh: one TransformToVisual + bounds per Component
+        // wrapper. Cost is O(_wrapperToId.Count), not O(visual-tree-size),
+        // so this stays cheap even when a Component renders thousands of
+        // descendants (e.g. a 500-row DataGrid). The previous variant did a
+        // full-tree authored-count walk on every flush which dominated the
+        // UI thread under heavy reconciles.
         foreach (var kv in _wrapperToId)
         {
             var wrapper = kv.Key;
             if (!_rollups.TryGetValue(kv.Value, out var rollup)) continue;
-            if (wrapper is not FrameworkElement fe) { unsized++; continue; }
+            if (wrapper is not FrameworkElement fe) continue;
             if (fe.ActualWidth <= 0 || fe.ActualHeight <= 0)
             {
                 rollup.SubtreeW = 0; rollup.SubtreeH = 0;
-                unsized++;
                 continue;
             }
 
-            // Skip wrappers that are no longer connected to the visual root
-            // (recycled during reconcile but not yet unmounted).
+            // Skip wrappers that are no longer in any visual tree.
             if (VisualTreeHelper.GetParent(fe) is null && fe != overlayAnchor)
-            {
-                detached++;
                 continue;
-            }
 
             try
             {
@@ -202,59 +208,16 @@ internal sealed class LayoutCostAttribution : ILayoutCostReporter
                 rollup.SubtreeY = (float)bounds.Y;
                 rollup.SubtreeW = (float)bounds.Width;
                 rollup.SubtreeH = (float)bounds.Height;
-                // Mirror into the spatial index so ETW events can attribute
-                // via innermost-rect match when we haven't yet learned the
-                // pointer-map binding for a given ElementId.
                 _spatial.SetComponentBounds(
                     kv.Value, rollup.Depth,
                     (float)bounds.X, (float)bounds.Y,
                     (float)bounds.Width, (float)bounds.Height);
-                sized++;
             }
             catch
             {
-                // TransformToVisual throws if `wrapper` is in a different visual
-                // tree (popup/flyout). Leave last-known bounds in place.
-                transformFailed++;
-                continue;
+                // TransformToVisual throws if `wrapper` is in a different
+                // visual tree (popup/flyout). Leave last-known bounds.
             }
-
-            int authored = 0;
-            CountAuthoredDescendants(wrapper, wrapper, ref authored);
-            rollup.AuthoredElementCount = authored;
-        }
-
-        if (unsized + detached + transformFailed > 0)
-        {
-            global::System.Diagnostics.Debug.WriteLine(
-                $"[Reactor.LayoutCost] Walk: sized={sized} unsized={unsized} detached={detached} transformFailed={transformFailed} total={_wrapperToId.Count}");
-        }
-    }
-
-    /// <summary>
-    /// Count UIElements in <paramref name="node"/>'s visual subtree, stopping
-    /// at nested Component wrappers (their descendants belong to another
-    /// rollup) and at overlay-chrome subtrees.
-    /// </summary>
-    private void CountAuthoredDescendants(DependencyObject node, UIElement rootWrapper, ref int count)
-    {
-        int n = VisualTreeHelper.GetChildrenCount(node);
-        for (int i = 0; i < n; i++)
-        {
-            var child = VisualTreeHelper.GetChild(node, i);
-            if (child is UIElement childEl)
-            {
-                // Skip overlay's own chrome.
-                if (LayoutCostOverlayAttached.GetIsOverlayChrome(childEl)) continue;
-
-                count++;
-
-                // Don't descend into a nested Component's wrapper — its own
-                // rollup owns that subtree.
-                if (!ReferenceEquals(childEl, rootWrapper) && _wrapperToId.ContainsKey(childEl))
-                    continue;
-            }
-            CountAuthoredDescendants(child, rootWrapper, ref count);
         }
     }
 

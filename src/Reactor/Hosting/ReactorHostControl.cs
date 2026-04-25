@@ -162,6 +162,30 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private bool AnyOverlayFlagOn =>
         ReactorFeatureFlags.HighlightReconcileChanges || ReactorFeatureFlags.ShowLayoutCost;
 
+    private bool _lastLayoutCostFlagState;
+
+    /// <summary>
+    /// Stop the ETW session when ShowLayoutCost goes off; restart on flag-on.
+    /// Mirrors <see cref="ReactorHost"/>.
+    /// </summary>
+    private void ApplyEtwSessionState()
+    {
+        bool on = ReactorFeatureFlags.ShowLayoutCost;
+        if (on == _lastLayoutCostFlagState) return;
+        _lastLayoutCostFlagState = on;
+
+        if (_etwConsumer is null) return;
+        try
+        {
+            if (on) _etwConsumer.Start();
+            else _etwConsumer.Stop();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor.LayoutCost] ETW session toggle ({(on ? "Start" : "Stop")}) failed: {ex.Message}");
+        }
+    }
+
     private void StartEtwPipeline()
     {
         if (_etwConsumer is not null) return;
@@ -357,31 +381,42 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             }
 
             bool anyOverlayOn = AnyOverlayFlagOn;
+
+            // Always ensure the LC pipeline is plumbed whenever its flag is
+            // on, even when the wrapper was previously installed for some
+            // other overlay. Idempotent. See matching note in ReactorHost.
+            if (ReactorFeatureFlags.ShowLayoutCost)
+                EnsureLayoutCostPipeline();
+            if (anyOverlayOn)
+                _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
+
+            // Per-feature teardown for the case where one flag flipped off
+            // while another is still on.
+            _overlayWiring?.ApplyFlagState();
+            ApplyEtwSessionState();
+
             if (newControl != _currentControl)
             {
                 UIElement? contentToSet = newControl;
                 if (anyOverlayOn)
-                {
-                    if (ReactorFeatureFlags.ShowLayoutCost) EnsureLayoutCostPipeline();
-                    _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
-                    contentToSet = _overlayWiring.SetContentViaWrapper(newControl);
-                }
+                    contentToSet = _overlayWiring!.SetContentViaWrapper(newControl);
                 Content = contentToSet;
                 AttachThemeListener(newControl);
             }
-            else if (anyOverlayOn && _overlayWiring?.WrapperRoot is null)
+            else if (anyOverlayOn && _overlayWiring!.WrapperRoot is null)
             {
                 // Flag flipped on mid-session. Detach current Content before
                 // re-parenting into the wrapper slot (WinUI throws "Element
                 // already has a logical parent" otherwise).
-                if (ReactorFeatureFlags.ShowLayoutCost) EnsureLayoutCostPipeline();
-                _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
                 Content = null;
                 Content = _overlayWiring.SetContentViaWrapper(newControl);
             }
             else if (!anyOverlayOn && _overlayWiring?.WrapperRoot is not null)
             {
-                // All overlay flags off — tear down the wrapper.
+                // All overlay flags off — tear down the wrapper. Detach the
+                // content from the wrapper's slot first; WinUI throws
+                // "Element already has a logical parent" otherwise.
+                _overlayWiring.DetachContent();
                 Content = newControl;
                 _overlayWiring.Dispose();
                 _overlayWiring = null;

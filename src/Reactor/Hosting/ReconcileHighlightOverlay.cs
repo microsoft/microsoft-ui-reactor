@@ -201,9 +201,9 @@ internal sealed class ReconcileHighlightOverlay
 
     public void Dispose()
     {
-        _parentContainer.Children.Remove(_container);
-        _container.Dispose();
-        _mountedBrush?.Dispose();
-        _modifiedBrush?.Dispose();
+        try { _parentContainer.Children.Remove(_container); } catch { }
+        try { _container.Dispose(); } catch { }
+        try { _mountedBrush?.Dispose(); } catch { }
+        try { _modifiedBrush?.Dispose(); } catch { }
     }
 }

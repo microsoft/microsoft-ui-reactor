@@ -256,11 +256,60 @@ public sealed class ReactorHost : IDisposable
     private bool AnyOverlayFlagOn =>
         ReactorFeatureFlags.HighlightReconcileChanges || ReactorFeatureFlags.ShowLayoutCost;
 
+    // Tracks the last observed value of ShowLayoutCost so we only act on
+    // off↔on transitions, not on every render.
+    private bool _lastLayoutCostFlagState;
+
+    /// <summary>
+    /// Stop the ETW session when ShowLayoutCost goes off and restart it
+    /// when it goes back on. Keeps the consumer object alive across
+    /// transitions so the session-name + leak-guard stay consistent.
+    /// </summary>
+    private void ApplyEtwSessionState()
+    {
+        bool on = ReactorFeatureFlags.ShowLayoutCost;
+        if (on == _lastLayoutCostFlagState) return;
+        _lastLayoutCostFlagState = on;
+
+        if (_etwConsumer is null) return; // pipeline never started, nothing to toggle.
+        try
+        {
+            if (on) _etwConsumer.Start();
+            else _etwConsumer.Stop();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor.LayoutCost] ETW session toggle ({(on ? "Start" : "Stop")}) failed: {ex.Message}");
+        }
+    }
+
     /// <summary>
     /// Internal debug hook — exposed for self-tests. Returns the running ETW
     /// consumer (or null when the flag was off at host init).
     /// </summary>
     internal LayoutEtwConsumer? EtwConsumer => _etwConsumer;
+
+    /// <summary>
+    /// Internal hook: the layout-cost reporter (attribution aggregator),
+    /// or null when <see cref="ReactorFeatureFlags.ShowLayoutCost"/> hasn't
+    /// been observed on. Used by selftest fixtures to inspect rollup state.
+    /// </summary>
+    internal LayoutCost.ILayoutCostReporter? LayoutCostReporter => _attribution;
+
+    /// <summary>
+    /// Internal hook: trigger an immediate layout-cost flush, bypassing the
+    /// throttle. Selftest fixtures use this to deterministically wait for
+    /// the attribution layer to refresh per-Component bounds via the visual
+    /// tree walk after a tree change.
+    /// </summary>
+    internal void FlushLayoutCostNow()
+    {
+        if (_overlayWiring is null || _attribution is null) return;
+        // Direct call on the UI thread — selftests run on the dispatcher.
+        _attribution.RefreshComponentMetricsFromVisualTree(
+            _overlayWiring.OverlayCanvas ?? (Microsoft.UI.Xaml.UIElement)_window.Content);
+        _attribution.Drain();
+    }
 
     /// <summary>Internal debug hook — paired-event ring buffer (or null when flag was off).</summary>
     internal LayoutEventRing? EventRing => _eventRing;
@@ -412,28 +461,40 @@ public sealed class ReactorHost : IDisposable
             // shared wrapper (once). Sub-overlays paint into the shared Canvas
             // via OverlayHostWiring's root ContainerVisual.
             bool anyOverlayOn = AnyOverlayFlagOn;
+
+            // Always ensure the LC pipeline is plumbed whenever its flag is
+            // on — even if the wrapper was already installed for the highlight
+            // overlay alone. Without this, a sequence of (highlight on →
+            // highlight off → LC on) leaves the wiring instance without an
+            // attribution reference, so ScheduleLayoutCostFlush silently
+            // returns. EnsureLayoutCostPipeline is idempotent.
+            if (ReactorFeatureFlags.ShowLayoutCost)
+                EnsureLayoutCostPipeline();
+            if (anyOverlayOn)
+                _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
+
+            // Per-feature teardown: if a flag flipped off while another is
+            // still on, dispose just that sub-overlay. The shared wrapper
+            // stays put for the remaining overlay.
+            _overlayWiring?.ApplyFlagState();
+            ApplyEtwSessionState();
+
             if (newControl != _currentControl)
             {
                 UIElement? contentToSet = newControl;
                 if (anyOverlayOn)
-                {
-                    if (ReactorFeatureFlags.ShowLayoutCost) EnsureLayoutCostPipeline();
-                    _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
-                    contentToSet = _overlayWiring.SetContentViaWrapper(newControl);
-                }
+                    contentToSet = _overlayWiring!.SetContentViaWrapper(newControl);
                 if (ContentTarget is not null)
                     ContentTarget.Child = contentToSet;
                 else
                     _window.Content = contentToSet;
                 AttachThemeListener(newControl);
             }
-            else if (anyOverlayOn && _overlayWiring?.WrapperRoot is null)
+            else if (anyOverlayOn && _overlayWiring!.WrapperRoot is null)
             {
                 // Flag flipped on mid-session. Detach the current content
                 // before re-parenting into the wrapper slot — WinUI throws
                 // "Element already has a logical parent" if we skip this.
-                if (ReactorFeatureFlags.ShowLayoutCost) EnsureLayoutCostPipeline();
-                _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
                 if (ContentTarget is not null)
                     ContentTarget.Child = null;
                 else
@@ -448,7 +509,11 @@ public sealed class ReactorHost : IDisposable
             else if (!anyOverlayOn && _overlayWiring?.WrapperRoot is not null)
             {
                 // All overlay flags off — tear down the wrapper and reinstate
-                // the raw control so we don't pay for an extra layout layer.
+                // the raw control. Explicitly detach the content from the
+                // wrapper's slot first, otherwise WinUI throws "Element
+                // already has a logical parent" when we re-attach it to the
+                // window.
+                _overlayWiring.DetachContent();
                 if (ContentTarget is not null)
                     ContentTarget.Child = newControl;
                 else

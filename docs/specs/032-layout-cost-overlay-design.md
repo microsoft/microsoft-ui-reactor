@@ -2,7 +2,10 @@
 
 ## Status
 
-**Draft** — 2026-04-24.
+- **Drafted** — 2026-04-24.
+- **v1 implemented** — 2026-04-25 on branch `feat/032-layout-cost-overlay-impl`.
+  See [Implementation findings](#implementation-findings) for the
+  divergences from the original design and the lessons that warranted them.
 
 ---
 
@@ -671,5 +674,365 @@ is Reactor-side.
    and keybind.
 5. **Phase 5 — Polish.** Detailed-view pin, color-ramp tuning, menu
    telemetry, sample-app integration.
+
+---
+
+## Implementation findings
+
+This section captures everything that turned out to be wrong, surprising,
+or load-bearing during the v1 implementation. If the feature gets ripped
+out and someone has to bring it back, **start here** before re-reading
+the design above.
+
+### What's actually shipped on the branch
+
+The data pipeline, attribution, and Components-mode overlay (Phases 1–3)
+ship behind `ReactorFeatureFlags.ShowLayoutCost`, default `false`. Modes
+(Phase 4) and detailed-view pin (Phase 5) are deferred. The shipped
+overlay differs from the design above in several places — see
+[Design departures](#design-departures-from-the-original-spec).
+
+### ETW reality vs. spec
+
+The design assumed numeric task IDs and payload field names from the
+WPF-era XAML manifest. **None of those numbers match what lifted WinUI
+emits today.** The provider GUID is the only identifier that survived.
+
+| What the spec said | What lifted WinUI actually emits |
+|---|---|
+| `MeasureElementBegin` task=47, opcode `win:Start` | `MeasureElement/Start` task=12, opcode 1 |
+| `MeasureElementEnd`   task=48, opcode `win:Stop`  | `MeasureElement/Stop`  task=12, opcode 2 |
+| `ArrangeElementBegin` task=49 | `ArrangeElement/Start` task=13, opcode 1 |
+| `ArrangeElementEnd`   task=50 | `ArrangeElement/Stop`  task=13, opcode 2 |
+| Arrange/End payload: `FinalRectX/Y/Width/Height` | `VisualOffsetX, VisualOffsetY, RenderWidth, RenderHeight` |
+| Arrange/Begin payload: (not specified) | `Left, Top, Width, Height` |
+
+Two follow-on consequences:
+
+1. **Filter by event name string, not numeric task/opcode.**
+   `LayoutEtwConsumer` discovers events at runtime by parsing
+   `data.EventName` (e.g. `"MeasureElement/Start"`) and matching name
+   prefixes. We accept both `Start/Stop` and `Begin/End` opcode suffixes
+   so the filter is robust across SDK versions. The numeric task IDs
+   from the spec are *wrong* and should not be relied on.
+2. **`VisualOffset*` is parent-relative, not root-relative.** This is
+   the single biggest implementation surprise. The original design
+   assumed root-relative coordinates from the event payload; that
+   assumption is invalid. See [Coordinate composition](#coordinate-composition-via-the-pairing-stack)
+   below.
+
+### Coordinate composition via the pairing stack
+
+Spatial attribution maps an event's rect center to a Component's bounds.
+With parent-relative offsets, every deep element sees a small (X, Y)
+near (0, 0), which lands them inside whichever Component happens to sit
+at the top-left of the screen. Misattribution flooded "TextColumn" while
+"FakeDataGrid" stayed quiet during slider scrubs.
+
+Fix: `EventPairing` accumulates root-relative coordinates **as it pushes
+frames**. Each `PairingFrame` carries `RootOriginX/Y` =
+`parentTop.RootOriginX + thisProposedLeft`. On `End`, the popped frame's
+final position is composed against the **new** stack top (its parent
+post-pop), giving a root-relative rect on the emitted `PairedLayoutEvent`.
+
+Limitations of this approach:
+
+- The chain is only as complete as the events that fire. If an
+  intermediate native element doesn't emit ETW (uncommon but possible
+  for highly-templated controls), descendants accumulate against an
+  incorrect parent and land in the wrong rect.
+- Off-screen content (a row scrolled out of a `ScrollViewer`) keeps its
+  layout coord — `(0, 1200)` say — and is "outside" the Component's
+  visible bounds in coord space. Attribution falls to chrome. The
+  spec accepted this trade-off.
+
+A unit test (`EventPairingTests.NestedArrange_PairedRect_IsRootRelative`)
+pins the math in place: a 3-level Arrange stack with offsets `(0,0)`,
+`(50,200)`, `(10,5)` must emit a grandchild rect at `(60, 205)`.
+
+### Attribution tiebreaker: smallest-area, not depth
+
+The design specified "innermost = deepest in the Component tree" for
+`SpatialIndex.AttributeByPoint`. That fails in practice: when the LC
+flag flips on mid-session, all Components mounted before the flag
+back-fill at depth 0 (we don't have the original mount-time depth).
+Depth-based tiebreaks then collapse to "first registered wins."
+
+The shipped tiebreaker is **smallest rect area wins** among Components
+whose bounds contain the point. That gives the same intuitive
+"innermost" result without depending on depth being accurate. A nested
+Component's bounds are a subset of its parent's, so smaller area ⇒
+deeper subtree ⇒ correct attribution.
+
+### Why we ship without the native-pointer interop
+
+The design's "pointer map" path requires `UIElement → CUIElement*`. On
+lifted WinUI that surface is **not** in the public SDK headers — the
+ABI-side `IUIElement7::ICoreObjectReference` doesn't lift, and the
+internal `NativePointer` accessor is hidden behind `Microsoft.UI.Xaml`'s
+internal types. v1 punts on this entirely:
+
+- `PointerMap.Track(UIElement, ComponentIdentity)` is a no-op stub.
+- Attribution always goes through the spatial fallback.
+- Once spatial attribution resolves an `ElementId` to a Component, that
+  binding is cached in `_idToComponent` so subsequent events for the
+  same element are O(1). The cache is populated **only** on Arrange
+  events with non-zero placement data — Measure events with `rect=0`
+  are deferred (they'd otherwise pin the cache to the wrong Component).
+
+Open Question 1 in the original spec is resolved as: **spatial-only
+for v1**, with the documented limitations on off-screen content.
+
+### Visual-tree walk for bounds (not for authored count)
+
+We populate per-Component bounds and `SpatialIndex.ComponentBounds` on
+each flush by walking `_wrapperToId` and calling
+`TransformToVisual(overlayCanvas).TransformBounds(...)`. This is O(N
+Components), constant in tree depth.
+
+We **do not** walk the descendants. The original design wanted authored
+counts via descendant-counting (`AuthoredElementCount`), but the meter
+became a sparkline (see below) and stopped using authored counts at
+all. Removing that walk is the difference between O(N components) and
+O(total UIElements) per flush — material when the user is scrubbing a
+slider that drives a 500-row list.
+
+If a future polish phase wants authored counts back, run that walk
+**only** on Component mount/unmount (a flag toggle on the existing
+reconciler events), not on every flush.
+
+### Idle ticker keeps the sparkline alive
+
+The sparkline (see below) decays to zero when the app is quiet. To
+make that decay actually happen — flushes only fire on `Render()` and
+on the post-render `ScheduleLayoutCostFlush`, neither of which runs
+when the user isn't interacting — `OverlayHostWiring` runs a
+`DispatcherQueueTimer` at 200 ms intervals while the LC flag is on.
+Each tick calls `ScheduleLayoutCostFlush` which is throttled by the
+33 ms cooldown anyway.
+
+Lifecycle (`ApplyFlagState`):
+
+- LC flag goes on, ticker not running → `Start()`.
+- LC flag goes off, ticker running → `Stop()`. We don't dispose; the
+  next on-flip restarts.
+- All overlays go off, wrapper torn down → `OverlayHostWiring.Dispose`
+  stops + nulls the ticker.
+
+### ETW session lifecycle
+
+The session is **stopped** when LC flag goes off and **restarted** on
+flag-on. The original spec called for "stop on flag flip-to-false" but
+the implementation initially only honored host disposal. The transition
+hook (`ReactorHost.ApplyEtwSessionState`) tracks the previous flag
+state and acts only on edges. Stop is idempotent; Start re-creates the
+real-time session under the same `Reactor.LayoutCost.{pid}` name.
+
+Why this matters: ETW session state is process-global, leaks on crash,
+and the consumer thread keeps a kernel buffer mapped while running.
+Letting it run when the user has explicitly turned the overlay off
+violates the "zero cost when off" goal.
+
+### Design departures from the original spec
+
+1. **Meter is a sparkline, not a two-bar meter.** The bicolored
+   bar-meter design was prototyped first; the visual signal "is this
+   Component slow right now?" is dramatically clearer with a
+   60-bucket × ~6 s history. The bar form's authored-vs-rendered
+   stays in `MeterMath.cs` as pure math + tests, but isn't rendered.
+   See `MeterVisual.SampleCount = 60`, `BucketDurationMs = 100`,
+   max-accumulate within a bucket.
+2. **Per-Component subtree outline.** A green outline traces each
+   Reactor Component's bounds at flush time. This wasn't in the
+   original design; it turned out to be the single most useful
+   visualization for "which Component am I looking at?" and it's
+   trivially cheap (4 thin `SpriteVisual`s per Component).
+3. **Single shared `OverlayHostWiring`.** The original spec said
+   "promote `HighlightOverlayWiring` to a shared `OverlayWiring` that
+   owns two Canvases vs. keep two independent wiring classes" and
+   chose "keep separate in v1." Implementation reversed that — every
+   feature flag toggle was duplicating the wrapper-install dance, and
+   the two-Canvas approach fights for the single
+   `SetElementChildVisual` slot. The shipped design is **one wrapper
+   Grid + one Canvas + one root `ContainerVisual`**. Each sub-overlay
+   creates its own child container under that root and paints into
+   it. Adding a third overlay is now "another sub-renderer" with no
+   host-side wrapper changes.
+4. **Live-toggle wrapper install.** The flag's contract said "read at
+   host init; restart required to change." Practical use makes that
+   awful — the menu callback now calls `RequestRender()`, which
+   triggers a render-path branch that detaches the current content,
+   builds a new wrapper, and re-parents the content under it. The
+   reverse path (all overlays off → tear down wrapper) calls
+   `DetachContent()` on the wiring before reparenting; without that
+   step, WinUI throws "Element already has a logical parent."
+5. **Back-fill on `BindReconciler`.** When the LC flag flips on
+   mid-session, Components are already mounted and won't fire mount
+   events. `LayoutCostAttribution.BindReconciler` calls a new
+   `Reconciler.EnumerateComponentWrappers()` and synthesizes a
+   register call for each. The synthesized depth is 0 for all — we
+   don't know the original depth. The smallest-area-wins tiebreaker
+   handles this correctly anyway.
+6. **Per-feature dispose** (`ApplyFlagState`). Originally the wrapper
+   tear-down was the only cleanup path, so toggling LC off while
+   highlight stayed on left the LC visuals on screen. Now each render
+   pass disposes any sub-overlay whose flag is off, leaving the
+   shared wrapper alone for the remaining overlay.
+7. **Slider-driven demo uses `LazyVStack`.** The 500-row demo
+   originally rebuilt every row on every slider tick. With both
+   overlays running this caused 5–10 s freezes during a slider drag.
+   Switching to `LazyVStack` virtualizes — only visible rows are
+   realized — and the demo became responsive. Generally relevant
+   advice: **the layout-cost overlay does not make slow apps fast;
+   it just shows you where the cost is.** Test apps that build
+   thousands of UIElements per render will be slow with or without
+   the overlay; consider that a feature, not a bug.
+8. **Visible debug "wash" was removed.** During bring-up there was a
+   green sanity-wash sprite + a red Canvas background to confirm the
+   overlay layer was alive. Both were removed once outlines + meters
+   were trustworthy. Don't bring them back; if a future debugging
+   session needs them, log instead.
+
+### Concrete file layout (as shipped)
+
+```
+src/Reactor/
+  Core/
+    ReactorFeatureFlags.cs      # ShowLayoutCost flag
+    Reconciler.cs               # LayoutCostComponentMounted/Unmounted events,
+                                # EnumerateComponentWrappers() for back-fill
+    Reconciler.Mount.cs         # depth-counter + RaiseLayoutCostComponentMounted
+                                # in MountComponent / MountFunc / MountMemo
+  Hosting/
+    OverlayHostWiring.cs        # Single wrapper Grid + Canvas + root container.
+                                # Owns idle ticker + per-feature schedule/flush.
+                                # ApplyFlagState() does per-feature teardown.
+    ReconcileHighlightOverlay.cs# Refactored: takes (Canvas, parent ContainerVisual)
+    ReactorHost.cs              # Constructs LC pipeline lazily on flag-on,
+                                # ApplyEtwSessionState() toggles ETW on flag edges
+    ReactorHostControl.cs       # Mirrors ReactorHost
+    Devtools/
+      DevtoolsMenuFactory.cs    # Both highlight + LC toggles call RequestRender()
+    Etw/
+      LayoutEtwConsumer.cs      # String-based event-name filter, schema discovery,
+                                # flexible handle-field name lookup
+      EventPairing.cs           # Per-thread stacks + RootOriginX/Y composition
+      LayoutEvents.cs           # RawLayoutEvent / PairedLayoutEvent records
+      LayoutEventRing.cs        # Power-of-two SPSC ring, drops-oldest-on-overflow
+    LayoutCost/
+      LayoutCostAttribution.cs  # ILayoutCostReporter impl, drain + attribute,
+                                # back-fill in BindReconciler,
+                                # tree-walk for bounds (NOT descendants)
+      LayoutCostOverlay.cs      # Composition renderer — outlines + meter pool
+      ComponentOutlineVisual.cs # Four-sprite hollow rectangle
+      MeterVisual.cs            # 60-bucket sparkline, in-place column updates
+      MeterVisualPool.cs        # Pool keyed by ComponentIdentity
+      ComponentRollup.cs        # Per-Component frame counters + EMA + LastFrameMs
+      ComponentSnapshot.cs      # Immutable per-frame view
+      SpatialIndex.cs           # Smallest-area-contains-point attribution
+      PointerMap.cs             # ElementId → ComponentIdentity cache
+      ColorRamps.cs             # Compile-time ms / inflation thresholds
+      MeterMath.cs              # Pure math for the deferred bar-meter form
+      SurfaceThrough.cs         # Pure rule for "should this child surface its parent's badge?"
+      MeterAnchor.cs            # Pure placement math (top-right anchor + clamping)
+      LayoutCostOverlayAttached.cs  # IsOverlayChrome attached property
+      ILayoutCostReporter.cs    # Test seam
+tests/
+  Reactor.Tests/Hosting/Etw/    # Unit tests for pairing, ring, consumer
+  Reactor.Tests/Hosting/LayoutCost/  # Unit tests for color ramps, meter math,
+                                # anchor math, surface-through, attribution,
+                                # rollup EMA, spatial index, pointer map
+  Reactor.AppTests.Host/SelfTest/Fixtures/LayoutCostOverlayTests.cs
+                                # Selftest fixtures for tree-change attribution
+samples/Reactor.TestApp/
+  Demos/LayoutCostDemo.cs       # Multi-Component demo with LazyVStack
+```
+
+---
+
+## Future ETW improvements
+
+The current attribution is **best-effort spatial fallback** because the
+native handle from `UIElement → CUIElement*` isn't accessible on lifted
+WinUI without dipping into internal types. If we ever revisit
+attribution accuracy, here are the options ranked by impact-vs-cost.
+
+### Option A — get `CUIElement*` from each Component wrapper *(highest impact, moderate cost)*
+
+At Component mount, get the wrapper Border's native `CUIElement*` via
+WinRT interop and register it in `PointerMap`. At attribution, walk
+**up the pairing stack** (we already maintain it) to find the deepest
+ancestor whose ElementId is in the map — that's the owner. O(stack
+depth), no coord math, correct for off-screen content, robust to
+intermediate elements that don't fire ETW.
+
+The blocker is that the lifted-WinUI seam isn't documented in public
+headers. Reachable via:
+
+- The internal `NativePointer` accessor inside `Microsoft.UI.Xaml.dll`
+  (not part of the public SDK contract).
+- ABI-level QueryInterface on an internal interop interface — tools
+  like `LiveVisualTree` already do something like this.
+
+We'd be adopting an undocumented seam, but a stable one (the dxaml
+layout pass has emitted these handles unchanged since WinUI 2). Cost:
+one dependency we don't fully control. Reward: collapses the entire
+spatial-attribution layer into a hashtable lookup and removes the
+"intermediate element didn't fire ETW" failure mode entirely.
+
+### Option B — emit root-relative coordinates from the XAML provider *(highest impact, requires Microsoft side)*
+
+Add `RootRelativeX/Y` to the `ArrangeElement/Stop` payload (alongside
+the existing `VisualOffsetX/Y`). That deletes our root-origin
+composition logic and removes the requirement that every parent in the
+chain emits ETW.
+
+Effort lives in the Microsoft-Windows-XAML manifest + the dxaml emit
+sites. Backwards-compatible (additive payload field). Probably the
+cleanest fix long-term but not something we can do unilaterally.
+
+### Option C — Reactor emits its own ETW events *(moderate impact, low cost, observable to other tools)*
+
+Have Reactor emit `Reactor.LayoutCost.ComponentMounted` / `Unmounted`
+events with `(ComponentId, ElementId, DisplayName)`. Combined with
+Option A's interop, this also makes the binding observable to WPA / PIX
+/ any external profiler — they'd see the Component boundary directly
+without our consumer.
+
+This is also the cleanest path to "upstream this feature into WinUI" —
+the upstream version's Component-equivalent emits the same kind of
+event, and the overlay code consumes both streams identically.
+
+### Option D — post-order pair emission with `ParentElementId` *(low impact, no manifest change)*
+
+Currently `PairedLayoutEvent`s emit in End-pop order, which is
+**children before parents**. So when a child's spatial attribution
+runs, its parent (which would be a more reliable signal) hasn't been
+attributed yet.
+
+Reverse the emission order so parents emit first, AND add
+`ParentElementId` to the event. Attribution then becomes: try this
+ElementId in the cache → try parent's ElementId → walk up. Once any
+ancestor gets attributed, descendants chain to it via cache hits.
+
+Doesn't solve off-screen content or popups. Does reduce coord-system
+fragility because spatial fallback only needs to succeed for ancestors
+(which are larger and harder to misattribute). A pragmatic 80% fix
+that needs no interop.
+
+### Option E — skip ETW, hook reconciler boundaries *(narrow scope, low cost)*
+
+Wrap each Component's wrapper Border in a `Panel` subclass that
+overrides `MeasureOverride` / `ArrangeOverride` and times them. Gives
+Reactor-attributed timing without ETW at all. Caveat: only times the
+wrapper itself, not the descendant XAML elements *inside* the wrapper
+— so a Component that renders a `DataGrid` would show the cost of
+arranging the Border, not the cost of arranging the rows. That's
+useful but not the same signal the ETW path gives.
+
+This could ship as a fallback when the ETW session can't start (no
+Performance Log Users membership), trading accuracy for availability.
+
+---
 
 Phases 1–3 are the v1 scope. 4 and 5 are fast-follow.

@@ -841,7 +841,8 @@ public sealed partial class Reconciler : IDisposable
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);
-            RaiseLayoutCostComponentUnmounted(control);
+            if (ReactorFeatureFlags.ShowLayoutCost)
+                RaiseLayoutCostComponentUnmounted(control);
         }
 
         _errorBoundaryNodes.Remove(control);
@@ -1033,7 +1034,8 @@ public sealed partial class Reconciler : IDisposable
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);
-            RaiseLayoutCostComponentUnmounted(control);
+            if (ReactorFeatureFlags.ShowLayoutCost)
+                RaiseLayoutCostComponentUnmounted(control);
         }
 
         if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl

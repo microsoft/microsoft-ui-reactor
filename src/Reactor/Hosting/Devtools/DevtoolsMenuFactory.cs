@@ -53,7 +53,13 @@ public static partial class Factories
 
         var builtInToggle = ToggleMenuItem("Highlight reconcile changes",
             ReactorFeatureFlags.HighlightReconcileChanges,
-            v => ReactorFeatureFlags.HighlightReconcileChanges = v);
+            v =>
+            {
+                ReactorFeatureFlags.HighlightReconcileChanges = v;
+                // Nudge a render so wrapper install / teardown happens
+                // immediately, mirroring the layout-cost toggle.
+                ReactorApp.ActiveHost?.RequestRender();
+            });
 
         // Layout-cost overlay toggle (spec 032). The overlay wiring builds
         // lazily on the next render pass after the flag flips, so we nudge

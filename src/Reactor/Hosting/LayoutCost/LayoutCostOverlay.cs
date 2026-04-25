@@ -162,10 +162,13 @@ internal sealed class LayoutCostOverlay
 
     public void Dispose()
     {
-        _pool.Dispose();
-        foreach (var v in _outlines.Values) v.Dispose();
+        try { _pool.Dispose(); } catch { }
+        foreach (var v in _outlines.Values)
+        {
+            try { v.Dispose(); } catch { }
+        }
         _outlines.Clear();
-        _parentContainer.Children.Remove(_container);
-        _container.Dispose();
+        try { _parentContainer.Children.Remove(_container); } catch { }
+        try { _container.Dispose(); } catch { }
     }
 }

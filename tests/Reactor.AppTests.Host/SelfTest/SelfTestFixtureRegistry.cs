@@ -683,6 +683,13 @@ internal static class SelfTestFixtureRegistry
         "ReconcileHighlight_ContainerNotModifiedWhenOnlyChildrenChange",
         "ReconcileHighlight_UpdatePathNotRemount",
         "ReconcileHighlight_MenuFlyoutUpdatesInPlace",
+
+        // Layout-cost overlay (spec 032)
+        "LayoutCost_FlagOn_BackFillsExistingComponents",
+        "LayoutCost_MountWhileOn_AddsRollup",
+        "LayoutCost_UnmountWhileOn_DropsRollup",
+        "LayoutCost_ToggleOffOn_NewComponentsStillRegister",
+        "LayoutCost_BoundsRefreshFromVisualTree",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1360,6 +1367,13 @@ internal static class SelfTestFixtureRegistry
         "ReconcileHighlight_ContainerNotModifiedWhenOnlyChildrenChange" => new ReconcileHighlightTests.ContainerNotModifiedWhenOnlyChildrenChange(harness),
         "ReconcileHighlight_UpdatePathNotRemount" => new ReconcileHighlightTests.UpdatePathNotRemount(harness),
         "ReconcileHighlight_MenuFlyoutUpdatesInPlace" => new ReconcileHighlightTests.MenuFlyoutUpdatesInPlace(harness),
+
+        // Layout-cost overlay
+        "LayoutCost_FlagOn_BackFillsExistingComponents" => new LayoutCostOverlayTests.FlagOn_BackFillsExistingComponents(harness),
+        "LayoutCost_MountWhileOn_AddsRollup" => new LayoutCostOverlayTests.MountWhileOn_AddsRollup(harness),
+        "LayoutCost_UnmountWhileOn_DropsRollup" => new LayoutCostOverlayTests.UnmountWhileOn_DropsRollup(harness),
+        "LayoutCost_ToggleOffOn_NewComponentsStillRegister" => new LayoutCostOverlayTests.ToggleOffOn_NewComponentsStillRegister(harness),
+        "LayoutCost_BoundsRefreshFromVisualTree" => new LayoutCostOverlayTests.BoundsRefreshFromVisualTree(harness),
 
         _ => null,
     };

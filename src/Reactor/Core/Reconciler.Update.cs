@@ -313,7 +313,8 @@ public sealed partial class Reconciler
         // WinUI properties were actually updated (not just children recursed).
         // Containers whose only change is children references are excluded — the
         // individual children will be captured if they change.
-        if (result is null && _highlightModified is not null
+        if (result is null && ReactorFeatureFlags.HighlightReconcileChanges
+            && _highlightModified is not null
             && (!Element.OwnPropsEqual(oldEl, newEl) || !Element.ModifiersEqual(oldModifiers, modifiers)))
             _highlightModified.Add(control);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)

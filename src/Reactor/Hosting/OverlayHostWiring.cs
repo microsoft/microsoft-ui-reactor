@@ -79,6 +79,7 @@ internal sealed class OverlayHostWiring : IDisposable
     }
 
     public Grid? WrapperRoot => _wrapperRoot;
+    public Canvas? OverlayCanvas => _overlayCanvas;
 
     /// <summary>
     /// Install <paramref name="newControl"/> into the shared wrapper Grid.
@@ -103,21 +104,14 @@ internal sealed class OverlayHostWiring : IDisposable
             });
             _wrapperRoot.Children.Add(_overlayCanvas);
 
-            // LayoutUpdated fires whenever *any* layout pass in this visual
-            // tree completes — scrolls, window resizes, animated property
-            // settling, etc. Tie overlay flushes to it so meter positions
-            // always track current bounds. Throttled by the 80 ms cooldown
-            // so storms don't overwhelm the dispatcher.
-            _wrapperRoot.LayoutUpdated += (_, _) =>
-            {
-                if (ReactorFeatureFlags.HighlightReconcileChanges)
-                {
-                    // Highlight doesn't re-snapshot on layout; it draws
-                    // per-element sprites on reconcile only. No action.
-                }
-                if (ReactorFeatureFlags.ShowLayoutCost)
-                    ScheduleLayoutCostFlush();
-            };
+            // Note: we used to also subscribe to LayoutUpdated here for
+            // sub-200 ms outline tracking during drag-resize. It fires
+            // 1000s of times per second under heavy reconciles (e.g. a
+            // 500-row DataGrid build), and even with the cooldown guard
+            // the call overhead alone backed up the UI thread. The
+            // 200 ms idle ticker + per-render scheduling cover the
+            // important cases at low cost; drag-resize updates lag up
+            // to 200 ms which is acceptable for a dev tool.
         }
 
         var slot = (ContentControl)_wrapperRoot.Children[0];
@@ -136,6 +130,22 @@ internal sealed class OverlayHostWiring : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Detach whatever the wrapper currently holds in its content slot. Used
+    /// during teardown so the host can re-parent that element back to the
+    /// window without WinUI throwing "Element already has a logical parent".
+    /// Returns the detached element, or null if there's no wrapper / no
+    /// content.
+    /// </summary>
+    public UIElement? DetachContent()
+    {
+        if (_wrapperRoot is null) return null;
+        var slot = (ContentControl)_wrapperRoot.Children[0];
+        var content = slot.Content as UIElement;
+        slot.Content = null;
+        return content;
+    }
+
     /// <summary>Bind the attribution aggregator so <see cref="ScheduleLayoutCostFlush"/> can drain it.</summary>
     public void AttachLayoutCostAttribution(LayoutCostAttribution attribution)
     {
@@ -143,11 +153,49 @@ internal sealed class OverlayHostWiring : IDisposable
         EnsureIdleTicker();
     }
 
+    /// <summary>
+    /// Reconcile the visible overlay sub-renderers AND background work with
+    /// the current flag state. Called every render so when a feature flag
+    /// goes off mid-session, its visuals (outlines, meters, fade sprites)
+    /// are torn down promptly and any per-feature background work (the
+    /// idle-decay ticker) is paused. The wrapper Canvas stays alive so
+    /// long as any other overlay is still on.
+    /// </summary>
+    public void ApplyFlagState()
+    {
+        bool lcOn = ReactorFeatureFlags.ShowLayoutCost;
+        bool hlOn = ReactorFeatureFlags.HighlightReconcileChanges;
+
+        if (!lcOn && _layoutCostOverlay is not null)
+        {
+            try { _layoutCostOverlay.Dispose(); } catch { }
+            _layoutCostOverlay = null;
+        }
+        if (!hlOn && _highlightOverlay is not null)
+        {
+            try { _highlightOverlay.Dispose(); } catch { }
+            _highlightOverlay = null;
+        }
+
+        // Idle-decay ticker is layout-cost-only. Pause when LC is off so we
+        // don't fire 5 Hz no-op dispatcher work the whole time the user has
+        // only the highlight overlay enabled.
+        if (_idleTicker is not null)
+        {
+            if (lcOn && !_idleTicker.IsRunning) _idleTicker.Start();
+            else if (!lcOn && _idleTicker.IsRunning) _idleTicker.Stop();
+        }
+    }
+
     private void EnsureIdleTicker()
     {
         if (_idleTicker is not null) return;
         _idleTicker = _dispatcherQueue.CreateTimer();
-        _idleTicker.Interval = TimeSpan.FromMilliseconds(50);
+        // 200 ms keeps the sparkline ticking through idle periods without
+        // saturating the dispatcher when both overlays are on. Faster ticks
+        // would queue Low-priority work on top of the highlight overlay's
+        // own flushes and starve paint.
+        _idleTicker.Interval = TimeSpan.FromMilliseconds(200);
         _idleTicker.IsRepeating = true;
         _idleTicker.Tick += (_, _) =>
         {
