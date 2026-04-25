@@ -98,11 +98,17 @@ internal static class LayoutCostOverlayTests
                 await Harness.Render();
 
                 var snap = Snapshot(host);
-                H.Check("LayoutCost_BackFill_TreeShapeAppears", HasComponent(snap, "TreeShape"));
+                // Note: TreeShape is the *root* Component (mounted via
+                // host.Mount(component)). The Reactor reconciler doesn't
+                // wrap the root in a ComponentNode — only nested
+                // ComponentElements get wrappers and lifecycle events.
+                // So back-fill picks up LeafA + LeafB; LeafC was a live
+                // mount after the IncludeC state flip.
                 H.Check("LayoutCost_BackFill_LeafAAppears", HasComponent(snap, "LeafA"));
                 H.Check("LayoutCost_BackFill_LeafBAppears", HasComponent(snap, "LeafB"));
-                // After IncludeC, LeafC should have mounted and registered.
                 H.Check("LayoutCost_BackFill_LeafCAppearsAfterMount", HasComponent(snap, "LeafC"));
+                H.Check("LayoutCost_BackFill_RootNotTracked",
+                    !HasComponent(snap, "TreeShape"));
             }
             finally
             {
@@ -133,8 +139,10 @@ internal static class LayoutCostOverlayTests
                 H.Check("LayoutCost_MountWhileOn_NoLeafCInitially",
                     !HasComponent(before, "LeafC"));
                 int beforeCount = CountNonChrome(before);
-                H.Check("LayoutCost_MountWhileOn_HasInitialThree",
-                    beforeCount == 3); // TreeShape + LeafA + LeafB
+                // TreeShape is the *root* Component and isn't tracked; the
+                // pre-IncludeC tree exposes LeafA + LeafB.
+                H.Check("LayoutCost_MountWhileOn_HasInitialTwo",
+                    beforeCount == 2);
 
                 TreeShape.IncludeC?.Invoke();
                 await Harness.Render();
