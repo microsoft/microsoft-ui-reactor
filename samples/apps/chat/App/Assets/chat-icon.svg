@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="#0078D4"/>
+
+  <!-- Chat flow symbol — two parallel lines with a flow indicator -->
+  <!-- Left vertical bar -->
+  <rect x="72" y="64" width="16" height="128" rx="8" fill="white"/>
+
+  <!-- Right vertical bar -->
+  <rect x="168" y="64" width="16" height="128" rx="8" fill="white"/>
+
+  <!-- Top connecting bar -->
+  <rect x="72" y="64" width="112" height="16" rx="8" fill="white"/>
+
+  <!-- Bottom connecting bar -->
+  <rect x="72" y="176" width="112" height="16" rx="8" fill="white"/>
+
+  <!-- Center flow arrow (right-pointing chevron) -->
+  <path d="M112 108 L140 128 L112 148" stroke="white" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Small dot — active indicator -->
+  <circle cx="200" cy="76" r="12" fill="#10B981"/>
+</svg>
