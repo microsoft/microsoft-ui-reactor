@@ -1479,7 +1479,7 @@ This skill focuses on **security vulnerabilities that can be exploited** -- prob
 3. Microsoft SDL Practices -- https://www.microsoft.com/en-us/securityengineering/sdl/practices
 4. NIST SSDF -- https://csrc.nist.gov/publications/detail/sp/800-218/final
 5. BinaryFormatter security risks -- https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide
-7. JSON.NET TypeNameHandling risks -- https://www.alphabot.com/security/blog/2017/net/How-to-configure-Json.NET-to-create-a-vulnerable-web-API.html
-8. OWASP .NET Security Cheat Sheet -- https://cheatsheetseries.owasp.org/cheatsheets/DotNet_Security_Cheat_Sheet.html
-9. ASP.NET Core Security Documentation -- https://learn.microsoft.com/en-us/aspnet/core/security/
-10. CWE/SANS Top 25 -- https://cwe.mitre.org/top25/archive/2023/2023_top25_list.html
+6. JSON.NET TypeNameHandling risks -- https://www.alphabot.com/security/blog/2017/net/How-to-configure-Json.NET-to-create-a-vulnerable-web-API.html
+7. OWASP .NET Security Cheat Sheet -- https://cheatsheetseries.owasp.org/cheatsheets/DotNet_Security_Cheat_Sheet.html
+8. ASP.NET Core Security Documentation -- https://learn.microsoft.com/en-us/aspnet/core/security/
+9. CWE/SANS Top 25 -- https://cwe.mitre.org/top25/archive/2023/2023_top25_list.html

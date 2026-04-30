@@ -13,7 +13,7 @@ Reference data and guidelines for routing C# code changes to the right expert re
 
 ## Pattern Sources
 
-The C# expert review skills encode patterns sourced from established .NET authorities, framework design guidelines, and .NET team guidance. The C# skills are pattern-sourced from published expertise rather than calibrated from observed reviewer behavior on internal PRs. The patterns are authoritative, but they derive from public guidance.
+The C# expert review skills encode patterns sourced from established .NET authorities, framework design guidelines, and .NET team guidance. The C# skills are pattern-sourced from published expertise rather than calibrated from observed reviewer behavior on internal PRs. The patterns are authoritative, but they are derived from public guidance.
 
 | Source | Domain Coverage | Key Contributions |
 |--------|----------------|-------------------|
