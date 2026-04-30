@@ -8,9 +8,8 @@ description: >-
   annotations, captive dependency (scoped in singleton), disposable transient
   services, breaking changes from added constructor parameters, enum serialization
   breakage, and premature abstraction via single-implementation interfaces.
-  30 patterns across 4 categories sourced from .NET Framework Design Guidelines
-  (Cwalina/Abrams), Immo Landwerth's API review streams, David Fowler's
-  ASP.NET Core patterns, and Mads Torgersen's C# language design notes.
+  30 patterns across 4 categories sourced from .NET Framework Design Guidelines,
+  .NET API review guidance, ASP.NET Core patterns, and C# language design notes.
   Use this skill when reviewing C# public APIs, library design, NuGet packages,
   type hierarchies, nullable annotations, DI registration, or versioning strategy.
 version: "1.0.0"
@@ -165,7 +164,7 @@ Check for binary and source breaking changes.
 
 #### API-TYPE-01: Mutable Struct (Value Type Semantics Violated)
 **Severity**: High
-**Source**: .NET Framework Design Guidelines (Cwalina/Abrams), Immo Landwerth
+**Source**: .NET Framework Design Guidelines
 
 **Signal**: `struct` with mutable fields or property setters. Mutations on copies are silently lost because structs have value semantics (assignment copies the entire value).
 
@@ -254,7 +253,7 @@ public class Matrix4x4 { ... }
 
 #### API-TYPE-03: Missing `sealed` on Non-Inheritable Class
 **Severity**: Medium
-**Source**: .NET Framework Design Guidelines, Immo Landwerth
+**Source**: .NET Framework Design Guidelines
 
 **Signal**: Public class without `sealed` that has no `virtual`/`abstract` members and no documented inheritance design. Unsealed classes implicitly promise extensibility that may not be intended.
 
@@ -290,7 +289,7 @@ public abstract class ValidatorBase
 
 #### API-TYPE-04: `record` vs `record struct` Mismatch
 **Severity**: Low
-**Source**: Mads Torgersen, C# language design
+**Source**: C# language design
 
 **Signal**: `record` (class) used for small, value-semantic types that would benefit from stack allocation, or `record struct` used for large types that need reference semantics.
 
@@ -321,7 +320,7 @@ public record LargePayload(
 
 #### API-TYPE-05: Tuple Return Type on Public API
 **Severity**: Medium
-**Source**: .NET Framework Design Guidelines (Cwalina/Abrams)
+**Source**: .NET Framework Design Guidelines
 
 **Signal**: Public method returning a `ValueTuple` with positional (or weakly-named) members. Callers see `Item1`, `Item2` at the call site unless they know the local names.
 
@@ -355,7 +354,7 @@ public record UserStatus(string Name, int Age, bool IsActive);
 
 #### API-TYPE-06: String Parameter Where Strong Type Appropriate
 **Severity**: Medium
-**Source**: .NET Framework Design Guidelines, Immo Landwerth
+**Source**: .NET Framework Design Guidelines
 
 **Signal**: String parameters representing constrained domain values (status codes, identifiers, file types, currencies) that could be an enum or strongly-typed wrapper.
 
@@ -383,7 +382,7 @@ public readonly record struct OrderId(string Value);
 
 #### API-TYPE-07: Boolean Parameter on Public Method
 **Severity**: Medium
-**Source**: .NET Framework Design Guidelines (Cwalina/Abrams, "Flag Arguments" section)
+**Source**: .NET Framework Design Guidelines ("Flag Arguments" section)
 
 **Signal**: Public method with a `bool` parameter that controls behavior. At the call site, the boolean value has no semantic meaning.
 
@@ -461,7 +460,7 @@ public abstract class MessageSenderBase : IMessageSender
 
 #### API-TYPE-09: Interface with Single Implementation (Premature Abstraction)
 **Severity**: Low
-**Source**: David Fowler, .NET design guidance
+**Source**: .NET design guidance
 
 **Signal**: Interface with exactly one implementation, created "just in case" rather than in response to an actual need for polymorphism.
 
@@ -502,7 +501,7 @@ public class OrderProcessor
 
 #### API-TYPE-10: Nested Public Type Without Strong Containment Reason
 **Severity**: Medium
-**Source**: .NET Framework Design Guidelines (Cwalina/Abrams)
+**Source**: .NET Framework Design Guidelines
 
 **Signal**: Public type nested inside another public type without a strong conceptual "belongs-to" relationship (e.g., Builder, Enumerator, EventArgs).
 
@@ -553,7 +552,7 @@ public class HttpRequest
 
 #### API-NULL-01: Public API Missing Nullable Annotations
 **Severity**: High (in nullable-enabled project)
-**Source**: .NET Framework Design Guidelines, Immo Landwerth
+**Source**: .NET Framework Design Guidelines
 
 **Signal**: Public method parameters or return types without nullable annotations in a project with `<Nullable>enable</Nullable>`. This leaves consumers guessing about null contracts.
 
@@ -590,7 +589,7 @@ public void ProcessOrder(Order order, string? couponCode)
 
 #### API-NULL-02: Missing `[NotNullWhen]`/`[MaybeNullWhen]` on Try Pattern
 **Severity**: High
-**Source**: .NET Framework Design Guidelines, Immo Landwerth
+**Source**: .NET Framework Design Guidelines
 
 **Signal**: `Try*` methods that use `out` parameters without nullability attributes. Without these, the compiler cannot narrow the null state after the method returns.
 
@@ -658,7 +657,7 @@ public class LegacyService
 
 #### API-NULL-04: Ambiguous `T?` on Unconstrained Generic
 **Severity**: High
-**Source**: Mads Torgersen, C# language design
+**Source**: C# language design
 
 **Signal**: `T?` used on an unconstrained generic type parameter. For value types, `T?` means `Nullable<T>`; for reference types, it means nullable reference. The behavior differs depending on the type argument.
 
@@ -786,7 +785,7 @@ public class UserService
 
 #### API-DI-01: Service Locator Pattern
 **Severity**: Medium
-**Source**: Mark Seemann (Dependency Injection in .NET), David Fowler
+**Source**: Dependency injection design guidance
 
 **Signal**: `IServiceProvider.GetService<T>()` or `IServiceProvider.GetRequiredService<T>()` called outside of composition root, factory, or middleware infrastructure code.
 
@@ -894,7 +893,7 @@ public class OrderOrchestrator : IOrderOrchestrator
 
 #### API-DI-03: Captive Dependency (Scoped Service in Singleton)
 **Severity**: Critical
-**Source**: Mark Seemann, David Fowler, ASP.NET Core documentation
+**Source**: ASP.NET Core documentation
 
 **Signal**: A singleton service that depends on a scoped service (or a scoped service depending on a transient disposable). The scoped service is "captured" and lives as long as the singleton, defeating its intended lifetime.
 
@@ -945,7 +944,7 @@ builder.Host.UseDefaultServiceProvider(options =>
 
 #### API-DI-04: Disposable Transient Service Without Scope Management
 **Severity**: High
-**Source**: ASP.NET Core documentation, David Fowler
+**Source**: ASP.NET Core documentation
 
 **Signal**: Transient service implementing `IDisposable` registered without explicit scope management. The DI container tracks disposable transients and holds references until the scope ends, causing memory pressure.
 
@@ -1016,7 +1015,7 @@ services.AddSingleton(TimeProvider.System);  // Framework abstraction
 
 #### API-DI-06: Ambient Context / Static Service Accessor in Library Code
 **Severity**: Medium
-**Source**: Mark Seemann, .NET DI guidelines
+**Source**: .NET DI guidelines
 
 **Signal**: Static property or method providing access to a service instance (ambient context pattern), hiding the dependency and making testing difficult.
 
@@ -1157,7 +1156,7 @@ public enum OrderStatus
 
 #### API-VER-03: Parameter Added to Public Constructor (Binary Breaking Change)
 **Severity**: High
-**Source**: .NET Framework Design Guidelines, Immo Landwerth
+**Source**: .NET Framework Design Guidelines
 
 **Signal**: New parameter added to an existing public constructor. This is a binary breaking change (existing compiled callers will fail at runtime with `MissingMethodException`) and a source breaking change.
 
@@ -1226,7 +1225,7 @@ public IReadOnlyList<Order> GetOrders() { ... }
 
 #### API-VER-05: Missing `[Obsolete]` Before Planned Removal
 **Severity**: Medium
-**Source**: .NET Framework Design Guidelines, Immo Landwerth
+**Source**: .NET Framework Design Guidelines
 
 **Signal**: Public API member removed without a prior release marking it `[Obsolete]`. Consumers have no warning or migration guidance.
 
@@ -1300,13 +1299,10 @@ public void Process(Order order) { ... }  // Kept for binary compatibility
 
 ## References
 
-1. .NET Framework Design Guidelines, 3rd Edition -- Krzysztof Cwalina & Brad Abrams (Addison-Wesley)
-2. Immo Landwerth API Review Videos -- https://www.youtube.com/playlist?list=PL1rZQsJPBU2S49OQPjupSJF-qeIEz9_ju
-3. David Fowler - ASP.NET Core Architecture -- https://github.com/davidfowl/AspNetCoreDiagnosticScenarios
-4. Mads Torgersen - C# Language Design -- https://github.com/dotnet/csharplang
-5. .NET API Design Guidelines -- https://learn.microsoft.com/en-us/dotnet/standard/design-guidelines/
-6. Mark Seemann - Dependency Injection in .NET -- https://www.manning.com/books/dependency-injection-principles-practices-patterns
-7. Andrew Lock - ASP.NET Core in Action -- DI lifetime management chapters
-8. Nullable Reference Types -- https://learn.microsoft.com/en-us/dotnet/csharp/nullable-references
-9. Breaking Changes in .NET -- https://learn.microsoft.com/en-us/dotnet/core/compatibility/
-10. Roslyn Analyzers -- https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/overview
+1. .NET Framework Design Guidelines, 3rd Edition (Addison-Wesley)
+2. .NET API Design Guidelines -- https://learn.microsoft.com/en-us/dotnet/standard/design-guidelines/
+3. C# Language Design -- https://github.com/dotnet/csharplang
+4. ASP.NET Core Diagnostic Scenarios -- https://github.com/davidfowl/AspNetCoreDiagnosticScenarios
+5. Nullable Reference Types -- https://learn.microsoft.com/en-us/dotnet/csharp/nullable-references
+6. Breaking Changes in .NET -- https://learn.microsoft.com/en-us/dotnet/core/compatibility/
+7. Roslyn Analyzers -- https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/overview

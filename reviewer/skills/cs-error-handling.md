@@ -8,8 +8,8 @@ description: >-
   reference type annotation mismatches, null-forgiving operator hiding real
   null paths, missing argument validation at public API boundaries, and
   guard clauses throwing wrong exception types.
-  28 patterns from .NET team guidelines, Stephen Cleary, and Framework
-  Design Guidelines. Covers exception patterns, null safety, and
+  28 patterns from .NET team guidelines and Framework Design Guidelines.
+  Covers exception patterns, null safety, and
   validation/contracts domains.
   Use this skill when reviewing C# code that handles exceptions, uses
   nullable reference types, validates parameters, or mixes async/sync
@@ -46,8 +46,7 @@ metadata:
   author: Windows Engineering Systems
   version: "1.0"
   source: >-
-    .NET team guidelines, Stephen Cleary (async best practices),
-    Framework Design Guidelines (Cwalina & Abrams)
+    .NET team guidelines, Framework Design Guidelines
   pattern-count: 28
   domains:
     - exception-patterns
@@ -1371,8 +1370,8 @@ Enable these analyzers to catch patterns at compile time:
 
 ## References
 
-1. .NET Framework Design Guidelines -- Exception Throwing (Cwalina & Abrams, 3rd edition)
-2. Stephen Cleary -- "Async/Await Best Practices" (MSDN Magazine, https://learn.microsoft.com/en-us/archive/msdn-magazine/2013/march/async-await-best-practices-in-asynchronous-programming)
+1. .NET Framework Design Guidelines -- Exception Throwing (3rd edition)
+2. MSDN Magazine -- "Async/Await Best Practices" (https://learn.microsoft.com/en-us/archive/msdn-magazine/2013/march/async-await-best-practices-in-asynchronous-programming)
 3. Microsoft Learn -- "Nullable reference types" (https://learn.microsoft.com/en-us/dotnet/csharp/nullable-references)
 4. Microsoft Learn -- "Exception handling best practices" (https://learn.microsoft.com/en-us/dotnet/standard/exceptions/best-practices-for-exceptions)
 5. Microsoft Learn -- "Nullable analysis attributes" (https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/attributes/nullable-analysis)

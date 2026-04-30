@@ -1,9 +1,6 @@
 # Reactor + WinUI3 Integration Proposals
 
 > Analysis of how Reactor's declarative reconciler could integrate more deeply with the WinUI3 native framework to unlock performance, correctness, and developer experience improvements.
->
-> **Reactor repo:** `C:\Users\andersonch\Code\patch`
-> **WinUI3 repo:** `C:\Users\andersonch\Code\microsoft-ui-xaml`
 
 ---
 

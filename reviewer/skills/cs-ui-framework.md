@@ -14,7 +14,7 @@ description: >-
   38 patterns across 6 sub-domains covering dependency-property-correctness,
   data-binding-MVVM, control-lifecycle-visual-tree, threading-dispatcher,
   and resource-style patterns. Sources include WPF/WinUI team guidance,
-  Raymond Chen (Windows UI), .NET MAUI team, and XAML specification.
+  .NET MAUI team, and XAML specification.
   Use this skill when reviewing C# code using WPF, WinUI 3, .NET MAUI, or
   any XAML-based UI framework programming model.
 ---
@@ -1945,7 +1945,6 @@ Use this checklist when reviewing any C# XAML-based UI code (WPF, WinUI 3, MAUI)
 
 1. WPF DependencyProperty documentation — Microsoft Learn: "Custom dependency properties"
 2. WinUI 3 DependencyProperty documentation — Microsoft Learn: "Dependency properties overview"
-3. Raymond Chen — "The Old New Thing" blog: UI threading and dispatcher patterns
-4. .NET MAUI BindableProperty documentation — Microsoft Learn: "Bindable properties"
-5. XAML specification — resource resolution order and markup extension behavior
-6. Framework Design Guidelines (3rd ed.) — DependencyProperty wrapper rules (Section 9.4)
+3. .NET MAUI BindableProperty documentation — Microsoft Learn: "Bindable properties"
+4. XAML specification — resource resolution order and markup extension behavior
+5. Framework Design Guidelines (3rd ed.) — DependencyProperty wrapper rules (Section 9.4)

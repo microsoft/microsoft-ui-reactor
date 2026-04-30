@@ -11,8 +11,8 @@ description: >-
   and Span/zero-copy missed opportunities (Substring vs ReadOnlySpan,
   stackalloc without fallback, ArrayPool not used).
   35 patterns with cost suppression rules, performance impact estimation,
-  and fix strategies. Sourced from Stephen Toub, Ben Adams, Rico Mariani,
-  the .NET Runtime team, and BenchmarkDotNet community.
+  and fix strategies. Sourced from .NET Runtime team guidance and the
+  BenchmarkDotNet community.
   Use this skill when reviewing C# code on hot paths, per-request handlers,
   UI render loops, startup sequences, or anywhere latency and allocation matter.
 ---
@@ -1150,10 +1150,7 @@ For each fix:
 
 ## References
 
-1. Stephen Toub -- "Performance Improvements in .NET" (annual series) (https://devblogs.microsoft.com/dotnet/)
-2. Ben Adams -- High-performance .NET patterns (https://github.com/benaadams)
-3. Rico Mariani -- "Performance Tidbits" (https://devblogs.microsoft.com/performance/)
-4. .NET Runtime team -- Performance best practices (https://learn.microsoft.com/en-us/dotnet/framework/performance/performance-tips)
-5. BenchmarkDotNet -- .NET benchmarking framework (https://benchmarkdotnet.org/)
-6. Adam Sitnik -- "Span<T>" (https://adamsitnik.com/Span/)
-7. .NET API documentation -- ArrayPool, Span, ValueTask (https://learn.microsoft.com/en-us/dotnet/api/)
+1. .NET Blog -- "Performance Improvements in .NET" (annual series) (https://devblogs.microsoft.com/dotnet/)
+2. .NET Runtime team -- Performance best practices (https://learn.microsoft.com/en-us/dotnet/framework/performance/performance-tips)
+3. BenchmarkDotNet -- .NET benchmarking framework (https://benchmarkdotnet.org/)
+4. .NET API documentation -- ArrayPool, Span, ValueTask (https://learn.microsoft.com/en-us/dotnet/api/)

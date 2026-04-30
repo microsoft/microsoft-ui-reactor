@@ -302,7 +302,7 @@ dotnet test Reactor.sln
 For lightweight demos, skip the `.csproj` entirely. Add a file-level header:
 
 ```csharp
-#:project C:\Users\andersonch\Code\reactor1\src\Reactor
+#:project ../src/Reactor
 #:package Microsoft.WindowsAppSDK@2.0.0-preview2
 #:property OutputType=WinExe
 #:property TargetFramework=net9.0-windows10.0.22621.0

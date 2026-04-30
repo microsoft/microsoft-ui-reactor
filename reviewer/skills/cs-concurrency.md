@@ -8,8 +8,8 @@ description: >-
   missing Dispatcher marshaling, blocking UI thread), and shared state races
   (unsynchronized static fields, concurrent Dictionary/List access, TOCTOU
   check-then-act, bool flags without volatile).
-  38 patterns from Stephen Toub, Stephen Cleary, the .NET Runtime team, and
-  David Fowler covering async-await-correctness, synchronization-and-locking,
+  38 patterns from .NET Runtime team guidance covering async-await-correctness,
+  synchronization-and-locking,
   thread-affinity-and-UI-threading, and shared-state-data-races domains.
   Use this skill when reviewing C# code that uses async/await, threads,
   locks, concurrent collections, or dispatches work across thread boundaries.
@@ -110,7 +110,7 @@ For each potential match:
 
 **Severity**: Critical
 **Why**: Unobserved exceptions in `async void` crash the process. There is no `Task` to observe, so the exception propagates to the `SynchronizationContext` and terminates the application.
-**Source**: Stephen Toub, Stephen Cleary
+**Source**: .NET async/await guidance
 
 ```csharp
 // BAD: async void -- unobserved exception crashes process
@@ -136,7 +136,7 @@ async Task ProcessDataAsync(string input)
 
 **Severity**: Critical
 **Why**: Blocks the calling thread. If that thread owns a `SynchronizationContext` (UI thread, legacy ASP.NET), the awaited Task's continuation is posted back to the same context, causing a deadlock.
-**Source**: Stephen Cleary ("Don't Block on Async Code")
+**Source**: .NET async/await guidance ("Don't Block on Async Code")
 
 ```csharp
 // BAD: deadlock on UI thread or ASP.NET classic
@@ -166,7 +166,7 @@ public async Task<string> GetDataAsync()
 
 **Severity**: High
 **Why**: Library code that awaits without `ConfigureAwait(false)` captures the caller's `SynchronizationContext`. If the caller is a UI thread that then blocks on the result, this causes a deadlock.
-**Source**: Stephen Toub, .NET Runtime team guidelines
+**Source**: .NET Runtime team guidelines
 
 ```csharp
 // BAD: library code captures SynchronizationContext
@@ -324,7 +324,7 @@ await Task.WhenAll(someList.Select(item => ProcessAsync(item)));
 
 **Severity**: Critical
 **Why**: Unlike `Task`, a `ValueTask` may be backed by a pooled `IValueTaskSource` that is recycled after the first consumption. Awaiting it twice, or calling `.Result` after `await`, causes undefined behavior (corruption, exceptions, wrong results).
-**Source**: Stephen Toub (.NET blog)
+**Source**: .NET blog
 
 ```csharp
 // BAD: ValueTask consumed twice
@@ -1276,10 +1276,8 @@ For each fix:
 
 ## References
 
-1. Stephen Toub -- "ConfigureAwait FAQ" (https://devblogs.microsoft.com/dotnet/configureawait-faq/)
-2. Stephen Cleary -- "Don't Block on Async Code" (https://blog.stephencleary.com/2012/07/dont-block-on-async-code.html)
-3. Stephen Cleary -- "Async/Await Best Practices" (https://docs.microsoft.com/en-us/archive/msdn-magazine/2013/march/async-await-best-practices-in-asynchronous-programming)
-4. David Fowler -- "Async Guidance" (https://github.com/davidfowl/AspNetCoreDiagnosticScenarios/blob/master/AsyncGuidance.md)
-5. .NET Runtime team -- Threading and async documentation (https://learn.microsoft.com/en-us/dotnet/standard/threading/)
-6. Stephen Toub -- "Understanding the Whys, Whats, and Whens of ValueTask" (https://devblogs.microsoft.com/dotnet/understanding-the-whys-whats-and-whens-of-valuetask/)
-7. .NET Framework Design Guidelines -- Lock usage patterns
+1. .NET Blog -- "ConfigureAwait FAQ" (https://devblogs.microsoft.com/dotnet/configureawait-faq/)
+2. MSDN Magazine -- "Async/Await Best Practices" (https://docs.microsoft.com/en-us/archive/msdn-magazine/2013/march/async-await-best-practices-in-asynchronous-programming)
+3. .NET Runtime team -- Threading and async documentation (https://learn.microsoft.com/en-us/dotnet/standard/threading/)
+4. .NET Blog -- "Understanding the Whys, Whats, and Whens of ValueTask" (https://devblogs.microsoft.com/dotnet/understanding-the-whys-whats-and-whens-of-valuetask/)
+5. .NET Framework Design Guidelines -- Lock usage patterns

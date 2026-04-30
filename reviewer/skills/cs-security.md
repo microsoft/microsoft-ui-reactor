@@ -9,8 +9,7 @@ description: >-
   and secrets committed in appsettings.json. Trust boundary analysis across
   HTTP request pipeline, deserialization boundaries, and configuration surfaces.
   35 patterns across 5 categories with OWASP-aligned severity ratings sourced
-  from OWASP Top 10, .NET Security Guidelines, Microsoft SDL, NIST SSDF,
-  and Andrew Lock's ASP.NET Core security guidance.
+  from OWASP Top 10, .NET Security Guidelines, Microsoft SDL, and NIST SSDF.
   Use this skill when reviewing C# code that handles user input, authentication,
   cryptography, serialization, or configuration in ASP.NET Core / .NET applications.
 version: "1.0.0"
@@ -360,7 +359,7 @@ using var reader = XmlReader.Create(stream, settings);
 #### SEC-INJ-07: Log Injection
 **Severity**: Medium
 **OWASP**: A09:2021 Security Logging and Monitoring Failures
-**Source**: OWASP, Andrew Lock
+**Source**: OWASP, ASP.NET Core security guidance
 
 **Signal**: User input written directly to log output without sanitization, enabling forged log entries via newline injection.
 
@@ -506,7 +505,7 @@ var obj = Serializer.Deserialize<MyType>(stream);
 #### SEC-DESER-02: JSON.NET TypeNameHandling Misconfiguration
 **Severity**: Critical
 **OWASP**: A08:2021 Software and Data Integrity Failures
-**Source**: OWASP, Alvaro Munoz & Oleksandr Mirosh research
+**Source**: OWASP, deserialization vulnerability research
 
 **Signal**: `TypeNameHandling` set to `All`, `Auto`, `Objects`, or `Arrays` in `JsonSerializerSettings`.
 
@@ -859,7 +858,7 @@ var jwtSecret = configuration["JwtSecret"];
 #### SEC-AUTH-04: Custom Authentication Instead of Framework Middleware
 **Severity**: High
 **OWASP**: A07:2021 Identification and Authentication Failures
-**Source**: .NET Security Guidelines, Andrew Lock
+**Source**: .NET Security Guidelines
 
 **Signal**: Hand-rolled authentication logic (password hashing, token generation, session management) instead of ASP.NET Core Identity or authentication middleware.
 
@@ -1259,7 +1258,7 @@ RandomNumberGenerator.Fill(bytes);
 #### SEC-CFG-01: Secrets in appsettings.json Committed to Source Control
 **Severity**: Critical
 **OWASP**: A05:2021 Security Misconfiguration
-**Source**: OWASP, Andrew Lock, .NET Security Guidelines
+**Source**: OWASP, .NET Security Guidelines
 
 **Signal**: `appsettings.json` or `appsettings.*.json` containing passwords, API keys, connection strings with credentials, or JWT signing keys and the file is tracked in source control.
 
@@ -1330,7 +1329,7 @@ builder.Configuration.AddAzureKeyVault(
 #### SEC-CFG-03: Missing Production Environment Check
 **Severity**: Medium
 **OWASP**: A05:2021 Security Misconfiguration
-**Source**: ASP.NET Core Security Guidelines, Andrew Lock
+**Source**: ASP.NET Core Security Guidelines
 
 **Signal**: Development-only features (Swagger UI, developer exception page, CORS wildcard) enabled without environment checks.
 
@@ -1479,8 +1478,7 @@ This skill focuses on **security vulnerabilities that can be exploited** -- prob
 2. .NET Security Guidelines -- https://learn.microsoft.com/en-us/dotnet/standard/security/
 3. Microsoft SDL Practices -- https://www.microsoft.com/en-us/securityengineering/sdl/practices
 4. NIST SSDF -- https://csrc.nist.gov/publications/detail/sp/800-218/final
-5. Andrew Lock - ASP.NET Core in Action -- Security chapters on authentication, authorization, HTTPS
-6. BinaryFormatter security risks -- https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide
+5. BinaryFormatter security risks -- https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide
 7. JSON.NET TypeNameHandling risks -- https://www.alphabot.com/security/blog/2017/net/How-to-configure-Json.NET-to-create-a-vulnerable-web-API.html
 8. OWASP .NET Security Cheat Sheet -- https://cheatsheetseries.owasp.org/cheatsheets/DotNet_Security_Cheat_Sheet.html
 9. ASP.NET Core Security Documentation -- https://learn.microsoft.com/en-us/aspnet/core/security/

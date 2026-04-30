@@ -6,8 +6,8 @@ description: >-
   GC pressure from LOH allocations and boxing, unsafe code without bounds
   checking, P/Invoke marshaling errors, GCHandle leaks, Span/Memory escaping
   scope, ArrayPool rent without return, and object pool stale-state bugs.
-  34 patterns from .NET Runtime team guidance, Stephen Toub, Rico Mariani,
-  Ben Adams, and .NET Framework Design Guidelines. Covers IDisposable/Dispose,
+  34 patterns from .NET Runtime team guidance and .NET Framework Design
+  Guidelines. Covers IDisposable/Dispose,
   GC pressure/object lifetime, unsafe code/interop, and object pooling/reuse
   domains.
   Use this skill when reviewing C# code that manages unmanaged resources,
@@ -47,8 +47,7 @@ metadata:
   author: Windows Engineering Systems
   version: "1.0"
   source: >-
-    .NET Runtime team, Stephen Toub, Rico Mariani, Ben Adams,
-    .NET Framework Design Guidelines
+    .NET Runtime team, .NET Framework Design Guidelines
   pattern-count: 34
   domains:
     - idisposable-dispose
@@ -1487,10 +1486,7 @@ Many patterns in this catalog are detectable by .NET analyzers. Enable these in 
 ## References
 
 1. .NET Framework Design Guidelines -- IDisposable Pattern (Microsoft Learn)
-2. Stephen Toub -- "How Async/Await Really Works in C#" (.NET Blog, 2023)
-3. Rico Mariani -- GC Performance Tips (MSDN Archive)
-4. Ben Adams -- .NET Performance Optimization (ASP.NET Community Standup, GitHub aspnet benchmarks)
-5. Microsoft Learn -- "Implement a Dispose method" (https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/implementing-dispose)
-6. Microsoft Learn -- "Memory management and garbage collection" (https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/)
-7. Microsoft Learn -- "Unsafe code and pointers" (https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/unsafe-code)
-8. .NET API Analyzers -- CA2000, CA2213, CA1001 series (https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/)
+2. Microsoft Learn -- "Implement a Dispose method" (https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/implementing-dispose)
+3. Microsoft Learn -- "Memory management and garbage collection" (https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/)
+4. Microsoft Learn -- "Unsafe code and pointers" (https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/unsafe-code)
+5. .NET API Analyzers -- CA2000, CA2213, CA1001 series (https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/)

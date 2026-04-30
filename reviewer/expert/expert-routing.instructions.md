@@ -13,21 +13,20 @@ Reference data and guidelines for routing C# code changes to the right expert re
 
 ## Pattern Sources
 
-The C# expert review skills encode patterns sourced from established .NET authorities, framework design guidelines, and .NET team guidance. Unlike the C++/Rust skill sets which are calibrated from named expert reviewers on real PR data, the C# skills are pattern-sourced from published expertise. This is an honest distinction — the patterns are authoritative, but they are derived from public guidance rather than observed reviewer behavior on internal PRs.
+The C# expert review skills encode patterns sourced from established .NET authorities, framework design guidelines, and .NET team guidance. The C# skills are pattern-sourced from published expertise rather than calibrated from observed reviewer behavior on internal PRs. The patterns are authoritative, but they derive from public guidance.
 
 | Source | Domain Coverage | Key Contributions |
 |--------|----------------|-------------------|
 | .NET Runtime team design guidelines | api-design, error-handling, performance | Framework Design Guidelines, API review process |
-| Stephen Toub | concurrency, performance | Async/await best practices, `ConfigureAwait`, `ValueTask` usage, `Task.Run` guidance, performance blog series |
-| Stephen Cleary | concurrency, error-handling | Async patterns, `async void` avoidance, `SynchronizationContext`, deadlock prevention, `AsyncEx` library patterns |
-| Raymond Chen | memory-lifecycle, concurrency, general correctness | COM ref counting, Windows API patterns, threading gotchas, P/Invoke correctness |
-| Andrew Lock | security, build-packaging, api-design | .NET configuration patterns, dependency injection, security headers, middleware pipeline |
-| David Fowler | api-design, performance, concurrency | High-performance API design, Kestrel patterns, `System.IO.Pipelines`, connection abstractions |
-| Immo Landwerth | api-design, error-handling | .NET API design reviews, nullability annotations, API compatibility, platform compatibility |
-| Rico Mariani | performance, memory-lifecycle | GC tuning, allocation reduction, working set optimization, performance measurement methodology |
-| Ben Adams | performance, concurrency | High-performance .NET patterns, zero-allocation techniques, `Span<T>` adoption, server performance |
-| Mads Torgersen | api-design, error-handling | C# language design, nullable reference types, pattern matching, record types |
-| .NET Framework Design Guidelines (Cwalina/Abrams) | api-design, error-handling | Type design, member design, exception design, naming conventions, extensibility patterns |
+| .NET async/await guidance | concurrency, error-handling | Async/await best practices, `ConfigureAwait`, `ValueTask` usage, `Task.Run` guidance, `async void` avoidance, `SynchronizationContext`, deadlock prevention |
+| Windows UI / native interop guidance | memory-lifecycle, concurrency, general correctness | COM ref counting, Windows API patterns, threading gotchas, P/Invoke correctness |
+| ASP.NET Core security / DI guidance | security, build-packaging, api-design | Configuration patterns, dependency injection, security headers, middleware pipeline |
+| ASP.NET Core architecture guidance | api-design, performance, concurrency | High-performance API design, Kestrel patterns, `System.IO.Pipelines`, connection abstractions |
+| .NET API review guidance | api-design, error-handling | API design reviews, nullability annotations, API compatibility, platform compatibility |
+| .NET GC / performance guidance | performance, memory-lifecycle | GC tuning, allocation reduction, working set optimization, performance measurement methodology |
+| High-performance .NET patterns | performance, concurrency | Zero-allocation techniques, `Span<T>` adoption, server performance |
+| C# language design notes | api-design, error-handling | Nullable reference types, pattern matching, record types |
+| .NET Framework Design Guidelines | api-design, error-handling | Type design, member design, exception design, naming conventions, extensibility patterns |
 
 ## Skill Routing Matrix
 
