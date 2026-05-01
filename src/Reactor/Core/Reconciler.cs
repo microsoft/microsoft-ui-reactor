@@ -360,8 +360,19 @@ public sealed partial class Reconciler : IDisposable
     // ElementPool.CleanElement), but clears Tag. So "Tag is null" on rent does
     // NOT mean "unwired" — the control may already have a trampoline attached.
     // We need a per-control flag that survives pool cycles to avoid double-
-    // subscription. A ConditionalWeakTable gives us that with zero cross-ABI
-    // cost and weak keys so GC isn't blocked.
+    // subscription.
+    //
+    // Two dedupe schemes coexist:
+    //   - Button.Click and TextBox.TextChanged/SelectionChanged use the CWT
+    //     below, keyed by managed FrameworkElement identity. This is fragile
+    //     when WinRT projection produces a second RCW over the same native
+    //     DependencyObject (each RCW gets its own entry, both pass dedupe,
+    //     trampoline subscribed twice). See issue #114 for the migration.
+    //   - ToggleSwitch.Toggled uses EventHandlerState (attached on
+    //     ReactorAttached.StateProperty), which is keyed by native DO identity
+    //     and so is RCW-stable. New poolable wiring should follow this pattern
+    //     — see EnsureToggleSwitchWiring and the EnsureXxxSubscribed helpers
+    //     for the input events.
 
     internal sealed class PoolableWireFlags
     {
