@@ -940,7 +940,7 @@ A single-window WinUI 3 app:
   side.
 - Shared commanding: the same `ICommand` instances are wrapped as
   Reactor `Command`s via a small bridge helper
-  (`Reactor.Command FromIcommand(ICommand)`) — the reviewer's bridge
+  (`Reactor.Command FromICommand(ICommand)`) — the reviewer's bridge
   ask. We add this helper if it doesn't exist already.
 
 ### What the sample is *not*
@@ -977,7 +977,7 @@ samples/InteropFirst/
     Components/
         OrdersDataGrid.cs
     Bridges/
-        IcommandBridge.cs   (Reactor.Command FromIcommand(ICommand))
+        ICommandBridge.cs   (Reactor.Command FromICommand(ICommand))
 ```
 
 The csproj uses the same `Microsoft.WindowsAppSDK` version as
