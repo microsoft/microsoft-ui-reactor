@@ -8,7 +8,6 @@ using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;
 using static Microsoft.UI.Reactor.Controls.Validation.ValidationVisualizerDsl;
-using WinUI = Microsoft.UI.Xaml.Controls;
 using SysVec = global::System.Numerics;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
@@ -172,7 +171,7 @@ internal static class ReconcilerBigCoverageFixtures
 
     // ════════════════════════════════════════════════════════════════════
     //  3. CheckBox three-state and indeterminate wiring
-    //     (covers the OnCheckedStateChanged + Indeterchildlikeate branch)
+    //     (covers the OnCheckedStateChanged + Indeterminate branch)
     // ════════════════════════════════════════════════════════════════════
     internal class CheckBoxThreeStateWiring(Harness h) : SelfTestFixtureBase(h)
     {
@@ -542,15 +541,14 @@ internal static class ReconcilerBigCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  12. Frame mount + MapControl mount (rarely-used elements).
-    //     Targets Mount.cs MountFrame, MountMapControl.
+    //  12. Frame mount (rarely-used element).
+    //     Targets Mount.cs MountFrame. MapControl is intentionally not exercised
+    //     here because it crashes natively without a map service token.
     // ════════════════════════════════════════════════════════════════════
-    internal class FrameAndMapMount(Harness h) : SelfTestFixtureBase(h)
+    internal class FrameMount(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
-            // MapControl crashes natively without a map service token, so we skip it
-            // here and only exercise Frame's mount path.
             var host = H.CreateHost();
             host.Mount(ctx => VStack(
                 Frame()
