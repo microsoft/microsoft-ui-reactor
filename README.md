@@ -61,7 +61,7 @@ Many of the experiments in this repo — the charting stack, accessibility valid
 
 ## What's included
 
-Reactor spans a core framework and a set of higher-level features. Each area below is labeled by its current maturity — *Preview* is the most mature, then *Draft*, then *Early*.
+Reactor spans a core framework and a set of higher-level features. Each area below is labeled by its current maturity — *Preview* is the most mature, then *Draft*, then *Early*. **All areas are pre-1.0 and the public API surface may change without notice while the project is labeled experimental.**
 
 | Area | What it does | Maturity |
 |---|---|---|
@@ -72,15 +72,17 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 | **Commanding** | Command records bundling label, icon, shortcut, and action; 16 standard commands; focus-scoped accelerators | Preview |
 | **Charting (D3)** | Full D3 algorithm port plus declarative chart DSL — line, bar, area, pie, tree, force-directed graphs | Preview |
 | **Markdown** | Native md4c parser with `Markdown()` element builder | Preview |
-| **Navigation** | Type-safe declarative routing, GPU composition transitions, lifecycle guards, back-stack serialization | Preview |
-| **Accessibility** | `AutomationProperties` modifiers, WCAG 2.1 AA target, compile- and runtime-validation | Preview |
+| **Navigation** | Type-safe declarative routing, GPU composition transitions, lifecycle guards, back-stack serialization | Draft |
+| **Accessibility** | `AutomationProperties` modifiers, WCAG 2.1 AA target, compile- and runtime-validation | Draft |
 | **WinForms interop** | Simple hosting of WinUI content inside WinForms apps | Draft |
-| **Theming & styling** | `ThemeRef` tokens, dark / light / high-contrast, style caching, per-control overrides, Roslyn analyzers | Draft |
-| **Animation** | Compositor-layer transitions, keyframes, stagger, scroll-linked and connected animations | Draft |
-| **Localization** | ICU message format, source generator, CLI tooling (extract, translate, validate), RTL/BiDi | Draft |
-| **Lists & virtualization** | Virtualized `ListView`, `GridView`, `ItemsRepeater`, `LazyStack` with recycling | Draft |
+| **Theming & styling** | `ThemeRef` tokens, dark / light / high-contrast, style caching, per-control overrides, Roslyn analyzers | Early |
+| **Animation** | Compositor-layer transitions, keyframes, stagger, scroll-linked and connected animations | Early |
+| **Localization** | ICU message format, source generator, CLI tooling (extract, translate, validate), RTL/BiDi | Early |
+| **Lists & virtualization** | Virtualized `ListView`, `GridView`, `ItemsRepeater`, `LazyStack` with recycling | Early |
 | **Data system** | `DataGrid`, `PropertyGrid`, `FormField`, metadata model, async validation, inline editing | Early |
 | **Preview / hot reload** | `MetadataUpdateHandler` hot reload, CLI `--preview` flag, VS Code live preview | Early |
+
+> Maturity labels reflect the breadth of testing and the likelihood of API churn, not feature completeness. *Preview* areas have selftest and e2e coverage and are the most stable. *Draft* areas work on the golden path but may have rough edges or partial AOT support. *Early* areas are usable but expect bigger shape changes as we iterate.
 
 ---
 
@@ -132,7 +134,7 @@ If you're building line-of-business applications:
 ### Create a new app
 
 ```bash
-dotnet run --project Reactor.Cli -- --create MyApp
+dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj -- --create MyApp
 ```
 
 Or create a `.csproj` manually:
@@ -226,7 +228,7 @@ dotnet run --project MyApp -- --preview-list
 The **Reactor Preview** extension adds a live preview panel to VS Code. It runs a single preview process and switches between components instantly over HTTP — no process restart when you change components.
 
 ```bash
-cd vscode-reactor
+cd src/vscode-reactor
 npm install
 npm run compile
 code --install-extension vscode-reactor
@@ -257,7 +259,6 @@ src/Reactor/                Core framework
   Flex/                     FlexPanel — CSS Flexbox via Yoga
   Yoga/                     Pure C# port of Meta's Yoga layout engine
   Hosting/                  App bootstrap, render loop, hot reload, preview capture server
-  Native/                   Experimental Rust differ (ViewDiffer)
 src/Reactor.Cli/            CLI scaffolding tool
 src/vscode-reactor/         VS Code extension — live preview panel
 tests/
@@ -298,6 +299,7 @@ dotnet run --project samples/apps/wordpuzzle
 |-----|-------------|
 | [Guide](docs/guide/) | Documentation on how to use Reactor |
 | [Design Specs](docs/specs/) | Numbered specs covering theming, navigation, animation, data, accessibility |
+| [AOT support matrix](docs/aot-support.md) | Which subsystems work under `PublishAot=true` and which throw at runtime |
 | [Contributing](CONTRIBUTING.md) | Build, test, add features, code style |
 
 ---

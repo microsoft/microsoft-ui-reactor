@@ -2,6 +2,8 @@
 
 > Analysis of how Reactor's declarative reconciler could integrate more deeply with the WinUI3 native framework to unlock performance, correctness, and developer experience improvements.
 
+> **Note (2026):** Several of the proposals below assume the existence of a native Rust differ that was prototyped early in the project's life. That experiment was retired and Reactor today ships a single pure-C# reconciler. Proposals that depend on the Rust path (notably §16, §18, §19, and parts of §20) would require re-introducing native diffing first; treat the Rust-differ language in those sections as historical context, not a current implementation. Other proposals in this document remain on the table.
+
 ---
 
 ## 1. Programmatic DataTemplate Construction Without XamlReader (Unblock)
@@ -340,7 +342,7 @@ The reconciler would store the `StrongBox` alongside the control in its tracking
 
 **Problem:** `TreeSerializer.SerializeWithMapping()` does a full BFS traversal and serializes the entire Element tree on every reconciliation pass. For a 1000-node tree where only 3 nodes changed, this wastes ~99.7% of serialization work.
 
-**Proposal:** Add dirty tracking to the Element tree. When `UseState` produces a new value, mark the owning component and its subtree as dirty. `TreeSerializer` would then only re-serialize dirty subtrees, reusing cached ViewNode/ViewProp arrays for clean subtrees. The Rust differ already handles subtree replacement via its `Replace` patch — it just needs the serializer to provide stable subtree references.
+**Proposal:** Add dirty tracking to the Element tree. When `UseState` produces a new value, mark the owning component and its subtree as dirty. A serializer would then only re-serialize dirty subtrees, reusing cached arrays for clean subtrees. The retired Rust differ prototype handled subtree replacement via its `Replace` patch; reviving that path would require pairing it with stable subtree references.
 
 **Impact:** Reduces serialization cost from O(n) to O(changed) per render. For typical UI updates (user types in a text field, counter increments), this could be 100x faster serialization.
 
@@ -372,7 +374,7 @@ The reconciler would store the `StrongBox` alongside the control in its tracking
 
 ## 14. Fine-Grained Component Boundaries via WinUI's ContentPresenter (Medium)
 
-**Problem:** Reactor components are opaque to the Rust differ — they appear as "gap nodes" that require imperative C# reconciliation. This means the native diff path can't optimize across component boundaries, falling back to the slower C# path for every component in the tree.
+**Problem:** In the retired native-differ prototype, Reactor components were opaque to the differ — they appeared as "gap nodes" that required imperative C# reconciliation. The same boundary problem would re-emerge in any future native diff path: it can't optimize across component boundaries without help from WinUI.
 
 **Proposal:** Map Reactor components to WinUI `ContentPresenter` instances. ContentPresenter already manages content lifecycle and template instantiation natively. Each Reactor component would own a ContentPresenter, and its rendered subtree would be the presenter's content. This gives WinUI native awareness of component boundaries — the presenter's content can be diffed independently, and WinUI's own content transition system provides free animation support.
 
@@ -409,7 +411,7 @@ The reconciler would store the `StrongBox` alongside the control in its tracking
 
 ## 16. Native Property Diffing in Rust (Medium)
 
-**Problem:** `TreeSerializer` serializes properties as `(dp_id, value_hash)` pairs, and the Rust differ compares hashes to detect changes. But the actual property application still happens in C# via per-control switch statements in `Reconciler.Update.cs`. The Rust differ knows *which* properties changed but can't *apply* them.
+**Problem:** In the retired prototype, the serializer encoded properties as `(dp_id, value_hash)` pairs and the Rust differ compared hashes to detect changes — but property *application* still happened in C# via per-control switch statements in `Reconciler.Update.cs`. The Rust side knew *which* properties changed and couldn't *apply* them. The same split would limit any revived native path.
 
 **Proposal:** Extend the Rust differ to emit typed property patches with actual values (not just hashes). For simple properties (strings, doubles, booleans, enums), the patch would carry the new value directly. A thin C interop layer would call WinUI's `SetValue` with the right `KnownPropertyIndex` and value, bypassing the C# switch dispatch entirely.
 
@@ -447,7 +449,7 @@ The reconciler would store the `StrongBox` alongside the control in its tracking
 
 ## 18. Rust Differ at the Composition Layer (Wild)
 
-**Problem:** The Rust differ currently operates on serialized Element trees (ViewNode/ViewProp arrays) and produces patches that the C# reconciler applies to the WinUI control tree. This means: serialize → diff in Rust → deserialize patches → apply via COM interop → trigger layout → render. Three language boundaries per update.
+**Problem:** In the retired prototype, the Rust differ operated on serialized Element trees (ViewNode/ViewProp arrays) and produced patches that the C# reconciler applied to the WinUI control tree — i.e. serialize → diff in Rust → deserialize patches → apply via COM interop → trigger layout → render. Three language boundaries per update. Any revived native path would inherit the same problem.
 
 **Proposal:** Move the Rust differ to operate directly on the DComp visual tree. The differ would read the current visual tree state from shared memory and emit DComp operations (visual inserts, property changes, offset updates) directly, bypassing the XAML layer entirely for layout-only subtrees. Interactive controls would still go through XAML, but pure layout subtrees could be updated in a single Rust→DComp pass.
 
@@ -466,7 +468,7 @@ The reconciler would store the `StrongBox` alongside the control in its tracking
 
 ## 19. Shared Memory Ring Buffer for Rust ↔ C# Communication (Wild)
 
-**Problem:** Every Rust differ invocation involves marshaling flat arrays across the FFI boundary: `ViewNode[]`, `ViewProp[]` in, `ViewPatch[]` out. While the current zero-copy design (patches point into Rust heap) is efficient for reads, the serialization of the input tree still copies data.
+**Problem:** In the retired prototype, every native differ invocation involved marshaling flat arrays across the FFI boundary: `ViewNode[]`, `ViewProp[]` in, `ViewPatch[]` out. Even with a zero-copy design on the read side (patches pointing into Rust heap), serialization of the input tree still copied data. Any revived native path would face the same FFI cost.
 
 **Proposal:** Use a shared memory ring buffer for bidirectional communication. C# writes serialized tree nodes directly into a memory-mapped region. Rust reads from the same region without copying. Patches are written to a separate output region. The ring buffer supports pipelining: C# can begin serializing the next frame while Rust is still diffing the current one.
 
@@ -502,7 +504,7 @@ The reconciler would store the `StrongBox` alongside the control in its tracking
 
 **Problem:** Reconciliation is single-threaded. For a tree with independent subtrees (e.g., a split-pane view with left navigation and right content), both sides are reconciled sequentially even though they have no data dependencies.
 
-**Proposal:** Identify independent subtrees (components with no shared state) and reconcile them in parallel on separate threads. Each thread produces a list of patches. Patches are applied on the UI thread in a single batch. The Rust differ already supports this — `DiffContext` is per-thread, and patches are returned as arrays that can be concatenated.
+**Proposal:** Identify independent subtrees (components with no shared state) and reconcile them in parallel on separate threads. Each thread produces a list of patches. Patches are applied on the UI thread in a single batch. The retired Rust differ prototype was already structured for this — `DiffContext` was per-thread and patches were returned as concatenable arrays — but the parallelism is also achievable in pure C#.
 
 **Impact:** A complex app with 4 independent panels could reconcile 4x faster on multi-core machines. The constraint is that WinUI controls can only be touched on the UI thread, so only the diff phase parallelizes — patch application remains single-threaded.
 

@@ -25,7 +25,7 @@ internal static class MarkdownHtmlFixtures
         - Virtual element tree with keyed reconciliation
         - Hooks: `UseState`, `UseEffect`, `UseRef`, `UseMemo`
         - CSS Flexbox layout via [Yoga](https://yogalayout.dev/)
-        - Native Rust differ for O(n) tree diffing
+        - O(n) keyed tree diffing
 
         ### Code Example
 

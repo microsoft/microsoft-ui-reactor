@@ -50,7 +50,7 @@ There is no packaging, publishing, or release infrastructure in the repo today. 
 ### Non-Goals
 
 - **Not** replacing the dev inner loop. Contributors continue to build from source; this spec only covers consumer-facing distribution.
-- **Not** shipping the native Rust differ (`Reactor.Native`) in v1 — it's experimental and platform-specific enough to warrant its own spec.
+- **Not** introducing native code dependencies. Reactor today is pure managed C#; an earlier Rust differ experiment was retired and there is no native component to package.
 - **Not** producing MSIX / packaged-app artifacts. Reactor is a library; packaging the consumer's app is the consumer's problem.
 - **Not** committing to semantic versioning stability until we go public. Pre-1.0 preview versions can break.
 

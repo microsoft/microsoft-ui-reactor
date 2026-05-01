@@ -76,11 +76,11 @@ Three things to note:
 
 ### CLI
 
-The CLI project is `Reactor.Cli/Reactor.Cli.csproj`. Run it via `dotnet run`,
+The CLI project is `src/Reactor.Cli/Reactor.Cli.csproj`. Run it via `dotnet run`,
 which auto-builds before executing:
 
 ```bash
-dotnet run --project Reactor.Cli/Reactor.Cli.csproj -- loc extract --help
+dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj -- loc extract --help
 ```
 
 Everything after `--` is passed to the CLI as arguments.
@@ -199,7 +199,7 @@ The extractor cannot rewrite static methods safely. Handle these manually.
 ### 2a. Dry run
 
 ```bash
-dotnet run --project Reactor.Cli/Reactor.Cli.csproj -- loc extract --source tests/Reactor.TestApp --output tests/Reactor.TestApp/Strings/en-US --dry-run
+dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj -- loc extract --source samples/Reactor.TestApp --output samples/Reactor.TestApp/Strings/en-US --dry-run
 ```
 
 This reports every string it would extract and every source rewrite it
@@ -212,7 +212,7 @@ would make, without modifying any files. Review the output:
 ### 2b. Extract and rewrite
 
 ```bash
-dotnet run --project Reactor.Cli/Reactor.Cli.csproj -- loc extract --source tests/Reactor.TestApp --output tests/Reactor.TestApp/Strings/en-US --rewrite
+dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj -- loc extract --source samples/Reactor.TestApp --output samples/Reactor.TestApp/Strings/en-US --rewrite
 ```
 
 This does three things:
@@ -307,7 +307,7 @@ locale, you get `REACTOR_LOC001` warning (or error, depending on
 ### 5a. AI-assisted translation
 
 ```bash
-dotnet run --project Reactor.Cli/Reactor.Cli.csproj -- loc translate --source tests/Reactor.TestApp/Strings/en-US --target fr-FR,ja-JP,ar-SA --missing-only
+dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj -- loc translate --source samples/Reactor.TestApp/Strings/en-US --target fr-FR,ja-JP,ar-SA --missing-only
 ```
 
 This uses GitHub Copilot (via the `gh` CLI) to pre-fill translations.
@@ -329,7 +329,7 @@ Open the generated `.resw` files and review. Remove or update the
 ### 5c. Validate
 
 ```bash
-dotnet run --project Reactor.Cli/Reactor.Cli.csproj -- loc validate --resources tests/Reactor.TestApp/Strings
+dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj -- loc validate --resources samples/Reactor.TestApp/Strings
 ```
 
 Checks:
@@ -340,7 +340,7 @@ Checks:
 ### 5d. Coverage report
 
 ```bash
-dotnet run --project Reactor.Cli/Reactor.Cli.csproj -- loc status --resources tests/Reactor.TestApp/Strings
+dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj -- loc status --resources samples/Reactor.TestApp/Strings
 ```
 
 Prints a table like:
@@ -360,10 +360,10 @@ As you refactor code and remove UI, keys can become orphaned. Clean up:
 
 ```bash
 # Preview what would be removed
-dotnet run --project Reactor.Cli/Reactor.Cli.csproj -- loc prune --source tests/Reactor.TestApp --resources tests/Reactor.TestApp/Strings/en-US --dry-run
+dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj -- loc prune --source samples/Reactor.TestApp --resources samples/Reactor.TestApp/Strings/en-US --dry-run
 
 # Actually remove them
-dotnet run --project Reactor.Cli/Reactor.Cli.csproj -- loc prune --source tests/Reactor.TestApp --resources tests/Reactor.TestApp/Strings/en-US --rewrite
+dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj -- loc prune --source samples/Reactor.TestApp --resources samples/Reactor.TestApp/Strings/en-US --rewrite
 ```
 
 ---

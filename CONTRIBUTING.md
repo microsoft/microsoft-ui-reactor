@@ -10,12 +10,21 @@ When filing an issue, include the platform (`x64` / `ARM64`), .NET SDK version, 
 
 ---
 
+## Contributor License Agreement
+
+This project welcomes contributions and suggestions. Most contributions require you to agree to a Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us the rights to use your contribution. For details, visit [https://cla.opensource.microsoft.com](https://cla.opensource.microsoft.com).
+
+When you submit a pull request, a CLA bot will automatically determine whether you need to provide a CLA and decorate the PR appropriately (e.g., status check, comment). Follow the instructions provided by the bot. You will only need to do this once across all repos using our CLA.
+
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+
+---
+
 ## Prerequisites
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - Windows App SDK 2.0 (preview) — restored automatically from NuGet, no manual install required
 - Visual Studio 2022 (17.8+) or VS Code with C# Dev Kit
-- (Optional) [Rust toolchain](https://rustup.rs/) via rustup — only needed for the native differ
 
 > **Package version:** All projects reference `Microsoft.WindowsAppSDK` **2.0.0-preview2** (public NuGet). The version is centralized in `Directory.Build.props` — update it there to change the version for every project at once.
 
@@ -44,16 +53,9 @@ dotnet build src/Reactor/Reactor.csproj -p:Platform=x64
 
 Visual Studio will restore NuGet packages on first load, pulling the experimental Windows App SDK.
 
-`Reactor.csproj` has an MSBuild target that builds the Rust differ DLL (`viewdiffer.dll`) via Cargo if the Rust toolchain is installed. If Rust is not installed, the build still succeeds and the framework falls back to the pure C# reconciliation path at runtime.
-
 ### Platforms
 
-The solution targets `x64` and `ARM64`. MSBuild maps these to Rust target triples automatically:
-
-- x64 → `x86_64-pc-windows-msvc`
-- ARM64 → `aarch64-pc-windows-msvc`
-
-Omit `-p:Platform=...` to use the default (ARM64 on ARM machines, x64 on Intel). Add `-p:Platform=ARM64` or `-p:Platform=x64` to force one.
+The solution targets `x64` and `ARM64`. Omit `-p:Platform=...` to use the default (ARM64 on ARM machines, x64 on Intel). Add `-p:Platform=ARM64` or `-p:Platform=x64` to force one.
 
 ---
 
@@ -105,7 +107,7 @@ xUnit tests covering framework internals **without a WinUI window**: element cre
 dotnet test tests/Reactor.Tests
 
 # Run a specific test class
-dotnet test tests/Reactor.Tests --filter "FullyQualifiedName~TreeSerializerTests"
+dotnet test tests/Reactor.Tests --filter "FullyQualifiedName~ReconcilerMountUpdateTests"
 ```
 
 ### 2. Selftest (`tests/Reactor.SelfTests`) — MSTest + TAP
@@ -215,9 +217,7 @@ src/Reactor/                      Core framework library
     Reconciler.cs                 Tree diff orchestration
     Reconciler.Mount.cs           Mount handlers for each element type
     Reconciler.Update.cs          Update handlers for each element type
-    Reconciler.DiffTrees.cs       Native Rust differ integration
     ChildReconciler.cs            Keyed child list reconciliation
-    TreeSerializer.cs             Flat tree serialization for the Rust differ
     ElementPool.cs                Control reuse pool
     PropValueRegistry.cs          Property value caching/hashing
   Elements/
@@ -236,15 +236,6 @@ src/Reactor/                      Core framework library
     ReactorHost.cs                Render loop, state batching, dispatcher scheduling
     ReactorHostControl.cs         Embeddable host for existing WinUI apps
     HotReloadService.cs           .NET Hot Reload integration for Visual Studio
-  Native/
-    ViewDiffer.cs                 C# P/Invoke wrapper for the Rust differ
-    differ/                       Rust crate (Cargo.toml, src/)
-      src/
-        types.rs                  Wire types (DifferNode, DifferProp, DifferPatch)
-        diff.rs                   Tree diff algorithm
-        reconcile.rs              Keyed list reconciliation with LIS
-        ffi.rs                    extern "C" FFI entry points
-        arena.rs                  Reusable diff context/buffer
 src/Reactor.Cli/                  CLI scaffolding tool
 tests/
   Reactor.Tests/                  1. Unit tests — xUnit (no UI window; includes D3 charting tests)
@@ -328,28 +319,6 @@ Hooks live in `src/Reactor/Core/Component.cs` (public API) and `src/Reactor/Core
 2. Implement the logic in `RenderContext`, using `GetOrCreateHook<T>()` to manage state
 3. Follow the convention: hooks must be called in the same order every render, no conditional calls
 4. Add tests in `tests/Reactor.Tests/`
-
----
-
-## Working on the Rust native differ
-
-The differ lives in `src/Reactor/Native/differ/`. It's a standalone Rust crate that builds as a `cdylib`.
-
-```bash
-cd src/Reactor/Native/differ
-cargo build
-cargo test
-cargo clippy
-```
-
-The C# interop layer is `src/Reactor/Native/ViewDiffer.cs`. If you change any struct layouts in `types.rs`, you **must** update the matching C# structs in `ViewDiffer.cs` — there are no compile-time checks across the FFI boundary.
-
-Key files:
-
-- `src/types.rs` — wire types shared between Rust and C#
-- `src/diff.rs` — tree diff algorithm
-- `src/reconcile.rs` — keyed list reconciliation (LIS-based)
-- `src/ffi.rs` — `extern "C"` entry points called from C#
 
 ---
 

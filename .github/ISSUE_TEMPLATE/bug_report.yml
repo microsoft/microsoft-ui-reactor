@@ -1,0 +1,87 @@
+name: Bug report
+description: Report a bug in Reactor
+title: "[Bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. A minimal repro saves a lot of round trips — for control-mount or reconciler bugs, a [selftest fixture](../../blob/main/CONTRIBUTING.md#2-selftest-testsreactorselftests--mstest--tap) is ideal.
+
+        First check: does the bug reproduce in a vanilla WinUI 3 app without Reactor? If yes, file it on `microsoft/microsoft-ui-xaml` instead.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug — what you expected vs. what you got.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal code or a link to a branch/gist. The smaller the repro, the faster the fix.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: reactor-version
+    attributes:
+      label: Reactor version / commit
+      description: NuGet version once published, or the `git rev-parse HEAD` of your checkout.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - x64
+        - ARM64
+        - Both
+    validations:
+      required: true
+
+  - type: input
+    id: dotnet
+    attributes:
+      label: .NET SDK version
+      description: Output of `dotnet --version`.
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: e.g. Windows 11 23H2 (build 22631).
+
+  - type: input
+    id: appsdk
+    attributes:
+      label: Windows App SDK version
+      description: The `Microsoft.WindowsAppSDK` package version your project resolved.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / stack trace
+      description: Paste any relevant exception text or `Reactor` event source output. Use code fences.
+      render: text
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have searched [existing issues](https://github.com/microsoft/microsoft-ui-reactor/issues?q=is%3Aissue) and this isn't a duplicate.
+          required: true
+        - label: This bug reproduces against the current `main` branch (or I've noted otherwise above).
+          required: false

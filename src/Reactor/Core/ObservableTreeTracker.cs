@@ -96,12 +96,12 @@ internal class ObservableTreeTracker : IDisposable
     /// </summary>
     private const int MaxNodesPerWalk = 1024;
 
-    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Object.GetType() does not carry DynamicallyAccessedMembers; INPC types are preserved because they implement INotifyPropertyChanged.")]
     private void Walk(INotifyPropertyChanged? node, HashSet<INotifyPropertyChanged> desiredSet)
     {
         Walk(node, desiredSet, visiting: new HashSet<INotifyPropertyChanged>(global::System.Collections.Generic.ReferenceEqualityComparer.Instance));
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Object.GetType() does not carry DynamicallyAccessedMembers; INPC types are preserved because they implement INotifyPropertyChanged.")]
     private void Walk(INotifyPropertyChanged? node, HashSet<INotifyPropertyChanged> desiredSet, HashSet<INotifyPropertyChanged> visiting)
     {
         // SECURITY (TASK-062): bound the walk so a hostile or accidentally

@@ -198,8 +198,7 @@ Understanding the full render cycle helps when debugging:
    └─ Returns new Element tree
 
 4. Reconciliation phase
-   ├─ TreeSerializer flattens tree to arrays (if using native differ)
-   ├─ Differ computes patches (Rust native or C# fallback)
+   ├─ Reconciler diffs old vs. new Element trees
    └─ Patches applied to WinUI controls (mount/update/unmount)
 
 5. Effect phase

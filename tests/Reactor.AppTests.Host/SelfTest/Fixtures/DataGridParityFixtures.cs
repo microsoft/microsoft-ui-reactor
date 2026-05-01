@@ -18,10 +18,9 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// and restores the previous value on exit.
 /// </summary>
 /// <remarks>
-/// A full "rendered tree equality via TreeSerializer" assertion is out of scope
-/// until we ship a public tree-serializer helper (see task 3.3). Until then the
-/// fixtures here assert observable behavioral parity: same visible rows after
-/// scroll, same commit semantics, same loading behavior on mount.
+/// A full rendered-tree equality assertion is out of scope; the fixtures here
+/// assert observable behavioral parity: same visible rows after scroll, same
+/// commit semantics, same loading behavior on mount.
 /// </remarks>
 internal static class DataGridParityFixtures
 {

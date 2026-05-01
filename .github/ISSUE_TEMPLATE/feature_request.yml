@@ -1,0 +1,47 @@
+name: Feature request
+description: Propose a new feature, control, hook, or design change
+title: "[Feature] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reactor is experimental and the API surface is actively evolving. Larger design changes typically land as a numbered spec under `docs/specs/` — feel free to propose the shape here first, and we'll work out whether a spec is needed.
+
+        For open-ended ideas or "should we even do this?" conversations, [start a discussion](https://github.com/microsoft/microsoft-ui-reactor/discussions) instead.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user-facing problem are you trying to solve? Who is affected?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Sketch the API or behavior. Code samples welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds, related libraries, or other shapes you weighed.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links to related issues, specs, prior art in React/SwiftUI/Compose, etc.
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have searched [existing issues and specs](https://github.com/microsoft/microsoft-ui-reactor/issues?q=is%3Aissue) for prior discussion of this idea.
+          required: true

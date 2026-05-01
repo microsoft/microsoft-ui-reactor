@@ -32,32 +32,9 @@ The reconciler is split across multiple partial class files:
 - **`Reconciler.cs`** — orchestration, type registry, helpers (`SetElementTag`, `GetElementTag`)
 - **`Reconciler.Mount.cs`** — `Mount()` dispatch + 40+ `MountXxx()` handlers that create WinUI controls from elements
 - **`Reconciler.Update.cs`** — `Update()` dispatch + 30+ `UpdateXxx()` handlers that patch existing controls
-- **`Reconciler.DiffTrees.cs`** — integration with the native Rust differ
 - **`ChildReconciler.cs`** — keyed and unkeyed child list reconciliation
 
-## Two reconciliation paths
-
-Reactor supports two reconciliation implementations:
-
-### Pure C# path (default)
-
-The original reconciler. Walks old and new trees imperatively, comparing element types and properties at each position. This is the reliable fallback that always works.
-
-### Native Rust differ path (experimental)
-
-An optional high-performance path that offloads tree diffing to a native Rust library (`viewdiffer.dll`).
-
-The flow:
-1. **Serialize** — `TreeSerializer` flattens both element trees into flat arrays of `ViewNode` and `ViewProp` structs
-2. **Diff** — The Rust differ compares the flat arrays and produces a list of `ViewPatch` operations
-3. **Apply** — C# applies the patches to WinUI controls using the same Mount/Update/Unmount handlers
-
-The Rust path is controlled by `ReconcileMode`:
-- `ReconcileMode.Auto` — uses Rust differ if the DLL is available, otherwise C#
-- `ReconcileMode.NativeDiffTree` — forces Rust differ (fails if DLL missing)
-- `ReconcileMode.Managed` — forces pure C# path
-
-See [Native Differ](native-differ.md) for the full architecture.
+The reconciler is a single pure-C# implementation. An earlier experimental native Rust differ path was prototyped and removed; the design notes are preserved under `docs/specs/archived/` for reference.
 
 ## Child reconciliation
 
@@ -121,7 +98,7 @@ Some WinUI controls have children that aren't in a simple `Panel.Children` colle
 - **MenuBar** — items are in `Items` with nested sub-items
 - **CommandBar** — primary/secondary commands
 
-Gap nodes are skipped by the flat tree serializer (they can't be represented in the `ViewNode` array). Instead, they're reconciled imperatively in a second pass after the main diff patches are applied.
+Gap nodes are reconciled imperatively in a second pass, separately from the main child-list diff.
 
 ## The mount/update dispatch
 
@@ -179,9 +156,6 @@ The reconciler supports custom element types via `RegisterType<TElement, TContro
 | Operation | Cost |
 |-----------|------|
 | Element tree creation | O(n) — cheap record allocations, no WinUI objects |
-| Tree serialization (for Rust differ) | O(n) — full BFS traversal |
 | Diffing | O(n) for tree structure, O(k) for keyed children where k = changed items |
 | Patch application | O(changes) — only touched controls are updated |
 | State batching | Multiple state changes → single render |
-
-The main optimization opportunity is making serialization incremental (only re-serialize dirty subtrees). See [WinUI Integration Proposals](../winui3-integration-proposals.md) for the full roadmap.

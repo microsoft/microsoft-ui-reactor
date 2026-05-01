@@ -206,7 +206,6 @@ selfhost/
 tests/stress_perf/publish_log*.txt
 
 # Rust build artifacts
-src/Reactor/Native/differ/target/
 samples/apps/reactorfiles/Native/reactorfs/target/
 
 # Claude Code local harness state — per-session lock and per-user settings

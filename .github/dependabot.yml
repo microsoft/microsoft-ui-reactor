@@ -1,0 +1,35 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "dependencies"
+      - "nuget"
+    open-pull-requests-limit: 10
+    ignore:
+      # Pinned via Directory.Build.props; bump intentionally.
+      - dependency-name: "Microsoft.WindowsAppSDK"
+
+  - package-ecosystem: "npm"
+    directory: "/src/vscode-reactor"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps(vscode)"
+    labels:
+      - "dependencies"
+      - "vscode-extension"

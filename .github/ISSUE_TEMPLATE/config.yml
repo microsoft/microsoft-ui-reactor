@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or "how do I…?"
+    url: https://github.com/microsoft/microsoft-ui-reactor/discussions
+    about: Use Discussions for questions, ideas, and design feedback. Issues are for bugs and feature requests.
+  - name: WinUI 3 bug (not Reactor-specific)
+    url: https://github.com/microsoft/microsoft-ui-xaml/issues
+    about: If the bug reproduces in a vanilla WinUI 3 app without Reactor, file it upstream.
+  - name: Windows App SDK bug
+    url: https://github.com/microsoft/WindowsAppSDK/issues
+    about: For platform-level issues with the Windows App SDK.
+  - name: Security vulnerability
+    url: https://github.com/microsoft/microsoft-ui-reactor/security/policy
+    about: Do not file public issues for security vulnerabilities. See SECURITY.md.
