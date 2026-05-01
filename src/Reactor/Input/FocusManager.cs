@@ -55,6 +55,18 @@ public sealed class ElementRef
 /// during element mount/update. Reading <see cref="Current"/> from a non-UI thread
 /// is permitted but the value may be stale by the time the caller dereferences it.
 /// </para>
+/// <para>
+/// <b>Accessibility:</b> programmatic focus via
+/// <c>Current?.Focus(<see cref="FocusState.Programmatic"/>)</c> moves the
+/// keyboard focus and triggers WinUI's standard focus-changed UIA event, but
+/// it does <i>not</i> by itself produce a screen-reader announcement of
+/// surrounding content. When the focus change should be accompanied by an
+/// announcement (e.g. "saved", "validation error") use
+/// <see cref="Microsoft.UI.Reactor.Hooks.UseAnnounceExtensions.UseAnnounce(RenderContext)"/>
+/// in addition to the focus call. Modifiers applied to the element (notably
+/// <c>.AutomationName(...)</c>) are preserved across re-renders, so the typed
+/// ref does not affect the UIA tree shape.
+/// </para>
 /// </remarks>
 [DebuggerDisplay("ElementRef<{typeof(T).Name,nq}> Current={Current}")]
 public sealed class ElementRef<T> where T : FrameworkElement

@@ -190,4 +190,70 @@ public class GridSizeTests
         Assert.Equal(typed.Definition.Columns, stringy.Definition.Columns);
         Assert.Equal(typed.Definition.Rows, stringy.Definition.Rows);
     }
+
+    /// <summary>
+    /// Element-wise parity across every canonical track shape — the typed factory
+    /// and the legacy string factory must produce <see cref="GridDefinition"/>
+    /// instances whose <c>Columns</c> and <c>Rows</c> arrays compare element-wise
+    /// equal. Spec 033 §5.9 (factory equivalence).
+    /// </summary>
+    [Fact]
+    public void Grid_Typed_And_String_Factories_Produce_ElementWise_Equal_Tracks_For_All_Canonical_Shapes()
+    {
+        var typedColumns = new[]
+        {
+            GridSize.Auto,
+            GridSize.Star(),       // weight = 1 round-trips to "*"
+            GridSize.Star(2),      // explicit weight round-trips to "2*"
+            GridSize.Star(0.33),   // fractional star
+            GridSize.Px(0),        // zero pixels permitted
+            GridSize.Px(120.5),    // fractional pixel
+        };
+        var typedRows = new[] { GridSize.Auto, GridSize.Star(1.5), GridSize.Px(48) };
+
+        var typed = Factories.Grid(typedColumns, typedRows);
+#pragma warning disable CS0618
+        var stringy = Factories.Grid(
+            columns: new[] { "Auto", "*", "2*", "0.33*", "0", "120.5" },
+            rows: new[] { "Auto", "1.5*", "48" });
+#pragma warning restore CS0618
+
+        Assert.Equal(typedColumns.Length, typed.Definition.Columns.Length);
+        Assert.Equal(typedRows.Length, typed.Definition.Rows.Length);
+        for (int i = 0; i < typedColumns.Length; i++)
+            Assert.Equal(stringy.Definition.Columns[i], typed.Definition.Columns[i]);
+        for (int i = 0; i < typedRows.Length; i++)
+            Assert.Equal(stringy.Definition.Rows[i], typed.Definition.Rows[i]);
+    }
+
+    /// <summary>
+    /// Spec 033 §5.9: the typed Grid factory validates its inputs at the
+    /// boundary. Null arrays must throw <see cref="ArgumentNullException"/>
+    /// rather than allowing a NRE downstream during reconciliation.
+    /// </summary>
+    [Fact]
+    public void Grid_Typed_Factory_Throws_On_Null_Track_Arrays()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            Factories.Grid(columns: null!, rows: new[] { GridSize.Star() }));
+        Assert.Throws<ArgumentNullException>(() =>
+            Factories.Grid(columns: new[] { GridSize.Star() }, rows: null!));
+    }
+
+    /// <summary>
+    /// Spec 033 §1: the canonical track string for star-weight 1 is <c>"*"</c>,
+    /// not <c>"1*"</c>. Verify the round-trip stays canonical so the typed and
+    /// string factories produce byte-identical track arrays in
+    /// <see cref="GridDefinition"/> for the most common shape.
+    /// </summary>
+    [Fact]
+    public void Grid_Typed_Factory_Star1_Produces_Canonical_Asterisk_Track()
+    {
+        var typed = Factories.Grid(
+            columns: new[] { GridSize.Star(1) },
+            rows: new[] { GridSize.Star(1) });
+
+        Assert.Equal(new[] { "*" }, typed.Definition.Columns);
+        Assert.Equal(new[] { "*" }, typed.Definition.Rows);
+    }
 }

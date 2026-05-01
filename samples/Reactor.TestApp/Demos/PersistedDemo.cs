@@ -14,10 +14,11 @@ class PersistedDemo : Component
 {
     public override Element Render()
     {
-        // Persisted state — survives tab switches
-        var (pName, setPName) = UsePersisted("demo.p.name", "");
-        var (pEmail, setPEmail) = UsePersisted("demo.p.email", "");
-        var (pColor, setPColor) = UsePersisted("demo.p.color", "Blue");
+        // Persisted state — survives tab switches. Window scope: this state is
+        // bound to the current host's lifetime, not process-wide.
+        var (pName, setPName) = UsePersisted("demo.p.name", "", PersistedScope.Window);
+        var (pEmail, setPEmail) = UsePersisted("demo.p.email", "", PersistedScope.Window);
+        var (pColor, setPColor) = UsePersisted("demo.p.color", "Blue", PersistedScope.Window);
 
         // Regular state — lost on tab switch
         var (rName, setRName) = UseState("");

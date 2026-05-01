@@ -106,6 +106,14 @@ public abstract class Component
     protected (T Value, Action<T> Set) UsePersisted<T>(string key, T initialValue)
         => Context.UsePersisted(key, initialValue);
 
+    /// <summary>
+    /// Persisted-state hook with explicit scope (spec 033 §2). Prefer this over
+    /// the two-arg overload in new code so the call site documents whether the
+    /// state is per-window or process-wide.
+    /// </summary>
+    protected (T Value, Action<T> Set) UsePersisted<T>(string key, T initialValue, PersistedScope scope)
+        => Context.UsePersisted(key, initialValue, scope);
+
     protected Command UseCommand(Command command)
         => Context.UseCommand(command);
 

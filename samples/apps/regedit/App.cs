@@ -26,8 +26,8 @@ class RegeditApp : Component
         var (currentKeyPath, setCurrentKeyPath) = UseState("");
         var (values, setValues) = UseState<RegistryValueEntry[]>([]);
         var (selectedValueIndex, setSelectedValueIndex) = UseState(-1);
-        var (showAddressBar, setShowAddressBar) = UsePersisted("showAddressBar", true);
-        var (showStatusBar, setShowStatusBar) = UsePersisted("showStatusBar", true);
+        var (showAddressBar, setShowAddressBar) = UsePersisted("showAddressBar", true, PersistedScope.Window);
+        var (showStatusBar, setShowStatusBar) = UsePersisted("showStatusBar", true, PersistedScope.Window);
         var (addressBarText, setAddressBarText) = UseState("");
         var (isLoading, setIsLoading) = UseState(false);
 

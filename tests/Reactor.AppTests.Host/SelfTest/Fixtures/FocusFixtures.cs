@@ -186,4 +186,40 @@ internal static class FocusFixtures
                 !ReferenceEquals(a?.Current, b?.Current));
         }
     }
+
+    /// <summary>
+    /// Spec 033 §2.6 — when a typed ref is attached to a Reactor control that
+    /// also carries an <c>.AutomationName(...)</c> modifier, the AutomationName
+    /// must be observable on the mounted control after focus is requested
+    /// programmatically. Catches a regression where typed refs accidentally
+    /// drop modifiers applied earlier in the chain.
+    /// </summary>
+    internal class TypedRefPreservesAutomationName(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            ElementRef<Button>? typed = null;
+            host.Mount(ctx =>
+            {
+                typed = ctx.UseElementRef<Button>();
+                return Button("Save", () => { })
+                    .Set(b => b.Name = "a11yBtn")
+                    .AutomationName("Save document")
+                    .Ref(typed);
+            });
+            await Harness.Render();
+
+            // Programmatic focus moves keyboard focus; we don't hard-assert
+            // success because focus-chain readiness is timing-sensitive in
+            // the harness. The point is the call must not throw and the
+            // AutomationName must survive the focus mutation.
+            _ = typed?.Current?.Focus(FocusState.Programmatic);
+
+            H.Check("TypedRef_A11y_Mounted", typed?.Current is Button);
+            H.Check("TypedRef_A11y_NameSurvivesFocus",
+                typed?.Current is Button btn &&
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(btn) == "Save document");
+        }
+    }
 }

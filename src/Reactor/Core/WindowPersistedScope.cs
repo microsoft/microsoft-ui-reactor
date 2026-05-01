@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using Microsoft.UI.Reactor.Core.Internal;
 
 namespace Microsoft.UI.Reactor.Core;
@@ -31,6 +32,9 @@ public sealed class WindowPersistedScope : IPersistedStateScope
     public WindowPersistedScope(int capacity)
     {
         _cache = new LruCache<string, object?>(capacity);
+        // Spec 033 §7.10: log only counts/capacity. Never keys or values —
+        // a host's window scope keys can be derived from user-controlled identifiers.
+        Debug.WriteLine($"[Reactor] WindowPersistedScope: constructed (capacity={capacity}).");
     }
 
     public int Capacity => _cache.Capacity;
@@ -67,7 +71,9 @@ public sealed class WindowPersistedScope : IPersistedStateScope
     {
         if (_disposed) return;
         _disposed = true;
+        var droppedCount = Count;
         _cache.Clear();
+        Debug.WriteLine($"[Reactor] WindowPersistedScope: disposed (dropped={droppedCount}/{Capacity}).");
     }
 
     private static void ValidateKey(string key)

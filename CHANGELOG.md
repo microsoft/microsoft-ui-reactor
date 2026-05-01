@@ -63,6 +63,10 @@ to land under these conventions; subsequent specs follow this shape.
   `(Button)ref.Current` cast at consumers and adds a DEBUG-only assertion when
   a typed ref is bound to an element of the wrong concrete type. AOT-safe and
   reflection-free at the public surface. (spec 033 §3)
+- `Component.UsePersisted<T>(key, initial, PersistedScope)` three-arg overload
+  so component subclasses can declare the persisted-state scope (Window vs
+  Application) explicitly at the call site, matching the
+  `RenderContext.UsePersisted` overload added earlier. (spec 033 §2)
 
 ### Changed
 
@@ -77,6 +81,15 @@ to land under these conventions; subsequent specs follow this shape.
 - `GridDefinition` gains a strongly-typed constructor accepting `GridSize[]`
   for columns and rows. The legacy string-array constructor is preserved for
   backward compatibility. (spec 033 §1)
+- `ApplicationPersistedScope` and `WindowPersistedScope` now emit one-line
+  `Debug.WriteLine` diagnostics on construction, disposal, and (for the
+  application scope) memory-pressure trim. Logs only counts and capacity —
+  never keys or values, since keys may be derived from user-controlled
+  identifiers in apps. (spec 033 §7.10)
+- `samples/Reactor.TestApp/Demos/PersistedDemo`, `NavigationDemo`, and
+  `samples/apps/regedit` migrated to the explicit
+  `UsePersisted(key, initial, PersistedScope.Window)` overload to document
+  per-window intent at the call site. (spec 033 §2)
 
 ### Deprecated
 

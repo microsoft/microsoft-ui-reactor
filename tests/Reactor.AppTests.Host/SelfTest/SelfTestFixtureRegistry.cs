@@ -629,6 +629,7 @@ internal static class SelfTestFixtureRegistry
         "Focus_TypedRefPopulatesAsConcreteType",
         "Focus_TypedRefIdentityStableAcrossRenders",
         "Focus_TypedRefMultipleControlsPopulateIndependently",
+        "Focus_TypedRefPreservesAutomationName",
 
         // Commanding coverage — spec 027 Tier 4 (Phase 5)
         "Commanding_SplitButtonCommandInvokesExecute",
@@ -1359,6 +1360,7 @@ internal static class SelfTestFixtureRegistry
         "Focus_TypedRefPopulatesAsConcreteType" => new FocusFixtures.TypedRefPopulatesAsConcreteType(harness),
         "Focus_TypedRefIdentityStableAcrossRenders" => new FocusFixtures.TypedRefIdentityStableAcrossRenders(harness),
         "Focus_TypedRefMultipleControlsPopulateIndependently" => new FocusFixtures.TypedRefMultipleControlsPopulateIndependently(harness),
+        "Focus_TypedRefPreservesAutomationName" => new FocusFixtures.TypedRefPreservesAutomationName(harness),
 
         // Commanding coverage — spec 027 Tier 4 (Phase 5)
         "Commanding_SplitButtonCommandInvokesExecute" => new CommandingCoverageFixtures.SplitButtonCommandInvokesExecute(harness),

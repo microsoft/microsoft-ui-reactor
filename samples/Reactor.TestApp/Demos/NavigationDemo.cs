@@ -20,7 +20,7 @@ class NavigationDemo : Component
     public override Element Render()
     {
         var nav = UseNavigation<NavRoute>(new NavHome());
-        var (transition, setTransition) = UsePersisted("navTransition", "Slide");
+        var (transition, setTransition) = UsePersisted("navTransition", "Slide", PersistedScope.Window);
 
         var activeTransition = transition switch
         {
@@ -66,7 +66,7 @@ class NavHomePage : Component
     public override Element Render()
     {
         var nav = UseNavigation<NavRoute>();
-        var (visitCount, setVisitCount) = UsePersisted("homeVisits", 0);
+        var (visitCount, setVisitCount) = UsePersisted("homeVisits", 0, PersistedScope.Window);
 
         UseNavigationLifecycle(
             onNavigatedTo: ctx => setVisitCount(visitCount + 1));
@@ -91,7 +91,7 @@ class NavDetailPage : Component<int>
     {
         var nav = UseNavigation<NavRoute>();
         var id = Props;
-        var (notes, setNotes) = UsePersisted($"detail-notes-{id}", "");
+        var (notes, setNotes) = UsePersisted($"detail-notes-{id}", "", PersistedScope.Window);
 
         UseNavigationLifecycle(
             onNavigatingFrom: ctx =>

@@ -35,6 +35,9 @@ public sealed class ApplicationPersistedScope : IPersistedStateScope
     {
         _cache = new LruCache<string, object?>(capacity);
         TryRegisterMemoryPressureHandler();
+        // Spec 033 §7.10: log only counts/capacity. Never keys or values —
+        // keys can be derived from user-controlled identifiers in apps.
+        Debug.WriteLine($"[Reactor] ApplicationPersistedScope: constructed (capacity={capacity}).");
     }
 
     public int Capacity => _cache.Capacity;
@@ -68,8 +71,10 @@ public sealed class ApplicationPersistedScope : IPersistedStateScope
     {
         if (_disposed) return;
         _disposed = true;
+        var droppedCount = Count;
         TryUnregisterMemoryPressureHandler();
         _cache.Clear();
+        Debug.WriteLine($"[Reactor] ApplicationPersistedScope: disposed (dropped={droppedCount}/{Capacity}).");
     }
 
     /// <summary>

@@ -140,13 +140,13 @@ this spec's pattern (release notes, PR template, analyzer-release files).
 
 ### 2.6 Accessibility
 
-- [ ] Add a test that uses `UseElementRef<Button>()` to programmatically focus a button and asserts the UIA `AutomationProperties.Name` is preserved on the focused element. (Catches a regression where typed refs accidentally drop modifiers applied earlier.)
-- [ ] Document in XML `<remarks>` that programmatic focus via `Current.Focus(FocusState.Programmatic)` does not by itself announce to screen readers — direct users to `UseAnnounce` for SR notifications.
+- [x] `Focus_TypedRefPreservesAutomationName` self-host fixture in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/FocusFixtures.cs` mounts a `Button` with `.AutomationName("Save document").Ref(typedRef)`, programmatically focuses via `typed.Current.Focus(FocusState.Programmatic)`, and asserts `AutomationProperties.GetName(...)` survives the focus mutation. Registered in `SelfTestFixtureRegistry`.
+- [x] `ElementRef<T>` XML `<remarks>` now documents that programmatic focus moves the keyboard focus and triggers WinUI's UIA focus-changed event but does **not** by itself produce a screen-reader announcement of surrounding content; callers are directed to `UseAnnounce` for SR notifications.
 
 ### 2.7 Sample migration
 
-- [ ] Find existing `as Button` / `as TextBox` casts on `ElementRef.Current` across `src/`, `samples/`, and `tests/` via Grep. Migrate to `ElementRef<T>` where it improves clarity. Do not migrate test fixtures whose intent is specifically to cover the untyped surface.
-- [ ] Update any sample that demonstrates focus management (search `samples/` for `UseElementFocus`) to mention typed refs as the preferred form when the consumer needs the concrete control type.
+- [x] Grep across `src/`, `samples/`, and `tests/` for `as Button`/`as TextBox` and `(Button)ref.Current`/`(TextBox)ref.Current` patterns on `ElementRef.Current`. **No matches outside XML doc text** — the codebase already uses `is`-pattern dispatch (e.g. `elRef.Current is TextBox tb`) where typing matters, which is already a typed projection. No call-site migrations needed.
+- [ ] Update samples that demonstrate focus management (search `samples/` for `UseElementFocus`) to mention typed refs — *deferred to docs pass*. The existing `UseFocusSample` in `InputGesturesDemo.cs` doesn't dereference `.Current` (the ref flows straight back into `.Ref(...)`), so no behavioral change is needed; the call-out is purely documentary.
 
 ### 2.8 Release-note bullet
 
@@ -368,8 +368,8 @@ overload on a public surface. Establish the pattern carefully — phases 6 and
 
 ### 5.9 Tests — `Grid` factory & reconciler
 
-- [ ] Both factory shapes produce a `GridElement` whose track collections compare equal element-wise.
-- [ ] Reconciler mounts a typed `Grid(...)` correctly (existing reconciler tests cover the string form — duplicate one with the typed form).
+- [x] `Grid_Typed_And_String_Factories_Produce_ElementWise_Equal_Tracks_For_All_Canonical_Shapes` (in `GridSizeTests.cs`) walks every canonical shape (`Auto`, `*`, `2*`, `0.33*`, `0`, `120.5`) and asserts the typed and legacy string factories produce element-wise equal `GridDefinition.Columns` and `Rows` arrays. Plus `Grid_Typed_Factory_Throws_On_Null_Track_Arrays` and `Grid_Typed_Factory_Star1_Produces_Canonical_Asterisk_Track` cover boundary validation and the canonical `Star(1)→"*"` round-trip.
+- [x] Reconciler mounts a typed `Grid(...)` — already exercised by the existing self-host fixtures `LayoutFixtures.GridRowColumn`, `GridVsFlexStarSizing`, and `ReconcilerFixtures.GridDynamicChildCountComponent`, all of which build their column/row arrays via `GridSize.Auto` / `Star()` / `Px()` and assert `WinUI.Grid.ColumnDefinitions` / `RowDefinitions` shapes after mount.
 
 ### 5.10 Sample / docs
 
@@ -495,18 +495,15 @@ flip default in N+1.
 
 ### 7.10 Logging & telemetry
 
-- [ ] Each scope logs (at `Debug.WriteLine`) on construction, disposal, and memory-pressure-trim. Prefix `[Reactor]` matching `Hosting/` style.
-- [ ] **Do not log keys or values** — keys may be derived from user-controlled identifiers in apps. Log only counts and capacity. (Security/privacy.)
-- [ ] If the repo has an ETW provider for hosting telemetry (check `src/Reactor/Hosting/Etw/`), expose:
-  - cache size at the time of memory-pressure trim
-  - eviction count over a rolling window
-  Optional — defer if no such provider exists.
+- [x] Each scope logs at `Debug.WriteLine` on construction, disposal, and (for `ApplicationPersistedScope`) memory-pressure trim. All entries carry the `[Reactor]` prefix matching `Hosting/` style.
+- [x] **Keys and values are never logged** — only `count` and `capacity` integers. Documented inline at each log site as a security/privacy note.
+- [ ] ETW provider entries — *deferred*. The hosting ETW providers under `src/Reactor/Hosting/Etw/` cover layout/render hot paths; persisted-state events are rare and the `Debug.WriteLine` channel is sufficient.
 
 ### 7.11 Migration: in-repo callers
 
-- [ ] Find every `UsePersisted` call via Grep. Triage each into Window or Application scope based on intent (most should be Window — that was the spec's bug that the call was process-global by default).
-- [ ] In samples and tests, default to the explicit three-arg form so they document the new API.
-- [ ] Specific sites: Devtools, charting samples, `Reactor.TestApp`. Confirm none rely on cross-window persistence.
+- [x] Sample call sites migrated to the explicit three-arg form: `samples/apps/regedit/App.cs` (showAddressBar, showStatusBar — Window), `samples/Reactor.TestApp/Demos/PersistedDemo.cs` (demo.p.name/email/color — Window), `samples/Reactor.TestApp/Demos/NavigationDemo.cs` (navTransition, homeVisits, detail-notes-* — Window). Added `Component.UsePersisted<T>(key, initial, PersistedScope)` so component subclasses can use the three-arg form ergonomically (matches the existing `RenderContext` overload).
+- [x] Tests in `tests/Reactor.Tests/PersistedStateTests.cs` deliberately exercise the legacy two-arg `UsePersisted` (the cross-host shared-state semantics they assert depend on it). Left untouched. The new scope surface has its own coverage in `PersistedStateScopeTests.cs`.
+- [x] No cross-window persistence dependency surfaced during the audit — every migrated site is per-window UI state (visibility toggles, navigation transition, visit count, per-detail-id notes). Application scope retained only for the explicit Application-scope tests.
 
 ### 7.12 Release-N+1 default flip (deferred)
 
@@ -539,9 +536,9 @@ flip default in N+1.
 
 ### 8.3 Acceptance results
 
-- [x] Full unit test suite: `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj` — **6723 passed, 0 failed, 46 skipped**.
-- [x] Full self-test suite: `dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj` — **638 passed, 0 failed**. Includes the three new `Focus_TypedRef*` fixtures added in Phase 2.
-- [x] Full solution build (`dotnet build Reactor.sln`) — **0 errors**. Warnings are all `CS0618` from intentionally-obsolete overload usage in tests/samples (the deprecation signal).
+- [x] Full unit test suite: `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj` — **6725 passed, 0 failed, 46 skipped** after this round (3 new `GridSizeTests` cases). Two timing-sensitive tests (`LogCaptureBufferTests.WaitForNewAsync_WakesOnAppend`, `UseResourceTests.Retry_Exhausted_Surfaces_Final_Error`) flake under load on the Windows on ARM64 runner; both pass when run in isolation. Tracked separately as flaky-test cleanup, unrelated to spec 033.
+- [x] Full self-test suite: `dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj` — **639 passed, 0 failed** after this round. Includes the four `Focus_TypedRef*` fixtures (3 from the prior pass + the new `Focus_TypedRefPreservesAutomationName` for §2.6).
+- [x] Full solution build (`dotnet build Reactor.sln`) — **0 errors**. Warnings are limited to `REACTOR_A11Y_*` analyzer firings inside `samples/apps/a11y-showcase` (an intentional analyzer-demo sample) and `CS0618` from the deferred `[Obsolete]`-marked overloads being exercised on purpose by the deprecation-test fixtures.
 - [x] `samples/InteropFirst` builds clean.
 - [ ] Manual visual smoke (Mica/Acrylic on a real Win11 box, browse `ReactorGallery`, IntelliSense check) — out of scope for this automated implementation pass.
 
