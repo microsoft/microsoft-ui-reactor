@@ -1,0 +1,151 @@
+name: Coverage
+
+# Maintainer-gated, comment-triggered coverage run for any PR (including forks).
+# A maintainer comments `@codecoverage` on a PR; this workflow runs the merged
+# unit + selftest coverage recipe from CONTRIBUTING.md and posts the result back
+# as a comment.
+#
+# Security: `issue_comment` workflows run in the base repo with full token
+# permissions. Untrusted code from the PR (build scripts, tests) executes here.
+# The `author_association` check below limits the trigger to maintainers, who
+# are expected to review the diff before commenting.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  coverage:
+    name: Merged coverage
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@codecoverage') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: windows-latest
+    steps:
+      - name: Acknowledge with reaction
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'eyes',
+            });
+
+      - name: Resolve PR head SHA
+        id: pr
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            core.setOutput('sha', pr.data.head.sha);
+            core.setOutput('ref', `refs/pull/${context.issue.number}/head`);
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ steps.pr.outputs.ref }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Install dotnet-coverage
+        run: dotnet tool install -g dotnet-coverage
+
+      - name: Build for instrumentation
+        shell: pwsh
+        run: |
+          dotnet build tests/Reactor.Tests           -c Debug -p:Optimize=false -p:DebugType=portable
+          dotnet build src/Reactor                   -c Debug -p:Optimize=false -p:DebugType=portable --no-incremental
+          dotnet build tests/Reactor.AppTests.Host   -c Debug -p:Optimize=false -p:DebugType=portable --no-incremental
+
+      - name: Collect unit coverage
+        shell: pwsh
+        run: |
+          dotnet-coverage collect -s coverage.settings.xml `
+            --output unit.cobertura.xml --output-format cobertura `
+            -- dotnet test tests/Reactor.Tests --no-build
+
+      - name: Instrument Reactor.dll
+        shell: pwsh
+        run: |
+          dotnet-coverage instrument `
+            "tests/Reactor.AppTests.Host/bin/x64/Debug/net9.0-windows10.0.22621.0/Reactor.dll" `
+            -s coverage.settings.xml
+
+      - name: Collect selftest coverage
+        shell: pwsh
+        run: |
+          dotnet-coverage collect -s coverage.settings.xml `
+            --output selftest.cobertura.xml --output-format cobertura `
+            -- dotnet run --project tests/Reactor.AppTests.Host --no-build -- --self-test
+
+      - name: Merge cobertura reports
+        shell: pwsh
+        run: |
+          dotnet-coverage merge unit.cobertura.xml selftest.cobertura.xml `
+            --output merged.cobertura.xml --output-format cobertura
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-${{ steps.pr.outputs.sha }}
+          path: |
+            unit.cobertura.xml
+            selftest.cobertura.xml
+            merged.cobertura.xml
+
+      - name: Read coverage rates
+        id: rates
+        shell: pwsh
+        run: |
+          [xml]$x = Get-Content merged.cobertura.xml
+          $line   = [math]::Round([double]$x.coverage.'line-rate'   * 100, 2)
+          $branch = [math]::Round([double]$x.coverage.'branch-rate' * 100, 2)
+          "line=$line"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "branch=$branch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Comment results
+        if: always()
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        env:
+          LINE: ${{ steps.rates.outputs.line }}
+          BRANCH: ${{ steps.rates.outputs.branch }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          OUTCOME: ${{ job.status }}
+        with:
+          script: |
+            const { LINE, BRANCH, SHA, OUTCOME } = process.env;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            let body;
+            if (OUTCOME === 'success') {
+              body = [
+                `**Merged coverage** for \`${SHA.slice(0, 7)}\` (unit + selftest)`,
+                ``,
+                `| Metric | Coverage |`,
+                `|---|---|`,
+                `| Line   | ${LINE}% |`,
+                `| Branch | ${BRANCH}% |`,
+                ``,
+                `Cobertura reports attached to the [workflow run](${runUrl}) as artifacts.`,
+              ].join('\n');
+            } else {
+              body = `**Coverage run failed** for \`${SHA.slice(0, 7)}\` — see the [workflow run](${runUrl}) for details.`;
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
