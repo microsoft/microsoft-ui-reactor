@@ -1,19 +1,19 @@
 using Microsoft.UI.Reactor.Charting.Accessibility;
 using Microsoft.UI.Reactor.Charting.D3;
-// Ergonomic Reactor chart DSL — high-level chart components for Reactor's declarative model
-// Usage: using static Microsoft.UI.Reactor.Charting.ChartDsl;
+// Ergonomic Reactor chart factories — high-level chart components for Reactor's declarative model
+// Usage: using static Microsoft.UI.Reactor.Charting.Charts;
 
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml.Media;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 
 namespace Microsoft.UI.Reactor.Charting;
 
 /// <summary>
-/// Static factory methods that integrate D3 charting into Reactor's declarative DSL.
-/// Import with: using static Microsoft.UI.Reactor.Charting.ChartDsl;
+/// Static factory methods that integrate D3 charting into Reactor's declarative model.
+/// Import with: using static Microsoft.UI.Reactor.Charting.Charts;
 /// </summary>
-public static partial class ChartDsl
+public static partial class Charts
 {
     public static ChartElement<T> LineChart<T>(IReadOnlyList<T> data, Func<T, double> x, Func<T, double> y) =>
         new() { Data = data, XAccessor = x, YAccessor = y, ChartType = ChartType.Line };
@@ -530,7 +530,7 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         return arcs.Select(arc =>
         {
             var (lx, ly) = arcGen.Centroid(arc.StartAngle, arc.EndAngle);
-            return (Element)D3Dsl.Text(cx + lx - 10, cy + ly - 7, LabelAccessor!(arc.Data), 11, whiteBrush);
+            return (Element)D3Charts.Text(cx + lx - 10, cy + ly - 7, LabelAccessor!(arc.Data), 11, whiteBrush);
         }).ToArray();
     }
 

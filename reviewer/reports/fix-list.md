@@ -1536,7 +1536,7 @@
 - **Agent**: general
 - **Status**: :black_square_button: PENDING
 - **Finding**: `Category10` and `Tableau10` are `public static readonly D3Color[]` — mutable arrays. Any caller can overwrite elements, corrupting shared palette.
-- **Evidence**: Lines 149, 156: `public static readonly D3Color[]`. D3Dsl.cs:23 shares the same reference.
+- **Evidence**: Lines 149, 156: `public static readonly D3Color[]`. D3Charts.cs:23 shares the same reference.
 - **Fix**: Change to `ReadOnlySpan<D3Color>` property or `IReadOnlyList<D3Color>`.
 - **Manager Decision**: APPROVED
 - **Implementation**: :white_check_mark: Complete (2026-04-11)
@@ -1736,7 +1736,7 @@
 ---
 
 ## F109
-- **File**: ReactorCharting/Charts/ChartDsl.cs:75, 179
+- **File**: ReactorCharting/Charts/Charts.cs:75, 179
 - **Severity**: medium
 - **Priority**: P2
 - **Domain**: error-handling

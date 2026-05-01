@@ -9,7 +9,7 @@ namespace Microsoft.UI.Reactor.Markdown;
 /// Renders Markdown to HTML using the md4c parser.
 /// This is primarily used for testing against the CommonMark spec.
 /// </summary>
-public static class Md4cHtml
+public static class MarkdownHtml
 {
     [Flags]
     public enum HtmlFlags : uint
@@ -24,7 +24,7 @@ public static class Md4cHtml
     /// <summary>
     /// Render Markdown to HTML. Returns -1 on error, 0 on success.
     /// </summary>
-    public static int Render(string input, MdParserFlags parserFlags, HtmlFlags renderFlags, StringBuilder output)
+    public static int Render(string input, MarkdownParserFlags parserFlags, HtmlFlags renderFlags, StringBuilder output)
     {
         var r = new HtmlRenderer(output, renderFlags);
 
@@ -47,7 +47,7 @@ public static class Md4cHtml
     /// <summary>
     /// Convenience: render Markdown string to HTML string.
     /// </summary>
-    public static string ToHtml(string markdown, MdParserFlags parserFlags = MdParserFlags.None, HtmlFlags renderFlags = HtmlFlags.None)
+    public static string ToHtml(string markdown, MarkdownParserFlags parserFlags = MarkdownParserFlags.None, HtmlFlags renderFlags = HtmlFlags.None)
     {
         var sb = new StringBuilder();
         int ret = Render(markdown, parserFlags, renderFlags, sb);
@@ -249,7 +249,7 @@ public static class Md4cHtml
                 Verbatim(text);
         }
 
-        private void RenderAttribute(MdAttribute attr, bool urlEsc)
+        private void RenderAttribute(MarkdownAttribute attr, bool urlEsc)
         {
             if (attr.Text == null) return;
 
@@ -264,10 +264,10 @@ public static class Md4cHtml
 
                 switch (type)
                 {
-                    case MdTextType.NullChar:
+                    case MarkdownTextType.NullChar:
                         AppendUtf8Codepoint(0xFFFD, false);
                         break;
-                    case MdTextType.Entity:
+                    case MarkdownTextType.Entity:
                         RenderEntity(substr, !urlEsc, urlEsc);
                         break;
                     default:
@@ -280,22 +280,22 @@ public static class Md4cHtml
             }
         }
 
-        public int EnterBlock(MdBlockType type, object? detail)
+        public int EnterBlock(MarkdownBlockType type, object? detail)
         {
             switch (type)
             {
-                case MdBlockType.Doc: break;
-                case MdBlockType.Quote: Verbatim("<blockquote>\n"); break;
-                case MdBlockType.Ul: Verbatim("<ul>\n"); break;
-                case MdBlockType.Ol:
-                    var ol = (MdBlockOlDetail)detail!;
+                case MarkdownBlockType.Doc: break;
+                case MarkdownBlockType.Quote: Verbatim("<blockquote>\n"); break;
+                case MarkdownBlockType.Ul: Verbatim("<ul>\n"); break;
+                case MarkdownBlockType.Ol:
+                    var ol = (MarkdownBlockOlDetail)detail!;
                     if (ol.Start == 1)
                         Verbatim("<ol>\n");
                     else
                         Verbatim($"<ol start=\"{ol.Start}\">\n");
                     break;
-                case MdBlockType.Li:
-                    var li = (MdBlockLiDetail)detail!;
+                case MarkdownBlockType.Li:
+                    var li = (MarkdownBlockLiDetail)detail!;
                     if (li.IsTask)
                     {
                         Verbatim("<li class=\"task-list-item\"><input type=\"checkbox\" class=\"task-list-item-checkbox\" disabled");
@@ -306,15 +306,15 @@ public static class Md4cHtml
                     else
                         Verbatim("<li>");
                     break;
-                case MdBlockType.Hr:
+                case MarkdownBlockType.Hr:
                     Verbatim((flags & HtmlFlags.Xhtml) != 0 ? "<hr />\n" : "<hr>\n");
                     break;
-                case MdBlockType.H:
-                    var h = (MdBlockHDetail)detail!;
+                case MarkdownBlockType.H:
+                    var h = (MarkdownBlockHDetail)detail!;
                     Verbatim(h.Level switch { 1 => "<h1>", 2 => "<h2>", 3 => "<h3>", 4 => "<h4>", 5 => "<h5>", _ => "<h6>" });
                     break;
-                case MdBlockType.Code:
-                    var code = (MdBlockCodeDetail)detail!;
+                case MarkdownBlockType.Code:
+                    var code = (MarkdownBlockCodeDetail)detail!;
                     Verbatim("<pre><code");
                     if (!string.IsNullOrEmpty(code.Lang.Text))
                     {
@@ -324,21 +324,21 @@ public static class Md4cHtml
                     }
                     Verbatim(">");
                     break;
-                case MdBlockType.Html: break;
-                case MdBlockType.P: Verbatim("<p>"); break;
-                case MdBlockType.Table: Verbatim("<table>\n"); break;
-                case MdBlockType.Thead: Verbatim("<thead>\n"); break;
-                case MdBlockType.Tbody: Verbatim("<tbody>\n"); break;
-                case MdBlockType.Tr: Verbatim("<tr>\n"); break;
-                case MdBlockType.Th:
-                case MdBlockType.Td:
-                    var td = (MdBlockTdDetail)detail!;
-                    string cellType = type == MdBlockType.Th ? "th" : "td";
+                case MarkdownBlockType.Html: break;
+                case MarkdownBlockType.P: Verbatim("<p>"); break;
+                case MarkdownBlockType.Table: Verbatim("<table>\n"); break;
+                case MarkdownBlockType.Thead: Verbatim("<thead>\n"); break;
+                case MarkdownBlockType.Tbody: Verbatim("<tbody>\n"); break;
+                case MarkdownBlockType.Tr: Verbatim("<tr>\n"); break;
+                case MarkdownBlockType.Th:
+                case MarkdownBlockType.Td:
+                    var td = (MarkdownBlockTdDetail)detail!;
+                    string cellType = type == MarkdownBlockType.Th ? "th" : "td";
                     string alignAttr = td.Align switch
                     {
-                        MdAlign.Left => $"<{cellType} align=\"left\">",
-                        MdAlign.Center => $"<{cellType} align=\"center\">",
-                        MdAlign.Right => $"<{cellType} align=\"right\">",
+                        MarkdownAlign.Left => $"<{cellType} align=\"left\">",
+                        MarkdownAlign.Center => $"<{cellType} align=\"center\">",
+                        MarkdownAlign.Right => $"<{cellType} align=\"right\">",
                         _ => $"<{cellType}>",
                     };
                     Verbatim(alignAttr);
@@ -347,48 +347,48 @@ public static class Md4cHtml
             return 0;
         }
 
-        public int LeaveBlock(MdBlockType type, object? detail)
+        public int LeaveBlock(MarkdownBlockType type, object? detail)
         {
             switch (type)
             {
-                case MdBlockType.Doc: break;
-                case MdBlockType.Quote: Verbatim("</blockquote>\n"); break;
-                case MdBlockType.Ul: Verbatim("</ul>\n"); break;
-                case MdBlockType.Ol: Verbatim("</ol>\n"); break;
-                case MdBlockType.Li: Verbatim("</li>\n"); break;
-                case MdBlockType.Hr: break;
-                case MdBlockType.H:
-                    var h = (MdBlockHDetail)detail!;
+                case MarkdownBlockType.Doc: break;
+                case MarkdownBlockType.Quote: Verbatim("</blockquote>\n"); break;
+                case MarkdownBlockType.Ul: Verbatim("</ul>\n"); break;
+                case MarkdownBlockType.Ol: Verbatim("</ol>\n"); break;
+                case MarkdownBlockType.Li: Verbatim("</li>\n"); break;
+                case MarkdownBlockType.Hr: break;
+                case MarkdownBlockType.H:
+                    var h = (MarkdownBlockHDetail)detail!;
                     Verbatim(h.Level switch { 1 => "</h1>\n", 2 => "</h2>\n", 3 => "</h3>\n", 4 => "</h4>\n", 5 => "</h5>\n", _ => "</h6>\n" });
                     break;
-                case MdBlockType.Code: Verbatim("</code></pre>\n"); break;
-                case MdBlockType.Html: break;
-                case MdBlockType.P: Verbatim("</p>\n"); break;
-                case MdBlockType.Table: Verbatim("</table>\n"); break;
-                case MdBlockType.Thead: Verbatim("</thead>\n"); break;
-                case MdBlockType.Tbody: Verbatim("</tbody>\n"); break;
-                case MdBlockType.Tr: Verbatim("</tr>\n"); break;
-                case MdBlockType.Th: Verbatim("</th>\n"); break;
-                case MdBlockType.Td: Verbatim("</td>\n"); break;
+                case MarkdownBlockType.Code: Verbatim("</code></pre>\n"); break;
+                case MarkdownBlockType.Html: break;
+                case MarkdownBlockType.P: Verbatim("</p>\n"); break;
+                case MarkdownBlockType.Table: Verbatim("</table>\n"); break;
+                case MarkdownBlockType.Thead: Verbatim("</thead>\n"); break;
+                case MarkdownBlockType.Tbody: Verbatim("</tbody>\n"); break;
+                case MarkdownBlockType.Tr: Verbatim("</tr>\n"); break;
+                case MarkdownBlockType.Th: Verbatim("</th>\n"); break;
+                case MarkdownBlockType.Td: Verbatim("</td>\n"); break;
             }
             return 0;
         }
 
-        public int EnterSpan(MdSpanType type, object? detail)
+        public int EnterSpan(MarkdownSpanType type, object? detail)
         {
             bool insideImg = imageNestingLevel > 0;
-            if (type == MdSpanType.Img)
+            if (type == MarkdownSpanType.Img)
                 imageNestingLevel++;
             if (insideImg)
                 return 0;
 
             switch (type)
             {
-                case MdSpanType.Em: Verbatim("<em>"); break;
-                case MdSpanType.Strong: Verbatim("<strong>"); break;
-                case MdSpanType.U: Verbatim("<u>"); break;
-                case MdSpanType.A:
-                    var a = (MdSpanADetail)detail!;
+                case MarkdownSpanType.Em: Verbatim("<em>"); break;
+                case MarkdownSpanType.Strong: Verbatim("<strong>"); break;
+                case MarkdownSpanType.U: Verbatim("<u>"); break;
+                case MarkdownSpanType.A:
+                    var a = (MarkdownSpanADetail)detail!;
                     Verbatim("<a href=\"");
                     RenderAttribute(a.Href, true);
                     if (a.Title.Text != null)
@@ -398,18 +398,18 @@ public static class Md4cHtml
                     }
                     Verbatim("\">");
                     break;
-                case MdSpanType.Img:
-                    var img = (MdSpanImgDetail)detail!;
+                case MarkdownSpanType.Img:
+                    var img = (MarkdownSpanImgDetail)detail!;
                     Verbatim("<img src=\"");
                     RenderAttribute(img.Src, true);
                     Verbatim("\" alt=\"");
                     break;
-                case MdSpanType.Code: Verbatim("<code>"); break;
-                case MdSpanType.Del: Verbatim("<del>"); break;
-                case MdSpanType.LatexMath: Verbatim("<x-equation>"); break;
-                case MdSpanType.LatexMathDisplay: Verbatim("<x-equation type=\"display\">"); break;
-                case MdSpanType.WikiLink:
-                    var wl = (MdSpanWikiLinkDetail)detail!;
+                case MarkdownSpanType.Code: Verbatim("<code>"); break;
+                case MarkdownSpanType.Del: Verbatim("<del>"); break;
+                case MarkdownSpanType.LatexMath: Verbatim("<x-equation>"); break;
+                case MarkdownSpanType.LatexMathDisplay: Verbatim("<x-equation type=\"display\">"); break;
+                case MarkdownSpanType.WikiLink:
+                    var wl = (MarkdownSpanWikiLinkDetail)detail!;
                     Verbatim("<x-wikilink data-target=\"");
                     RenderAttribute(wl.Target, false);
                     Verbatim("\">");
@@ -418,21 +418,21 @@ public static class Md4cHtml
             return 0;
         }
 
-        public int LeaveSpan(MdSpanType type, object? detail)
+        public int LeaveSpan(MarkdownSpanType type, object? detail)
         {
-            if (type == MdSpanType.Img)
+            if (type == MarkdownSpanType.Img)
                 imageNestingLevel--;
             if (imageNestingLevel > 0)
                 return 0;
 
             switch (type)
             {
-                case MdSpanType.Em: Verbatim("</em>"); break;
-                case MdSpanType.Strong: Verbatim("</strong>"); break;
-                case MdSpanType.U: Verbatim("</u>"); break;
-                case MdSpanType.A: Verbatim("</a>"); break;
-                case MdSpanType.Img:
-                    var img = (MdSpanImgDetail)detail!;
+                case MarkdownSpanType.Em: Verbatim("</em>"); break;
+                case MarkdownSpanType.Strong: Verbatim("</strong>"); break;
+                case MarkdownSpanType.U: Verbatim("</u>"); break;
+                case MarkdownSpanType.A: Verbatim("</a>"); break;
+                case MarkdownSpanType.Img:
+                    var img = (MarkdownSpanImgDetail)detail!;
                     if (img.Title.Text != null)
                     {
                         Verbatim("\" title=\"");
@@ -440,35 +440,35 @@ public static class Md4cHtml
                     }
                     Verbatim((flags & HtmlFlags.Xhtml) != 0 ? "\" />" : "\">");
                     break;
-                case MdSpanType.Code: Verbatim("</code>"); break;
-                case MdSpanType.Del: Verbatim("</del>"); break;
-                case MdSpanType.LatexMath:
-                case MdSpanType.LatexMathDisplay: Verbatim("</x-equation>"); break;
-                case MdSpanType.WikiLink: Verbatim("</x-wikilink>"); break;
+                case MarkdownSpanType.Code: Verbatim("</code>"); break;
+                case MarkdownSpanType.Del: Verbatim("</del>"); break;
+                case MarkdownSpanType.LatexMath:
+                case MarkdownSpanType.LatexMathDisplay: Verbatim("</x-equation>"); break;
+                case MarkdownSpanType.WikiLink: Verbatim("</x-wikilink>"); break;
             }
             return 0;
         }
 
-        public int TextCallback(MdTextType type, ReadOnlySpan<char> text)
+        public int TextCallback(MarkdownTextType type, ReadOnlySpan<char> text)
         {
             switch (type)
             {
-                case MdTextType.NullChar:
+                case MarkdownTextType.NullChar:
                     AppendUtf8Codepoint(0xFFFD, false);
                     break;
-                case MdTextType.Br:
+                case MarkdownTextType.Br:
                     if (imageNestingLevel == 0)
                         Verbatim((flags & HtmlFlags.Xhtml) != 0 ? "<br />\n" : "<br>\n");
                     else
                         Verbatim(" ");
                     break;
-                case MdTextType.SoftBr:
+                case MarkdownTextType.SoftBr:
                     Verbatim(imageNestingLevel == 0 ? "\n" : " ");
                     break;
-                case MdTextType.Html:
+                case MarkdownTextType.Html:
                     Verbatim(text);
                     break;
-                case MdTextType.Entity:
+                case MarkdownTextType.Entity:
                     RenderEntity(text, true);
                     break;
                 default:

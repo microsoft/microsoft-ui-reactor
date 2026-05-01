@@ -144,7 +144,7 @@ internal static class PropertyGridFixtures
         {
             UseObservable(_model);
             return VStack(
-                PropertyGridDsl.PropertyGrid(_model, _registry)
+                PropertyGrid(_model, _registry)
                     .AutomationId("MutableObjectGrid"),
                 TextBlock($"Live: {_model.Name},{_model.Age},{_model.Active}")
                     .AutomationId("MutableObjectLive")
@@ -157,12 +157,12 @@ internal static class PropertyGridFixtures
 
     // 2. Categories, hidden, read-only attributes
     internal static Element Reflection_Categorized(RenderContext ctx) =>
-        PropertyGridDsl.PropertyGrid(new CategorizedModel(), new TypeRegistry())
+        PropertyGrid(new CategorizedModel(), new TypeRegistry())
             .AutomationId("CategorizedGrid");
 
     // 3. Enum renders as ComboBox
     internal static Element Reflection_EnumEditor(RenderContext ctx) =>
-        PropertyGridDsl.PropertyGrid(new MaterialModel(), new TypeRegistry())
+        PropertyGrid(new MaterialModel(), new TypeRegistry())
             .AutomationId("EnumEditorGrid");
 
     // 4. Nested immutable record with expand/collapse
@@ -175,7 +175,7 @@ internal static class PropertyGridFixtures
         {
             UseObservable(_model);
             return VStack(
-                PropertyGridDsl.PropertyGrid(_model, _registry)
+                PropertyGrid(_model, _registry)
                     .AutomationId("NestedRecordGrid"),
                 TextBlock($"Pos: {_model.Position}").AutomationId("NestedRecordPos")
             );
@@ -194,7 +194,7 @@ internal static class PropertyGridFixtures
         {
             var (point, setPoint) = UseState(new Point2D(5, 10));
             return VStack(
-                PropertyGridDsl.PropertyGrid(point, _registry,
+                PropertyGrid(point, _registry,
                     onRootChanged: obj => setPoint((Point2D)obj))
                     .AutomationId("ImmutableRootGrid"),
                 TextBlock($"Current: {point}").AutomationId("ImmutableRootValue")
@@ -237,7 +237,7 @@ internal static class PropertyGridFixtures
         });
 
         var model = new ShapeModel();
-        return PropertyGridDsl.PropertyGrid(model, registry)
+        return PropertyGrid(model, registry)
             .AutomationId("CustomEditorGrid");
     }
 
@@ -270,7 +270,7 @@ internal static class PropertyGridFixtures
                     Button("Material", () => setTargetIdx(1)).AutomationId("TargetMaterialBtn"),
                     Button("Shape", () => setTargetIdx(2)).AutomationId("TargetShapeBtn")
                 ),
-                PropertyGridDsl.PropertyGrid(target, _registry)
+                PropertyGrid(target, _registry)
                     .AutomationId("SwitchingGrid")
             );
         }
@@ -281,7 +281,7 @@ internal static class PropertyGridFixtures
 
     // 8. Category expand/collapse
     internal static Element Category_ExpandCollapse(RenderContext ctx) =>
-        PropertyGridDsl.PropertyGrid(new CategorizedModel(), new TypeRegistry())
+        PropertyGrid(new CategorizedModel(), new TypeRegistry())
             .AutomationId("CategoryGrid");
 
     // 9. Deep nesting: record inside record
@@ -294,7 +294,7 @@ internal static class PropertyGridFixtures
             var config = new AppConfig("MyApp", new Theme("Dark", new Point2D(0, 0)));
             var (c, setC) = UseState(config);
             return VStack(
-                PropertyGridDsl.PropertyGrid(c, _registry,
+                PropertyGrid(c, _registry,
                     onRootChanged: obj => setC((AppConfig)obj))
                     .AutomationId("DeepNestingGrid"),
                 TextBlock($"Config: {c.Label}, {c.Theme.Name}, ({c.Theme.Origin.X},{c.Theme.Origin.Y})")
@@ -316,7 +316,7 @@ internal static class PropertyGridFixtures
         {
             UseObservable(_person);
             return VStack(
-                PropertyGridDsl.PropertyGrid(_person, _registry)
+                PropertyGrid(_person, _registry)
                     .AutomationId("INPCGrid"),
                 TextBlock($"Live: {_person.Name}").AutomationId("INPCLive"),
                 Button("MutateName", () => _person.Name = "Bob").AutomationId("INPCMutateBtn")

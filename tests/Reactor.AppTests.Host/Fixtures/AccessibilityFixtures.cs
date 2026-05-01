@@ -152,7 +152,7 @@ internal static class AccessibilityFixtures
                 .AutomationId("ChartA11y_E2E_Heading"),
 
             // Line chart with title, series names, units
-            Charting.ChartDsl.LineChart(lineData1, d => d.X, d => d.Y)
+            Charting.Charts.LineChart(lineData1, d => d.X, d => d.Y)
                 .Title("Monthly Revenue")
                 .SeriesName("Region A")
                 .Units("months", "USD")
@@ -161,7 +161,7 @@ internal static class AccessibilityFixtures
                 .AutomationId("ChartA11y_E2E_LineChart"),
 
             // Bar chart with title and default labels
-            Charting.ChartDsl.BarChart(barData, d => d.X, d => d.Y)
+            Charting.Charts.BarChart(barData, d => d.X, d => d.Y)
                 .Title("Quarterly Sales")
                 .SeriesName("Product A")
                 .Width(400).Height(250)
@@ -169,14 +169,14 @@ internal static class AccessibilityFixtures
                 .AutomationId("ChartA11y_E2E_BarChart"),
 
             // Pie chart with title and slice labels
-            Charting.ChartDsl.PieChart(pieData, d => d.Value, d => d.Name)
+            Charting.Charts.PieChart(pieData, d => d.Value, d => d.Name)
                 .Title("Browser Market Share")
                 .Width(300).Height(250)
                 .ToElement()
                 .AutomationId("ChartA11y_E2E_PieChart"),
 
             // Interactive chart with keyboard nav enabled
-            Charting.ChartDsl.LineChart(lineData1, d => d.X, d => d.Y)
+            Charting.Charts.LineChart(lineData1, d => d.X, d => d.Y)
                 .Title("Interactive Revenue Chart")
                 .SeriesName("Revenue")
                 .Interactive()

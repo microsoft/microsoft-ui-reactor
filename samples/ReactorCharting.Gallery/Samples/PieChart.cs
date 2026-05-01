@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -20,7 +20,7 @@ public sealed class PieChartSample : GallerySample
             ..arcs.SelectMany((a, i) => new[] {
                 D3ArcPath(a.StartAngle, a.EndAngle, cx, cy, outerRadius: 150,
                     fill: Brush(Palette[i % Palette.Count])),
-                D3Dsl.Text(cx + lx, cy + ly, label, 11, brush),
+                D3Charts.Text(cx + lx, cy + ly, label, 11, brush),
             })
         )
             .AutomationName("Market Share")
@@ -49,11 +49,11 @@ public sealed class PieChartSample : GallerySample
                         D3ArcPath(a.StartAngle, a.EndAngle, cx, cy, outerRadius: 150,
                             fill: Brush(Palette[i % Palette.Count]),
                             stroke: ChartSurface, strokeWidth: 1),
-                        D3Dsl.Text(cx + ox - 20, cy + oy - 7,
+                        D3Charts.Text(cx + ox - 20, cy + oy - 7,
                             $"{a.Data.Name} ({a.Data.Value}%)", 11, Brush(Palette[i % Palette.Count])),
                     };
                 }),
-             D3Dsl.Text(cx - 60, 10, "Market Share", 16, ChartForeground),
+             D3Charts.Text(cx - 60, 10, "Market Share", 16, ChartForeground),
             ]
         )
             .AutomationName("Market Share")

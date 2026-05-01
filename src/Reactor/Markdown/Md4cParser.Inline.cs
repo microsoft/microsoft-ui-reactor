@@ -374,14 +374,14 @@ internal sealed partial class Md4cParser
 
     // ── Attribute management ────────────────────────────────────────────
 
-    private static void BuildAttrAppendSubstr(ref AttributeBuild build, MdTextType type, int off)
+    private static void BuildAttrAppendSubstr(ref AttributeBuild build, MarkdownTextType type, int off)
     {
         if (build.SubstrTypes == null || build.SubstrCount >= build.SubstrTypes.Length)
         {
             int newAlloc = build.SubstrTypes != null
                 ? build.SubstrTypes.Length + build.SubstrTypes.Length / 2
                 : 8;
-            var newTypes = new MdTextType[newAlloc];
+            var newTypes = new MarkdownTextType[newAlloc];
             var newOffsets = new int[newAlloc + 1];
             if (build.SubstrTypes != null)
             {
@@ -398,7 +398,7 @@ internal sealed partial class Md4cParser
     }
 
     private int BuildAttribute(string rawText, int rawSize, int attrFlags,
-                               out MdAttribute attr, ref AttributeBuild build)
+                               out MarkdownAttribute attr, ref AttributeBuild build)
     {
         attr = default;
         build = default;
@@ -418,7 +418,7 @@ internal sealed partial class Md4cParser
         if (isTrivial)
         {
             build.Text = rawSize > 0 ? rawText.ToCharArray(0, rawSize) : null;
-            build.SubstrTypes = new[] { MdTextType.Normal };
+            build.SubstrTypes = new[] { MarkdownTextType.Normal };
             build.SubstrOffsets = new[] { 0, rawSize };
             build.SubstrCount = 1;
             off = rawSize;
@@ -434,7 +434,7 @@ internal sealed partial class Md4cParser
             {
                 if (rawText[rawOff] == '\0')
                 {
-                    BuildAttrAppendSubstr(ref build, MdTextType.NullChar, off);
+                    BuildAttrAppendSubstr(ref build, MarkdownTextType.NullChar, off);
                     build.Text![off] = rawText[rawOff];
                     off++;
                     rawOff++;
@@ -445,7 +445,7 @@ internal sealed partial class Md4cParser
                 {
                     if (IsEntityStr(rawText, rawOff, rawSize, out int entEnd))
                     {
-                        BuildAttrAppendSubstr(ref build, MdTextType.Entity, off);
+                        BuildAttrAppendSubstr(ref build, MarkdownTextType.Entity, off);
                         rawText.CopyTo(rawOff, build.Text!, off, entEnd - rawOff);
                         off += entEnd - rawOff;
                         rawOff = entEnd;
@@ -453,8 +453,8 @@ internal sealed partial class Md4cParser
                     }
                 }
 
-                if (build.SubstrCount == 0 || build.SubstrTypes![build.SubstrCount - 1] != MdTextType.Normal)
-                    BuildAttrAppendSubstr(ref build, MdTextType.Normal, off);
+                if (build.SubstrCount == 0 || build.SubstrTypes![build.SubstrCount - 1] != MarkdownTextType.Normal)
+                    BuildAttrAppendSubstr(ref build, MarkdownTextType.Normal, off);
 
                 if ((attrFlags & BUILD_ATTR_NO_ESCAPES) == 0 &&
                     rawText[rawOff] == '\\' && rawOff + 1 < rawSize &&
@@ -468,7 +468,7 @@ internal sealed partial class Md4cParser
             build.SubstrOffsets![build.SubstrCount] = off;
         }
 
-        attr = new MdAttribute(
+        attr = new MarkdownAttribute(
             build.Text != null ? new string(build.Text, 0, off) : "",
             build.SubstrTypes!,
             build.SubstrOffsets!);
@@ -1587,7 +1587,7 @@ internal sealed partial class Md4cParser
                 // Raw HTML or autolink.
                 if (ch == '<')
                 {
-                    if ((flags & MdParserFlags.NoHtmlSpans) == 0)
+                    if ((flags & MarkdownParserFlags.NoHtmlSpans) == 0)
                     {
                         bool isHtml = IsHtmlAny(lines, nLines - lineIndex, lineOffset + lineIndex,
                                         off, lines[lineOffset + nLines - 1].End, out int htmlEnd);
@@ -1716,7 +1716,7 @@ internal sealed partial class Md4cParser
                 }
 
                 // Table cell boundary or wiki link delimiter.
-                if ((tableMode || (flags & MdParserFlags.WikiLinks) != 0) && ch == '|')
+                if ((tableMode || (flags & MarkdownParserFlags.WikiLinks) != 0) && ch == '|')
                 {
                     int mi = AddMark(ch, off, off + 1, 0);
                     if (mi < 0) return -1;
@@ -1859,7 +1859,7 @@ internal sealed partial class Md4cParser
             bool isLink = false;
 
             // Wiki links.
-            if ((flags & MdParserFlags.WikiLinks) != 0 &&
+            if ((flags & MarkdownParserFlags.WikiLinks) != 0 &&
                 (opener.End - opener.Beg == 1) &&
                 nextOpener != null &&
                 nextOpener.Value.Ch == '[' &&
@@ -2066,7 +2066,7 @@ internal sealed partial class Md4cParser
                 AnalyzeLinkContents(lines, nLines, lineOffset, openerIndex + 1, closerIndex);
 
                 // Suppress permissive autolink inside link text.
-                if ((flags & MdParserFlags.PermissiveAutolinks) != 0)
+                if ((flags & MarkdownParserFlags.PermissiveAutolinks) != 0)
                 {
                     int firstNestedIdx = openerIndex + 1;
                     while (firstNestedIdx < closerIndex && marks[firstNestedIdx].Ch == 'D')
@@ -2591,7 +2591,7 @@ internal sealed partial class Md4cParser
         AnalyzeMarks(lines, nLines, lineOffset, markBeg, markEnd, "&", 0);
         AnalyzeMarks(lines, nLines, lineOffset, markBeg, markEnd, "*_~$", 0);
 
-        if ((flags & MdParserFlags.PermissiveAutolinks) != 0)
+        if ((flags & MarkdownParserFlags.PermissiveAutolinks) != 0)
         {
             AnalyzeMarks(lines, nLines, lineOffset, markBeg, markEnd, "@:.", ANALYZE_NOSKIP_EMPH);
         }
@@ -2602,7 +2602,7 @@ internal sealed partial class Md4cParser
 
     // ── Span enter/leave helpers ────────────────────────────────────────
 
-    private int EnterLeaveSpanA(bool enter, MdSpanType type,
+    private int EnterLeaveSpanA(bool enter, MarkdownSpanType type,
                                 string dest, int destSize, bool isAutolink,
                                 string? title, int titleSize)
     {
@@ -2615,7 +2615,7 @@ internal sealed partial class Md4cParser
                     out var href, ref hrefBuild);
         if (ret != 0) return ret;
 
-        MdAttribute titleAttr = default;
+        MarkdownAttribute titleAttr = default;
         if (title != null && titleSize > 0)
         {
             ret = BuildAttribute(title, titleSize, 0,
@@ -2623,10 +2623,10 @@ internal sealed partial class Md4cParser
             if (ret != 0) return ret;
         }
 
-        // MdSpanADetail and MdSpanImgDetail are compatible.
-        if (type == MdSpanType.Img)
+        // MarkdownSpanADetail and MarkdownSpanImgDetail are compatible.
+        if (type == MarkdownSpanType.Img)
         {
-            var det = new MdSpanImgDetail { Src = href, Title = titleAttr };
+            var det = new MarkdownSpanImgDetail { Src = href, Title = titleAttr };
             if (enter)
             { ret = EnterSpan(type, det); if (ret != 0) return ret; }
             else
@@ -2634,7 +2634,7 @@ internal sealed partial class Md4cParser
         }
         else
         {
-            var det = new MdSpanADetail { Href = href, Title = titleAttr, IsAutolink = isAutolink };
+            var det = new MarkdownSpanADetail { Href = href, Title = titleAttr, IsAutolink = isAutolink };
             if (enter)
             { ret = EnterSpan(type, det); if (ret != 0) return ret; }
             else
@@ -2652,11 +2652,11 @@ internal sealed partial class Md4cParser
         ret = BuildAttribute(target, targetSize, 0, out var targetAttr, ref targetBuild);
         if (ret != 0) return ret;
 
-        var det = new MdSpanWikiLinkDetail { Target = targetAttr };
+        var det = new MarkdownSpanWikiLinkDetail { Target = targetAttr };
         if (enter)
-        { ret = EnterSpan(MdSpanType.WikiLink, det); if (ret != 0) return ret; }
+        { ret = EnterSpan(MarkdownSpanType.WikiLink, det); if (ret != 0) return ret; }
         else
-        { ret = LeaveSpan(MdSpanType.WikiLink, det); if (ret != 0) return ret; }
+        { ret = LeaveSpan(MarkdownSpanType.WikiLink, det); if (ret != 0) return ret; }
 
         return ret;
     }
@@ -2665,7 +2665,7 @@ internal sealed partial class Md4cParser
 
     private int ProcessInlines(Line[] lines, int nLines, int lineOffset)
     {
-        MdTextType textType;
+        MarkdownTextType textType;
         int lineIndex = 0;
         int markIndex = 0;
         int off = lines[lineOffset].Beg;
@@ -2677,7 +2677,7 @@ internal sealed partial class Md4cParser
         while (markIndex < nMarks && (marks[markIndex].Flags & MARK_RESOLVED) == 0)
             markIndex++;
 
-        textType = MdTextType.Normal;
+        textType = MarkdownTextType.Normal;
 
         while (true)
         {
@@ -2717,26 +2717,26 @@ internal sealed partial class Md4cParser
                     case '`':
                         if ((mark.Flags & MARK_OPENER) != 0)
                         {
-                            ret = EnterSpan(MdSpanType.Code, null);
+                            ret = EnterSpan(MarkdownSpanType.Code, null);
                             if (ret != 0) return ret;
-                            textType = MdTextType.Code;
+                            textType = MarkdownTextType.Code;
                         }
                         else
                         {
-                            ret = LeaveSpan(MdSpanType.Code, null);
+                            ret = LeaveSpan(MarkdownSpanType.Code, null);
                             if (ret != 0) return ret;
-                            textType = MdTextType.Normal;
+                            textType = MarkdownTextType.Normal;
                         }
                         break;
 
                     case '_':
-                        if ((flags & MdParserFlags.Underline) != 0)
+                        if ((flags & MarkdownParserFlags.Underline) != 0)
                         {
                             if ((mark.Flags & MARK_OPENER) != 0)
                             {
                                 while (off < mark.End)
                                 {
-                                    ret = EnterSpan(MdSpanType.U, null);
+                                    ret = EnterSpan(MarkdownSpanType.U, null);
                                     if (ret != 0) return ret;
                                     off++;
                                 }
@@ -2745,7 +2745,7 @@ internal sealed partial class Md4cParser
                             {
                                 while (off < mark.End)
                                 {
-                                    ret = LeaveSpan(MdSpanType.U, null);
+                                    ret = LeaveSpan(MarkdownSpanType.U, null);
                                     if (ret != 0) return ret;
                                     off++;
                                 }
@@ -2759,13 +2759,13 @@ internal sealed partial class Md4cParser
                         {
                             if ((mark.End - off) % 2 != 0)
                             {
-                                ret = EnterSpan(MdSpanType.Em, null);
+                                ret = EnterSpan(MarkdownSpanType.Em, null);
                                 if (ret != 0) return ret;
                                 off++;
                             }
                             while (off + 1 < mark.End)
                             {
-                                ret = EnterSpan(MdSpanType.Strong, null);
+                                ret = EnterSpan(MarkdownSpanType.Strong, null);
                                 if (ret != 0) return ret;
                                 off += 2;
                             }
@@ -2774,13 +2774,13 @@ internal sealed partial class Md4cParser
                         {
                             while (off + 1 < mark.End)
                             {
-                                ret = LeaveSpan(MdSpanType.Strong, null);
+                                ret = LeaveSpan(MarkdownSpanType.Strong, null);
                                 if (ret != 0) return ret;
                                 off += 2;
                             }
                             if ((mark.End - off) % 2 != 0)
                             {
-                                ret = LeaveSpan(MdSpanType.Em, null);
+                                ret = LeaveSpan(MarkdownSpanType.Em, null);
                                 if (ret != 0) return ret;
                                 off++;
                             }
@@ -2789,25 +2789,25 @@ internal sealed partial class Md4cParser
 
                     case '~':
                         if ((mark.Flags & MARK_OPENER) != 0)
-                        { ret = EnterSpan(MdSpanType.Del, null); if (ret != 0) return ret; }
+                        { ret = EnterSpan(MarkdownSpanType.Del, null); if (ret != 0) return ret; }
                         else
-                        { ret = LeaveSpan(MdSpanType.Del, null); if (ret != 0) return ret; }
+                        { ret = LeaveSpan(MarkdownSpanType.Del, null); if (ret != 0) return ret; }
                         break;
 
                     case '$':
                         if ((mark.Flags & MARK_OPENER) != 0)
                         {
-                            var spanType = (mark.End - off) % 2 != 0 ? MdSpanType.LatexMath : MdSpanType.LatexMathDisplay;
+                            var spanType = (mark.End - off) % 2 != 0 ? MarkdownSpanType.LatexMath : MarkdownSpanType.LatexMathDisplay;
                             ret = EnterSpan(spanType, null);
                             if (ret != 0) return ret;
-                            textType = MdTextType.LatexMath;
+                            textType = MarkdownTextType.LatexMath;
                         }
                         else
                         {
-                            var spanType = (mark.End - off) % 2 != 0 ? MdSpanType.LatexMath : MdSpanType.LatexMathDisplay;
+                            var spanType = (mark.End - off) % 2 != 0 ? MarkdownSpanType.LatexMath : MarkdownSpanType.LatexMathDisplay;
                             ret = LeaveSpan(spanType, null);
                             if (ret != 0) return ret;
-                            textType = MdTextType.Normal;
+                            textType = MarkdownTextType.Normal;
                         }
                         break;
 
@@ -2856,7 +2856,7 @@ internal sealed partial class Md4cParser
 
                         ret = EnterLeaveSpanA(
                             mark.Ch != ']',
-                            openerRef.Ch == '!' ? MdSpanType.Img : MdSpanType.A,
+                            openerRef.Ch == '!' ? MarkdownSpanType.Img : MarkdownSpanType.A,
                             destStr, destStr.Length, false,
                             titleStr, titleSz);
                         if (ret != 0) return ret;
@@ -2876,9 +2876,9 @@ internal sealed partial class Md4cParser
                         if ((mark.Flags & MARK_AUTOLINK) == 0)
                         {
                             if ((mark.Flags & MARK_OPENER) != 0)
-                                textType = MdTextType.Html;
+                                textType = MarkdownTextType.Html;
                             else
-                                textType = MdTextType.Normal;
+                                textType = MarkdownTextType.Normal;
                             break;
                         }
                         goto case '@';
@@ -2909,19 +2909,19 @@ internal sealed partial class Md4cParser
                         {
                             ret = EnterLeaveSpanA(
                                 (mark.Flags & MARK_OPENER) != 0,
-                                MdSpanType.A, dest, destSz, true, null, 0);
+                                MarkdownSpanType.A, dest, destSz, true, null, 0);
                             if (ret != 0) return ret;
                         }
                         break;
                     }
 
                     case '&':
-                        ret = Text(MdTextType.Entity, mark.Beg, mark.End - mark.Beg);
+                        ret = Text(MarkdownTextType.Entity, mark.Beg, mark.End - mark.Beg);
                         if (ret != 0) return ret;
                         break;
 
                     case '\0':
-                        ret = TextBuf(MdTextType.NullChar, "\0".AsSpan());
+                        ret = TextBuf(MarkdownTextType.NullChar, "\0".AsSpan());
                         if (ret != 0) return ret;
                         break;
 
@@ -2947,7 +2947,7 @@ internal sealed partial class Md4cParser
                 if (off >= end)
                     break;
 
-                if (textType == MdTextType.Code || textType == MdTextType.LatexMath)
+                if (textType == MarkdownTextType.Code || textType == MarkdownTextType.LatexMath)
                 {
                     // Inside code/latex span: output trailing whitespace + newline as space.
                     tmp = off;
@@ -2965,7 +2965,7 @@ internal sealed partial class Md4cParser
                         if (ret != 0) return ret;
                     }
                 }
-                else if (textType == MdTextType.Html)
+                else if (textType == MarkdownTextType.Html)
                 {
                     // Inside raw HTML: output trailing spaces + literal newline.
                     tmp = off;
@@ -2973,29 +2973,29 @@ internal sealed partial class Md4cParser
                         tmp++;
                     if (tmp > off)
                     {
-                        ret = Text(MdTextType.Html, off, tmp - off);
+                        ret = Text(MarkdownTextType.Html, off, tmp - off);
                         if (ret != 0) return ret;
                     }
-                    ret = TextBuf(MdTextType.Html, "\n".AsSpan());
+                    ret = TextBuf(MarkdownTextType.Html, "\n".AsSpan());
                     if (ret != 0) return ret;
                 }
                 else
                 {
                     // Soft or hard break.
-                    MdTextType breakType = MdTextType.SoftBr;
+                    MarkdownTextType breakType = MarkdownTextType.SoftBr;
 
-                    if (textType == MdTextType.Normal)
+                    if (textType == MarkdownTextType.Normal)
                     {
-                        if (enforceHardbreak != 0 || (flags & MdParserFlags.HardSoftBreaks) != 0)
+                        if (enforceHardbreak != 0 || (flags & MarkdownParserFlags.HardSoftBreaks) != 0)
                         {
-                            breakType = MdTextType.Br;
+                            breakType = MarkdownTextType.Br;
                         }
                         else
                         {
                             while (off < size && Md4cUnicode.IsBlank(text[off]))
                                 off++;
                             if (off >= line.End + 2 && text[off - 2] == ' ' && text[off - 1] == ' ' && Md4cUnicode.IsNewline(text[off]))
-                                breakType = MdTextType.Br;
+                                breakType = MarkdownTextType.Br;
                         }
                     }
 
@@ -3023,10 +3023,10 @@ internal sealed partial class Md4cParser
     // ── Partial method implementations for Block.cs stubs ───────────────
 
     /// <summary>
-    /// Build an MdAttribute from a range within <see cref="text"/>.
+    /// Build an MarkdownAttribute from a range within <see cref="text"/>.
     /// Matches the partial stub in Md4cParser.Block.cs.
     /// </summary>
-    private int BuildAttribute(int off, int len, int attrFlags, out MdAttribute attr)
+    private int BuildAttribute(int off, int len, int attrFlags, out MarkdownAttribute attr)
     {
         string rawText = (len > 0) ? text.Substring(off, len) : "";
         var build = new AttributeBuild();

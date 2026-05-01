@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -20,7 +20,7 @@ public sealed class DonutChartSample : GallerySample
             D3ArcPath(a.StartAngle, a.EndAngle, cx, cy,
                 outerRadius: 150, innerRadius: 80, padAngle: 0.02,
                 fill: Brush(Palette[i % Palette.Count])),
-            D3Dsl.Text(cx + lx, cy + ly, a.Data.Name, 10, brush),
+            D3Charts.Text(cx + lx, cy + ly, a.Data.Name, 10, brush),
         });
         D3Canvas(width, height, [..slices, ..centerText, title])
             .AutomationName("Monthly Expenses")
@@ -51,13 +51,13 @@ public sealed class DonutChartSample : GallerySample
                         D3ArcPath(a.StartAngle, a.EndAngle, cx, cy,
                             outerRadius: 150, innerRadius: 80, padAngle: 0.02,
                             fill: Brush(Palette[i % Palette.Count])),
-                        D3Dsl.Text(cx + lx - 24, cy + ly - 7,
+                        D3Charts.Text(cx + lx - 24, cy + ly - 7,
                             $"{a.Data.Name}", 10, Brush(Palette[i % Palette.Count])),
                     };
                 }),
-            D3Dsl.Text(cx - 24, cy - 12, $"${total:N0}", 14, ChartForeground),
-            D3Dsl.Text(cx - 16, cy + 6, "/ month", 10, ChartMutedForeground),
-            D3Dsl.Text(cx - 80, 10, "Monthly Expenses", 16, ChartForeground),
+            D3Charts.Text(cx - 24, cy - 12, $"${total:N0}", 14, ChartForeground),
+            D3Charts.Text(cx - 16, cy + 6, "/ month", 10, ChartMutedForeground),
+            D3Charts.Text(cx - 80, 10, "Monthly Expenses", 16, ChartForeground),
         ])
             .AutomationName("Monthly Expenses")
             .FullDescription("Donut chart showing monthly expenses: Housing $1,800, Food $650, Transport $400, Health $300, Utilities $250, Savings $600.");

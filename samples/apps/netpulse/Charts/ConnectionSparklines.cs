@@ -2,7 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace NetPulse.Charts;
@@ -43,7 +43,7 @@ sealed class ConnectionSparklines : Component<ConnectionSparklinesProps>
         if (entries.Count == 0)
         {
             return D3Canvas(100, 40,
-                D3Dsl.Text(4, 12, "No connection history yet...", 11, Gray(100)));
+                D3Charts.Text(4, 12, "No connection history yet...", 11, Gray(100)));
         }
 
         // Compute grid dimensions — fill available width (~1340px minus margins)
@@ -53,7 +53,7 @@ sealed class ConnectionSparklines : Component<ConnectionSparklinesProps>
         double totalH = rows * (CellH + Pad) + 26;
 
         var elements = new List<Element>();
-        elements.Add(D3Dsl.Text(4, 4, $"Connection Sparklines ({entries.Count})", 13, Gray(40)));
+        elements.Add(D3Charts.Text(4, 4, $"Connection Sparklines ({entries.Count})", 13, Gray(40)));
 
         for (int i = 0; i < entries.Count; i++)
         {
@@ -77,7 +77,7 @@ sealed class ConnectionSparklines : Component<ConnectionSparklinesProps>
                 ? string.Concat(entry.Label.AsSpan(0, 23), "\u2026")
                 : entry.Label;
             elements.Add(
-                D3Dsl.Text(cx + 4, cy + 2, label, 8, Gray(80))
+                D3Charts.Text(cx + 4, cy + 2, label, 8, Gray(80))
                 .WithKey($"lbl-{entry.Key}"));
 
             // Sparkline: one Path per connection (not N Lines)
@@ -103,7 +103,7 @@ sealed class ConnectionSparklines : Component<ConnectionSparklinesProps>
 
                 string stateName = ((TcpState)latestState).ToString();
                 elements.Add(
-                    D3Dsl.Text(cx + 4, cy + CellH - 16, stateName, 8,
+                    D3Charts.Text(cx + 4, cy + CellH - 16, stateName, 8,
                         Brush(Palette[colorIdx % Palette.Count]))
                     .WithKey($"stn-{entry.Key}"));
             }

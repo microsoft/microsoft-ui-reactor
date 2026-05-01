@@ -2,8 +2,9 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
+using Microsoft.UI.Reactor.Charting.Accessibility;
 using static Microsoft.UI.Reactor.Factories;
-using static Microsoft.UI.Reactor.Charting.ChartDsl;
+using static Microsoft.UI.Reactor.Charting.Charts;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<ChartingApp>("Charting", width: 700, height: 800
@@ -34,8 +35,8 @@ class LineChartDemo : Component
                 .Title("Monthly Revenue — Line")
                 .SeriesName("Revenue")
                 .Units("months", "USD")
-                .AxisLabel(Charting.Accessibility.ChartAxisType.X, "Month")
-                .AxisLabel(Charting.Accessibility.ChartAxisType.Y, "Revenue (USD)")
+                .AxisLabel(ChartAxisType.X, "Month")
+                .AxisLabel(ChartAxisType.Y, "Revenue (USD)")
                 .Width(600).Height(250)
                 .Stroke("#0078D4").StrokeWidth(2.5)
                 .ShowGrid(true).ShowAxes(true)
@@ -60,8 +61,8 @@ class BarChartDemo : Component
                 .Title("Quarterly Revenue — Bar")
                 .SeriesName("Revenue")
                 .Units("quarters", "USD")
-                .AxisLabel(Charting.Accessibility.ChartAxisType.X, "Quarter")
-                .AxisLabel(Charting.Accessibility.ChartAxisType.Y, "Revenue (USD)")
+                .AxisLabel(ChartAxisType.X, "Quarter")
+                .AxisLabel(ChartAxisType.Y, "Revenue (USD)")
                 .Width(600).Height(250)
                 .Fill("#50C878")
                 .ShowGrid(true).ShowAxes(true)
@@ -89,8 +90,8 @@ class AreaChartDemo : Component
                 .Title("Monthly Revenue — Area")
                 .SeriesName("Revenue")
                 .Units("months", "USD")
-                .AxisLabel(Charting.Accessibility.ChartAxisType.X, "Month")
-                .AxisLabel(Charting.Accessibility.ChartAxisType.Y, "Revenue (USD)")
+                .AxisLabel(ChartAxisType.X, "Month")
+                .AxisLabel(ChartAxisType.Y, "Revenue (USD)")
                 .Width(600).Height(250)
                 .Stroke("#9B59B6").Fill("#9B59B6")
                 .FillOpacity(0.2)
@@ -217,8 +218,8 @@ class AccessibleChartDemo : Component
                 .Title("Monthly Revenue 2024")
                 .SeriesName("Revenue")
                 .Units("months", "USD")
-                .AxisLabel(Charting.Accessibility.ChartAxisType.X, "Month")
-                .AxisLabel(Charting.Accessibility.ChartAxisType.Y, "Revenue (USD)")
+                .AxisLabel(ChartAxisType.X, "Month")
+                .AxisLabel(ChartAxisType.Y, "Revenue (USD)")
                 .Width(600).Height(250)
                 .Stroke("#0078D4").StrokeWidth(2.5)
                 .ShowGrid(true).ShowAxes(true),

@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -97,7 +97,7 @@ public sealed class ForceDirectedGraphSample : GallerySample
                 },
                 TextCenter(n.X - 16, n.Y + 12, labels[i], 32, 9, ChartMutedForeground),
             }),
-            D3Dsl.Text(12, 6, "Force-Directed Graph", 14, ChartForeground),
+            D3Charts.Text(12, 6, "Force-Directed Graph", 14, ChartForeground),
         ])
             .AutomationName("Force-Directed Graph")
             .FullDescription("Network diagram of 15 people in 4 groups connected by 22 edges.");

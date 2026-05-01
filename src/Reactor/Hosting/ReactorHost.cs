@@ -159,7 +159,7 @@ public sealed class ReactorHost : IDisposable
         }
 
         // ── Accessibility: auto-detect forced-colors and reduced-motion ──
-        // D3Dsl.IsForcedColors is set each render; listeners trigger re-render.
+        // D3Charts.IsForcedColors is set each render; listeners trigger re-render.
         try
         {
             _accessibilitySettings = new global::Windows.UI.ViewManagement.AccessibilitySettings();
@@ -394,11 +394,11 @@ public sealed class ReactorHost : IDisposable
 
             _phaseSw.Restart();
 
-            // Propagate accessibility state to D3Dsl thread-statics so all chart
+            // Propagate accessibility state to D3Charts thread-statics so all chart
             // rendering picks up forced-colors / reduced-motion automatically.
-            Charting.D3Dsl.IsForcedColors = _isForcedColors;
-            Charting.D3Dsl.IsReducedMotion = _isReducedMotion;
-            Charting.D3Dsl.ForcedColors = _forcedColorsTheme;
+            Charting.D3Charts.IsForcedColors = _isForcedColors;
+            Charting.D3Charts.IsReducedMotion = _isReducedMotion;
+            Charting.D3Charts.ForcedColors = _forcedColorsTheme;
 
             if (_rootComponent is not null)
             {

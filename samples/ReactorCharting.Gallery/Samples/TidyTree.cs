@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -94,7 +94,7 @@ public sealed class TidyTreeSample : GallerySample
                  Microsoft.UI.Xaml.Media.Brush? stroke = isLeaf ? null : ChartMutedForeground;
 
                  Element label = isLeaf
-                     ? D3Dsl.Text(node.X + 8, node.Y - 7, node.Data.Name, 9, ChartMutedForeground)
+                     ? D3Charts.Text(node.X + 8, node.Y - 7, node.Data.Name, 9, ChartMutedForeground)
                      : TextCenter(node.X - 4, node.Y - 18, node.Data.Name, 40, 10, ChartForeground);
 
                  return new Element[]

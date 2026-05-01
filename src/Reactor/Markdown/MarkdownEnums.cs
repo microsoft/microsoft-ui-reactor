@@ -6,29 +6,29 @@ namespace Microsoft.UI.Reactor.Markdown;
 /// <summary>
 /// Block represents a part of document hierarchy structure like a paragraph or list item.
 /// </summary>
-public enum MdBlockType
+public enum MarkdownBlockType
 {
     /// <summary>&lt;body&gt;...&lt;/body&gt;</summary>
     Doc = 0,
     /// <summary>&lt;blockquote&gt;...&lt;/blockquote&gt;</summary>
     Quote,
-    /// <summary>&lt;ul&gt;...&lt;/ul&gt;. Detail: <see cref="MdBlockUlDetail"/>.</summary>
+    /// <summary>&lt;ul&gt;...&lt;/ul&gt;. Detail: <see cref="MarkdownBlockUlDetail"/>.</summary>
     Ul,
-    /// <summary>&lt;ol&gt;...&lt;/ol&gt;. Detail: <see cref="MdBlockOlDetail"/>.</summary>
+    /// <summary>&lt;ol&gt;...&lt;/ol&gt;. Detail: <see cref="MarkdownBlockOlDetail"/>.</summary>
     Ol,
-    /// <summary>&lt;li&gt;...&lt;/li&gt;. Detail: <see cref="MdBlockLiDetail"/>.</summary>
+    /// <summary>&lt;li&gt;...&lt;/li&gt;. Detail: <see cref="MarkdownBlockLiDetail"/>.</summary>
     Li,
     /// <summary>&lt;hr&gt;</summary>
     Hr,
-    /// <summary>&lt;h1&gt;...&lt;/h6&gt; (levels 1-6). Detail: <see cref="MdBlockHDetail"/>.</summary>
+    /// <summary>&lt;h1&gt;...&lt;/h6&gt; (levels 1-6). Detail: <see cref="MarkdownBlockHDetail"/>.</summary>
     H,
-    /// <summary>&lt;pre&gt;&lt;code&gt;...&lt;/code&gt;&lt;/pre&gt;. Detail: <see cref="MdBlockCodeDetail"/>.</summary>
+    /// <summary>&lt;pre&gt;&lt;code&gt;...&lt;/code&gt;&lt;/pre&gt;. Detail: <see cref="MarkdownBlockCodeDetail"/>.</summary>
     Code,
     /// <summary>Raw HTML block.</summary>
     Html,
     /// <summary>&lt;p&gt;...&lt;/p&gt;</summary>
     P,
-    /// <summary>&lt;table&gt;...&lt;/table&gt;. Detail: <see cref="MdBlockTableDetail"/>.</summary>
+    /// <summary>&lt;table&gt;...&lt;/table&gt;. Detail: <see cref="MarkdownBlockTableDetail"/>.</summary>
     Table,
     /// <summary>&lt;thead&gt;...&lt;/thead&gt;</summary>
     Thead,
@@ -36,9 +36,9 @@ public enum MdBlockType
     Tbody,
     /// <summary>&lt;tr&gt;...&lt;/tr&gt;</summary>
     Tr,
-    /// <summary>&lt;th&gt;...&lt;/th&gt;. Detail: <see cref="MdBlockTdDetail"/>.</summary>
+    /// <summary>&lt;th&gt;...&lt;/th&gt;. Detail: <see cref="MarkdownBlockTdDetail"/>.</summary>
     Th,
-    /// <summary>&lt;td&gt;...&lt;/td&gt;. Detail: <see cref="MdBlockTdDetail"/>.</summary>
+    /// <summary>&lt;td&gt;...&lt;/td&gt;. Detail: <see cref="MarkdownBlockTdDetail"/>.</summary>
     Td,
 }
 
@@ -46,34 +46,34 @@ public enum MdBlockType
 /// Span represents an in-line piece of a document which should be rendered with
 /// the same font, color and other attributes.
 /// </summary>
-public enum MdSpanType
+public enum MarkdownSpanType
 {
     /// <summary>&lt;em&gt;...&lt;/em&gt;</summary>
     Em,
     /// <summary>&lt;strong&gt;...&lt;/strong&gt;</summary>
     Strong,
-    /// <summary>&lt;a href="xxx"&gt;...&lt;/a&gt;. Detail: <see cref="MdSpanADetail"/>.</summary>
+    /// <summary>&lt;a href="xxx"&gt;...&lt;/a&gt;. Detail: <see cref="MarkdownSpanADetail"/>.</summary>
     A,
-    /// <summary>&lt;img src="xxx"&gt;...&lt;/img&gt;. Detail: <see cref="MdSpanImgDetail"/>.</summary>
+    /// <summary>&lt;img src="xxx"&gt;...&lt;/img&gt;. Detail: <see cref="MarkdownSpanImgDetail"/>.</summary>
     Img,
     /// <summary>&lt;code&gt;...&lt;/code&gt;</summary>
     Code,
-    /// <summary>&lt;del&gt;...&lt;/del&gt; (requires <see cref="MdParserFlags.Strikethrough"/>).</summary>
+    /// <summary>&lt;del&gt;...&lt;/del&gt; (requires <see cref="MarkdownParserFlags.Strikethrough"/>).</summary>
     Del,
-    /// <summary>Inline LaTeX math (requires <see cref="MdParserFlags.LatexMathSpans"/>).</summary>
+    /// <summary>Inline LaTeX math (requires <see cref="MarkdownParserFlags.LatexMathSpans"/>).</summary>
     LatexMath,
-    /// <summary>Display LaTeX math (requires <see cref="MdParserFlags.LatexMathSpans"/>).</summary>
+    /// <summary>Display LaTeX math (requires <see cref="MarkdownParserFlags.LatexMathSpans"/>).</summary>
     LatexMathDisplay,
-    /// <summary>Wiki link (requires <see cref="MdParserFlags.WikiLinks"/>).</summary>
+    /// <summary>Wiki link (requires <see cref="MarkdownParserFlags.WikiLinks"/>).</summary>
     WikiLink,
-    /// <summary>&lt;u&gt;...&lt;/u&gt; (requires <see cref="MdParserFlags.Underline"/>).</summary>
+    /// <summary>&lt;u&gt;...&lt;/u&gt; (requires <see cref="MarkdownParserFlags.Underline"/>).</summary>
     U,
 }
 
 /// <summary>
 /// Text is the actual textual contents of a span.
 /// </summary>
-public enum MdTextType
+public enum MarkdownTextType
 {
     /// <summary>Normal text.</summary>
     Normal = 0,
@@ -96,7 +96,7 @@ public enum MdTextType
 /// <summary>
 /// Table cell alignment.
 /// </summary>
-public enum MdAlign
+public enum MarkdownAlign
 {
     Default = 0,
     Left,
@@ -108,7 +108,7 @@ public enum MdAlign
 /// Parser extension flags.
 /// </summary>
 [Flags]
-public enum MdParserFlags : uint
+public enum MarkdownParserFlags : uint
 {
     None = 0,
     /// <summary>In MD_TEXT_NORMAL, collapse non-trivial whitespace into single ' '.</summary>

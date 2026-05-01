@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -73,20 +73,20 @@ public class HorizontalBarChartSample : GallerySample
                  from el in new Element[]
                  {
                      D3Rect(left, y, barW, band.Bandwidth) with { Fill = fill, RadiusX = 2, RadiusY = 2 },
-                     D3Dsl.Text(left + barW + 4, y + band.Bandwidth / 2 - 7, $"{populations[t.i]:F0}M", 10, ChartMutedForeground),
+                     D3Charts.Text(left + barW + 4, y + band.Bandwidth / 2 - 7, $"{populations[t.i]:F0}M", 10, ChartMutedForeground),
                  }
                  select el),
 
              D3Line(left, top + plotH, left + plotW, top + plotH) with { Stroke = axisBrush, StrokeThickness = 1 },
              D3Line(left, top, left, top + plotH) with { Stroke = axisBrush, StrokeThickness = 1 },
              .. xs.Ticks(6).Select(t =>
-                 D3Dsl.Text(left + xs.Map(t) - 12, top + plotH + 6, Fmt(t), 10, axisBrush)),
+                 D3Charts.Text(left + xs.Map(t) - 12, top + plotH + 6, Fmt(t), 10, axisBrush)),
 
              // Y axis labels
              .. countries.Select((country, i) =>
                  TextRight(2, top + band.Map(country) + band.Bandwidth / 2 - 7, country, left - 6, 10, ChartMutedForeground)),
 
-             D3Dsl.Text(left, 4, "Population by Country (millions)", 13, ChartForeground),
+             D3Charts.Text(left, 4, "Population by Country (millions)", 13, ChartForeground),
             ]
         )
             .AutomationName("Population by Country (millions)")

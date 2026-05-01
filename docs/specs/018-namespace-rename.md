@@ -392,9 +392,9 @@ ItemsRepeater, etc.).
 | `Duct.Controls.AutoSuggest` | 4 | 0 | `SearchState`, `AutoSuggestElement<T>`, `AutoSuggestDsl`, `SearchManager<T>` |
 | `Duct.Controls.Formatting` | 3 | 10 | `FormatResult`, `InputFormatter`, `FormatterPipeline` (+ 10 internal formatters) |
 | `Duct.Controls.MaskedTextBox` | 4 | 2 | `MaskedTextFieldElement`, `MaskedTextFieldDsl`, `MaskEngine`, `MaskPreset` |
-| `Duct.DataGrid` | 11 | 3 | `DataGridComponent<T>`, `DataGridElement<T>`, `DataGridState<T>`, `DataGridDsl`, `ColumnDsl`, `ColumnBuilder<T>`, `SelectionMode`, `EditMode`, `CellContext<T>`, `RowContext<T>`, `HeaderContext` |
-| `Duct.PropertyGrid` | 18 | 3 | `PropertyGridComponent`, `PropertyGridElement`, `PropertyGridDsl`, `PropertyGridDefaults`, 7 attributes, 4 delegates, `TypeMetadata`, `ArrayTypeMetadata`, `TypeRegistry`, `EditorTier`, `ReflectionTypeMetadataProvider` |
-| `Duct.Virtualization` | 4 | 0 | `VirtualListComponent`, `VirtualListDsl`, `VirtualListElement`, `VirtualListRef` |
+| `Duct.DataGrid` | 11 | 3 | `DataGridComponent<T>`, `DataGridElement<T>`, `DataGridState<T>`, `Factories`, `Factories`, `ColumnBuilder<T>`, `SelectionMode`, `EditMode`, `CellContext<T>`, `RowContext<T>`, `HeaderContext` |
+| `Duct.PropertyGrid` | 18 | 3 | `PropertyGridComponent`, `PropertyGridElement`, `Factories`, `PropertyGridDefaults`, 7 attributes, 4 delegates, `TypeMetadata`, `ArrayTypeMetadata`, `TypeRegistry`, `EditorTier`, `ReflectionTypeMetadataProvider` |
+| `Duct.Virtualization` | 4 | 0 | `VirtualListComponent`, `Factories`, `VirtualListElement`, `VirtualListRef` |
 | **Total in Controls** | **44** | **18** | |
 
 44 public types in `Controls` is well within WinUI norms
@@ -448,9 +448,9 @@ The `DuctD3/` project (separate assembly, ~108 types) merges into the main
 
 ```
 Reactor/Charting/
-  ChartDsl.cs               ← Charts/ChartDsl.cs
+  Charts.cs               ← Charts/Charts.cs
   TreeChartDsl.cs            ← Charts/TreeChartDsl.cs
-  D3Dsl.cs                  ← Charts/D3Dsl.cs
+  D3Charts.cs                  ← Charts/D3Charts.cs
   PathDataParser.cs          ← Charts/PathDataParser.cs
   D3/
     Array/                   ← from DuctD3/Array/
@@ -475,7 +475,7 @@ These are the controls and DSL factories that most developers import.
 
 | Type | Kind | Description |
 |---|---|---|
-| `ChartDsl` | `public static partial class` | Factory methods: `LineChart()`, `BarChart()`, `AreaChart()`, `PieChart()`, `TreeChart()`, `ForceGraph()` |
+| `Charts` | `public static partial class` | Factory methods: `LineChart()`, `BarChart()`, `AreaChart()`, `PieChart()`, `TreeChart()`, `ForceGraph()` |
 | `ChartType` | `public enum` | Line, Bar, Area |
 | `ChartElement<T>` | `public sealed class` | Line/bar/area chart builder (data, axes, grid, colors, margins) |
 | `ChartHandle<T>` | `public sealed class` | Handle from OnReady; exposes underlying Canvas |
@@ -622,8 +622,8 @@ Everything below is the D3 algorithm port. Grouped by subdirectory.
    the main library.
 6. Update `Reactor.sln` to remove the DuctD3 project entry.
 7. Update `tests/ReactorD3.Tests/` to reference `Reactor` instead of `DuctD3`.
-8. Update `using static Duct.D3.Charts.ChartDsl` →
-   `using static Microsoft.UI.Reactor.Charting.ChartDsl` everywhere.
+8. Update `using static Duct.D3.Charts.Charts` →
+   `using static Microsoft.UI.Reactor.Charting.Charts` everywhere.
 
 ---
 

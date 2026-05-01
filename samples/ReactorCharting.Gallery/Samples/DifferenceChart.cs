@@ -1,7 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -86,7 +86,7 @@ D3Canvas(W, H,
             D3LinePath(data, x: d => xScale.Map(d.X), y: d => yScale.Map(d.B),
                 stroke: redBrush, strokeWidth: 2, curve: D3Curve.MonotoneX),
             .. D3Legend(lx, marginTop + 6, [("Revenue", greenBrush), ("Expenses", redBrush)]),
-            Microsoft.UI.Reactor.Charting.D3Dsl.Text(marginLeft, 4, "Difference Chart (Revenue vs Expenses)", 14, ChartForeground),
+            Microsoft.UI.Reactor.Charting.D3Charts.Text(marginLeft, 4, "Difference Chart (Revenue vs Expenses)", 14, ChartForeground),
         ])
             .AutomationName("Difference Chart (Revenue vs Expenses)")
             .FullDescription("Surplus/deficit difference chart comparing Revenue and Expenses over 24 months, with green fill where Revenue exceeds Expenses and red where Expenses exceed Revenue.");

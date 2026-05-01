@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -110,7 +110,7 @@ public sealed class SankeyDiagramSample : GallerySample
 
                  var label = isOutput
                      ? TextRight(pad + node.X0 - 6 - 90, labelY, labelText, 90, 10, ChartForeground)
-                     : D3Dsl.Text(pad + node.X1 + 6, labelY, labelText, 10, ChartForeground);
+                     : D3Charts.Text(pad + node.X1 + 6, labelY, labelText, 10, ChartForeground);
 
                  return new Element[]
                  {
@@ -119,7 +119,7 @@ public sealed class SankeyDiagramSample : GallerySample
                      label,
                  };
              }),
-             D3Dsl.Text(12, 6, "Sankey Diagram \u2014 Energy Flow", 14, ChartForeground),
+             D3Charts.Text(12, 6, "Sankey Diagram \u2014 Energy Flow", 14, ChartForeground),
             ]
         )
             .AutomationName("Sankey Diagram \u2014 Energy Flow")

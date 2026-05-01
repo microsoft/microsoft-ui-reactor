@@ -6,7 +6,7 @@ namespace Microsoft.UI.Reactor.Tests;
 
 /// <summary>
 /// Pure-function tests for the small Yoga value-resolution helpers and
-/// MdAttribute factory used by the markdown layer.
+/// MarkdownAttribute factory used by the markdown layer.
 /// </summary>
 public class YogaValueExtensionsTests
 {
@@ -50,21 +50,21 @@ public class YogaValueExtensionsTests
         Assert.False(new YogaValue(0, YogaUnit.Point).IsStretch());
     }
 
-    // ── MdAttribute.Simple ─────────────────────────────────────────
+    // ── MarkdownAttribute.Simple ─────────────────────────────────────────
 
     [Fact]
     public void MdAttribute_Simple_With_Text_Wraps_As_Normal()
     {
-        var attr = MdAttribute.Simple("hello");
+        var attr = MarkdownAttribute.Simple("hello");
         Assert.Equal("hello", attr.Text);
         Assert.Single(attr.SubstrTypes);
-        Assert.Equal(MdTextType.Normal, attr.SubstrTypes[0]);
+        Assert.Equal(MarkdownTextType.Normal, attr.SubstrTypes[0]);
     }
 
     [Fact]
     public void MdAttribute_Simple_With_Null_Returns_Default()
     {
-        var attr = MdAttribute.Simple(null);
+        var attr = MarkdownAttribute.Simple(null);
         Assert.Null(attr.Text);
     }
 }

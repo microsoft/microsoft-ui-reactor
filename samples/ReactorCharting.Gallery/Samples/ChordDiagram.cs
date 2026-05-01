@@ -2,7 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -85,7 +85,7 @@ public sealed class ChordDiagramSample : GallerySample
             .. data.Chords
                 .Select(c => D3PathTranslated(ribbon.Generate(c), cx, cy,
                     fill: Brush(Palette[c.Source.Index % Palette.Count], opacity: 0.55))),
-            D3Dsl.Text(12, 6, "Chord Diagram — Regional Trade Flow", 14, ChartForeground),
+            D3Charts.Text(12, 6, "Chord Diagram — Regional Trade Flow", 14, ChartForeground),
         ])
             .AutomationName("Chord Diagram — Regional Trade Flow")
             .FullDescription("Chord diagram showing trade flow between 5 world regions with ribbons indicating pairwise connections.");

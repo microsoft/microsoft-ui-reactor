@@ -67,10 +67,10 @@ internal static class DataGridScrollFixtures
     {
         return new FieldDescriptor[]
         {
-            ColumnDsl.Column<ScrollItem>("Id", p => p.Id, width: 80),
-            ColumnDsl.Column<ScrollItem>("Name", p => p.Name, width: 160),
-            ColumnDsl.Column<ScrollItem>("Dept", p => p.Dept, width: 120),
-            ColumnDsl.Column<ScrollItem>("Title", p => p.Title, width: 160),
+            Column<ScrollItem>("Id", p => p.Id, width: 80),
+            Column<ScrollItem>("Name", p => p.Name, width: 160),
+            Column<ScrollItem>("Dept", p => p.Dept, width: 120),
+            Column<ScrollItem>("Title", p => p.Title, width: 160),
         };
     }
 
@@ -92,7 +92,7 @@ internal static class DataGridScrollFixtures
             host.Mount(ctx =>
             {
                 source = ctx.UseMemo(() => CreateDelayedSource(10_000, delayMs: 10));
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source!,
                     columns: CreateColumns(),
                     rowHeight: 36
@@ -156,7 +156,7 @@ internal static class DataGridScrollFixtures
             host.Mount(ctx =>
             {
                 var source = ctx.UseMemo(() => CreateDelayedSource(5_000, delayMs: 5));
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source,
                     columns: CreateColumns(),
                     rowHeight: 36
@@ -218,7 +218,7 @@ internal static class DataGridScrollFixtures
                 var host = H.CreateHost();
                 host.Mount(ctx =>
                 {
-                    return VirtualListDsl.VirtualList(
+                    return VirtualList(
                         itemCount: itemCount,
                         renderItem: index =>
                         {
@@ -266,7 +266,7 @@ internal static class DataGridScrollFixtures
                         return new ListDataSource<ScrollItem>(items, p => (RowKey)p.Id);
                     });
 
-                    return DataGridDsl.DataGrid(
+                    return DataGrid(
                         source: source,
                         columns: CreateColumns(),
                         rowHeight: 36,

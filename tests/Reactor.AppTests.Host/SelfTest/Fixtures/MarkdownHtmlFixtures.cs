@@ -7,7 +7,7 @@ using static Microsoft.UI.Reactor.Factories;
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
-/// Tests the Markdown → HTML generation path (Md4cHtml) and displays the result in a WebView2.
+/// Tests the Markdown → HTML generation path (MarkdownHtml) and displays the result in a WebView2.
 /// This covers the HTML renderer that the native-element fixtures do not exercise.
 /// </summary>
 internal static class MarkdownHtmlFixtures
@@ -59,7 +59,7 @@ internal static class MarkdownHtmlFixtures
         public override async Task RunAsync()
         {
             // Generate HTML from markdown using the md4c HTML renderer
-            var html = Md4cHtml.ToHtml(SampleMarkdown, MdParserFlags.DialectGitHub);
+            var html = MarkdownHtml.ToHtml(SampleMarkdown, MarkdownParserFlags.DialectGitHub);
 
             // Verify the HTML contains expected structural elements
             H.Check("MdHtml_HasH1", html.Contains("<h1>"));
@@ -88,7 +88,7 @@ internal static class MarkdownHtmlFixtures
         public override async Task RunAsync()
         {
             // Generate a full HTML document from the markdown
-            var bodyHtml = Md4cHtml.ToHtml(SampleMarkdown, MdParserFlags.DialectGitHub);
+            var bodyHtml = MarkdownHtml.ToHtml(SampleMarkdown, MarkdownParserFlags.DialectGitHub);
             var fullHtml = $$"""
                 <!DOCTYPE html>
                 <html>

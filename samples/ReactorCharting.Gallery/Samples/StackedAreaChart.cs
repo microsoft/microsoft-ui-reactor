@@ -2,7 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -81,10 +81,10 @@ public class StackedAreaChart : GallerySample
                 }),
              .. D3Axes(xScale, yScale, marginLeft, marginTop, plotW, plotH),
              .. Enumerable.Range(0, 6).Select(i =>
-                D3Dsl.Text(xScale.Map(i * 2) - 10, marginTop + plotH + 6,
+                D3Charts.Text(xScale.Map(i * 2) - 10, marginTop + plotH + 6,
                     monthLabels[i * 2], 9, ChartMutedForeground)),
              .. D3Legend(marginLeft + plotW - 100, marginTop + 8, keys.Select((key, k) => (key, Brush(Palette[k], opacity: 0.75)))),
-             D3Dsl.Text(marginLeft, 2, "Stacked Area Chart", 14, ChartForeground),
+             D3Charts.Text(marginLeft, 2, "Stacked Area Chart", 14, ChartForeground),
             ]
         )
             .AutomationName("Stacked Area Chart")

@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -97,10 +97,10 @@ public class RidgePlot : GallerySample
                     D3LinePath(pts, x: d => xScale.Map(d.x), y: d => yScale.Map(d.y),
                         stroke: Brush(Palette[r]), strokeWidth: 1.5, curve: D3Curve.Natural),
                     D3Line(marginLeft, baselineY, marginLeft + plotW, baselineY) with { Stroke = ChartSubtleStroke, StrokeThickness = 0.5 },
-                    D3Dsl.Text(4, baselineY - rowStep * 0.5 - 6, labels[r], 11, ChartMutedForeground),
+                    D3Charts.Text(4, baselineY - rowStep * 0.5 - 6, labels[r], 11, ChartMutedForeground),
                 ];
             }),
-            D3Dsl.Text(marginLeft, 4, "Ridgeline Plot", 14, ChartForeground),
+            D3Charts.Text(marginLeft, 4, "Ridgeline Plot", 14, ChartForeground),
         ])
             .AutomationName("Ridgeline Plot")
             .FullDescription("Ridgeline plot with 5 overlapping distribution curves (Groups A through E) stacked vertically.");

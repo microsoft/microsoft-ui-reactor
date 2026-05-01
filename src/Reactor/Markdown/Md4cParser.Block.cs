@@ -96,7 +96,7 @@ internal sealed partial class Md4cParser
 
     // ── Verbatim block processing ────────────────────────────────────────
 
-    private int ProcessVerbatimBlockContents(MdTextType textType, VerbatimLine[] lines, int nLines, int lineOffset)
+    private int ProcessVerbatimBlockContents(MarkdownTextType textType, VerbatimLine[] lines, int nLines, int lineOffset)
     {
         int ret = 0;
 
@@ -159,12 +159,12 @@ internal sealed partial class Md4cParser
         if (nLines == 0)
             return 0;
 
-        return ProcessVerbatimBlockContents(MdTextType.Code, lines, nLines, lineOffset);
+        return ProcessVerbatimBlockContents(MarkdownTextType.Code, lines, nLines, lineOffset);
     }
 
     // ── Fenced code detail setup ─────────────────────────────────────────
 
-    private int SetupFencedCodeDetail(int blockIndex, out MdBlockCodeDetail det)
+    private int SetupFencedCodeDetail(int blockIndex, out MarkdownBlockCodeDetail det)
     {
         det = default;
 
@@ -189,14 +189,14 @@ internal sealed partial class Md4cParser
             end--;
 
         // Build info string attribute.
-        ret = BuildAttribute(beg, end - beg, 0, out MdAttribute infoBuild);
+        ret = BuildAttribute(beg, end - beg, 0, out MarkdownAttribute infoBuild);
         if (ret < 0) return ret;
 
         // Build lang string attribute (up to first whitespace).
         int langEnd = beg;
         while (langEnd < end && !Md4cUnicode.IsWhitespace(text[langEnd]))
             langEnd++;
-        ret = BuildAttribute(beg, langEnd - beg, 0, out MdAttribute langBuild);
+        ret = BuildAttribute(beg, langEnd - beg, 0, out MarkdownAttribute langBuild);
         if (ret < 0) return ret;
 
         det.Info = infoBuild;
@@ -208,7 +208,7 @@ internal sealed partial class Md4cParser
 
     // ── Table cell processing ────────────────────────────────────────────
 
-    private int ProcessTableCell(MdBlockType cellType, MdAlign align, int beg, int end)
+    private int ProcessTableCell(MarkdownBlockType cellType, MarkdownAlign align, int beg, int end)
     {
         int ret = 0;
 
@@ -217,7 +217,7 @@ internal sealed partial class Md4cParser
         while (end > beg && Md4cUnicode.IsWhitespace(text[end - 1]))
             end--;
 
-        var det = new MdBlockTdDetail { Align = align };
+        var det = new MarkdownBlockTdDetail { Align = align };
         var lineArr = new Line[] { new Line { Beg = beg, End = end } };
 
         ret = EnterBlock(cellType, det);
@@ -232,8 +232,8 @@ internal sealed partial class Md4cParser
 
     // ── Table row processing ─────────────────────────────────────────────
 
-    private int ProcessTableRow(MdBlockType cellType, int beg, int end,
-                                MdAlign[] align, int colCount)
+    private int ProcessTableRow(MarkdownBlockType cellType, int beg, int end,
+                                MarkdownAlign[] align, int colCount)
     {
         int ret = 0;
         int[]? pipeOffs = null;
@@ -259,7 +259,7 @@ internal sealed partial class Md4cParser
         pipeOffs[j++] = end + 1;
 
         // Process cells.
-        ret = EnterBlock(MdBlockType.Tr, null);
+        ret = EnterBlock(MarkdownBlockType.Tr, null);
         if (ret != 0) goto abort;
 
         int k = 0;
@@ -280,7 +280,7 @@ internal sealed partial class Md4cParser
 
     leave_tr:
         {
-            int r = LeaveBlock(MdBlockType.Tr, null);
+            int r = LeaveBlock(MarkdownBlockType.Tr, null);
             if (ret == 0) ret = r;
         }
 
@@ -299,31 +299,31 @@ internal sealed partial class Md4cParser
 
         Debug.Assert(nLines >= 2);
 
-        var align = new MdAlign[colCount];
+        var align = new MarkdownAlign[colCount];
 
         AnalyzeTableAlignment(lines[lineOffset + 1].Beg, lines[lineOffset + 1].End, align, colCount);
 
-        ret = EnterBlock(MdBlockType.Thead, null);
+        ret = EnterBlock(MarkdownBlockType.Thead, null);
         if (ret != 0) return ret;
-        ret = ProcessTableRow(MdBlockType.Th,
+        ret = ProcessTableRow(MarkdownBlockType.Th,
                     lines[lineOffset].Beg, lines[lineOffset].End, align, colCount);
         {
-            int r = LeaveBlock(MdBlockType.Thead, null);
+            int r = LeaveBlock(MarkdownBlockType.Thead, null);
             if (ret == 0) ret = r;
             if (ret != 0) return ret;
         }
 
         if (nLines > 2)
         {
-            ret = EnterBlock(MdBlockType.Tbody, null);
+            ret = EnterBlock(MarkdownBlockType.Tbody, null);
             if (ret != 0) return ret;
             for (int lineIndex = 2; lineIndex < nLines; lineIndex++)
             {
-                ret = ProcessTableRow(MdBlockType.Td,
+                ret = ProcessTableRow(MarkdownBlockType.Td,
                          lines[lineOffset + lineIndex].Beg, lines[lineOffset + lineIndex].End, align, colCount);
                 if (ret != 0) break;
             }
-            int r = LeaveBlock(MdBlockType.Tbody, null);
+            int r = LeaveBlock(MarkdownBlockType.Tbody, null);
             if (ret == 0) ret = r;
         }
 
@@ -334,7 +334,7 @@ internal sealed partial class Md4cParser
 
     private int ProcessLeafBlock(int blockIndex)
     {
-        MdBlockCodeDetail codeDet = default;
+        MarkdownBlockCodeDetail codeDet = default;
         bool isInTightList;
         int ret = 0;
 
@@ -349,11 +349,11 @@ internal sealed partial class Md4cParser
 
         switch (block.Type)
         {
-            case MdBlockType.H:
-                detail = new MdBlockHDetail { Level = block.Data };
+            case MarkdownBlockType.H:
+                detail = new MarkdownBlockHDetail { Level = block.Data };
                 break;
 
-            case MdBlockType.Code:
+            case MarkdownBlockType.Code:
                 if (block.Data != 0)
                 {
                     ret = SetupFencedCodeDetail(blockIndex, out codeDet);
@@ -362,12 +362,12 @@ internal sealed partial class Md4cParser
                 }
                 else
                 {
-                    detail = new MdBlockCodeDetail();
+                    detail = new MarkdownBlockCodeDetail();
                 }
                 break;
 
-            case MdBlockType.Table:
-                detail = new MdBlockTableDetail
+            case MarkdownBlockType.Table:
+                detail = new MarkdownBlockTableDetail
                 {
                     ColCount = block.Data,
                     HeadRowCount = 1,
@@ -379,7 +379,7 @@ internal sealed partial class Md4cParser
                 break;
         }
 
-        if (!isInTightList || block.Type != MdBlockType.P)
+        if (!isInTightList || block.Type != MarkdownBlockType.P)
         {
             ret = EnterBlock(block.Type, detail);
             if (ret != 0) return ret;
@@ -388,25 +388,25 @@ internal sealed partial class Md4cParser
         // Process the block contents according to its type.
         switch (block.Type)
         {
-            case MdBlockType.Hr:
+            case MarkdownBlockType.Hr:
                 // noop
                 break;
 
-            case MdBlockType.Code:
+            case MarkdownBlockType.Code:
             {
                 int verbLineStart = GetBlockVerbatimLineStart(blockIndex);
                 ret = ProcessCodeBlockContents(block.Data != 0, blockVerbatimLines_arr, block.NLines, verbLineStart);
                 break;
             }
 
-            case MdBlockType.Html:
+            case MarkdownBlockType.Html:
             {
                 int verbLineStart = GetBlockVerbatimLineStart(blockIndex);
-                ret = ProcessVerbatimBlockContents(MdTextType.Html, blockVerbatimLines_arr, block.NLines, verbLineStart);
+                ret = ProcessVerbatimBlockContents(MarkdownTextType.Html, blockVerbatimLines_arr, block.NLines, verbLineStart);
                 break;
             }
 
-            case MdBlockType.Table:
+            case MarkdownBlockType.Table:
             {
                 int lineStart = GetBlockLineStart(blockIndex);
                 ret = ProcessTableBlockContents(block.Data, blockLines_arr, block.NLines, lineStart);
@@ -421,7 +421,7 @@ internal sealed partial class Md4cParser
             }
         }
 
-        if (!isInTightList || block.Type != MdBlockType.P)
+        if (!isInTightList || block.Type != MarkdownBlockType.P)
         {
             int r = LeaveBlock(block.Type, detail);
             if (ret == 0) ret = r;
@@ -472,7 +472,7 @@ internal sealed partial class Md4cParser
             if ((b.Flags & BLOCK_CONTAINER) != 0)
                 continue;
 
-            if (b.Type == MdBlockType.Code || b.Type == MdBlockType.Html)
+            if (b.Type == MarkdownBlockType.Code || b.Type == MarkdownBlockType.Html)
                 verbIdx += b.NLines;
             else
                 lineIdx += b.NLines;
@@ -498,16 +498,16 @@ internal sealed partial class Md4cParser
 
             switch (block.Type)
             {
-                case MdBlockType.Ul:
-                    det = new MdBlockUlDetail
+                case MarkdownBlockType.Ul:
+                    det = new MarkdownBlockUlDetail
                     {
                         IsTight = (block.Flags & BLOCK_LOOSE_LIST) == 0,
                         Mark = (char)block.Data,
                     };
                     break;
 
-                case MdBlockType.Ol:
-                    det = new MdBlockOlDetail
+                case MarkdownBlockType.Ol:
+                    det = new MarkdownBlockOlDetail
                     {
                         Start = block.NLines,
                         IsTight = (block.Flags & BLOCK_LOOSE_LIST) == 0,
@@ -515,8 +515,8 @@ internal sealed partial class Md4cParser
                     };
                     break;
 
-                case MdBlockType.Li:
-                    det = new MdBlockLiDetail
+                case MarkdownBlockType.Li:
+                    det = new MarkdownBlockLiDetail
                     {
                         IsTask = block.Data != 0,
                         TaskMark = (char)block.Data,
@@ -535,7 +535,7 @@ internal sealed partial class Md4cParser
                     ret = LeaveBlock(block.Type, det);
                     if (ret != 0) return ret;
 
-                    if (block.Type == MdBlockType.Ul || block.Type == MdBlockType.Ol || block.Type == MdBlockType.Quote)
+                    if (block.Type == MarkdownBlockType.Ul || block.Type == MarkdownBlockType.Ol || block.Type == MarkdownBlockType.Quote)
                         nContainers--;
                 }
 
@@ -544,12 +544,12 @@ internal sealed partial class Md4cParser
                     ret = EnterBlock(block.Type, det);
                     if (ret != 0) return ret;
 
-                    if (block.Type == MdBlockType.Ul || block.Type == MdBlockType.Ol)
+                    if (block.Type == MarkdownBlockType.Ul || block.Type == MarkdownBlockType.Ol)
                     {
                         containers[nContainers].IsLoose = (block.Flags & BLOCK_LOOSE_LIST) != 0;
                         nContainers++;
                     }
-                    else if (block.Type == MdBlockType.Quote)
+                    else if (block.Type == MarkdownBlockType.Quote)
                     {
                         containers[nContainers].IsLoose = true;
                         nContainers++;
@@ -581,25 +581,25 @@ internal sealed partial class Md4cParser
         switch (line.Type)
         {
             case LineType.Hr:
-                block.Type = MdBlockType.Hr;
+                block.Type = MarkdownBlockType.Hr;
                 break;
 
             case LineType.AtxHeader:
             case LineType.SetextHeader:
-                block.Type = MdBlockType.H;
+                block.Type = MarkdownBlockType.H;
                 break;
 
             case LineType.FencedCode:
             case LineType.IndentedCode:
-                block.Type = MdBlockType.Code;
+                block.Type = MarkdownBlockType.Code;
                 break;
 
             case LineType.Text:
-                block.Type = MdBlockType.P;
+                block.Type = MarkdownBlockType.P;
                 break;
 
             case LineType.Html:
-                block.Type = MdBlockType.Html;
+                block.Type = MarkdownBlockType.Html;
                 break;
 
             case LineType.Blank:
@@ -668,8 +668,8 @@ internal sealed partial class Md4cParser
             return ret;
 
         // Check for reference definitions.
-        if (CurrentBlock.Type == MdBlockType.P ||
-           (CurrentBlock.Type == MdBlockType.H && (CurrentBlock.Flags & BLOCK_SETEXT_HEADER) != 0))
+        if (CurrentBlock.Type == MarkdownBlockType.P ||
+           (CurrentBlock.Type == MarkdownBlockType.H && (CurrentBlock.Flags & BLOCK_SETEXT_HEADER) != 0))
         {
             int lineStart = GetCurrentBlockLineStart();
             if (lineStart < blockLines.Count)
@@ -686,7 +686,7 @@ internal sealed partial class Md4cParser
             }
         }
 
-        if (CurrentBlock.Type == MdBlockType.H && (CurrentBlock.Flags & BLOCK_SETEXT_HEADER) != 0)
+        if (CurrentBlock.Type == MarkdownBlockType.H && (CurrentBlock.Flags & BLOCK_SETEXT_HEADER) != 0)
         {
             int nLines = CurrentBlock.NLines;
 
@@ -697,7 +697,7 @@ internal sealed partial class Md4cParser
             }
             else
             {
-                CurrentBlock.Type = MdBlockType.P;
+                CurrentBlock.Type = MarkdownBlockType.P;
                 return 0;
             }
         }
@@ -711,7 +711,7 @@ internal sealed partial class Md4cParser
     {
         Debug.Assert(currentBlockIndex >= 0);
 
-        if (CurrentBlock.Type == MdBlockType.Code || CurrentBlock.Type == MdBlockType.Html)
+        if (CurrentBlock.Type == MarkdownBlockType.Code || CurrentBlock.Type == MarkdownBlockType.Html)
         {
             blockVerbatimLines.Add(new VerbatimLine
             {
@@ -733,7 +733,7 @@ internal sealed partial class Md4cParser
         return 0;
     }
 
-    private int PushContainerBytes(MdBlockType type, int start, int data, byte blockFlags)
+    private int PushContainerBytes(MarkdownBlockType type, int start, int data, byte blockFlags)
     {
         int ret = EndCurrentBlock();
         if (ret != 0) return ret;
@@ -766,7 +766,7 @@ internal sealed partial class Md4cParser
             ref Block b = ref span[i];
             if ((b.Flags & BLOCK_CONTAINER) != 0)
                 continue;
-            if (b.Type != MdBlockType.Code && b.Type != MdBlockType.Html)
+            if (b.Type != MarkdownBlockType.Code && b.Type != MarkdownBlockType.Html)
                 lineIdx += b.NLines;
         }
         return lineIdx;
@@ -819,7 +819,7 @@ internal sealed partial class Md4cParser
             return false;
         pLevel = n;
 
-        if ((flags & MdParserFlags.PermissiveAtxHeaders) == 0 && off < size &&
+        if ((flags & MarkdownParserFlags.PermissiveAtxHeaders) == 0 && off < size &&
             !Md4cUnicode.IsBlank(text[off]) && !Md4cUnicode.IsNewline(text[off]))
             return false;
 
@@ -1186,11 +1186,11 @@ internal sealed partial class Md4cParser
                     c.BlockIndex = blocks.Count;
 
                     ret = PushContainerBytes(
-                        isOrderedList ? MdBlockType.Ol : MdBlockType.Ul,
+                        isOrderedList ? MarkdownBlockType.Ol : MarkdownBlockType.Ul,
                         c.Start, c.Ch, BLOCK_CONTAINER_OPENER);
                     if (ret != 0) return ret;
 
-                    ret = PushContainerBytes(MdBlockType.Li,
+                    ret = PushContainerBytes(MarkdownBlockType.Li,
                         c.TaskMarkOff,
                         c.IsTask ? text[c.TaskMarkOff] : 0,
                         BLOCK_CONTAINER_OPENER);
@@ -1198,7 +1198,7 @@ internal sealed partial class Md4cParser
                     break;
 
                 case '>':
-                    ret = PushContainerBytes(MdBlockType.Quote, 0, 0, BLOCK_CONTAINER_OPENER);
+                    ret = PushContainerBytes(MarkdownBlockType.Quote, 0, 0, BLOCK_CONTAINER_OPENER);
                     if (ret != 0) return ret;
                     break;
 
@@ -1230,19 +1230,19 @@ internal sealed partial class Md4cParser
                 case '-':
                 case '+':
                 case '*':
-                    ret = PushContainerBytes(MdBlockType.Li,
+                    ret = PushContainerBytes(MarkdownBlockType.Li,
                         c.TaskMarkOff, c.IsTask ? text[c.TaskMarkOff] : 0,
                         BLOCK_CONTAINER_CLOSER);
                     if (ret != 0) return ret;
 
                     ret = PushContainerBytes(
-                        isOrderedList ? MdBlockType.Ol : MdBlockType.Ul,
+                        isOrderedList ? MarkdownBlockType.Ol : MarkdownBlockType.Ul,
                         0, c.Ch, BLOCK_CONTAINER_CLOSER);
                     if (ret != 0) return ret;
                     break;
 
                 case '>':
-                    ret = PushContainerBytes(MdBlockType.Quote, 0, 0, BLOCK_CONTAINER_CLOSER);
+                    ret = PushContainerBytes(MarkdownBlockType.Quote, 0, 0, BLOCK_CONTAINER_CLOSER);
                     if (ret != 0) return ret;
                     break;
 
@@ -1477,7 +1477,7 @@ internal sealed partial class Md4cParser
                     {
                         var span = CollectionsMarshal.AsSpan(blocks);
                         ref Block topBlock = ref span[blocks.Count - 1];
-                        if (topBlock.Type == MdBlockType.Li)
+                        if (topBlock.Type == MarkdownBlockType.Li)
                             lastListItemStartsWithTwoBlankLines = true;
                     }
                 }
@@ -1494,7 +1494,7 @@ internal sealed partial class Md4cParser
                     {
                         var span = CollectionsMarshal.AsSpan(blocks);
                         ref Block topBlock = ref span[blocks.Count - 1];
-                        if (topBlock.Type == MdBlockType.Li)
+                        if (topBlock.Type == MarkdownBlockType.Li)
                         {
                             nParents--;
                             line.Indent = totalIndent;
@@ -1674,7 +1674,7 @@ internal sealed partial class Md4cParser
 
             // Check for start of raw HTML block.
             if (off < size && text[off] == '<' &&
-                (flags & MdParserFlags.NoHtmlBlocks) == 0)
+                (flags & MarkdownParserFlags.NoHtmlBlocks) == 0)
             {
                 htmlBlockType = IsHtmlBlockStartCondition(off);
 
@@ -1695,7 +1695,7 @@ internal sealed partial class Md4cParser
             }
 
             // Check for table underline.
-            if ((flags & MdParserFlags.Tables) != 0 && pivotLine.Type == LineType.Text &&
+            if ((flags & MarkdownParserFlags.Tables) != 0 && pivotLine.Type == LineType.Text &&
                 off < size && IsAnyOf3(text[off], '|', '-', ':') &&
                 nParents == nContainers)
             {
@@ -1717,7 +1717,7 @@ internal sealed partial class Md4cParser
             }
 
             // Check for task mark.
-            if ((flags & MdParserFlags.TaskLists) != 0 && nBrothers + nChildren > 0 &&
+            if ((flags & MarkdownParserFlags.TaskLists) != 0 && nBrothers + nChildren > 0 &&
                 IsAnyOf(containers[nContainers - 1].Ch, "-+*.)"))
             {
                 int tmp = off;
@@ -1758,7 +1758,7 @@ internal sealed partial class Md4cParser
                 tmp--;
             while (tmp > line.Beg && text[tmp - 1] == '#')
                 tmp--;
-            if (tmp == line.Beg || Md4cUnicode.IsBlank(text[tmp - 1]) || (flags & MdParserFlags.PermissiveAtxHeaders) != 0)
+            if (tmp == line.Beg || Md4cUnicode.IsBlank(text[tmp - 1]) || (flags & MarkdownParserFlags.PermissiveAtxHeaders) != 0)
                 line.End = tmp;
         }
 
@@ -1802,12 +1802,12 @@ internal sealed partial class Md4cParser
         if (nBrothers > 0)
         {
             Debug.Assert(nBrothers == 1);
-            ret = PushContainerBytes(MdBlockType.Li,
+            ret = PushContainerBytes(MarkdownBlockType.Li,
                 containers[nParents].TaskMarkOff,
                 containers[nParents].IsTask ? text[containers[nParents].TaskMarkOff] : 0,
                 BLOCK_CONTAINER_CLOSER);
             if (ret != 0) return ret;
-            ret = PushContainerBytes(MdBlockType.Li,
+            ret = PushContainerBytes(MarkdownBlockType.Li,
                 container.TaskMarkOff,
                 container.IsTask ? text[container.TaskMarkOff] : 0,
                 BLOCK_CONTAINER_OPENER);
@@ -1873,7 +1873,7 @@ internal sealed partial class Md4cParser
         if (line.Type == LineType.SetextUnderline)
         {
             Debug.Assert(currentBlockIndex >= 0);
-            CurrentBlock.Type = MdBlockType.H;
+            CurrentBlock.Type = MarkdownBlockType.H;
             CurrentBlock.Data = line.Data;
             CurrentBlock.Flags |= BLOCK_SETEXT_HEADER;
             ret = AddLineIntoCurrentBlock(ref line);
@@ -1897,7 +1897,7 @@ internal sealed partial class Md4cParser
         {
             Debug.Assert(currentBlockIndex >= 0);
             Debug.Assert(CurrentBlock.NLines == 1);
-            CurrentBlock.Type = MdBlockType.Table;
+            CurrentBlock.Type = MarkdownBlockType.Table;
             CurrentBlock.Data = line.Data;
             Debug.Assert(pivotSlot >= 0);
             lineBuf[pivotSlot].Type = LineType.Table;
@@ -1937,7 +1937,7 @@ internal sealed partial class Md4cParser
         int off = 0;
         int ret = 0;
 
-        ret = EnterBlock(MdBlockType.Doc, null);
+        ret = EnterBlock(MarkdownBlockType.Doc, null);
         if (ret != 0) return ret;
 
         while (off < size)
@@ -1980,7 +1980,7 @@ internal sealed partial class Md4cParser
         if (ret != 0) goto abort;
 
         {
-            int r = LeaveBlock(MdBlockType.Doc, null);
+            int r = LeaveBlock(MarkdownBlockType.Doc, null);
             if (ret == 0) ret = r;
         }
 
@@ -1990,7 +1990,7 @@ internal sealed partial class Md4cParser
 
     // ── Table alignment analysis ─────────────────────────────────────────
 
-    private void AnalyzeTableAlignment(int beg, int end, MdAlign[] align, int colCount)
+    private void AnalyzeTableAlignment(int beg, int end, MarkdownAlign[] align, int colCount)
     {
         int off = beg;
         int k = 0;
@@ -2015,13 +2015,13 @@ internal sealed partial class Md4cParser
             if (hasRight) off++;
 
             if (hasLeft && hasRight)
-                align[k] = MdAlign.Center;
+                align[k] = MarkdownAlign.Center;
             else if (hasLeft)
-                align[k] = MdAlign.Left;
+                align[k] = MarkdownAlign.Left;
             else if (hasRight)
-                align[k] = MdAlign.Right;
+                align[k] = MarkdownAlign.Right;
             else
-                align[k] = MdAlign.Default;
+                align[k] = MarkdownAlign.Default;
 
             k++;
 

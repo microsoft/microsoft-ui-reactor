@@ -253,7 +253,7 @@ These tests instantiate **both** `DataPageCache<T>` and `UseInfiniteResource`-ba
 
 ### 2.6 Phase-2 dogfood (§16 Phase 2)
 
-- [x] Infinite-list demo on the `AsyncValueSamples` page — pull-model via `ItemAt`, null-placeholder rows (`InfiniteScrollScenario`, uses `VirtualListDsl.VirtualList`)
+- [x] Infinite-list demo on the `AsyncValueSamples` page — pull-model via `ItemAt`, null-placeholder rows (`InfiniteScrollScenario`, uses `VirtualList`)
 - [x] Search-as-you-type over an infinite list — deps + pull model together (`SearchInfiniteScenario`)
 - [x] `Refresh()` demo — button-triggered, epoch-stamped values prove the swap (`InfiniteRefreshScenario`)
 - [x] `UseDataSource` adapter demo — `IDataSource<T>` wired through the hook (`DataSourceAdapterScenario`)

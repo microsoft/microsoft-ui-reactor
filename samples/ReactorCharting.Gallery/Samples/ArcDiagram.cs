@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -25,7 +25,7 @@ public sealed class ArcDiagramSample : GallerySample
              }),
              ..Enumerable.Range(0, nodeCount).SelectMany(i => new Element[] {
                  D3Circle(nodeX[i], baseline, 8) with { Fill = fill },
-                 D3Dsl.Text(nodeX[i] - 24, baseline + 14, labels[i], 9, ChartMutedForeground),
+                 D3Charts.Text(nodeX[i] - 24, baseline + 14, labels[i], 9, ChartMutedForeground),
              }),
             ]
         )
@@ -90,7 +90,7 @@ public sealed class ArcDiagramSample : GallerySample
                      TextCenter(nodeX[i] - 24, baseline + 14, labels[i], 48, 9, ChartMutedForeground),
                  };
              }),
-             D3Dsl.Text(12, 6, "Arc Diagram", 14, ChartForeground),
+             D3Charts.Text(12, 6, "Arc Diagram", 14, ChartForeground),
             ]
         )
             .AutomationName("Arc Diagram")

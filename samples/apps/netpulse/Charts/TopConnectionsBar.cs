@@ -2,7 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace NetPulse.Charts;
@@ -44,7 +44,7 @@ sealed class TopConnectionsBar : Component<TopConnectionsBarProps>
         if (connections.Count == 0)
         {
             return D3Canvas(W, H,
-                D3Dsl.Text(Left, Top + PlotH / 2, "No TCP connections", 12, Gray(100)));
+                D3Charts.Text(Left, Top + PlotH / 2, "No TCP connections", 12, Gray(100)));
         }
 
         // Filter out listeners, take top N sorted by remote port (causes constant reordering)
@@ -58,7 +58,7 @@ sealed class TopConnectionsBar : Component<TopConnectionsBarProps>
         if (top.Length == 0)
         {
             return D3Canvas(W, H,
-                D3Dsl.Text(Left, Top + PlotH / 2, "No active connections", 12, Gray(100)));
+                D3Charts.Text(Left, Top + PlotH / 2, "No active connections", 12, Gray(100)));
         }
 
         double maxPort = top.Max(c => (double)c.RemotePort);
@@ -105,7 +105,7 @@ sealed class TopConnectionsBar : Component<TopConnectionsBarProps>
 
             // State badge
             elements.Add(
-                D3Dsl.Text(Left + barW + 4, y + barH / 2 - 7,
+                D3Charts.Text(Left + barW + 4, y + barH / 2 - 7,
                     conn.State.ToString(), 8, Brush(Palette[colorIdx % Palette.Count]))
                 .WithKey($"st-{conn.Key}"));
         }
@@ -123,11 +123,11 @@ sealed class TopConnectionsBar : Component<TopConnectionsBarProps>
 
         foreach (var t in xs.Ticks(5))
         {
-            elements.Add(D3Dsl.Text(Left + xs.Map(t) - 12, Top + PlotH + 4,
+            elements.Add(D3Charts.Text(Left + xs.Map(t) - 12, Top + PlotH + 4,
                 Fmt(t), 9, axisBrush));
         }
 
-        elements.Add(D3Dsl.Text(Left, 4, $"Top {top.Length} Connections (by remote port)", 13, Gray(40)));
+        elements.Add(D3Charts.Text(Left, 4, $"Top {top.Length} Connections (by remote port)", 13, Gray(40)));
 
         return D3Canvas(W, H, elements.ToArray());
     }

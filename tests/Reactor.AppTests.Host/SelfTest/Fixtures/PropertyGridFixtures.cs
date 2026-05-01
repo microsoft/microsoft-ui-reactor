@@ -147,7 +147,7 @@ internal static class PropertyGridFixtures
             {
                 ctx.UseObservable(model);
                 return VStack(
-                    PropertyGridDsl.PropertyGrid(model, registry),
+                    PropertyGrid(model, registry),
                     TextBlock($"Live: {model.Name},{model.Age},{model.Active}")
                 );
             });
@@ -169,7 +169,7 @@ internal static class PropertyGridFixtures
             var registry = new TypeRegistry();
 
             var host = H.CreateHost();
-            host.Mount(_ => PropertyGridDsl.PropertyGrid(model, registry));
+            host.Mount(_ => PropertyGrid(model, registry));
             await Harness.Render();
 
             H.Check("Categorized_ShowsGeneralCategory",
@@ -193,7 +193,7 @@ internal static class PropertyGridFixtures
             var registry = new TypeRegistry();
 
             var host = H.CreateHost();
-            host.Mount(_ => PropertyGridDsl.PropertyGrid(model, registry));
+            host.Mount(_ => PropertyGrid(model, registry));
             await Harness.Render();
 
             H.Check("Enum_ShowsBlendProperty", H.FindText("Blend") is not null);
@@ -215,7 +215,7 @@ internal static class PropertyGridFixtures
             {
                 ctx.UseObservable(model);
                 return VStack(
-                    PropertyGridDsl.PropertyGrid(model, registry),
+                    PropertyGrid(model, registry),
                     TextBlock($"Pos: {model.Position}")
                 );
             });
@@ -255,7 +255,7 @@ internal static class PropertyGridFixtures
             {
                 var (point, setPoint) = ctx.UseState(new Point2D(5, 10));
                 return VStack(
-                    PropertyGridDsl.PropertyGrid(point, registry,
+                    PropertyGrid(point, registry,
                         onRootChanged: obj => setPoint((Point2D)obj)),
                     TextBlock($"Current: {point}")
                 );
@@ -304,7 +304,7 @@ internal static class PropertyGridFixtures
             var model = new ShapeModel();
 
             var host = H.CreateHost();
-            host.Mount(_ => PropertyGridDsl.PropertyGrid(model, registry));
+            host.Mount(_ => PropertyGrid(model, registry));
             await Harness.Render();
 
             H.Check("CustomEditor_ShowsCustomText",
@@ -332,7 +332,7 @@ internal static class PropertyGridFixtures
                 ctx.UseObservable(person);
                 ctx.UseObservable(material);
                 ctx.UseObservable(shape);
-                return PropertyGridDsl.PropertyGrid(target, registry);
+                return PropertyGrid(target, registry);
             });
             await Harness.Render();
 
@@ -372,7 +372,7 @@ internal static class PropertyGridFixtures
             var registry = new TypeRegistry();
 
             var host = H.CreateHost();
-            host.Mount(_ => PropertyGridDsl.PropertyGrid(model, registry));
+            host.Mount(_ => PropertyGrid(model, registry));
             await Harness.Render();
 
             H.Check("CategoryCollapse_TitleVisible", H.FindText("Title") is not null);
@@ -429,7 +429,7 @@ internal static class PropertyGridFixtures
             {
                 var (c, setC) = ctx.UseState(config);
                 return VStack(
-                    PropertyGridDsl.PropertyGrid(c, registry,
+                    PropertyGrid(c, registry,
                         onRootChanged: obj => setC((AppConfig)obj)),
                     TextBlock($"Config: {c.Label}, {c.Theme.Name}, ({c.Theme.Origin.X},{c.Theme.Origin.Y})")
                 );
@@ -455,7 +455,7 @@ internal static class PropertyGridFixtures
             {
                 ctx.UseObservable(person);
                 return VStack(
-                    PropertyGridDsl.PropertyGrid(person, registry),
+                    PropertyGrid(person, registry),
                     TextBlock($"Live: {person.Name}"),
                     Button("MutateName", () => person.Name = "Bob")
                 );

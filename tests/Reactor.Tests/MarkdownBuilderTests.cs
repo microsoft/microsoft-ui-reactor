@@ -1044,7 +1044,7 @@ public class MarkdownBuilderTests
     [Fact]
     public void ParserFlags_CommonMark_DisablesStrikethrough()
     {
-        var options = new MarkdownOptions { ParserFlags = MdParserFlags.None };
+        var options = new MarkdownOptions { ParserFlags = MarkdownParserFlags.None };
         var result = Md("~~text~~", options);
         var stack = AsVStack(result);
         var rtb = Child<RichTextBlockElement>(stack, 0);
@@ -1057,7 +1057,7 @@ public class MarkdownBuilderTests
     public void ParserFlags_Default_IsGitHub()
     {
         var options = new MarkdownOptions();
-        Assert.Equal(MdParserFlags.DialectGitHub, options.ParserFlags);
+        Assert.Equal(MarkdownParserFlags.DialectGitHub, options.ParserFlags);
     }
 
     [Fact]

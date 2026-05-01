@@ -2,7 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting;
 using static Microsoft.UI.Reactor.Factories;
-using static Microsoft.UI.Reactor.Charting.ChartDsl;
+using static Microsoft.UI.Reactor.Charting.Charts;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.Fixtures;
 
@@ -27,7 +27,7 @@ internal static class D3Fixtures
     internal static Element LineChart(RenderContext ctx) =>
         VStack(
             TextBlock("Line Chart").AutomationId("LineChartTitle"),
-            ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Width(600).Height(400)
                 .ShowAxes(true)
                 .ShowGrid(true)
@@ -38,7 +38,7 @@ internal static class D3Fixtures
     internal static Element BarChart(RenderContext ctx) =>
         VStack(
             TextBlock("Bar Chart").AutomationId("BarChartTitle"),
-            ChartDsl.BarChart(SampleBars, d => d.X, d => d.Y)
+            Charts.BarChart(SampleBars, d => d.X, d => d.Y)
                 .Width(600).Height(400)
                 .ShowAxes(true)
                 .ToElement()
@@ -48,7 +48,7 @@ internal static class D3Fixtures
     internal static Element PieChart(RenderContext ctx) =>
         VStack(
             TextBlock("Pie Chart").AutomationId("PieChartTitle"),
-            ChartDsl.PieChart(SamplePie, d => d.Value, d => d.Label)
+            Charts.PieChart(SamplePie, d => d.Value, d => d.Label)
                 .Width(400).Height(400)
                 .ToElement()
                 .AutomationId("PieChartCanvas")

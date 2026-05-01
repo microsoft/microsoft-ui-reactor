@@ -85,7 +85,7 @@ Derived from: `docs/spec/017-data-system-design.md`
 - [x] Update template delegates (`PropertyRowTemplate`, `PropertyLabelTemplate`) to accept `FieldDescriptor`
 - [x] Update category grouping logic to use `FieldDescriptor.Category`
 - [x] Update search/filter to use `FieldDescriptor.DisplayName` and `FieldDescriptor.Name`
-- [x] Update DSL (`PropertyGridDsl.cs`) to work with `FieldDescriptor`
+- [x] Update DSL (`Factories.cs`) to work with `FieldDescriptor`
 - [x] **Regression test**: run all existing `PropertyGridComponentTests` — all must pass
 - [x] Unit tests: component renders properties from `FieldDescriptor` list
 - [x] Unit tests: template delegates receive `FieldDescriptor` with correct properties
@@ -326,7 +326,7 @@ Derived from: `docs/spec/017-data-system-design.md`
 - [x] Unit tests: element construction with all property combinations
 
 #### 2A.3 Column DSL
-- [x] Create `Reactor/DataGrid/ColumnDsl.cs` — `Column<T>(name, accessor, ...)` helper (spec Appendix A)
+- [x] Create `Reactor/DataGrid/Factories.cs` — `Column<T>(name, accessor, ...)` helper (spec Appendix A)
 - [x] Support `editable`, `displayName`, `format`, `width`, `pin` parameters
 - [x] Support `.Validate(...)` chaining for per-column validators
 - [x] Auto-generate columns from `TypeRegistry` + reflection when `Columns` is null

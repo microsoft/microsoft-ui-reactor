@@ -321,29 +321,29 @@ internal static class ChartKeyboardNavigator
         const double innerRadius = 12;
 
         // Double-ring for 3:1 contrast on any background
-        var fc = D3Dsl.ForcedColors ?? ForcedColorsTheme.Default;
+        var fc = D3Charts.ForcedColors ?? ForcedColorsTheme.Default;
         var darkBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-            D3Dsl.IsForcedColors
+            D3Charts.IsForcedColors
                 ? fc.Foreground
                 : global::Windows.UI.Color.FromArgb(255, 0, 0, 0));
         var lightBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-            D3Dsl.IsForcedColors
+            D3Charts.IsForcedColors
                 ? fc.Highlight
                 : global::Windows.UI.Color.FromArgb(255, 255, 255, 255));
 
         // Use D3Circle for the rings (no fill, stroke only)
-        var outerRing = D3Dsl.D3Circle(x, y, outerRadius) with
+        var outerRing = D3Charts.D3Circle(x, y, outerRadius) with
         {
             Stroke = lightBrush,
             StrokeThickness = 1,
         };
-        var innerRing = D3Dsl.D3Circle(x, y, innerRadius) with
+        var innerRing = D3Charts.D3Circle(x, y, innerRadius) with
         {
             Stroke = darkBrush,
             StrokeThickness = 1,
         };
 
-        return D3Dsl.D3Canvas(chartWidth, chartHeight, outerRing, innerRing)
+        return D3Charts.D3Canvas(chartWidth, chartHeight, outerRing, innerRing)
             .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
     }
 

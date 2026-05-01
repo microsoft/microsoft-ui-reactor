@@ -18,7 +18,7 @@ state-driven updates.
 
 ## Problem Statement
 
-The high-level chart factories in `ReactorCharting/Charts/ChartDsl.cs` bypass
+The high-level chart factories in `ReactorCharting/Charts/Charts.cs` bypass
 Reactor's virtual tree entirely. Each `ChartElement<T>` wraps a
 `XamlHostElement` that creates a raw WinUI `Canvas` and imperatively
 calls `canvas.Children.Add(...)` to draw shapes:
@@ -72,7 +72,7 @@ migration:
 - Chart shapes can use Reactor modifiers (animation, theming, accessibility)
 - No special registration or escape hatches needed
 - `OnReady` / `ChartHandle.Redraw` still works for live-data scenarios
-- The `using static Microsoft.UI.Reactor.Charting.ChartDsl;` API is unchanged
+- The `using static Microsoft.UI.Reactor.Charting.Charts;` API is unchanged
 
 ---
 
@@ -324,7 +324,7 @@ data costs essentially zero.
 
 ## What Does NOT Change
 
-- `using static Microsoft.UI.Reactor.Charting.ChartDsl;` import
+- `using static Microsoft.UI.Reactor.Charting.Charts;` import
 - `LineChart<T>(data, x, y)` factory signature
 - `.Width()`, `.Height()`, `.Margin()`, `.Stroke()`, `.Fill()` builder methods
 - `.ShowAxes()`, `.ShowGrid()` configuration

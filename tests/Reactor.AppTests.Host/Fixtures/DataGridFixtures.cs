@@ -40,15 +40,15 @@ internal static class DataGridFixtures
 
             var columns = new FieldDescriptor[]
             {
-                ColumnDsl.Column<Employee>("Id", e => e.Id, width: 60),
-                ColumnDsl.Column<Employee>("FirstName", e => e.FirstName, editable: true, displayName: "First Name", width: 140),
-                ColumnDsl.Column<Employee>("LastName", e => e.LastName, editable: true, displayName: "Last Name", width: 140),
-                ColumnDsl.Column<Employee>("Salary", e => e.Salary, format: "C0", width: 100),
+                Column<Employee>("Id", e => e.Id, width: 60),
+                Column<Employee>("FirstName", e => e.FirstName, editable: true, displayName: "First Name", width: 140),
+                Column<Employee>("LastName", e => e.LastName, editable: true, displayName: "Last Name", width: 140),
+                Column<Employee>("Salary", e => e.Salary, format: "C0", width: 100),
             };
 
             return VStack(8,
                 TextBlock($"Last edit: {lastEdit}").AutomationId("EditStatus"),
-                DataGridDsl.DataGrid(
+                DataGrid(
                     source: source,
                     columns: columns,
                     editable: true,

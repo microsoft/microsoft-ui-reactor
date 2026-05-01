@@ -26,7 +26,7 @@ internal class EmployeeGrid : Component<EmployeeGridProps>
 
         return FlexColumn(
             // ── DataGrid ────────────────────────────────────────────
-            DataGridDsl.DataGrid(
+            DataGrid(
                 source: source,
                 columns: visibleColumns,
                 selectionMode: SelectionMode.Multiple,

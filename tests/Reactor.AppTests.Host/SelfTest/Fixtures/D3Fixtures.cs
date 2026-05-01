@@ -7,7 +7,7 @@ using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
-using static Microsoft.UI.Reactor.Charting.ChartDsl;
+using static Microsoft.UI.Reactor.Charting.Charts;
 using WinShapes = Microsoft.UI.Xaml.Shapes;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
@@ -40,7 +40,7 @@ internal static class D3Fixtures
             host.Mount(ctx =>
                 VStack(
                     TextBlock("Line Chart"),
-                    ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+                    Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                         .Width(600).Height(400)
                         .ShowAxes(true)
                         .ShowGrid(true)
@@ -71,7 +71,7 @@ internal static class D3Fixtures
             host.Mount(ctx =>
                 VStack(
                     TextBlock("Bar Chart"),
-                    ChartDsl.BarChart(SampleBars, d => d.X, d => d.Y)
+                    Charts.BarChart(SampleBars, d => d.X, d => d.Y)
                         .Width(600).Height(400)
                         .ShowAxes(true)
                         .ToElement()
@@ -102,7 +102,7 @@ internal static class D3Fixtures
             host.Mount(ctx =>
                 VStack(
                     TextBlock("Pie Chart"),
-                    ChartDsl.PieChart(SamplePie, d => d.Value, d => d.Label)
+                    Charts.PieChart(SamplePie, d => d.Value, d => d.Label)
                         .Width(400).Height(400)
                         .ToElement()
                 )
@@ -132,7 +132,7 @@ internal static class D3Fixtures
             host.Mount(ctx =>
                 VStack(
                     TextBlock("Area Chart"),
-                    ChartDsl.AreaChart(SampleLine, d => d.X, d => d.Y)
+                    Charts.AreaChart(SampleLine, d => d.X, d => d.Y)
                         .Width(600).Height(400)
                         .ShowAxes(true)
                         .ShowGrid(true)
@@ -171,7 +171,7 @@ internal static class D3Fixtures
             host.Mount(ctx =>
                 VStack(
                     TextBlock("Tree Chart"),
-                    ChartDsl.TreeChart<TreeItem>(TreeData, t => t.Kids, t => t.Name)
+                    Charts.TreeChart<TreeItem>(TreeData, t => t.Kids, t => t.Name)
                         .Width(600).Height(400)
                         .ToElement()
                 )
@@ -218,7 +218,7 @@ internal static class D3Fixtures
             host.Mount(ctx =>
                 VStack(
                     TextBlock("Force Graph"),
-                    ChartDsl.ForceGraph(nodes, links)
+                    Charts.ForceGraph(nodes, links)
                         .Width(600).Height(400)
                         .ToElement()
                 )
@@ -256,7 +256,7 @@ internal static class D3Fixtures
             host.Mount(ctx =>
                 VStack(
                     TextBlock("Customized Chart"),
-                    ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+                    Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                         .Width(800).Height(500)
                         .Margin(30, 30, 40, 50)
                         .Stroke("#ff0000")
@@ -298,7 +298,7 @@ internal static class D3Fixtures
             host.Mount(ctx =>
                 VStack(
                     TextBlock("Pie Chart Labels"),
-                    ChartDsl.PieChart(SamplePie, d => d.Value, d => d.Label)
+                    Charts.PieChart(SamplePie, d => d.Value, d => d.Label)
                         .Width(400).Height(400)
                         .ToElement()
                 )

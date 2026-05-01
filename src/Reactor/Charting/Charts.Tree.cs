@@ -1,6 +1,6 @@
 using Microsoft.UI.Reactor.Charting.Accessibility;
 using Microsoft.UI.Reactor.Charting.D3;
-// Tree and Force Graph chart DSL for Reactor integration
+// Tree and Force Graph chart factories for Reactor integration
 
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
@@ -9,11 +9,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using WinShapes = Microsoft.UI.Xaml.Shapes;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 
 namespace Microsoft.UI.Reactor.Charting;
 
-public static partial class ChartDsl
+public static partial class Charts
 {
     /// <summary>
     /// Creates a tree diagram from hierarchical data.
@@ -127,7 +127,7 @@ public sealed class TreeChartElement<T> : IChartAccessibilityData
             {
                 double labelX = node.Children.Count > 0 ? node.X - 15 : node.X + _nodeRadius + 4;
                 double labelY = node.Children.Count > 0 ? node.Y - _nodeRadius - 14 : node.Y - 6;
-                return (Element)D3Dsl.Text(labelX, labelY, LabelAccessor(node.Data), 10, textBrush)
+                return (Element)D3Charts.Text(labelX, labelY, LabelAccessor(node.Data), 10, textBrush)
                     .WithKey($"label-{i}");
             }).ToArray()
             : [];

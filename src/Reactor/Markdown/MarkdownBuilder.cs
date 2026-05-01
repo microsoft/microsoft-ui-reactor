@@ -36,7 +36,7 @@ public record MarkdownOptions
     /// <summary>Override thematic break rendering.</summary>
     public Func<Element>? ThematicBreak { get; init; }
     /// <summary>Override table rendering. (rows, columnAlignments)</summary>
-    public Func<Element[], MdAlign[], Element>? Table { get; init; }
+    public Func<Element[], MarkdownAlign[], Element>? Table { get; init; }
     /// <summary>Override raw HTML block rendering. (rawHtml)</summary>
     public Func<string, Element>? HtmlBlock { get; init; }
     /// <summary>Override image rendering. (altText, src)</summary>
@@ -45,7 +45,7 @@ public record MarkdownOptions
     /// <summary>Font family for inline code and code blocks. Default: "Consolas".</summary>
     public string CodeFontFamily { get; init; } = "Consolas";
     /// <summary>Parser flags. Default: DialectGitHub (tables, strikethrough, task lists).</summary>
-    public MdParserFlags ParserFlags { get; init; } = MdParserFlags.DialectGitHub;
+    public MarkdownParserFlags ParserFlags { get; init; } = MarkdownParserFlags.DialectGitHub;
 }
 
 /// <summary>
@@ -58,11 +58,11 @@ internal sealed class MarkdownBuilder
     // Block stack — each frame accumulates child elements for that block.
     private readonly struct BlockFrame
     {
-        public readonly MdBlockType Type;
+        public readonly MarkdownBlockType Type;
         public readonly object? Detail;
         public readonly List<Element> Children;
 
-        public BlockFrame(MdBlockType type, object? detail)
+        public BlockFrame(MarkdownBlockType type, object? detail)
         {
             Type = type;
             Detail = detail;
@@ -99,7 +99,7 @@ internal sealed class MarkdownBuilder
 
     // Table state.
     private int _tableColCount;
-    private MdAlign[]? _tableAligns;
+    private MarkdownAlign[]? _tableAligns;
     private readonly List<Element> _tableAllCells = new();
     private int _tableRowIndex;
     private int _tableCellIndex;
@@ -137,116 +137,116 @@ internal sealed class MarkdownBuilder
 
     // ── Block callbacks ──────────────────────────────────────────────────
 
-    private int OnEnterBlock(MdBlockType type, object? detail)
+    private int OnEnterBlock(MarkdownBlockType type, object? detail)
     {
         switch (type)
         {
-            case MdBlockType.Doc:
-            case MdBlockType.Quote:
-            case MdBlockType.Ul:
-            case MdBlockType.Ol:
-            case MdBlockType.Li:
-            case MdBlockType.P:
-            case MdBlockType.H:
-            case MdBlockType.Thead:
-            case MdBlockType.Tbody:
-            case MdBlockType.Tr:
+            case MarkdownBlockType.Doc:
+            case MarkdownBlockType.Quote:
+            case MarkdownBlockType.Ul:
+            case MarkdownBlockType.Ol:
+            case MarkdownBlockType.Li:
+            case MarkdownBlockType.P:
+            case MarkdownBlockType.H:
+            case MarkdownBlockType.Thead:
+            case MarkdownBlockType.Tbody:
+            case MarkdownBlockType.Tr:
                 _blockStack.Push(new BlockFrame(type, detail));
                 break;
 
-            case MdBlockType.Code:
+            case MarkdownBlockType.Code:
                 _blockStack.Push(new BlockFrame(type, detail));
                 _codeAccum = new StringBuilder();
-                if (detail is MdBlockCodeDetail codeDet && codeDet.Lang.Text is not null)
+                if (detail is MarkdownBlockCodeDetail codeDet && codeDet.Lang.Text is not null)
                     _codeBlockLang = codeDet.Lang.Text;
                 else
                     _codeBlockLang = null;
                 break;
 
-            case MdBlockType.Html:
+            case MarkdownBlockType.Html:
                 _blockStack.Push(new BlockFrame(type, detail));
                 _htmlAccum = new StringBuilder();
                 break;
 
-            case MdBlockType.Table:
+            case MarkdownBlockType.Table:
                 _blockStack.Push(new BlockFrame(type, detail));
-                if (detail is MdBlockTableDetail tableDet)
+                if (detail is MarkdownBlockTableDetail tableDet)
                 {
                     _tableColCount = tableDet.ColCount;
-                    _tableAligns = new MdAlign[_tableColCount];
+                    _tableAligns = new MarkdownAlign[_tableColCount];
                     _tableAllCells.Clear();
                     _tableRowIndex = 0;
                 }
                 break;
 
-            case MdBlockType.Th:
-            case MdBlockType.Td:
+            case MarkdownBlockType.Th:
+            case MarkdownBlockType.Td:
                 _blockStack.Push(new BlockFrame(type, detail));
                 _inlines.Clear();
                 break;
 
-            case MdBlockType.Hr:
+            case MarkdownBlockType.Hr:
                 // Hr has no children — produce it immediately.
                 break;
         }
 
         // Reset list item index on entering a list.
-        if (type == MdBlockType.Ul || type == MdBlockType.Ol)
+        if (type == MarkdownBlockType.Ul || type == MarkdownBlockType.Ol)
             _listItemIndex = 0;
 
         // Prepare inlines for text-bearing blocks.
-        if (type == MdBlockType.P || type == MdBlockType.H)
+        if (type == MarkdownBlockType.P || type == MarkdownBlockType.H)
             _inlines.Clear();
 
         return 0;
     }
 
-    private int OnLeaveBlock(MdBlockType type, object? detail)
+    private int OnLeaveBlock(MarkdownBlockType type, object? detail)
     {
         switch (type)
         {
-            case MdBlockType.Doc:
+            case MarkdownBlockType.Doc:
                 LeaveDoc();
                 break;
-            case MdBlockType.P:
+            case MarkdownBlockType.P:
                 LeaveParagraph();
                 break;
-            case MdBlockType.H:
+            case MarkdownBlockType.H:
                 LeaveHeading(detail);
                 break;
-            case MdBlockType.Quote:
+            case MarkdownBlockType.Quote:
                 LeaveBlockQuote();
                 break;
-            case MdBlockType.Ul:
+            case MarkdownBlockType.Ul:
                 LeaveUnorderedList();
                 break;
-            case MdBlockType.Ol:
+            case MarkdownBlockType.Ol:
                 LeaveOrderedList(detail);
                 break;
-            case MdBlockType.Li:
+            case MarkdownBlockType.Li:
                 LeaveListItem(detail);
                 break;
-            case MdBlockType.Code:
+            case MarkdownBlockType.Code:
                 LeaveCodeBlock();
                 break;
-            case MdBlockType.Html:
+            case MarkdownBlockType.Html:
                 LeaveHtmlBlock();
                 break;
-            case MdBlockType.Hr:
+            case MarkdownBlockType.Hr:
                 LeaveThematicBreak();
                 break;
-            case MdBlockType.Table:
+            case MarkdownBlockType.Table:
                 LeaveTable();
                 break;
-            case MdBlockType.Thead:
-            case MdBlockType.Tbody:
+            case MarkdownBlockType.Thead:
+            case MarkdownBlockType.Tbody:
                 LeaveTableSection();
                 break;
-            case MdBlockType.Tr:
+            case MarkdownBlockType.Tr:
                 LeaveTableRow();
                 break;
-            case MdBlockType.Th:
-            case MdBlockType.Td:
+            case MarkdownBlockType.Th:
+            case MarkdownBlockType.Td:
                 LeaveTableCell(type, detail);
                 break;
         }
@@ -278,7 +278,7 @@ internal sealed class MarkdownBuilder
     private void LeaveHeading(object? detail)
     {
         var frame = _blockStack.Pop();
-        int level = detail is MdBlockHDetail h ? h.Level : 1;
+        int level = detail is MarkdownBlockHDetail h ? h.Level : 1;
         var inlines = _inlines.ToArray();
         _inlines.Clear();
 
@@ -354,7 +354,7 @@ internal sealed class MarkdownBuilder
     private void LeaveOrderedList(object? detail)
     {
         var frame = _blockStack.Pop();
-        int start = detail is MdBlockOlDetail ol ? ol.Start : 1;
+        int start = detail is MarkdownBlockOlDetail ol ? ol.Start : 1;
         var items = frame.Children.ToArray();
 
         Element element;
@@ -377,7 +377,7 @@ internal sealed class MarkdownBuilder
 
         // Determine the bullet/number marker.
         string marker;
-        var liDetail = detail as MdBlockLiDetail?;
+        var liDetail = detail as MarkdownBlockLiDetail?;
         if (liDetail?.IsTask == true)
         {
             marker = (liDetail.Value.TaskMark == 'x' || liDetail.Value.TaskMark == 'X')
@@ -386,10 +386,10 @@ internal sealed class MarkdownBuilder
         else
         {
             // Check if parent is Ol or Ul.
-            bool isOrdered = _blockStack.Count > 0 && _blockStack.Peek().Type == MdBlockType.Ol;
+            bool isOrdered = _blockStack.Count > 0 && _blockStack.Peek().Type == MarkdownBlockType.Ol;
             if (isOrdered)
             {
-                int start = _blockStack.Peek().Detail is MdBlockOlDetail olDet ? olDet.Start : 1;
+                int start = _blockStack.Peek().Detail is MarkdownBlockOlDetail olDet ? olDet.Start : 1;
                 marker = $"{start + _listItemIndex - 1}. ";
             }
             else
@@ -493,7 +493,7 @@ internal sealed class MarkdownBuilder
     private void LeaveTable()
     {
         var frame = _blockStack.Pop();
-        var aligns = _tableAligns ?? Array.Empty<MdAlign>();
+        var aligns = _tableAligns ?? Array.Empty<MarkdownAlign>();
 
         if (_options.Table is not null)
         {
@@ -535,14 +535,14 @@ internal sealed class MarkdownBuilder
         _tableCellIndex = 0;
     }
 
-    private void LeaveTableCell(MdBlockType type, object? detail)
+    private void LeaveTableCell(MarkdownBlockType type, object? detail)
     {
         var frame = _blockStack.Pop();
         var inlines = _inlines.ToArray();
         _inlines.Clear();
 
-        bool isHeader = type == MdBlockType.Th;
-        var align = detail is MdBlockTdDetail td ? td.Align : MdAlign.Default;
+        bool isHeader = type == MarkdownBlockType.Th;
+        var align = detail is MarkdownBlockTdDetail td ? td.Align : MarkdownAlign.Default;
 
         // Store alignment from header cells.
         if (isHeader && _tableAligns is not null && _tableCellIndex < _tableAligns.Length)
@@ -563,8 +563,8 @@ internal sealed class MarkdownBuilder
         // Apply alignment.
         cell = align switch
         {
-            MdAlign.Center => cell.HAlign(HorizontalAlignment.Center),
-            MdAlign.Right => cell.HAlign(HorizontalAlignment.Right),
+            MarkdownAlign.Center => cell.HAlign(HorizontalAlignment.Center),
+            MarkdownAlign.Right => cell.HAlign(HorizontalAlignment.Right),
             _ => cell.HAlign(HorizontalAlignment.Left),
         };
 
@@ -583,34 +583,34 @@ internal sealed class MarkdownBuilder
 
     // ── Span callbacks ───────────────────────────────────────────────────
 
-    private int OnEnterSpan(MdSpanType type, object? detail)
+    private int OnEnterSpan(MarkdownSpanType type, object? detail)
     {
         switch (type)
         {
-            case MdSpanType.Strong:
+            case MarkdownSpanType.Strong:
                 _boldDepth++;
                 break;
-            case MdSpanType.Em:
+            case MarkdownSpanType.Em:
                 _italicDepth++;
                 break;
-            case MdSpanType.Code:
+            case MarkdownSpanType.Code:
                 _isCode = true;
                 break;
-            case MdSpanType.Del:
+            case MarkdownSpanType.Del:
                 _isStrikethrough = true;
                 break;
-            case MdSpanType.A:
-                if (detail is MdSpanADetail a && a.Href.Text is not null)
+            case MarkdownSpanType.A:
+                if (detail is MarkdownSpanADetail a && a.Href.Text is not null)
                 {
                     Uri.TryCreate(a.Href.Text, UriKind.RelativeOrAbsolute, out var uri);
                     _linkUri = IsSafeUri(uri) ? uri : null;
                 }
                 _linkInlineStart = _inlines.Count;
                 break;
-            case MdSpanType.Img:
+            case MarkdownSpanType.Img:
                 _insideImage = true;
                 _imageAlt = new StringBuilder();
-                if (detail is MdSpanImgDetail img && img.Src.Text is not null)
+                if (detail is MarkdownSpanImgDetail img && img.Src.Text is not null)
                 {
                     Uri.TryCreate(img.Src.Text, UriKind.RelativeOrAbsolute, out var imgUri);
                     _imageSrc = IsSafeUri(imgUri) ? imgUri : null;
@@ -620,26 +620,26 @@ internal sealed class MarkdownBuilder
         return 0;
     }
 
-    private int OnLeaveSpan(MdSpanType type, object? detail)
+    private int OnLeaveSpan(MarkdownSpanType type, object? detail)
     {
         switch (type)
         {
-            case MdSpanType.Strong:
+            case MarkdownSpanType.Strong:
                 _boldDepth = Math.Max(0, _boldDepth - 1);
                 break;
-            case MdSpanType.Em:
+            case MarkdownSpanType.Em:
                 _italicDepth = Math.Max(0, _italicDepth - 1);
                 break;
-            case MdSpanType.Code:
+            case MarkdownSpanType.Code:
                 _isCode = false;
                 break;
-            case MdSpanType.Del:
+            case MarkdownSpanType.Del:
                 _isStrikethrough = false;
                 break;
-            case MdSpanType.A:
+            case MarkdownSpanType.A:
                 LeaveLink();
                 break;
-            case MdSpanType.Img:
+            case MarkdownSpanType.Img:
                 LeaveImage();
                 break;
         }
@@ -702,7 +702,7 @@ internal sealed class MarkdownBuilder
 
     // ── Text callback ────────────────────────────────────────────────────
 
-    private int OnText(MdTextType type, ReadOnlySpan<char> text)
+    private int OnText(MarkdownTextType type, ReadOnlySpan<char> text)
     {
         // Code block accumulation.
         if (_codeAccum is not null)
@@ -727,28 +727,28 @@ internal sealed class MarkdownBuilder
 
         switch (type)
         {
-            case MdTextType.Normal:
-            case MdTextType.Code:
+            case MarkdownTextType.Normal:
+            case MarkdownTextType.Code:
                 AddInlineRun(text.ToString());
                 break;
 
-            case MdTextType.SoftBr:
+            case MarkdownTextType.SoftBr:
                 _inlines.Add(new RichTextRun(" "));
                 break;
 
-            case MdTextType.Br:
+            case MarkdownTextType.Br:
                 _inlines.Add(new RichTextLineBreak());
                 break;
 
-            case MdTextType.Entity:
+            case MarkdownTextType.Entity:
                 AddEntityText(text.ToString());
                 break;
 
-            case MdTextType.NullChar:
+            case MarkdownTextType.NullChar:
                 _inlines.Add(new RichTextRun("\uFFFD"));
                 break;
 
-            case MdTextType.Html:
+            case MarkdownTextType.Html:
                 // Inline HTML — pass through as text.
                 _inlines.Add(new RichTextRun(text.ToString()));
                 break;

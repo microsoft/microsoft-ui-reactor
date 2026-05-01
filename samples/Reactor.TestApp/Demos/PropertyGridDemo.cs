@@ -215,7 +215,7 @@ class PropertyGridDemo : Component
 
             // PropertyGrid
             ScrollView(
-                PropertyGridDsl.PropertyGrid(target, registry, onRootChanged)
+                PropertyGrid(target, registry, onRootChanged)
             ),
 
             // Live readback

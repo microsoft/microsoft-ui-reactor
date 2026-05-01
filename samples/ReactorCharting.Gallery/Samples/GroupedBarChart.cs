@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -93,12 +93,12 @@ public class GroupedBarChartSample : GallerySample
 
              // X axis labels
              .. categories.Select((cat, i) =>
-                 D3Dsl.Text(left + band.Map(cat) + band.Bandwidth / 2 - 10, top + plotH + 8, cat, 10, axisBrush)),
+                 D3Charts.Text(left + band.Map(cat) + band.Bandwidth / 2 - 10, top + plotH + 8, cat, 10, axisBrush)),
 
              // Legend
              .. D3Legend(legendX, legendY, seriesNames.Select((name, i) => (name, Brush(Palette[i])))),
 
-             D3Dsl.Text(left, 4, "Quarterly Sales by Product Line", 13, ChartForeground),
+             D3Charts.Text(left, 4, "Quarterly Sales by Product Line", 13, ChartForeground),
             ]
         )
             .AutomationName("Quarterly Sales by Product Line")

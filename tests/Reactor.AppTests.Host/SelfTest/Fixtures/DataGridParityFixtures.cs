@@ -58,10 +58,10 @@ internal static class DataGridParityFixtures
     {
         return new FieldDescriptor[]
         {
-            ColumnDsl.Column<ParityItem>("Id", p => p.Id, width: 80),
-            ColumnDsl.Column<ParityItem>("Name", p => p.Name, width: 160),
-            ColumnDsl.Column<ParityItem>("Dept", p => p.Dept, width: 120),
-            ColumnDsl.Column<ParityItem>("Title", p => p.Title, width: 160),
+            Column<ParityItem>("Id", p => p.Id, width: 80),
+            Column<ParityItem>("Name", p => p.Name, width: 160),
+            Column<ParityItem>("Dept", p => p.Dept, width: 120),
+            Column<ParityItem>("Title", p => p.Title, width: 160),
         };
     }
 
@@ -99,7 +99,7 @@ internal static class DataGridParityFixtures
             host.Mount(ctx =>
             {
                 source = ctx.UseMemo(() => CreateSource(10_000));
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source!,
                     columns: CreateColumns(),
                     rowHeight: 36
@@ -138,7 +138,7 @@ internal static class DataGridParityFixtures
             host.Mount(ctx =>
             {
                 var source = ctx.UseMemo(() => CreateSource(10_000));
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source,
                     columns: CreateColumns(),
                     rowHeight: 36
@@ -188,7 +188,7 @@ internal static class DataGridParityFixtures
             host.Mount(ctx =>
             {
                 var source = ctx.UseMemo(() => CreateSource(5_000));
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source,
                     columns: CreateColumns(),
                     rowHeight: 36
@@ -233,7 +233,7 @@ internal static class DataGridParityFixtures
             host.Mount(ctx =>
             {
                 source = ctx.UseMemo(() => CreateSource(12));
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source!,
                     columns: CreateColumns(),
                     rowHeight: 36
@@ -280,7 +280,7 @@ internal static class DataGridParityFixtures
                 host.Mount(ctx =>
                 {
                     var source = ctx.UseMemo(() => CreateSource(10_000));
-                    return DataGridDsl.DataGrid(
+                    return DataGrid(
                         source: source,
                         columns: CreateColumns(),
                         rowHeight: 36
@@ -347,12 +347,12 @@ internal static class DataGridParityFixtures
                 var source = ctx.UseMemo(() => CreateSource(50));
                 var columns = new FieldDescriptor[]
                 {
-                    ColumnDsl.Column<ParityItem>("Id", p => p.Id, width: 60),
-                    ColumnDsl.Column<ParityItem>("Name", p => p.Name, editable: true, width: 160),
-                    ColumnDsl.Column<ParityItem>("Dept", p => p.Dept, editable: true, width: 120),
-                    ColumnDsl.Column<ParityItem>("Title", p => p.Title, editable: true, width: 160),
+                    Column<ParityItem>("Id", p => p.Id, width: 60),
+                    Column<ParityItem>("Name", p => p.Name, editable: true, width: 160),
+                    Column<ParityItem>("Dept", p => p.Dept, editable: true, width: 120),
+                    Column<ParityItem>("Title", p => p.Title, editable: true, width: 160),
                 };
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source,
                     columns: columns,
                     selectionMode: Microsoft.UI.Reactor.Controls.SelectionMode.Single,

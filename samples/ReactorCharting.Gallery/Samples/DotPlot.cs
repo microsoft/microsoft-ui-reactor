@@ -2,7 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -20,7 +20,7 @@ public sealed class DotPlotSample : GallerySample
                  data.Where(d => d.cat == cat)
                      .Select(d => D3Circle(xs.Map(d.value), rowY, 5)
                          with { Fill = fill, Stroke = stroke })),
-             D3Dsl.Text(left, 6, "Dot Plot", 14, ChartForeground)]
+             D3Charts.Text(left, 6, "Dot Plot", 14, ChartForeground)]
         )
             .AutomationName("Dot Plot (strip chart)")
             .FullDescription("Dot plot showing values for 5 categories (Alpha, Beta, Gamma, Delta, Epsilon) along a shared x axis.")
@@ -50,7 +50,7 @@ public sealed class DotPlotSample : GallerySample
             [// X axis
              D3Line(left, axisY, left + pw, axisY) with { Stroke = ChartAxis },
              .. xs.Ticks(6).Select(t =>
-                 D3Dsl.Text(xs.Map(t) - 12, axisY + 4, Fmt(t), 10, ChartMutedForeground)),
+                 D3Charts.Text(xs.Map(t) - 12, axisY + 4, Fmt(t), 10, ChartMutedForeground)),
              // Category rows and dots
              .. categories.SelectMany((cat, ci) =>
              {
@@ -59,13 +59,13 @@ public sealed class DotPlotSample : GallerySample
                  var stroke = Brush(Palette[ci % Palette.Count]);
                  return ((Element[])
                  [
-                     D3Dsl.Text(4, rowY - 7, cat, 11, ChartMutedForeground),
+                     D3Charts.Text(4, rowY - 7, cat, 11, ChartMutedForeground),
                      D3Line(left, rowY, left + pw, rowY) with { Stroke = ChartGrid },
                      .. data.Where(d => d.cat == cat)
                          .Select(d => D3Circle(xs.Map(d.value), rowY, 5) with { Fill = fill, Stroke = stroke }),
                  ]);
              }),
-             D3Dsl.Text(left, 6, "Dot Plot (strip chart)", 14, ChartForeground)]
+             D3Charts.Text(left, 6, "Dot Plot (strip chart)", 14, ChartForeground)]
         )
             .AutomationName("Dot Plot (strip chart)")
             .FullDescription("Dot plot showing values for 5 categories (Alpha, Beta, Gamma, Delta, Epsilon) along a shared x axis.");

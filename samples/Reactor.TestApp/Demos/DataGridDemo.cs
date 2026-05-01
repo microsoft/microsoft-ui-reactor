@@ -112,16 +112,16 @@ class ExplicitColumnsDemo : Component
             SubHeading("Explicit Columns with Column DSL").Flex(shrink: 0),
             TextBlock("Columns defined via Column<T> builder. Click column headers to sort.").Foreground(SecondaryText).Flex(shrink: 0),
 
-            DataGridDsl.DataGrid(
+            DataGrid(
                 source: source,
                 columns: new FieldDescriptor[]
                 {
-                    ColumnDsl.Column<Product>("Id", p => p.Id, width: 60),
-                    ColumnDsl.Column<Product>("Name", p => p.Name, displayName: "Product Name", width: 200),
-                    ColumnDsl.Column<Product>("Category", p => p.Category, width: 140),
-                    ColumnDsl.Column<Product>("Price", p => p.Price, displayName: "Price", format: "C2", width: 100),
-                    ColumnDsl.Column<Product>("Stock", p => p.Stock, displayName: "In Stock", width: 80),
-                    ColumnDsl.Column<Product>("InStock", p => p.InStock, displayName: "Available", width: 80),
+                    Column<Product>("Id", p => p.Id, width: 60),
+                    Column<Product>("Name", p => p.Name, displayName: "Product Name", width: 200),
+                    Column<Product>("Category", p => p.Category, width: 140),
+                    Column<Product>("Price", p => p.Price, displayName: "Price", format: "C2", width: 100),
+                    Column<Product>("Stock", p => p.Stock, displayName: "In Stock", width: 80),
+                    Column<Product>("InStock", p => p.InStock, displayName: "Available", width: 80),
                 },
                 rowHeight: 36
             ).Flex(grow: 1)
@@ -157,7 +157,7 @@ class AutoColumnsDemo : Component
             TextBlock("Columns auto-generated from Product record properties via TypeRegistry + reflection.").Foreground(SecondaryText).Flex(shrink: 0),
             TextBlock("Click column headers to sort. Columns auto-size from FieldDescriptor metadata.").Foreground(SecondaryText).Flex(shrink: 0),
 
-            DataGridDsl.DataGrid(
+            DataGrid(
                 source: source,
                 registry: registry,
                 rowHeight: 36
@@ -197,14 +197,14 @@ class SingleSelectionDemo : Component
             SubHeading("Single Selection").Flex(shrink: 0),
             TextBlock("Click a row to select it. Only one row can be selected at a time.").Foreground(SecondaryText).Flex(shrink: 0),
 
-            DataGridDsl.DataGrid(
+            DataGrid(
                 source: source,
                 columns: new FieldDescriptor[]
                 {
-                    ColumnDsl.Column<Product>("Id", p => p.Id, width: 60),
-                    ColumnDsl.Column<Product>("Name", p => p.Name, displayName: "Product", width: 200),
-                    ColumnDsl.Column<Product>("Category", p => p.Category, width: 140),
-                    ColumnDsl.Column<Product>("Price", p => p.Price, format: "C2", width: 100),
+                    Column<Product>("Id", p => p.Id, width: 60),
+                    Column<Product>("Name", p => p.Name, displayName: "Product", width: 200),
+                    Column<Product>("Category", p => p.Category, width: 140),
+                    Column<Product>("Price", p => p.Price, format: "C2", width: 100),
                 },
                 selectionMode: SelectionMode.Single,
                 onSelectionChanged: keys => setSelectedKeys(keys),
@@ -249,15 +249,15 @@ class MultiSelectionDemo : Component
             SubHeading("Multiple Selection").Flex(shrink: 0),
             TextBlock("Click rows to select. Ctrl+click to toggle. Shift+click for range selection.").Foreground(SecondaryText).Flex(shrink: 0),
 
-            DataGridDsl.DataGrid(
+            DataGrid(
                 source: source,
                 columns: new FieldDescriptor[]
                 {
-                    ColumnDsl.Column<Product>("Id", p => p.Id, width: 60),
-                    ColumnDsl.Column<Product>("Name", p => p.Name, displayName: "Product", width: 200),
-                    ColumnDsl.Column<Product>("Category", p => p.Category, width: 140),
-                    ColumnDsl.Column<Product>("Price", p => p.Price, format: "C2", width: 100),
-                    ColumnDsl.Column<Product>("Stock", p => p.Stock, width: 80),
+                    Column<Product>("Id", p => p.Id, width: 60),
+                    Column<Product>("Name", p => p.Name, displayName: "Product", width: 200),
+                    Column<Product>("Category", p => p.Category, width: 140),
+                    Column<Product>("Price", p => p.Price, format: "C2", width: 100),
+                    Column<Product>("Stock", p => p.Stock, width: 80),
                 },
                 selectionMode: SelectionMode.Multiple,
                 onSelectionChanged: keys => setSelectedKeys(keys),
@@ -296,14 +296,14 @@ class CustomRenderersDemo : Component
             SubHeading("Custom Cell Renderers").Flex(shrink: 0),
             TextBlock("Custom cell template: price is color-coded, stock shows a progress bar, availability uses an icon.").Foreground(SecondaryText).Flex(shrink: 0),
 
-            DataGridDsl.DataGrid(
+            DataGrid(
                 source: source,
                 columns: new FieldDescriptor[]
                 {
-                    ColumnDsl.Column<Product>("Id", p => p.Id, width: 60),
-                    ColumnDsl.Column<Product>("Name", p => p.Name, displayName: "Product", width: 200),
-                    ColumnDsl.Column<Product>("Category", p => p.Category, width: 140),
-                    (ColumnDsl.Column<Product>("Price", p => p.Price, width: 120)
+                    Column<Product>("Id", p => p.Id, width: 60),
+                    Column<Product>("Name", p => p.Name, displayName: "Product", width: 200),
+                    Column<Product>("Category", p => p.Category, width: 140),
+                    (Column<Product>("Price", p => p.Price, width: 120)
                         .CellRenderer(val =>
                         {
                             var price = (double)val;
@@ -313,7 +313,7 @@ class CustomRenderersDemo : Component
                                     ? TextBlock($"${price:N2}").Foreground(Theme.Ref("SystemFillColorCautionBrush"))
                                     : TextBlock($"${price:N2}").Foreground(Theme.Ref("SystemFillColorSuccessBrush"));
                         })).Build(),
-                    (ColumnDsl.Column<Product>("Stock", p => p.Stock, displayName: "Stock Level", width: 160)
+                    (Column<Product>("Stock", p => p.Stock, displayName: "Stock Level", width: 160)
                         .CellRenderer(val =>
                         {
                             var stock = (int)val;
@@ -330,7 +330,7 @@ class CustomRenderersDemo : Component
                                 ).Background(SubtleFill).Width(100).Height(12).CornerRadius(4)
                             ) with { AlignItems = FlexAlign.Center, ColumnGap = 8 };
                         })).Build(),
-                    (ColumnDsl.Column<Product>("InStock", p => p.InStock, displayName: "Available", width: 80)
+                    (Column<Product>("InStock", p => p.InStock, displayName: "Available", width: 80)
                         .CellRenderer(val =>
                         {
                             var inStock = (bool)val;
@@ -378,16 +378,16 @@ class LargeDatasetDemo : Component
                 Button("100K", () => setCount(100000))
             ).Flex(shrink: 0),
 
-            DataGridDsl.DataGrid(
+            DataGrid(
                 source: source,
                 columns: new FieldDescriptor[]
                 {
-                    ColumnDsl.Column<Product>("Id", p => p.Id, width: 80),
-                    ColumnDsl.Column<Product>("Name", p => p.Name, displayName: "Product Name", width: 220),
-                    ColumnDsl.Column<Product>("Category", p => p.Category, width: 140),
-                    ColumnDsl.Column<Product>("Price", p => p.Price, format: "C2", width: 100),
-                    ColumnDsl.Column<Product>("Stock", p => p.Stock, width: 80),
-                    ColumnDsl.Column<Product>("InStock", p => p.InStock, displayName: "Available", width: 80),
+                    Column<Product>("Id", p => p.Id, width: 80),
+                    Column<Product>("Name", p => p.Name, displayName: "Product Name", width: 220),
+                    Column<Product>("Category", p => p.Category, width: 140),
+                    Column<Product>("Price", p => p.Price, format: "C2", width: 100),
+                    Column<Product>("Stock", p => p.Stock, width: 80),
+                    Column<Product>("InStock", p => p.InStock, displayName: "Available", width: 80),
                 },
                 selectionMode: SelectionMode.Single,
                 rowHeight: 32
@@ -426,15 +426,15 @@ class InlineEditMutableDemo : Component
             TextBlock("Click a cell to edit. Arrow keys navigate. Enter/F2 starts editing. Escape cancels. Tab commits and moves.").Foreground(SecondaryText).Flex(shrink: 0),
             TextBlock("Editable columns: Name, Department, Salary, Active. Id is read-only.").Foreground(SecondaryText).Flex(shrink: 0),
 
-            DataGridDsl.DataGrid(
+            DataGrid(
                 source: source,
                 columns: new FieldDescriptor[]
                 {
-                    ColumnDsl.Column<MutableEmployee>("Id", e => e.Id, width: 60),
-                    ColumnDsl.Column<MutableEmployee>("Name", e => e.Name, editable: true, width: 180),
-                    ColumnDsl.Column<MutableEmployee>("Department", e => e.Department, editable: true, width: 140),
-                    ColumnDsl.Column<MutableEmployee>("Salary", e => e.Salary, editable: true, displayName: "Salary", format: "C0", width: 120),
-                    ColumnDsl.Column<MutableEmployee>("Active", e => e.Active, editable: true, width: 80),
+                    Column<MutableEmployee>("Id", e => e.Id, width: 60),
+                    Column<MutableEmployee>("Name", e => e.Name, editable: true, width: 180),
+                    Column<MutableEmployee>("Department", e => e.Department, editable: true, width: 140),
+                    Column<MutableEmployee>("Salary", e => e.Salary, editable: true, displayName: "Salary", format: "C0", width: 120),
+                    Column<MutableEmployee>("Active", e => e.Active, editable: true, width: 80),
                 },
                 selectionMode: SelectionMode.Single,
                 editable: true,
@@ -482,16 +482,16 @@ class InlineEditRecordDemo : Component
             TextBlock("Editing immutable records: SetValue creates a new object (return-new-owner pattern).").Foreground(SecondaryText).Flex(shrink: 0),
             TextBlock("Click a cell to edit. Name, Category, Price are editable. Id, Stock, InStock are read-only.").Foreground(SecondaryText).Flex(shrink: 0),
 
-            DataGridDsl.DataGrid(
+            DataGrid(
                 source: source,
                 columns: new FieldDescriptor[]
                 {
-                    ColumnDsl.Column<Product>("Id", p => p.Id, width: 60),
-                    ColumnDsl.Column<Product>("Name", p => p.Name, editable: true, displayName: "Product Name", width: 200),
-                    ColumnDsl.Column<Product>("Category", p => p.Category, editable: true, width: 140),
-                    ColumnDsl.Column<Product>("Price", p => p.Price, editable: true, format: "C2", width: 100),
-                    ColumnDsl.Column<Product>("Stock", p => p.Stock, width: 80),
-                    ColumnDsl.Column<Product>("InStock", p => p.InStock, displayName: "Available", width: 80),
+                    Column<Product>("Id", p => p.Id, width: 60),
+                    Column<Product>("Name", p => p.Name, editable: true, displayName: "Product Name", width: 200),
+                    Column<Product>("Category", p => p.Category, editable: true, width: 140),
+                    Column<Product>("Price", p => p.Price, editable: true, format: "C2", width: 100),
+                    Column<Product>("Stock", p => p.Stock, width: 80),
+                    Column<Product>("InStock", p => p.InStock, displayName: "Available", width: 80),
                 },
                 selectionMode: SelectionMode.Single,
                 editable: true,
@@ -544,21 +544,21 @@ class AdvancedFeaturesDemo : Component
             TextBlock("Validation: Name is required (min 2 chars), Price must be 0-10000").Foreground(SecondaryText).Flex(shrink: 0),
             TextBlock("Pinned columns: Id is pinned left, InStock is pinned right").Foreground(SecondaryText).Flex(shrink: 0),
 
-            DataGridDsl.DataGrid(
+            DataGrid(
                 source: source,
                 columns: new FieldDescriptor[]
                 {
-                    ColumnDsl.Column<Product>("Id", p => p.Id, width: 60, pin: PinPosition.Left),
-                    (ColumnDsl.Column<Product>("Name", p => p.Name, editable: true, displayName: "Product Name", width: 200)
+                    Column<Product>("Id", p => p.Id, width: 60, pin: PinPosition.Left),
+                    (Column<Product>("Name", p => p.Name, editable: true, displayName: "Product Name", width: 200)
                         .Validate(
                             Microsoft.UI.Reactor.Controls.Validation.Validate.Required(),
                             Microsoft.UI.Reactor.Controls.Validation.Validate.MinLength(2)
                         )).Build(),
-                    ColumnDsl.Column<Product>("Category", p => p.Category, editable: true, width: 140),
-                    (ColumnDsl.Column<Product>("Price", p => p.Price, editable: true, format: "C2", width: 100)
+                    Column<Product>("Category", p => p.Category, editable: true, width: 140),
+                    (Column<Product>("Price", p => p.Price, editable: true, format: "C2", width: 100)
                         .Validate(Microsoft.UI.Reactor.Controls.Validation.Validate.Range(0, 10000))).Build(),
-                    ColumnDsl.Column<Product>("Stock", p => p.Stock, displayName: "In Stock", width: 80),
-                    ColumnDsl.Column<Product>("InStock", p => p.InStock, displayName: "Available", width: 80, pin: PinPosition.Right),
+                    Column<Product>("Stock", p => p.Stock, displayName: "In Stock", width: 80),
+                    Column<Product>("InStock", p => p.InStock, displayName: "Available", width: 80, pin: PinPosition.Right),
                 },
                 selectionMode: SelectionMode.Multiple,
                 editable: true,

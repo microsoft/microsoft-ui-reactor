@@ -7,12 +7,12 @@ namespace Microsoft.UI.Reactor.Controls;
 
 /// <summary>
 /// Typed column factories that ship specialized editors + cell renderers out of
-/// the box. Thin wrappers over <see cref="ColumnDsl.Column{T}"/> that pre-wire
+/// the box. Thin wrappers over <see cref="Factories.Column{T}"/> that pre-wire
 /// the matching pair from <see cref="Editors"/> and <see cref="CellRenderers"/>.
 ///
 /// Use when the column type is known at the call site and you want HitTable-style
 /// "batteries included" ergonomics. For discovery-driven columns, use
-/// <see cref="ColumnDsl.AutoColumns{T}"/> with a <see cref="TypeRegistry"/>
+/// <see cref="Factories.AutoColumns{T}"/> with a <see cref="TypeRegistry"/>
 /// populated via <see cref="TypeRegistry.WithDefaultEditors"/>.
 /// </summary>
 public static class TypedColumns
@@ -33,7 +33,7 @@ public static class TypedColumns
         double? width = null,
         PinPosition pin = PinPosition.None)
     {
-        var builder = ColumnDsl.Column(name, accessor,
+        var builder = Factories.Column(name, accessor,
             editable: true, displayName: displayName, format: format, width: width, pin: pin);
         var fieldType = ((FieldDescriptor)builder).FieldType;
         return builder
@@ -51,7 +51,7 @@ public static class TypedColumns
         string? displayName = null,
         double? width = null,
         PinPosition pin = PinPosition.None)
-        => ColumnDsl.Column(name, accessor,
+        => Factories.Column(name, accessor,
                 editable: true, displayName: displayName, width: width, pin: pin)
             .WithEditor(Editors.CheckBox())
             .CellRenderer(CellRenderers.CheckMark());
@@ -64,7 +64,7 @@ public static class TypedColumns
         string? displayName = null,
         double? width = null,
         PinPosition pin = PinPosition.None)
-        => ColumnDsl.Column(name, accessor,
+        => Factories.Column(name, accessor,
                 editable: true, displayName: displayName, width: width, pin: pin)
             .WithEditor(Editors.Toggle(onContent, offContent))
             .CellRenderer(CellRenderers.ToggleIndicator());
@@ -81,7 +81,7 @@ public static class TypedColumns
         double? width = null,
         PinPosition pin = PinPosition.None)
     {
-        var builder = ColumnDsl.Column(name, accessor,
+        var builder = Factories.Column(name, accessor,
             editable: true, displayName: displayName, format: format, width: width, pin: pin);
         var fieldType = ((FieldDescriptor)builder).FieldType;
         var editor = fieldType == typeof(global::System.DateTimeOffset)
@@ -102,7 +102,7 @@ public static class TypedColumns
         double? width = null,
         PinPosition pin = PinPosition.None)
     {
-        var builder = ColumnDsl.Column(name, accessor,
+        var builder = Factories.Column(name, accessor,
             editable: true, displayName: displayName, format: format, width: width, pin: pin);
         var fieldType = ((FieldDescriptor)builder).FieldType;
         var editor = fieldType == typeof(global::System.TimeOnly)
@@ -124,7 +124,7 @@ public static class TypedColumns
         string? displayName = null,
         double? width = null,
         PinPosition pin = PinPosition.None)
-        => ColumnDsl.Column(name, accessor,
+        => Factories.Column(name, accessor,
                 editable: true, displayName: displayName, width: width, pin: pin)
             .WithEditor(Editors.Combo(choices))
             .CellRenderer(CellRenderers.Enum());
@@ -141,7 +141,7 @@ public static class TypedColumns
         double? width = null,
         PinPosition pin = PinPosition.None)
     {
-        var builder = ColumnDsl.Column(name, accessor,
+        var builder = Factories.Column(name, accessor,
             editable: true, displayName: displayName, width: width, pin: pin);
         var fieldType = ((FieldDescriptor)builder).FieldType;
         var editor = fieldType == typeof(global::System.Uri)
@@ -165,7 +165,7 @@ public static class TypedColumns
         // Editors.ColorCompact (not .Color) — grid cells are ~40px tall, the
         // full inline ColorPicker would overflow ~300px and obscure adjacent
         // rows. Compact = swatch + hex text box; stays inside the row.
-        => ColumnDsl.Column(name, accessor,
+        => Factories.Column(name, accessor,
                 editable: true, displayName: displayName, width: width, pin: pin)
             .WithEditor(Editors.ColorCompact())
             .CellRenderer(CellRenderers.ColorSwatch());

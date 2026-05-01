@@ -1,12 +1,9 @@
 using Microsoft.UI.Reactor.Core;
-using static Microsoft.UI.Reactor.Factories;
+using Microsoft.UI.Reactor.Controls;
 
-namespace Microsoft.UI.Reactor.Controls;
+namespace Microsoft.UI.Reactor;
 
-/// <summary>
-/// DSL factory methods for PropertyGrid.
-/// </summary>
-public static class PropertyGridDsl
+public static partial class Factories
 {
     /// <summary>
     /// Creates a PropertyGrid element for editing the target object's properties.

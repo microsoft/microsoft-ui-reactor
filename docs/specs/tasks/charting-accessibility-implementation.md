@@ -191,9 +191,9 @@ values, series headers, and axis labels without any visible table.
 
 ## Phase 3: Layer 7 — Forced-colors + reduced-motion + double-encoding
 
-### 3.1 — `IsForcedColors` flag on `D3Dsl`
+### 3.1 — `IsForcedColors` flag on `D3Charts`
 
-- [x] Add `[ThreadStatic] private static bool _isForcedColors` to `D3Dsl.cs`,
+- [x] Add `[ThreadStatic] private static bool _isForcedColors` to `D3Charts.cs`,
       following the existing `IsDarkTheme` pattern
 - [x] Add public property `IsForcedColors { get; set; }`
 - [x] Add `ChartSeries(int seriesIndex)` brush: returns system high-contrast
@@ -209,7 +209,7 @@ values, series headers, and axis labels without any visible table.
 - [x] In `ReactorHost` (or `RenderContext`), read
       `AccessibilitySettings.HighContrast` at startup
 - [x] Listen for `AccessibilitySettings.HighContrastChanged` and
-      `UISettings.ColorValuesChanged`; set `D3Dsl.IsForcedColors` and trigger
+      `UISettings.ColorValuesChanged`; set `D3Charts.IsForcedColors` and trigger
       re-render
 - [x] Propagate automatically — no author opt-in required
 
@@ -269,7 +269,7 @@ values, series headers, and axis labels without any visible table.
 
 ### 3.9 — Selftest fixtures: forced-colors and encoding
 
-- [x] Fixture `ChartA11y_ForcedColorsPalette`: set `D3Dsl.IsForcedColors = true`,
+- [x] Fixture `ChartA11y_ForcedColorsPalette`: set `D3Charts.IsForcedColors = true`,
       mount a 4-series `LineChart`, assert series brushes use system colors
       (CanvasText, Highlight, LinkText, GrayText)
 - [x] Fixture `ChartA11y_DoubleEncoding`: mount a multi-series chart, assert each
@@ -456,7 +456,7 @@ values, series headers, and axis labels without any visible table.
 
 ### 7.3 — Decoration pruning (Layer 5)
 
-- [x] All `D3Dsl` decoration primitives (grid lines, tick marks, minor axes,
+- [x] All `D3Charts` decoration primitives (grid lines, tick marks, minor axes,
       background) auto-set `AccessibilityView = Raw` unless carrying meaningful
       data
 - [x] Keeps UIA tree clean for screen-reader users

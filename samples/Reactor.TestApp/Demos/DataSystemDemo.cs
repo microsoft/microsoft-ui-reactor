@@ -196,7 +196,7 @@ class PropertyGridFullEditorDemo : Microsoft.UI.Reactor.Core.Component
             TextBlock("Clicking \"\u2026\" opens a flyout with individual R/G/B NumberBox editors and a live preview.").Foreground(SecondaryText).Flex(shrink: 0),
 
             ScrollView(
-                PropertyGridDsl.PropertyGrid(spriteRef.Current, registry)
+                PropertyGrid(spriteRef.Current, registry)
             ).Flex(grow: 1).Margin(0, 8, 0, 0),
 
             Border(
@@ -241,7 +241,7 @@ class VirtualListFixedDemo : Microsoft.UI.Reactor.Core.Component
                 Button("Scroll to end", () => { listRef.Current?.ScrollToIndex(count - 1); })
             ).Flex(shrink: 0),
 
-            VirtualListDsl.VirtualList(
+            VirtualList(
                 itemCount: count,
                 renderItem: i => FlexRow(
                     TextBlock($"{i:N0}").Width(80).Foreground(TertiaryText),
@@ -278,7 +278,7 @@ class VirtualListVariableDemo : Microsoft.UI.Reactor.Core.Component
                 Button("10K", () => setCount(10000))
             ).Flex(shrink: 0),
 
-            VirtualListDsl.VirtualList(
+            VirtualList(
                 itemCount: count,
                 renderItem: i =>
                 {
@@ -397,7 +397,7 @@ class DataSourceDemo : Microsoft.UI.Reactor.Core.Component
                             TextBlock("Salary").Width(100).SemiBold()
                         ) with { ColumnGap = 8 },
 
-                        VirtualListDsl.VirtualList(
+                        VirtualList(
                             itemCount: page.Items.Count,
                             renderItem: i =>
                             {

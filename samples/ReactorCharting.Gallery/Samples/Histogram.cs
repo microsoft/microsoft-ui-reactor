@@ -2,7 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -71,7 +71,7 @@ public sealed class HistogramSample : GallerySample
                  return D3Rect(bx, by, bw, bh) with { Fill = fill };
              }),
              .. D3Axes(xs, ys, left, top, pw, ph),
-             D3Dsl.Text(left, 6, "Histogram (normal distribution, 200 values)", 14, ChartForeground)]
+             D3Charts.Text(left, 6, "Histogram (normal distribution, 200 values)", 14, ChartForeground)]
         )
             .AutomationName("Histogram (normal distribution, 200 values)")
             .FullDescription("Histogram of 200 normally-distributed values binned into 20 bins, centered around 50.");

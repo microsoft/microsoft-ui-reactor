@@ -2,7 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -91,12 +91,12 @@ public class StackedBarChartSample : GallerySample
 
              // X axis labels
              .. months.Select((month, i) =>
-                 D3Dsl.Text(left + band.Map(month) + band.Bandwidth / 2 - 14, top + plotH + 8, month, 10, axisBrush)),
+                 D3Charts.Text(left + band.Map(month) + band.Bandwidth / 2 - 14, top + plotH + 8, month, 10, axisBrush)),
 
              // Legend
              .. D3Legend(legendX, legendY, keys.Select((key, i) => (key, Brush(Palette[i])))),
 
-             D3Dsl.Text(left, 4, "Fruit Sales by Month (Stacked)", 13, ChartForeground),
+             D3Charts.Text(left, 4, "Fruit Sales by Month (Stacked)", 13, ChartForeground),
             ]
         )
             .AutomationName("Fruit Sales by Month (Stacked)")

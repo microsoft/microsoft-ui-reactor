@@ -2073,7 +2073,7 @@ See Section 5.7 for details.
 ## Appendix A: Column DSL Helper
 
 ```csharp
-public static class ColumnDsl
+public static class Factories
 {
     /// <summary>
     /// Creates a column definition for a typed property accessor.

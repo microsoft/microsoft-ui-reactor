@@ -14,7 +14,7 @@ public class Md4cUnderlineTest
     {
         var md = "_foo_";
         var expected = "<p><u>foo</u></p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.Underline);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Underline);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -23,7 +23,7 @@ public class Md4cUnderlineTest
     {
         var md = "___foo___";
         var expected = "<p><u><u><u>foo</u></u></u></p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.Underline);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Underline);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -32,7 +32,7 @@ public class Md4cUnderlineTest
     {
         var md = "foo_bar_baz";
         var expected = "<p>foo_bar_baz</p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.Underline);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Underline);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -41,7 +41,7 @@ public class Md4cUnderlineTest
     {
         var md = "_foo _bar";
         var expected = "<p>_foo _bar</p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.Underline);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Underline);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 

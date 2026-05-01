@@ -2,7 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -91,7 +91,7 @@ series.Select((s, si) => {
                         fill: Brush(Palette[si], opacity: 0.8));
                 }),
              .. D3Legend(marginLeft + 10, marginTop + 4, keys.Select((key, k) => (key, Brush(Palette[k], opacity: 0.8)))),
-             D3Dsl.Text(marginLeft + 100, 6, "Streamgraph (Centered Stack)", 14, ChartForeground),
+             D3Charts.Text(marginLeft + 100, 6, "Streamgraph (Centered Stack)", 14, ChartForeground),
             ]
         )
             .AutomationName("Streamgraph (Centered Stack)")

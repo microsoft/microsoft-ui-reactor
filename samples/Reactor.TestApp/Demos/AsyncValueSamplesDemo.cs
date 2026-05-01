@@ -337,7 +337,7 @@ class InfiniteScrollScenario : Component
             TextBlock($"Server has {resource.TotalCount?.ToString() ?? "?"} rows. LoadState = {LoadLabel(resource.LoadState)}. Scroll to page in more."),
 
             Border(
-                VirtualListDsl.VirtualList(
+                VirtualList(
                     itemCount: listLen,
                     renderItem: i =>
                     {
@@ -392,7 +392,7 @@ class SearchInfiniteScenario : Component
             TextBlock($"Matches: {resource.TotalCount?.ToString() ?? "…"}  /  LoadState: {SearchInfiniteLabel(resource.LoadState)}"),
 
             Border(
-                VirtualListDsl.VirtualList(
+                VirtualList(
                     itemCount: listLen,
                     renderItem: i =>
                     {
@@ -459,7 +459,7 @@ class InfiniteRefreshScenario : Component
             ),
 
             Border(
-                VirtualListDsl.VirtualList(
+                VirtualList(
                     itemCount: Math.Max(resource.Items.Count, 1),
                     renderItem: i => TextBlock(resource.ItemAt(i) ?? "⏳ loading…"),
                     itemHeight: 28,
@@ -552,7 +552,7 @@ class DataSourceAdapterScenario : Component
             TextBlock($"Matches: {resource.TotalCount?.ToString() ?? "…"}"),
 
             Border(
-                VirtualListDsl.VirtualList(
+                VirtualList(
                     itemCount: listLen,
                     renderItem: i => TextBlock(resource.ItemAt(i) ?? "⏳ loading…"),
                     itemHeight: 28,

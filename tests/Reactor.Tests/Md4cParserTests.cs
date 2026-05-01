@@ -14,7 +14,7 @@ public class Md4cParserTests
 
     private record ParseEvent(string Kind, string Type, string? Detail = null);
 
-    private static List<ParseEvent> ParseMarkdown(string markdown, MdParserFlags flags = MdParserFlags.None)
+    private static List<ParseEvent> ParseMarkdown(string markdown, MarkdownParserFlags flags = MarkdownParserFlags.None)
     {
         var events = new List<ParseEvent>();
 
@@ -29,19 +29,19 @@ public class Md4cParserTests
         return events;
     }
 
-    private static List<string> GetBlockTypes(string markdown, MdParserFlags flags = MdParserFlags.None)
+    private static List<string> GetBlockTypes(string markdown, MarkdownParserFlags flags = MarkdownParserFlags.None)
         => ParseMarkdown(markdown, flags)
             .Where(e => e.Kind == "EnterBlock")
             .Select(e => e.Type)
             .ToList();
 
-    private static List<string> GetSpanTypes(string markdown, MdParserFlags flags = MdParserFlags.None)
+    private static List<string> GetSpanTypes(string markdown, MarkdownParserFlags flags = MarkdownParserFlags.None)
         => ParseMarkdown(markdown, flags)
             .Where(e => e.Kind == "EnterSpan")
             .Select(e => e.Type)
             .ToList();
 
-    private static string GetText(string markdown, MdParserFlags flags = MdParserFlags.None)
+    private static string GetText(string markdown, MarkdownParserFlags flags = MarkdownParserFlags.None)
         => string.Join("", ParseMarkdown(markdown, flags)
             .Where(e => e.Kind == "Text" && e.Type == "Normal")
             .Select(e => e.Detail));
@@ -180,7 +180,7 @@ public class Md4cParserTests
     [Fact]
     public void Parse_Strikethrough()
     {
-        var spans = GetSpanTypes("~~deleted~~", MdParserFlags.Strikethrough);
+        var spans = GetSpanTypes("~~deleted~~", MarkdownParserFlags.Strikethrough);
         Assert.Contains("Del", spans);
     }
 
@@ -327,7 +327,7 @@ public class Md4cParserTests
     [Fact]
     public void Parse_Returns_Zero_On_Success()
     {
-        var result = Md4cParser.Parse("hello", MdParserFlags.None,
+        var result = Md4cParser.Parse("hello", MarkdownParserFlags.None,
             (_, _) => 0, (_, _) => 0, (_, _) => 0, (_, _) => 0, (_, _) => 0);
         Assert.Equal(0, result);
     }
@@ -340,7 +340,7 @@ public class Md4cParserTests
     public void Parse_Table()
     {
         var markdown = "| A | B |\n|---|---|\n| 1 | 2 |";
-        var blocks = GetBlockTypes(markdown, MdParserFlags.Tables);
+        var blocks = GetBlockTypes(markdown, MarkdownParserFlags.Tables);
         Assert.Contains("Table", blocks);
         Assert.Contains("Thead", blocks);
         Assert.Contains("Tbody", blocks);
@@ -353,7 +353,7 @@ public class Md4cParserTests
     public void Parse_Table_WithAlignment()
     {
         var markdown = "| Left | Center | Right |\n|:-----|:------:|------:|\n| a | b | c |";
-        var blocks = GetBlockTypes(markdown, MdParserFlags.Tables);
+        var blocks = GetBlockTypes(markdown, MarkdownParserFlags.Tables);
         Assert.Contains("Table", blocks);
     }
 
@@ -365,7 +365,7 @@ public class Md4cParserTests
     public void Parse_NoHtml_Flag()
     {
         var markdown = "<b>bold</b>";
-        var blocks = GetBlockTypes(markdown, MdParserFlags.NoHtmlBlocks | MdParserFlags.NoHtmlSpans);
+        var blocks = GetBlockTypes(markdown, MarkdownParserFlags.NoHtmlBlocks | MarkdownParserFlags.NoHtmlSpans);
         Assert.DoesNotContain("Html", blocks);
     }
 
@@ -373,21 +373,21 @@ public class Md4cParserTests
     public void Parse_PermissiveAtxHeaders()
     {
         // Normally '#heading' without space is not a heading
-        var blocks = GetBlockTypes("#heading", MdParserFlags.PermissiveAtxHeaders);
+        var blocks = GetBlockTypes("#heading", MarkdownParserFlags.PermissiveAtxHeaders);
         Assert.Contains("H", blocks);
     }
 
     [Fact]
     public void Parse_PermissiveUrlAutolinks()
     {
-        var spans = GetSpanTypes("Visit http://example.com today", MdParserFlags.PermissiveUrlAutolinks);
+        var spans = GetSpanTypes("Visit http://example.com today", MarkdownParserFlags.PermissiveUrlAutolinks);
         Assert.Contains("A", spans);
     }
 
     [Fact]
     public void Parse_PermissiveEmailAutolinks()
     {
-        var spans = GetSpanTypes("Email user@example.com now", MdParserFlags.PermissiveEmailAutolinks);
+        var spans = GetSpanTypes("Email user@example.com now", MarkdownParserFlags.PermissiveEmailAutolinks);
         Assert.Contains("A", spans);
     }
 
@@ -422,7 +422,7 @@ public class Md4cParserTests
     public void Parse_TaskList()
     {
         var markdown = "- [ ] unchecked\n- [x] checked";
-        var blocks = GetBlockTypes(markdown, MdParserFlags.TaskLists);
+        var blocks = GetBlockTypes(markdown, MarkdownParserFlags.TaskLists);
         Assert.Contains("Ul", blocks);
     }
 
@@ -447,7 +447,7 @@ public class Md4cParserTests
     public void Parse_Callback_Abort()
     {
         // enterBlock returns non-zero → parser aborts
-        var result = Md4cParser.Parse("test", MdParserFlags.None,
+        var result = Md4cParser.Parse("test", MarkdownParserFlags.None,
             (_, _) => 1, // abort
             (_, _) => 0, (_, _) => 0, (_, _) => 0, (_, _) => 0);
         Assert.NotEqual(0, result);
@@ -460,42 +460,42 @@ public class Md4cParserTests
     [Fact]
     public void Parse_WikiLink()
     {
-        var spans = GetSpanTypes("[[wiki page]]", MdParserFlags.WikiLinks);
+        var spans = GetSpanTypes("[[wiki page]]", MarkdownParserFlags.WikiLinks);
         Assert.Contains("WikiLink", spans);
     }
 
     [Fact]
     public void Parse_LatexMath_Inline()
     {
-        var spans = GetSpanTypes("$E=mc^2$", MdParserFlags.LatexMathSpans);
+        var spans = GetSpanTypes("$E=mc^2$", MarkdownParserFlags.LatexMathSpans);
         Assert.Contains("LatexMath", spans);
     }
 
     [Fact]
     public void Parse_LatexMath_Display()
     {
-        var events = ParseMarkdown("$$\\sum_{i=0}^n i$$", MdParserFlags.LatexMathSpans);
+        var events = ParseMarkdown("$$\\sum_{i=0}^n i$$", MarkdownParserFlags.LatexMathSpans);
         Assert.Contains(events, e => e.Kind == "EnterSpan" && e.Type == "LatexMathDisplay");
     }
 
     [Fact]
     public void Parse_Underline()
     {
-        var spans = GetSpanTypes("_underlined_", MdParserFlags.Underline);
+        var spans = GetSpanTypes("_underlined_", MarkdownParserFlags.Underline);
         Assert.Contains("U", spans);
     }
 
     [Fact]
     public void Parse_WwwAutolink()
     {
-        var spans = GetSpanTypes("Visit www.example.com today", MdParserFlags.PermissiveWwwAutolinks);
+        var spans = GetSpanTypes("Visit www.example.com today", MarkdownParserFlags.PermissiveWwwAutolinks);
         Assert.Contains("A", spans);
     }
 
     [Fact]
     public void Parse_CollapseWhitespace()
     {
-        var text = GetText("Hello    world", MdParserFlags.CollapseWhitespace);
+        var text = GetText("Hello    world", MarkdownParserFlags.CollapseWhitespace);
         Assert.DoesNotContain("    ", text);
     }
 
@@ -503,14 +503,14 @@ public class Md4cParserTests
     public void Parse_NoIndentedCodeBlocks_Flag()
     {
         // Verify the flag is accepted (no crash)
-        var events = ParseMarkdown("    text", MdParserFlags.NoIndentedCodeBlocks);
+        var events = ParseMarkdown("    text", MarkdownParserFlags.NoIndentedCodeBlocks);
         Assert.Contains(events, e => e.Kind == "EnterBlock" && e.Type == "Doc");
     }
 
     [Fact]
     public void Parse_HardSoftBreaks()
     {
-        var events = ParseMarkdown("line1\nline2", MdParserFlags.HardSoftBreaks);
+        var events = ParseMarkdown("line1\nline2", MarkdownParserFlags.HardSoftBreaks);
         Assert.Contains(events, e => e.Kind == "Text" && e.Type == "Br");
     }
 
@@ -521,28 +521,28 @@ public class Md4cParserTests
     [Fact]
     public void Parse_GitHub_Dialect_Table()
     {
-        var blocks = GetBlockTypes("| A | B |\n|---|---|\n| 1 | 2 |", MdParserFlags.DialectGitHub);
+        var blocks = GetBlockTypes("| A | B |\n|---|---|\n| 1 | 2 |", MarkdownParserFlags.DialectGitHub);
         Assert.Contains("Table", blocks);
     }
 
     [Fact]
     public void Parse_GitHub_Dialect_Strikethrough()
     {
-        var spans = GetSpanTypes("~~deleted~~", MdParserFlags.DialectGitHub);
+        var spans = GetSpanTypes("~~deleted~~", MarkdownParserFlags.DialectGitHub);
         Assert.Contains("Del", spans);
     }
 
     [Fact]
     public void Parse_GitHub_Dialect_TaskList()
     {
-        var blocks = GetBlockTypes("- [x] done\n- [ ] todo", MdParserFlags.DialectGitHub);
+        var blocks = GetBlockTypes("- [x] done\n- [ ] todo", MarkdownParserFlags.DialectGitHub);
         Assert.Contains("Ul", blocks);
     }
 
     [Fact]
     public void Parse_GitHub_Dialect_Autolinks()
     {
-        var spans = GetSpanTypes("Visit http://example.com", MdParserFlags.DialectGitHub);
+        var spans = GetSpanTypes("Visit http://example.com", MarkdownParserFlags.DialectGitHub);
         Assert.Contains("A", spans);
     }
 
@@ -627,7 +627,7 @@ public class Md4cParserTests
     public void Parse_Table_MultipleBodies()
     {
         var markdown = "| A |\n|---|\n| 1 |\n\n| B |\n|---|\n| 2 |";
-        var blocks = GetBlockTypes(markdown, MdParserFlags.Tables);
+        var blocks = GetBlockTypes(markdown, MarkdownParserFlags.Tables);
         Assert.True(blocks.Count(b => b == "Table") >= 2 || blocks.Contains("Table"));
     }
 
@@ -635,7 +635,7 @@ public class Md4cParserTests
     public void Parse_Table_NoBodyRows()
     {
         var markdown = "| A | B |\n|---|---|";
-        var blocks = GetBlockTypes(markdown, MdParserFlags.Tables);
+        var blocks = GetBlockTypes(markdown, MarkdownParserFlags.Tables);
         Assert.Contains("Table", blocks);
     }
 
@@ -658,7 +658,7 @@ public class Md4cParserTests
     public void Parse_DebugLog_Callback()
     {
         var logs = new List<string>();
-        Md4cParser.Parse("# Hello", MdParserFlags.None,
+        Md4cParser.Parse("# Hello", MarkdownParserFlags.None,
             (_, _) => 0, (_, _) => 0, (_, _) => 0, (_, _) => 0, (_, _) => 0,
             debugLog: msg => logs.Add(msg));
         // Debug log may or may not produce output depending on implementation
@@ -668,86 +668,86 @@ public class Md4cParserTests
     public void Parse_Detail_HeadingLevel()
     {
         object? headingDetail = null;
-        Md4cParser.Parse("## H2", MdParserFlags.None,
-            (type, detail) => { if (type == MdBlockType.H) headingDetail = detail; return 0; },
+        Md4cParser.Parse("## H2", MarkdownParserFlags.None,
+            (type, detail) => { if (type == MarkdownBlockType.H) headingDetail = detail; return 0; },
             (_, _) => 0, (_, _) => 0, (_, _) => 0, (_, _) => 0);
         Assert.NotNull(headingDetail);
-        Assert.IsType<MdBlockHDetail>(headingDetail);
-        Assert.Equal(2, ((MdBlockHDetail)headingDetail).Level);
+        Assert.IsType<MarkdownBlockHDetail>(headingDetail);
+        Assert.Equal(2, ((MarkdownBlockHDetail)headingDetail).Level);
     }
 
     [Fact]
     public void Parse_Detail_OrderedListStart()
     {
         object? olDetail = null;
-        Md4cParser.Parse("5. item", MdParserFlags.None,
-            (type, detail) => { if (type == MdBlockType.Ol) olDetail = detail; return 0; },
+        Md4cParser.Parse("5. item", MarkdownParserFlags.None,
+            (type, detail) => { if (type == MarkdownBlockType.Ol) olDetail = detail; return 0; },
             (_, _) => 0, (_, _) => 0, (_, _) => 0, (_, _) => 0);
         Assert.NotNull(olDetail);
-        Assert.IsType<MdBlockOlDetail>(olDetail);
-        Assert.Equal(5, ((MdBlockOlDetail)olDetail).Start);
+        Assert.IsType<MarkdownBlockOlDetail>(olDetail);
+        Assert.Equal(5, ((MarkdownBlockOlDetail)olDetail).Start);
     }
 
     [Fact]
     public void Parse_Detail_LinkHref()
     {
         object? linkDetail = null;
-        Md4cParser.Parse("[text](http://example.com)", MdParserFlags.None,
+        Md4cParser.Parse("[text](http://example.com)", MarkdownParserFlags.None,
             (_, _) => 0, (_, _) => 0,
-            (type, detail) => { if (type == MdSpanType.A) linkDetail = detail; return 0; },
+            (type, detail) => { if (type == MarkdownSpanType.A) linkDetail = detail; return 0; },
             (_, _) => 0, (_, _) => 0);
         Assert.NotNull(linkDetail);
-        Assert.IsType<MdSpanADetail>(linkDetail);
-        Assert.Contains("example.com", ((MdSpanADetail)linkDetail).Href.Text!);
+        Assert.IsType<MarkdownSpanADetail>(linkDetail);
+        Assert.Contains("example.com", ((MarkdownSpanADetail)linkDetail).Href.Text!);
     }
 
     [Fact]
     public void Parse_Detail_ImageSrc()
     {
         object? imgDetail = null;
-        Md4cParser.Parse("![alt](image.png)", MdParserFlags.None,
+        Md4cParser.Parse("![alt](image.png)", MarkdownParserFlags.None,
             (_, _) => 0, (_, _) => 0,
-            (type, detail) => { if (type == MdSpanType.Img) imgDetail = detail; return 0; },
+            (type, detail) => { if (type == MarkdownSpanType.Img) imgDetail = detail; return 0; },
             (_, _) => 0, (_, _) => 0);
         Assert.NotNull(imgDetail);
-        Assert.IsType<MdSpanImgDetail>(imgDetail);
-        Assert.Contains("image.png", ((MdSpanImgDetail)imgDetail).Src.Text!);
+        Assert.IsType<MarkdownSpanImgDetail>(imgDetail);
+        Assert.Contains("image.png", ((MarkdownSpanImgDetail)imgDetail).Src.Text!);
     }
 
     [Fact]
     public void Parse_Detail_FencedCodeInfo()
     {
         object? codeDetail = null;
-        Md4cParser.Parse("```python\nprint('hi')\n```", MdParserFlags.None,
-            (type, detail) => { if (type == MdBlockType.Code) codeDetail = detail; return 0; },
+        Md4cParser.Parse("```python\nprint('hi')\n```", MarkdownParserFlags.None,
+            (type, detail) => { if (type == MarkdownBlockType.Code) codeDetail = detail; return 0; },
             (_, _) => 0, (_, _) => 0, (_, _) => 0, (_, _) => 0);
         Assert.NotNull(codeDetail);
-        Assert.IsType<MdBlockCodeDetail>(codeDetail);
-        Assert.Contains("python", ((MdBlockCodeDetail)codeDetail).Lang.Text!);
+        Assert.IsType<MarkdownBlockCodeDetail>(codeDetail);
+        Assert.Contains("python", ((MarkdownBlockCodeDetail)codeDetail).Lang.Text!);
     }
 
     [Fact]
     public void Parse_Detail_TableColumns()
     {
         object? tableDetail = null;
-        Md4cParser.Parse("| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |", MdParserFlags.Tables,
-            (type, detail) => { if (type == MdBlockType.Table) tableDetail = detail; return 0; },
+        Md4cParser.Parse("| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |", MarkdownParserFlags.Tables,
+            (type, detail) => { if (type == MarkdownBlockType.Table) tableDetail = detail; return 0; },
             (_, _) => 0, (_, _) => 0, (_, _) => 0, (_, _) => 0);
         Assert.NotNull(tableDetail);
-        Assert.IsType<MdBlockTableDetail>(tableDetail);
-        Assert.Equal(3, ((MdBlockTableDetail)tableDetail).ColCount);
+        Assert.IsType<MarkdownBlockTableDetail>(tableDetail);
+        Assert.Equal(3, ((MarkdownBlockTableDetail)tableDetail).ColCount);
     }
 
     [Fact]
     public void Parse_Detail_TaskListItem()
     {
         object? liDetail = null;
-        Md4cParser.Parse("- [x] checked", MdParserFlags.TaskLists,
-            (type, detail) => { if (type == MdBlockType.Li) liDetail = detail; return 0; },
+        Md4cParser.Parse("- [x] checked", MarkdownParserFlags.TaskLists,
+            (type, detail) => { if (type == MarkdownBlockType.Li) liDetail = detail; return 0; },
             (_, _) => 0, (_, _) => 0, (_, _) => 0, (_, _) => 0);
         Assert.NotNull(liDetail);
-        Assert.IsType<MdBlockLiDetail>(liDetail);
-        Assert.True(((MdBlockLiDetail)liDetail).IsTask);
+        Assert.IsType<MarkdownBlockLiDetail>(liDetail);
+        Assert.True(((MarkdownBlockLiDetail)liDetail).IsTask);
     }
 
     [Fact]

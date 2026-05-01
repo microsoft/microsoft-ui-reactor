@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -96,8 +96,8 @@ public sealed class CurveExplorerSample : GallerySample
                         Stroke = ChartSurface,
                         StrokeThickness = 1.5,
                     })),
-                D3Dsl.Text(canvasW / 2 - 20, canvasH - 10, "X", 11, ChartMutedForeground),
-                D3Dsl.Text(2, top - 14, "Y", 11, ChartMutedForeground),
+                D3Charts.Text(canvasW / 2 - 20, canvasH - 10, "X", 11, ChartMutedForeground),
+                D3Charts.Text(2, top - 14, "Y", 11, ChartMutedForeground),
             ]);
 
             return VStack(12,

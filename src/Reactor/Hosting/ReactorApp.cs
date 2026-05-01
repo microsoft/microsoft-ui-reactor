@@ -670,7 +670,7 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
     // referenced by ResourceDictionary keys). Additive safety net — in the normal path
     // the Reactor provider already satisfies queries.
     private IXamlMetadataProvider? _coreProvider;
-    private IXamlMetadataProvider CoreProvider => _coreProvider ??= new Hosting.ReactorCoreXamlMetaDataProvider();
+    private IXamlMetadataProvider CoreProvider => _coreProvider ??= new Hosting.ReactorCoreXamlMetadataProvider();
 
     /// <summary>
     /// Optional callback for unhandled exceptions. If set, called before deciding whether to handle.

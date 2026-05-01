@@ -6,7 +6,7 @@ using static Microsoft.UI.Reactor.Factories;
 namespace Microsoft.UI.Reactor.Tests;
 
 /// <summary>
-/// Tests for VirtualListElement, VirtualListRef, and VirtualListDsl.
+/// Tests for VirtualListElement, VirtualListRef, and Factories.
 /// </summary>
 public class VirtualListTests
 {
@@ -155,7 +155,7 @@ public class VirtualListTests
     [Fact]
     public void DSL_VirtualList_Creates_ComponentElement()
     {
-        var element = VirtualListDsl.VirtualList(
+        var element = VirtualList(
             itemCount: 50,
             renderItem: i => TextBlock($"Item {i}"));
 
@@ -166,7 +166,7 @@ public class VirtualListTests
     [Fact]
     public void DSL_VirtualList_With_FixedHeight_Creates_Element()
     {
-        var element = VirtualListDsl.VirtualList(
+        var element = VirtualList(
             itemCount: 1000,
             renderItem: i => TextBlock($"Row {i}"),
             itemHeight: 32,
@@ -178,7 +178,7 @@ public class VirtualListTests
     [Fact]
     public void DSL_VirtualList_With_Key_Selector_Creates_Element()
     {
-        var element = VirtualListDsl.VirtualList(
+        var element = VirtualList(
             itemCount: 100,
             renderItem: i => TextBlock($"Item {i}"),
             getItemKey: i => $"key-{i}");

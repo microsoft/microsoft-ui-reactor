@@ -1,7 +1,7 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace NetPulse.Charts;
@@ -26,7 +26,7 @@ sealed class TrafficAreaChart : Component<TrafficAreaChartProps>
         if (history.Count < 2)
         {
             return D3Canvas(W, H,
-                D3Dsl.Text(Left, Top + PlotH / 2, "Waiting for traffic data...", 12, Gray(100)));
+                D3Charts.Text(Left, Top + PlotH / 2, "Waiting for traffic data...", 12, Gray(100)));
         }
 
         // Build indexed data points for scales
@@ -84,11 +84,11 @@ sealed class TrafficAreaChart : Component<TrafficAreaChartProps>
 
             // Legend
             D3Rect(Left + 8, Top - 20, 10, 10) with { Fill = Brush(Palette[0], 0.6) },
-            D3Dsl.Text(Left + 22, Top - 22, outLabel, 10, Gray(60)),
+            D3Charts.Text(Left + 22, Top - 22, outLabel, 10, Gray(60)),
             D3Rect(Left + 150, Top - 20, 10, 10) with { Fill = Brush(Palette[1], 0.6) },
-            D3Dsl.Text(Left + 164, Top - 22, inLabel, 10, Gray(60)),
+            D3Charts.Text(Left + 164, Top - 22, inLabel, 10, Gray(60)),
 
-            D3Dsl.Text(Left, 4, "Network Throughput", 13, Gray(40)),
+            D3Charts.Text(Left, 4, "Network Throughput", 13, Gray(40)),
         ]);
     }
 

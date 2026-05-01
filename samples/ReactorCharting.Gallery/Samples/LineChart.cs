@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -53,8 +53,8 @@ public class LineChart : GallerySample
              .. D3Axes(xs, ys, left, top, width, height),
              D3LinePath(data, x: d => xs.Map(d.x), y: d => ys.Map(d.y), stroke: lineBrush, strokeWidth: 2),
              .. data.Select(d => (Element)(D3Circle(xs.Map(d.x), ys.Map(d.y), 3) with { Fill = lineBrush })),
-             D3Dsl.Text(canvasW / 2 - 20, canvasH - 12, "Day", 11, ChartMutedForeground),
-             D3Dsl.Text(2, top - 14, "\u00b0C", 11, ChartMutedForeground)]
+             D3Charts.Text(canvasW / 2 - 20, canvasH - 12, "Day", 11, ChartMutedForeground),
+             D3Charts.Text(2, top - 14, "\u00b0C", 11, ChartMutedForeground)]
         )
             .AutomationName("Daily Temperature (\u00b0C)")
             .FullDescription("Line chart showing daily temperature readings over 30 days, ranging from 5.2\u00b0C to 22.0\u00b0C.");

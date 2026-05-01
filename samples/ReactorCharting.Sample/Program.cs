@@ -5,7 +5,7 @@ using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
-using static Microsoft.UI.Reactor.Charting.ChartDsl;
+using static Microsoft.UI.Reactor.Charting.Charts;
 
 ReactorApp.Run<ChartGallery>("Reactor Chart Gallery", width: 1200, height: 800
 #if DEBUG

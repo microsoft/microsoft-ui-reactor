@@ -163,7 +163,7 @@ class StockGridApp : Component
                 TextBlock(updateMs).VAlign(Microsoft.UI.Xaml.VerticalAlignment.Center).Width(120),
                 TextBlock(mem).VAlign(Microsoft.UI.Xaml.VerticalAlignment.Center).Width(120)
             ).Padding(8),
-            DataGridDsl.DataGrid(
+            DataGrid(
                 source: source,
                 columns: columns,
                 rowHeight: 18,

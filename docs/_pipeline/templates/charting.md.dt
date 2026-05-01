@@ -20,7 +20,7 @@ Add a reference to `ReactorD3.csproj` and import the DSL:
 
 ```csharp
 using Reactor.D3.Charts;
-using static Reactor.D3.Charts.ChartDsl;
+using static Reactor.D3.Charts.Charts;
 ```
 
 ## Line Chart

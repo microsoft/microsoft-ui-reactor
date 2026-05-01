@@ -72,8 +72,8 @@ The `ColumnBuilder<T>` supports chaining:
 | `.NotSortable()` | Disable sort for this column |
 | `.Build()` | Finalize the `FieldDescriptor` |
 
-Import both DSLs: `using static Reactor.DataGrid.DataGridDsl;` and
-`using static Reactor.DataGrid.ColumnDsl;`
+Import both DSLs: `using static Reactor.DataGrid.Factories;` and
+`using static Reactor.DataGrid.Factories;`
 
 ## Auto-Generated Columns
 

@@ -67,7 +67,7 @@ otherwise need to touch.
 
 **Note:** Additional fixes applied during 1B:
 - Added `global::System.*` and `global::Windows.*` prefixes to resolve namespace conflicts caused by `Microsoft.UI.Reactor.*` namespace hierarchy
-- Renamed `D3` static class → `D3Dsl` to avoid collision with `Microsoft.UI.Reactor.Charting.D3` namespace
+- Renamed `D3` static class → `D3Charts` to avoid collision with `Microsoft.UI.Reactor.Charting.D3` namespace
 - Qualified bare `Text()` calls in files where `Microsoft.UI.Text` namespace collides with the DSL method
 - Fixed cross-namespace `using` statements (Localization, Controls, Layout)
 

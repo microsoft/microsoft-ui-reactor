@@ -178,19 +178,19 @@ class IntegratedDataDemo : Microsoft.UI.Reactor.Core.Component
         // ── DataGrid columns — same validators as PropertyGrid ───
         var columns = UseMemo(() => new FieldDescriptor[]
         {
-            ColumnDsl.Column<ProjectTask>("Id", t => t.Id, width: 50),
-            (ColumnDsl.Column<ProjectTask>("Name", t => t.Name, editable: true,
+            Column<ProjectTask>("Id", t => t.Id, width: 50),
+            (Column<ProjectTask>("Name", t => t.Name, editable: true,
                     displayName: "Task Name", width: 180)
                 .Validate(ProjectTask.NameValidators)).Build(),
-            ColumnDsl.Column<ProjectTask>("Category", t => t.Category,
+            Column<ProjectTask>("Category", t => t.Category,
                 editable: true, width: 120),
-            (ColumnDsl.Column<ProjectTask>("Priority", t => t.Priority,
+            (Column<ProjectTask>("Priority", t => t.Priority,
                     editable: true, width: 70)
                 .Validate(ProjectTask.PriorityValidators)).Build(),
-            (ColumnDsl.Column<ProjectTask>("Budget", t => t.Budget,
+            (Column<ProjectTask>("Budget", t => t.Budget,
                     editable: true, displayName: "Budget", format: "C0", width: 100)
                 .Validate(ProjectTask.BudgetValidators)).Build(),
-            ColumnDsl.Column<ProjectTask>("Complete", t => t.Complete,
+            Column<ProjectTask>("Complete", t => t.Complete,
                 editable: true, width: 80),
         });
 
@@ -243,7 +243,7 @@ class IntegratedDataDemo : Microsoft.UI.Reactor.Core.Component
 
                 // PropertyGrid section — plain, no inline validation
                 TextBlock("PropertyGrid (selected item)").SemiBold(),
-                PropertyGridDsl.PropertyGrid(selectedItem, registry),
+                PropertyGrid(selectedItem, registry),
 
                 // Form-level validation summary
                 allErrors.Count > 0
@@ -281,7 +281,7 @@ class IntegratedDataDemo : Microsoft.UI.Reactor.Core.Component
                 (FlexColumn(
                     TextBlock("DataGrid").SemiBold().Flex(shrink: 0),
                     Caption("Click a row to select. Double-click or press F2 to edit a cell.").Foreground(TertiaryText).Flex(shrink: 0),
-                    DataGridDsl.DataGrid(
+                    DataGrid(
                         source: source,
                         columns: columns,
                         selectionMode: SelectionMode.Single,

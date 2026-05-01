@@ -14,7 +14,7 @@ public class Md4cStrikethroughTest
     {
         var md = "~Hi~ Hello, world!";
         var expected = "<p><del>Hi</del> Hello, world!</p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.Strikethrough);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Strikethrough);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -23,7 +23,7 @@ public class Md4cStrikethroughTest
     {
         var md = "This ~text~~ is curious.";
         var expected = "<p>This ~text~~ is curious.</p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.Strikethrough);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Strikethrough);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -32,7 +32,7 @@ public class Md4cStrikethroughTest
     {
         var md = "foo ~~~bar~~~";
         var expected = "<p>foo ~~~bar~~~</p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.Strikethrough);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Strikethrough);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -41,7 +41,7 @@ public class Md4cStrikethroughTest
     {
         var md = "~foo ~bar";
         var expected = "<p>~foo ~bar</p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.Strikethrough);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Strikethrough);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -50,7 +50,7 @@ public class Md4cStrikethroughTest
     {
         var md = "This ~~has a\n\nnew paragraph~~.";
         var expected = "<p>This ~~has a</p>\n<p>new paragraph~~.</p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.Strikethrough);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Strikethrough);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 

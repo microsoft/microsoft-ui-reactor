@@ -2,7 +2,6 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Controls;
 using static Microsoft.UI.Reactor.Factories;
-using static Microsoft.UI.Reactor.Controls.VirtualListDsl;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<CollectionsApp>("Collections", width: 700, height: 600

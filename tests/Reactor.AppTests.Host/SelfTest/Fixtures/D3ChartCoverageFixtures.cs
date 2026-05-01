@@ -7,7 +7,7 @@ using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using WinShapes = Microsoft.UI.Xaml.Shapes;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
@@ -545,7 +545,7 @@ internal static class D3ChartCoverageFixtures
                         D3Rect(10, 10, 80, 60) with { Fill = Brush(Palette[0]), RadiusX = 4, RadiusY = 4 },
                         D3Circle(200, 100, 40) with { Fill = Brush(Palette[1]), Stroke = Brush(Palette[2]) },
                         D3Line(10, 200, 390, 200) with { Stroke = Gray(100), StrokeThickness = 2 },
-                        D3Dsl.Text(10, 250, "Label", 12, Gray(40)),
+                        D3Charts.Text(10, 250, "Label", 12, Gray(40)),
                         TextRight(200, 250, "Right", 80, 12, Gray(40)),
                         TextCenter(300, 250, "Center", 80, 12, Gray(40)),
                         D3Link(50, 10, 150, 100, stroke: Gray(80), strokeWidth: 2),

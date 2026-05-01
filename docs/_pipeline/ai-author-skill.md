@@ -418,8 +418,9 @@ virtualized grid with sort, filter, search, inline editing, column resize/reorde
 `Column<T>(name, accessor, editable?, displayName?, format?, width?, pin?)` →
 `ColumnBuilder<T>` — `.Validate(...)`, `.CellRenderer(...)`, `.NotSortable()`,
 `.Build()`. `AutoColumns<T>(registry?, overrides?)` — auto-generate from
-reflection. Import: `using static Reactor.DataGrid.DataGridDsl;` and
-`using static Reactor.DataGrid.ColumnDsl;`
+reflection. Both `DataGrid<T>(...)` and `Column<T>(...)` are factory methods
+on `Microsoft.UI.Reactor.Factories` — already imported by the standard
+`using static Microsoft.UI.Reactor.Factories;`.
 
 Data sources: `IDataSource<T>` (abstract), `ListDataSource<T>` (in-memory
 with client-side sort/filter/search), `ObservableListDataSource<T>` (wraps
@@ -431,7 +432,7 @@ width, pin, sortable, validators, cell renderer, formatter).
 **Charting** (via ReactorCharting): `LineChart<T>(data, x, y)`,
 `BarChart<T>(data, x, y)`, `AreaChart<T>(data, x, y)`,
 `PieChart<T>(data, value, label?)`, `TreeChart<T>(root, children, label?)`,
-`ForceGraph(nodes, links)`. Import: `using static Microsoft.UI.Reactor.Charting.ChartDsl;`
+`ForceGraph(nodes, links)`. Import: `using static Microsoft.UI.Reactor.Charting.Charts;`
 
 **Accessibility elements:** `SemanticPanel` — wraps a child to provide
 custom automation peer metadata (role, value, range) for complex components
@@ -522,7 +523,7 @@ Generate these as `<topic>.md.dt` + `docs/_pipeline/apps/<topic>/` pairs:
 16. **animation** — Implicit transitions (opacity, scale, translate, rotation, background), .Animate() compositor modifier, enter/exit .Transition() with combinators (+, |), .InteractionStates() zero-reconcile hover/press/focus, .Stagger() cascade, .Keyframes() trigger animations, .ScrollLinked() expression animations, WithAnimation/WithAnimationAsync ambient scopes, spring/ease curves, LayoutAnimation, ConnectedAnimation
 17. **charting** — ReactorCharting chart DSL: LineChart, BarChart, AreaChart, PieChart, TreeChart, ForceGraph; scales (Linear, Band, Log, Pow, Ordinal); shape generators; D3 Canvas drawing primitives; ChartHandle for live updates
 18. **advanced** — ErrorBoundary + fallback UI, Memo for subtree skip, performance tuning (ElementPool, batched renders, bitmask diffs), WinUI escape hatch (`.Set()`), observable data binding (UseObservableTree, UseCollection)
-19. **data-system** — DataGrid\<T\> with sort, filter, search, inline editing (cell/row modes), column resize/reorder, selection; IDataSource\<T\> abstraction, ListDataSource, ObservableListDataSource; FieldDescriptor and ColumnDsl for column definition; DataPageCache for incremental paging; DataGridState headless state machine
+19. **data-system** — DataGrid\<T\> with sort, filter, search, inline editing (cell/row modes), column resize/reorder, selection; IDataSource\<T\> abstraction, ListDataSource, ObservableListDataSource; FieldDescriptor and `Column<T>` / `AutoColumns<T>` factories for column definition; DataPageCache for incremental paging; DataGridState headless state machine
 20. **winforms-interop** — Hosting Reactor components in WinForms via XAML Islands; XamlIslandBootstrap.Run() initialization flow, XamlIslandControl (code and designer), ComponentType property with Properties-grid dropdown, Tab/keyboard bridging, accessibility hooks, background/stretch considerations
 
 ---

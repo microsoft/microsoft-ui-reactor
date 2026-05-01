@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml.Media;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -83,9 +83,9 @@ D3Path(pathData, stroke: Brush(Palette[0]), strokeWidth: 2)
                      double x1 = xs.Map(t.i + 1.5);
                      return D3Rect(x0, top, x1 - x0, height) with { Fill = bandBrush };
                  }),
-             D3Dsl.Text(W / 2 - 20, H - 12, "Day", 11, ChartMutedForeground),
-             D3Dsl.Text(2, top - 14, "\u00b0C", 11, ChartMutedForeground),
-             D3Dsl.Text(left + 5, top + 5, "Shaded regions = missing sensor data", 10, Brush(Palette[3]))]
+             D3Charts.Text(W / 2 - 20, H - 12, "Day", 11, ChartMutedForeground),
+             D3Charts.Text(2, top - 14, "\u00b0C", 11, ChartMutedForeground),
+             D3Charts.Text(left + 5, top + 5, "Shaded regions = missing sensor data", 10, Brush(Palette[3]))]
         )
             .AutomationName("Sensor Temperature with Missing Data")
             .FullDescription("Line chart showing 30 days of sensor temperature readings with gaps where data was unavailable, ranging from 22.1\u00b0C to 30.8\u00b0C.");

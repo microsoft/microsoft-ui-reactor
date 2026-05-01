@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -92,13 +92,13 @@ public class DivergingBarChartSample : GallerySample
                  from el in new Element[]
                  {
                      D3Rect(barStart, y, barWidth, band.Bandwidth) with { Fill = fill, RadiusX = 2, RadiusY = 2 },
-                     D3Dsl.Text(labelX, y + band.Bandwidth / 2 - 7, (v >= 0 ? "+" : "") + v.ToString("F0"), 10, ChartMutedForeground),
+                     D3Charts.Text(labelX, y + band.Bandwidth / 2 - 7, (v >= 0 ? "+" : "") + v.ToString("F0"), 10, ChartMutedForeground),
                  }
                  select el),
 
              D3Line(left, top + plotH, left + plotW, top + plotH) with { Stroke = axisBrush, StrokeThickness = 1 },
              .. xs.Ticks(8).Select(t =>
-                 D3Dsl.Text(left + xs.Map(t) - 12, top + plotH + 6, Fmt(t), 10, axisBrush)),
+                 D3Charts.Text(left + xs.Map(t) - 12, top + plotH + 6, Fmt(t), 10, axisBrush)),
 
              // Y axis labels
              .. items.Select((item, i) =>
@@ -107,7 +107,7 @@ public class DivergingBarChartSample : GallerySample
              // Legend
              .. D3Legend(left + plotW - 120, top + 2, [("Positive", posBrush), ("Negative", negBrush)]),
 
-             D3Dsl.Text(left, 4, "Customer Sentiment Scores", 13, ChartForeground),
+             D3Charts.Text(left, 4, "Customer Sentiment Scores", 13, ChartForeground),
             ]
         )
             .AutomationName("Customer Sentiment Scores")

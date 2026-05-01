@@ -58,9 +58,9 @@ internal static class DataGridPagingFixtures
     {
         return new FieldDescriptor[]
         {
-            ColumnDsl.Column<PagingItem>("Id", p => p.Id, width: 60),
-            ColumnDsl.Column<PagingItem>("Name", p => p.Name, width: 200),
-            ColumnDsl.Column<PagingItem>("Category", p => p.Category, width: 120),
+            Column<PagingItem>("Id", p => p.Id, width: 60),
+            Column<PagingItem>("Name", p => p.Name, width: 200),
+            Column<PagingItem>("Category", p => p.Category, width: 120),
         };
     }
 
@@ -81,7 +81,7 @@ internal static class DataGridPagingFixtures
                 var source = ctx.UseMemo(() => CreateTrackingSource(10_000));
                 tracking = source;
 
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source,
                     columns: CreateColumns(),
                     rowHeight: 36
@@ -132,7 +132,7 @@ internal static class DataGridPagingFixtures
                 var source = ctx.UseMemo(() => CreateTrackingSource(20));
                 tracking = source;
 
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source,
                     columns: CreateColumns(),
                     rowHeight: 36

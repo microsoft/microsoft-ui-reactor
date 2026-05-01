@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -42,10 +42,10 @@ public sealed class BarChartRaceSample : GallerySample
             ..countries.SelectMany((name, ci) => new[] {
                 D3Rect(left, interpY, xScale.Map(interpVal), barH),
                 TextRight(0, interpY, name, left - 10),
-                D3Dsl.Text(left + barW + 6, interpY, $"${val:F1}T"),
+                D3Charts.Text(left + barW + 6, interpY, $"${val:F1}T"),
             }),
-            D3Dsl.Text(..., "GDP by Country"),
-            D3Dsl.Text(..., Years[yearIdx]),  // watermark
+            D3Charts.Text(..., "GDP by Country"),
+            D3Charts.Text(..., Years[yearIdx]),  // watermark
         ])
             .AutomationName("GDP by Country")
             .FullDescription("Animated bar chart race showing GDP of 8 countries from 2018 to 2023 with bars that grow, shrink, and re-sort over time.");
@@ -147,12 +147,12 @@ public sealed class BarChartRaceSample : GallerySample
                         },
                         TextRight(0, by + BarH / 2 - 8, Countries[ci], Left - 10, fontSize: 11,
                             foreground: titleBrush),
-                        D3Dsl.Text(Left + bw + 6, by + BarH / 2 - 7, $"${val:F1}T", fontSize: 10,
+                        D3Charts.Text(Left + bw + 6, by + BarH / 2 - 7, $"${val:F1}T", fontSize: 10,
                             foreground: valueBrush),
                     };
                 }),
-                D3Dsl.Text(12, 8, "GDP by Country (Trillions USD)", fontSize: 14, foreground: titleBrush),
-                D3Dsl.Text(W - 160, H - 80, Years[yearIdx], fontSize: 48, foreground: yearBrush),
+                D3Charts.Text(12, 8, "GDP by Country (Trillions USD)", fontSize: 14, foreground: titleBrush),
+                D3Charts.Text(W - 160, H - 80, Years[yearIdx], fontSize: 48, foreground: yearBrush),
             ])
                 .AutomationName("GDP by Country")
                 .FullDescription("Animated bar chart race showing GDP of 8 countries from 2018 to 2023 with bars that grow, shrink, and re-sort over time.");

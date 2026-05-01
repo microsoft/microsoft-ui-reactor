@@ -1,7 +1,7 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace NetPulse.Charts;
@@ -25,11 +25,11 @@ sealed class ProtocolDonut : Component<ProtocolDonutProps>
         double outerR = 100, innerR = 60;
 
         var elements = new List<Element>();
-        elements.Add(D3Dsl.Text(10, 4, "Protocol Mix", 13, Gray(40)));
+        elements.Add(D3Charts.Text(10, 4, "Protocol Mix", 13, Gray(40)));
 
         if (tcpCount + udpCount == 0)
         {
-            elements.Add(D3Dsl.Text(cx - 40, cy - 7, "No data", 12, Gray(100)));
+            elements.Add(D3Charts.Text(cx - 40, cy - 7, "No data", 12, Gray(100)));
             return D3Canvas(W, H, elements.ToArray());
         }
 
@@ -56,7 +56,7 @@ sealed class ProtocolDonut : Component<ProtocolDonutProps>
         {
             var (lx, ly) = ArcGenerator.Centroid(arc.StartAngle, arc.EndAngle,
                 innerRadius: outerR + 16, outerRadius: outerR + 16);
-            elements.Add(D3Dsl.Text(cx + lx - 16, cy + ly - 7,
+            elements.Add(D3Charts.Text(cx + lx - 16, cy + ly - 7,
                 $"{arc.Data.Name} ({(int)arc.Data.Value})", 10, Gray(60)));
         }
 

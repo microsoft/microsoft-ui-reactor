@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -113,8 +113,8 @@ public sealed class IcicleSample : GallerySample
                     [
                         D3Rect(node.X0, node.Y0, w, h) with { Fill = fill, RadiusX = 1, RadiusY = 1 },
                         D3Rect(node.X0, node.Y0, w, h) with { Stroke = ChartSurfaceAlpha(180), StrokeThickness = 0.5 },
-                        .. (w > 50 && h > 16 ? [D3Dsl.Text(node.X0 + 4, node.Y0 + 3, label, 9, Gray(20))] : (Element[])[]),
-                        .. (w > 50 && h > 30 ? [D3Dsl.Text(node.X0 + 4, node.Y0 + 16, valLabel, 8, ChartMutedForeground)] : (Element[])[]),
+                        .. (w > 50 && h > 16 ? [D3Charts.Text(node.X0 + 4, node.Y0 + 3, label, 9, Gray(20))] : (Element[])[]),
+                        .. (w > 50 && h > 30 ? [D3Charts.Text(node.X0 + 4, node.Y0 + 16, valLabel, 8, ChartMutedForeground)] : (Element[])[]),
                     ];
                 }),
         ])

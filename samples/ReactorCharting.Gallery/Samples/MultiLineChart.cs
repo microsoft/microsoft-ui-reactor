@@ -4,8 +4,8 @@ using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
-using static Microsoft.UI.Reactor.Charting.ChartDsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
+using static Microsoft.UI.Reactor.Charting.Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -26,7 +26,7 @@ var chart = D3Canvas(W, H, [..grid, ..axes, ..lines, ..legend])
 var table = BuildDataTable(months, labels, allSeries);
 
 // Wrap: press T or Alt+Shift+F11 to toggle between chart ↔ table
-return ChartDsl.WithAlternateView(chart, table);
+return Charts.WithAlternateView(chart, table);
 ";
 
     // Monthly average temperatures (12 months)
@@ -56,7 +56,7 @@ return ChartDsl.WithAlternateView(chart, table);
         var ys = new LinearScale([yMax + 3, yMin - 3], [top, top + height]).Nice();
 
         var monthLabels = Months.Select((m, i) =>
-            D3Dsl.Text(xs.Map(i) - 10, top + height + 4, m, 10, ChartMutedForeground));
+            D3Charts.Text(xs.Map(i) - 10, top + height + 4, m, 10, ChartMutedForeground));
 
         var lines = allSeries.Select((series, s) =>
         {
@@ -73,7 +73,7 @@ return ChartDsl.WithAlternateView(chart, table);
              .. monthLabels,
              .. lines,
              .. D3Legend(legendX, top + 10, labels.Select((label, s) => (label, Brush(colors[s])))),
-             D3Dsl.Text(2, top - 14, "\u00b0C", 11, ChartMutedForeground)]
+             D3Charts.Text(2, top - 14, "\u00b0C", 11, ChartMutedForeground)]
         )
             .AutomationName("Monthly Temperatures (\u00b0C)")
             .FullDescription("Multi-line chart comparing monthly average temperatures for New York, London, and Tokyo across 12 months.");

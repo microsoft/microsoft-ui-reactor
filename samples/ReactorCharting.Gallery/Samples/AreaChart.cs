@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -63,7 +63,7 @@ public class AreaChart : GallerySample
              D3LinePath(data, x: d => xScale.Map(d.x), y: d => yScale.Map(d.y),
                 stroke: Brush(Palette[0]), strokeWidth: 2, curve: D3Curve.MonotoneX),
              .. dots,
-             D3Dsl.Text(marginLeft, 2, "Area Chart", 14, ChartForeground)]
+             D3Charts.Text(marginLeft, 2, "Area Chart", 14, ChartForeground)]
         )
             .AutomationName("Area Chart")
             .FullDescription("Area chart with 20 smoothly varying data points.");

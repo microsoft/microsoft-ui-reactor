@@ -49,7 +49,7 @@ class GalleryApp : Component
         // Charts read this flag to pick axis/label/grid brushes that contrast
         // with the current theme. Set here so it's current by the time any
         // descendant sample.Render() runs.
-        Microsoft.UI.Reactor.Charting.D3Dsl.IsDarkTheme = isDark;
+        Microsoft.UI.Reactor.Charting.D3Charts.IsDarkTheme = isDark;
 
         // The Windows caption buttons (min/max/close) are system chrome —
         // they don't adapt to RequestedTheme on the Reactor tree. Push the

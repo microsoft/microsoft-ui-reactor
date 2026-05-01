@@ -7,7 +7,7 @@ goal: |
   Cover DataGrid<T> with sort, filter, search, inline editing (cell and row
   modes), column resize/reorder, and selection. Teach IDataSource<T> for data
   access, ListDataSource and ObservableListDataSource providers, FieldDescriptor
-  and ColumnDsl for column definition, DataPageCache for incremental paging,
+  and Factories for column definition, DataPageCache for incremental paging,
   and DataGridState for headless testing.
 ---
 
@@ -57,8 +57,8 @@ The `ColumnBuilder<T>` supports chaining:
 | `.NotSortable()` | Disable sort for this column |
 | `.Build()` | Finalize the `FieldDescriptor` |
 
-Import both DSLs: `using static Reactor.DataGrid.DataGridDsl;` and
-`using static Reactor.DataGrid.ColumnDsl;`
+Import both DSLs: `using static Reactor.DataGrid.Factories;` and
+`using static Reactor.DataGrid.Factories;`
 
 ## Auto-Generated Columns
 

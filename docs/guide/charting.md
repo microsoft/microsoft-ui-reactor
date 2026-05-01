@@ -10,7 +10,7 @@ Add a reference to `ReactorD3.csproj` and import the DSL:
 
 ```csharp
 using Reactor.D3.Charts;
-using static Reactor.D3.Charts.ChartDsl;
+using static Reactor.D3.Charts.Charts;
 ```
 
 ## Line Chart
@@ -34,6 +34,11 @@ class LineChartDemo : Component
         return VStack(12,
             SubHeading("Line Chart"),
             LineChart(data, d => d.Month, d => d.Revenue)
+                .Title("Monthly Revenue — Line")
+                .SeriesName("Revenue")
+                .Units("months", "USD")
+                .AxisLabel(ChartAxisType.X, "Month")
+                .AxisLabel(ChartAxisType.Y, "Revenue (USD)")
                 .Width(600).Height(250)
                 .Stroke("#0078D4").StrokeWidth(2.5)
                 .ShowGrid(true).ShowAxes(true)
@@ -65,6 +70,11 @@ class BarChartDemo : Component
         return VStack(12,
             SubHeading("Bar Chart"),
             BarChart(data, d => d.Month, d => d.Revenue)
+                .Title("Quarterly Revenue — Bar")
+                .SeriesName("Revenue")
+                .Units("quarters", "USD")
+                .AxisLabel(ChartAxisType.X, "Quarter")
+                .AxisLabel(ChartAxisType.Y, "Revenue (USD)")
                 .Width(600).Height(250)
                 .Fill("#50C878")
                 .ShowGrid(true).ShowAxes(true)
@@ -100,6 +110,11 @@ class AreaChartDemo : Component
         return VStack(12,
             SubHeading("Area Chart"),
             AreaChart(data, d => d.Month, d => d.Revenue)
+                .Title("Monthly Revenue — Area")
+                .SeriesName("Revenue")
+                .Units("months", "USD")
+                .AxisLabel(ChartAxisType.X, "Month")
+                .AxisLabel(ChartAxisType.Y, "Revenue (USD)")
                 .Width(600).Height(250)
                 .Stroke("#9B59B6").Fill("#9B59B6")
                 .FillOpacity(0.2)
@@ -135,6 +150,8 @@ class PieChartDemo : Component
         return VStack(12,
             SubHeading("Pie Chart"),
             PieChart(data, d => d.Value, d => d.Name)
+                .Title("Team Distribution")
+                .Description("Pie chart showing team size across Engineering, Marketing, Sales, and Support.")
                 .Width(300).Height(300)
                 .InnerRadius(60)
                 .PadAngle(0.03)
@@ -197,6 +214,10 @@ class CombinedChartDemo : Component
             SubHeading("Interactive Chart"),
             ComboBox(years, year, setYear),
             AreaChart(data, d => d.Month, d => d.Revenue)
+                .Title("Revenue by Year")
+                .SeriesName("Revenue")
+                .Units("months", "USD")
+                .Interactive()
                 .Width(600).Height(250)
                 .Stroke("#0078D4").Fill("#0078D4")
                 .FillOpacity(0.15)
@@ -235,6 +256,9 @@ class DynamicDataDemo : Component
                     .Select(i => new SalesPoint(i, Random.Shared.Next(50, 500)))
                     .ToList())),
             BarChart<SalesPoint>(points, d => d.Month, d => d.Revenue)
+                .Title("Dynamic Revenue Data")
+                .SeriesName("Revenue")
+                .Units("months", "USD")
                 .Width(600).Height(250)
                 .Fill("#E74C3C")
                 .ShowGrid(true).ShowAxes(true)
@@ -247,6 +271,79 @@ class DynamicDataDemo : Component
 
 For high-frequency updates (60fps streaming), use `OnReady` to get a
 handle that exposes the underlying `Canvas` for direct manipulation.
+
+## Chart Accessibility
+
+Charts are fully accessible out of the box. Add `.Title()` and
+`.SeriesName()` for screen-reader identification, `.Units()` for axis
+annotations, and `.Interactive()` for keyboard navigation:
+
+```csharp
+/// <summary>
+/// Canonical accessible chart pattern — demonstrates all recommended accessibility
+/// modifiers for both static and interactive charts. Follow this pattern to ensure
+/// charts are fully accessible to screen readers, keyboard users, and users who
+/// need forced-colors or reduced-motion.
+/// </summary>
+class AccessibleChartDemo : Component
+{
+    public override Element Render()
+    {
+        var data = new SalesPoint[]
+        {
+            new(1, 120), new(2, 180), new(3, 150),
+            new(4, 220), new(5, 310), new(6, 280)
+        };
+
+        return VStack(12,
+            SubHeading("Accessible Chart"),
+
+            // Static accessible chart: Title + SeriesName + Units
+            LineChart(data, d => d.Month, d => d.Revenue)
+                .Title("Monthly Revenue 2024")
+                .SeriesName("Revenue")
+                .Units("months", "USD")
+                .AxisLabel(ChartAxisType.X, "Month")
+                .AxisLabel(ChartAxisType.Y, "Revenue (USD)")
+                .Width(600).Height(250)
+                .Stroke("#0078D4").StrokeWidth(2.5)
+                .ShowGrid(true).ShowAxes(true),
+
+            // Interactive accessible chart: adds keyboard nav and point invocation
+            BarChart(data, d => d.Month, d => d.Revenue)
+                .Title("Monthly Revenue — Interactive")
+                .SeriesName("Revenue")
+                .Units("months", "USD")
+                .Interactive()
+                .Width(600).Height(250)
+                .Fill("#50C878")
+                .ShowGrid(true).ShowAxes(true)
+        ).Padding(24);
+    }
+}
+```
+
+![Accessible chart](images/charting/accessible-chart.png)
+
+### Accessibility Modifiers
+
+| Method | Purpose |
+|--------|---------|
+| `.Title(str)` | Visible title and accessible name |
+| `.Description(str)` | Override auto-generated summary |
+| `.SeriesName(str)` | Name the data series |
+| `.Units(x, y)` | Axis unit annotations (e.g., "months", "USD") |
+| `.AxisLabel(axis, str)` | Explicit axis label |
+| `.Interactive()` | Enable keyboard navigation and virtual focus |
+| `.OnPointInvoke(handler)` | Callback when Enter/Space pressed on a point |
+| `.AlternateView(element)` | Toggle between chart and data table (T key) |
+| `.Palette(palette)` | Curated colorblind-safe palette |
+| `.SeriesShapes(shapes)` | Marker shapes for double-encoding |
+| `.SeriesDashes(dashes)` | Dash patterns for double-encoding |
+
+Screen readers announce the chart type, series count, data range, and
+individual point values. Keyboard users navigate with arrow keys, invoke
+points with Enter, and toggle an alternate data-table view with T.
 
 ## Low-Level Drawing
 

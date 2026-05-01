@@ -6,8 +6,6 @@ using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Factories;
-using static Microsoft.UI.Reactor.Controls.DataGridDsl;
-using static Microsoft.UI.Reactor.Controls.ColumnDsl;
 
 ReactorApp.Run<DataSystemApp>("Data System", width: 900, height: 600
 #if DEBUG

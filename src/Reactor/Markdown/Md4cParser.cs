@@ -102,7 +102,7 @@ internal sealed partial class Md4cParser
 
     private struct Block
     {
-        public MdBlockType Type;
+        public MarkdownBlockType Type;
         public byte Flags;
         public int Data;
         public int NLines;
@@ -139,7 +139,7 @@ internal sealed partial class Md4cParser
     private struct AttributeBuild
     {
         public char[]? Text;
-        public MdTextType[]? SubstrTypes;
+        public MarkdownTextType[]? SubstrTypes;
         public int[]? SubstrOffsets;
         public int SubstrCount;
     }
@@ -149,13 +149,13 @@ internal sealed partial class Md4cParser
     // Immutable: parameters of Parse()
     private readonly string text;
     private readonly int size;
-    private readonly MdParserFlags flags;
-    private readonly MdEnterBlockCallback enterBlock;
-    private readonly MdLeaveBlockCallback leaveBlock;
-    private readonly MdEnterSpanCallback enterSpan;
-    private readonly MdLeaveSpanCallback leaveSpan;
-    private readonly MdTextCallback textCb;
-    private readonly MdDebugLogCallback? debugLog;
+    private readonly MarkdownParserFlags flags;
+    private readonly MarkdownEnterBlockCallback enterBlock;
+    private readonly MarkdownLeaveBlockCallback leaveBlock;
+    private readonly MarkdownEnterSpanCallback enterSpan;
+    private readonly MarkdownLeaveSpanCallback leaveSpan;
+    private readonly MarkdownTextCallback textCb;
+    private readonly MarkdownDebugLogCallback? debugLog;
 
     // Optimization hint
     private readonly bool docEndsWithNewline;
@@ -236,13 +236,13 @@ internal sealed partial class Md4cParser
 
     private Md4cParser(
         string text,
-        MdParserFlags flags,
-        MdEnterBlockCallback enterBlock,
-        MdLeaveBlockCallback leaveBlock,
-        MdEnterSpanCallback enterSpan,
-        MdLeaveSpanCallback leaveSpan,
-        MdTextCallback textCb,
-        MdDebugLogCallback? debugLog)
+        MarkdownParserFlags flags,
+        MarkdownEnterBlockCallback enterBlock,
+        MarkdownLeaveBlockCallback leaveBlock,
+        MarkdownEnterSpanCallback enterSpan,
+        MarkdownLeaveSpanCallback leaveSpan,
+        MarkdownTextCallback textCb,
+        MarkdownDebugLogCallback? debugLog)
     {
         this.text = text;
         this.size = text.Length;
@@ -254,7 +254,7 @@ internal sealed partial class Md4cParser
         this.textCb = textCb;
         this.debugLog = debugLog;
 
-        codeIndentOffset = (flags & MdParserFlags.NoIndentedCodeBlocks) != 0 ? -1 : 4;
+        codeIndentOffset = (flags & MarkdownParserFlags.NoIndentedCodeBlocks) != 0 ? -1 : 4;
         docEndsWithNewline = size > 0 && Md4cUnicode.IsNewline(text[size - 1]);
         maxRefDefOutput = Math.Min(Math.Min(16L * size, 1024 * 1024L), int.MaxValue);
 
@@ -278,13 +278,13 @@ internal sealed partial class Md4cParser
     /// </summary>
     public static int Parse(
         string text,
-        MdParserFlags flags,
-        MdEnterBlockCallback enterBlock,
-        MdLeaveBlockCallback leaveBlock,
-        MdEnterSpanCallback enterSpan,
-        MdLeaveSpanCallback leaveSpan,
-        MdTextCallback textCb,
-        MdDebugLogCallback? debugLog = null)
+        MarkdownParserFlags flags,
+        MarkdownEnterBlockCallback enterBlock,
+        MarkdownLeaveBlockCallback leaveBlock,
+        MarkdownEnterSpanCallback enterSpan,
+        MarkdownLeaveSpanCallback leaveSpan,
+        MarkdownTextCallback textCb,
+        MarkdownDebugLogCallback? debugLog = null)
     {
         var parser = new Md4cParser(text, flags, enterBlock, leaveBlock, enterSpan, leaveSpan, textCb, debugLog);
         return parser.ProcessDoc();
@@ -303,35 +303,35 @@ internal sealed partial class Md4cParser
 
     // ── Callback helpers ─────────────────────────────────────────────────
 
-    private int EnterBlock(MdBlockType type, object? detail)
+    private int EnterBlock(MarkdownBlockType type, object? detail)
     {
         int ret = enterBlock(type, detail);
         if (ret != 0) Log("Aborted from enter_block() callback.");
         return ret;
     }
 
-    private int LeaveBlock(MdBlockType type, object? detail)
+    private int LeaveBlock(MarkdownBlockType type, object? detail)
     {
         int ret = leaveBlock(type, detail);
         if (ret != 0) Log("Aborted from leave_block() callback.");
         return ret;
     }
 
-    private int EnterSpan(MdSpanType type, object? detail)
+    private int EnterSpan(MarkdownSpanType type, object? detail)
     {
         int ret = enterSpan(type, detail);
         if (ret != 0) Log("Aborted from enter_span() callback.");
         return ret;
     }
 
-    private int LeaveSpan(MdSpanType type, object? detail)
+    private int LeaveSpan(MarkdownSpanType type, object? detail)
     {
         int ret = leaveSpan(type, detail);
         if (ret != 0) Log("Aborted from leave_span() callback.");
         return ret;
     }
 
-    private int Text(MdTextType type, int off, int len)
+    private int Text(MarkdownTextType type, int off, int len)
     {
         if (len > 0)
         {
@@ -341,7 +341,7 @@ internal sealed partial class Md4cParser
         return 0;
     }
 
-    private int TextBuf(MdTextType type, ReadOnlySpan<char> buf)
+    private int TextBuf(MarkdownTextType type, ReadOnlySpan<char> buf)
     {
         if (buf.Length > 0)
         {
@@ -351,12 +351,12 @@ internal sealed partial class Md4cParser
         return 0;
     }
 
-    private int TextInsecure(MdTextType type, int off, int len)
+    private int TextInsecure(MarkdownTextType type, int off, int len)
     {
         return TextWithNullReplacement(type, off, len);
     }
 
-    private int TextWithNullReplacement(MdTextType type, int off, int len)
+    private int TextWithNullReplacement(MarkdownTextType type, int off, int len)
     {
         int end = off + len;
         int segStart = off;
@@ -369,7 +369,7 @@ internal sealed partial class Md4cParser
                     int ret = textCb(type, text.AsSpan(segStart, off - segStart));
                     if (ret != 0) return ret;
                 }
-                int ret2 = textCb(MdTextType.NullChar, "\0".AsSpan());
+                int ret2 = textCb(MarkdownTextType.NullChar, "\0".AsSpan());
                 if (ret2 != 0) return ret2;
                 off++;
                 segStart = off;
@@ -496,25 +496,25 @@ internal sealed partial class Md4cParser
         markCharMap[']'] = true;
         // '\0' is not a valid char in C# strings, skip it.
 
-        if ((flags & MdParserFlags.Strikethrough) != 0)
+        if ((flags & MarkdownParserFlags.Strikethrough) != 0)
             markCharMap['~'] = true;
 
-        if ((flags & MdParserFlags.LatexMathSpans) != 0)
+        if ((flags & MarkdownParserFlags.LatexMathSpans) != 0)
             markCharMap['$'] = true;
 
-        if ((flags & MdParserFlags.PermissiveEmailAutolinks) != 0)
+        if ((flags & MarkdownParserFlags.PermissiveEmailAutolinks) != 0)
             markCharMap['@'] = true;
 
-        if ((flags & MdParserFlags.PermissiveUrlAutolinks) != 0)
+        if ((flags & MarkdownParserFlags.PermissiveUrlAutolinks) != 0)
             markCharMap[':'] = true;
 
-        if ((flags & MdParserFlags.PermissiveWwwAutolinks) != 0)
+        if ((flags & MarkdownParserFlags.PermissiveWwwAutolinks) != 0)
             markCharMap['.'] = true;
 
-        if ((flags & (MdParserFlags.Tables | MdParserFlags.WikiLinks)) != 0)
+        if ((flags & (MarkdownParserFlags.Tables | MarkdownParserFlags.WikiLinks)) != 0)
             markCharMap['|'] = true;
 
-        if ((flags & MdParserFlags.CollapseWhitespace) != 0)
+        if ((flags & MarkdownParserFlags.CollapseWhitespace) != 0)
         {
             for (int i = 0; i < markCharMap.Length; i++)
             {

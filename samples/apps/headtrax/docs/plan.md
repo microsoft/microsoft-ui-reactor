@@ -157,7 +157,7 @@ variance in the data itself from random title/dept/location assignment).
 | `HeadTrax/DataSources/SqliteDataSource.cs` | **Done** | Full `IDataSource` + `IKeyedDataSource`, parameterized SQL, FTS search, column whitelist |
 | `HeadTrax/DataSources/GraphQLDataSource.cs` | **Done** | Full `IDataSource`, builds GraphQL query string, maps camelCase ↔ snake_case, `JsonElement` row parsing |
 | `HeadTrax/Components/Toolbar.cs` | **Done** | ToggleButton pair for data source switching, FlexColumn spacers, `with {}` for flex props |
-| `HeadTrax/Components/EmployeeGrid.cs` | **Done** | FlexColumn layout, `with {}` for flex props, DataGridDsl.DataGrid call |
+| `HeadTrax/Components/EmployeeGrid.cs` | **Done** | FlexColumn layout, `with {}` for flex props, DataGrid call |
 
 ### Phase 1 complete
 
@@ -294,7 +294,7 @@ dotnet run
 | `FieldDescriptor` | Column definitions in EmployeeSchema |
 | `DataSourceCapabilities` | Both sources declare full server capabilities |
 | `RowKey` | Employee ID as row identity |
-| `DataGridDsl.DataGrid<T>()` | Grid instantiation with explicit columns |
+| `DataGrid<T>()` | Grid instantiation with explicit columns |
 | `Component<TProps>` | All UI components |
 | `UseState` / `UseMemo` | State management in App, EmployeeGrid |
 | `FlexRow` / `FlexColumn` | Layout |

@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -28,7 +28,7 @@ public sealed class IndentedTreeSample : GallerySample
                  return new Element[] {
                      hasChildren ? D3Path(pb.ToString(), null, ChartMutedForeground, 0)
                                  : D3Circle(indent - 8, y + 9, 2.5) with { Fill = ChartSubtleStroke },
-                     D3Dsl.Text(indent, y + 3, node.Data.Name, 10, nameColor),
+                     D3Charts.Text(indent, y + 3, node.Data.Name, 10, nameColor),
                  };
              }),
             ]
@@ -93,8 +93,8 @@ public sealed class IndentedTreeSample : GallerySample
         [
             // Header
             D3Rect(0, startY, W, rowH) with { Fill = ChartSubtleFill },
-            D3Dsl.Text(startX, startY + 3, "Name", 10, ChartForeground),
-            D3Dsl.Text(typeCol, startY + 3, "Type", 10, ChartForeground),
+            D3Charts.Text(startX, startY + 3, "Name", 10, ChartForeground),
+            D3Charts.Text(typeCol, startY + 3, "Type", 10, ChartForeground),
 
             // Rows
             .. rows.Select((node, i) => (node, i, y: startY + (i + 1) * rowH))
@@ -119,8 +119,8 @@ public sealed class IndentedTreeSample : GallerySample
                     [
                         .. (i % 2 == 0 ? new[] { D3Rect(0, y, W, rowH) with { Fill = ChartSubtleFill } } : Array.Empty<Element>()),
                         indicator,
-                        D3Dsl.Text(indent, y + 3, node.Data.Name, 10, nameColor),
-                        D3Dsl.Text(typeCol, y + 3, node.Data.Type, 9, ChartMutedForeground),
+                        D3Charts.Text(indent, y + 3, node.Data.Name, 10, nameColor),
+                        D3Charts.Text(typeCol, y + 3, node.Data.Type, 9, ChartMutedForeground),
                         D3Line(0, y + rowH, W, y + rowH) with { Stroke = ChartSubtleStroke, StrokeThickness = 0.5 },
                     ];
                 }),

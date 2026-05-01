@@ -205,7 +205,7 @@
       "files": [
         "Reactor/Controls/PropertyGrid/PropertyGridComponent.cs",
         "Reactor/Controls/PropertyGrid/PropertyGridElement.cs",
-        "Reactor/Controls/PropertyGrid/PropertyGridDsl.cs",
+        "Reactor/Controls/PropertyGrid/Factories.cs",
         "Reactor/Controls/PropertyGrid/PropertyGridDefaults.cs"
       ],
       "description": "PropertyGrid \u2014 component lifecycle, event wiring"
@@ -1037,7 +1037,7 @@
       "files": [
         "Reactor/Controls/PropertyGrid/PropertyGridComponent.cs",
         "Reactor/Controls/PropertyGrid/PropertyGridElement.cs",
-        "Reactor/Controls/PropertyGrid/PropertyGridDsl.cs",
+        "Reactor/Controls/PropertyGrid/Factories.cs",
         "Reactor/Controls/PropertyGrid/PropertyGridDefaults.cs",
         "Reactor/Controls/PropertyGrid/ArrayOperations.cs",
         "Reactor/Controls/PropertyGrid/Attributes.cs"
@@ -1180,8 +1180,8 @@
       "id": "general-batch-23",
       "agent": "general",
       "files": [
-        "Reactor/Charting/Charts/ChartDsl.cs",
-        "Reactor/Charting/Charts/D3Dsl.cs",
+        "Reactor/Charting/Charts/Charts.cs",
+        "Reactor/Charting/Charts/D3Charts.cs",
         "Reactor/Charting/Charts/PathDataParser.cs",
         "Reactor/Charting/Charts/TreeChartDsl.cs",
         "Reactor/Charting/Chord/Chord.cs",

@@ -9,8 +9,8 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
-using static Microsoft.UI.Reactor.Charting.ChartDsl;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.Charts;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -48,7 +48,7 @@ internal static class ChartAccessibilityFixtures
         public override async Task RunAsync()
         {
             // Verify ChartElement implements IChartAccessibilityData
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Test Line Chart")
                 .SeriesName("Revenue");
 
@@ -78,7 +78,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.BarChart(SampleBars, d => d.X, d => d.Y)
+            var chart = Charts.BarChart(SampleBars, d => d.X, d => d.Y)
                 .SeriesName("Sales");
 
             var a11y = (IChartAccessibilityData)chart;
@@ -108,7 +108,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .SeriesName("Revenue")
                 .Units(yUnits: " USD");
 
@@ -145,7 +145,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .SeriesName("Quarterly Revenue");
 
             var a11y = (IChartAccessibilityData)chart;
@@ -176,7 +176,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.PieChart(SamplePie, d => d.Value, d => d.Label)
+            var chart = Charts.PieChart(SamplePie, d => d.Value, d => d.Label)
                 .Title("Distribution");
 
             var a11y = (IChartAccessibilityData)chart;
@@ -220,7 +220,7 @@ internal static class ChartAccessibilityFixtures
                 new(1, 2, Strength: 2),
             };
 
-            var graph = ChartDsl.ForceGraph(nodes, links)
+            var graph = Charts.ForceGraph(nodes, links)
                 .Title("Social Network");
 
             var a11y = (IChartAccessibilityData)graph;
@@ -251,7 +251,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .SeriesName("Revenue")
                 .Units(yUnits: " USD");
 
@@ -279,7 +279,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .DataLabel((d, i) => $"Custom #{i}: {d.Y}");
 
             var a11y = (IChartAccessibilityData)chart;
@@ -309,7 +309,7 @@ internal static class ChartAccessibilityFixtures
                 .Select(i => new DataPoint(i, i * 100.0))
                 .ToArray();
 
-            var chart = ChartDsl.LineChart(data, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(data, d => d.X, d => d.Y)
                 .SeriesName("Revenue");
 
             var a11y = (IChartAccessibilityData)chart;
@@ -335,7 +335,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Revenue Over Time");
 
             var a11y = (IChartAccessibilityData)chart;
@@ -356,7 +356,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y);
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y);
 
             var a11y = (IChartAccessibilityData)chart;
             H.Check("ChartA11y_AutoNameFallback_NoExplicitName",
@@ -384,13 +384,13 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            D3Dsl.IsForcedColors = true;
+            D3Charts.IsForcedColors = true;
             try
             {
-                var brush0 = D3Dsl.ChartSeries(0);
-                var brush1 = D3Dsl.ChartSeries(1);
-                var brush2 = D3Dsl.ChartSeries(2);
-                var brush3 = D3Dsl.ChartSeries(3);
+                var brush0 = D3Charts.ChartSeries(0);
+                var brush1 = D3Charts.ChartSeries(1);
+                var brush2 = D3Charts.ChartSeries(2);
+                var brush3 = D3Charts.ChartSeries(3);
 
                 H.Check("ChartA11y_ForcedColorsPalette_Series0",
                     brush0.Color == Microsoft.UI.Colors.White);
@@ -403,7 +403,7 @@ internal static class ChartAccessibilityFixtures
             }
             finally
             {
-                D3Dsl.IsForcedColors = false;
+                D3Charts.IsForcedColors = false;
             }
             await Harness.Render();
         }
@@ -439,7 +439,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Revenue")
                 .ColorOnly();
 
@@ -471,7 +471,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y);
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y);
 
             var host = H.CreateHost();
             XamlInterop.Register(host.Reconciler);
@@ -498,7 +498,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Revenue")
                 .ColorOnly();
 
@@ -522,7 +522,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Revenue")
                 .SeriesColors(
                     new D3Color(128, 128, 128),
@@ -552,7 +552,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Monthly Revenue")
                 .SeriesName("Revenue")
                 .Units("months", "USD");
@@ -572,27 +572,27 @@ internal static class ChartAccessibilityFixtures
     }
 
     /// <summary>
-    /// Reduced-motion: verify D3Dsl.IsReducedMotion flag is readable.
+    /// Reduced-motion: verify D3Charts.IsReducedMotion flag is readable.
     /// </summary>
     internal class ReducedMotion(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             // Save and restore the flag
-            bool saved = D3Dsl.IsReducedMotion;
+            bool saved = D3Charts.IsReducedMotion;
             try
             {
-                D3Dsl.IsReducedMotion = true;
+                D3Charts.IsReducedMotion = true;
                 H.Check("ChartA11y_ReducedMotion_FlagSet",
-                    D3Dsl.IsReducedMotion == true);
+                    D3Charts.IsReducedMotion == true);
 
-                D3Dsl.IsReducedMotion = false;
+                D3Charts.IsReducedMotion = false;
                 H.Check("ChartA11y_ReducedMotion_FlagCleared",
-                    D3Dsl.IsReducedMotion == false);
+                    D3Charts.IsReducedMotion == false);
             }
             finally
             {
-                D3Dsl.IsReducedMotion = saved;
+                D3Charts.IsReducedMotion = saved;
             }
             await Harness.Render();
         }
@@ -605,7 +605,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Test")
                 .Interactive()
                 .TightHitTest();
@@ -630,7 +630,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Test")
                 .Interactive()
                 .DisableKeyboard();
@@ -653,7 +653,7 @@ internal static class ChartAccessibilityFixtures
         public override async Task RunAsync()
         {
             var alternate = TextBlock("Data table placeholder");
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Revenue")
                 .AlternateView(alternate);
 
@@ -674,7 +674,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Revenue");
 
             var host = H.CreateHost();
@@ -699,7 +699,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Revenue")
                 .SeriesName("Q1")
                 .Interactive();
@@ -735,7 +735,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Revenue")
                 .Interactive();
 
@@ -764,7 +764,7 @@ internal static class ChartAccessibilityFixtures
         public override async Task RunAsync()
         {
             // Create a chart that exposes 2 series via accessibility data
-            var chart1 = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart1 = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Multi-series")
                 .SeriesNames("Series A", "Series B")
                 .Interactive();
@@ -794,7 +794,7 @@ internal static class ChartAccessibilityFixtures
         public override async Task RunAsync()
         {
             int invokedIndex = -1;
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Revenue")
                 .OnPointInvoke((item, index) => invokedIndex = index);
 
@@ -818,7 +818,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Revenue")
                 .Interactive();
 
@@ -844,7 +844,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Revenue")
                 .Interactive();
 
@@ -921,7 +921,7 @@ internal static class ChartAccessibilityFixtures
     {
         public override async Task RunAsync()
         {
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Revenue")
                 .ShowAxes(true)
                 .ShowGrid(true);
@@ -1045,7 +1045,7 @@ internal static class ChartAccessibilityFixtures
         public override async Task RunAsync()
         {
             // Create a chart exercising all layers
-            var chart = ChartDsl.LineChart(SampleLine, d => d.X, d => d.Y)
+            var chart = Charts.LineChart(SampleLine, d => d.X, d => d.Y)
                 .Title("Integration Revenue Chart")
                 .SeriesName("Revenue")
                 .Units("months", "USD")

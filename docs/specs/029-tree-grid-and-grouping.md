@@ -606,7 +606,7 @@ Same as DataGrid for vertical navigation, with tree-specific additions:
 
 ### Column Behavior
 
-TreeGrid reuses `FieldDescriptor` for column definitions and the same `Column<T>()` builder from `ColumnDsl`. The first column is special:
+TreeGrid reuses `FieldDescriptor` for column definitions and the same `Column<T>()` builder from `Factories`. The first column is special:
 
 - **Indentation**: padded by `Depth × IndentWidth` pixels on the left
 - **Expand chevron**: a `▶`/`▼` toggle before the cell content (only if `HasChildren`)
@@ -623,7 +623,7 @@ Other columns behave identically to DataGrid columns (width modes, resize, reord
 | Component | Used By | Notes |
 |-----------|---------|-------|
 | `FieldDescriptor` | DataGrid, TreeGrid, PropertyGrid, FormField | Already unified |
-| `ColumnDsl` / `Column<T>()` | DataGrid, TreeGrid | Same fluent builder |
+| `Factories` / `Column<T>()` | DataGrid, TreeGrid | Same fluent builder |
 | `RowKey` | DataGrid, TreeGrid | Same identity type |
 | `SortDescriptor` | DataGrid, TreeGrid, flat and tree data sources | Same type |
 | `SelectionMode` | DataGrid, TreeGrid | Same enum |

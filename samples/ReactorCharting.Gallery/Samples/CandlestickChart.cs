@@ -2,7 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -96,8 +96,8 @@ public class CandlestickChart : GallerySample
                  select el),
              // X-axis labels (every 5 days)
              .. Enumerable.Range(0, 4).Select(n => n * 5)
-                 .Select(i => D3Dsl.Text(xs.Map(i) - 12, top + height + 4, $"Day {i + 1}", 10, ChartMutedForeground)),
-             D3Dsl.Text(2, top - 14, "Price", 11, ChartMutedForeground),
+                 .Select(i => D3Charts.Text(xs.Map(i) - 12, top + height + 4, $"Day {i + 1}", 10, ChartMutedForeground)),
+             D3Charts.Text(2, top - 14, "Price", 11, ChartMutedForeground),
              .. D3Legend(left + width - 120, top + 5, [("Bullish", bullBrush), ("Bearish", bearBrush)])]
         )
             .AutomationName("Stock Price Candlestick Chart")

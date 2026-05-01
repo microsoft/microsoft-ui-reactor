@@ -36,7 +36,7 @@ internal sealed partial class ChartAutomationPeer : FrameworkElementAutomationPe
     protected override string GetNameCore()
     {
         // Priority: explicit AutomationName > Title > auto-derived fallback
-        // Ignore "Plot area" — that's an auto-set structural label from D3Dsl,
+        // Ignore "Plot area" — that's an auto-set structural label from D3,
         // not an intentional chart name.
         var explicitName = base.GetNameCore();
         if (!string.IsNullOrWhiteSpace(explicitName) && explicitName != "Plot area")

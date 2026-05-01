@@ -14,7 +14,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// producing a STATUS_APPLICATION_INTERNAL_EXCEPTION crash inside Microsoft.UI.Xaml.dll
 /// during Application bootstrap (when XamlControlsResources loads its theme dictionaries).
 /// </summary>
-internal sealed partial class ReactorCoreXamlMetaDataProvider : IXamlMetadataProvider
+internal sealed partial class ReactorCoreXamlMetadataProvider : IXamlMetadataProvider
 {
     private static readonly (string Name, Type Type)[] s_entries =
     [

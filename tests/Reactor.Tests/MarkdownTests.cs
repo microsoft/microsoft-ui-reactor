@@ -5,17 +5,17 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Tests;
 
 /// <summary>
-/// Unit tests for the Markdown parser (Md4cParser) and HTML renderer (Md4cHtml).
-/// Tests the full parsing pipeline through the public Md4cHtml.Render API,
+/// Unit tests for the Markdown parser (Md4cParser) and HTML renderer (MarkdownHtml).
+/// Tests the full parsing pipeline through the public MarkdownHtml.Render API,
 /// which exercises Md4cParser, Md4cEntity, and Md4cUnicode under the hood.
 /// No WinUI dependencies — pure algorithmic tests.
 /// </summary>
 public class MarkdownTests
 {
-    private static string ToHtml(string markdown, MdParserFlags flags = MdParserFlags.DialectGitHub)
+    private static string ToHtml(string markdown, MarkdownParserFlags flags = MarkdownParserFlags.DialectGitHub)
     {
         var sb = new StringBuilder();
-        int result = Md4cHtml.Render(markdown, flags, Md4cHtml.HtmlFlags.None, sb);
+        int result = MarkdownHtml.Render(markdown, flags, MarkdownHtml.HtmlFlags.None, sb);
         Assert.Equal(0, result);
         return sb.ToString().Trim();
     }
@@ -108,7 +108,7 @@ public class MarkdownTests
     [Fact]
     public void Strikethrough_GitHub()
     {
-        var html = ToHtml("~~deleted~~", MdParserFlags.DialectGitHub);
+        var html = ToHtml("~~deleted~~", MarkdownParserFlags.DialectGitHub);
         Assert.Contains("<del>deleted</del>", html);
     }
 
@@ -181,7 +181,7 @@ public class MarkdownTests
     [Fact]
     public void TaskList_GitHub()
     {
-        var html = ToHtml("- [x] Done\n- [ ] Todo", MdParserFlags.DialectGitHub);
+        var html = ToHtml("- [x] Done\n- [ ] Todo", MarkdownParserFlags.DialectGitHub);
         Assert.Contains("Done", html);
         Assert.Contains("Todo", html);
     }
@@ -242,7 +242,7 @@ public class MarkdownTests
     public void Table_GitHub()
     {
         var md = "| A | B |\n|---|---|\n| 1 | 2 |";
-        var html = ToHtml(md, MdParserFlags.DialectGitHub);
+        var html = ToHtml(md, MarkdownParserFlags.DialectGitHub);
         Assert.Contains("<table>", html);
         Assert.Contains("<th>", html);
         Assert.Contains("<td>", html);
@@ -254,7 +254,7 @@ public class MarkdownTests
     public void Table_Alignment()
     {
         var md = "| Left | Center | Right |\n|:---|:---:|---:|\n| a | b | c |";
-        var html = ToHtml(md, MdParserFlags.DialectGitHub);
+        var html = ToHtml(md, MarkdownParserFlags.DialectGitHub);
         Assert.Contains("<table>", html);
         Assert.Contains("Left", html);
         Assert.Contains("Right", html);
@@ -341,7 +341,7 @@ public class MarkdownTests
     public void Empty_Input()
     {
         var sb = new StringBuilder();
-        int result = Md4cHtml.Render("", MdParserFlags.None, Md4cHtml.HtmlFlags.None, sb);
+        int result = MarkdownHtml.Render("", MarkdownParserFlags.None, MarkdownHtml.HtmlFlags.None, sb);
         Assert.Equal(0, result);
         Assert.Equal("", sb.ToString().Trim());
     }
@@ -403,7 +403,7 @@ public class MarkdownTests
 
             [Link](https://example.com)
             """;
-        var html = ToHtml(md, MdParserFlags.DialectGitHub);
+        var html = ToHtml(md, MarkdownParserFlags.DialectGitHub);
         Assert.Contains("<h1>Title</h1>", html);
         Assert.Contains("<strong>bold</strong>", html);
         Assert.Contains("<em>italic</em>", html);
@@ -425,7 +425,7 @@ public class MarkdownTests
     public void CommonMark_Mode()
     {
         // In CommonMark mode, strikethrough should NOT be parsed
-        var html = ToHtml("~~text~~", MdParserFlags.None);
+        var html = ToHtml("~~text~~", MarkdownParserFlags.None);
         Assert.DoesNotContain("<del>", html);
         Assert.Contains("~~text~~", html);
     }
@@ -435,7 +435,7 @@ public class MarkdownTests
     {
         var md = "| H |\n|---|\n| D |";
         // GitHub dialect enables tables
-        var github = ToHtml(md, MdParserFlags.DialectGitHub);
+        var github = ToHtml(md, MarkdownParserFlags.DialectGitHub);
         Assert.Contains("<table>", github);
     }
 
@@ -447,7 +447,7 @@ public class MarkdownTests
     public void Xhtml_Mode()
     {
         var sb = new StringBuilder();
-        Md4cHtml.Render("---", MdParserFlags.None, Md4cHtml.HtmlFlags.Xhtml, sb);
+        MarkdownHtml.Render("---", MarkdownParserFlags.None, MarkdownHtml.HtmlFlags.Xhtml, sb);
         var html = sb.ToString();
         Assert.Contains("<hr />", html);
     }
@@ -456,7 +456,7 @@ public class MarkdownTests
     public void SkipUtf8Bom()
     {
         var sb = new StringBuilder();
-        Md4cHtml.Render("\uFEFFHello", MdParserFlags.None, Md4cHtml.HtmlFlags.SkipUtf8Bom, sb);
+        MarkdownHtml.Render("\uFEFFHello", MarkdownParserFlags.None, MarkdownHtml.HtmlFlags.SkipUtf8Bom, sb);
         var html = sb.ToString();
         Assert.Contains("Hello", html);
     }
@@ -486,7 +486,7 @@ public class MarkdownTests
         var rows = Enumerable.Range(0, 20)
             .Select(r => "| " + string.Join(" | ", Enumerable.Range(0, 10).Select(c => $"R{r}C{c}")) + " |");
         var md = header + "\n" + sep + "\n" + string.Join("\n", rows);
-        var html = ToHtml(md, MdParserFlags.DialectGitHub);
+        var html = ToHtml(md, MarkdownParserFlags.DialectGitHub);
         Assert.Contains("<table>", html);
         Assert.Contains("R19C9", html);
     }

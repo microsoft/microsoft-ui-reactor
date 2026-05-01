@@ -8,7 +8,7 @@ using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -71,7 +71,7 @@ public class ThemedChartSample : GallerySample
         var ys = new LinearScale([yMax + 3, yMin - 3], [top, top + height]).Nice();
 
         var monthLabels = months.Select((m, i) =>
-            D3Dsl.Text(xs.Map(i) - 10, top + height + 4, m, 10, ChartMutedForeground));
+            D3Charts.Text(xs.Map(i) - 10, top + height + 4, m, 10, ChartMutedForeground));
 
         var lines = series.Select(s =>
         {
@@ -93,7 +93,7 @@ public class ThemedChartSample : GallerySample
              .. lines,
              .. dots,
              .. D3Legend(legendX, top + 10, series.Select(s => (s.Label, s.Brush))),
-             D3Dsl.Text(2, top - 14, "count", 11, ChartMutedForeground)]
+             D3Charts.Text(2, top - 14, "count", 11, ChartMutedForeground)]
         )
             .AutomationName("Themed Chart")
             .FullDescription("Multi-line chart with 4 series using WinUI theme resource brushes that adapt to Light and Dark themes.");

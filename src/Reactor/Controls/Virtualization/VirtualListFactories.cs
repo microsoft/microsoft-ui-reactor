@@ -1,12 +1,9 @@
 using Microsoft.UI.Reactor.Core;
-using static Microsoft.UI.Reactor.Factories;
+using Microsoft.UI.Reactor.Controls;
 
-namespace Microsoft.UI.Reactor.Controls;
+namespace Microsoft.UI.Reactor;
 
-/// <summary>
-/// DSL factory methods for VirtualList.
-/// </summary>
-public static class VirtualListDsl
+public static partial class Factories
 {
     /// <summary>
     /// Creates a VirtualList element — a count-based virtualized list.

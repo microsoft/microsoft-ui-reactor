@@ -2,7 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -98,10 +98,10 @@ public sealed class BoxPlotSample : GallerySample
                      // Median line
                      D3Line(bx, ys.Map(median), bx + boxWidth, ys.Map(median)) with { Stroke = stroke, StrokeThickness = 2.5 },
                      // Group label
-                     D3Dsl.Text(cx - 8, top + ph + 8, $"Group {groups[entry.g]}", 11, ChartMutedForeground),
+                     D3Charts.Text(cx - 8, top + ph + 8, $"Group {groups[entry.g]}", 11, ChartMutedForeground),
                  }
                  select el),
-             D3Dsl.Text(left, 6, "Box Plot (four groups)", 14, ChartForeground)]
+             D3Charts.Text(left, 6, "Box Plot (four groups)", 14, ChartForeground)]
         )
             .AutomationName("Box Plot (four groups)")
             .FullDescription("Box plot for 4 groups (A, B, C, D) showing min, Q1, median, Q3, and max for each distribution.");

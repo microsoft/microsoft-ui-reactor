@@ -2,7 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -56,7 +56,7 @@ public class BarChartSample : GallerySample
         var xLabels =
             from month in months
             let cx = left + band.Map(month) + band.Bandwidth / 2
-            select D3Dsl.Text(cx - 14, top + plotH + 8, month, 10, axisBrush);
+            select D3Charts.Text(cx - 14, top + plotH + 8, month, 10, axisBrush);
 
         return D3Canvas(W, H,
             [.. D3Grid(ys, left, plotW),
@@ -66,7 +66,7 @@ public class BarChartSample : GallerySample
              .. ys.Ticks(5).Select(t =>
                  TextRight(0, ys.Map(t) - 7, Fmt(t) + "k", left - 6, 10, axisBrush)),
              .. xLabels,
-             D3Dsl.Text(left, 4, "Monthly Revenue ($k)", 13, ChartForeground)]
+             D3Charts.Text(left, 4, "Monthly Revenue ($k)", 13, ChartForeground)]
         )
             .AutomationName("Monthly Revenue ($k)")
             .FullDescription("Bar chart showing monthly revenue from January to December, ranging from $42k to $103k.");

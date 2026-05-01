@@ -46,7 +46,7 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
         var columns = el.Columns is not null
             ? el.Columns
 #pragma warning disable IL2091 // Generic type parameter flows through without DynamicallyAccessedMembers annotation
-            : UseMemo(() => ColumnDsl.AutoColumns<T>(registry, el.ColumnOverrides));
+            : UseMemo(() => Factories.AutoColumns<T>(registry, el.ColumnOverrides));
 #pragma warning restore IL2091
 
         // Create the headless state machine once and hold it in a ref.
@@ -444,7 +444,7 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
         if (hasRowEditActions) gridColDefs[idx] = "Auto";
         var rowDef = new string[] { "*" };
 
-        return VirtualListDsl.VirtualList(
+        return VirtualList(
             itemCount: totalItems,
             renderItem: index =>
             {

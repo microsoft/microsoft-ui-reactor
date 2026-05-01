@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml.Media;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace NetPulse.Charts;
@@ -45,7 +45,7 @@ sealed class StateHeatmap : Component<StateHeatmapProps>
         if (connections.Count == 0)
         {
             return D3Canvas(W, H,
-                D3Dsl.Text(Left, Top + 40, "No connections", 12, Gray(100)));
+                D3Charts.Text(Left, Top + 40, "No connections", 12, Gray(100)));
         }
 
         // Sort by state (causes reordering as states change), then by remote port
@@ -61,7 +61,7 @@ sealed class StateHeatmap : Component<StateHeatmapProps>
         double gridH = rows * (CellSize + CellGap);
 
         var elements = new List<Element>();
-        elements.Add(D3Dsl.Text(Left, 4, $"TCP State Heatmap ({sorted.Length} connections)", 13, Gray(40)));
+        elements.Add(D3Charts.Text(Left, 4, $"TCP State Heatmap ({sorted.Length} connections)", 13, Gray(40)));
 
         for (int i = 0; i < sorted.Length; i++)
         {
@@ -97,7 +97,7 @@ sealed class StateHeatmap : Component<StateHeatmapProps>
         {
             var brush = StateBrush.GetValueOrDefault(state, Gray(200));
             elements.Add(D3Rect(lx, legendY, 10, 10) with { Fill = brush, RadiusX = 1, RadiusY = 1 });
-            elements.Add(D3Dsl.Text(lx + 13, legendY - 1, label, 8, Gray(80)));
+            elements.Add(D3Charts.Text(lx + 13, legendY - 1, label, 8, Gray(80)));
             lx += label.Length * 6 + 24;
         }
 
@@ -106,11 +106,11 @@ sealed class StateHeatmap : Component<StateHeatmapProps>
             .OrderByDescending(g => g.Count())
             .Take(4);
         double sx = W - Right - 200;
-        elements.Add(D3Dsl.Text(sx, 6, "Counts:", 10, Gray(80)));
+        elements.Add(D3Charts.Text(sx, 6, "Counts:", 10, Gray(80)));
         sx += 50;
         foreach (var g in stateCounts)
         {
-            elements.Add(D3Dsl.Text(sx, 6, $"{g.Key}: {g.Count()}", 10, Gray(60)));
+            elements.Add(D3Charts.Text(sx, 6, $"{g.Key}: {g.Count()}", 10, Gray(60)));
             sx += 80;
         }
 

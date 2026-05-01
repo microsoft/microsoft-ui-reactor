@@ -1,9 +1,9 @@
 using Microsoft.UI.Reactor.Charting.D3;
-// Declarative D3 drawing DSL for Reactor's virtual tree.
+// Declarative D3 drawing primitives for Reactor's virtual tree.
 // Replaces imperative G.AddRect/AddLine/AddEllipse/AddText/MakePath patterns
 // with composable Reactor Elements that work with the reconciler.
 //
-// Usage: using static Microsoft.UI.Reactor.Charting.D3Dsl;
+// Usage: using static Microsoft.UI.Reactor.Charting.D3Charts;
 
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
@@ -15,9 +15,9 @@ namespace Microsoft.UI.Reactor.Charting;
 
 /// <summary>
 /// Static factory methods for declarative D3 chart drawing.
-/// Import with: using static Microsoft.UI.Reactor.Charting.D3Dsl;
+/// Import with: using static Microsoft.UI.Reactor.Charting.D3Charts;
 /// </summary>
-public static class D3Dsl
+public static class D3Charts
 {
     // ── Color helpers ───────────────────────────────────────────────────
 

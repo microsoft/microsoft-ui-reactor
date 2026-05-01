@@ -14,7 +14,7 @@ public class Md4cLatexMathTest
     {
         var md = "$a+b=c$ Hello, world!";
         var expected = "<p><x-equation>a+b=c</x-equation> Hello, world!</p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.LatexMathSpans);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.LatexMathSpans);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -23,7 +23,7 @@ public class Md4cLatexMathTest
     {
         var md = "$$foo $bar$ baz$$";
         var expected = "<p>$$foo <x-equation>bar</x-equation> baz$$</p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.LatexMathSpans);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.LatexMathSpans);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -32,7 +32,7 @@ public class Md4cLatexMathTest
     {
         var md = "x$a+b=c$";
         var expected = "<p>x$a+b=c$</p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.LatexMathSpans);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.LatexMathSpans);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -41,7 +41,7 @@ public class Md4cLatexMathTest
     {
         var md = "$a+b=c$x";
         var expected = "<p>$a+b=c$x</p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.LatexMathSpans);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.LatexMathSpans);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -50,7 +50,7 @@ public class Md4cLatexMathTest
     {
         var md = "This is a display equation: $$\\int_a^b x dx$$.";
         var expected = "<p>This is a display equation: <x-equation type=\"display\">\\int_a^b x dx</x-equation>.</p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.LatexMathSpans);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.LatexMathSpans);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -59,7 +59,7 @@ public class Md4cLatexMathTest
     {
         var md = "$$\n\\int_a^b\nf(x) dx\n$$";
         var expected = "<p><x-equation type=\"display\"> \\int_a^b f(x) dx </x-equation></p>\n";
-        var actual = Md4cHtml.ToHtml(md, MdParserFlags.LatexMathSpans);
+        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.LatexMathSpans);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 

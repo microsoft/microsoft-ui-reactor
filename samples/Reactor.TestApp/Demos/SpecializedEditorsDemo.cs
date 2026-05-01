@@ -179,7 +179,7 @@ class SpecializedEditorsDemo : Component
                             "Uri → hyperlink. Color → swatch. enum → plain text. " +
                             "DocsUrl renders as a hyperlink because of [DataType(DataType.Url)]. " +
                             "This section is non-editable — click a row to select, edit below.",
-                        DataGridDsl.DataGrid(
+                        DataGrid(
                             source: source,
                             registry: registry,
                             selectionMode: SelectionMode.Single,
@@ -199,7 +199,7 @@ class SpecializedEditorsDemo : Component
                             "InStock is intentionally rendered as a toggle pill + ToggleSwitch " +
                             "editor here (vs the CheckMark in section 1). Priority uses a " +
                             "ComboBox seeded with only three of the four enum values.",
-                        DataGridDsl.DataGrid(
+                        DataGrid(
                             source: source,
                             columns: BuildExplicitColumns(),
                             selectionMode: SelectionMode.Single,
@@ -222,7 +222,7 @@ class SpecializedEditorsDemo : Component
                                 "path. Toggling InStock here updates both grids above.",
                         selected is null
                             ? (Element)TextBlock("(nothing selected)").Foreground(SecondaryText).Padding(12)
-                            : PropertyGridDsl.PropertyGrid(target: selected, registry: registry)
+                            : PropertyGrid(target: selected, registry: registry)
                     )
                 )
             ).Flex(grow: 1)
@@ -237,8 +237,8 @@ class SpecializedEditorsDemo : Component
     /// </summary>
     static FieldDescriptor[] BuildExplicitColumns() =>
     [
-        ColumnDsl.Column<Gizmo>("Id", g => g.Id, width: 40),
-        ColumnDsl.Column<Gizmo>("Name", g => g.Name, editable: true, width: 140),
+        Column<Gizmo>("Id", g => g.Id, width: 40),
+        Column<Gizmo>("Name", g => g.Name, editable: true, width: 140),
         TypedColumns.NumberColumn<Gizmo>("Quantity", g => g.Quantity,
             min: 0, max: 10_000, width: 100),
         TypedColumns.NumberColumn<Gizmo>("UnitPrice", g => g.UnitPrice,

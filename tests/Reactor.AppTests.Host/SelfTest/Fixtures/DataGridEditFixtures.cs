@@ -33,10 +33,10 @@ internal static class DataGridEditFixtures
     {
         return new FieldDescriptor[]
         {
-            ColumnDsl.Column<TestProduct>("Id", p => p.Id, width: 60),
-            ColumnDsl.Column<TestProduct>("Name", p => p.Name, editable: true, width: 160),
-            ColumnDsl.Column<TestProduct>("Category", p => p.Category, editable: true, width: 120),
-            ColumnDsl.Column<TestProduct>("Price", p => p.Price, editable: true, format: "C2", width: 100),
+            Column<TestProduct>("Id", p => p.Id, width: 60),
+            Column<TestProduct>("Name", p => p.Name, editable: true, width: 160),
+            Column<TestProduct>("Category", p => p.Category, editable: true, width: 120),
+            Column<TestProduct>("Price", p => p.Price, editable: true, format: "C2", width: 100),
         };
     }
 
@@ -70,7 +70,7 @@ internal static class DataGridEditFixtures
                 }
                 state = stateCapture.Current;
 
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source,
                     columns: columns,
                     selectionMode: Microsoft.UI.Reactor.Controls.SelectionMode.Single,
@@ -117,7 +117,7 @@ internal static class DataGridEditFixtures
             {
                 var source = ctx.UseMemo(() => CreateSource(10));
 
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source,
                     columns: CreateEditableColumns(),
                     selectionMode: Microsoft.UI.Reactor.Controls.SelectionMode.Single,
@@ -160,7 +160,7 @@ internal static class DataGridEditFixtures
 
                 return VStack(
                     TextBlock($"Selected: {sel.Count}"),
-                    DataGridDsl.DataGrid(
+                    DataGrid(
                         source: source,
                         columns: CreateEditableColumns(),
                         selectionMode: Microsoft.UI.Reactor.Controls.SelectionMode.Multiple,
@@ -198,7 +198,7 @@ internal static class DataGridEditFixtures
             {
                 var source = ctx.UseMemo(() => CreateSource(10));
 
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source,
                     columns: CreateEditableColumns(),
                     selectionMode: Microsoft.UI.Reactor.Controls.SelectionMode.Single,
@@ -328,13 +328,13 @@ internal static class DataGridEditFixtures
                 // Columns with a cell renderer that reads the external fontSize
                 var columns = new FieldDescriptor[]
                 {
-                    ColumnDsl.Column<TestProduct>("Id", p => p.Id, width: 60),
-                    (ColumnDsl.Column<TestProduct>("Name", p => p.Name, width: 160)
+                    Column<TestProduct>("Id", p => p.Id, width: 60),
+                    (Column<TestProduct>("Name", p => p.Name, width: 160)
                         .CellRenderer(val => TextBlock((string)val).FontSize(fontSize))).Build(),
-                    ColumnDsl.Column<TestProduct>("Category", p => p.Category, width: 120),
+                    Column<TestProduct>("Category", p => p.Category, width: 120),
                 };
 
-                return DataGridDsl.DataGrid(
+                return DataGrid(
                     source: source,
                     columns: columns,
                     rowHeight: 36

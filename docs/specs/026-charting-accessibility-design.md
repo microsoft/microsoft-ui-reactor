@@ -36,7 +36,7 @@ theming, and animation — but accessibility was **explicitly left for a follow-
 - No chart in the codebase supports keyboard navigation, tooltips-via-keyboard, data-table fallback,
   live-region updates, forced-colors palette remap, or reduced-motion.
 - `AccessibilityScanner` has no chart-specific rules (A11Y_001–008 cover generic elements).
-- `D3Dsl.ChartForeground` / `ChartAxis` / `ChartGrid` brushes adapt to dark mode but **do not**
+- `D3Charts.ChartForeground` / `ChartAxis` / `ChartGrid` brushes adapt to dark mode but **do not**
   listen to `AccessibilitySettings.HighContrast` / `UISettings.ColorValuesChanged`.
 
 Meanwhile, Reactor's general accessibility infrastructure (spec 006) is already rich:
@@ -397,7 +397,7 @@ Framework provides `ChartFocusContext` that:
 
 ### 5.3 Decoration pruning
 
-All `D3Dsl` decoration primitives (grid lines, tick marks, minor axes, background) auto-set
+All `D3Charts` decoration primitives (grid lines, tick marks, minor axes, background) auto-set
 `AccessibilityView = Raw` unless they carry meaningful data. Keeps the UIA tree clean.
 
 ---
@@ -440,12 +440,12 @@ immediately and full-motion users hear it ~200ms later after the tween completes
 
 ### 7.1 Forced-colors palette
 
-Extend `D3Dsl` brushes. `IsForcedColors` follows the same per-render `[ThreadStatic]` pattern
-as the existing `IsDarkTheme` flag (`src/Reactor/Charting/D3Dsl.cs:52`) so multi-window hosts
+Extend `D3Charts` brushes. `IsForcedColors` follows the same per-render `[ThreadStatic]` pattern
+as the existing `IsDarkTheme` flag (`src/Reactor/Charting/D3Charts.cs:52`) so multi-window hosts
 can render concurrently with different accessibility settings without cross-talk:
 
 ```csharp
-// src/Reactor/Charting/D3Dsl.cs
+// src/Reactor/Charting/D3Charts.cs
 [ThreadStatic] private static bool _isForcedColors;
 public static bool IsForcedColors
 {

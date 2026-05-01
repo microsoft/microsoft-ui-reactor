@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Xaml;
-using static Microsoft.UI.Reactor.Charting.D3Dsl;
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace ReactorCharting.Gallery;
@@ -119,7 +119,7 @@ public sealed class CirclePackingSample : GallerySample
                     };
                 }
             }),
-            D3Dsl.Text(10, 5, "Organization Headcount", 13, ChartForeground),
+            D3Charts.Text(10, 5, "Organization Headcount", 13, ChartForeground),
         ])
             .AutomationName("Organization Headcount")
             .FullDescription("Circle packing of an organization hierarchy with nested circles showing team containment and leaf sizes proportional to headcount across 14 teams.");

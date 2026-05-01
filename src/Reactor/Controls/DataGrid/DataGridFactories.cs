@@ -1,14 +1,10 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Reactor.Controls;
-using static Microsoft.UI.Reactor.Factories;
 
-namespace Microsoft.UI.Reactor.Controls;
+namespace Microsoft.UI.Reactor;
 
-/// <summary>
-/// DSL factory methods for DataGrid.
-/// </summary>
-public static class DataGridDsl
+public static partial class Factories
 {
     /// <summary>
     /// Creates a DataGrid with explicit column definitions.
