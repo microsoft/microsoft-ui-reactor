@@ -110,11 +110,25 @@ jobs:
         id: rates
         shell: pwsh
         run: |
+          # dotnet-coverage's cobertura output captures per-line branch data in
+          # `condition-coverage="P% (covered/total)"` attributes but does not
+          # aggregate them: the root and class `branch-rate` attributes are
+          # hardcoded to 1. Sum the per-line numerators/denominators ourselves.
           [xml]$x = Get-Content merged.cobertura.xml
-          $line   = [math]::Round([double]$x.coverage.'line-rate'   * 100, 2)
-          $branch = [math]::Round([double]$x.coverage.'branch-rate' * 100, 2)
+          $line = [math]::Round([double]$x.coverage.'line-rate' * 100, 2)
+          $covered = 0
+          $total   = 0
+          foreach ($l in $x.SelectNodes('//line[@condition-coverage]')) {
+            if ($l.'condition-coverage' -match '\((\d+)/(\d+)\)') {
+              $covered += [int]$Matches[1]
+              $total   += [int]$Matches[2]
+            }
+          }
+          $branch = if ($total -gt 0) { [math]::Round(100.0 * $covered / $total, 2) } else { 0 }
           "line=$line"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "branch=$branch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "branches-covered=$covered" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "branches-total=$total"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Comment results
         if: always()
@@ -122,11 +136,13 @@ jobs:
         env:
           LINE: ${{ steps.rates.outputs.line }}
           BRANCH: ${{ steps.rates.outputs.branch }}
+          BRANCHES_COVERED: ${{ steps.rates.outputs.branches-covered }}
+          BRANCHES_TOTAL: ${{ steps.rates.outputs.branches-total }}
           SHA: ${{ steps.pr.outputs.sha }}
           OUTCOME: ${{ job.status }}
         with:
           script: |
-            const { LINE, BRANCH, SHA, OUTCOME } = process.env;
+            const { LINE, BRANCH, BRANCHES_COVERED, BRANCHES_TOTAL, SHA, OUTCOME } = process.env;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             let body;
             if (OUTCOME === 'success') {
@@ -136,7 +152,7 @@ jobs:
                 `| Metric | Coverage |`,
                 `|---|---|`,
                 `| Line   | ${LINE}% |`,
-                `| Branch | ${BRANCH}% |`,
+                `| Branch | ${BRANCH}% (${BRANCHES_COVERED}/${BRANCHES_TOTAL}) |`,
                 ``,
                 `Cobertura reports attached to the [workflow run](${runUrl}) as artifacts.`,
               ].join('\n');
