@@ -130,7 +130,14 @@ internal static class PruneCommand
     {
         var refs = new HashSet<(string, string)>();
 
-        foreach (var file in Directory.GetFiles(sourceDir, "*.cs", SearchOption.AllDirectories))
+        // SECURITY (TASK-035): skip reparse points to avoid traversing
+        // junctions/symlinks that escape the source tree.
+        var enumOpts = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            AttributesToSkip = FileAttributes.ReparsePoint | FileAttributes.System,
+        };
+        foreach (var file in Directory.GetFiles(sourceDir, "*.cs", enumOpts))
         {
             string content;
             try

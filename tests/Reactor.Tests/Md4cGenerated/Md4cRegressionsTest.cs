@@ -14,7 +14,7 @@ public class Md4cRegressionsTest
     {
         var md = "<gi att1=tok1 att2=tok2>";
         var expected = "<gi att1=tok1 att2=tok2>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -23,7 +23,7 @@ public class Md4cRegressionsTest
     {
         var md = "foo <gi att1=tok1 att2=tok2> bar";
         var expected = "<p>foo <gi att1=tok1 att2=tok2> bar</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -32,7 +32,7 @@ public class Md4cRegressionsTest
     {
         var md = "foo <gi att1=tok1\natt2=tok2> bar";
         var expected = "<p>foo <gi att1=tok1\natt2=tok2> bar</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -41,7 +41,7 @@ public class Md4cRegressionsTest
     {
         var md = "![alt text with *entity* &copy;](img.png 'title')";
         var expected = "<p><img src=\"img.png\" alt=\"alt text with entity ©\" title=\"title\"></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -50,7 +50,7 @@ public class Md4cRegressionsTest
     {
         var md = "> [foo\n> bar]: /url\n>\n> [foo bar]";
         var expected = "<blockquote>\n<p><a href=\"/url\">foo\nbar</a></p>\n</blockquote>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -59,7 +59,7 @@ public class Md4cRegressionsTest
     {
         var md = "[x]:\nx\n- <?\n\n  x";
         var expected = "<ul>\n<li><?\n\nx\n</li>\n</ul>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -68,7 +68,7 @@ public class Md4cRegressionsTest
     {
         var md = "x [link](/url \"foo &ndash; bar\") x";
         var expected = "<p>x <a href=\"/url\" title=\"foo – bar\">link</a> x</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -77,7 +77,7 @@ public class Md4cRegressionsTest
     {
         var md = "a***b* c*";
         var expected = "<p>a*<em><em>b</em> c</em></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -86,7 +86,7 @@ public class Md4cRegressionsTest
     {
         var md = "***b* c*";
         var expected = "<p>*<em><em>b</em> c</em></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -95,7 +95,7 @@ public class Md4cRegressionsTest
     {
         var md = "a*b**c*";
         var expected = "<p>a<em>b**c</em></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -104,7 +104,7 @@ public class Md4cRegressionsTest
     {
         var md = "```&amp;&amp;&amp;&amp;&amp;&amp;&amp;&amp;";
         var expected = "<pre><code class=\"language-&amp;&amp;&amp;&amp;&amp;&amp;&amp;&amp;\"></code></pre>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -113,7 +113,7 @@ public class Md4cRegressionsTest
     {
         var md = "__x_ _x___";
         var expected = "<p><em><em>x</em> <em>x</em></em>_</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -122,7 +122,7 @@ public class Md4cRegressionsTest
     {
         var md = "[x](url\n'title'\n)x";
         var expected = "<p><a href=\"url\" title=\"title\">x</a>x</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -131,7 +131,7 @@ public class Md4cRegressionsTest
     {
         var md = "* x|x\n---|---";
         var expected = "<ul>\n<li>x|x\n---|---</li>\n</ul>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Tables);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.Tables);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -140,7 +140,7 @@ public class Md4cRegressionsTest
     {
         var md = "* x|x\n  ---|---\nx|x";
         var expected = "<ul>\n<li><table>\n<thead>\n<tr>\n<th>x</th>\n<th>x</th>\n</tr>\n</thead>\n</table>\n</li>\n</ul>\n<p>x|x</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Tables);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.Tables);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -149,7 +149,7 @@ public class Md4cRegressionsTest
     {
         var md = "] http://x.x *x*\n\n|x|x|\n|---|---|\n|x|";
         var expected = "<p>] http://x.x <em>x</em></p>\n<table>\n<thead>\n<tr>\n<th>x</th>\n<th>x</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>x</td>\n<td></td>\n</tr>\n</tbody>\n</table>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Tables);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.Tables);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -158,7 +158,7 @@ public class Md4cRegressionsTest
     {
         var md = "This is [link](http://github.com/).";
         var expected = "<p>This is <a href=\"http://github.com/\">link</a>.</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.PermissiveUrlAutolinks);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.PermissiveUrlAutolinks);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -167,7 +167,7 @@ public class Md4cRegressionsTest
     {
         var md = "This is [link](http://github.com/)X";
         var expected = "<p>This is <a href=\"http://github.com/\">link</a>X</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.PermissiveUrlAutolinks);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.PermissiveUrlAutolinks);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -176,7 +176,7 @@ public class Md4cRegressionsTest
     {
         var md = "`";
         var expected = "<p>`</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -185,7 +185,7 @@ public class Md4cRegressionsTest
     {
         var md = "~`foo`~";
         var expected = "<p><del><code>foo</code></del></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Strikethrough);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.Strikethrough);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -194,7 +194,7 @@ public class Md4cRegressionsTest
     {
         var md = "~*foo*~";
         var expected = "<p><del><em>foo</em></del></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Strikethrough);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.Strikethrough);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -203,7 +203,7 @@ public class Md4cRegressionsTest
     {
         var md = "*~foo~*";
         var expected = "<p><em><del>foo</del></em></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Strikethrough);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.Strikethrough);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -212,7 +212,7 @@ public class Md4cRegressionsTest
     {
         var md = "[f]:\n-\n    xx\n-";
         var expected = "<pre><code>xx\n</code></pre>\n<ul>\n<li></li>\n</ul>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -221,7 +221,7 @@ public class Md4cRegressionsTest
     {
         var md = "*(http://example.com)*";
         var expected = "<p><em>(<a href=\"http://example.com\">http://example.com</a>)</em></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.PermissiveUrlAutolinks);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.PermissiveUrlAutolinks);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -230,7 +230,7 @@ public class Md4cRegressionsTest
     {
         var md = "[SS ẞ]: /url\n[ẞ SS]";
         var expected = "<p><a href=\"/url\">ẞ SS</a></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -239,7 +239,7 @@ public class Md4cRegressionsTest
     {
         var md = "foo\n>";
         var expected = "<p>foo</p>\n<blockquote>\n</blockquote>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -248,7 +248,7 @@ public class Md4cRegressionsTest
     {
         var md = ". foo";
         var expected = "<p>. foo</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -257,7 +257,7 @@ public class Md4cRegressionsTest
     {
         var md = "[ab]: /foo\n[a] [ab] [abc]";
         var expected = "<p>[a] <a href=\"/foo\">ab</a> [abc]</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -266,7 +266,7 @@ public class Md4cRegressionsTest
     {
         var md = "[a b]: /foo\n[a   b]";
         var expected = "<p><a href=\"/foo\">a   b</a></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -275,7 +275,7 @@ public class Md4cRegressionsTest
     {
         var md = "*a **b c* d**";
         var expected = "<p><em>a <em><em>b c</em> d</em></em></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -284,7 +284,7 @@ public class Md4cRegressionsTest
     {
         var md = "<foo@123456789012345678901234567890123456789012345678901234567890123.123456789012345678901234567890123456789012345678901234567890123>";
         var expected = "<p><a href=\"mailto:foo@123456789012345678901234567890123456789012345678901234567890123.123456789012345678901234567890123456789012345678901234567890123\">foo@123456789012345678901234567890123456789012345678901234567890123.123456789012345678901234567890123456789012345678901234567890123</a></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -293,7 +293,7 @@ public class Md4cRegressionsTest
     {
         var md = "<foo@123456789012345678901234567890123456789012345678901234567890123x.123456789012345678901234567890123456789012345678901234567890123>";
         var expected = "<p>&lt;foo@123456789012345678901234567890123456789012345678901234567890123x.123456789012345678901234567890123456789012345678901234567890123&gt;</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -302,7 +302,7 @@ public class Md4cRegressionsTest
     {
         var md = "A | B\n--- | ---\n[x](url)";
         var expected = "<table>\n<thead>\n<tr>\n<th>A</th>\n<th>B</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><a href=\"url\">x</a></td>\n<td></td>\n</tr>\n</tbody>\n</table>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Tables);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.Tables);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -311,7 +311,7 @@ public class Md4cRegressionsTest
     {
         var md = "***foo *bar baz***";
         var expected = "<p>*<strong>foo <em>bar baz</em></strong></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -320,7 +320,7 @@ public class Md4cRegressionsTest
     {
         var md = "~~~\n                x\n~~~\n\n~~~\n                 x\n~~~";
         var expected = "<pre><code>                x\n</code></pre>\n<pre><code>                 x\n</code></pre>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -329,7 +329,7 @@ public class Md4cRegressionsTest
     {
         var md = "[![alt][img]][link]\n\n[img]: img_url\n[link]: link_url";
         var expected = "<p><a href=\"link_url\"><img src=\"img_url\" alt=\"alt\"></a></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -338,7 +338,7 @@ public class Md4cRegressionsTest
     {
         var md = "| abc | def |\n| --- | --- |";
         var expected = "<table>\n<thead>\n<tr>\n<th>abc</th>\n<th>def</th>\n</tr>\n</thead>\n</table>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Tables);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.Tables);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -347,7 +347,7 @@ public class Md4cRegressionsTest
     {
         var md = "[fooﬗ]: /url\n[fooﬕ]";
         var expected = "<p>[fooﬕ]</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -356,7 +356,7 @@ public class Md4cRegressionsTest
     {
         var md = "- <script>\n- foo\nbar\n</script>";
         var expected = "<ul>\n<li><script>\n</li>\n<li>foo\nbar\n</script></li>\n</ul>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -365,7 +365,7 @@ public class Md4cRegressionsTest
     {
         var md = "[http://example.com](http://example.com)";
         var expected = "<p><a href=\"http://example.com\">http://example.com</a></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.PermissiveUrlAutolinks);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.PermissiveUrlAutolinks);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -374,7 +374,7 @@ public class Md4cRegressionsTest
     {
         var md = "-\n\n    foo";
         var expected = "<ul>\n<li></li>\n</ul>\n<pre><code>foo\n</code></pre>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -383,7 +383,7 @@ public class Md4cRegressionsTest
     {
         var md = "<!-- foo -->\n    ```\n    bar\n    ```";
         var expected = "<!-- foo -->\n<pre><code>```\nbar\n```\n</code></pre>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -392,7 +392,7 @@ public class Md4cRegressionsTest
     {
         var md = "foo\n    ```\n    bar\n    ```";
         var expected = "<p>foo\n<code>bar</code></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -401,7 +401,7 @@ public class Md4cRegressionsTest
     {
         var md = "<textarea>\n\n*foo*\n\n_bar_\n\n</textarea>\n\nbaz";
         var expected = "<textarea>\n\n*foo*\n\n_bar_\n\n</textarea>\n<p>baz</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -410,7 +410,7 @@ public class Md4cRegressionsTest
     {
         var md = "![outer ![inner](img_inner \"inner title\")](img_outer \"outer title\")";
         var expected = "<p><img src=\"img_outer\" alt=\"outer inner\" title=\"outer title\"></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -419,7 +419,7 @@ public class Md4cRegressionsTest
     {
         var md = "x\n|-\n|[*x*]()";
         var expected = "<table>\n<thead>\n<tr>\n<th>x</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><a href=\"\"><em>x</em></a></td>\n</tr>\n</tbody>\n</table>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Tables);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.Tables);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -428,7 +428,7 @@ public class Md4cRegressionsTest
     {
         var md = "x\n|-\n[|\n\n[[ ]][[![|]()]]";
         var expected = "<table>\n<thead>\n<tr>\n<th>x</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>[</td>\n</tr>\n</tbody>\n</table>\n<p><x-wikilink data-target=\" \"> </x-wikilink><x-wikilink data-target=\"![|]()\"><img src=\"\" alt=\"|\"></x-wikilink></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Tables | MarkdownParserFlags.WikiLinks);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.Tables | MarkdownParserFlags.WikiLinks);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -437,7 +437,7 @@ public class Md4cRegressionsTest
     {
         var md = "title\n--\t";
         var expected = "<h2>title</h2>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -446,7 +446,7 @@ public class Md4cRegressionsTest
     {
         var md = "x <!A>";
         var expected = "<p>x <!A></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -455,7 +455,7 @@ public class Md4cRegressionsTest
     {
         var md = "__!_!__\n\n__!x!__\n\n**!*!**\n\n---\n\n_*__*_*\n\n_*xx*_*\n\n_*__-_-\n\n_*xx-_-";
         var expected = "<p><strong>!_!</strong></p>\n<p><strong>!x!</strong></p>\n<p><strong>!*!</strong></p>\n<hr />\n<p><em><em>__</em></em>*</p>\n<p><em><em>xx</em></em>*</p>\n<p><em>*__-</em>-</p>\n<p><em>*xx-</em>-</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -464,7 +464,7 @@ public class Md4cRegressionsTest
     {
         var md = "~foo ~bar baz~";
         var expected = "<p>~foo <del>bar baz</del></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Strikethrough);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.Strikethrough);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -473,7 +473,7 @@ public class Md4cRegressionsTest
     {
         var md = "`\nfoo`";
         var expected = "<p><code> foo</code></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -482,7 +482,7 @@ public class Md4cRegressionsTest
     {
         var md = "`foo\n`";
         var expected = "<p><code>foo </code></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -491,7 +491,7 @@ public class Md4cRegressionsTest
     {
         var md = "`\nfoo\n`";
         var expected = "<p><code>foo</code></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -500,7 +500,7 @@ public class Md4cRegressionsTest
     {
         var md = "https://example.com/\nhttps://example.com/dir/";
         var expected = "<p><a href=\"https://example.com/\">https://example.com/</a>\n<a href=\"https://example.com/dir/\">https://example.com/dir/</a></p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.PermissiveUrlAutolinks);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.PermissiveUrlAutolinks);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -509,7 +509,7 @@ public class Md4cRegressionsTest
     {
         var md = "copy ~user1/file to ~user2/file\n\ncopy \"~user1/file\" to \"~user2/file\"";
         var expected = "<p>copy ~user1/file to ~user2/file</p>\n<p>copy &quot;~user1/file&quot; to &quot;~user2/file&quot;</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.Strikethrough);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.Strikethrough);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -518,7 +518,7 @@ public class Md4cRegressionsTest
     {
         var md = "#\tFoo";
         var expected = "<h1>Foo</h1>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -527,7 +527,7 @@ public class Md4cRegressionsTest
     {
         var md = "  Foo *bar\nbaz*\t\n====";
         var expected = "<h1>Foo <em>bar\nbaz</em></h1>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -536,7 +536,7 @@ public class Md4cRegressionsTest
     {
         var md = "foo  \t\nbar";
         var expected = "<p>foo\nbar</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -545,7 +545,7 @@ public class Md4cRegressionsTest
     {
         var md = "foo\t  \nbar";
         var expected = "<p>foo<br>\nbar</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.None);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.None);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 

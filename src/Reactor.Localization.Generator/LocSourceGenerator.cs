@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 
@@ -120,10 +121,7 @@ public sealed class LocSourceGenerator : IIncrementalGenerator
             sb.AppendLine("[GeneratedCode(\"Reactor.Localization.Generator\", \"1.0.0\")]");
             sb.AppendLine("internal static class Loc");
             sb.AppendLine("{");
-            foreach (var entry in entries.OrderBy(e => e.Key, StringComparer.Ordinal))
-            {
-                EmitKeyField(sb, "Resources", entry, "    ");
-            }
+            EmitEntries(sb, "Resources", entries, "    ");
             sb.AppendLine("}");
         }
         else
@@ -132,17 +130,16 @@ public sealed class LocSourceGenerator : IIncrementalGenerator
             sb.AppendLine("[GeneratedCode(\"Reactor.Localization.Generator\", \"1.0.0\")]");
             sb.AppendLine("internal static class Loc");
             sb.AppendLine("{");
+            var classNameUsage = new HashSet<string>(StringComparer.Ordinal);
             foreach (var kvp in defaultFiles.OrderBy(kv => kv.Key, StringComparer.Ordinal))
             {
                 var ns = kvp.Key;
                 var entries = kvp.Value;
 
-                sb.AppendLine($"    internal static class {SanitizeIdentifier(ns)}");
+                var classIdent = ResolveIdentifier(SanitizeIdentifier(ns), classNameUsage);
+                sb.AppendLine($"    internal static class {classIdent}");
                 sb.AppendLine("    {");
-                foreach (var entry in entries.OrderBy(e => e.Key, StringComparer.Ordinal))
-                {
-                    EmitKeyField(sb, ns, entry, "        ");
-                }
+                EmitEntries(sb, ns, entries, "        ");
                 sb.AppendLine("    }");
             }
             sb.AppendLine("}");
@@ -151,7 +148,16 @@ public sealed class LocSourceGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
-    private static void EmitKeyField(StringBuilder sb, string ns, ReswEntry entry, string indent)
+    private static void EmitEntries(StringBuilder sb, string ns, List<ReswEntry> entries, string indent)
+    {
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in entries.OrderBy(e => e.Key, StringComparer.Ordinal))
+        {
+            EmitKeyField(sb, ns, entry, indent, used);
+        }
+    }
+
+    private static void EmitKeyField(StringBuilder sb, string ns, ReswEntry entry, string indent, HashSet<string> usedIdentifiers)
     {
         // XML doc with the default-locale value for IntelliSense
         var escapedValue = entry.Value
@@ -160,8 +166,27 @@ public sealed class LocSourceGenerator : IIncrementalGenerator
             .Replace("&", "&amp;")
             .Replace("<", "&lt;")
             .Replace(">", "&gt;");
+        // SECURITY: SymbolDisplay.FormatLiteral produces a properly escaped C# string literal
+        // (including surrounding quotes), so attacker-controlled .resw key/file names cannot
+        // break out of the literal context and inject C# at build time.
+        var nsLiteral = SymbolDisplay.FormatLiteral(ns, quote: true);
+        var keyLiteral = SymbolDisplay.FormatLiteral(entry.Key, quote: true);
+        var ident = ResolveIdentifier(SanitizeIdentifier(entry.Key), usedIdentifiers);
         sb.AppendLine($"{indent}/// <summary>{escapedValue}</summary>");
-        sb.AppendLine($"{indent}public static readonly MessageKey {SanitizeIdentifier(entry.Key)} = new(\"{ns}\", \"{entry.Key}\");");
+        sb.AppendLine($"{indent}public static readonly MessageKey {ident} = new({nsLiteral}, {keyLiteral});");
+    }
+
+    private static string ResolveIdentifier(string sanitized, HashSet<string> used)
+    {
+        // Disambiguate collisions (two .resw keys that sanitize to the same identifier)
+        // by appending a numeric suffix. Comparison is ordinal so case differences alone
+        // also collide, matching C# identifier rules in practice for our scope.
+        if (used.Add(sanitized)) return sanitized;
+        for (int i = 2; ; i++)
+        {
+            var candidate = sanitized + "_" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (used.Add(candidate)) return candidate;
+        }
     }
 
     private static void EmitMissingKeyDiagnostics(
@@ -241,7 +266,7 @@ public sealed class LocSourceGenerator : IIncrementalGenerator
     private static string SanitizeIdentifier(string name)
     {
         // Replace invalid C# identifier chars with underscore
-        var sb = new StringBuilder(name.Length);
+        var sb = new StringBuilder(name.Length + 1);
         for (int i = 0; i < name.Length; i++)
         {
             var c = name[i];
@@ -249,6 +274,14 @@ public sealed class LocSourceGenerator : IIncrementalGenerator
                 sb.Append('_');
             sb.Append(char.IsLetterOrDigit(c) || c == '_' ? c : '_');
         }
-        return sb.ToString();
+        if (sb.Length == 0) sb.Append('_');
+        var ident = sb.ToString();
+        // Reserved-keyword guard: prefix with `@` so `class`, `void`, etc. become valid identifiers.
+        if (SyntaxFacts.GetKeywordKind(ident) != SyntaxKind.None
+            || SyntaxFacts.GetContextualKeywordKind(ident) != SyntaxKind.None)
+        {
+            ident = "@" + ident;
+        }
+        return ident;
     }
 }

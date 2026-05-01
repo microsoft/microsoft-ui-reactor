@@ -98,6 +98,14 @@ internal static class YogaAlgorithm
     /// Cache wrapper: checks if previous layout results are reusable before running full algo.
     /// performLayout=false is a measure-only pass (no position assignment).
     /// </summary>
+    /// <summary>
+    /// Hard cap on recursion depth. TASK-081: attacker-controlled nesting
+    /// would otherwise raise an uncatchable <c>StackOverflowException</c> and
+    /// crash the app. Throwing <see cref="InvalidOperationException"/> at the
+    /// cap lets a host catch the failure and degrade gracefully.
+    /// </summary>
+    private const uint MaxLayoutDepth = 256;
+
     private static bool CalculateLayoutInternal(
         YogaNode node, float availableWidth, float availableHeight,
         FlexLayoutDirection ownerDirection,
@@ -106,6 +114,10 @@ internal static class YogaAlgorithm
         bool performLayout,
         uint depth, uint generationCount)
     {
+        // SECURITY (TASK-081): bound recursion depth.
+        if (depth >= MaxLayoutDepth)
+            throw new InvalidOperationException(
+                $"Yoga layout recursion exceeded {MaxLayoutDepth} levels — likely a tree cycle or malformed layout.");
         var layout = node.Layout;
         depth++;
 

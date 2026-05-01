@@ -49,6 +49,14 @@ public sealed record DropTargetConfig
     /// is left at <see cref="DragOperations.None"/> by the user callback. Matches source-declared
     /// <see cref="DragSourceConfig.AllowedOperations"/> via <see cref="DragOperationNegotiation"/>.</summary>
     public DragOperations AcceptedOperations { get; init; } = DragOperations.All;
+
+    /// <summary>
+    /// Hard cap on the byte size of any single payload (Text, Html, Rtf,
+    /// Bitmap) the target accepts from a cross-process drag. Default 4 MiB.
+    /// Apps that legitimately accept larger payloads can override per drop
+    /// target. TASK-068.
+    /// </summary>
+    public int MaxPayloadBytes { get; init; } = 4 * 1024 * 1024;
 }
 
 /// <summary>

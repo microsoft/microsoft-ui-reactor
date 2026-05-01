@@ -65,10 +65,15 @@ public static class AutoSuggestDsl
 /// </summary>
 public sealed class SearchManager<T> : IDisposable
 {
+    // SECURITY (TASK-098): all mutable state accessed under _lock so the
+    // threadpool Timer callback and the UI-thread Search call can't race.
+    private readonly object _lock = new();
     private CancellationTokenSource? _cts;
     private Timer? _debounceTimer;
+    private long _generation; // increments per Search; old continuations discard
     private readonly int _debounceMs;
     private readonly Func<string, CancellationToken, Task<IReadOnlyList<T>>> _search;
+    private bool _disposed;
 
     public SearchState State { get; private set; } = SearchState.Idle;
     public IReadOnlyList<T> Results { get; private set; } = Array.Empty<T>();
@@ -83,56 +88,83 @@ public sealed class SearchManager<T> : IDisposable
         _debounceMs = debounceMs;
     }
 
+    private void RaiseStateChanged()
+    {
+        var dq = global::Microsoft.UI.Reactor.Hosting.ReactorHost.MainDispatcherQueue;
+        if (dq is not null && !dq.HasThreadAccess)
+        {
+            // SECURITY (TASK-098): marshal StateChanged onto the UI thread
+            // so subscribers (typically components) don't race the renderer.
+            var handler = StateChanged;
+            if (handler is not null) dq.TryEnqueue(() => handler.Invoke());
+            return;
+        }
+        StateChanged?.Invoke();
+    }
+
     /// <summary>
     /// Triggers a debounced search. Cancels any in-flight search.
     /// </summary>
     public void Search(string query)
     {
-        // Cancel previous
-        _cts?.Cancel();
-        _cts?.Dispose();
-        _debounceTimer?.Dispose();
-
-        if (string.IsNullOrEmpty(query))
+        CancellationToken token;
+        long mygen;
+        lock (_lock)
         {
-            State = SearchState.Idle;
-            Results = Array.Empty<T>();
-            StateChanged?.Invoke();
-            return;
-        }
+            if (_disposed) return;
+            try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
+            _cts?.Dispose();
+            _debounceTimer?.Dispose();
 
-        _cts = new CancellationTokenSource();
-        var token = _cts.Token;
+            mygen = ++_generation;
 
-        _debounceTimer = new Timer(async _ =>
-        {
-            State = SearchState.Loading;
-            StateChanged?.Invoke();
-
-            try
+            if (string.IsNullOrEmpty(query))
             {
-                var results = await _search(query, token);
-                token.ThrowIfCancellationRequested();
-
-                Results = results;
-                State = results.Count > 0 ? SearchState.Results : SearchState.Empty;
-            }
-            catch (OperationCanceledException)
-            {
-                // Cancelled — don't update state
+                State = SearchState.Idle;
+                Results = Array.Empty<T>();
+                RaiseStateChanged();
                 return;
             }
-            catch (Exception ex)
-            {
-                if (!token.IsCancellationRequested)
-                {
-                    State = SearchState.Error;
-                    ErrorText = ex.Message;
-                }
-            }
 
-            StateChanged?.Invoke();
-        }, null, _debounceMs, Timeout.Infinite);
+            _cts = new CancellationTokenSource();
+            token = _cts.Token;
+
+            _debounceTimer = new Timer(async _ =>
+            {
+                lock (_lock)
+                {
+                    if (_disposed || mygen != _generation) return;
+                    State = SearchState.Loading;
+                }
+                RaiseStateChanged();
+
+                IReadOnlyList<T>? results = null;
+                Exception? failure = null;
+                try
+                {
+                    results = await _search(query, token);
+                    token.ThrowIfCancellationRequested();
+                }
+                catch (OperationCanceledException) { return; }
+                catch (Exception ex) { failure = ex; }
+
+                lock (_lock)
+                {
+                    if (_disposed || mygen != _generation) return;
+                    if (failure is not null && !token.IsCancellationRequested)
+                    {
+                        State = SearchState.Error;
+                        ErrorText = failure.Message;
+                    }
+                    else if (results is not null)
+                    {
+                        Results = results;
+                        State = results.Count > 0 ? SearchState.Results : SearchState.Empty;
+                    }
+                }
+                RaiseStateChanged();
+            }, null, _debounceMs, Timeout.Infinite);
+        }
     }
 
     /// <summary>
@@ -140,16 +172,26 @@ public sealed class SearchManager<T> : IDisposable
     /// </summary>
     public void Cancel()
     {
-        _cts?.Cancel();
-        _debounceTimer?.Dispose();
-        State = SearchState.Idle;
-        Results = Array.Empty<T>();
+        lock (_lock)
+        {
+            try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
+            _debounceTimer?.Dispose();
+            _generation++;
+            State = SearchState.Idle;
+            Results = Array.Empty<T>();
+        }
     }
 
     public void Dispose()
     {
-        _cts?.Cancel();
-        _cts?.Dispose();
-        _debounceTimer?.Dispose();
+        lock (_lock)
+        {
+            _disposed = true;
+            try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
+            _cts?.Dispose();
+            _debounceTimer?.Dispose();
+            _cts = null;
+            _debounceTimer = null;
+        }
     }
 }

@@ -176,6 +176,16 @@ internal sealed class McpDispatcher
         var selector = TryReadSelector(@params);
         if (traceMcp)
             ReactorEventSource.Log.McpCallStart(name, selector ?? string.Empty);
+        // TASK-017: mutation tools always get a separate mutation-log line so
+        // investigators can tell setProperty(IncrementCount) from
+        // setProperty(DeleteAccount, "admin") without guessing.
+        if (_logger is not null && IsMutationTool(name))
+        {
+            var argsJson = @params is JsonElement je && je.ValueKind != JsonValueKind.Undefined
+                ? je.GetRawText()
+                : "";
+            _logger.LogMutation(name, selector, argsJson);
+        }
         var sw = global::System.Diagnostics.Stopwatch.StartNew();
         try
         {
@@ -210,6 +220,19 @@ internal sealed class McpDispatcher
             throw;
         }
     }
+
+    /// <summary>
+    /// Tools that mutate observable state. TASK-017: any of these gets a
+    /// separate <c>!mutation</c> log line with a hashed args fingerprint
+    /// regardless of log level.
+    /// </summary>
+    private static bool IsMutationTool(string name) => name switch
+    {
+        "setProperty" or "setResource" or "fire" or "click" or "type"
+        or "toggle" or "select" or "scroll" or "expand" or "collapse"
+        or "invoke" or "reload" or "shutdown" => true,
+        _ => false,
+    };
 
     /// <summary>
     /// True when <paramref name="result"/> is an object with an <c>ok</c> property

@@ -24,6 +24,11 @@ internal sealed class LockfileEntry
     [JsonPropertyName("buildTag")] public string BuildTag { get; set; } = "";
     [JsonPropertyName("project")] public string Project { get; set; } = "";
     [JsonPropertyName("startedAt")] public string StartedAt { get; set; } = "";
+    /// <summary>
+    /// Per-launch random bearer token clients must present in
+    /// <c>Authorization: Bearer ...</c>. Spec 025 §5 / TASK-001.
+    /// </summary>
+    [JsonPropertyName("token")] public string Token { get; set; } = "";
 }
 
 // Dedicated context with WriteIndented so humans `cat`-ing the lockfile see
@@ -133,20 +138,64 @@ internal static class LockfileRegistry
         try { if (File.Exists(path)) File.Delete(path); } catch { }
     }
 
+    /// <summary>
+    /// Hard cap on lockfile size in bytes. The schema is small (a few hundred
+    /// bytes) but a hostile actor could plant a multi-megabyte file to slow
+    /// readers; refuse anything past 8 KiB before parsing.
+    /// </summary>
+    public const int MaxLockfileBytes = 8 * 1024;
+
     public static bool TryRead(string path, out LockfileEntry? entry)
     {
         entry = null;
         if (!File.Exists(path)) return false;
         try
         {
+            // SECURITY (TASK-005): cap size before reading so we can't be DoSed
+            // by a planted multi-megabyte file.
+            var info = new FileInfo(path);
+            if (info.Length > MaxLockfileBytes) return false;
             var json = File.ReadAllText(path);
             entry = JsonSerializer.Deserialize(json, LockfileJsonContext.Default.LockfileEntry);
-            return entry is not null;
+            if (entry is null) return false;
+            // SECURITY (TASK-005 / TASK-031): enforce schema tag and validate
+            // that the endpoint really is loopback. A lockfile pointing at
+            // off-machine endpoints is rejected — better stale-session error
+            // than confused-deputy data exfil.
+            if (!string.Equals(entry.Schema, SchemaTag, StringComparison.Ordinal))
+            {
+                entry = null;
+                return false;
+            }
+            if (string.Equals(entry.Transport, "http", StringComparison.OrdinalIgnoreCase)
+                && !IsLoopbackHttpEndpoint(entry.Endpoint))
+            {
+                entry = null;
+                return false;
+            }
+            return true;
         }
         catch
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Returns true iff <paramref name="endpoint"/> parses as an HTTP URL with
+    /// host equal to 127.0.0.1, ::1, or localhost, and carries no userinfo.
+    /// </summary>
+    public static bool IsLoopbackHttpEndpoint(string endpoint)
+    {
+        if (string.IsNullOrEmpty(endpoint)) return false;
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)) return false;
+        if (!string.Equals(uri.Scheme, "http", StringComparison.Ordinal)) return false;
+        if (!string.IsNullOrEmpty(uri.UserInfo)) return false;
+        var host = uri.Host;
+        return string.Equals(host, "127.0.0.1", StringComparison.Ordinal)
+            || string.Equals(host, "::1", StringComparison.Ordinal)
+            || string.Equals(host, "[::1]", StringComparison.Ordinal)
+            || string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

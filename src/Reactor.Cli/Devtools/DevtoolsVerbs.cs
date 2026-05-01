@@ -36,7 +36,7 @@ internal static class DevtoolsVerbs
             return (int)resolution.Exit;
         }
 
-        using var client = new McpCliClient(resolution.Endpoint!);
+        using var client = new McpCliClient(resolution.Endpoint!, token: resolution.Token);
         try
         {
             return verb.ToLowerInvariant() switch
@@ -198,6 +198,20 @@ internal static class DevtoolsVerbs
                 if (result.TryGetProperty("png", out var pngEl) && pngEl.ValueKind == JsonValueKind.String)
                 {
                     var bytes = Convert.FromBase64String(pngEl.GetString()!);
+                    // SECURITY (TASK-033): cap size, validate PNG magic, and
+                    // refuse paths with NUL or NTFS alternate-stream `:`.
+                    if (bytes.Length > 64 * 1024 * 1024)
+                    {
+                        Console.Error.WriteLine("[mur devtools] screenshot exceeds 64 MiB cap; refusing to write.");
+                        return (int)DevtoolsCliExit.ToolError;
+                    }
+                    if (bytes.Length < 8
+                        || bytes[0] != 0x89 || bytes[1] != 0x50 || bytes[2] != 0x4E || bytes[3] != 0x47
+                        || bytes[4] != 0x0D || bytes[5] != 0x0A || bytes[6] != 0x1A || bytes[7] != 0x0A)
+                    {
+                        Console.Error.WriteLine("[mur devtools] screenshot bytes are not a PNG; refusing to write.");
+                        return (int)DevtoolsCliExit.ToolError;
+                    }
                     if (outPath == "-")
                     {
                         using var stdout = Console.OpenStandardOutput();
@@ -210,6 +224,11 @@ internal static class DevtoolsVerbs
                                          bounds = result.TryGetProperty("bounds", out var b) ? (object?)b : null };
                         Console.Error.WriteLine(JsonSerializer.Serialize(meta));
                         return (int)DevtoolsCliExit.Success;
+                    }
+                    if (!IsSafeOutPath(outPath))
+                    {
+                        Console.Error.WriteLine($"[mur devtools] screenshot --out path refused (NUL or alternate-stream): '{outPath}'");
+                        return (int)DevtoolsCliExit.Usage;
                     }
                     File.WriteAllBytes(outPath, bytes);
                 }
@@ -611,6 +630,26 @@ internal static class DevtoolsVerbs
     }
 
     // -- Output / error mapping ----------------------------------------------
+
+    /// <summary>
+    /// Returns false for paths containing NUL or NTFS alternate-stream `:`
+    /// past the optional drive letter. TASK-033.
+    /// </summary>
+    internal static bool IsSafeOutPath(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return false;
+        if (path.IndexOf('\0') >= 0) return false;
+        // Allow `C:` or `c:` only at index 1.
+        for (int i = 0; i < path.Length; i++)
+        {
+            if (path[i] == ':')
+            {
+                if (i == 1 && char.IsLetter(path[0])) continue;
+                return false;
+            }
+        }
+        return true;
+    }
 
     private static bool HasError(JsonDocument doc) =>
         doc.RootElement.TryGetProperty("error", out var err) && err.ValueKind != JsonValueKind.Null;

@@ -49,7 +49,15 @@ internal static class ExtractCommand
             return 1;
         }
 
-        var csFiles = Directory.GetFiles(sourcePath, "*.cs", SearchOption.AllDirectories);
+        // SECURITY (TASK-035): skip reparse points so a junction in the
+        // source tree can't redirect us out of the repo. EnumerationOptions
+        // works recursively and respects AttributesToSkip.
+        var enumOpts = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            AttributesToSkip = FileAttributes.ReparsePoint | FileAttributes.System,
+        };
+        var csFiles = Directory.GetFiles(sourcePath, "*.cs", enumOpts);
         if (csFiles.Length == 0)
         {
             Console.Error.WriteLine($"Error: No .cs files found in '{sourcePath}'.");

@@ -134,7 +134,7 @@ public class LockfileRegistryTests
         var path = Path.Combine(Path.GetTempPath(), $"reactor-test-{Guid.NewGuid():N}.json");
         try
         {
-            var entry = new LockfileEntry { Endpoint = "x", Pid = 1 };
+            var entry = new LockfileEntry { Endpoint = "http://127.0.0.1:42/mcp", Transport = "http", Pid = 1 };
             LockfileRegistry.Write(path, entry);
             var firstWrite = File.GetLastWriteTimeUtc(path);
             Thread.Sleep(15); // make any rewrite visibly later
@@ -151,10 +151,10 @@ public class LockfileRegistryTests
         var path = Path.Combine(Path.GetTempPath(), $"reactor-test-{Guid.NewGuid():N}.json");
         try
         {
-            LockfileRegistry.Write(path, new LockfileEntry { Endpoint = "a" });
-            LockfileRegistry.Write(path, new LockfileEntry { Endpoint = "b" });
+            LockfileRegistry.Write(path, new LockfileEntry { Endpoint = "http://127.0.0.1:42/mcp", Transport = "http" });
+            LockfileRegistry.Write(path, new LockfileEntry { Endpoint = "http://127.0.0.1:43/mcp", Transport = "http" });
             Assert.True(LockfileRegistry.TryRead(path, out var e));
-            Assert.Equal("b", e!.Endpoint);
+            Assert.Equal("http://127.0.0.1:43/mcp", e!.Endpoint);
         }
         finally { try { File.Delete(path); } catch { } }
     }
@@ -189,7 +189,7 @@ public class LockfileRegistryTests
         var path = Path.Combine(LockfileRegistry.Directory, $"test-enum-{Guid.NewGuid():N}.json");
         try
         {
-            LockfileRegistry.Write(path, new LockfileEntry { Endpoint = "x", Pid = 1 });
+            LockfileRegistry.Write(path, new LockfileEntry { Endpoint = "http://127.0.0.1:42/mcp", Transport = "http", Pid = 1 });
             var found = LockfileRegistry.EnumerateAll().Any(t => string.Equals(t.Path, path, StringComparison.OrdinalIgnoreCase));
             Assert.True(found);
         }

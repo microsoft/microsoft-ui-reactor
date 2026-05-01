@@ -23,8 +23,19 @@ internal sealed class SpatialIndex
     private readonly Dictionary<ulong, (float x, float y, float w, float h)> _elementRects = new();
     private readonly Dictionary<ComponentIdentity, (float x, float y, float w, float h, int depth)> _componentBounds = new();
 
+    /// <summary>Hard cap on tracked rects. TASK-066.</summary>
+    private const int MaxTrackedRects = 16384;
+
     public void RecordElementRect(ulong elementId, float x, float y, float w, float h)
     {
+        // SECURITY (TASK-066): bound the dictionary. A reborn-under-new-id
+        // pattern would otherwise climb without bound while
+        // `ShowLayoutCost` is on. Drop a chunk of the lowest ids when over.
+        if (_elementRects.Count >= MaxTrackedRects && !_elementRects.ContainsKey(elementId))
+        {
+            var snapshot = _elementRects.Keys.OrderBy(k => k).Take(MaxTrackedRects / 10).ToArray();
+            foreach (var k in snapshot) _elementRects.Remove(k);
+        }
         _elementRects[elementId] = (x, y, w, h);
     }
 

@@ -166,7 +166,8 @@ internal static class DevtoolsPropertyTools
                 Regex? filterRe = null;
                 if (filter is not null)
                 {
-                    try { filterRe = new Regex(filter, RegexOptions.IgnoreCase); }
+                    // SECURITY (TASK-014): cap regex execution to 200ms.
+                    try { filterRe = new Regex(filter, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(200)); }
                     catch { throw new McpToolException($"Invalid regex: {filter}", JsonRpcErrorCodes.InvalidParams); }
                 }
 
@@ -209,7 +210,10 @@ internal static class DevtoolsPropertyTools
         server.Tools.Register(
             new McpToolDescriptor(
                 Name: "setResource",
-                Description: "Set or add a XAML resource in a ResourceDictionary at the specified scope.",
+                Description: "Set or add a XAML resource in a ResourceDictionary at the specified scope. " +
+                    "Scope is required ('element' | 'window' | 'application'). 'application' additionally " +
+                    "requires confirmAppWide=true since it mutates Application.Current.Resources for the " +
+                    "lifetime of the process.",
                 InputSchema: new
                 {
                     type = "object",
@@ -217,24 +221,43 @@ internal static class DevtoolsPropertyTools
                     {
                         key = new { type = "string", description = "Resource key." },
                         value = new { type = "string", description = "Value as string (same parsing as setProperty)." },
-                        scope = new { type = "string", description = "'element', 'window', or 'app' (default 'app')." },
+                        scope = new { type = "string", description = "'element', 'window', or 'application' (no default — explicit choice required)." },
                         selector = new { type = "string", description = "Element selector (required when scope is 'element')." },
                         window = new { type = "string", description = "Window id (omit for default)." },
+                        confirmAppWide = new { type = "boolean", description = "Required to be true when scope is 'application'. Speed-bump against accidental process-wide mutation." },
                     },
-                    required = new[] { "key", "value" },
+                    required = new[] { "key", "value", "scope" },
                     additionalProperties = false,
                 }),
             (@params) => server.OnDispatcher(() =>
             {
                 var key = RequiredString(@params, "key");
                 var raw = RequiredString(@params, "value");
-                var scope = DevtoolsTools.ReadString(@params, "scope") ?? "app";
+                // SECURITY (TASK-012): scope is required; no implicit "app"
+                // default. Legacy "app" still accepted as an alias for
+                // "application" but the old default-to-app path is gone.
+                var scope = RequiredString(@params, "scope");
+                if (scope == "app") scope = "application";
+                if (scope is not ("element" or "window" or "application"))
+                    throw new McpToolException(
+                        $"scope must be 'element', 'window', or 'application'; got '{scope}'.",
+                        JsonRpcErrorCodes.InvalidParams);
+                if (scope == "application")
+                {
+                    var confirm = DevtoolsTools.ReadBool(@params, "confirmAppWide") ?? false;
+                    if (!confirm)
+                        throw new McpToolException(
+                            "scope='application' mutates Application.Current.Resources for the lifetime of the process. " +
+                            "Pass confirmAppWide=true to opt in, or use 'element' / 'window' instead.",
+                            JsonRpcErrorCodes.InvalidParams,
+                            new { code = "app-wide-confirmation-required" });
+                }
                 var selector = DevtoolsTools.ReadString(@params, "selector");
                 var windowId = DevtoolsTools.ReadString(@params, "window");
 
                 ResourceDictionary dict;
                 bool existedAtScope;
-                if (scope is "element")
+                if (scope == "element")
                 {
                     if (selector is null)
                         throw new McpToolException("selector is required when scope is 'element'.", JsonRpcErrorCodes.InvalidParams);
@@ -242,7 +265,7 @@ internal static class DevtoolsPropertyTools
                         ?? throw new McpToolException("Element is not a FrameworkElement.", JsonRpcErrorCodes.ToolExecution);
                     dict = el.Resources;
                 }
-                else if (scope is "window")
+                else if (scope == "window")
                 {
                     // Walk up to root from selector, or use app resources.
                     FrameworkElement? root = null;

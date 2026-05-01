@@ -53,9 +53,26 @@ public sealed class FocusTrapHandle
     {
         if (!_isActive || _container is null) return;
 
+        // SECURITY (TASK-100): refuse to trap when the container has fallen
+        // out of the visual state where trapping is sensible. Without these
+        // gates, a hidden / collapsed / unloaded container wedges keyboard
+        // navigation: the user can't focus anything else and Esc / Tab
+        // bounce back uselessly.
+        if (_container is FrameworkElement fe)
+        {
+            if (!fe.IsLoaded) return;
+            if (fe.Visibility != Visibility.Visible) return;
+        }
+        if (!_container.IsHitTestVisible) return;
+
         // Check if the new focus target is outside our container
         var newFocus = args.NewFocusedElement as DependencyObject;
         if (newFocus is null) return;
+
+        // Allow cross-window navigation — the new focus target's root may
+        // belong to a different XamlRoot, in which case we don't own it.
+        if (newFocus is UIElement newUi && !ReferenceEquals(newUi.XamlRoot, _container.XamlRoot))
+            return;
 
         // Walk up from new focus target to see if it's within our container
         if (!IsDescendantOf(newFocus, _container))

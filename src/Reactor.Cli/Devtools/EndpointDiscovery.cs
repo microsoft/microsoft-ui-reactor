@@ -21,7 +21,8 @@ internal enum DevtoolsCliExit
 internal sealed record EndpointResolution(
     string? Endpoint,
     DevtoolsCliExit Exit,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    string? Token = null);
 
 /// <summary>
 /// Resolves the MCP endpoint the CLI should talk to. Spec 025 §5.
@@ -33,7 +34,20 @@ internal static class EndpointDiscovery
     public static EndpointResolution Resolve(string? explicitEndpoint, bool autoScan)
     {
         if (!string.IsNullOrEmpty(explicitEndpoint))
-            return new EndpointResolution(explicitEndpoint, DevtoolsCliExit.Success, null);
+        {
+            // SECURITY (TASK-031): even when the user passes --endpoint, refuse
+            // anything that's not loopback HTTP. Otherwise the flag becomes a
+            // confused-deputy primitive ("send the agent's token to attacker.com").
+            if (!LockfileReader.IsLoopbackHttpEndpoint(explicitEndpoint))
+            {
+                return new EndpointResolution(
+                    null, DevtoolsCliExit.Usage,
+                    $"--endpoint must be a loopback http URL; got '{LockfileReader.SafeForTerminal(explicitEndpoint)}'");
+            }
+            // Explicit endpoint without lockfile means we have no token. The
+            // server will 401 unless --endpoint is paired with the token.
+            return new EndpointResolution(explicitEndpoint, DevtoolsCliExit.Success, null, Token: null);
+        }
 
         var live = FindLiveHttpSessions();
         if (live.Count == 0)
@@ -45,14 +59,15 @@ internal static class EndpointDiscovery
         }
         if (live.Count == 1)
         {
-            return new EndpointResolution(live[0].Entry!.Endpoint, DevtoolsCliExit.Success, null);
+            var entry = live[0].Entry!;
+            return new EndpointResolution(entry.Endpoint, DevtoolsCliExit.Success, null, Token: entry.Token);
         }
 
         // Multiple live: disambiguate. Spec §5 item 2.
         var sb = new global::System.Text.StringBuilder();
         sb.AppendLine("multiple live devtools sessions found; pass --endpoint to pick one:");
         foreach (var (_, entry) in live)
-            sb.AppendLine($"  {entry!.Endpoint}  pid={entry.Pid}  {entry.Project}");
+            sb.AppendLine($"  {LockfileReader.SafeForTerminal(entry!.Endpoint)}  pid={entry.Pid}  {LockfileReader.SafeForTerminal(entry.Project)}");
         return new EndpointResolution(
             Endpoint: null,
             Exit: DevtoolsCliExit.Usage,

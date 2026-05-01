@@ -12,6 +12,7 @@ public sealed class OrdinalScale<TDomain> where TDomain : notnull
     private readonly Dictionary<TDomain, int> _index = [];
     private double[] _range = [];
     private double _unknown = double.NaN;
+    private bool _allowImplicitGrowth = true;
 
     public OrdinalScale() { }
 
@@ -32,10 +33,26 @@ public sealed class OrdinalScale<TDomain> where TDomain : notnull
         if (!_index.TryGetValue(x, out int i))
         {
             if (!double.IsNaN(_unknown)) return _unknown;
+            // SECURITY (TASK-091): when implicit growth is disabled, treat
+            // unknown keys as NaN. The previous default — NaN unknown +
+            // implicit grow — was an unbounded memory leak under streaming
+            // categorical keys.
+            if (!_allowImplicitGrowth) return double.NaN;
             i = _domain.Count;
             AddToDomain(x);
         }
         return _range.Length > 0 ? _range[i % _range.Length] : double.NaN;
+    }
+
+    /// <summary>
+    /// When false, <see cref="Map"/> returns <see cref="Unknown"/> (or NaN if
+    /// none) for keys that aren't already in the domain instead of growing
+    /// the domain. TASK-091.
+    /// </summary>
+    public bool AllowImplicitGrowth
+    {
+        get => _allowImplicitGrowth;
+        set => _allowImplicitGrowth = value;
     }
 
     /// <summary>Gets or sets the domain.</summary>

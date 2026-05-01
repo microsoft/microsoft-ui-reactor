@@ -58,6 +58,14 @@ public sealed class PackLayout<T>
         }
     }
 
+    /// <summary>
+    /// Cap on per-node child count for the brute-force packer. TASK-087:
+    /// the implementation is O(n⁴) per node; n ≈ 50 starts to hurt the
+    /// render thread, n ≈ 1000 freezes it for billions of operations.
+    /// Until the front-chain port lands (deferred), trim to this cap.
+    /// </summary>
+    public const int MaxChildrenPerPack = 100;
+
     private void PackCircles(PackNode<T> node)
     {
         if (node.Children.Count == 0) return;
@@ -65,8 +73,12 @@ public sealed class PackLayout<T>
         foreach (var child in node.Children)
             PackCircles(child);
 
-        // Simple front-chain packing algorithm
-        var circles = node.Children.OrderByDescending(c => c.R).ToList();
+        // SECURITY (TASK-087): the brute-force packer is O(n⁴). Truncate to
+        // the largest-by-radius `MaxChildrenPerPack` children if exceeded.
+        var ordered = node.Children.OrderByDescending(c => c.R);
+        var circles = (node.Children.Count > MaxChildrenPerPack
+            ? ordered.Take(MaxChildrenPerPack)
+            : ordered).ToList();
 
         if (circles.Count == 1)
         {

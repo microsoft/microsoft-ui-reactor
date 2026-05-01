@@ -458,6 +458,16 @@ internal static class DevtoolsUiaTools
 
     // -- screenshot --------------------------------------------------------------
 
+    /// <summary>
+    /// Per-process throttle for the <c>screenshot</c> tool. TASK-015: capture
+    /// allocates two GDI Bitmaps + PrintWindow + PNG encode; without a min
+    /// interval, a runaway loop pegs the GPU/CPU. 100ms = ~10fps cap which
+    /// matches the preview server's frame rate and is plenty for an agent.
+    /// </summary>
+    private static long s_lastScreenshotTicks;
+    private const int ScreenshotMinIntervalMs = 100;
+    private static readonly object s_screenshotGate = new();
+
     private static void Register_Screenshot(DevtoolsMcpServer server, SelectorResolver resolver, WindowRegistry windows)
     {
         server.Tools.Register(
@@ -476,48 +486,73 @@ internal static class DevtoolsUiaTools
                     },
                     additionalProperties = false,
                 }),
-            @params => server.OnDispatcher(() =>
+            @params =>
             {
-                var selector = DevtoolsTools.ReadString(@params, "selector");
-                var windowId = DevtoolsTools.ReadString(@params, "window");
-                var waitIdle = DevtoolsTools.ReadBool(@params, "waitIdle") ?? true;
-                var includeChrome = DevtoolsTools.ReadBool(@params, "includeChrome") ?? false;
-
-                var w = ResolveWindowForTools(windows, windowId);
-
-                (double x, double y, double w, double h)? crop = null;
-                if (!string.IsNullOrEmpty(selector))
+                // SECURITY (TASK-015): serialize captures and enforce a 100ms
+                // min interval. The lock also prevents two captures from
+                // racing each other's GDI Bitmap allocations.
+                lock (s_screenshotGate)
                 {
-                    var el = resolver.Resolve(selector!, windowId);
-                    if (el is FrameworkElement fe)
+                    var nowTicks = global::System.Diagnostics.Stopwatch.GetTimestamp();
+                    var elapsedMs = (nowTicks - s_lastScreenshotTicks) * 1000.0 / global::System.Diagnostics.Stopwatch.Frequency;
+                    if (s_lastScreenshotTicks != 0 && elapsedMs < ScreenshotMinIntervalMs)
                     {
-                        // Element bounds relative to the window client area.
-                        var transform = fe.TransformToVisual(w.Content);
-                        var origin = transform.TransformPoint(new global::Windows.Foundation.Point(0, 0));
-                        crop = (origin.X, origin.Y, fe.ActualWidth, fe.ActualHeight);
+                        var sleep = ScreenshotMinIntervalMs - (int)elapsedMs;
+                        if (sleep > 0) Thread.Sleep(sleep);
+                    }
+                    try
+                    {
+                        return server.OnDispatcher(() => CaptureScreenshot(@params, resolver, windows), timeoutMs: 10_000);
+                    }
+                    finally
+                    {
+                        s_lastScreenshotTicks = global::System.Diagnostics.Stopwatch.GetTimestamp();
                     }
                 }
+            });
+    }
 
-                if (waitIdle)
-                {
-                    // A no-op UpdateLayout on the content tree forces pending layout
-                    // to run before we capture.
-                    if (w.Content is FrameworkElement rootFe) rootFe.UpdateLayout();
-                }
+    private static object CaptureScreenshot(JsonElement? @params, SelectorResolver resolver, WindowRegistry windows)
+    {
+        var selector = DevtoolsTools.ReadString(@params, "selector");
+        var windowId = DevtoolsTools.ReadString(@params, "window");
+        var waitIdle = DevtoolsTools.ReadBool(@params, "waitIdle") ?? true;
+        var includeChrome = DevtoolsTools.ReadBool(@params, "includeChrome") ?? false;
 
-                var capture = ScreenshotCapture.CaptureWindow(w, includeChrome, crop);
-                return new
-                {
-                    png = Convert.ToBase64String(capture.Png),
-                    bounds = new
-                    {
-                        x = capture.X,
-                        y = capture.Y,
-                        width = capture.Width,
-                        height = capture.Height,
-                    },
-                };
-            }, timeoutMs: 10_000));
+        var w = ResolveWindowForTools(windows, windowId);
+
+        (double x, double y, double w, double h)? crop = null;
+        if (!string.IsNullOrEmpty(selector))
+        {
+            var el = resolver.Resolve(selector!, windowId);
+            if (el is FrameworkElement fe)
+            {
+                // Element bounds relative to the window client area.
+                var transform = fe.TransformToVisual(w.Content);
+                var origin = transform.TransformPoint(new global::Windows.Foundation.Point(0, 0));
+                crop = (origin.X, origin.Y, fe.ActualWidth, fe.ActualHeight);
+            }
+        }
+
+        if (waitIdle)
+        {
+            // A no-op UpdateLayout on the content tree forces pending layout
+            // to run before we capture.
+            if (w.Content is FrameworkElement rootFe) rootFe.UpdateLayout();
+        }
+
+        var capture = ScreenshotCapture.CaptureWindow(w, includeChrome, crop);
+        return new
+        {
+            png = Convert.ToBase64String(capture.Png),
+            bounds = new
+            {
+                x = capture.X,
+                y = capture.Y,
+                width = capture.Width,
+                height = capture.Height,
+            },
+        };
     }
 
     // -- tree --------------------------------------------------------------------
@@ -567,11 +602,13 @@ internal static class DevtoolsUiaTools
                     root = resolver.Resolve(selector!, windowId);
                 }
 
+                var nodesWalked = walker.Walk(root);
                 return new TreeResult
                 {
                     Schema = TreeWalker.SchemaVersion,
                     WindowId = WindowIdFor(windows, w),
-                    Nodes = walker.Walk(root),
+                    Nodes = nodesWalked,
+                    Truncated = walker.Truncated ? true : null,
                 };
             }));
     }
@@ -750,6 +787,12 @@ internal static class DevtoolsUiaTools
 
                 var pred = WaitForPredicate.FromJson(predEl);
                 int timeoutMs = DevtoolsTools.ReadInt(@params, "timeoutMs") ?? 5000;
+                // SECURITY (TASK-016): clamp the timeout. Without this, a
+                // caller passing int.MaxValue would park an HTTP worker for
+                // ~24 days. 10 min matches the standard Unix-tool ceiling.
+                const int MaxWaitMs = 10 * 60 * 1000;
+                if (timeoutMs < 0) timeoutMs = 0;
+                if (timeoutMs > MaxWaitMs) timeoutMs = MaxWaitMs;
                 var windowId = DevtoolsTools.ReadString(@params, "window");
 
                 var sw = global::System.Diagnostics.Stopwatch.StartNew();
@@ -865,8 +908,15 @@ internal sealed record WaitForPredicate(
             if (pred.TextEquals is not null && pred.TextEquals != text) ok = false;
             if (pred.TextMatches is not null)
             {
-                try { if (!Regex.IsMatch(text ?? string.Empty, pred.TextMatches)) ok = false; }
+                // SECURITY (TASK-014): cap regex execution to 200ms to defang
+                // catastrophic backtracking on caller-supplied patterns.
+                try
+                {
+                    if (!Regex.IsMatch(text ?? string.Empty, pred.TextMatches,
+                        RegexOptions.None, TimeSpan.FromMilliseconds(200))) ok = false;
+                }
                 catch (RegexParseException) { ok = false; }
+                catch (RegexMatchTimeoutException) { ok = false; }
             }
             if (pred.Visible is bool vb && vb != visible) ok = false;
 

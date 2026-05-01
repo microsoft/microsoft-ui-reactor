@@ -49,9 +49,14 @@ pub fn enumerate_directory(path: &Path) -> FsResult {
         // The tree shows an expand arrow; expanding an empty dir simply shows nothing.
         let has_children = is_dir;
 
-        let name_ptr = name_utf16.as_ptr();
-        let name_len = name_utf16.len() as u32;
-        std::mem::forget(name_utf16); // Caller frees via reactorfs_free_result
+        // SECURITY (TASK-075): `Vec::from_raw_parts` with `(len, len)` over a
+        // Vec that may have over-allocated capacity is documented UB. Convert
+        // to a boxed slice first so cap == len, then leak the box. The
+        // free path reconstructs with `Box::from_raw` which doesn't carry
+        // capacity.
+        let name_box: Box<[u16]> = name_utf16.into_boxed_slice();
+        let name_len = name_box.len() as u32;
+        let name_ptr = Box::into_raw(name_box) as *const u16;
 
         entries.push(FsEntry {
             name_ptr,
@@ -63,9 +68,11 @@ pub fn enumerate_directory(path: &Path) -> FsResult {
         });
     }
 
-    let count = entries.len() as u32;
-    let ptr = entries.as_mut_ptr();
-    std::mem::forget(entries); // Caller frees via reactorfs_free_result
+    // SECURITY (TASK-075): boxed slice for the same reason as the per-name
+    // buffer above — guaranteed cap == len.
+    let entries_box: Box<[FsEntry]> = entries.into_boxed_slice();
+    let count = entries_box.len() as u32;
+    let ptr = if count == 0 { std::ptr::null_mut() } else { Box::into_raw(entries_box) as *mut FsEntry };
 
     FsResult {
         entries: ptr,
@@ -111,9 +118,10 @@ pub fn enumerate_subdirs(path: &Path) -> FsResult {
         });
     }
 
-    let count = entries.len() as u32;
-    let ptr = entries.as_mut_ptr();
-    std::mem::forget(entries);
+    // SECURITY (TASK-075): boxed slice for guaranteed cap == len.
+    let entries_box: Box<[FsEntry]> = entries.into_boxed_slice();
+    let count = entries_box.len() as u32;
+    let ptr = if count == 0 { std::ptr::null_mut() } else { Box::into_raw(entries_box) as *mut FsEntry };
 
     FsResult {
         entries: ptr,

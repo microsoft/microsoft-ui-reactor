@@ -185,6 +185,47 @@ public sealed class DragData
         return false;
     }
     public bool TryGetBitmap(out RandomAccessStreamReference value) => TryGetAs(StandardDataFormats.Bitmap, out value!);
+
+    /// <summary>
+    /// Filters dropped files to local-only paths, removing UNC, DOS-device,
+    /// reparse, and shell-virtual entries that the source process picked.
+    /// Apps that open/parse/render dropped files should prefer this over
+    /// <see cref="TryGetFiles"/>; UNC paths trigger NTLM authentication on
+    /// stat/open, reparse points can escape the directory the user thought
+    /// they shared, and Internet-zone files lose their MOTW warning if the
+    /// app reads bytes without consulting <c>Zone.Identifier</c>. TASK-069.
+    /// </summary>
+    public bool TryGetSafeLocalFiles(out IReadOnlyList<IStorageItem> value)
+    {
+        if (!TryGetFiles(out var raw))
+        {
+            value = Array.Empty<IStorageItem>();
+            return false;
+        }
+        var safe = new List<IStorageItem>(raw.Count);
+        foreach (var item in raw)
+        {
+            string path;
+            try { path = item.Path; } catch { continue; }
+            if (string.IsNullOrEmpty(path)) continue;
+            // UNC: \\server\share\... — refuse so we don't trigger SMB auth
+            // on stat/open. DOS-device paths (\\?\, \\.\) are also refused
+            // because they bypass canonical path checks.
+            if (path.StartsWith(@"\\", StringComparison.Ordinal)) continue;
+            // Reject files marked ReparsePoint at the leaf — junctions and
+            // symlinks that escape the directory the user thinks they
+            // shared.
+            try
+            {
+                var attrs = global::System.IO.File.GetAttributes(path);
+                if ((attrs & global::System.IO.FileAttributes.ReparsePoint) != 0) continue;
+            }
+            catch { continue; }
+            safe.Add(item);
+        }
+        value = safe;
+        return safe.Count > 0;
+    }
     public bool TryGetCustomFormat<T>(string formatId, out T value)
     {
         if (_formatEntries.TryGetValue(formatId, out var entry)

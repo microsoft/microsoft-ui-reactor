@@ -107,6 +107,35 @@ internal sealed class DevtoolsLogger : IDisposable
         WriteLine($"{ts}\t!error\t{messagePart}\t-\terr\t-");
     }
 
+    /// <summary>
+    /// Logs a mutating tool call with a hashed argument fingerprint plus a
+    /// truncated preview of the args. TASK-017: investigators need to tell
+    /// <c>setProperty(IncrementCount)</c> apart from <c>setProperty(DeleteAccount,
+    /// "admin")</c>. Always written at the Error/Call floor so a runaway agent
+    /// leaves a tamper-evident trail even with default verbosity. The full
+    /// preview only appears at <see cref="DevtoolsLogLevel.Trace"/>.
+    /// </summary>
+    public void LogMutation(string tool, string? selector, string argsJson)
+    {
+        if (_level == DevtoolsLogLevel.Off) return;
+        var ts = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
+        var argsBytes = Encoding.UTF8.GetBytes(argsJson ?? "");
+        var hash = global::System.Security.Cryptography.SHA256.HashData(argsBytes);
+        var sb = new StringBuilder(16);
+        for (int i = 0; i < 8; i++) sb.Append(hash[i].ToString("x2"));
+        var fingerprint = sb.ToString();
+        var selPart = string.IsNullOrEmpty(selector) ? "-" : Truncate(selector!, 80);
+        if (_level == DevtoolsLogLevel.Trace)
+        {
+            var preview = Truncate(argsJson ?? "", 200);
+            WriteLine($"{ts}\t!mutation\t{tool}\t{selPart}\t{fingerprint}\t{preview}");
+        }
+        else
+        {
+            WriteLine($"{ts}\t!mutation\t{tool}\t{selPart}\t{fingerprint}\t-");
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

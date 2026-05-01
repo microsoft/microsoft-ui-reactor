@@ -44,9 +44,28 @@ internal sealed class PointerMap
         _ = owner;
     }
 
+    /// <summary>
+    /// Hard cap on `_idToComponent` size. TASK-066. Without this, the table
+    /// grows for the lifetime of the host because `Untrack` cannot
+    /// efficiently remove entries by ownership.
+    /// </summary>
+    private const int MaxTrackedElementIds = 16384;
+
     /// <summary>Called the first time an ETW event surfaces an ElementId for a tracked element.</summary>
     public void RegisterElementId(ulong elementId, ComponentIdentity owner)
     {
+        // SECURITY (TASK-066): bound the dictionary by oldest-eviction. A
+        // long-running session with `ShowLayoutCost` enabled would
+        // otherwise climb without bound as elements get reborn under
+        // different ETW ids.
+        if (_idToComponent.Count >= MaxTrackedElementIds)
+        {
+            // Drop ~10% of the oldest entries (the ones with the lowest ids
+            // tend to correspond to early-mounted elements that no longer
+            // exist). Cheap and avoids touching every entry on every add.
+            var snapshot = _idToComponent.Keys.OrderBy(k => k).Take(MaxTrackedElementIds / 10).ToArray();
+            foreach (var k in snapshot) _idToComponent.Remove(k);
+        }
         _idToComponent[elementId] = owner;
     }
 

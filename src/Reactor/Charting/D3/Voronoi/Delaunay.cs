@@ -39,6 +39,12 @@ public sealed class Delaunay
     /// Computes the Delaunay triangulation for the given points.
     /// Uses the Bowyer-Watson incremental insertion algorithm.
     /// </summary>
+    /// <summary>Cap on point count. TASK-088: implementation is incremental
+    /// Bowyer-Watson (O(n²) average, O(n³) pathological). Until the
+    /// delaunator sweep-line port lands (deferred), reject inputs over this
+    /// cap so the render thread can't be frozen.</summary>
+    public const int MaxPointsForDelaunay = 5000;
+
     public static Delaunay From(IReadOnlyList<(double x, double y)> points)
     {
         var pts = points.ToArray();
@@ -47,6 +53,12 @@ public sealed class Delaunay
         if (n < 3)
         {
             return new Delaunay(pts, [], [], n >= 1 ? Enumerable.Range(0, n).ToArray() : []);
+        }
+        // SECURITY (TASK-088): bound at MaxPointsForDelaunay; over-cap inputs
+        // return an empty triangulation rather than freezing the UI.
+        if (n > MaxPointsForDelaunay)
+        {
+            return new Delaunay(pts, [], [], Enumerable.Range(0, n).ToArray());
         }
 
         // Find a seed triangle (points not collinear)

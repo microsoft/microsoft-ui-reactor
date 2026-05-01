@@ -28,6 +28,13 @@ namespace Microsoft.UI.Reactor.Interop.WinForms;
 public static partial class XamlIslandBootstrap
 {
     private static Action? _onReady;
+    /// <summary>
+    /// Single-shot guard. <see cref="Run"/> is not safe to call twice — the
+    /// XAML runtime is process-singleton and a second call would clobber
+    /// <see cref="_onReady"/> mid-flight, re-set DPI awareness, and crash
+    /// inside <see cref="XamlApp.Start"/>. TASK-080.
+    /// </summary>
+    private static int _runStarted;
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetProcessDpiAwarenessContext(nint value);
@@ -64,6 +71,12 @@ public static partial class XamlIslandBootstrap
     /// </summary>
     public static void Run(Action onReady)
     {
+        // SECURITY (TASK-080): single-shot. Concurrent or sequential second
+        // call would race the static state and crash inside XamlApp.Start.
+        if (Interlocked.Exchange(ref _runStarted, 1) != 0)
+            throw new InvalidOperationException(
+                "XamlIslandBootstrap.Run can only be called once per process.");
+
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         WinRT.ComWrappersSupport.InitializeComWrappers();
 

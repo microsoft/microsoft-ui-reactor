@@ -35,13 +35,16 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
+exports.resolveDotnet = resolveDotnet;
 const vscode = __importStar(require("vscode"));
 const cp = __importStar(require("child_process"));
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const http = __importStar(require("http"));
+const crypto = __importStar(require("crypto"));
 let previewProcess;
 let capturePort;
+let captureToken;
 let panel;
 let statusBarItem;
 let outputChannel;
@@ -155,6 +158,7 @@ async function launchPreviewProcess(context, csprojPath) {
     isLaunching = true;
     await killPreviewProcess();
     capturePort = undefined;
+    captureToken = undefined;
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
         path.dirname(csprojPath);
     // Launch with --devtools run (no component name = default to first) and --vscode.
@@ -162,11 +166,28 @@ async function launchPreviewProcess(context, csprojPath) {
     // stdout: a `[preview]` prefix means the target Reactor is pre-rename, so we kill
     // and relaunch with the legacy args. telemetry_event_name is kept for one release.
     const args = buildDevtoolsArgs(csprojPath, legacyPreviewArgs);
-    outputChannel.appendLine(`[reactor] Launching: dotnet ${args.join(" ")}`);
+    // SECURITY (TASK-027): resolve `dotnet` to an absolute path **outside** the
+    // workspace before spawning. CreateProcessW on Windows searches the CWD before
+    // %PATH%, so a hostile repo dropping `dotnet.exe`/`dotnet.bat` at its root would
+    // get arbitrary code execution. We refuse such an exe and disable the legacy
+    // CWD-first lookup via NoDefaultCurrentDirectoryInExePath as belt-and-braces.
+    const dotnetExe = resolveDotnet(workspaceRoot);
+    if (!dotnetExe) {
+        vscode.window.showErrorMessage("Could not locate `dotnet` on PATH outside the workspace. Install the .NET SDK or remove any dotnet executable from the workspace root.");
+        isLaunching = false;
+        return;
+    }
+    outputChannel.appendLine(`[reactor] Launching: ${dotnetExe} ${args.join(" ")}`);
     logTelemetry(legacyPreviewArgs ? "reactor_preview_launch" : "reactor_devtools_launch");
-    previewProcess = cp.spawn("dotnet", args, {
+    previewProcess = cp.spawn(dotnetExe, args, {
         cwd: workspaceRoot,
         stdio: ["ignore", "pipe", "pipe"],
+        env: {
+            ...process.env,
+            // Belt-and-braces: even if a child re-spawns with a relative name,
+            // CreateProcess will skip the CWD when this env var is set.
+            NoDefaultCurrentDirectoryInExePath: "1",
+        },
     });
     statusBarItem.text = `$(loading~spin) Reactor: Starting...`;
     statusBarItem.show();
@@ -193,7 +214,15 @@ async function launchPreviewProcess(context, csprojPath) {
             capturePort = parseInt(match[1], 10);
             isLaunching = false;
             outputChannel.appendLine(`[reactor] Capture server on port ${capturePort}`);
-            // Fetch the component list from the running process
+        }
+        // SECURITY (TASK-018): the per-launch bearer token is announced on the
+        // next stdout line. Capture it before issuing any request.
+        const tokenMatch = text.match(/CAPTURE_TOKEN=([A-Za-z0-9_\-]+)/);
+        if (tokenMatch) {
+            captureToken = tokenMatch[1];
+        }
+        // Fire the initial fetch once both port and token are known.
+        if (capturePort && captureToken && !panel) {
             fetchComponentsAndShow(context);
         }
     });
@@ -210,7 +239,63 @@ async function launchPreviewProcess(context, csprojPath) {
         }, 5000);
         previewProcess = undefined;
         capturePort = undefined;
+        captureToken = undefined;
     });
+}
+/**
+ * Walk %PATH% looking for a real `dotnet` executable that is NOT under the
+ * workspace root. Returns null if none is found.
+ *
+ * SECURITY (TASK-027): a hostile repo can plant `dotnet.exe`/`dotnet.bat` at
+ * its root; spawning unqualified `dotnet` with cwd=workspace would execute it.
+ */
+function resolveDotnet(workspaceRoot) {
+    const pathEnv = process.env.PATH ?? process.env.Path ?? process.env.path ?? "";
+    if (!pathEnv)
+        return null;
+    const sep = process.platform === "win32" ? ";" : ":";
+    const isWin = process.platform === "win32";
+    // PATHEXT semantics on Windows: dotnet.exe takes precedence, but .cmd/.bat
+    // are also resolved by CreateProcess. We check the well-known list.
+    const exts = isWin ? [".exe", ".cmd", ".bat", ".com"] : [""];
+    const baseName = isWin ? "dotnet" : "dotnet";
+    const wsNormalized = path.resolve(workspaceRoot).toLowerCase();
+    for (const dir of pathEnv.split(sep)) {
+        if (!dir)
+            continue;
+        const dirAbs = path.resolve(dir);
+        // Refuse anything resolved from inside the workspace.
+        const dirLower = dirAbs.toLowerCase();
+        if (dirLower === wsNormalized || dirLower.startsWith(wsNormalized + path.sep.toLowerCase())) {
+            continue;
+        }
+        for (const ext of exts) {
+            const candidate = path.join(dirAbs, baseName + ext);
+            try {
+                const stat = fs.statSync(candidate);
+                if (stat.isFile()) {
+                    // Final guard: realpath in case PATH entry is a symlink that escapes
+                    // back into the workspace.
+                    let real;
+                    try {
+                        real = fs.realpathSync(candidate);
+                    }
+                    catch {
+                        real = candidate;
+                    }
+                    const realLower = real.toLowerCase();
+                    if (realLower === wsNormalized || realLower.startsWith(wsNormalized + path.sep.toLowerCase())) {
+                        continue;
+                    }
+                    return candidate;
+                }
+            }
+            catch {
+                // Not present in this dir; keep searching.
+            }
+        }
+    }
+    return null;
 }
 function buildDevtoolsArgs(csprojPath, legacy) {
     const tail = legacy ? ["--preview", "--vscode"] : ["--devtools", "run", "--vscode"];
@@ -279,6 +364,7 @@ async function killPreviewProcess() {
         const pid = proc.pid;
         previewProcess = undefined;
         capturePort = undefined;
+        captureToken = undefined;
         if (pid) {
             try {
                 cp.execFileSync("taskkill", ["/T", "/F", "/PID", pid.toString()], { stdio: "ignore" });
@@ -301,6 +387,7 @@ async function killPreviewProcess() {
     }
     else {
         capturePort = undefined;
+        captureToken = undefined;
     }
 }
 // -- Connect to existing Preview ---------------------------------------------
@@ -341,6 +428,9 @@ function showPreviewPanel(context, componentName) {
     panel = vscode.window.createWebviewPanel("reactorPreview", `Reactor: ${componentName}`, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true }, {
         enableScripts: true,
         retainContextWhenHidden: true,
+        // SECURITY (TASK-028): no local resources are loaded; lock the roots empty
+        // so an attacker who lands a `vscode-resource:` URL cannot fetch repo files.
+        localResourceRoots: [],
     });
     panel.onDidDispose(() => {
         panel = undefined;
@@ -354,21 +444,33 @@ function showPreviewPanel(context, componentName) {
     updatePanelHtml();
 }
 function updatePanelHtml() {
-    if (!panel || !capturePort)
+    if (!panel || !capturePort || !captureToken)
         return;
-    panel.webview.html = getWebviewHtml(capturePort, currentComponents, currentComponentName ?? currentComponents[0]);
+    panel.webview.html = getWebviewHtml(capturePort, captureToken, currentComponents, currentComponentName ?? currentComponents[0]);
 }
-function getWebviewHtml(port, components, selectedComponent) {
+function getWebviewHtml(port, token, components, selectedComponent) {
     const optionsHtml = components
         .map((c) => `<option value="${escapeHtml(c)}"${c === selectedComponent ? " selected" : ""}>${escapeHtml(c)}</option>`)
         .join("\n");
     const selectorHtml = components.length > 1
         ? `<select id="componentSelect" title="Select component to preview">${optionsHtml}</select>`
         : `<span class="component-name">${escapeHtml(selectedComponent)}</span>`;
+    // SECURITY (TASK-028): nonce-bound CSP for inline scripts. connect-src is
+    // pinned to the loopback capture server. img-src allows blob: because frames
+    // are fetched and converted to object URLs in the script.
+    const nonce = crypto.randomBytes(16).toString("base64");
+    const csp = [
+        "default-src 'none'",
+        `connect-src http://127.0.0.1:* http://localhost:*`,
+        `img-src blob: data:`,
+        `style-src 'unsafe-inline'`,
+        `script-src 'nonce-${nonce}'`,
+    ].join("; ");
     return /*html*/ `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="${csp}">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -468,9 +570,12 @@ function getWebviewHtml(port, components, selectedComponent) {
     <div id="placeholder" class="placeholder">Waiting for first frame...</div>
   </div>
 
-  <script>
+  <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const PORT = ${port};
+    const AUTH = 'Bearer ' + ${JSON.stringify(token)};
+    const AUTH_INIT = { headers: { Authorization: AUTH } };
+    const AUTH_POST = { method: 'POST', headers: { Authorization: AUTH } };
     const img = document.getElementById('preview');
     const placeholder = document.getElementById('placeholder');
     const statusEl = document.getElementById('status');
@@ -496,12 +601,22 @@ function getWebviewHtml(port, components, selectedComponent) {
     window.addEventListener('message', (event) => {
       const msg = event.data;
       if (msg.type === 'updateSelection' && componentSelect) {
-        componentSelect.value = msg.selected;
+        componentSelect.value = String(msg.selected ?? '');
       }
-      if (msg.type === 'updateComponents' && componentSelect) {
-        componentSelect.innerHTML = msg.components
-          .map(c => '<option value="' + c + '"' + (c === msg.selected ? ' selected' : '') + '>' + c + '</option>')
-          .join('');
+      if (msg.type === 'updateComponents' && componentSelect && Array.isArray(msg.components)) {
+        // SECURITY (TASK-029): build options via DOM APIs. Component names are
+        // attacker-controllable via the loopback endpoint; innerHTML would let
+        // a hostile name inject script.
+        while (componentSelect.firstChild) componentSelect.removeChild(componentSelect.firstChild);
+        const selected = String(msg.selected ?? '');
+        for (const c of msg.components) {
+          const value = String(c);
+          const opt = document.createElement('option');
+          opt.value = value;
+          opt.textContent = value;
+          if (value === selected) opt.selected = true;
+          componentSelect.appendChild(opt);
+        }
       }
     });
 
@@ -516,7 +631,7 @@ function getWebviewHtml(port, components, selectedComponent) {
       }
 
       try {
-        const resp = await fetch(frameUrl, { cache: 'no-store' });
+        const resp = await fetch(frameUrl, { cache: 'no-store', headers: { Authorization: AUTH } });
         if (resp.ok && resp.status === 200) {
           const blob = await resp.blob();
           const url = URL.createObjectURL(blob);
@@ -541,7 +656,7 @@ function getWebviewHtml(port, components, selectedComponent) {
 
     async function refreshStatus() {
       try {
-        const resp = await fetch(statusUrl, { cache: 'no-store' });
+        const resp = await fetch(statusUrl, { cache: 'no-store', headers: { Authorization: AUTH } });
         if (resp.ok) {
           const data = await resp.json();
           if (data.building) {
@@ -561,11 +676,11 @@ function getWebviewHtml(port, components, selectedComponent) {
     }
 
     focusBtn.addEventListener('click', () => {
-      fetch(focusUrl, { method: 'POST' }).catch(() => {});
+      fetch(focusUrl, AUTH_POST).catch(() => {});
     });
 
     img.addEventListener('click', () => {
-      fetch(focusUrl, { method: 'POST' }).catch(() => {});
+      fetch(focusUrl, AUTH_POST).catch(() => {});
     });
 
     refreshFrame();
@@ -612,7 +727,10 @@ function escapeHtml(s) {
 // -- HTTP Helpers ------------------------------------------------------------
 function httpGetJson(url) {
     return new Promise((resolve, reject) => {
-        const req = http.get(url, (res) => {
+        const opts = captureToken
+            ? { headers: { Authorization: `Bearer ${captureToken}` } }
+            : {};
+        const req = http.get(url, opts, (res) => {
             if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
                 res.resume();
                 reject(new Error(`HTTP ${res.statusCode}`));
@@ -639,12 +757,15 @@ function httpGetJson(url) {
 function httpPostJson(url, data) {
     return new Promise((resolve, reject) => {
         const body = JSON.stringify(data);
+        const headers = {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(body),
+        };
+        if (captureToken)
+            headers["Authorization"] = `Bearer ${captureToken}`;
         const req = http.request(url, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(body),
-            },
+            headers,
         }, (res) => {
             let resBody = "";
             res.on("data", (chunk) => (resBody += chunk));
@@ -668,7 +789,10 @@ function httpPostJson(url, data) {
 }
 function httpPost(url) {
     return new Promise((resolve, reject) => {
-        const req = http.request(url, { method: "POST" }, (res) => {
+        const opts = { method: "POST" };
+        if (captureToken)
+            opts.headers = { Authorization: `Bearer ${captureToken}` };
+        const req = http.request(url, opts, (res) => {
             res.resume();
             res.on("end", resolve);
         });

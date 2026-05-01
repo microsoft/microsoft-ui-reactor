@@ -371,6 +371,19 @@ public static class ReactorApp
                 // the active component.
                 bool SwitchComponentCore(string name)
                 {
+                    // SECURITY (TASK-021): only allow switching to a type
+                    // already present in the announced component list. Without
+                    // this, the loopback /preview endpoint becomes a primitive
+                    // for activating arbitrary Component subclasses (including
+                    // ones the dev never intended to expose).
+                    var allowed = FindAllComponentNames();
+                    bool ok = false;
+                    foreach (var n in allowed)
+                    {
+                        if (string.Equals(n, name, StringComparison.OrdinalIgnoreCase)) { ok = true; break; }
+                    }
+                    if (!ok) return false;
+
                     var type = FindComponentType(name);
                     if (type == null) return false;
 

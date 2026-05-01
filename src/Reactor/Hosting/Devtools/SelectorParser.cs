@@ -67,10 +67,14 @@ internal static class SelectorParser
         var reactorMatch = ReactorRegex.Match(trimmed);
         if (reactorMatch.Success)
         {
+            // SECURITY (TASK-054): TryParse so an over-large line number
+            // becomes a FormatException, not an unhandled OverflowException.
+            if (!int.TryParse(reactorMatch.Groups[2].Value, out var line))
+                throw new FormatException($"Reactor source line number out of range in '{input}'.");
             return new SelectorIr(
                 SelectorKind.ReactorSource,
                 ReactorComponent: reactorMatch.Groups[1].Value,
-                ReactorLine: int.Parse(reactorMatch.Groups[2].Value));
+                ReactorLine: line);
         }
 
         // Type path: `Button`, `Button[2]`, `StackPanel > Button`. `>` separates steps.
@@ -84,7 +88,13 @@ internal static class SelectorParser
             var m = TypeStepRegex.Match(step);
             if (!m.Success)
                 throw new FormatException($"Unrecognized type step: '{step}' in selector '{input}'.");
-            int? index = m.Groups[2].Success ? int.Parse(m.Groups[2].Value) : null;
+            int? index = null;
+            if (m.Groups[2].Success)
+            {
+                if (!int.TryParse(m.Groups[2].Value, out var i))
+                    throw new FormatException($"Type-step index out of range: '{step}'.");
+                index = i;
+            }
             parsed.Add(new TypeStep(m.Groups[1].Value, index));
         }
         return new SelectorIr(SelectorKind.TypePath, TypePath: parsed);

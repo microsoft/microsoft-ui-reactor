@@ -46,6 +46,17 @@ public record MarkdownOptions
     public string CodeFontFamily { get; init; } = "Consolas";
     /// <summary>Parser flags. Default: DialectGitHub (tables, strikethrough, task lists).</summary>
     public MarkdownParserFlags ParserFlags { get; init; } = MarkdownParserFlags.DialectGitHub;
+    /// <summary>
+    /// Override link rendering. (displayInlines, navigateUri) → element.
+    /// Apps that want to require a confirmation UX or unfurl/origin-preview
+    /// for cross-site hyperlinks should provide this. TASK-048.
+    /// </summary>
+    public Func<Element[], Uri, Element>? LinkBuilder { get; init; }
+    /// <summary>
+    /// Hard cap on input markdown size in bytes. Default 4 MiB. Inputs past
+    /// the cap throw at <see cref="MarkdownBuilder.Build"/>. TASK-049.
+    /// </summary>
+    public int MaxInputBytes { get; init; } = 4 * 1024 * 1024;
 }
 
 /// <summary>
@@ -121,9 +132,24 @@ internal sealed class MarkdownBuilder
     internal static Element Build(string markdown, MarkdownOptions? options)
     {
         options ??= new MarkdownOptions();
+        // SECURITY (TASK-049): reject huge inputs before we hand them to the
+        // mark-allocating parser. The cap is in *byte* count post-UTF-8
+        // because that's what the parser sees; for ASCII inputs string
+        // length is a tight upper bound.
+        if (options.MaxInputBytes > 0 && markdown is not null
+            && markdown.Length * 4L > options.MaxInputBytes)
+        {
+            // Char-length × 4 is the worst-case UTF-8 expansion. Probe the
+            // exact byte count only when the cheap bound trips.
+            var byteCount = global::System.Text.Encoding.UTF8.GetByteCount(markdown);
+            if (byteCount > options.MaxInputBytes)
+                throw new ArgumentException(
+                    $"Markdown input exceeds MaxInputBytes ({options.MaxInputBytes}).",
+                    nameof(markdown));
+        }
         var builder = new MarkdownBuilder(options);
         int ret = Md4cParser.Parse(
-            markdown,
+            markdown ?? string.Empty,
             options.ParserFlags,
             builder.OnEnterBlock,
             builder.OnLeaveBlock,
@@ -648,8 +674,13 @@ internal sealed class MarkdownBuilder
 
     private static bool IsSafeUri(Uri? uri)
     {
+        // SECURITY (TASK-047): require an absolute URI with a known-safe
+        // scheme. The previous "all relative URIs are safe" branch let
+        // `slack:`, `vscode:`, `intent:` (parsed by .NET as relative) bypass
+        // the allowlist. Relative URIs should be resolved by the caller
+        // against a known base before they reach this layer.
         if (uri is null) return false;
-        if (!uri.IsAbsoluteUri) return true;
+        if (!uri.IsAbsoluteUri) return false;
         var scheme = uri.Scheme;
         return scheme is "http" or "https" or "mailto";
     }

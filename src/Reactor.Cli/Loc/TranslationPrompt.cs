@@ -56,12 +56,15 @@ internal static class TranslationPrompt
     public static string BuildUserMessage(TranslationBatch batch)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Translate the following strings:");
+        sb.AppendLine("Translate the following strings. Each value is on a single line; \\n in the source has been escaped to a literal \\n and \\\\ to \\\\\\\\. Decode these in your translation BEFORE translating the text.");
         sb.AppendLine();
 
         foreach (var entry in batch.Entries)
         {
-            sb.AppendLine($"{entry.Key}={entry.Value}");
+            // SECURITY (TASK-037): escape newlines and embedded `=` so a
+            // hostile source value like `Greet=Hi\nLogout=Erase` cannot
+            // inject a second KEY=VALUE pair the parser would accept.
+            sb.AppendLine($"{entry.Key}={EscapeForKvLine(entry.Value)}");
         }
 
         if (batch.ExistingTranslations.Count > 0)
@@ -71,10 +74,53 @@ internal static class TranslationPrompt
             sb.AppendLine();
             foreach (var (key, value) in batch.ExistingTranslations.Take(20))
             {
-                sb.AppendLine($"{key}={value}");
+                sb.AppendLine($"{key}={EscapeForKvLine(value)}");
             }
         }
 
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Escapes <c>\</c>, newlines, and CR for embedding inside a one-line
+    /// <c>KEY=VALUE</c> record. The decoder is <see cref="UnescapeKvValue"/>.
+    /// </summary>
+    internal static string EscapeForKvLine(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        var sb = new StringBuilder(value.Length);
+        foreach (var c in value)
+        {
+            switch (c)
+            {
+                case '\\': sb.Append("\\\\"); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                default: sb.Append(c); break;
+            }
+        }
+        return sb.ToString();
+    }
+
+    internal static string UnescapeKvValue(string value)
+    {
+        if (string.IsNullOrEmpty(value) || value.IndexOf('\\') < 0) return value;
+        var sb = new StringBuilder(value.Length);
+        for (int i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (c == '\\' && i + 1 < value.Length)
+            {
+                var next = value[i + 1];
+                switch (next)
+                {
+                    case '\\': sb.Append('\\'); i++; continue;
+                    case 'n': sb.Append('\n'); i++; continue;
+                    case 'r': sb.Append('\r'); i++; continue;
+                }
+            }
+            sb.Append(c);
+        }
         return sb.ToString();
     }
 
@@ -85,6 +131,10 @@ internal static class TranslationPrompt
     {
         var result = new Dictionary<string, string>();
         var keySet = new HashSet<string>(expectedKeys, StringComparer.Ordinal);
+        // SECURITY (TASK-037): refuse duplicate keys so a model that obeys an
+        // injected `Logout=Erase` line can't last-writes-wins overwrite a
+        // legitimate prior key.
+        var seen = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var line in response.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -96,12 +146,11 @@ internal static class TranslationPrompt
             if (eqIdx <= 0) continue;
 
             var key = trimmed[..eqIdx].Trim();
-            var value = trimmed[(eqIdx + 1)..];
+            var value = UnescapeKvValue(trimmed[(eqIdx + 1)..]);
 
-            if (keySet.Contains(key))
-            {
-                result[key] = value;
-            }
+            if (!keySet.Contains(key)) continue;
+            if (!seen.Add(key)) continue; // refuse duplicate
+            result[key] = value;
         }
 
         return result;

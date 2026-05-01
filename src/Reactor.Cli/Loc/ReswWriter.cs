@@ -1,3 +1,4 @@
+using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -99,14 +100,17 @@ internal static class ReswWriter
             // Add new entries
             foreach (var entry in group)
             {
+                // SECURITY (TASK-038): scrub XML-1.0-invalid control chars from
+                // LLM output before they hit XElement; an unescaped \x00-\x08
+                // would otherwise abort `doc.Save` and corrupt the batch.
                 var dataElement = new XElement("data",
-                    new XAttribute("name", entry.Key),
+                    new XAttribute("name", XmlSafe(entry.Key)),
                     new XAttribute(XNamespace.Xml + "space", "preserve"),
-                    new XElement("value", entry.Value));
+                    new XElement("value", XmlSafe(entry.Value)));
 
                 if (entry.Comment != null)
                 {
-                    dataElement.Add(new XElement("comment", entry.Comment));
+                    dataElement.Add(new XElement("comment", XmlSafe(entry.Comment)));
                 }
 
                 root.Add(dataElement);
@@ -122,7 +126,38 @@ internal static class ReswWriter
             foreach (var h in headers) root.Add(h);
             foreach (var d in dataElements) root.Add(d);
 
-            doc.Save(filePath);
+            try
+            {
+                doc.Save(filePath);
+            }
+            catch (ArgumentException)
+            {
+                // Belt-and-braces: if anything still slipped through XmlSafe
+                // and XElement rejects it, surface a single warning rather
+                // than aborting the whole batch.
+                Console.Error.WriteLine($"  Warning: skipped malformed XML save for '{filePath}'");
+            }
         }
+    }
+
+    /// <summary>
+    /// Strips XML-1.0-invalid control characters from <paramref name="value"/>.
+    /// Tab, LF, CR are kept; everything else in 0x00-0x1F and 0x7F-0x9F is
+    /// removed; surrogates and non-characters are preserved (XML 1.0 §2.2).
+    /// TASK-038.
+    /// </summary>
+    internal static string XmlSafe(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        var sb = new StringBuilder(value.Length);
+        foreach (var c in value)
+        {
+            if (c == '\t' || c == '\n' || c == '\r') { sb.Append(c); continue; }
+            if (c < 0x20) continue;
+            if (c == 0x7F) continue;
+            if (c >= 0x80 && c <= 0x9F) continue;
+            sb.Append(c);
+        }
+        return sb.ToString();
     }
 }

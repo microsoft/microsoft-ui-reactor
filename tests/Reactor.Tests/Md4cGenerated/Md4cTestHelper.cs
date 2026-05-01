@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.UI.Reactor.Markdown;
 
 namespace Microsoft.UI.Reactor.Tests.Md4cGenerated;
 
@@ -11,6 +12,18 @@ namespace Microsoft.UI.Reactor.Tests.Md4cGenerated;
 /// </summary>
 internal static class Md4cTestHelper
 {
+    /// <summary>
+    /// Spec-compliance helper. The CommonMark spec tests verify the md4c
+    /// renderer's output across a 1000+ example corpus that includes raw
+    /// HTML blocks and arbitrary URL schemes. Since TASK-045/046 made the
+    /// public <c>ToHtml</c> default to safe-mode, spec tests opt back in
+    /// via the unsafe flags. This is the parser-correctness API; production
+    /// callers should use the safe defaults.
+    /// </summary>
+    public static string SpecToHtml(string md, MarkdownParserFlags parserFlags) =>
+        MarkdownHtml.ToHtml(md, parserFlags,
+            MarkdownHtml.HtmlFlags.AllowRawHtml | MarkdownHtml.HtmlFlags.AllowUnsafeUrls);
+
     private static readonly HashSet<string> BlockTags = new(StringComparer.OrdinalIgnoreCase)
     {
         "article", "header", "aside", "hgroup", "blockquote",

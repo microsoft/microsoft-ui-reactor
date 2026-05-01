@@ -45,9 +45,13 @@ internal static partial class DocAssembler
             var sb = new StringBuilder();
             if (title != null)
                 sb.AppendLine($"// {title}");
-            sb.AppendLine("```csharp");
+            // SECURITY (TASK-043): pick a fence longer than the longest run of
+            // backticks in the snippet so embedded ``` cannot break out of the
+            // fenced block and inject markdown.
+            var fence = ChooseFence(snippet.Code);
+            sb.AppendLine(fence + "csharp");
             sb.AppendLine(snippet.Code);
-            sb.Append("```");
+            sb.Append(fence);
             return sb.ToString();
         });
 
@@ -71,5 +75,22 @@ internal static partial class DocAssembler
         errors = errs;
         warnings = warns;
         return output;
+    }
+
+    /// <summary>
+    /// Returns a fence (sequence of backticks) at least one char longer than
+    /// any run of backticks present in <paramref name="content"/>. Minimum
+    /// length is 3 (the standard CommonMark fence). TASK-043.
+    /// </summary>
+    internal static string ChooseFence(string content)
+    {
+        int longest = 0;
+        int run = 0;
+        foreach (var c in content)
+        {
+            if (c == '`') { run++; if (run > longest) longest = run; }
+            else run = 0;
+        }
+        return new string('`', Math.Max(3, longest + 1));
     }
 }

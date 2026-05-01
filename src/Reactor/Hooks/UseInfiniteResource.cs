@@ -281,7 +281,15 @@ internal sealed class InfiniteHookState<TItem, TCursor> : IDisposable
                     // Resource._pages[pageIndex] so EnsureRange can re-drive us later — without
                     // this, the orphan in-flight marker persists and deep-scroll hangs because
                     // EnsureRange sees the page as "already in flight" and skips it.
-                    _deferredRequests.Add(pageIndex);
+                    // SECURITY (TASK-099): cap the deferred-set at 100. A
+                    // slow source under EnsureRange(0, 100_000) would
+                    // otherwise grow this set toward 100k entries.
+                    const int MaxDeferred = 100;
+                    if (_deferredRequests.Count < MaxDeferred)
+                        _deferredRequests.Add(pageIndex);
+                    else
+                        global::System.Diagnostics.Debug.WriteLine(
+                            "[Reactor.UseInfiniteResource] deferred-request set at cap; new request dropped.");
                     Resource.ClearInflightSlot(pageIndex);
                     return;
                 }

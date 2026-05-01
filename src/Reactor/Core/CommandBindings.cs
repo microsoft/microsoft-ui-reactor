@@ -32,7 +32,16 @@ internal static class CommandBindings
             ToolTipService.SetToolTip(btn, cmd.Description);
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(btn, cmd.Description);
         }
+        else
+        {
+            // SECURITY (TASK-072): when a Command transitions Description from
+            // non-null to null, the previously-set tooltip and UIA HelpText
+            // would otherwise persist as stale values. Clear them.
+            ToolTipService.SetToolTip(btn, null);
+            btn.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.HelpTextProperty);
+        }
         if (cmd.AccessKey is not null) btn.AccessKey = cmd.AccessKey;
+        else btn.AccessKey = "";
 
         // Remove any prior command-added accelerator before adding the new one, so
         // rerunning this setter on update/reconcile doesn't stack duplicates that

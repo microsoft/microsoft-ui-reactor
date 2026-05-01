@@ -87,6 +87,7 @@ internal static class DevtoolsFixtures
                 Content = new StringContent(body, Encoding.UTF8),
             };
             req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Server.AuthToken);
             var resp = await _client.SendAsync(req);
             var text = await resp.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(text);
@@ -1036,6 +1037,7 @@ internal static class DevtoolsFixtures
             using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{mcp.Server.Port}/") };
             using var req = new HttpRequestMessage(HttpMethod.Post, "mcp")
             { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", mcp.Server.AuthToken);
             var resp = await client.SendAsync(req);
             var text = await resp.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(text);

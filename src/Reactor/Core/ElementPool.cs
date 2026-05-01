@@ -196,6 +196,12 @@ public sealed class ElementPool : IDisposable
     {
         // Common properties
         Reconciler.ClearElementTag(fe);
+        // SECURITY (TASK-060): clear the Current* user-handler delegates on
+        // pool return so a pooled control can't fire the previous component's
+        // captured rerender closure into the next mount. The underlying
+        // trampoline subscription stays attached — that's intentional, see
+        // the comment block in Reconciler.cs above PoolableWireFlags.
+        Reconciler.ClearCurrentEventHandlers(fe);
         fe.Tag = null;
         fe.Margin = new Thickness(0);
         fe.Width = double.NaN;

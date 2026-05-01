@@ -230,9 +230,17 @@ internal static class PixelGridHelper
             scaledValue = scaledValue - fractial +
                 (!double.IsNaN(fractial) && (fractial > 0.5 || InexactEquals(fractial, 0.5)) ? 1.0 : 0.0);
 
-        return (double.IsNaN(scaledValue) || double.IsNaN(pointScaleFactor))
-            ? float.NaN
-            : (float)(scaledValue / pointScaleFactor);
+        if (double.IsNaN(scaledValue) || double.IsNaN(pointScaleFactor))
+            return float.NaN;
+        var result = (float)(scaledValue / pointScaleFactor);
+        // SECURITY (TASK-083): clamp +∞/-∞ to a large finite value before
+        // returning. Apps with `MaxWidth = ∞` (the standard "unconstrained"
+        // idiom) used to hit `Arrange` with +Infinity and crash WinUI.
+        // Clamp at float.MaxValue so layout finalizes; downstream Arrange
+        // can still handle huge but finite numbers.
+        if (float.IsPositiveInfinity(result)) return float.MaxValue;
+        if (float.IsNegativeInfinity(result)) return float.MinValue;
+        return result;
     }
 
     public static void RoundLayoutResultsToPixelGrid(YogaNode node, double absoluteLeft, double absoluteTop)

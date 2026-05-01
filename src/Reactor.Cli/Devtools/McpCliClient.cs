@@ -14,11 +14,18 @@ internal sealed class McpCliClient : IDisposable
 {
     private readonly HttpClient _http;
     private readonly string _endpoint;
+    private readonly string? _token;
 
-    public McpCliClient(string endpoint, TimeSpan? timeout = null)
+    public McpCliClient(string endpoint, TimeSpan? timeout = null, string? token = null)
     {
         _endpoint = endpoint;
+        _token = token;
         _http = new HttpClient { Timeout = timeout ?? TimeSpan.FromSeconds(30) };
+        if (!string.IsNullOrEmpty(token))
+        {
+            _http.DefaultRequestHeaders.Authorization =
+                new global::System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        }
     }
 
     public void Dispose() => _http.Dispose();

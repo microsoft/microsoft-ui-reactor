@@ -95,6 +95,13 @@ internal sealed class YogaNode
 
     public void InsertChild(YogaNode child, int index)
     {
+        // SECURITY (TASK-082): reject self-cycles and parent-aliasing. Without
+        // these checks, the layout walker recurses forever and dirty
+        // propagation reads stale state.
+        if (ReferenceEquals(child, this))
+            throw new InvalidOperationException("InsertChild: cannot insert a node into itself.");
+        if (child._owner is not null && !ReferenceEquals(child._owner, this))
+            throw new InvalidOperationException("InsertChild: child already has a different parent. Remove from prior parent first.");
         if (_measureFunc != null)
             throw new InvalidOperationException("Cannot add children to a node with a measure function.");
         _children.Insert(index, child);

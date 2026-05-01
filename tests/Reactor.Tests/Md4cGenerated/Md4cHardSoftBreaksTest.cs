@@ -14,7 +14,7 @@ public class Md4cHardSoftBreaksTest
     {
         var md = "foo\nbaz";
         var expected = "<p>foo<br>\nbaz</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.HardSoftBreaks);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.HardSoftBreaks);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 
@@ -23,7 +23,7 @@ public class Md4cHardSoftBreaksTest
     {
         var md = "A quote from the CommonMark Spec below:\n\nA renderer may also provide an option to \nrender soft line breaks as hard line breaks.";
         var expected = "<p>A quote from the CommonMark Spec below:</p>\n<p>A renderer may also provide an option to<br>\nrender soft line breaks as hard line breaks.</p>\n";
-        var actual = MarkdownHtml.ToHtml(md, MarkdownParserFlags.HardSoftBreaks);
+        var actual = Md4cTestHelper.SpecToHtml(md, MarkdownParserFlags.HardSoftBreaks);
         Assert.Equal(Md4cTestHelper.NormalizeHtml(expected), Md4cTestHelper.NormalizeHtml(actual));
     }
 

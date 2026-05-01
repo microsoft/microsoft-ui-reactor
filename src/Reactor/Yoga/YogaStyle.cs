@@ -70,7 +70,25 @@ internal sealed class YogaStyle
     };
 
     // Aspect ratio (NaN = undefined)
-    public float AspectRatio = float.NaN;
+    private float _aspectRatio = float.NaN;
+    public float AspectRatio
+    {
+        get => _aspectRatio;
+        set
+        {
+            // SECURITY (TASK-083): aspect ratio must be a positive finite
+            // number. Negatives produce negative computed dimensions; ±∞
+            // propagates into Arrange and crashes WinUI. NaN is the
+            // intentional "undefined" sentinel and is allowed.
+            if (!float.IsNaN(value))
+            {
+                if (value <= 0 || float.IsInfinity(value))
+                    throw new ArgumentOutOfRangeException(nameof(value),
+                        $"AspectRatio must be a positive finite number or NaN; got {value}.");
+            }
+            _aspectRatio = value;
+        }
+    }
 
     private static YogaValue[] CreateUndefinedEdges()
     {

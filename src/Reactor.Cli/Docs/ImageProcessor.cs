@@ -15,14 +15,33 @@ internal static class ImageProcessor
     private const int ShadowBlur = 6;       // number of graduated shadow layers
     private const float ShadowMaxAlpha = 0.12f;
 
+    /// <summary>Hard cap on input image size in bytes. TASK-044.</summary>
+    public const int MaxImageBytes = 64 * 1024 * 1024; // 64 MiB
+
+    /// <summary>Hard cap on decoded dimensions. TASK-044.</summary>
+    public const int MaxImageDimension = 16384;
+
     /// <summary>
     /// Auto-crops whitespace from a captured frame, adds border + drop shadow,
     /// and returns PNG bytes.
     /// </summary>
     public static byte[] Process(byte[] frameBytes)
     {
+        // SECURITY (TASK-044): validate magic bytes and size before handing
+        // attacker-controllable data to GDI+. GDI+ has a long history of
+        // decode-time vulnerabilities; pre-filter to known formats and bound
+        // the input size.
+        if (frameBytes is null || frameBytes.Length == 0)
+            throw new ArgumentException("Empty image bytes.", nameof(frameBytes));
+        if (frameBytes.Length > MaxImageBytes)
+            throw new ArgumentException($"Image exceeds {MaxImageBytes / (1024 * 1024)} MiB cap.", nameof(frameBytes));
+        if (!HasKnownImageMagic(frameBytes))
+            throw new ArgumentException("Image bytes are neither PNG nor JPEG.", nameof(frameBytes));
+
         using var ms = new MemoryStream(frameBytes);
         using var source = new Bitmap(ms);
+        if (source.Width > MaxImageDimension || source.Height > MaxImageDimension)
+            throw new ArgumentException($"Image dimensions exceed {MaxImageDimension}px cap.", nameof(frameBytes));
 
         // 1. Find content bounds (trim white edges)
         var bounds = FindContentBounds(source, threshold: 248);
@@ -139,5 +158,21 @@ internal static class ImageProcessor
         int right = Math.Min(maxW, r.Right + padding);
         int bottom = Math.Min(maxH, r.Bottom + padding);
         return new Rectangle(x, y, right - x, bottom - y);
+    }
+
+    /// <summary>
+    /// Returns true iff <paramref name="bytes"/> starts with PNG or JPEG
+    /// magic bytes. PNG: 89 50 4E 47 0D 0A 1A 0A. JPEG: FF D8 FF (any ext).
+    /// TASK-044.
+    /// </summary>
+    internal static bool HasKnownImageMagic(byte[] bytes)
+    {
+        if (bytes.Length >= 8
+            && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47
+            && bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A)
+            return true;
+        if (bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+            return true;
+        return false;
     }
 }

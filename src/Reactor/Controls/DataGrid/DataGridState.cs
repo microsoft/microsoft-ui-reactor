@@ -11,6 +11,14 @@ namespace Microsoft.UI.Reactor.Controls;
 /// </summary>
 public class DataGridState<T>
 {
+    /// <summary>
+    /// Hard cap on the page size used for the client-fallback "load all
+    /// rows" path. Apps mounting against a non-server-capable source that
+    /// expect more rows should configure their backing store accordingly.
+    /// TASK-097.
+    /// </summary>
+    public static int MaxClientFallbackPageSize { get; set; } = 100_000;
+
     private readonly IDataSource<T> _source;
     private readonly SelectionMode _selectionMode;
     private readonly int _blockSize;
@@ -1304,9 +1312,14 @@ public class DataGridState<T>
                 _mutations.Clear();
                 _keyOverrides.Clear();
 
+                // SECURITY (TASK-097): cap the unbounded "load all rows"
+                // request. Without this, mounting against a source that
+                // doesn't support server sort/filter triggers a SELECT * with
+                // no LIMIT — OOM territory. Apps that need more rows can
+                // bump MaxClientFallbackPageSize.
                 var request = new DataRequest
                 {
-                    PageSize = int.MaxValue,
+                    PageSize = MaxClientFallbackPageSize,
                     Sort = serverSort && _sorts.Count > 0 ? _sorts : null,
                     Filters = serverFilter && _filters.Count > 0 ? _filters : null,
                     SearchQuery = serverSearch ? _searchQuery : null,

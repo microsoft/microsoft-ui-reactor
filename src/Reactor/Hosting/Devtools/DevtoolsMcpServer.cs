@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -29,6 +30,17 @@ internal sealed class DevtoolsMcpServer : IDisposable
     private string? _lockfilePath;
     private StdioMcpLoop? _stdioLoop;
     private bool _disposed;
+    /// <summary>
+    /// Per-launch random bearer token. Anyone who can read the lockfile (this
+    /// user's tempdir) authenticates; anyone who can't is rejected. TASK-001.
+    /// </summary>
+    private readonly string _authToken;
+    /// <summary>
+    /// Hard cap on accepted concurrent dispatches. Any request past this gets
+    /// 503; without it, a single noisy client can saturate the threadpool.
+    /// TASK-007.
+    /// </summary>
+    private readonly SemaphoreSlim _dispatchGate = new(initialCount: 16, maxCount: 16);
 
     public int Port { get; }
     public McpToolRegistry Tools => _tools;
@@ -36,7 +48,11 @@ internal sealed class DevtoolsMcpServer : IDisposable
     public DispatcherQueue DispatcherQueue => _dispatcherQueue;
     public Window Window => _window;
     public McpTransport Transport => _transport;
+    /// <summary>Test-only accessor for the bearer token.</summary>
+    internal string AuthToken => _authToken;
     internal DevtoolsLogger? Logger => _logger;
+    /// <summary>Hard request body cap. TASK-006.</summary>
+    internal const int MaxRequestBodyBytes = 1 * 1024 * 1024; // 1 MiB
 
     /// <summary>
     /// Routes banner/announcement lines. When stdio is the active MCP
@@ -61,6 +77,7 @@ internal sealed class DevtoolsMcpServer : IDisposable
         _logger = logger;
         _transport = transport;
         _projectIdentifier = projectIdentifier;
+        _authToken = GenerateToken();
 
         Port = preferredPort ?? FindFreePort();
         _listener = new HttpListener();
@@ -92,6 +109,22 @@ internal sealed class DevtoolsMcpServer : IDisposable
     {
         if (_transport == McpTransport.Http)
         {
+            // SECURITY (TASK-006): bound the IO timers so a slow-loris client
+            // can't park a worker indefinitely. Defaults are minutes; cap at
+            // 10s so any single request fits well inside the dispatch budget.
+            try
+            {
+                var tm = _listener.TimeoutManager;
+                tm.HeaderWait = TimeSpan.FromSeconds(10);
+                tm.EntityBody = TimeSpan.FromSeconds(10);
+                tm.IdleConnection = TimeSpan.FromSeconds(15);
+                tm.RequestQueue = TimeSpan.FromSeconds(10);
+            }
+            catch
+            {
+                // TimeoutManager is unavailable on some hosts; the per-read
+                // ContentLength64 cap below is the load-bearing protection.
+            }
             _listener.Start();
             _ = ListenAsync().ContinueWith(
                 t => Console.Error.WriteLine($"[devtools:mcp] Listener loop failed: {t.Exception!.GetBaseException()}"),
@@ -174,6 +207,7 @@ internal sealed class DevtoolsMcpServer : IDisposable
                 BuildTag = _buildTag,
                 Project = _projectIdentifier,
                 StartedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                Token = _authToken,
             };
             LockfileRegistry.Write(path, entry);
             _lockfilePath = path;
@@ -182,6 +216,33 @@ internal sealed class DevtoolsMcpServer : IDisposable
         {
             Console.Error.WriteLine($"[devtools] Failed to write lockfile: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// 256-bit random token, base64url-encoded. Constant-time-comparable.
+    /// </summary>
+    private static string GenerateToken()
+    {
+        Span<byte> bytes = stackalloc byte[32];
+        RandomNumberGenerator.Fill(bytes);
+        return Convert.ToBase64String(bytes)
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+    }
+
+    private bool BearerMatches(string? authHeader)
+    {
+        if (string.IsNullOrEmpty(authHeader)) return false;
+        const string prefix = "Bearer ";
+        if (!authHeader.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        var presented = authHeader.AsSpan(prefix.Length).Trim();
+        var expected = _authToken.AsSpan();
+        if (presented.Length != expected.Length) return false;
+        // Constant-time compare to avoid timing side-channels on token length.
+        int diff = 0;
+        for (int i = 0; i < expected.Length; i++) diff |= presented[i] ^ expected[i];
+        return diff == 0;
     }
 
     public void Dispose()
@@ -211,7 +272,25 @@ internal sealed class DevtoolsMcpServer : IDisposable
             catch (ObjectDisposedException) { break; }
             catch (HttpListenerException) { break; }
 
-            _ = Task.Run(() => HandleRequest(ctx));
+            // SECURITY (TASK-007): bound concurrent dispatch. WaitOne with zero
+            // timeout — if all 16 slots are in use, fail fast with 503. Doing
+            // it here, before Task.Run, prevents queue blow-up.
+            if (!_dispatchGate.Wait(0))
+            {
+                try
+                {
+                    ctx.Response.StatusCode = 503;
+                    ctx.Response.Headers.Add("Retry-After", "1");
+                    ctx.Response.Close();
+                }
+                catch { }
+                continue;
+            }
+            _ = Task.Run(() =>
+            {
+                try { HandleRequest(ctx); }
+                finally { _dispatchGate.Release(); }
+            });
         }
     }
 
@@ -222,11 +301,22 @@ internal sealed class DevtoolsMcpServer : IDisposable
         var path = ctx.Request.Url?.AbsolutePath ?? "/";
         var response = ctx.Response;
 
+        // SECURITY (TASK-003): block DNS rebinding by validating the Host
+        // header before doing any work. Anything that isn't loopback gets
+        // 421 Misdirected Request — a rebound attacker page that resolves
+        // back to localhost still needs to send Host: <attacker>:<port>.
+        if (!IsAllowedHost(ctx.Request.Headers["Host"]))
+        {
+            response.StatusCode = 421;
+            response.Close();
+            return;
+        }
+
         if (ctx.Request.HttpMethod == "OPTIONS")
         {
             response.Headers.Add("Access-Control-Allow-Origin", "http://127.0.0.1");
             response.Headers.Add("Access-Control-Allow-Methods", "POST, OPTIONS");
-            response.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
+            response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
             response.StatusCode = 204;
             response.Close();
             return;
@@ -235,6 +325,17 @@ internal sealed class DevtoolsMcpServer : IDisposable
         if (!string.Equals(path, "/mcp", StringComparison.Ordinal))
         {
             response.StatusCode = 404;
+            response.Close();
+            return;
+        }
+
+        // SECURITY (TASK-001): every method on /mcp requires a valid bearer.
+        // The token lives in the lockfile; only same-user processes can read
+        // it, so this is what gates same-machine-different-process access.
+        if (!BearerMatches(ctx.Request.Headers["Authorization"]))
+        {
+            response.StatusCode = 401;
+            response.Headers.Add("WWW-Authenticate", "Bearer realm=\"reactor-devtools\"");
             response.Close();
             return;
         }
@@ -263,9 +364,55 @@ internal sealed class DevtoolsMcpServer : IDisposable
             return;
         }
 
+        // SECURITY (TASK-002): require a non-simple Content-Type. A browser
+        // form/<img>/text-plain POST cannot satisfy this, blocking CSRF without
+        // requiring a preflight.
+        var contentType = ctx.Request.ContentType ?? "";
+        var ctMain = contentType.Split(';', 2)[0].Trim();
+        if (!string.Equals(ctMain, "application/json", StringComparison.OrdinalIgnoreCase))
+        {
+            response.StatusCode = 415;
+            response.Close();
+            return;
+        }
+        // Origin allowlist: vscode-webview, loopback, or absent (CLI/curl with
+        // valid bearer). Reject explicit cross-origin senders.
+        var origin = ctx.Request.Headers["Origin"];
+        if (!string.IsNullOrEmpty(origin) && !IsAllowedOrigin(origin))
+        {
+            response.StatusCode = 403;
+            response.Close();
+            return;
+        }
+
+        // SECURITY (TASK-006): cap body size before we read. ContentLength64
+        // is the advertised length; reject anything over the cap. We also
+        // bound the actual read so chunked/lying clients can't slip past.
+        var advertised = ctx.Request.ContentLength64;
+        if (advertised > MaxRequestBodyBytes)
+        {
+            response.StatusCode = 413;
+            response.Close();
+            return;
+        }
+
         string body;
-        using (var reader = new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding))
-            body = reader.ReadToEnd();
+        try
+        {
+            body = ReadCappedBody(ctx.Request.InputStream, ctx.Request.ContentEncoding, MaxRequestBodyBytes);
+        }
+        catch (InvalidDataException)
+        {
+            response.StatusCode = 413;
+            try { response.Close(); } catch { }
+            return;
+        }
+        catch
+        {
+            response.StatusCode = 400;
+            try { response.Close(); } catch { }
+            return;
+        }
 
         var responsePayload = DispatchRpc(body);
         var json = JsonSerializer.Serialize(responsePayload, JsonOpts);
@@ -283,6 +430,45 @@ internal sealed class DevtoolsMcpServer : IDisposable
         {
             try { response.Close(); } catch { }
         }
+    }
+
+    /// <summary>
+    /// Reads <paramref name="stream"/> into a string while strictly capping the
+    /// total byte count. Throws <see cref="InvalidDataException"/> if the
+    /// stream produces more than <paramref name="cap"/> bytes.
+    /// </summary>
+    internal static string ReadCappedBody(Stream stream, Encoding encoding, int cap)
+    {
+        var buffer = new byte[Math.Min(cap, 8192)];
+        var ms = new MemoryStream(capacity: Math.Min(cap, 8192));
+        int total = 0;
+        int read;
+        while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            total += read;
+            if (total > cap) throw new InvalidDataException("body too large");
+            ms.Write(buffer, 0, read);
+        }
+        return encoding.GetString(ms.GetBuffer(), 0, (int)ms.Length);
+    }
+
+    private bool IsAllowedHost(string? hostHeader)
+    {
+        if (string.IsNullOrEmpty(hostHeader)) return false;
+        // The HttpListener prefix already binds 127.0.0.1, so any TCP packet
+        // reaching us came in via loopback. Still validate the Host header
+        // string defensively against rebinding-style attacks.
+        var portStr = Port.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
+        return string.Equals(hostHeader, $"127.0.0.1:{portStr}", StringComparison.Ordinal)
+            || string.Equals(hostHeader, $"localhost:{portStr}", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAllowedOrigin(string origin)
+    {
+        if (origin.StartsWith("vscode-webview://", StringComparison.OrdinalIgnoreCase)) return true;
+        if (origin.StartsWith("http://127.0.0.1", StringComparison.Ordinal)) return true;
+        if (origin.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
     }
 
     // -- Dispatch ----------------------------------------------------------------

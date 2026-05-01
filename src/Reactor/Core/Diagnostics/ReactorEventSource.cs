@@ -126,7 +126,21 @@ internal sealed class ReactorEventSource : EventSource
     public void McpCallStart(string toolName, string selector)
     {
         if (IsEnabled(EventLevel.Informational, Keywords.Mcp))
-            WriteEvent(7, toolName ?? string.Empty, selector ?? string.Empty);
+            // SECURITY (TASK-065): selectors carry user-bound strings via text
+            // predicates ([Text*='user@email']). Replace with a SHA-1 prefix
+            // so any same-UID dotnet-trace consumer sees a fingerprint, not
+            // PII. Tool name itself is not user-controlled.
+            WriteEvent(7, toolName ?? string.Empty, HashSelectorForEtw(selector));
+    }
+
+    private static string HashSelectorForEtw(string? selector)
+    {
+        if (string.IsNullOrEmpty(selector)) return string.Empty;
+        var bytes = global::System.Security.Cryptography.SHA1.HashData(
+            global::System.Text.Encoding.UTF8.GetBytes(selector));
+        var sb = new global::System.Text.StringBuilder(16);
+        for (int i = 0; i < 8; i++) sb.Append(bytes[i].ToString("x2"));
+        return "sha1:" + sb;
     }
 
     [Event(8, Level = EventLevel.Informational, Keywords = Keywords.Mcp,
@@ -203,6 +217,13 @@ internal sealed class ReactorEventSource : EventSource
     public void RenderError(string componentName, string exceptionType, string message)
     {
         if (IsEnabled(EventLevel.Error, Keywords.Errors))
-            WriteEvent(9, componentName ?? string.Empty, exceptionType ?? string.Empty, message ?? string.Empty);
+            // SECURITY (TASK-064): ex.Message can contain absolute paths,
+            // env values, query strings, and partial form values that would
+            // leak to any same-UID dotnet-trace consumer. Drop the raw
+            // message; the exception type is enough to triage class. Apps
+            // that want richer diagnostics should opt in through the
+            // app-level logger pipeline, which goes to ETL/disk under their
+            // own ACL, not the Microsoft-UI-Reactor provider.
+            WriteEvent(9, componentName ?? string.Empty, exceptionType ?? string.Empty, string.Empty);
     }
 }

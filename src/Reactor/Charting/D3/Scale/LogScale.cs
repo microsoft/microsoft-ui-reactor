@@ -81,6 +81,12 @@ public sealed class LogScale
     public double[] Ticks(int count = 10)
     {
         double d0 = _domain[0], d1 = _domain[^1];
+        // SECURITY (TASK-085): Log(0) = -∞ casts to int.MinValue and produces
+        // a near-infinite loop. Reject non-positive / non-finite domains.
+        if (!(d0 > 0 && d1 > 0) || !double.IsFinite(d0) || !double.IsFinite(d1))
+            return Array.Empty<double>();
+        if (!(_base > 1) || !double.IsFinite(_base))
+            return Array.Empty<double>();
         bool reverse = d1 < d0;
         if (reverse) (d0, d1) = (d1, d0);
 

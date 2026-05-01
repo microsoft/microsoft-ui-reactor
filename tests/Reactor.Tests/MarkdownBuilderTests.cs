@@ -374,13 +374,18 @@ public class MarkdownBuilderTests
     }
 
     [Fact]
-    public void Link_Relative_IsSafe()
+    public void Link_Relative_IsBlocked()
     {
+        // TASK-047: relative URIs no longer auto-pass IsSafeUri. The previous
+        // "all relative URIs are safe" branch let `slack:`, `vscode:`, etc.
+        // (parsed as relative by .NET Uri) bypass the allowlist. Apps that
+        // want to allow site-relative links should resolve to an absolute
+        // URI before handing the markdown to the builder.
         var result = Md("[page](./other-page)");
         var stack = AsVStack(result);
         var rtb = Child<RichTextBlockElement>(stack, 0);
-        var link = Inline<RichTextHyperlink>(rtb, 0);
-        Assert.Equal("page", link.Text);
+        var inlines = FirstParagraph(rtb).Inlines;
+        Assert.DoesNotContain(inlines, i => i is RichTextHyperlink);
     }
 
     [Fact]
@@ -391,6 +396,30 @@ public class MarkdownBuilderTests
         var rtb = Child<RichTextBlockElement>(stack, 0);
         var inlines = FirstParagraph(rtb).Inlines;
         Assert.DoesNotContain(inlines, i => i is RichTextHyperlink);
+    }
+
+    [Fact]
+    public void Link_CustomScheme_Blocked()
+    {
+        // TASK-047: regression — schemes that .NET Uri parses as relative
+        // (slack:, vscode:, intent:) used to slip past the allowlist.
+        foreach (var url in new[] { "slack://team", "vscode://file/", "intent://example#" })
+        {
+            var result = Md($"[link]({url})");
+            var stack = AsVStack(result);
+            var rtb = Child<RichTextBlockElement>(stack, 0);
+            var inlines = FirstParagraph(rtb).Inlines;
+            Assert.DoesNotContain(inlines, i => i is RichTextHyperlink);
+        }
+    }
+
+    [Fact]
+    public void HugeInput_RejectedByMaxInputBytes()
+    {
+        // TASK-049: a 100MB blob should fail fast instead of allocating
+        // tens of millions of mark structs.
+        var huge = new string('*', 5 * 1024 * 1024); // 5 MiB > default 4 MiB cap
+        Assert.Throws<ArgumentException>(() => Md(huge));
     }
 
     [Fact]

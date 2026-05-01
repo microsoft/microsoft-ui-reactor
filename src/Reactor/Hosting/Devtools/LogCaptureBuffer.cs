@@ -111,7 +111,9 @@ internal sealed class LogCaptureBuffer
         Regex? re = null;
         if (!string.IsNullOrEmpty(filterRegex))
         {
-            try { re = new Regex(filterRegex, RegexOptions.CultureInvariant); }
+            // SECURITY (TASK-014): cap regex execution to 200ms; ReDoS on
+            // log filtering would tarpit any caller scanning the ring buffer.
+            try { re = new Regex(filterRegex, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(200)); }
             catch (ArgumentException)
             {
                 // Invalid regex becomes a literal substring match — friendlier
@@ -133,7 +135,13 @@ internal sealed class LogCaptureBuffer
                 if (e.Seq < sinceSeq) continue;
                 if (source is { } s && e.Source != s) continue;
                 if (!string.IsNullOrEmpty(level) && !string.Equals(e.Level, level, StringComparison.OrdinalIgnoreCase)) continue;
-                if (re is not null && !re.IsMatch(e.Text)) continue;
+                if (re is not null)
+                {
+                    bool matched_;
+                    try { matched_ = re.IsMatch(e.Text); }
+                    catch (RegexMatchTimeoutException) { matched_ = false; }
+                    if (!matched_) continue;
+                }
                 if (filterRegex is not null && re is null && !e.Text.Contains(filterRegex, StringComparison.Ordinal)) continue;
                 buf.Add(e);
             }

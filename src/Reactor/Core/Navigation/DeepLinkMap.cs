@@ -88,6 +88,13 @@ public sealed class RouteArgs
         {
             throw new FormatException($"Route parameter '{name}' value '{raw}' is not a valid {type.Name}.", ex);
         }
+        // SECURITY (TASK-054): translate OverflowException into the same
+        // FormatException so a deep link like `/detail/9999...` cannot
+        // permanently DoS an app via an unhandled-exception teardown.
+        catch (OverflowException ex)
+        {
+            throw new FormatException($"Route parameter '{name}' value '{raw}' overflows {type.Name}.", ex);
+        }
         return (T)result;
     }
 }
@@ -139,6 +146,24 @@ public sealed class DeepLinkMap<TRoute> where TRoute : notnull
 
     public DeepLinkResult<TRoute> Resolve(string path)
     {
+        // SECURITY (TASK-055): canonicalize through Uri once, so the string
+        // and Uri overloads can't disagree on `%2F` / `..` / case-folding.
+        // Without this, `myapp:///public%2F..%2Fadmin` could resolve
+        // differently depending on which overload the caller picks.
+        // We synthesize a loopback host so relative paths parse, then read
+        // back AbsolutePath which has run through the canonicalizer.
+        Uri canonical;
+        if (Uri.TryCreate(path, UriKind.Absolute, out var abs))
+        {
+            return Resolve(abs);
+        }
+        if (Uri.TryCreate("http://invalid.local" + (path.StartsWith("/") ? "" : "/") + path, UriKind.Absolute, out canonical!))
+        {
+            return Resolve(canonical);
+        }
+        // Fallback: best-effort split on `?`. Only used when Uri.TryCreate
+        // fails entirely (e.g., raw bytes); the Resolve(Uri) path is
+        // strongly preferred.
         Dictionary<string, string>? queryParams = null;
         var qi = path.IndexOf('?');
         if (qi >= 0)

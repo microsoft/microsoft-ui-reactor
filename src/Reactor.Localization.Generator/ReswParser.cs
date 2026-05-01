@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Xml;
 
 namespace Microsoft.UI.Reactor.Localization.Generator;
@@ -31,8 +32,22 @@ internal static class ReswParser
     public static List<ReswEntry> Parse(string xmlContent)
     {
         var entries = new List<ReswEntry>();
-        var doc = new XmlDocument();
-        doc.LoadXml(xmlContent);
+        var doc = new XmlDocument { XmlResolver = null };
+        // SECURITY: prohibit DTD processing and external entities to block billion-laughs
+        // and XXE on attacker-controlled .resw inputs at build time.
+        var settings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            MaxCharactersFromEntities = 0,
+            // .resw files are bounded by repo realities; 16 MiB is more than enough.
+            MaxCharactersInDocument = 16 * 1024 * 1024,
+        };
+        using (var stringReader = new StringReader(xmlContent))
+        using (var xmlReader = XmlReader.Create(stringReader, settings))
+        {
+            doc.Load(xmlReader);
+        }
 
         var dataNodes = doc.SelectNodes("/root/data");
         if (dataNodes == null) return entries;

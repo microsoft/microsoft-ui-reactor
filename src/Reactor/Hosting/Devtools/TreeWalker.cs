@@ -101,9 +101,26 @@ internal sealed class TreeWalker
 {
     public const string SchemaVersion = "reactor-tree/1";
 
+    /// <summary>
+    /// Hard cap on emitted nodes per <c>Walk</c>. TASK-013: a runaway tree
+    /// (e.g. a recursive ItemsControl template) would otherwise pin the UI
+    /// dispatcher for seconds. When the cap is hit, <see cref="Truncated"/>
+    /// becomes true and the walker stops descending.
+    /// </summary>
+    public const int MaxNodes = 5000;
+
+    /// <summary>
+    /// Hard cap on recursion depth. TASK-013: same rationale.
+    /// </summary>
+    public const int MaxDepth = 64;
+
     private readonly string _windowId;
     private readonly NodeRegistry _registry;
     private readonly TreeView _view;
+
+    /// <summary>True when the last <see cref="Walk"/> hit a cap. Callers should
+    /// surface this in their response so agents know the result is partial.</summary>
+    public bool Truncated { get; private set; }
 
     public TreeWalker(string windowId, NodeRegistry registry, TreeView view = TreeView.Summary)
     {
@@ -116,8 +133,9 @@ internal sealed class TreeWalker
     public List<TreeNode> Walk(UIElement? root)
     {
         var list = new List<TreeNode>();
+        Truncated = false;
         if (root is null) return list;
-        WalkInto(root, parent: null, parentElement: null, ancestor: null, siblingIndex: 0, list);
+        WalkInto(root, parent: null, parentElement: null, ancestor: null, siblingIndex: 0, list, depth: 0);
         return list;
     }
 
@@ -127,8 +145,16 @@ internal sealed class TreeWalker
         UIElement? parentElement,
         NodeDescriptor? ancestor,
         int siblingIndex,
-        List<TreeNode> sink)
+        List<TreeNode> sink,
+        int depth)
     {
+        // SECURITY (TASK-013): cap node count and recursion depth so a hostile
+        // template loop or deeply nested layout cannot freeze the UI dispatcher.
+        if (sink.Count >= MaxNodes || depth >= MaxDepth)
+        {
+            Truncated = true;
+            return;
+        }
         var typeName = element.GetType().Name;
         var automationId = AutomationProperties.GetAutomationId(element);
         var automationName = AutomationProperties.GetName(element);
@@ -179,7 +205,7 @@ internal sealed class TreeWalker
         {
             if (VisualTreeHelper.GetChild(element, i) is UIElement child)
             {
-                WalkInto(child, parent: descriptor, parentElement: element, ancestor: nextAncestor, siblingIndex: i, sink);
+                WalkInto(child, parent: descriptor, parentElement: element, ancestor: nextAncestor, siblingIndex: i, sink, depth: depth + 1);
                 // Backfill the parent's childIds once we know the child id.
                 var childDesc = new NodeDescriptor(
                     WindowId: _windowId,
@@ -441,4 +467,6 @@ internal sealed class TreeResult
 
     public List<TreeNode> Nodes { get; set; } = new();
     public string? WindowId { get; set; }
+    /// <summary>True when the walker hit a node-count or depth cap. TASK-013.</summary>
+    public bool? Truncated { get; set; }
 }

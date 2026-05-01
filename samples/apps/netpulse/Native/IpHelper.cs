@@ -134,6 +134,11 @@ static unsafe class IpHelper
         try
         {
             int count = Marshal.ReadInt32(table);
+            // SECURITY (TASK-076): MIB_IF_ROW2 layout is hard-coded (1352 bytes
+            // and offsets above). Bound the count to defend against an OS
+            // version returning an unexpected size that would have us wander
+            // past the buffer end into adjacent memory.
+            if (count <= 0 || count > 16384) return [];
             var result = new List<InterfaceSnapshot>();
             // MIB_IF_TABLE2: ULONG NumEntries (4 bytes) + padding to 8 = 8 bytes header
             byte* basePtr = (byte*)table + 8;

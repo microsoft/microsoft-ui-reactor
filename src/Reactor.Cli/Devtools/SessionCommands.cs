@@ -67,15 +67,35 @@ internal static class SessionCommands
 
         if (pretty)
         {
+            // SECURITY (TASK-032): sanitize same-user-controlled lockfile
+            // fields before printing so a hostile co-tenant can't slip ANSI
+            // escapes or bidi-overrides past a downstream LLM agent.
             Console.WriteLine($"{"PID",-8} {"PORT",-6} {"TRANSPORT",-10} {"ENDPOINT",-40} PROJECT");
             foreach (var e in rows)
-                Console.WriteLine($"{e.Pid,-8} {e.Port,-6} {e.Transport,-10} {e.Endpoint,-40} {e.Project}");
+                Console.WriteLine($"{e.Pid,-8} {e.Port,-6} {LockfileReader.SafeForTerminal(e.Transport, 16),-10} {LockfileReader.SafeForTerminal(e.Endpoint, 80),-40} {LockfileReader.SafeForTerminal(e.Project, 200)}");
         }
         else
         {
+            // JSON output: don't echo the bearer token. JSON itself escapes
+            // control characters, but the token would round-trip plaintext to
+            // anyone reading the output.
             var opts = new JsonSerializerOptions { DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
             foreach (var e in rows)
-                Console.WriteLine(JsonSerializer.Serialize(e, opts));
+            {
+                var redacted = new LockfileEntry
+                {
+                    Schema = e.Schema,
+                    Endpoint = e.Endpoint,
+                    Transport = e.Transport,
+                    Port = e.Port,
+                    Pid = e.Pid,
+                    BuildTag = e.BuildTag,
+                    Project = e.Project,
+                    StartedAt = e.StartedAt,
+                    Token = string.IsNullOrEmpty(e.Token) ? "" : "***",
+                };
+                Console.WriteLine(JsonSerializer.Serialize(redacted, opts));
+            }
         }
         return (int)DevtoolsCliExit.Success;
     }

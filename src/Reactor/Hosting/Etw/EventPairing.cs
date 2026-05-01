@@ -38,6 +38,11 @@ internal sealed class EventPairing
     private readonly Dictionary<(int threadId, LayoutEventKind kind), Stack<PairingFrame>> _stacks = new();
     private bool _mismatchLogged;
 
+    /// <summary>Per-(thread, kind) stack depth cap. TASK-067.</summary>
+    private const int MaxPerStackDepth = 1024;
+    /// <summary>Total tracked thread/kind buckets. TASK-067.</summary>
+    private const int MaxStackEntries = 256;
+
     /// <summary>Raised on every successful pair. Fires on the ETW callback thread.</summary>
     public event Action<PairedLayoutEvent>? Paired;
 
@@ -47,12 +52,27 @@ internal sealed class EventPairing
         var key = (raw.ThreadId, raw.Kind);
         if (!_stacks.TryGetValue(key, out var stack))
         {
+            // SECURITY (TASK-067): cap the dictionary so a host that churns
+            // through worker threads can't grow it without bound. When over,
+            // drop the largest stack — most likely the one losing matched
+            // End events.
+            if (_stacks.Count >= MaxStackEntries)
+            {
+                var biggest = _stacks.OrderByDescending(kv => kv.Value.Count).First().Key;
+                _stacks.Remove(biggest);
+            }
             stack = new Stack<PairingFrame>();
             _stacks[key] = stack;
         }
 
         if (raw.Phase == LayoutEventPhase.Begin)
         {
+            // SECURITY (TASK-067): cap per-stack depth so a thread that drops
+            // End events doesn't accumulate unbounded frames.
+            if (stack.Count >= MaxPerStackDepth)
+            {
+                stack.Clear();
+            }
             // Compose root-relative origin by accumulating parent-relative
             // offsets up the stack. ETW gives us Left/Top in the parent's
             // coord space on Arrange/Begin; without this composition,

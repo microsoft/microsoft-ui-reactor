@@ -38,6 +38,12 @@ namespace Microsoft.UI.Reactor.Interop.WinForms;
 public class XamlIslandControl : SWF.Control
 {
     private DesktopWindowXamlSource? _source;
+    /// <summary>
+    /// Last <see cref="ReactorHostControl"/> hosted by this island. Tracked so
+    /// it can be disposed on dispose / handle-recreate / ComponentType change
+    /// — the source's Dispose doesn't dispose its content. TASK-079.
+    /// </summary>
+    private ReactorHostControl? _hostedReactorControl;
     private UIElement? _pendingContent;
     private Func<UIElement>? _contentFactory;
     private Type? _componentType;
@@ -126,6 +132,10 @@ public class XamlIslandControl : SWF.Control
 
         if (DesignMode) return;
 
+        // SECURITY (TASK-078): handle-recreation cycles must not leak the
+        // prior source. Belt-and-braces dispose any survivor before
+        // allocating a fresh one.
+        DisposeHostedAndSource();
         _source = new DesktopWindowXamlSource();
 
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(Handle);
@@ -172,8 +182,48 @@ public class XamlIslandControl : SWF.Control
     private void MountComponentType(Type type)
     {
         if (_source is null) return;
+        // SECURITY (TASK-079): drop any prior hosted control before mounting
+        // a new one — without this, ComponentType changes leak reconciler /
+        // ETW / overlay state for the old component.
+        DisposeHostedReactorControl();
         var component = (ReactorComponent)Activator.CreateInstance(type)!;
-        _source.Content = new ReactorHostControl(component);
+        var host = new ReactorHostControl(component);
+        _hostedReactorControl = host;
+        _source.Content = host;
+    }
+
+    private void DisposeHostedReactorControl()
+    {
+        if (_hostedReactorControl is IDisposable disp)
+        {
+            try { disp.Dispose(); } catch { }
+        }
+        _hostedReactorControl = null;
+    }
+
+    private void DisposeHostedAndSource()
+    {
+        DisposeHostedReactorControl();
+        if (_source is not null)
+        {
+            try { _source.Dispose(); } catch { }
+            _source = null;
+        }
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        // SECURITY (TASK-078 / TASK-079): COM source + hosted control must
+        // be disposed when the WinForms HWND goes away, otherwise handle-
+        // recreation cycles leak both.
+        if (!DesignMode) DisposeHostedAndSource();
+        base.OnHandleDestroyed(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) DisposeHostedAndSource();
+        base.Dispose(disposing);
     }
 
     protected override void OnPaint(SWF.PaintEventArgs e)
@@ -312,13 +362,4 @@ public class XamlIslandControl : SWF.Control
         UpdateBridgeSize();
     }
 
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            _source?.Dispose();
-            _source = null;
-        }
-        base.Dispose(disposing);
-    }
 }

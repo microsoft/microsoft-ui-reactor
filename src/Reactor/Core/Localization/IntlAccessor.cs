@@ -61,14 +61,25 @@ public sealed class IntlAccessor
             return _pseudoLocalize ? PseudoLocalizer.MissingKeyMarker(key) : $"[?? {key} ??]";
 
         string result;
-        if (args is null)
-            result = _messageCache.Format(Locale, pattern);
-        else
+        try
         {
-            var dict = ToArgsDictionary(args);
-            result = _messageCache.Format(Locale, pattern, dict);
+            if (args is null)
+                result = _messageCache.Format(Locale, pattern);
+            else
+            {
+                var dict = ToArgsDictionary(args);
+                result = _messageCache.Format(Locale, pattern, dict);
+            }
+        }
+        catch (Exception ex)
+        {
+            // SECURITY (TASK-050): one bad .resw row would otherwise tear
+            // down the rendering page. Log and degrade to the raw pattern.
+            Debug.WriteLine($"[Reactor.Intl] Format failed for '{key}': {ex.GetType().Name}: {ex.Message}");
+            result = pattern;
         }
 
+        result = SanitizeBidi(result);
         return _pseudoLocalize ? PseudoLocalizer.Transform(result) : result;
     }
 
@@ -94,14 +105,28 @@ public sealed class IntlAccessor
         }
 
         string formatted;
-        if (args is null)
-            formatted = _messageCache.Format(Locale, pattern);
-        else
+        try
         {
-            var dict = ToArgsDictionary(args);
-            formatted = _messageCache.Format(Locale, pattern, dict);
+            if (args is null)
+                formatted = _messageCache.Format(Locale, pattern);
+            else
+            {
+                // SECURITY (TASK-053): escape `<`, `>`, `&` in arg values
+                // BEFORE formatting so a translator-controlled arg can't
+                // mint a `<link>` tag that ParseRichText would dispatch to a
+                // developer-supplied factory.
+                var dict = ToArgsDictionary(args);
+                var escaped = EscapeForRichTags(dict);
+                formatted = _messageCache.Format(Locale, pattern, escaped);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor.Intl] RichMessage format failed for '{key}': {ex.GetType().Name}: {ex.Message}");
+            formatted = pattern;
         }
 
+        formatted = SanitizeBidi(formatted);
         if (_pseudoLocalize)
             formatted = PseudoLocalizer.Transform(formatted);
 
@@ -291,9 +316,18 @@ public sealed class IntlAccessor
         if (args is IDictionary<string, object> dict)
             return dict;
 
-        // Convert anonymous object to dictionary via reflection
+        // SECURITY (TASK-051): refuse arbitrary DTOs. Anonymous types and the
+        // [LocArgs]-marked record contract are the only accepted shapes;
+        // anything else (e.g. a domain DTO with `AccessToken`/`Email`/...)
+        // would expose every public property to translator-controlled patterns.
+        var type = args.GetType();
+        if (!IsAcceptableArgsContainer(type))
+            throw new ArgumentException(
+                $"Localization args must be an IDictionary<string,object>, an anonymous type, or a record marked with [LocArgs]. Got '{type.FullName}'.",
+                nameof(args));
+
         var result = new Dictionary<string, object>();
-        var props = _propertyCache.GetOrAdd(args.GetType(),
+        var props = _propertyCache.GetOrAdd(type,
             t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance));
         foreach (var prop in props)
         {
@@ -302,6 +336,61 @@ public sealed class IntlAccessor
                 result[prop.Name] = value;
         }
         return result;
+    }
+
+    private static bool IsAcceptableArgsContainer(Type type)
+    {
+        // Anonymous types are sealed, generic, public-property-only with a
+        // compiler-generated name like `<>f__AnonymousType0`.
+        if (type.Name.StartsWith("<>", StringComparison.Ordinal)) return true;
+        // Allow opt-in via [LocArgs] attribute name match.
+        foreach (var attr in type.GetCustomAttributes(inherit: false))
+        {
+            var n = attr.GetType().Name;
+            if (n == "LocArgsAttribute" || n == "LocArgs") return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Strips bidi-override codepoints (U+202A..U+202E, U+2066..U+2069) from
+    /// formatted output. TASK-052: hostile patterns + arg values would
+    /// otherwise reorder rendered UI to spoof file extensions / homoglyphs.
+    /// </summary>
+    private static string SanitizeBidi(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        bool needsScrub = false;
+        foreach (var c in text)
+        {
+            if ((c >= '‪' && c <= '‮') || (c >= '⁦' && c <= '⁩'))
+            { needsScrub = true; break; }
+        }
+        if (!needsScrub) return text;
+        var sb = new global::System.Text.StringBuilder(text.Length);
+        foreach (var c in text)
+        {
+            if ((c >= '‪' && c <= '‮') || (c >= '⁦' && c <= '⁩')) continue;
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// HTML-escapes string-valued args before they are substituted into a
+    /// pattern that <see cref="RichMessage"/> will tag-parse. TASK-053.
+    /// Non-string values pass through untouched.
+    /// </summary>
+    private static IDictionary<string, object> EscapeForRichTags(IDictionary<string, object> args)
+    {
+        var escaped = new Dictionary<string, object>(args.Count);
+        foreach (var (k, v) in args)
+        {
+            escaped[k] = v is string s
+                ? s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
+                : v;
+        }
+        return escaped;
     }
 
     /// <summary>

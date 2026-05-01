@@ -41,19 +41,22 @@ pub unsafe extern "C" fn reactorfs_free_result(result: FsResult) {
         return;
     }
 
-    let entries = unsafe {
-        Vec::from_raw_parts(result.entries, result.count as usize, result.count as usize)
+    // SECURITY (TASK-075): allocator round-trip is via Box<[T]> so cap == len
+    // is guaranteed. `Vec::from_raw_parts(ptr, len, len)` over a Vec that
+    // had over-allocated capacity is documented UB and can corrupt the heap
+    // under non-default allocators.
+    let entries: Box<[crate::types::FsEntry]> = unsafe {
+        Box::from_raw(std::slice::from_raw_parts_mut(result.entries, result.count as usize))
     };
 
     // Free each name string
-    for entry in &entries {
+    for entry in entries.iter() {
         if !entry.name_ptr.is_null() && entry.name_len > 0 {
-            let _ = unsafe {
-                Vec::from_raw_parts(
+            let _: Box<[u16]> = unsafe {
+                Box::from_raw(std::slice::from_raw_parts_mut(
                     entry.name_ptr as *mut u16,
                     entry.name_len as usize,
-                    entry.name_len as usize,
-                )
+                ))
             };
         }
     }

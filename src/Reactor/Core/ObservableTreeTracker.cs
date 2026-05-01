@@ -16,7 +16,9 @@ internal class ObservableTreeTracker : IDisposable
 {
     private readonly Action _requestRerender;
     private readonly Dictionary<INotifyPropertyChanged, PropertyChangedEventHandler> _subscriptions = new();
-    private readonly HashSet<INotifyPropertyChanged> _visiting = new();
+    // _visiting was an instance field; that meant re-entrant Walks would
+    // share state and could lose nodes. Replaced with a stack-local set
+    // passed through recursion. TASK-062.
     private INotifyPropertyChanged? _root;
     private readonly Microsoft.UI.Dispatching.DispatcherQueue? _dispatcherQueue;
 
@@ -53,7 +55,6 @@ internal class ObservableTreeTracker : IDisposable
     {
         _root = root;
         var desiredSet = new HashSet<INotifyPropertyChanged>(ReferenceEqualityComparer.Instance);
-        _visiting.Clear();
         Walk(root, desiredSet);
 
         // Unsubscribe from objects no longer in the graph
@@ -88,21 +89,37 @@ internal class ObservableTreeTracker : IDisposable
         _subscriptions.Clear();
     }
 
+    /// <summary>
+    /// Hard cap on nodes visited per <see cref="SyncSubscriptions"/>. TASK-062.
+    /// Without this, a cyclic or extremely fan-out INPC graph would walk
+    /// every reachable property-changed node on every property change.
+    /// </summary>
+    private const int MaxNodesPerWalk = 1024;
+
     [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Object.GetType() does not carry DynamicallyAccessedMembers; INPC types are preserved because they implement INotifyPropertyChanged.")]
     private void Walk(INotifyPropertyChanged? node, HashSet<INotifyPropertyChanged> desiredSet)
     {
-        if (node is null || !_visiting.Add(node))
+        Walk(node, desiredSet, visiting: new HashSet<INotifyPropertyChanged>(global::System.Collections.Generic.ReferenceEqualityComparer.Instance));
+    }
+
+    private void Walk(INotifyPropertyChanged? node, HashSet<INotifyPropertyChanged> desiredSet, HashSet<INotifyPropertyChanged> visiting)
+    {
+        // SECURITY (TASK-062): bound the walk so a hostile or accidentally
+        // huge INPC graph can't burn the UI thread on every property change.
+        if (desiredSet.Count >= MaxNodesPerWalk) return;
+        if (node is null || !visiting.Add(node))
             return; // null or cycle detected
 
         desiredSet.Add(node);
 
         foreach (var prop in GetInpcCandidateProperties(node.GetType()))
         {
+            if (desiredSet.Count >= MaxNodesPerWalk) break;
             try
             {
                 var value = prop.GetValue(node);
                 if (value is INotifyPropertyChanged inpc)
-                    Walk(inpc, desiredSet);
+                    Walk(inpc, desiredSet, visiting);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
             {
@@ -110,7 +127,11 @@ internal class ObservableTreeTracker : IDisposable
             }
         }
 
-        _visiting.Remove(node);
+        // SECURITY (TASK-062): use a stack-local visiting set rather than the
+        // shared instance field so re-entrant calls (e.g., a property-change
+        // handler that triggers another sync) can't corrupt each other's
+        // cycle-detection state.
+        visiting.Remove(node);
     }
 
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "ObservableTreeTracker uses reflection to inspect property changes.")]

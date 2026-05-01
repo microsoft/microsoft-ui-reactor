@@ -19,7 +19,23 @@ public static class MarkdownHtml
         VerbatimEntities = 0x0002,
         SkipUtf8Bom = 0x0004,
         Xhtml = 0x0008,
+        /// <summary>
+        /// Disable the URL scheme allowlist + raw-HTML stripping. Caller
+        /// opts out of the default safe-mode rendering. TASK-045 / TASK-046.
+        /// </summary>
+        AllowUnsafeUrls = 0x0010,
+        AllowRawHtml = 0x0020,
     }
+
+    /// <summary>
+    /// URL schemes the safe-mode renderer leaves intact in <c>href</c> /
+    /// <c>src</c> attributes. Anything else gets rewritten to
+    /// <c>about:blank</c>. TASK-045.
+    /// </summary>
+    private static readonly HashSet<string> SafeUrlSchemes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "http", "https", "mailto",
+    };
 
     /// <summary>
     /// Render Markdown to HTML. Returns -1 on error, 0 on success.
@@ -45,15 +61,51 @@ public static class MarkdownHtml
     }
 
     /// <summary>
-    /// Convenience: render Markdown string to HTML string.
+    /// Convenience: render Markdown string to HTML string. Defaults to
+    /// safe-mode (raw HTML stripped, unknown URL schemes neutralized).
+    /// Pass <see cref="HtmlFlags.AllowRawHtml"/> / <see cref="HtmlFlags.AllowUnsafeUrls"/>
+    /// to opt back into the prior behavior. TASK-045 / TASK-046.
     /// </summary>
     public static string ToHtml(string markdown, MarkdownParserFlags parserFlags = MarkdownParserFlags.None, HtmlFlags renderFlags = HtmlFlags.None)
     {
+        // SECURITY (TASK-046): default to NoHtml unless the caller has
+        // explicitly opted in via AllowRawHtml. The previous default emitted
+        // raw <script>/event-handler attributes verbatim into a WebView.
+        if ((renderFlags & HtmlFlags.AllowRawHtml) == 0)
+            parserFlags |= MarkdownParserFlags.NoHtml;
+
         var sb = new StringBuilder();
         int ret = Render(markdown, parserFlags, renderFlags, sb);
         if (ret != 0)
             throw new InvalidOperationException($"md4c parse failed with code {ret}");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns either <paramref name="url"/> or <c>about:blank</c> after
+    /// scheme-allowlist evaluation. TASK-045.
+    /// </summary>
+    internal static string SanitizeUrl(string url, bool unsafeAllowed)
+    {
+        if (unsafeAllowed) return url;
+        if (string.IsNullOrEmpty(url)) return url;
+        // Relative URLs (no scheme) are safe; only absolute schemes need
+        // checking. Pull the scheme by hand because Uri.TryCreate is too
+        // lenient — it would parse `javascript:alert(1)` as a valid Uri.
+        int colon = url.IndexOf(':');
+        if (colon <= 0) return url; // no scheme = treat as path-relative
+        // Schemes per RFC 3986: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+        for (int i = 0; i < colon; i++)
+        {
+            var c = url[i];
+            bool ok = (i == 0)
+                ? (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                : (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.';
+            if (!ok) return url; // not a real scheme — treat as relative
+        }
+        var scheme = url[..colon];
+        return SafeUrlSchemes.Contains(scheme) ? url : "about:blank";
     }
 
     private sealed class HtmlRenderer
@@ -249,6 +301,35 @@ public static class MarkdownHtml
                 Verbatim(text);
         }
 
+        /// <summary>
+        /// SECURITY (TASK-045): reconstructs the raw URL from the
+        /// MarkdownAttribute, runs it through the safe-mode allowlist, then
+        /// writes (URL-escaped) the result. <c>javascript:</c>, <c>data:</c>,
+        /// <c>vbscript:</c>, custom-scheme URLs become <c>about:blank</c>.
+        /// </summary>
+        private void RenderUrlSanitized(MarkdownAttribute attr)
+        {
+            if (attr.Text == null) return;
+            // Reassemble the raw URL string. Substr boundaries match the
+            // attr.Text source span; entity substrings are rendered later.
+            var raw = new StringBuilder(attr.Text.Length);
+            for (int i = 0; i < attr.SubstrTypes.Length; i++)
+            {
+                int off = attr.SubstrOffsets[i];
+                int nextOff = attr.SubstrOffsets[i + 1];
+                int len = nextOff - off;
+                if (off < 0 || len <= 0 || off + len > attr.Text.Length) continue;
+                if (attr.SubstrTypes[i] == MarkdownTextType.NullChar)
+                {
+                    raw.Append('�');
+                    continue;
+                }
+                raw.Append(attr.Text.AsSpan(off, len));
+            }
+            var sanitized = SanitizeUrl(raw.ToString(), unsafeAllowed: (flags & HtmlFlags.AllowUnsafeUrls) != 0);
+            UrlEscaped(sanitized.AsSpan());
+        }
+
         private void RenderAttribute(MarkdownAttribute attr, bool urlEsc)
         {
             if (attr.Text == null) return;
@@ -390,7 +471,10 @@ public static class MarkdownHtml
                 case MarkdownSpanType.A:
                     var a = (MarkdownSpanADetail)detail!;
                     Verbatim("<a href=\"");
-                    RenderAttribute(a.Href, true);
+                    if ((flags & HtmlFlags.AllowUnsafeUrls) != 0)
+                        RenderAttribute(a.Href, true);
+                    else
+                        RenderUrlSanitized(a.Href);
                     if (a.Title.Text != null)
                     {
                         Verbatim("\" title=\"");
@@ -401,7 +485,10 @@ public static class MarkdownHtml
                 case MarkdownSpanType.Img:
                     var img = (MarkdownSpanImgDetail)detail!;
                     Verbatim("<img src=\"");
-                    RenderAttribute(img.Src, true);
+                    if ((flags & HtmlFlags.AllowUnsafeUrls) != 0)
+                        RenderAttribute(img.Src, true);
+                    else
+                        RenderUrlSanitized(img.Src);
                     Verbatim("\" alt=\"");
                     break;
                 case MarkdownSpanType.Code: Verbatim("<code>"); break;

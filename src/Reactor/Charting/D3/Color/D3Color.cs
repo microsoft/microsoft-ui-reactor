@@ -51,20 +51,28 @@ public readonly struct D3Color
     {
         format = format.Trim().ToLowerInvariant();
 
-        // Hex
+        // Hex — TASK-090: TryParse instead of Convert.ToByte so a bad hex
+        // char (e.g., `#1z3456`) returns a default color rather than
+        // throwing FormatException and crashing the render.
         if (format.StartsWith('#'))
         {
             string hex = format[1..];
-            if (hex.Length == 3)
-                return new D3Color(
-                    (byte)(Convert.ToByte(hex[0..1], 16) * 17),
-                    (byte)(Convert.ToByte(hex[1..2], 16) * 17),
-                    (byte)(Convert.ToByte(hex[2..3], 16) * 17));
-            if (hex.Length == 6)
-                return new D3Color(
-                    Convert.ToByte(hex[0..2], 16),
-                    Convert.ToByte(hex[2..4], 16),
-                    Convert.ToByte(hex[4..6], 16));
+            const global::System.Globalization.NumberStyles HexStyle = global::System.Globalization.NumberStyles.HexNumber;
+            var ic = global::System.Globalization.CultureInfo.InvariantCulture;
+            if (hex.Length == 3
+                && byte.TryParse(hex[0..1], HexStyle, ic, out var r3)
+                && byte.TryParse(hex[1..2], HexStyle, ic, out var g3)
+                && byte.TryParse(hex[2..3], HexStyle, ic, out var b3))
+            {
+                return new D3Color((byte)(r3 * 17), (byte)(g3 * 17), (byte)(b3 * 17));
+            }
+            if (hex.Length == 6
+                && byte.TryParse(hex[0..2], HexStyle, ic, out var r6)
+                && byte.TryParse(hex[2..4], HexStyle, ic, out var g6)
+                && byte.TryParse(hex[4..6], HexStyle, ic, out var b6))
+            {
+                return new D3Color(r6, g6, b6);
+            }
         }
 
         // rgb(r, g, b) / rgba(r, g, b, a)

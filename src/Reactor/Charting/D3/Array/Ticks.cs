@@ -51,15 +51,23 @@ public static class D3Ticks
     /// (such as multiples of powers of 10), and are guaranteed to be within the extent
     /// of the given interval.
     /// </summary>
+    /// <summary>Hard cap on emitted tick count. TASK-086.</summary>
+    public const int MaxTicks = 10_000;
+
     public static double[] Ticks(double start, double stop, int count)
     {
+        // SECURITY (TASK-086): reject non-finite endpoints and bound the
+        // result size so domains near ±double.MaxValue don't allocate
+        // hundreds of MB.
         if (count <= 0) return [];
+        if (!double.IsFinite(start) || !double.IsFinite(stop)) return [];
         if (start == stop) return [start];
 
         bool reverse = stop < start;
         var (i1, i2, inc) = reverse ? TickSpec(stop, start, count) : TickSpec(start, stop, count);
 
         if (i2 < i1) return [];
+        if (i2 - i1 + 1 > MaxTicks) return [];
 
         int n = (int)(i2 - i1 + 1);
         var ticks = new double[n];
