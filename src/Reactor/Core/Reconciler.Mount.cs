@@ -675,23 +675,22 @@ public sealed partial class Reconciler
         return toggle;
     }
 
-    /// <summary>
-    /// Wires ToggleSwitch.Toggled trampoline only when the element has a
-    /// handler AND the control hasn't been wired yet. The CWT flag survives
-    /// pool round-trips (ToggleSwitch is a poolable type).
-    /// </summary>
+    // Dedupe via EventHandlerState (attached on ReactorAttached.StateProperty,
+    // keyed by native DependencyObject identity). A plain CWT keyed by managed
+    // RCW identity is unsafe — two RCWs over the same DO miss the dedupe and
+    // double-subscribe, fanning one Toggled into multiple user-callback invocations.
     internal static void EnsureToggleSwitchWiring(WinUI.ToggleSwitch toggle, ToggleSwitchElement ts)
     {
         if (ts.OnChanged is null) return;
-        var flags = GetPoolableWireFlags(toggle);
-        if (flags.ToggleSwitchToggled) return;
-        flags.ToggleSwitchToggled = true;
-        toggle.Toggled += (s, _) =>
+        var state = GetOrCreateEventState(toggle);
+        if (state.ToggleSwitchToggledTrampoline is not null) return;
+        state.ToggleSwitchToggledTrampoline = (s, _) =>
         {
             var t = (WinUI.ToggleSwitch)s!;
             if (ChangeEchoSuppressor.ShouldSuppress(t)) return;
             (GetElementTag(t) as ToggleSwitchElement)?.OnChanged?.Invoke(t.IsOn);
         };
+        toggle.Toggled += state.ToggleSwitchToggledTrampoline;
     }
 
     private WinUI.RatingControl MountRatingControl(RatingControlElement rc)

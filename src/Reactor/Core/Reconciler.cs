@@ -368,7 +368,6 @@ public sealed partial class Reconciler : IDisposable
         public bool ButtonClick;
         public bool TextBoxTextChanged;
         public bool TextBoxSelectionChanged;
-        public bool ToggleSwitchToggled;
     }
 
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, PoolableWireFlags> _poolableWireFlags = new();
@@ -2554,6 +2553,7 @@ public sealed partial class Reconciler : IDisposable
         public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CharacterReceivedTrampoline;
         public RoutedEventHandler? GotFocusTrampoline;
         public RoutedEventHandler? LostFocusTrampoline;
+        public RoutedEventHandler? ToggleSwitchToggledTrampoline;
         public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? AccessKeyDisplayRequestedTrampoline;
 
         /// <summary>
