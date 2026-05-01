@@ -174,14 +174,21 @@ internal static class LockfileReader
 
     /// <summary>
     /// Returns true iff the listening TCP socket on <paramref name="port"/> on
-    /// 127.0.0.1 is owned by <paramref name="pid"/>. Returns true on platforms
-    /// where we can't make the check (the HTTP probe is the next-best signal).
+    /// 127.0.0.1 is owned by <paramref name="pid"/>. On non-Windows hosts the
+    /// check is unimplemented and returns true (the HTTP probe is the next-best
+    /// signal). On Windows, an exception during the lookup means we cannot
+    /// confirm ownership — fail closed (return false) so an attacker can't
+    /// bypass the PID→port check by triggering the exception path.
     /// </summary>
     internal static bool PortOwnedBy(int port, int pid)
     {
         if (!OperatingSystem.IsWindows()) return true; // best effort
         try { return PortOwnership.IsPortOwnedBy(port, pid); }
-        catch { return true; }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[reactor.cli] PortOwnership check failed for pid={pid} port={port}: {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
     }
 
     private static bool HttpProbe(string endpoint, string token)

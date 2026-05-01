@@ -743,26 +743,32 @@ public sealed partial class Reconciler : IDisposable
                     "synchronously inside Render() or effect cleanup.");
 
             // SECURITY (TASK-063): if invoked off the UI thread (e.g.,
-            // setState(threadSafe:true) firing from a worker), marshal the
-            // re-entry onto the dispatcher so we don't race the reconciler
-            // and ElementPool from a background thread.
-            var dq = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-            if (dq is null)
+            // setState(threadSafe:true) firing from a worker, or a worker
+            // that owns its own DispatcherQueue), marshal onto the UI
+            // dispatcher captured at host bring-up so we don't race the
+            // reconciler and ElementPool from a background thread.
+            // A non-null GetForCurrentThread() doesn't imply UI affinity —
+            // the only authoritative check is HasThreadAccess on the UI DQ.
+            var uiDq = ReactorHost.MainDispatcherQueue;
+            bool onUiThread = false;
+            if (uiDq is not null)
             {
-                // No DispatcherQueue on this thread → must be a worker.
-                // Marshal via the global UI dispatcher captured at host bring-up.
-                var uiDq = ReactorHost.MainDispatcherQueue;
-                if (uiDq is not null && !uiDq.HasThreadAccess)
-                {
-                    uiDq.TryEnqueue(() =>
-                    {
-                        node.SelfTriggered = true;
-                        InvokeRerenderTracked(requestRerender);
-                    });
-                    return;
-                }
+                try { onUiThread = uiDq.HasThreadAccess; }
+                catch { onUiThread = false; }
             }
 
+            if (!onUiThread && uiDq is not null)
+            {
+                uiDq.TryEnqueue(() =>
+                {
+                    node.SelfTriggered = true;
+                    InvokeRerenderTracked(requestRerender);
+                });
+                return;
+            }
+
+            // Either we're on the UI thread, or no UI DQ has been captured
+            // (test/headless host) — run inline.
             node.SelfTriggered = true;
             InvokeRerenderTracked(requestRerender);
         };

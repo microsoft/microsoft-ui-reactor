@@ -652,7 +652,15 @@ internal static class DevtoolsPropertyTools
         foreach (var key in dict.Keys)
         {
             var keyStr = key?.ToString() ?? "";
-            if (filter is not null && !filter.IsMatch(keyStr)) continue;
+            if (filter is not null)
+            {
+                bool match;
+                // SECURITY (TASK-014): the regex carries a 200ms MatchTimeout;
+                // a pathological pattern+key combo throws — treat as non-match.
+                try { match = filter.IsMatch(keyStr); }
+                catch (RegexMatchTimeoutException) { match = false; }
+                if (!match) continue;
+            }
 
             object? val;
             try { val = dict[key]; }

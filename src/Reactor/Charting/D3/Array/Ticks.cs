@@ -67,7 +67,10 @@ public static class D3Ticks
         var (i1, i2, inc) = reverse ? TickSpec(stop, start, count) : TickSpec(start, stop, count);
 
         if (i2 < i1) return [];
-        if (i2 - i1 + 1 > MaxTicks) return [];
+        // SECURITY (TASK-086): bound the result size so domains near
+        // ±double.MaxValue don't allocate hundreds of MB. Compare in an
+        // overflow-safe way — i2-i1+1 can wrap when i1/i2 are far apart.
+        if (i2 > i1 + (MaxTicks - 1)) return [];
 
         int n = (int)(i2 - i1 + 1);
         var ticks = new double[n];

@@ -199,9 +199,7 @@ When recording findings:
 - **Severity** — 🔴 / 🟠 / 🟡, calibrated to actual harm.
 - **Category tag** — `Security` for boundary-crossing findings,
   `Reliability` for everything else. The category gates how the eventual
-  PR is described in the changelog. (See the live tracker
-  `docs/specs/security-review/REMEDIATION-TASKS.md` for examples and the
-  category legend.)
+  PR is described in the changelog.
 
 ## Common phrases that should pause you
 
