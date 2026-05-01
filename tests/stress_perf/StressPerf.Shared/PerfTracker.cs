@@ -118,5 +118,16 @@ public sealed class PerfTracker
         var report = GetReport(appName, percent);
         var path = Path.Combine(AppContext.BaseDirectory, $"{appName}.report.txt");
         File.WriteAllText(path, report);
+
+        var csv = new StringBuilder();
+        csv.AppendLine("Second,FPS,Memory_MB");
+        int n = Math.Min(_fpsSamples.Count, _memorySamples.Count);
+        for (int i = 0; i < n; i++)
+        {
+            double mb = _memorySamples[i] / (1024.0 * 1024.0);
+            csv.AppendLine($"{i + 1},{_fpsSamples[i]:F2},{mb:F1}");
+        }
+        var csvPath = Path.Combine(AppContext.BaseDirectory, $"{appName}.samples.csv");
+        File.WriteAllText(csvPath, csv.ToString());
     }
 }
