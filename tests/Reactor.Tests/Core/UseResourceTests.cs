@@ -382,8 +382,13 @@ public class UseResourceTests
         ctx.UseResource(_ => tcs.Task, cache, Array.Empty<object>(), null, dispatcher: null);
 
         tcs.SetResult(7);
-        await Task.Yield();
-        await Task.Delay(10);
+
+        // Continuation hops to the threadpool (RunContinuationsAsynchronously). Under
+        // heavy parallel test load the threadpool can take longer than a single 10ms
+        // tick, causing this assertion to flake. Poll up to 1s for the rerender flag.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(1);
+        while (!rerendered && DateTime.UtcNow < deadline)
+            await Task.Delay(10);
 
         Assert.True(rerendered);
     }

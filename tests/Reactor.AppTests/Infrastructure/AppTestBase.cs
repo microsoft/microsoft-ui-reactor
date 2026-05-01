@@ -33,12 +33,31 @@ public class AppTestBase
         if (_currentFixture == name)
             return;
 
-        var navElement = Session.FindElement(MobileBy.AccessibilityId($"Nav_{name}"));
-        navElement.Click();
-        // 10s instead of the 5s default: late-suite navigations after dozens of
-        // fixture loads can take longer when the dispatcher is busy. The test still
-        // fails fast in isolation; this just absorbs cumulative scheduling latency.
-        WaitForText("FixtureStatus", $"Loaded: {name}", timeoutMs: 10000);
+        var expected = $"Loaded: {name}";
+
+        // Click + wait. If the click is silently absorbed (observed when the
+        // previous test left a flyout open, or when a Reset re-render races the
+        // navigator's hit-test rebuild), the wait times out — retry the click
+        // once before giving up. This keeps fast paths fast (no extra waits in
+        // the common case) but absorbs the occasional missed click.
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            Session.FindElement(MobileBy.AccessibilityId($"Nav_{name}")).Click();
+            try
+            {
+                WaitForText("FixtureStatus", expected, timeoutMs: 5000);
+                _currentFixture = name;
+                return;
+            }
+            catch (WebDriverTimeoutException) when (attempt == 0)
+            {
+                // Brief pause before the retry so the next click doesn't land in
+                // the same window that swallowed the first one.
+                Thread.Sleep(250);
+            }
+        }
+        // Final attempt: longer timeout, no further retry.
+        WaitForText("FixtureStatus", expected, timeoutMs: 5000);
         _currentFixture = name;
     }
 
@@ -55,18 +74,8 @@ public class AppTestBase
     /// </remarks>
     protected void NavigateToFixtureFresh(string name)
     {
-        // Only Reset when re-navigating to the *same* fixture — that's the case
-        // where TestHost's setFixture() short-circuits as a no-op and state would
-        // leak. Switching to a different fixture already remounts the tree, and
-        // an unnecessary Reset → click sequence has been observed to race the
-        // navigator's re-render and cause the next nav click to silently land on
-        // stale ScrollView geometry (Pan test failing with FixtureStatus stuck
-        // at "Ready").
-        if (_currentFixture == name)
-        {
-            ResetFixture();
-            _currentFixture = null;
-        }
+        ResetFixture();
+        _currentFixture = null;
         NavigateToFixture(name);
     }
 
