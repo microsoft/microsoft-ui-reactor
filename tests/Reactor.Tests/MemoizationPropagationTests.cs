@@ -80,6 +80,12 @@ public class MemoizationPropagationTests
         return propsChanged || contextChanged;
     }
 
+    // NOTE: Product code does NOT use reflection here. Reconciler.ShouldUpdateWithProps
+    // dispatches via the IPropsComparable interface (see Component.cs and Reconciler.cs).
+    // This test-only mirror keeps the harness independent of the production interface so
+    // it can validate ShouldUpdate(TProps?, TProps?) against arbitrary Component<TProps>
+    // subclasses without re-implementing the dispatch path. Do not infer from this code
+    // that the product reconciler reflects on every reconcile — it does not.
     private static bool ShouldUpdateWithProps(Component component, object? oldProps, object? newProps)
     {
         var compType = component.GetType();
