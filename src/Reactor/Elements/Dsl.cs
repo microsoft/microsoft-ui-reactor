@@ -269,6 +269,33 @@ public static partial class Factories
 
     // ── Grid ────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Creates a <see cref="GridElement"/> with strongly-typed track sizes.
+    /// </summary>
+    /// <remarks>
+    /// Spec 033 §1. Use <see cref="GridSize.Auto"/> / <see cref="GridSize.Star(double)"/> /
+    /// <see cref="GridSize.Px(double)"/> instead of the legacy string-form
+    /// (<c>"Auto"</c>/<c>"*"</c>/<c>"200"</c>) for compile-time validation and
+    /// IntelliSense over the legal track shapes.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="columns"/> or <paramref name="rows"/> is null.</exception>
+    public static GridElement Grid(
+        GridSize[] columns, GridSize[] rows,
+        params Element?[] children)
+    {
+        if (columns is null) throw new ArgumentNullException(nameof(columns));
+        if (rows is null) throw new ArgumentNullException(nameof(rows));
+        return new(new GridDefinition(columns, rows), FilterChildren(children));
+    }
+
+    /// <summary>
+    /// Creates a <see cref="GridElement"/> with string-form track sizes. Deprecated
+    /// in favor of the typed overload; will be removed in the next minor release.
+    /// </summary>
+    [global::System.Obsolete(
+        "Use Grid(GridSize[], GridSize[], ...) — GridSize.Star/.Auto/.Px helpers. " +
+        "String-track overload will be removed in the next minor release. (spec 033 §1)",
+        error: false)]
     public static GridElement Grid(
         string[] columns, string[] rows,
         params Element?[] children) =>
@@ -294,7 +321,7 @@ public static partial class Factories
         double separatorSize,
         Func<int, Element> separatorFactory)
     {
-        if (items.Length == 0) return Grid([], [], []);
+        if (items.Length == 0) return Grid(global::System.Array.Empty<GridSize>(), global::System.Array.Empty<GridSize>());
         if (items.Length != proportions.Length)
             throw new ArgumentException("items and proportions must have the same length");
         for (int i = 0; i < proportions.Length; i++)
@@ -303,14 +330,14 @@ public static partial class Factories
                 throw new ArgumentOutOfRangeException(nameof(proportions), $"proportions[{i}] must be a non-negative number, got {proportions[i]}");
         }
 
-        var sizes = new List<string>();
+        var sizes = new List<GridSize>();
         var children = new List<Element>();
         bool isHorizontal = orientation == Orientation.Horizontal;
 
         for (int i = 0; i < items.Length; i++)
         {
             var starValue = proportions[i];
-            sizes.Add(string.Format(global::System.Globalization.CultureInfo.InvariantCulture, "{0:F6}*", starValue));
+            sizes.Add(GridSize.Star(starValue));
 
             children.Add(isHorizontal
                 ? items[i].Grid(row: 0, column: i * 2)
@@ -318,7 +345,7 @@ public static partial class Factories
 
             if (i < items.Length - 1)
             {
-                sizes.Add($"{separatorSize}");
+                sizes.Add(GridSize.Px(separatorSize));
                 var sep = separatorFactory(i);
                 children.Add(isHorizontal
                     ? sep.Grid(row: 0, column: i * 2 + 1)
@@ -326,9 +353,10 @@ public static partial class Factories
             }
         }
 
+        var oneStar = new[] { GridSize.Star() };
         return isHorizontal
-            ? Grid(sizes.ToArray(), ["*"], children.ToArray())
-            : Grid(["*"], sizes.ToArray(), children.ToArray());
+            ? Grid(sizes.ToArray(), oneStar, children.ToArray())
+            : Grid(oneStar, sizes.ToArray(), children.ToArray());
     }
 
     /// <summary>
@@ -338,9 +366,10 @@ public static partial class Factories
     public static GridElement UniformGrid(Orientation orientation, params Element?[] items)
     {
         var filtered = FilterChildren(items);
-        if (filtered.Length == 0) return Grid([], [], []);
+        if (filtered.Length == 0) return Grid(global::System.Array.Empty<GridSize>(), global::System.Array.Empty<GridSize>());
 
-        var sizes = Enumerable.Repeat("*", filtered.Length).ToArray();
+        var sizes = Enumerable.Repeat(GridSize.Star(), filtered.Length).ToArray();
+        var oneStar = new[] { GridSize.Star() };
         bool isHorizontal = orientation == Orientation.Horizontal;
 
         for (int i = 0; i < filtered.Length; i++)
@@ -351,8 +380,8 @@ public static partial class Factories
         }
 
         return isHorizontal
-            ? Grid(sizes, ["*"], filtered)
-            : Grid(["*"], sizes, filtered);
+            ? Grid(sizes, oneStar, filtered)
+            : Grid(oneStar, sizes, filtered);
     }
 
     // ── Navigation ──────────────────────────────────────────────────
@@ -527,6 +556,19 @@ public static partial class Factories
     /// Define an inline function component (like a React function component).
     /// Usage: Func(ctx => { var (n,setN) = ctx.UseState(0); return TextBlock($"{n}"); })
     /// </summary>
+    /// <remarks>
+    /// Spec 033 §4 — soft-deprecated. <c>Func(...)</c> is "inline + own hooks +
+    /// no memoization", a niche rarely used intentionally. Replace with:
+    /// <list type="bullet">
+    ///   <item><description><see cref="Memo(Func{RenderContext, Element}, object?[])"/> with no deps for the common case (render once + state-driven re-renders).</description></item>
+    ///   <item><description><see cref="RenderEachTime"/> when you specifically want the old "re-render every parent render" behavior.</description></item>
+    /// </list>
+    /// </remarks>
+    [global::System.Obsolete(
+        "Use Memo(ctx => …) for render-once-plus-state semantics, or " +
+        "RenderEachTime(ctx => …) for the explicit always-re-render case. " +
+        "Func will be removed in the next minor release. (spec 033 §4)",
+        error: false)]
     public static FuncElement Func(Func<RenderContext, Element> render) => new(render);
 
     /// <summary>
@@ -536,6 +578,20 @@ public static partial class Factories
     /// </summary>
     public static MemoElement Memo(Func<RenderContext, Element> render, params object?[] dependencies)
         => new(render, dependencies.Length == 0 ? null : dependencies);
+
+    /// <summary>
+    /// Define an inline function component that re-renders on every parent render
+    /// (no memoization), keeping its own hook scope. Equivalent to the legacy
+    /// <see cref="Func"/> behavior, made explicit so the reader can tell the
+    /// always-re-render case apart from a missing deps array.
+    /// </summary>
+    /// <remarks>
+    /// Spec 033 §4. Use sparingly — components that re-render on every parent
+    /// render defeat the memoization story and can amplify render storms.
+    /// Prefer <see cref="Memo(Func{RenderContext, Element}, object?[])"/> with
+    /// an explicit deps array whenever the re-render trigger can be enumerated.
+    /// </remarks>
+    public static FuncElement RenderEachTime(Func<RenderContext, Element> render) => new(render);
 
     // ── Command host ─────────────────────────────────────────────────
 
@@ -561,6 +617,43 @@ public static partial class Factories
     /// </summary>
     public static Element If(bool condition, Func<Element> then, Func<Element>? otherwise = null) =>
         condition ? then() : (otherwise?.Invoke() ?? EmptyElement.Instance);
+
+    /// <summary>
+    /// Inline block-expression escape hatch: invokes <paramref name="render"/> and returns
+    /// its element, or <c>EmptyElement.Instance</c> when the lambda returns <c>null</c>.
+    /// Lets callers write multi-statement bodies inside a DSL tree without extracting a
+    /// local function or relying on the <c>((Func&lt;Element?&gt;)(() =&gt; …))()</c> cast trick.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Spec 033 §5. <c>Expr</c> performs no memoization, owns no <c>RenderContext</c>, and
+    /// is not a reconciler boundary — it is purely composition sugar. If the body needs
+    /// hooks, use <c>Memo(...)</c> or a <c>Component&lt;TProps&gt;</c> instead.
+    /// </para>
+    /// <para>
+    /// Exceptions thrown inside <paramref name="render"/> propagate unchanged so the
+    /// surrounding error-boundary path applies.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// VStack(
+    ///     Header(),
+    ///     Expr(() =&gt; {
+    ///         var summary = ComputeSummary(orders);
+    ///         return summary.Total &gt; 0
+    ///             ? TotalsBanner(summary)
+    ///             : null;
+    ///     }),
+    ///     Footer())
+    /// </code>
+    /// </example>
+    /// <exception cref="ArgumentNullException"><paramref name="render"/> is <c>null</c>.</exception>
+    public static Element Expr(Func<Element?> render)
+    {
+        ArgumentNullException.ThrowIfNull(render);
+        return render() ?? EmptyElement.Instance;
+    }
 
     /// <summary>
     /// Map a list to elements (like .map() in React JSX):

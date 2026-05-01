@@ -82,7 +82,7 @@ class SpacingPage : Component
                     .Margin(0, 0, 0, 4),
 
                 Grid(
-                    columns: ["*", "*"], rows: ["Auto"],
+                    columns: [GridSize.Star(), GridSize.Star()], rows: [GridSize.Auto],
 
                     // Margin demo
                     VStack(4,
@@ -164,7 +164,7 @@ Border(
 
     static Element CompatRow(string element, bool margin, bool padding) =>
         Grid(
-            columns: ["120", "80", "80"], rows: ["Auto"],
+            columns: [GridSize.Px(120), GridSize.Px(80), GridSize.Px(80)], rows: [GridSize.Auto],
             TextBlock(element).FontSize(13).Foreground(Theme.PrimaryText)
                 .Set(tb => tb.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Cascadia Code, Consolas, monospace"))
                 .VAlign(VerticalAlignment.Center)

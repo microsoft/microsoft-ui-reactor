@@ -189,14 +189,14 @@ internal static class ReconcilerFixtures
                 var panes = Enumerable.Range(0, paneCount)
                     .Select(i => TextBlock($"Pane {i}").Grid(row: 0, column: i))
                     .ToArray();
-                var cols = Enumerable.Range(0, Math.Max(1, paneCount)).Select(_ => "*").ToArray();
+                var cols = Enumerable.Range(0, Math.Max(1, paneCount)).Select(_ => GridSize.Star()).ToArray();
 
                 return VStack(
                     HStack(
                         Button("Split", () => setPaneCount(paneCount + 1)),
                         Button("Collapse", () => setPaneCount(Math.Max(0, paneCount - 1)))
                     ),
-                    Grid(cols, ["*"], panes)
+                    Grid(cols, [GridSize.Star()], panes)
                 );
             });
 
@@ -279,7 +279,7 @@ internal static class ReconcilerFixtures
                 var canvasChildren = Enumerable.Range(0, count)
                     .Select(i => TextBlock($"C{i}"))
                     .ToArray();
-                var cols = Enumerable.Range(0, Math.Max(1, count)).Select(_ => "*").ToArray();
+                var cols = Enumerable.Range(0, Math.Max(1, count)).Select(_ => GridSize.Star()).ToArray();
 
                 return VStack(
                     HStack(
@@ -287,7 +287,7 @@ internal static class ReconcilerFixtures
                         Button("Remove", () => setCount(Math.Max(0, count - 1)))
                     ),
                     VStack(stackChildren),
-                    Grid(cols, ["*"], gridChildren),
+                    Grid(cols, [GridSize.Star()], gridChildren),
                     FlexRow(flexChildren),
                     WrapGrid(wrapChildren),
                     Canvas(canvasChildren)

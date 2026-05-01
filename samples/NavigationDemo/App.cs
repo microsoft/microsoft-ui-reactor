@@ -204,7 +204,9 @@ class AppShell : Component
 
                 DiagnosticsPanel(diagLog, nav)
             )
-        );
+        )
+        // Spec 033 §6 — Mica window backdrop on the navigation shell.
+        .Backdrop(BackdropKind.Mica);
     }
 
     static Element DiagnosticsPanel(List<string> log, NavigationHandle<AppRoute> nav)

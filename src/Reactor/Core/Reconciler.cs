@@ -2391,7 +2391,28 @@ public sealed partial class Reconciler : IDisposable
         // can target the mounted control. Writing on every update is cheap (single field
         // write) and keeps the ref fresh when the pool recycles elements.
         if (m.Ref is not null)
+        {
             m.Ref._current = fe;
+            AssertTypedRefMatch(m.Ref, fe);
+        }
+    }
+
+    [global::System.Diagnostics.Conditional("DEBUG")]
+    private static void AssertTypedRefMatch(Microsoft.UI.Reactor.Input.ElementRef r, FrameworkElement fe)
+    {
+        // Spec 033 §3 — typed refs (ElementRef<T>) record their expected concrete
+        // type on the inner untyped ref. When a typed ref is bound to an element
+        // that is not assignable to T, fail loudly under DEBUG so the bug is caught
+        // during dev-loop. RELEASE builds keep the silent-null behavior of the
+        // typed wrapper's `Current` property — no perf cost on the hot path.
+        var expected = r.ExpectedType;
+        if (expected is null) return;
+        if (!expected.IsInstanceOfType(fe))
+        {
+            global::System.Diagnostics.Debug.Fail(
+                $"ElementRef<{expected.Name}> attached to a {fe.GetType().Name}. " +
+                "Use ElementRef<" + fe.GetType().Name + "> or untyped ElementRef.");
+        }
     }
 
     // ════════════════════════════════════════════════════════════════

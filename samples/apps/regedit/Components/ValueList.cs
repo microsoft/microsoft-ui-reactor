@@ -29,8 +29,8 @@ internal sealed class ValueList : Component<ValueListProps>
 
         // Column header
         var header = Grid(
-            ["2*", "*", "3*"],
-            ["32"],
+            [GridSize.Star(2), GridSize.Star(), GridSize.Star(3)],
+            [GridSize.Px(32)],
             TextBlock(Strings.ColumnName).SemiBold().VAlign(VerticalAlignment.Center).Grid(row: 0, column: 0),
             TextBlock(Strings.ColumnType).SemiBold().VAlign(VerticalAlignment.Center).Grid(row: 0, column: 1),
             TextBlock(Strings.ColumnData).SemiBold().VAlign(VerticalAlignment.Center).Grid(row: 0, column: 2)
@@ -48,8 +48,8 @@ internal sealed class ValueList : Component<ValueListProps>
         ) with { EstimatedItemSize = 28, Spacing = 0 };
 
         return Grid(
-            ["*"],
-            ["Auto", "*"],
+            [GridSize.Star()],
+            [GridSize.Auto, GridSize.Star()],
             header.Grid(row: 0, column: 0),
             list.Grid(row: 1, column: 0)
         );
@@ -65,8 +65,8 @@ internal sealed class ValueList : Component<ValueListProps>
             });
 
         var row = Grid(
-            ["2*", "*", "3*"],
-            ["28"],
+            [GridSize.Star(2), GridSize.Star(), GridSize.Star(3)],
+            [GridSize.Px(28)],
             HStack(6,
                 icon.VAlign(VerticalAlignment.Center),
                 TextBlock(value.DisplayName).VAlign(VerticalAlignment.Center)

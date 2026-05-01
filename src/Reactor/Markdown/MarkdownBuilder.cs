@@ -539,8 +539,8 @@ internal sealed class MarkdownBuilder
             return;
         }
 
-        var columns = Enumerable.Repeat("*", colCount).ToArray();
-        var rows2 = Enumerable.Repeat("Auto", rowCount).ToArray();
+        var columns = Enumerable.Repeat(Microsoft.UI.Reactor.GridSize.Star(), colCount).ToArray();
+        var rows2 = Enumerable.Repeat(Microsoft.UI.Reactor.GridSize.Auto, rowCount).ToArray();
         var cells = _tableAllCells.ToArray();
 
         var grid = Grid(columns, rows2, cells);

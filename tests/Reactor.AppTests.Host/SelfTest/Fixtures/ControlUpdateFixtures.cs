@@ -478,10 +478,10 @@ internal static class ControlUpdateFixtures
                 return VStack(
                     Button("UpdGrid", () => set(1)),
                     phase == 0
-                        ? Grid(["*", "*"], ["*"],
+                        ? Grid([GridSize.Star(), GridSize.Star()], [GridSize.Star()],
                             TextBlock("G_A").Grid(row: 0, column: 0),
                             TextBlock("G_B").Grid(row: 0, column: 1))
-                        : Grid(["*", "*", "*"], ["*"],
+                        : Grid([GridSize.Star(), GridSize.Star(), GridSize.Star()], [GridSize.Star()],
                             TextBlock("G_A").Grid(row: 0, column: 0),
                             TextBlock("G_B").Grid(row: 0, column: 1),
                             TextBlock("G_C").Grid(row: 0, column: 2))

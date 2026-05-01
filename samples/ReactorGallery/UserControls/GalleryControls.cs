@@ -43,7 +43,7 @@ public static class GalleryControls
             c => c.Tag,
             (c, _) => Border(
                 Grid(
-                    columns: ["Auto", "*"], rows: ["Auto", "*"],
+                    columns: [GridSize.Auto, GridSize.Star()], rows: [GridSize.Auto, GridSize.Star()],
 
                     Image(c.ImagePath)
                         .Width(32).Height(32)

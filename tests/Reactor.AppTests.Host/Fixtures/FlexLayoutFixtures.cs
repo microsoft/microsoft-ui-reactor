@@ -73,7 +73,7 @@ internal static class FlexLayoutFixtures
 
     // 4. Flex inside Grid star cells
     internal static Element FlexInsideGrid(RenderContext ctx) =>
-        Grid(["*", "2*"], ["*", "*"],
+        Grid([GridSize.Star(), GridSize.Star(2)], [GridSize.Star(), GridSize.Star()],
             // Top-left: FlexRow in 1* cell
             FlexRow(
                 TextBlock("A1").Flex(grow: 1).AutomationId("A1").Background("LightCoral"),
@@ -223,7 +223,7 @@ internal static class FlexLayoutFixtures
         FlexColumn(
             TextBlock("Header").Height(50).AutomationId("GIFHeader").Background("LightCoral"),
 
-            Grid(["*", "2*"], ["*"],
+            Grid([GridSize.Star(), GridSize.Star(2)], [GridSize.Star()],
                 TextBlock("GridLeft").Grid(row: 0, column: 0).AutomationId("GridLeft").Background("LightGreen"),
                 TextBlock("GridRight").Grid(row: 0, column: 1).AutomationId("GridRight").Background("LightBlue")
             ).Flex(grow: 1).AutomationId("GridInFlex"),
@@ -253,7 +253,7 @@ internal static class FlexLayoutFixtures
 
     // 17. Layout cycle prevention: FlexPanel inside Grid star column
     internal static Element FlexLayoutCycleInGridStar(RenderContext ctx) =>
-        Grid(["200", "*"], ["*"],
+        Grid([GridSize.Px(200), GridSize.Star()], [GridSize.Star()],
             // Fixed sidebar
             TextBlock("Sidebar").Grid(row: 0, column: 0).AutomationId("CycleSidebar").Background("LightCoral"),
 
@@ -299,7 +299,7 @@ internal static class FlexLayoutFixtures
             "should display in fewer lines at wider widths. The layout cycle " +
             "bug would cause a crash when text is re-measured during arrange.";
 
-        return Grid(["*", "2*"], ["Auto", "*"],
+        return Grid([GridSize.Star(), GridSize.Star(2)], [GridSize.Auto, GridSize.Star()],
             // Row 0: Auto-height row with FlexPanel containing wrapping text
             FlexRow(
                 TextBlock("Label").Width(80).AutomationId("AutoLabel").Background("LightCoral"),
@@ -317,7 +317,7 @@ internal static class FlexLayoutFixtures
     // 20. Layout cycle prevention: size mismatch between Measure and Arrange
     internal static Element FlexLayoutCycleSizeMismatch(RenderContext ctx) =>
         // Outer Grid constrains the viewport
-        Grid(["*"], ["60", "*", "60"],
+        Grid([GridSize.Star()], [GridSize.Px(60), GridSize.Star(), GridSize.Px(60)],
             // Header
             TextBlock("Header").Grid(row: 0, column: 0).AutomationId("MismatchHeader").Background("LightCoral"),
 

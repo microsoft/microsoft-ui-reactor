@@ -27,7 +27,7 @@ internal static class LayoutFixtures
     }
 
     internal static Element GridRowColumn(RenderContext ctx) =>
-        Grid(["200", "*"], ["Auto", "*"],
+        Grid([GridSize.Px(200), GridSize.Star()], [GridSize.Auto, GridSize.Star()],
             TextBlock("TopLeft").Grid(row: 0, column: 0).AutomationId("TopLeft"),
             TextBlock("TopRight").Grid(row: 0, column: 1).AutomationId("TopRight"),
             TextBlock("BottomLeft").Grid(row: 1, column: 0).AutomationId("BottomLeft"),
@@ -37,7 +37,7 @@ internal static class LayoutFixtures
     internal static Element GridVsFlexStarSizing(RenderContext ctx) =>
         VStack(8,
             // Grid with 1* / 2* / 1* star columns
-            Grid(["*", "2*", "*"], ["*"],
+            Grid([GridSize.Star(), GridSize.Star(2), GridSize.Star()], [GridSize.Star()],
                 TextBlock("G1").Grid(row: 0, column: 0).AutomationId("G1").Background("LightCoral"),
                 TextBlock("G2").Grid(row: 0, column: 1).AutomationId("G2").Background("LightGreen"),
                 TextBlock("G3").Grid(row: 0, column: 2).AutomationId("G3").Background("LightBlue")

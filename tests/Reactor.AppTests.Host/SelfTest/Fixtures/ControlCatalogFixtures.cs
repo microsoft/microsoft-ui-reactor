@@ -122,7 +122,7 @@ internal static class ControlCatalogFixtures
             // ── Layout containers ──
             Add("VStack", VStack(TextBlock("CatalogVS")), "CatalogVS");
             Add("HStack", HStack(TextBlock("CatalogHS")), "CatalogHS");
-            Add("Grid", Grid(["*"], ["*"], TextBlock("CatalogGrid").Grid(row: 0, column: 0)), "CatalogGrid");
+            Add("Grid", Grid([GridSize.Star()], [GridSize.Star()], TextBlock("CatalogGrid").Grid(row: 0, column: 0)), "CatalogGrid");
             Add("FlexRow", FlexRow(TextBlock("CatalogFlex")), "CatalogFlex");
             Add("FlexColumn", FlexColumn(TextBlock("CatalogFlexC")), "CatalogFlexC");
             Add("Border", Border(TextBlock("CatalogBorder")), "CatalogBorder");
@@ -151,7 +151,11 @@ internal static class ControlCatalogFixtures
             Add("Ellipse", new EllipseElement() { Modifiers = new ElementModifiers { Width = 20, Height = 20 } }, null);
 
             // ── Components ──
+            // Intentionally exercises the legacy Func() factory so the catalog
+            // still covers it until the obsolete overload is removed.
+#pragma warning disable CS0618
             Add("FuncComponent", Func(ctx => TextBlock("CatalogFunc")), "CatalogFunc");
+#pragma warning restore CS0618
 
             return items;
         }

@@ -397,7 +397,7 @@ class ShowcaseApp : Component
     public override Element Render()
     {
         return Grid(
-            ["*"], ["Auto", "*"],
+            [GridSize.Star()], [GridSize.Auto, GridSize.Star()],
 
             TitleBar("Validation Showcase")
                 .Subtitle("Reactor Forms & Data Entry")
@@ -426,7 +426,9 @@ class ShowcaseApp : Component
                     Empty().Height(24)
                 )
             ).Grid(row: 1)
-        );
+        )
+        // Spec 033 §6 — Mica window backdrop.
+        .Backdrop(BackdropKind.Mica);
     }
 
     static Element Separator() =>

@@ -43,7 +43,7 @@ public sealed class CurveExplorerSample : GallerySample
 
     public override Element Render()
     {
-        return Func(ctx =>
+        return RenderEachTime(ctx =>
         {
             var (curveIdx, setCurveIdx) = ctx.UseState(0);
             var (tension, setTension) = ctx.UseState(0.5);

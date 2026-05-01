@@ -15,7 +15,7 @@ class TestReactorComponent : Component
         var (count, setCount) = UseState(0);
         var (text, setText) = UseState("");
 
-        return Grid(["*"], ["*"],
+        return Grid([GridSize.Star()], [GridSize.Star()],
             VStack(
                 TextBlock("Reactor Island Content")
                     .FontSize(16)

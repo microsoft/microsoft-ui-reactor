@@ -65,7 +65,8 @@ public sealed class PendingComponent : Component<PendingProps>
         // Always mount both. Visibility toggles between fallback and child so the child
         // subtree's hooks keep running, even while the fallback is visible.
         return Microsoft.UI.Reactor.Factories.Grid(
-            columns: new[] { "*" }, rows: new[] { "*" },
+            columns: new[] { Microsoft.UI.Reactor.GridSize.Star() },
+            rows: new[] { Microsoft.UI.Reactor.GridSize.Star() },
             Props.Child.Visible(!showFallback),
             Props.Fallback.Visible(showFallback))
             .Provide(AppContexts.PendingScope, (PendingScope?)scope);

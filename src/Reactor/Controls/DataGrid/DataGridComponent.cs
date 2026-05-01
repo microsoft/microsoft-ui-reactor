@@ -315,7 +315,12 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
         for (int r = 0; r < gridRow; r++) rootRowDefs[r] = "Auto";
         rootRowDefs[gridRow] = "*";
 
-        var gridEl = Grid(["*"], rootRowDefs, gridChildren.ToArray());
+        // DataGrid builds row-track strings dynamically via its existing
+        // string-based path; the typed migration is tracked as a follow-up to
+        // spec 033 §1 because it requires reshaping rootRowDefs all the way up.
+#pragma warning disable CS0618 // Use string-form Grid overload (deprecated, scheduled for removal)
+        var gridEl = Grid(new[] { "*" }, rootRowDefs, gridChildren.ToArray());
+#pragma warning restore CS0618
 
         // Commit active edit when focus leaves the DataGrid entirely.
         // Attached once at mount via Setters; the handler reads current state from the ref.
@@ -687,7 +692,9 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
         // Use a WinUI Grid with pixel column definitions instead of FlexRow.
         // Grid with pixel columns avoids Yoga layout entirely — the dominant
         // cost identified by profiling.
+#pragma warning disable CS0618 // dynamic gridColDefs string[] — typed migration tracked
         Element row = Grid(gridColDefs, rowDef, cells);
+#pragma warning restore CS0618
         row = row.Background(rowBg);
 
         // Click handler — always present (maintains element tree structure).
@@ -964,7 +971,9 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
                     .Grid(row: 0, column: colCount + cellOffset));
         }
 
+#pragma warning disable CS0618 // dynamic gridColDefs string[] — typed migration tracked
         return Grid(gridColDefs, rowDef, headerCells.ToArray());
+#pragma warning restore CS0618
     }
 
     // Cached GridDefinition for the resize grip overlay. Using a static instance

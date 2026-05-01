@@ -66,7 +66,7 @@ class ChartGallery : Component
         string[] tabs = ["Line", "Bar", "Area", "Pie", "Tree", "Force"];
 
         return Grid(
-            columns: ["*"], rows: ["Auto", "*"],
+            columns: [GridSize.Star()], rows: [GridSize.Auto, GridSize.Star()],
             (TitleBar("Reactor Chart Gallery") with
             {
                 Subtitle = $"D3-powered live charts · tick {tick}",
@@ -112,7 +112,9 @@ class ChartGallery : Component
                     }
                 ).Padding(16)
             )).Padding(0).Grid(row: 1)
-        );
+        )
+        // Spec 033 §6 — Mica window backdrop.
+        .Backdrop(BackdropKind.Mica);
     }
 
     // ── Data generators — pure functions of tick ─────────────────────────

@@ -328,7 +328,7 @@ public class ElementTests
     public void Grid_Creates_With_Definition_And_Children()
     {
         var el = Grid(
-            ["*", "Auto"], ["*"],
+            [GridSize.Star(), GridSize.Auto], [GridSize.Star()],
             TextBlock("A").Grid(row: 0, column: 0),
             TextBlock("B").Grid(row: 0, column: 1)
         );

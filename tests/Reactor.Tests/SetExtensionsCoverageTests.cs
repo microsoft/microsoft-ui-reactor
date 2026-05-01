@@ -168,7 +168,7 @@ public class SetExtensionsCoverageTests
     [Fact]
     public void Set_Grid_Appends_Setter()
     {
-        var el = Grid(new[] { "auto" }, new[] { "*" }, TextBlock("a"))
+        var el = Grid(new[] { GridSize.Auto }, new[] { GridSize.Star() }, TextBlock("a"))
             .Set(g => g.RowSpacing = 4);
         Assert.Single(el.Setters);
     }

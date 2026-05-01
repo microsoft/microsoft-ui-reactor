@@ -81,8 +81,8 @@ public class JournalApp : Component
                 .Grid(row: i / Columns, column: i % Columns);
         }
 
-        var colDefs = Enumerable.Repeat("*", Columns).ToArray();
-        var rowDefs = Enumerable.Repeat("*", Rows).ToArray();
+        var colDefs = Enumerable.Repeat(GridSize.Star(), Columns).ToArray();
+        var rowDefs = Enumerable.Repeat(GridSize.Star(), Rows).ToArray();
 
         return VStack(
             HStack(

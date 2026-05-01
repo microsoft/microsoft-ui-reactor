@@ -181,7 +181,7 @@ internal static class FlexLayoutFixtures
         {
             var host = H.CreateHost();
             host.Mount(ctx =>
-                Grid(["*", "2*"], ["*", "*"],
+                Grid([GridSize.Star(), GridSize.Star(2)], [GridSize.Star(), GridSize.Star()],
                     FlexRow(
                         TextBlock("A1").Flex(grow: 1).Background("LightCoral"),
                         TextBlock("A2").Flex(grow: 1).Background("LightBlue")
@@ -624,7 +624,7 @@ internal static class FlexLayoutFixtures
                 FlexColumn(
                     TextBlock("Header").Height(50).Background("LightCoral"),
 
-                    Grid(["*", "2*"], ["*"],
+                    Grid([GridSize.Star(), GridSize.Star(2)], [GridSize.Star()],
                         TextBlock("GridLeft").Grid(row: 0, column: 0).Background("LightGreen"),
                         TextBlock("GridRight").Grid(row: 0, column: 1).Background("LightBlue")
                     ).Flex(grow: 1),
@@ -741,7 +741,7 @@ internal static class FlexLayoutFixtures
         {
             var host = H.CreateHost();
             host.Mount(ctx =>
-                Grid(["200", "*"], ["*"],
+                Grid([GridSize.Px(200), GridSize.Star()], [GridSize.Star()],
                     TextBlock("Sidebar").Grid(row: 0, column: 0).Background("LightCoral"),
 
                     FlexRow(
@@ -837,7 +837,7 @@ internal static class FlexLayoutFixtures
 
             var host = H.CreateHost();
             host.Mount(ctx =>
-                Grid(["*", "2*"], ["Auto", "*"],
+                Grid([GridSize.Star(), GridSize.Star(2)], [GridSize.Auto, GridSize.Star()],
                     FlexRow(
                         TextBlock("Label").Width(80).Background("LightCoral"),
                         TextBlock(longText).Flex(grow: 1).Background("LightBlue")
@@ -877,7 +877,7 @@ internal static class FlexLayoutFixtures
         {
             var host = H.CreateHost();
             host.Mount(ctx =>
-                Grid(["*"], ["60", "*", "60"],
+                Grid([GridSize.Star()], [GridSize.Px(60), GridSize.Star(), GridSize.Px(60)],
                     TextBlock("Header").Grid(row: 0, column: 0).Background("LightCoral"),
 
                     ScrollView(

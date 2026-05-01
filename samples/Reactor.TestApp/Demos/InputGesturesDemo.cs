@@ -198,8 +198,8 @@ sealed class KanbanDragDropSample : Component
             "Kanban (typed drag & drop)",
             "Drag a card between columns. The source removes its copy only once DropCompleted confirms the Move.",
             Grid(
-                new[] { "*", "*" },
-                new[] { "Auto" },
+                new[] { GridSize.Star(), GridSize.Star() },
+                new[] { GridSize.Auto },
                 Border(RenderColumn("Todo", todo, setTodo))
                     .Background("#F7F7F7").CornerRadius(6).Padding(10).Margin(4)
                     .Grid(column: 0),

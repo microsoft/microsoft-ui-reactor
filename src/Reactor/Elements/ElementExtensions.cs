@@ -1413,6 +1413,21 @@ public static class ElementExtensions
     public static T Ref<T>(this T el, Microsoft.UI.Reactor.Input.ElementRef target) where T : Element =>
         Modify(el, new ElementModifiers { Ref = target });
 
+    /// <summary>
+    /// Strongly-typed overload of <see cref="Ref{T}(T, Microsoft.UI.Reactor.Input.ElementRef)"/>.
+    /// Accepts a typed <see cref="Microsoft.UI.Reactor.Input.ElementRef{TElement}"/> and forwards
+    /// to the untyped form via the implicit conversion.
+    /// </summary>
+    /// <remarks>
+    /// Spec 033 §3. Behaviorally identical to passing the inner untyped ref; the typed
+    /// overload exists so callers see the typed surface in IntelliSense and so the
+    /// reconciler's DEBUG mismatch-assert can fire on a wrong-type binding.
+    /// </remarks>
+    public static T Ref<T, TElement>(this T el, Microsoft.UI.Reactor.Input.ElementRef<TElement> target)
+        where T : Element
+        where TElement : Microsoft.UI.Xaml.FrameworkElement =>
+        Modify(el, new ElementModifiers { Ref = target });
+
     // ════════════════════════════════════════════════════════════════
     //  Accessibility — Tier 2/3 (lazy AccessibilityModifiers sub-record)
     // ════════════════════════════════════════════════════════════════

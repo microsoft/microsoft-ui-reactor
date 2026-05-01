@@ -23,8 +23,8 @@ class StockGridApp : Component
     public static CliOptions CliOpts { get; set; } = new();
 
     // Pre-compute column/row definition arrays once
-    private static readonly string[] Cols = Enumerable.Range(0, StockDataSource.Columns).Select(_ => "64").ToArray();
-    private static readonly string[] RowDefs = Enumerable.Range(0, StockDataSource.Rows).Select(_ => "18").ToArray();
+    private static readonly GridSize[] Cols = Enumerable.Range(0, StockDataSource.Columns).Select(_ => GridSize.Px(64)).ToArray();
+    private static readonly GridSize[] RowDefs = Enumerable.Range(0, StockDataSource.Rows).Select(_ => GridSize.Px(18)).ToArray();
 
     // Cache brushes to avoid creating 4,800 new SolidColorBrush COM objects per frame.
     // Lazy because SolidColorBrush (a DependencyObject) requires the WinUI thread to exist.

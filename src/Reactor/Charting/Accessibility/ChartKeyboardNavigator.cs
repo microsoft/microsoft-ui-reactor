@@ -252,7 +252,8 @@ internal static class ChartKeyboardNavigator
 
             // Overlay the focus ring using a layered Grid
             return Factories.Grid(
-                ["*"], ["*"],
+                new[] { Microsoft.UI.Reactor.GridSize.Star() },
+                new[] { Microsoft.UI.Reactor.GridSize.Star() },
                 wrappedChart,
                 focusOverlay.Opacity(1.0)
             );

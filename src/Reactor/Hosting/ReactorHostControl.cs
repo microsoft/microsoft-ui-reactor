@@ -63,6 +63,12 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private volatile bool _disposed;
     private Curve? _pendingAnimationCurve;
 
+    // Spec 033 §6 — backdrop applier in "windowless" mode. Embedded
+    // ReactorHostControl does not own its window, so the modifier no-ops with
+    // a single debug log. Constructed lazily so we don't pay any cost when no
+    // backdrop modifier is ever set.
+    private BackdropApplier? _backdropApplier;
+
     // ── Single shared overlay surface (see OverlayHostWiring) ──
     private OverlayHostWiring? _overlayWiring;
 
@@ -424,6 +430,16 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             _currentControl = newControl;
             _currentTree = newTree;
+
+            // Spec 033 §6 — Backdrop modifier on the root tree is a no-op for
+            // ReactorHostControl, which doesn't own its hosting Window. We
+            // still construct the applier (lazily, only on first encounter) so
+            // the no-op log fires exactly once per host instance.
+            if (newTree?.Modifiers?.Backdrop is { } backdropChoice)
+            {
+                _backdropApplier ??= new BackdropApplier(window: null);
+                _backdropApplier.Apply(backdropChoice);
+            }
 
             // Start any connected animations now that the new tree is in the visual tree
             _reconciler.FlushConnectedAnimations();

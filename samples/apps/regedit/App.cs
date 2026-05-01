@@ -795,8 +795,8 @@ class RegeditApp : Component
 
         // ── Layout ───────────────────────────────────────────────────
         return Grid(
-            ["*"],
-            ["Auto", "Auto", "*", "Auto"],
+            [GridSize.Star()],
+            [GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto],
             menuBar.Grid(row: 0, column: 0),
             addressBar.Grid(row: 1, column: 0),
             Component<SplitPanel, SplitPanelProps>(new SplitPanelProps(
@@ -819,7 +819,9 @@ class RegeditApp : Component
                 )
             )).Grid(row: 2, column: 0),
             statusBar.Grid(row: 3, column: 0)
-        );
+        )
+        // Spec 033 §6 — Mica window backdrop on a primary tool surface.
+        .Backdrop(BackdropKind.Mica);
     }
 
     /// <summary>

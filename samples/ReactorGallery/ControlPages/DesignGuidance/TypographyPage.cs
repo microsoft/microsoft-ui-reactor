@@ -68,7 +68,7 @@ class TypographyPage : Component
     static Element TypeRampRow(TypeRampEntry entry) =>
         Border(
             Grid(
-                columns: ["*", "220", "200"], rows: ["Auto"],
+                columns: [GridSize.Star(), GridSize.Px(220), GridSize.Px(200)], rows: [GridSize.Auto],
 
                 // Live preview
                 TextBlock(entry.ExampleText)

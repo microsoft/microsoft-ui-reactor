@@ -422,7 +422,7 @@ public class PanelChildReconciliationTests
     [Fact]
     public void Grid_DSL_Filters_Null_Children()
     {
-        var el = Grid(["*", "*"], ["*"], TextBlock("A"), null, TextBlock("B"));
+        var el = Grid([GridSize.Star(), GridSize.Star()], [GridSize.Star()], TextBlock("A"), null, TextBlock("B"));
         Assert.Equal(2, el.Children.Length);
     }
 
@@ -499,8 +499,8 @@ public class PanelChildReconciliationTests
     public void CanUpdate_Grid_Elements_Same_Type()
     {
         var reconciler = new Reconciler();
-        var a = Grid(["*"], ["*"], TextBlock("A"));
-        var b = Grid(["*", "*"], ["*"], TextBlock("B"));
+        var a = Grid([GridSize.Star()], [GridSize.Star()], TextBlock("A"));
+        var b = Grid([GridSize.Star(), GridSize.Star()], [GridSize.Star()], TextBlock("B"));
         Assert.True(reconciler.CanUpdate(a, b));
     }
 
@@ -533,7 +533,7 @@ public class PanelChildReconciliationTests
         Assert.False(reconciler.CanUpdate(Factories.Flex(TextBlock("A")), WrapGrid(TextBlock("A"))));
         Assert.False(reconciler.CanUpdate(WrapGrid(TextBlock("A")), Canvas(TextBlock("A"))));
         Assert.False(reconciler.CanUpdate(
-            Grid(["*"], ["*"], TextBlock("A")),
+            Grid([GridSize.Star()], [GridSize.Star()], TextBlock("A")),
             VStack(TextBlock("A"))));
     }
 
@@ -685,7 +685,7 @@ public class PanelChildReconciliationTests
     [Fact]
     public void Grid_Empty_Children_Is_Valid()
     {
-        var el = Grid(["*"], ["*"]);
+        var el = Grid([GridSize.Star()], [GridSize.Star()]);
         Assert.Empty(el.Children);
     }
 

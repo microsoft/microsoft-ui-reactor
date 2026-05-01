@@ -80,7 +80,7 @@ public sealed class AnimatedDonutSample : GallerySample
 
     public override Element Render()
     {
-        return Func(ctx =>
+        return RenderEachTime(ctx =>
         {
             double cx = W / 2, cy = H / 2;
 

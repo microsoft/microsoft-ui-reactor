@@ -244,7 +244,7 @@ internal static class DslExtensionFixtures
         {
             var host = H.CreateHost();
             host.Mount(ctx => VStack(
-                Grid(["*", "*"], ["*", "*"],
+                Grid([GridSize.Star(), GridSize.Star()], [GridSize.Star(), GridSize.Star()],
                     TextBlock("TL").Grid(row: 0, column: 0),
                     TextBlock("TR").Grid(row: 0, column: 1),
                     TextBlock("BL").Grid(row: 1, column: 0),
@@ -343,7 +343,7 @@ internal static class DslExtensionFixtures
                 TextBlock("TransRotation").RotationTransition(),
                 TextBlock("TransScale").ScaleTransition(),
                 TextBlock("TransTranslation").TranslationTransition(),
-                Grid([], []).BackgroundTransition(TimeSpan.FromMilliseconds(50)),
+                Grid(global::System.Array.Empty<Microsoft.UI.Reactor.GridSize>(), global::System.Array.Empty<Microsoft.UI.Reactor.GridSize>()).BackgroundTransition(TimeSpan.FromMilliseconds(50)),
                 VStack().BackgroundTransition(),
                 TextBlock("ThemeTrans").WithTransitions(
                     new Microsoft.UI.Xaml.Media.Animation.ContentThemeTransition()),

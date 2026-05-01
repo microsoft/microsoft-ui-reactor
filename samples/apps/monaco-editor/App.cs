@@ -36,7 +36,9 @@ public static class Program
 #endif
         configure: host =>
     {
-        host.Window.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+        // Spec 033 §6 — backdrop is declared on the root element via
+        // .Backdrop(BackdropKind.Mica) below; the host applies it after each
+        // reconcile pass. No imperative window-mutation needed here.
         // Register the custom MonacoEditorElement so the reconciler knows how to
         // mount/update/unmount it. Mirrors the pattern used by XamlInterop.Register.
         MonacoEditorRegistration.Register(host.Reconciler);
@@ -186,7 +188,9 @@ class EditorApp : Component
             : isDirty ? "Untitled *" : "Untitled";
 
         bool showPreview = language == "markdown";
-        string[] columns = showPreview ? ["*", "Auto", "*"] : ["*"];
+        GridSize[] columns = showPreview
+            ? [GridSize.Star(), GridSize.Auto, GridSize.Star()]
+            : [GridSize.Star()];
 
         var titleBar = (TitleBar("Monaco Editor") with
         {
@@ -242,9 +246,9 @@ class EditorApp : Component
         if (!showPreview)
         {
             return CommandHost([newCmd, openCmd, saveCmd, saveAsCmd],
-                Grid(columns, ["Auto", "Auto", "*", "Auto"],
+                Grid(columns, [GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto],
                     titleBar, toolbar, editor, statusBar
-                ));
+                )).Backdrop(BackdropKind.Mica);
         }
 
         var previewPane = ScrollView(
@@ -258,7 +262,7 @@ class EditorApp : Component
                 VStack(toolbar).Flex(shrink:0),
                 FlexRow(editor.Flex(grow:1, basis:0), previewPane.Flex(grow: 1, basis:0)).Flex(grow:1, basis:0),
                 VStack(statusBar).Flex(shrink:0)
-            ));
+            )).Backdrop(BackdropKind.Mica);
     }
 
     static void InitPicker(object picker)

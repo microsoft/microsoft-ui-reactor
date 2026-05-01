@@ -351,7 +351,30 @@ public sealed class RenderContext
     /// On first mount, uses cached value if available, otherwise uses initialValue.
     /// Value is saved to cache on unmount.
     /// </summary>
+    /// <remarks>
+    /// Spec 033 §2. The cache is currently process-wide
+    /// (<see cref="ApplicationPersistedScope.Default"/>) and bounded by an LRU
+    /// policy. The two-arg form will trigger an analyzer warning in a follow-up
+    /// release; new code should use the three-arg overload to make the
+    /// intended scope explicit.
+    /// </remarks>
     public (T Value, Action<T> Set) UsePersisted<T>(string key, T initialValue)
+        => UsePersisted(key, initialValue, PersistedScope.Application);
+
+    /// <summary>
+    /// Persisted-state hook with explicit scope (spec 033 §2). Use
+    /// <see cref="PersistedScope.Window"/> for state that should be bounded by
+    /// the host's lifetime; <see cref="PersistedScope.Application"/> for
+    /// process-wide state.
+    /// </summary>
+    /// <remarks>
+    /// In this release, both scopes resolve to
+    /// <see cref="ApplicationPersistedScope.Default"/>. The
+    /// <see cref="WindowPersistedScope"/> infrastructure is in place; per-host
+    /// resolution will be wired through <c>ReactorHost</c> in a follow-up
+    /// without a public-API change.
+    /// </remarks>
+    public (T Value, Action<T> Set) UsePersisted<T>(string key, T initialValue, PersistedScope scope)
     {
         if (_hookIndex >= _hooks.Count)
         {

@@ -46,7 +46,7 @@ public sealed class DonutMixerSample : GallerySample
 
     public override Element Render()
     {
-        return Func(ctx =>
+        return RenderEachTime(ctx =>
         {
             var (values, setValues) = ctx.UseState(Defaults.ToArray());
             var (innerR, setInnerR) = ctx.UseState(70.0);

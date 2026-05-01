@@ -114,8 +114,8 @@ internal sealed class SplitPanel : Component<SplitPanelProps>
             });
 
         return Grid(
-            [$"{widthRef.Current}", "Auto", "*"],
-            ["*"],
+            [GridSize.Px(widthRef.Current), GridSize.Auto, GridSize.Star()],
+            [GridSize.Star()],
             Props.Left.Grid(row: 0, column: 0),
             splitter.Grid(row: 0, column: 1),
             Props.Right.Grid(row: 0, column: 2)

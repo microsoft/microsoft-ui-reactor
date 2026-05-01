@@ -2,7 +2,24 @@
 
 ## Status
 
-**Draft** — 2026-05-01.
+**Implemented (in part)** as of 2026-05-01. See
+`docs/specs/tasks/033-winui-xaml-reviewer-feedback-implementation.md` for the
+phase-by-phase landing log. The seven items §1–§7 each ship the core
+behaviorial change in this round; three pieces are deliberately deferred to
+a follow-up:
+
+1. The three custom Roslyn analyzers (`REACTOR_GRID_001`, `REACTOR_FUNC_001`,
+   `REACTOR_PERSIST_001`) and their code-fixers. The `[Obsolete]` attributes
+   already produce the deprecation diagnostic at every call site; the
+   analyzers' value-add is the auto-fix.
+2. The host-side wiring of `WindowPersistedScope` into `RenderContext` (§7
+   item §7.5). The interface, classes, capacity, lifecycle, memory-pressure
+   handler, and `UsePersisted(scope)` overload are all in place; the
+   per-host scope resolution at hook-entry time is a focused follow-up that
+   touches `BeginRender` overloads.
+3. The `samples/InteropFirst` UI-driver tests under WinAppDriver — the
+   sample itself ships and builds; the test infrastructure is a separate
+   piece.
 
 Source: `C:\temp\reactor-winui-xaml-expert-review.md` (an external review by a
 WPF → WinUI3 veteran on first contact with the repo).

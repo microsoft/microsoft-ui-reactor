@@ -544,7 +544,7 @@ internal static class CoreCoverageFixtures2
 
                 // .Provide() pushes onto ContextScope, child reads it via UseContext
                 return VStack(
-                    Func(inner =>
+                    RenderEachTime(inner =>
                     {
                         var theme = inner.UseContext(ThemeContext);
                         return TextBlock($"Theme:{theme}");

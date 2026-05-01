@@ -150,7 +150,9 @@ class DemoApp : Component
             // itself only renders in devtools sessions, so in practice this
             // strip is dev-only. Retail cost is one bool check.
             debugUI ? DebugStrip(currentTab) : null
-        );
+        )
+        // Spec 033 §6 — Mica window backdrop on the demo shell.
+        .Backdrop(BackdropKind.Mica);
     }
 
     static Element DebugStrip(Tab currentTab) =>

@@ -44,8 +44,8 @@ internal sealed class FileListPane : Component<FileListPaneProps>
     {
         // Column header
         var header = Grid(
-            ["36", "2*", "*", "*", "*"],
-            ["32"],
+            [GridSize.Px(36), GridSize.Star(2), GridSize.Star(), GridSize.Star(), GridSize.Star()],
+            [GridSize.Px(32)],
             TextBlock("").Grid(row: 0, column: 0),
             TextBlock("Name").SemiBold().Grid(row: 0, column: 1),
             TextBlock("Date modified").SemiBold().Grid(row: 0, column: 2),
@@ -65,8 +65,8 @@ internal sealed class FileListPane : Component<FileListPaneProps>
         ) with { EstimatedItemSize = 32, Spacing = 0 };
 
         return Grid(
-            ["*"],
-            ["Auto", "*"],
+            [GridSize.Star()],
+            [GridSize.Auto, GridSize.Star()],
             header.Grid(row: 0, column: 0),
             list.Grid(row: 1, column: 0)
         );
@@ -82,8 +82,8 @@ internal sealed class FileListPane : Component<FileListPaneProps>
             });
 
         return Grid(
-            ["36", "2*", "*", "*", "*"],
-            ["32"],
+            [GridSize.Px(36), GridSize.Star(2), GridSize.Star(), GridSize.Star(), GridSize.Star()],
+            [GridSize.Px(32)],
             icon.HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 0),
             TextBlock(file.Name).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 1),
             TextBlock(file.Modified.ToString("g")).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 2),

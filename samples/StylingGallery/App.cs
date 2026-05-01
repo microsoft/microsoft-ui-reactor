@@ -19,7 +19,7 @@ class StylingGalleryApp : Component
 {
     public override Element Render() =>
         Grid(
-            columns: ["*"], rows: ["Auto", "*"],
+            columns: [GridSize.Star()], rows: [GridSize.Auto, GridSize.Star()],
             (TitleBar("Styling Gallery") with
             {
                 Subtitle = "Theme tokens · RequestedTheme · Lightweight styling",
@@ -30,7 +30,10 @@ class StylingGalleryApp : Component
                 Tab("UseColorScheme",       ScrollView(Component<ColorSchemeDemo>())) with { IsClosable = false },
                 Tab("Lightweight Styling",  ScrollView(Component<LightweightStylingDemo>())) with { IsClosable = false },
                 Tab("Style Caching",        ScrollView(Component<StyleCachingDemo>())) with { IsClosable = false }
-            ).Grid(row: 1));
+            ).Grid(row: 1))
+        // Spec 033 §6 — Mica window backdrop. Tab pages set their own card
+        // backgrounds to float above the material.
+        .Backdrop(BackdropKind.Mica);
 }
 
 // ════════════════════════════════════════════════════════════════════════

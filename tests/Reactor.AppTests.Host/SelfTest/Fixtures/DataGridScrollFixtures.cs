@@ -205,8 +205,8 @@ internal static class DataGridScrollFixtures
         public override async Task RunAsync()
         {
             const int itemCount = 10_000;
-            var colDefs = new[] { "80", "160", "120", "160" };
-            var rowDef = new[] { "*" };
+            var colDefs = new[] { GridSize.Px(80), GridSize.Px(160), GridSize.Px(120), GridSize.Px(160) };
+            var rowDef = new[] { GridSize.Star() };
 
             // Scroll offsets to jump to (far enough apart that ItemsRepeater
             // must realize entirely new items at each position).

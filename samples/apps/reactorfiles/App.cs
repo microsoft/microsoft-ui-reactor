@@ -213,14 +213,16 @@ class ReactorFilesApp : Component
         // The outer VStack must not stretch — use a Grid so toolbar gets Auto height
         // and the content area fills remaining space.
         return Grid(
-            ["*"],
-            ["Auto", "*"],
+            [GridSize.Star()],
+            [GridSize.Auto, GridSize.Star()],
             toolbar.Grid(row: 0, column: 0),
             Component<SplitPanel, SplitPanelProps>(new SplitPanelProps(
                 Left: tree,
                 Right: fileList
             )).Grid(row: 1, column: 0)
-        );
+        )
+        // Spec 033 §6 — Mica window backdrop fits a file-manager surface.
+        .Backdrop(BackdropKind.Mica);
     }
 }
 

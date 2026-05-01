@@ -96,7 +96,7 @@ return Charts.WithAlternateView(chart, table);
 
         // Column definitions: Month + one per series
         var colDefs = Enumerable.Range(0, seriesNames.Length + 1)
-            .Select(_ => "*")
+            .Select(_ => GridSize.Star())
             .ToArray();
 
         // Build header row
@@ -144,7 +144,7 @@ return Charts.WithAlternateView(chart, table);
 
         // Row definitions: header + 12 data rows
         var rowDefs = Enumerable.Range(0, months.Length + 1)
-            .Select(_ => "Auto")
+            .Select(_ => GridSize.Auto)
             .ToArray();
 
         var allCells = headerCells.Concat(rows).ToArray();

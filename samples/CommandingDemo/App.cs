@@ -21,7 +21,7 @@ class CommandingDemoApp : Component
 {
     public override Element Render() =>
         Grid(
-            columns: ["*"], rows: ["Auto", "*"],
+            columns: [GridSize.Star()], rows: [GridSize.Auto, GridSize.Star()],
             (TitleBar("Commanding Demo") with
             {
                 Subtitle = "StandardCommand · UseCommand · CommandHost",
@@ -33,7 +33,9 @@ class CommandingDemoApp : Component
                 Tab("CommandHost",        Component<CommandHostDemo>())       with { IsClosable = false },
                 Tab("Per-Site Override",  Component<PerSiteOverrideDemo>())   with { IsClosable = false },
                 Tab("Context Sharing",    Component<ContextSharingDemo>())    with { IsClosable = false }
-            ).Grid(row: 1));
+            ).Grid(row: 1))
+        // Spec 033 §6 — Mica window backdrop.
+        .Backdrop(BackdropKind.Mica);
 }
 
 // ─── 1. Standard Commands Demo ────────────────────────────────────────────────
@@ -141,7 +143,11 @@ class StandardCommandsDemo : Component
     static Element PendingSelectionConsumer(
         (int Start, int Length)? pending,
         Action<(int Start, int Length)?> setPending) =>
-        Func(ctx =>
+        // Spec 033 §4 — migrated from `Func(...)` to `RenderEachTime(...)` to
+        // make the always-re-render intent explicit. The body has hooks and
+        // depends on the parent's `pending` argument, so we want to re-evaluate
+        // on every parent render.
+        RenderEachTime(ctx =>
         {
             ctx.UseEffect(() =>
             {

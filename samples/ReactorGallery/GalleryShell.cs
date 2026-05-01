@@ -113,7 +113,7 @@ class GalleryShell : Component
         }
 
         var shell = Grid(
-            columns: ["*"], rows: ["Auto", "*"],
+            columns: [GridSize.Star()], rows: [GridSize.Auto, GridSize.Star()],
 
             (TitleBar("Reactor WinUI Gallery") with
             {
@@ -182,8 +182,12 @@ class GalleryShell : Component
             .Grid(row: 1)
         );
 
+        // Spec 033 §6 — Mica window backdrop. The shell intentionally drops the
+        // opaque Theme.SolidBackground at the root so Mica is visible through
+        // the layout chrome; cards and surfaces inside still set their own
+        // backgrounds to float above the material.
         return Border(shell)
-            .Background(Theme.SolidBackground)
-            .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light);
+            .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light)
+            .Backdrop(BackdropKind.Mica);
     }
 }

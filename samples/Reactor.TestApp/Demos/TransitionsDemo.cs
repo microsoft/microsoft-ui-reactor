@@ -94,7 +94,7 @@ class TransitionsDemo : Component
             SubHeading("Background Transition"),
             TextBlock("Click to cycle colors — animates via an implicit BrushTransition on a Grid."),
             Button("Next Color", () => setBgIndex(bgIndex + 1)),
-            Grid(["*"], ["80"],
+            Grid([GridSize.Star()], [GridSize.Px(80)],
                 TextBlock(currentBg).SemiBold()
                     .HAlign(HorizontalAlignment.Center)
                     .VAlign(VerticalAlignment.Center)
@@ -142,7 +142,7 @@ class TransitionsDemo : Component
                     setComboBgIndex(comboBgIndex + 1);
                 })
             ),
-            Grid(["*"], ["80"],
+            Grid([GridSize.Star()], [GridSize.Px(80)],
                 TextBlock("All at once").SemiBold()
                     .HAlign(HorizontalAlignment.Center)
                     .VAlign(VerticalAlignment.Center)

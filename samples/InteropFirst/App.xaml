@@ -1,0 +1,23 @@
+<Application
+    x:Class="InteropFirst.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!--
+                Spec 033 §7 — shared resources read by both the XAML side and
+                the Reactor side. The Reactor host's MainWindow.xaml.cs resolves
+                these from Application.Current.Resources and forwards them as
+                props into the OrdersDataGrid component. The XAML side picks
+                them up via {StaticResource} when needed.
+            -->
+            <Color x:Key="AccentSampleColor">#0078D4</Color>
+            <SolidColorBrush x:Key="AccentSampleBrush" Color="{StaticResource AccentSampleColor}" />
+            <SolidColorBrush x:Key="SubtleSampleBrush" Color="#666666" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

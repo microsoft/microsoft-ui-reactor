@@ -80,6 +80,9 @@ class GalleryApp : Component
             }
         }, isDark);
 
+        // Spec 033 §6 — Mica window backdrop. Drop the opaque
+        // Theme.SolidBackground at the root so the material shows through;
+        // sample cards keep their own backgrounds inside.
         return Border(
             FlexColumn(
                 TitleBar("Reactor Charting Gallery")
@@ -102,8 +105,8 @@ class GalleryApp : Component
                 }
             )
         )
-        .Background(Theme.SolidBackground)
-        .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light);
+        .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light)
+        .Backdrop(BackdropKind.Mica);
     }
 
     static string SubtitleFor(GalleryRoute route) => route switch

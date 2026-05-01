@@ -277,7 +277,7 @@ Border(HStack(icon, message))
 
     static Element BrushRow(BrushEntry entry) =>
         Grid(
-            columns: ["Auto", "240", "Auto", "*"], rows: ["Auto"],
+            columns: [GridSize.Auto, GridSize.Px(240), GridSize.Auto, GridSize.Star()], rows: [GridSize.Auto],
 
             Border(VStack())
                 .Background(entry.Color)

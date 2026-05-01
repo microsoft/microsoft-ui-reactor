@@ -402,8 +402,8 @@ internal static class DataGridEditFixtures
                     : (Element)TextBlock("Alice").Padding(8, 4);
 
                 return Grid(
-                    new[] { "60", "140", "120", "100" },
-                    new[] { "*" },
+                    new[] { GridSize.Px(60), GridSize.Px(140), GridSize.Px(120), GridSize.Px(100) },
+                    new[] { GridSize.Star() },
                     TextBlock("1").Padding(8, 4).Grid(row: 0, column: 0),
                     nameCell.Grid(row: 0, column: 1),
                     TextBlock("Widgets").Padding(8, 4).Grid(row: 0, column: 2),

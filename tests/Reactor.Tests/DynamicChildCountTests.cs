@@ -30,8 +30,8 @@ public class DynamicChildCountTests
     public void CanUpdate_Grid_DifferentChildCounts_Returns_True()
     {
         var reconciler = new Reconciler();
-        var oldEl = Grid(["*"], ["*"], TextBlock("A"));
-        var newEl = Grid(["*", "*"], ["*"], TextBlock("A"), TextBlock("B"));
+        var oldEl = Grid([GridSize.Star()], [GridSize.Star()], TextBlock("A"));
+        var newEl = Grid([GridSize.Star(), GridSize.Star()], [GridSize.Star()], TextBlock("A"), TextBlock("B"));
         Assert.True(reconciler.CanUpdate(oldEl, newEl));
     }
 
@@ -39,8 +39,8 @@ public class DynamicChildCountTests
     public void CanUpdate_Grid_GrowFromEmpty_Returns_True()
     {
         var reconciler = new Reconciler();
-        var oldEl = Grid(["*"], ["*"]);
-        var newEl = Grid(["*", "*"], ["*"], TextBlock("A"), TextBlock("B"));
+        var oldEl = Grid([GridSize.Star()], [GridSize.Star()]);
+        var newEl = Grid([GridSize.Star(), GridSize.Star()], [GridSize.Star()], TextBlock("A"), TextBlock("B"));
         Assert.True(reconciler.CanUpdate(oldEl, newEl));
     }
 
@@ -48,8 +48,8 @@ public class DynamicChildCountTests
     public void CanUpdate_Grid_ShrinkToEmpty_Returns_True()
     {
         var reconciler = new Reconciler();
-        var oldEl = Grid(["*", "*"], ["*"], TextBlock("A"), TextBlock("B"));
-        var newEl = Grid(["*"], ["*"]);
+        var oldEl = Grid([GridSize.Star(), GridSize.Star()], [GridSize.Star()], TextBlock("A"), TextBlock("B"));
+        var newEl = Grid([GridSize.Star()], [GridSize.Star()]);
         Assert.True(reconciler.CanUpdate(oldEl, newEl));
     }
 
@@ -108,14 +108,14 @@ public class DynamicChildCountTests
     public void CanUpdate_TextToGrid_Returns_False()
     {
         var reconciler = new Reconciler();
-        Assert.False(reconciler.CanUpdate(TextBlock("A"), Grid(["*"], ["*"], TextBlock("A"))));
+        Assert.False(reconciler.CanUpdate(TextBlock("A"), Grid([GridSize.Star()], [GridSize.Star()], TextBlock("A"))));
     }
 
     [Fact]
     public void CanUpdate_GridToText_Returns_False()
     {
         var reconciler = new Reconciler();
-        Assert.False(reconciler.CanUpdate(Grid(["*"], ["*"], TextBlock("A")), TextBlock("A")));
+        Assert.False(reconciler.CanUpdate(Grid([GridSize.Star()], [GridSize.Star()], TextBlock("A")), TextBlock("A")));
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public class DynamicChildCountTests
     {
         var reconciler = new Reconciler();
         Assert.False(reconciler.CanUpdate(
-            Grid(["*"], ["*"], TextBlock("A")),
+            Grid([GridSize.Star()], [GridSize.Star()], TextBlock("A")),
             VStack(TextBlock("A"))));
     }
 
@@ -140,7 +140,7 @@ public class DynamicChildCountTests
         var reconciler = new Reconciler();
         Assert.False(reconciler.CanUpdate(
             Canvas(TextBlock("A")),
-            Grid(["*"], ["*"], TextBlock("A"))));
+            Grid([GridSize.Star()], [GridSize.Star()], TextBlock("A"))));
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -152,23 +152,23 @@ public class DynamicChildCountTests
     [Fact]
     public void Grid_DifferentChildCounts_Are_Not_Equal()
     {
-        var el1 = Grid(["*"], ["*"], TextBlock("A"));
-        var el2 = Grid(["*", "*"], ["*"], TextBlock("A"), TextBlock("B"));
+        var el1 = Grid([GridSize.Star()], [GridSize.Star()], TextBlock("A"));
+        var el2 = Grid([GridSize.Star(), GridSize.Star()], [GridSize.Star()], TextBlock("A"), TextBlock("B"));
         Assert.NotEqual(el1, el2);
     }
 
     [Fact]
     public void Grid_SameChildCount_DifferentContent_Are_Not_Equal()
     {
-        var el1 = Grid(["*", "*"], ["*"], TextBlock("A"), TextBlock("B"));
-        var el2 = Grid(["*", "*"], ["*"], TextBlock("A"), TextBlock("C"));
+        var el1 = Grid([GridSize.Star(), GridSize.Star()], [GridSize.Star()], TextBlock("A"), TextBlock("B"));
+        var el2 = Grid([GridSize.Star(), GridSize.Star()], [GridSize.Star()], TextBlock("A"), TextBlock("C"));
         Assert.NotEqual(el1, el2);
     }
 
     [Fact]
     public void Grid_Same_Reference_Is_Equal()
     {
-        var el = Grid(["*", "*"], ["*"], TextBlock("A"), TextBlock("B"));
+        var el = Grid([GridSize.Star(), GridSize.Star()], [GridSize.Star()], TextBlock("A"), TextBlock("B"));
         Assert.Equal(el, el);
     }
 

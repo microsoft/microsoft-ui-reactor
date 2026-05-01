@@ -46,6 +46,11 @@ public sealed class ReactorHost : IDisposable
     private volatile bool _needsRerender;   // only touched on UI thread
     private FrameworkElement? _themeListenerElement;
     private volatile bool _disposed;
+
+    // Spec 033 §6 — declarative SystemBackdrop modifier on the root tree.
+    // Owned for the host's lifetime; reset on dispose so a non-Reactor
+    // window-reuse path returns to a clean slate.
+    private readonly BackdropApplier _backdropApplier;
     private readonly global::Windows.Foundation.TypedEventHandler<object, WindowEventArgs> _closedHandler;
 
     // Accessibility: forced-colors and reduced-motion auto-propagation
@@ -131,6 +136,7 @@ public sealed class ReactorHost : IDisposable
         _logger = logger ?? NullLogger.Instance;
         _reconciler = new Reconciler(_logger);
         _window = window;
+        _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         // First-host-wins capture so off-thread rerenders can marshal onto
         // the UI thread without explicit plumbing. TASK-063.
@@ -536,6 +542,11 @@ public sealed class ReactorHost : IDisposable
             _currentControl = newControl;
             _currentTree = newTree;
 
+            // Spec 033 §6 — apply (or clear) the SystemBackdrop modifier carried on
+            // the root tree's modifiers. A no-op when the modifier hasn't changed
+            // since the last apply.
+            _backdropApplier.Apply(newTree?.Modifiers?.Backdrop);
+
             // Start any connected animations now that the new tree is in the visual tree
             _reconciler.FlushConnectedAnimations();
 
@@ -722,6 +733,11 @@ public sealed class ReactorHost : IDisposable
 
         _rootComponent?.Context.RunCleanups();
         _funcContext?.RunCleanups();
+
+        // Clear the SystemBackdrop so a window-reuse path returns to the WinUI
+        // default. Best effort — disposed hosts may already be torn down.
+        try { _backdropApplier.Reset(); } catch { /* best effort */ }
+
         _reconciler.Dispose();
         _rootComponent = null;
         _rootRenderFunc = null;

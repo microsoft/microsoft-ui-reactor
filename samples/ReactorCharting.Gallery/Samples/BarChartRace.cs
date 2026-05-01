@@ -78,7 +78,7 @@ public sealed class BarChartRaceSample : GallerySample
 
     public override Element Render()
     {
-        return Func(ctx =>
+        return RenderEachTime(ctx =>
         {
             var (yearIdx, setYearIdx) = ctx.UseState(0);
             var (animT, setAnimT) = ctx.UseState(0.0);

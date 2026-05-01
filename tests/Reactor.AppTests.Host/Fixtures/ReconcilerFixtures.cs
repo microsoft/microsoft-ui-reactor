@@ -94,7 +94,7 @@ internal static class ReconcilerFixtures
             var panes = Enumerable.Range(0, paneCount)
                 .Select(i => TextBlock($"Pane {i}").Grid(row: 0, column: i).AutomationId($"Pane{i}"))
                 .ToArray();
-            var cols = Enumerable.Range(0, Math.Max(1, paneCount)).Select(_ => "*").ToArray();
+            var cols = Enumerable.Range(0, Math.Max(1, paneCount)).Select(_ => GridSize.Star()).ToArray();
 
             return VStack(
                 HStack(
@@ -102,7 +102,7 @@ internal static class ReconcilerFixtures
                     Button("Collapse", () => setPaneCount(Math.Max(0, paneCount - 1))).AutomationId("CollapseBtn"),
                     TextBlock($"Panes: {paneCount}").AutomationId("PaneCount")
                 ),
-                Grid(cols, ["*"], panes).AutomationId("DockGrid")
+                Grid(cols, [GridSize.Star()], panes).AutomationId("DockGrid")
             );
         }
     }
@@ -123,7 +123,7 @@ internal static class ReconcilerFixtures
             var gridChildren = Enumerable.Range(0, count)
                 .Select(i => TextBlock($"G{i}").Grid(row: 0, column: i))
                 .ToArray();
-            var cols = Enumerable.Range(0, Math.Max(1, count)).Select(_ => "*").ToArray();
+            var cols = Enumerable.Range(0, Math.Max(1, count)).Select(_ => GridSize.Star()).ToArray();
 
             return VStack(
                 HStack(
@@ -134,7 +134,7 @@ internal static class ReconcilerFixtures
                 TextBlock("Stack:"),
                 VStack(children),
                 TextBlock("Grid:"),
-                Grid(cols, ["*"], gridChildren),
+                Grid(cols, [GridSize.Star()], gridChildren),
                 TextBlock("Flex:"),
                 FlexRow(children),
                 TextBlock("WrapGrid:"),

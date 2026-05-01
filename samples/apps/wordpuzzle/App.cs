@@ -194,15 +194,18 @@ class WordPuzzleApp : Component
 
                 // Game board
                 Grid(
-                    ["*", "*", "*", "*"],
-                    ["*", "*", "*", "*"],
+                    [GridSize.Star(), GridSize.Star(), GridSize.Star(), GridSize.Star()],
+                    [GridSize.Star(), GridSize.Star(), GridSize.Star(), GridSize.Star()],
                     BuildCells(tiles, showWinText, OnTileClicked)
                 )
                 .Width(440).Height(440)
                 .Set(g => { g.RowSpacing = 4; g.ColumnSpacing = 4; })
                 .HAlign(HorizontalAlignment.Center)
             )
-        );
+        )
+        // Spec 033 §6 — Mica window backdrop. The puzzle root has no opaque
+        // background so the material shows through.
+        .Backdrop(BackdropKind.Mica);
     }
 
     static Element[] BuildCells(int[] tiles, bool showWin, Action<int> onTileClicked)

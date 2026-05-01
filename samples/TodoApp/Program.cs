@@ -110,8 +110,8 @@ class TodoApp : Component
                 // HAlign(Center) does on narrow windows.
                 ScrollView(
                     Grid(
-                        columns: ["*", "Auto", "*"],
-                        rows: ["Auto"],
+                        columns: [GridSize.Star(), GridSize.Auto, GridSize.Star()],
+                        rows: [GridSize.Auto],
                         Card(state, filtered, addCmd, remaining, completed, dispatch)
                             .MinWidth(320)
                             .MaxWidth(560)
@@ -120,7 +120,8 @@ class TodoApp : Component
                     )
                 ).Flex(grow: 1)
             )
-            .Background(SolidBackground));
+            // Spec 033 §6 — declarative Mica backdrop on the host window.
+            .Backdrop(BackdropKind.Mica));
     }
 
     // ── Card: input row, list, footer — all inside a rounded surface ──

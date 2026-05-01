@@ -928,6 +928,15 @@ public record ElementModifiers
     /// </summary>
     public Microsoft.UI.Reactor.Input.ElementRef? Ref { get; init; }
 
+    // ── SystemBackdrop (spec 033 §6) ────────────────────────────────
+    /// <summary>
+    /// Declarative system backdrop (Mica / Acrylic) for the host window.
+    /// Read by <c>ReactorHost</c> from the root tree's modifiers and applied to
+    /// the owning <c>Window.SystemBackdrop</c>. Ignored by <c>ReactorHostControl</c>
+    /// that does not own its window.
+    /// </summary>
+    public BackdropChoice? Backdrop { get; init; }
+
     // ── Accessibility — Tier 2/3 (lazy sub-record, zero allocation unless used) ─
     public AccessibilityModifiers? Accessibility { get; init; }
 
@@ -1007,6 +1016,7 @@ public record ElementModifiers
             XYFocusKeyboardNavigation = other.XYFocusKeyboardNavigation ?? XYFocusKeyboardNavigation,
             OnAccessKeyDisplayRequested = other.OnAccessKeyDisplayRequested ?? OnAccessKeyDisplayRequested,
             Ref = other.Ref ?? Ref,
+            Backdrop = other.Backdrop ?? Backdrop,
             Accessibility = other.Accessibility is not null
                 ? (Accessibility is not null ? Accessibility.Merge(other.Accessibility) : other.Accessibility)
                 : Accessibility,
@@ -1152,7 +1162,29 @@ public record LayoutAnimationConfig
 //  Supporting data records (non-Element, used as structured params)
 // ════════════════════════════════════════════════════════════════════════
 
-public record GridDefinition(string[] Columns, string[] Rows);
+public record GridDefinition(string[] Columns, string[] Rows)
+{
+    /// <summary>
+    /// Construct a <see cref="GridDefinition"/> from the strongly-typed
+    /// <see cref="GridSize"/> form. Track strings are produced via
+    /// <see cref="GridSize.ToString"/> using <see cref="System.Globalization.CultureInfo.InvariantCulture"/>.
+    /// Spec 033 §1.
+    /// </summary>
+    /// <exception cref="System.ArgumentNullException">Thrown when either array is null.</exception>
+    public GridDefinition(GridSize[] columns, GridSize[] rows)
+        : this(ToStrings(columns), ToStrings(rows))
+    {
+    }
+
+    private static string[] ToStrings(GridSize[] sizes)
+    {
+        if (sizes is null) throw new global::System.ArgumentNullException(nameof(sizes));
+        var result = new string[sizes.Length];
+        for (int i = 0; i < sizes.Length; i++)
+            result[i] = sizes[i].ToString();
+        return result;
+    }
+}
 
 /// <summary>Attached property data for Grid children. Set via .Grid(row:, column:) extension.</summary>
 public record GridAttached(int Row = 0, int Column = 0, int RowSpan = 1, int ColumnSpan = 1);

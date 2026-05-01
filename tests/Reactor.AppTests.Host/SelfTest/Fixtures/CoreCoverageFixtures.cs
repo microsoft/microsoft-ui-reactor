@@ -1229,7 +1229,7 @@ internal static class CoreCoverageFixtures
                         .Background(Theme.CardBackground)
                         .WithBorder(Theme.CardStroke),
                     // Grid target
-                    Grid(["*"], ["*"], TextBlock("grid cell")).Background(Theme.SubtleFill),
+                    Grid([GridSize.Star()], [GridSize.Star()], TextBlock("grid cell")).Background(Theme.SubtleFill),
                     // StackPanel target
                     VStack(TextBlock("stack")).Background(Theme.LayerFill)
                 );

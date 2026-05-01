@@ -18,8 +18,8 @@ class GridPage : Component
 
                 SampleCard("Basic Grid",
                     Grid(
-                        columns: ["*", "*", "*"],
-                        rows: ["Auto", "Auto"],
+                        columns: [GridSize.Star(), GridSize.Star(), GridSize.Star()],
+                        rows: [GridSize.Auto, GridSize.Auto],
                         Border(TextBlock("1,1").Center().Padding(12)).Background("#E74C3C").Foreground("#FFFFFF").Grid(row: 0, column: 0),
                         Border(TextBlock("1,2").Center().Padding(12)).Background("#3498DB").Foreground("#FFFFFF").Grid(row: 0, column: 1),
                         Border(TextBlock("1,3").Center().Padding(12)).Background("#2ECC71").Foreground("#FFFFFF").Grid(row: 0, column: 2),
@@ -31,8 +31,8 @@ class GridPage : Component
 
                 SampleCard("Column & Row Spanning",
                     Grid(
-                        columns: ["*", "*", "*"],
-                        rows: ["60", "60", "60"],
+                        columns: [GridSize.Star(), GridSize.Star(), GridSize.Star()],
+                        rows: [GridSize.Px(60), GridSize.Px(60), GridSize.Px(60)],
                         Border(TextBlock("Header (spans 3)").Center().Foreground("#FFFFFF"))
                             .Background("#2C3E50").Grid(row: 0, column: 0, columnSpan: 3),
                         Border(TextBlock("Left").Center().Foreground("#FFFFFF"))
@@ -46,8 +46,8 @@ class GridPage : Component
 
                 SampleCard("Mixed Sizing",
                     Grid(
-                        columns: ["100", "*", "2*"],
-                        rows: ["Auto"],
+                        columns: [GridSize.Px(100), GridSize.Star(), GridSize.Star(2)],
+                        rows: [GridSize.Auto],
                         Border(TextBlock("100px").Center().Padding(8)).Background("#E67E22").Foreground("#FFFFFF").Grid(row: 0, column: 0),
                         Border(TextBlock("1*").Center().Padding(8)).Background("#27AE60").Foreground("#FFFFFF").Grid(row: 0, column: 1),
                         Border(TextBlock("2*").Center().Padding(8)).Background("#8E44AD").Foreground("#FFFFFF").Grid(row: 0, column: 2)

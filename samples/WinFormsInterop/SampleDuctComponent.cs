@@ -21,7 +21,7 @@ class SampleReactorComponent : Component
         // Grid stretches to fill the island and provides a themed background.
         // DesktopWindowXamlSource doesn't stretch content or provide a background
         // like a WinUI Window does — hosted components should fill their container.
-        return Grid(["*"], ["*"],
+        return Grid([GridSize.Star()], [GridSize.Star()],
           VStack(
             // ── Header ─────────────────────────────────────
             SubHeading("Reactor Component (via XAML Island)").Margin(0, 0, 0, 4),

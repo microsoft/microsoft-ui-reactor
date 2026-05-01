@@ -79,8 +79,8 @@ public class AllocationApp : Component
             return () => timer.Stop();
         });
 
-        var columns = Enumerable.Range(0, Cols).Select(_ => "1*").ToArray();
-        var rows = Enumerable.Range(0, Rows).Select(_ => "1*").ToArray();
+        var columns = Enumerable.Range(0, Cols).Select(_ => GridSize.Star()).ToArray();
+        var rows = Enumerable.Range(0, Rows).Select(_ => GridSize.Star()).ToArray();
 
         var elements = new Element[Total + 1];
         for (int i = 0; i < Total; i++)
