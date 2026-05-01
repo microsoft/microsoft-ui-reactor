@@ -274,9 +274,9 @@ Reactor ships three Roslyn analyzers that flag common styling mistakes:
 
 | Analyzer | Severity | What it flags |
 |----------|----------|--------------|
-| DUCT001 | Warning | Hard-coded color string where a `Theme.*` token exists |
-| DUCT002 | Info | `.Set()` brush assignment that has a lightweight styling key |
-| DUCT003 | Info | `.Set(fe => fe.RequestedTheme = ...)` — use `.RequestedTheme()` |
+| REACTOR_THEME_001 | Warning | Hard-coded color string where a `Theme.*` token exists |
+| REACTOR_THEME_002 | Info | `.Set()` brush assignment that has a lightweight styling key |
+| REACTOR_THEME_003 | Info | `.Set(fe => fe.RequestedTheme = ...)` — use `.RequestedTheme()` |
 
 Each analyzer includes a code fix that auto-converts to the preferred
 pattern. Enable them by referencing the `Reactor.Analyzers` project.

@@ -1,7 +1,7 @@
 # Reactor Styling Enhancements — Implementation Plan
 
 Execution plan for the 5 styling features defined in
-[`docs/spec/duct-styling-design.md`](../spec/duct-styling-design.md).
+[`docs/specs/015-styling-design.md`](../015-styling-design.md).
 
 Phases follow the spec's priority order (P0 items first). Each task is
 independently checkable so work can pause and resume at any point.
@@ -229,21 +229,21 @@ theme-reactive styling and the new fluent APIs.
 - [x] Set up NuGet packaging for the analyzer assembly
 - [x] Add Roslyn test infrastructure (`Microsoft.CodeAnalysis.CSharp.Analyzer.Testing`)
 
-### 5.2 — DUCT003: RequestedTheme Set → modifier
+### 5.2 — REACTOR_THEME_003: RequestedTheme Set → modifier
 - [x] Implement `RequestedThemeSetAnalyzer` (DiagnosticAnalyzer):
   - [x] Detect `.Set(fe => fe.RequestedTheme = ...)` or
         `.Set(b => b.RequestedTheme = ElementTheme.Dark)` patterns
-  - [x] Report `DUCT003` (Info severity): "RequestedTheme modifier available"
+  - [x] Report `REACTOR_THEME_003` (Info severity): "RequestedTheme modifier available"
 - [x] Implement `RequestedThemeSetCodeFix` (CodeFixProvider):
   - [x] Replace `.Set(fe => fe.RequestedTheme = ElementTheme.X)` with
         `.RequestedTheme(ElementTheme.X)`
 - [x] Unit tests: verify detection and fix for various `.Set()` patterns
 
-### 5.3 — DUCT001: hard-coded color → ThemeRef
+### 5.3 — REACTOR_THEME_001: hard-coded color → ThemeRef
 - [x] Implement `UseThemeRefAnalyzer` (DiagnosticAnalyzer):
   - [x] Detect `.Background("...")`, `.Foreground("...")`, `.WithBorder("...")`
         calls where a string literal is used and a ThemeRef overload exists
-  - [x] Report `DUCT001` (Warning severity): "Use ThemeRef instead of hard-coded
+  - [x] Report `REACTOR_THEME_001` (Warning severity): "Use ThemeRef instead of hard-coded
         color"
 - [x] Implement `UseThemeRefCodeFix` (CodeFixProvider):
   - [x] Map common colors to semantic tokens:
@@ -254,12 +254,12 @@ theme-reactive styling and the new fluent APIs.
 - [x] Unit tests: verify detection for known and unknown color strings
 - [x] Unit tests: verify code fix replaces string with correct `Theme.X` token
 
-### 5.4 — DUCT002: Set brush → lightweight styling
+### 5.4 — REACTOR_THEME_002: Set brush → lightweight styling
 - [x] Implement `UseLightweightStylingAnalyzer` (DiagnosticAnalyzer):
   - [x] Detect `.Set()` callbacks that assign a brush to a property that has
         a known lightweight styling key equivalent (e.g., setting
         `button.Background` when `ButtonBackground` resource key exists)
-  - [x] Report `DUCT002` (Info severity): "Consider lightweight styling for
+  - [x] Report `REACTOR_THEME_002` (Info severity): "Consider lightweight styling for
         visual-state overrides"
 - [x] Unit tests: verify detection for common control/property combos
 

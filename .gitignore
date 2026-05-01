@@ -202,6 +202,9 @@ health/
 
 selfhost/
 
+# Stress/perf publish logs
+tests/stress_perf/publish_log*.txt
+
 # Rust build artifacts
 src/Reactor/Native/differ/target/
 samples/apps/reactorfiles/Native/reactorfs/target/

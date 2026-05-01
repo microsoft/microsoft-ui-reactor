@@ -26,19 +26,19 @@
 
 .EXAMPLE
     # Full review — all agents, all batches
-    ./reviewer/run-review.ps1
+    ./tools/reviewer/run-review.ps1
 
     # Single agent
-    ./reviewer/run-review.ps1 -Agent safety
+    ./tools/reviewer/run-review.ps1 -Agent safety
 
     # Single batch
-    ./reviewer/run-review.ps1 -Batch safety-batch-1
+    ./tools/reviewer/run-review.ps1 -Batch safety-batch-1
 
     # Just consolidate existing reports
-    ./reviewer/run-review.ps1 -ConsolidateOnly
+    ./tools/reviewer/run-review.ps1 -ConsolidateOnly
 
     # Dry run to see what would happen
-    ./reviewer/run-review.ps1 -DryRun
+    ./tools/reviewer/run-review.ps1 -DryRun
 #>
 
 param(
@@ -530,5 +530,5 @@ Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Review individual reports in $ReportsDir"
 Write-Host "  2. Review consolidated fix-list: $FixListPath"
 Write-Host "  3. Manager: approve/decline findings in fix-list.md"
-Write-Host "  4. Run: ./reviewer/apply-fixes.ps1 to hand approved fixes to AI"
+Write-Host "  4. Run: ./tools/reviewer/apply-fixes.ps1 to hand approved fixes to AI"
 Write-Host ""

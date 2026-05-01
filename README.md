@@ -304,4 +304,4 @@ dotnet run --project samples/apps/wordpuzzle
 
 ## License
 
-Microsoft Internal
+[MIT](LICENSE)

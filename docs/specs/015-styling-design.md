@@ -976,18 +976,18 @@ analysis.
 
 | Rule ID | Severity | Title | Description |
 |---|---|---|---|
-| **DUCT001** | Warning | Use ThemeRef instead of hard-coded color | A hard-coded color string or `SolidColorBrush` is passed to a property that supports `ThemeRef`. Suggest the nearest semantic token. |
-| **DUCT002** | Info | Consider lightweight styling for visual-state overrides | A `.Set()` callback assigns a brush to a property that has a lightweight styling key equivalent. |
-| **DUCT003** | Info | RequestedTheme modifier available | A `.Set(fe => fe.RequestedTheme = ...)` call could use the fluent `.RequestedTheme()` modifier. |
+| **REACTOR_THEME_001** | Warning | Use ThemeRef instead of hard-coded color | A hard-coded color string or `SolidColorBrush` is passed to a property that supports `ThemeRef`. Suggest the nearest semantic token. |
+| **REACTOR_THEME_002** | Info | Consider lightweight styling for visual-state overrides | A `.Set()` callback assigns a brush to a property that has a lightweight styling key equivalent. |
+| **REACTOR_THEME_003** | Info | RequestedTheme modifier available | A `.Set(fe => fe.RequestedTheme = ...)` call could use the fluent `.RequestedTheme()` modifier. |
 
-#### DUCT001 Implementation Sketch
+#### REACTOR_THEME_001 Implementation Sketch
 
 ```csharp
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public class UseThemeRefAnalyzer : DiagnosticAnalyzer
 {
     private static readonly DiagnosticDescriptor Rule = new(
-        "DUCT001",
+        "REACTOR_THEME_001",
         "Use ThemeRef instead of hard-coded color",
         "'{0}' accepts a ThemeRef — consider Theme.{1} instead of \"{2}\"",
         "Reactor.Styling",
@@ -1008,7 +1008,7 @@ public class UseThemeRefAnalyzer : DiagnosticAnalyzer
 }
 ```
 
-#### DUCT001 Code Fix
+#### REACTOR_THEME_001 Code Fix
 
 ```csharp
 [ExportCodeFixProvider(LanguageNames.CSharp)]
@@ -1023,10 +1023,10 @@ public class UseThemeRefCodeFix : CodeFixProvider
 }
 ```
 
-#### DUCT003 Code Fix
+#### REACTOR_THEME_003 Code Fix
 
 ```csharp
-// Before (detected by DUCT003):
+// Before (detected by REACTOR_THEME_003):
 VStack(children).Set(b => b.RequestedTheme = ElementTheme.Dark)
 
 // After (auto-fixed):
@@ -1048,8 +1048,8 @@ VStack(children).RequestedTheme(ElementTheme.Dark)
 | Risk | Mitigation |
 |---|---|
 | Ordering between RequestedTheme and ThemeBindings | Apply RequestedTheme before ApplyThemeBindings in reconciler |
-| Analyzer false positives | DUCT001 only triggers on methods with ThemeRef overloads; DUCT002/003 are Info severity |
-| Analyzer development effort | DUCT003 (Set → modifier) is trivial; DUCT001 (suggest tokens) can start simple and grow |
+| Analyzer false positives | REACTOR_THEME_001 only triggers on methods with ThemeRef overloads; REACTOR_THEME_002/003 are Info severity |
+| Analyzer development effort | REACTOR_THEME_003 (Set → modifier) is trivial; REACTOR_THEME_001 (suggest tokens) can start simple and grow |
 | Analyzer distribution | Ship as a NuGet analyzer package referenced by the Reactor project template |
 
 ---
@@ -1114,9 +1114,9 @@ VStack(children).RequestedTheme(ElementTheme.Dark)
 **Effort:** ~8 hours. Separate analyzer project.
 
 1. Create `Reactor.Analyzers` project (Roslyn analyzer + code fix)
-2. Implement DUCT003 (`.Set(fe.RequestedTheme)` → `.RequestedTheme()`)
-3. Implement DUCT001 (hard-coded color → ThemeRef suggestion) with common mappings
-4. Implement DUCT002 (`.Set()` brush → lightweight styling suggestion)
+2. Implement REACTOR_THEME_003 (`.Set(fe.RequestedTheme)` → `.RequestedTheme()`)
+3. Implement REACTOR_THEME_001 (hard-coded color → ThemeRef suggestion) with common mappings
+4. Implement REACTOR_THEME_002 (`.Set()` brush → lightweight styling suggestion)
 5. Package as NuGet analyzer
 
 **Validation:** Unit tests per analyzer rule with Roslyn test infrastructure.

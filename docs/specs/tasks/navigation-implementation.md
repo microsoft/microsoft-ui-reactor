@@ -1,6 +1,6 @@
 # Reactor Navigation System — Implementation Tasks
 
-Reference: [docs/spec/duct-navigation-design.md](../spec/duct-navigation-design.md)
+Reference: [docs/specs/011-navigation-design.md](../011-navigation-design.md)
 
 ### Test classification
 
@@ -475,7 +475,7 @@ Scope: Update documentation and AI skills guidance.
 - [x] Anti-patterns: don't call `nav.Navigate()` during render (use effects or event handlers)
 
 ### 10.2 Update existing documentation
-- [x] Update `docs/spec/duct-navigation-design.md` status from "Not started" to reflect progress
+- [x] Update `docs/specs/011-navigation-design.md` status from "Not started" to reflect progress
 - [x] Add migration guide: how to convert `UseState` page-switching to `UseNavigation`
 - [x] Document the `NavigationHost` DSL signature and all `with { }` options
 

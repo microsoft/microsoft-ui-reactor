@@ -677,7 +677,7 @@ Application.Current.Resources.MergedDictionaries.Add(themeDict);
 // no validation, and must run before any UI renders
 ```
 
-This defeats Reactor's declarative model entirely. The theming design spec (`docs/spec/duct-theming-design.md`) proposed a `ReactorThemeResources` class for declarative custom theme definition, but it was never implemented. Without it:
+This defeats Reactor's declarative model entirely. The theming design spec (`docs/specs/001-theming-design.md`) proposed a `ReactorThemeResources` class for declarative custom theme definition, but it was never implemented. Without it:
 - No branded colors that adapt to Light/Dark (must hard-code or use the verbose workaround above)
 - No app-specific semantic tokens (e.g., "PricingPositive" = green in light, lighter green in dark)
 - No component-level theme scoping (a component can't define theme tokens for its subtree)

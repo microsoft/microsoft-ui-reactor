@@ -1,7 +1,7 @@
 # Reactor Animation System — Implementation Plan
 
 Execution plan for the 8 compositor-layer animation features defined in
-[`docs/spec/duct-animation-design.md`](../spec/duct-animation-design.md).
+[`docs/specs/014-animation-design.md`](../014-animation-design.md).
 
 Phases follow the spec's priority order. Each task is independently checkable
 so work can pause and resume at any point.

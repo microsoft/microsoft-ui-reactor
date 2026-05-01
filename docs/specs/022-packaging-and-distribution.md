@@ -350,7 +350,7 @@ Consumer gets: framework, analyzers, source generator, and WinUI SDK (transitive
 
 ## 13. Open Questions
 
-- **License change.** README says "Microsoft Internal" but the repo lives on the public `microsoft/` org. Public distribution (P3) requires resolving this — almost certainly moving to MIT — before any NuGet.org push.
+- **License.** Repo is MIT (root `LICENSE`, README points to it). Cleared for NuGet.org push from a licensing standpoint.
 - **Internal feed ownership.** Which Azure Artifacts organization hosts the P1 feed? Creating one takes ~a day plus approvals.
 - **Signing prerequisite for P1.** Does the chosen internal feed enforce signed packages? If yes, P1 needs ESRP too, not just P2.
 - **Package ID.** `Microsoft.UI.Reactor` assumes we stay in the `Microsoft.UI.*` namespace (see spec 018 for the namespace rename). If that namespace decision changes, the package ID follows.

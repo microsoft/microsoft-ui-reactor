@@ -1,6 +1,6 @@
 # Reactor Core State & Component Model — Implementation Tasks
 
-Reference: [docs/spec/duct-state-and-components-design.md](../spec/duct-state-and-components-design.md)
+Reference: [docs/specs/009-state-and-components-design.md](../009-state-and-components-design.md)
 
 ### Test classification
 

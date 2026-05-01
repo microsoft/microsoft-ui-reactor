@@ -7,7 +7,7 @@
     to approve, decline, or defer each one. Updates fix-list.md in place.
 
 .PARAMETER FixList
-    Path to the fix-list file. Defaults to reviewer/reports/fix-list.md.
+    Path to the fix-list file. Defaults to tools/reviewer/reports/fix-list.md.
 
 .PARAMETER SeverityFilter
     Only show findings of this severity or higher.
@@ -15,10 +15,10 @@
 
 .EXAMPLE
     # Review all pending findings
-    ./reviewer/manager-review.ps1
+    ./tools/reviewer/manager-review.ps1
 
     # Review only critical and high severity
-    ./reviewer/manager-review.ps1 -SeverityFilter high
+    ./tools/reviewer/manager-review.ps1 -SeverityFilter high
 #>
 
 param(
@@ -156,6 +156,6 @@ Write-Host "Declined: $declined" -ForegroundColor Red
 Write-Host "Deferred: $deferred" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
-Write-Host "  1. Run ./reviewer/apply-fixes.ps1 to implement approved fixes"
-Write-Host "  2. Run ./reviewer/manager-review.ps1 again to review remaining findings"
+Write-Host "  1. Run ./tools/reviewer/apply-fixes.ps1 to implement approved fixes"
+Write-Host "  2. Run ./tools/reviewer/manager-review.ps1 again to review remaining findings"
 Write-Host ""

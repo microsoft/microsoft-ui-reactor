@@ -9,14 +9,14 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Microsoft.UI.Reactor.Analyzers;
 
 /// <summary>
-/// DUCT002: Detects <c>.Set()</c> callbacks that assign a brush to a property
+/// REACTOR_THEME_002: Detects <c>.Set()</c> callbacks that assign a brush to a property
 /// with a known lightweight styling key equivalent, and suggests using
 /// <c>.Resources()</c> instead for visual-state-aware overrides.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class UseLightweightStylingAnalyzer : DiagnosticAnalyzer
 {
-    public const string DiagnosticId = "DUCT002";
+    public const string DiagnosticId = "REACTOR_THEME_002";
 
     private static readonly LocalizableString Title =
         "Consider lightweight styling for visual-state overrides";

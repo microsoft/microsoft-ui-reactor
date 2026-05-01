@@ -11,19 +11,19 @@ Parallelized code review of the Reactor framework using specialized Claude Code 
 
 ```powershell
 # 1. Run the full review (all 6 agents in parallel, then consolidation)
-./reviewer/run-review.ps1
+./tools/reviewer/run-review.ps1
 
 # 2. Manager reviews and approves/declines findings
-./reviewer/manager-review.ps1
+./tools/reviewer/manager-review.ps1
 
 # 3. Implement approved fixes
-./reviewer/apply-fixes.ps1
+./tools/reviewer/apply-fixes.ps1
 ```
 
 ## Directory Structure
 
 ```
-reviewer/
+tools/reviewer/
   README.md               — This file
   manifest.json           — All in-scope files, categories, batch assignments (91 batches)
   run-review.ps1          — Main orchestrator: runs agents in parallel, consolidates
@@ -105,10 +105,10 @@ After the review runs, a manager reviews each finding:
 
 ```powershell
 # Interactive review — prompts for each finding
-./reviewer/manager-review.ps1
+./tools/reviewer/manager-review.ps1
 
 # Review only critical and high severity
-./reviewer/manager-review.ps1 -SeverityFilter high
+./tools/reviewer/manager-review.ps1 -SeverityFilter high
 ```
 
 For each finding, the manager can:
@@ -142,13 +142,13 @@ After manager approval:
 
 ```powershell
 # Implement all approved findings
-./reviewer/apply-fixes.ps1
+./tools/reviewer/apply-fixes.ps1
 
 # Implement a specific finding
-./reviewer/apply-fixes.ps1 -FindingId F003
+./tools/reviewer/apply-fixes.ps1 -FindingId F003
 
 # Dry run — see what would be implemented
-./reviewer/apply-fixes.ps1 -DryRun
+./tools/reviewer/apply-fixes.ps1 -DryRun
 ```
 
 The implementation agent:
@@ -180,16 +180,16 @@ The implementation agent:
 
 ```powershell
 # Run a single batch
-./reviewer/run-review.ps1 -Batch safety-batch-1
+./tools/reviewer/run-review.ps1 -Batch safety-batch-1
 
 # Increase parallelism (default: 4)
-./reviewer/run-review.ps1 -MaxParallel 8
+./tools/reviewer/run-review.ps1 -MaxParallel 8
 
 # Re-consolidate without re-running agents
-./reviewer/run-review.ps1 -ConsolidateOnly
+./tools/reviewer/run-review.ps1 -ConsolidateOnly
 
 # Dry run — see all batches without invoking agents
-./reviewer/run-review.ps1 -DryRun
+./tools/reviewer/run-review.ps1 -DryRun
 ```
 
 ## Expert Pipeline

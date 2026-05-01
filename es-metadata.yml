@@ -1,8 +1,0 @@
-schemaVersion: 0.0.1
-isProduction: false
-accountableOwners:
-  service: f780f559-9386-41ce-8883-9dfd67cf9c89
-routing:
-  defaultAreaPath:
-    org: microsoft
-    path: OS\Windows Client and Services\WinPD\SPICE\WinUI\Support

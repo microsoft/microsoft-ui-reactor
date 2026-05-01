@@ -7,7 +7,7 @@
       "Reactor.Cli/",
       "Reactor.Localization.Generator/",
       "Reactor/Charting/",
-      "vscode-duct/src/",
+      "src/vscode-reactor/src/",
       "tests/Reactor.Tests/",
       "tests/Reactor.AppTests/",
       "tests/Reactor.AppTests.Host/",
@@ -28,7 +28,7 @@
       "obj/",
       "node_modules/",
       ".git/",
-      "vscode-duct/out/",
+      "src/vscode-reactor/out/",
       "tests/Reactor.Tests/YogaGenerated/",
       "tests/Reactor.Tests/Md4cGenerated/",
       "*.json (non-csproj config)"
@@ -1209,7 +1209,7 @@
       "id": "general-batch-25",
       "agent": "general",
       "files": [
-        "vscode-duct/src/extension.ts"
+        "src/vscode-reactor/src/extension.ts"
       ],
       "description": "VS Code extension \u2014 language support, preview integration"
     },

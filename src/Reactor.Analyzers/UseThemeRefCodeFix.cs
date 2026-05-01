@@ -10,7 +10,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Microsoft.UI.Reactor.Analyzers;
 
 /// <summary>
-/// Code fix for DUCT001: replaces hard-coded color strings with <c>Theme.X</c>
+/// Code fix for REACTOR_THEME_001: replaces hard-coded color strings with <c>Theme.X</c>
 /// tokens where a known mapping exists.
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(UseThemeRefCodeFix))]

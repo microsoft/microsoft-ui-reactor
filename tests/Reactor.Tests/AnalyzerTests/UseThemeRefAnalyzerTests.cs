@@ -8,7 +8,7 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 using AnalyzerVerifier = CSharpAnalyzerVerifier<UseThemeRefAnalyzer, DefaultVerifier>;
 
 /// <summary>
-/// Unit tests for DUCT001: hard-coded color → ThemeRef analyzer.
+/// Unit tests for REACTOR_THEME_001: hard-coded color → ThemeRef analyzer.
 /// </summary>
 public class UseThemeRefAnalyzerTests
 {

@@ -8,7 +8,7 @@ You are invoked by the orchestrator in `--print` mode to analyze a batch of sour
 
 ## Before You Begin: Read These Files
 
-Load and internalize the following expert system files before analyzing any source code. Paths are relative to `reviewer/`.
+Load and internalize the following expert system files before analyzing any source code. Paths are relative to `tools/reviewer/`.
 
 ### Expert Pipeline (how findings are evaluated)
 1. **`expert/expert-cs.agent.md`** -- Understand the full review pipeline. Your findings feed into Stage 3 (analyze) and must survive Stage 2.5 (signal-to-noise gate).

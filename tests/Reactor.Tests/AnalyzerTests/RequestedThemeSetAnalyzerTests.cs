@@ -9,7 +9,7 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 using AnalyzerVerifier = CSharpAnalyzerVerifier<RequestedThemeSetAnalyzer, DefaultVerifier>;
 
 /// <summary>
-/// Unit tests for DUCT003: RequestedTheme Set → modifier analyzer.
+/// Unit tests for REACTOR_THEME_003: RequestedTheme Set → modifier analyzer.
 /// </summary>
 public class RequestedThemeSetAnalyzerTests
 {

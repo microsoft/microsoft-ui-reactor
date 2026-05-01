@@ -1,6 +1,6 @@
 # Reactor Localization System — Implementation Tasks
 
-Reference: [docs/spec/duct-localization-design.md](../spec/duct-localization-design.md)
+Reference: [docs/specs/005-localization-design.md](../005-localization-design.md)
 
 > Do NOT auto-localize any major apps/samples. The human will manually localize those after implementation is complete, as a validation exercise.
 
@@ -93,7 +93,7 @@ Reference: [docs/spec/duct-localization-design.md](../spec/duct-localization-des
 
 ### 2.4 Missing Key Diagnostics
 - [x] Cross-reference all locale folders at build time
-- [x] Emit `DUCT_LOC001` warning for keys in default locale missing in other locales
+- [x] Emit `REACTOR_LOC001` warning for keys in default locale missing in other locales
 - [x] Support `ReactorLocMissingKeySeverity` MSBuild property to promote warnings to errors
 
 ### 2.5 MSBuild Integration

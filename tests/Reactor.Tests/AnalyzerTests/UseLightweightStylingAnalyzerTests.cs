@@ -6,7 +6,7 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 
 /// <summary>
-/// Unit tests for DUCT002: Set brush → lightweight styling analyzer.
+/// Unit tests for REACTOR_THEME_002: Set brush → lightweight styling analyzer.
 /// </summary>
 public class UseLightweightStylingAnalyzerTests
 {

@@ -9,14 +9,14 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Microsoft.UI.Reactor.Analyzers;
 
 /// <summary>
-/// DUCT001: Detects hard-coded color strings in <c>.Background("...")</c>,
+/// REACTOR_THEME_001: Detects hard-coded color strings in <c>.Background("...")</c>,
 /// <c>.Foreground("...")</c>, and <c>.WithBorder("...")</c> calls where a
 /// <see cref="ThemeRef"/> overload exists, and suggests using theme tokens instead.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class UseThemeRefAnalyzer : DiagnosticAnalyzer
 {
-    public const string DiagnosticId = "DUCT001";
+    public const string DiagnosticId = "REACTOR_THEME_001";
 
     private static readonly LocalizableString Title =
         "Use ThemeRef instead of hard-coded color";

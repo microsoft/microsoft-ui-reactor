@@ -310,7 +310,7 @@ options (in priority order):
 
 1. **VS Code:** `code --goto {file}:{line}`
 2. **Visual Studio:** `devenv /edit {file} /command "Edit.GoTo {line}"`
-3. **Generic:** Use the `DUCT_EDITOR` environment variable (same pattern as
+3. **Generic:** Use the `REACTOR_EDITOR` environment variable (same pattern as
    React's `REACT_EDITOR` / `launch-editor`)
 
 #### 2.3 Click-to-source in the dev tools overlay

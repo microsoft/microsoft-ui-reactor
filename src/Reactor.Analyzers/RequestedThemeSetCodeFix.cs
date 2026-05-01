@@ -10,7 +10,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Microsoft.UI.Reactor.Analyzers;
 
 /// <summary>
-/// Code fix for DUCT003: replaces <c>.Set(fe =&gt; fe.RequestedTheme = ElementTheme.X)</c>
+/// Code fix for REACTOR_THEME_003: replaces <c>.Set(fe =&gt; fe.RequestedTheme = ElementTheme.X)</c>
 /// with <c>.RequestedTheme(ElementTheme.X)</c>.
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(RequestedThemeSetCodeFix))]

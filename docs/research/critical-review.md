@@ -1233,24 +1233,22 @@ static analysis:
 
 | Analyzer | Severity | Detects | Suggests |
 |---|---|---|---|
-| DUCT001 | Warning | `.Background("#FFFFFF")` hard-coded colors | Use `Theme.*` tokens |
-| DUCT002 | Info | `.Set(b => b.Background = brush)` on known controls | Use `.Resources()` lightweight styling |
-| DUCT003 | Info | `.Set(fe => fe.RequestedTheme = ...)` pattern | Use `.RequestedTheme()` modifier |
+| REACTOR_THEME_001 | Warning | `.Background("#FFFFFF")` hard-coded colors | Use `Theme.*` tokens |
+| REACTOR_THEME_002 | Info | `.Set(b => b.Background = brush)` on known controls | Use `.Resources()` lightweight styling |
+| REACTOR_THEME_003 | Info | `.Set(fe => fe.RequestedTheme = ...)` pattern | Use `.RequestedTheme()` modifier |
 
-Each has matching unit tests via `CSharpAnalyzerVerifier`. DUCT001 includes a
+Each has matching unit tests via `CSharpAnalyzerVerifier`. REACTOR_THEME_001 includes a
 `UseThemeRefCodeFix` that maps known colors to tokens (`#FFFFFF` → `Theme.PrimaryBackground`,
-`#0078D4` → `Theme.Accent`). DUCT003 has `RequestedThemeSetCodeFix` for
+`#0078D4` → `Theme.Accent`). REACTOR_THEME_003 has `RequestedThemeSetCodeFix` for
 the `.Set()` → `.RequestedTheme()` transformation.
 
-**Naming inconsistency (minor but real).** Spec 018 renamed the framework
-from "Duct" to "Microsoft.UI.Reactor". Commit `55dc53f` renamed
-`DUCT_A11Y_*` → `REACTOR_A11Y_*` and `DUCT_LOC001` → `REACTOR_LOC001`, but
-the three theming analyzers (`DUCT001`/`DUCT002`/`DUCT003`) kept their
-original IDs. The result is a public API surface where some diagnostics use
-the old product name and others use the new one. A customer's `.editorconfig`
-suppressing "all Reactor diagnostics" would have to list both prefixes. This
-is a small consistency issue that the rename commit acknowledged and
-deferred.
+**Naming consistency (resolved).** Spec 018 renamed the framework from
+"Duct" to "Microsoft.UI.Reactor". The initial rename commit migrated
+accessibility and localization diagnostics (`REACTOR_A11Y_*`, `REACTOR_LOC001`)
+but left the three theming analyzers on their pre-rename IDs. The pre-launch
+cleanup completed the rename — all three are now `REACTOR_THEME_001`/
+`REACTOR_THEME_002`/`REACTOR_THEME_003`. A consumer's `.editorconfig` only
+needs the `REACTOR_*` prefix to suppress all Reactor diagnostics.
 
 ### What's actually good about this (credit where due)
 
@@ -1281,7 +1279,7 @@ dangling references. When the element is collected, the tracking set goes with
 it.
 
 **The analyzers close the "pit of success" gap.** The previous review criticized
-hard-coded colors as a trap with no guardrails. DUCT001 now warns at edit time
+hard-coded colors as a trap with no guardrails. REACTOR_THEME_001 now warns at edit time
 when a string literal is passed to `.Background()`, `.Foreground()`, or
 `.WithBorder()`. It's not perfect (see concerns below), but it's the difference
 between "no guidance" and "IDE squiggles on the suspicious line."
@@ -1432,7 +1430,7 @@ This interacts poorly with `.ApplyStyle("AccentButtonStyle")` and implicit
 styles. The cache means this is now a *correctness* concern (style precedence)
 rather than a *performance* concern.
 
-**8. DUCT002 analyzer coverage is shallow.** The `UseLightweightStylingAnalyzer`
+**8. REACTOR_THEME_002 analyzer coverage is shallow.** The `UseLightweightStylingAnalyzer`
 only knows about 3 properties (Background, Foreground, BorderBrush) and 6
 control types (Button, ToggleButton, RepeatButton, SplitButton, AppBarButton,
 HyperlinkButton). Missing: TextBox, CheckBox, ComboBox, Slider, ToggleSwitch.
@@ -1443,7 +1441,7 @@ better than nothing — but it won't nudge a developer who's using `.Set()` on a
 TextBox to set its placeholder foreground, which is one of the most common
 lightweight styling use cases.
 
-**9. DUCT001 color-to-token mapping is incomplete.** The `UseThemeRefAnalyzer`
+**9. REACTOR_THEME_001 color-to-token mapping is incomplete.** The `UseThemeRefAnalyzer`
 maps 5 specific colors (#FFFFFF, white, #000000, black, #0078D4) to theme
 tokens. Every other hard-coded color gets a generic "use ThemeRef" message with
 no specific token suggestion. In practice, developers use dozens of colors —
@@ -3780,7 +3778,7 @@ SwiftUI, Compose).
 | **Accessibility** | B | B | A | A | 16 modifiers + SemanticPanel, UseFocusTrap, 3 Roslyn a11y analyzers, runtime WCAG scanner; SemanticPanel limited to 2 patterns, focus trap doesn't cycle, remaining hooks unbuilt. **Grade rose from B- to B** mostly because of charting a11y (below) — the general surface is unchanged |
 | **Charting + Chart A11y** | B+ | N/A | A (Apple Charts) | C (Vico/ad-hoc) | **NEW section 11a.** 43 samples + 8-layer a11y (ChartAutomationPeer, ChartPalette.Harden/ColorblindSimulate, keyboard nav, live announcer, alternate view, forced-colors, 12 scanner rules). No sonification, ForceGraph a11y decorative-only, hit-target expansion opt-in |
 | **Input/Events** | B | B | A | A | **Rose from C to B.** Spec 027 shipped: full pointer modifier surface (entered/exited/canceled/wheel), tap/double/right/holding, key-up/preview/character, focus modifiers + `UseElementFocus`, typed `.OnPan`/`.OnPinch`/`.OnRotate` gestures, drag-and-drop with eager+lazy format providers. Trampoline dispatch eliminates per-render COM churn. Still missing: gesture composition (.simultaneously/.sequenced), typed long-press, pointer capture ergonomics, tuned inertia, wheel momentum classification |
-| **Styling** | B- | B+ | A | A | Lightweight styling is a genuine differentiator; ResourceBuilder fluent API; 3 Roslyn analyzers; stringly-typed resource keys; analyzer coverage shallow; DUCT_/REACTOR_ ID inconsistency |
+| **Styling** | B- | B+ | A | A | Lightweight styling is a genuine differentiator; ResourceBuilder fluent API; 3 Roslyn analyzers; stringly-typed resource keys; analyzer coverage shallow |
 | **Developer Experience** | B | A | B+ | B+ | **Rose from C+ to B.** Hot reload works; MCP devtools + ETW + 4 hook analyzers + ~5,600 lines of new coverage tests (4,222 unit + 1,426 selftest wave 1+2) pushed selftest coverage past 85%. Still no GUI devtools, preview is screenshot-only, no per-component render timing, no cache inspector |
 | **Devtools + Tracing** | B | B+ (DevTools) | A (Instruments) | B+ (LI) | **NEW section 13a.** MCP server (HTTP+stdio), 12+ MCP tools, stable node ids, supervisor, CLI parity, ETW provider with 6 keywords. State is read-only, no diff in v1, no source map in v1, no cache inspection, ETW has no per-component timing |
 | **Control Coverage** | A | N/A | A | A | 94% of WinUI wrapped |
@@ -4088,7 +4086,7 @@ This is a red flag for a framework that wants to be production-ready.
 
 13. **Naming and conceptual churn.** Spec 018 renamed Duct → Reactor;
     commit 55dc53f renamed half the analyzer ids (A11Y + Loc) while
-    leaving the theming ids (DUCT001-003) alone; `Factories.Text` →
+    leaving the theming ids (REACTOR_THEME_001-003) alone; `Factories.Text` →
     `TextBlock`; `--preview` → `--devtools`; Monaco moved out of core into
     a sample. These are all individually defensible, but cumulatively
     they're a lot of churn for a framework that's not yet at v1. Customers
@@ -4200,8 +4198,8 @@ large in the composition / materials / windowing region.
 12. **Finish devtools v1.1.** Source mapping (spec 010), tree diffing,
     state mutation (`reactor.setState`), cache inspection. Without source
     mapping, agents can't map tree nodes back to authored components.
-13. **Complete the `REACTOR_*` analyzer rename.** Finish what commit `55dc53f`
-    started — DUCT001/002/003 still carry the old product name.
+13. ~~**Complete the `REACTOR_*` analyzer rename.**~~ Done in pre-launch
+    cleanup — theming analyzers are now `REACTOR_THEME_001/002/003`.
 14. **Finish exhaustive-deps analyzer.** `REACTOR_HOOKS_002/003` are deferred
     pending control-flow analysis. This is the single most valuable ESLint
     rule React developers rely on.

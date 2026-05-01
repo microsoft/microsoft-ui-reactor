@@ -7,13 +7,13 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Microsoft.UI.Reactor.Analyzers;
 
 /// <summary>
-/// DUCT003: Detects <c>.Set(fe =&gt; fe.RequestedTheme = ...)</c> patterns and
+/// REACTOR_THEME_003: Detects <c>.Set(fe =&gt; fe.RequestedTheme = ...)</c> patterns and
 /// suggests using the fluent <c>.RequestedTheme(ElementTheme.X)</c> modifier instead.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class RequestedThemeSetAnalyzer : DiagnosticAnalyzer
 {
-    public const string DiagnosticId = "DUCT003";
+    public const string DiagnosticId = "REACTOR_THEME_003";
 
     private static readonly LocalizableString Title =
         "RequestedTheme modifier available";

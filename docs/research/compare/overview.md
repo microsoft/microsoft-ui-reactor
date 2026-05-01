@@ -397,9 +397,7 @@ Material-centric.
   deterministic sorted keys in a `ConcurrentDictionary` eliminates the
   XamlReader.Load-per-element perf concern that was the previous review's
   biggest theming critique. `.RequestedTheme()` modifier and `UseColorScheme`
-  hook shipped. Three Roslyn analyzers (still carrying the old `DUCT001-003`
-  IDs — the `REACTOR_*` rename is partial; `DUCT_LOC001` and `DUCT_A11Y_*`
-  were migrated, the theming IDs were not). **Two headline features don't
+  hook shipped. Three Roslyn analyzers (`REACTOR_THEME_001-003`). **Two headline features don't
   compose correctly with each other:** `UseColorScheme` reads
   `Application.Current.RequestedTheme` (app-level), not the element's
   effective theme — so a component inside `.RequestedTheme(ElementTheme.Dark)`
@@ -1745,8 +1743,7 @@ zero field evidence. Drag-and-drop has 370 lines of new code with zero
 showcase consumer. Typed drag format ids are unversioned — rename a model,
 round-trip breaks. Trampoline dispatch is unvalidated at the thing it
 promises (no before/after render benchmark; 6,390 unit tests that don't
-exercise COM interop don't measure COM interop). The `REACTOR_*` analyzer
-rename is partial (`DUCT001-003` still carry the old product name).
+exercise COM interop don't measure COM interop).
 E2E tests were just discovered to be 95% invisible behind a broken filter
 (now fixed, but the blind spot for the entire dev period is telling).
 Three to four invisible wrapper element types, and a running theme of
@@ -2003,7 +2000,6 @@ Every framework has embarrassing gaps:
   apps and unversioned typed format ids that break on model renames.
   Stringly-typed APIs at every platform boundary (deep link patterns,
   semantic roles, resource keys, connected-animation keys, drag formats).
-  Analyzer IDs half-renamed (DUCT001-003 still carry the old product name).
   And the constant-across-three-review-cycles critique: **showcase apps
   don't use the framework's own features** — Outlook clone still uses
   `UseState<string>` for navigation; nothing uses SemanticPanel, commanding,
@@ -2027,7 +2023,7 @@ most for your specific application.
 ### Microsoft frameworks
 - [Blazor Analysis](blazor.md) — Microsoft's component-based web/hybrid framework
 - [Reactor Critical Review](../critical-review.md) — Detailed Reactor analysis
-- [WinUI 3 Gap Analysis](../spec/duct-winui3-gap-analysis.md) — Reactor vs WinUI 3 coverage
+- [WinUI 3 Gap Analysis](../../specs/002-winui3-gap-analysis.md) — Reactor vs WinUI 3 coverage
 - [Microsoft Learn: WinForms Overview](https://learn.microsoft.com/en-us/dotnet/desktop/winforms/overview)
 - [Microsoft Learn: WPF Architecture](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/advanced/wpf-architecture)
 - [Microsoft Learn: Windows App SDK](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/)

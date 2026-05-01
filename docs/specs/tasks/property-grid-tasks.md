@@ -1,6 +1,6 @@
 # PropertyGrid Implementation Tasks
 
-Derived from: `docs/spec/duct-property-grid.md`
+Derived from: `docs/specs/004-property-grid.md`
 
 ---
 

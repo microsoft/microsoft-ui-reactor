@@ -1,6 +1,6 @@
 # Commanding System Implementation Tasks
 
-Derived from: `docs/spec/duct-commanding-design.md`
+Derived from: `docs/specs/012-commanding-design.md`
 
 ---
 

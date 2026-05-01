@@ -8,7 +8,7 @@
     Tracks completion status back into fix-list.md.
 
 .PARAMETER FixList
-    Path to the fix-list file. Defaults to reviewer/reports/fix-list.md.
+    Path to the fix-list file. Defaults to tools/reviewer/reports/fix-list.md.
 
 .PARAMETER FindingId
     Implement a specific finding only (e.g., "F001").
@@ -21,13 +21,13 @@
 
 .EXAMPLE
     # Implement all approved findings
-    ./reviewer/apply-fixes.ps1
+    ./tools/reviewer/apply-fixes.ps1
 
     # Implement a specific finding
-    ./reviewer/apply-fixes.ps1 -FindingId F003
+    ./tools/reviewer/apply-fixes.ps1 -FindingId F003
 
     # Dry run
-    ./reviewer/apply-fixes.ps1 -DryRun
+    ./tools/reviewer/apply-fixes.ps1 -DryRun
 #>
 
 param(
