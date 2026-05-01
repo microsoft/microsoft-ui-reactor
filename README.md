@@ -1,8 +1,16 @@
-# Microsoft.UI.Reactor
+<a href="https://github.com/microsoft/microsoft-ui-xaml">
+  <img src="docs/images/header.png" alt="WinUI hero image"/>
+</a>
 
-**A declarative, component-based C# framework for building WinUI 3 desktop apps.**
+<h1 align="center">Microsoft.UI.Reactor</h1>
 
-**Status:** Experimental · April 2026
+<p align="center">
+  <strong>A declarative, component-based C# framework for building <a href="https://github.com/microsoft/microsoft-ui-xaml">WinUI 3</a> desktop apps.</strong>
+</p>
+
+<p align="center">
+  <strong>Status:</strong> Experimental · April 2026
+</p>
 
 ---
 
