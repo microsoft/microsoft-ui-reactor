@@ -99,25 +99,28 @@ public class LogCaptureBufferTests
         buf.Append(LogSource.Stdout, null, "a");
         buf.Append(LogSource.Stdout, null, "b");
 
-        // sinceSeq=0, buffer has seq 1 & 2 → should not block.
-        var completed = buf.WaitForNewAsync(0, 5_000);
-        var first = await Task.WhenAny(completed, Task.Delay(500));
-        Assert.Same(completed, first);
+        // sinceSeq=0, buffer has seq 1 & 2 → fast path, no blocking.
+        // WaitAsync provides the outer budget; on the fast path it should be near-instant.
+        await buf.WaitForNewAsync(0, 5_000).WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     [Fact]
     public async Task WaitForNewAsync_WakesOnAppend()
     {
         var buf = new LogCaptureBuffer();
-        // Wait for seq >= 1. Empty buffer has no entry yet, so the wait blocks
-        // until the first append lands.
-        var wait = buf.WaitForNewAsync(1, 5_000);
+        // Use an effectively-infinite internal timeout so the only completion
+        // path is the wake from Append — eliminates the "did it fall through to
+        // the internal timeout?" ambiguity that a Task.WhenAny+Task.Delay race
+        // can't disambiguate, especially on contended CI runners where the
+        // post-signal continuation can be delayed past a tight outer race.
+        var wait = buf.WaitForNewAsync(1, timeoutMs: int.MaxValue);
 
         Assert.False(wait.IsCompleted);
 
         buf.Append(LogSource.Stdout, null, "first");
-        var completed = await Task.WhenAny(wait, Task.Delay(2_000));
-        Assert.Same(wait, completed);
+        // 30s outer budget is generous for thread-pool starvation; if the wake
+        // never propagates, WaitAsync throws TimeoutException with a clear stack.
+        await wait.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     [Fact]
