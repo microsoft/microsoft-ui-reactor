@@ -73,6 +73,25 @@ jobs:
       - name: Test
         run: dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore --logger "console;verbosity=normal"
 
+  selftests:
+    name: Selftests
+    needs: changes
+    if: needs.changes.outputs.non-md == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore tests/Reactor.SelfTests/Reactor.SelfTests.csproj
+
+      - name: Test
+        run: dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore --logger "console;verbosity=normal"
+
   build-solution:
     name: Build solution
     needs: changes
