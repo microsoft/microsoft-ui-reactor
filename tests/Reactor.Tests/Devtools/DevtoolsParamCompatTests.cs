@@ -2,6 +2,10 @@ using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.Devtools;
 
+// Joins the Localization tests' collection: every test here mutates Console.Error,
+// and racing those mutations against ValidateCommandTests / PruneCommandTests etc.
+// causes one test's stderr to land in another's StringWriter.
+[Collection("ConsoleTests")]
 public class DevtoolsParamCompatTests
 {
     [Fact]

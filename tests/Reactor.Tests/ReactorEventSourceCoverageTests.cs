@@ -13,10 +13,17 @@ public class ReactorEventSourceCoverageTests : IDisposable
 {
     private sealed class CapturingListener : EventListener
     {
-        public readonly List<EventWrittenEventArgs> Events = new();
+        // ReactorEventSource.Log is process-wide. Other tests running in parallel
+        // can fire events into this listener while a test enumerates Events, so
+        // both writes and snapshot reads must be guarded.
+        private readonly List<EventWrittenEventArgs> _events = new();
+        public IReadOnlyList<EventWrittenEventArgs> Events
+        {
+            get { lock (_events) return _events.ToArray(); }
+        }
         protected override void OnEventWritten(EventWrittenEventArgs eventData)
         {
-            Events.Add(eventData);
+            lock (_events) _events.Add(eventData);
         }
     }
 

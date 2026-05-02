@@ -10,35 +10,53 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 public class NavigationDiagnosticsCoverageTests
 {
+    // NavigationDiagnostics events are process-wide static delegates. Real navigation
+    // tests running in parallel fire these same events, so handlers must filter to
+    // their own payload (unique From/To keys per test) or risk capturing a sibling
+    // test's event.
+    private static (string From, string To) UniqueKeys()
+    {
+        var g = Guid.NewGuid().ToString("N");
+        return ($"From-{g}", $"To-{g}");
+    }
+
     [Fact]
     public void OnNavigationRequested_Fires_Event_With_Payload()
     {
+        var (from, to) = UniqueKeys();
         NavigationDiagnosticEvent? captured = null;
-        Action<NavigationDiagnosticEvent> handler = e => captured = e;
+        Action<NavigationDiagnosticEvent> handler = e =>
+        {
+            if (e.From == from && e.To == to) captured = e;
+        };
         NavigationDiagnostics.NavigationRequested += handler;
         try
         {
-            NavigationDiagnostics.OnNavigationRequested("Home", "Detail", NavigationMode.Push);
+            NavigationDiagnostics.OnNavigationRequested(from, to, NavigationMode.Push);
         }
         finally
         {
             NavigationDiagnostics.NavigationRequested -= handler;
         }
         Assert.NotNull(captured);
-        Assert.Equal("Home", captured!.From);
-        Assert.Equal("Detail", captured.To);
+        Assert.Equal(from, captured!.From);
+        Assert.Equal(to, captured.To);
         Assert.Equal(NavigationMode.Push, captured.Mode);
     }
 
     [Fact]
     public void OnNavigationCompleted_Fires_Event()
     {
+        var (from, to) = UniqueKeys();
         NavigationDiagnosticEvent? captured = null;
-        Action<NavigationDiagnosticEvent> handler = e => captured = e;
+        Action<NavigationDiagnosticEvent> handler = e =>
+        {
+            if (e.From == from && e.To == to) captured = e;
+        };
         NavigationDiagnostics.NavigationCompleted += handler;
         try
         {
-            NavigationDiagnostics.OnNavigationCompleted("A", "B", NavigationMode.Pop);
+            NavigationDiagnostics.OnNavigationCompleted(from, to, NavigationMode.Pop);
         }
         finally
         {
@@ -51,12 +69,16 @@ public class NavigationDiagnosticsCoverageTests
     [Fact]
     public void OnNavigationCancelled_Captures_Reason()
     {
+        var (from, to) = UniqueKeys();
         NavigationDiagnosticEvent? captured = null;
-        Action<NavigationDiagnosticEvent> handler = e => captured = e;
+        Action<NavigationDiagnosticEvent> handler = e =>
+        {
+            if (e.From == from && e.To == to) captured = e;
+        };
         NavigationDiagnostics.NavigationCancelled += handler;
         try
         {
-            NavigationDiagnostics.OnNavigationCancelled("A", "B", NavigationMode.Push, "guard");
+            NavigationDiagnostics.OnNavigationCancelled(from, to, NavigationMode.Push, "guard");
         }
         finally
         {
@@ -69,21 +91,25 @@ public class NavigationDiagnosticsCoverageTests
     [Fact]
     public void OnCacheHit_OnCacheMiss_OnCacheEviction_Fire()
     {
+        var g = Guid.NewGuid().ToString("N");
+        var rHit = $"Hit-{g}";
+        var rMiss = $"Miss-{g}";
+        var rEvict = $"Evict-{g}";
         var hits = new List<CacheDiagnosticEvent>();
         var misses = new List<CacheDiagnosticEvent>();
         var evicts = new List<CacheDiagnosticEvent>();
-        Action<CacheDiagnosticEvent> hh = e => hits.Add(e);
-        Action<CacheDiagnosticEvent> mh = e => misses.Add(e);
-        Action<CacheDiagnosticEvent> eh = e => evicts.Add(e);
+        Action<CacheDiagnosticEvent> hh = e => { if (e.Route == rHit) hits.Add(e); };
+        Action<CacheDiagnosticEvent> mh = e => { if (e.Route == rMiss) misses.Add(e); };
+        Action<CacheDiagnosticEvent> eh = e => { if (e.Route == rEvict) evicts.Add(e); };
 
         NavigationDiagnostics.CacheHit += hh;
         NavigationDiagnostics.CacheMiss += mh;
         NavigationDiagnostics.CacheEviction += eh;
         try
         {
-            NavigationDiagnostics.OnCacheHit("R1");
-            NavigationDiagnostics.OnCacheMiss("R2");
-            NavigationDiagnostics.OnCacheEviction("R3");
+            NavigationDiagnostics.OnCacheHit(rHit);
+            NavigationDiagnostics.OnCacheMiss(rMiss);
+            NavigationDiagnostics.OnCacheEviction(rEvict);
         }
         finally
         {
@@ -91,23 +117,25 @@ public class NavigationDiagnosticsCoverageTests
             NavigationDiagnostics.CacheMiss -= mh;
             NavigationDiagnostics.CacheEviction -= eh;
         }
-        Assert.Equal("R1", Assert.Single(hits).Route);
-        Assert.Equal("R2", Assert.Single(misses).Route);
-        Assert.Equal("R3", Assert.Single(evicts).Route);
+        Assert.Equal(rHit, Assert.Single(hits).Route);
+        Assert.Equal(rMiss, Assert.Single(misses).Route);
+        Assert.Equal(rEvict, Assert.Single(evicts).Route);
     }
 
     [Fact]
     public void OnTransitionStarted_OnTransitionCompleted_Fire()
     {
+        // Filter by transition instance identity — concurrent navigation tests fire
+        // their own transitions through the same global event.
+        var transition = new SlideTransition();
         TransitionDiagnosticEvent? start = null;
         TransitionDiagnosticEvent? end = null;
-        Action<TransitionDiagnosticEvent> sh = e => start = e;
-        Action<TransitionDiagnosticEvent> eh = e => end = e;
+        Action<TransitionDiagnosticEvent> sh = e => { if (ReferenceEquals(e.Transition, transition)) start = e; };
+        Action<TransitionDiagnosticEvent> eh = e => { if (ReferenceEquals(e.Transition, transition)) end = e; };
         NavigationDiagnostics.TransitionStarted += sh;
         NavigationDiagnostics.TransitionCompleted += eh;
         try
         {
-            var transition = new SlideTransition();
             NavigationDiagnostics.OnTransitionStarted(transition, NavigationMode.Push);
             NavigationDiagnostics.OnTransitionCompleted(transition, NavigationMode.Pop);
         }
@@ -125,29 +153,31 @@ public class NavigationDiagnosticsCoverageTests
     [Fact]
     public void OnDeepLinkResolved_Fires_With_Match_And_Miss()
     {
+        var pathHit = $"/home-{Guid.NewGuid():N}";
         DeepLinkDiagnosticEvent? captured = null;
-        Action<DeepLinkDiagnosticEvent> handler = e => captured = e;
+        Action<DeepLinkDiagnosticEvent> handler = e => { if (e.Path == pathHit) captured = e; };
         NavigationDiagnostics.DeepLinkResolved += handler;
         try
         {
-            NavigationDiagnostics.OnDeepLinkResolved("/home", true, 2);
+            NavigationDiagnostics.OnDeepLinkResolved(pathHit, true, 2);
         }
         finally
         {
             NavigationDiagnostics.DeepLinkResolved -= handler;
         }
         Assert.NotNull(captured);
-        Assert.Equal("/home", captured!.Path);
+        Assert.Equal(pathHit, captured!.Path);
         Assert.True(captured.Matched);
         Assert.Equal(2, captured.RouteCount);
 
         // Re-fire for the miss branch (matched=false formats differently)
+        var pathMiss = $"/missing-{Guid.NewGuid():N}";
         DeepLinkDiagnosticEvent? miss = null;
-        Action<DeepLinkDiagnosticEvent> handler2 = e => miss = e;
+        Action<DeepLinkDiagnosticEvent> handler2 = e => { if (e.Path == pathMiss) miss = e; };
         NavigationDiagnostics.DeepLinkResolved += handler2;
         try
         {
-            NavigationDiagnostics.OnDeepLinkResolved("/missing", false, 0);
+            NavigationDiagnostics.OnDeepLinkResolved(pathMiss, false, 0);
         }
         finally
         {
