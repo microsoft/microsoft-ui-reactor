@@ -1,0 +1,119 @@
+# StressPerf — UI framework perf comparison harness
+
+Measures **Effective Refresh** (frames per second the user actually
+perceives) for the same stocks-grid workload across six rendering
+approaches. Built to settle "how does Reactor compare to WPF / WinUI 3 /
+DirectX / React Native" without trusting the in-app FPS counters that
+each framework exposes — those lie in different directions and aren't
+comparable.
+
+The most-recent baseline is committed at:
+
+> `docs/reports/stress-perf-stocks-grid.md`
+
+## What's in this directory
+
+```
+SPEC.md                            ← workload + cell-grid spec (4,900 cells, 33 ms tick)
+METHODOLOGY.md                     ← measurement rules; the "don't trust X" list
+README.md                          ← you are here
+
+StressPerf.Direct/                 ← WinUI 3, imperative property setting
+StressPerf.Bound/                  ← WinUI 3, MVVM (INotifyPropertyChanged)
+StressPerf.Wpf/                    ← WPF, imperative
+StressPerf.DirectX/                ← Win2D / Direct2D, full-canvas redraw
+StressPerf.Reactor/                ← Reactor (this repo's framework)
+StressPerf.Shared/                 ← PerfTracker, StockDataSource, ListItemSource
+
+StressPerf.VirtualList.Reactor/    ← virtualizing-list scenario (Reactor)
+PresentTracer/                     ← ETW Present-rate sampler (admin)
+
+run_stocks_grid_baseline.ps1       ← full matrix runner (admin)
+run_dwm_attribution_test.ps1       ← DWM-attribution diagnostic (admin)
+run_present_trace.ps1              ← single-shot ETW capture (admin)
+run_sweep_arm64.ps1                ← legacy sweep harness
+```
+
+The React Native / Fabric variant lives at `tests/stress_perf_rn/`. It's
+a separate npm-managed workspace; see its own README.
+
+## Quick start
+
+### Easy mode — no admin
+
+```powershell
+# Build everything once:
+foreach ($p in 'Direct','Bound','Wpf','DirectX','Reactor','VirtualList.Reactor') {
+  dotnet build "tests/stress_perf/StressPerf.$p" -c Release -p:Platform=ARM64
+}
+
+# Run any one variant headless. Report lands as <AppName>.report.txt next to the exe.
+dotnet run --project tests/stress_perf/StressPerf.Reactor -c Release -p:Platform=ARM64 `
+  -- --headless --percent 50 --duration 10
+```
+
+The report gives you `Total Renders` (the cross-framework throughput
+metric — within ~10 % of ground truth on most variants) plus per-tick
+phase timings.
+
+### Accurate mode — ETW Present count, admin needed
+
+```powershell
+# One-time: build the tracer.
+dotnet build tests/stress_perf/PresentTracer -c Release -p:Platform=ARM64
+
+# Right-click PowerShell → Run as administrator, then run the full matrix:
+& 'C:\Users\andersonch\Code\reactor3\tests\stress_perf\run_stocks_grid_baseline.ps1' -Repeats 5
+```
+
+Outputs (gitignored, regenerable):
+- `baseline-stocks-grid.csv` — one row per (run × variant × percent).
+- `baseline-stocks-grid.summary.csv` — median ± spread per (variant × percent).
+- `baseline-stocks-grid.log` — human-readable per-scenario dump.
+
+The harness records `PowerState` (battery / ac) and `GlobalVsyncPerSec`
+(display refresh rate during the bench) so the data stays interpretable
+across power states. **Do not diff battery and AC numbers** — see
+METHODOLOGY.md.
+
+### React Native / Fabric variant
+
+Lives at `tests/stress_perf_rn/`. Real `react-native-windows` projects
+checked into the repo (RN 0.82, react-native-windows 0.82.5). One-time
+prerequisite is the C++ / WinRT VS workload (see that directory's
+`README.md`). After that, `npm run windows` from inside `StocksGrid/` or
+`VirtualList/`. Headless mode is driven by CLI args (parsed by the
+C++ host, forwarded to JS as initial props):
+
+```powershell
+.\StocksGrid.exe --headless --percent 50 --duration 10
+```
+
+The baseline harness runs the RN variant alongside the C# variants and
+scrapes its on-screen report via UI Automation.
+
+## What we learned (TL;DR)
+
+- **Don't trust in-app FPS counters.** `CompositionTarget.Rendering`
+  overcounts by ~2×; `requestAnimationFrame` undercounts and goes
+  bursty under saturation. Use ETW Present count instead.
+- **Render-count is a good free proxy** (~3 % off ETW for the WinUI 3
+  variants and Reactor). Imperfect for WPF (render-thread coalesces) and
+  RN-Fabric (commit pipeline emits non-render frames).
+- **Effective Refresh = `min(Renders/s, Present/s)`** is what the user
+  actually perceives. Either rate alone misleads.
+- **DRR (Dynamic Refresh Rate)** is real and changes which framework
+  "feels" fastest depending on power state. Always label battery vs AC.
+- Latest baseline: `docs/reports/stress-perf-stocks-grid.md`.
+
+## Adding a new variant
+
+1. Create `StressPerf.YourFramework/` with a CLI matching `--headless
+   --percent N --duration S` and a `Window` that hosts the workload.
+2. Reference `StressPerf.Shared` for `StockDataSource` (deterministic
+   data) and `PerfTracker` (FPS / memory / render-count tracking).
+3. In your tick handler, call `_perf.BeginUpdate()` /
+   `_perf.EndUpdate()` / `_perf.RecordRender()`.
+4. Add an entry to `run_stocks_grid_baseline.ps1`'s `$variants` list.
+5. Document what counts as a "render" in your variant — see
+   METHODOLOGY.md for the existing definitions.

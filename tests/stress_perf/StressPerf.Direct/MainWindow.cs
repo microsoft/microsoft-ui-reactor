@@ -161,6 +161,9 @@ public sealed class MainWindow : Window
         double propSetMs = _phaseSw.Elapsed.TotalMilliseconds;
 
         _perf.EndUpdate();
+        // For imperative WinUI variants a "render" = one tick that finished
+        // patching cell properties on the live tree. Cross-variant cmp.
+        _perf.RecordRender();
 
         _mutateSum += mutateMs;
         _propSetSum += propSetMs;

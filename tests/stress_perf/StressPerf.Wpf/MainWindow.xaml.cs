@@ -155,6 +155,8 @@ public partial class MainWindow : Window
         }
 
         _perf.EndUpdate();
+        // For WPF imperative, a "render" = one tick of property patches.
+        _perf.RecordRender();
 
         // Update stats display
         _fpsText!.Text = $"FPS: {_perf.CurrentFps:F0}";

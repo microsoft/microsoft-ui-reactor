@@ -179,6 +179,9 @@ public sealed class MainWindow : Window
         double vmSetMs = _phaseSw.Elapsed.TotalMilliseconds;
 
         _perf.EndUpdate();
+        // For MVVM, a "render" = one tick that finished pushing INPC
+        // notifications through the binding pipeline.
+        _perf.RecordRender();
 
         _mutateSum += mutateMs;
         _vmSetSum += vmSetMs;

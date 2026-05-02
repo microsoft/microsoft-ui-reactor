@@ -165,6 +165,10 @@ public sealed class MainWindow : Window
         _canvas?.Invalidate();
 
         _perf.EndUpdate();
+        // For DirectX, a "render" = one tick that called Invalidate(); the
+        // actual D2D draw happens on the canvas callback. Tick count is the
+        // closest proxy to "frames the app asked the GPU to redraw."
+        _perf.RecordRender();
 
         // Update stats display
         _fpsText!.Text = $"FPS: {_perf.CurrentFps:F0}";

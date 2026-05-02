@@ -19,6 +19,11 @@ public sealed class PerfTracker
     private readonly List<double> _treeBuildSamples = new();
     private readonly List<double> _diffPatchSamples = new();
     private readonly List<double> _effectsSamples = new();
+    // Cross-variant render counter. See METHODOLOGY.md for what this means
+    // per framework. Imperative variants increment after each tick's
+    // mutate-and-set-properties pass; declarative variants (Reactor)
+    // increment when the reconcile completes via RecordPhases.
+    private int _renderCount;
 
     public double CurrentFps => _currentFps;
     public double LastUpdateMs => _lastUpdateMs;
@@ -58,7 +63,20 @@ public sealed class PerfTracker
     }
 
     /// <summary>
-    /// Record per-phase breakdown for a render pass.
+    /// Increment the cross-variant render counter. Call once per "render
+    /// completed" event for the framework — for imperative variants
+    /// (Direct/Bound/Wpf/DirectX) that's after the tick handler finishes
+    /// patching properties; for Reactor it happens automatically when
+    /// <see cref="RecordPhases"/> fires from the reconcile-complete callback.
+    /// See METHODOLOGY.md.
+    /// </summary>
+    public void RecordRender() => _renderCount++;
+
+    public int TotalRenders => _renderCount;
+
+    /// <summary>
+    /// Record per-phase breakdown for a render pass. Reactor only — also
+    /// counts as a render via <see cref="RecordRender"/>.
     /// </summary>
     public void RecordPhases(double treeBuildMs, double diffPatchMs, double effectsMs)
     {
@@ -66,6 +84,7 @@ public sealed class PerfTracker
         _diffPatchSamples.Add(diffPatchMs);
         _effectsSamples.Add(effectsMs);
         _reconcileTimeSamples.Add(treeBuildMs + diffPatchMs + effectsMs);
+        RecordRender();
     }
 
     public double ElapsedSeconds => _wallClock.Elapsed.TotalSeconds;
@@ -86,6 +105,9 @@ public sealed class PerfTracker
             sb.AppendLine($"Avg Update:  {_updateTimeSamples.Average():F1} ms");
             sb.AppendLine($"Max Update:  {_updateTimeSamples.Max():F1} ms");
         }
+        // Always emit Total Renders so easy-mode (no-ETW) baselines have a
+        // free cross-framework throughput proxy. See METHODOLOGY.md.
+        sb.AppendLine($"Total Renders: {_renderCount}");
         if (_reconcileTimeSamples.Count > 0)
         {
             sb.AppendLine($"Avg Reconcile: {_reconcileTimeSamples.Average():F1} ms");
