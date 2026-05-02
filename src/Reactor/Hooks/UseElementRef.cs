@@ -33,12 +33,13 @@ public static class UseElementRefExtensions
     {
         if (ctx is null) throw new ArgumentNullException(nameof(ctx));
 
-        // We back the typed wrapper with UseState so the same instance is
-        // returned across re-renders (identity stable, matching useRef
-        // semantics in React). The initial-value argument is captured into
-        // the hook on first call and ignored afterward.
-        var (typed, _) = ctx.UseState(new ElementRef<T>(new ElementRef()));
-        return typed;
+        // UseMemo with empty deps allocates the typed+inner ref on the first
+        // render only; subsequent renders return the cached instance. Using
+        // UseState here would eagerly evaluate `new ElementRef<T>(new ElementRef())`
+        // on every render and throw the result away (UseState only consults
+        // the initial value on first call), which would defeat the point of a
+        // cheap stable ref hook.
+        return ctx.UseMemo(static () => new ElementRef<T>(new ElementRef()), Array.Empty<object>());
     }
 
     /// <inheritdoc cref="UseElementRef{T}(RenderContext)"/>

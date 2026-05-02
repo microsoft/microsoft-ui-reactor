@@ -194,6 +194,25 @@ public class PersistedStateScopeTests
         Assert.Equal(0, scope.Count);
     }
 
+    [Fact]
+    public void ApplicationScope_Disposes_Becomes_Inert()
+    {
+        // Matches WindowPersistedScope's "becomes inert" behavior: post-dispose
+        // mutations no-op and TryGet returns false. Prevents stale state from
+        // leaking back into the cache via a lingering reference.
+        var scope = new ApplicationPersistedScope(4);
+        scope.Set("k", 42);
+        scope.Dispose();
+        Assert.Equal(0, scope.Count);
+        scope.Set("k", 99);
+        Assert.False(scope.TryGet<int>("k", out _));
+        scope.Remove("k"); // also no-op (would otherwise hit the LRU after dispose)
+        // ApplyMemoryPressureTrim is also safe on a disposed scope: the
+        // underlying _cache.Trim handles a count <= target as a no-op.
+        var trimmed = scope.ApplyMemoryPressureTrim();
+        Assert.Equal(0, trimmed);
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  WindowPersistedScope public surface
     // ════════════════════════════════════════════════════════════════

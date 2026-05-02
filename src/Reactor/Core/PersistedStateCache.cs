@@ -45,6 +45,7 @@ public sealed class ApplicationPersistedScope : IPersistedStateScope
 
     public bool TryGet<T>(string key, out T value)
     {
+        if (_disposed) { value = default!; return false; }
         ValidateKey(key);
         if (_cache.TryGet(key, out var boxed) && boxed is T typed)
         {
@@ -57,12 +58,14 @@ public sealed class ApplicationPersistedScope : IPersistedStateScope
 
     public void Set<T>(string key, T value)
     {
+        if (_disposed) return;
         ValidateKey(key);
         _cache.Set(key, value);
     }
 
     public void Remove(string key)
     {
+        if (_disposed) return;
         ValidateKey(key);
         _cache.Remove(key);
     }
@@ -127,6 +130,11 @@ public sealed class ApplicationPersistedScope : IPersistedStateScope
 
     private void OnAppMemoryUsageIncreased(object? sender, object e)
     {
+        // Race: the event can fire after Dispose has unregistered (if a callback
+        // is already in flight) or while disposing. Match the WindowPersistedScope
+        // pattern and become inert post-dispose.
+        if (_disposed) return;
+
         // The event arg type is opaque-ish; what we care about is the current
         // app memory usage level. Trim aggressively when over-limit.
         try
