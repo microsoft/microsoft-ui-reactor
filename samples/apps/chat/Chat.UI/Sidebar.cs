@@ -38,7 +38,7 @@ public class Sidebar : Component<SidebarProps>
         : Border(Empty()).Size(8, 8).CornerRadius(4).Background(Ref("SystemFillColorCautionBrush")).VAlign(VerticalAlignment.Center);
 
     public override Element Render() => Border(
-        Grid(["*"], ["Auto", "Auto", "Auto", "Auto", "*", "Auto"],
+        Grid([GridSize.Star()], [GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto],
             // Connection status + new session button
             VStack(12,
                 (FlexRow(

@@ -160,66 +160,6 @@ class PerfStressDemo : Component
             p95Ms = sorted[(int)(sorted.Count * 0.95)];
         }
 
-        // Build the bar visualization
-        Element bars;
-        if (sortState is not null)
-        {
-            var barElements = new Element[sortState.Values.Length];
-            double maxVal = elementCount;
-            for (int i = 0; i < sortState.Values.Length; i++)
-            {
-                double heightPct = sortState.Values[i] / maxVal * 200;
-                int colorIdx = sortState.Colors[i] % BarColors.Length;
-                bool isPivot = i == sortState.Pivot;
-                bool isActive = i >= sortState.Left && i <= sortState.Right;
-
-                double barWidth = Math.Max(2, 800.0 / elementCount - (showBorders ? 1 : 0));
-                double barHeight = Math.Max(4, heightPct);
-                double opacity = isPivot ? 1.0 : isActive ? 0.9 : 0.7;
-                int val = sortState.Values[i];
-
-                // Each bar contains child controls to stress the reconciler:
-                // a tiny progress indicator + a value label + a colored pip
-                Element barContent = VStack(0,
-                    // Top: small colored indicator pip (changes with sort state)
-                    Border(Empty())
-                        .Background(isPivot ? "#ffffff" : isActive ? "#ffeb3b" : BarColors[(colorIdx + 1) % BarColors.Length])
-                        .CornerRadius(1)
-                        .Width(Math.Min(barWidth - 1, 6))
-                        .Height(2),
-                    // Middle: value label (only when bars are wide enough)
-                    barWidth >= 10
-                        ? TextBlock($"{val}").FontSize(Math.Min(7, barWidth * 0.8))
-                        : Empty(),
-                    // Bottom: progress-like fill showing relative position
-                    Border(Empty())
-                        .Background(BarColors[(colorIdx + 2) % BarColors.Length])
-                        .CornerRadius(0)
-                        .Width(Math.Max(1, barWidth * 0.6))
-                        .Height(Math.Max(1, barHeight * 0.15))
-                        .Opacity(0.5)
-                );
-
-                Element bar = Border(barContent)
-                    .Background(BarColors[colorIdx])
-                    .CornerRadius(0)
-                    .Width(barWidth)
-                    .Height(barHeight)
-                    .Opacity(opacity)
-                    .VAlign(VerticalAlignment.Bottom);
-
-                if (showBorders)
-                    bar = bar.Margin(0, 0, 1, 0);
-
-                barElements[i] = bar;
-            }
-            bars = HStack(0, barElements).Height(220).VAlign(VerticalAlignment.Bottom);
-        }
-        else
-        {
-            bars = TextBlock("Click 'Start Sort' to begin").Foreground(TertiaryText).MinHeight(220);
-        }
-
         return ScrollView(VStack(12,
             Heading("Performance Stress Test"),
             TextBlock("Quicksort visualization — stresses tree diffing with many simultaneous property changes, " +
@@ -271,8 +211,64 @@ class PerfStressDemo : Component
                     ? TextBlock($"Sorting... step {stepCount}, {totalSwaps} swaps").Foreground(SecondaryText)
                     : Empty(),
 
-            // Visualization area
-            Border(bars)
+            // Visualization area — Expr() (spec 033 §5) keeps the per-bar
+            // build locals scoped to the branch that uses them.
+            Border(Expr(() =>
+            {
+                if (sortState is null)
+                    return TextBlock("Click 'Start Sort' to begin").Foreground(TertiaryText).MinHeight(220);
+
+                var barElements = new Element[sortState.Values.Length];
+                double maxVal = elementCount;
+                for (int i = 0; i < sortState.Values.Length; i++)
+                {
+                    double heightPct = sortState.Values[i] / maxVal * 200;
+                    int colorIdx = sortState.Colors[i] % BarColors.Length;
+                    bool isPivot = i == sortState.Pivot;
+                    bool isActive = i >= sortState.Left && i <= sortState.Right;
+
+                    double barWidth = Math.Max(2, 800.0 / elementCount - (showBorders ? 1 : 0));
+                    double barHeight = Math.Max(4, heightPct);
+                    double opacity = isPivot ? 1.0 : isActive ? 0.9 : 0.7;
+                    int val = sortState.Values[i];
+
+                    // Each bar contains child controls to stress the reconciler:
+                    // a tiny progress indicator + a value label + a colored pip
+                    Element barContent = VStack(0,
+                        // Top: small colored indicator pip (changes with sort state)
+                        Border(Empty())
+                            .Background(isPivot ? "#ffffff" : isActive ? "#ffeb3b" : BarColors[(colorIdx + 1) % BarColors.Length])
+                            .CornerRadius(1)
+                            .Width(Math.Min(barWidth - 1, 6))
+                            .Height(2),
+                        // Middle: value label (only when bars are wide enough)
+                        barWidth >= 10
+                            ? TextBlock($"{val}").FontSize(Math.Min(7, barWidth * 0.8))
+                            : Empty(),
+                        // Bottom: progress-like fill showing relative position
+                        Border(Empty())
+                            .Background(BarColors[(colorIdx + 2) % BarColors.Length])
+                            .CornerRadius(0)
+                            .Width(Math.Max(1, barWidth * 0.6))
+                            .Height(Math.Max(1, barHeight * 0.15))
+                            .Opacity(0.5)
+                    );
+
+                    Element bar = Border(barContent)
+                        .Background(BarColors[colorIdx])
+                        .CornerRadius(0)
+                        .Width(barWidth)
+                        .Height(barHeight)
+                        .Opacity(opacity)
+                        .VAlign(VerticalAlignment.Bottom);
+
+                    if (showBorders)
+                        bar = bar.Margin(0, 0, 1, 0);
+
+                    barElements[i] = bar;
+                }
+                return HStack(0, barElements).Height(220).VAlign(VerticalAlignment.Bottom);
+            }))
                 .CornerRadius(8)
                 .Background("#1a1a2e")
                 .Padding(8),

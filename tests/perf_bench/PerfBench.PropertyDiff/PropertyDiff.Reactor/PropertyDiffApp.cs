@@ -72,8 +72,8 @@ public class PropertyDiffApp : Component
             return () => timer.Stop();
         });
 
-        var columns = Enumerable.Range(0, Cols).Select(_ => "1*").ToArray();
-        var rows = Enumerable.Range(0, Rows).Select(_ => "1*").ToArray();
+        var columns = Enumerable.Range(0, Cols).Select(_ => GridSize.Star()).ToArray();
+        var rows = Enumerable.Range(0, Rows).Select(_ => GridSize.Star()).ToArray();
 
         var elements = new Element[Total];
         for (int i = 0; i < Total; i++)

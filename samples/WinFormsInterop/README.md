@@ -110,7 +110,7 @@ class MyReactorComponent : Component
 
         // Grid + Background fills the island — XAML Islands don't provide
         // a background or stretch content like a WinUI Window does.
-        return Grid(["*"], ["*"],
+        return Grid([GridSize.Star()], [GridSize.Star()],
             VStack(
                 Text("Hello from Reactor!").FontSize(24),
                 Button($"Clicked {count} times", () => setCount(count + 1))
@@ -142,6 +142,6 @@ samples/WinFormsInterop/            This sample
 
 2. **Exit via `System.Windows.Forms.Application.Exit()`.** The WinForms message loop owns the process — exit through WinForms, not `Microsoft.UI.Xaml.Application.Current.Exit()`. The bootstrap handles the XAML runtime shutdown automatically after the WinForms loop exits.
 
-3. **Wrap content in a Grid with a background.** XAML Islands don't stretch content or provide a background like a WinUI Window does. Use `Grid(["*"], ["*"], ...).Background(SolidBackground)` in your root component.
+3. **Wrap content in a Grid with a background.** XAML Islands don't stretch content or provide a background like a WinUI Window does. Use `Grid([GridSize.Star()], [GridSize.Star()], ...).Background(SolidBackground)` in your root component.
 
 4. **Tab navigation works across the boundary.** `XamlIslandControl` bridges `TakeFocusRequested` and `NavigateFocus` so Tab/Shift+Tab cycles between WinForms controls and WinUI controls inside the island.

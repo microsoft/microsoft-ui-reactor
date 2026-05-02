@@ -286,7 +286,7 @@ class ChatSampleApp : Component
         var allCommands = new List<Command> { newThreadCmd, closeThreadCmd, escapeCmd };
         allCommands.AddRange(switchCmds);
 
-        Element chatArea = Grid(["*"], ["Auto", "Auto", "Auto", "*", "Auto", "Auto"],
+        Element chatArea = Grid([GridSize.Star()], [GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto, GridSize.Auto],
             notificationBar.Grid(row: 0, column: 0),
             header.Grid(row: 1, column: 0),
             divider.Grid(row: 2, column: 0),
@@ -295,7 +295,7 @@ class ChatSampleApp : Component
             statusBar.Grid(row: 5, column: 0)
         );
 
-        return Grid(["*"], ["Auto", "*"],
+        return Grid([GridSize.Star()], [GridSize.Auto, GridSize.Star()],
             titleBar.Grid(row: 0, column: 0),
             Component<SplitPanel, SplitPanelProps>(new(
                 Left: sidebar, Right: chatArea, InitialWidth: 280, MinWidth: 200))

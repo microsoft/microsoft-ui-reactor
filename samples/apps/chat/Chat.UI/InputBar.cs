@@ -30,29 +30,6 @@ public class InputBar : Component<InputBarProps>
         var sendActionRef = UseRef<Action>(sendAction);
         sendActionRef.Current = sendAction;
 
-        // Working indicator
-        Element workingIndicator = Props.TurnActive
-            ? (FlexRow(
-                ProgressRing().Size(16, 16),
-                Caption("Assistant is working…").Foreground(SecondaryText)
-              ) with { ColumnGap = 8 }).Padding(16, 8, 16, 0)
-            : Empty();
-
-        // Permission banner
-        Element permissionBanner = Props.PendingPermission is { } perm
-            ? Border(
-                HStack(8,
-                    TextBlock($"⚠ {perm.ToolName}: {perm.Detail}")
-                        .Set(t => { t.TextWrapping = TextWrapping.Wrap; t.TextTrimming = TextTrimming.CharacterEllipsis; })
-                        .HAlign(HorizontalAlignment.Stretch),
-                    Button("Allow", () => Props.OnPermissionResponse(perm.RequestId, true))
-                        .Background(Accent).Set(b => { b.CornerRadius = new CornerRadius(4); b.Padding = new Thickness(12, 4, 12, 4); b.MinWidth = 0; b.MinHeight = 0; }),
-                    Button("Deny", () => Props.OnPermissionResponse(perm.RequestId, false))
-                        .Set(b => { b.CornerRadius = new CornerRadius(4); b.Padding = new Thickness(12, 4, 12, 4); b.MinWidth = 0; b.MinHeight = 0; })
-                ).Padding(12, 8, 12, 8)
-              ).Background(SubtleFill).CornerRadius(8).WithBorder(DividerStroke, 1).Margin(12, 4, 12, 4)
-            : Empty();
-
         var isConnected = Props.ConnectionState == "connected";
         var placeholder = Props.ConnectionState switch
         {
@@ -62,7 +39,7 @@ public class InputBar : Component<InputBarProps>
         };
 
         var inputField = Border(
-            Grid(["Auto", "*", "Auto"], ["*"],
+            Grid([GridSize.Auto, GridSize.Star(), GridSize.Auto], [GridSize.Star()],
                 Button(
                     TextBlock("+").FontSize(16),
                     () => { /* Future: attach files */ }
@@ -123,8 +100,29 @@ public class InputBar : Component<InputBarProps>
         ).Padding(16, 12, 16, 16);
 
         return VStack(0,
-            workingIndicator,
-            permissionBanner,
+            // Working indicator (spec 033 §5 — Expr keeps the row local to the branch)
+            Expr(() => Props.TurnActive
+                ? (FlexRow(
+                    ProgressRing().Size(16, 16),
+                    Caption("Assistant is working…").Foreground(SecondaryText)
+                  ) with { ColumnGap = 8 }).Padding(16, 8, 16, 0)
+                : Empty()),
+
+            // Permission banner — Expr scopes the destructured `perm` to its consumers.
+            Expr(() => Props.PendingPermission is { } perm
+                ? Border(
+                    HStack(8,
+                        TextBlock($"⚠ {perm.ToolName}: {perm.Detail}")
+                            .Set(t => { t.TextWrapping = TextWrapping.Wrap; t.TextTrimming = TextTrimming.CharacterEllipsis; })
+                            .HAlign(HorizontalAlignment.Stretch),
+                        Button("Allow", () => Props.OnPermissionResponse(perm.RequestId, true))
+                            .Background(Accent).Set(b => { b.CornerRadius = new CornerRadius(4); b.Padding = new Thickness(12, 4, 12, 4); b.MinWidth = 0; b.MinHeight = 0; }),
+                        Button("Deny", () => Props.OnPermissionResponse(perm.RequestId, false))
+                            .Set(b => { b.CornerRadius = new CornerRadius(4); b.Padding = new Thickness(12, 4, 12, 4); b.MinWidth = 0; b.MinHeight = 0; })
+                    ).Padding(12, 8, 12, 8)
+                  ).Background(SubtleFill).CornerRadius(8).WithBorder(DividerStroke, 1).Margin(12, 4, 12, 4)
+                : Empty()),
+
             inputField
         );
     }

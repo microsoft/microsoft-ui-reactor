@@ -194,80 +194,6 @@ class IntegratedDataDemo : Microsoft.UI.Reactor.Core.Component
                 editable: true, width: 80),
         });
 
-        // ── Build right-panel content ─────────────────────────────
-        Element rightPanel;
-        if (selectedItem is not null)
-        {
-            var nameField = new FieldDescriptor
-            {
-                Name = "Name",
-                DisplayName = "Task Name",
-                FieldType = typeof(string),
-                GetValue = _ => selectedItem.Name,
-                Validators = ProjectTask.NameValidators,
-                Description = "Edit the task name here — changes sync to DataGrid and PropertyGrid",
-            };
-
-            // ── Run validators once, share results across views ──
-            var nameErrors = ProjectTask.NameValidators
-                .Select(v => v.Validate(selectedItem.Name, "Name"))
-                .Where(m => m is not null).ToList();
-            var priorityErrors = ProjectTask.PriorityValidators
-                .Select(v => v.Validate(selectedItem.Priority, "Priority"))
-                .Where(m => m is not null).ToList();
-            var budgetErrors = ProjectTask.BudgetValidators
-                .Select(v => v.Validate(selectedItem.Budget, "Budget"))
-                .Where(m => m is not null).ToList();
-            var allErrors = nameErrors.Concat(priorityErrors).Concat(budgetErrors).ToList();
-
-            // FormField with inline red border
-            var nameEditor = TextField(selectedItem.Name, v =>
-            {
-                selectedItem.Name = (string)v;
-            }, placeholder: "Task name...");
-            if (nameErrors.Count > 0)
-                nameEditor = nameEditor.WithBorder(Theme.Ref("SystemFillColorCriticalBrush"), 1);
-
-            rightPanel = VStack(8,
-                // FormField section — red border on invalid
-                Border(
-                    VStack(4,
-                        TextBlock("FormField (first property)").SemiBold(),
-                        Caption("Task Name *"),
-                        nameEditor,
-                        nameErrors.Count > 0
-                            ? Caption(nameErrors[0]!.Text).Foreground(Theme.Ref("SystemFillColorCriticalBrush"))
-                            : Caption(nameField.Description ?? "").Foreground(TertiaryText)
-                    )
-                ).Padding(12).Background(SubtleFill).CornerRadius(4),
-
-                // PropertyGrid section — plain, no inline validation
-                TextBlock("PropertyGrid (selected item)").SemiBold(),
-                PropertyGrid(selectedItem, registry),
-
-                // Form-level validation summary
-                allErrors.Count > 0
-                    ? Border(
-                        VStack(4, new Element?[] {
-                            TextBlock($"Validation ({allErrors.Count} error{(allErrors.Count != 1 ? "s" : "")})")
-                                .SemiBold().Foreground(Theme.Ref("SystemFillColorCriticalBrush"))
-                        }.Concat(allErrors.Select(e => (Element?)
-                            Caption($"\u2022 {e!.Field}: {e.Text}").Foreground(Theme.Ref("SystemFillColorCriticalBrush"))
-                        )).ToArray())
-                    ).Padding(12).WithBorder(Theme.Ref("SystemFillColorCriticalBrush"), 1).CornerRadius(4)
-                    : (Element)Border(
-                        TextBlock("\u2713 All fields valid").Foreground(Theme.Ref("SystemFillColorSuccessBrush")).SemiBold()
-                    ).Padding(12).WithBorder(Theme.Ref("SystemFillColorSuccessBrush"), 1).CornerRadius(4)
-            );
-        }
-        else
-        {
-            rightPanel = Border(
-                TextBlock("Select a row in the DataGrid to see its details here.")
-                    .Foreground(TertiaryText).Padding(20)
-            ).Background(SubtleFill).CornerRadius(4).VAlign(VerticalAlignment.Center);
-        }
-
         // ── Layout ────────────────────────────────────────────────
         return FlexColumn(
             Heading("Integrated Data Demo").Flex(shrink: 0),
@@ -293,8 +219,77 @@ class IntegratedDataDemo : Microsoft.UI.Reactor.Core.Component
                     ).Flex(grow: 1)
                 ) with { RowGap = 4 }).Flex(grow: 3, basis: 0),
 
-                // Right: FormField + PropertyGrid (40%)
-                rightPanel.Flex(grow: 2, basis: 0)
+                // Right: FormField + PropertyGrid (40%) — Expr() (spec 033 §5)
+                // keeps the validator locals scoped to the branch that uses them.
+                Expr(() =>
+                {
+                    if (selectedItem is null)
+                        return Border(
+                            TextBlock("Select a row in the DataGrid to see its details here.")
+                                .Foreground(TertiaryText).Padding(20)
+                        ).Background(SubtleFill).CornerRadius(4).VAlign(VerticalAlignment.Center);
+
+                    var nameField = new FieldDescriptor
+                    {
+                        Name = "Name",
+                        DisplayName = "Task Name",
+                        FieldType = typeof(string),
+                        GetValue = _ => selectedItem.Name,
+                        Validators = ProjectTask.NameValidators,
+                        Description = "Edit the task name here — changes sync to DataGrid and PropertyGrid",
+                    };
+
+                    // Run validators once, share results across views.
+                    var nameErrors = ProjectTask.NameValidators
+                        .Select(v => v.Validate(selectedItem.Name, "Name"))
+                        .Where(m => m is not null).ToList();
+                    var priorityErrors = ProjectTask.PriorityValidators
+                        .Select(v => v.Validate(selectedItem.Priority, "Priority"))
+                        .Where(m => m is not null).ToList();
+                    var budgetErrors = ProjectTask.BudgetValidators
+                        .Select(v => v.Validate(selectedItem.Budget, "Budget"))
+                        .Where(m => m is not null).ToList();
+                    var allErrors = nameErrors.Concat(priorityErrors).Concat(budgetErrors).ToList();
+
+                    var nameEditor = TextField(selectedItem.Name, v =>
+                    {
+                        selectedItem.Name = (string)v;
+                    }, placeholder: "Task name...");
+                    if (nameErrors.Count > 0)
+                        nameEditor = nameEditor.WithBorder(Theme.Ref("SystemFillColorCriticalBrush"), 1);
+
+                    return VStack(8,
+                        // FormField section — red border on invalid
+                        Border(
+                            VStack(4,
+                                TextBlock("FormField (first property)").SemiBold(),
+                                Caption("Task Name *"),
+                                nameEditor,
+                                nameErrors.Count > 0
+                                    ? Caption(nameErrors[0]!.Text).Foreground(Theme.Ref("SystemFillColorCriticalBrush"))
+                                    : Caption(nameField.Description ?? "").Foreground(TertiaryText)
+                            )
+                        ).Padding(12).Background(SubtleFill).CornerRadius(4),
+
+                        // PropertyGrid section — plain, no inline validation
+                        TextBlock("PropertyGrid (selected item)").SemiBold(),
+                        PropertyGrid(selectedItem, registry),
+
+                        // Form-level validation summary
+                        allErrors.Count > 0
+                            ? Border(
+                                VStack(4, new Element?[] {
+                                    TextBlock($"Validation ({allErrors.Count} error{(allErrors.Count != 1 ? "s" : "")})")
+                                        .SemiBold().Foreground(Theme.Ref("SystemFillColorCriticalBrush"))
+                                }.Concat(allErrors.Select(e => (Element?)
+                                    Caption($"• {e!.Field}: {e.Text}").Foreground(Theme.Ref("SystemFillColorCriticalBrush"))
+                                )).ToArray())
+                            ).Padding(12).WithBorder(Theme.Ref("SystemFillColorCriticalBrush"), 1).CornerRadius(4)
+                            : (Element)Border(
+                                TextBlock("✓ All fields valid").Foreground(Theme.Ref("SystemFillColorSuccessBrush")).SemiBold()
+                            ).Padding(12).WithBorder(Theme.Ref("SystemFillColorSuccessBrush"), 1).CornerRadius(4)
+                    );
+                }).Flex(grow: 2, basis: 0)
 
             ) with { ColumnGap = 16, AlignItems = FlexAlign.Stretch }).Flex(grow: 1)
 

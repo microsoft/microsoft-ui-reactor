@@ -35,7 +35,7 @@ public class SessionListItem : Component<SessionListItemProps>
             : Empty();
 
         return Button(
-            Grid(["*"], ["*"],
+            Grid([GridSize.Star()], [GridSize.Star()],
                 VStack(2,
                     FlexRow(
                         StatusIndicator.VAlign(VerticalAlignment.Center),

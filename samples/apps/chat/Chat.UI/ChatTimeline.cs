@@ -213,7 +213,7 @@ public class ChatTimeline : Component<ChatTimelineProps>
 
             // Assistant — markdown in a padded, width-constraining surface
             ChatTimelineItemKind.Assistant => Border(
-                Grid(["*"], ["Auto"],
+                Grid([GridSize.Star()], [GridSize.Auto],
                     Markdown(entry.Text ?? "", _markdownOptions).Grid(row: 0, column: 0)
                 )
             ).Padding(24, 4, 24, 4)
@@ -268,9 +268,9 @@ public class ChatTimeline : Component<ChatTimelineProps>
             .Select(entry => RenderEntry(entry).WithKey(entry.Id))
             .ToArray();
 
-        return Grid(["*"], ["*"],
+        return Grid([GridSize.Star()], [GridSize.Star()],
             ScrollView(
-                Grid(["*"], ["Auto", "Auto", "Auto"],
+                Grid([GridSize.Star()], [GridSize.Auto, GridSize.Auto, GridSize.Auto],
                     loadMoreButton.Grid(row: 0, column: 0),
                     VStack(4, renderedEntries).Set(sp =>
                     {

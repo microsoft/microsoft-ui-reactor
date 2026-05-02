@@ -73,7 +73,7 @@ public class LandingPage : Component<LandingPageProps>
 
             // Input bar
             Border(
-                Grid(["Auto", "*", "Auto"], ["*"],
+                Grid([GridSize.Auto, GridSize.Star(), GridSize.Auto], [GridSize.Star()],
                     Caption("+").Foreground(SecondaryText).VAlign(VerticalAlignment.Center)
                         .Padding(8, 0, 0, 0).Grid(row: 0, column: 0),
                     TextField(inputState.Value, v => inputState.Set(v))
