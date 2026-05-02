@@ -102,15 +102,19 @@ All factories live on `Microsoft.UI.Reactor.Factories` — use
 
 ```csharp
 Grid(
-    columns: ["*", "*", "200"],      // Star, Star, 200px fixed
-    rows: ["Auto", "*"],              // Auto-height, fill remaining
+    columns: [GridSize.Star(), GridSize.Star(), GridSize.Px(200)],
+    rows: [GridSize.Auto, GridSize.Star()],
     TextBlock("A").Grid(row: 0, column: 0),
     TextBlock("Wide").Grid(row: 1, column: 0, columnSpan: 3)
 )
 ```
 
-Column/row syntax: `"*"` (1 star), `"2*"` (2 stars), `"Auto"` (size to
-content), `"200"` (fixed 200px).
+Track helpers: `GridSize.Star()` (1 star), `GridSize.Star(2)` (2 stars),
+`GridSize.Auto` (size to content), `GridSize.Px(200)` (fixed 200px).
+
+The legacy string-form overload (`Grid(["*", "*", "200"], ["Auto", "*"], …)`)
+still compiles but is soft-deprecated (`CS0618`) — prefer the typed helpers
+(spec 033 §1).
 
 ### Flex Layout (CSS Flexbox)
 
@@ -274,9 +278,22 @@ signatures.
 |---------|---------|-----------|
 | `When(condition, then)` | Render only if true | `(bool, Func<Element>) → Element` |
 | `If(condition, then, otherwise?)` | If/else | `(bool, Func<Element>, Func<Element>?) → Element` |
+| `Expr(render)` | Inline block-expression escape hatch — evaluates the lambda and returns its element (or `EmptyElement` for null). No node, no hook scope, no memoization (spec 033 §5). | `(Func<Element?>) → Element` |
 | `ForEach(items, render)` | Map list → elements | `(IEnumerable<T>, Func<T, Element>) → Element` |
 | `ForEach(items, render)` | With index | `(IEnumerable<T>, Func<T, int, Element>) → Element` |
 | `Empty()` | Renders nothing | `→ Element` |
+
+## Function Components
+
+| Factory | Purpose | Signature |
+|---------|---------|-----------|
+| `Memo(render)` | Inline component, render once + own state changes | `(Func<RenderContext, Element>) → MemoElement` |
+| `Memo(render, deps)` | Inline component, also re-renders when any dep changes | `(Func<RenderContext, Element>, params object?[]) → MemoElement` |
+| `RenderEachTime(render)` | Inline component, re-renders on every parent render (no memoization). Use sparingly. | `(Func<RenderContext, Element>) → FuncElement` |
+
+The legacy `Func(ctx => …)` factory is soft-deprecated (`CS0618`) — replace
+with `Memo(ctx => …)` for the common case or `RenderEachTime(ctx => …)` when
+you specifically want the always-re-render shape (spec 033 §4).
 
 ---
 

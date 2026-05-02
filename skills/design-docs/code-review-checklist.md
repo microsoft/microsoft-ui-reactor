@@ -39,7 +39,7 @@ Use this checklist when reviewing Reactor UI code for Windows 11 design complian
 - [ ] Uses `Border` for single-child containers (not `Grid`/`VStack` wrappers)
 - [ ] No unnecessary wrapper containers without layout or styling purpose
 - [ ] `HStack` does not contain text that needs `TextTrimming`
-- [ ] Text trimming columns use `"*"` (not `"Auto"`, which also prevents trimming)
+- [ ] Text trimming columns use `GridSize.Star()` (not `GridSize.Auto`, which also prevents trimming)
 - [ ] Uses spacing parameters, not spacer elements
 - [ ] Mixed-control rows explicitly set `VAlign(VerticalAlignment.Center)`
 - [ ] `ThemeShadow` has `Translation(0, 0, 32)` for elevation

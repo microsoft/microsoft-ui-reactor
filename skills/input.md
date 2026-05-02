@@ -26,7 +26,8 @@ etc.) when you attach a handler, so you never need to set those manually.
 | `.OnRotate(...)` | Rotation gesture |
 | `.OnLongPress(...)` | Press-and-hold |
 | `.OnGotFocus()` / `.OnLostFocus()` | Focus change events |
-| `UseElementFocus(ref)` | Programmatic focus control |
+| `UseElementFocus()` | Untyped ref + dispatcher-scheduled focus |
+| `UseElementRef<T>()` | Typed element ref — `.Current` is `T` (no cast) |
 | `.AccessKey("S")` | Alt+key keyboard shortcut |
 | `.OnDragStart(...)` / `.OnDrop(...)` | Drag-and-drop |
 
@@ -173,6 +174,24 @@ return VStack(12,
 
 `UseElementFocus` returns a handle with `.Ref` (attach to the element)
 and `.RequestFocus()` (imperatively focus it).
+
+### UseElementRef\<T\> — typed refs
+
+When you actually need to call methods on the underlying control (`SelectAll()`
+on a `TextBox`, `Focus(FocusState.Programmatic)`, etc.), use the typed variant.
+`.Current` is already typed as `T` — no cast at the call site:
+
+```csharp
+var inputRef = UseElementRef<TextBox>();
+
+UseEffect(() => inputRef.Current?.SelectAll(), Array.Empty<object>());
+
+return TextField(query, setQuery).Ref(inputRef);
+```
+
+The constraint is `T : FrameworkElement`. In `DEBUG` builds Reactor asserts
+the actual mounted element is a `T`; in release the mismatch is silent and
+`.Current` returns `null`. Spec 033 §3.
 
 ### Focus events
 

@@ -97,23 +97,26 @@ Explicit row/column definitions with child positioning.
 
 ```csharp
 Grid(
-    columns: ["Auto", "*", "Auto"],
-    rows: ["Auto", "*"],
-    
+    columns: [GridSize.Auto, GridSize.Star(), GridSize.Auto],
+    rows: [GridSize.Auto, GridSize.Star()],
+
     TextBlock("Label").Grid(row: 0, column: 0),
     TextField(value, setValue).Grid(row: 0, column: 1),
     Button("Go", onClick).Grid(row: 0, column: 2),
-    
+
     ScrollView(
         VStack(8, content)
     ).Grid(row: 1, column: 0, columnSpan: 3))
 ```
 
-**Column/row definitions:**
-- `"*"` — flexible, takes remaining space
-- `"2*"` — flexible, twice the weight
-- `"Auto"` — sizes to content
-- `"200"` — fixed 200px
+**Track helpers (spec 033 §1):**
+- `GridSize.Star()` — flexible, takes remaining space (weight 1)
+- `GridSize.Star(2)` — flexible, twice the weight
+- `GridSize.Auto` — sizes to content
+- `GridSize.Px(200)` — fixed 200px
+
+The legacy string-form overload (`Grid(["Auto", "*"], …)`) still compiles but
+is soft-deprecated (`CS0618`).
 
 ### Flex (CSS Flexbox)
 
@@ -157,7 +160,7 @@ Border(
 ).Padding(16).CornerRadius(4).Background(Theme.CardBackground)
 
 // Wrong: Grid or VStack for single child
-Grid(["*"], ["*"],
+Grid([GridSize.Star()], [GridSize.Star()],
     TextBlock("Card content")
 ).Background(Theme.CardBackground)
 ```
@@ -298,13 +301,13 @@ Border(content)
 
 ## Text Trimming
 
-`HStack` (StackPanel) and `FlexRow` both give children unbounded main-axis width, so `TextTrimming` never activates inside them. Use a `Grid` with a `"*"` column:
+`HStack` (StackPanel) and `FlexRow` both give children unbounded main-axis width, so `TextTrimming` never activates inside them. Use a `Grid` with a `GridSize.Star()` column:
 
 ```csharp
 // Correct: Grid constrains width
 Grid(
-    columns: ["Auto", "*"],
-    rows: ["Auto"],
+    columns: [GridSize.Auto, GridSize.Star()],
+    rows: [GridSize.Auto],
     Image(avatar).Size(32, 32).Grid(column: 0),
     TextBlock(title)
         .TextTrimming(TextTrimming.CharacterEllipsis)
@@ -317,7 +320,7 @@ HStack(8,
     TextBlock(title).TextTrimming(TextTrimming.CharacterEllipsis))
 ```
 
-**Important:** `Grid` column `"Auto"` also sizes to content and prevents trimming — always use `"*"` for the column that contains trimmable text. This is a common mistake when multiple columns are present.
+**Important:** `GridSize.Auto` also sizes to content and prevents trimming — always use `GridSize.Star()` for the column that contains trimmable text. This is a common mistake when multiple columns are present.
 
 ### Unnecessary Container Wrappers
 
@@ -325,7 +328,7 @@ Remove wrapper containers (`Border`, `Grid`, `VStack`) that exist only for nesti
 
 ```csharp
 // Wrong: Grid wrapper serves no purpose
-Grid(["*"], ["*"],
+Grid([GridSize.Star()], [GridSize.Star()],
     TextBlock("Hello").Grid(row: 0, column: 0))
 
 // Correct: just the text

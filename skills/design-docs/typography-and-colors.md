@@ -96,12 +96,12 @@ TextBlock("Prominent text").Set(tb =>
        tb.Typography.NumeralAlignment = FontNumeralAlignment.Tabular)
    ```
 
-7. **Text trimming requires constrained width** — `HStack` gives unbounded width so trimming never fires. Use `Grid` with a `"*"` column (not `"Auto"`, which also sizes to content and prevents trimming):
+7. **Text trimming requires constrained width** — `HStack` gives unbounded width so trimming never fires. Use `Grid` with a `GridSize.Star()` column (not `GridSize.Auto`, which also sizes to content and prevents trimming):
 
    ```csharp
    Grid(
-       columns: ["Auto", "*"],
-       rows: ["Auto"],
+       columns: [GridSize.Auto, GridSize.Star()],
+       rows: [GridSize.Auto],
        Image(avatar).Size(32, 32).Grid(column: 0),
        TextBlock(longTitle)
            .TextTrimming(TextTrimming.CharacterEllipsis)

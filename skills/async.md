@@ -15,7 +15,8 @@ handle.** The hook owns the cancellation token, dedups across siblings,
 caches results in a shared `QueryCache`, and drops late results on unmount.
 
 Available on any `Component` subclass directly; on `RenderContext` as
-extension methods for function components (`Func(ctx => ...)`).
+extension methods for function components (`Memo(ctx => ...)` or
+`RenderEachTime(ctx => ...)`).
 
 ## 1. UseResource — single fetch
 

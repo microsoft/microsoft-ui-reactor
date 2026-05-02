@@ -296,13 +296,13 @@ or are porting from existing StackPanel code.
 
 Remove wrapper containers (`Border`, `Grid`, `FlexColumn`, `VStack`) that exist only for nesting without contributing layout, styling, or semantic purpose.
 
-**Text trimming caveat:** `HStack` (StackPanel) and `FlexRow` both give children unbounded width on the main axis, so `TextTrimming` never activates inside them. Use a `Grid` with a `"*"` column. Note: `Grid` column `"Auto"` also sizes to content and prevents trimming — always use `"*"` for the column that contains trimmable text.
+**Text trimming caveat:** `HStack` (StackPanel) and `FlexRow` both give children unbounded width on the main axis, so `TextTrimming` never activates inside them. Use a `Grid` with a `GridSize.Star()` column. Note: `GridSize.Auto` also sizes to content and prevents trimming — always use `GridSize.Star()` for the column that contains trimmable text.
 
 ```csharp
 // Correct: Grid constrains width so trimming works
 Grid(
-    columns: ["Auto", "*"],
-    rows: ["Auto"],
+    columns: [GridSize.Auto, GridSize.Star()],
+    rows: [GridSize.Auto],
     Image(source).Size(32, 32).Grid(column: 0),
     TextBlock(title).TextTrimming(TextTrimming.CharacterEllipsis).Grid(column: 1))
 
@@ -689,6 +689,26 @@ Border(content)
 - Overlays on acrylic use `LayerOnAcrylicFillColorDefaultBrush`.
 - Keep one acrylic layer per visual surface to avoid stacked-material artifacts.
 
+#### Window Backdrops (Mica / Acrylic)
+
+For *window-level* material (Mica/Acrylic showing through the title bar and
+chrome), use the `.Backdrop(BackdropKind)` modifier on the root element —
+not a brush. The modifier walks up to the host's `Window` and assigns the
+right `SystemBackdrop`:
+
+```csharp
+return Grid([GridSize.Star()], [GridSize.Auto, GridSize.Star()],
+    titleBar.Grid(row: 0),
+    content.Grid(row: 1)
+).Backdrop(BackdropKind.Mica);
+```
+
+Available kinds: `BackdropKind.None`, `Mica`, `MicaAlt`, `DesktopAcrylic`,
+`AcrylicThin`. On `ReactorHostControl` (windowless host) the modifier
+no-ops cleanly. For Mica to show through, the root element must not
+paint an opaque background — drop `Theme.SolidBackground` from the root
+when applying a backdrop. Spec 033 §6.
+
 #### Flyout Surface Pattern
 
 Flyout/popup surfaces should follow a standard elevation pattern:
@@ -801,7 +821,7 @@ Border(TextBlock("Hello")).Background(Theme.CardBackground).Padding(16)
 
 // Wrong: unnecessary nesting
 VStack(
-    Grid(["*"], ["*"],
+    Grid([GridSize.Star()], [GridSize.Star()],
         TextBlock("Hello")
     ).Background(Theme.CardBackground)
 ).Padding(16)
