@@ -42,8 +42,8 @@ as you need.
 
 ## Grid
 
-For row-and-column layouts, use `Grid`. Define columns and rows as string
-arrays, then place children with the `.Grid()` modifier:
+For row-and-column layouts, use `Grid`. Define columns and rows with `GridSize`
+helpers, then place children with the `.Grid()` modifier:
 
 ```csharp
 class GridDemo : Component
@@ -53,8 +53,8 @@ class GridDemo : Component
         return VStack(8,
             SubHeading("Grid"),
             Grid(
-                columns: ["120", "1*", "Auto"],
-                rows: ["Auto", "Auto"],
+                columns: [GridSize.Px(120), GridSize.Star(), GridSize.Auto],
+                rows: [GridSize.Auto, GridSize.Auto],
                 TextBlock("Label").Bold().Grid(row: 0, column: 0),
                 TextField("", _ => { }, placeholder: "Input...")
                     .Grid(row: 0, column: 1),
@@ -70,17 +70,21 @@ class GridDemo : Component
 
 ![Grid layout](images/layout/grid-layout.png)
 
-Column and row definitions use these formats:
+Use these `GridSize` helpers for tracks:
 
-| Format | Meaning |
+| Helper | Meaning |
 |--------|---------|
-| `"200"` | Fixed 200 pixels |
-| `"1*"` | Proportional — fills available space |
-| `"2*"` | Proportional — twice the space of `"1*"` |
-| `"Auto"` | Sizes to content |
+| `GridSize.Px(200)` | Fixed 200 pixels |
+| `GridSize.Star()` | Proportional — fills available space (weight 1) |
+| `GridSize.Star(2)` | Proportional — twice the space of `GridSize.Star()` |
+| `GridSize.Auto` | Sizes to content |
 
 Place children with `.Grid(row: 0, column: 1)`. Use `columnSpan` or
 `rowSpan` to span multiple cells: `.Grid(row: 1, column: 0, columnSpan: 2)`.
+
+> The older `Grid(["120", "1*", "Auto"], ...)` string-form overload still
+> works but is soft-deprecated (`CS0618`). Prefer the typed helpers — they
+> catch typos at compile time.
 
 ## ScrollView and Border
 
@@ -238,8 +242,8 @@ VStack(8, items).Margin(24).Padding(16)
 **Start with VStack.** Most screens are a vertical stack of sections. Add
 HStack for side-by-side content within those sections.
 
-**Use Grid for forms.** A two-column grid with `["Auto", "1*"]` columns
-gives you aligned labels on the left and stretching inputs on the right.
+**Use Grid for forms.** A two-column grid with `[GridSize.Auto, GridSize.Star()]`
+columns gives you aligned labels on the left and stretching inputs on the right.
 
 **Wrap long content in ScrollView.** If your VStack might overflow the window,
 wrap the whole thing in `ScrollView(VStack(...))`.

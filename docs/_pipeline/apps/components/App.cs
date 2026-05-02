@@ -77,7 +77,8 @@ class FunctionComponentDemo : Component
     {
         return VStack(12,
             SubHeading("Function components"),
-            Func(ctx =>
+            // Memo: render once + own state changes (the common case).
+            Memo(ctx =>
             {
                 var (on, setOn) = ctx.UseState(false);
                 return HStack(8,
@@ -85,6 +86,7 @@ class FunctionComponentDemo : Component
                     TextBlock(on ? "Active" : "Inactive")
                 );
             }),
+            // Memo with a dep: skip re-render when deps haven't changed.
             Memo(ctx =>
             {
                 return TextBlock("I only re-render when deps change")

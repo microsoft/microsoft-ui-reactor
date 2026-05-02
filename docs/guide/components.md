@@ -103,7 +103,8 @@ and return `true` to re-render whenever the parent re-renders.
 
 ## Function Components
 
-Not everything needs a class. Use `Func` for lightweight inline components:
+Not everything needs a class. Use `Memo` for lightweight inline components
+with their own hook state:
 
 ```csharp
 class FunctionComponentDemo : Component
@@ -112,7 +113,8 @@ class FunctionComponentDemo : Component
     {
         return VStack(12,
             SubHeading("Function components"),
-            Func(ctx =>
+            // Memo: render once + own state changes (the common case).
+            Memo(ctx =>
             {
                 var (on, setOn) = ctx.UseState(false);
                 return HStack(8,
@@ -120,6 +122,7 @@ class FunctionComponentDemo : Component
                     TextBlock(on ? "Active" : "Inactive")
                 );
             }),
+            // Memo with a dep: skip re-render when deps haven't changed.
             Memo(ctx =>
             {
                 return TextBlock("I only re-render when deps change")
@@ -132,11 +135,22 @@ class FunctionComponentDemo : Component
 
 ![Function component](images/components/function-component.png)
 
-- **`Func(ctx => { ... })`** — an inline component with its own hook state.
-  The `ctx` parameter is a `RenderContext` that provides `UseState`,
-  `UseEffect`, and all other hooks.
-- **`Memo(ctx => { ... }, deps)`** — like `Func`, but only re-renders when
-  the dependency values change. Use this for expensive subtrees (see [Hooks](hooks.md) for `UseMemo`).
+- **`Memo(ctx => { ... })`** — an inline component with its own hook state.
+  With no `deps` argument, it renders once and re-renders only on its own
+  state changes. The `ctx` parameter is a `RenderContext` that provides
+  `UseState`, `UseEffect`, and all other hooks.
+- **`Memo(ctx => { ... }, deps)`** — same as above, but also re-renders when
+  any value in `deps` changes. Use this for expensive subtrees that depend on
+  external props (see [Hooks](hooks.md) for `UseMemo`).
+- **`RenderEachTime(ctx => { ... })`** — opts the component back into
+  re-rendering on every parent render. Use sparingly — it defeats memoization
+  and can amplify render storms. Pick this only when you've decided you
+  *need* the always-re-render behavior.
+
+> The older `Func(ctx => ...)` factory still works but is soft-deprecated
+> (`CS0618`) — replace it with `Memo(ctx => ...)` for the common case or
+> `RenderEachTime(ctx => ...)` when you specifically want the always-re-render
+> shape.
 
 You can also use a function component as the app root:
 
@@ -195,9 +209,9 @@ correctly.
 `Component<TProps>` are the only base classes you need. Build complexity
 through nesting, not class hierarchies.
 
-**Use `Func` for one-off components.** If a component is only used in one
-place and has simple state, an inline `Func(ctx => ...)` avoids the class
-boilerplate.
+**Use `Memo` for one-off components.** If a component is only used in one
+place and has simple state, an inline `Memo(ctx => ...)` avoids the class
+boilerplate while still memoizing its render.
 
 **Keep Render() pure.** Don't mutate external state or perform I/O inside
 `Render()`. Use [`UseEffect`](effects.md) for side effects. `Render()` should be a pure

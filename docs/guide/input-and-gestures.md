@@ -235,6 +235,31 @@ mounted control. Call `Microsoft.UI.Reactor.Input.FocusManager.Focus(ref)` for
 a synchronous focus attempt or `FocusManager.FocusAsync(ref)` for WinUI's
 async API with a success result.
 
+#### Typed refs
+
+When you actually need to call methods on the underlying control (e.g.
+`SelectAll()` on a `TextBox`, `Focus(FocusState.Programmatic)` on a `Button`),
+use `UseElementRef<T>()` instead. It gives you an `ElementRef<T>` whose
+`.Current` is already typed as `T` — no `as TextBox` cast at the call site:
+
+```csharp
+public class SearchBox : Component
+{
+    public override Element Render()
+    {
+        var inputRef = Context.UseElementRef<TextBox>();
+
+        Context.UseEffect(() => inputRef.Current?.SelectAll(), Array.Empty<object>());
+
+        return TextField(query, setQuery).Ref(inputRef);
+    }
+}
+```
+
+The constraint `T : FrameworkElement` keeps the ref type-checked. In `DEBUG`
+builds Reactor asserts the actual mounted element is a `T`; in release the
+mismatch is silent and `.Current` returns `null`.
+
 ## Behind the scenes: trampoline dispatch
 
 Re-rendering an element with a fresh handler closure is the common case in a

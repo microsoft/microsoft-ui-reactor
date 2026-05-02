@@ -312,7 +312,8 @@ class MyComponent : Component<MyProps>
 
 | Hook | Signature | Purpose |
 |------|-----------|---------|
-| `UsePersisted` | `(T, Action<T>) UsePersisted<T>(string key, T initial)` | Local-storage-backed state |
+| `UsePersisted` | `(T, Action<T>) UsePersisted<T>(string key, T initial)` | Local-storage-backed state (Application scope, legacy default) |
+| `UsePersisted` | `(T, Action<T>) UsePersisted<T>(string key, T initial, PersistedScope scope)` | Same, but routes to the Application or Window scope explicitly. `PersistedScope.Window` is the recommended default for new code. |
 | `UseObservableTree` | `T UseObservableTree<T>(T source)` | Re-render on any INotifyPropertyChanged |
 | `UseObservable` | `T UseObservable<T>(T source)` | Re-render on direct property changes |
 | `UseObservableProperty` | `TProp UseObservableProperty<T,TProp>(T src, Func<T,TProp> sel, string prop)` | Track a single property |
@@ -339,6 +340,8 @@ class MyComponent : Component<MyProps>
 |------|-----------|---------|
 | `UseValidationContext` | `ValidationContext UseValidationContext()` | Create/access nearest validation context |
 | `UseFocus` | `FocusManager UseFocus()` | Programmatic focus, enter-to-advance |
+| `UseElementFocus` | `(ElementRef Ref, Action RequestFocus) UseElementFocus()` | Untyped ref + dispatcher-scheduled focus |
+| `UseElementRef<T>` | `ElementRef<T> UseElementRef<T>() where T : FrameworkElement` | Typed element ref — `.Current` is already `T`, no cast needed at the call site (spec 033 §3) |
 
 **Accessibility:**
 
@@ -381,8 +384,14 @@ Apply with `.FocusTrap(handle)` modifier on a container element.
 `PasswordBox(password, onChange)`, `RadioButtons(items, selectedIndex, onChange)`
 
 **Layout:** `VStack(spacing?, children)`, `HStack(spacing?, children)`,
-`Grid(columns, rows, children)`, `ScrollView(child)`, `Border(child)`,
-`Expander(header, content)`, `FlexRow(children)`, `FlexColumn(children)`
+`Grid(GridSize[] columns, GridSize[] rows, children)`, `ScrollView(child)`,
+`Border(child)`, `Expander(header, content)`, `FlexRow(children)`,
+`FlexColumn(children)`
+
+`GridSize` value type with helpers: `GridSize.Auto`, `GridSize.Star(weight = 1)`,
+`GridSize.Px(pixels)`. Example: `Grid([GridSize.Auto, GridSize.Star()], [GridSize.Px(40)], …)`.
+The legacy string-form overload (`Grid(["Auto", "1*"], …)`) is soft-deprecated
+(`CS0618`) — prefer the typed helpers (spec 033 §1).
 
 **Collections:** `ListView<T>(items, keySelector, viewBuilder)`,
 `LazyVStack<T>(items, keySelector, viewBuilder)`,
@@ -445,7 +454,15 @@ criterion, fix suggestions, and context. 8 built-in checks (icon buttons,
 images, form labels, headings, landmarks, TabIndex gaps, etc.).
 
 **Helpers:** `When(bool, () => element)`, `If(bool, then, else?)`,
+`Expr(Func<Element?>)` — inline block-expression escape hatch; runs the lambda
+and returns its result, no node, no hook scope, no memoization (spec 033 §5),
 `ForEach(items, render)`, `Empty()`, `Group(children)`
+
+**Function components:** `Memo(ctx => …)` for the common render-once-plus-state
+case (no deps); `Memo(ctx => …, deps)` to also re-render when any dep changes;
+`RenderEachTime(ctx => …)` for the explicit always-re-render shape. The legacy
+`Func(ctx => …)` factory is soft-deprecated (`CS0618`) — replace with `Memo`
+(common case) or `RenderEachTime` (always-re-render case) (spec 033 §4).
 
 ### Common Modifiers (chainable on any Element)
 
@@ -462,7 +479,12 @@ images, form labels, headings, landmarks, TabIndex gaps, etc.).
 
 **Styling:**
 `.RequestedTheme(ElementTheme)`,
-`.Resources(r => r.Set(key, value))` — lightweight styling overrides
+`.Resources(r => r.Set(key, value))` — lightweight styling overrides,
+`.Backdrop(BackdropKind)` — apply a system backdrop (Mica / MicaAlt /
+DesktopAcrylic / AcrylicThin / None) to the host window. Modifier is
+host-side: it walks up to the `ReactorHost`'s `Window` and assigns the
+materialized `SystemBackdrop`. On `ReactorHostControl` (windowless) it
+no-ops (spec 033 §6).
 
 **Animation — implicit transitions:**
 `.OpacityTransition(duration?)`, `.ScaleTransition(transition?)`,

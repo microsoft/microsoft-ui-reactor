@@ -37,8 +37,8 @@ class GridDemo : Component
         return VStack(8,
             SubHeading("Grid"),
             Grid(
-                columns: ["120", "1*", "Auto"],
-                rows: ["Auto", "Auto"],
+                columns: [GridSize.Px(120), GridSize.Star(), GridSize.Auto],
+                rows: [GridSize.Auto, GridSize.Auto],
                 TextBlock("Label").Bold().Grid(row: 0, column: 0),
                 TextField("", _ => { }, placeholder: "Input...")
                     .Grid(row: 0, column: 1),
