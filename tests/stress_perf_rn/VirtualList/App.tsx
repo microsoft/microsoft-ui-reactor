@@ -30,10 +30,14 @@ import { PerfTracker } from './PerfTracker';
 
 const APP_NAME = 'StressPerf.RN.VirtualList';
 
-const Cli = {
-  headless: process.env.STRESSPERF_HEADLESS === '1',
-  count: Number(process.env.STRESSPERF_COUNT ?? '5000'),
-  durationSeconds: Number(process.env.STRESSPERF_DURATION ?? '5'),
+// CLI flags arrive as initial props from the C++ host (VirtualList.cpp parses
+// argv and routes them via ReactViewOptions.InitialProps). We do *not* use
+// process.env here — RN bundles env-var references at compile time, so
+// runtime values from the launching shell are invisible to JS.
+type AppProps = {
+  headless?: boolean;
+  count?: number;
+  duration?: number;
 };
 
 // ── Row renderer ────────────────────────────────────────────────────────────
@@ -66,8 +70,12 @@ const Row = React.memo(function Row({ item, index }: { item: ListItem; index: nu
 
 // ── App ─────────────────────────────────────────────────────────────────────
 
-export default function App() {
-  const [count, setCount] = useState<number>(Cli.count);
+export default function App(props: AppProps) {
+  const headless = !!props.headless;
+  const initialCount = props.count ?? 5000;
+  const durationSeconds = props.duration ?? 5;
+
+  const [count, setCount] = useState<number>(initialCount);
   const items = useMemo(() => generate(count), [count]);
 
   const [fpsLabel, setFpsLabel] = useState('FPS: --');
@@ -76,6 +84,10 @@ export default function App() {
   const [p99Label, setP99Label] = useState('P99: -- ms');
   const [memLabel, setMemLabel] = useState('Mem: -- MB');
   const [status, setStatus] = useState('idle');
+  // Final headless report rendered on-screen so the harness can scrape it
+  // via UI Automation. Mirrors StocksGrid/App.tsx — WinUI .exe apps don't
+  // have stdout, so an on-screen TextBlock is the most reliable channel.
+  const [report, setReport] = useState<string>('');
 
   const perfRef = useRef<PerfTracker>(new PerfTracker());
   const listRef = useRef<FlatList<ListItem>>(null);
@@ -86,7 +98,7 @@ export default function App() {
   // ChangeView from CompositionTarget.Rendering). FlatList recycles cells
   // as we scroll past them, exercising the virtualizer.
   const benchActiveRef = useRef(false);
-  const benchDurationMs = Cli.durationSeconds * 1000;
+  const benchDurationMs = durationSeconds * 1000;
   const maxOffsetRef = useRef(0);
 
   // FPS frame loop, always on; this also drives the bench tween when active.
@@ -118,9 +130,8 @@ export default function App() {
     setMemLabel(`Mem: ${perfRef.current.memoryMB} MB`);
     setStatus(`done (${r.frames.length} frames)`);
 
-    // Print report — file write needs `react-native-fs` after the bootstrap.
-    // For now, stdout via `npx react-native log-windows`.
-    const report =
+    // Surface the report on-screen so the harness can scrape it via UIA.
+    const reportText =
       `=== ${APP_NAME} ===\n` +
       `Count:       ${count}\n` +
       `Frames:      ${r.frames.length}\n` +
@@ -129,11 +140,7 @@ export default function App() {
       `P95 dt:      ${r.p95.toFixed(2)} ms\n` +
       `P99 dt:      ${r.p99.toFixed(2)} ms\n` +
       `Max dt:      ${r.max.toFixed(2)} ms\n`;
-    // eslint-disable-next-line no-console
-    console.log('REPORT_BEGIN\n' + report + 'REPORT_END');
-    const csv = ['FrameIndex,DeltaMs', ...r.frames.map((f, i) => `${i},${f.toFixed(2)}`)].join('\n');
-    // eslint-disable-next-line no-console
-    console.log('FRAMES_BEGIN\n' + csv + '\nFRAMES_END');
+    setReport('REPORT_BEGIN\n' + reportText + 'REPORT_END');
   }, [count]);
 
   const startBenchmark = useCallback(() => {
@@ -145,21 +152,14 @@ export default function App() {
     setStatus('running…');
   }, [count]);
 
-  // Headless: kick off the benchmark right after first paint, then exit.
+  // Headless: kick off the benchmark right after first paint. The harness
+  // kills the process after the duration + slack window — see
+  // tests/stress_perf/run_stocks_grid_baseline.ps1.
   useEffect(() => {
-    if (!Cli.headless) return;
+    if (!headless) return;
     const startHandle = setTimeout(startBenchmark, 250);
-    // Quit slack: bench duration + 2s.
-    const quitHandle = setTimeout(() => {
-      // RN-Windows: the cleanest exit is to just close the window via a
-      // native module. Simpler in practice: the test runner kills the
-      // process after capturing log output.
-    }, (Cli.durationSeconds + 2) * 1000);
-    return () => {
-      clearTimeout(startHandle);
-      clearTimeout(quitHandle);
-    };
-  }, [startBenchmark]);
+    return () => clearTimeout(startHandle);
+  }, [headless, startBenchmark]);
 
   const renderItem = useCallback(
     ({ item, index }: ListRenderItemInfo<ListItem>) => <Row item={item} index={index} />,
@@ -185,6 +185,11 @@ export default function App() {
         <Text style={[styles.toolbarText, { width: 110 }]}>{memLabel}</Text>
         <Text style={[styles.toolbarText, styles.dim]}>{status}</Text>
       </View>
+      {!!report && (
+        <Text testID="HeadlessReport" style={styles.report} selectable>
+          {report}
+        </Text>
+      )}
       <FlatList
         ref={listRef}
         data={items}
@@ -216,6 +221,7 @@ const styles = StyleSheet.create({
   },
   toolbarText: { fontSize: 12 },
   dim: { color: '#6E6E6E', flex: 1 },
+  report: { fontSize: 12, padding: 8, fontFamily: 'Consolas, monospace' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
