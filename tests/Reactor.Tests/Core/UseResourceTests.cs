@@ -270,11 +270,13 @@ public class UseResourceTests
     {
         var cache = NewCache();
         var dispatcher = new InlineDispatcher();
+        // The fetcher runs on Timer/threadpool callbacks, so all access to `calls`
+        // must be synchronized — Interlocked on the increment, Volatile on reads.
         int calls = 0;
         Func<CancellationToken, Task<int>> fetcher = _ =>
         {
-            calls++;
-            return calls < 3 ? Task.FromException<int>(new InvalidOperationException("transient")) : Task.FromResult(42);
+            int n = Interlocked.Increment(ref calls);
+            return n < 3 ? Task.FromException<int>(new InvalidOperationException("transient")) : Task.FromResult(42);
         };
 
         var ctx = new RenderContext();
@@ -283,11 +285,10 @@ public class UseResourceTests
             new ResourceOptions(RetryCount: 3), dispatcher);
         ctx.FlushEffects();
 
-        // The retry chain runs on Timer/threadpool callbacks. `calls++` increments
-        // ahead of the dispatcher.Post that publishes state, so polling on `calls`
-        // alone races the state transition. Poll the rendered AsyncValue instead —
-        // re-rendering with identical deps just reads the current hook state and
-        // does not re-invoke the fetcher.
+        // `calls` increments ahead of the dispatcher.Post that publishes state, so
+        // polling on `calls` alone races the state transition. Poll the rendered
+        // AsyncValue instead — re-rendering with identical deps just reads the
+        // current hook state and does not re-invoke the fetcher.
         AsyncValue<int>? probe = null;
         var sw = global::System.Diagnostics.Stopwatch.StartNew();
         while (sw.Elapsed < TimeSpan.FromSeconds(5))
@@ -299,7 +300,7 @@ public class UseResourceTests
             await Task.Delay(25);
         }
 
-        Assert.Equal(3, calls);
+        Assert.Equal(3, Volatile.Read(ref calls));
         Assert.Equal(new AsyncValue<int>.Data(42), probe);
     }
 
@@ -308,11 +309,13 @@ public class UseResourceTests
     {
         var cache = NewCache();
         var dispatcher = new InlineDispatcher();
+        // See sibling test: synchronized access required because the fetcher runs
+        // on Timer/threadpool callbacks during retry.
         int calls = 0;
         Func<CancellationToken, Task<int>> fetcher = _ =>
         {
-            calls++;
-            return Task.FromException<int>(new InvalidOperationException($"attempt{calls}"));
+            int n = Interlocked.Increment(ref calls);
+            return Task.FromException<int>(new InvalidOperationException($"attempt{n}"));
         };
 
         var ctx = new RenderContext();
@@ -321,7 +324,7 @@ public class UseResourceTests
             new ResourceOptions(RetryCount: 2), dispatcher);
         ctx.FlushEffects();
 
-        // See sibling test: poll the rendered state, not the call counter.
+        // Poll the rendered state, not the call counter.
         AsyncValue<int>? probe = null;
         var sw = global::System.Diagnostics.Stopwatch.StartNew();
         while (sw.Elapsed < TimeSpan.FromSeconds(5))
@@ -333,7 +336,7 @@ public class UseResourceTests
             await Task.Delay(25);
         }
 
-        Assert.Equal(3, calls);
+        Assert.Equal(3, Volatile.Read(ref calls));
         var err = Assert.IsType<AsyncValue<int>.Error>(probe);
         Assert.Contains("attempt", err.Exception.Message);
     }

@@ -27,7 +27,8 @@ public class NavigationDiagnosticsCoverageTests
         NavigationDiagnosticEvent? captured = null;
         Action<NavigationDiagnosticEvent> handler = e =>
         {
-            if (e.From == from && e.To == to) captured = e;
+            // From/To are typed `object`; compare via Equals to avoid CS0252.
+            if (Equals(e.From, from) && Equals(e.To, to)) captured = e;
         };
         NavigationDiagnostics.NavigationRequested += handler;
         try
@@ -51,7 +52,8 @@ public class NavigationDiagnosticsCoverageTests
         NavigationDiagnosticEvent? captured = null;
         Action<NavigationDiagnosticEvent> handler = e =>
         {
-            if (e.From == from && e.To == to) captured = e;
+            // From/To are typed `object`; compare via Equals to avoid CS0252.
+            if (Equals(e.From, from) && Equals(e.To, to)) captured = e;
         };
         NavigationDiagnostics.NavigationCompleted += handler;
         try
@@ -73,7 +75,8 @@ public class NavigationDiagnosticsCoverageTests
         NavigationDiagnosticEvent? captured = null;
         Action<NavigationDiagnosticEvent> handler = e =>
         {
-            if (e.From == from && e.To == to) captured = e;
+            // From/To are typed `object`; compare via Equals to avoid CS0252.
+            if (Equals(e.From, from) && Equals(e.To, to)) captured = e;
         };
         NavigationDiagnostics.NavigationCancelled += handler;
         try
@@ -98,9 +101,11 @@ public class NavigationDiagnosticsCoverageTests
         var hits = new List<CacheDiagnosticEvent>();
         var misses = new List<CacheDiagnosticEvent>();
         var evicts = new List<CacheDiagnosticEvent>();
-        Action<CacheDiagnosticEvent> hh = e => { if (e.Route == rHit) hits.Add(e); };
-        Action<CacheDiagnosticEvent> mh = e => { if (e.Route == rMiss) misses.Add(e); };
-        Action<CacheDiagnosticEvent> eh = e => { if (e.Route == rEvict) evicts.Add(e); };
+        // CacheDiagnosticEvent.Route is typed as object; compare via Equals to
+        // avoid the reference-comparison footgun (CS0252).
+        Action<CacheDiagnosticEvent> hh = e => { if (Equals(e.Route, rHit)) hits.Add(e); };
+        Action<CacheDiagnosticEvent> mh = e => { if (Equals(e.Route, rMiss)) misses.Add(e); };
+        Action<CacheDiagnosticEvent> eh = e => { if (Equals(e.Route, rEvict)) evicts.Add(e); };
 
         NavigationDiagnostics.CacheHit += hh;
         NavigationDiagnostics.CacheMiss += mh;
