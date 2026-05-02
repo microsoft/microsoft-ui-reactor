@@ -5,7 +5,7 @@ Windows UI options. This document synthesizes the per-framework analyses into
 a unified scorecard and identifies where each Microsoft framework stands
 relative to the industry.
 
-**Date:** April 2026
+**Date:** May 2026 (updated; previous revision April 2026)
 
 **Frameworks analyzed:**
 
@@ -108,16 +108,16 @@ to understand the gap, not to declare winners.
 | **Declarative Syntax** | F | C+ | C+ | C+ | B+ | B |
 | **Component Architecture** | D | B- | B- | B- | B | B+ |
 | **State & Reactivity** | D | B | B | B | C+ | B+ |
-| **Rendering & Performance** | C+ | B | B | B+ | B | B- |
+| **Rendering & Performance** | C+ | B | B | B+ | B | B |
 | **Layout** | D+ | A- | A- | A- | B+ | B+ |
 | **Styling & Theming** | D | A- | A- | A | B | B- |
 | **Navigation** | F | C | C+ | C+ | B | B+ |
 | **Animation** | F | B+ | A- | A | C | B- |
 | **Accessibility** | D+ | A- | A | A | B | B |
 | **Input & Gestures** | C | B+ | B+ | B+ | B+ | B |
-| **Developer Experience** | B | B- | C+ | B- | B | B |
+| **Developer Experience** | B | B- | C+ | B- | B | B+ |
 | **Platform Reach** | D | D | D+ | D | B+ | D |
-| **Testing** | D+ | B | C+ | B- | A- | B- |
+| **Testing** | D+ | B | C+ | B- | A- | B |
 | **Error Handling** | C | C | C | C | B+ | B |
 | **Data Loading & Async** | D+ | B | B | B | B+ | B+ |
 | **Lists & Virtualization** | C+ | A- | A- | A- | B+ | B+ |
@@ -163,7 +163,11 @@ constructors are the weakest of the four but still declarative.
   constructor style than SwiftUI/Compose's block syntax. Modifier chains
   (`.Bold().FontSize(24)`) are ergonomic. The main weakness is bracket-
   counting in deeply nested UIs — C# lacks trailing closures or result
-  builders. Still, it's the most readable declarative option on Windows
+  builders. **Spec 033 (May 2026) closed two specific stringly-typed gripes:**
+  `Grid(["*", "Auto", "200"], ...)` is now `Grid([GridSize.Star(), GridSize.Auto,
+  GridSize.Px(200)], ...)` with the string overload `[Obsolete]` and an in-tree
+  migration tool. `Expr(...)` adds a block-expression escape hatch for inline
+  statement bodies. Still, it's the most readable declarative option on Windows
 
 **Gap:** WPF/WinUI3's XAML is ~15 years behind modern declarative syntax.
 Blazor's Razor closes most of the gap (B+); Reactor closes roughly half the
@@ -200,7 +204,14 @@ Flutter's StatefulWidget two-class pattern is the most verbose.
   composition is a generation behind function-as-component models
 - **Reactor (B+):** React-style function components with hooks. Context system,
   memoization. The mental model transfers from React cleanly. No slots
-  pattern (unlike Compose's named slot APIs), but children via params work
+  pattern (unlike Compose's named slot APIs), but children via params work.
+  **Spec 033 added typed `ElementRef<T>` + `UseElementRef<T>(ctx)` hook**
+  (where `T : FrameworkElement`) — closes the "no `x:Name` analog with type
+  safety" critique. `btn.Current?.StartAnimation(...)` no longer requires
+  `as Button` casts; AOT-safe; DEBUG-only mismatch assertion. The same spec
+  also documented the five composition forms (raw method, propless
+  `Component`, `Component<TProps>`, `Func`, `Memo`) and soft-deprecated
+  `Func` in favor of `Memo` with `[Obsolete]` (no source generator)
 
 **Gap:** WPF/WinUI3 are a generation behind (class-based vs function-based).
 Reactor is competitive with React/Compose's component model.
@@ -243,13 +254,24 @@ libraries. Flutter provides only `setState()`.
   for free. Context system (`Context<T>` + `.Provide()` + `UseContext`)
   provides tree-scoped ambient state — `LocaleProvider` was migrated from a
   thread-static hack to Context, validating the primitive with a real use
-  case. `UsePersisted<T>(key, initial)` survives unmount/remount (in-process
-  static cache — unbounded, no eviction, string keys with no collision
-  protection). `UseObservable` family (tree, property, collection) bridges
-  MVVM. Async resources ship as a separate subsystem (see Data Loading &
-  Async). **Implementation concerns:** `ShouldUpdateWithProps` uses reflection
+  case. `UsePersisted<T>(key, initial)` survives unmount/remount. **Spec 033
+  (May 2026) replaced the previous unbounded process-global cache with a
+  scoped LRU design** — `IPersistedStateScope` with `WindowPersistedScope`
+  (default, 1024-cap LRU, disposed on host unload) and
+  `ApplicationPersistedScope` (4096-cap LRU, plus a
+  `MemoryManager.AppMemoryUsageIncreased` shrink-to-25% callback on
+  `OverLimit`). Reject-when-full has been replaced by LRU eviction. The
+  literal critique from the prior review ("no eviction, no scoping") is
+  now fixed. Caveat: per-host scope resolution at hook-entry time is
+  deferred to a follow-up — primitives landed, `BeginRender` wiring not.
+  `UseObservable` family (tree, property, collection) bridges MVVM. Async
+  resources ship as a separate subsystem (see Data Loading & Async).
+  **Implementation concerns:** `ShouldUpdateWithProps` uses reflection
   on every memo check with no `MethodInfo` caching — 50 components in a tree
-  = 50 reflection calls per parent re-render. Context scope stores values as
+  = 50 reflection calls per parent re-render. *(Spec 033 §0 documents this
+  was already resolved in product via `IPropsComparable` interface dispatch
+  — the reflection lives in test mirrors, not the reconciler.)* Context
+  scope stores values as
   `object?` so value-typed context values (`Context<int>`) box on every
   provide. `UseCallback` is literally `UseMemo(() => callback, deps)` — the
   lambda captures callback, so reference stability is only as fresh as the
@@ -299,9 +321,31 @@ concurrent rendering with priority scheduling. SwiftUI's AttributeGraph.
   Interactive WebAssembly, Interactive Auto). Server mode is latency-sensitive
   (every interaction is a SignalR round-trip); WebAssembly has a significant
   initial download cost even post-trim. No concurrent rendering
-- **Reactor (B-):** Single-threaded reconciler. No concurrent rendering. Known
-  GC pressure from modifier chain allocations. No profiling tools. However,
-  reconciler correctness is solid and perf experiments are underway
+- **Reactor (B):** Single-threaded reconciler. No concurrent rendering. Known
+  GC pressure from modifier chain allocations. **Reconciler correctness was
+  materially hardened in the last 9 days** — skip-path correctness fixed,
+  lazy event wiring (commit `b60bd24`), aliased-RCW duplicate event
+  subscriptions fixed (`ef6ced1`), `EventHandlerState` dedupes
+  `ToggleSwitch.Toggled` and other event wirings across re-renders
+  (`bf9b2e7`), and identity-preservation fixtures now cover 14 in-place
+  Update controls (`2b92f98`, `cd90291`). The "tag-based event dispatch
+  is a fragile workaround" critique is partially superseded — `EventHandlerState`
+  is a more explicit primitive, though the underlying tag mechanism still
+  exists. **Per-Component layout cost overlay (spec 032)** added: green
+  outline + 64×20 sparkline of measure+arrange ms over 6s, sourced from
+  the `Microsoft-Windows-XAML` ETW provider, attributed to Components by
+  innermost-rect bounds match against a live visual-tree walk. Live flag
+  toggle (no host restart). This is the first per-Component perf attribution
+  any C# UI framework has shipped — it closes the most concrete gap from
+  the previous review ("no per-component render timing"). **Reconcile
+  highlight overlay** paints red (mount) / yellow (update) over changed
+  UIElements via Composition SpriteVisuals — the closest C#-framework
+  analogue to React DevTools' "highlight updates" toggle. Stress-perf
+  emits per-second FPS/memory CSV alongside aggregates (`134874e`).
+  Bumps from B- to B because reconciler correctness is now demonstrably
+  guarded and the per-Component timing gap has a real answer; the lack of
+  concurrent rendering, GC pressure on hot paths, and the structural
+  ceiling at single-threaded reconciliation keep it from B+
 
 **Gap:** WinUI 3's Composition layer is genuinely competitive for animation
 rendering. For general UI performance, the lack of concurrent/pausable
@@ -338,14 +382,17 @@ system). Flutter's constraint model is powerful but has a steep learning curve.
   No framework-level layout primitive, but CSS is the most capable layout
   system available
 - **Reactor (B+):** FlexPanel (full Flexbox implementation) is ambitious and
-  useful — provides layout capabilities WinUI itself doesn't have. Grid is
-  stringly-typed (`["*", "Auto", "200"]`). No custom layout protocol. A
-  silent correctness gap was just closed: FlexPanel's measure pass was not
-  CSS-equivalent until commit `397f274` (April 2026), paired with a 526-line
-  fixture suite that pins behavior against a real WebView-rendered layout.
-  The fix is the right shape; the fact that there was no parity harness from
-  day one is a process gap — any app built against the earlier FlexPanel may
-  have subtly wrong layouts
+  useful — provides layout capabilities WinUI itself doesn't have. **Grid
+  tracks are now typed**: `Grid([GridSize.Star(), GridSize.Auto, GridSize.Px(200)],
+  ...)` with `using static Microsoft.UI.Reactor.GridSize` enabling the terse
+  `Grid([Star(), Auto, Px(200)], ...)`. The string overload is `[Obsolete]`
+  with an in-tree migration tool (`tools/migrate_grid_tracks.py`) covering
+  the ~60 in-repo call sites. No custom layout protocol. FlexPanel's measure
+  pass was made CSS-equivalent in commit `397f274` (April 2026), paired with
+  a 526-line fixture suite that pins behavior against a real WebView-rendered
+  layout. The fix is the right shape; the fact that there was no parity
+  harness from day one is a process gap — any app built against the earlier
+  FlexPanel may have subtly wrong layouts
 
 **Gap:** WPF and WinUI 3 have **no gap** in layout — they're competitive with
 or ahead of most declarative frameworks. Reactor's FlexPanel is a genuine
@@ -391,7 +438,11 @@ Material-centric.
   dotnet/aspnetcore#63091). No built-in design system — ecosystem relies on
   Fluent UI Blazor, MudBlazor, Telerik, Syncfusion, DevExpress
 - **Reactor (B-):** ~40 semantic theme tokens with `Theme.Ref(key)` for
-  custom resources. `ResourceBuilder` lightweight styling is Reactor's first
+  custom resources. **Spec 033 added `.Backdrop(BackdropKind.Mica/Acrylic/...)`**
+  — Mica/Acrylic/MicaAlt system-backdrops are now a first-class modifier
+  rather than a `.Set()` escape-hatch. Closes one of the catalog's last
+  Fluent-design holes against vanilla WinUI 3.
+  `ResourceBuilder` lightweight styling is Reactor's first
   genuinely unique styling feature — no other C# declarative framework
   surfaces WinUI's per-control resource key overrides. Style caching with
   deterministic sorted keys in a `ConcurrentDictionary` eliminates the
@@ -673,7 +724,10 @@ capable. React has no built-in gesture system.
   `.OnPreviewKeyUp`, `.OnCharacterReceived`); focus (`.OnGotFocus`,
   `.OnLostFocus`, plus a `UseElementFocus()` hook with typed `ElementRef`
   and `.Ref(target)` modifier, and a `FocusManager` helper — the first
-  imperative focus primitive the framework has had); typed pan/pinch/rotate
+  imperative focus primitive the framework has had; **Spec 033 (May 2026)
+  added typed `ElementRef<T>` + `UseElementRef<T>(ctx)` so callers no longer
+  cast `as Button` to reach Composition / Ink / Pointer APIs**); typed
+  pan/pinch/rotate
   gestures (`.OnPan`, `.OnPinch`, `.OnRotate`) with `PanGesture`/`PinchGesture`/
   `RotateGesture` records carrying phase, translation/delta/velocity, scale/anchor,
   angle, and an `IsInertial` flag; drag-and-drop with eager/sync-provider/
@@ -758,7 +812,7 @@ and Preview are excellent.
   end-to-end. **No component DevTools** — no render tree inspector, no
   parameter inspector, no render-count profiler. WebAssembly debugging has
   debug-proxy handshake fragility
-- **Reactor (B):** Hot reload works via .NET's `MetadataUpdateHandler` —
+- **Reactor (B+):** Hot reload works via .NET's `MetadataUpdateHandler` —
   UI updates on code change while hook state survives (`UseState` values
   persist because `RenderContext` stays in memory). Works with both VS and
   `dotnet watch`. Limited by .NET hot reload's inherent restrictions: adding
@@ -783,6 +837,21 @@ and Preview are excellent.
   equivalent that was previously absent. The most valuable ESLint rule
   (`exhaustive-deps`) is still deferred as control-flow-analysis work.
   ~5,600 lines of new coverage tests pushed selftest coverage past 85%.
+  **The May 2026 cycle added two in-process overlays that close the longest-
+  standing per-component-timing gap:** the **layout-cost overlay (spec 032)**
+  paints a green outline + 64×20 sparkline of measure+arrange ms over 6s
+  per Component, sourced from the `Microsoft-Windows-XAML` ETW provider and
+  attributed by spatial-bounds match against a live visual-tree walk; live
+  flag toggle, no host restart. The **reconcile-highlight overlay** draws
+  red (mount) / yellow (update) tint via Composition SpriteVisuals on every
+  reconcile pass — the closest C#-framework analogue to React DevTools'
+  "highlight updates" toggle. **Frame-aligned sampling (spec 031)** + per-
+  second FPS/memory CSV on stress-perf reports give time-series perf data
+  out of the box. CI now runs the full SelfTest suite on hosted
+  `windows-latest` (`69482bb`), with branch rate computed from per-line
+  condition coverage. Net DX is a half-grade jump: per-Component perf
+  attribution exists where the previous review said it didn't, hot reload
+  + reconcile highlight + layout cost overlay is a working in-app dev loop.
   **Remaining gaps:** state is read-only in MCP (no `reactor.setState`);
   tree diffing is deferred (agents must cache client-side); source mapping
   from tree nodes to authored C# lines is v1.1; no cache inspection
@@ -888,12 +957,20 @@ is fast and comprehensive. SwiftUI has the weakest testing story.
   (whitespace/attribute-order insensitive), officially endorsed by Microsoft
   Learn, xUnit/NUnit/MSTest/TUnit compatible, milliseconds per test. Mocked
   `IJSRuntime` and `NavigationManager` built in
-- **Reactor (B-):** Pure C# function components are unit-testable. ErrorBoundary
+- **Reactor (B):** Pure C# function components are unit-testable. ErrorBoundary
   exists. Navigation has 146+ unit tests (including 29 stress tests covering
   concurrency, serialization, and deep linking). DataGrid has 1,600+ state
   unit tests. Accessibility has ~34 tests (scanner + analyzer). E2E Appium
   tests exist for DataGrid, WinForms interop (13 tests), and accessibility
-  interactions. No component-level testing framework
+  interactions. **The May 2026 cycle materially hardened the test
+  infrastructure**: Reactor.SelfTests now runs on hosted `windows-latest`
+  in CI (#110), with branch rate computed from per-line condition coverage
+  (#112). 12 deflaked tests across 4 classes (#118), reconciler coverage
+  fixtures + 2 flaky test fixes (#99, #84), and identity-preservation
+  fixtures for 14 in-place Update controls (#80). Bumps from B- to B
+  because the suite now actually runs in CI and reconciler correctness is
+  guarded by fixtures rather than wishes. Still no component-level testing
+  framework — there is no bUnit equivalent for Reactor
 
 **Gap:** WPF's MVVM testability is on par with competitors. **Blazor's bUnit
 closes the component-testing gap entirely** — it's the renderer-level equivalent
@@ -1162,6 +1239,16 @@ is mature. Flutter's add-to-app works but platform views are costly.
   native controls); platform API access requires MAUI APIs or JS interop
   bridges. "Not actually native" is the defining trade-off
 - **Reactor (A-):** **Best interop story in the Microsoft ecosystem.**
+  **Spec 033 §7 (May 2026) shipped `samples/InteropFirst`** — the canonical
+  "Reactor as guest, not host" sample: a vanilla WinUI 3 `Window` hosts
+  `ReactorHostControl` in a `Grid` cell next to a XAML `ListView`. One
+  `MainPageViewModel` owns an `ObservableCollection<Order>` and `ICommand`
+  properties; XAML `x:Bind`s to it; the Reactor side reads via props,
+  bridges `CollectionChanged` with `UseEffect`, and consumes the same
+  `ICommand` instances via `CommandInterop.FromCommand`. Shared XAML
+  resources (`AccentSampleBrush`, `SubtleSampleBrush`) flow through the
+  host. This was the missing concrete demonstration in the previous
+  review — the path is now in-tree, buildable, and documented.
   `ReactorHostControl` drops into any WinUI XAML layout — no `ReactorApp` required.
   `XamlHostElement`/`XamlPageElement` embed existing XAML in Reactor trees.
   `UseObservable`/`UseObservableTree`/`UseObservableProperty`/`UseCollection`
@@ -1369,6 +1456,14 @@ env vars misconfigure. The previous `--preview` flag was replaced
 in mental model — screenshots are now a devtools sub-capability rather
 than a first-class command. Traditional-developer tooling (live component
 tree in an IDE panel, per-component Profiler) still doesn't exist.
+**However, the May 2026 cycle filled a meaningful slice of that gap
+in-process rather than in an IDE panel:** the layout-cost overlay
+(spec 032) paints per-Component measure+arrange sparklines via ETW
+attribution, and the reconcile-highlight overlay paints per-pass
+mount/update tint via Composition. Both are dev-flag-gated and run
+inside the running app — no external profiler, no separate process,
+no IDE panel — which is its own ergonomic win even if it's not the
+shape React/Compose developers are used to.
 
 **Gap:** No other C# UI framework — and for that matter, no other
 declarative UI framework on any platform — ships an MCP server. The
@@ -1377,7 +1472,9 @@ node ids, CLI parity, single-instance lockfile) are correct. The bet
 is that AI agents are a primary UI-debugging audience. If that bet
 pays off, Reactor is uniquely positioned; if developers still prefer
 React DevTools-style GUI devtools, Reactor shipped the supplement
-before the primary. Grade: **B** as a new category.
+before the primary. With the layout-cost + reconcile-highlight overlays
+added in May 2026, there's a real per-Component perf and reconcile
+story that didn't exist before. Grade: **B+** as a new category.
 
 ---
 
@@ -1388,16 +1485,16 @@ before the primary. Grade: **B** as a new category.
 | Declarative Syntax | A- | Blazor (B+) | B+ | **Half grade behind** |
 | Component Architecture | A- | Reactor (B+) | B+ | **Half grade behind** |
 | State & Reactivity | B+ | Reactor (B+) | B+ | **Matched** |
-| Rendering & Performance | B+ | WinUI 3 (B+) | B+ | **Matched** |
+| Rendering & Performance | B+ | WinUI 3 (B+) / Reactor (B) | B+ | **Matched (WinUI 3); Reactor a half-grade behind** |
 | Layout | A- | WPF/WinUI 3 (A-) | A- | **Matched** |
 | Styling & Theming | A- | WinUI 3 (A) | A | **Matched or ahead** |
 | Navigation | B+ | Reactor (B+) | B+ | **Matched** |
 | Animation | B+ | WinUI 3 (A) | A | **Ahead** |
 | Accessibility | B+ | WinUI 3 (A) | A | **Ahead** |
 | Input & Gestures | B+ | WPF/WinUI 3/Blazor/Reactor (B+/B) | B+ | **Matched** |
-| Developer Experience | A- | WinForms/Blazor/Reactor (B) | B | **1 grade behind** |
+| Developer Experience | A- | Reactor (B+) | B+ | **Half grade behind** |
 | Platform Reach | A- | Blazor (B+) | B+ | **Half grade behind** |
-| Testing | B+ | Blazor (A-) | A- | **Ahead** |
+| Testing | B+ | Blazor (A-) / Reactor (B) | A- | **Ahead (Blazor); Reactor matched** |
 | Error Handling | C+ | Blazor (B+) | B+ | **Ahead** |
 | Data Loading & Async | A- | Blazor/Reactor (B+) | B+ | **Half grade behind** |
 | Lists & Virtualization | B+ | WPF/WinUI 3 (A-) | A- | **Ahead** |
@@ -1405,7 +1502,7 @@ before the primary. Grade: **B** as a new category.
 | Interop & Adoption | A- | Blazor/Reactor (A-) | A- | **Matched** |
 | Forms & Data Entry | B | WPF (A) | A | **Ahead** |
 | Charting + Chart A11y | C (Compose/median) | Reactor (B+) | B+ | **Ahead** |
-| Devtools & Tracing (MCP) | — (unique) | Reactor (B) | B | **Unique industry position** |
+| Devtools & Tracing (MCP) | — (unique) | Reactor (B+) | B+ | **Unique industry position** |
 
 ### Where Microsoft leads or matches:
 1. **Forms & Data Entry** (WPF) — The richest validation system of any
@@ -1441,9 +1538,12 @@ before the primary. Grade: **B** as a new category.
    Reactor are Windows-only vs 2-7 platforms for competitors. Unbridgeable
    without Avalonia/Uno. Blazor Hybrid is the only first-party way out, at
    the cost of rendering HTML in a WebView rather than native controls
-2. **Developer Experience** — No equivalent to React DevTools, Flutter hot
-   reload, or Compose Layout Inspector in *any* Microsoft framework including
-   Blazor and Reactor
+2. **Developer Experience** — No equivalent to React DevTools' tree
+   inspector or Compose Layout Inspector in *any* Microsoft framework
+   including Blazor and Reactor. Reactor's May 2026 layout-cost and
+   reconcile-highlight overlays close the per-Component perf and reconcile-
+   visualization gaps in-process, but the IDE-panel component-tree story
+   doesn't exist; Flutter hot reload remains best-in-class
 3. **Declarative Syntax** — XAML is a generation behind; Blazor's Razor and
    Reactor's method-call syntax both narrow the gap but C# lacks the language
    features of Swift/Kotlin. Avalonia modernizes XAML (compiled bindings,
@@ -1717,7 +1817,33 @@ compositor-property-bound (Opacity, Scale, Rotation, Translation, CenterPoint
 `reactor.click`, `reactor.state`, etc. over HTTP + stdio). **ETW tracing**
 closes part of the profiling gap. ~5,600 lines of new coverage tests pushed
 selftest past 85%. **WinForms interop** via `XamlIslandControl` opens
-brownfield adoption.
+brownfield adoption. **May 2026 (Spec 033) responded directly to a WPF→WinUI3
+veteran's reviewer feedback**: typed `GridSize.Star/Auto/Px` replacing
+stringly-typed Grid tracks; typed `ElementRef<T>` + `UseElementRef<T>`
+hook so callers no longer cast `as Button` for Composition / Ink / Pointer
+APIs; `PersistedStateScope` with bounded LRU + `WindowPersistedScope` /
+`ApplicationPersistedScope` (replaces the unbounded process-global cache
+the prior review called out); `Expr(...)` block-expression escape hatch;
+`.Backdrop()` modifier promoting Mica/Acrylic from `.Set()` to first-class;
+and the `samples/InteropFirst` "Reactor as guest" sample where a vanilla
+WinUI 3 XAML page hosts `ReactorHostControl` with a shared
+`ObservableCollection<T>` ViewModel and shared `ICommand` properties.
+**Per-Component perf attribution shipped** via the layout-cost overlay
+(spec 032) — green outline + 64×20 sparkline of measure+arrange ms over 6s
+sourced from the `Microsoft-Windows-XAML` ETW provider, attributed to
+Components by spatial-bounds match. The **reconcile-highlight overlay**
+draws red (mount) / yellow (update) on changed UIElements via Composition
+SpriteVisuals — analogous to React DevTools' "highlight updates" toggle.
+**Reconciler correctness was hardened** in seven PRs covering skip-path
+correctness, lazy event wiring, aliased-RCW dedupe, `EventHandlerState`
+deduplicating `ToggleSwitch.Toggled` and other event wirings across
+re-renders, and identity-preservation fixtures across 14 in-place Update
+controls. **CI now runs Reactor.SelfTests on hosted `windows-latest`** with
+branch coverage from per-line condition coverage. **OSS launch prep**:
+proper `DynamicallyAccessedMembers` / `RequiresUnreferencedCode` annotations
+replacing `UnconditionalSuppressMessage`, license/metadata scrub, security
+review remediations. **Native chat sample** added — a second flagship app
+that uses `Component<TProps>`, hooks, and `GridSize` idiomatically.
 
 **But — and it's a growing list:** `UseColorScheme` reads app-level theme,
 not element effective theme, so the headline RequestedTheme + UseColorScheme
@@ -1752,15 +1878,27 @@ lightweight styling keys, connected-animation keys, drag-format ids).
 `.Set()` surface is materially thinner than a quarter ago but still carries
 composition-layer effects, materials, windowing, pointer-capture, custom
 geometry, and ink. And the single most damning critique that's been
-constant for three review cycles: **the showcase apps don't use the
-framework's own features.** Outlook clone still uses `UseState<string>`
-for navigation. File manager still needs `SynchronizationContext` capture
-for off-thread state updates. None of the four flagship apps use context,
+constant for three review cycles is now *partially* softened but mostly
+still standing: **the older showcase apps don't use the framework's own
+features.** Outlook clone still uses `UseState<string>` for navigation.
+File manager still needs `SynchronizationContext` capture for off-thread
+state updates. None of the four older flagship apps use context,
 memoization, persisted state, commanding, navigation, SemanticPanel,
 async resources, UseFocusTrap, or any of the spec 027 input modifiers.
-The charting gallery is the one bright exception — all 43 samples were
-retrofitted in one pass, which proves the work is possible; it just isn't
-being prioritized for the general-purpose flagship apps.
+The charting gallery and now the **native chat sample** (added in this
+cycle, uses `Component<TProps>`, hooks, `GridSize`, prop bridging) and
+the **InteropFirst sample** (vanilla WinUI 3 hosting Reactor with shared
+ViewModel + ICommand) are the bright exceptions — they prove the work
+is possible. **Spec 033 also explicitly deferred three pieces** that were
+in the plan: the three custom Roslyn analyzers (`REACTOR_GRID_001`,
+`REACTOR_FUNC_001`, `REACTOR_PERSIST_001`) and their code-fixers (the
+`[Obsolete]` attributes already produce diagnostics; the auto-fixers are
+the value-add); the host-side wiring of `WindowPersistedScope` into
+`RenderContext.BeginRender` (primitives are landed, the per-host
+resolution at hook-entry time is a focused follow-up); and the
+WinAppDriver UI tests for the InteropFirst sample. So the May 2026 cycle
+shipped substantial primitives but left the analyzer auto-fixers and
+the `WindowPersistedScope` host wiring on the next plate.
 
 **Competitive position:** Reactor now has *five* features where it's ahead
 of the entire industry: commanding (no competitor has define-once commands
@@ -1841,7 +1979,7 @@ architectural choice:
 | **Component model** | Class-based + `StateHasChanged` | Function-as-component + hooks |
 | **Platform reach** | Web + Desktop + Mobile | Windows only |
 | **Forms** | `<EditForm>` (A-) | FormField + validators (B) |
-| **Testing** | bUnit (A-) | Unit tests per component (B-) |
+| **Testing** | bUnit (A-) | SelfTests in CI + unit tests (B) |
 
 **Blazor's form story, testing infrastructure, and error boundary are three
 features Reactor should learn from directly.** Blazor's `StateHasChanged`
@@ -1850,37 +1988,46 @@ Reactor already does better. **Reactor's native-rendering, native-UIA,
 native-look positioning is its structural advantage over Blazor Hybrid on
 Windows desktop** — positioning that's worth stating explicitly in marketing.
 
-### 4. Reactor addresses the right gaps — but feature velocity is outpacing integration
+### 4. Reactor addresses the right gaps — and the May 2026 cycle was specifically responsive
 
 Reactor's declarative model, navigation, and commanding are not random feature
 additions — they directly address the areas where WPF/WinUI 3 are weakest
 relative to competitors (declarative syntax, component model, navigation
-type safety). The commanding system is genuinely novel. Recent work has
-deepened coverage across the board: theming (style caching + lightweight
-styling + analyzers), forms (automatic validation + FormField), accessibility
-(SemanticPanel + AccessibilityScanner + 3 analyzers + UseFocusTrap), animation
-(all 4 integration bugs fixed, API now faithful), DataGrid (paged caching +
-inline editing + server-side sort/filter), navigation (destination guards,
-wildcards, diagnostics), interop (WinForms via XamlIslandControl), **async
-data (full subsystem — UseResource/UseInfiniteResource/UseMutation with
-AsyncValue ADT and QueryCache)**, **charting + chart a11y (8-layer system
-with WCAG-hardening palette + scanner rules)**, **MCP devtools (unique
-industry-wide)**, **ETW tracing**, and **spec 027 declarative input
-(pointer/gesture/focus/drag-drop modifiers + trampoline dispatch)**. The key
-remaining gaps are structural (animation compositor-property ceiling, no
-custom theme resources, SemanticPanel covering 2 of ~20 UIA patterns),
+type safety). The commanding system is genuinely novel. **Unlike most prior
+cycles, the May 2026 (last 9 days) work was driven by an external WinUI/XAML
+veteran's reviewer feedback rather than internal roadmap.** Spec 033 took
+seven specific complaints and shipped concrete answers to most of them in
+one PR: typed Grid tracks (`GridSize.Star/Auto/Px`), typed
+`ElementRef<T>` (no more `as Button` casts), bounded LRU
+`PersistedStateScope` (replaces the unbounded process-global cache the
+*previous review of this document* flagged), `Expr(...)` escape hatch,
+`.Backdrop()` modifier, and an `InteropFirst` sample that demonstrates
+"Reactor as guest" inside a vanilla WinUI 3 XAML page with shared
+ViewModel + ICommand. **Per-Component perf attribution** finally landed
+via the layout-cost overlay (ETW-sourced, attributed by spatial bounds);
+the **reconcile-highlight overlay** draws mount/update tints in-process.
+**Reconciler correctness** was demonstrably hardened: skip-path
+correctness, lazy event wiring, `EventHandlerState` deduping
+`ToggleSwitch.Toggled` across re-renders, identity-preservation fixtures
+across 14 in-place-update controls, and SelfTests now run on hosted
+`windows-latest` in CI. **OSS launch prep** (proper trim/AOT annotations,
+license scrub, security review remediations) means this is no longer an
+internal-only experiment. The **native chat sample** is a second flagship
+app that uses framework features idiomatically.
+
+The remaining gaps are structural (animation compositor-property ceiling,
+no custom theme resources, SemanticPanel covering 2 of ~20 UIA patterns),
 compositional (UseColorScheme/RequestedTheme don't compose correctly,
 StandardCommand labels aren't localized despite Reactor having a full ICU
-system, no command routing to focused view), and — most uncomfortably —
-integrative. The showcase apps (Outlook clone, file manager, registry
-editor, word puzzle game) don't use navigation, commanding, context,
-memoization, persisted state, SemanticPanel, UseFocusTrap, async resources,
-or any of the spec 027 input modifiers. Every new feature ships with an
-isolated demo; the flagship apps freeze in time. The charting gallery is
-the one bright exception (43 samples retrofitted in one pass, proving the
-team *can* do integration work). Production-readiness doesn't live in
-"features exist" — it lives in "features compose in real apps under real
-load." That gap is widening, not closing.
+system, no command routing to focused view), and — though this critique
+is now slightly softer — integrative. The four older flagship apps
+(Outlook clone, file manager, registry editor, word puzzle game) still
+don't use navigation, commanding, context, memoization, persisted state,
+SemanticPanel, UseFocusTrap, async resources, or spec 027 input modifiers.
+The charting gallery, the new chat sample, and InteropFirst are the bright
+exceptions. Production-readiness doesn't live in "features exist" — it
+lives in "features compose in real apps under real load." That gap is
+narrower than a cycle ago but is not closed.
 
 ### 5. Error handling is an industry-wide gap — but Microsoft has two answers
 
@@ -1992,19 +2139,26 @@ Every framework has embarrassing gaps:
   routing to focused view. Accelerators rebuild on every render. Delegate
   equality on Command records defeats memoization. 4+ invisible wrapper
   element types accumulate in the visual tree. `.Set()` still needed for
-  composition layer, materials, windowing, pointer capture, custom
-  geometry, ink. `ConnectedTransition` is shipped but silently falls back
-  to slide. Trampoline dispatch has no render-cycle benchmark proving the
-  perf claim it makes. Async `QueryCache` has no persistence, no auto-retry,
-  no devtools surface, no stress tests. Drag-and-drop has zero consumer
-  apps and unversioned typed format ids that break on model renames.
-  Stringly-typed APIs at every platform boundary (deep link patterns,
-  semantic roles, resource keys, connected-animation keys, drag formats).
-  And the constant-across-three-review-cycles critique: **showcase apps
-  don't use the framework's own features** — Outlook clone still uses
-  `UseState<string>` for navigation; nothing uses SemanticPanel, commanding,
-  context, UseFocusTrap, async resources, or spec 027 input modifiers
-  except isolated demos
+  composition layer, custom geometry, and ink (Mica/Acrylic moved to
+  `.Backdrop()` in May 2026). `ConnectedTransition` is shipped but
+  silently falls back to slide. Trampoline dispatch has no render-cycle
+  benchmark proving the perf claim it makes. Async `QueryCache` has no
+  persistence, no auto-retry, no devtools surface, no stress tests.
+  Drag-and-drop has zero consumer apps and unversioned typed format ids
+  that break on model renames. Stringly-typed APIs at most platform
+  boundaries (deep link patterns, semantic roles, resource keys,
+  connected-animation keys, drag formats — though Grid tracks were
+  detyped→typed with `GridSize` in May 2026, and `ElementRef<T>` typed the
+  control-handle surface). Spec 033's three planned auto-fixer analyzers
+  (`REACTOR_GRID_001`, `REACTOR_FUNC_001`, `REACTOR_PERSIST_001`) and
+  the host-side `WindowPersistedScope` wiring at hook-entry are deferred.
+  And the long-running critique, now slightly softer but not gone:
+  **older showcase apps don't use the framework's own features.** Outlook
+  clone still uses `UseState<string>` for navigation; the four older
+  flagship apps don't use SemanticPanel, commanding, context, UseFocusTrap,
+  async resources, or spec 027 input modifiers. The chat sample,
+  charting gallery, and InteropFirst sample are the integration evidence;
+  the rest are isolated demos
 
 The "perfect framework" doesn't exist. The question is which gaps matter
 most for your specific application.
