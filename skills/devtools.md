@@ -22,7 +22,12 @@ as a parity escape hatch, but reach for it only when the CLI can't express
 what you need (structured args the CLI flattens, or another MCP client
 that's already wired up).
 
-Loopback-only, no auth — **DEBUG builds only**, never ship it.
+Loopback-only — **DEBUG builds only**, never ship it. Auth is a per-launch
+bearer token written into the lockfile; the CLI applies it transparently
+during lockfile discovery, so you don't see it. **Don't pass `--endpoint`
+for tool calls** — without the token the server returns 401. `--endpoint`
+is only useful when you're crafting the `Authorization: Bearer …` header
+yourself (curl, custom client).
 
 ## Attaching to a running app
 
@@ -134,6 +139,9 @@ mur devtools session clean --dry-run  # show what would be removed
 ### Shared flags (before any verb)
 
 - `--endpoint <url>` — skip lockfile discovery and talk to this endpoint.
+  **Drops the bearer token** — the CLI has no `--token` flag, so verbs hit
+  the endpoint unauthenticated and get 401. Only useful with `curl` plus a
+  hand-built `Authorization` header, not for `mur devtools <verb>` calls.
 - `--pretty` — indent JSON output.
 - `--auto` — loopback port scan (slow; use only when lockfile discovery fails).
 
@@ -270,6 +278,23 @@ mur devtools ancestors "#my-button" --pretty
 
 Useful for understanding layout containers, resource scoping, and which
 parent element is providing inherited property values.
+
+### Driving the app from a script
+
+For launch → drive → shutdown loops (stress tests, batch automation, CI):
+
+1. Start the app yourself (`dotnet run … -- --devtools run &` or the built exe).
+2. **Poll `mur devtools session list` until exit 0** — that's the only signal
+   that lockfile discovery + the auth probe both succeed. Don't grep stdout
+   for `MCP_ENDPOINT=`; that banner fires before the lockfile is written and
+   before the server can authorize you.
+3. Issue verbs without `--endpoint` so lockfile discovery applies the bearer
+   token.
+4. `mur devtools shutdown` — the child exits with code 0 within a second.
+   Wait for the OS process to exit before relaunching against the same
+   project, or the single-instance check (exit 3) will trip on the next iteration.
+5. If a previous iteration was killed without `shutdown`, run
+   `mur devtools session clean` to GC the stale lockfile.
 
 ### Cleaning up when done
 
