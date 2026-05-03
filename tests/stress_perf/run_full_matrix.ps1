@@ -140,8 +140,28 @@ if (-not $SkipBuild) {
         "  build: RN-Fabric — node_modules present, skipping npm install" | Tee-Object -FilePath $logPath -Append | Out-Host
       }
       $rnArchLower = $Platform.ToLower()  # react-native run-windows wants 'arm64', not 'ARM64'
-      "  build: RN-Fabric — npx @react-native-community/cli run-windows --release --arch $rnArchLower --no-launch --no-deploy (~5-10 min on first build, incremental after that)" | Tee-Object -FilePath $logPath -Append | Out-Host
-      & $npx.Source '@react-native-community/cli' run-windows --release --arch $rnArchLower --no-launch --no-deploy 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null
+      # react-native-windows 0.82's MSBuild detection (findLatestVsInstall in
+      # @react-native-windows/cli/lib-commonjs/utils/vsInstalls.js) clamps the
+      # version range to [minVersion, floor(minVersion)+1), so the default
+      # `17.11.0` excludes VS 18 entirely. If the only installed VS is 18.x,
+      # raise minVersion via the env var the CLI already honors.
+      $vsRoots = (Get-ChildItem 'C:\Program Files\Microsoft Visual Studio' -Directory -ErrorAction SilentlyContinue) +
+                 (Get-ChildItem 'C:\Program Files (x86)\Microsoft Visual Studio' -Directory -ErrorAction SilentlyContinue)
+      $vs17 = $vsRoots | Where-Object { $_.Name -match '^17(\b|$)' -or $_.Name -eq '2022' } | Select-Object -First 1
+      $vs18 = $vsRoots | Where-Object { $_.Name -match '^18(\b|$)' } | Select-Object -First 1
+      $savedMinVS = $env:MinimumVisualStudioVersion
+      try {
+        if (-not $vs17 -and $vs18) {
+          $env:MinimumVisualStudioVersion = '18.0'
+          "  build: RN-Fabric — VS 17 not installed; setting MinimumVisualStudioVersion=18.0 so RN's MSBuild detection accepts the installed VS $($vs18.Name)" | Tee-Object -FilePath $logPath -Append | Out-Host
+        }
+        "  build: RN-Fabric — npx @react-native-community/cli run-windows --release --arch $rnArchLower --no-launch --no-deploy (~5-10 min on first build, incremental after that)" | Tee-Object -FilePath $logPath -Append | Out-Host
+        & $npx.Source '@react-native-community/cli' run-windows --release --arch $rnArchLower --no-launch --no-deploy 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null
+        $rnExitCode = $LASTEXITCODE
+      } finally {
+        if ($savedMinVS) { $env:MinimumVisualStudioVersion = $savedMinVS } else { Remove-Item Env:\MinimumVisualStudioVersion -ErrorAction SilentlyContinue }
+      }
+      $LASTEXITCODE = $rnExitCode
       if ($LASTEXITCODE -ne 0) {
         throw @"
 RN-Fabric build failed (see $logPath). Common causes on this repo:
