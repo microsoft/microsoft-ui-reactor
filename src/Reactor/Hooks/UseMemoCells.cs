@@ -175,9 +175,15 @@ public static class UseMemoCellsExtensions
     /// Memoize cell construction when the data source already knows which
     /// indices changed. Skips the per-cell <see cref="object.Equals(object?, object?)"/>
     /// scan entirely; the builder runs only for indices in
-    /// <paramref name="changedIndices"/>. Item-count change is not
-    /// supported via this overload — callers must fall back to
-    /// <see cref="UseMemoCells{T}"/> when the list length changes.
+    /// <paramref name="changedIndices"/>. When the item count changes
+    /// between renders the overload falls back to a full rebuild
+    /// (<paramref name="changedIndices"/> is treated as
+    /// "rebuild everything") because the index space no longer matches
+    /// the prior render. Callers whose lists grow or shrink frequently
+    /// will get better incremental reuse from <see cref="UseMemoCells{T}"/>
+    /// or <see cref="UseMemoCellsByKey{T,TKey}"/>, both of which can
+    /// short-circuit per-cell on value or key equality across length
+    /// changes.
     /// </summary>
     /// <param name="ctx">The render context.</param>
     /// <param name="items">Source items.</param>

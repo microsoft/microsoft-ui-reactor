@@ -15,9 +15,10 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// Code fix for <c>REACTOR_HOOKS_007</c>: appends the missing capture as an
 /// additional argument in the trailing <c>params deps</c> slot of the
 /// <c>UseMemoCells</c> / <c>UseMemoCellsByKey</c> / <c>UseMemoCellsByIndex</c>
-/// invocation. The diagnostic message names the capture; the fix walks up
-/// from the lambda's call-site to the enclosing invocation and inserts the
-/// argument identifier.
+/// invocation. The capture name travels from the analyzer in
+/// <see cref="Diagnostic.Properties"/> under
+/// <see cref="UseMemoCellsAnalyzer.CaptureNameProperty"/>; a message-text
+/// fallback handles diagnostics produced by older analyzer builds.
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(UseMemoCellsCodeFix))]
 [Shared]
@@ -42,10 +43,19 @@ public sealed class UseMemoCellsCodeFix : CodeFixProvider
             var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
             if (invocation is null) continue;
 
-            // The diagnostic's first message argument is the capture name.
-            // Roslyn's Diagnostic doesn't expose Properties unless we set them,
-            // so re-derive the capture from the message.
-            var captureName = ExtractCaptureName(diagnostic.GetMessage());
+            // Prefer the structured property the analyzer set; fall back to
+            // message-text parsing only if it's missing (i.e., a stale
+            // analyzer build emitted the diagnostic).
+            string? captureName = null;
+            if (diagnostic.Properties.TryGetValue(UseMemoCellsAnalyzer.CaptureNameProperty, out var fromProps)
+                && !string.IsNullOrEmpty(fromProps))
+            {
+                captureName = fromProps;
+            }
+            else
+            {
+                captureName = ExtractCaptureName(diagnostic.GetMessage());
+            }
             if (string.IsNullOrEmpty(captureName)) continue;
 
             context.RegisterCodeFix(
@@ -59,7 +69,9 @@ public sealed class UseMemoCellsCodeFix : CodeFixProvider
 
     private static string? ExtractCaptureName(string message)
     {
-        // Message format: "'X' is captured by the builder lambda but missing from the dependencies arg list. ..."
+        // Fallback path for diagnostics from analyzer builds before the
+        // CaptureNameProperty round-trip was introduced. Message format:
+        // "'X' is captured by the builder lambda but missing from the dependencies arg list. ..."
         if (string.IsNullOrEmpty(message)) return null;
         int first = message.IndexOf('\'');
         if (first < 0) return null;

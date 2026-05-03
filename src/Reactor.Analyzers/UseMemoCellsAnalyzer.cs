@@ -34,6 +34,15 @@ public sealed class UseMemoCellsAnalyzer : DiagnosticAnalyzer
 {
     public const string DiagnosticId = "REACTOR_HOOKS_007";
 
+    /// <summary>
+    /// Property bag key carrying the captured symbol's name from the
+    /// analyzer to <c>UseMemoCellsCodeFix</c>. Round-tripping through
+    /// <see cref="Diagnostic.Properties"/> is more robust than re-parsing
+    /// it out of the diagnostic message text — message edits or
+    /// localization would otherwise break the codefix silently.
+    /// </summary>
+    public const string CaptureNameProperty = "CaptureName";
+
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         "Builder closure captures variable not in dependencies",
@@ -218,7 +227,9 @@ public sealed class UseMemoCellsAnalyzer : DiagnosticAnalyzer
 
             // Report on the call-site location so the warning lands near
             // the hook invocation, not deep in the lambda body.
-            var diag = Diagnostic.Create(Rule, lambdaNode.GetLocation(), capture.Name);
+            var props = ImmutableDictionary<string, string?>.Empty
+                .Add(CaptureNameProperty, capture.Name);
+            var diag = Diagnostic.Create(Rule, lambdaNode.GetLocation(), props, capture.Name);
             context.ReportDiagnostic(diag);
         }
     }
