@@ -97,6 +97,16 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Changed
 
+- **Spec 034 — Element allocation reduction.** Three independent
+  allocation cuts in one PR: bucketed `ElementModifiers` (transparent
+  storage shim, ~−11% bytes/tick on the 4,900-cell stress grid),
+  direct-record-initializer idiom for inner cell loops (~−60% bytes
+  per cell), and `UseMemoCells` cell-level memoization (~+49% renders
+  on 10% mutation). The combined `ReactorOptimized` variant of the
+  stress bench is the spec's empirical close — see
+  `docs/specs/034-element-allocation-reduction.md` for the full A/B
+  table from the investigation prototype. Production re-bench is a
+  follow-up. (spec 034)
 - `ElementModifiers` now stores layout and visual fields in
   `LayoutModifiers` / `VisualModifiers` sub-records. Existing call sites are
   unaffected — public properties (`Padding`, `Margin`, `Foreground`,

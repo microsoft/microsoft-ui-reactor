@@ -2,7 +2,15 @@
 
 ## Status
 
-- **Drafted** — 2026-05-02.
+- **Implemented** — 2026-05-02. All three components ship in one PR
+  (Reactor `LayoutModifiers` / `VisualModifiers` shim, `UseMemoCells*`
+  hook trio, `REACTOR_HOOKS_007` analyzer + codefix, and the
+  `StressPerf.ReactorOptimized` reference variant). The verified
+  numbers belong in the table below — at the time of writing the
+  production code is in place but a same-day re-bench has not been
+  captured; the prototype's table from `reactor-vs-direct-10pct.md`
+  remains the operating reference until that re-bench lands as a
+  follow-up.
 - **Investigation complete** — see `docs/perf-investigations/reactor-vs-direct-10pct.md`
   for the full analysis, hypothesis log, and same-day measured A/B data that
   motivates this spec. That document is reference material; this spec is the

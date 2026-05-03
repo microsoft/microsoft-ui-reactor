@@ -12,6 +12,7 @@
 
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -51,6 +52,12 @@ class StockGridApp : Component
         var source = sourceRef.Current;
 
         var (data, setData) = UseState(source.Snapshot());
+        // Track which indices changed in the most recent Update() call so
+        // UseMemoCellsByIndex (below) only re-runs the builder for those.
+        // First render sees an empty list, which means "full reuse" — but
+        // the hook also detects that this is the first render via its
+        // internal state and rebuilds the whole grid then.
+        var changedIndicesRef = UseRef<IReadOnlyList<int>>(Array.Empty<int>());
 
         var (percent, setPercent) = UseState(CliOpts.Percent);
         var (running, setRunning) = UseState(false);
@@ -97,7 +104,8 @@ class StockGridApp : Component
                     var perf = perfRef.Current!;
                     perf.BeginUpdate();
 
-                    src.Update(percent);
+                    var changed = src.Update(percent);
+                    changedIndicesRef.Current = changed;
                     benchmarkUpdatePending.Current = true;
                     setData(src.Snapshot());
 
@@ -142,33 +150,37 @@ class StockGridApp : Component
         }, Array.Empty<object>());
 
         // ── Build element tree ──────────────────────────────────────────
-        // Direct record initializer (spec 034 §B): one TextBlockElement,
-        // one ElementModifiers with two bucket sub-records, one Attached
-        // dictionary per cell. The fluent .Foreground().Padding().Grid()
-        // chain that the naive variant uses would clone ElementModifiers
-        // up to 5× per cell.
+        // Spec 034 §B + §C combined: each cell is a single TextBlockElement
+        // with one ElementModifiers carrying two bucket sub-records (no
+        // fluent-chain clones), and UseMemoCellsByIndex skips the builder
+        // entirely for indices the data source didn't touch.
         //
-        // Component C (UseMemoCellsByIndex) is wired in Phase 4 of spec 034.
-        var children = new Element[StockDataSource.TotalItems];
-        for (int i = 0; i < StockDataSource.TotalItems; i++)
-        {
-            int r = i / StockDataSource.Columns;
-            int c = i % StockDataSource.Columns;
-            ref readonly var item = ref data[i];
-            children[i] = new TextBlockElement(StockDataSource.FormatCell(in item))
+        // GreenBrush / RedBrush are deps because they're closed over by
+        // the lambda; r / c / StockDataSource.Columns / FormatCell are
+        // either lambda parameters or static, so REACTOR_HOOKS_007 does
+        // not flag this call.
+        var children = this.UseMemoCellsByIndex<StockItem>(
+            data,
+            changedIndicesRef.Current,
+            (item, i) =>
             {
-                FontSize = 8,
-                Modifiers = new ElementModifiers
+                int r = i / StockDataSource.Columns;
+                int c = i % StockDataSource.Columns;
+                return new TextBlockElement(StockDataSource.FormatCell(in item))
                 {
-                    Layout = new LayoutModifiers { Padding = new Thickness(2, 1, 2, 1) },
-                    Visual = new VisualModifiers { Foreground = item.IsUp ? GreenBrush : RedBrush },
-                },
-                Attached = new Dictionary<Type, object>(1)
-                {
-                    [typeof(GridAttached)] = new GridAttached(r, c, 1, 1),
-                },
-            };
-        }
+                    FontSize = 8,
+                    Modifiers = new ElementModifiers
+                    {
+                        Layout = new LayoutModifiers { Padding = new Thickness(2, 1, 2, 1) },
+                        Visual = new VisualModifiers { Foreground = item.IsUp ? GreenBrush : RedBrush },
+                    },
+                    Attached = new Dictionary<Type, object>(1)
+                    {
+                        [typeof(GridAttached)] = new GridAttached(r, c, 1, 1),
+                    },
+                };
+            },
+            GreenBrush, RedBrush);
 
         return VStack(
             HStack(12,
