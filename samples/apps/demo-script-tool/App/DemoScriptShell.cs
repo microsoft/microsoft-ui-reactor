@@ -326,10 +326,30 @@ public sealed class DemoScriptShell : Component
                 .Set("ButtonForegroundPressed", new ThemeRef("TextOnAccentFillColorSecondaryBrush"))
                 .Set("ButtonForegroundDisabled", new ThemeRef("TextOnAccentFillColorDisabledBrush")));
 
+        var devMenu = DevtoolsMenu(() => new Microsoft.UI.Reactor.Core.MenuFlyoutItemBase[]
+        {
+            MenuItem("Reveal demo-script.md…",
+                () =>
+                {
+                    if (projectRoot is null) return;
+                    try
+                    {
+                        var path = IoPath.Combine(projectRoot, DemoScriptStore.FileName);
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+                    }
+                    catch (Exception ex) { _status.ShowToast($"Reveal failed: {ex.Message}", StatusSeverity.Error); }
+                }),
+            MenuItem("Log model snapshot",
+                () => System.Diagnostics.Debug.WriteLine($"[demo-script] title='{model.Title}' steps={model.Steps.Count} multiFile={model.IsMultiFile}")),
+            MenuItem("Force banner: dummy auth error",
+                () => _status.SetBanner("Dummy auth banner — testing recovery UX. Click Open Folder to clear.")),
+        });
+
         var headerActions = HStack(8,
             Button(openCmd),
             generateButton,
-            Button(exportCmd))
+            Button(exportCmd),
+            devMenu)
             .Landmark(Microsoft.UI.Xaml.Automation.Peers.AutomationLandmarkType.Navigation);
 
         // ── Title bar ───────────────────────────────────────────────────

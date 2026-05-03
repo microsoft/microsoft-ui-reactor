@@ -17,24 +17,21 @@ public sealed class DemoPromptPanel : Component<DemoPromptPanelProps>
 {
     public override Element Render()
     {
+        // Local typing buffer — the source of truth WHILE the user is editing.
+        // Keystroke flow: user types → local set → push to model (debounced save).
+        // We deliberately do NOT subscribe to model.Changed in this panel: that
+        // would round-trip our own keystrokes back through setState in the same
+        // frame, which makes WinUI's TextBox clear its selection / reset the
+        // caret to 0. The shell mints a NEW DemoScriptModel instance on Open
+        // Folder / file-watcher reload, which lands here as a Props.Model swap
+        // and is picked up by the dep-keyed effect below.
         var (title, setTitle) = UseState(Props.Model.Title);
         var (prompt, setPrompt) = UseState(Props.Model.DemoPrompt);
 
-        // Sync local state to the model on (a) initial mount with this model, (b) every
-        // mutation the model raises through Changed, and (c) when Props.Model is REPLACED
-        // (Open Folder swaps the whole instance — Changed does not fire in that case).
         UseEffect(() =>
         {
             setTitle(Props.Model.Title);
             setPrompt(Props.Model.DemoPrompt);
-
-            void Handler()
-            {
-                setTitle(Props.Model.Title);
-                setPrompt(Props.Model.DemoPrompt);
-            }
-            Props.Model.Changed += Handler;
-            return () => Props.Model.Changed -= Handler;
         }, Props.Model);
 
         var titleField = (TextField(title, v =>

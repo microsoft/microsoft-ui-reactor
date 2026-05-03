@@ -28,8 +28,20 @@ public sealed class StepCard : Component<StepCardProps>
         var (_, setRevision) = UseState(0, threadSafe: true);
         var counterRef = UseRef(0);
 
+        // Local typing buffers for the editable text fields. The card subscribes
+        // to step.Changed so streaming code / build-state mutations re-render the
+        // card, but we must NOT round-trip the typed value back through setState
+        // here — doing so resets WinUI's TextBox selection mid-keystroke. The
+        // typed value flows to the model via Props.OnPromptChanged / OnTitleChanged
+        // and persists via the shell's debounced save; on Props.Step swap (e.g.
+        // file-watcher reload) we sync from the new step instance below.
+        var (localTitle, setLocalTitle) = UseState(step.Title);
+        var (localPrompt, setLocalPrompt) = UseState(step.Prompt);
+
         UseEffect(() =>
         {
+            setLocalTitle(step.Title);
+            setLocalPrompt(step.Prompt);
             void Handler() { counterRef.Current++; setRevision(counterRef.Current); }
             step.Changed += Handler;
             return () => step.Changed -= Handler;
@@ -39,8 +51,12 @@ public sealed class StepCard : Component<StepCardProps>
         var hasDelta = !string.IsNullOrWhiteSpace(step.Delta);
         var canRun = step.OutputPath is not null;
 
-        var promptField = (TextField(step.Prompt,
-                v => Props.OnPromptChanged(step.Number, v),
+        var promptField = (TextField(localPrompt,
+                v =>
+                {
+                    setLocalPrompt(v);
+                    Props.OnPromptChanged(step.Number, v);
+                },
                 placeholder: "What should this step do?"))
             .Set(tb =>
             {
@@ -118,8 +134,12 @@ public sealed class StepCard : Component<StepCardProps>
                 .AutomationName("Compiler output")
             : Empty();
 
-        var titleField = (TextField(step.Title,
-                v => Props.OnTitleChanged(step.Number, v),
+        var titleField = (TextField(localTitle,
+                v =>
+                {
+                    setLocalTitle(v);
+                    Props.OnTitleChanged(step.Number, v);
+                },
                 placeholder: "Step title"))
             .Set(tb =>
             {

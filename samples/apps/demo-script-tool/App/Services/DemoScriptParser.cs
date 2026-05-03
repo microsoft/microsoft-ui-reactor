@@ -170,7 +170,9 @@ public static class DemoScriptParser
 
         title = line[titleStart..closeBold].Trim();
         trailingBody = line[(closeBold + 2)..].TrimStart();
-        return title.Length > 0;
+        // Empty bold titles are valid — a freshly-added step has no title yet;
+        // the UI renders the placeholder "Step title" against the empty value.
+        return true;
     }
 
     /// <summary>Serialise a model back to markdown text (UTF-8, LF newlines).</summary>

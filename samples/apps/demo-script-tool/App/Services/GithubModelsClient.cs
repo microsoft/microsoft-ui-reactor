@@ -21,7 +21,10 @@ namespace DemoScriptTool.App.Services;
 public sealed class GithubModelsClient : IModelClient, IDisposable
 {
     const string DefaultEndpoint = "https://models.github.ai/inference/chat/completions";
-    const string DefaultModel = "openai/gpt-5"; // GitHub Models catalog id; closest available proxy for Claude Opus 4.6 — spec §AI Backend allows substitution.
+    // Spec §AI Backend names claude-opus-4-6 but GitHub Models' Anthropic
+    // catalog uses path-prefixed ids like `anthropic/claude-3-...`; openai/gpt-4o
+    // is the most reliable evergreen default for local development.
+    const string DefaultModel = "openai/gpt-4o";
 
     readonly HttpClient _http;
     readonly GhAuth _auth;
@@ -41,8 +44,10 @@ public sealed class GithubModelsClient : IModelClient, IDisposable
         string userPrompt,
         [EnumeratorCancellation] CancellationToken ct)
     {
+        System.Diagnostics.Debug.WriteLine($"[GithubModels] StreamAsync model={_model} endpoint={_endpoint} userPromptBytes={userPrompt.Length}");
         var token = await _auth.GetTokenAsync(ct).ConfigureAwait(false)
             ?? throw new AuthExpiredException("No GitHub token available. Sign in via the Open Folder flow.");
+        System.Diagnostics.Debug.WriteLine($"[GithubModels] token acquired (len={token.Length})");
 
         var payload = new
         {
@@ -64,9 +69,19 @@ public sealed class GithubModelsClient : IModelClient, IDisposable
         req.Headers.Accept.ParseAdd("text/event-stream");
 
         using var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        System.Diagnostics.Debug.WriteLine($"[GithubModels] HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
         if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
-            throw new AuthExpiredException($"GitHub Models rejected the request: {(int)response.StatusCode} {response.ReasonPhrase}.");
-        response.EnsureSuccessStatusCode();
+        {
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            System.Diagnostics.Debug.WriteLine($"[GithubModels] auth rejected body={body}");
+            throw new AuthExpiredException($"GitHub Models rejected the request ({(int)response.StatusCode} {response.ReasonPhrase}). Likely missing the `models:read` scope on your GitHub token — re-run `gh auth login --scopes models:read`.");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            System.Diagnostics.Debug.WriteLine($"[GithubModels] error body={body}");
+            throw new HttpRequestException($"GitHub Models returned {(int)response.StatusCode} {response.ReasonPhrase}: {body}");
+        }
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         using var reader = new StreamReader(stream, Encoding.UTF8);

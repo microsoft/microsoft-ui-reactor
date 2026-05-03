@@ -57,21 +57,26 @@ public sealed class GenerationPipeline
     /// <summary>Generate every step in <paramref name="model"/> sequentially.</summary>
     public async Task GenerateAllAsync(DemoScriptModel model, string projectRoot, CancellationToken ct)
     {
+        System.Diagnostics.Debug.WriteLine($"[Pipeline] GenerateAll start root='{projectRoot}' steps={model.Steps.Count} multiFile={model.IsMultiFile}");
         if (model.Steps.Count == 0)
         {
             _status.ShowToast("Add at least one step to your demo script before generating.", StatusSeverity.Warning);
             return;
         }
 
+        _status.SetGeneratingStatus($"Preparing {model.Steps.Count} step{(model.Steps.Count == 1 ? "" : "s")}…");
         var userPrompt = BuildUserPrompt(model);
 
         try
         {
             await StreamAndApplyAsync(model, projectRoot, userPrompt, ct).ConfigureAwait(false);
+            System.Diagnostics.Debug.WriteLine("[Pipeline] GenerateAll completed normally");
         }
-        catch (AuthExpiredException)
+        catch (AuthExpiredException ex)
         {
             // Spec §5.1: retry once after re-auth.
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthExpired, retrying after re-auth: {ex.Message}");
+            _status.SetGeneratingStatus("Re-authenticating with GitHub…");
             try
             {
                 await _auth.EnsureAuthenticatedAsync(ct).ConfigureAwait(false);
@@ -79,23 +84,28 @@ public sealed class GenerationPipeline
             }
             catch (AuthExpiredException ex2)
             {
+                System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthExpired after retry: {ex2.Message}");
                 _status.SetBanner($"Authentication failed. {ex2.Message}");
             }
             catch (AuthUnavailableException ex2)
             {
+                System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthUnavailable: {ex2.Message}");
                 _status.SetBanner(ex2.Message);
             }
         }
         catch (AuthUnavailableException ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthUnavailable: {ex.Message}");
             _status.SetBanner(ex.Message);
         }
         catch (OperationCanceledException)
         {
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] Cancelled with {CompletedCount(model)} of {model.Steps.Count} done");
             _status.ShowToast($"Cancelled — {CompletedCount(model)} of {model.Steps.Count} steps generated.", StatusSeverity.Info);
         }
         catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] Generation failed: {ex}");
             _status.SetBanner($"Generation failed: {ex.Message}");
         }
         finally
