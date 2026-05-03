@@ -826,32 +826,139 @@ public record SemanticElement(Element Child, SemanticDescription Semantics) : El
 
 public record ElementModifiers
 {
-    public Thickness? Margin { get; init; }
-    public Thickness? Padding { get; init; }
-    public double? Width { get; init; }
-    public double? Height { get; init; }
-    public double? MinWidth { get; init; }
-    public double? MinHeight { get; init; }
-    public double? MaxWidth { get; init; }
-    public double? MaxHeight { get; init; }
-    public HorizontalAlignment? HorizontalAlignment { get; init; }
-    public VerticalAlignment? VerticalAlignment { get; init; }
-    public double? Opacity { get; init; }
-    public global::System.Numerics.Vector3? Scale { get; init; }
-    public float? Rotation { get; init; }
-    public global::System.Numerics.Vector3? Translation { get; init; }
-    public global::System.Numerics.Vector3? CenterPoint { get; init; }
-    public bool? IsVisible { get; init; }
+    // ── Bucketed sub-records (spec 034 §A) ──────────────────────────
+    // Layout / Visual fields are stored in dedicated sub-records so that the
+    // common case (a cell that sets only Foreground + Padding) allocates two
+    // small bucket records instead of bloating the parent ElementModifiers.
+    // Public properties for moved fields (Padding, Margin, Width, …,
+    // Foreground, Background, …) stay on ElementModifiers as get/init shims
+    // that read from / write into the appropriate bucket — call sites see no
+    // API change.
+    /// <summary>
+    /// Layout-bucket sub-record. Set directly only in perf-critical inner
+    /// loops; ordinary code uses the field shim properties (Padding, Margin,
+    /// Width, …) and never observes this slot.
+    /// </summary>
+    /// <remarks>Spec 034 §A.</remarks>
+    public LayoutModifiers? Layout { get; init; }
+    /// <summary>
+    /// Visual-bucket sub-record. Set directly only in perf-critical inner
+    /// loops; ordinary code uses the field shim properties (Foreground,
+    /// Background, BorderBrush, …) and never observes this slot.
+    /// </summary>
+    /// <remarks>Spec 034 §A.</remarks>
+    public VisualModifiers? Visual { get; init; }
+
+    public Thickness? Margin
+    {
+        get => Layout?.Margin;
+        init => Layout = Layout is null ? new LayoutModifiers { Margin = value } : Layout with { Margin = value };
+    }
+    public Thickness? Padding
+    {
+        get => Layout?.Padding;
+        init => Layout = Layout is null ? new LayoutModifiers { Padding = value } : Layout with { Padding = value };
+    }
+    public double? Width
+    {
+        get => Layout?.Width;
+        init => Layout = Layout is null ? new LayoutModifiers { Width = value } : Layout with { Width = value };
+    }
+    public double? Height
+    {
+        get => Layout?.Height;
+        init => Layout = Layout is null ? new LayoutModifiers { Height = value } : Layout with { Height = value };
+    }
+    public double? MinWidth
+    {
+        get => Layout?.MinWidth;
+        init => Layout = Layout is null ? new LayoutModifiers { MinWidth = value } : Layout with { MinWidth = value };
+    }
+    public double? MinHeight
+    {
+        get => Layout?.MinHeight;
+        init => Layout = Layout is null ? new LayoutModifiers { MinHeight = value } : Layout with { MinHeight = value };
+    }
+    public double? MaxWidth
+    {
+        get => Layout?.MaxWidth;
+        init => Layout = Layout is null ? new LayoutModifiers { MaxWidth = value } : Layout with { MaxWidth = value };
+    }
+    public double? MaxHeight
+    {
+        get => Layout?.MaxHeight;
+        init => Layout = Layout is null ? new LayoutModifiers { MaxHeight = value } : Layout with { MaxHeight = value };
+    }
+    public HorizontalAlignment? HorizontalAlignment
+    {
+        get => Layout?.HorizontalAlignment;
+        init => Layout = Layout is null ? new LayoutModifiers { HorizontalAlignment = value } : Layout with { HorizontalAlignment = value };
+    }
+    public VerticalAlignment? VerticalAlignment
+    {
+        get => Layout?.VerticalAlignment;
+        init => Layout = Layout is null ? new LayoutModifiers { VerticalAlignment = value } : Layout with { VerticalAlignment = value };
+    }
+    public double? Opacity
+    {
+        get => Visual?.Opacity;
+        init => Visual = Visual is null ? new VisualModifiers { Opacity = value } : Visual with { Opacity = value };
+    }
+    public global::System.Numerics.Vector3? Scale
+    {
+        get => Visual?.Scale;
+        init => Visual = Visual is null ? new VisualModifiers { Scale = value } : Visual with { Scale = value };
+    }
+    public float? Rotation
+    {
+        get => Visual?.Rotation;
+        init => Visual = Visual is null ? new VisualModifiers { Rotation = value } : Visual with { Rotation = value };
+    }
+    public global::System.Numerics.Vector3? Translation
+    {
+        get => Visual?.Translation;
+        init => Visual = Visual is null ? new VisualModifiers { Translation = value } : Visual with { Translation = value };
+    }
+    public global::System.Numerics.Vector3? CenterPoint
+    {
+        get => Visual?.CenterPoint;
+        init => Visual = Visual is null ? new VisualModifiers { CenterPoint = value } : Visual with { CenterPoint = value };
+    }
+    public bool? IsVisible
+    {
+        get => Layout?.IsVisible;
+        init => Layout = Layout is null ? new LayoutModifiers { IsVisible = value } : Layout with { IsVisible = value };
+    }
     public string? ToolTip { get; init; }
     public Element? RichToolTip { get; init; }
     public Element? AttachedFlyout { get; init; }
     public Element? ContextFlyout { get; init; }
-    public Brush? Background { get; init; }
-    public Brush? Foreground { get; init; }
+    public Brush? Background
+    {
+        get => Visual?.Background;
+        init => Visual = Visual is null ? new VisualModifiers { Background = value } : Visual with { Background = value };
+    }
+    public Brush? Foreground
+    {
+        get => Visual?.Foreground;
+        init => Visual = Visual is null ? new VisualModifiers { Foreground = value } : Visual with { Foreground = value };
+    }
     public bool? IsEnabled { get; init; }
-    public Microsoft.UI.Xaml.CornerRadius? CornerRadius { get; init; }
-    public Brush? BorderBrush { get; init; }
-    public Thickness? BorderThickness { get; init; }
+    public Microsoft.UI.Xaml.CornerRadius? CornerRadius
+    {
+        get => Visual?.CornerRadius;
+        init => Visual = Visual is null ? new VisualModifiers { CornerRadius = value } : Visual with { CornerRadius = value };
+    }
+    public Brush? BorderBrush
+    {
+        get => Visual?.BorderBrush;
+        init => Visual = Visual is null ? new VisualModifiers { BorderBrush = value } : Visual with { BorderBrush = value };
+    }
+    public Thickness? BorderThickness
+    {
+        get => Visual?.BorderThickness;
+        init => Visual = Visual is null ? new VisualModifiers { BorderThickness = value } : Visual with { BorderThickness = value };
+    }
     public string? AutomationName { get; init; }
     public string? AutomationId { get; init; }
     public ElementSoundMode? ElementSoundMode { get; init; }
@@ -898,11 +1005,31 @@ public record ElementModifiers
     // ── Logical (BiDi-aware) layout properties ──────────────────────
     // These resolve to physical left/right based on FlowDirection at mount/update time.
     // InlineStart = left in LTR, right in RTL. InlineEnd = right in LTR, left in RTL.
-    public double? MarginInlineStart { get; init; }
-    public double? MarginInlineEnd { get; init; }
-    public double? PaddingInlineStart { get; init; }
-    public double? PaddingInlineEnd { get; init; }
-    public Thickness? BorderInlineStart { get; init; }
+    public double? MarginInlineStart
+    {
+        get => Layout?.MarginInlineStart;
+        init => Layout = Layout is null ? new LayoutModifiers { MarginInlineStart = value } : Layout with { MarginInlineStart = value };
+    }
+    public double? MarginInlineEnd
+    {
+        get => Layout?.MarginInlineEnd;
+        init => Layout = Layout is null ? new LayoutModifiers { MarginInlineEnd = value } : Layout with { MarginInlineEnd = value };
+    }
+    public double? PaddingInlineStart
+    {
+        get => Layout?.PaddingInlineStart;
+        init => Layout = Layout is null ? new LayoutModifiers { PaddingInlineStart = value } : Layout with { PaddingInlineStart = value };
+    }
+    public double? PaddingInlineEnd
+    {
+        get => Layout?.PaddingInlineEnd;
+        init => Layout = Layout is null ? new LayoutModifiers { PaddingInlineEnd = value } : Layout with { PaddingInlineEnd = value };
+    }
+    public Thickness? BorderInlineStart
+    {
+        get => Layout?.BorderInlineStart;
+        init => Layout = Layout is null ? new LayoutModifiers { BorderInlineStart = value } : Layout with { BorderInlineStart = value };
+    }
 
     // ── Theme override ───────────────────────────────────────────────
     /// <summary>
@@ -911,7 +1038,11 @@ public record ElementModifiers
     /// sidebar in a light app). Applied before ThemeRef bindings resolve so
     /// that theme resources pick up the correct variant.
     /// </summary>
-    public ElementTheme? RequestedTheme { get; init; }
+    public ElementTheme? RequestedTheme
+    {
+        get => Layout?.RequestedTheme;
+        init => Layout = Layout is null ? new LayoutModifiers { RequestedTheme = value } : Layout with { RequestedTheme = value };
+    }
 
     // ── Accessibility — Tier 1 (inline, commonly needed for WCAG AA) ─
     public Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel? HeadingLevel { get; init; }
@@ -942,34 +1073,25 @@ public record ElementModifiers
 
     public ElementModifiers Merge(ElementModifiers other)
     {
+        // Merge buckets at sub-record level. Naming a shim'd property inside
+        // the with { } here would clone the bucket once per moved field
+        // (each shim's init re-runs); write Layout / Visual once instead.
+        var mergedLayout = other.Layout is not null
+            ? (Layout is not null ? Layout.Merge(other.Layout) : other.Layout)
+            : Layout;
+        var mergedVisual = other.Visual is not null
+            ? (Visual is not null ? Visual.Merge(other.Visual) : other.Visual)
+            : Visual;
+
         return this with
         {
-            Margin = other.Margin ?? Margin,
-            Padding = other.Padding ?? Padding,
-            Width = other.Width ?? Width,
-            Height = other.Height ?? Height,
-            MinWidth = other.MinWidth ?? MinWidth,
-            MinHeight = other.MinHeight ?? MinHeight,
-            MaxWidth = other.MaxWidth ?? MaxWidth,
-            MaxHeight = other.MaxHeight ?? MaxHeight,
-            HorizontalAlignment = other.HorizontalAlignment ?? HorizontalAlignment,
-            VerticalAlignment = other.VerticalAlignment ?? VerticalAlignment,
-            Opacity = other.Opacity ?? Opacity,
-            Scale = other.Scale ?? Scale,
-            Rotation = other.Rotation ?? Rotation,
-            Translation = other.Translation ?? Translation,
-            CenterPoint = other.CenterPoint ?? CenterPoint,
-            IsVisible = other.IsVisible ?? IsVisible,
+            Layout = mergedLayout,
+            Visual = mergedVisual,
             ToolTip = other.ToolTip ?? ToolTip,
             RichToolTip = other.RichToolTip ?? RichToolTip,
             AttachedFlyout = other.AttachedFlyout ?? AttachedFlyout,
             ContextFlyout = other.ContextFlyout ?? ContextFlyout,
-            Background = other.Background ?? Background,
-            Foreground = other.Foreground ?? Foreground,
             IsEnabled = other.IsEnabled ?? IsEnabled,
-            CornerRadius = other.CornerRadius ?? CornerRadius,
-            BorderBrush = other.BorderBrush ?? BorderBrush,
-            BorderThickness = other.BorderThickness ?? BorderThickness,
             AutomationName = other.AutomationName ?? AutomationName,
             AutomationId = other.AutomationId ?? AutomationId,
             ElementSoundMode = other.ElementSoundMode ?? ElementSoundMode,
@@ -1003,12 +1125,6 @@ public record ElementModifiers
             LongPress = other.LongPress ?? LongPress,
             DragSource = other.DragSource ?? DragSource,
             DropTarget = other.DropTarget ?? DropTarget,
-            MarginInlineStart = other.MarginInlineStart ?? MarginInlineStart,
-            MarginInlineEnd = other.MarginInlineEnd ?? MarginInlineEnd,
-            PaddingInlineStart = other.PaddingInlineStart ?? PaddingInlineStart,
-            PaddingInlineEnd = other.PaddingInlineEnd ?? PaddingInlineEnd,
-            BorderInlineStart = other.BorderInlineStart ?? BorderInlineStart,
-            RequestedTheme = other.RequestedTheme ?? RequestedTheme,
             HeadingLevel = other.HeadingLevel ?? HeadingLevel,
             IsTabStop = other.IsTabStop ?? IsTabStop,
             TabIndex = other.TabIndex ?? TabIndex,
@@ -1022,6 +1138,111 @@ public record ElementModifiers
                 : Accessibility,
         };
     }
+}
+
+/// <summary>
+/// Layout-related modifiers (sizing, alignment, spacing, visibility, theme,
+/// logical-direction insets). Stored as a lazy sub-record on
+/// <see cref="ElementModifiers"/> so that the common case of a few fields
+/// set allocates a small bucket rather than bloating the parent record.
+/// Public properties on <see cref="ElementModifiers"/> (Padding, Margin,
+/// Width, …) read from / write into this sub-record transparently — most
+/// callers never see this type.
+/// </summary>
+/// <remarks>
+/// Spec 034 §A. The field set may grow but won't shrink — additions are
+/// always backwards-compatible.
+/// </remarks>
+public record LayoutModifiers
+{
+    public Thickness? Margin { get; init; }
+    public Thickness? Padding { get; init; }
+    public double? Width { get; init; }
+    public double? Height { get; init; }
+    public double? MinWidth { get; init; }
+    public double? MinHeight { get; init; }
+    public double? MaxWidth { get; init; }
+    public double? MaxHeight { get; init; }
+    public HorizontalAlignment? HorizontalAlignment { get; init; }
+    public VerticalAlignment? VerticalAlignment { get; init; }
+    public bool? IsVisible { get; init; }
+    public double? MarginInlineStart { get; init; }
+    public double? MarginInlineEnd { get; init; }
+    public double? PaddingInlineStart { get; init; }
+    public double? PaddingInlineEnd { get; init; }
+    public Thickness? BorderInlineStart { get; init; }
+    public ElementTheme? RequestedTheme { get; init; }
+
+    /// <summary>
+    /// Merge <paramref name="other"/> into this record, preferring
+    /// <paramref name="other"/>'s set fields and falling back to ours.
+    /// Mirrors <see cref="ElementModifiers.Merge"/>.
+    /// </summary>
+    /// <remarks>Spec 034 §A.</remarks>
+    public LayoutModifiers Merge(LayoutModifiers other) => this with
+    {
+        Margin = other.Margin ?? Margin,
+        Padding = other.Padding ?? Padding,
+        Width = other.Width ?? Width,
+        Height = other.Height ?? Height,
+        MinWidth = other.MinWidth ?? MinWidth,
+        MinHeight = other.MinHeight ?? MinHeight,
+        MaxWidth = other.MaxWidth ?? MaxWidth,
+        MaxHeight = other.MaxHeight ?? MaxHeight,
+        HorizontalAlignment = other.HorizontalAlignment ?? HorizontalAlignment,
+        VerticalAlignment = other.VerticalAlignment ?? VerticalAlignment,
+        IsVisible = other.IsVisible ?? IsVisible,
+        MarginInlineStart = other.MarginInlineStart ?? MarginInlineStart,
+        MarginInlineEnd = other.MarginInlineEnd ?? MarginInlineEnd,
+        PaddingInlineStart = other.PaddingInlineStart ?? PaddingInlineStart,
+        PaddingInlineEnd = other.PaddingInlineEnd ?? PaddingInlineEnd,
+        BorderInlineStart = other.BorderInlineStart ?? BorderInlineStart,
+        RequestedTheme = other.RequestedTheme ?? RequestedTheme,
+    };
+}
+
+/// <summary>
+/// Visual-related modifiers (brushes, borders, transforms, opacity).
+/// Stored as a lazy sub-record on <see cref="ElementModifiers"/> in the
+/// same pattern as <see cref="LayoutModifiers"/>. Public properties on
+/// <see cref="ElementModifiers"/> (Foreground, Background, BorderBrush, …)
+/// shim through.
+/// </summary>
+/// <remarks>
+/// Spec 034 §A. The field set may grow but won't shrink — additions are
+/// always backwards-compatible.
+/// </remarks>
+public record VisualModifiers
+{
+    public Brush? Background { get; init; }
+    public Brush? Foreground { get; init; }
+    public Brush? BorderBrush { get; init; }
+    public Thickness? BorderThickness { get; init; }
+    public Microsoft.UI.Xaml.CornerRadius? CornerRadius { get; init; }
+    public double? Opacity { get; init; }
+    public global::System.Numerics.Vector3? Scale { get; init; }
+    public float? Rotation { get; init; }
+    public global::System.Numerics.Vector3? Translation { get; init; }
+    public global::System.Numerics.Vector3? CenterPoint { get; init; }
+
+    /// <summary>
+    /// Merge <paramref name="other"/> into this record, preferring
+    /// <paramref name="other"/>'s set fields and falling back to ours.
+    /// </summary>
+    /// <remarks>Spec 034 §A.</remarks>
+    public VisualModifiers Merge(VisualModifiers other) => this with
+    {
+        Background = other.Background ?? Background,
+        Foreground = other.Foreground ?? Foreground,
+        BorderBrush = other.BorderBrush ?? BorderBrush,
+        BorderThickness = other.BorderThickness ?? BorderThickness,
+        CornerRadius = other.CornerRadius ?? CornerRadius,
+        Opacity = other.Opacity ?? Opacity,
+        Scale = other.Scale ?? Scale,
+        Rotation = other.Rotation ?? Rotation,
+        Translation = other.Translation ?? Translation,
+        CenterPoint = other.CenterPoint ?? CenterPoint,
+    };
 }
 
 /// <summary>

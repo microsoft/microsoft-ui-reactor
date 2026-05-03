@@ -70,6 +70,13 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Changed
 
+- `ElementModifiers` now stores layout and visual fields in
+  `LayoutModifiers` / `VisualModifiers` sub-records. Existing call sites are
+  unaffected — public properties (`Padding`, `Margin`, `Foreground`,
+  `Background`, …) shim through to the appropriate bucket on read and write.
+  Perf-critical inner loops may construct buckets directly via the new
+  `Layout = …` / `Visual = …` initializer slots to avoid a fat
+  `ElementModifiers` clone per fluent step. (spec 034 §A)
 - `PersistedStateCache` rewritten over an LRU cache with eviction-on-full
   semantics. The previous "refuse new keys when 4096 entries are present"
   policy is replaced — later, hotter keys are no longer starved by the

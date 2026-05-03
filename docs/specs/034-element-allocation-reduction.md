@@ -7,7 +7,7 @@
   for the full analysis, hypothesis log, and same-day measured A/B data that
   motivates this spec. That document is reference material; this spec is the
   forward-looking design.
-- **Three components locked in** for production: `MemoCells` hook (EX1),
+- **Three components locked in** for production: `UseMemoCells` hook (EX1),
   direct-record-initializer idiom (EX3), bucketed `ElementModifiers` (EX4).
 - **One experiment dropped** as a measured regression: inline-fluent fast
   paths on `Foreground` / `Padding` (EX2). May return after re-measurement
@@ -67,11 +67,14 @@ Three takeaways:
 
 1. **Land all three components without breaking public API.** All three are
    API-additive: bucketed modifiers ship as a transparent storage shim, the
-   direct-construction idiom is a recommendation, `MemoCells` is a new hook.
+   direct-construction idiom is a recommendation, `UseMemoCells` is a new hook.
 2. **Make the closure-dependency footgun loud, not silent.** The investigation
    surfaced a real correctness risk in naive memo usage (cells silently render
-   stale when the builder closes over external state). `MemoCells` must take
-   an explicit dependency parameter so users can't accidentally use it wrong.
+   stale when the builder closes over external state). `UseMemoCells` takes
+   `params` deps matching `UseMemo` / `UseEffect` / `UseCallback`, and ships
+   alongside a Roslyn analyzer that warns when a closure capture in `builder`
+   is not declared in `deps`. The analyzer — not the API shape — is the
+   primary protection against maintenance drift.
 3. **Document the perf-critical-path-only nature of EX3.** Direct record
    initializers bypass the fluent chain's ergonomics. The recommendation is
    explicitly "use this in inner cell loops; keep using fluent everywhere else."
@@ -316,7 +319,7 @@ builder that materializes a single immutable record at `.Build()`. That's
 
 ---
 
-## Component C — `MemoCells` hook with explicit dependencies (EX1)
+## Component C — `UseMemoCells` hook with explicit dependencies (EX1)
 
 ### What
 
@@ -327,22 +330,27 @@ investigation prototype proved this experimentally: a `UseRef`-backed
 manual loop reusing `prevChildren[i]` for unchanged cells gave +49 %
 renders.
 
-`MemoCells` ships that pattern as a one-line idiom:
+`UseMemoCells` ships that pattern as a one-line idiom:
 
 ```csharp
-public static Element[] MemoCells<T>(
+public static Element[] UseMemoCells<T>(
     IReadOnlyList<T> items,
-    object?[] dependencies,
     Func<T, int, Element> builder,
-    IEqualityComparer<T>? comparer = null) where T : notnull;
+    params object[] dependencies) where T : notnull;
 ```
 
-**The `dependencies` parameter is mandatory and explicit.** This is the
-spec's most important point and is detailed below.
+**The signature deliberately matches `UseMemo` / `UseEffect` /
+`UseCallback`** for muscle-memory consistency: deps are trailing
+`params`. The closure-capture correctness problem is solved by a
+companion Roslyn analyzer, not by API friction — see "Companion
+analyzer" below. Custom item equality, when needed, is expressed by
+swapping to `UseMemoCellsByKey` with a key selector that produces equal
+keys for equal items, rather than threading an `IEqualityComparer<T>`
+through the base hook.
 
 ### The closure-dependency footgun
 
-`MemoCells` caches its output keyed only on the per-item value `T`. If
+`UseMemoCells` caches its output keyed only on the per-item value `T`. If
 the `builder` lambda closes over anything besides the item — theme,
 selection state, hover state, drag overlays, sort order, a parent
 component's `UseState` value — those captures are not part of the cache
@@ -350,19 +358,22 @@ key. A change to a captured value will **not** invalidate the cell. The
 cell silently renders stale.
 
 This is the same trap as `React.memo` and `useMemo` with a forgotten
-dependency. The compiler can't see closure captures, so the framework
-can't catch it automatically.
+dependency. The runtime can't catch it — by the time `builder` runs,
+the closure has already baked in the stale value. The framework's
+answer is two-part: a `deps` parameter that the user passes, and a
+companion Roslyn analyzer (below) that warns at compile time when a
+closure capture is missing from `deps`.
 
-The chosen mitigation is **mandatory explicit deps**:
+The call-site shape:
 
 ```csharp
 var theme = UseTheme();
 var selection = UseSelection();
 
-var children = MemoCells(
+var children = UseMemoCells(
     items,
-    [theme, selection],     // ← deps; framework invalidates on change
-    (item, i) => Cell(item, theme, selection));
+    (item, i) => Cell(item, theme, selection),
+    theme, selection);      // ← deps; framework invalidates on change
 ```
 
 Behaviorally:
@@ -372,31 +383,64 @@ Behaviorally:
   invalidated** and every cell rebuilds via `builder`.
 - If deps are unchanged, the per-item `Equals` check decides which cells
   reuse vs rebuild.
-- Empty deps array (`[]`) means "no closure captures to track" — pure
-  function of `T`. Allowed but documented as the sharp-knife case.
-- Null `dependencies` is **disallowed** (compile-time `[]` is fine).
-  Forcing the user to write `[]` explicitly is the design's whole point —
-  silent memo at non-pure call sites is what we are protecting against.
+- Zero deps (calling `UseMemoCells(items, builder)` with no trailing args)
+  means "pure function of `T`" — no closure captures to track. Legal,
+  but the analyzer flags it when the `builder` lambda actually does
+  capture something. This is the sharp-knife case made loud at compile
+  time.
 
 ### Variants
 
 Two helpers ship alongside the base hook for common shapes:
 
-- **`MemoCellsByKey<T>(items, keySelector, deps, builder)`** — for items
-  with stable identity but mutable interior (`record Person(int Id, string Name)`).
-  Hashes by key, value-compares for content. Also lets the reconciler key
-  the children for reorder stability.
-- **`MemoCellsByIndex<T>(items, changedIndices, deps, builder)`** — for the
-  case where the data source already knows which indices changed (the
-  `StressPerf.StockDataSource.Update()` return value is exactly this).
-  Skips the per-cell equality scan entirely; only the named indices run the
-  builder.
+- **`UseMemoCellsByKey<T>(items, keySelector, builder, params deps)`** — for
+  items with stable identity but mutable interior
+  (`record Person(int Id, string Name)`). Hashes by key, value-compares
+  for content. Also lets the reconciler key the children for reorder
+  stability.
+- **`UseMemoCellsByIndex<T>(items, changedIndices, builder, params deps)`** —
+  for the case where the data source already knows which indices changed
+  (the `StressPerf.StockDataSource.Update()` return value is exactly
+  this). Skips the per-cell equality scan entirely; only the named
+  indices run the builder.
+
+### Companion Roslyn analyzer
+
+Ships in the same release as the hook, in `Reactor.Analyzers`. The
+analyzer walks the `builder` lambda passed to `UseMemoCells` /
+`UseMemoCellsByKey` / `UseMemoCellsByIndex`, identifies its closure captures,
+and emits a warning for any capture that is not present in the trailing
+`deps` arguments.
+
+Scope:
+
+- **Diagnostic id**: `REACTOR_HOOKS_007` (next free in the existing
+  `Reactor.Hooks` analyzer range — see
+  `src/Reactor.Analyzers/AnalyzerReleases.Unshipped.md`; the
+  `HookRulesAnalyzer` currently owns 001–006).
+- **Trigger**: a syntactic capture appears in the lambda body but the
+  same expression is missing from the `deps` arg list.
+- **Severity**: warning by default; codefix offers to add the missing
+  capture to the `deps` list.
+- **False positives accepted as policy**: a capture that is truly
+  immutable for the component's lifetime (e.g., a static brush) will be
+  flagged. The codefix's "add to `deps`" is harmless in that case;
+  per-call suppression is available for users who want it.
+- **Known blind spot**: indirect captures through an intermediate
+  method call (`builder` calls `RenderRow(item)` which closes over
+  state). Same blind spot as React's `react-hooks/exhaustive-deps`.
+  Documented in user docs; no static fix available without
+  whole-program analysis.
+
+The analyzer is the spec's actual answer to the maintenance-drift
+footgun. The hook's `params` shape is consistent with the rest of the
+hook surface; the analyzer is what makes it safe.
 
 ### Documentation deliverable — preconditions and gen2 caveat
 
 User-facing docs must lead with two warnings:
 
-1. **`MemoCells` is the right hammer for cells whose content is a pure
+1. **`UseMemoCells` is the right hammer for cells whose content is a pure
    function of their item plus a small set of declared deps.** It is the
    wrong hammer the moment cell content depends on shared state that you
    aren't capturing in `deps`. Examples that *would* work: tickers, log
@@ -431,10 +475,12 @@ recommended sequence is:
    only; shipped as a `docs/guide/perf-hot-loops.md` template plus an
    updated `tests/stress_perf/StressPerf.Reactor` example showing the
    pattern in context. No source changes.
-3. **Component C (`MemoCells`)** last. Most surface-area-additive work
-   — new public hook in `Microsoft.UI.Reactor.Hooks`, three variants,
-   docs, tests. Requires the explicit-deps API discussion to land in
-   review before implementation.
+3. **Component C (`UseMemoCells` + analyzer)** last. Most surface-area-
+   additive work — new public hook in `Microsoft.UI.Reactor.Hooks`,
+   three variants, companion `REACTOR_HOOKS_007` analyzer in `Reactor.Analyzers`,
+   docs, tests. The hook and analyzer ship together in one PR; the
+   analyzer is what makes the hook safe to use, so they should not
+   split.
 
 Each PR can ship independently. Component A is internal and lowest-risk;
 Component B is documentation only; Component C is the largest user-facing
@@ -474,15 +520,20 @@ addition and benefits from B's documentation context.
 
 ### Component C
 
-- Unit tests for `MemoCells` covering: deps-unchanged + items-unchanged
+- Unit tests for `UseMemoCells` covering: deps-unchanged + items-unchanged
   (full reuse), deps-unchanged + items-partial (per-cell decisions),
-  deps-changed (full invalidation), null deps disallowed, empty deps
-  allowed.
-- Unit tests for `MemoCellsByKey` and `MemoCellsByIndex`.
+  deps-changed (full invalidation), zero-deps call (legal — analyzer
+  catches the misuse case at compile time, not the hook at runtime).
+- Unit tests for `UseMemoCellsByKey` and `UseMemoCellsByIndex`.
+- Analyzer tests for `REACTOR_HOOKS_007`: builder captures dep present in `deps`
+  (no diagnostic), capture missing from `deps` (warning), zero-deps
+  call with capturing builder (warning), zero-deps call with pure
+  builder (no diagnostic), codefix adds the missing capture. Follow
+  the existing test pattern in `tests/Reactor.Analyzers.Tests/`.
 - Property test: a fuzz over (deps, items) sequences confirms that for
-  any input that should produce a different render output, `MemoCells`
+  any input that should produce a different render output, `UseMemoCells`
   produces it.
-- Bench: re-run `StressPerf.Reactor` with `MemoCells` (replacing the
+- Bench: re-run `StressPerf.Reactor` with `UseMemoCells` (replacing the
   current `STRESS_PERF_MEMO=1` manual loop) and confirm the +49 %
   render gain reproduces.
 - Worst-case bench: re-run at `--percent 100` and confirm the
@@ -492,7 +543,7 @@ addition and benefits from B's documentation context.
 ### Cross-component bench
 
 After all three land, re-establish the canonical comparison table on the
-production code (no env vars) and confirm `MemoCells + EX3 idiom + EX4
+production code (no env vars) and confirm `UseMemoCells + EX3 idiom + EX4
 storage = 214 renders / 2.21 MB/tick` reproduces.
 
 ---
@@ -511,18 +562,20 @@ storage = 214 renders / 2.21 MB/tick` reproduces.
   for any consumer that has built a `new LayoutModifiers { … }` directly.
   Mitigation: document the buckets as "stable surface for direct
   construction; field set may grow but won't shrink" and pin via API tests.
-- **Component C — Closure footgun even with explicit deps.** Users will
-  forget to add a dep. The mandatory-deps API makes this visible at the
-  call site (`[]` is a deliberate choice, not a default), but the failure
-  is still silent. Long-term mitigation options not in this spec:
-  (a) a Roslyn analyzer that warns when a closure capture is not in `deps`;
-  (b) the `Render Method Compiler Transform` from
-  `008-csharp-language-improvements.md` §4, which would let us see
-  closure captures statically.
+- **Component C — Analyzer blind spots.** `REACTOR_HOOKS_007` catches direct
+  closure captures in the `builder` lambda but not indirect captures
+  through an intermediate method call (`builder` calls `RenderRow(item)`
+  which closes over state). Same blind spot as React's
+  `react-hooks/exhaustive-deps`. The longer-term fix is the Render
+  Method Compiler Transform from `008-csharp-language-improvements.md`
+  §4, which would let us see closure captures statically across the
+  whole render tree. Until then, document the boundary in `UseMemoCells`
+  user docs and trust that the direct-capture case (overwhelmingly the
+  common one) is covered.
 - **Component C — gen2 retention.** The +67 % gen2 finding under
   worst-case mutation is real and could compound across many memoized
   lists. Watch for this in real apps; if it becomes a problem, consider
-  shipping a `MemoCells.Compact()` API that lets users drop the snapshot
+  shipping a `UseMemoCells.Compact()` API that lets users drop the snapshot
   on demand (e.g., when the list scrolls off screen).
 - **EX2 dropped.** If a future production workload depends on the EX2
   inline fast path, dropping it now is a regression vs the in-tree
@@ -577,7 +630,7 @@ Largest pending systemic win for non-memoizable workloads. Pipelines the
 ~24 ms tree-build off the UI thread, freeing UI-thread cycles for COM
 calls into WinUI. Tracked as Q&A Q2 in the analysis doc; needs a
 WinUI-thread-affinity audit on framework-internal `Brush` /
-`FontFamily` / `CornerRadius` allocations. **The cells where `MemoCells`
+`FontFamily` / `CornerRadius` allocations. **The cells where `UseMemoCells`
 is unsafe** (closure-dependent content) are exactly the cells where
 off-thread render still helps.
 
@@ -586,16 +639,9 @@ off-thread render still helps.
 The investigation surfaced that `StockDataSource.Update(100)` only
 achieves ~63 % effective per-cell mutation due to sampling with
 replacement. A truly-100 % mode would isolate the equality-check
-overhead in `MemoCells` from the partial-reuse benefit, giving cleaner
+overhead in `UseMemoCells` from the partial-reuse benefit, giving cleaner
 worst-case numbers. Bench-only change; logged for Component C's bench
 test plan.
-
-### Roslyn analyzer for `MemoCells` closure captures
-
-If the gen2 retention or silent staleness becomes a real-world problem,
-a custom analyzer that walks the `builder` lambda's captures and warns
-when one is not in `deps` would let us catch the footgun at compile
-time. Compelling but not blocking for the initial ship.
 
 ---
 
