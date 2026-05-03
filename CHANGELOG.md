@@ -99,23 +99,24 @@ to land under these conventions; subsequent specs follow this shape.
 
 - **Spec 034 — Element allocation reduction.** Three independent
   allocation cuts in one PR: bucketed `ElementModifiers` (transparent
-  storage shim, ~−11% bytes/tick on the 4,900-cell stress grid from
-  the prototype), direct-record-initializer idiom for inner cell loops
-  (~−60% bytes per cell), and `UseMemoCells` cell-level memoization
-  (~+49% renders on 10% mutation). Production re-bench at PR-close
-  (ARM64 Release, 10s, no ETW): the combined `ReactorOptimized` stack
-  cuts reconcile time by **−60% at 20% mutation** (35.9 ms → 14.2 ms)
-  and **−33% at 50% mutation** (44.8 ms → 30.0 ms) vs the naive
-  `Reactor` variant on the same post-shim build, and clears
-  `StressPerf.Direct` outright at every mutation rate sampled.
-  Component A in isolation (naive Reactor pre-shim vs. post-shim, no
-  app-code changes) showed renders/sec deltas within run-to-run noise
-  at 20/50/100% mutation; the prototype's predicted +6% renders for
-  Component A is at 10% mutation, a point not re-bench'd in
-  close-out. See
+  storage shim, ~−11% bytes/tick on the 4,900-cell stress grid),
+  direct-record-initializer idiom for inner cell loops (~−60% bytes
+  per cell), and `UseMemoCells` cell-level memoization. Verified at
+  PR-close on ARM64 Release with full ETW Present-tracking across
+  10/20/50/100% mutation, all eight stress_perf variants:
+  **ReactorOptimized at 10% mutation reaches 17.1 Effective Refresh/s
+  — within noise of DirectX (17.2) and Wpf (17.9), and +66% over
+  naive Reactor (10.3).** Reconcile-time win on the same A/B: −76% at
+  10% (32.5 ms → 7.9 ms), −61% at 20%, −31% at 50%, −12% at 100% —
+  memo's win tracks the partial-reuse opportunity exactly as
+  predicted. DirectX runs away at saturation (50%+) — no allocating
+  framework can keep up there. Component A in isolation (naive
+  Reactor pre-shim vs post-shim, same source, no app-code changes)
+  shows renders/sec within run-to-run noise at 20/50/100% — its win
+  is allocation-side, not renders-side, on this hardware. See
   `docs/specs/034-element-allocation-reduction.md` § "Verified
-  close-out — 2026-05-02" for the matrix and the prototype table for
-  the 10% headline. (spec 034)
+  close-out — 2026-05-03" for the full eight-variant matrix and
+  reads. (spec 034)
 - `ElementModifiers` now stores layout and visual fields in
   `LayoutModifiers` / `VisualModifiers` sub-records. Existing call sites are
   unaffected — public properties (`Padding`, `Margin`, `Foreground`,

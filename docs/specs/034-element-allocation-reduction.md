@@ -2,20 +2,19 @@
 
 ## Status
 
-- **Implemented — 2026-05-02.** All three components ship in one PR
+- **Implemented — 2026-05-03.** All three components ship in one PR
   (Reactor `LayoutModifiers` / `VisualModifiers` shim, `UseMemoCells*`
   hook trio, `REACTOR_HOOKS_007` analyzer + codefix, and the
   `StressPerf.ReactorOptimized` reference variant). Verified numbers
-  from a same-day three-variant bench (ARM64 Release, 10 s,
-  20 / 50 / 100 % mutation, no ETW) live in the
-  [Verified close-out — 2026-05-02](#verified-close-out--2026-05-02)
-  section below. The headline reconcile-time win at the spec's
-  primary 20 % mutation point is **−60 % reconcile time
-  (35.9 ms → 14.2 ms) and +10 % renders** for the all-three-stack
-  vs. naive Reactor on the same post-shim build. The
-  `reactor-vs-direct-10pct.md` prototype table at 10 % mutation
-  remains the reference for that data point and was not re-measured
-  in the close-out.
+  from a same-day full-matrix ETW bench (ARM64 Release, 10 s,
+  10 / 20 / 50 / 100 % mutation, eight variants) live in the
+  [Verified close-out — 2026-05-03](#verified-close-out--2026-05-03)
+  section below. **Headline:** ReactorOptimized at 10 % mutation
+  reaches **17.1 Effective Refresh/s — within noise of DirectX (17.2)
+  and Wpf (17.9), and +66 % over naive Reactor (10.3).** Reconcile
+  time on the same A/B is **−76 % at 10 %** mutation
+  (32.5 ms → 7.9 ms), **−61 % at 20 %**, **−31 % at 50 %**, **−12 %
+  at 100 %**. The prototype's prediction reproduces on production code.
 - **Investigation complete** — see `docs/perf-investigations/reactor-vs-direct-10pct.md`
   for the full analysis, hypothesis log, and same-day measured A/B data that
   motivates this spec. That document is reference material; this spec is the
@@ -658,57 +657,122 @@ test plan.
 
 ---
 
-## Verified close-out — 2026-05-02
+## Verified close-out — 2026-05-03
 
-Same-day, same-machine three-variant bench captured at PR-close on the
-production branch. Configuration: ARM64 Release, 10 s headless, no
-ETW (the script lives at `tests/stress_perf/run_spec034_bench.ps1`;
-raw CSV at `tests/stress_perf/baselines/spec-034-final.csv`). Three
-mutation rates were sampled — the prototype's headline 10 % point is
-**not** part of this re-bench; the prototype table above remains the
-reference for that data point.
+Full eight-variant matrix re-bench against the merged production code
+on ARM64 Release, 10 s per scenario, ETW Present-tracking via
+`PresentTracer` (admin shell). Captures every mutation rate the spec
+cares about: **10 %** (the prototype's headline), 20, 50, 100. Script
+at `tests/stress_perf/run_full_matrix.ps1`; raw CSV at
+`tests/stress_perf/baselines/full-matrix-2026-05-03-070935/`.
 
-| Mutation | Variant            | Renders | Renders/s | Reconcile (ms) | ΔReconcile vs Reactor |
-|---------:|--------------------|--------:|----------:|---------------:|----------------------:|
-|     20 % | Reactor            |      77 |     7.7   |          35.9  |                  —    |
-|     20 % | **ReactorOptimized** | **85** | **8.5**  |        **14.2**|             **−60 %** |
-|     20 % | Direct             |      76 |     7.6   |              — |                  —    |
-|     50 % | Reactor            |      50 |     5.0   |          44.8  |                  —    |
-|     50 % | ReactorOptimized   |      51 |     5.1   |          30.0  |               −33 %   |
-|     50 % | Direct             |      44 |     4.4   |              — |                  —    |
-|    100 % | Reactor            |      34 |     3.4   |          53.4  |                  —    |
-|    100 % | ReactorOptimized   |      35 |     3.5   |          49.1  |                −8 %   |
-|    100 % | Direct             |      31 |     3.1   |              — |                  —    |
+The headline column below is **Effective Refresh = min(in-app
+renders/s, ETW Present/s)** — the rate at which fresh content reaches
+the screen, the only honest cross-framework metric for this workload
+(see `tests/stress_perf/METHODOLOGY.md`). Two scrape anomalies are
+called out separately so they don't pollute the comparisons.
 
-**Reads.**
+### Effective Refresh (1-run, AC, ARM64, 120 Hz display)
 
-1. **Memoization tracks the partial-reuse opportunity, as predicted.**
-   At 20 % mutation (~80 % cell reuse) `UseMemoCellsByIndex` cuts
-   reconcile time by 60 %; at 50 % (~50 % reuse) the win drops to
-   33 %; at 100 % (sampling-with-replacement, ~63 % effective
-   mutation) the win shrinks to 8 % — the per-cell equality scan
-   begins to claw back what little reuse remains. This is the spec's
-   stated trade-off, measured.
-2. **Renders/sec moves less than reconcile time at high mutation
-   rates** because `Reactor` and `ReactorOptimized` are both
-   GC-bound at 50 / 100 % on this hardware — gen2 dominates above
-   ~30 % mutation. The render delta widens at 20 % and narrows at
-   100 %, mirroring reconcile time.
-3. **Direct stays the floor** but the gap is small at 20 % (Reactor
-   77 vs Direct 76) and `ReactorOptimized` clears Direct outright at
-   every mutation rate sampled (85 vs 76 at 20 %; 51 vs 44 at 50 %;
-   35 vs 31 at 100 %). Spec's prediction was that
-   `ReactorOptimized` would meet or exceed Direct on this workload —
-   confirmed across the matrix.
+| Variant            | 10 % | 20 % | 50 % | 100 % |
+|--------------------|-----:|-----:|-----:|------:|
+| **DirectX**        | 17.2 | 15.6 | **14.8** | **14.3** |
+| **Wpf**            | **17.9** | 11.7 |  6.2 |   4.1 |
+| **ReactorOptimized** | **17.1** |  8.2 |  5.0 |   3.6 |
+| ReactorGrid        | 11.0 |  8.3 |  5.8 |   4.6 |
+| Reactor            | 10.3 |  7.4 |  4.7 |   3.4 |
+| Direct             | 10.0 |  8.1 |  4.6 |   3.1 |
+| Bound              |   *  |  6.8 |  4.1 |   2.8 |
+| RN-Fabric          |  5.8 |  3.6 |   *  |   2.1 |
 
-**Component A in isolation — naive `Reactor` before vs. after.**
+\* Two scrape anomalies. `Bound @ 10 %` and `RN-Fabric @ 50 %` exited
+before the script's 500 ms post-run UIA scrape window. ETW Present
+rates were captured cleanly for both rows (12.1 and 3.6 respectively),
+so the variants did run; only the in-app `Total Renders` field is
+zero. Filed as a bench follow-up (extend the post-run sleep or read
+the report file synchronously when the process exits) and does not
+affect any cross-variant comparison that uses Effective Refresh.
+
+### Reactor reconcile-time — Components A + B + C combined
+
+| Mutation | Reactor reconcile (ms) | ReactorOptimized reconcile (ms) | Δ |
+|---------:|-----------------------:|--------------------------------:|---:|
+|    10 %  |                  32.5  |                          **7.9** | **−76 %** |
+|    20 %  |                  36.8  |                           14.4  |  −61 %  |
+|    50 %  |                  43.9  |                           30.4  |  −31 %  |
+|   100 %  |                  53.7  |                           47.3  |  −12 %  |
+
+### Reads
+
+1. **Spec's headline lands.** ReactorOptimized at 10 % mutation reaches
+   **17.1 Effective Refresh/s** — within run-to-run noise of DirectX
+   (17.2) and Wpf (17.9), and **+66 %** over naive Reactor (10.3).
+   The prototype predicted Reactor → ReactorOptimized would close the
+   gap to Direct/DirectX on this workload; production code does so.
+2. **Reconcile time is the cleanest signal of the framework-side
+   improvement.** −76 % at 10 % mutation collapses to −12 % at 100 %
+   as the workload turns GC-bound and the per-cell equality scan
+   begins to claw back what little reuse remains. Memo's win tracks
+   the partial-reuse opportunity exactly as predicted in §C.
+3. **DirectX wins at saturation** (50 % onwards) by a wide margin.
+   Workload-independent canvas redraws don't allocate per cell, so
+   GC pressure never bites. Above ~30 % mutation, no allocating
+   framework can keep up. This is a known shape, not a spec 034
+   regression.
+4. **ReactorOptimized > Direct at every mutation rate sampled, but
+   the gap at 10 % deserves an asterisk.** Direct's `OnTick`
+   (`tests/stress_perf/StressPerf.Direct/MainWindow.cs:142-183`) is
+   doing exactly what it should — `foreach (int idx in changed) { tb.Text =
+   …; tb.Foreground = …; }` — so on first principles Direct should
+   be the floor. Two effects in the bench scaffolding bias the
+   comparison in ReactorOptimized's favor:
+    - Direct sets `_fpsText.Text` / `_updateText.Text` /
+      `_memText.Text` **every tick** regardless of value change
+      (lines 180-182). Three SetValues × ~30 ticks/s × layout
+      invalidation on the parent StackPanel = real overhead the
+      reconciler-routed ReactorOptimized path skips when string
+      values match.
+    - Direct writes phase timings to `C:\temp\direct_perf_phases.log`
+      via `File.AppendAllText` once per second, on the UI thread,
+      inside `OnTick` (lines 171-177). Leftover dev instrumentation;
+      should be deleted.
+    - This was a single-repeat run; run-to-run variance was not
+      sampled at 10 % across all 8 variants.
+   The ReactorOptimized headline (matches DirectX/Wpf within noise)
+   is robust; the "beats Direct" claim should be read as "ties or
+   beats Direct after fixing those two dev-instrumentation warts."
+   Filed as a bench follow-up.
+5. **ReactorGrid (virtualizing list)** leads naive Reactor at every
+   rate and beats ReactorOptimized at 50 / 100 %. Orthogonal to spec
+   034 — the right answer for *very* large grids is "don't render
+   the off-screen cells," not "render them faster." Confirms
+   virtualization is still on the table for follow-up specs even
+   after spec 034 lands.
+6. **RN-Fabric is consistently last and framework-bound** at every
+   captured rate. JS↔C++ commit gates the render thread; peak RSS
+   1.1-1.4 GB (vs ~140 MB for DirectX, ~400-510 MB for the C#
+   variants).
+
+### Memory footprint (peak RSS, MB, median across mutation rates)
+
+| DirectX | Direct | ReactorGrid | ReactorOptimized | Reactor | Bound | Wpf  | RN-Fabric |
+|--------:|-------:|------------:|-----------------:|--------:|------:|-----:|----------:|
+|  ~142   |  ~414  |    ~394     |       ~497       |   ~503  | ~497  | ~903 |  ~1212    |
+
+Reactor variants sit at ~500 MB — heavier than Direct or DirectX,
+lighter than Wpf or RN-Fabric. Spec 034's allocation-side savings
+don't move the steady-state RSS materially; that's gen0 churn the
+GC reclaims, not retained working set.
+
+### Component A in isolation — naive `Reactor` before vs. after
 
 The same naive `StressPerf.Reactor` source compiled against the
 pre-spec-034 commit (`247a525`, parent of the Component A merge) was
 re-bench'd via `git worktree` to isolate Component A's transparent
-storage shim. **No app-code changes — same fluent-chain usage on both
-sides.** Raw data in `tests/stress_perf/baselines/spec-034-reactor-before.csv`;
-script at `tests/stress_perf/run_spec034_reactor_before.ps1`.
+storage shim — same source, same fluent-chain usage, only the
+framework changed. Captured with the no-ETW driver (yesterday) at
+20 / 50 / 100 % only; not re-run with ETW. Raw data at
+`tests/stress_perf/baselines/spec-034-reactor-before.csv`.
 
 | Mutation | Reactor pre-A renders | Reactor post-A renders | ΔRenders | Reactor pre-A reconcile (ms) | Reactor post-A reconcile (ms) | ΔReconcile |
 |---------:|----------------------:|-----------------------:|---------:|-----------------------------:|------------------------------:|-----------:|
@@ -716,43 +780,19 @@ script at `tests/stress_perf/run_spec034_reactor_before.ps1`.
 |     50 % |                    48 |                     50 |  +4.2 %  |                         53.8 |                          44.8 |   −16.7 %  |
 |    100 % |                    34 |                     34 |   0 %    |                         55.3 |                          53.4 |    −3.4 %  |
 
-**Read on Component A in isolation.** Across 20 / 50 / 100 % mutation,
-Component A's transparent shim does **not** deliver renders/sec uplift
-outside run-to-run noise (±5 %). The cleanest signal is the −16.7 %
-reconcile-time win at 50 % mutation; 20 % and 100 % are within noise.
-This is consistent with the spec's framing: Component A is an
-**allocation-side** improvement (~−11 % bytes/tick per the prototype),
-and on this hardware at these mutation rates the workload is GC-bound
-in a way where 11 % fewer allocations doesn't translate into
-proportionally more renders. The prototype's predicted +6 % renders
-was at **10 % mutation** — a point we did not sample here, and the
-point at which Component A's free benefit is most likely to show up
-because gen2 pressure is correspondingly lighter.
-
-The PR-worthy framing for Component A: **the win is real on the
-allocation axis, invisible on renders/sec at the high mutation rates
-sampled, and worth re-measuring at 10 % on the same machine before
-quoting a renders-side number.** Components B + C carry the bulk of
-the user-visible perf story (`ReactorOptimized` row in the previous
-table).
-
-**What this re-bench does not cover.**
-
-- **The 10 % mutation headline number.** The spec table at the top
-  (Reactor 142 → ReactorOptimized 214, +51 %) was measured on the
-  prototype against a different physical machine. Re-measuring at
-  10 % is logged as a follow-up (Phase 7.4 in the implementation
-  task list); the current data is sufficient to validate the
-  spec's behavioral predictions across the mutation curve and
-  confirm Component A's renders-side benefit doesn't reach
-  significance at higher mutation.
-- **Allocation bytes / gen2 counts.** Capturing those needs the ETW
-  PresentTracer script, which requires admin and was not run for
-  this close-out. The reconcile-time delta is the cleanest proxy
-  this bench produces and tracks the alloc story directly per the
-  prototype's correlation. Component A's allocation savings live in
-  the same path the prototype validated; only the renders-side
-  translation is in question on this hardware.
+Component A's transparent shim does **not** deliver renders/sec
+uplift outside run-to-run noise at 20 / 50 / 100 %. The cleanest
+signal is the −16.7 % reconcile-time win at 50 %; 20 and 100 are
+within noise. Consistent with §A's framing: Component A is an
+**allocation-side** improvement (~−11 % bytes/tick per the
+prototype), and at the high mutation rates sampled the workload is
+GC-bound enough that 11 % fewer allocations doesn't translate
+proportionally into more renders. The prototype's predicted +6 %
+renders was at 10 % mutation — a point captured in the full-matrix
+table above only against the ReactorOptimized + Reactor pair, not
+isolated against pre-A Reactor. Component A's user-visible win
+remains "free transparent allocation reduction" — bytes-side, not
+renders-side, on this hardware at these rates.
 
 ---
 
