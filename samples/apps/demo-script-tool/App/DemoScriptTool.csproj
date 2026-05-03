@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>DemoScriptTool.App</RootNamespace>
+    <AssemblyName>DemoScriptTool</AssemblyName>
+    <Product>Demo Script Tool</Product>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <ApplicationIcon Condition="Exists('Assets\demo-script-tool.ico')">Assets\demo-script-tool.ico</ApplicationIcon>
+    <WarningsAsErrors>REACTOR_A11Y_001;REACTOR_A11Y_002;REACTOR_A11Y_003</WarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Reactor\Reactor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\SystemPrompt.txt" />
+    <None Include="Assets\demo-script-tool.ico" Condition="Exists('Assets\demo-script-tool.ico')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
