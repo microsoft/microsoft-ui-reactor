@@ -39,24 +39,33 @@ $tfmTracer  = 'net9.0'
 
 $tracerExe  = Join-Path $stressDir "PresentTracer\bin\$Platform\$Configuration\$tfmTracer\PresentTracer.exe"
 
-# Variant table — name, exe path, in-app report file name. Matches
-# StressPerf.<X>.report.txt that PerfTracker.WriteReportFile emits next
-# to the executable. RN-Fabric is intentionally omitted; its build
-# pipeline (npx run-windows) is separate and needs its own driver.
+# Variant table — name, exe path, in-app report source.
+#
+# C# variants write `StressPerf.<X>.report.txt` next to the exe (via
+# PerfTracker.WriteReportFile). The RN-Fabric variant doesn't write to
+# disk; it surfaces its in-app report through a `testID="HeadlessReport"`
+# Text node, scraped via UIA below.
+#
+# RN-Fabric is NOT auto-built — its toolchain is `npx react-native
+# run-windows --release --arch ARM64` which is a separate driver. The
+# script verifies the exe exists and prints the build command if it
+# doesn't.
+$rnExe = Join-Path $repoRoot 'tests\stress_perf_rn\StocksGrid\windows\ARM64\Release\StocksGrid.exe'
+
 $variants = @(
-  [pscustomobject]@{ Name='Direct';            Csproj="$stressDir\StressPerf.Direct\StressPerf.Direct.csproj";                       Exe="$stressDir\StressPerf.Direct\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.Direct.exe";                       ReportName='StressPerf.Direct' }
-  [pscustomobject]@{ Name='Bound';             Csproj="$stressDir\StressPerf.Bound\StressPerf.Bound.csproj";                         Exe="$stressDir\StressPerf.Bound\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.Bound.exe";                         ReportName='StressPerf.Bound' }
-  [pscustomobject]@{ Name='Wpf';               Csproj="$stressDir\StressPerf.Wpf\StressPerf.Wpf.csproj";                             Exe="$stressDir\StressPerf.Wpf\bin\$Platform\$Configuration\$tfmWpf\StressPerf.Wpf.exe";                               ReportName='StressPerf.Wpf' }
-  [pscustomobject]@{ Name='DirectX';           Csproj="$stressDir\StressPerf.DirectX\StressPerf.DirectX.csproj";                     Exe="$stressDir\StressPerf.DirectX\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.DirectX.exe";                     ReportName='StressPerf.DirectX' }
-  [pscustomobject]@{ Name='Reactor';           Csproj="$stressDir\StressPerf.Reactor\StressPerf.Reactor.csproj";                     Exe="$stressDir\StressPerf.Reactor\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.Reactor.exe";                     ReportName='StressPerf.Reactor' }
-  [pscustomobject]@{ Name='ReactorOptimized';  Csproj="$stressDir\StressPerf.ReactorOptimized\StressPerf.ReactorOptimized.csproj";   Exe="$stressDir\StressPerf.ReactorOptimized\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.ReactorOptimized.exe";   ReportName='StressPerf.ReactorOptimized' }
-  [pscustomobject]@{ Name='ReactorGrid';       Csproj="$stressDir\StressPerf.ReactorGrid\StressPerf.ReactorGrid.csproj";             Exe="$stressDir\StressPerf.ReactorGrid\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.ReactorGrid.exe";             ReportName='StressPerf.ReactorGrid' }
-  [pscustomobject]@{ Name='VirtualListReactor';Csproj="$stressDir\StressPerf.VirtualList.Reactor\StressPerf.VirtualList.Reactor.csproj"; Exe="$stressDir\StressPerf.VirtualList.Reactor\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.VirtualList.Reactor.exe"; ReportName='StressPerf.VirtualList.Reactor' }
+  [pscustomobject]@{ Name='Direct';           IsRN=$false; Csproj="$stressDir\StressPerf.Direct\StressPerf.Direct.csproj";                     Exe="$stressDir\StressPerf.Direct\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.Direct.exe";                     ReportName='StressPerf.Direct' }
+  [pscustomobject]@{ Name='Bound';            IsRN=$false; Csproj="$stressDir\StressPerf.Bound\StressPerf.Bound.csproj";                       Exe="$stressDir\StressPerf.Bound\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.Bound.exe";                       ReportName='StressPerf.Bound' }
+  [pscustomobject]@{ Name='Wpf';              IsRN=$false; Csproj="$stressDir\StressPerf.Wpf\StressPerf.Wpf.csproj";                           Exe="$stressDir\StressPerf.Wpf\bin\$Platform\$Configuration\$tfmWpf\StressPerf.Wpf.exe";                             ReportName='StressPerf.Wpf' }
+  [pscustomobject]@{ Name='DirectX';          IsRN=$false; Csproj="$stressDir\StressPerf.DirectX\StressPerf.DirectX.csproj";                   Exe="$stressDir\StressPerf.DirectX\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.DirectX.exe";                   ReportName='StressPerf.DirectX' }
+  [pscustomobject]@{ Name='Reactor';          IsRN=$false; Csproj="$stressDir\StressPerf.Reactor\StressPerf.Reactor.csproj";                   Exe="$stressDir\StressPerf.Reactor\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.Reactor.exe";                   ReportName='StressPerf.Reactor' }
+  [pscustomobject]@{ Name='ReactorOptimized'; IsRN=$false; Csproj="$stressDir\StressPerf.ReactorOptimized\StressPerf.ReactorOptimized.csproj"; Exe="$stressDir\StressPerf.ReactorOptimized\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.ReactorOptimized.exe"; ReportName='StressPerf.ReactorOptimized' }
+  [pscustomobject]@{ Name='ReactorGrid';      IsRN=$false; Csproj="$stressDir\StressPerf.ReactorGrid\StressPerf.ReactorGrid.csproj";           Exe="$stressDir\StressPerf.ReactorGrid\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.ReactorGrid.exe";           ReportName='StressPerf.ReactorGrid' }
+  [pscustomobject]@{ Name='RN-Fabric';        IsRN=$true;  Csproj=$null;                                                                       Exe=$rnExe;                                                                                                          ReportName='StressPerf.RN.StocksGrid' }
 )
 
 if ($VariantFilter.Count -gt 0) {
   $variants = $variants | Where-Object { $VariantFilter -contains $_.Name }
-  if ($variants.Count -eq 0) { throw "VariantFilter matched no variants. Names: Direct, Bound, Wpf, DirectX, Reactor, ReactorOptimized, ReactorGrid, VirtualListReactor" }
+  if ($variants.Count -eq 0) { throw "VariantFilter matched no variants. Names: Direct, Bound, Wpf, DirectX, Reactor, ReactorOptimized, ReactorGrid, RN-Fabric" }
 }
 
 # ── Pre-flight: admin check (skip allowed for in-app-only mode) ────────────
@@ -97,22 +106,65 @@ $summaryPath = Join-Path $outDir 'run.summary.csv'
 # ── Build phase ────────────────────────────────────────────────────────────
 if (-not $SkipBuild) {
   "==== Build: dotnet build (Configuration=$Configuration Platform=$Platform) ====" | Tee-Object -FilePath $logPath -Append | Out-Host
-  # Build each variant project explicitly. Building Reactor.sln rebuilds 80+
-  # projects we don't need; building the variant csprojs covers them and
+  # Build each C# variant project explicitly. Building Reactor.sln rebuilds
+  # 80+ projects we don't need; building the variant csprojs covers them and
   # their transitive dependencies (StressPerf.Shared, Reactor, etc.).
-  $buildTargets = @($variants | ForEach-Object Csproj)
+  # RN-Fabric is skipped — its toolchain is npx, not dotnet.
+  $buildTargets = @($variants | Where-Object { -not $_.IsRN } | ForEach-Object Csproj)
   if ($useETW) { $buildTargets += "$stressDir\PresentTracer\PresentTracer.csproj" }
   foreach ($csproj in $buildTargets) {
     "  build: $(Split-Path -Leaf $csproj)" | Tee-Object -FilePath $logPath -Append | Out-Host
     & dotnet build $csproj -c $Configuration -p:Platform=$Platform -v q -nologo 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Build failed for $csproj (see $logPath)" }
   }
+  # Build RN-Fabric if present in the variant set. Two-step process: npm
+  # install (only if node_modules is missing) then react-native run-windows
+  # in build-only mode (--no-launch --no-deploy). MSBuild is the long pole
+  # — first build is ~5-10 min on this hardware. Subsequent rebuilds are
+  # incremental and much faster.
+  if ($variants | Where-Object IsRN) {
+    # The RN project layout has package.json under tests/stress_perf_rn/StocksGrid,
+    # not tests/stress_perf_rn — npm + npx must be invoked from that subdir.
+    $rnRoot = Join-Path $repoRoot 'tests\stress_perf_rn\StocksGrid'
+    if (-not (Test-Path (Join-Path $rnRoot 'package.json'))) { throw "RN package.json not found: $rnRoot\package.json" }
+    $npx = (Get-Command npx.cmd -ErrorAction SilentlyContinue) ?? (Get-Command npx -ErrorAction SilentlyContinue)
+    $npm = (Get-Command npm.cmd -ErrorAction SilentlyContinue) ?? (Get-Command npm -ErrorAction SilentlyContinue)
+    if (-not $npx -or -not $npm) { throw "RN-Fabric requested but npm/npx not on PATH. Install Node.js or drop RN-Fabric from the variant set." }
+    Push-Location $rnRoot
+    try {
+      if (-not (Test-Path (Join-Path $rnRoot 'node_modules'))) {
+        "  build: RN-Fabric — npm install (node_modules missing; this is ~2-3 min)" | Tee-Object -FilePath $logPath -Append | Out-Host
+        & $npm.Source install 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "npm install failed for RN-Fabric (see $logPath)" }
+      } else {
+        "  build: RN-Fabric — node_modules present, skipping npm install" | Tee-Object -FilePath $logPath -Append | Out-Host
+      }
+      $rnArchLower = $Platform.ToLower()  # react-native run-windows wants 'arm64', not 'ARM64'
+      "  build: RN-Fabric — npx @react-native-community/cli run-windows --release --arch $rnArchLower --no-launch --no-deploy (~5-10 min on first build, incremental after that)" | Tee-Object -FilePath $logPath -Append | Out-Host
+      & $npx.Source '@react-native-community/cli' run-windows --release --arch $rnArchLower --no-launch --no-deploy 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "RN-Fabric build failed (see $logPath). Re-try from a non-elevated shell if this is admin — npm/MSBuild prefer non-elevated." }
+    } finally {
+      Pop-Location
+    }
+  }
   "" | Tee-Object -FilePath $logPath -Append | Out-Host
 }
 
 # Verify outputs exist after build (or up-front if -SkipBuild).
 foreach ($v in $variants) {
-  if (-not (Test-Path $v.Exe)) { throw "Missing exe for $($v.Name): $($v.Exe). Drop -SkipBuild or build manually." }
+  if (-not (Test-Path $v.Exe)) {
+    if ($v.IsRN) {
+      throw @"
+Missing exe for RN-Fabric: $($v.Exe).
+Build it separately (npm + msbuild — works fine from a non-elevated shell):
+    cd $repoRoot\tests\stress_perf_rn
+    npx react-native run-windows --release --arch ARM64 --no-launch --no-deploy
+Then re-run this script. To skip RN-Fabric this session, pass:
+    -VariantFilter @('Direct','Bound','Wpf','DirectX','Reactor','ReactorOptimized','ReactorGrid')
+"@
+    }
+    throw "Missing exe for $($v.Name): $($v.Exe). Drop -SkipBuild or build manually."
+  }
 }
 if ($useETW -and -not (Test-Path $tracerExe)) {
   throw "Missing PresentTracer: $tracerExe. Drop -SkipBuild or build PresentTracer.csproj."
@@ -125,6 +177,20 @@ function Read-VariantReport {
   $path = Join-Path $dir "$ReportName.report.txt"
   if (Test-Path $path) { return Get-Content $path -Raw }
   return ''
+}
+
+# RN-Fabric doesn't write to disk; it surfaces the in-app report as a
+# Text node tagged testID="HeadlessReport" inside the running window.
+# Pull it via UIA before we kill the process.
+function Scrape-RnReport {
+  param([int]$ProcId)
+  $root = [System.Windows.Automation.AutomationElement]::RootElement
+  $pidCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $ProcId)
+  $win = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $pidCond)
+  if (-not $win) { return '' }
+  $idCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'HeadlessReport')
+  $r = $win.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $idCond)
+  if ($r) { return $r.Current.Name } else { return '' }
 }
 
 function Parse-Field {
@@ -205,7 +271,10 @@ foreach ($v in $variants) {
     Get-Process -Name $exeName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 250
     $exeDir = Split-Path -Parent $v.Exe
-    Remove-Item (Join-Path $exeDir "$($v.ReportName).report.txt") -ErrorAction SilentlyContinue
+    if (-not $v.IsRN) {
+      # RN-Fabric doesn't write to disk; skip the disk-cleanup.
+      Remove-Item (Join-Path $exeDir "$($v.ReportName).report.txt") -ErrorAction SilentlyContinue
+    }
 
     $tracerCsv = Join-Path $env:TEMP "trace-$($v.Name)-$pct-run$run.csv"
     Remove-Item $tracerCsv -ErrorAction SilentlyContinue
@@ -236,6 +305,14 @@ foreach ($v in $variants) {
       Start-Sleep -Milliseconds 250
     }
 
+    # For RN, scrape the on-screen report BEFORE we kill — it lives in
+    # the UIA tree and disappears with the process.
+    $rnReport = ''
+    if ($v.IsRN) {
+      Start-Sleep -Milliseconds 500
+      $rnReport = Scrape-RnReport -ProcId $proc.Id
+    }
+
     # Wait for tracer to finish (if any) then teardown.
     if ($tracerJob) {
       Wait-Job $tracerJob | Out-Null
@@ -248,8 +325,8 @@ foreach ($v in $variants) {
     Start-Sleep -Milliseconds 500
     Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
 
-    # Read the variant's report.
-    $report = Read-VariantReport -Exe $v.Exe -ReportName $v.ReportName
+    # Read the variant's report. C# variants write to disk; RN was scraped above.
+    $report = if ($v.IsRN) { $rnReport } else { Read-VariantReport -Exe $v.Exe -ReportName $v.ReportName }
     $report | Tee-Object -FilePath $logPath -Append | Out-Host
 
     # Extract headline numbers.
