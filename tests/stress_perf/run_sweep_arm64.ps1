@@ -12,6 +12,7 @@ $variants = @(
     @{ Name = 'WinUI.Direct';      Exe = "$stressDir\StressPerf.Direct\bin\ARM64\Release\net9.0-windows10.0.22621.0\StressPerf.Direct.exe" },
     @{ Name = 'WinUI.Bound';       Exe = "$stressDir\StressPerf.Bound\bin\ARM64\Release\net9.0-windows10.0.22621.0\StressPerf.Bound.exe" },
     @{ Name = 'WinUI.Reactor';     Exe = "$stressDir\StressPerf.Reactor\bin\ARM64\Release\net9.0-windows10.0.22621.0\StressPerf.Reactor.exe" },
+    @{ Name = 'WinUI.ReactorOptimized'; Exe = "$stressDir\StressPerf.ReactorOptimized\bin\ARM64\Release\net9.0-windows10.0.22621.0\StressPerf.ReactorOptimized.exe" },
     @{ Name = 'WinUI.ReactorGrid'; Exe = "$stressDir\StressPerf.ReactorGrid\bin\ARM64\Release\net9.0-windows10.0.22621.0\StressPerf.ReactorGrid.exe" },
     @{ Name = 'WinUI.DirectX';     Exe = "$stressDir\StressPerf.DirectX\bin\ARM64\Release\net9.0-windows10.0.22621.0\StressPerf.DirectX.exe" },
     @{ Name = 'WPF.Direct';        Exe = "$stressDir\StressPerf.Wpf\bin\ARM64\Release\net9.0-windows\StressPerf.Wpf.exe" }

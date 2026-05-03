@@ -22,7 +22,11 @@ StressPerf.Direct/                 ← WinUI 3, imperative property setting
 StressPerf.Bound/                  ← WinUI 3, MVVM (INotifyPropertyChanged)
 StressPerf.Wpf/                    ← WPF, imperative
 StressPerf.DirectX/                ← Win2D / Direct2D, full-canvas redraw
-StressPerf.Reactor/                ← Reactor (this repo's framework)
+StressPerf.Reactor/                ← Reactor (this repo's framework, naive — what an
+                                     unaware user writes; permanent baseline)
+StressPerf.ReactorOptimized/       ← Reactor with spec-034 perf-tuning idioms
+                                     (direct-record-initializer construction +
+                                     UseMemoCells; spec 034 reference impl)
 StressPerf.Shared/                 ← PerfTracker, StockDataSource, ListItemSource
 
 StressPerf.VirtualList.Reactor/    ← virtualizing-list scenario (Reactor)
@@ -43,7 +47,7 @@ a separate npm-managed workspace; see its own README.
 
 ```powershell
 # Build everything once:
-foreach ($p in 'Direct','Bound','Wpf','DirectX','Reactor','VirtualList.Reactor') {
+foreach ($p in 'Direct','Bound','Wpf','DirectX','Reactor','ReactorOptimized','VirtualList.Reactor') {
   dotnet build "tests/stress_perf/StressPerf.$p" -c Release -p:Platform=ARM64
 }
 

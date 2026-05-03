@@ -65,6 +65,28 @@ Reactor's declarative reconciliation:
 - On tick: call `setData(newArray)` — the Reactor reconciler diffs old vs new
   element trees and patches only changed `TextBlock` controls.
 
+This is the **naive** Reactor variant: plain fluent API, no memo, no
+direct-initializer tricks. It is what an unaware user writes and stays
+that way permanently — it's the framework-level baseline the spec-034
+table compares the optimized variant against.
+
+### 4. Reactor Perf-Tuned (`StressPerf.ReactorOptimized`)
+
+Same workload, same UI, same `Component`/`Render()` shape, but the
+inner-loop cell construction follows the spec-034 §B/§C idioms:
+
+- Cells are built via direct `new TextBlockElement { … }` initializer
+  with `Modifiers = new ElementModifiers { Layout = …, Visual = … }`
+  buckets — bypasses the `with`-clone steps the fluent chain produces.
+- `UseMemoCellsByIndex` (Phase 4 of spec 034) skips re-running the
+  builder for unchanged indices, so a 10% mutation tick allocates ~10%
+  of the cells the naive variant does.
+
+This is the **optimized** Reactor variant — the reference implementation
+of the spec-034 perf-tips skill. Do not adopt this shape for ordinary
+UI; restrict it to identifiable hot loops (lists/grids with hundreds-plus
+elements per render).
+
 ## Interactive Mode (default)
 
 Each app opens a window with:
@@ -122,6 +144,7 @@ All projects target `net8.0-windows10.0.22621.0` and use the repo-wide
 dotnet build tests/stress_perf/StressPerf.Direct -c Release -p:Platform=x64
 dotnet build tests/stress_perf/StressPerf.Bound  -c Release -p:Platform=x64
 dotnet build tests/stress_perf/StressPerf.Reactor   -c Release -p:Platform=x64
+dotnet build tests/stress_perf/StressPerf.ReactorOptimized -c Release -p:Platform=x64
 
 # Run interactive
 dotnet run --project tests/stress_perf/StressPerf.Direct -c Release -p:Platform=x64

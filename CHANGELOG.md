@@ -29,6 +29,18 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- `tests/stress_perf/StressPerf.ReactorOptimized` — sibling bench
+  variant that demonstrates the spec-034 §B direct-record-initializer
+  idiom for inner-loop cell construction. The naive `StressPerf.Reactor`
+  variant stays unchanged and remains the framework-level baseline; the
+  new optimized sibling is the reference implementation of the perf-tips
+  skill. Wired into `run_stocks_grid_baseline.ps1`,
+  `run_bench_aot_publish.sh`, `run_benchmark.sh`, and
+  `run_sweep_arm64.ps1`. (spec 034 §B)
+- "Hot loops" section in `docs/guide/advanced.md` documenting when to
+  reach for direct record initializers, the trade-offs vs the fluent
+  chain, and a side-by-side worked example. Source template at
+  `docs/_pipeline/templates/advanced.md.dt`. (spec 034 §B)
 - `Expr(Func<Element?>)` factory in `Microsoft.UI.Reactor.Factories` for inline
   block-expression bodies inside a DSL tree, removing the
   `((Func<Element?>)(() => …))()` cast ceremony. Pure composition — no hooks,
