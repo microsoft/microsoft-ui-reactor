@@ -48,27 +48,31 @@ public sealed class DemoScriptModel
         }
     }
 
-    public event Action? Changed;
+    /// <summary>Fires on title / demo-prompt edits. NOT on collection mutations.</summary>
+    public event Action? FieldsChanged;
+
+    /// <summary>Fires when steps are added / removed / replaced. NOT on field edits.</summary>
+    public event Action? StepsChanged;
 
     public void UpdateTitle(string title)
     {
         if (Title == title) return;
         Title = title;
-        Changed?.Invoke();
+        FieldsChanged?.Invoke();
     }
 
     public void UpdateDemoPrompt(string prompt)
     {
         if (DemoPrompt == prompt) return;
         DemoPrompt = prompt;
-        Changed?.Invoke();
+        FieldsChanged?.Invoke();
     }
 
     public void ReplaceSteps(IEnumerable<StepModel> steps)
     {
         _steps.Clear();
         _steps.AddRange(steps);
-        Changed?.Invoke();
+        StepsChanged?.Invoke();
     }
 
     /// <summary>Append a new empty step at the next available number.</summary>
@@ -77,7 +81,7 @@ public sealed class DemoScriptModel
         var nextNumber = _steps.Count == 0 ? 1 : _steps[^1].Number + 1;
         var step = new StepModel(nextNumber, title, prompt);
         _steps.Add(step);
-        Changed?.Invoke();
+        StepsChanged?.Invoke();
         return step;
     }
 
@@ -90,7 +94,7 @@ public sealed class DemoScriptModel
         // Renumber so step-NN files line up with positions for the next generation.
         for (int i = 0; i < _steps.Count; i++)
             _steps[i].Renumber(i + 1);
-        Changed?.Invoke();
+        StepsChanged?.Invoke();
         return true;
     }
 

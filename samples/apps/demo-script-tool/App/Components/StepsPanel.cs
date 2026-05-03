@@ -27,11 +27,14 @@ public sealed class StepsPanel : Component<StepsPanelProps>
         var (_, setRevision) = UseState(0, threadSafe: true);
         var counterRef = UseRef(0);
 
+        // StepsChanged only — the steps panel cares about Add/Remove, not about
+        // typing in the demo title/prompt (which would otherwise re-render every
+        // step card on every keystroke).
         UseEffect(() =>
         {
             void Handler() { counterRef.Current++; setRevision(counterRef.Current); }
-            Props.Model.Changed += Handler;
-            return () => Props.Model.Changed -= Handler;
+            Props.Model.StepsChanged += Handler;
+            return () => Props.Model.StepsChanged -= Handler;
         }, Props.Model);
 
         var steps = Props.Model.Steps;

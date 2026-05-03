@@ -99,6 +99,7 @@ public sealed class DotnetRunner
 
     static async Task<BuildResult> RunCapturedAsync(string fileName, string args, string workdir, CancellationToken ct)
     {
+        System.Diagnostics.Debug.WriteLine($"[DotnetRunner] spawn '{fileName} {args}' cwd='{workdir}'");
         var psi = new ProcessStartInfo(fileName, args)
         {
             WorkingDirectory = workdir,

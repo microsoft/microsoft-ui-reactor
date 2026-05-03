@@ -19,6 +19,16 @@ Designed against [docs/specs/035-demo-script-tool-design.md](../../../docs/specs
 dotnet run --project samples/apps/demo-script-tool/App/DemoScriptTool.csproj
 ```
 
+To skip the Open Folder dialog and load a project on launch, pass the
+folder path as a positional argument:
+
+```pwsh
+dotnet run --project samples/apps/demo-script-tool/App/DemoScriptTool.csproj -- C:\dev\my-demo
+```
+
+(Reactor's own `--devtools` flags pass straight through; the first
+non-flag argument is treated as the folder path.)
+
 On first launch the app will look up your GitHub token via:
 
 1. `$env:GITHUB_TOKEN` (set this for non-interactive use), or

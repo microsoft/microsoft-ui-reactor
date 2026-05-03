@@ -19,6 +19,14 @@ namespace DemoScriptTool.App;
 /// </summary>
 public sealed class DemoScriptShell : Component
 {
+    /// <summary>
+    /// Optional folder to auto-load on first mount, set by <c>Program.cs</c> from
+    /// the first non-flag CLI argument (e.g. <c>dotnet run -- C:\dev\my-demo</c>).
+    /// Static because <see cref="ReactorApp.Run{T}"/> instantiates the shell
+    /// itself and we have no constructor seam.
+    /// </summary>
+    public static string? InitialFolder { get; set; }
+
     readonly DemoScriptStore _store = new();
     readonly StepFileWriter _writer = new();
     readonly DotnetRunner _runner = new();
@@ -36,19 +44,32 @@ public sealed class DemoScriptShell : Component
 
     public override Element Render()
     {
-        var (projectRoot, setProjectRoot) = UseState<string?>(null);
-        var (model, setModel) = UseState(DemoScriptModel.Empty());
-        var (parseError, setParseError) = UseState<DemoScriptParseError?>(null);
-        var (banner, setBanner) = UseState<string?>(null);
-        var (toast, setToast) = UseState<(string Message, StatusSeverity Severity)?>(null);
-        var (generationStatus, setGenerationStatus) = UseState<string?>(null);
-        var (isGenerating, setIsGenerating) = UseState(false);
+        // threadSafe: true on every state cell — services raise events from
+        // Task.Run threads (file watcher, generation pipeline, dotnet runner)
+        // and would otherwise throw cross-thread on setState.
+        var (projectRoot, setProjectRoot) = UseState<string?>(null, threadSafe: true);
+        var (model, setModel) = UseState(DemoScriptModel.Empty(), threadSafe: true);
+        var (parseError, setParseError) = UseState<DemoScriptParseError?>(null, threadSafe: true);
+        var (banner, setBanner) = UseState<string?>(null, threadSafe: true);
+        var (toast, setToast) = UseState<(string Message, StatusSeverity Severity)?>(null, threadSafe: true);
+        var (generationStatus, setGenerationStatus) = UseState<string?>(null, threadSafe: true);
+        var (isGenerating, setIsGenerating) = UseState(false, threadSafe: true);
         var watcherRef = UseRef<DemoScriptWatcher?>(null);
         var generationCtsRef = UseRef<CancellationTokenSource?>(null);
         var saveDebounceRef = UseRef<CancellationTokenSource?>(null);
+        // SHA-256 of the bytes of our most recent save (or load). When the
+        // file watcher fires for a write WE just made, the disk hash equals
+        // this value and we suppress the reload — otherwise our own debounced
+        // save round-trips through the watcher, replaces the model with a new
+        // instance, re-syncs every TextField's local buffer, and resets the
+        // user's caret to position 0 mid-keystroke.
+        var lastSyncedHashRef = UseRef<string?>(null);
         var announce = UseAnnounce();
 
-        // Wire StatusReporter once. Channel its events to React state.
+        // Wire StatusReporter once + auto-load the CLI-supplied folder if any.
+        // The auto-load runs as a fire-and-forget Task because LoadAsync awaits
+        // and we want render to return immediately; the resulting setState calls
+        // will land on the dispatcher and trigger the next render.
         UseEffect(() =>
         {
             void OnToast(string message, StatusSeverity severity)
@@ -59,13 +80,30 @@ public sealed class DemoScriptShell : Component
             void OnGenerating(string? msg)
             {
                 setGenerationStatus(msg);
-                if (msg is not null) announce.Announce(msg, assertive: false);
+                if (msg is not null)
+                {
+                    // announce.Announce hits WinUI's automation peer which is
+                    // UI-thread-only — marshal explicitly since the pipeline
+                    // raises this event from Task.Run.
+                    var dq = ReactorApp.ActiveHost?.Window?.DispatcherQueue;
+                    if (dq is null || dq.HasThreadAccess)
+                        announce.Announce(msg, assertive: false);
+                    else
+                        dq.TryEnqueue(() => announce.Announce(msg, assertive: false));
+                }
             }
             void OnBanner(string? msg) => setBanner(msg);
 
             _status.Toast += OnToast;
             _status.Generating += OnGenerating;
             _status.Banner += OnBanner;
+
+            if (InitialFolder is not null && projectRoot is null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[demo-script] auto-loading CLI folder: {InitialFolder}");
+                _ = LoadFolderAsync(InitialFolder);
+            }
+
             return () =>
             {
                 _status.Toast -= OnToast;
@@ -86,7 +124,20 @@ public sealed class DemoScriptShell : Component
             {
                 try
                 {
-                    var (loaded, err) = await _store.LoadAsync(projectRoot, CancellationToken.None);
+                    var path = IoPath.Combine(projectRoot, DemoScriptStore.FileName);
+                    if (!File.Exists(path)) return;
+
+                    var diskBytes = await File.ReadAllBytesAsync(path, CancellationToken.None).ConfigureAwait(false);
+                    var diskHash = HashBytes(diskBytes);
+                    if (diskHash == lastSyncedHashRef.Current)
+                    {
+                        // Watcher fired for a write WE just made; ignore.
+                        return;
+                    }
+                    lastSyncedHashRef.Current = diskHash;
+
+                    var diskText = System.Text.Encoding.UTF8.GetString(diskBytes);
+                    var (loaded, err) = DemoScriptParser.Parse(diskText);
                     setParseError(err);
                     if (loaded is not null)
                     {
@@ -132,7 +183,15 @@ public sealed class DemoScriptShell : Component
                 try
                 {
                     await Task.Delay(500, cts.Token).ConfigureAwait(false);
-                    await _store.SaveAsync(model, projectRoot, cts.Token).ConfigureAwait(false);
+                    // Serialize once so we can hash the exact bytes we're about
+                    // to write; the watcher's reload compares to this hash and
+                    // skips the (caret-resetting) reload for our own save.
+                    var serialized = DemoScriptParser.Serialise(model);
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(serialized);
+                    lastSyncedHashRef.Current = HashBytes(bytes);
+                    var path = IoPath.Combine(projectRoot, DemoScriptStore.FileName);
+                    await File.WriteAllBytesAsync(path + ".tmp", bytes, cts.Token).ConfigureAwait(false);
+                    File.Move(path + ".tmp", path, overwrite: true);
                 }
                 catch (OperationCanceledException) { }
                 catch (Exception ex)
@@ -143,17 +202,24 @@ public sealed class DemoScriptShell : Component
         }
 
         // ── Commands ────────────────────────────────────────────────────
-        async void OnOpenFolder()
+        async Task LoadFolderAsync(string root)
         {
             try
             {
-                var picker = new global::Windows.Storage.Pickers.FolderPicker();
-                picker.FileTypeFilter.Add("*");
-                InitPicker(picker);
-                var folder = await picker.PickSingleFolderAsync();
-                if (folder is null) return;
+                // Seed the hash so a watcher fire for the file we just read
+                // (the OS often reports a Changed event on close even without
+                // a write) doesn't spuriously trigger a reload.
+                var path = IoPath.Combine(root, DemoScriptStore.FileName);
+                if (File.Exists(path))
+                {
+                    var diskBytes = await File.ReadAllBytesAsync(path, CancellationToken.None).ConfigureAwait(false);
+                    lastSyncedHashRef.Current = HashBytes(diskBytes);
+                }
+                else
+                {
+                    lastSyncedHashRef.Current = null;
+                }
 
-                var root = folder.Path;
                 var (loaded, err) = await _store.LoadAsync(root, CancellationToken.None);
                 setProjectRoot(root);
                 setParseError(err);
@@ -169,6 +235,24 @@ public sealed class DemoScriptShell : Component
                 {
                     setBanner($"demo-script.md is malformed — {err}");
                 }
+            }
+            catch (Exception ex)
+            {
+                _status.ShowToast($"Could not open folder: {ex.Message}", StatusSeverity.Error);
+            }
+        }
+
+        async void OnOpenFolder()
+        {
+            try
+            {
+                var picker = new global::Windows.Storage.Pickers.FolderPicker();
+                picker.FileTypeFilter.Add("*");
+                InitPicker(picker);
+                var folder = await picker.PickSingleFolderAsync();
+                if (folder is null) return;
+
+                await LoadFolderAsync(folder.Path);
             }
             catch (Exception ex)
             {
@@ -199,6 +283,11 @@ public sealed class DemoScriptShell : Component
                 try
                 {
                     await _pipeline.GenerateAllAsync(model, projectRoot, cts.Token).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Shell] Generate task crashed: {ex}");
+                    _status.SetBanner($"Generation crashed: {ex.GetType().Name} — {ex.Message}");
                 }
                 finally
                 {
@@ -423,6 +512,14 @@ public sealed class DemoScriptShell : Component
         foreach (var s in m.Steps)
             if (!string.IsNullOrWhiteSpace(s.Delta)) return true;
         return false;
+    }
+
+    static string HashBytes(byte[] bytes)
+    {
+        var h = System.Security.Cryptography.SHA256.HashData(bytes);
+        var sb = new System.Text.StringBuilder(64);
+        for (int i = 0; i < h.Length; i++) sb.Append(h[i].ToString("x2"));
+        return sb.ToString();
     }
 
     static string SymbolFor(StatusSeverity s) => s switch

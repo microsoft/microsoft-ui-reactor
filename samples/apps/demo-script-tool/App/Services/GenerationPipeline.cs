@@ -64,11 +64,11 @@ public sealed class GenerationPipeline
             return;
         }
 
-        _status.SetGeneratingStatus($"Preparing {model.Steps.Count} step{(model.Steps.Count == 1 ? "" : "s")}…");
-        var userPrompt = BuildUserPrompt(model);
-
         try
         {
+            _status.SetGeneratingStatus($"Preparing {model.Steps.Count} step{(model.Steps.Count == 1 ? "" : "s")}…");
+            var userPrompt = BuildUserPrompt(model, projectRoot);
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] userPrompt built ({userPrompt.Length} bytes); calling StreamAndApplyAsync");
             await StreamAndApplyAsync(model, projectRoot, userPrompt, ct).ConfigureAwait(false);
             System.Diagnostics.Debug.WriteLine("[Pipeline] GenerateAll completed normally");
         }
@@ -80,7 +80,7 @@ public sealed class GenerationPipeline
             try
             {
                 await _auth.EnsureAuthenticatedAsync(ct).ConfigureAwait(false);
-                await StreamAndApplyAsync(model, projectRoot, userPrompt, ct).ConfigureAwait(false);
+                await StreamAndApplyAsync(model, projectRoot, BuildUserPrompt(model, projectRoot), ct).ConfigureAwait(false);
             }
             catch (AuthExpiredException ex2)
             {
@@ -131,6 +131,7 @@ public sealed class GenerationPipeline
 
         parser.StepStarted += n =>
         {
+            System.Diagnostics.Debug.WriteLine($"[Parser] StepStarted n={n}");
             currentStep = FindStep(model, n);
             if (currentStep is not null)
             {
@@ -142,6 +143,7 @@ public sealed class GenerationPipeline
 
         parser.CodeBlockStarted += (n, path) =>
         {
+            System.Diagnostics.Debug.WriteLine($"[Parser] CodeBlockStarted n={n} path='{path}'");
             if (fileBuffers.TryGetValue(n, out var buf)) buf.OpenFile(path);
         };
 
@@ -163,13 +165,16 @@ public sealed class GenerationPipeline
 
         parser.StepCompleted += n =>
         {
+            System.Diagnostics.Debug.WriteLine($"[Parser] StepCompleted n={n}");
             var step = FindStep(model, n);
-            if (step is null) return;
-            if (!fileBuffers.TryGetValue(n, out var buf)) return;
+            if (step is null) { System.Diagnostics.Debug.WriteLine($"[Parser] StepCompleted: no step n={n}"); return; }
+            if (!fileBuffers.TryGetValue(n, out var buf)) { System.Diagnostics.Debug.WriteLine($"[Parser] StepCompleted: no buffer for n={n}"); return; }
             var snapshot = buf.Snapshot();
+            System.Diagnostics.Debug.WriteLine($"[Parser] StepCompleted: snapshot has {snapshot.Count} files for n={n}");
             if (snapshot.Count == 0) return;
 
             var primary = _writer.Write(step.Number, snapshot, projectRoot, model.IsMultiFile);
+            System.Diagnostics.Debug.WriteLine($"[Parser] StepCompleted: wrote primary='{primary}'");
             step.SetOutputPath(primary);
 
             // Build-and-fix loop happens off the streaming thread to avoid blocking
@@ -177,7 +182,7 @@ public sealed class GenerationPipeline
             _ = Task.Run(() => RunBuildAndFixAsync(step, model, projectRoot, ct), ct);
         };
 
-        parser.Warning += msg => _status.ShowToast(msg, StatusSeverity.Warning);
+        parser.Warning += msg => { System.Diagnostics.Debug.WriteLine($"[Parser] Warning: {msg}"); _status.ShowToast(msg, StatusSeverity.Warning); };
 
         await foreach (var token in _client.StreamAsync(SystemPrompt, userPrompt, ct).ConfigureAwait(false))
         {
@@ -192,7 +197,13 @@ public sealed class GenerationPipeline
         try
         {
             step.SetBuildState(BuildState.Building);
+            System.Diagnostics.Debug.WriteLine($"[BuildFix] step {step.Number}: starting initial build");
             var result = await _runner.BuildAsync(step, projectRoot, model.IsMultiFile, ct).ConfigureAwait(false);
+            System.Diagnostics.Debug.WriteLine($"[BuildFix] step {step.Number}: initial build exit={result.ExitCode} succeeded={result.Succeeded} outputBytes={result.CombinedOutput.Length}");
+            if (!result.Succeeded)
+            {
+                System.Diagnostics.Debug.WriteLine($"[BuildFix] step {step.Number} build output (last 500 chars): {result.CombinedOutput[Math.Max(0, result.CombinedOutput.Length - 500)..]}");
+            }
             if (result.Succeeded)
             {
                 step.SetBuildState(BuildState.Succeeded);
@@ -205,11 +216,13 @@ public sealed class GenerationPipeline
             for (int attempt = 1; attempt <= MaxFixAttempts; attempt++)
             {
                 ct.ThrowIfCancellationRequested();
+                System.Diagnostics.Debug.WriteLine($"[BuildFix] step {step.Number}: fix attempt {attempt}");
                 if (!await ApplyFixAttemptAsync(step, model, projectRoot, lastOutput, ct).ConfigureAwait(false))
                     break;
 
                 step.IncrementFixAttempts();
                 var rebuild = await _runner.BuildAsync(step, projectRoot, model.IsMultiFile, ct).ConfigureAwait(false);
+                System.Diagnostics.Debug.WriteLine($"[BuildFix] step {step.Number}: fix-attempt {attempt} build exit={rebuild.ExitCode} succeeded={rebuild.Succeeded}");
                 if (rebuild.Succeeded)
                 {
                     step.SetBuildState(BuildState.Succeeded);
@@ -291,12 +304,42 @@ public sealed class GenerationPipeline
         return null;
     }
 
-    static string BuildUserPrompt(DemoScriptModel model)
+    static string BuildUserPrompt(DemoScriptModel model, string projectRoot)
     {
         var sb = new StringBuilder();
         sb.Append("# Demo: ").Append(model.Title).Append('\n').Append('\n');
         sb.Append("## Demo Prompt (Layer 2)\n").Append(model.DemoPrompt).Append('\n').Append('\n');
         sb.Append("## Mode\n").Append(model.IsMultiFile ? "multi-file" : "single-file").Append('\n').Append('\n');
+
+        // Help the model emit a correct relative #:project path when Reactor
+        // is in scope. We compute the relative path from the demo's project
+        // root to Reactor.csproj if it can be discovered; otherwise we hand
+        // over the absolute paths and let the model figure it out.
+        var (reactorDir, reactorRel) = ResolveReactorPath(projectRoot);
+        var rid = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture switch
+        {
+            System.Runtime.InteropServices.Architecture.Arm64 => "win-arm64",
+            System.Runtime.InteropServices.Architecture.X64 => "win-x64",
+            System.Runtime.InteropServices.Architecture.X86 => "win-x86",
+            _ => "win-x64",
+        };
+        sb.Append("## Paths\n");
+        sb.Append("- Project root (where step-NN.cs files are written): ").Append(projectRoot).Append('\n');
+        if (reactorDir is not null)
+        {
+            sb.Append("- Reactor source directory: ").Append(reactorDir).Append('\n');
+            sb.Append("- Suggested `#:project` directive: `#:project ").Append(reactorRel).Append("`\n");
+        }
+        else
+        {
+            sb.Append("- Reactor source directory: NOT FOUND on this machine. ");
+            sb.Append("Use `#:package Microsoft.UI.Reactor` if a published NuGet package exists, ");
+            sb.Append("or fall back to a non-Reactor framework like Spectre.Console for the demo.\n");
+        }
+        sb.Append("- Host runtime identifier (use this in `#:property RuntimeIdentifier=...`): ")
+            .Append(rid).Append('\n');
+        sb.Append('\n');
+
         sb.Append("## Steps\n");
         foreach (var step in model.Steps)
         {
@@ -305,5 +348,45 @@ public sealed class GenerationPipeline
         }
         sb.Append("Generate every step in order using the envelope from the system prompt.\n");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Find Reactor's source directory by walking up from <paramref name="projectRoot"/>
+    /// looking for a sibling repo or an ancestor `src/Reactor/Reactor.csproj`.
+    /// Returns (absoluteDir, relativeFromProjectRoot) or (null, "") if not found.
+    /// </summary>
+    static (string? Absolute, string Relative) ResolveReactorPath(string projectRoot)
+    {
+        // Walk up from projectRoot — handles "demo lives inside the Reactor repo"
+        // and "demo lives in a sibling folder of the Reactor repo" alike.
+        var dir = new System.IO.DirectoryInfo(projectRoot);
+        for (int i = 0; i < 8 && dir is not null; i++, dir = dir.Parent)
+        {
+            // Same-tree: <dir>/src/Reactor/Reactor.csproj
+            var inTree = System.IO.Path.Combine(dir.FullName, "src", "Reactor", "Reactor.csproj");
+            if (System.IO.File.Exists(inTree))
+                return (System.IO.Path.GetDirectoryName(inTree)!, RelPath(projectRoot, System.IO.Path.GetDirectoryName(inTree)!));
+
+            // Sibling: <dir>/<repo>/src/Reactor/Reactor.csproj
+            try
+            {
+                foreach (var sub in dir.EnumerateDirectories())
+                {
+                    var siblingTree = System.IO.Path.Combine(sub.FullName, "src", "Reactor", "Reactor.csproj");
+                    if (System.IO.File.Exists(siblingTree))
+                        return (System.IO.Path.GetDirectoryName(siblingTree)!, RelPath(projectRoot, System.IO.Path.GetDirectoryName(siblingTree)!));
+                }
+            }
+            catch { /* permission etc. — ignore */ }
+        }
+        return (null, "");
+    }
+
+    static string RelPath(string fromDir, string toDir)
+    {
+        var rel = System.IO.Path.GetRelativePath(fromDir, toDir);
+        // Normalize to forward slashes — `dotnet run` accepts both, but the
+        // file-based-app `#:project` directive is more portable with `/`.
+        return rel.Replace('\\', '/');
     }
 }
