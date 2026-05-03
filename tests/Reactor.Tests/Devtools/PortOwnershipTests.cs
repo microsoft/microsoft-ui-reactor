@@ -21,7 +21,7 @@ public class PortOwnershipTests
     {
         // Direct TcpListener user-mode bind — the legacy happy path.
         var rows = new[] { Row(port: 50001, pid: 12345) };
-        Assert.True(PortOwnership.MatchListener(rows, port: 50001, pid: 12345));
+        Assert.True(PortOwnership.MatchListener(rows, port: 50001, pid: 12345, enumerationComplete: true));
     }
 
     [Fact]
@@ -29,7 +29,7 @@ public class PortOwnershipTests
     {
         // No row at all for the asked port — port is not bound.
         var rows = new[] { Row(port: 50002, pid: 12345) };
-        Assert.False(PortOwnership.MatchListener(rows, port: 50001, pid: 12345));
+        Assert.False(PortOwnership.MatchListener(rows, port: 50001, pid: 12345, enumerationComplete: true));
     }
 
     [Fact]
@@ -37,7 +37,7 @@ public class PortOwnershipTests
     {
         // Some other user-mode pid owns the port — classic spoof signature.
         var rows = new[] { Row(port: 50001, pid: 99999) };
-        Assert.False(PortOwnership.MatchListener(rows, port: 50001, pid: 12345));
+        Assert.False(PortOwnership.MatchListener(rows, port: 50001, pid: 12345, enumerationComplete: true));
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class PortOwnershipTests
         // user-mode pid is the request-queue owner that mur authenticates
         // against via the bearer token. Single HTTP.SYS row → accept.
         var rows = new[] { Row(port: 50001, pid: PortOwnership.HttpSysPid) };
-        Assert.True(PortOwnership.MatchListener(rows, port: 50001, pid: 12345));
+        Assert.True(PortOwnership.MatchListener(rows, port: 50001, pid: 12345, enumerationComplete: true));
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class PortOwnershipTests
             Row(port: 50001, pid: PortOwnership.HttpSysPid),
             Row(port: 50001, pid: PortOwnership.HttpSysPid),
         };
-        Assert.True(PortOwnership.MatchListener(rows, port: 50001, pid: 12345));
+        Assert.True(PortOwnership.MatchListener(rows, port: 50001, pid: 12345, enumerationComplete: true));
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class PortOwnershipTests
             Row(port: 50001, pid: PortOwnership.HttpSysPid),
             Row(port: 50001, pid: 99999),
         };
-        Assert.False(PortOwnership.MatchListener(rows, port: 50001, pid: 12345));
+        Assert.False(PortOwnership.MatchListener(rows, port: 50001, pid: 12345, enumerationComplete: true));
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class PortOwnershipTests
             Row(port: 50001, pid: PortOwnership.HttpSysPid),
             Row(port: 50001, pid: 12345),
         };
-        Assert.True(PortOwnership.MatchListener(rows, port: 50001, pid: 12345));
+        Assert.True(PortOwnership.MatchListener(rows, port: 50001, pid: 12345, enumerationComplete: true));
     }
 
     [Fact]
@@ -102,7 +102,48 @@ public class PortOwnershipTests
             Row(port: 50001, pid: PortOwnership.HttpSysPid),
             Row(port: 50002, pid: 99999),                   // unrelated port
         };
-        Assert.True(PortOwnership.MatchListener(rows, port: 50001, pid: 12345));
+        Assert.True(PortOwnership.MatchListener(rows, port: 50001, pid: 12345, enumerationComplete: true));
+    }
+
+    [Fact]
+    public void Match_PartialEnumeration_HttpSysOnly_RejectedAsUnsafe()
+    {
+        // PR #128 review (Copilot): if the AF_INET or AF_INET6 TCP-table
+        // query failed, the rows we have are a partial view. Accepting an
+        // HTTP.SYS-only signature on the visible family would let a
+        // competing user-mode listener on the unseen family go undetected
+        // — a same-user spoof opportunity. Direct match still works on
+        // partial data; HTTP.SYS-only does not.
+        var rows = new[]
+        {
+            Row(port: 50001, pid: PortOwnership.HttpSysPid),
+        };
+        Assert.False(PortOwnership.MatchListener(rows, port: 50001, pid: 12345, enumerationComplete: false));
+    }
+
+    [Fact]
+    public void Match_PartialEnumeration_DirectMatch_StillAccepted()
+    {
+        // Even if one address-family query failed, a direct row attributing
+        // to the lockfile pid is unambiguous — accept.
+        var rows = new[]
+        {
+            Row(port: 50001, pid: 12345),
+        };
+        Assert.True(PortOwnership.MatchListener(rows, port: 50001, pid: 12345, enumerationComplete: false));
+    }
+
+    [Fact]
+    public void Match_PartialEnumeration_DirectMatchAlongsideHttpSys_StillAccepted()
+    {
+        // Mixed but the lockfile pid is among the rows we did get back —
+        // direct match wins regardless of enumeration completeness.
+        var rows = new[]
+        {
+            Row(port: 50001, pid: PortOwnership.HttpSysPid),
+            Row(port: 50001, pid: 12345),
+        };
+        Assert.True(PortOwnership.MatchListener(rows, port: 50001, pid: 12345, enumerationComplete: false));
     }
 
     [Fact]

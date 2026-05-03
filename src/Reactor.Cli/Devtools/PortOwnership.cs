@@ -39,6 +39,16 @@ internal static class PortOwnership
     /// <see cref="HttpSysPid"/> (HTTP.SYS) on at least one address family while
     /// no other user-mode process holds a competing listener on the same port.
     /// Returns false when no LISTEN row exists for the port at all.
+    /// <para>
+    /// <b>Failure mode for partial TCP-table enumeration:</b> if either
+    /// <c>AF_INET</c> or <c>AF_INET6</c> enumeration fails (rare; e.g. locked-down
+    /// loopback policy, kernel resource pressure), the HTTP.SYS-only fallback
+    /// is disabled — we'd otherwise accept a session whose only HTTP.SYS row is
+    /// on the visible family while a competing user-mode listener could exist
+    /// on the unseen family. Direct pid match is still honored on whatever
+    /// rows we did get back. This keeps the spoof defense intact under
+    /// degraded enumeration.
+    /// </para>
     /// </summary>
     public static bool IsPortOwnedBy(int port, int pid)
     {
@@ -46,11 +56,14 @@ internal static class PortOwnership
         if (pid <= 0) return false;
 
         var rows = new List<TcpListenerRow>();
-        if (TryGetTcpTable(AF_INET, out var v4)) rows.AddRange(v4);
-        if (TryGetTcpTable(AF_INET6, out var v6)) rows.AddRange(v6);
+        bool v4Ok = TryGetTcpTable(AF_INET, out var v4);
+        if (v4Ok) rows.AddRange(v4);
+        bool v6Ok = TryGetTcpTable(AF_INET6, out var v6);
+        if (v6Ok) rows.AddRange(v6);
         if (rows.Count == 0) return false;
 
-        return MatchListener(rows, port, pid);
+        bool enumerationComplete = v4Ok && v6Ok;
+        return MatchListener(rows, port, pid, enumerationComplete);
     }
 
     /// <summary>
@@ -60,13 +73,22 @@ internal static class PortOwnership
     /// The lockfile pid passes when:
     /// (1) any LISTEN row on <paramref name="port"/> directly attributes to
     /// <paramref name="pid"/>, OR
-    /// (2) every LISTEN row on <paramref name="port"/> attributes to
-    /// <see cref="HttpSysPid"/> (HTTP.SYS holds the socket and no user-mode
-    /// process is competing on the same port). Mixed ownership — HTTP.SYS
-    /// plus a different user-mode pid — is rejected as ambiguous.
+    /// (2) <paramref name="enumerationComplete"/> is true AND every LISTEN
+    /// row on <paramref name="port"/> attributes to <see cref="HttpSysPid"/>
+    /// (HTTP.SYS holds the socket and no user-mode process is competing on
+    /// the same port). Mixed ownership — HTTP.SYS plus a different user-mode
+    /// pid — is rejected as ambiguous.
+    /// </para>
+    /// <para>
+    /// When <paramref name="enumerationComplete"/> is false (a TCP-table
+    /// query for one address family failed), the HTTP.SYS-only fallback is
+    /// disabled to prevent acceptance based on a partial view: a
+    /// competing user-mode listener on the unseen family would be invisible
+    /// to this check. Strict pid attribution still works on the visible
+    /// rows.
     /// </para>
     /// </summary>
-    internal static bool MatchListener(IReadOnlyList<TcpListenerRow> rows, int port, int pid)
+    internal static bool MatchListener(IReadOnlyList<TcpListenerRow> rows, int port, int pid, bool enumerationComplete)
     {
         bool anyForPort = false;
         bool anyHttpSys = false;
@@ -82,6 +104,7 @@ internal static class PortOwnership
         }
 
         if (!anyForPort) return false;
+        if (!enumerationComplete) return false;
         return anyHttpSys && !anyOtherUserMode;
     }
 
