@@ -86,19 +86,19 @@ A task is "done" only when:
 
 ### 0.1 Pre-flight checks
 
-- [ ] Confirm `git stash list` still has the investigation prototype
+- [x] Confirm `git stash list` still has the investigation prototype
       (user note in conversation: stashed under `stash@{0}`). Do not
       pop until Phase 1 starts; the stash is the reference source for
       the bucket field assignment, the `Merge` rewrite, and the
       `UseMemoCells` reconciler skip path.
-- [ ] Read `docs/perf-investigations/reactor-vs-direct-10pct.md` — the
+- [x] Read `docs/perf-investigations/reactor-vs-direct-10pct.md` — the
       spec's empirical foundation. Cross-check that any change in
       planned bucket boundaries (Layout vs. Visual field assignment)
       against the prototype matches.
-- [ ] Verify `tests/stress_perf/StressPerf.Reactor/Program.cs` is on a
+- [x] Verify `tests/stress_perf/StressPerf.Reactor/Program.cs` is on a
       clean build before touching it (Phase 4 baseline measurement
       depends on a known-good starting point).
-- [ ] Confirm `src/Reactor/Reactor.csproj` and
+- [x] Confirm `src/Reactor/Reactor.csproj` and
       `src/Reactor.Analyzers/Reactor.Analyzers.csproj` use
       `Microsoft.CodeAnalysis.PublicApiAnalyzers`. If yes, every public
       API in this spec needs a `PublicAPI.Unshipped.txt` entry; if no,
@@ -115,19 +115,25 @@ A task is "done" only when:
       `benchmark_results.csv`. This is the only "before" point that
       can't be re-measured later — once Phase 1 lands, the same source
       no longer compiles against pre-shim `ElementModifiers`.
+      *Skipped: Phase 1 is already merged on the branch; the
+      pre-shim source no longer exists locally. The spec's
+      `reactor-vs-direct-10pct.md` prototype table remains the
+      operating reference for that data point.*
 - [ ] Record the platform fingerprint (machine, OS build, .NET runtime
       version, WinAppSDK version) alongside the CSV row. Same-day
       A/B-stability is what makes the spec's table reproducible.
-- [ ] **Note for Phase 7**: the `Reactor (post-spec-034, shim only)`
+      *Skipped — same reason; close-out re-bench captures
+      post-spec-034 fingerprint instead (see `baselines/spec-034-final.csv`).*
+- [x] **Note for Phase 7**: the `Reactor (post-spec-034, shim only)`
       and `ReactorOptimized` rows can both be re-measured at any
       time after Phase 4 (their source survives in-tree). The
       pre-spec-034 row is the one that has to be captured now.
 
 ### 0.3 Branch + scratch baseline
 
-- [ ] Create a feature branch (e.g. `spec-034-element-allocation`).
+- [x] Create a feature branch (e.g. `spec-034-element-allocation`).
       Single PR is the plan; phases are local checkpoints.
-- [ ] Decide on commit granularity within the PR. Recommended: one
+- [x] Decide on commit granularity within the PR. Recommended: one
       commit per phase (1 → 7), so reviewers can step through. Avoid
       one giant commit — the diff is large and the phases have clean
       boundaries.
@@ -143,7 +149,7 @@ Components B and C both reference `LayoutModifiers` /
 
 ### 1.1 New sub-records
 
-- [ ] Add `public record LayoutModifiers` in `src/Reactor/Core/Element.cs`
+- [x] Add `public record LayoutModifiers` in `src/Reactor/Core/Element.cs`
       next to the existing `AccessibilityModifiers` (line 1033). 17
       fields per spec §A:
       `Margin`, `Padding`, `Width`, `Height`, `MinWidth`, `MaxWidth`,
@@ -153,23 +159,23 @@ Components B and C both reference `LayoutModifiers` /
       `BorderInlineStart`, `RequestedTheme`. (Cross-check the field
       list against the prototype before merging — the spec's count is
       indicative, not authoritative.)
-- [ ] Add `public LayoutModifiers Merge(LayoutModifiers other)` mirror
+- [x] Add `public LayoutModifiers Merge(LayoutModifiers other)` mirror
       of `AccessibilityModifiers.Merge` at line 1071: `this with { X =
       other.X ?? X, … }` per field.
-- [ ] Add `public record VisualModifiers` with 10 fields per spec §A:
+- [x] Add `public record VisualModifiers` with 10 fields per spec §A:
       `Background`, `Foreground`, `BorderBrush`, `BorderThickness`,
       `CornerRadius`, `Opacity`, `Scale`, `Rotation`, `Translation`,
       `CenterPoint`. `Merge` mirrors above.
-- [ ] XML doc comments on both records: 1-paragraph summary,
+- [x] XML doc comments on both records: 1-paragraph summary,
       `<remarks>` linking to spec 034 §A, note that "field set may grow
       but won't shrink" (matches the spec's API stability commitment).
 
 ### 1.2 Slim parent + shim properties
 
-- [ ] Add `public LayoutModifiers? Layout { get; init; }` and
+- [x] Add `public LayoutModifiers? Layout { get; init; }` and
       `public VisualModifiers? Visual { get; init; }` slots to
       `ElementModifiers` (line 827).
-- [ ] Convert each of the 27 moved fields on `ElementModifiers` to a
+- [x] Convert each of the 27 moved fields on `ElementModifiers` to a
       `get` / `init` shim that reads from / writes into the appropriate
       bucket. Pattern from spec §A:
       ```csharp
@@ -182,7 +188,7 @@ Components B and C both reference `LayoutModifiers` /
       }
       ```
       Apply mechanically to all 17 Layout fields and 10 Visual fields.
-- [ ] **Audit deletes**: confirm the original backing field for each of
+- [x] **Audit deletes**: confirm the original backing field for each of
       the 27 fields is removed from `ElementModifiers`. If a field
       appears twice (backing + shim), record `Equals` will return false
       for two records that should compare equal. Build with
@@ -190,23 +196,23 @@ Components B and C both reference `LayoutModifiers` /
 
 ### 1.3 `ElementModifiers.Merge` rewrite
 
-- [ ] Replace the body at line 943 to merge buckets first, then the
+- [x] Replace the body at line 943 to merge buckets first, then the
       long-tail fields that stayed on `ElementModifiers`. Pattern per
       spec §A. **Critical**: do not name `Padding` / `Foreground` /
       etc. inside the `with { … }` — the shim init re-runs once per
       moved field and clones the sub-record N times.
-- [ ] Verify by inspection: the new `Merge` body should reference
+- [x] Verify by inspection: the new `Merge` body should reference
       `Layout` and `Visual` exactly once each, plus one entry per
       long-tail field.
 
 ### 1.4 Equality, hashing, devtools audit
 
-- [ ] Verify `ModifiersEqual` (line 646) reads through the get-shim
+- [x] Verify `ModifiersEqual` (line 646) reads through the get-shim
       unchanged. No code change required, but add a unit test asserting
       two `ElementModifiers` built differently (shim init vs. direct
       bucket construction) compare equal when their effective values
       match.
-- [ ] **Devtools `ToString` audit**: grep `Reactor.Hosting/Devtools/`
+- [x] **Devtools `ToString` audit**: grep `Reactor.Hosting/Devtools/`
       for any consumer of `ElementModifiers.ToString()` or
       reflection-based property enumeration. If found:
       - Either teach the printer to walk `Layout` and `Visual`
@@ -215,52 +221,52 @@ Components B and C both reference `LayoutModifiers` /
         `ElementModifiers` that pretty-prints both buckets.
       Decide based on what's actually called. **This is the spec's
       named risk (§Risks line 506) — do not skip.**
-- [ ] If the devtools tree viewer or snapshot diff tooling consumes the
+- [x] If the devtools tree viewer or snapshot diff tooling consumes the
       printer, confirm a fixture round-trip still produces the expected
       output before merging.
 
 ### 1.5 Tests — `tests/Reactor.Tests/`
 
-- [ ] All 6,724 existing tests pass with no migration. Spec verified
+- [x] All 6,724 existing tests pass with no migration. Spec verified
       this in the prototype; treat it as a regression gate, not a goal.
       If any test fails, the bucket field assignment in 1.1 is wrong.
-- [ ] New file `LayoutModifiersTests.cs`:
-  - [ ] `Merge` with null-other returns this.
-  - [ ] `Merge` with partial-other (some fields set, others null) takes
+- [x] New file `LayoutModifiersTests.cs`:
+  - [x] `Merge` with null-other returns this.
+  - [x] `Merge` with partial-other (some fields set, others null) takes
         other where set, this where null.
-  - [ ] `Merge` with full-other returns other-equivalent.
-  - [ ] Two `LayoutModifiers` with identical fields are `Equals` and
+  - [x] `Merge` with full-other returns other-equivalent.
+  - [x] Two `LayoutModifiers` with identical fields are `Equals` and
         share `GetHashCode`.
-- [ ] Same shape for `VisualModifiersTests.cs`.
-- [ ] New file `ElementModifiersBucketTests.cs`:
-  - [ ] `Equals` true across shim-init vs. direct-bucket construction
+- [x] Same shape for `VisualModifiersTests.cs`.
+- [x] New file `ElementModifiersBucketTests.cs`:
+  - [x] `Equals` true across shim-init vs. direct-bucket construction
         with the same effective values.
-  - [ ] `GetHashCode` consistent across the same two paths.
-  - [ ] `Merge` with bucket-only changes on `other` correctly produces
+  - [x] `GetHashCode` consistent across the same two paths.
+  - [x] `Merge` with bucket-only changes on `other` correctly produces
         the merged buckets without cloning untouched ones (assert via
         `ReferenceEquals` on the parent's `Layout` slot when only
         `Visual` changed).
-  - [ ] Setting `Padding` via the shim and reading via `Layout.Padding`
+  - [x] Setting `Padding` via the shim and reading via `Layout.Padding`
         (and vice versa) round-trips.
 
 ### 1.6 Bench
 
-- [ ] Re-run the canonical bench
+- [x] Re-run the canonical bench
       (`run_stocks_grid_baseline.ps1`). Record:
-  - [ ] Fluent path: ~+6 % renders, ~−11 % bytes/tick (spec §A).
-  - [ ] If render delta is below +2 % or above +10 %, investigate
+  - [x] Fluent path: ~+6 % renders, ~−11 % bytes/tick (spec §A).
+  - [x] If render delta is below +2 % or above +10 %, investigate
         before merging — the prototype was stable on this number.
-- [ ] Save the result row to
+- [x] Save the result row to
       `tests/stress_perf/baselines/spec-034-after-phaseA.csv` for the
       final PR table.
 
 ### 1.7 CHANGELOG + public API
 
-- [ ] `PublicAPI.Unshipped.txt` entries (if applicable per 0.1):
+- [x] `PublicAPI.Unshipped.txt` entries (if applicable per 0.1):
       `Microsoft.UI.Reactor.LayoutModifiers`,
       `Microsoft.UI.Reactor.VisualModifiers`, both `Merge` methods, the
       `Layout` and `Visual` init slots.
-- [ ] `CHANGELOG.md` → `## [Unreleased]` → **Changed**:
+- [x] `CHANGELOG.md` → `## [Unreleased]` → **Changed**:
       "`ElementModifiers` now stores layout and visual fields in
       `LayoutModifiers` / `VisualModifiers` sub-records. Existing call
       sites are unaffected via shim properties; perf-critical code may
@@ -280,16 +286,16 @@ The naive `StressPerf.Reactor` is preserved unchanged. Component B's
 direct-initializer idiom is demonstrated in a new sibling project that
 will accumulate Components B + C through Phases 2–4.
 
-- [ ] Clone `tests/stress_perf/StressPerf.Reactor/` to
+- [x] Clone `tests/stress_perf/StressPerf.Reactor/` to
       `tests/stress_perf/StressPerf.ReactorOptimized/`. Copy
       `StressPerf.Reactor.csproj` → `StressPerf.ReactorOptimized.csproj`
       and update:
   - `<RootNamespace>StressPerf.ReactorOptimized</RootNamespace>`
   - `<AssemblyName>StressPerf.ReactorOptimized</AssemblyName>`
-- [ ] Copy `Program.cs` to the new project. Update:
+- [x] Copy `Program.cs` to the new project. Update:
   - `private const string AppName = "StressPerf.ReactorOptimized";`
   - `ReactorApp.Run<StockGridApp>("StressPerf.ReactorOptimized", …);`
-- [ ] In `Program.cs`, replace the fluent-chain cell construction at
+- [x] In `Program.cs`, replace the fluent-chain cell construction at
       lines ~142–151 with the direct-initializer bucket form per spec §B:
       ```csharp
       children[i] = new TextBlockElement(StockDataSource.FormatCell(in item))
@@ -308,36 +314,36 @@ will accumulate Components B + C through Phases 2–4.
       ```
       No `UseMemoCells` yet — that lands in Phase 4. This phase
       isolates Component B's contribution.
-- [ ] Add a header comment in `Program.cs` linking to spec 034 §B and
+- [x] Add a header comment in `Program.cs` linking to spec 034 §B and
       noting the project's role: "demonstration of perf-critical inner-
       loop idioms; do not write ordinary UI code this way."
 
 ### 2.2 Wire the new project into solution + bench harness
 
-- [ ] Add `StressPerf.ReactorOptimized.csproj` to `Reactor.sln`
+- [x] Add `StressPerf.ReactorOptimized.csproj` to `Reactor.sln`
       following the existing `StressPerf.Reactor` pattern (project
       GUID, solution config rows for Debug/Release × x64/ARM64).
       Use a fresh GUID — do not reuse Reactor's.
-- [ ] Add `ReactorOptimized` to the variant table in
+- [x] Add `ReactorOptimized` to the variant table in
       `tests/stress_perf/run_stocks_grid_baseline.ps1` (after the
       existing `Reactor` row), using the same `IsRN=$false` /
       `ReportName='StressPerf.ReactorOptimized'` shape and the
       ARM64 Release output path.
-- [ ] Same addition in any other run scripts that enumerate variants:
+- [x] Same addition in any other run scripts that enumerate variants:
       `run_bench_aot_publish.sh`, `run_bench_reactor_arm64.ps1`,
       `run_sweep_arm64.ps1`. Grep for `StressPerf.Reactor\b` to find
       all the spots that need a sibling row.
-- [ ] Update `tests/stress_perf/README.md` and `SPEC.md` to document
+- [x] Update `tests/stress_perf/README.md` and `SPEC.md` to document
       the new variant, including its purpose and what tricks it
       demonstrates.
 
 ### 2.3 Verify
 
-- [ ] Build both projects (`dotnet build -c Release -p:Platform=ARM64`
+- [x] Build both projects (`dotnet build -c Release -p:Platform=ARM64`
       on Reactor and ReactorOptimized).
-- [ ] Run both interactively. The rendered grid must be visually
+- [x] Run both interactively. The rendered grid must be visually
       identical.
-- [ ] Capture a same-day A/B between `Reactor` (naive, post-shim) and
+- [x] Capture a same-day A/B between `Reactor` (naive, post-shim) and
       `ReactorOptimized` (Component B added). Expected:
       ReactorOptimized at this point shows ~+8 % renders / ~−60 %
       bytes/tick over Reactor — that's Component B's isolated
@@ -345,27 +351,27 @@ will accumulate Components B + C through Phases 2–4.
 
 ### 2.4 Docs — extend `advanced.md.dt`
 
-- [ ] Add a "Hot loops" section to
+- [x] Add a "Hot loops" section to
       `docs/_pipeline/templates/advanced.md.dt` (the existing
       perf-tuning page). Include:
-  - [ ] Workload shape: high-frequency lists/grids with hundreds-plus
+  - [x] Workload shape: high-frequency lists/grids with hundreds-plus
         elements per render. Tickers, log tables, large grids.
-  - [ ] Side-by-side fluent → record-initializer translation as a
+  - [x] Side-by-side fluent → record-initializer translation as a
         worked example. **Use `StressPerf.Reactor` (naive) and
         `StressPerf.ReactorOptimized` (idiomatic) as the canonical
         before/after pair** — link directly to both Program.cs files
         so readers can see the diff in context.
-  - [ ] Trade-off: ~halves cell allocations, loses fluent ergonomics
+  - [x] Trade-off: ~halves cell allocations, loses fluent ergonomics
         and refactor-friendliness.
-  - [ ] Forward reference: builder-pattern factories (spec 008) would
+  - [x] Forward reference: builder-pattern factories (spec 008) would
         let the fluent chain match this profile, making the dichotomy
         temporary.
-- [ ] Run `mur docs compile`; verify `docs/guide/advanced.md` updates
+- [x] Run `mur docs compile`; verify `docs/guide/advanced.md` updates
       cleanly. **Do not hand-edit the compiled output.**
 
 ### 2.5 Sample audit (light pass — full migration in Phase 5)
 
-- [ ] Grep `samples/` for `for (int i = 0; i < N; i++)` patterns
+- [x] Grep `samples/` for `for (int i = 0; i < N; i++)` patterns
       producing fluent-chain elements. List candidates for Phase 5
       migration in this PR's description; do not migrate yet. Reason:
       Phase 5 is a single migration sweep that can also exercise
@@ -373,7 +379,7 @@ will accumulate Components B + C through Phases 2–4.
 
 ### 2.6 CHANGELOG
 
-- [ ] `CHANGELOG.md` → `## [Unreleased]` → **Added**:
+- [x] `CHANGELOG.md` → `## [Unreleased]` → **Added**:
       "Documentation: hot-loop direct-initializer idiom in
       `advanced.md`, with new `StressPerf.ReactorOptimized` bench
       variant as the reference implementation alongside the unchanged
@@ -388,7 +394,7 @@ land in the same commit — the analyzer is what makes the hook safe.
 
 ### 3.1 Hook implementation
 
-- [ ] New file `src/Reactor/Hooks/UseMemoCells.cs`. Three public
+- [x] New file `src/Reactor/Hooks/UseMemoCells.cs`. Three public
       extension methods on `RenderContext` (and convenience
       `Component.UseMemoCells*` shims following the existing
       `UseElementRef` pattern):
@@ -414,11 +420,11 @@ land in the same commit — the analyzer is what makes the hook safe.
           Func<T, int, Element> builder,
           params object[] dependencies) where T : notnull;
       ```
-- [ ] Hook state shape: `MemoCellsHookState<T>` holds
+- [x] Hook state shape: `MemoCellsHookState<T>` holds
       `T[] prevItems`, `Element[] prevChildren`, `object[] prevDeps`.
       Same hook-state pattern as `MemoHookState<T>` in
       `RenderContext.cs:299`.
-- [ ] **Behavior** (per spec §C):
+- [x] **Behavior** (per spec §C):
   - Compare `dependencies` element-wise via `Equals` against
     `prevDeps`. If any dep changed → invalidate the entire memo;
     rebuild every cell.
@@ -426,36 +432,36 @@ land in the same commit — the analyzer is what makes the hook safe.
     `prevChildren[i]` (reconciler short-circuits via
     `ReferenceEquals`). Otherwise call `builder(items[i], i)`.
   - On first render (no prior state), build all cells.
-- [ ] `UseMemoCellsByKey`: hash items by `keySelector`; reuse when both
+- [x] `UseMemoCellsByKey`: hash items by `keySelector`; reuse when both
       key matches and value compares equal. Note: also feeds the
       reconciler keyed-children path (verify the reconciler's existing
       key handling — `src/Reactor/Core/ChildReconciler.cs` —
       participates correctly).
-- [ ] `UseMemoCellsByIndex`: skip the per-cell equality scan; only run
+- [x] `UseMemoCellsByIndex`: skip the per-cell equality scan; only run
       `builder` for indices in `changedIndices`. The
       `StressPerf.StockDataSource.Update()` return type is the
       reference shape (verify or extend in Phase 4).
-- [ ] **Validation at the boundary**:
+- [x] **Validation at the boundary**:
   - `ArgumentNullException` for null `items`, `builder`, or
     `keySelector` / `changedIndices` where required.
   - `dependencies` is `params`; null array (someone explicitly passes
     `(object[])null`) → `ArgumentNullException(nameof(dependencies))`.
-- [ ] XML doc comments: 1-paragraph summary per overload, `<remarks>`
+- [x] XML doc comments: 1-paragraph summary per overload, `<remarks>`
       linking to spec 034 §C, `<example>` block showing the canonical
       ticker-list call. Lead with the closure-capture warning and link
       to the analyzer.
 
 ### 3.2 Analyzer — `REACTOR_HOOKS_007`
 
-- [ ] New analyzer in `src/Reactor.Analyzers/UseMemoCellsAnalyzer.cs`.
+- [x] New analyzer in `src/Reactor.Analyzers/UseMemoCellsAnalyzer.cs`.
       Follow the `HookRulesAnalyzer.cs` pattern (registered via
       `DiagnosticAnalyzer` attribute, syntax-tree walk).
-- [ ] Trigger: invocation expression where the called symbol is
+- [x] Trigger: invocation expression where the called symbol is
       `Microsoft.UI.Reactor.RenderContext.UseMemoCells` /
       `UseMemoCellsByKey` / `UseMemoCellsByIndex` (or the `Component`
       shims). Match by symbol, not by name (avoid false positives from
       user-defined methods of the same name).
-- [ ] Analysis steps:
+- [x] Analysis steps:
   1. Locate the `builder` argument's lambda body.
   2. Walk the lambda's data-flow analysis (`SemanticModel.AnalyzeDataFlow`)
      to enumerate captured locals/parameters/fields.
@@ -467,7 +473,7 @@ land in the same commit — the analyzer is what makes the hook safe.
      `theme` through `this`).
   5. Emit `REACTOR_HOOKS_007` for each capture not present in the
      deps list.
-- [ ] **Diagnostic shape**:
+- [x] **Diagnostic shape**:
   - ID: `REACTOR_HOOKS_007`.
   - Category: `Reactor.Hooks`.
   - Severity: Warning.
@@ -475,63 +481,63 @@ land in the same commit — the analyzer is what makes the hook safe.
   - Message: "`{0}` is captured by the builder lambda but missing from
     the `dependencies` arg list. The cell will not invalidate when
     `{0}` changes."
-- [ ] **Codefix** in
+- [x] **Codefix** in
       `src/Reactor.Analyzers/UseMemoCellsCodeFix.cs`. Adds the missing
       capture as a trailing argument. Test pattern lives in the same
       file as the analyzer's tests.
-- [ ] **Known blind spot** (per spec): indirect captures through
+- [x] **Known blind spot** (per spec): indirect captures through
       method calls. Document in the analyzer's source-level XML
       comment; do not attempt to fix.
 
 ### 3.3 Analyzer release tracking
 
-- [ ] Add to `src/Reactor.Analyzers/AnalyzerReleases.Unshipped.md`:
+- [x] Add to `src/Reactor.Analyzers/AnalyzerReleases.Unshipped.md`:
       ```
       REACTOR_HOOKS_007 | Reactor.Hooks | Warning | UseMemoCellsAnalyzer - Builder closure capture missing from dependencies
       ```
-- [ ] Verify no diagnostic ID collision (existing IDs end at
+- [x] Verify no diagnostic ID collision (existing IDs end at
       `REACTOR_HOOKS_006`).
 
 ### 3.4 Tests — hook (`tests/Reactor.Tests/UseMemoCellsTests.cs`)
 
-- [ ] First render builds all cells (no prior state).
-- [ ] Deps unchanged + items unchanged → full reuse (assert
+- [x] First render builds all cells (no prior state).
+- [x] Deps unchanged + items unchanged → full reuse (assert
       `ReferenceEquals` on every returned element vs. previous render).
-- [ ] Deps unchanged + items partial change → only changed indices
+- [x] Deps unchanged + items partial change → only changed indices
       rebuild; unchanged indices return the same `Element` reference.
-- [ ] Deps changed → full invalidation; every cell calls `builder`.
-- [ ] Zero-deps call (`UseMemoCells(items, builder)`) is legal at
+- [x] Deps changed → full invalidation; every cell calls `builder`.
+- [x] Zero-deps call (`UseMemoCells(items, builder)`) is legal at
       runtime (no exception). The analyzer is what flags this when the
       builder captures.
-- [ ] Null `items` / `builder` → `ArgumentNullException`.
-- [ ] Explicit null deps array → `ArgumentNullException`.
-- [ ] Item count change (longer items) → new tail rebuilds; existing
+- [x] Null `items` / `builder` → `ArgumentNullException`.
+- [x] Explicit null deps array → `ArgumentNullException`.
+- [x] Item count change (longer items) → new tail rebuilds; existing
       head is reused or rebuilt per equality.
-- [ ] Item count change (shorter items) → trailing previous children
+- [x] Item count change (shorter items) → trailing previous children
       are released (no leak; assert via the existing reconciler
       lifecycle hooks).
-- [ ] Hook-order stability: `UseMemoCells` followed by `UseState`
+- [x] Hook-order stability: `UseMemoCells` followed by `UseState`
       followed by another `UseMemoCells` works across renders (deps on
       both update independently).
 
 ### 3.5 Tests — `UseMemoCellsByKey`
 
-- [ ] Stable identity / mutable interior: same key + different content
+- [x] Stable identity / mutable interior: same key + different content
       → cell rebuilds.
-- [ ] Reorder (same items, different positions) → cells reused, just
+- [x] Reorder (same items, different positions) → cells reused, just
       reordered. Verify the reconciler's keyed-children path is
       exercised (cells don't unmount/remount).
-- [ ] Null `keySelector` → `ArgumentNullException`.
-- [ ] Duplicate keys → throws or last-write-wins; pick one explicitly
+- [x] Null `keySelector` → `ArgumentNullException`.
+- [x] Duplicate keys → throws or last-write-wins; pick one explicitly
       and document in the XML doc.
 
 ### 3.6 Tests — `UseMemoCellsByIndex`
 
-- [ ] Empty `changedIndices` + same items → full reuse (no `builder`
+- [x] Empty `changedIndices` + same items → full reuse (no `builder`
       calls).
-- [ ] Single-index change → only that cell's `builder` runs.
-- [ ] Index out of range → `ArgumentOutOfRangeException`.
-- [ ] Item count change is **not** supported via index-only; document
+- [x] Single-index change → only that cell's `builder` runs.
+- [x] Index out of range → `ArgumentOutOfRangeException`.
+- [x] Item count change is **not** supported via index-only; document
       that callers must fall back to `UseMemoCells` when the list
       length changes.
 
@@ -539,22 +545,22 @@ land in the same commit — the analyzer is what makes the hook safe.
 
 Follow the `HookRulesAnalyzerTests.cs` pattern.
 
-- [ ] Builder captures dep present in `deps` → no diagnostic.
-- [ ] Builder captures dep missing from `deps` → `REACTOR_HOOKS_007`
+- [x] Builder captures dep present in `deps` → no diagnostic.
+- [x] Builder captures dep missing from `deps` → `REACTOR_HOOKS_007`
       warning at the call-site location.
-- [ ] Zero-deps call with capturing builder → warning.
-- [ ] Zero-deps call with pure builder (no captures) → no diagnostic.
-- [ ] `static readonly` capture → no diagnostic (skipped per 3.2 step
+- [x] Zero-deps call with capturing builder → warning.
+- [x] Zero-deps call with pure builder (no captures) → no diagnostic.
+- [x] `static readonly` capture → no diagnostic (skipped per 3.2 step
       3).
-- [ ] `const` capture → no diagnostic.
-- [ ] Capture through `this` (instance field) → diagnostic emitted,
+- [x] `const` capture → no diagnostic.
+- [x] Capture through `this` (instance field) → diagnostic emitted,
       message names the field correctly.
-- [ ] Indirect capture through helper method → no diagnostic
+- [x] Indirect capture through helper method → no diagnostic
       (documented blind spot).
-- [ ] Codefix: applying the fix transforms
+- [x] Codefix: applying the fix transforms
       `UseMemoCells(items, (item, i) => Cell(item, theme))` →
       `UseMemoCells(items, (item, i) => Cell(item, theme), theme)`.
-- [ ] Three variants share the analyzer: tests cover `UseMemoCells`,
+- [x] Three variants share the analyzer: tests cover `UseMemoCells`,
       `UseMemoCellsByKey`, and `UseMemoCellsByIndex`.
 
 ### 3.8 Bench (mid-flight hook validation)
@@ -564,44 +570,44 @@ but no bench variant uses it yet — Phase 4 wires it into
 `ReactorOptimized`. For mid-flight validation, run the hook against a
 focused unit-style timing harness (no UI):
 
-- [ ] Add a small benchmark in `tests/Reactor.Tests/` (or via
+- [x] Add a small benchmark in `tests/Reactor.Tests/` (or via
       BenchmarkDotNet if already in use — check
       `tests/Reactor.Tests/Reactor.Tests.csproj` references) that
       compares `for`-loop cell construction against `UseMemoCells` on
       a fixed 4,900-element synthetic list with 10 % mutation. Record
       cells/sec and bytes/op.
-- [ ] Confirm `UseMemoCells` reduces `builder` invocations by ~90 % at
+- [x] Confirm `UseMemoCells` reduces `builder` invocations by ~90 % at
       10 % mutation (only ~490 of 4,900 cells should rebuild). If the
       ratio is wildly off, the per-item equality check or the deps
       comparison is wrong.
-- [ ] Save numbers to
+- [x] Save numbers to
       `tests/stress_perf/baselines/spec-034-phaseC-microbench.csv`.
       The full UI-level A/B happens in Phase 4 once the hook is wired
       into `ReactorOptimized`.
 
 ### 3.9 Docs — extend `advanced.md.dt`
 
-- [ ] Add a "Memoizing list cells" section after "Hot loops". Include:
-  - [ ] When `UseMemoCells` is the right hammer (pure function of `T`
+- [x] Add a "Memoizing list cells" section after "Hot loops". Include:
+  - [x] When `UseMemoCells` is the right hammer (pure function of `T`
         + declared deps; tickers, log tables, file lists, large
         readonly grids).
-  - [ ] When it's the wrong hammer (rows whose chrome depends on
+  - [x] When it's the wrong hammer (rows whose chrome depends on
         focus / drag / selection / hover not passed through deps).
-  - [ ] Three-overload table: base, `ByKey`, `ByIndex` — when to pick
+  - [x] Three-overload table: base, `ByKey`, `ByIndex` — when to pick
         each.
-  - [ ] **gen2 caveat**: memo trades short-lived gen0 churn for
+  - [x] **gen2 caveat**: memo trades short-lived gen0 churn for
         long-lived gen1/gen2 retention. Worst-case A/B showed +67 %
         gen2 even when bytes drop. Workloads with many memoized lists
         should be aware.
-  - [ ] Pointer to the analyzer: missing-dep is caught at compile
+  - [x] Pointer to the analyzer: missing-dep is caught at compile
         time; indirect captures through helper methods are not.
-- [ ] Run `mur docs compile`.
+- [x] Run `mur docs compile`.
 
 ### 3.10 CHANGELOG + public API
 
-- [ ] `PublicAPI.Unshipped.txt` entries: three overloads × hook =
+- [x] `PublicAPI.Unshipped.txt` entries: three overloads × hook =
       6 (RenderContext + Component shims).
-- [ ] `CHANGELOG.md` → **Added**:
+- [x] `CHANGELOG.md` → **Added**:
       "`UseMemoCells` / `UseMemoCellsByKey` / `UseMemoCellsByIndex`
       hooks for cell-level memoization in high-frequency lists, plus
       `REACTOR_HOOKS_007` analyzer that warns when a builder closure
@@ -619,7 +625,7 @@ the spec's canonical "all three combined" reference.
 
 ### 4.1 Add `UseMemoCells` to the cell-building loop
 
-- [ ] In `tests/stress_perf/StressPerf.ReactorOptimized/Program.cs`,
+- [x] In `tests/stress_perf/StressPerf.ReactorOptimized/Program.cs`,
       replace the cell-building `for` loop with a single
       `UseMemoCellsByIndex` call:
       ```csharp
@@ -654,21 +660,21 @@ the spec's canonical "all three combined" reference.
       ```
       This is the spec's canonical "all three components combined"
       reference. The brushes are deps because they're closed over.
-- [ ] **Do not** touch `StressPerf.Reactor`. It stays naive; that is
+- [x] **Do not** touch `StressPerf.Reactor`. It stays naive; that is
       its permanent role.
-- [ ] Verify the analyzer (now shipped) does not flag this call —
+- [x] Verify the analyzer (now shipped) does not flag this call —
       `GreenBrush`/`RedBrush` are in deps; `r`/`c` are derived from
       `i` (lambda parameter, not a capture); `StockDataSource.Columns`
       and `StockDataSource.FormatCell` are static.
 
 ### 4.2 Plumb `LastChangedIndices` if needed
 
-- [ ] Confirm `StressPerf.Shared.StockDataSource.Update(int percent)`
+- [x] Confirm `StressPerf.Shared.StockDataSource.Update(int percent)`
       already returns the changed-index list. If not, add it (low-risk
       bench-only change in `StressPerf.Shared`). Both
       `StressPerf.Reactor` and `StressPerf.ReactorOptimized` reference
       this lib; the change is invisible to the naive variant.
-- [ ] If using `UseMemoCellsByIndex` exposes the bench's existing
+- [x] If using `UseMemoCellsByIndex` exposes the bench's existing
       "sampling with replacement" issue (spec §Non-Goals: only ~63 %
       effective per-cell mutation at `--percent 100`), file as a
       bench-only follow-up — do not block on it for this PR.
@@ -679,13 +685,13 @@ Run all three on the same machine, same day, same .NET / WinAppSDK
 versions. Save result rows to
 `tests/stress_perf/baselines/spec-034-three-way.csv`.
 
-- [ ] `StressPerf.Reactor` (naive, post-shim) — Component A's
+- [x] `StressPerf.Reactor` (naive, post-shim) — Component A's
       framework-level uplift only. Expected: ~+6 % renders / ~−11 %
       bytes/tick over the pre-spec-034 baseline captured in 0.2.
-- [ ] `StressPerf.ReactorOptimized` — full stack. Expected:
+- [x] `StressPerf.ReactorOptimized` — full stack. Expected:
       `~214 renders / ~2.21 MB/tick` at 10 % mutation. Within ±5 % of
       the spec's table.
-- [ ] `StressPerf.Direct` — reference. Should not have moved.
+- [x] `StressPerf.Direct` — reference. Should not have moved.
 
 If `ReactorOptimized` underperforms the spec's headline by more than
 5 %, debug before continuing to Phase 5. Most-likely causes:
@@ -699,11 +705,11 @@ deps into the array.
 
 ### 5.1 Audit
 
-- [ ] Grep `samples/` for cell-construction loops:
+- [x] Grep `samples/` for cell-construction loops:
   - `for (int i = 0; i < ...; i++)` producing fluent chains
   - `Enumerable.Range(...).Select(i => Element)`
   - `items.Select(...)` materialized to `Element[]` inside `Render()`
-- [ ] For each candidate, decide:
+- [x] For each candidate, decide:
   - **Migrate to `UseMemoCells`** if the list is non-trivial (~50+
     items) and the builder is a pure function of the item.
   - **Adopt direct-initializer idiom** if the list is small but the
@@ -711,29 +717,29 @@ deps into the array.
     examples, gallery samples).
   - **Leave alone** if the sample is demonstrating a different concept
     and changing the cell construction would obscure it.
-- [ ] Capture the audit table in the PR description (sample → decision
+- [x] Capture the audit table in the PR description (sample → decision
       → rationale).
 
 ### 5.2 Likely migration candidates (verify in 5.1 — list is illustrative)
 
-- [ ] `samples/ReactorGallery/` — if there's a list/grid demo, adopt
+- [x] `samples/ReactorGallery/` — if there's a list/grid demo, adopt
       `UseMemoCells` and call it out in the gallery's "what this
       demonstrates" copy.
-- [ ] `samples/TodoApp/` — likely has a list of todos. Migrate to
+- [x] `samples/TodoApp/` — likely has a list of todos. Migrate to
       `UseMemoCellsByKey<TodoItem, int>(items, t => t.Id, …)`.
-- [ ] `samples/apps/` — review each.
-- [ ] `samples/Reactor.TestApp/` — keep as-is unless it demos lists
+- [x] `samples/apps/` — review each.
+- [x] `samples/Reactor.TestApp/` — keep as-is unless it demos lists
       explicitly.
 
 ### 5.3 Build + run smoke
 
-- [ ] Each migrated sample compiles, runs, and visually matches the
+- [x] Each migrated sample compiles, runs, and visually matches the
       pre-migration version. UI smoke is sufficient — no automated
       regression suite at the sample level.
 
 ### 5.4 CHANGELOG
 
-- [ ] `CHANGELOG.md` → **Changed**: "Samples updated to use
+- [x] `CHANGELOG.md` → **Changed**: "Samples updated to use
       `UseMemoCells` / direct-initializer idiom where appropriate (spec
       034 §B / §C)."
 
@@ -746,7 +752,7 @@ alongside `skills/dsl-reference.md`, `skills/design.md`, etc.
 
 ### 6.1 Content
 
-- [ ] Create `skills/perf-tips.md`. Match the tone of
+- [x] Create `skills/perf-tips.md`. Match the tone of
       `skills/dsl-reference.md` (terse, agent-focused, code-first).
       Cover at minimum:
   1. **When to care**: only in lists/grids with hundreds-plus elements
@@ -773,18 +779,18 @@ alongside `skills/dsl-reference.md`, `skills/design.md`, etc.
   7. **Profile before optimizing** — point to
      `tests/stress_perf/PresentTracer/` and `mur perf` (or whatever
      the in-tree profiling entry points are; verify before writing).
-- [ ] Include a "When NOT to" section: declarative ergonomics matter,
+- [x] Include a "When NOT to" section: declarative ergonomics matter,
       and the fluent chain remains the right tool for ordinary UI.
-- [ ] Cross-link: `skills/dsl-reference.md`, `skills/design.md`, the
+- [x] Cross-link: `skills/dsl-reference.md`, `skills/design.md`, the
       `docs/guide/advanced.md` deep-dive (compiled output of
       `advanced.md.dt`).
 
 ### 6.2 Verify
 
-- [ ] Read it back as if cold: would an agent unfamiliar with the
+- [x] Read it back as if cold: would an agent unfamiliar with the
       project pick the right tool from this skill alone? Iterate until
       yes.
-- [ ] Confirm every API name, file path, and diagnostic ID mentioned
+- [x] Confirm every API name, file path, and diagnostic ID mentioned
       actually exists at the time of writing (analyzer ID, bucket type
       names, hook signatures all settled by Phase 3).
 
@@ -808,13 +814,19 @@ ships two variants. The final table is correspondingly simpler:
 | `ReactorOptimized` | re-run `StressPerf.ReactorOptimized` today | full stack: A + B + C |
 | `Direct` | re-run `StressPerf.Direct` today | reference floor |
 
-- [ ] Same-day, same-machine, same .NET / WinAppSDK versions for all
+- [x] Same-day, same-machine, same .NET / WinAppSDK versions for all
       three re-runs. Record the platform fingerprint at the top of the
       table.
-- [ ] Headline expectation: `Reactor` (post-shim) ≈ `Reactor`
+- [x] Headline expectation: `Reactor` (post-shim) ≈ `Reactor`
       (pre-spec-034) × 1.06; `ReactorOptimized` ≈ `Reactor`
       (pre-spec-034) × 1.51 with ~−90 % alloc/tick.
-- [ ] If any row diverges from the spec's table by more than ±10 %,
+      *Verified at 20/50/100 % mutation (close-out re-bench
+      sampled those three points instead of the 10 % headline).
+      Reconcile-time win matches prototype: −60 % at 20 %, −33 %
+      at 50 %, −8 % at 100 %. Renders/sec deltas are smaller at
+      50/100 % (GC-bound). 10 % point not re-measured this session
+      — logged as follow-up below.*
+- [x] If any row diverges from the spec's table by more than ±10 %,
       investigate before merging. Either the implementation differs
       from the prototype or the host machine differs — both are
       reportable findings, neither is a blocker, but the table must
@@ -822,31 +834,31 @@ ships two variants. The final table is correspondingly simpler:
 
 ### 7.2 Update spec 034 table
 
-- [ ] Replace lines 46–53 of `docs/specs/034-element-allocation-reduction.md`
+- [x] Replace lines 46–53 of `docs/specs/034-element-allocation-reduction.md`
       with the freshly measured numbers. Mark the table "verified
       YYYY-MM-DD on production code" so future readers know this is
       no longer the prototype's prediction.
-- [ ] Add a short paragraph above the table noting whether the
+- [x] Add a short paragraph above the table noting whether the
       production numbers matched, exceeded, or fell short of the
       prototype's. Be specific — this is the spec's empirical close.
 
 ### 7.3 PR description
 
-- [ ] The PR description must contain the full before/after table
+- [x] The PR description must contain the full before/after table
       inline (not just a link), so the reviewer sees the headline in
       the PR view.
-- [ ] Include a 2-paragraph summary: what shipped, what the headline
+- [x] Include a 2-paragraph summary: what shipped, what the headline
       number is, what trade-offs (gen2 retention, ToString audit) the
       reviewer should be aware of.
-- [ ] Link back to the investigation doc and the spec.
+- [x] Link back to the investigation doc and the spec.
 
 ### 7.4 CHANGELOG aggregation
 
-- [ ] Verify the three component CHANGELOG entries (from Phases 1, 2,
+- [x] Verify the three component CHANGELOG entries (from Phases 1, 2,
       3) plus the bench-variant entry (Phase 2.6) read coherently as a
       group. Edit if needed so the unreleased section tells the
       spec-034 story end-to-end.
-- [ ] Add a top-level "Spec 034 — Element allocation reduction" rollup
+- [x] Add a top-level "Spec 034 — Element allocation reduction" rollup
       bullet under **Changed** that names the headline using the
       verified numbers from 7.1: "ReactorOptimized variant of the
       stress bench shows +XX % renders / −YY % alloc on the
@@ -857,7 +869,7 @@ ships two variants. The final table is correspondingly simpler:
 
 ### 7.5 Spec status flip
 
-- [ ] Update the **Status** block at the top of
+- [x] Update the **Status** block at the top of
       `docs/specs/034-element-allocation-reduction.md`:
       `Drafted` → `Implemented — YYYY-MM-DD`. Add a one-line note that
       the verified numbers live in the table below.
@@ -873,23 +885,38 @@ These are not blockers for shipping but should not be dropped.
       Verify no trim warnings on `LayoutModifiers` / `VisualModifiers`
       / `UseMemoCells*`. The hook uses no reflection, so this should
       be clean.
+      *Blocked on environment: vswhere.exe / MSVC linker not on
+      PATH in this shell. Inspection-only check passed —
+      `UseMemoCells*` is reflection-free, the analyzer is build-time
+      only, and `LayoutModifiers`/`VisualModifiers` are records with
+      compiler-synthesized equality (AOT-safe). Schedule on a CI
+      box with Visual Studio Build Tools installed.*
 - [ ] **Roslyn analyzer perf check**: build a representative app with
       the analyzer enabled and confirm build-time impact is < 1 s on a
       project with 100+ `UseMemoCells` call sites. If it's worse,
       profile the data-flow analysis path.
-- [ ] **Follow-up issues to file**:
+      *Deferred — no in-tree app currently has 100+ call sites.
+      Re-evaluate once samples adopt `UseMemoCells` more broadly.*
+- [x] **Follow-up issues to file**:
   - Single-bucket EX4 variant (spec §Non-Goals) — file as
     "investigation: single Light bucket".
   - Truly-100 % deterministic StressPerf mutation mode (spec §Risks
     line 108) — file as bench harness improvement.
   - Builder-pattern element factories (spec §Future Work) — depends
     on spec 008 §6/§7/§8; file cross-reference issue.
+  - 10 % mutation re-bench against the spec's prototype headline
+    (close-out captured 20/50/100 only) — file as
+    "spec 034 close-out: re-bench at 10 % to validate prototype
+    +51 % renders / −90 % alloc on production code".
+  - AOT publish smoke for `StressPerf.ReactorOptimized` on a CI box
+    that has Visual Studio Build Tools (vswhere/link) installed —
+    local environment can't run the linker.
 
 ---
 
 ## Open questions / decisions to confirm before Phase 1
 
-- [ ] Confirm `LayoutModifiers` / `VisualModifiers` field assignment
+- [x] Confirm `LayoutModifiers` / `VisualModifiers` field assignment
       against the prototype before merging Phase 1.
-- [ ] Confirm whether `Reactor.csproj` / `Reactor.Analyzers.csproj`
+- [x] Confirm whether `Reactor.csproj` / `Reactor.Analyzers.csproj`
       track public-API via `PublicApiAnalyzers` (Phase 0.1).

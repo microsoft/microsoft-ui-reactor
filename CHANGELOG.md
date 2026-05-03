@@ -99,14 +99,18 @@ to land under these conventions; subsequent specs follow this shape.
 
 - **Spec 034 — Element allocation reduction.** Three independent
   allocation cuts in one PR: bucketed `ElementModifiers` (transparent
-  storage shim, ~−11% bytes/tick on the 4,900-cell stress grid),
-  direct-record-initializer idiom for inner cell loops (~−60% bytes
-  per cell), and `UseMemoCells` cell-level memoization (~+49% renders
-  on 10% mutation). The combined `ReactorOptimized` variant of the
-  stress bench is the spec's empirical close — see
-  `docs/specs/034-element-allocation-reduction.md` for the full A/B
-  table from the investigation prototype. Production re-bench is a
-  follow-up. (spec 034)
+  storage shim, ~−11% bytes/tick on the 4,900-cell stress grid from
+  the prototype), direct-record-initializer idiom for inner cell loops
+  (~−60% bytes per cell), and `UseMemoCells` cell-level memoization
+  (~+49% renders on 10% mutation). Production re-bench at PR-close
+  (ARM64 Release, 10s, no ETW) shows the combined `ReactorOptimized`
+  stack cuts reconcile time by **−60% at 20% mutation** (35.9 ms →
+  14.2 ms) and **−33% at 50% mutation** (44.8 ms → 30.0 ms) vs naive
+  `Reactor` on the same post-shim build, while clearing
+  `StressPerf.Direct` outright at every mutation rate sampled. See
+  `docs/specs/034-element-allocation-reduction.md` § "Verified
+  close-out — 2026-05-02" for the matrix and the prototype table for
+  the 10% headline. (spec 034)
 - `ElementModifiers` now stores layout and visual fields in
   `LayoutModifiers` / `VisualModifiers` sub-records. Existing call sites are
   unaffected — public properties (`Padding`, `Margin`, `Foreground`,

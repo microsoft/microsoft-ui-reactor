@@ -2,15 +2,20 @@
 
 ## Status
 
-- **Implemented** — 2026-05-02. All three components ship in one PR
+- **Implemented — 2026-05-02.** All three components ship in one PR
   (Reactor `LayoutModifiers` / `VisualModifiers` shim, `UseMemoCells*`
   hook trio, `REACTOR_HOOKS_007` analyzer + codefix, and the
-  `StressPerf.ReactorOptimized` reference variant). The verified
-  numbers belong in the table below — at the time of writing the
-  production code is in place but a same-day re-bench has not been
-  captured; the prototype's table from `reactor-vs-direct-10pct.md`
-  remains the operating reference until that re-bench lands as a
-  follow-up.
+  `StressPerf.ReactorOptimized` reference variant). Verified numbers
+  from a same-day three-variant bench (ARM64 Release, 10 s,
+  20 / 50 / 100 % mutation, no ETW) live in the
+  [Verified close-out — 2026-05-02](#verified-close-out--2026-05-02)
+  section below. The headline reconcile-time win at the spec's
+  primary 20 % mutation point is **−60 % reconcile time
+  (35.9 ms → 14.2 ms) and +10 % renders** for the all-three-stack
+  vs. naive Reactor on the same post-shim build. The
+  `reactor-vs-direct-10pct.md` prototype table at 10 % mutation
+  remains the reference for that data point and was not re-measured
+  in the close-out.
 - **Investigation complete** — see `docs/perf-investigations/reactor-vs-direct-10pct.md`
   for the full analysis, hypothesis log, and same-day measured A/B data that
   motivates this spec. That document is reference material; this spec is the
@@ -650,6 +655,70 @@ replacement. A truly-100 % mode would isolate the equality-check
 overhead in `UseMemoCells` from the partial-reuse benefit, giving cleaner
 worst-case numbers. Bench-only change; logged for Component C's bench
 test plan.
+
+---
+
+## Verified close-out — 2026-05-02
+
+Same-day, same-machine three-variant bench captured at PR-close on the
+production branch. Configuration: ARM64 Release, 10 s headless, no
+ETW (the script lives at `tests/stress_perf/run_spec034_bench.ps1`;
+raw CSV at `tests/stress_perf/baselines/spec-034-final.csv`). Three
+mutation rates were sampled — the prototype's headline 10 % point is
+**not** part of this re-bench; the prototype table above remains the
+reference for that data point.
+
+| Mutation | Variant            | Renders | Renders/s | Reconcile (ms) | ΔReconcile vs Reactor |
+|---------:|--------------------|--------:|----------:|---------------:|----------------------:|
+|     20 % | Reactor            |      77 |     7.7   |          35.9  |                  —    |
+|     20 % | **ReactorOptimized** | **85** | **8.5**  |        **14.2**|             **−60 %** |
+|     20 % | Direct             |      76 |     7.6   |              — |                  —    |
+|     50 % | Reactor            |      50 |     5.0   |          44.8  |                  —    |
+|     50 % | ReactorOptimized   |      51 |     5.1   |          30.0  |               −33 %   |
+|     50 % | Direct             |      44 |     4.4   |              — |                  —    |
+|    100 % | Reactor            |      34 |     3.4   |          53.4  |                  —    |
+|    100 % | ReactorOptimized   |      35 |     3.5   |          49.1  |                −8 %   |
+|    100 % | Direct             |      31 |     3.1   |              — |                  —    |
+
+**Reads.**
+
+1. **Memoization tracks the partial-reuse opportunity, as predicted.**
+   At 20 % mutation (~80 % cell reuse) `UseMemoCellsByIndex` cuts
+   reconcile time by 60 %; at 50 % (~50 % reuse) the win drops to
+   33 %; at 100 % (sampling-with-replacement, ~63 % effective
+   mutation) the win shrinks to 8 % — the per-cell equality scan
+   begins to claw back what little reuse remains. This is the spec's
+   stated trade-off, measured.
+2. **Renders/sec moves less than reconcile time at high mutation
+   rates** because `Reactor` and `ReactorOptimized` are both
+   GC-bound at 50 / 100 % on this hardware — gen2 dominates above
+   ~30 % mutation. The render delta widens at 20 % and narrows at
+   100 %, mirroring reconcile time.
+3. **Direct stays the floor** but the gap is small at 20 % (Reactor
+   77 vs Direct 76) and `ReactorOptimized` clears Direct outright at
+   every mutation rate sampled (85 vs 76 at 20 %; 51 vs 44 at 50 %;
+   35 vs 31 at 100 %). Spec's prediction was that
+   `ReactorOptimized` would meet or exceed Direct on this workload —
+   confirmed across the matrix.
+
+**What this re-bench does not cover.**
+
+- **The 10 % mutation headline number.** The spec table at the top
+  (Reactor 142 → ReactorOptimized 214, +51 %) was measured on the
+  prototype against a different physical machine. Re-measuring at
+  10 % is logged as a follow-up (Phase 7.4 in the implementation
+  task list); the current data is sufficient to validate the
+  spec's behavioral predictions across the mutation curve.
+- **Allocation bytes / gen2 counts.** Capturing those needs the ETW
+  PresentTracer script, which requires admin and was not run for
+  this close-out. The reconcile-time delta is the cleanest proxy
+  this bench produces and tracks the alloc story directly per the
+  prototype's correlation.
+- **Pre-spec-034 baseline.** Phase 0.2's "before" capture against
+  unmodified main is preserved in commit history but was not
+  re-measured here; Component A's transparent storage shim is
+  already live in the `Reactor` row above and that benefit cannot be
+  isolated post-merge without reverting.
 
 ---
 
