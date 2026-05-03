@@ -103,11 +103,16 @@ to land under these conventions; subsequent specs follow this shape.
   the prototype), direct-record-initializer idiom for inner cell loops
   (~−60% bytes per cell), and `UseMemoCells` cell-level memoization
   (~+49% renders on 10% mutation). Production re-bench at PR-close
-  (ARM64 Release, 10s, no ETW) shows the combined `ReactorOptimized`
-  stack cuts reconcile time by **−60% at 20% mutation** (35.9 ms →
-  14.2 ms) and **−33% at 50% mutation** (44.8 ms → 30.0 ms) vs naive
-  `Reactor` on the same post-shim build, while clearing
-  `StressPerf.Direct` outright at every mutation rate sampled. See
+  (ARM64 Release, 10s, no ETW): the combined `ReactorOptimized` stack
+  cuts reconcile time by **−60% at 20% mutation** (35.9 ms → 14.2 ms)
+  and **−33% at 50% mutation** (44.8 ms → 30.0 ms) vs the naive
+  `Reactor` variant on the same post-shim build, and clears
+  `StressPerf.Direct` outright at every mutation rate sampled.
+  Component A in isolation (naive Reactor pre-shim vs. post-shim, no
+  app-code changes) showed renders/sec deltas within run-to-run noise
+  at 20/50/100% mutation; the prototype's predicted +6% renders for
+  Component A is at 10% mutation, a point not re-bench'd in
+  close-out. See
   `docs/specs/034-element-allocation-reduction.md` § "Verified
   close-out — 2026-05-02" for the matrix and the prototype table for
   the 10% headline. (spec 034)

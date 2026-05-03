@@ -1,0 +1,4 @@
+"Variant","Percent","Renders","RendersPerSec","FpsAvg","UpdateMsAvg","ReconcileMsAvg","PeakMemMB"
+"Reactor (pre-spec-034)","20","81","8.1","15.9","0.2","35.1","491"
+"Reactor (pre-spec-034)","50","48","4.8","9.7","0.3","53.8","485"
+"Reactor (pre-spec-034)","100","34","3.4","7.1","0.4","55.3","503"

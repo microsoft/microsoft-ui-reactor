@@ -1,0 +1,72 @@
+Pre-spec-034 Reactor bench @ 2026-05-02T23:35:21.6913904-07:00 (ARM64 Release, exe=C:\Users\andersonch\Code\reactor1-prespec034\tests\stress_perf\StressPerf.Reactor\bin\ARM64\Release\net9.0-windows10.0.22621.0\StressPerf.Reactor.exe)
+
+==== Reactor (pre-spec-034) @ 20% / 10s ====
+=== StressPerf.Reactor ===
+Duration:    10.6s
+Percent:     20%
+Avg FPS:     15.9
+Min FPS:     11.8
+Max FPS:     17.0
+Avg Update:  0.2 ms
+Max Update:  1.4 ms
+Total Renders: 81
+Avg Reconcile: 35.1 ms
+Max Reconcile: 75.3 ms
+  Avg Tree:    24.3 ms
+  Avg Diff:    10.7 ms
+  Avg Effects: 0.0 ms
+Avg Combined:  35.3 ms  (renders/tick: 1.00)
+Avg Memory:  478.7 MB
+Peak Memory: 491.0 MB
+
+
+==== Reactor (pre-spec-034) @ 50% / 10s ====
+=== StressPerf.Reactor ===
+Duration:    10.6s
+Percent:     50%
+Avg FPS:     9.7
+Min FPS:     8.9
+Max FPS:     11.0
+Avg Update:  0.3 ms
+Max Update:  1.7 ms
+Total Renders: 48
+Avg Reconcile: 53.8 ms
+Max Reconcile: 92.3 ms
+  Avg Tree:    32.6 ms
+  Avg Diff:    21.2 ms
+  Avg Effects: 0.0 ms
+Avg Combined:  54.1 ms  (renders/tick: 1.00)
+Avg Memory:  471.9 MB
+Peak Memory: 485.0 MB
+
+
+==== Reactor (pre-spec-034) @ 100% / 10s ====
+=== StressPerf.Reactor ===
+Duration:    10.7s
+Percent:     100%
+Avg FPS:     7.1
+Min FPS:     5.8
+Max FPS:     10.4
+Avg Update:  0.4 ms
+Max Update:  2.0 ms
+Total Renders: 34
+Avg Reconcile: 55.3 ms
+Max Reconcile: 108.1 ms
+  Avg Tree:    18.8 ms
+  Avg Diff:    36.5 ms
+  Avg Effects: 0.0 ms
+Avg Combined:  55.7 ms  (renders/tick: 1.00)
+Avg Memory:  484.8 MB
+Peak Memory: 503.0 MB
+
+
+==== RESULTS ====
+
+Variant                Percent Renders RendersPerSec FpsAvg UpdateMsAvg ReconcileMsAvg PeakMemMB
+-------                ------- ------- ------------- ------ ----------- -------------- ---------
+Reactor (pre-spec-034)      20      81          8.10  15.90        0.20          35.10    491.00
+Reactor (pre-spec-034)      50      48          4.80   9.70        0.30          53.80    485.00
+Reactor (pre-spec-034)     100      34          3.40   7.10        0.40          55.30    503.00
+
+
+DONE @ 2026-05-02T23:35:59.4590655-07:00

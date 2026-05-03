@@ -701,6 +701,41 @@ reference for that data point.
    `ReactorOptimized` would meet or exceed Direct on this workload —
    confirmed across the matrix.
 
+**Component A in isolation — naive `Reactor` before vs. after.**
+
+The same naive `StressPerf.Reactor` source compiled against the
+pre-spec-034 commit (`247a525`, parent of the Component A merge) was
+re-bench'd via `git worktree` to isolate Component A's transparent
+storage shim. **No app-code changes — same fluent-chain usage on both
+sides.** Raw data in `tests/stress_perf/baselines/spec-034-reactor-before.csv`;
+script at `tests/stress_perf/run_spec034_reactor_before.ps1`.
+
+| Mutation | Reactor pre-A renders | Reactor post-A renders | ΔRenders | Reactor pre-A reconcile (ms) | Reactor post-A reconcile (ms) | ΔReconcile |
+|---------:|----------------------:|-----------------------:|---------:|-----------------------------:|------------------------------:|-----------:|
+|     20 % |                    81 |                     77 |  −4.9 %  |                         35.1 |                          35.9 |    +2.3 %  |
+|     50 % |                    48 |                     50 |  +4.2 %  |                         53.8 |                          44.8 |   −16.7 %  |
+|    100 % |                    34 |                     34 |   0 %    |                         55.3 |                          53.4 |    −3.4 %  |
+
+**Read on Component A in isolation.** Across 20 / 50 / 100 % mutation,
+Component A's transparent shim does **not** deliver renders/sec uplift
+outside run-to-run noise (±5 %). The cleanest signal is the −16.7 %
+reconcile-time win at 50 % mutation; 20 % and 100 % are within noise.
+This is consistent with the spec's framing: Component A is an
+**allocation-side** improvement (~−11 % bytes/tick per the prototype),
+and on this hardware at these mutation rates the workload is GC-bound
+in a way where 11 % fewer allocations doesn't translate into
+proportionally more renders. The prototype's predicted +6 % renders
+was at **10 % mutation** — a point we did not sample here, and the
+point at which Component A's free benefit is most likely to show up
+because gen2 pressure is correspondingly lighter.
+
+The PR-worthy framing for Component A: **the win is real on the
+allocation axis, invisible on renders/sec at the high mutation rates
+sampled, and worth re-measuring at 10 % on the same machine before
+quoting a renders-side number.** Components B + C carry the bulk of
+the user-visible perf story (`ReactorOptimized` row in the previous
+table).
+
 **What this re-bench does not cover.**
 
 - **The 10 % mutation headline number.** The spec table at the top
@@ -708,17 +743,16 @@ reference for that data point.
   prototype against a different physical machine. Re-measuring at
   10 % is logged as a follow-up (Phase 7.4 in the implementation
   task list); the current data is sufficient to validate the
-  spec's behavioral predictions across the mutation curve.
+  spec's behavioral predictions across the mutation curve and
+  confirm Component A's renders-side benefit doesn't reach
+  significance at higher mutation.
 - **Allocation bytes / gen2 counts.** Capturing those needs the ETW
   PresentTracer script, which requires admin and was not run for
   this close-out. The reconcile-time delta is the cleanest proxy
   this bench produces and tracks the alloc story directly per the
-  prototype's correlation.
-- **Pre-spec-034 baseline.** Phase 0.2's "before" capture against
-  unmodified main is preserved in commit history but was not
-  re-measured here; Component A's transparent storage shim is
-  already live in the `Reactor` row above and that benefit cannot be
-  isolated post-merge without reverting.
+  prototype's correlation. Component A's allocation savings live in
+  the same path the prototype validated; only the renders-side
+  translation is in question on this hardware.
 
 ---
 
