@@ -184,24 +184,35 @@ To bench everything else without RN-Fabric, drop it from the variant set:
   "" | Tee-Object -FilePath $logPath -Append | Out-Host
 }
 
-# Verify outputs exist after build (or up-front if -SkipBuild).
+# Verify outputs exist after build (or up-front if -SkipBuild). Even with
+# -SkipBuild we'll auto-build any single missing C# target on demand —
+# starting a 10-minute matrix only to fail on a missing exe is a waste.
 foreach ($v in $variants) {
   if (-not (Test-Path $v.Exe)) {
     if ($v.IsRN) {
       throw @"
 Missing exe for RN-Fabric: $($v.Exe).
 Build it separately (npm + msbuild — works fine from a non-elevated shell):
-    cd $repoRoot\tests\stress_perf_rn
-    npx react-native run-windows --release --arch ARM64 --no-launch --no-deploy
+    cd $repoRoot\tests\stress_perf_rn\StocksGrid
+    npx '@react-native-community/cli' run-windows --release --arch arm64 --no-launch --no-deploy
+(If only VS 18 is installed, prefix with: `$env:MinimumVisualStudioVersion='18.0'`)
 Then re-run this script. To skip RN-Fabric this session, pass:
     -VariantFilter @('Direct','Bound','Wpf','DirectX','Reactor','ReactorOptimized','ReactorGrid')
 "@
     }
-    throw "Missing exe for $($v.Name): $($v.Exe). Drop -SkipBuild or build manually."
+    "  exe missing for $($v.Name) — auto-building $($v.Csproj)" | Tee-Object -FilePath $logPath -Append | Out-Host
+    & dotnet build $v.Csproj -c $Configuration -p:Platform=$Platform -v q -nologo 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $v.Exe)) {
+      throw "Auto-build failed for $($v.Name) (see $logPath)."
+    }
   }
 }
 if ($useETW -and -not (Test-Path $tracerExe)) {
-  throw "Missing PresentTracer: $tracerExe. Drop -SkipBuild or build PresentTracer.csproj."
+  "  PresentTracer missing — auto-building $stressDir\PresentTracer\PresentTracer.csproj" | Tee-Object -FilePath $logPath -Append | Out-Host
+  & dotnet build "$stressDir\PresentTracer\PresentTracer.csproj" -c $Configuration -p:Platform=$Platform -v q -nologo 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null
+  if ($LASTEXITCODE -ne 0 -or -not (Test-Path $tracerExe)) {
+    throw "Auto-build failed for PresentTracer (see $logPath)."
+  }
 }
 
 # ── Helpers ────────────────────────────────────────────────────────────────
