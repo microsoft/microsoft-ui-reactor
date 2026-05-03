@@ -142,7 +142,21 @@ if (-not $SkipBuild) {
       $rnArchLower = $Platform.ToLower()  # react-native run-windows wants 'arm64', not 'ARM64'
       "  build: RN-Fabric — npx @react-native-community/cli run-windows --release --arch $rnArchLower --no-launch --no-deploy (~5-10 min on first build, incremental after that)" | Tee-Object -FilePath $logPath -Append | Out-Host
       & $npx.Source '@react-native-community/cli' run-windows --release --arch $rnArchLower --no-launch --no-deploy 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null
-      if ($LASTEXITCODE -ne 0) { throw "RN-Fabric build failed (see $logPath). Re-try from a non-elevated shell if this is admin — npm/MSBuild prefer non-elevated." }
+      if ($LASTEXITCODE -ne 0) {
+        throw @"
+RN-Fabric build failed (see $logPath). Common causes on this repo:
+  1. react-native-windows 0.82 does NOT recognize Visual Studio 18 yet —
+     it requires VS 17.11+ specifically. If only VS 18 is installed,
+     install VS Build Tools 17 alongside (workloads: 'Desktop development
+     with C++' + 'Windows app development').
+  2. npm/MSBuild prefer a non-elevated shell — re-run from a regular
+     PowerShell if this one is admin.
+  3. node_modules drift after a `react-native-windows` bump — rerun
+     with the node_modules dir deleted to force a clean install.
+To bench everything else without RN-Fabric, drop it from the variant set:
+    -VariantFilter @('Direct','Bound','Wpf','DirectX','Reactor','ReactorOptimized','ReactorGrid')
+"@
+      }
     } finally {
       Pop-Location
     }
