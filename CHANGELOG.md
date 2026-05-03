@@ -29,6 +29,21 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- `Microsoft.UI.Reactor.Hooks.UseMemoCells` /
+  `UseMemoCellsByKey` / `UseMemoCellsByIndex` — cell-level memoization
+  hooks (extension methods on `RenderContext`, plus matching `Component`
+  shims) for high-frequency list/grid bodies. Cells whose item value
+  (and declared deps) haven't changed since the previous render are
+  reused by reference; the reconciler short-circuits on
+  `ReferenceEquals` and skips diffing entirely. (spec 034 §C)
+- `REACTOR_HOOKS_007` analyzer + codefix — warns when a `UseMemoCells`
+  builder lambda closes over a value that isn't declared in the
+  `params deps` list, which would silently render stale. The codefix
+  appends the missing capture to the deps slot. Indirect captures
+  through helper methods are a documented blind spot. (spec 034 §C)
+- "Memoizing list cells" section in `docs/guide/advanced.md` covering
+  the three overloads, when each is the right hammer, the gen2
+  trade-off, and the analyzer-as-safety-net story. (spec 034 §C)
 - `tests/stress_perf/StressPerf.ReactorOptimized` — sibling bench
   variant that demonstrates the spec-034 §B direct-record-initializer
   idiom for inner-loop cell construction. The naive `StressPerf.Reactor`

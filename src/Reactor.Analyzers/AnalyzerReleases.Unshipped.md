@@ -9,3 +9,4 @@ REACTOR_HOOKS_001 | Reactor.Hooks | Warning | HookRulesAnalyzer - Hook called co
 REACTOR_HOOKS_004 | Reactor.Hooks | Warning | HookRulesAnalyzer - Hook deps contains freshly allocated value
 REACTOR_HOOKS_005 | Reactor.Hooks | Warning | HookRulesAnalyzer - Hook called outside Render or custom-hook method
 REACTOR_HOOKS_006 | Reactor.Hooks | Info | HookRulesAnalyzer - UseResource fetcher looks non-idempotent (use UseMutation for writes)
+REACTOR_HOOKS_007 | Reactor.Hooks | Warning | UseMemoCellsAnalyzer - Builder closure capture missing from dependencies

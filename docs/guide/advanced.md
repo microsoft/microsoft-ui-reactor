@@ -314,6 +314,52 @@ would let the fluent chain match this allocation profile, eliminating
 the dichotomy. Until then, treat direct-initializer as a targeted
 optimization.
 
+## Memoizing list cells
+
+`UseMemoCells` skips the cell-build for indices whose item value (and
+declared dependencies) haven't changed since the previous render. The
+reconciler's `ReferenceEquals` shortcut means a reused cell allocates
+nothing and skips diffing entirely.
+
+```csharp
+var theme = ctx.UseTheme();
+var children = ctx.UseMemoCells(
+    stocks,
+    (item, i) => Cell(item, theme),
+    theme);   // ← deps; framework invalidates on change
+```
+
+**When it's the right hammer.** Tickers, log tables, file lists, large
+read-only grids — anywhere the cell content is a pure function of `T`
+plus a small set of declared deps.
+
+**When it's the wrong hammer.** Rows whose chrome depends on focus,
+drag, selection, or hover state that you aren't capturing in deps.
+Memo silently renders stale when an external state change isn't
+declared as a dep — the analyzer below catches the obvious cases, but
+indirect captures through helper methods aren't visible to it.
+
+**Three overloads:**
+
+| Overload | Use when |
+|----------|----------|
+| `UseMemoCells<T>` | Per-item value equality. Default choice. |
+| `UseMemoCellsByKey<T, TKey>` | Items have stable identity but mutable interior (`record Person(int Id, string Name)`). Hashes by key, value-compares for content. Reordered keys reuse cells via the reconciler's keyed-children path. |
+| `UseMemoCellsByIndex<T>` | Data source already knows which indices changed. Skips the per-cell equality scan; only the named indices run the builder. |
+
+**gen2 caveat.** Memo trades short-lived gen0 churn for longer-lived
+gen1/gen2 retention. Many memoized lists across an app can compound
+gen2 pressure even when bytes-per-tick drops. Profile before adopting
+across the board.
+
+**Compile-time safety net.** The companion Roslyn analyzer
+`REACTOR_HOOKS_007` warns when a builder closure captures a value that
+isn't declared in the deps list. Codefix is "add the missing capture to
+deps". Indirect captures through intermediate methods are a documented
+blind spot — the analyzer can't see through a method call without
+whole-program analysis (same blind spot as React's
+`react-hooks/exhaustive-deps`).
+
 ## Tips
 
 **Wrap third-party components in `ErrorBoundary`.** If a plugin or external
