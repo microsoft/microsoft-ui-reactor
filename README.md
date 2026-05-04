@@ -283,14 +283,6 @@ samples/
 
 ## Sample apps
 
-### ReactorFiles — file explorer
-
-A full file explorer demonstrating `TreeView`, hierarchical navigation, component composition, and platform interop.
-
-```bash
-dotnet run --project samples/apps/reactorfiles
-```
-
 ### WordPuzzle — word search game
 
 A word search game demonstrating grid layout, timers, and interactive state.

@@ -203,9 +203,6 @@ health/
 # Stress/perf publish logs
 tests/stress_perf/publish_log*.txt
 
-# Rust build artifacts
-samples/apps/reactorfiles/Native/reactorfs/target/
-
 # Claude Code local harness state — per-session lock and per-user settings
 # that must never land in the shared repo
 .claude/scheduled_tasks.lock
