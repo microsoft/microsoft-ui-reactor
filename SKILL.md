@@ -43,7 +43,7 @@ re-renders automatically. No XAML. No data binding. No ViewModels.
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.0-preview2" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.1" />
     <ProjectReference Include="..\Reactor\Reactor.csproj" />
   </ItemGroup>
 </Project>
@@ -309,7 +309,7 @@ For lightweight demos, skip the `.csproj` entirely. Add a file-level header:
 
 ```csharp
 #:project ./src/Reactor
-#:package Microsoft.WindowsAppSDK@2.0.0-preview2
+#:package Microsoft.WindowsAppSDK@2.0.1
 #:property OutputType=WinExe
 #:property TargetFramework=net9.0-windows10.0.22621.0
 #:property UseWinUI=true

@@ -23,10 +23,10 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 ## Prerequisites
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- Windows App SDK 2.0 (preview) — restored automatically from NuGet, no manual install required
+- Windows App SDK 2.0 — restored automatically from NuGet, no manual install required
 - Visual Studio 2022 (17.8+) or VS Code with C# Dev Kit
 
-> **Package version:** All projects reference `Microsoft.WindowsAppSDK` **2.0.0-preview2** (public NuGet). The version is centralized in `Directory.Build.props` — update it there to change the version for every project at once.
+> **Package version:** All projects reference `Microsoft.WindowsAppSDK` **2.0.1** (public NuGet). The version is centralized in `Directory.Build.props` — update it there to change the version for every project at once.
 
 ---
 
