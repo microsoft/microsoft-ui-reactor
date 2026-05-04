@@ -101,7 +101,11 @@ as a reasonable default.
 
 # Per-step output contract
 
-For every step, emit the following machine-grep-able envelope:
+You will be asked to generate ONE step at a time. Each request names
+the step number (e.g. "Generate step 3") and may include a "Previous
+step's final code" block carrying the on-disk source from step N-1.
+
+For the requested step, emit the following machine-grep-able envelope:
 
   ===STEP <N>===
   ===CODE step-<NN>.cs===
@@ -120,21 +124,39 @@ file. If a `.csproj` is needed, include it as one of the CODE blocks.
 
 Rules:
 
-1. CONTINUITY — each step's full code MUST build naturally on the
-   previous step. Do not invent unrelated changes.
-2. RUNABILITY — every step's primary file MUST compile and run
+1. ACCRETION — when a "Previous step's final code" block is provided,
+   treat it as the baseline. The current step's code MUST contain
+   every line of behavior from the previous step, modified or
+   extended only as the current step's prompt requires. Do not
+   rewrite the file from scratch; do not delete code that the step
+   prompt does not ask to remove. Behavior introduced at step N must
+   keep working at step N+1 unless the prompt explicitly retires it.
+2. CONTINUITY — even when no previous-code block is supplied (e.g.
+   step 1), each step's code MUST build naturally on the prior steps
+   the user described. Do not invent unrelated changes between steps.
+3. RUNABILITY — every step's primary file MUST compile and run
    independently via `dotnet run`. Single-file steps include all
    needed `#:` directives. No partial stubs, no placeholders.
-3. SINGLE-FILE vs MULTI-FILE — respect the declaration in the demo
+4. SINGLE-FILE vs MULTI-FILE — respect the declaration in the demo
    prompt. Single-file: emit exactly one CODE block per step, named
    `step-<NN>.cs`. Multi-file: emit one CODE block per file under
    `step-<NN>/<filename>`.
-4. DELTA — plain English with precise placement ("After the line
-   `BuildLayout();` add:..."). Avoid vague instructions.
-5. NUMBERING — pad step numbers to two digits (step-01, step-02, ...).
-6. NO XAML — never generate `.xaml` / `.xaml.cs` files. Reactor and
+5. DELTA — plain English with precise placement ("After the line
+   `BuildLayout();` add:..."). Avoid vague instructions. The delta
+   describes what changed RELATIVE TO the previous step's code.
+6. NUMBERING — pad step numbers to two digits (step-01, step-02, ...).
+7. NO XAML — never generate `.xaml` / `.xaml.cs` files. Reactor and
    file-based apps don't use XAML. Multi-file mode may include a
    `.csproj` but no XAML.
+8. ONE STEP PER RESPONSE — emit exactly one ===STEP N=== … ===END STEP N===
+   envelope. Do not preview or include later steps. If asked for step 3,
+   only emit step 3.
+
+If the previous-code block is marked "(this code did not build cleanly
+— do your best to incorporate its intent while emitting a working
+version)", treat its content as a guide to user intent, not as a
+ground-truth baseline. Produce a working file that delivers what the
+prior step was supposed to deliver plus the current step's additions.
 
 # Fix mode
 

@@ -14,6 +14,11 @@ namespace DemoScriptTool.App.Services;
 /// loop. The pipeline keeps no UI state — it mutates the supplied
 /// <see cref="DemoScriptModel"/> and reports progress through
 /// <see cref="StatusReporter"/>.
+///
+/// Steps are generated SEQUENTIALLY: step N's stream + build-and-fix loop
+/// runs to completion before step N+1 starts. The per-step user prompt
+/// includes the prior step's post-fix on-disk code so each step's output
+/// is an accretion on what came before, not an unrelated rewrite.
 /// </summary>
 public sealed class GenerationPipeline
 {
@@ -66,42 +71,40 @@ public sealed class GenerationPipeline
 
         try
         {
-            _status.SetGeneratingStatus($"Preparing {model.Steps.Count} step{(model.Steps.Count == 1 ? "" : "s")}…");
-            var userPrompt = BuildUserPrompt(model, projectRoot);
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] userPrompt built ({userPrompt.Length} bytes); calling StreamAndApplyAsync");
-            await StreamAndApplyAsync(model, projectRoot, userPrompt, ct).ConfigureAwait(false);
+            for (int i = 0; i < model.Steps.Count; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                var step = model.Steps[i];
+                var prior = i > 0 ? model.Steps[i - 1] : null;
+
+                _status.SetGeneratingStatus($"Generating step {step.Number} of {model.Steps.Count}…");
+                System.Diagnostics.Debug.WriteLine($"[Pipeline] streaming step {step.Number} (prior={(prior?.Number.ToString() ?? "<none>")})");
+
+                if (!await StreamSingleStepWithAuthRetryAsync(model, projectRoot, step, prior, ct).ConfigureAwait(false))
+                {
+                    // No code emitted (model returned nothing or only delta) — record as
+                    // a failed step but keep going so a partial run still produces what
+                    // it can. The next step's prompt will fall back to in-memory code or
+                    // skip the previous-code block entirely if there's nothing on disk.
+                    System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: no code produced; continuing");
+                    step.SetBuildState(BuildState.Failed, "No code produced.");
+                    continue;
+                }
+
+                _status.SetGeneratingStatus($"Building step {step.Number} of {model.Steps.Count}…");
+                await RunBuildAndFixAsync(step, model, projectRoot, ct).ConfigureAwait(false);
+            }
             System.Diagnostics.Debug.WriteLine("[Pipeline] GenerateAll completed normally");
-        }
-        catch (AuthExpiredException ex)
-        {
-            // Spec §5.1: retry once after re-auth.
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthExpired, retrying after re-auth: {ex.Message}");
-            _status.SetGeneratingStatus("Re-authenticating with GitHub…");
-            try
-            {
-                await _auth.EnsureAuthenticatedAsync(ct).ConfigureAwait(false);
-                await StreamAndApplyAsync(model, projectRoot, BuildUserPrompt(model, projectRoot), ct).ConfigureAwait(false);
-            }
-            catch (AuthExpiredException ex2)
-            {
-                System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthExpired after retry: {ex2.Message}");
-                _status.SetBanner($"Authentication failed. {ex2.Message}");
-            }
-            catch (AuthUnavailableException ex2)
-            {
-                System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthUnavailable: {ex2.Message}");
-                _status.SetBanner(ex2.Message);
-            }
-        }
-        catch (AuthUnavailableException ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthUnavailable: {ex.Message}");
-            _status.SetBanner(ex.Message);
         }
         catch (OperationCanceledException)
         {
             System.Diagnostics.Debug.WriteLine($"[Pipeline] Cancelled with {CompletedCount(model)} of {model.Steps.Count} done");
             _status.ShowToast($"Cancelled — {CompletedCount(model)} of {model.Steps.Count} steps generated.", StatusSeverity.Info);
+        }
+        catch (AuthUnavailableException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthUnavailable: {ex.Message}");
+            _status.SetBanner(ex.Message);
         }
         catch (Exception ex)
         {
@@ -122,113 +125,134 @@ public sealed class GenerationPipeline
         return n;
     }
 
-    async Task StreamAndApplyAsync(DemoScriptModel model, string projectRoot, string userPrompt, CancellationToken ct)
+    /// <summary>
+    /// Stream one step. On AuthExpired, re-authenticate and retry the SAME step
+    /// once. Returns true when at least one CODE block was produced and written
+    /// to disk; false on empty output.
+    /// </summary>
+    async Task<bool> StreamSingleStepWithAuthRetryAsync(DemoScriptModel model, string projectRoot, StepModel step, StepModel? prior, CancellationToken ct)
     {
-        var parser = new GeneratedOutputParser();
-        var fileBuffers = new Dictionary<int, StepFileBuffer>();
+        try
+        {
+            return await StreamSingleStepAsync(model, projectRoot, step, prior, ct).ConfigureAwait(false);
+        }
+        catch (AuthExpiredException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthExpired on step {step.Number}, retrying after re-auth: {ex.Message}");
+            _status.SetGeneratingStatus("Re-authenticating with GitHub…");
+            await _auth.EnsureAuthenticatedAsync(ct).ConfigureAwait(false);
+            _status.SetGeneratingStatus($"Generating step {step.Number} of {model.Steps.Count}…");
+            return await StreamSingleStepAsync(model, projectRoot, step, prior, ct).ConfigureAwait(false);
+        }
+    }
 
-        StepModel? currentStep = null;
+    /// <summary>
+    /// Stream a single step's response, parse it, write the canonical files to
+    /// disk, and stamp provenance + content hash on <paramref name="step"/>.
+    /// Returns false when the model produced no code blocks.
+    /// </summary>
+    async Task<bool> StreamSingleStepAsync(DemoScriptModel model, string projectRoot, StepModel step, StepModel? prior, CancellationToken ct)
+    {
+        // Wipe the streamed code/delta buffers and any prior build state up front
+        // so the user sees this step's content arrive fresh — same animation as
+        // an initial generation.
+        step.ResetForRegeneration();
+
+        var perStepPrompt = BuildSingleStepUserPrompt(model, projectRoot, step, prior);
+        System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number} per-step user prompt ({perStepPrompt.Length} bytes)");
+
+        var parser = new GeneratedOutputParser();
+        var buffer = new StepFileBuffer();
+        bool sawCode = false;
 
         parser.StepStarted += n =>
         {
-            System.Diagnostics.Debug.WriteLine($"[Parser] StepStarted n={n}");
-            currentStep = FindStep(model, n);
-            if (currentStep is not null)
-            {
-                currentStep.ResetForRegeneration();
-                _status.SetGeneratingStatus($"Generating step {n} of {model.Steps.Count}…");
-            }
-            fileBuffers[n] = new StepFileBuffer();
+            if (n != step.Number)
+                System.Diagnostics.Debug.WriteLine($"[Parser] step number mismatch: expected {step.Number}, model emitted {n}");
         };
 
-        parser.CodeBlockStarted += (n, path) =>
+        parser.CodeBlockStarted += (_, path) =>
         {
-            System.Diagnostics.Debug.WriteLine($"[Parser] CodeBlockStarted n={n} path='{path}'");
-            if (fileBuffers.TryGetValue(n, out var buf)) buf.OpenFile(path);
+            System.Diagnostics.Debug.WriteLine($"[Parser] step {step.Number} CodeBlockStarted path='{path}'");
+            buffer.OpenFile(path);
         };
 
-        parser.CodeChunk += (n, chunk) =>
+        parser.CodeChunk += (_, chunk) =>
         {
-            if (fileBuffers.TryGetValue(n, out var buf)) buf.AppendChunk(chunk);
-            var step = FindStep(model, n);
-            // Stream into the primary code viewer regardless of which file is open
-            // — for single-file mode this is the only file; for multi-file mode the
-            // viewer shows whichever file the model is currently writing.
-            step?.AppendCodeToken(chunk);
+            buffer.AppendChunk(chunk);
+            step.AppendCodeToken(chunk);
+            sawCode = true;
         };
 
-        parser.DeltaChunk += (n, chunk) =>
-        {
-            var step = FindStep(model, n);
-            step?.AppendDeltaToken(chunk);
-        };
+        parser.DeltaChunk += (_, chunk) => step.AppendDeltaToken(chunk);
 
         parser.StepCompleted += n =>
         {
-            System.Diagnostics.Debug.WriteLine($"[Parser] StepCompleted n={n}");
-            var step = FindStep(model, n);
-            if (step is null) { System.Diagnostics.Debug.WriteLine($"[Parser] StepCompleted: no step n={n}"); return; }
-            if (!fileBuffers.TryGetValue(n, out var buf)) { System.Diagnostics.Debug.WriteLine($"[Parser] StepCompleted: no buffer for n={n}"); return; }
-            var snapshot = buf.Snapshot();
-            System.Diagnostics.Debug.WriteLine($"[Parser] StepCompleted: snapshot has {snapshot.Count} files for n={n}");
-            if (snapshot.Count == 0) return;
-
-            var primary = _writer.Write(step.Number, snapshot, projectRoot, model.IsMultiFile);
-            System.Diagnostics.Debug.WriteLine($"[Parser] StepCompleted: wrote primary='{primary}'");
-            step.SetOutputPath(primary);
-
-            // Replace the streamed code buffer with the canonical file content.
-            // The streamed buffer can pick up multiple code blocks emitted by
-            // the model under one ===STEP=== (e.g. step-NN.cs followed by an
-            // accidental step-(N+1).cs) AND any concurrent fix-mode chunks
-            // racing to mutate it — both of which produce the scrambled
-            // GENERATED CODE pane we saw without this swap.
-            try
-            {
-                if (System.IO.File.Exists(primary))
-                    step.ReplaceCode(System.IO.File.ReadAllText(primary));
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[Parser] StepCompleted: ReplaceCode read failed: {ex.Message}");
-            }
-
-            // Stamp the step with the model id + the moment it produced this
-            // content so the per-card provenance footer ("✨ generated by
-            // claude-sonnet-4.5 · 2 min ago") survives a restart.
-            step.SetGenerationProvenance(_client.ModelId, DateTimeOffset.Now);
-
-            // Hash the file bytes so we can detect later edits made outside
-            // the app. Stored in the delta sidecar's frontmatter; on Open
-            // Folder the shell re-hashes the disk file and flags the step as
-            // out-of-sync when they don't match.
-            try
-            {
-                if (System.IO.File.Exists(primary))
-                    step.SetSourceHash(ComputeFileHash(primary));
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[Parser] StepCompleted: ComputeFileHash failed: {ex.Message}");
-            }
-
-            // Persist the presenter delta + provenance + content hash as a
-            // sibling file so Open Folder can restore them next launch.
-            WriteDeltaSidecar(step, projectRoot);
-
-            // Build-and-fix loop happens off the streaming thread to avoid blocking
-            // subsequent steps' tokens.
-            _ = Task.Run(() => RunBuildAndFixAsync(step, model, projectRoot, ct), ct);
+            System.Diagnostics.Debug.WriteLine($"[Parser] step {step.Number} StepCompleted (model emitted n={n})");
         };
 
-        parser.Warning += msg => { System.Diagnostics.Debug.WriteLine($"[Parser] Warning: {msg}"); _status.ShowToast(msg, StatusSeverity.Warning); };
+        parser.Warning += msg =>
+        {
+            System.Diagnostics.Debug.WriteLine($"[Parser] Warning: {msg}");
+            _status.ShowToast(msg, StatusSeverity.Warning);
+        };
 
-        await foreach (var token in _client.StreamAsync(SystemPrompt, userPrompt, ct).ConfigureAwait(false))
+        await foreach (var token in _client.StreamAsync(SystemPrompt, perStepPrompt, ct).ConfigureAwait(false))
         {
             ct.ThrowIfCancellationRequested();
             parser.Feed(token);
         }
         parser.Complete();
+
+        if (!sawCode)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: no CodeChunk seen");
+            return false;
+        }
+
+        var snapshot = buffer.Snapshot();
+        if (snapshot.Count == 0)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: empty file snapshot");
+            return false;
+        }
+
+        var primary = _writer.Write(step.Number, snapshot, projectRoot, model.IsMultiFile);
+        System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: wrote primary='{primary}'");
+        step.SetOutputPath(primary);
+
+        // Replace the streamed buffer with the canonical file body. The streamed
+        // buffer can pick up extra blocks emitted under one ===STEP=== envelope;
+        // collapsing to disk content guarantees the GENERATED CODE pane matches
+        // what `dotnet run` will execute.
+        try
+        {
+            if (System.IO.File.Exists(primary))
+                step.ReplaceCode(System.IO.File.ReadAllText(primary));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: ReplaceCode read failed: {ex.Message}");
+        }
+
+        // Stamp model id + timestamp so the per-card provenance footer survives
+        // restart via the delta sidecar's YAML frontmatter.
+        step.SetGenerationProvenance(_client.ModelId, DateTimeOffset.Now);
+
+        // Hash the bytes so Open Folder can flag artifacts that drifted from
+        // what we generated (manual edit, git checkout, etc.).
+        try
+        {
+            if (System.IO.File.Exists(primary))
+                step.SetSourceHash(ComputeFileHash(primary));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: ComputeFileHash failed: {ex.Message}");
+        }
+
+        WriteDeltaSidecar(step, projectRoot);
+        return true;
     }
 
     async Task RunBuildAndFixAsync(StepModel step, DemoScriptModel model, string projectRoot, CancellationToken ct)
@@ -255,11 +279,13 @@ public sealed class GenerationPipeline
             for (int attempt = 1; attempt <= MaxFixAttempts; attempt++)
             {
                 ct.ThrowIfCancellationRequested();
+                _status.SetGeneratingStatus($"Fixing step {step.Number} of {model.Steps.Count} (attempt {attempt})…");
                 System.Diagnostics.Debug.WriteLine($"[BuildFix] step {step.Number}: fix attempt {attempt}");
                 if (!await ApplyFixAttemptAsync(step, model, projectRoot, lastOutput, ct).ConfigureAwait(false))
                     break;
 
                 step.IncrementFixAttempts();
+                _status.SetGeneratingStatus($"Building step {step.Number} of {model.Steps.Count} (re-build {attempt})…");
                 var rebuild = await _runner.BuildAsync(step, projectRoot, model.IsMultiFile, ct).ConfigureAwait(false);
                 System.Diagnostics.Debug.WriteLine($"[BuildFix] step {step.Number}: fix-attempt {attempt} build exit={rebuild.ExitCode} succeeded={rebuild.Succeeded}");
                 if (rebuild.Succeeded)
@@ -273,7 +299,7 @@ public sealed class GenerationPipeline
 
             step.SetBuildState(BuildState.Failed, lastOutput);
         }
-        catch (OperationCanceledException) { /* leave whatever state we last set */ }
+        catch (OperationCanceledException) { /* leave whatever state we last set */ throw; }
         catch (Exception ex)
         {
             step.SetBuildState(BuildState.Failed, ex.Message);
@@ -326,12 +352,7 @@ public sealed class GenerationPipeline
         if (!gotCode) return false;
 
         var snapshot = buffer.Snapshot();
-        // Fix-mode replies may omit the relative path prefix in single-file mode;
-        // synthesise one if missing.
-        if (snapshot.Count == 0)
-        {
-            return false;
-        }
+        if (snapshot.Count == 0) return false;
         var fixedPrimary = _writer.Write(step.Number, snapshot, projectRoot, model.IsMultiFile);
         // Same canonicalize-on-write pattern as the initial generation —
         // collapse the streamed buffer to the actual file body.
@@ -474,24 +495,57 @@ public sealed class GenerationPipeline
         return (afterClose, generatedBy, generatedAt, contentHash);
     }
 
-    static StepModel? FindStep(DemoScriptModel model, int n)
-    {
-        foreach (var step in model.Steps)
-            if (step.Number == n) return step;
-        return null;
-    }
-
-    static string BuildUserPrompt(DemoScriptModel model, string projectRoot)
+    /// <summary>
+    /// Build the user prompt for ONE step. Includes the demo-wide context
+    /// (title, demo prompt, mode, paths) and — when <paramref name="prior"/>
+    /// is non-null — the prior step's post-fix on-disk code as a baseline
+    /// the model should accrete onto.
+    /// </summary>
+    static string BuildSingleStepUserPrompt(DemoScriptModel model, string projectRoot, StepModel step, StepModel? prior)
     {
         var sb = new StringBuilder();
         sb.Append("# Demo: ").Append(model.Title).Append('\n').Append('\n');
         sb.Append("## Demo Prompt (Layer 2)\n").Append(model.DemoPrompt).Append('\n').Append('\n');
         sb.Append("## Mode\n").Append(model.IsMultiFile ? "multi-file" : "single-file").Append('\n').Append('\n');
 
-        // Help the model emit a correct relative #:project path when Reactor
-        // is in scope. We compute the relative path from the demo's project
-        // root to Reactor.csproj if it can be discovered; otherwise we hand
-        // over the absolute paths and let the model figure it out.
+        AppendPathsBlock(sb, projectRoot);
+
+        // Prior step's final code becomes the baseline for this step. We prefer
+        // the on-disk file (post-fix, post-canonicalize) because that's what the
+        // user just saw built. Fall back to in-memory step.Code if the file is
+        // missing for any reason.
+        if (prior is not null)
+        {
+            var priorCode = ReadPriorStepCode(model, projectRoot, prior);
+            if (!string.IsNullOrEmpty(priorCode))
+            {
+                var hint = prior.BuildState == BuildState.Failed
+                    ? " (this code did not build cleanly — do your best to incorporate its intent while emitting a working version)"
+                    : "";
+                sb.Append("## Previous step's final code\n");
+                sb.Append("Step ").Append(prior.Number).Append(" final source").Append(hint).Append(":\n");
+                sb.Append("```csharp\n").Append(priorCode);
+                if (!priorCode.EndsWith('\n')) sb.Append('\n');
+                sb.Append("```\n\n");
+                sb.Append("Use the source above as your baseline. The current step's code MUST keep every existing line of behavior intact unless this step's prompt explicitly asks to change or remove it.\n\n");
+            }
+        }
+
+        sb.Append("## Step to generate\n");
+        sb.Append(step.Number).Append(". **").Append(step.Title).Append("**\n");
+        sb.Append(step.Prompt).Append('\n').Append('\n');
+        sb.Append("Emit ONLY step ").Append(step.Number).Append(" using the envelope from the system prompt. Do not preview or include other steps.\n");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Append the shared "Paths" block: project root, Reactor source dir,
+    /// suggested `#:project` relative path, and host RID. Same content the
+    /// previous batch prompt produced — split out so per-step prompts can
+    /// reuse it without copy/pasting.
+    /// </summary>
+    static void AppendPathsBlock(StringBuilder sb, string projectRoot)
+    {
         var (reactorDir, reactorRel) = ResolveReactorPath(projectRoot);
         var rid = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture switch
         {
@@ -516,15 +570,39 @@ public sealed class GenerationPipeline
         sb.Append("- Host runtime identifier (use this in `#:property RuntimeIdentifier=...`): ")
             .Append(rid).Append('\n');
         sb.Append('\n');
+    }
 
-        sb.Append("## Steps\n");
-        foreach (var step in model.Steps)
+    /// <summary>
+    /// Resolve the prior step's most-recently-generated source. Prefers the
+    /// on-disk file (post-fix, post-canonicalize) so we feed the model what
+    /// `dotnet run` would actually execute; falls back to <see cref="StepModel.Code"/>
+    /// for the rare case where the file vanished between steps (e.g. user
+    /// deleted it manually).
+    /// </summary>
+    static string? ReadPriorStepCode(DemoScriptModel model, string projectRoot, StepModel prior)
+    {
+        if (!string.IsNullOrEmpty(prior.OutputPath) && System.IO.File.Exists(prior.OutputPath))
         {
-            sb.Append(step.Number).Append(". **").Append(step.Title).Append("**\n");
-            sb.Append(step.Prompt).Append('\n').Append('\n');
+            try { return System.IO.File.ReadAllText(prior.OutputPath); }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Pipeline] read prior step file failed: {ex.Message}");
+            }
         }
-        sb.Append("Generate every step in order using the envelope from the system prompt.\n");
-        return sb.ToString();
+        // Fallback paths for the standard layout — same shape the writer uses.
+        var fallback = model.IsMultiFile
+            ? System.IO.Path.Combine(projectRoot, $"step-{prior.Number:D2}", "Program.cs")
+            : System.IO.Path.Combine(projectRoot, $"step-{prior.Number:D2}.cs");
+        if (System.IO.File.Exists(fallback))
+        {
+            try { return System.IO.File.ReadAllText(fallback); }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Pipeline] read prior step fallback failed: {ex.Message}");
+            }
+        }
+        var inMem = prior.Code;
+        return string.IsNullOrEmpty(inMem) ? null : inMem;
     }
 
     /// <summary>
