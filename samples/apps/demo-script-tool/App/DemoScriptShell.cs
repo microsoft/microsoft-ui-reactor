@@ -62,6 +62,17 @@ public sealed class DemoScriptShell : Component
         var watcherRef = UseRef<DemoScriptWatcher?>(null);
         var generationCtsRef = UseRef<CancellationTokenSource?>(null);
         var saveDebounceRef = UseRef<CancellationTokenSource?>(null);
+        // Last-click-fired timestamp guards against Generate / Re-gen / etc.
+        // entry handlers running multiple times per user click. We've observed
+        // (logged at SessionLog) the OnGenerateAll handler firing 3+ times
+        // within 1 ms of a single click — which previously kicked off a run
+        // and then immediately cancelled it. Until the framework-level cause
+        // is found (suspected leaky button click subscription across
+        // re-renders, see PoolableWireFlags + EnsureButtonWiring) a cheap
+        // 200 ms debounce stops the immediate-cancel symptom without changing
+        // the user's perceived behavior on legitimate clicks.
+        var lastGenerateClickRef = UseRef<long>(0);
+        var lastRegenClickRef = UseRef<long>(0);
         // SHA-256 of the bytes of our most recent save (or load). When the
         // file watcher fires for a write WE just made, the disk hash equals
         // this value and we suppress the reload — otherwise our own debounced
@@ -280,7 +291,15 @@ public sealed class DemoScriptShell : Component
 
         void OnGenerateAll()
         {
-            SessionLog.Write($"[Shell] OnGenerateAll projectRoot='{projectRoot ?? "(null)"}' ctsCurrent={(generationCtsRef.Current is null ? "null" : "non-null")} isGenerating={isGenerating} steps={model.Steps.Count}");
+            var now = Environment.TickCount64;
+            var delta = now - lastGenerateClickRef.Current;
+            SessionLog.Write($"[Shell] OnGenerateAll projectRoot='{projectRoot ?? "(null)"}' ctsCurrent={(generationCtsRef.Current is null ? "null" : "non-null")} isGenerating={isGenerating} steps={model.Steps.Count} sinceLastClick={delta}ms");
+            if (lastGenerateClickRef.Current != 0 && delta < 200)
+            {
+                SessionLog.Write($"[Shell] OnGenerateAll → debounce drop ({delta}ms since last invocation)");
+                return;
+            }
+            lastGenerateClickRef.Current = now;
             if (projectRoot is null)
             {
                 _status.ShowToast("Open a folder first (Ctrl+O).", StatusSeverity.Warning);
@@ -365,7 +384,15 @@ public sealed class DemoScriptShell : Component
 
         void OnRegenFromStep(StepModel step)
         {
-            SessionLog.Write($"[Shell] OnRegenFromStep step={step.Number} '{step.Title}' projectRoot='{projectRoot ?? "(null)"}' ctsCurrent={(generationCtsRef.Current is null ? "null" : "non-null")} isGenerating={isGenerating}");
+            var now = Environment.TickCount64;
+            var delta = now - lastRegenClickRef.Current;
+            SessionLog.Write($"[Shell] OnRegenFromStep step={step.Number} '{step.Title}' projectRoot='{projectRoot ?? "(null)"}' ctsCurrent={(generationCtsRef.Current is null ? "null" : "non-null")} isGenerating={isGenerating} sinceLastClick={delta}ms");
+            if (lastRegenClickRef.Current != 0 && delta < 200)
+            {
+                SessionLog.Write($"[Shell] OnRegenFromStep → debounce drop ({delta}ms since last invocation)");
+                return;
+            }
+            lastRegenClickRef.Current = now;
             if (projectRoot is null)
             {
                 _status.ShowToast("Open a folder first.", StatusSeverity.Warning);
