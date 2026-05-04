@@ -291,8 +291,8 @@ Reactor has three test suites. Run the one that matches what you changed.
 # Unit tests — fast, no UI window (~3s)
 dotnet test tests/Reactor.Tests
 
-# Selfhost tests — real WinUI controls, in-process (~15s)
-dotnet test tests/Reactor.AppTests --filter "ClassName=Reactor.AppTests.Tests.SelfTestBatch"
+# Selfhost tests — real WinUI controls, in-process (~2 min)
+dotnet test tests/Reactor.SelfTests
 
 # Appium / E2E — cross-process UI Automation (~30s, needs WinAppDriver)
 dotnet test tests/Reactor.AppTests --filter "ClassName=Reactor.AppTests.Tests.InteractiveTests"
