@@ -71,6 +71,11 @@ internal static class SelectionEventFixtures
             count = 0; lastIndex = -1;
             if (rbs is not null) rbs.SelectedIndex = 1;
 
+            // RadioButtons can raise SelectionChanged via the dispatcher (unlike
+            // ComboBox/ListView/etc. which fire it synchronously in the setter),
+            // so pump once before asserting on the counter.
+            await Harness.Render();
+
             H.Check("RadioButtonsSel_CallbackFired", count >= 1);
             H.Check("RadioButtonsSel_PayloadIndex", lastIndex == 1);
         }
@@ -198,6 +203,11 @@ internal static class SelectionEventFixtures
 
             count = 0; lastIndex = -1;
             if (tv is not null) tv.SelectedIndex = 2;
+
+            // TabView can raise SelectionChanged via the dispatcher (unlike
+            // ComboBox/ListView/etc. which fire it synchronously in the setter),
+            // so pump once before asserting on the counter.
+            await Harness.Render();
 
             H.Check("TabViewSel_CallbackFired", count >= 1);
             H.Check("TabViewSel_PayloadIndex", lastIndex == 2);

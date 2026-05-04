@@ -92,9 +92,12 @@ internal static class HostingCoverageFixtures
                 );
             });
 
+            // Standalone ReactorHostControl doesn't register with ReactorApp.ActiveHost,
+            // so Harness.Render() can't wait on its render loop directly — give it
+            // wall-clock time, same as the sibling Component / Factory fixtures.
             var container = new Border { Child = hostControl };
             H.SetContent(container);
-            await Harness.Render();
+            await Harness.Render(200);
 
             var text = FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("Func:") == true);
             H.Check("HostCtrlFunc_Mounted", text is not null);
@@ -107,7 +110,7 @@ internal static class HostingCoverageFixtures
                 ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
                     peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
             }
-            await Harness.Render();
+            await Harness.Render(200);
             text = FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("Func:") == true);
             H.Check("HostCtrlFunc_Updated", text?.Text == "Func:world");
 
