@@ -44,8 +44,14 @@ public sealed class StepFileWriter
         // Multi-file mode: write each file under step-NN/ verbatim.
         var stepDir = Path.Combine(projectRoot, $"step-{stepNumber:D2}");
         Directory.CreateDirectory(stepDir);
+        // Used to validate every model-supplied path stays inside stepDir —
+        // see comment on TryResolveContainedPath. The trailing separator on
+        // the canonical form is what makes the StartsWith check below safe
+        // against the "stepDir" / "stepDir-evil" prefix-collision case.
+        var stepDirCanonical = Path.GetFullPath(stepDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
         string? primary = null;
+        string? firstCsFile = null;
         bool sawCsproj = false;
 
         foreach (var kv in files)
@@ -56,7 +62,16 @@ public sealed class StepFileWriter
             if (rel.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase))
                 rel = rel[prefix.Length..];
 
-            var target = Path.Combine(stepDir, rel);
+            // SECURITY: model output is untrusted. A path like "../../foo" or an
+            // absolute path joined with stepDir would let a generated step
+            // overwrite arbitrary files under the user's workspace. Reject any
+            // path that, once resolved, doesn't sit strictly inside stepDir.
+            if (!TryResolveContainedPath(stepDirCanonical, rel, out var target))
+            {
+                System.Diagnostics.Debug.WriteLine($"[StepFileWriter] rejecting unsafe path '{kv.Key}' → outside step dir");
+                continue;
+            }
+
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             WriteWithRetry(target, kv.Value);
 
@@ -64,6 +79,8 @@ public sealed class StepFileWriter
                 sawCsproj = true;
             if (rel.EndsWith("Program.cs", System.StringComparison.OrdinalIgnoreCase))
                 primary ??= target;
+            else if (firstCsFile is null && rel.EndsWith(".cs", System.StringComparison.OrdinalIgnoreCase))
+                firstCsFile = target;
         }
 
         if (!sawCsproj)
@@ -72,7 +89,45 @@ public sealed class StepFileWriter
             WriteWithRetry(fallbackCsproj, ScaffoldCsproj());
         }
 
-        return primary ?? stepDir;
+        // Prefer Program.cs as the entry point (it's what the system prompt
+        // asks for), but fall back to the first .cs we wrote so the canonical
+        // OutputPath points at a real file. Without this fallback, when the
+        // model picks an alternate name (App.cs, Demo.cs) the step's
+        // OutputPath would be the directory and downstream
+        // `File.Exists(primary)` checks all silently no-op — the canonical
+        // step.Code never gets refreshed from disk and Open Folder can't
+        // restore the file's content on relaunch.
+        return primary ?? firstCsFile ?? stepDir;
+    }
+
+    /// <summary>
+    /// Resolve <paramref name="rel"/> relative to <paramref name="stepDirCanonical"/>
+    /// and verify it stays inside the step directory. Returns false for paths
+    /// that would escape (<c>..</c> traversal, absolute paths, junctions, etc.)
+    /// so the caller can refuse to write them.
+    /// </summary>
+    static bool TryResolveContainedPath(string stepDirCanonical, string rel, out string target)
+    {
+        target = string.Empty;
+        if (string.IsNullOrEmpty(rel)) return false;
+        // Path.IsPathRooted catches absolute paths AND paths with drive letters
+        // ("C:\foo") — both should be refused even though Combine would happily
+        // discard stepDir and use the rooted side as-is.
+        if (Path.IsPathRooted(rel)) return false;
+
+        try
+        {
+            var combined = Path.GetFullPath(Path.Combine(stepDirCanonical, rel));
+            if (!combined.StartsWith(stepDirCanonical, System.StringComparison.OrdinalIgnoreCase))
+                return false;
+            target = combined;
+            return true;
+        }
+        catch (System.Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[StepFileWriter] path resolve failed for '{rel}': {ex.Message}");
+            return false;
+        }
     }
 
     /// <summary>

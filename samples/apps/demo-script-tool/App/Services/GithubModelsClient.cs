@@ -131,5 +131,14 @@ public sealed class GithubModelsClient : IModelClient, IDisposable
         return null;
     }
 
+    /// <summary>
+    /// No-op: this client reads the GitHub token via <see cref="GhAuth.GetTokenAsync"/>
+    /// at the start of every <see cref="StreamAsync"/> call, so a fresh
+    /// <c>gh auth refresh</c> is picked up automatically. The interface
+    /// requires the method for SDK-backed clients that snapshot credentials
+    /// (see <see cref="CopilotSdkClient.ResetAsync"/>).
+    /// </summary>
+    public Task ResetAsync(CancellationToken ct) => Task.CompletedTask;
+
     public void Dispose() => _http.Dispose();
 }

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace DemoScriptTool.App.Services;
 
@@ -22,6 +23,17 @@ public interface IModelClient
     /// the underlying HTTP read when <paramref name="ct"/> is cancelled.
     /// </summary>
     IAsyncEnumerable<string> StreamAsync(string systemPrompt, string userPrompt, CancellationToken ct);
+
+    /// <summary>
+    /// Drop any cached auth state so the next <see cref="StreamAsync"/> call
+    /// re-authenticates. Called by the pipeline after a successful
+    /// <c>gh auth refresh</c> so an SDK that snapshots its credentials at
+    /// startup (e.g. <see cref="CopilotSdkClient"/>'s long-lived
+    /// <c>CopilotClient</c>) actually picks up the new ones. Implementations
+    /// that read the token per-call (<see cref="GithubModelsClient"/>) can
+    /// no-op.
+    /// </summary>
+    Task ResetAsync(CancellationToken ct);
 }
 
 /// <summary>Thrown when the GitHub Models API rejects the call as unauthenticated.</summary>

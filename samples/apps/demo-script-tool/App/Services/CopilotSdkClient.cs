@@ -231,6 +231,41 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Tear down the cached <see cref="CopilotClient"/> so the next
+    /// <see cref="StreamAsync"/> call re-runs <see cref="GetClientAsync"/>
+    /// and starts a fresh CLI session. The pipeline calls this after
+    /// <c>gh auth refresh</c> — without it the SDK keeps using the
+    /// already-started session that was authenticated under the old token,
+    /// and the auth-retry path silently fails again.
+    /// </summary>
+    public async Task ResetAsync(CancellationToken ct)
+    {
+        await _initLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_client is { } client)
+            {
+                System.Diagnostics.Debug.WriteLine("[CopilotSdk] resetting CLI client (auth refresh)");
+                try { await client.StopAsync().ConfigureAwait(false); }
+                catch (System.Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[CopilotSdk] StopAsync during reset threw: {ex.Message}");
+                }
+                try { await client.DisposeAsync().ConfigureAwait(false); }
+                catch (System.Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[CopilotSdk] DisposeAsync during reset threw: {ex.Message}");
+                }
+                _client = null;
+            }
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_client is { } client)

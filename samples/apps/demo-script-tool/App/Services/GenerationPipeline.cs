@@ -171,6 +171,11 @@ public sealed class GenerationPipeline
             System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthExpired on step {step.Number}, retrying after re-auth: {ex.Message}");
             _status.SetGeneratingStatus("Re-authenticating with GitHub…");
             await _auth.EnsureAuthenticatedAsync(ct).ConfigureAwait(false);
+            // Drop any cached client state (e.g. CopilotSdkClient's long-lived
+            // CopilotClient session) so the retry actually picks up the new
+            // gh auth credentials. Without this, refreshing gh auth state
+            // changes nothing the next StreamAsync call can see.
+            await _client.ResetAsync(ct).ConfigureAwait(false);
             _status.SetGeneratingStatus($"Generating step {step.Number} of {model.Steps.Count}…");
             return await StreamSingleStepAsync(model, projectRoot, step, prior, ct).ConfigureAwait(false);
         }
@@ -376,6 +381,12 @@ public sealed class GenerationPipeline
         catch (AuthExpiredException)
         {
             await _auth.EnsureAuthenticatedAsync(ct).ConfigureAwait(false);
+            // Same reason as in the streaming-retry path above: refreshing gh
+            // auth alone doesn't help an SDK that cached a long-lived session.
+            // We still return false here (the outer build-and-fix loop will
+            // count this as a consumed attempt), but at least the NEXT fix
+            // attempt will start from a fresh client.
+            await _client.ResetAsync(ct).ConfigureAwait(false);
             return false;
         }
 

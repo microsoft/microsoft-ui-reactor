@@ -83,10 +83,15 @@ public static class DemoScriptParser
             switch (section)
             {
                 case 0:
-                    // Pre-section content (between H1 and the first H2). Empty lines OK.
-                    // Anything substantial is captured into RawTail to keep round-trips honest.
-                    if (!string.IsNullOrWhiteSpace(raw))
-                        rawTail.AppendLine(raw);
+                    // Pre-section content between the H1 title and the first H2.
+                    // Capturing into rawTail would round-trip incorrectly: the
+                    // serializer always writes rawTail at the end of the file,
+                    // which would silently move preamble below the steps section
+                    // on the next save. The format spec doesn't reserve space for
+                    // a preamble, so we drop section-0 content rather than
+                    // reorder it. (If a real round-trip need shows up, switch
+                    // to a separate RawHeader field that the serializer emits
+                    // immediately after the H1.)
                     break;
 
                 case 1:

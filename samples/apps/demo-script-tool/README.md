@@ -1,7 +1,7 @@
 # Demo Script Tool
 
 A WinUI 3 desktop sample app built on Reactor. Author a coding demo as a
-single Markdown file (`demo-script.md`) and let the GitHub Models AI SDK
+single Markdown file (`demo-script.md`) and let the GitHub Copilot SDK
 generate runnable .NET code for each step plus speaker notes you can paste
 into your slides.
 
@@ -29,15 +29,27 @@ dotnet run --project samples/apps/demo-script-tool/App/DemoScriptTool.csproj -- 
 (Reactor's own `--devtools` flags pass straight through; the first
 non-flag argument is treated as the folder path.)
 
-On first launch the app will look up your GitHub token via:
+### Authentication
 
-1. `$env:GITHUB_TOKEN` (set this for non-interactive use), or
-2. `gh auth token` (the GitHub CLI's cache), or
-3. A spawned `gh auth login --web --scopes models:read` flow, which opens an
-   interactive console window — this is the recommended route.
+The app uses the [`GitHub.Copilot.SDK`](https://www.nuget.org/packages/GitHub.Copilot.SDK)
+NuGet package, which talks to a bundled Copilot CLI. That CLI piggybacks on
+whatever account `gh auth` currently considers active, so:
 
-The token is read at the moment of each generation call; it is not cached
-inside the app.
+1. Make sure you have the [GitHub CLI](https://cli.github.com/) installed and
+   on `PATH`.
+2. Sign in with a Copilot-enabled account: `gh auth login --web`.
+3. Confirm with `gh auth status` — the active account needs to have GitHub
+   Copilot Pro / Pro+ / Business / Enterprise so the SDK can issue Copilot
+   chat completions on your behalf.
+
+The default model is `claude-sonnet-4.5`; change it by passing a different
+id to the `CopilotSdkClient` constructor in `DemoScriptShell`. Use the
+**⚡ Devtools → Log available Copilot models…** menu item to see what model
+ids your account can use.
+
+If a generation call hits an authentication failure mid-stream, the pipeline
+runs `gh auth login` (in a spawned console) and resets the cached Copilot
+SDK client so the retry picks up the refreshed credentials.
 
 ## 2. Author a demo
 
