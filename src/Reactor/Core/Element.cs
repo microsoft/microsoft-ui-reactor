@@ -2412,10 +2412,14 @@ public abstract record TemplatedListElementBase : Element
     public abstract void ApplyControlSetters(object control);
     /// <summary>
     /// True when programmatic setter actions (.Set(...)) have been attached.
-    /// OwnPropsEqual / ShallowEquals must return false in that case so the
-    /// reconciler always re-runs ApplyControlSetters.
+    /// Used by <see cref="OwnPropsEqual"/> to suppress the reconcile-highlight
+    /// short-circuit so the overlay correctly tags the control as modified
+    /// (and ApplyControlSetters keeps running on every reconcile pass).
+    /// Virtual + default-false so external types deriving from this public
+    /// abstract record don't break — only Reactor's own derived records that
+    /// expose Setters need to override.
     /// </summary>
-    internal abstract bool HasSetters { get; }
+    internal virtual bool HasSetters => false;
 }
 
 public record TemplatedListViewElement<T>(

@@ -313,7 +313,6 @@ internal static class TemplatedListHighlightTests
                 });
 
                 await Harness.Render();
-                int modifiedCountBefore = host.Reconciler.LastModifiedElements.Count;
 
                 H.ClickButton("lvinc");
                 await Harness.Render();
