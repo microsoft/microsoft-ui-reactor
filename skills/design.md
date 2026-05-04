@@ -488,7 +488,7 @@ element.Margin(left: 4, top: 8, right: 16, bottom: 24)
 
 #### Corner Radius
 
-Use system values — `ControlCornerRadius` (4px) for controls and `OverlayCornerRadius` (8px) for overlays.
+Use system values — `ControlCornerRadius` (4px) for controls and `OverlayCornerRadius` (8px) for overlays. Setting `CornerRadius` with hardcoded number values is not recommended; always use `ControlCornerRadius` and `OverlayCornerRadius` theme resources instead.
 
 WinUI provides two corner radius theme resources. Use `ThemeResource.CornerRadius()` to resolve the system values at render time, ensuring your UI adapts if these values are customized:
 
@@ -501,16 +501,14 @@ var overlayRadius = ThemeResource.CornerRadius("OverlayCornerRadius");
 Border(child).CornerRadius(controlRadius.TopLeft)   // controls, buttons, cards
 Border(dialog).CornerRadius(overlayRadius.TopLeft)   // dialogs, flyouts, menus
 
-// Also acceptable: hardcoded system values
-Border(child).CornerRadius(4)   // ControlCornerRadius equivalent
-Border(child).CornerRadius(8)   // OverlayCornerRadius equivalent
-
-// Selective rounding (top corners only)
-Border(child).CornerRadius(8, 8, 0, 0)
+// Not recommended: hardcoded number values
+// Border(child).CornerRadius(4)
+// Border(child).CornerRadius(8)
+// Border(child).CornerRadius(8, 8, 0, 0)
 
 // Wrong: non-standard radii (even if from Figma)
-Border(child).CornerRadius(3)
-Border(child).CornerRadius(6)
+// Border(child).CornerRadius(3)
+// Border(child).CornerRadius(6)
 ```
 
 **Mixed radii for nested surfaces:** When nesting controls inside overlay containers, the outer container uses `OverlayCornerRadius` while inner controls use `ControlCornerRadius`:
