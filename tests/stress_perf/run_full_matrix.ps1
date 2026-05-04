@@ -284,8 +284,11 @@ function Parse-TracerCsvForGlobalVsync {
 
 function Median {
   param([double[]]$Values)
-  if ($Values.Count -eq 0) { return 0 }
-  $sorted = $Values | Sort-Object
+  # Filter NaN — Avg Update is missing on RN rows, Avg Mount is missing
+  # on C# rows, both come back as NaN from Parse-FloatField.
+  $clean = @($Values | Where-Object { -not [double]::IsNaN($_) })
+  if ($clean.Count -eq 0) { return [double]::NaN }
+  $sorted = $clean | Sort-Object
   $n = $sorted.Count
   if ($n % 2 -eq 1) { return [double]$sorted[[int]([math]::Floor($n / 2))] }
   return ([double]$sorted[$n/2 - 1] + [double]$sorted[$n/2]) / 2.0
@@ -416,8 +419,17 @@ foreach ($v in $variants) {
       InAppFps               = Parse-FloatField $report 'Avg FPS'
       InAppTotalRenders      = Parse-IntField   $report 'Total Renders'
       InAppRendersPerSec     = $rendersPerSec
+      # `Avg Update` is the synchronous UI-thread span (Direct/Bound/Wpf/
+      # DirectX/Reactor — meaningful). `Avg Mount` is RN's rAF-after-commit
+      # mount-time proxy. Different brackets, separate columns; see
+      # METHODOLOGY.md.
       InAppAvgUpdateMs       = Parse-FloatField $report 'Avg Update'
+      InAppAvgMountMs        = Parse-FloatField $report 'Avg Mount'
       InAppAvgReconcileMs    = Parse-FloatField $report 'Avg Reconcile'
+      # `Avg Memory` / `Peak Memory` come from C# variants only — the RN
+      # variant excludes them because performance.memory.usedJSHeapSize
+      # excludes Hermes/Fabric/Yoga/text caches and would mislead. PeakRssMB
+      # below is the cross-framework number.
       InAppAvgMemoryMB       = Parse-FloatField $report 'Avg Memory'
       InAppPeakMemoryMB      = Parse-FloatField $report 'Peak Memory'
       PeakRssMB              = [math]::Round($peakRss / 1MB, 1)
@@ -439,6 +451,7 @@ $summary = $results | Group-Object -Property Variant, Percent | ForEach-Object {
   $etw   = [double[]]@($rows | ForEach-Object { [double]$_.EtwPresentPerSec })
   $rps   = [double[]]@($rows | ForEach-Object { [double]$_.InAppRendersPerSec })
   $upd   = [double[]]@($rows | ForEach-Object { [double]$_.InAppAvgUpdateMs })
+  $mnt   = [double[]]@($rows | ForEach-Object { [double]$_.InAppAvgMountMs })
   $recon = [double[]]@($rows | ForEach-Object { [double]$_.InAppAvgReconcileMs })
   $rss   = [double[]]@($rows | ForEach-Object { [double]$_.PeakRssMB })
   $vsync = [double[]]@($rows | ForEach-Object { [double]$_.GlobalVsyncPerSec })
@@ -459,6 +472,7 @@ $summary = $results | Group-Object -Property Variant, Percent | ForEach-Object {
     EtwPresent_Max                = [math]::Round(($etw | Measure-Object -Maximum).Maximum, 2)
     InAppRendersPerSec_Med        = [math]::Round((Median $rps), 2)
     InAppAvgUpdateMs_Med          = [math]::Round((Median $upd), 2)
+    InAppAvgMountMs_Med           = [math]::Round((Median $mnt), 2)
     InAppAvgReconcileMs_Med       = [math]::Round((Median $recon), 2)
     PeakRssMB_Med                 = [math]::Round((Median $rss), 1)
   }

@@ -4,15 +4,17 @@
 //
 // Layout: 70 cols × 70 rows = 4,900 cells, 64×18 each, FontSize 8.
 // Update loop: setInterval @ 33 ms; each tick mutates N% of cells (slider).
-// Stats: FPS via requestAnimationFrame, update time via stopwatch, memory
-// via performance.memory (Hermes exposes usedJSHeapSize on RN-Windows).
+// Stats: FPS via requestAnimationFrame; mount time via beginMount-stamp
+// before setSnapshot + recordMountCommit-on-useLayoutEffect (rAF after
+// commit); JS heap via performance.memory (diagnostic only — RSS is
+// captured by the harness externally).
 //
 // Match policy: behaviorally identical to the Reactor app — same data
 // generation algorithm (StockDataSource.ts), same tick rate, same sample
 // schedule.  PerfTracker writes the same flavor of report file.
 
 import * as React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   ScrollView,
@@ -109,8 +111,8 @@ export default function App(props: AppProps) {
   const [percent, setPercent] = useState<number>(initialPercent);
   const [running, setRunning] = useState<boolean>(false);
   const [fpsLabel, setFpsLabel] = useState('FPS: --');
-  const [updateLabel, setUpdateLabel] = useState('Update: -- ms');
-  const [memLabel, setMemLabel] = useState('Mem: -- MB');
+  const [mountLabel, setMountLabel] = useState('Mount: -- ms');
+  const [memLabel, setMemLabel] = useState('JS Heap: -- MB');
   // Surfaces the final headless report in a single TextBlock so we can read
   // it back via UI Automation (WinUI .exe apps have no stdout by default).
   const [report, setReport] = useState<string>('');
@@ -129,16 +131,16 @@ export default function App(props: AppProps) {
     return stop;
   }, []);
 
-  // Update loop. Mirrors Reactor variant's UseEffect on (running, percent).
+  // Update loop. Stamps T0 immediately before setSnapshot; the
+  // useLayoutEffect below records a mount-time sample once React commits.
+  // Bracketing setSnapshot with a synchronous begin/end span (the C# pattern)
+  // would only measure JS dispatch — Fabric's commit pipeline is async.
   useEffect(() => {
     if (!running) return;
     const perf = perfRef.current;
     const handle = setInterval(() => {
-      perf.beginUpdate();
       const changed = source.update(percent);
-      // Build a new snapshot — but only patch the changed indices, like the
-      // Direct variant.  Allocates a new outer array (so React detects it)
-      // but reuses unchanged Cell objects (so React.memo skips them).
+      perf.beginMount();
       setSnapshot(prev => {
         const next = prev.slice();
         for (const idx of changed) {
@@ -151,14 +153,20 @@ export default function App(props: AppProps) {
         }
         return next;
       });
-      perf.endUpdate();
 
       setFpsLabel(`FPS: ${perf.fps.toFixed(0)}`);
-      setUpdateLabel(`Update: ${perf.updateMs.toFixed(1)} ms`);
-      setMemLabel(`Mem: ${perf.memoryMB} MB`);
+      setMountLabel(`Mount: ${perf.mountMs.toFixed(1)} ms`);
+      setMemLabel(`JS Heap: ${perf.jsHeapMB} MB`);
     }, TICK_MS);
     return () => clearInterval(handle);
   }, [running, percent, source]);
+
+  // Records a mount-time sample after each commit. useLayoutEffect runs
+  // post-commit on the JS thread; the tracker schedules a single rAF inside
+  // so the sample brackets through to the next display frame.
+  useLayoutEffect(() => {
+    perfRef.current.recordMountCommit();
+  }, [snapshot]);
 
   // Headless auto-start mirrors the Reactor variant's CliOpts.Headless path.
   useEffect(() => {
@@ -220,7 +228,7 @@ export default function App(props: AppProps) {
         <Button title="50%" onPress={() => setPercent(50)} disabled={percent === 50} />
         <Button title="100%" onPress={() => setPercent(100)} disabled={percent === 100} />
         <Text style={[styles.toolbarText, styles.fixedW90]}>{fpsLabel}</Text>
-        <Text style={[styles.toolbarText, styles.fixedW120]}>{updateLabel}</Text>
+        <Text style={[styles.toolbarText, styles.fixedW120]}>{mountLabel}</Text>
         <Text style={[styles.toolbarText, styles.fixedW120]}>{memLabel}</Text>
       </View>
       {!!report && (

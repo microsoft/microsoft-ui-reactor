@@ -82,7 +82,7 @@ export default function App(props: AppProps) {
   const [p50Label, setP50Label] = useState('P50: -- ms');
   const [p95Label, setP95Label] = useState('P95: -- ms');
   const [p99Label, setP99Label] = useState('P99: -- ms');
-  const [memLabel, setMemLabel] = useState('Mem: -- MB');
+  const [memLabel, setMemLabel] = useState('JS Heap: -- MB');
   const [status, setStatus] = useState('idle');
   // Final headless report rendered on-screen so the harness can scrape it
   // via UI Automation. Mirrors StocksGrid/App.tsx — WinUI .exe apps don't
@@ -127,7 +127,7 @@ export default function App(props: AppProps) {
     setP95Label(`P95: ${r.p95.toFixed(1)} ms`);
     setP99Label(`P99: ${r.p99.toFixed(1)} ms`);
     setFpsLabel(`FPS: ${perfRef.current.fps.toFixed(0)}`);
-    setMemLabel(`Mem: ${perfRef.current.memoryMB} MB`);
+    setMemLabel(`JS Heap: ${perfRef.current.jsHeapMB} MB`);
     setStatus(`done (${r.frames.length} frames)`);
 
     // Surface the report on-screen so the harness can scrape it via UIA.

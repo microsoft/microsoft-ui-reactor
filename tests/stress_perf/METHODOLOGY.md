@@ -131,12 +131,81 @@ say one wins.
 - Never directly diff battery numbers against AC numbers; treat them as
   separate baselines.
 
+## Per-tick latency: `Avg Update` (C#) vs `Avg Mount` (RN)
+
+The synchronous variants (Direct / Bound / Wpf / DirectX / Reactor) bracket
+the tick handler with a stopwatch — `BeginUpdate` before the property patch
++ reconcile, `EndUpdate` after — and report `Avg Update` ms. Because the
+work runs on the UI thread synchronously, the bracket captures all of it:
+data mutation, framework reconciliation, and any commit-to-tree work.
+
+**RN-Fabric can't use that pattern.** `setState` returns immediately while
+React reconcile → Fabric commit → Yoga → Composition continues across
+other threads. A JS-side stopwatch around `setSnapshot` measures only JS
+dispatch and undercounts the per-tick cost by a large factor.
+
+For RN we report `Avg Mount` instead. The tracker stamps T0 just before
+`setSnapshot` and records `(rAF-now − T0)` from a single
+`requestAnimationFrame` scheduled inside a `useLayoutEffect` on the
+dispatched state. By the time the rAF callback runs:
+
+- React has finished its commit phase (useLayoutEffect ran)
+- Fabric has had a chance to apply the commit to the host tree
+- One display frame has been scheduled
+
+It's a **pure-JS proxy**, not pixel-accurate. It excludes any Fabric work
+that lands after the rAF tick (e.g. layout follow-ups in subsequent
+frames). For true JS-to-pixel mount time, hook the native side per the
+[RNW Fabric perf wiki, Part 2](https://github.com/microsoft/react-native-windows/wiki/Performance-tests-Fabric#part-2--native-perf-tests).
+
+**Don't diff `Avg Update` against `Avg Mount`.** They bracket different
+work. The harness reports them in separate columns (`InAppAvgUpdateMs`
+for C#, `InAppAvgMountMs` for RN) for that reason.
+
+## Memory: in-app `usedJSHeapSize` vs harness `WorkingSet64`
+
+Each variant's PerfTracker can read process memory locally, but the only
+in-process API exposed to RN/Hermes is `performance.memory.usedJSHeapSize`
+— **JS heap only**. It excludes:
+
+- Hermes engine
+- JSI bridge
+- Fabric reconciler + shadow tree
+- Yoga
+- TypeLayout / text-shaping caches
+
+These are tens-to-hundreds of MB of fixed cost RN pays before any cells
+exist. C# variants don't have an equivalent fixed cost. Reading
+`usedJSHeapSize` and comparing it to a C# variant's `WorkingSet64` would
+massively under-report RN.
+
+Because of this, **the harness samples `WorkingSet64` externally for every
+variant** (see `run_stocks_grid_baseline.ps1`'s polling loop) and that's
+the figure published as `PeakRssMB`. RN's PerfTracker still emits a
+per-second JS-heap series into its samples CSV under a `JsHeap_MB` column
+header, but the human-readable report omits it — the only authoritative
+memory column is the harness's `PeakRssMB`.
+
+When citing RN memory numbers, separate **engine-baseline** from
+**per-cell**: a 0-cell (or empty-tree) run gives the fixed cost; the
+delta from the loaded run is per-content cost. The published baseline
+report's RN row mostly reflects engine-baseline — note that explicitly
+when comparing.
+
 ## Don'ts (so we don't redo this analysis)
 
 1. **Don't trust `CompositionTarget.Rendering` for "FPS."** It's UI-thread-
    idle-vsync, not present-rate. Always 2× too high under load.
 2. **Don't trust `requestAnimationFrame` for "FPS" in RN.** It's JS-thread
    tick rate. Under at light load, bursty at saturation.
+   2a. **Don't bracket `setState` with a JS stopwatch and call it "update
+   time" in RN.** The dispatch returns immediately; the commit pipeline
+   continues across other threads. Use the rAF-after-commit `Avg Mount`
+   proxy or hook native per the RNW Fabric perf wiki. See above.
+   2b. **Don't read `performance.memory.usedJSHeapSize` and compare it to
+   a C# variant's working set.** JS heap excludes Hermes, JSI, Fabric,
+   Yoga, and text caches — tens-to-hundreds of MB of RN-fixed cost. Use
+   `WorkingSet64` from the harness for any cross-framework number.
 3. **Don't trust DwmCore VSync events filtered by PID.** Vsyncs are global;
    the per-PID attribution is heuristic and only fires when our app's
    swap chain is the signal target. For "OS still presents at 60Hz when

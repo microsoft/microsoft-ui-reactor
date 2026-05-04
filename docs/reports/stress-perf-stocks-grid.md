@@ -149,6 +149,18 @@ Wpf         950     ◀── MILCore + render-thread state
 RN-Fabric 1,156     ◀── Hermes + JS bundle + Yoga + Fabric shadow tree
 ```
 
+All numbers are `WorkingSet64` (process RSS) sampled externally by the
+harness, **not** `performance.memory.usedJSHeapSize`. JS-heap-only would
+massively under-report RN by excluding Hermes, JSI, Fabric reconciler,
+Yoga, and text-shaping caches.
+
+**Don't read RN's number as per-cell overhead.** A large fraction of the
+1,156 MB is RN-fixed cost — engine + bundle + reconciler infrastructure
+RN pays before the first cell exists. To attribute per-cell cost, run an
+empty-tree baseline of the same .exe and subtract; the delta is what
+scales with content. We haven't captured that baseline yet (open
+question — see below).
+
 Memory ranking is essentially identical battery and AC. Power state
 doesn't change architectural memory footprints.
 
@@ -227,6 +239,17 @@ perception was a battery-specific artifact.
 - Reactor's tree-build cost (22 ms steady) is the dominant reconcile
   phase. Investigation candidate: element allocation pooling, cached
   text formatters.
+- RN engine-baseline vs per-cell memory split. Run
+  `StocksGrid.exe --headless --percent 0 --duration 5` (or with a
+  zero-cell variant of the data source) to measure RN's fixed cost;
+  delta from the 1,156 MB loaded number is per-content cost. Until
+  we have that baseline, the RN row in the memory table is
+  apples-to-bowling-balls vs the C# variants.
+- True JS-to-pixel mount time. `Avg Mount` is currently a pure-JS
+  rAF-after-commit proxy and excludes Fabric work that lands after
+  the first rAF. Hook the native side per
+  [RNW Fabric perf wiki, Part 2](https://github.com/microsoft/react-native-windows/wiki/Performance-tests-Fabric#part-2--native-perf-tests)
+  to get real mount-to-pixel timing.
 
 ## How to reproduce
 

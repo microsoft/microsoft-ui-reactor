@@ -1,6 +1,12 @@
 // Frame-time tracker for the virtualizing-list benchmark. Counts FPS via
 // requestAnimationFrame and records per-frame deltas during a benchmark run
 // so we can report P50/P95/P99 like the Reactor sibling.
+//
+// Memory: the in-process reading we have is performance.memory.usedJSHeapSize
+// — JS heap only, exclusive of Hermes engine, JSI bridge, Fabric shadow
+// tree, Yoga, and TypeLayout caches. Surfaced through `jsHeapMB` and the
+// toolbar label so it's clearly diagnostic; the harness samples WorkingSet64
+// externally and that's the figure we publish.
 
 export class PerfTracker {
   private wallClockStart = performance.now();
@@ -9,7 +15,7 @@ export class PerfTracker {
   private currentFps = 0;
 
   private readonly fpsSamples: number[] = [];
-  private readonly memorySamples: number[] = [];
+  private readonly jsHeapSamples: number[] = [];
 
   // Set by start/finishBenchmark.
   private benchActive = false;
@@ -38,7 +44,7 @@ export class PerfTracker {
     if (elapsed >= 1.0) {
       this.currentFps = this.frameCount / elapsed;
       this.fpsSamples.push(this.currentFps);
-      this.memorySamples.push(this.currentMemoryBytes());
+      this.jsHeapSamples.push(this.currentJsHeapBytes());
       this.frameCount = 0;
       this.lastSampleTime = (now - this.wallClockStart) / 1000;
     }
@@ -82,11 +88,11 @@ export class PerfTracker {
     return this.currentFps;
   }
 
-  get memoryMB(): number {
-    return Math.round(this.currentMemoryBytes() / (1024 * 1024));
+  get jsHeapMB(): number {
+    return Math.round(this.currentJsHeapBytes() / (1024 * 1024));
   }
 
-  private currentMemoryBytes(): number {
+  private currentJsHeapBytes(): number {
     const m = (performance as any).memory;
     return m?.usedJSHeapSize ?? 0;
   }
