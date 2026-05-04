@@ -150,6 +150,30 @@ FlexColumn(
 row/column with defined tracks. `Flex` for grow/shrink, wrapping, or
 space distribution.
 
+**Gotcha — `.Flex(grow: 1)` is `flex-grow: 1`, NOT CSS shorthand `flex: 1`.**
+Reactor's `.Flex(...)` maps each parameter to the matching CSS individual
+property. Default basis is `auto` (content size). When a growing child has
+a large intrinsic size (`ListView`, `ScrollView` with many items, long
+text), its content size makes the flex container overflow, and Yoga
+shrinks **every** sibling proportionally — heading, buttons, and inputs
+all collapse along with the scrollable region. Two ways to fix:
+
+```csharp
+// 1. Pass basis: 0 alongside grow — matches CSS `flex: 1` shorthand.
+//    The grower starts at 0; siblings keep their natural size.
+Border(ListView(items, ...)).Flex(grow: 1, basis: 0)
+
+// 2. Put shrink: 0 on every fixed-size sibling.
+FlexColumn(
+    Heading("Title").Flex(shrink: 0),
+    TextField(name, setName).Flex(shrink: 0),
+    Border(ListView(items, ...)).Flex(grow: 1))
+```
+
+Prefer (1) for a single growing region — one modifier, no per-sibling
+bookkeeping. Use (2) when several children grow and you need basis=auto
+on the growers (e.g., proportional columns sized by content).
+
 Required: `using Microsoft.UI.Reactor.Layout;`
 
 ## Navigation

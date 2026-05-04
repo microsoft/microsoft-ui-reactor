@@ -238,6 +238,12 @@ ForEach(items, item => TextBlock(item.Name))
 6. **`.WithKey("id")` on dynamic list items.** Without keys, the reconciler
    matches by position and re-mounts everything on insert/reorder.
 7. **Memoize expensive computations.** `UseMemo(() => items.OrderBy(...).ToList(), items)`.
+8. **`.Flex(grow: 1)` is `flex-grow`, not the CSS `flex: 1` shorthand.** Default
+   basis is `auto` (content size), so a growing child with large intrinsic
+   content (e.g. `ListView` with many items) overflows the container and Yoga
+   shrinks every sibling proportionally — heading/buttons/inputs all collapse.
+   Pass `.Flex(grow: 1, basis: 0)` (matches CSS `flex: 1`) or add
+   `.Flex(shrink: 0)` to each fixed-size sibling. See `skills/dsl-reference.md`.
 
 ## Starter template
 
