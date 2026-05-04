@@ -71,9 +71,9 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
                 GitHubToken = _explicitToken,
             };
             var client = new CopilotClient(options);
-            System.Diagnostics.Debug.WriteLine($"[CopilotSdk] starting CLI server (model={_model}, explicitToken={(_explicitToken is null ? "no" : "yes")})");
+            SessionLog.Write($"[CopilotSdk] starting CLI server (model={_model}, explicitToken={(_explicitToken is null ? "no" : "yes")})");
             await client.StartAsync().ConfigureAwait(false);
-            System.Diagnostics.Debug.WriteLine("[CopilotSdk] CLI server ready");
+            SessionLog.Write("[CopilotSdk] CLI server ready");
             _client = client;
             return _client;
         }
@@ -88,7 +88,7 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
         string userPrompt,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        System.Diagnostics.Debug.WriteLine($"[CopilotSdk] StreamAsync model={_model} userPromptBytes={userPrompt.Length}");
+        SessionLog.Write($"[CopilotSdk] StreamAsync model={_model} userPromptBytes={userPrompt.Length}");
         var client = await GetClientAsync(ct).ConfigureAwait(false);
 
         // Channel bridges the SDK's event-based delivery to our IAsyncEnumerable
@@ -119,7 +119,7 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
         };
 
         await using var session = await client.CreateSessionAsync(sessionConfig, ct).ConfigureAwait(false);
-        System.Diagnostics.Debug.WriteLine($"[CopilotSdk] session created id={session.SessionId}");
+        SessionLog.Write($"[CopilotSdk] session created id={session.SessionId}");
 
         Exception? terminalError = null;
         bool sawDeltas = false;
@@ -131,7 +131,7 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
             // is visible during debugging. The line is kept short so it doesn't
             // dominate the devtools log; payload is only read for the events
             // we care about below.
-            System.Diagnostics.Debug.WriteLine($"[CopilotSdk] evt: {evt.GetType().Name}");
+            SessionLog.Write($"[CopilotSdk] evt: {evt.GetType().Name}");
 
             switch (evt)
             {
@@ -173,7 +173,7 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
 
                 case SessionErrorEvent err:
                     var msg = $"Copilot {err.Data.ErrorType}: {err.Data.Message}";
-                    System.Diagnostics.Debug.WriteLine($"[CopilotSdk] {msg}");
+                    SessionLog.Write($"[CopilotSdk] {msg}");
                     terminalError = err.Data.ErrorType switch
                     {
                         "authentication" or "authorization" => new AuthExpiredException(msg),
@@ -246,16 +246,16 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
         {
             if (_client is { } client)
             {
-                System.Diagnostics.Debug.WriteLine("[CopilotSdk] resetting CLI client (auth refresh)");
+                SessionLog.Write("[CopilotSdk] resetting CLI client (auth refresh)");
                 try { await client.StopAsync().ConfigureAwait(false); }
                 catch (System.Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[CopilotSdk] StopAsync during reset threw: {ex.Message}");
+                    SessionLog.Write($"[CopilotSdk] StopAsync during reset threw: {ex.Message}");
                 }
                 try { await client.DisposeAsync().ConfigureAwait(false); }
                 catch (System.Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[CopilotSdk] DisposeAsync during reset threw: {ex.Message}");
+                    SessionLog.Write($"[CopilotSdk] DisposeAsync during reset threw: {ex.Message}");
                 }
                 _client = null;
             }

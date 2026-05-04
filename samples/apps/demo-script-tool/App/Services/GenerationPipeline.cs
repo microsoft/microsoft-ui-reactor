@@ -72,7 +72,7 @@ public sealed class GenerationPipeline
     /// </summary>
     public async Task GenerateFromAsync(DemoScriptModel model, string projectRoot, int startIndex, CancellationToken ct)
     {
-        System.Diagnostics.Debug.WriteLine($"[Pipeline] GenerateFrom start root='{projectRoot}' steps={model.Steps.Count} startIndex={startIndex} multiFile={model.IsMultiFile}");
+        SessionLog.Write($"[Pipeline] GenerateFrom start root='{projectRoot}' steps={model.Steps.Count} startIndex={startIndex} multiFile={model.IsMultiFile}");
         if (model.Steps.Count == 0)
         {
             _status.ShowToast("Add at least one step to your demo script before generating.", StatusSeverity.Warning);
@@ -80,7 +80,7 @@ public sealed class GenerationPipeline
         }
         if (startIndex < 0 || startIndex >= model.Steps.Count)
         {
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] GenerateFrom: invalid startIndex {startIndex}, falling back to 0");
+            SessionLog.Write($"[Pipeline] GenerateFrom: invalid startIndex {startIndex}, falling back to 0");
             startIndex = 0;
         }
 
@@ -93,7 +93,7 @@ public sealed class GenerationPipeline
                 var prior = i > 0 ? model.Steps[i - 1] : null;
 
                 _status.SetGeneratingStatus($"Generating step {step.Number} of {model.Steps.Count}…");
-                System.Diagnostics.Debug.WriteLine($"[Pipeline] streaming step {step.Number} (prior={(prior?.Number.ToString() ?? "<none>")})");
+                SessionLog.Write($"[Pipeline] streaming step {step.Number} (prior={(prior?.Number.ToString() ?? "<none>")})");
 
                 if (!await StreamSingleStepWithAuthRetryAsync(model, projectRoot, step, prior, ct).ConfigureAwait(false))
                 {
@@ -102,7 +102,7 @@ public sealed class GenerationPipeline
                     // or stale) baseline, which we observed cascading into a
                     // chain of "No code produced" failures. The user can fix
                     // the prompt and click Re-gen.
-                    System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: no code produced; halting");
+                    SessionLog.Write($"[Pipeline] step {step.Number}: no code produced; halting");
                     step.SetBuildState(BuildState.Failed, "No code produced.");
                     _status.SetBanner($"Step {step.Number} produced no code — generation halted. Edit the prompt or earlier steps and click Re-gen.");
                     return;
@@ -119,26 +119,26 @@ public sealed class GenerationPipeline
                 // and click Re-gen to pick up where we stopped.
                 if (step.BuildState == BuildState.Failed)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: build failed after {MaxFixAttempts} fix attempts; halting");
+                    SessionLog.Write($"[Pipeline] step {step.Number}: build failed after {MaxFixAttempts} fix attempts; halting");
                     _status.SetBanner($"Step {step.Number} failed to build after {MaxFixAttempts} fix attempts — generation halted. Click Re-gen after editing the step.");
                     return;
                 }
             }
-            System.Diagnostics.Debug.WriteLine("[Pipeline] GenerateFrom completed normally");
+            SessionLog.Write("[Pipeline] GenerateFrom completed normally");
         }
         catch (OperationCanceledException)
         {
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] Cancelled with {CompletedCount(model)} of {model.Steps.Count} done");
+            SessionLog.Write($"[Pipeline] Cancelled with {CompletedCount(model)} of {model.Steps.Count} done");
             _status.ShowToast($"Cancelled — {CompletedCount(model)} of {model.Steps.Count} steps generated.", StatusSeverity.Info);
         }
         catch (AuthUnavailableException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthUnavailable: {ex.Message}");
+            SessionLog.Write($"[Pipeline] AuthUnavailable: {ex.Message}");
             _status.SetBanner(ex.Message);
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] Generation failed: {ex}");
+            SessionLog.Write($"[Pipeline] Generation failed: {ex}");
             _status.SetBanner($"Generation failed: {ex.Message}");
         }
         finally
@@ -168,7 +168,7 @@ public sealed class GenerationPipeline
         }
         catch (AuthExpiredException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] AuthExpired on step {step.Number}, retrying after re-auth: {ex.Message}");
+            SessionLog.Write($"[Pipeline] AuthExpired on step {step.Number}, retrying after re-auth: {ex.Message}");
             _status.SetGeneratingStatus("Re-authenticating with GitHub…");
             await _auth.EnsureAuthenticatedAsync(ct).ConfigureAwait(false);
             // Drop any cached client state (e.g. CopilotSdkClient's long-lived
@@ -194,7 +194,7 @@ public sealed class GenerationPipeline
         step.ResetForRegeneration();
 
         var perStepPrompt = BuildSingleStepUserPrompt(model, projectRoot, step, prior);
-        System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number} per-step user prompt ({perStepPrompt.Length} bytes)");
+        SessionLog.Write($"[Pipeline] step {step.Number} per-step user prompt ({perStepPrompt.Length} bytes)");
 
         var parser = new GeneratedOutputParser();
         var buffer = new StepFileBuffer();
@@ -203,12 +203,12 @@ public sealed class GenerationPipeline
         parser.StepStarted += n =>
         {
             if (n != step.Number)
-                System.Diagnostics.Debug.WriteLine($"[Parser] step number mismatch: expected {step.Number}, model emitted {n}");
+                SessionLog.Write($"[Parser] step number mismatch: expected {step.Number}, model emitted {n}");
         };
 
         parser.CodeBlockStarted += (_, path) =>
         {
-            System.Diagnostics.Debug.WriteLine($"[Parser] step {step.Number} CodeBlockStarted path='{path}'");
+            SessionLog.Write($"[Parser] step {step.Number} CodeBlockStarted path='{path}'");
             buffer.OpenFile(path);
         };
 
@@ -223,12 +223,12 @@ public sealed class GenerationPipeline
 
         parser.StepCompleted += n =>
         {
-            System.Diagnostics.Debug.WriteLine($"[Parser] step {step.Number} StepCompleted (model emitted n={n})");
+            SessionLog.Write($"[Parser] step {step.Number} StepCompleted (model emitted n={n})");
         };
 
         parser.Warning += msg =>
         {
-            System.Diagnostics.Debug.WriteLine($"[Parser] Warning: {msg}");
+            SessionLog.Write($"[Parser] Warning: {msg}");
             _status.ShowToast(msg, StatusSeverity.Warning);
         };
 
@@ -241,19 +241,19 @@ public sealed class GenerationPipeline
 
         if (!sawCode)
         {
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: no CodeChunk seen");
+            SessionLog.Write($"[Pipeline] step {step.Number}: no CodeChunk seen");
             return false;
         }
 
         var snapshot = buffer.Snapshot();
         if (snapshot.Count == 0)
         {
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: empty file snapshot");
+            SessionLog.Write($"[Pipeline] step {step.Number}: empty file snapshot");
             return false;
         }
 
         var primary = _writer.Write(step.Number, snapshot, projectRoot, model.IsMultiFile);
-        System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: wrote primary='{primary}'");
+        SessionLog.Write($"[Pipeline] step {step.Number}: wrote primary='{primary}'");
         step.SetOutputPath(primary);
 
         // Replace the streamed buffer with the canonical file body. The streamed
@@ -267,7 +267,7 @@ public sealed class GenerationPipeline
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: ReplaceCode read failed: {ex.Message}");
+            SessionLog.Write($"[Pipeline] step {step.Number}: ReplaceCode read failed: {ex.Message}");
         }
 
         // Stamp model id + timestamp so the per-card provenance footer survives
@@ -283,7 +283,7 @@ public sealed class GenerationPipeline
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: ComputeFileHash failed: {ex.Message}");
+            SessionLog.Write($"[Pipeline] step {step.Number}: ComputeFileHash failed: {ex.Message}");
         }
 
         WriteDeltaSidecar(step, projectRoot);
@@ -295,12 +295,12 @@ public sealed class GenerationPipeline
         try
         {
             step.SetBuildState(BuildState.Building);
-            System.Diagnostics.Debug.WriteLine($"[BuildFix] step {step.Number}: starting initial build");
+            SessionLog.Write($"[BuildFix] step {step.Number}: starting initial build");
             var result = await _runner.BuildAsync(step, projectRoot, model.IsMultiFile, ct).ConfigureAwait(false);
-            System.Diagnostics.Debug.WriteLine($"[BuildFix] step {step.Number}: initial build exit={result.ExitCode} succeeded={result.Succeeded} outputBytes={result.CombinedOutput.Length}");
+            SessionLog.Write($"[BuildFix] step {step.Number}: initial build exit={result.ExitCode} succeeded={result.Succeeded} outputBytes={result.CombinedOutput.Length}");
             if (!result.Succeeded)
             {
-                System.Diagnostics.Debug.WriteLine($"[BuildFix] step {step.Number} build output (last 500 chars): {result.CombinedOutput[Math.Max(0, result.CombinedOutput.Length - 500)..]}");
+                SessionLog.Write($"[BuildFix] step {step.Number} build output (last 500 chars): {result.CombinedOutput[Math.Max(0, result.CombinedOutput.Length - 500)..]}");
             }
             if (result.Succeeded)
             {
@@ -315,14 +315,14 @@ public sealed class GenerationPipeline
             {
                 ct.ThrowIfCancellationRequested();
                 _status.SetGeneratingStatus($"Fixing step {step.Number} of {model.Steps.Count} (attempt {attempt})…");
-                System.Diagnostics.Debug.WriteLine($"[BuildFix] step {step.Number}: fix attempt {attempt}");
+                SessionLog.Write($"[BuildFix] step {step.Number}: fix attempt {attempt}");
                 if (!await ApplyFixAttemptAsync(step, model, projectRoot, lastOutput, ct).ConfigureAwait(false))
                     break;
 
                 step.IncrementFixAttempts();
                 _status.SetGeneratingStatus($"Building step {step.Number} of {model.Steps.Count} (re-build {attempt})…");
                 var rebuild = await _runner.BuildAsync(step, projectRoot, model.IsMultiFile, ct).ConfigureAwait(false);
-                System.Diagnostics.Debug.WriteLine($"[BuildFix] step {step.Number}: fix-attempt {attempt} build exit={rebuild.ExitCode} succeeded={rebuild.Succeeded}");
+                SessionLog.Write($"[BuildFix] step {step.Number}: fix-attempt {attempt} build exit={rebuild.ExitCode} succeeded={rebuild.Succeeded}");
                 if (rebuild.Succeeded)
                 {
                     step.SetBuildState(BuildState.Succeeded);
@@ -404,7 +404,7 @@ public sealed class GenerationPipeline
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[BuildFix] ReplaceCode read failed: {ex.Message}");
+            SessionLog.Write($"[BuildFix] ReplaceCode read failed: {ex.Message}");
         }
         return true;
     }
@@ -479,7 +479,7 @@ public sealed class GenerationPipeline
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] WriteDeltaSidecar failed: {ex.Message}");
+            SessionLog.Write($"[Pipeline] WriteDeltaSidecar failed: {ex.Message}");
         }
     }
 
@@ -627,7 +627,7 @@ public sealed class GenerationPipeline
             try { return System.IO.File.ReadAllText(prior.OutputPath); }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[Pipeline] read prior step file failed: {ex.Message}");
+                SessionLog.Write($"[Pipeline] read prior step file failed: {ex.Message}");
             }
         }
         // Fallback paths for the standard layout — same shape the writer uses.
@@ -639,7 +639,7 @@ public sealed class GenerationPipeline
             try { return System.IO.File.ReadAllText(fallback); }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[Pipeline] read prior step fallback failed: {ex.Message}");
+                SessionLog.Write($"[Pipeline] read prior step fallback failed: {ex.Message}");
             }
         }
         var inMem = prior.Code;

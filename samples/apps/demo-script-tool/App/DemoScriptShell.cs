@@ -84,6 +84,7 @@ public sealed class DemoScriptShell : Component
             }
             void OnGenerating(string? msg)
             {
+                SessionLog.Write($"[Shell] OnGenerating '{msg ?? "(null)"}'");
                 setGenerationStatus(msg);
                 if (msg is not null)
                 {
@@ -105,7 +106,7 @@ public sealed class DemoScriptShell : Component
 
             if (InitialFolder is not null && projectRoot is null)
             {
-                System.Diagnostics.Debug.WriteLine($"[demo-script] auto-loading CLI folder: {InitialFolder}");
+                SessionLog.Write($"[demo-script] auto-loading CLI folder: {InitialFolder}");
                 _ = LoadFolderAsync(InitialFolder);
             }
 
@@ -279,6 +280,7 @@ public sealed class DemoScriptShell : Component
 
         void OnGenerateAll()
         {
+            SessionLog.Write($"[Shell] OnGenerateAll projectRoot='{projectRoot ?? "(null)"}' ctsCurrent={(generationCtsRef.Current is null ? "null" : "non-null")} isGenerating={isGenerating} steps={model.Steps.Count}");
             if (projectRoot is null)
             {
                 _status.ShowToast("Open a folder first (Ctrl+O).", StatusSeverity.Warning);
@@ -294,6 +296,7 @@ public sealed class DemoScriptShell : Component
             // cancel a run regardless of any UseState-vs-render drift.
             if (generationCtsRef.Current is not null)
             {
+                SessionLog.Write("[Shell] OnGenerateAll → cancelling in-flight gen");
                 generationCtsRef.Current.Cancel();
                 return;
             }
@@ -306,21 +309,24 @@ public sealed class DemoScriptShell : Component
             generationCtsRef.Current = cts;
             setIsGenerating(true);
             announce.Announce($"Generating {model.Steps.Count} steps…", assertive: false);
+            SessionLog.Write("[Shell] Generate-All kicking off Task.Run");
 
             _ = Task.Run(async () =>
             {
+                SessionLog.Write("[Shell] Generate-All Task.Run entered");
                 try
                 {
                     await _pipeline.GenerateAllAsync(model, projectRoot, cts.Token).ConfigureAwait(false);
+                    SessionLog.Write("[Shell] Generate-All Task.Run pipeline returned normally");
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[Shell] Generate task crashed: {ex}");
+                    SessionLog.Write($"[Shell] Generate task crashed: {ex}");
                     _status.SetBanner($"Generation crashed: {ex.GetType().Name} — {ex.Message}");
                 }
                 finally
                 {
-                    System.Diagnostics.Debug.WriteLine("[Shell] Generate finally — clearing isGenerating + cts");
+                    SessionLog.Write("[Shell] Generate finally — clearing isGenerating + cts");
                     setIsGenerating(false);
                     generationCtsRef.Current?.Dispose();
                     generationCtsRef.Current = null;
@@ -359,6 +365,7 @@ public sealed class DemoScriptShell : Component
 
         void OnRegenFromStep(StepModel step)
         {
+            SessionLog.Write($"[Shell] OnRegenFromStep step={step.Number} '{step.Title}' projectRoot='{projectRoot ?? "(null)"}' ctsCurrent={(generationCtsRef.Current is null ? "null" : "non-null")} isGenerating={isGenerating}");
             if (projectRoot is null)
             {
                 _status.ShowToast("Open a folder first.", StatusSeverity.Warning);
@@ -387,21 +394,24 @@ public sealed class DemoScriptShell : Component
             generationCtsRef.Current = cts;
             setIsGenerating(true);
             announce.Announce($"Re-generating from step {step.Number}…", assertive: false);
+            SessionLog.Write($"[Shell] Re-gen kicking off Task.Run startIndex={idx}");
 
             _ = Task.Run(async () =>
             {
+                SessionLog.Write($"[Shell] Re-gen Task.Run entered startIndex={idx}");
                 try
                 {
                     await _pipeline.GenerateFromAsync(model, projectRoot, idx, cts.Token).ConfigureAwait(false);
+                    SessionLog.Write("[Shell] Re-gen Task.Run pipeline returned normally");
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[Shell] Re-gen task crashed: {ex}");
+                    SessionLog.Write($"[Shell] Re-gen task crashed: {ex}");
                     _status.SetBanner($"Re-gen crashed: {ex.GetType().Name} — {ex.Message}");
                 }
                 finally
                 {
-                    System.Diagnostics.Debug.WriteLine("[Shell] Re-gen finally — clearing isGenerating + cts");
+                    SessionLog.Write("[Shell] Re-gen finally — clearing isGenerating + cts");
                     setIsGenerating(false);
                     generationCtsRef.Current?.Dispose();
                     generationCtsRef.Current = null;
@@ -510,13 +520,28 @@ public sealed class DemoScriptShell : Component
                     }
                     catch (Exception ex) { _status.ShowToast($"Reveal failed: {ex.Message}", StatusSeverity.Error); }
                 }),
+            MenuItem("Reveal log folder…",
+                () =>
+                {
+                    try
+                    {
+                        // Prefer selecting the current session's file (highlights it
+                        // in Explorer); fall back to opening the folder if Init
+                        // hasn't run or the file is gone.
+                        var arg = SessionLog.CurrentPath is { } p && System.IO.File.Exists(p)
+                            ? $"/select,\"{p}\""
+                            : $"\"{SessionLog.LogDirectory}\"";
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", arg) { UseShellExecute = true });
+                    }
+                    catch (Exception ex) { _status.ShowToast($"Reveal log failed: {ex.Message}", StatusSeverity.Error); }
+                }),
             MenuItem("Log model snapshot",
-                () => System.Diagnostics.Debug.WriteLine($"[demo-script] title='{model.Title}' steps={model.Steps.Count} multiFile={model.IsMultiFile}")),
+                () => SessionLog.Write($"[demo-script] title='{model.Title}' steps={model.Steps.Count} multiFile={model.IsMultiFile}")),
             MenuItem("Log available Copilot models…",
                 () => _ = Task.Run(async () =>
                 {
                     var s = await _client.DescribeAvailableModelsAsync(CancellationToken.None);
-                    System.Diagnostics.Debug.WriteLine("[demo-script] available models:\n" + s);
+                    SessionLog.Write("[demo-script] available models:\n" + s);
                     _status.ShowToast("Available Copilot models written to debug log.", StatusSeverity.Info);
                 })),
             MenuItem("Force banner: dummy auth error",

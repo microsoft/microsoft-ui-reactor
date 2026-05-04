@@ -253,7 +253,7 @@ public sealed class StepModel
             try { Changed?.Invoke(); }
             catch (System.Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[StepModel] Changed handler threw: {ex}");
+                SessionLog.Write($"[StepModel] Changed handler threw: {ex}");
             }
         });
     }

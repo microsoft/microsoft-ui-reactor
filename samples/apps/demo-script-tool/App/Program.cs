@@ -27,6 +27,11 @@ foreach (var raw in System.Environment.GetCommandLineArgs().Skip(1))
     break;
 }
 
+// Persistent session log — opens before anything else can call Write so
+// even early-startup failures land in the file, not just the debugger.
+DemoScriptTool.App.Services.SessionLog.Init();
+DemoScriptTool.App.Services.SessionLog.Write($"[Program] launched initialFolder='{initialFolder ?? "(none)"}' args={string.Join(' ', System.Environment.GetCommandLineArgs())}");
+
 DemoScriptShell.InitialFolder = initialFolder;
 
 ReactorApp.Run<DemoScriptShell>(

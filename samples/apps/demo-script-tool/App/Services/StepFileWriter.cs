@@ -68,7 +68,7 @@ public sealed class StepFileWriter
             // path that, once resolved, doesn't sit strictly inside stepDir.
             if (!TryResolveContainedPath(stepDirCanonical, rel, out var target))
             {
-                System.Diagnostics.Debug.WriteLine($"[StepFileWriter] rejecting unsafe path '{kv.Key}' → outside step dir");
+                SessionLog.Write($"[StepFileWriter] rejecting unsafe path '{kv.Key}' → outside step dir");
                 continue;
             }
 
@@ -125,7 +125,7 @@ public sealed class StepFileWriter
         }
         catch (System.Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[StepFileWriter] path resolve failed for '{rel}': {ex.Message}");
+            SessionLog.Write($"[StepFileWriter] path resolve failed for '{rel}': {ex.Message}");
             return false;
         }
     }

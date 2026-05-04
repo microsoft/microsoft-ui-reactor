@@ -46,10 +46,10 @@ public sealed class GithubModelsClient : IModelClient, IDisposable
         string userPrompt,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        System.Diagnostics.Debug.WriteLine($"[GithubModels] StreamAsync model={_model} endpoint={_endpoint} userPromptBytes={userPrompt.Length}");
+        SessionLog.Write($"[GithubModels] StreamAsync model={_model} endpoint={_endpoint} userPromptBytes={userPrompt.Length}");
         var token = await _auth.GetTokenAsync(ct).ConfigureAwait(false)
             ?? throw new AuthExpiredException("No GitHub token available. Sign in via the Open Folder flow.");
-        System.Diagnostics.Debug.WriteLine($"[GithubModels] token acquired (len={token.Length})");
+        SessionLog.Write($"[GithubModels] token acquired (len={token.Length})");
 
         var payload = new
         {
@@ -79,17 +79,17 @@ public sealed class GithubModelsClient : IModelClient, IDisposable
         req.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
 
         using var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        System.Diagnostics.Debug.WriteLine($"[GithubModels] HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
+        SessionLog.Write($"[GithubModels] HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
         if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            System.Diagnostics.Debug.WriteLine($"[GithubModels] auth rejected body={body}");
+            SessionLog.Write($"[GithubModels] auth rejected body={body}");
             throw new AuthExpiredException($"GitHub Models rejected the request ({(int)response.StatusCode} {response.ReasonPhrase}). Likely missing the `models:read` scope on your GitHub token — re-run `gh auth login --scopes models:read`.");
         }
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            System.Diagnostics.Debug.WriteLine($"[GithubModels] error body={body}");
+            SessionLog.Write($"[GithubModels] error body={body}");
             throw new HttpRequestException($"GitHub Models returned {(int)response.StatusCode} {response.ReasonPhrase}: {body}");
         }
 
