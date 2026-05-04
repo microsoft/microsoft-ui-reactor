@@ -65,10 +65,10 @@ public sealed class GenerationPipeline
 
     /// <summary>
     /// Generate from <paramref name="startIndex"/> through the end of the
-    /// script. The "Re-run from here" affordance on each step card calls this
-    /// with the chosen step's index — regenerating one step inevitably changes
-    /// the baseline code that downstream steps were built on, so we always
-    /// re-run the chain from the chosen point onward.
+    /// script. The "Re-gen" affordance on each step card calls this with the
+    /// chosen step's index — regenerating one step inevitably changes the
+    /// baseline code that downstream steps were built on, so we always
+    /// re-generate the chain from the chosen point onward.
     /// </summary>
     public async Task GenerateFromAsync(DemoScriptModel model, string projectRoot, int startIndex, CancellationToken ct)
     {
@@ -101,10 +101,10 @@ public sealed class GenerationPipeline
                     // Halt: continuing would feed the next step a poisoned (empty
                     // or stale) baseline, which we observed cascading into a
                     // chain of "No code produced" failures. The user can fix
-                    // the prompt and click Re-run from here.
+                    // the prompt and click Re-gen.
                     System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: no code produced; halting");
                     step.SetBuildState(BuildState.Failed, "No code produced.");
-                    _status.SetBanner($"Step {step.Number} produced no code — generation halted. Edit the prompt or earlier steps and use “Re-run from here.”");
+                    _status.SetBanner($"Step {step.Number} produced no code — generation halted. Edit the prompt or earlier steps and click Re-gen.");
                     return;
                 }
 
@@ -116,11 +116,11 @@ public sealed class GenerationPipeline
                 // attempts; passing its broken code to step N+1 produced
                 // cascade-failure runs in practice, so halt here. The user can
                 // tweak the failing step's prompt or an earlier step's code
-                // and Re-run from here to pick up where we stopped.
+                // and click Re-gen to pick up where we stopped.
                 if (step.BuildState == BuildState.Failed)
                 {
                     System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: build failed after {MaxFixAttempts} fix attempts; halting");
-                    _status.SetBanner($"Step {step.Number} failed to build after {MaxFixAttempts} fix attempts — generation halted. Use “Re-run from here” after editing the step.");
+                    _status.SetBanner($"Step {step.Number} failed to build after {MaxFixAttempts} fix attempts — generation halted. Click Re-gen after editing the step.");
                     return;
                 }
             }

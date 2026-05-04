@@ -15,7 +15,7 @@ public sealed record StepsPanelProps(
     Action<StepModel> OnCopyDelta,
     Action OnAddStep,
     Action<StepModel> OnDeleteStep,
-    Action<StepModel> OnRerunFromStep);
+    Action<StepModel> OnRegenFromStep);
 
 /// <summary>
 /// Vertical scroller of <see cref="StepCard"/> instances keyed by step number.
@@ -79,7 +79,7 @@ public sealed class StepsPanel : Component<StepsPanelProps>
                 steps.Count,
                 Props.IsGenerating,
                 Props.OnPromptChanged, Props.OnTitleChanged, Props.OnRun, Props.OnCopyDelta, Props.OnDeleteStep,
-                Props.OnRerunFromStep)))
+                Props.OnRegenFromStep)))
             .Append(addButton)
             .ToArray();
 

@@ -284,11 +284,23 @@ public sealed class DemoScriptShell : Component
                 _status.ShowToast("Open a folder first (Ctrl+O).", StatusSeverity.Warning);
                 return;
             }
-            if (isGenerating)
+
+            // The CTS ref is the source of truth for "actually in flight" — it's
+            // mutated synchronously and never lags behind a UseState dispatch.
+            // We previously gated on the isGenerating UseState, which ended up
+            // stuck true on at least one repro after a normal completion (the
+            // Cancel button never reverted to Generate All), blocking subsequent
+            // runs. Falling back to the ref means the user can always start /
+            // cancel a run regardless of any UseState-vs-render drift.
+            if (generationCtsRef.Current is not null)
             {
-                generationCtsRef.Current?.Cancel();
+                generationCtsRef.Current.Cancel();
                 return;
             }
+
+            // Defensively reset the UI flag in case it's stuck out of sync with
+            // the ref. setIsGenerating(true) below schedules a render either way.
+            if (isGenerating) setIsGenerating(false);
 
             var cts = new CancellationTokenSource();
             generationCtsRef.Current = cts;
@@ -308,6 +320,7 @@ public sealed class DemoScriptShell : Component
                 }
                 finally
                 {
+                    System.Diagnostics.Debug.WriteLine("[Shell] Generate finally — clearing isGenerating + cts");
                     setIsGenerating(false);
                     generationCtsRef.Current?.Dispose();
                     generationCtsRef.Current = null;
@@ -344,18 +357,22 @@ public sealed class DemoScriptShell : Component
             });
         }
 
-        void OnRerunFromStep(StepModel step)
+        void OnRegenFromStep(StepModel step)
         {
             if (projectRoot is null)
             {
                 _status.ShowToast("Open a folder first.", StatusSeverity.Warning);
                 return;
             }
-            if (isGenerating)
+            // CTS-ref-as-truth (see OnGenerateAll). Gating on UseState's
+            // isGenerating directly used to leave Re-gen permanently disabled
+            // when the flag got stuck after a normal completion.
+            if (generationCtsRef.Current is not null)
             {
                 _status.ShowToast("Generation already running — cancel it first.", StatusSeverity.Warning);
                 return;
             }
+            if (isGenerating) setIsGenerating(false);
 
             // Locate this step's index in the live steps list. Comparing by
             // reference is robust to renumbering after Add/Delete.
@@ -369,7 +386,7 @@ public sealed class DemoScriptShell : Component
             var cts = new CancellationTokenSource();
             generationCtsRef.Current = cts;
             setIsGenerating(true);
-            announce.Announce($"Re-running from step {step.Number}…", assertive: false);
+            announce.Announce($"Re-generating from step {step.Number}…", assertive: false);
 
             _ = Task.Run(async () =>
             {
@@ -379,11 +396,12 @@ public sealed class DemoScriptShell : Component
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[Shell] Re-run task crashed: {ex}");
-                    _status.SetBanner($"Re-run crashed: {ex.GetType().Name} — {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[Shell] Re-gen task crashed: {ex}");
+                    _status.SetBanner($"Re-gen crashed: {ex.GetType().Name} — {ex.Message}");
                 }
                 finally
                 {
+                    System.Diagnostics.Debug.WriteLine("[Shell] Re-gen finally — clearing isGenerating + cts");
                     setIsGenerating(false);
                     generationCtsRef.Current?.Dispose();
                     generationCtsRef.Current = null;
@@ -546,7 +564,7 @@ public sealed class DemoScriptShell : Component
                 .Margin(0, banner is null && parseError is null ? 0 : 12, 0, 0),
             (parseError is null
                 ? (Element)Component<StepsPanel, StepsPanelProps>(
-                    new StepsPanelProps(model, isGenerating, OnPromptChanged, OnTitleChanged, OnRunStep, OnCopyDelta, OnAddStep, OnDeleteStep, OnRerunFromStep))
+                    new StepsPanelProps(model, isGenerating, OnPromptChanged, OnTitleChanged, OnRunStep, OnCopyDelta, OnAddStep, OnDeleteStep, OnRegenFromStep))
                     .Flex(grow: 1, basis: 0)
                 : Empty()))
             with { RowGap = 0 })
