@@ -61,7 +61,7 @@ public sealed class StepsPanel : Component<StepsPanelProps>
                     SubHeading("No steps yet").Foreground(Theme.SecondaryText),
                     TextBlock("Add steps below, or run Generate All once you have a few in mind.")
                         .Foreground(Theme.SecondaryText)
-                        .Set(tb => tb.TextWrapping = TextWrapping.Wrap),
+                        .TextWrapping(TextWrapping.Wrap),
                     addButton))
                 .Padding(40)
                 .HAlign(HorizontalAlignment.Center)
@@ -74,13 +74,13 @@ public sealed class StepsPanel : Component<StepsPanelProps>
             .Append(addButton)
             .ToArray();
 
-        return ScrollView(VStack(cards))
-            .Set(sv =>
+        return (ScrollView(VStack(cards))
+            with
             {
-                sv.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-                sv.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-                sv.Padding = new Thickness(0, 0, 8, 0);
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             })
+            .Padding(0, 0, 8, 0)
             .Landmark(Microsoft.UI.Xaml.Automation.Peers.AutomationLandmarkType.Main);
     }
 }

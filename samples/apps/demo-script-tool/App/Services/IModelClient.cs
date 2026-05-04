@@ -11,6 +11,12 @@ namespace DemoScriptTool.App.Services;
 public interface IModelClient
 {
     /// <summary>
+    /// Identifier of the model behind this client (e.g. <c>claude-sonnet-4.5</c>).
+    /// Surfaced in the per-step provenance footer.
+    /// </summary>
+    string ModelId { get; }
+
+    /// <summary>
     /// Stream the model's response token-by-token. The returned sequence is
     /// produced as deltas arrive over the wire — implementations must abort
     /// the underlying HTTP read when <paramref name="ct"/> is cancelled.

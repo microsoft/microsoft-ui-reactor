@@ -33,12 +33,17 @@ public sealed class DemoScriptShell : Component
     readonly GhAuth _auth = new();
     readonly SpeakerNotesExporter _exporter = new();
     readonly StatusReporter _status = new();
-    readonly GithubModelsClient _client;
+    readonly CopilotSdkClient _client;
     readonly GenerationPipeline _pipeline;
 
     public DemoScriptShell()
     {
-        _client = new GithubModelsClient(_auth);
+        // Copilot SDK rides the user's logged-in Copilot subscription; the
+        // earlier raw-HTTP GithubModelsClient kept tripping github.com's anti-
+        // scraping 429 when the Authorization header alone wasn't enough to
+        // attribute the traffic. The SDK proxies through the bundled Copilot
+        // CLI which sends the proper UA + session metadata.
+        _client = new CopilotSdkClient();
         _pipeline = new GenerationPipeline(_client, _runner, _writer, _auth, _status);
     }
 
@@ -225,11 +230,23 @@ public sealed class DemoScriptShell : Component
                 setParseError(err);
                 if (loaded is not null)
                 {
+                    // Restore previously-generated step artifacts from disk so
+                    // the UI shows the existing code instead of "No code
+                    // generated yet" after a re-open. Build state and Delta
+                    // are NOT persisted; they reset to NotBuilt and null —
+                    // the user can click ▶ Run on a step that already has
+                    // code without re-generating.
+                    int restored = 0;
+                    foreach (var step in loaded.Steps)
+                        if (await TryRestoreStepArtifactAsync(step, root, loaded.IsMultiFile, CancellationToken.None).ConfigureAwait(false))
+                            restored++;
+
                     setModel(loaded);
                     setBanner(null);
-                    _status.ShowToast(loaded.Steps.Count == 0
-                        ? $"Opened {IoPath.GetFileName(root)} — add a demo prompt to get started."
-                        : $"Opened {IoPath.GetFileName(root)} ({loaded.Steps.Count} steps).");
+                    var stepsLine = loaded.Steps.Count == 0
+                        ? "add a demo prompt to get started."
+                        : $"{loaded.Steps.Count} step{(loaded.Steps.Count == 1 ? "" : "s")}{(restored > 0 ? $", {restored} with existing code" : "")}.";
+                    _status.ShowToast($"Opened {IoPath.GetFileName(root)} — {stepsLine}");
                 }
                 else if (err is not null)
                 {
@@ -430,6 +447,13 @@ public sealed class DemoScriptShell : Component
                 }),
             MenuItem("Log model snapshot",
                 () => System.Diagnostics.Debug.WriteLine($"[demo-script] title='{model.Title}' steps={model.Steps.Count} multiFile={model.IsMultiFile}")),
+            MenuItem("Log available Copilot models…",
+                () => _ = Task.Run(async () =>
+                {
+                    var s = await _client.DescribeAvailableModelsAsync(CancellationToken.None);
+                    System.Diagnostics.Debug.WriteLine("[demo-script] available models:\n" + s);
+                    _status.ShowToast("Available Copilot models written to debug log.", StatusSeverity.Info);
+                })),
             MenuItem("Force banner: dummy auth error",
                 () => _status.SetBanner("Dummy auth banner — testing recovery UX. Click Open Folder to clear.")),
         });
@@ -458,7 +482,12 @@ public sealed class DemoScriptShell : Component
         };
 
         // ── Body ────────────────────────────────────────────────────────
-        var body = VStack(0,
+        // FlexColumn (not VStack) so we can mark the steps panel `Flex(grow:1)`.
+        // Without that, StepsPanel's inner ScrollView gets unbounded height and
+        // simply overflows the window — the user can't scroll past the first
+        // step or two. The banner / DemoPromptPanel above stay at natural height
+        // (Flex shrink is 1 by default for non-grow children).
+        var body = (FlexColumn(
             announce.Region,
             banner is not null
                 ? InlineBanner.Render(banner, BannerKind.Error)
@@ -471,7 +500,9 @@ public sealed class DemoScriptShell : Component
             (parseError is null
                 ? (Element)Component<StepsPanel, StepsPanelProps>(
                     new StepsPanelProps(model, OnPromptChanged, OnTitleChanged, OnRunStep, OnCopyDelta, OnAddStep, OnDeleteStep))
+                    .Flex(grow: 1, basis: 0)
                 : Empty()))
+            with { RowGap = 0 })
             .Padding(16)
             .Flex(grow: 1);
 
@@ -520,6 +551,79 @@ public sealed class DemoScriptShell : Component
         var sb = new System.Text.StringBuilder(64);
         for (int i = 0; i < h.Length; i++) sb.Append(h[i].ToString("x2"));
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Restore the on-disk artifact for a step into <see cref="StepModel.Code"/>
+    /// and <see cref="StepModel.OutputPath"/> so the UI shows the existing code
+    /// after re-opening a folder. Single-file mode reads <c>step-NN.cs</c>
+    /// directly; multi-file mode prefers <c>step-NN/Program.cs</c> for the
+    /// viewer body and points OutputPath at the step directory. Returns true
+    /// if anything was restored.
+    /// </summary>
+    static async Task<bool> TryRestoreStepArtifactAsync(StepModel step, string projectRoot, bool multiFile, CancellationToken ct)
+    {
+        try
+        {
+            string? primary = null;
+
+            if (multiFile)
+            {
+                var stepDir = IoPath.Combine(projectRoot, $"step-{step.Number:D2}");
+                if (Directory.Exists(stepDir))
+                {
+                    var program = IoPath.Combine(stepDir, "Program.cs");
+                    if (File.Exists(program)) primary = program;
+                }
+            }
+            else
+            {
+                var path = IoPath.Combine(projectRoot, $"step-{step.Number:D2}.cs");
+                if (File.Exists(path)) primary = path;
+            }
+
+            // Restore the delta sidecar even if no primary code file is present
+            // — a step might have a hand-written delta the user wants to view
+            // before generating any code. Frontmatter (model id + generated
+            // timestamp + content hash) round-trips through the parser so the
+            // per-card provenance footer + stale indicator survive a restart.
+            string? storedHash = null;
+            var deltaPath = GenerationPipeline.DeltaSidecarPath(step.Number, projectRoot);
+            if (File.Exists(deltaPath))
+            {
+                try
+                {
+                    var raw = await File.ReadAllTextAsync(deltaPath, ct).ConfigureAwait(false);
+                    var (body, generatedBy, generatedAt, contentHash) = GenerationPipeline.ParseDeltaSidecar(raw);
+                    step.ReplaceDelta(body);
+                    if (generatedBy is not null || generatedAt is not null)
+                        step.SetGenerationProvenance(generatedBy, generatedAt);
+                    storedHash = contentHash;
+                }
+                catch { /* best-effort restore */ }
+            }
+
+            if (primary is null) return false;
+            var bytes = await File.ReadAllBytesAsync(primary, ct).ConfigureAwait(false);
+            step.ReplaceCode(System.Text.Encoding.UTF8.GetString(bytes));
+            step.SetOutputPath(primary);
+
+            // Stale check: re-hash the live disk bytes and compare against the
+            // hash captured at generate time. Mismatch means the file moved
+            // (hand edit, git checkout, sed/find replace, fix-mode regenerate
+            // that didn't update the sidecar). We always store the LIVE hash
+            // on the step so the next regenerate's compare is against current
+            // disk state, not stale state — but the StaleSinceLoad flag
+            // remembers what we found so the UI can flag it.
+            var liveHash = GenerationPipeline.ComputeBytesHash(bytes);
+            step.SetSourceHash(liveHash);
+            step.SetStaleSinceLoad(storedHash is not null && !string.Equals(storedHash, liveHash, StringComparison.Ordinal));
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     static string SymbolFor(StatusSeverity s) => s switch

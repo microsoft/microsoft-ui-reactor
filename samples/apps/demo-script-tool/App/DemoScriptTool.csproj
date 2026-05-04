@@ -18,6 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="GitHub.Copilot.SDK" Version="0.3.0" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
   </ItemGroup>
 
@@ -30,6 +31,7 @@
     <None Include="Assets\demo-script-tool.ico" Condition="Exists('Assets\demo-script-tool.ico')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <Content Include="Assets\Icons\*.svg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -54,6 +54,35 @@ public sealed class StepModel
     public string? OutputPath { get; private set; }
 
     /// <summary>
+    /// Model identifier that produced the current code/delta (e.g.
+    /// <c>claude-sonnet-4.5</c>). Persisted alongside the delta sidecar so
+    /// the provenance footer survives an app restart.
+    /// </summary>
+    public string? GeneratedBy { get; private set; }
+
+    /// <summary>
+    /// Wall-clock time when the current code/delta was produced. Persisted
+    /// alongside the delta sidecar so the "generated 5 min ago" footer
+    /// stays accurate across restarts.
+    /// </summary>
+    public DateTimeOffset? GeneratedAt { get; private set; }
+
+    /// <summary>
+    /// SHA-256 of the generated artifact bytes — set at generate time and
+    /// re-set after Open Folder reads the live disk content. Persisted in
+    /// the delta sidecar's frontmatter as <c>contentHash</c>.
+    /// </summary>
+    public string? SourceHash { get; private set; }
+
+    /// <summary>
+    /// True when the sidecar's stored hash disagrees with the live disk hash
+    /// at load time — the artifact was modified outside the app between
+    /// generation and the most recent Open Folder. The shell drives this;
+    /// the UI shows a warning indicator. Cleared on the next regenerate.
+    /// </summary>
+    public bool StaleSinceLoad { get; private set; }
+
+    /// <summary>
     /// Fires after any mutation. UI components subscribe via <see cref="UseEffect"/>
     /// and pull whatever fields they need.
     /// </summary>
@@ -81,11 +110,46 @@ public sealed class StepModel
         RaiseChanged();
     }
 
+    /// <summary>
+    /// Replace the entire code buffer with <paramref name="content"/>. Used by
+    /// the generation pipeline once <see cref="Services.StepFileWriter"/> has
+    /// produced the canonical on-disk file for this step — the streamed buffer
+    /// can hold noise (alternate code blocks, multi-file emissions, fix-mode
+    /// partials), so the post-write swap pins the UI to the actual file the
+    /// user will run.
+    /// </summary>
+    public void ReplaceCode(string content)
+    {
+        lock (_gate)
+        {
+            _code.Clear();
+            if (!string.IsNullOrEmpty(content))
+                _code.Append(content);
+        }
+        RaiseChanged();
+    }
+
     public void AppendDeltaToken(string token)
     {
         if (string.IsNullOrEmpty(token)) return;
         lock (_gate)
             _delta.Append(token);
+        RaiseChanged();
+    }
+
+    /// <summary>
+    /// Replace the entire delta buffer. Used when loading speaker notes from
+    /// a previously-exported <c>speaker-notes.txt</c> on Open Folder so Copy
+    /// Delta is wired up without re-generating.
+    /// </summary>
+    public void ReplaceDelta(string? content)
+    {
+        lock (_gate)
+        {
+            _delta.Clear();
+            if (!string.IsNullOrEmpty(content))
+                _delta.Append(content);
+        }
         RaiseChanged();
     }
 
@@ -100,6 +164,7 @@ public sealed class StepModel
         BuildOutput = null;
         FixAttempts = 0;
         OutputPath = null;
+        StaleSinceLoad = false;
         RaiseChanged();
     }
 
@@ -126,6 +191,29 @@ public sealed class StepModel
     public void SetOutputPath(string path)
     {
         OutputPath = path;
+        RaiseChanged();
+    }
+
+    /// <summary>Stamp the current code/delta with the model id + a UTC timestamp.</summary>
+    public void SetGenerationProvenance(string? generatedBy, DateTimeOffset? generatedAt)
+    {
+        GeneratedBy = generatedBy;
+        GeneratedAt = generatedAt;
+        RaiseChanged();
+    }
+
+    /// <summary>Stamp the current artifact's content hash.</summary>
+    public void SetSourceHash(string? sourceHash)
+    {
+        SourceHash = sourceHash;
+        RaiseChanged();
+    }
+
+    /// <summary>Mark the step as out-of-sync (or back in sync) at load time.</summary>
+    public void SetStaleSinceLoad(bool stale)
+    {
+        if (StaleSinceLoad == stale) return;
+        StaleSinceLoad = stale;
         RaiseChanged();
     }
 

@@ -25,23 +25,42 @@ public sealed class DotnetRunner
     /// <summary>Outcome of a build attempt.</summary>
     public sealed record BuildResult(bool Succeeded, string CombinedOutput, int ExitCode);
 
+    /// <summary>
+    /// Serializes concurrent BuildAsync calls. The WindowsAppSDK markup-
+    /// compiler MSBuild task (Microsoft.UI.Xaml.Markup.Compiler.interop) is
+    /// not safe to invoke from two `dotnet build` processes at once — it
+    /// races on a shared temp directory and one of the two reliably fails
+    /// with MSB3073. The generation pipeline fires a build per step from
+    /// independent Task.Run continuations so without this gate, anything
+    /// past step 1 hits the race.
+    /// </summary>
+    readonly System.Threading.SemaphoreSlim _buildGate = new(1, 1);
+
     /// <summary>Run <c>dotnet build</c> for a step. The process is killed if cancelled.</summary>
     public async Task<BuildResult> BuildAsync(StepModel step, string projectRoot, bool multiFile, CancellationToken ct)
     {
-        if (multiFile)
+        await _buildGate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            var stepDir = Path.Combine(projectRoot, $"step-{step.Number:D2}");
-            return await RunCapturedAsync("dotnet", "build --nologo -v:m", stepDir, ct).ConfigureAwait(false);
+            if (multiFile)
+            {
+                var stepDir = Path.Combine(projectRoot, $"step-{step.Number:D2}");
+                return await RunCapturedAsync("dotnet", "build --nologo -v:m", stepDir, ct).ConfigureAwait(false);
+            }
+
+            var file = Path.Combine(projectRoot, $"step-{step.Number:D2}.cs");
+            // `dotnet build <file.cs>` (file-based apps) — when unavailable, fall back to a transient project wrap.
+            var direct = await RunCapturedAsync("dotnet", $"build --nologo -v:m \"{file}\"", projectRoot, ct).ConfigureAwait(false);
+            if (direct.Succeeded || !LooksLikeFileBasedNotSupported(direct.CombinedOutput))
+                return direct;
+
+            var wrap = await WrapAsTransientProjectAsync(step, projectRoot, ct).ConfigureAwait(false);
+            return await RunCapturedAsync("dotnet", "build --nologo -v:m", wrap, ct).ConfigureAwait(false);
         }
-
-        var file = Path.Combine(projectRoot, $"step-{step.Number:D2}.cs");
-        // `dotnet build <file.cs>` (file-based apps) — when unavailable, fall back to a transient project wrap.
-        var direct = await RunCapturedAsync("dotnet", $"build --nologo -v:m \"{file}\"", projectRoot, ct).ConfigureAwait(false);
-        if (direct.Succeeded || !LooksLikeFileBasedNotSupported(direct.CombinedOutput))
-            return direct;
-
-        var wrap = await WrapAsTransientProjectAsync(step, projectRoot, ct).ConfigureAwait(false);
-        return await RunCapturedAsync("dotnet", "build --nologo -v:m", wrap, ct).ConfigureAwait(false);
+        finally
+        {
+            _buildGate.Release();
+        }
     }
 
     /// <summary>Spawn a non-blocking <c>dotnet run</c> for a step. Returns whether spawn succeeded.</summary>

@@ -39,6 +39,8 @@ public sealed class GithubModelsClient : IModelClient, IDisposable
         _http = httpClient ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
     }
 
+    public string ModelId => _model;
+
     public async IAsyncEnumerable<string> StreamAsync(
         string systemPrompt,
         string userPrompt,
@@ -67,6 +69,14 @@ public sealed class GithubModelsClient : IModelClient, IDisposable
         };
         req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         req.Headers.Accept.ParseAdd("text/event-stream");
+        // Required: github.com's edge classifies UA-less traffic as scraping
+        // and returns the 429 abuse-prevention page instead of a real
+        // rate-limit decision. Send a stable, identifiable UA per
+        // https://docs.github.com/en/rest/overview/rate-limits-for-the-rest-api.
+        req.Headers.UserAgent.ParseAdd("DemoScriptTool/1.0 (+https://github.com/microsoft/microsoft-ui-reactor)");
+        // Models inference: pin the API version per
+        // https://docs.github.com/en/rest/overview/api-versions.
+        req.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
 
         using var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         System.Diagnostics.Debug.WriteLine($"[GithubModels] HTTP {(int)response.StatusCode} {response.ReasonPhrase}");

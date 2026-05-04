@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics;
+using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -16,6 +18,80 @@ public sealed class GhAuth
     int _retryCount;
 
     public event Action<string>? StatusChanged;
+
+    /// <summary>
+    /// Snapshot of the auth state — which gh account, what token source, what
+    /// scopes — for the diagnostic surface. Populated lazily by
+    /// <see cref="GetIdentityAsync"/> so we don't hit github.com on every
+    /// generation.
+    /// </summary>
+    public sealed record AuthIdentity(string Source, string? Login, string[] Scopes, string? Error)
+    {
+        public override string ToString() =>
+            Error is not null
+                ? $"[{Source}] error: {Error}"
+                : $"[{Source}] login={Login ?? "<unknown>"} scopes=[{string.Join(", ", Scopes)}]";
+    }
+
+    /// <summary>
+    /// Resolve a token, then call GET https://api.github.com/user with it to
+    /// confirm which GitHub login the token belongs to and which OAuth scopes
+    /// it carries. Useful when `gh auth token` returns a different account's
+    /// token than the user expected (multi-account gh setups).
+    /// </summary>
+    public async Task<AuthIdentity> GetIdentityAsync(CancellationToken ct)
+    {
+        string source;
+        string? token;
+
+        var envToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        if (!string.IsNullOrEmpty(envToken))
+        {
+            source = "GITHUB_TOKEN env";
+            token = envToken;
+        }
+        else
+        {
+            try
+            {
+                var cached = await RunGhAsync("auth token", captureStdout: true, ct).ConfigureAwait(false);
+                if (cached.ExitCode != 0 || string.IsNullOrWhiteSpace(cached.Stdout))
+                    return new AuthIdentity("gh auth token", null, Array.Empty<string>(),
+                        $"`gh auth token` exited {cached.ExitCode}: {cached.Stderr.Trim()}");
+                source = "gh auth token";
+                token = cached.Stdout.Trim();
+            }
+            catch (Exception ex)
+            {
+                return new AuthIdentity("gh auth token", null, Array.Empty<string>(), ex.Message);
+            }
+        }
+
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            using var req = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/user");
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            req.Headers.UserAgent.ParseAdd("DemoScriptTool/1.0");
+            req.Headers.Accept.ParseAdd("application/vnd.github+json");
+            using var resp = await http.SendAsync(req, ct).ConfigureAwait(false);
+            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+                return new AuthIdentity(source, null, Array.Empty<string>(),
+                    $"GET /user → {(int)resp.StatusCode} {resp.ReasonPhrase}: {body}");
+
+            using var doc = JsonDocument.Parse(body);
+            var login = doc.RootElement.TryGetProperty("login", out var l) ? l.GetString() : null;
+            var scopes = Array.Empty<string>();
+            if (resp.Headers.TryGetValues("x-oauth-scopes", out var headerVals))
+                scopes = string.Join(",", headerVals).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return new AuthIdentity(source, login, scopes, null);
+        }
+        catch (Exception ex)
+        {
+            return new AuthIdentity(source, null, Array.Empty<string>(), ex.Message);
+        }
+    }
 
     /// <summary>
     /// Read the current GitHub token from the environment or the gh CLI cache.

@@ -37,7 +37,7 @@ public sealed class StepFileWriter
                 }
             }
             var path = Path.Combine(projectRoot, name);
-            File.WriteAllText(path, body);
+            WriteWithRetry(path, body);
             return path;
         }
 
@@ -58,7 +58,7 @@ public sealed class StepFileWriter
 
             var target = Path.Combine(stepDir, rel);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            File.WriteAllText(target, kv.Value);
+            WriteWithRetry(target, kv.Value);
 
             if (rel.EndsWith(".csproj", System.StringComparison.OrdinalIgnoreCase))
                 sawCsproj = true;
@@ -69,10 +69,37 @@ public sealed class StepFileWriter
         if (!sawCsproj)
         {
             var fallbackCsproj = Path.Combine(stepDir, $"step-{stepNumber:D2}.csproj");
-            File.WriteAllText(fallbackCsproj, ScaffoldCsproj());
+            WriteWithRetry(fallbackCsproj, ScaffoldCsproj());
         }
 
         return primary ?? stepDir;
+    }
+
+    /// <summary>
+    /// Write a file with bounded retry-with-backoff against transient sharing
+    /// violations. The .cs file is the source the user runs via `dotnet run`;
+    /// when the prior run is still alive (or the SDK's file-based-app
+    /// host process holds a handle), regeneration would otherwise fail with
+    /// IOException 0x80070020 ("being used by another process") and abort
+    /// the whole pipeline.
+    /// </summary>
+    static void WriteWithRetry(string path, string content)
+    {
+        const int maxAttempts = 6;
+        var delayMs = 50;
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.WriteAllText(path, content);
+                return;
+            }
+            catch (IOException) when (attempt < maxAttempts)
+            {
+                System.Threading.Thread.Sleep(delayMs);
+                delayMs = System.Math.Min(delayMs * 2, 800); // 50→100→200→400→800
+            }
+        }
     }
 
     static string ScaffoldCsproj() => """
