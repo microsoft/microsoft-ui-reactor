@@ -2,7 +2,7 @@
 
   <!--
     Centralize the Windows App SDK version so all projects stay in sync.
-    This uses the public WinUI 3 package from NuGet.
+    This uses the public Microsoft.WindowsAppSDK package from NuGet.
     To install: dotnet restore (NuGet will pull the package automatically).
   -->
   <PropertyGroup>
