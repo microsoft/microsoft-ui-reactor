@@ -68,9 +68,14 @@ public sealed class StepsPanel : Component<StepsPanelProps>
                 .Landmark(Microsoft.UI.Xaml.Automation.Peers.AutomationLandmarkType.Main);
         }
 
+        // Pass each card a reference to the prior step so its show-code mode can
+        // bold lines that appeared since the previous step. Card 0 has no prior.
         var cards = steps
-            .Select(s => (Element)Component<StepCard, StepCardProps>(new StepCardProps(
-                s, steps.Count, Props.OnPromptChanged, Props.OnTitleChanged, Props.OnRun, Props.OnCopyDelta, Props.OnDeleteStep)))
+            .Select((s, idx) => (Element)Component<StepCard, StepCardProps>(new StepCardProps(
+                s,
+                idx > 0 ? steps[idx - 1] : null,
+                steps.Count,
+                Props.OnPromptChanged, Props.OnTitleChanged, Props.OnRun, Props.OnCopyDelta, Props.OnDeleteStep)))
             .Append(addButton)
             .ToArray();
 

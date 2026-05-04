@@ -60,6 +60,23 @@ internal static class CommandBindings
             };
             btn.KeyboardAccelerators.Add(accel);
             _commandAccelerators.Add(btn, accel);
+
+            // Suppress WinUI's auto-generated bare-chord tooltip ("Ctrl+O") when
+            // the command has no Description to anchor it. Without a label, the
+            // floating "Ctrl+O" tooltip is uninformative on its own, and has been
+            // observed to stick on screen when the UI thread is briefly busy
+            // (the dismiss animation can't run). Callers that want the chord
+            // visible should set cmd.Description ("Open Folder", say) — WinUI
+            // shows that as the explicit tooltip and the chord remains
+            // discoverable via the keyboard hint overlay.
+            if (cmd.Description is null)
+                btn.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
+            else
+                btn.ClearValue(UIElement.KeyboardAcceleratorPlacementModeProperty);
+        }
+        else
+        {
+            btn.ClearValue(UIElement.KeyboardAcceleratorPlacementModeProperty);
         }
     }
 

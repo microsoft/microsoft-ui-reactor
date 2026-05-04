@@ -7,6 +7,7 @@ namespace DemoScriptTool.App.Components;
 
 public sealed record StepCardProps(
     StepModel Step,
+    StepModel? PriorStep,
     int TotalSteps,
     Action<int, string> OnPromptChanged,
     Action<int, string> OnTitleChanged,
@@ -46,6 +47,22 @@ public sealed class StepCard : Component<StepCardProps>
             step.Changed += Handler;
             return () => step.Changed -= Handler;
         }, step);
+
+        // Subscribe to the prior step's Changed so the bolded-diff view reflects
+        // late updates to the prior step's code (manual edits, regenerate, fix
+        // attempt that lands after we mounted). Separate effect so subscription
+        // identity tracks PriorStep, not Step — swapping the prior reference
+        // (e.g. after Add/Remove resequences) cleanly tears down + re-attaches.
+        UseEffect(() =>
+        {
+            var prior = Props.PriorStep;
+            if (prior is null) return () => { };
+            void Handler() { counterRef.Current++; setRevision(counterRef.Current); }
+            prior.Changed += Handler;
+            return () => prior.Changed -= Handler;
+            // Explicit single-element array because Props.PriorStep is nullable
+            // and bare `params object[]` would mistake `null` for "no deps".
+        }, new object[] { Props.PriorStep! });
 
         var hasCode = !string.IsNullOrEmpty(step.Code);
         var hasDelta = !string.IsNullOrWhiteSpace(step.Delta);
@@ -89,9 +106,7 @@ public sealed class StepCard : Component<StepCardProps>
         {
             (true, true, _) => Border(
                 (ScrollView(
-                    (TextBlock(step.Code) with { IsTextSelectionEnabled = true })
-                        .FontFamily("Cascadia Code, Consolas, Courier New")
-                        .TextWrapping(TextWrapping.NoWrap)
+                    BuildCodeRichText(step.Code, Props.PriorStep?.Code)
                         .Foreground(Theme.PrimaryText)
                         .Padding(12))
                 with { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto }))
@@ -297,6 +312,49 @@ public sealed class StepCard : Component<StepCardProps>
         .Disabled(!isEnabled)
         .HAlign(HorizontalAlignment.Stretch)
         .AutomationName(automationName);
+
+    /// <summary>
+    /// Render <paramref name="code"/> as a monospace RichTextBlock with each
+    /// line that is NOT present in <paramref name="priorCode"/> rendered bold.
+    /// Diff is line-set difference, not a true LCS — cheap to compute on every
+    /// render, and "good enough" for the demo authoring use case where the
+    /// reader just wants to see what got added since the previous step.
+    /// Empty / whitespace lines are never bolded so blank-line padding doesn't
+    /// flag as new content.
+    /// </summary>
+    static RichTextBlockElement BuildCodeRichText(string code, string? priorCode)
+    {
+        System.Collections.Generic.HashSet<string>? prior = null;
+        if (!string.IsNullOrEmpty(priorCode))
+        {
+            prior = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+            foreach (var raw in priorCode.Split('\n'))
+                prior.Add(raw.TrimEnd('\r'));
+        }
+
+        var lines = code.Split('\n');
+        var paragraphs = new RichTextParagraph[lines.Length];
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].TrimEnd('\r');
+            bool isNew = prior is not null
+                      && !string.IsNullOrWhiteSpace(line)
+                      && !prior.Contains(line);
+            paragraphs[i] = new RichTextParagraph([
+                new RichTextRun(line)
+                {
+                    IsBold = isNew,
+                    FontFamily = "Cascadia Code, Consolas, Courier New",
+                }
+            ]);
+        }
+        return new RichTextBlockElement("")
+        {
+            Paragraphs = paragraphs,
+            IsTextSelectionEnabled = true,
+            TextWrapping = TextWrapping.NoWrap,
+        };
+    }
 
     static string RelativeTime(DateTimeOffset when)
     {

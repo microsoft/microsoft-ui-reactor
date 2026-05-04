@@ -1,4 +1,6 @@
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace DemoScriptTool.App.Models;
 
@@ -225,5 +227,34 @@ public sealed class StepModel
         RaiseChanged();
     }
 
-    void RaiseChanged() => Changed?.Invoke();
+    /// <summary>
+    /// Coalesce window for the <see cref="Changed"/> event. Streaming-token
+    /// mutations (<see cref="AppendCodeToken"/>, <see cref="AppendDeltaToken"/>)
+    /// can fire hundreds of times per second; without coalescing the UI thread
+    /// drowns in setState dispatches and visible side-effects (tooltip dismiss
+    /// animations, scroll inertia, focus tracking) get wedged. 16 ms is one
+    /// frame at 60 Hz — barely perceptible smoothing for one-shot mutations,
+    /// dramatic relief for high-frequency streaming bursts.
+    /// </summary>
+    const int CoalesceMs = 16;
+    int _changeScheduled;
+
+    void RaiseChanged()
+    {
+        // Interlocked CAS ensures only one outstanding flush task per StepModel
+        // regardless of which thread mutated state. The flush task clears the
+        // flag BEFORE invoking handlers, so a mutation that races during the
+        // invoke phase schedules a follow-up flush rather than getting lost.
+        if (Interlocked.Exchange(ref _changeScheduled, 1) == 1) return;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(CoalesceMs).ConfigureAwait(false);
+            Interlocked.Exchange(ref _changeScheduled, 0);
+            try { Changed?.Invoke(); }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[StepModel] Changed handler threw: {ex}");
+            }
+        });
+    }
 }
