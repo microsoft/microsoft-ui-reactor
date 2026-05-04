@@ -1,18 +1,15 @@
 name: Package
 
 # Produces the framework NuGet (.nupkg + .snupkg) and the agent skill kit
-# (reactor-skill-kit-<version>.zip with bin/x64 + bin/arm64) for three
-# scenarios:
+# (reactor-skill-kit-<version>.zip with bin/x64 + bin/arm64).
 #
-#   - PR or push to main → uploads as workflow artifacts (download from the
-#     Actions tab). Version is `0.0.0-pr.<num>.<sha7>` for PRs or
-#     `0.0.0-main.<sha7>` for main pushes — clearly not installable as a
-#     stable, but real and reviewable.
-#   - tag push (`v*`) → also creates a GitHub Release with both assets
-#     attached. This is the interim distribution path described in
-#     docs/specs/022-packaging-and-distribution.md §3 (Phase P0) while the
-#     internal Microsoft NuGet feed is being plumbed through.
-#   - workflow_dispatch → manual run with explicit version, no Release.
+# Versions come from MinVer (see "Resolve version" step). Both PR and main
+# builds get the same MinVer-computed version; they differ by sha in build
+# metadata and by workflow run ID. Tag pushes (`v*`) get the tag's version
+# verbatim and additionally create a GitHub Release with the assets attached.
+# This is the interim distribution path described in
+# docs/specs/022-packaging-and-distribution.md §3 (Phase P0) while the
+# internal Microsoft NuGet feed is being plumbed through.
 #
 # Both x64 and arm64 mur binaries are produced on every run so reviewers can
 # install either against a feature branch.
@@ -20,13 +17,12 @@ name: Package
 on:
   pull_request:
     paths-ignore:
-      - 'docs/**'
-      - '**.md'
+      - 'docs/guide/**'   # auto-generated; see CLAUDE.md memory note
   push:
+    # No paths-ignore on push: tag pushes must always run regardless of what
+    # changed in the tagged commit, and main pushes are infrequent enough
+    # that running on doc-only changes isn't a real cost.
     branches: [main]
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
     tags:
       - 'v*'
   workflow_dispatch:
@@ -148,7 +144,9 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path artifacts/kit | Out-Null
           $zip = "artifacts/kit/reactor-skill-kit-$version.zip"
-          # -Path the parent so the zip contains a `reactor/` root folder.
+          # Archive the `reactor` folder itself (not its contents) so the zip
+          # contains a single top-level `reactor/` folder. Extracting the zip
+          # gives the directory layout install-skill-kit.ps1 expects.
           Compress-Archive -Path artifacts/kit-stage/reactor -DestinationPath $zip -Force
           Write-Host "Kit: $zip"
 

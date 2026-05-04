@@ -34,8 +34,11 @@ yourself (curl, custom client).
 `mur` resolves from PATH in both modes:
 - **Skill kit (deployed):** `install-skill-kit.ps1` (shipped with the kit zip)
   prepends `<install>/bin/<arch>` to your user PATH.
-- **Cloned repo (selfhost):** every build of `src/Reactor.Cli` mirrors the
-  output to `<repo>/bin/<arch>/`. Add that directory to your PATH once.
+- **Cloned repo (selfhost):** any `dotnet build` of `src/Reactor.Cli` with
+  an explicit `-p:Platform=x64` or `-p:Platform=ARM64` mirrors the output to
+  `<repo>/bin/<arch>/`. Add that directory to your PATH once. Builds that
+  resolve to `Platform=AnyCPU` (some sln-config translations) skip the
+  mirror — use the per-project build for the dev loop.
 
 If `mur --version` doesn't resolve, neither path was set up; commands below assume it does.
 

@@ -49,13 +49,43 @@ if (-not $has9) {
     Write-Warning "Continuing with kit install anyway."
 }
 
-Write-Host "Installing Reactor skill kit to: $Path"
-if (Test-Path $Path) {
-    Write-Host "  Removing existing install"
-    Remove-Item -Recurse -Force $Path
+# Safety guards — `Remove-Item -Recurse -Force` is destructive enough that a
+# typo'd -Path could nuke real data. Refuse anything that would obviously be
+# wrong (kit's own dir, a drive root, profile root, system dirs) before we
+# touch anything.
+$absPath = [System.IO.Path]::GetFullPath($Path)
+$absSource = [System.IO.Path]::GetFullPath($source)
+if ($absPath -ieq $absSource -or $absSource.StartsWith($absPath, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to install into '$absPath' — that's the extracted kit itself or a parent of it. Pass a different -Path."
 }
-New-Item -ItemType Directory -Force -Path $Path | Out-Null
-Copy-Item -Recurse -Force "$source\*" $Path
+$forbidden = @(
+    [System.IO.Path]::GetPathRoot($absPath).TrimEnd('\'),
+    $env:USERPROFILE,
+    $env:SystemRoot,
+    "$env:SystemRoot\System32",
+    $env:ProgramFiles,
+    "${env:ProgramFiles(x86)}",
+    "$env:USERPROFILE\Desktop",
+    "$env:USERPROFILE\Documents",
+    "$env:USERPROFILE\Downloads"
+) | Where-Object { $_ }
+foreach ($f in $forbidden) {
+    if ($absPath -ieq $f.TrimEnd('\')) {
+        throw "Refusing to install into '$absPath' — that's a system or user-data root. Pass a more specific -Path (default is ~/.claude/skills/reactor)."
+    }
+}
+if ($absPath.Length -lt 12) {   # e.g. C:\, C:\foo
+    throw "Refusing to install into '$absPath' — path is suspiciously short. Pass a more specific -Path."
+}
+
+Write-Host "Installing Reactor skill kit to: $absPath"
+if (Test-Path $absPath) {
+    Write-Host "  Removing existing install"
+    Remove-Item -Recurse -Force $absPath
+}
+New-Item -ItemType Directory -Force -Path $absPath | Out-Null
+Copy-Item -Recurse -Force "$source\*" $absPath
+$Path = $absPath
 
 if (-not $SkipPath) {
     $targetBin = Join-Path $Path "bin\$arch"

@@ -66,7 +66,11 @@
   </ItemGroup>
 
   <!-- Bundle the analyzer + source-generator DLLs into the framework package
-       so consumers get them automatically. See spec 022 §5. -->
+       so consumers get them automatically. See spec 022 §5. The analyzer
+       projects are not ProjectReferences (we don't want their rules running
+       against the framework itself), so their build outputs must already
+       exist before pack — verified by the AssertAnalyzerDllsExist target
+       below. -->
   <ItemGroup>
     <None Include="..\Reactor.Analyzers\bin\$(Configuration)\netstandard2.0\Reactor.Analyzers.dll"
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
@@ -74,6 +78,17 @@
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
   </ItemGroup>
+
+  <Target Name="AssertAnalyzerDllsExist" BeforeTargets="Pack">
+    <PropertyGroup>
+      <_ReactorAnalyzersDll>..\Reactor.Analyzers\bin\$(Configuration)\netstandard2.0\Reactor.Analyzers.dll</_ReactorAnalyzersDll>
+      <_ReactorLocGenDll>..\Reactor.Localization.Generator\bin\$(Configuration)\netstandard2.0\Reactor.Localization.Generator.dll</_ReactorLocGenDll>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_ReactorAnalyzersDll)')"
+           Text="Reactor.Analyzers.dll not found at $(_ReactorAnalyzersDll). Run 'dotnet build Reactor.sln -c $(Configuration)' before 'dotnet pack' so the analyzer assemblies exist for bundling." />
+    <Error Condition="!Exists('$(_ReactorLocGenDll)')"
+           Text="Reactor.Localization.Generator.dll not found at $(_ReactorLocGenDll). Run 'dotnet build Reactor.sln -c $(Configuration)' before 'dotnet pack'." />
+  </Target>
 
   <!-- ═══════════════════════════════════════════════════════════════════
        Localization — .resw files fed to the source generator

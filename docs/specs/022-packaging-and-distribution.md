@@ -443,9 +443,9 @@ Done:
 2. Bundle `Reactor.Analyzers.dll` and `Reactor.Localization.Generator.dll` into the framework `.nupkg` under `analyzers/dotnet/cs/`. Flip `Reactor.Analyzers.csproj` to `IsPackable=false` (no longer ships standalone).
 3. Replace the bootstrap pattern (see §4.4) with a `MirrorBinForSelfhost` build target that drops `mur.exe` at `<repo>/bin/<arch>/`. Target is gated on a concrete Platform (x64/ARM64) to avoid creating a `bin/anycpu/` folder when sln-config translation collapses Platform to AnyCPU.
 4. Add `.github/workflows/release.yml` (workflow name: **Package**) running on:
-   - **PRs** (paths-ignore docs/md) → version `0.0.0-pr.<num>.<sha7>`, uploads x64 + arm64 artifacts (no Release).
-   - **Push to `main`** (paths-ignore docs/md) → version `0.0.0-main.<sha7>`, uploads artifacts (no Release).
-   - **Tag push (`v*`)** → version from tag, uploads artifacts AND creates a GitHub Release with `.nupkg` + `.snupkg` + skill kit zip attached.
+   - **PRs** (paths-ignore `docs/guide/**`) → MinVer-computed version, uploads x64 + arm64 artifacts (no Release).
+   - **Push to `main`** → MinVer-computed version, uploads artifacts (no Release).
+   - **Tag push (`v*`)** → version from tag (no paths-ignore so tag pushes always run), uploads artifacts AND creates a GitHub Release with `.nupkg` + `.snupkg` + skill kit zip attached.
    - **Manual `workflow_dispatch`** → caller-supplied version, uploads artifacts (no Release).
 5. Add `tools/install-skill-kit.ps1` (shipped inside the kit zip).
 6. Update `skills/devtools.md` with the "Getting `mur` on your PATH" note covering both selfhost and kit modes.
