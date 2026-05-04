@@ -199,19 +199,21 @@ Add `Microsoft.SourceLink.GitHub` so consumers can step into Reactor source duri
 - .NET global tools must be AnyCPU and don't cleanly handle Windows-only TFMs.
 - Even if we got it working, Copilot SDK native dependencies (`GitHub.Copilot.SDK`) and WinUI runtime expectations make a self-contained exe the more reliable path.
 
-### Chosen approach: self-contained per-RID executables
+### Chosen approach: framework-dependent per-RID executables
 
 On every CI run, publish:
 
-- `mur-win-x64.zip` containing `mur.exe` and its runtime
-- `mur-win-arm64.zip` same for ARM64
+- `bin/x64/mur.exe` and `bin/arm64/mur.exe` (plus their managed/native dependencies) inside `reactor-skill-kit-<version>.zip`
+- Per RID — `--runtime win-x64` and `--runtime win-arm64` — to pick up the right native bits (Copilot SDK natives, etc.)
 
-Attach them to:
+**Framework-dependent (`--self-contained false`)** — the consumer's machine supplies the .NET 9 desktop runtime. This saves ~70 MB per RID over self-contained. Tradeoffs:
 
-- **PR artifacts** (short retention, for review) on every PR.
-- **GitHub Releases** on tagged builds, with a stable download URL.
+- Requires `winget install Microsoft.DotNet.Runtime.9` on the consumer's machine. Acceptable for the P0 audience (Microsoft engineers) and for P2/P3 consumers willing to install a runtime.
+- `install-skill-kit.ps1` checks for .NET 9 and warns clearly if it's missing.
 
-Provide an install helper script (`install-mur.ps1`) hosted in the repo that consumers can `iwr | iex` — downloads the latest release asset, extracts to `%LOCALAPPDATA%\Programs\mur\`, adds to `PATH`. This is the pattern `winget`/`rustup`/`gh` all use.
+**Sample apps stay self-contained.** Reactor's sample apps and bench/perf projects continue to use `WindowsAppSDKSelfContained=true` (the Directory.Build.props default). Sample apps are sensitive to the WinUI runtime version — bundling makes it trivial to test against different SDK versions during dev. Tools (`mur`) are not.
+
+The kit zip is the deployable unit; consumers extract it and run `install-skill-kit.ps1` which copies to the install location and adds `bin/<arch>` to user `PATH`.
 
 ### Future: fold into `Microsoft.UI.Reactor.Tools`
 

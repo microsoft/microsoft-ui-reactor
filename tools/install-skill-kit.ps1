@@ -35,6 +35,20 @@ if (-not (Test-Path (Join-Path $archBin 'mur.exe'))) {
     throw "bin\$arch\mur.exe not found in kit. Re-download the matching release."
 }
 
+# mur is framework-dependent — needs the .NET 9 desktop runtime. Detect early
+# and give a useful error rather than letting the consumer hit an opaque
+# "framework not found" at first invocation.
+$dotnet = Get-Command dotnet.exe -CommandType Application -ErrorAction SilentlyContinue
+if (-not $dotnet) {
+    throw ".NET 9 runtime is required but `dotnet.exe` is not on PATH. Install with: winget install Microsoft.DotNet.Runtime.9"
+}
+$has9 = (& $dotnet.Source --list-runtimes) | Where-Object { $_ -match '^Microsoft\.NETCore\.App 9\.' }
+if (-not $has9) {
+    Write-Warning "No .NET 9 runtime found. mur will fail to start until you install it:"
+    Write-Warning "  winget install Microsoft.DotNet.Runtime.9"
+    Write-Warning "Continuing with kit install anyway."
+}
+
 Write-Host "Installing Reactor skill kit to: $Path"
 if (Test-Path $Path) {
     Write-Host "  Removing existing install"

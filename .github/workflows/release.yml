@@ -108,12 +108,15 @@ jobs:
           -p:Platform=x64
           -o artifacts/nupkg
 
+      # Framework-dependent: the consumer's machine supplies the .NET 9
+      # runtime — saves ~70 MB per RID. install-skill-kit.ps1 checks for it
+      # and errors out with an install hint if it's missing. See spec 022 §6.
       - name: Publish mur (win-x64)
         run: >
           dotnet publish src/Reactor.Cli/Reactor.Cli.csproj
           --configuration Release
           --runtime win-x64
-          --self-contained true
+          --self-contained false
           -p:Platform=x64
           -p:Version=${{ steps.version.outputs.version }}
           -o artifacts/mur/x64
@@ -123,7 +126,7 @@ jobs:
           dotnet publish src/Reactor.Cli/Reactor.Cli.csproj
           --configuration Release
           --runtime win-arm64
-          --self-contained true
+          --self-contained false
           -p:Platform=ARM64
           -p:Version=${{ steps.version.outputs.version }}
           -o artifacts/mur/arm64
