@@ -289,7 +289,26 @@ public sealed class DemoScriptShell : Component
             }
         }
 
-        void OnGenerateAll()
+        // Wraps a click handler so any exception (e.g. UseAnnounce hitting an
+        // unattached automation peer, a stale UseRef, an SDK call surfacing
+        // mid-handler) is logged and surfaced as a banner instead of being
+        // swallowed by the WinUI Click event chain. The repro that motivated
+        // this: OnRegenFromStep entered (entry log fired), exited the click
+        // event with no further log, no Task.Run, no toast — a silent throw
+        // somewhere between the entry log and the kickoff log was the most
+        // likely cause but invisible without this scaffolding.
+        void SafeClickHandler(string name, Action body)
+        {
+            try { body(); }
+            catch (Exception ex)
+            {
+                SessionLog.Write($"[Shell] {name} threw: {ex}");
+                _status.SetBanner($"{name} crashed: {ex.GetType().Name} — {ex.Message}");
+            }
+        }
+
+        void OnGenerateAll() => SafeClickHandler("OnGenerateAll", OnGenerateAllCore);
+        void OnGenerateAllCore()
         {
             var now = Environment.TickCount64;
             var delta = now - lastGenerateClickRef.Current;
@@ -382,7 +401,8 @@ public sealed class DemoScriptShell : Component
             });
         }
 
-        void OnRegenFromStep(StepModel step)
+        void OnRegenFromStep(StepModel step) => SafeClickHandler($"OnRegenFromStep(step={step.Number})", () => OnRegenFromStepCore(step));
+        void OnRegenFromStepCore(StepModel step)
         {
             var now = Environment.TickCount64;
             var delta = now - lastRegenClickRef.Current;

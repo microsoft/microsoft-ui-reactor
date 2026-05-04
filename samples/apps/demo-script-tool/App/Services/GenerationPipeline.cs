@@ -300,7 +300,10 @@ public sealed class GenerationPipeline
             SessionLog.Write($"[BuildFix] step {step.Number}: initial build exit={result.ExitCode} succeeded={result.Succeeded} outputBytes={result.CombinedOutput.Length}");
             if (!result.Succeeded)
             {
-                SessionLog.Write($"[BuildFix] step {step.Number} build output (last 500 chars): {result.CombinedOutput[Math.Max(0, result.CombinedOutput.Length - 500)..]}");
+                // 800 chars: 500 was clipping the leading lines of compiler
+                // output (the success-cascade from upstream project builds
+                // pushes the actual CSC error past 500 chars from the tail).
+                SessionLog.Write($"[BuildFix] step {step.Number} build output (last 800 chars): {result.CombinedOutput[Math.Max(0, result.CombinedOutput.Length - 800)..]}");
             }
             if (result.Succeeded)
             {
@@ -322,7 +325,17 @@ public sealed class GenerationPipeline
                 step.IncrementFixAttempts();
                 _status.SetGeneratingStatus($"Building step {step.Number} of {model.Steps.Count} (re-build {attempt})…");
                 var rebuild = await _runner.BuildAsync(step, projectRoot, model.IsMultiFile, ct).ConfigureAwait(false);
-                SessionLog.Write($"[BuildFix] step {step.Number}: fix-attempt {attempt} build exit={rebuild.ExitCode} succeeded={rebuild.Succeeded}");
+                SessionLog.Write($"[BuildFix] step {step.Number}: fix-attempt {attempt} build exit={rebuild.ExitCode} succeeded={rebuild.Succeeded} outputBytes={rebuild.CombinedOutput.Length}");
+                if (!rebuild.Succeeded)
+                {
+                    // Mirror the initial-build logging so we can see what each
+                    // fix actually broke or left broken. The model's own diff
+                    // is one big LLM blob; the COMPILER tells us whether it
+                    // converged. Without this we can't tell "AI made it worse"
+                    // from "AI made same mistake" from "different error each
+                    // attempt" — they all just show "exit=1" otherwise.
+                    SessionLog.Write($"[BuildFix] step {step.Number} fix-attempt {attempt} build output (last 800 chars): {rebuild.CombinedOutput[Math.Max(0, rebuild.CombinedOutput.Length - 800)..]}");
+                }
                 if (rebuild.Succeeded)
                 {
                     step.SetBuildState(BuildState.Succeeded);
@@ -400,7 +413,16 @@ public sealed class GenerationPipeline
         try
         {
             if (System.IO.File.Exists(fixedPrimary))
-                step.ReplaceCode(System.IO.File.ReadAllText(fixedPrimary));
+            {
+                var fixedBody = System.IO.File.ReadAllText(fixedPrimary);
+                step.ReplaceCode(fixedBody);
+                // Log the first 600 chars of what the AI emitted as its fix.
+                // Without this we couldn't tell whether a 3rd-attempt failure
+                // was the model repeating the same broken code or making a
+                // new mistake — the fix prompt and the SDK events are opaque.
+                var preview = fixedBody.Length > 600 ? fixedBody[..600] + "…[truncated]" : fixedBody;
+                SessionLog.Write($"[BuildFix] step {step.Number} fix-attempt produced ({fixedBody.Length} bytes):\n{preview}");
+            }
         }
         catch (Exception ex)
         {
