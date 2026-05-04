@@ -28,9 +28,13 @@ export class PerfTracker {
   private readonly mountTimeSamples: number[] = [];
   private renderCount = 0;
 
-  // Stamped by beginMount() before setState dispatch; consumed by
-  // recordMountCommit() from a useLayoutEffect after React commits.
-  private lastMountStart = 0;
+  // Pending dispatch timestamps. Each beginMount() pushes one; each
+  // recordMountCommit() consumes the *oldest* (so the sample reflects
+  // worst-case latency from first dispatch to commit) and clears the
+  // rest (one batched commit reflects all queued dispatches under React
+  // batching). An empty queue at commit time means no sample — avoids
+  // attributing stale stamps to unrelated commits.
+  private pendingMountStarts: number[] = [];
   private lastMountMs = 0;
 
   startFrameLoop(): () => void {
@@ -70,20 +74,27 @@ export class PerfTracker {
   /**
    * Stamp T0 immediately before dispatching setState. Pair with
    * recordMountCommit() from a useLayoutEffect on the same state.
+   * Multiple calls before a commit (React batching under load) all
+   * queue — recordMountCommit consumes them as one batch.
    */
   beginMount(): void {
-    this.lastMountStart = performance.now();
+    this.pendingMountStarts.push(performance.now());
   }
 
   /**
    * Call from useLayoutEffect on the dispatched state. Schedules a
    * single rAF — by the time it fires, Fabric has had a chance to mount
    * and at least one display frame has been scheduled. Records the
-   * (rAF-now − T0) interval as a mount-time sample.
+   * (rAF-now − T0_oldest) interval as a mount-time sample, where
+   * T0_oldest is the earliest queued dispatch (so batched ticks measure
+   * worst-case user-perceived latency, not the optimistic latest).
+   * Empties the queue afterward so unrelated later commits don't
+   * attribute to stale stamps.
    */
   recordMountCommit(): void {
-    const start = this.lastMountStart;
-    if (start === 0) return;
+    if (this.pendingMountStarts.length === 0) return;
+    const start = this.pendingMountStarts[0];
+    this.pendingMountStarts.length = 0;
     requestAnimationFrame(() => {
       const dt = performance.now() - start;
       this.mountTimeSamples.push(dt);

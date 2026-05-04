@@ -197,7 +197,7 @@ when comparing.
 1. **Don't trust `CompositionTarget.Rendering` for "FPS."** It's UI-thread-
    idle-vsync, not present-rate. Always 2× too high under load.
 2. **Don't trust `requestAnimationFrame` for "FPS" in RN.** It's JS-thread
-   tick rate. Under at light load, bursty at saturation.
+   tick rate. Under-reports at light load, bursty at saturation.
    2a. **Don't bracket `setState` with a JS stopwatch and call it "update
    time" in RN.** The dispatch returns immediately; the commit pipeline
    continues across other threads. Use the rAF-after-commit `Avg Mount`
