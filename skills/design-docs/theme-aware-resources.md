@@ -232,3 +232,108 @@ return VStack(
     // Adjust layout or content based on theme
 );
 ```
+
+## App-Level Custom Theme Resources
+
+Define brand colors and app-specific semantic tokens that adapt to Light, Dark, and High Contrast using `AppTheme.Register()`. This injects custom brushes into WinUI's `Application.Current.Resources.ThemeDictionaries` at app startup — making them available throughout the app via `Theme.Ref()` and lightweight styling `.Resources()`.
+
+### Defining Custom Theme Resources
+
+Call `AppTheme.Register()` in the App constructor or `OnLaunched`, **before** building the visual tree:
+
+```csharp
+AppTheme.Register(theme => theme
+    .Add("BrandPrimaryBrush",
+        light: "#005A9E",
+        dark: "#4FC3F7",
+        highContrast: "SystemColorHighlightColorBrush")
+    .Add("BrandSecondaryBrush",
+        light: "#106EBE",
+        dark: "#81D4FA",
+        highContrast: "SystemColorHotlightColorBrush")
+    .Add("BrandSurfaceBrush",
+        light: "#F0F6FF",
+        dark: "#1A1A2E",
+        highContrast: "SystemColorWindowColorBrush")
+    .Add("BrandSubtleBrush",
+        light: "#E8F0FE",
+        dark: "#2A2A3E",
+        highContrast: "SystemColorButtonFaceColorBrush"));
+```
+
+Under the hood, `AppTheme.Register()`:
+1. Gets or creates the Light, Dark, and HighContrast `ResourceDictionary` entries in `Application.Current.Resources.ThemeDictionaries`
+2. Adds a `SolidColorBrush` for each key in each theme variant
+3. For HC values that reference a system brush key (e.g., `"SystemColorHighlightColorBrush"`), resolves the brush at registration time
+
+### Consuming Custom Resources
+
+Custom resources use the same `Theme.Ref()` API as WinUI built-in resources — no new syntax:
+
+```csharp
+// Direct property usage
+Border(child).Background(Theme.Ref("BrandPrimaryBrush"))
+TextBlock("Branded heading").Foreground(Theme.Ref("BrandSecondaryBrush"))
+
+// Lightweight styling — brand button with all states
+Button("Brand Action", onClick).Resources(r => r
+    .Set("ButtonBackground", Theme.Ref("BrandPrimaryBrush"))
+    .Set("ButtonBackgroundPointerOver", Theme.Ref("BrandSecondaryBrush"))
+    .Set("ButtonBackgroundPressed", Theme.Ref("BrandPrimaryBrush"))
+    .Set("ButtonForeground", Theme.Ref("TextOnAccentFillColorPrimaryBrush")))
+
+// Brand-colored card surface
+Border(
+    VStack(12, cardContent).Margin(16)
+)
+.Background(Theme.Ref("BrandSurfaceBrush"))
+.WithBorder(Theme.CardStroke, 1)
+.CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft)
+```
+
+### Gradient Brushes
+
+For surfaces that accept arbitrary `Brush` types (e.g., `Border.Background`), `AddGradient()` registers `LinearGradientBrush` resources. In High Contrast, gradients must fall back to a solid color.
+
+**Important:** Most control template resource keys (e.g., `ButtonBackground`, `TextControlBackground`) expect `SolidColorBrush`. Assigning gradients to those keys may not render correctly. Use gradients only on direct surface properties.
+
+```csharp
+AppTheme.Register(theme => theme
+    .AddGradient("BrandAccentGradientBrush",
+        light: new GradientDef(("0", "#7cb6e9"), ("0.5", "#335fe3"), ("1.0", "#ee9bbf")),
+        dark: new GradientDef(("0", "#7cb6e9"), ("0.5", "#335fe3"), ("1.0", "#ee9bbf")),
+        highContrast: "#48B1E9"));  // Solid fallback in HC
+
+// Use on surfaces, not control template keys
+Border(hero).Background(Theme.Ref("BrandAccentGradientBrush"))
+```
+
+### XAML Equivalent
+
+`AppTheme.Register()` is the Reactor equivalent of defining custom brushes in XAML's `App.xaml` or a `Colors.xaml` resource dictionary with `ThemeDictionaries`:
+
+```xml
+<!-- XAML equivalent — what AppTheme.Register() generates under the hood -->
+<ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light">
+        <SolidColorBrush x:Key="BrandPrimaryBrush" Color="#005A9E" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Dark">
+        <SolidColorBrush x:Key="BrandPrimaryBrush" Color="#4FC3F7" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="HighContrast">
+        <SolidColorBrush x:Key="BrandPrimaryBrush"
+                         Color="{ThemeResource SystemColorHighlightColor}" />
+    </ResourceDictionary>
+</ResourceDictionary.ThemeDictionaries>
+```
+
+### Rules
+
+1. **Register before building the visual tree** — call `AppTheme.Register()` in the App constructor or `OnLaunched`, before any component renders.
+2. **Always provide all three variants** (light, dark, highContrast). Omitting HC causes accessibility regressions. There is no optional-HC overload by design.
+3. **HC values must reference system color brushes or solid hex colors** — no gradients, no opacity, no custom colors in HC. Use WinUI system brush keys like `"SystemColorHighlightColorBrush"`, `"SystemColorHotlightColorBrush"`, etc.
+4. **Custom keys must end in `Brush`** — matches WinUI naming conventions and ensures `Theme.Ref()` resolves them correctly.
+5. **Don't re-register WinUI built-in keys** — use `Theme.*` tokens or `Theme.Ref()` for existing WinUI resources. `AppTheme.Register()` is for app-defined resources only.
+6. **Duplicate key registration throws** — registering the same key twice throws at startup. Libraries and app code must coordinate key names to avoid collisions.
+7. **HC brush references are snapshots** — HC values that reference system brush keys are resolved at registration time. If the HC palette changes at runtime (rare), custom brushes won't update until the next full re-render.
