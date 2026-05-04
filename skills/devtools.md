@@ -29,6 +29,16 @@ for tool calls** — without the token the server returns 401. `--endpoint`
 is only useful when you're crafting the `Authorization: Bearer …` header
 yourself (curl, custom client).
 
+## Getting `mur` on your PATH
+
+`mur` resolves from PATH in both modes:
+- **Skill kit (deployed):** `install-skill-kit.ps1` (shipped with the kit zip)
+  prepends `<install>/bin/<arch>` to your user PATH.
+- **Cloned repo (selfhost):** every build of `src/Reactor.Cli` mirrors the
+  output to `<repo>/bin/<arch>/`. Add that directory to your PATH once.
+
+If `mur --version` doesn't resolve, neither path was set up; commands below assume it does.
+
 ## Attaching to a running app
 
 The app author enables devtools in their `Program.cs`:

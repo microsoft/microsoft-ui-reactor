@@ -200,8 +200,6 @@ health/
 # Publish profiles
 *.pubxml
 
-selfhost/
-
 # Stress/perf publish logs
 tests/stress_perf/publish_log*.txt
 

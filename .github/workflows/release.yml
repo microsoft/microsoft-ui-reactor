@@ -1,0 +1,209 @@
+name: Package
+
+# Produces the framework NuGet (.nupkg + .snupkg) and the agent skill kit
+# (reactor-skill-kit-<version>.zip with bin/x64 + bin/arm64) for three
+# scenarios:
+#
+#   - PR or push to main → uploads as workflow artifacts (download from the
+#     Actions tab). Version is `0.0.0-pr.<num>.<sha7>` for PRs or
+#     `0.0.0-main.<sha7>` for main pushes — clearly not installable as a
+#     stable, but real and reviewable.
+#   - tag push (`v*`) → also creates a GitHub Release with both assets
+#     attached. This is the interim distribution path described in
+#     docs/specs/022-packaging-and-distribution.md §3 (Phase P0) while the
+#     internal Microsoft NuGet feed is being plumbed through.
+#   - workflow_dispatch → manual run with explicit version, no Release.
+#
+# Both x64 and arm64 mur binaries are produced on every run so reviewers can
+# install either against a feature branch.
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to pack (e.g. 0.1.0-preview.1). When dispatched manually, no Release is created.'
+        required: true
+        type: string
+
+permissions:
+  contents: write   # required for creating Releases
+
+# ─── Version strategy ───────────────────────────────────────────────────────
+# Versions come from MinVer (commit-height past the latest `v*` tag). Pattern:
+#
+#   - Past tag `v0.1.0-experimental.1` by N commits → `0.1.0-experimental.1.N+<sha7>`
+#   - Exactly at a tag → that tag's version
+#   - No tags yet → `0.1.0-experimental.0.<height>+<sha7>` (defaults below)
+#
+# Bootstrap once: `git tag v0.1.0-experimental.0 && git push --tags`. After
+# that, every commit gets a unique, ordered version with zero coordination —
+# height strictly increases as commits land. Bump to a new milestone by
+# tagging (e.g. `v0.1.0-experimental.1`); MinVer takes it from there.
+#
+# Tag pushes (`v*`) produce a clean version and create a GitHub Release.
+# Pushes to main and PR builds get the same MinVer-computed version (they
+# differ by sha → unique workflow artifacts; the .nupkg filename may collide
+# across PR pushes from the same merge base, which is acceptable for the
+# experimental channel).
+
+jobs:
+  package:
+    name: Pack (x64 + arm64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0   # MinVer needs full history to find the latest v* tag
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Install minver-cli
+        run: dotnet tool install --global minver-cli --version 5.0.0
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $eventName = '${{ github.event_name }}'
+          if ($eventName -eq 'workflow_dispatch') {
+            $version = '${{ inputs.version }}'
+          } else {
+            # MinVer flags:
+            #   -t v                          tag prefix
+            #   -p experimental.0             default prerelease identifiers — flags pre-P1 builds as experimental
+            #   -m 0.1                        minimum major.minor when no tag (so untagged → 0.1.x)
+            $version = (& minver -t v -p experimental.0 -m 0.1).Trim()
+          }
+          if (-not $version) { throw "Could not resolve version" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          $isTag = '${{ github.ref }}'.StartsWith('refs/tags/v')
+          "is_tag=$($isTag.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $version  (event=$eventName, isTag=$isTag)"
+
+      - name: Restore
+        run: dotnet restore Reactor.sln
+
+      - name: Build framework + analyzers
+        run: dotnet build Reactor.sln --no-restore --configuration Release -p:Platform=x64
+
+      - name: Pack framework NuGet
+        run: >
+          dotnet pack src/Reactor/Reactor.csproj
+          --no-build --configuration Release
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:Platform=x64
+          -o artifacts/nupkg
+
+      - name: Publish mur (win-x64)
+        run: >
+          dotnet publish src/Reactor.Cli/Reactor.Cli.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:Platform=x64
+          -p:Version=${{ steps.version.outputs.version }}
+          -o artifacts/mur/x64
+
+      - name: Publish mur (win-arm64)
+        run: >
+          dotnet publish src/Reactor.Cli/Reactor.Cli.csproj
+          --configuration Release
+          --runtime win-arm64
+          --self-contained true
+          -p:Platform=ARM64
+          -p:Version=${{ steps.version.outputs.version }}
+          -o artifacts/mur/arm64
+
+      - name: Assemble skill kit
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $stage = 'artifacts/kit-stage/reactor'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          New-Item -ItemType Directory -Force -Path "$stage/bin/x64" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$stage/bin/arm64" | Out-Null
+
+          Copy-Item SKILL.md $stage
+          Copy-Item -Recurse skills $stage
+          Copy-Item artifacts/mur/x64/* "$stage/bin/x64/" -Recurse
+          Copy-Item artifacts/mur/arm64/* "$stage/bin/arm64/" -Recurse
+          Copy-Item tools/install-skill-kit.ps1 "$stage/install-skill-kit.ps1"
+
+          New-Item -ItemType Directory -Force -Path artifacts/kit | Out-Null
+          $zip = "artifacts/kit/reactor-skill-kit-$version.zip"
+          # -Path the parent so the zip contains a `reactor/` root folder.
+          Compress-Archive -Path artifacts/kit-stage/reactor -DestinationPath $zip -Force
+          Write-Host "Kit: $zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-${{ steps.version.outputs.version }}
+          path: |
+            artifacts/nupkg/*
+            artifacts/kit/*.zip
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.is_tag == 'true'
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+        with:
+          name: Reactor ${{ steps.version.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          generate_release_notes: true
+          files: |
+            artifacts/nupkg/*.nupkg
+            artifacts/nupkg/*.snupkg
+            artifacts/kit/*.zip
+          body: |
+            **Reactor ${{ steps.version.outputs.version }}**
+
+            > Interim distribution — see [spec 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md) for the rollout plan.
+
+            ## Two assets
+
+            ### `Microsoft.UI.Reactor.${{ steps.version.outputs.version }}.nupkg` — the framework
+
+            Drop into a folder and add a NuGet source pointing at it:
+
+            ```xml
+            <!-- nuget.config -->
+            <configuration>
+              <packageSources>
+                <add key="reactor-local" value="C:\path\to\folder\with\nupkg" />
+              </packageSources>
+            </configuration>
+            ```
+
+            Then in your `.csproj`:
+
+            ```xml
+            <PackageReference Include="Microsoft.UI.Reactor" Version="${{ steps.version.outputs.version }}" />
+            ```
+
+            ### `reactor-skill-kit-${{ steps.version.outputs.version }}.zip` — agent skill bundle + `mur` CLI
+
+            Extract, then run:
+
+            ```powershell
+            cd reactor
+            .\install-skill-kit.ps1
+            ```
+
+            Installs to `~/.claude/skills/reactor/` and adds `bin/<arch>` to your user PATH. After a new shell, `mur --version` should resolve.

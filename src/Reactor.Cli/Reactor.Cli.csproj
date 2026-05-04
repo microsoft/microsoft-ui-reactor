@@ -9,7 +9,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <WindowsPackageType>None</WindowsPackageType>
-    <SelfHostDir>$(MSBuildThisFileDirectory)..\..\selfhost</SelfHostDir>
+    <!-- Mirror the deployed skill-kit layout under <repo>/bin/<arch>/ so devs
+         can put that directory on PATH and `mur` resolves to the freshly-built
+         binary. The release workflow produces the same bin/x64 + bin/arm64
+         layout via a self-contained `dotnet publish`. -->
+    <ReactorBinDir>$(MSBuildThisFileDirectory)..\..\bin\$(Platform.ToLowerInvariant())</ReactorBinDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,19 +31,24 @@
     <EmbeddedResource Include="..\..\SKILL.md" Link="SKILL.md" LogicalName="SKILL.md" />
   </ItemGroup>
 
-  <!-- After build, populate selfhost/ with the CLI exe and bootstrap skill -->
-  <Target Name="PopulateSelfHost" AfterTargets="Build">
-    <MakeDir Directories="$(SelfHostDir)" />
+  <!-- After build, mirror the CLI output to <repo>/bin/<arch>/ so it matches
+       the deployed skill-kit layout. Add that directory to your PATH once and
+       `mur` works from anywhere — same invocation in selfhost and deployed.
+
+       Condition: only fire when Platform is concrete (x64/ARM64). A sln-level
+       `dotnet build -p:Platform=x64` can translate to AnyCPU at the project
+       level via sln config mapping — silently skip rather than create a
+       bin/anycpu/ folder. Build with explicit per-project Platform to mirror. -->
+  <Target Name="MirrorBinForSelfhost"
+          AfterTargets="Build"
+          Condition="'$(Platform)' == 'x64' or '$(Platform)' == 'ARM64'">
     <ItemGroup>
-      <SelfHostFiles Include="$(OutputPath)**\*.*" />
+      <ReactorCliOutputs Include="$(OutputPath)**\*.*" />
     </ItemGroup>
-    <Copy SourceFiles="@(SelfHostFiles)"
-          DestinationFolder="$(SelfHostDir)\%(RecursiveDir)"
+    <Copy SourceFiles="@(ReactorCliOutputs)"
+          DestinationFolder="$(ReactorBinDir)\%(RecursiveDir)"
           SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(MSBuildThisFileDirectory)BOOTSTRAP-SKILL.md"
-          DestinationFiles="$(SelfHostDir)\SKILL.md"
-          SkipUnchangedFiles="true" />
-    <Message Importance="high" Text="Selfhost populated: $(SelfHostDir)" />
+    <Message Importance="high" Text="mur mirrored: $(ReactorBinDir)" />
   </Target>
 
 </Project>

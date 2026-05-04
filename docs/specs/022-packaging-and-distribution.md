@@ -1,7 +1,7 @@
 # 022 — Packaging and Distribution
 
-**Status:** Draft
-**Date:** 2026-04-17
+**Status:** P0 in flight (interim release-asset path); P1+ still draft
+**Date:** 2026-04-17 (last updated 2026-05-03)
 **Author:** Chris Anderson
 
 ---
@@ -58,11 +58,12 @@ There is no packaging, publishing, or release infrastructure in the repo today. 
 
 | Phase | Timing | Audience | Feed | Signing |
 |---|---|---|---|---|
-| **P1 — Internal** | Now | Microsoft employees only | Azure Artifacts (internal feed) | Optional |
-| **P2 — NDA external** | ~2 weeks | Small group of external partners under NDA | GitHub Packages (private), invite-only | Required (ESRP) |
-| **P3 — Public** | ~4–6 weeks | Open .NET / WinUI community | NuGet.org | Required (ESRP) |
+| **P0 — Interim release assets** | Now | Anyone with repo read access | GitHub Releases (.nupkg + skill-kit zip) | None |
+| **P1 — Internal** | When the internal feed is plumbed | Microsoft employees only | Azure Artifacts (internal feed) | Optional |
+| **P2 — NDA external** | ~2 weeks after P1 | Small group of external partners under NDA | GitHub Packages (private), invite-only | Required (ESRP) |
+| **P3 — Public** | ~4–6 weeks after P1 | Open .NET / WinUI community | NuGet.org | Required (ESRP) |
 
-Each phase adds consumers but keeps the same package ID and build pipeline — we just flip publish destinations and tighten the gate.
+Each phase adds consumers but keeps the same package ID and build pipeline — we just flip publish destinations and tighten the gate. **P0 exists because P1's internal feed plumbing has lead time and we want a usable artifact today.** Consumers download the `.nupkg` from a Release and add a local-folder NuGet source. When P1 lands, the same workflow gains a `publish` step targeting the internal feed; nothing about the build itself changes.
 
 ## 4. Artifacts to Ship
 
@@ -87,7 +88,49 @@ Ships as a **per-RID self-contained executable** attached to GitHub Releases, no
 
 Continues to ship as a `.vsix`. Details under section 7.
 
-### 4.4 Secondary packages (v1+, optional)
+### 4.4 Agent skill kit (`reactor-skill-kit-<version>.zip`)
+
+Single zip that bundles the agent-facing assets and the `mur` CLI:
+
+```
+reactor/                          ← extracts here; user copies to ~/.claude/skills/reactor/
+├── SKILL.md                      ← root skill (full content, not a bootstrap)
+├── skills/                       ← sub-skills loaded on demand
+│   ├── design.md
+│   ├── devtools.md
+│   └── …
+├── bin/
+│   ├── x64/   mur.exe + runtime  ← self-contained `dotnet publish -r win-x64`
+│   └── arm64/ mur.exe + runtime  ← self-contained `dotnet publish -r win-arm64`
+└── install-skill-kit.ps1         ← copies the kit to the install location and adds bin/<arch> to user PATH
+```
+
+#### Why not split markdown from binary
+
+Considered shipping `reactor-skills.zip` (markdown only) plus separate `mur-win-{x64,arm64}.zip`, but a single per-version artifact keeps the skill content and the CLI it documents in lockstep — `skills/devtools.md` describes a `mur` surface that must match the binary next to it. A user who downloads only the markdown half ends up with skill instructions that disagree with whatever `mur` they happen to have installed; the version-coupled bundle avoids that whole class of breakage.
+
+#### `mur` and PATH (selfhost vs deployed)
+
+Skills are PATH-agnostic — they always invoke `mur ...`, never a relative path. Each mode has its own way of getting `mur` on PATH:
+
+- **Selfhost (cloned repo):** `Reactor.Cli.csproj` has an `AfterTargets="Build"` target (`MirrorBinForSelfhost`) that copies the freshly built CLI to `<repo>/bin/<arch>/`. Devs add that directory to `PATH` once.
+- **Deployed kit:** `install-skill-kit.ps1` copies the kit to `~/.claude/skills/reactor/` (or `-Path` override) and prepends the matching `bin/<arch>` to the user's `PATH` via `[Environment]::SetEnvironmentVariable`.
+
+Both modes produce the same on-disk layout (`bin/x64/mur.exe`, `bin/arm64/mur.exe`), which keeps skill content portable and removes any "is this dev or prod?" branching from the markdown.
+
+#### Bootstrap pattern (retired)
+
+The previous `selfhost/SKILL.md` "bootstrap" pattern — a tiny stub skill that told the agent to run `mur --skill` to fetch the real content — has been removed. It existed when the CLI was the source of truth for skill content; now `SKILL.md` at the repo root is. Concretely deleted:
+
+- `src/Reactor.Cli/BOOTSTRAP-SKILL.md`
+- `<SelfHostDir>` property + `PopulateSelfHost` MSBuild target in `Reactor.Cli.csproj`
+- `selfhost/` entry in `.gitignore`
+
+The `<EmbeddedResource Include="..\..\SKILL.md">` line stays — `mur --skill` still prints the full skill, useful for `mur --skill | less` style debugging without leaving the terminal.
+
+> Mixing a binary into a skill directory is unusual — most agent skills are pure markdown and ask the user to install the CLI separately (winget, scoop, manual). The agent-native shape for runtime tooling is an MCP server, which `mur devtools` already exposes at `/mcp` (see `skills/devtools.md`). The skill-kit bundle is a pragmatic interim: as the MCP surface stabilizes, the kit can shrink back to pure markdown and the binary moves to MCP-only invocation. Tracked under §13.
+
+### 4.5 Secondary packages (v1+, optional)
 
 - `Microsoft.UI.Reactor.Interop.WinForms` — smaller audience, ship as a separate package so WinForms-free consumers don't pay the cost.
 
@@ -183,26 +226,60 @@ The `vscode-reactor/` project already builds a VSIX via `npm run compile` + `vsc
 
 ## 8. Versioning
 
-### Scheme
+### Scheme (P0): MinVer / commit height
 
-`MAJOR.MINOR.PATCH-preview.<build>+<sha>`
+Versions come from [MinVer](https://github.com/adamralph/minver), driven by git tags + commit height. The workflow runs `minver-cli` and passes the result via `-p:Version=…` to `dotnet pack` and `dotnet publish`.
 
-Until we hit `1.0`, every version is a prerelease. Consumers must opt in by allowing prerelease versions in their `<PackageReference>` (either explicit version or `AllowPrereleaseVersions`).
+| State | Version |
+|---|---|
+| Past tag `v0.1.0-preview.1` by N commits | `0.1.0-preview.1.N+<sha7>` |
+| Exactly at tag `v0.1.0-preview.1` | `0.1.0-preview.1` |
+| Tag push of `v0.1.0` | `0.1.0` (stable, P3 only) |
+| No tags yet (defaults below) | `0.1.0-experimental.0.<height>+<sha7>` |
+| `workflow_dispatch` with explicit `version` input | as supplied |
 
-### Tool: MinVer
+`minver-cli` flags:
 
-Use **[MinVer](https://github.com/adamralph/minver)** — tag-driven, no extra files, just reads `git describe`. Alternatives considered: `Nerdbank.GitVersioning` (more powerful but heavier), manual (error-prone). MinVer fits our cadence.
+- `-t v` — tag prefix
+- `-p experimental.0` — default prerelease identifiers when no tag is reachable
+- `-m 0.1` — minimum major.minor when no tag (so an untagged repo doesn't start at `0.0.x`)
 
-Rules:
+### Bootstrap
 
-- On push to `main` without a tag: `0.1.0-preview.0.<height>+<sha>` where `height` is commits since last tag.
-- On PR: `0.1.0-pr.<pr-number>.<sha>` — clearly distinguishable so nobody installs a PR build by mistake.
-- On tag `v1.0.0-preview.5`: exactly `1.0.0-preview.5`.
-- On tag `v1.0.0`: exactly `1.0.0` (stable, P3 only).
+Tag the repo once before the first CI run:
 
-### PR build version collision
+```sh
+git tag v0.1.0-experimental.0
+git push --tags
+```
 
-PR builds share a PR number across pushes. To keep each push installable, append the short SHA: `0.1.0-pr.123.abc1234`. NuGet allows this; the `+` metadata suffix is NuGet-legal.
+After that, every commit gets a unique, ordered version with zero coordination — height strictly increases as commits land. Milestone bumps are explicit tags (`v0.1.0-preview.1`, `v0.2.0-experimental.0`, …); MinVer takes it from there.
+
+### Why MinVer over the alternatives
+
+- **Daily patch** (originally drafted): no git-state requirement, but versions don't communicate "what changed" and collide within a UTC day. Atypical for NuGet packages.
+- **Nerdbank.GitVersioning**: more capable but heavier — version.json schema, per-branch override support, deeper integration. Overkill for our cadence.
+- **Manual SemVer bumps**: fine for a stable public package, but pre-1.0 we want every commit installable for review and don't want to bump versions by hand on each PR.
+
+MinVer hits the sweet spot: tag-driven, no extra files in the repo, conventional output that matches what most public NuGet packages look like.
+
+### PR vs main distinguishability
+
+Pure MinVer doesn't add a PR identifier — both PR and main builds with the same git height produce the same `0.1.0-experimental.0.<height>` filename. This is acceptable because:
+
+- The `+<sha7>` build metadata in the SemVer string differs (visible in package metadata, even if NuGet drops it from the filename).
+- Workflow artifact uploads are run-scoped — each workflow run gets its own download URL regardless of version collision.
+- Two PRs branched from the same merge base hitting the same commit height is rare in practice.
+
+If collisions become a problem later, append a CI-only suffix in the workflow (e.g. `-pr.<num>` after MinVer's output). Not adding it now to keep version strings conventional.
+
+### NuGet normalization caveat
+
+NuGet strips leading zeros from numeric components (`0.01.0001` → `0.1.1`), so plain integers are the only option for the version components MinVer produces.
+
+### Local builds
+
+Local `dotnet pack` defaults to `0.0.0-local` (set in `Reactor.csproj`) — there's no MinVer PackageReference, so the local pack doesn't need git history or `minver-cli`. Pass `-p:Version=…` when you want a specific version locally. CI is the source of truth for shipped versions.
 
 ## 9. CI/CD Pipeline
 
@@ -217,8 +294,6 @@ pack:
   runs-on: windows-latest
   steps:
     - uses: actions/checkout@...
-      with:
-        fetch-depth: 0          # required for MinVer
     - uses: actions/setup-dotnet@...
       with:
         dotnet-version: 9.0.x
@@ -359,15 +434,41 @@ Consumer gets: framework, analyzers, source generator, and WinUI SDK (transitive
 
 ## 14. Implementation Phases
 
+### P0 — Interim release-asset distribution (in flight)
+
+Done:
+1. Add packaging metadata to `src/Reactor/Reactor.csproj` (PackageId, license file, symbol package). Version comes from MinVer in CI; local pack uses `0.0.0-local`.
+2. Bundle `Reactor.Analyzers.dll` and `Reactor.Localization.Generator.dll` into the framework `.nupkg` under `analyzers/dotnet/cs/`. Flip `Reactor.Analyzers.csproj` to `IsPackable=false` (no longer ships standalone).
+3. Replace the bootstrap pattern (see §4.4) with a `MirrorBinForSelfhost` build target that drops `mur.exe` at `<repo>/bin/<arch>/`. Target is gated on a concrete Platform (x64/ARM64) to avoid creating a `bin/anycpu/` folder when sln-config translation collapses Platform to AnyCPU.
+4. Add `.github/workflows/release.yml` (workflow name: **Package**) running on:
+   - **PRs** (paths-ignore docs/md) → version `0.0.0-pr.<num>.<sha7>`, uploads x64 + arm64 artifacts (no Release).
+   - **Push to `main`** (paths-ignore docs/md) → version `0.0.0-main.<sha7>`, uploads artifacts (no Release).
+   - **Tag push (`v*`)** → version from tag, uploads artifacts AND creates a GitHub Release with `.nupkg` + `.snupkg` + skill kit zip attached.
+   - **Manual `workflow_dispatch`** → caller-supplied version, uploads artifacts (no Release).
+5. Add `tools/install-skill-kit.ps1` (shipped inside the kit zip).
+6. Update `skills/devtools.md` with the "Getting `mur` on your PATH" note covering both selfhost and kit modes.
+
+Verified locally:
+- `dotnet build Reactor.sln -c Release` → 0 errors.
+- `dotnet test tests/Reactor.Tests` → 6836 passed.
+- `dotnet test tests/Reactor.SelfTests` → 639 passed.
+- `dotnet pack src/Reactor -c Release -p:Platform=x64 -p:Version=0.0.1-smoke` → produces `.nupkg` containing `lib/net9.0-windows10.0.22621/Reactor.dll`, `analyzers/dotnet/cs/Reactor.Analyzers.dll`, `analyzers/dotnet/cs/Reactor.Localization.Generator.dll`, `LICENSE`, `Reactor.xml`.
+
+Still TODO under P0:
+- **Bootstrap MinVer**: `git tag v0.1.0-experimental.0 && git push --tags` so the first CI run produces `0.1.0-experimental.0.<height>` rather than the pre-bootstrap default.
+- First end-to-end test: after bootstrapping, push a tag like `v0.1.0-preview.1`, verify the workflow produces both assets, install into a throwaway consumer repo from the Release page.
+- Verify the on-PR pack produces a complete kit zip (no environment-specific path issues in `Compress-Archive`).
+- Decide whether the skill kit should also be smoke-tested by piping it through `install-skill-kit.ps1` on a clean Windows VM.
+
 ### P1 — Internal, ~1 week
 
-1. Add `Directory.Pack.props` with shared packaging metadata.
-2. Enable `IsPackable` on `Reactor.csproj`; bundle analyzer + source-generator DLLs.
-3. Add MinVer, tag the repo at `v0.1.0-preview.0`.
-4. Extend `ci.yml` with `pack` and `publish` jobs; target internal Azure Artifacts feed.
-5. Add PR-comment workflow with install snippet.
-6. Write a consumer-facing `docs/guide/install.md` page.
-7. Verify end-to-end by installing the package into a throwaway consumer repo outside the enlistment.
+P0 already covered packaging metadata, analyzer/source-generator bundling, and version generation (see §8). P1 adds the internal-feed publish step on top of the existing `release.yml`:
+
+1. Add a `publish` step to `release.yml`, gated on `push` to `main`, that does `dotnet nuget push` against the internal Azure Artifacts feed using a `FEED_PAT` secret.
+2. Add a PR-comment workflow with the install snippet pointing at the internal feed.
+3. Write a consumer-facing `docs/guide/install.md` page.
+4. Verify end-to-end by installing the package into a throwaway consumer repo outside the enlistment.
+5. (Optional) Once a second packable project lands, lift shared metadata into `Directory.Pack.props`.
 
 ### P2 — NDA external, ~2 weeks after P1
 
@@ -390,14 +491,25 @@ Consumer gets: framework, analyzers, source generator, and WinUI SDK (transitive
 
 ## Appendix A — File changes summary
 
+### Done in P0
+
 | File | Change |
 |---|---|
-| `Directory.Pack.props` (new) | Shared packaging metadata |
-| `src/Reactor/Reactor.csproj` | `IsPackable=true`, pack analyzer/source-gen DLLs |
-| `src/Reactor.Analyzers/Reactor.Analyzers.csproj` | `IsPackable=false` (now bundled) |
-| `src/Reactor.Localization.Generator/Reactor.Localization.Generator.csproj` | Stays as-is (already non-packable) |
-| `src/Reactor.Cli/Reactor.Cli.csproj` | No changes — published as self-contained exe from CI |
-| `.github/workflows/ci.yml` | Add `pack`, `publish`, `release` jobs; PR-comment workflow |
+| `src/Reactor/Reactor.csproj` | `IsPackable=true`; package metadata; bundles `Reactor.Analyzers.dll` and `Reactor.Localization.Generator.dll` under `analyzers/dotnet/cs/`; ships `LICENSE` |
+| `src/Reactor.Analyzers/Reactor.Analyzers.csproj` | `IsPackable=false` — bundled into framework package, no longer ships standalone |
+| `src/Reactor.Cli/Reactor.Cli.csproj` | Replaced `PopulateSelfHost` target with `MirrorBinForSelfhost` (mirrors build output to `<repo>/bin/<arch>/`); removed `<SelfHostDir>` |
+| `src/Reactor.Cli/BOOTSTRAP-SKILL.md` | **Deleted** — bootstrap pattern retired |
+| `.github/workflows/release.yml` (new) | Tag-triggered: pack framework, publish `mur` for x64+arm64, assemble skill kit zip, create GitHub Release with both assets |
+| `tools/install-skill-kit.ps1` (new) | Ships inside the kit zip; copies to install location and adds `bin/<arch>` to user PATH |
+| `skills/devtools.md` | Added "Getting `mur` on your PATH" section explaining selfhost vs deployed |
+| `.gitignore` | Removed `selfhost/` entry — directory no longer generated |
+
+### Planned for P1+
+
+| File | Change |
+|---|---|
+| `Directory.Pack.props` (new) | Centralize packaging metadata across packable projects (defer until there's a second packable project) |
+| `.github/workflows/ci.yml` | Add `pack` and `publish` jobs targeting the internal Azure Artifacts feed |
 | `nuget.config` (new, at repo root) | Optional — points consumers at the internal/NDA feed during P1/P2 |
 | `docs/guide/install.md` (new) | Consumer install docs |
-| `install-mur.ps1` (new, at repo root) | Standalone CLI installer script |
+| `Microsoft.SourceLink.GitHub` | Add to `Reactor.csproj` once the repo is public so consumers can step into source |
