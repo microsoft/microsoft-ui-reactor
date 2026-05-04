@@ -97,17 +97,7 @@ public sealed class DemoScriptShell : Component
             {
                 SessionLog.Write($"[Shell] OnGenerating '{msg ?? "(null)"}'");
                 setGenerationStatus(msg);
-                if (msg is not null)
-                {
-                    // announce.Announce hits WinUI's automation peer which is
-                    // UI-thread-only — marshal explicitly since the pipeline
-                    // raises this event from Task.Run.
-                    var dq = ReactorApp.ActiveHost?.Window?.DispatcherQueue;
-                    if (dq is null || dq.HasThreadAccess)
-                        announce.Announce(msg, assertive: false);
-                    else
-                        dq.TryEnqueue(() => announce.Announce(msg, assertive: false));
-                }
+                if (msg is not null) SafeAnnounce(msg);
             }
             void OnBanner(string? msg) => setBanner(msg);
 
@@ -307,6 +297,34 @@ public sealed class DemoScriptShell : Component
             }
         }
 
+        // SafeAnnounce — never throws. UseAnnounce.Announce ultimately calls
+        // FrameworkElementAutomationPeer.FromElement, which is UI-thread-only
+        // and surfaces RPC_E_WRONG_THREAD (COMException 0x8001010E) when
+        // invoked from a threadpool thread (we hit this from
+        // UseCommand-wrapped click handlers — see framework #130). Marshals
+        // to the UI dispatcher when needed and swallows any other automation
+        // peer flake — losing one screen-reader announcement is fine, leaving
+        // the caller mid-state-setup is not.
+        void SafeAnnounce(string message, bool assertive = false)
+        {
+            try
+            {
+                var dq = ReactorApp.ActiveHost?.Window?.DispatcherQueue;
+                if (dq is null || dq.HasThreadAccess)
+                    announce.Announce(message, assertive);
+                else
+                    dq.TryEnqueue(() =>
+                    {
+                        try { announce.Announce(message, assertive); }
+                        catch (Exception ex) { SessionLog.Write($"[Shell] SafeAnnounce (dispatched) swallowed: {ex.Message}"); }
+                    });
+            }
+            catch (Exception ex)
+            {
+                SessionLog.Write($"[Shell] SafeAnnounce swallowed: {ex.Message}");
+            }
+        }
+
         void OnGenerateAll() => SafeClickHandler("OnGenerateAll", OnGenerateAllCore);
         void OnGenerateAllCore()
         {
@@ -346,7 +364,7 @@ public sealed class DemoScriptShell : Component
             var cts = new CancellationTokenSource();
             generationCtsRef.Current = cts;
             setIsGenerating(true);
-            announce.Announce($"Generating {model.Steps.Count} steps…", assertive: false);
+            SafeAnnounce($"Generating {model.Steps.Count} steps…");
             SessionLog.Write("[Shell] Generate-All kicking off Task.Run");
 
             _ = Task.Run(async () =>
@@ -440,7 +458,7 @@ public sealed class DemoScriptShell : Component
             var cts = new CancellationTokenSource();
             generationCtsRef.Current = cts;
             setIsGenerating(true);
-            announce.Announce($"Re-generating from step {step.Number}…", assertive: false);
+            SafeAnnounce($"Re-generating from step {step.Number}…");
             SessionLog.Write($"[Shell] Re-gen kicking off Task.Run startIndex={idx}");
 
             _ = Task.Run(async () =>
@@ -475,7 +493,7 @@ public sealed class DemoScriptShell : Component
                 dp.SetText(step.Delta);
                 global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dp);
                 _status.ShowToast($"Step {step.Number} delta copied to clipboard.", StatusSeverity.Success);
-                announce.Announce($"Step {step.Number} delta copied.", assertive: false);
+                SafeAnnounce($"Step {step.Number} delta copied.");
             }
             catch (Exception ex)
             {
@@ -504,7 +522,7 @@ public sealed class DemoScriptShell : Component
         {
             var added = model.AddStep(title: "", prompt: "");
             ScheduleSave();
-            announce.Announce($"Added step {added.Number}.", assertive: false);
+            SafeAnnounce($"Added step {added.Number}.");
         }
 
         void OnDeleteStep(StepModel step)

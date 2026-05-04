@@ -41,6 +41,14 @@ file-based app is a top-level-statements program — no `class App :
 Application`, no `Main`, no namespace, no XAML. The entry point is the
 top-level statements themselves.
 
+Order matters: `#:` directives FIRST, then `using` statements, then
+top-level statements (like `ReactorApp.Run<App>(...);`), THEN any
+`class`, `record`, `struct` declarations. C# enforces this
+("`error CS8803: Top-level statements must precede namespace and type
+declarations`"). When you define a `class App : Component` and call
+`ReactorApp.Run<App>(...)`, the `Run<App>(...)` call must appear ABOVE
+the `class App` declaration in the file.
+
 # Reactor (default for desktop / WinUI / GUI demos)
 
 If the demo prompt mentions Reactor, WinUI 3, XAML, or building a

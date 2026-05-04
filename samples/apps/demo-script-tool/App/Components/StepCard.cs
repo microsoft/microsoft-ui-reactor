@@ -205,16 +205,20 @@ public sealed class StepCard : Component<StepCardProps>
             },
         });
 
-        var regenCmd = UseCommand(new Command
+        // Plain sync Command (no UseCommand). UseCommand's Task.Run wrapper
+        // would put OnRegenFromHere on a threadpool thread, which made the
+        // shell's announce.Announce throw RPC_E_WRONG_THREAD on the
+        // FrameworkElementAutomationPeer call (the exact issue tracked by
+        // framework #130). The 250 ms IsExecuting bridge is no longer needed
+        // either — the shell's lastRegenClickRef debounce (200 ms) covers
+        // the same multi-fire window without crossing threads, and
+        // Props.IsGenerating disables the button on the next render.
+        var regenCmd = new Command
         {
             Label = "Re-gen",
             CanExecute = !Props.IsGenerating,
-            ExecuteAsync = async () =>
-            {
-                Props.OnRegenFromHere(step);
-                await Task.Delay(250).ConfigureAwait(false);
-            },
-        });
+            Execute = () => Props.OnRegenFromHere(step),
+        };
 
         var toggleCmd = new Command
         {
