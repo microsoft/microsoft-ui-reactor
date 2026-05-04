@@ -688,6 +688,15 @@ internal static class SelfTestFixtureRegistry
         "ReconcileHighlight_ContainerNotModifiedWhenOnlyChildrenChange",
         "ReconcileHighlight_UpdatePathNotRemount",
         "ReconcileHighlight_MenuFlyoutUpdatesInPlace",
+        "TemplatedListHL_ListView_NoHighlightOnSiblingStateChange",
+        "TemplatedListHL_ListView_HeaderChangeFlagsListView",
+        "TemplatedListHL_ListView_ItemsChangeStillUpdates",
+        "TemplatedListHL_ListView_SettersStillFlagged",
+        "TemplatedListHL_GridView_NoHighlightOnSiblingStateChange",
+        "TemplatedListHL_FlipView_NoHighlightOnSiblingStateChange",
+        "TemplatedListHL_LazyVStack_NoHighlightOnSiblingStateChange",
+        "TemplatedListHL_LazyHStack_NoHighlightOnSiblingStateChange",
+        "TemplatedListHL_LazyVStack_SpacingChangeFlagsControl",
 
         // Layout-cost overlay (spec 032)
         "LayoutCost_FlagOn_BackFillsExistingComponents",
@@ -1419,6 +1428,15 @@ internal static class SelfTestFixtureRegistry
         "ReconcileHighlight_ContainerNotModifiedWhenOnlyChildrenChange" => new ReconcileHighlightTests.ContainerNotModifiedWhenOnlyChildrenChange(harness),
         "ReconcileHighlight_UpdatePathNotRemount" => new ReconcileHighlightTests.UpdatePathNotRemount(harness),
         "ReconcileHighlight_MenuFlyoutUpdatesInPlace" => new ReconcileHighlightTests.MenuFlyoutUpdatesInPlace(harness),
+        "TemplatedListHL_ListView_NoHighlightOnSiblingStateChange" => new TemplatedListHighlightTests.TemplatedListView_NoHighlightOnSiblingStateChange(harness),
+        "TemplatedListHL_ListView_HeaderChangeFlagsListView" => new TemplatedListHighlightTests.TemplatedListView_HeaderChangeFlagsListView(harness),
+        "TemplatedListHL_ListView_ItemsChangeStillUpdates" => new TemplatedListHighlightTests.TemplatedListView_ItemsChangeStillUpdates(harness),
+        "TemplatedListHL_ListView_SettersStillFlagged" => new TemplatedListHighlightTests.TemplatedListView_SettersStillFlagged(harness),
+        "TemplatedListHL_GridView_NoHighlightOnSiblingStateChange" => new TemplatedListHighlightTests.TemplatedGridView_NoHighlightOnSiblingStateChange(harness),
+        "TemplatedListHL_FlipView_NoHighlightOnSiblingStateChange" => new TemplatedListHighlightTests.TemplatedFlipView_NoHighlightOnSiblingStateChange(harness),
+        "TemplatedListHL_LazyVStack_NoHighlightOnSiblingStateChange" => new TemplatedListHighlightTests.LazyVStack_NoHighlightOnSiblingStateChange(harness),
+        "TemplatedListHL_LazyHStack_NoHighlightOnSiblingStateChange" => new TemplatedListHighlightTests.LazyHStack_NoHighlightOnSiblingStateChange(harness),
+        "TemplatedListHL_LazyVStack_SpacingChangeFlagsControl" => new TemplatedListHighlightTests.LazyVStack_SpacingChangeFlagsControl(harness),
 
         // Layout-cost overlay
         "LayoutCost_FlagOn_BackFillsExistingComponents" => new LayoutCostOverlayTests.FlagOn_BackFillsExistingComponents(harness),

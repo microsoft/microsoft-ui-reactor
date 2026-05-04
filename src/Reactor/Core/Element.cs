@@ -576,6 +576,30 @@ public abstract record Element
             (BreadcrumbBarElement ba, BreadcrumbBarElement bb) =>
                 ba.Setters.Length == 0 && bb.Setters.Length == 0,
 
+            // Templated (data-driven) collections: own props are the WinUI
+            // properties UpdateTemplatedXxx writes back. Items + ViewBuilder
+            // are not own props — they drive child reconcile but don't write
+            // properties on the parent control. Without this case, the typed
+            // ListView<T>/GridView<T>/FlipView<T> falls through to false and
+            // the highlight overlay flashes the whole list on every parent
+            // re-render (because OwnPropsEqual returning false is the gate
+            // for ReconcileHighlightOverlay's "modified" tag).
+            (TemplatedListElementBase ta, TemplatedListElementBase tb) =>
+                ta.GetSelectedIndex() == tb.GetSelectedIndex()
+                && ta.GetSelectionMode() == tb.GetSelectionMode()
+                && ta.GetHeader() == tb.GetHeader()
+                && ta.GetIsItemClickEnabled() == tb.GetIsItemClickEnabled()
+                && !ta.HasSetters && !tb.HasSetters,
+
+            // Lazy (virtualized) stacks: same rationale — Items/ViewBuilder
+            // are factory inputs, not control properties.
+            (LazyStackElementBase la, LazyStackElementBase lb) =>
+                la.Orientation == lb.Orientation
+                && la.Spacing == lb.Spacing
+                && la.EstimatedItemSize == lb.EstimatedItemSize
+                && la.ScrollViewerSetters.Length == 0 && lb.ScrollViewerSetters.Length == 0
+                && la.RepeaterSetters.Length == 0 && lb.RepeaterSetters.Length == 0,
+
             // Non-container / leaf types: return false → always captured
             _ => false,
         };
@@ -2386,6 +2410,12 @@ public abstract record TemplatedListElementBase : Element
     public abstract void InvokeSelectionChanged(int index);
     public abstract void InvokeItemClick(int index);
     public abstract void ApplyControlSetters(object control);
+    /// <summary>
+    /// True when programmatic setter actions (.Set(...)) have been attached.
+    /// OwnPropsEqual / ShallowEquals must return false in that case so the
+    /// reconciler always re-runs ApplyControlSetters.
+    /// </summary>
+    internal abstract bool HasSetters { get; }
 }
 
 public record TemplatedListViewElement<T>(
@@ -2416,6 +2446,7 @@ public record TemplatedListViewElement<T>(
     public override void ApplyControlSetters(object control) =>
         Reconciler.ApplySetters(Setters, (WinUI.ListView)control);
     internal override bool HasCallbacks => OnSelectionChanged is not null || OnItemClick is not null;
+    internal override bool HasSetters => Setters.Length > 0;
 }
 
 public record TemplatedGridViewElement<T>(
@@ -2446,6 +2477,7 @@ public record TemplatedGridViewElement<T>(
     public override void ApplyControlSetters(object control) =>
         Reconciler.ApplySetters(Setters, (WinUI.GridView)control);
     internal override bool HasCallbacks => OnSelectionChanged is not null || OnItemClick is not null;
+    internal override bool HasSetters => Setters.Length > 0;
 }
 
 public record TemplatedFlipViewElement<T>(
@@ -2472,6 +2504,7 @@ public record TemplatedFlipViewElement<T>(
     public override void ApplyControlSetters(object control) =>
         Reconciler.ApplySetters(Setters, (WinUI.FlipView)control);
     internal override bool HasCallbacks => OnSelectionChanged is not null;
+    internal override bool HasSetters => Setters.Length > 0;
 }
 
 // ════════════════════════════════════════════════════════════════════════
