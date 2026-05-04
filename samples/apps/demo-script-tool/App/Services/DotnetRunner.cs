@@ -69,15 +69,19 @@ public sealed class DotnetRunner
         try
         {
             string args, workdir;
+            // Forward `--devtools` to the spawned step so any Reactor devtools
+            // overlay / debug menu in the generated app is reachable from the
+            // demo. Everything after `--` is passed verbatim to the program,
+            // not consumed by `dotnet run`.
             if (multiFile)
             {
                 workdir = Path.Combine(projectRoot, $"step-{step.Number:D2}");
-                args = "run --no-build";
+                args = "run --no-build -- --devtools";
             }
             else
             {
                 workdir = projectRoot;
-                args = $"run \"{Path.Combine(projectRoot, $"step-{step.Number:D2}.cs")}\"";
+                args = $"run \"{Path.Combine(projectRoot, $"step-{step.Number:D2}.cs")}\" -- --devtools";
             }
 
             var psi = new ProcessStartInfo("dotnet", args)

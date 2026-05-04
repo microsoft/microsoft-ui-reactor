@@ -60,18 +60,33 @@ public sealed class GenerationPipeline
     }
 
     /// <summary>Generate every step in <paramref name="model"/> sequentially.</summary>
-    public async Task GenerateAllAsync(DemoScriptModel model, string projectRoot, CancellationToken ct)
+    public Task GenerateAllAsync(DemoScriptModel model, string projectRoot, CancellationToken ct) =>
+        GenerateFromAsync(model, projectRoot, startIndex: 0, ct);
+
+    /// <summary>
+    /// Generate from <paramref name="startIndex"/> through the end of the
+    /// script. The "Re-run from here" affordance on each step card calls this
+    /// with the chosen step's index — regenerating one step inevitably changes
+    /// the baseline code that downstream steps were built on, so we always
+    /// re-run the chain from the chosen point onward.
+    /// </summary>
+    public async Task GenerateFromAsync(DemoScriptModel model, string projectRoot, int startIndex, CancellationToken ct)
     {
-        System.Diagnostics.Debug.WriteLine($"[Pipeline] GenerateAll start root='{projectRoot}' steps={model.Steps.Count} multiFile={model.IsMultiFile}");
+        System.Diagnostics.Debug.WriteLine($"[Pipeline] GenerateFrom start root='{projectRoot}' steps={model.Steps.Count} startIndex={startIndex} multiFile={model.IsMultiFile}");
         if (model.Steps.Count == 0)
         {
             _status.ShowToast("Add at least one step to your demo script before generating.", StatusSeverity.Warning);
             return;
         }
+        if (startIndex < 0 || startIndex >= model.Steps.Count)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Pipeline] GenerateFrom: invalid startIndex {startIndex}, falling back to 0");
+            startIndex = 0;
+        }
 
         try
         {
-            for (int i = 0; i < model.Steps.Count; i++)
+            for (int i = startIndex; i < model.Steps.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
                 var step = model.Steps[i];
@@ -82,19 +97,34 @@ public sealed class GenerationPipeline
 
                 if (!await StreamSingleStepWithAuthRetryAsync(model, projectRoot, step, prior, ct).ConfigureAwait(false))
                 {
-                    // No code emitted (model returned nothing or only delta) — record as
-                    // a failed step but keep going so a partial run still produces what
-                    // it can. The next step's prompt will fall back to in-memory code or
-                    // skip the previous-code block entirely if there's nothing on disk.
-                    System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: no code produced; continuing");
+                    // No code emitted (model returned nothing or only delta).
+                    // Halt: continuing would feed the next step a poisoned (empty
+                    // or stale) baseline, which we observed cascading into a
+                    // chain of "No code produced" failures. The user can fix
+                    // the prompt and click Re-run from here.
+                    System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: no code produced; halting");
                     step.SetBuildState(BuildState.Failed, "No code produced.");
-                    continue;
+                    _status.SetBanner($"Step {step.Number} produced no code — generation halted. Edit the prompt or earlier steps and use “Re-run from here.”");
+                    return;
                 }
 
                 _status.SetGeneratingStatus($"Building step {step.Number} of {model.Steps.Count}…");
                 await RunBuildAndFixAsync(step, model, projectRoot, ct).ConfigureAwait(false);
+
+                // After the build-and-fix loop settles, the step is either
+                // Succeeded or Failed. A Failed step means we exhausted the fix
+                // attempts; passing its broken code to step N+1 produced
+                // cascade-failure runs in practice, so halt here. The user can
+                // tweak the failing step's prompt or an earlier step's code
+                // and Re-run from here to pick up where we stopped.
+                if (step.BuildState == BuildState.Failed)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Pipeline] step {step.Number}: build failed after {MaxFixAttempts} fix attempts; halting");
+                    _status.SetBanner($"Step {step.Number} failed to build after {MaxFixAttempts} fix attempts — generation halted. Use “Re-run from here” after editing the step.");
+                    return;
+                }
             }
-            System.Diagnostics.Debug.WriteLine("[Pipeline] GenerateAll completed normally");
+            System.Diagnostics.Debug.WriteLine("[Pipeline] GenerateFrom completed normally");
         }
         catch (OperationCanceledException)
         {

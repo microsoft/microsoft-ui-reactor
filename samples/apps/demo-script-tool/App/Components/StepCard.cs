@@ -9,11 +9,13 @@ public sealed record StepCardProps(
     StepModel Step,
     StepModel? PriorStep,
     int TotalSteps,
+    bool IsGenerating,
     Action<int, string> OnPromptChanged,
     Action<int, string> OnTitleChanged,
     Action<StepModel> OnRun,
     Action<StepModel> OnCopyDelta,
-    Action<StepModel> OnDelete);
+    Action<StepModel> OnDelete,
+    Action<StepModel> OnRerunFromHere);
 
 /// <summary>
 /// One step rendered as a three-column card: prompt | code | actions
@@ -172,6 +174,10 @@ public sealed class StepCard : Component<StepCardProps>
             ActionButton(IconAsset("run"), "Run", canRun, () => Props.OnRun(step), $"Run step {step.Number}"),
             ActionButton(IconAsset(showCode ? "notes" : "code"), showCode ? "Show notes" : "Show code", hasCode || hasDelta, () => setShowCode(!showCode), $"Toggle code/notes view for step {step.Number}"),
             ActionButton(IconAsset("copy"), "Copy notes", hasDelta, () => Props.OnCopyDelta(step), $"Copy speaker notes for step {step.Number}"),
+            // Re-run-from-here regenerates this step + every step that follows.
+            // Disabled while a generation pass is already in flight to keep
+            // the cancellation token / status state consistent.
+            ActionButton(IconAsset("rerun"), "Re-run from here", !Props.IsGenerating, () => Props.OnRerunFromHere(step), $"Re-run step {step.Number} and every following step"),
             ActionButton(IconAsset("delete"), "Delete", true, () => Props.OnDelete(step), $"Delete step {step.Number}"));
 
         var failureOutput = (step.BuildState == BuildState.Failed && !string.IsNullOrEmpty(step.BuildOutput))

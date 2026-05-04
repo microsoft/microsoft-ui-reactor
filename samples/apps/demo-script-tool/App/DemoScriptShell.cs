@@ -344,6 +344,53 @@ public sealed class DemoScriptShell : Component
             });
         }
 
+        void OnRerunFromStep(StepModel step)
+        {
+            if (projectRoot is null)
+            {
+                _status.ShowToast("Open a folder first.", StatusSeverity.Warning);
+                return;
+            }
+            if (isGenerating)
+            {
+                _status.ShowToast("Generation already running — cancel it first.", StatusSeverity.Warning);
+                return;
+            }
+
+            // Locate this step's index in the live steps list. Comparing by
+            // reference is robust to renumbering after Add/Delete.
+            int idx = -1;
+            for (int i = 0; i < model.Steps.Count; i++)
+            {
+                if (ReferenceEquals(model.Steps[i], step)) { idx = i; break; }
+            }
+            if (idx < 0) { _status.ShowToast("Step is no longer in the script.", StatusSeverity.Warning); return; }
+
+            var cts = new CancellationTokenSource();
+            generationCtsRef.Current = cts;
+            setIsGenerating(true);
+            announce.Announce($"Re-running from step {step.Number}…", assertive: false);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _pipeline.GenerateFromAsync(model, projectRoot, idx, cts.Token).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Shell] Re-run task crashed: {ex}");
+                    _status.SetBanner($"Re-run crashed: {ex.GetType().Name} — {ex.Message}");
+                }
+                finally
+                {
+                    setIsGenerating(false);
+                    generationCtsRef.Current?.Dispose();
+                    generationCtsRef.Current = null;
+                }
+            });
+        }
+
         void OnCopyDelta(StepModel step)
         {
             if (string.IsNullOrEmpty(step.Delta)) return;
@@ -499,7 +546,7 @@ public sealed class DemoScriptShell : Component
                 .Margin(0, banner is null && parseError is null ? 0 : 12, 0, 0),
             (parseError is null
                 ? (Element)Component<StepsPanel, StepsPanelProps>(
-                    new StepsPanelProps(model, OnPromptChanged, OnTitleChanged, OnRunStep, OnCopyDelta, OnAddStep, OnDeleteStep))
+                    new StepsPanelProps(model, isGenerating, OnPromptChanged, OnTitleChanged, OnRunStep, OnCopyDelta, OnAddStep, OnDeleteStep, OnRerunFromStep))
                     .Flex(grow: 1, basis: 0)
                 : Empty()))
             with { RowGap = 0 })

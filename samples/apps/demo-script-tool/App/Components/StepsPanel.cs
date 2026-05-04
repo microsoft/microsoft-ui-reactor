@@ -8,12 +8,14 @@ namespace DemoScriptTool.App.Components;
 
 public sealed record StepsPanelProps(
     DemoScriptModel Model,
+    bool IsGenerating,
     Action<int, string> OnPromptChanged,
     Action<int, string> OnTitleChanged,
     Action<StepModel> OnRun,
     Action<StepModel> OnCopyDelta,
     Action OnAddStep,
-    Action<StepModel> OnDeleteStep);
+    Action<StepModel> OnDeleteStep,
+    Action<StepModel> OnRerunFromStep);
 
 /// <summary>
 /// Vertical scroller of <see cref="StepCard"/> instances keyed by step number.
@@ -75,7 +77,9 @@ public sealed class StepsPanel : Component<StepsPanelProps>
                 s,
                 idx > 0 ? steps[idx - 1] : null,
                 steps.Count,
-                Props.OnPromptChanged, Props.OnTitleChanged, Props.OnRun, Props.OnCopyDelta, Props.OnDeleteStep)))
+                Props.IsGenerating,
+                Props.OnPromptChanged, Props.OnTitleChanged, Props.OnRun, Props.OnCopyDelta, Props.OnDeleteStep,
+                Props.OnRerunFromStep)))
             .Append(addButton)
             .ToArray();
 
