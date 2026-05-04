@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using DemoScriptTool.App.Models;
 using Microsoft.UI.Reactor.Animation;
 using static Microsoft.UI.Reactor.Factories;
@@ -111,7 +112,20 @@ public sealed class StepCard : Component<StepCardProps>
                     BuildCodeRichText(step.Code, Props.PriorStep?.Code)
                         .Foreground(Theme.PrimaryText)
                         .Padding(12))
-                with { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto }))
+                with
+                {
+                    // Vertical scroll lives at the steps-panel level — disabling
+                    // it here keeps the inner ScrollView from eating the mouse
+                    // wheel when the horizontal scrollbar is present. Without
+                    // this, a tall code block with overflow on the X axis hijacks
+                    // every wheel event, even pure-Y motion, and the parent panel
+                    // can't scroll. NoWrap on the rich text means lines extend
+                    // off-screen and the user navigates them via the visible
+                    // horizontal scrollbar, not the wheel.
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                    VerticalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Disabled,
+                }))
                 .Background(Theme.ControlFill)
                 .CornerRadius(4)
                 .WithBorder(Theme.ControlStrokeSecondary, 1),
@@ -170,15 +184,65 @@ public sealed class StepCard : Component<StepCardProps>
         // column's full width so they read as a uniform button stack.
         // The Button(content, onClick) overload takes a custom content
         // Element so we layout an HStack(icon, label) ourselves.
+        // Per-action Commands. UseCommand wraps async ExecuteAsync into a
+        // synchronous launcher that flips IsExecuting=true while the action
+        // is in flight and back to false on completion — Command.IsEnabled
+        // honors that flag, so the button auto-disables for the duration.
+        // - Run: wraps a Task.Delay so the visible disable lasts long enough
+        //   to absorb double-clicks (the spawn itself returns instantly).
+        // - Re-gen: tiny delay so the IsExecuting window overlaps with the
+        //   shell flipping Props.IsGenerating to true on the next render —
+        //   without this the button could re-enable for a frame in between.
+        // - Show / Copy / Delete: plain sync Commands; instant.
+        var runCmd = UseCommand(new Command
+        {
+            Label = "Run",
+            CanExecute = canRun,
+            ExecuteAsync = async () =>
+            {
+                Props.OnRun(step);
+                await Task.Delay(1500).ConfigureAwait(false);
+            },
+        });
+
+        var rerunCmd = UseCommand(new Command
+        {
+            Label = "Re-gen",
+            CanExecute = !Props.IsGenerating,
+            ExecuteAsync = async () =>
+            {
+                Props.OnRerunFromHere(step);
+                await Task.Delay(250).ConfigureAwait(false);
+            },
+        });
+
+        var toggleCmd = new Command
+        {
+            Label = showCode ? "Show notes" : "Show code",
+            CanExecute = hasCode || hasDelta,
+            Execute = () => setShowCode(!showCode),
+        };
+
+        var copyCmd = new Command
+        {
+            Label = "Copy notes",
+            CanExecute = hasDelta,
+            Execute = () => Props.OnCopyDelta(step),
+        };
+
+        var deleteCmd = new Command
+        {
+            Label = "Delete",
+            Execute = () => Props.OnDelete(step),
+        };
+
         var actions = VStack(6,
-            ActionButton(IconAsset("run"), "Run", canRun, () => Props.OnRun(step), $"Run step {step.Number}"),
-            ActionButton(IconAsset(showCode ? "notes" : "code"), showCode ? "Show notes" : "Show code", hasCode || hasDelta, () => setShowCode(!showCode), $"Toggle code/notes view for step {step.Number}"),
-            ActionButton(IconAsset("copy"), "Copy notes", hasDelta, () => Props.OnCopyDelta(step), $"Copy speaker notes for step {step.Number}"),
+            ActionButton(IconAsset("run"), runCmd, $"Run step {step.Number}"),
+            ActionButton(IconAsset(showCode ? "notes" : "code"), toggleCmd, $"Toggle code/notes view for step {step.Number}"),
+            ActionButton(IconAsset("copy"), copyCmd, $"Copy speaker notes for step {step.Number}"),
             // Re-run-from-here regenerates this step + every step that follows.
-            // Disabled while a generation pass is already in flight to keep
-            // the cancellation token / status state consistent.
-            ActionButton(IconAsset("rerun"), "Re-run from here", !Props.IsGenerating, () => Props.OnRerunFromHere(step), $"Re-run step {step.Number} and every following step"),
-            ActionButton(IconAsset("delete"), "Delete", true, () => Props.OnDelete(step), $"Delete step {step.Number}"));
+            ActionButton(IconAsset("rerun"), rerunCmd, $"Re-run step {step.Number} and every following step"),
+            ActionButton(IconAsset("delete"), deleteCmd, $"Delete step {step.Number}"));
 
         var failureOutput = (step.BuildState == BuildState.Failed && !string.IsNullOrEmpty(step.BuildOutput))
             ? Border(
@@ -305,17 +369,28 @@ public sealed class StepCard : Component<StepCardProps>
 
     /// <summary>
     /// Action-row button factory: SVG icon (16×16) on the left, label on the
-    /// right, stretched to the column's full width so the four buttons line
-    /// up perfectly. Disabled state and AutomationName are wired in one place.
+    /// right, stretched to the column's full width so the buttons line up
+    /// perfectly. Driven by a <see cref="Command"/> so callers can opt into
+    /// <see cref="RenderContext.UseCommand"/>'s IsExecuting tracking — async
+    /// commands wrapped via UseCommand auto-disable the button while running,
+    /// preventing rapid double-clicks from re-firing the action.
     /// </summary>
-    static Element ActionButton(string iconPath, string label, bool isEnabled, Action onClick, string automationName) =>
+    static Element ActionButton(string iconPath, Command command, string automationName) =>
         Button(
             (FlexRow(
                 Image(iconPath).Width(16).Height(16),
-                TextBlock(label).VAlign(VerticalAlignment.Center))
+                TextBlock(command.Label).VAlign(VerticalAlignment.Center))
             with { ColumnGap = 8, AlignItems = FlexAlign.Center }),
-            onClick)
-        .Disabled(!isEnabled)
+            () =>
+            {
+                // Match the framework's CommandBindings.Invoke contract: prefer
+                // the synchronous Execute (which is what UseCommand sets after
+                // wrapping an async command), fall back to firing ExecuteAsync
+                // for raw async commands that didn't go through UseCommand.
+                if (command.Execute is not null) command.Execute();
+                else if (command.ExecuteAsync is not null) _ = command.ExecuteAsync();
+            })
+        .Disabled(!command.IsEnabled)
         .HAlign(HorizontalAlignment.Stretch)
         .AutomationName(automationName);
 
