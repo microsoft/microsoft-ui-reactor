@@ -64,7 +64,7 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor HookOutsideRenderRule = new(
         HookOutsideRenderId,
         "Hook called outside Render or a custom-hook method",
-        "Hook '{0}' must be called inside a Component.Render override or a custom-hook method (by convention, a method whose name starts with 'Use').",
+        "Hook '{0}' must be called inside a Component.Render override or a custom-hook method (by convention, a method whose name starts with 'Use')",
         "Reactor.Hooks",
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,

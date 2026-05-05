@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.Hooks;
 /// <remarks>
 /// Spec 033 §3. The same <see cref="ElementRef{T}"/> instance is returned across
 /// re-renders (identity stable), so storing the ref in a deps array or comparing
-/// with <see cref="ReferenceEquals"/> is safe.
+/// with <see cref="object.ReferenceEquals"/> is safe.
 /// </remarks>
 /// <example>
 /// <code>

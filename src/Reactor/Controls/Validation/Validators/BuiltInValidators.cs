@@ -20,7 +20,7 @@ public static class Validate
         new MinLengthValidator(n, message ?? $"Must be at least {n} characters.");
 
     /// <summary>
-    /// String length must be <= n.
+    /// String length must be &lt;= n.
     /// </summary>
     public static IValidator MaxLength(int n, string? message = null) =>
         new MaxLengthValidator(n, message ?? $"Must be at most {n} characters.");

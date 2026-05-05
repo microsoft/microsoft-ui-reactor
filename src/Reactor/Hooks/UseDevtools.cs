@@ -8,7 +8,7 @@ public static class UseDevtoolsExtensions
     /// Returns <c>true</c> when the current process is running with the in-app
     /// devtools UI enabled. This is the AND of two independent signals:
     /// <list type="number">
-    ///   <item><see cref="ReactorApp.Run{TRoot}(string,int,int,bool,bool,bool,System.Action{ReactorHost}?)"/>
+    ///   <item><c>ReactorApp.Run&lt;TRoot&gt;</c>
     ///   was called with <c>devtools: true</c> (build-time capability gate).</item>
     ///   <item>The process was launched with <c>--devtools app</c> or
     ///   <c>--devtools run</c> (session-scoped opt-in by the user running the app).</item>

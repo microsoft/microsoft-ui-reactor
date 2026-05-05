@@ -6,8 +6,8 @@ using Microsoft.UI.Xaml.Controls;
 namespace Microsoft.UI.Reactor.Hooks;
 
 /// <summary>
-/// Handle returned by <see cref="UseAnnounceExtensions.UseAnnounce"/>.
-/// Provides an imperative <see cref="Announce"/> method for screen reader
+/// Handle returned by <see cref="UseAnnounceExtensions.UseAnnounce(Microsoft.UI.Reactor.Core.RenderContext)"/>.
+/// Provides an imperative <see cref="Announce(string)"/> method for screen reader
 /// live-region announcements plus a zero-size <see cref="Region"/> element
 /// that must be included somewhere in the component's rendered tree.
 /// </summary>

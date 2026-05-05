@@ -7,7 +7,7 @@ namespace Microsoft.UI.Reactor;
 
 /// <summary>
 /// Strongly-typed grid track size, used by the typed
-/// <see cref="Microsoft.UI.Reactor.Factories.Grid(GridSize[], GridSize[], Element?[])"/>
+/// <c>Microsoft.UI.Reactor.Factories.Grid(GridSize[], GridSize[], Element?[])</c>
 /// factory in place of the legacy string-form (<c>"Auto"</c>, <c>"*"</c>,
 /// <c>"200"</c>, <c>"1.5*"</c>) tracks.
 /// </summary>

@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 namespace Microsoft.UI.Reactor.Hooks;
 
 /// <summary>
-/// Callbacks and side-effects for <see cref="UseMutationExtensions.UseMutation{TInput,TResult}"/>.
+/// Callbacks and side-effects for the <c>UseMutation</c> hook.
 /// All callbacks are optional; all run on the dispatcher thread except <see cref="OnOptimistic"/>
 /// which runs synchronously on the caller of <see cref="Mutation{TInput,TResult}.RunAsync"/>
 /// — the typical case is a render-thread click handler, so the optimistic update lands in the
@@ -23,7 +23,7 @@ public sealed record MutationOptions<TInput, TResult>(
     string[]? InvalidateKeys = null);
 
 /// <summary>
-/// Handle returned by <see cref="UseMutationExtensions.UseMutation{TInput,TResult}"/>. Carries
+/// Handle returned by the <c>UseMutation</c> hook. Carries
 /// the pending/error/last-result state and the <see cref="RunAsync"/> entry point.
 /// </summary>
 /// <remarks>
@@ -87,6 +87,7 @@ public static class UseMutationExtensions
     /// Registers a <see cref="Mutation{TInput,TResult}"/> for this hook slot. The handle
     /// is stable across renders (pass it to buttons, context menus, etc.).
     /// </summary>
+    /// <param name="ctx">The render context (extension target).</param>
     /// <param name="mutator">The async write. Receives the caller's input and a token that
     /// fires on unmount. Rethrow <see cref="OperationCanceledException"/> to honour it.</param>
     /// <param name="cache">The cache whose keys to invalidate on success, or null to skip

@@ -25,7 +25,7 @@ namespace Microsoft.UI.Reactor.Hooks;
 /// <para>
 /// <b>When to use:</b> tickers, log tables, observability dashboards, file
 /// lists, and other large readonly grids whose cell content is a pure
-/// function of <typeparamref name="T"/> plus a small set of declared
+/// function of the item type plus a small set of declared
 /// deps. <b>When not to use:</b> rows whose chrome depends on focus /
 /// drag / selection / hover state that you aren't capturing in deps.
 /// </para>

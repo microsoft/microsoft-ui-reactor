@@ -239,7 +239,7 @@ public static class ElementExtensions
 
     /// <summary>
     /// Attaches a pan (single-finger translation) gesture recognizer. The reconciler
-    /// wires <see cref="FrameworkElement.ManipulationDelta"/> and computes
+    /// wires <see cref="UIElement.ManipulationDelta"/> and computes
     /// <see cref="UIElement.ManipulationMode"/> based on the chosen <paramref name="axis"/>
     /// and <paramref name="withInertia"/> flag. <paramref name="minimumDistance"/> gates
     /// callbacks until the cumulative translation exceeds that distance — on first

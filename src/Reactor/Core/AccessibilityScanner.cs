@@ -102,7 +102,7 @@ public record A11yContext
 /// <summary>
 /// Post-reconciliation accessibility scanner that walks the Reactor virtual
 /// element tree and produces structured diagnostics. Intended for DEBUG
-/// builds only — call via <see cref="ReactorHostControl.EnableAccessibilityDiagnostics"/>.
+/// builds only — call via <c>ReactorHostControl.EnableAccessibilityDiagnostics</c>.
 ///
 /// The scanner produces AI-agent-friendly JSON output: each diagnostic
 /// includes rich contextual clues (sibling texts, parent names, child

@@ -6,8 +6,8 @@ namespace Microsoft.UI.Reactor.Controls;
 /// <summary>
 /// Transforms input text and cursor position. Used in formatter pipelines.
 /// </summary>
-/// <param name="Input">The input text.</param>
-/// <param name="CursorPos">The cursor position in the input.</param>
+/// <param name="Output">The transformed output text.</param>
+/// <param name="CursorPos">The cursor position in the output.</param>
 public readonly record struct FormatResult(string Output, int CursorPos);
 
 /// <summary>

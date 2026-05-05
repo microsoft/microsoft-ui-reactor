@@ -7,7 +7,7 @@ namespace Microsoft.UI.Reactor.Input;
 /// <summary>
 /// Mutable hooks on <see cref="DragTargetArgs.UIOverride"/> that let drag-over handlers
 /// tweak the drop indicator (caption, glyph, preview). Values written here are applied
-/// by the reconciler onto the underlying WinUI <see cref="DragUIOverride"/> after the
+/// by the reconciler onto the underlying WinUI <c>Windows.ApplicationModel.DataTransfer.DragDrop.DragUIOverride</c> after the
 /// user callback returns.
 /// </summary>
 public sealed class DragUIOverrideHandle

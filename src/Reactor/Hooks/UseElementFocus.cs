@@ -7,7 +7,7 @@ namespace Microsoft.UI.Reactor.Hooks;
 /// <summary>
 /// Hook for imperative element focus (spec 027 Tier 5). Returns a stable
 /// <see cref="ElementRef"/> (survives re-renders) plus a <c>RequestFocus</c> action
-/// that schedules <see cref="FocusManager.Focus"/> on the UI dispatcher. Scheduling
+/// that schedules <see cref="Microsoft.UI.Reactor.Input.FocusManager.Focus"/> on the UI dispatcher. Scheduling
 /// defers focus past the current reconcile pass so callers can safely request focus
 /// from effects or event handlers without racing against layout.
 /// </summary>
@@ -16,7 +16,7 @@ public static class UseElementFocusExtensions
     /// <summary>
     /// Creates (or retrieves) a component-scoped <see cref="ElementRef"/> and pairs it
     /// with a <c>RequestFocus</c> action. Bind the ref to an element via <c>.Ref(ref)</c>.
-    /// Calling <c>RequestFocus</c> schedules <see cref="FocusManager.Focus"/> on the UI
+    /// Calling <c>RequestFocus</c> schedules <see cref="Microsoft.UI.Reactor.Input.FocusManager.Focus"/> on the UI
     /// dispatcher; if the ref's target has not mounted yet the call is a no-op.
     /// </summary>
     /// <example>

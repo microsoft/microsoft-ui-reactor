@@ -1412,10 +1412,10 @@ public record GridDefinition(string[] Columns, string[] Rows)
     /// <summary>
     /// Construct a <see cref="GridDefinition"/> from the strongly-typed
     /// <see cref="GridSize"/> form. Track strings are produced via
-    /// <see cref="GridSize.ToString"/> using <see cref="System.Globalization.CultureInfo.InvariantCulture"/>.
+    /// <see cref="GridSize.ToString"/> using <c>CultureInfo.InvariantCulture</c>.
     /// Spec 033 §1.
     /// </summary>
-    /// <exception cref="System.ArgumentNullException">Thrown when either array is null.</exception>
+    /// <exception cref="global::System.ArgumentNullException">Thrown when either array is null.</exception>
     public GridDefinition(GridSize[] columns, GridSize[] rows)
         : this(ToStrings(columns), ToStrings(rows))
     {
@@ -2412,7 +2412,7 @@ public abstract record TemplatedListElementBase : Element
     public abstract void ApplyControlSetters(object control);
     /// <summary>
     /// True when programmatic setter actions (.Set(...)) have been attached.
-    /// Used by <see cref="OwnPropsEqual"/> to suppress the reconcile-highlight
+    /// Used by <see cref="Element.OwnPropsEqual"/> to suppress the reconcile-highlight
     /// short-circuit so the overlay correctly tags the control as modified
     /// (and ApplyControlSetters keeps running on every reconcile pass).
     /// Virtual + default-false so external types deriving from this public

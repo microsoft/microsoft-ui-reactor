@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.Core;
 namespace Microsoft.UI.Reactor.Hooks;
 
 /// <summary>
-/// Tuning for <see cref="UseResourceExtensions.UseResource{T}"/>. Defaults mirror
+/// Tuning for the <c>UseResource</c> hook. Defaults mirror
 /// TanStack Query — zero <see cref="StaleTime"/> (always refetch-on-mount but dedup
 /// concurrent requests), five-minute <see cref="CacheTime"/>.
 /// </summary>

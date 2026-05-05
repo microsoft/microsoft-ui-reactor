@@ -44,6 +44,9 @@ public static class D3Ticks
         return (i1, i2, inc);
     }
 
+    /// <summary>Hard cap on emitted tick count. TASK-086.</summary>
+    public const int MaxTicks = 10_000;
+
     /// <summary>
     /// Returns an array of approximately <paramref name="count"/> representative values
     /// from the given numeric interval [<paramref name="start"/>, <paramref name="stop"/>].
@@ -51,9 +54,6 @@ public static class D3Ticks
     /// (such as multiples of powers of 10), and are guaranteed to be within the extent
     /// of the given interval.
     /// </summary>
-    /// <summary>Hard cap on emitted tick count. TASK-086.</summary>
-    public const int MaxTicks = 10_000;
-
     public static double[] Ticks(double start, double stop, int count)
     {
         // SECURITY (TASK-086): reject non-finite endpoints and bound the

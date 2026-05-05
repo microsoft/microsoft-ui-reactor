@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.Core;
 /// </summary>
 /// <remarks>
 /// Spec 033 §2. Bounded LRU (default capacity 1024). Window-scoped state is
-/// the recommended default for new <see cref="RenderContext.UsePersisted{T}"/>
+/// the recommended default for new <see cref="RenderContext.UsePersisted{T}(string, T)"/>
 /// calls because most apps want "preserved across an unmount/remount within
 /// this window" rather than "preserved across every window in the process."
 /// Memory-pressure registration is deliberately omitted — the lifetime is

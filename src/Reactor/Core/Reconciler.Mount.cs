@@ -2841,7 +2841,7 @@ public sealed partial class Reconciler
     /// <summary>
     /// Mounts a zero-size hidden TextBlock for screen reader live-region announcements.
     /// The TextBlock is connected to the <see cref="AnnounceHandle"/> so that
-    /// <see cref="AnnounceHandle.Announce"/> can raise UIA notifications through it.
+    /// <see cref="AnnounceHandle.Announce(string)"/> can raise UIA notifications through it.
     /// </summary>
     private static UIElement MountAnnounceRegion(AnnounceRegionElement ann)
     {

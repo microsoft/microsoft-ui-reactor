@@ -405,6 +405,9 @@ public class DataGridState<T>
     public int LastVisibleFirst;
     public int LastVisibleLast;
 
+    /// <param name="source">Data source feeding rows into the grid.</param>
+    /// <param name="columns">Column descriptors defining accessor + editor + renderer per column.</param>
+    /// <param name="selectionMode">Single-row, multi-row, or no selection.</param>
     /// <param name="blockSize">
     /// Page cache block size. When 0 (default), the cache uses its built-in default (50).
     /// Pass a viewport-derived value to ensure the first block fills the screen.

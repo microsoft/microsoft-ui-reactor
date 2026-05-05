@@ -3130,7 +3130,7 @@ public sealed partial class Reconciler : IDisposable
     /// Applies per-control resource overrides (lightweight styling) to a
     /// <see cref="FrameworkElement"/>. Literal values are set directly;
     /// <see cref="ThemeRef"/>-based values are resolved from
-    /// <see cref="Application.Current.Resources"/>.
+    /// <c>Application.Current.Resources</c>.
     /// </summary>
     private static void ApplyResourceOverrides(
         FrameworkElement fe,

@@ -2,7 +2,7 @@ namespace Microsoft.UI.Reactor.Input;
 
 /// <summary>
 /// Drag-and-drop operation flags. Source declares what it allows via
-/// <see cref="ElementExtensions.OnDragStart"/>; target negotiates the final
+/// <c>ElementExtensions.OnDragStart</c>; target negotiates the final
 /// operation by setting <see cref="DragTargetArgs.AcceptedOperation"/>.
 /// </summary>
 [Flags]

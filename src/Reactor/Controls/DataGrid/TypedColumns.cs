@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.Controls;
 /// Use when the column type is known at the call site and you want HitTable-style
 /// "batteries included" ergonomics. For discovery-driven columns, use
 /// <see cref="Factories.AutoColumns{T}"/> with a <see cref="TypeRegistry"/>
-/// populated via <see cref="TypeRegistry.WithDefaultEditors"/>.
+/// populated with built-in editors and renderers.
 /// </summary>
 public static class TypedColumns
 {
