@@ -70,7 +70,11 @@ internal static class AsyncInfiniteResourceFixtures
                 return TextBlock($"count: {r.Items.Count} total: {r.TotalCount?.ToString() ?? "?"}");
             });
 
-            // Let the first page resolve.
+            // Let the first page resolve. The fetcher's 10ms Task.Delay can resolve
+            // during a Render()'s 16ms wall-clock breathing-room, queueing the Apply
+            // continuation (which sets TotalCount) on the dispatcher just after
+            // WaitForIdleAsync returned. Pump a third time to drain it.
+            await Harness.Render();
             await Harness.Render();
             await Harness.Render();
 
