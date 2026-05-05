@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Capture profile for startup_perf.
+
+  Single profile: only the BenchmarkSyntheticApps provider, file mode.
+  Keeps ETLs tiny (~MB) and parsing fast (Get-WinEvent streams cleanly).
+
+  If you want kernel-process / Microsoft-Windows-XAML providers too,
+  capture with -lift's Tracing.wprp instead — the provider GUID is the
+  same so your traces will resolve in WPA against -lift's Regions XML.
+
+  Usage:
+    wpr -start tests\startup_perf\Common\Tracing.wprp -filemode
+    <launch app, wait for window>
+    wpr -stop out.etl
+-->
+<WindowsPerformanceRecorder Version="1.0" Author="reactor3 startup_perf">
+  <Profiles>
+    <EventCollector Id="BenchmarkCollector" Name="Benchmark Event Collector">
+      <BufferSize Value="64" />
+      <Buffers Value="16" />
+    </EventCollector>
+
+    <EventProvider Id="BenchmarkProvider"
+                   Name="FD80D616-E92B-4B2B-9BED-131ADA36A8FD"
+                   Level="5"
+                   NonPagedMemory="true">
+      <Keywords>
+        <Keyword Value="0x0000400000000000" />
+      </Keywords>
+    </EventProvider>
+
+    <Profile Id="StartupPerf.Light.File"
+             Name="StartupPerf"
+             Description="Captures only BenchmarkSyntheticApps events."
+             LoggingMode="File"
+             DetailLevel="Light">
+      <Collectors>
+        <EventCollectorId Value="BenchmarkCollector">
+          <EventProviders>
+            <EventProviderId Value="BenchmarkProvider" />
+          </EventProviders>
+        </EventCollectorId>
+      </Collectors>
+    </Profile>
+
+    <Profile Id="StartupPerf.Verbose.File"
+             Name="StartupPerf"
+             Description="Same as Light — kept so -verboselevel selects a valid profile."
+             LoggingMode="File"
+             DetailLevel="Verbose">
+      <Collectors>
+        <EventCollectorId Value="BenchmarkCollector">
+          <EventProviders>
+            <EventProviderId Value="BenchmarkProvider" />
+          </EventProviders>
+        </EventCollectorId>
+      </Collectors>
+    </Profile>
+  </Profiles>
+</WindowsPerformanceRecorder>
