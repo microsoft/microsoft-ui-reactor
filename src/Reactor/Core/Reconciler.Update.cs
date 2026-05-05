@@ -2516,7 +2516,11 @@ public sealed partial class Reconciler
     {
         for (int i = 0; i < newEl.ItemCount; i++)
         {
-            var container = listViewBase.ContainerFromIndex(i) as WinUI.ListViewItem;
+            // Cast to SelectorItem so both ListView (ListViewItem) and GridView
+            // (GridViewItem) containers are handled — both derive from SelectorItem
+            // and share the same ContentTemplateRoot pattern. Casting to ListViewItem
+            // alone silently dropped GridView containers.
+            var container = listViewBase.ContainerFromIndex(i) as Microsoft.UI.Xaml.Controls.Primitives.SelectorItem;
             if (container?.ContentTemplateRoot is not ContentControl cc) continue;
 
             var oldItemElement = GetElementTag(cc);
@@ -2547,7 +2551,13 @@ public sealed partial class Reconciler
 
         if (o.ItemCount != n.ItemCount)
             lv.ItemsSource = Enumerable.Range(0, n.ItemCount).ToList();
-        else if (!n.SameItemsAs(o))
+        else
+            // Always refresh realized containers on update. The viewBuilder is
+            // a closure that legitimately captures outer state (UseState values,
+            // counters, theme, etc.); we cannot assume "items reference unchanged"
+            // implies "rendered output unchanged". Each realized container is
+            // diffed via the standard Update path, so the per-item cost is bounded
+            // by leaf ShallowEquals — invisible when nothing actually changed.
             RefreshRealizedContainers(lv, n, requestRerender);
 
         SetElementTag(lv, n);
@@ -2567,7 +2577,8 @@ public sealed partial class Reconciler
 
         if (o.ItemCount != n.ItemCount)
             gv.ItemsSource = Enumerable.Range(0, n.ItemCount).ToList();
-        else if (!n.SameItemsAs(o))
+        else
+            // Always refresh realized containers on update — see UpdateTemplatedListView.
             RefreshRealizedContainers(gv, n, requestRerender);
 
         SetElementTag(gv, n);

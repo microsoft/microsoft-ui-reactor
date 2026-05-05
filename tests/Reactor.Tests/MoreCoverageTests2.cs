@@ -776,10 +776,6 @@ public class MoreCoverageTests2
         Assert.Null(el.GetHeader());
         Assert.False(el.GetIsItemClickEnabled());
         Assert.Equal(TemplatedControlKind.ListView, el.ControlKind);
-        var same = new TemplatedListViewElement<int>(items, el.KeySelector, el.ViewBuilder);
-        Assert.True(el.SameItemsAs(same));
-        var different = new TemplatedListViewElement<int>(new[] { 1, 2, 3 }, el.KeySelector, el.ViewBuilder);
-        Assert.False(el.SameItemsAs(different));
         var view = el.BuildItemView(0);
         Assert.NotNull(view);
 
@@ -813,8 +809,6 @@ public class MoreCoverageTests2
         Assert.Null(el.GetHeader());
         Assert.False(el.GetIsItemClickEnabled());
         Assert.Equal(TemplatedControlKind.GridView, el.ControlKind);
-        var same = new TemplatedGridViewElement<string>(items, el.KeySelector, el.ViewBuilder);
-        Assert.True(el.SameItemsAs(same));
         Assert.NotNull(el.BuildItemView(0));
         el.InvokeSelectionChanged(1);
         el.InvokeItemClick(0);
@@ -835,8 +829,6 @@ public class MoreCoverageTests2
         Assert.Null(el.GetHeader());
         Assert.False(el.GetIsItemClickEnabled());
         Assert.Equal(TemplatedControlKind.FlipView, el.ControlKind);
-        var same = new TemplatedFlipViewElement<int>(items, el.KeySelector, el.ViewBuilder);
-        Assert.True(el.SameItemsAs(same));
         el.InvokeSelectionChanged(0);
         el.InvokeItemClick(0);   // no-op on flip view
         Assert.NotNull(el.BuildItemView(1));

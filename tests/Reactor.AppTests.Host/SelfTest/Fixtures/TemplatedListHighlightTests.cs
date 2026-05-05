@@ -156,6 +156,85 @@ internal static class TemplatedListHighlightTests
         }
     }
 
+    // ── Typed ListView<T>: viewBuilder closure capturing outer state must
+    //     refresh realized containers on parent re-render even when the items
+    //     reference is unchanged. The previous SameItemsAs short-circuit was
+    //     unsound: it assumed viewBuilder was a pure function of (item, index),
+    //     but viewBuilder closures legitimately capture other state (count,
+    //     theme, mode flags, etc.). With the short-circuit in place, the
+    //     header text refreshed but list rows stayed frozen at their first-
+    //     render values.
+    internal class TemplatedListView_ViewBuilderClosureRefreshes(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // Stable items reference — same list instance across renders.
+            var items = new[] { "a", "b" };
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (count, setCount) = ctx.UseState(0);
+                return VStack(
+                    Button("inc", () => setCount(count + 1)),
+                    ListView<string>(items, s => s, (item, _) =>
+                        TextBlock($"{item}:{count}").AutomationId($"row_{item}"))
+                );
+            });
+
+            await Harness.Render();
+
+            // Sanity: rows reflect the initial count.
+            var rowAInit = H.FindControl<TextBlock>(t =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == "row_a");
+            H.Check("TemplatedListHL_ViewBuilderClosure_InitialCount",
+                rowAInit is not null && rowAInit.Text == "a:0");
+
+            // Bump count. The items reference is unchanged, but the viewBuilder
+            // closure now captures count=1.
+            H.ClickButton("inc");
+            await Harness.Render();
+
+            var rowA = H.FindControl<TextBlock>(t =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == "row_a");
+            var rowB = H.FindControl<TextBlock>(t =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == "row_b");
+            H.Check("TemplatedListHL_ViewBuilderClosure_RowA_Refreshed",
+                rowA is not null && rowA.Text == "a:1");
+            H.Check("TemplatedListHL_ViewBuilderClosure_RowB_Refreshed",
+                rowB is not null && rowB.Text == "b:1");
+        }
+    }
+
+    // Same contract for GridView<T>.
+    internal class TemplatedGridView_ViewBuilderClosureRefreshes(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var items = new[] { "g1", "g2" };
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (count, setCount) = ctx.UseState(0);
+                return VStack(
+                    Button("inc", () => setCount(count + 1)),
+                    GridView<string>(items, s => s, (item, _) =>
+                        TextBlock($"{item}:{count}").AutomationId($"gv_{item}"))
+                );
+            });
+
+            await Harness.Render();
+            H.ClickButton("inc");
+            await Harness.Render();
+
+            var cell = H.FindControl<TextBlock>(t =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == "gv_g1");
+            H.Check("TemplatedListHL_GridView_ViewBuilderClosure_Refreshed",
+                cell is not null && cell.Text == "g1:1");
+        }
+    }
+
     // ── Typed ListView<T>: .Set(...) Setters force "modified" tagging ──
     // HasSetters has to gate the OwnPropsEqual short-circuit — without that
     // gate, ApplyControlSetters would silently stop running.

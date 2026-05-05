@@ -1486,7 +1486,22 @@ public record GridDefinition(string[] Columns, string[] Rows)
 public record GridAttached(int Row = 0, int Column = 0, int RowSpan = 1, int ColumnSpan = 1);
 
 /// <summary>Attached property data for Canvas children. Set via .Canvas(left:, top:) extension.</summary>
-public record CanvasAttached(double Left = 0, double Top = 0);
+/// <remarks>
+/// <see cref="AnchorX"/> / <see cref="AnchorY"/> are 0..1 fractions of the element's
+/// rendered size that are subtracted from <see cref="Left"/>/<see cref="Top"/> after
+/// layout. Anchor 0,0 (default) keeps the legacy top-left positioning. Anchor 0.5,0.5
+/// centers the element on (Left, Top); 1,1 anchors at bottom-right. Useful for
+/// chart labels and other elements that need to align around a logical point
+/// rather than their top-left corner.
+/// </remarks>
+public record CanvasAttached(double Left = 0, double Top = 0)
+{
+    /// <summary>Horizontal anchor as a 0..1 fraction of the element's rendered width.</summary>
+    public double AnchorX { get; init; }
+
+    /// <summary>Vertical anchor as a 0..1 fraction of the element's rendered height.</summary>
+    public double AnchorY { get; init; }
+}
 
 /// <summary>Attached property data for Flex children. Set via .Flex(grow:, shrink:, ...) extension.</summary>
 public record FlexAttached(
@@ -2457,7 +2472,6 @@ public abstract record TemplatedListElementBase : Element
     public abstract string? GetHeader();
     public abstract bool GetIsItemClickEnabled();
     public abstract Element BuildItemView(int index);
-    public abstract bool SameItemsAs(TemplatedListElementBase other);
     public abstract void InvokeSelectionChanged(int index);
     public abstract void InvokeItemClick(int index);
     public abstract void ApplyControlSetters(object control);
@@ -2493,8 +2507,6 @@ public record TemplatedListViewElement<T>(
     public override string? GetHeader() => Header;
     public override bool GetIsItemClickEnabled() => OnItemClick is not null;
     public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
-    public override bool SameItemsAs(TemplatedListElementBase o) =>
-        o is TemplatedListViewElement<T> x && ReferenceEquals(Items, x.Items);
     public override void InvokeSelectionChanged(int index) => OnSelectionChanged?.Invoke(index);
     public override void InvokeItemClick(int index) =>
         OnItemClick?.Invoke(index >= 0 && index < Items.Count ? Items[index] : default!);
@@ -2524,8 +2536,6 @@ public record TemplatedGridViewElement<T>(
     public override string? GetHeader() => Header;
     public override bool GetIsItemClickEnabled() => OnItemClick is not null;
     public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
-    public override bool SameItemsAs(TemplatedListElementBase o) =>
-        o is TemplatedGridViewElement<T> x && ReferenceEquals(Items, x.Items);
     public override void InvokeSelectionChanged(int index) => OnSelectionChanged?.Invoke(index);
     public override void InvokeItemClick(int index) =>
         OnItemClick?.Invoke(index >= 0 && index < Items.Count ? Items[index] : default!);
@@ -2552,8 +2562,6 @@ public record TemplatedFlipViewElement<T>(
     public override string? GetHeader() => null;
     public override bool GetIsItemClickEnabled() => false;
     public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
-    public override bool SameItemsAs(TemplatedListElementBase o) =>
-        o is TemplatedFlipViewElement<T> x && ReferenceEquals(Items, x.Items);
     public override void InvokeSelectionChanged(int index) => OnSelectionChanged?.Invoke(index);
     public override void InvokeItemClick(int index) { }
     public override void ApplyControlSetters(object control) =>
