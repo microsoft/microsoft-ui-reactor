@@ -19,6 +19,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
+    <!-- Standalone library used by Issue142_ThirdPartyControlPrivateDp_Renders to
+         simulate a 3P control NuGet referenced from a Reactor app that has its
+         own XAML metadata. -->
+    <ProjectReference Include="..\Reactor.AppTests.ThirdPartyControls\Reactor.AppTests.ThirdPartyControls.csproj" />
   </ItemGroup>
 
 </Project>

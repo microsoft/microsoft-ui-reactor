@@ -746,6 +746,10 @@ internal static class SelfTestFixtureRegistry
         "RBC_TreeViewProgrammaticInvoke",
         "RBC_RichEditBoxFireEvent",
         "RBC_CollectionsHandlerWiring",
+
+        // Issue #142 — controls with private static readonly DPs
+        "Issue142_CustomControlPrivateDp_Renders",
+        "Issue142_ThirdPartyControlPrivateDp_Renders",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1486,6 +1490,9 @@ internal static class SelfTestFixtureRegistry
         "RBC_TreeViewProgrammaticInvoke" => new ReconcilerBigCoverageFixtures.TreeViewProgrammaticInvoke(harness),
         "RBC_RichEditBoxFireEvent" => new ReconcilerBigCoverageFixtures.RichEditBoxFireEvent(harness),
         "RBC_CollectionsHandlerWiring" => new ReconcilerBigCoverageFixtures.CollectionsHandlerWiring(harness),
+
+        "Issue142_CustomControlPrivateDp_Renders" => new Issue142Fixtures.CustomControlPrivateDp_Renders(harness),
+        "Issue142_ThirdPartyControlPrivateDp_Renders" => new Issue142Fixtures.ThirdPartyControlPrivateDp_Renders(harness),
 
         _ => null,
     };

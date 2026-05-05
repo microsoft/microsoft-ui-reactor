@@ -44,6 +44,90 @@ public static class ReactorApp
 
     private static int _previewParamDeprecationWarned;
 
+    // ── XAML control-assembly registration ─────────────────────────────────
+    //
+    // The lifted XAML loader resolves `local:` namespaces and Generic.xaml type
+    // references through Application.Current's IXamlMetadataProvider chain.
+    // ReactorApplication auto-discovers the *entry assembly's* compiler-generated
+    // provider, but that breaks down for third-party control libraries when the
+    // consuming Reactor app has no XAML files of its own — in that case the
+    // app's compiler-generated provider doesn't exist, so referenced libraries
+    // never get chained. Registered providers fill that gap.
+    //
+    // CopyOnWrite snapshot semantics so reads from GetXamlType (called on the UI
+    // thread, hot path) need no locking.
+    private static IXamlMetadataProvider[] _registeredXamlMetadataProviders = [];
+    private static readonly object _registeredXamlMetadataProvidersLock = new();
+
+    /// <summary>
+    /// Registers a XAML metadata provider so its types are visible to the WinUI
+    /// XAML loader for this process. Required when a third-party control library
+    /// is referenced from a Reactor app that has no XAML files of its own (and
+    /// therefore no compiler-generated provider that would auto-chain to the
+    /// library). Call before <see cref="Run{TRoot}(string, int, int, bool, bool, bool, Action{ReactorHost}?)"/>.
+    /// Idempotent (same instance is added at most once) and thread-safe.
+    /// See https://github.com/microsoft/microsoft-ui-reactor/issues/142.
+    /// </summary>
+    public static void RegisterControlAssembly(IXamlMetadataProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        lock (_registeredXamlMetadataProvidersLock)
+        {
+            var current = _registeredXamlMetadataProviders;
+            if (Array.IndexOf(current, provider) >= 0) return;
+            var next = new IXamlMetadataProvider[current.Length + 1];
+            Array.Copy(current, next, current.Length);
+            next[^1] = provider;
+            Volatile.Write(ref _registeredXamlMetadataProviders, next);
+        }
+    }
+
+    /// <summary>
+    /// Convenience overload that locates the XAML-compiler-generated
+    /// <c>IXamlMetadataProvider</c> in <paramref name="assembly"/> (the type the
+    /// XAML compiler emits when the project has at least one XAML file) and
+    /// registers it. Throws if no such provider is found — pass the
+    /// <see cref="IXamlMetadataProvider"/> instance directly if your library
+    /// uses a non-standard provider type.
+    /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Caller-supplied assembly's XAML metadata provider is preserved by the XAML compiler that emits it.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Parameterless ctor invoked on a freshly-discovered IXamlMetadataProvider type.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Reflection over caller-supplied assembly types; XAML compiler preserves IXamlMetadataProvider implementations.")]
+    public static void RegisterControlAssembly(global::System.Reflection.Assembly assembly)
+    {
+        ArgumentNullException.ThrowIfNull(assembly);
+        var provider = FindXamlMetadataProviderInAssembly(assembly)
+            ?? throw new InvalidOperationException(
+                $"No IXamlMetadataProvider found in {assembly.GetName().Name}. " +
+                "The XAML compiler only generates one when the project has at least one XAML file. " +
+                "If you have a hand-written provider, pass the instance directly to RegisterControlAssembly.");
+        RegisterControlAssembly(provider);
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "See RegisterControlAssembly(Assembly).")]
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "See RegisterControlAssembly(Assembly).")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "See RegisterControlAssembly(Assembly).")]
+    internal static IXamlMetadataProvider? FindXamlMetadataProviderInAssembly(global::System.Reflection.Assembly assembly)
+    {
+        global::System.Type[] types;
+        try { types = assembly.GetTypes(); }
+        catch (global::System.Reflection.ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t is not null).ToArray()!; }
+
+        foreach (var t in types)
+        {
+            if (t is null) continue;
+            if (!typeof(IXamlMetadataProvider).IsAssignableFrom(t)) continue;
+            if (t.IsAbstract || t.IsInterface) continue;
+            if (t.GetConstructor(global::System.Type.EmptyTypes) is null) continue;
+            try { return (IXamlMetadataProvider)global::System.Activator.CreateInstance(t)!; }
+            catch { /* keep scanning — a broken candidate must not deny a valid one */ }
+        }
+        return null;
+    }
+
+    internal static IXamlMetadataProvider[] RegisteredControlAssemblyProviders
+        => Volatile.Read(ref _registeredXamlMetadataProviders);
+
     // Session-scoped flag. True iff the process was launched with a devtools
     // subverb (--devtools app / --devtools run) AND the developer passed
     // devtools: true to Run. Frozen after startup; read by UseDevtools() and
@@ -688,6 +772,41 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
     private IXamlMetadataProvider? _coreProvider;
     private IXamlMetadataProvider CoreProvider => _coreProvider ??= new Hosting.ReactorCoreXamlMetadataProvider();
 
+    // Provider for the consuming app's own XAML-compiler-generated metadata. Without this,
+    // a custom Control declared in the user's project crashes when WinUI loads its
+    // Themes/Generic.xaml because `local:` namespace lookups go through Application.Current
+    // (which is this ReactorApplication) and our chain only knew about Reactor's own types.
+    // Empty providers (apps with no custom XAML types) collapse to a no-op stub and cost
+    // one reflection scan of the entry assembly at startup.
+    // See https://github.com/microsoft/microsoft-ui-reactor/issues/142.
+    private IXamlMetadataProvider? _hostAppProvider;
+    private IXamlMetadataProvider HostAppProvider => _hostAppProvider ??= DiscoverHostAppProvider();
+
+    private static IXamlMetadataProvider DiscoverHostAppProvider()
+    {
+        // The XAML compiler emits one IXamlMetadataProvider per project that has any XAML
+        // file (typically named `<Sanitized(AssemblyName)>_XamlTypeInfo.XamlMetaDataProvider`,
+        // but the exact name varies). Scanning the entry assembly is robust to that drift.
+        var entry = global::System.Reflection.Assembly.GetEntryAssembly();
+        if (entry is null) return EmptyXamlMetadataProvider.Instance;
+
+        var found = ReactorApp.FindXamlMetadataProviderInAssembly(entry);
+        // Reactor's own generated provider lives in the Reactor assembly; if the entry
+        // assembly happens to BE Reactor (unit-test hosting), ReactorProvider already
+        // covers it and we'd just be re-finding the same type.
+        if (found is not null && found.GetType().FullName != "Microsoft.UI.Reactor.Reactor_XamlTypeInfo.XamlMetaDataProvider")
+            return found;
+        return EmptyXamlMetadataProvider.Instance;
+    }
+
+    private sealed partial class EmptyXamlMetadataProvider : IXamlMetadataProvider
+    {
+        public static readonly EmptyXamlMetadataProvider Instance = new();
+        public IXamlType? GetXamlType(Type type) => null;
+        public IXamlType? GetXamlType(string fullName) => null;
+        public XmlnsDefinition[] GetXmlnsDefinitions() => [];
+    }
+
     /// <summary>
     /// Optional callback for unhandled exceptions. If set, called before deciding whether to handle.
     /// Return true to mark the exception as handled; return false (or leave null) to let it crash.
@@ -747,8 +866,55 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
     // here is the WinUI convention for "unknown type" even though the WinRT interface
     // types it as non-nullable.
     public IXamlType GetXamlType(Type type)
-        => (ReactorProvider.GetXamlType(type) ?? CoreProvider.GetXamlType(type))!;
+    {
+        var t = ReactorProvider.GetXamlType(type);
+        if (t is not null) return t;
+        t = HostAppProvider.GetXamlType(type);
+        if (t is not null) return t;
+        foreach (var p in ReactorApp.RegisteredControlAssemblyProviders)
+        {
+            t = p.GetXamlType(type);
+            if (t is not null) return t;
+        }
+        return CoreProvider.GetXamlType(type)!;
+    }
+
     public IXamlType GetXamlType(string fullName)
-        => (ReactorProvider.GetXamlType(fullName) ?? CoreProvider.GetXamlType(fullName))!;
-    public XmlnsDefinition[] GetXmlnsDefinitions() => ReactorProvider.GetXmlnsDefinitions();
+    {
+        var t = ReactorProvider.GetXamlType(fullName);
+        if (t is not null) return t;
+        t = HostAppProvider.GetXamlType(fullName);
+        if (t is not null) return t;
+        foreach (var p in ReactorApp.RegisteredControlAssemblyProviders)
+        {
+            t = p.GetXamlType(fullName);
+            if (t is not null) return t;
+        }
+        return CoreProvider.GetXamlType(fullName)!;
+    }
+
+    public XmlnsDefinition[] GetXmlnsDefinitions()
+    {
+        var reactor = ReactorProvider.GetXmlnsDefinitions();
+        var host = HostAppProvider.GetXmlnsDefinitions();
+        var registered = ReactorApp.RegisteredControlAssemblyProviders;
+        var registeredCount = 0;
+        var registeredDefs = new XmlnsDefinition[registered.Length][];
+        for (var i = 0; i < registered.Length; i++)
+        {
+            registeredDefs[i] = registered[i].GetXmlnsDefinitions() ?? [];
+            registeredCount += registeredDefs[i].Length;
+        }
+        if (host.Length == 0 && registeredCount == 0) return reactor;
+        var combined = new XmlnsDefinition[reactor.Length + host.Length + registeredCount];
+        var offset = 0;
+        global::System.Array.Copy(reactor, 0, combined, offset, reactor.Length); offset += reactor.Length;
+        global::System.Array.Copy(host, 0, combined, offset, host.Length); offset += host.Length;
+        for (var i = 0; i < registeredDefs.Length; i++)
+        {
+            global::System.Array.Copy(registeredDefs[i], 0, combined, offset, registeredDefs[i].Length);
+            offset += registeredDefs[i].Length;
+        }
+        return combined;
+    }
 }

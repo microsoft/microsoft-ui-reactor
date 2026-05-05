@@ -1,0 +1,18 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures">
+
+    <Style TargetType="local:CustomControlWithPrivateDp">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:CustomControlWithPrivateDp">
+                    <Border>
+                        <TextBlock Text="{TemplateBinding MyText}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
