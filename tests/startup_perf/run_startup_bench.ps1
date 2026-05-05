@@ -55,14 +55,15 @@ $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "ARM64" } else { "x64" }
 $rid = if ($arch -eq "ARM64") { "win-arm64" } else { "win-x64" }
 $tfm = "net9.0-windows10.0.22621.0"
 
-# C# variants are AOT-published so we measure native startup, not CLR/JIT
-# bootstrap. RNW builds via the RN CLI; its exe lives under windows\<name>\<arch>\Release.
+# C# variants are non-AOT (PublishAot=false in csproj — NativeAOT trims the
+# EventSource subclass and emits zero ETW events). Build path therefore has
+# no publish/ subdir. Means C# numbers carry ~70-100 ms of CLR bootstrap;
+# README documents this. RNW builds via the RN CLI; its exe lives under
+# windows\<arch>\Release.
 $variants = @(
     @{
         Name = "WinUI3"
         AppName = "blank_winui3"
-        # Non-AOT build output (PublishAot=false in csproj). Path no longer
-        # has a publish/ subdir.
         Exe = Join-Path $root "BlankWinUI3\bin\$arch\Release\$tfm\BlankWinUI3.exe"
         BuildArgs = @("build", (Join-Path $root "BlankWinUI3\BlankWinUI3.csproj"), "-c", "Release", "-p:Platform=$arch")
     },

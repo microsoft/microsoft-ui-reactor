@@ -49,6 +49,10 @@ internal sealed partial class App : Application
         BenchmarkTracing.Log.TraceXamlAppLoaded();
 
         _window = new MainWindow();
+        // 1000x1000 to match BlankReactor + BlankRNW. Same surface area
+        // across stacks so first-paint cost and working set are
+        // comparable.
+        _window.AppWindow.Resize(new Windows.Graphics.SizeInt32(1000, 1000));
         _window.Activate();
     }
 }

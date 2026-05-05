@@ -24,9 +24,14 @@ struct StartupTiming {
     TraceReactMounted();
   }
 
-  REACT_METHOD(reportMetrics)
-  void reportMetrics(double ttfpMs, double ttiMs) noexcept {
-    TraceTTFP(ttfpMs);
-    TraceTTI(ttiMs);
-  }
+  // Split into two methods so each ETW event fires at its actual moment —
+  // FirstRender from inside requestAnimationFrame, FirstIdle from inside
+  // requestIdleCallback. Calling both from the idle callback (the prior
+  // shape) would collapse FirstRender's timestamp onto FirstIdle's,
+  // making harness-computed TTFP equal TTI.
+  REACT_METHOD(reportFirstRender)
+  void reportFirstRender(double ttfpMs) noexcept { TraceTTFP(ttfpMs); }
+
+  REACT_METHOD(reportFirstIdle)
+  void reportFirstIdle(double ttiMs) noexcept { TraceTTI(ttiMs); }
 };

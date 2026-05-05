@@ -40,10 +40,13 @@ All events carry these payload fields:
 | `BlankBenchmark_JSBundleToReactMount`   | `JSBundleLoaded` | `ReactMounted`   | RNW: React reconciler first commit                       |
 | `BlankBenchmark_StartToReactMounted`    | `wWinMainEntry`  | `ReactMounted`   | RNW: end-to-end through React commit                     |
 
-The kernel-level `Microsoft-Windows-Kernel-Process` `ProcessStart` event
-(in -lift's wprp) splices to a true process-creation tick, giving
-sub-WinMain accuracy. Our `Tracing.wprp` includes the same kernel
-provider so this works here.
+Our `Tracing.wprp` is intentionally slim: only the
+`BenchmarkSyntheticApps` provider, no kernel or XAML providers. That
+keeps ETLs tiny and parsing fast (`tracerpt` decodes them in <1 s) at
+the cost of starting measurement at `wWinMainEntry` rather than at the
+kernel-level `ProcessStart`. If you need sub-WinMain accuracy, capture
+with -lift's full `Common/Tracing.wprp` instead — same provider GUID,
+so our regions still resolve.
 
 ## What each variant approximates from -lift's MainWindow flow
 

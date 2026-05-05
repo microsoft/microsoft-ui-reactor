@@ -55,6 +55,17 @@ function useStartupPipeline() {
       const ttfpMs = Date.now() - T0;
       setTtfp(ttfpMs);
 
+      // Fire FirstRender now, inside rAF. Doing this from the idle
+      // callback below would record the FirstRender ETW event with an
+      // idle-time timestamp, which the harness's region math interprets
+      // as TTFP — collapsing TTFP onto TTI in the reports.
+      try {
+        const nt1: NativeTimings = NativeModules.StartupTiming.getTimings();
+        const nativeToJsAtTtfp = Math.max(0, nt1.nativeElapsedMs - ttfpMs);
+        const trueTtfp = +(nativeToJsAtTtfp + ttfpMs).toFixed(1);
+        NativeModules.StartupTiming.reportFirstRender(trueTtfp);
+      } catch {}
+
       requestIdleCallback(() => {
         const ttiMs = Date.now() - T0;
         setTti(ttiMs);
@@ -75,7 +86,7 @@ function useStartupPipeline() {
             trueTtiMs: trueTti,
           };
           setPhases(p);
-          NativeModules.StartupTiming.reportMetrics(trueTtfp, trueTti);
+          NativeModules.StartupTiming.reportFirstIdle(trueTti);
         } catch {}
       });
     });

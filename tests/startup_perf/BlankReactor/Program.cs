@@ -31,7 +31,10 @@ BenchmarkTracing.Log.TraceWinMainEntry();
 
 try
 {
-    ReactorApp.Run<BlankApp>(title: "BlankReactor", width: 800, height: 600);
+    // 1000x1000 to match BlankRNW + BlankWinUI3. Window surface area
+    // affects layout / first-paint cost, so all three variants must use
+    // the same size for cross-stack comparison to be fair.
+    ReactorApp.Run<BlankApp>(title: "BlankReactor", width: 1000, height: 1000);
 }
 finally
 {

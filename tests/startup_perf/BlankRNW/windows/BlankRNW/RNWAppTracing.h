@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <TraceLoggingProvider.h>
 #include <winmeta.h>
 
@@ -42,52 +44,47 @@ inline void CaptureBeforeStart() noexcept { g_qpcBeforeStartUs = QpcNowUs(); }
 
 constexpr int64_t RNWAPP_KEYWORD_MEASURES = 0x0000400000000000;
 
-inline void TraceWinMainEntry() noexcept {
-  TraceLoggingWrite(g_hRNWAppProvider, "wWinMainEntry",
-      TraceLoggingLevel(WINEVENT_LEVEL_INFO), TraceLoggingKeyword(RNWAPP_KEYWORD_MEASURES),
-      TraceLoggingString(RNWAPP_APP_NAME, "AppName"));
-}
+// Monotonic sequence number per process. Same field name + semantics as
+// Common/Tracing.cpp and BenchmarkTracing.cs so RNW events share the
+// schema (AppName, Seq, Pid) with the C# siblings.
+inline std::atomic<uint64_t> g_rnwSeq{0};
+inline uint64_t NextSeq() noexcept { return g_rnwSeq.fetch_add(1, std::memory_order_relaxed); }
 
+#define RNW_TRACE_BARE(eventName)                                                          \
+    TraceLoggingWrite(g_hRNWAppProvider, eventName,                                        \
+        TraceLoggingLevel(WINEVENT_LEVEL_INFO),                                            \
+        TraceLoggingKeyword(RNWAPP_KEYWORD_MEASURES),                                      \
+        TraceLoggingPid(GetCurrentProcessId(), "Pid"),                                     \
+        TraceLoggingString(RNWAPP_APP_NAME, "AppName"),                                    \
+        TraceLoggingUInt64(NextSeq(), "Seq"))
+
+inline void TraceWinMainEntry() noexcept { RNW_TRACE_BARE("wWinMainEntry"); }
+inline void TraceXamlAppLoaded() noexcept { RNW_TRACE_BARE("XamlAppLoaded"); }
+inline void TraceWindowLoaded() noexcept { RNW_TRACE_BARE("WindowLoaded"); }
+inline void TraceJSBundleLoaded() noexcept { RNW_TRACE_BARE("JSBundleLoaded"); }
+inline void TraceReactMounted() noexcept { RNW_TRACE_BARE("ReactMounted"); }
+inline void TraceProcessStop() noexcept { RNW_TRACE_BARE("ProcessStop"); }
+
+// FirstRender / FirstIdle additionally carry the JS-computed TTFP / TTI
+// values as TtfpMs / TtiMs payload fields. The harness uses event
+// timestamps for region math; the payload values let consumers see the
+// JS-side computation directly.
 inline void TraceTTFP(double ms) noexcept {
   TraceLoggingWrite(g_hRNWAppProvider, "FirstRender",
-      TraceLoggingLevel(WINEVENT_LEVEL_INFO), TraceLoggingKeyword(RNWAPP_KEYWORD_MEASURES),
+      TraceLoggingLevel(WINEVENT_LEVEL_INFO),
+      TraceLoggingKeyword(RNWAPP_KEYWORD_MEASURES),
+      TraceLoggingPid(GetCurrentProcessId(), "Pid"),
       TraceLoggingString(RNWAPP_APP_NAME, "AppName"),
+      TraceLoggingUInt64(NextSeq(), "Seq"),
       TraceLoggingFloat64(ms, "TtfpMs"));
 }
 
 inline void TraceTTI(double ms) noexcept {
   TraceLoggingWrite(g_hRNWAppProvider, "FirstIdle",
-      TraceLoggingLevel(WINEVENT_LEVEL_INFO), TraceLoggingKeyword(RNWAPP_KEYWORD_MEASURES),
+      TraceLoggingLevel(WINEVENT_LEVEL_INFO),
+      TraceLoggingKeyword(RNWAPP_KEYWORD_MEASURES),
+      TraceLoggingPid(GetCurrentProcessId(), "Pid"),
       TraceLoggingString(RNWAPP_APP_NAME, "AppName"),
+      TraceLoggingUInt64(NextSeq(), "Seq"),
       TraceLoggingFloat64(ms, "TtiMs"));
-}
-
-inline void TraceXamlAppLoaded() noexcept {
-  TraceLoggingWrite(g_hRNWAppProvider, "XamlAppLoaded",
-      TraceLoggingLevel(WINEVENT_LEVEL_INFO), TraceLoggingKeyword(RNWAPP_KEYWORD_MEASURES),
-      TraceLoggingString(RNWAPP_APP_NAME, "AppName"));
-}
-
-inline void TraceWindowLoaded() noexcept {
-  TraceLoggingWrite(g_hRNWAppProvider, "WindowLoaded",
-      TraceLoggingLevel(WINEVENT_LEVEL_INFO), TraceLoggingKeyword(RNWAPP_KEYWORD_MEASURES),
-      TraceLoggingString(RNWAPP_APP_NAME, "AppName"));
-}
-
-inline void TraceJSBundleLoaded() noexcept {
-  TraceLoggingWrite(g_hRNWAppProvider, "JSBundleLoaded",
-      TraceLoggingLevel(WINEVENT_LEVEL_INFO), TraceLoggingKeyword(RNWAPP_KEYWORD_MEASURES),
-      TraceLoggingString(RNWAPP_APP_NAME, "AppName"));
-}
-
-inline void TraceReactMounted() noexcept {
-  TraceLoggingWrite(g_hRNWAppProvider, "ReactMounted",
-      TraceLoggingLevel(WINEVENT_LEVEL_INFO), TraceLoggingKeyword(RNWAPP_KEYWORD_MEASURES),
-      TraceLoggingString(RNWAPP_APP_NAME, "AppName"));
-}
-
-inline void TraceProcessStop() noexcept {
-  TraceLoggingWrite(g_hRNWAppProvider, "ProcessStop",
-      TraceLoggingLevel(WINEVENT_LEVEL_INFO), TraceLoggingKeyword(RNWAPP_KEYWORD_MEASURES),
-      TraceLoggingString(RNWAPP_APP_NAME, "AppName"));
 }

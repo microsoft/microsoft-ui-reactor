@@ -114,24 +114,24 @@ variant or after editing the tracing code.
 .\tests\startup_perf\diag.ps1
 ```
 
-## Sample results (ARM64 dev box, 5 runs each)
+## Sample results (ARM64 dev box, 5 runs, 1000×1000 windows)
 
 | Variant   | XamlAppLoaded | WindowLoaded | TTFP    | TTI     | Peak WS     |
 | --------- | ------------: | -----------: | ------: | ------: | ----------: |
-| WinUI3    | 68.6 ms       | 150.4 ms     | 215.4   | 219.1   | 118.1 MB    |
-| RNW       | 73.8 ms       | 74.4 ms      | 231.8   | 231.8   | 83.2 MB     |
-| Reactor   | 222.4 ms      | 245.9 ms     | 258.4   | 261.7   | 112.1 MB    |
+| WinUI3    | 72.7 ms       | 172.4 ms     | 234.3   | 238.9   | 105.7 MB    |
+| RNW       | 72.7 ms       | 73.4 ms      | 234.1   | 234.8   | 82.9 MB     |
+| Reactor   | 240.6 ms      | 257.8 ms     | 294.8   | 297.2   | 114.1 MB    |
 
 What this gives us:
 
-- RNW within ~16 ms of WinUI3 on TTFP — reproduces -lift's "very close
-  at startup" claim.
-- RNW has the *smallest* working set at startup (83 MB vs 112–118 MB).
+- RNW within 0.2 ms of WinUI3 on TTFP at the same surface area —
+  reproduces -lift's "very close at startup" claim and tightens it.
+- RNW has the *smallest* working set at startup (83 MB vs 106–114 MB).
   Any RNW memory bloat seen in `tests/stress_perf_rn` is therefore
   runtime-side (React reconciler, JS heap growth, Yoga layout), not
-  startup overhead. That's a useful narrowing for workload analysis.
-- Reactor's framework cost is ~165 ms one-time (XamlAppLoaded delta over
-  WinUI3) and ~6 MB of working set.
+  startup overhead. Useful narrowing for workload analysis.
+- Reactor's framework cost is ~168 ms one-time (XamlAppLoaded delta
+  over WinUI3) and ~8 MB of working set.
 
 ## Methodology notes
 
@@ -168,10 +168,8 @@ tests/startup_perf/
 ├── README.md                 (this file)
 ├── SPEC.md                   event-by-event description of the pipeline
 ├── Common/
-│   ├── Tracing.h / .cpp      C++ TraceLogging provider
-│   ├── BenchmarkTracing.cs   C# EventSource on the same provider GUID
-│   ├── BlankPerfMetrics.h    C++ AppStart/FirstFrame/Interactive holder
-│   ├── BlankPerfMetrics.cs   C# equivalent
+│   ├── BenchmarkTracing.cs   C# EventSource (used by BlankWinUI3 + BlankReactor)
+│   ├── BlankPerfMetrics.cs   C# AppStart/FirstFrame/Interactive holder
 │   └── Tracing.wprp          WPR capture profile (single provider, slim)
 ├── BlankWinUI3/              C# WinUI 3 minimal blank app
 ├── BlankReactor/             C# Reactor minimal blank app
