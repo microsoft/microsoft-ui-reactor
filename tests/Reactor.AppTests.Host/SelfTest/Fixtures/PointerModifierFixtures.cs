@@ -127,10 +127,15 @@ internal static class PointerModifierFixtures
             H.Check("GotLostFocus_ControlsFound", tbA is not null && tbB is not null);
 
             tbA?.Focus(FocusState.Programmatic);
+            // GotFocus can be raised via the dispatcher rather than synchronously
+            // in Focus() (same shape as the TabView/RadioButtons/PasswordBox flake
+            // fixed in #139/#149). Pump twice so the queued event lands.
+            await Harness.Render();
             await Harness.Render();
             H.Check("GotFocus_FiresOnA", gotA == 1 && lostA == 0);
 
             tbB?.Focus(FocusState.Programmatic);
+            await Harness.Render();
             await Harness.Render();
             H.Check("LostFocus_FiresOnA", lostA == 1);
             H.Check("GotFocus_FiresOnB", gotB == 1);

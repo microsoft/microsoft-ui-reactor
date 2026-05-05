@@ -600,6 +600,10 @@ internal static class CoverageBoostFixtures
 
             H.ClickButton("Mutate");
             await Harness.Render(100);
+            // The mutation's RunAsync resolves during the 100ms wall-clock wait
+            // and schedules a re-render that may not have flushed before
+            // Render(100) returns. Pump once more to drain the queued re-render.
+            await Harness.Render();
             H.Check("Mutation_Completed", H.FindText("Mutation:done:test") is not null);
         }
     }
