@@ -111,11 +111,10 @@ public static class ReactorApp
     {
         global::System.Type[] types;
         try { types = assembly.GetTypes(); }
-        catch (global::System.Reflection.ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t is not null).ToArray()!; }
+        catch (global::System.Reflection.ReflectionTypeLoadException ex) { types = ex.Types.OfType<global::System.Type>().ToArray(); }
 
         foreach (var t in types)
         {
-            if (t is null) continue;
             if (!typeof(IXamlMetadataProvider).IsAssignableFrom(t)) continue;
             if (t.IsAbstract || t.IsInterface) continue;
             if (t.GetConstructor(global::System.Type.EmptyTypes) is null) continue;
