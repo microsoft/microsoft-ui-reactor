@@ -18,10 +18,18 @@ public sealed record StepCardProps(
     Action<StepModel> OnDelete,
     Action<StepModel> OnRegenFromHere)
 {
-    // Manual Equals: callback delegates are excluded from memo equality. Their
-    // identity is fresh each parent render but dispatch always reads the latest
-    // value, so identity isn't load-bearing. Including them here would re-render
-    // every card on every shell render. Framework-level fix tracked at #151.
+    // Manual Equals: callback delegates are excluded from memo equality. They
+    // get a fresh delegate identity each parent render (local functions in
+    // DemoScriptShell.Render), and including them here would re-render every
+    // card on every shell render. SAFETY CONTRACT: when memo decides "skip
+    // render", Reactor does NOT refresh Props on the child, so the child
+    // continues to dispatch through the *prior* delegates. That's only safe
+    // when the callbacks' captured state doesn't change between renders, OR
+    // when any state they capture is also reflected in one of the data
+    // fields below (so a meaningful change forces a refresh). Both hold for
+    // these callbacks today: they close over `model` (UseRef-stable identity)
+    // and per-step actions; per-step state changes show up via Step / PriorStep
+    // identity. Framework-level fix tracked at #151.
     public bool Equals(StepCardProps? other) =>
         other is not null
         && ReferenceEquals(Step, other.Step)

@@ -8,10 +8,15 @@ public sealed record DemoPromptPanelProps(
     System.Action<string> OnPromptChanged,
     System.Action<string> OnTitleChanged)
 {
-    // Manual Equals: callback delegates are excluded from memo equality. Their
-    // identity is fresh each parent render but dispatch always reads the latest
-    // value, so identity isn't load-bearing. Including them here would force a
-    // re-render on every parent render. Framework-level fix tracked at #151.
+    // Manual Equals: callback delegates are excluded from memo equality. They
+    // get a fresh delegate identity each parent render. SAFETY CONTRACT: when
+    // memo decides "skip render", Reactor does NOT refresh Props on the child,
+    // so the child continues to dispatch through the *prior* delegates. That's
+    // only safe when the callbacks' captured state doesn't change between
+    // renders, OR any state they capture is reflected in one of the data
+    // fields below. Both hold today: callbacks close over `model` (UseRef-
+    // stable identity); Model changes flow via reference identity below.
+    // Framework-level fix tracked at #151.
     public bool Equals(DemoPromptPanelProps? other) =>
         other is not null && ReferenceEquals(Model, other.Model);
     public override int GetHashCode() => Model.GetHashCode();

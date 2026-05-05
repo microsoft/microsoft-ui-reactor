@@ -667,6 +667,56 @@ public class ElementTests
     }
 
     // ════════════════════════════════════════════════════════════════
+    //  Setters fast-path: ShallowEquals uses ReferenceEquals on Setters
+    // ════════════════════════════════════════════════════════════════
+    //
+    // Setters arrays are reference-compared rather than length-checked. The
+    // C# 12 collection-expression `[]` default lowers to Array.Empty<T>(),
+    // which is a singleton — so two elements with the default empty Setters
+    // remain reference-equal. Non-empty arrays are *not* deep-compared:
+    // a stable Setters reference held across renders fast-paths; a freshly
+    // allocated array (the typical case) does not. This contract is what
+    // lets future call-sites that cache their Setters opt into skip.
+
+    [Fact]
+    public void ShallowEquals_TextBlock_Default_Empty_Setters_Are_Equal()
+    {
+        // Both use the empty-default Setters → same Array.Empty<T>() singleton.
+        var a = TextBlock("Hello");
+        var b = TextBlock("Hello");
+        Assert.True(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_TextBlock_Different_NonEmpty_Setters_Are_Not_Equal()
+    {
+        // .Set allocates a fresh Setters array each call — distinct refs → not equal.
+        var a = TextBlock("Hello").Set(tb => tb.FontSize = 14);
+        var b = TextBlock("Hello").Set(tb => tb.FontSize = 14);
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_TextBlock_Same_NonEmpty_Setters_Reference_Are_Equal()
+    {
+        // Authors that cache the Setters array across renders get the fast-path:
+        // identical underlying record + reference-equal Setters → ShallowEquals true.
+        var setters = new Action<TextBlock>[] { tb => tb.FontSize = 14 };
+        var a = TextBlock("Hello") with { Setters = setters };
+        var b = TextBlock("Hello") with { Setters = setters };
+        Assert.True(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_TextBlock_Empty_Vs_NonEmpty_Setters_Are_Not_Equal()
+    {
+        // Empty default vs non-empty: refs differ → fast-path declines.
+        var a = TextBlock("Hello");
+        var b = TextBlock("Hello").Set(tb => tb.FontSize = 14);
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //  Record immutability
     // ════════════════════════════════════════════════════════════════
 
