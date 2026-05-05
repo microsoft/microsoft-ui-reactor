@@ -338,6 +338,26 @@ public abstract record Element
             (EllipseElement ea, EllipseElement eb) =>
                 ea.Setters.Length == 0 && eb.Setters.Length == 0,
 
+            // Chart primitives — emitted in bulk by D3Charts. Without these arms,
+            // every Path/Line in a chart falls through to UpdatePath/UpdateLine on
+            // every parent render even when chart data is unchanged, so D3Charts.Brush
+            // re-allocations cause every WinUI Path/Line property to be reassigned.
+            (PathElement pa, PathElement pb) =>
+                string.Equals(pa.PathDataString, pb.PathDataString, StringComparison.Ordinal)
+                && (pa.PathDataString is not null || ReferenceEquals(pa.Data, pb.Data))
+                && BrushesEqual(pa.Fill, pb.Fill)
+                && BrushesEqual(pa.Stroke, pb.Stroke)
+                && pa.StrokeThickness == pb.StrokeThickness
+                && ReferenceEquals(pa.StrokeDashArray, pb.StrokeDashArray)
+                && TransformsEqual(pa.RenderTransform, pb.RenderTransform)
+                && pa.Setters.Length == 0 && pb.Setters.Length == 0,
+
+            (LineElement la, LineElement lb) =>
+                la.X1 == lb.X1 && la.Y1 == lb.Y1 && la.X2 == lb.X2 && la.Y2 == lb.Y2
+                && BrushesEqual(la.Stroke, lb.Stroke)
+                && la.StrokeThickness == lb.StrokeThickness
+                && la.Setters.Length == 0 && lb.Setters.Length == 0,
+
             (RichTextBlockElement ra, RichTextBlockElement rb) =>
                 ra.Text == rb.Text
                 && ra.FontSize == rb.FontSize
@@ -394,6 +414,22 @@ public abstract record Element
                 && fa.FlexPadding == fb.FlexPadding
                 && ReferenceEquals(fa.Children, fb.Children)
                 && fa.Setters.Length == 0 && fb.Setters.Length == 0,
+
+            (CanvasElement ca, CanvasElement cb) =>
+                ca.Width == cb.Width
+                && ca.Height == cb.Height
+                && BrushesEqual(ca.Background, cb.Background)
+                && ReferenceEquals(ca.Children, cb.Children)
+                && ReferenceEquals(ca.ChartData, cb.ChartData)
+                && ReferenceEquals(ca.CustomPalette, cb.CustomPalette)
+                && ca.IsColorOnly == cb.IsColorOnly
+                && ca.IsRawColors == cb.IsRawColors
+                && ca.IsInteractive == cb.IsInteractive
+                && ca.IsKeyboardDisabled == cb.IsKeyboardDisabled
+                && ca.IsTightHitTest == cb.IsTightHitTest
+                && ca.IsAnnounceEveryFrame == cb.IsAnnounceEveryFrame
+                && ca.CustomFocusColor == cb.CustomFocusColor
+                && ca.Setters.Length == 0 && cb.Setters.Length == 0,
 
             (EmptyElement, EmptyElement) => true,
 
@@ -650,6 +686,21 @@ public abstract record Element
         if (a is null || b is null) return false;
         if (a is SolidColorBrush sa && b is SolidColorBrush sb)
             return sa.Color == sb.Color && sa.Opacity == sb.Opacity;
+        return false;
+    }
+
+    /// <summary>
+    /// Structural transform comparison. D3PathTranslated allocates a fresh
+    /// TranslateTransform on every render even when X/Y match, so reference
+    /// equality always fails for the common chart case. Unwrap TranslateTransform
+    /// and fall back to ReferenceEquals for everything else.
+    /// </summary>
+    private static bool TransformsEqual(Transform? a, Transform? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+        if (a is TranslateTransform ta && b is TranslateTransform tb)
+            return ta.X == tb.X && ta.Y == tb.Y;
         return false;
     }
 
