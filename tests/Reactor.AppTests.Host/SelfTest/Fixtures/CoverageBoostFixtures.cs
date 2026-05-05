@@ -638,6 +638,10 @@ internal static class CoverageBoostFixtures
             var host = H.CreateHost();
             host.Mount(new ResourceComponent());
             await Harness.Render(200);
+            // The fetcher's Task.Delay(10) resolves during the 200ms wall-clock
+            // wait, then schedules a re-render that may not have flushed before
+            // Render(200) returns. Pump once more to drain the queued re-render.
+            await Harness.Render();
 
             var tb = H.FindTextContaining("Data:fetched-data");
             H.Check("Resource_FetchedData", tb is not null);

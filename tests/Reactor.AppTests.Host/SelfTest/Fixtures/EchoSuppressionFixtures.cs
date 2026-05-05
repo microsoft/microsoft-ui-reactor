@@ -453,6 +453,10 @@ internal static class EchoSuppressionFixtures
             H.Check("EchoSuppress_PasswordBox_NoEchoCall", calls.Count == 0);
 
             if (pb is not null) pb.Password = "typed";
+            // PasswordBox.PasswordChanged can be raised via the dispatcher rather
+            // than synchronously in the setter, so a single render pump is racy.
+            // Pump twice so the queued event lands before the assertion.
+            await Harness.Render();
             await Harness.Render();
             H.Check("EchoSuppress_PasswordBox_UserEditFires",
                 calls.Count >= 1 && calls[^1] == "typed");
