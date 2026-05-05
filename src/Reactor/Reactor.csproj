@@ -33,6 +33,10 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Suppress missing-XML-doc warnings on public API. The .xml doc file
+         still ships whatever comments do exist; we just don't gate the
+         build on documenting every public member. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
