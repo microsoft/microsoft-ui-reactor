@@ -15,7 +15,17 @@ public sealed record StepsPanelProps(
     Action<StepModel> OnCopyDelta,
     Action OnAddStep,
     Action<StepModel> OnDeleteStep,
-    Action<StepModel> OnRegenFromStep);
+    Action<StepModel> OnRegenFromStep)
+{
+    // Manual Equals: callback delegates are excluded from memo equality. Their
+    // identity is fresh each parent render but dispatch always reads the latest
+    // value, so identity isn't load-bearing. Framework-level fix tracked at #151.
+    public bool Equals(StepsPanelProps? other) =>
+        other is not null
+        && ReferenceEquals(Model, other.Model)
+        && IsGenerating == other.IsGenerating;
+    public override int GetHashCode() => HashCode.Combine(Model, IsGenerating);
+}
 
 /// <summary>
 /// Vertical scroller of <see cref="StepCard"/> instances keyed by step number.

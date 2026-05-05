@@ -6,7 +6,16 @@ namespace DemoScriptTool.App.Components;
 public sealed record DemoPromptPanelProps(
     DemoScriptModel Model,
     System.Action<string> OnPromptChanged,
-    System.Action<string> OnTitleChanged);
+    System.Action<string> OnTitleChanged)
+{
+    // Manual Equals: callback delegates are excluded from memo equality. Their
+    // identity is fresh each parent render but dispatch always reads the latest
+    // value, so identity isn't load-bearing. Including them here would force a
+    // re-render on every parent render. Framework-level fix tracked at #151.
+    public bool Equals(DemoPromptPanelProps? other) =>
+        other is not null && ReferenceEquals(Model, other.Model);
+    public override int GetHashCode() => Model.GetHashCode();
+}
 
 /// <summary>
 /// Top-of-body region binding to <c>## Demo Prompt</c>. The text-area writes

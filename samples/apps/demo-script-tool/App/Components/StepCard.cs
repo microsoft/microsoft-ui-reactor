@@ -16,7 +16,21 @@ public sealed record StepCardProps(
     Action<StepModel> OnRun,
     Action<StepModel> OnCopyDelta,
     Action<StepModel> OnDelete,
-    Action<StepModel> OnRegenFromHere);
+    Action<StepModel> OnRegenFromHere)
+{
+    // Manual Equals: callback delegates are excluded from memo equality. Their
+    // identity is fresh each parent render but dispatch always reads the latest
+    // value, so identity isn't load-bearing. Including them here would re-render
+    // every card on every shell render. Framework-level fix tracked at #151.
+    public bool Equals(StepCardProps? other) =>
+        other is not null
+        && ReferenceEquals(Step, other.Step)
+        && ReferenceEquals(PriorStep, other.PriorStep)
+        && TotalSteps == other.TotalSteps
+        && IsGenerating == other.IsGenerating;
+    public override int GetHashCode() =>
+        HashCode.Combine(Step, PriorStep, TotalSteps, IsGenerating);
+}
 
 /// <summary>
 /// One step rendered as a three-column card: prompt | code | actions

@@ -220,7 +220,7 @@ public abstract record Element
                 && ta.Weight == tb.Weight
                 && ta.FontStyle == tb.FontStyle
                 && ta.HorizontalAlignment == tb.HorizontalAlignment
-                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+                && ReferenceEquals(ta.Setters, tb.Setters),
 
             // Callbacks (OnClick, OnChanged, etc.) are intentionally not compared:
             // dispatch goes through the Tag trampoline, and the Update.cs skip path
@@ -231,23 +231,23 @@ public abstract record Element
                 ba.Label == bb.Label
                 && ba.IsEnabled == bb.IsEnabled
                 && ba.ContentElement is null && bb.ContentElement is null
-                && ba.Setters.Length == 0 && bb.Setters.Length == 0,
+                && ReferenceEquals(ba.Setters, bb.Setters),
 
             (HyperlinkButtonElement ha, HyperlinkButtonElement hb) =>
                 ha.Content == hb.Content
                 && ha.NavigateUri == hb.NavigateUri
-                && ha.Setters.Length == 0 && hb.Setters.Length == 0,
+                && ReferenceEquals(ha.Setters, hb.Setters),
 
             (RepeatButtonElement ra, RepeatButtonElement rb) =>
                 ra.Label == rb.Label
                 && ra.Delay == rb.Delay
                 && ra.Interval == rb.Interval
-                && ra.Setters.Length == 0 && rb.Setters.Length == 0,
+                && ReferenceEquals(ra.Setters, rb.Setters),
 
             (ToggleButtonElement ta, ToggleButtonElement tb) =>
                 ta.Label == tb.Label
                 && ta.IsChecked == tb.IsChecked
-                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+                && ReferenceEquals(ta.Setters, tb.Setters),
 
             (SliderElement sa, SliderElement sb) =>
                 sa.Value == sb.Value
@@ -255,27 +255,27 @@ public abstract record Element
                 && sa.Max == sb.Max
                 && sa.StepFrequency == sb.StepFrequency
                 && sa.Header == sb.Header
-                && sa.Setters.Length == 0 && sb.Setters.Length == 0,
+                && ReferenceEquals(sa.Setters, sb.Setters),
 
             (ToggleSwitchElement ta, ToggleSwitchElement tb) =>
                 ta.IsOn == tb.IsOn
                 && ta.OnContent == tb.OnContent
                 && ta.OffContent == tb.OffContent
                 && ta.Header == tb.Header
-                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+                && ReferenceEquals(ta.Setters, tb.Setters),
 
             (CheckBoxElement ca, CheckBoxElement cb) =>
                 ca.IsChecked == cb.IsChecked
                 && ca.Label == cb.Label
                 && ca.IsThreeState == cb.IsThreeState
                 && ca.CheckedState == cb.CheckedState
-                && ca.Setters.Length == 0 && cb.Setters.Length == 0,
+                && ReferenceEquals(ca.Setters, cb.Setters),
 
             (RadioButtonElement ra, RadioButtonElement rb) =>
                 ra.Label == rb.Label
                 && ra.IsChecked == rb.IsChecked
                 && ra.GroupName == rb.GroupName
-                && ra.Setters.Length == 0 && rb.Setters.Length == 0,
+                && ReferenceEquals(ra.Setters, rb.Setters),
 
             (ComboBoxElement ca, ComboBoxElement cb) =>
                 ReferenceEquals(ca.Items, cb.Items)
@@ -284,7 +284,7 @@ public abstract record Element
                 && ca.Header == cb.Header
                 && ca.IsEditable == cb.IsEditable
                 && ReferenceEquals(ca.ItemElements, cb.ItemElements)
-                && ca.Setters.Length == 0 && cb.Setters.Length == 0,
+                && ReferenceEquals(ca.Setters, cb.Setters),
 
             (TextFieldElement ta, TextFieldElement tb) =>
                 ta.Value == tb.Value
@@ -295,7 +295,7 @@ public abstract record Element
                 && ta.TextWrapping == tb.TextWrapping
                 && ta.SelectionStart == tb.SelectionStart
                 && ta.SelectionLength == tb.SelectionLength
-                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+                && ReferenceEquals(ta.Setters, tb.Setters),
 
             (NumberBoxElement na, NumberBoxElement nb) =>
                 na.Value == nb.Value
@@ -306,12 +306,12 @@ public abstract record Element
                 && na.Header == nb.Header
                 && na.PlaceholderText == nb.PlaceholderText
                 && na.SpinButtonPlacement == nb.SpinButtonPlacement
-                && na.Setters.Length == 0 && nb.Setters.Length == 0,
+                && ReferenceEquals(na.Setters, nb.Setters),
 
             (PasswordBoxElement pa, PasswordBoxElement pb) =>
                 pa.Password == pb.Password
                 && pa.PlaceholderText == pb.PlaceholderText
-                && pa.Setters.Length == 0 && pb.Setters.Length == 0,
+                && ReferenceEquals(pa.Setters, pb.Setters),
 
             (ProgressElement pa, ProgressElement pb) =>
                 pa.Value == pb.Value
@@ -319,24 +319,24 @@ public abstract record Element
                 && pa.Maximum == pb.Maximum
                 && pa.ShowError == pb.ShowError
                 && pa.ShowPaused == pb.ShowPaused
-                && pa.Setters.Length == 0 && pb.Setters.Length == 0,
+                && ReferenceEquals(pa.Setters, pb.Setters),
 
             (ProgressRingElement pa, ProgressRingElement pb) =>
                 pa.Value == pb.Value
                 && pa.Minimum == pb.Minimum
                 && pa.Maximum == pb.Maximum
                 && pa.IsActive == pb.IsActive
-                && pa.Setters.Length == 0 && pb.Setters.Length == 0,
+                && ReferenceEquals(pa.Setters, pb.Setters),
 
             (ImageElement ia, ImageElement ib) =>
                 ia.Source == ib.Source
-                && ia.Setters.Length == 0 && ib.Setters.Length == 0,
+                && ReferenceEquals(ia.Setters, ib.Setters),
 
             (RectangleElement ra, RectangleElement rb) =>
-                ra.Setters.Length == 0 && rb.Setters.Length == 0,
+                ReferenceEquals(ra.Setters, rb.Setters),
 
             (EllipseElement ea, EllipseElement eb) =>
-                ea.Setters.Length == 0 && eb.Setters.Length == 0,
+                ReferenceEquals(ea.Setters, eb.Setters),
 
             (RichTextBlockElement ra, RichTextBlockElement rb) =>
                 ra.Text == rb.Text
@@ -344,7 +344,7 @@ public abstract record Element
                 && ra.IsTextSelectionEnabled == rb.IsTextSelectionEnabled
                 && ra.TextWrapping == rb.TextWrapping
                 && ParagraphsEqual(ra.Paragraphs, rb.Paragraphs)
-                && ra.Setters.Length == 0 && rb.Setters.Length == 0,
+                && ReferenceEquals(ra.Setters, rb.Setters),
 
             // Container elements: compare own props + children by reference.
             // Same children reference = truly unchanged subtree = safe to skip entirely.
@@ -355,7 +355,7 @@ public abstract record Element
                 && sa.HorizontalAlignment == sb.HorizontalAlignment
                 && sa.VerticalAlignment == sb.VerticalAlignment
                 && ReferenceEquals(sa.Children, sb.Children)
-                && sa.Setters.Length == 0 && sb.Setters.Length == 0,
+                && ReferenceEquals(sa.Setters, sb.Setters),
 
             (BorderElement ba, BorderElement bb) =>
                 BrushesEqual(ba.Background, bb.Background)
@@ -364,14 +364,14 @@ public abstract record Element
                 && ba.Padding == bb.Padding
                 && ba.BorderThickness == bb.BorderThickness
                 && ReferenceEquals(ba.Child, bb.Child)
-                && ba.Setters.Length == 0 && bb.Setters.Length == 0,
+                && ReferenceEquals(ba.Setters, bb.Setters),
 
             (GridElement ga, GridElement gb) =>
                 ga.RowSpacing == gb.RowSpacing
                 && ga.ColumnSpacing == gb.ColumnSpacing
                 && ReferenceEquals(ga.Definition, gb.Definition)
                 && ReferenceEquals(ga.Children, gb.Children)
-                && ga.Setters.Length == 0 && gb.Setters.Length == 0,
+                && ReferenceEquals(ga.Setters, gb.Setters),
 
             (ScrollViewElement sva, ScrollViewElement svb) =>
                 sva.Orientation == svb.Orientation
@@ -381,7 +381,7 @@ public abstract record Element
                 && sva.VerticalScrollMode == svb.VerticalScrollMode
                 && sva.ZoomMode == svb.ZoomMode
                 && ReferenceEquals(sva.Child, svb.Child)
-                && sva.Setters.Length == 0 && svb.Setters.Length == 0,
+                && ReferenceEquals(sva.Setters, svb.Setters),
 
             (FlexElement fa, FlexElement fb) =>
                 fa.Direction == fb.Direction
@@ -393,7 +393,7 @@ public abstract record Element
                 && fa.RowGap == fb.RowGap
                 && fa.FlexPadding == fb.FlexPadding
                 && ReferenceEquals(fa.Children, fb.Children)
-                && fa.Setters.Length == 0 && fb.Setters.Length == 0,
+                && ReferenceEquals(fa.Setters, fb.Setters),
 
             (EmptyElement, EmptyElement) => true,
 
@@ -426,13 +426,13 @@ public abstract record Element
                 && sa.Spacing == sb.Spacing
                 && sa.HorizontalAlignment == sb.HorizontalAlignment
                 && sa.VerticalAlignment == sb.VerticalAlignment
-                && sa.Setters.Length == 0 && sb.Setters.Length == 0,
+                && ReferenceEquals(sa.Setters, sb.Setters),
 
             (Core.GridElement ga, Core.GridElement gb) =>
                 ga.RowSpacing == gb.RowSpacing
                 && ga.ColumnSpacing == gb.ColumnSpacing
                 && ReferenceEquals(ga.Definition, gb.Definition)
-                && ga.Setters.Length == 0 && gb.Setters.Length == 0,
+                && ReferenceEquals(ga.Setters, gb.Setters),
 
             (BorderElement ba, BorderElement bb) =>
                 BrushesEqual(ba.Background, bb.Background)
@@ -440,7 +440,7 @@ public abstract record Element
                 && ba.CornerRadius == bb.CornerRadius
                 && ba.Padding == bb.Padding
                 && ba.BorderThickness == bb.BorderThickness
-                && ba.Setters.Length == 0 && bb.Setters.Length == 0,
+                && ReferenceEquals(ba.Setters, bb.Setters),
 
             (ScrollViewElement sva, ScrollViewElement svb) =>
                 sva.Orientation == svb.Orientation
@@ -449,7 +449,7 @@ public abstract record Element
                 && sva.HorizontalScrollMode == svb.HorizontalScrollMode
                 && sva.VerticalScrollMode == svb.VerticalScrollMode
                 && sva.ZoomMode == svb.ZoomMode
-                && sva.Setters.Length == 0 && svb.Setters.Length == 0,
+                && ReferenceEquals(sva.Setters, svb.Setters),
 
             (FlexElement fa, FlexElement fb) =>
                 fa.Direction == fb.Direction
@@ -460,23 +460,23 @@ public abstract record Element
                 && fa.ColumnGap == fb.ColumnGap
                 && fa.RowGap == fb.RowGap
                 && fa.FlexPadding == fb.FlexPadding
-                && fa.Setters.Length == 0 && fb.Setters.Length == 0,
+                && ReferenceEquals(fa.Setters, fb.Setters),
 
             (CanvasElement ca, CanvasElement cb) =>
-                ca.Setters.Length == 0 && cb.Setters.Length == 0,
+                ReferenceEquals(ca.Setters, cb.Setters),
 
             (WrapGridElement wa, WrapGridElement wb) =>
                 wa.Orientation == wb.Orientation
                 && wa.ItemWidth == wb.ItemWidth
                 && wa.ItemHeight == wb.ItemHeight
                 && wa.MaximumRowsOrColumns == wb.MaximumRowsOrColumns
-                && wa.Setters.Length == 0 && wb.Setters.Length == 0,
+                && ReferenceEquals(wa.Setters, wb.Setters),
 
             (RelativePanelElement ra, RelativePanelElement rb) =>
-                ra.Setters.Length == 0 && rb.Setters.Length == 0,
+                ReferenceEquals(ra.Setters, rb.Setters),
 
             (ViewboxElement va, ViewboxElement vb) =>
-                va.Setters.Length == 0 && vb.Setters.Length == 0,
+                ReferenceEquals(va.Setters, vb.Setters),
 
             // Structural wrappers that only contain children
             (NavigationHostElement, NavigationHostElement) => true,
@@ -494,7 +494,7 @@ public abstract record Element
                 && ta.IsBackButtonVisible == tb.IsBackButtonVisible
                 && ta.IsBackButtonEnabled == tb.IsBackButtonEnabled
                 && ta.IsPaneToggleButtonVisible == tb.IsPaneToggleButtonVisible
-                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+                && ReferenceEquals(ta.Setters, tb.Setters),
 
             // Pure composition wrappers — they never write their own WinUI
             // properties; their rendered output is diffed separately. Returning
@@ -525,56 +525,56 @@ public abstract record Element
                 && ca.PlaceholderText == cb.PlaceholderText
                 && ca.Header == cb.Header
                 && ca.IsEditable == cb.IsEditable
-                && ca.Setters.Length == 0 && cb.Setters.Length == 0,
+                && ReferenceEquals(ca.Setters, cb.Setters),
 
             (ListViewElement la, ListViewElement lb) =>
                 la.SelectedIndex == lb.SelectedIndex
                 && la.SelectionMode == lb.SelectionMode
                 && la.Header == lb.Header
-                && la.Setters.Length == 0 && lb.Setters.Length == 0,
+                && ReferenceEquals(la.Setters, lb.Setters),
 
             (GridViewElement ga, GridViewElement gb) =>
                 ga.SelectedIndex == gb.SelectedIndex
                 && ga.SelectionMode == gb.SelectionMode
                 && ga.Header == gb.Header
-                && ga.Setters.Length == 0 && gb.Setters.Length == 0,
+                && ReferenceEquals(ga.Setters, gb.Setters),
 
             (FlipViewElement fa, FlipViewElement fb) =>
                 fa.SelectedIndex == fb.SelectedIndex
-                && fa.Setters.Length == 0 && fb.Setters.Length == 0,
+                && ReferenceEquals(fa.Setters, fb.Setters),
 
             (PivotElement pa, PivotElement pb) =>
                 pa.SelectedIndex == pb.SelectedIndex
                 && pa.Title == pb.Title
-                && pa.Setters.Length == 0 && pb.Setters.Length == 0,
+                && ReferenceEquals(pa.Setters, pb.Setters),
 
             (TabViewElement ta, TabViewElement tb) =>
                 ta.SelectedIndex == tb.SelectedIndex
                 && ta.IsAddTabButtonVisible == tb.IsAddTabButtonVisible
-                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+                && ReferenceEquals(ta.Setters, tb.Setters),
 
             (TreeViewElement ta, TreeViewElement tb) =>
                 ta.SelectionMode == tb.SelectionMode
                 && ta.CanDragItems == tb.CanDragItems
                 && ta.AllowDrop == tb.AllowDrop
                 && ta.CanReorderItems == tb.CanReorderItems
-                && ta.Setters.Length == 0 && tb.Setters.Length == 0,
+                && ReferenceEquals(ta.Setters, tb.Setters),
 
             (SelectorBarElement sa, SelectorBarElement sb) =>
                 sa.SelectedIndex == sb.SelectedIndex
-                && sa.Setters.Length == 0 && sb.Setters.Length == 0,
+                && ReferenceEquals(sa.Setters, sb.Setters),
 
             (ListBoxElement la, ListBoxElement lb) =>
                 la.SelectedIndex == lb.SelectedIndex
-                && la.Setters.Length == 0 && lb.Setters.Length == 0,
+                && ReferenceEquals(la.Setters, lb.Setters),
 
             (RadioButtonsElement ra, RadioButtonsElement rb) =>
                 ra.SelectedIndex == rb.SelectedIndex
                 && ra.Header == rb.Header
-                && ra.Setters.Length == 0 && rb.Setters.Length == 0,
+                && ReferenceEquals(ra.Setters, rb.Setters),
 
             (BreadcrumbBarElement ba, BreadcrumbBarElement bb) =>
-                ba.Setters.Length == 0 && bb.Setters.Length == 0,
+                ReferenceEquals(ba.Setters, bb.Setters),
 
             // Templated (data-driven) collections: own props are the WinUI
             // properties UpdateTemplatedXxx writes back. Items + ViewBuilder
@@ -597,8 +597,8 @@ public abstract record Element
                 la.Orientation == lb.Orientation
                 && la.Spacing == lb.Spacing
                 && la.EstimatedItemSize == lb.EstimatedItemSize
-                && la.ScrollViewerSetters.Length == 0 && lb.ScrollViewerSetters.Length == 0
-                && la.RepeaterSetters.Length == 0 && lb.RepeaterSetters.Length == 0,
+                && ReferenceEquals(la.ScrollViewerSetters, lb.ScrollViewerSetters)
+                && ReferenceEquals(la.RepeaterSetters, lb.RepeaterSetters),
 
             // Non-container / leaf types: return false → always captured
             _ => false,

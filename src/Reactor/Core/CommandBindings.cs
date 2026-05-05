@@ -67,6 +67,20 @@ internal static class CommandBindings
         }
         if (cmd.Accelerator is not null)
         {
+            // Set placement mode BEFORE adding the accelerator. WinUI captures the
+            // auto-tooltip-generation decision at the moment the accelerator is
+            // added; setting mode=Hidden afterward didn't reliably clear the
+            // already-generated chord tooltip ("Ctrl+O") on x64-emulated WinUI 3
+            // self-contained — it could persist and stick when the UI thread was
+            // briefly busy. Setting mode first keeps the auto tooltip from ever
+            // being generated. Callers that want the chord visible set
+            // cmd.Description — WinUI shows that as the explicit tooltip and the
+            // chord remains discoverable via the keyboard hint overlay.
+            if (cmd.Description is null)
+                btn.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
+            else
+                btn.ClearValue(UIElement.KeyboardAcceleratorPlacementModeProperty);
+
             var accel = new KeyboardAccelerator
             {
                 Key = cmd.Accelerator.Key,
@@ -74,19 +88,6 @@ internal static class CommandBindings
             };
             btn.KeyboardAccelerators.Add(accel);
             _commandAccelerators.Add(btn, accel);
-
-            // Suppress WinUI's auto-generated bare-chord tooltip ("Ctrl+O") when
-            // the command has no Description to anchor it. Without a label, the
-            // floating "Ctrl+O" tooltip is uninformative on its own, and has been
-            // observed to stick on screen when the UI thread is briefly busy
-            // (the dismiss animation can't run). Callers that want the chord
-            // visible should set cmd.Description ("Open Folder", say) — WinUI
-            // shows that as the explicit tooltip and the chord remains
-            // discoverable via the keyboard hint overlay.
-            if (cmd.Description is null)
-                btn.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
-            else
-                btn.ClearValue(UIElement.KeyboardAcceleratorPlacementModeProperty);
         }
         else
         {

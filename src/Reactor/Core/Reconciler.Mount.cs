@@ -1762,6 +1762,16 @@ public sealed partial class Reconciler
 
     private static void AddCommandHostAccelerators(WinUI.Grid host, Command[] commands)
     {
+        // Suppress WinUI's auto-generated chord tooltip on the host Grid. Without
+        // this, accelerators registered on the host (which wraps the entire app)
+        // propagate as ambient keyboard hints — hovering ANY descendant (a step
+        // prompt textbox, say) flashes the parent's chord ("Ctrl+O") as a tooltip
+        // on the descendant. Setting Hidden on the host stops the auto-generation
+        // at the source and is invisible to users (the chord is still announced
+        // by command-bound buttons that opt back in via their own tooltip).
+        if (commands.Length > 0)
+            host.KeyboardAcceleratorPlacementMode = Microsoft.UI.Xaml.Input.KeyboardAcceleratorPlacementMode.Hidden;
+
         foreach (var cmd in commands)
         {
             if (cmd.Accelerator is null) continue;
