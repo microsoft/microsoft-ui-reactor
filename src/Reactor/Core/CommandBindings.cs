@@ -18,7 +18,7 @@ internal static class CommandBindings
 {
     /// <summary>
     /// Applies command metadata that is common to every command-capable WinUI control:
-    /// <see cref="Control.IsEnabled"/>, <see cref="ToolTipService.ToolTipProperty"/>,
+    /// <see cref="Control.IsEnabled"/>, the <c>ToolTipService.ToolTip</c> attached property,
     /// <see cref="UIElement.AccessKey"/>, and <see cref="UIElement.KeyboardAccelerators"/>.
     /// Accepts <see cref="Control"/> so it can target both <see cref="ButtonBase"/>
     /// derivatives and WinUI controls that don't derive from ButtonBase

@@ -4,7 +4,8 @@ using System.Text.RegularExpressions;
 namespace Microsoft.UI.Reactor.Controls;
 
 /// <summary>
-/// Transforms input text and cursor position. Used in formatter pipelines.
+/// Result returned by an <see cref="InputFormatter"/>: the transformed output text
+/// paired with the adjusted cursor position.
 /// </summary>
 /// <param name="Output">The transformed output text.</param>
 /// <param name="CursorPos">The cursor position in the output.</param>

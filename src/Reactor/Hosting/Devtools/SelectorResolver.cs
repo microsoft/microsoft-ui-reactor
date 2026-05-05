@@ -243,7 +243,7 @@ internal sealed class SelectorResolver
     /// same visible-text surface that <c>tree</c> reports so the selector is
     /// consistent with what an agent reads from the tree — a Reactor
     /// <c>Button("Save", …)</c> can be selected by <c>[name='Save']</c> even
-    /// though WinUI doesn't auto-fill <see cref="AutomationProperties.NameProperty"/>.
+    /// though WinUI doesn't auto-fill the <c>AutomationProperties.Name</c> attached property.
     /// </summary>
     private static bool NameMatches(UIElement el, string value)
     {
