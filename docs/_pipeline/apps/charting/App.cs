@@ -193,6 +193,73 @@ class DynamicDataDemo : Component
 }
 // </snippet:dynamic-data>
 
+/// <summary>
+/// Demonstrates <see cref="PieChartElement{T}.LabelView"/> — replace the built-in
+/// text slice label with any Element. The string LabelAccessor is still passed so
+/// screen readers describe the slice correctly.
+/// </summary>
+class PieLabelViewDemo : Component
+{
+    public override Element Render()
+    {
+        var data = new CategoryData[]
+        {
+            new("Engineering", 42), new("Sales", 25),
+            new("Marketing", 18),   new("Support", 15)
+        };
+
+        return VStack(12,
+            SubHeading("Pie LabelView"),
+            // <snippet:pie-label-view>
+            // Percent rendered inside the slice. The string label accessor
+            // is still passed so screen readers describe the slice.
+            PieChart(data, d => d.Value, d => d.Name)
+                .Title("Team Distribution")
+                .Width(300).Height(300)
+                .InnerRadius(50).PadAngle(0.02)
+                .LabelView((d, layout) =>
+                    TextBlock($"{layout.Fraction:P0}")
+                        .FontSize(12).Bold().Foreground("White"))
+            // </snippet:pie-label-view>
+        ).Padding(24);
+    }
+}
+
+/// <summary>
+/// Demonstrates <see cref="ChartElement{T}.XTickLabelView"/> — replace the numeric
+/// X-axis tick label with any Element.
+/// </summary>
+class AxisTickViewDemo : Component
+{
+    public override Element Render()
+    {
+        var data = new SalesPoint[]
+        {
+            new(1, 120), new(2, 180), new(3, 150),
+            new(4, 220), new(5, 310), new(6, 280)
+        };
+
+        string[] months = { "Jan", "Feb", "Mar", "Apr", "May", "Jun" };
+
+        return VStack(12,
+            SubHeading("Axis XTickLabelView"),
+            // <snippet:axis-tick-view>
+            // X axis ticks: render month name plus a caption per tick.
+            LineChart(data, d => d.Month, d => d.Revenue)
+                .Title("Revenue by Month")
+                .SeriesName("Revenue")
+                .Width(600).Height(220)
+                .Stroke("#0078D4").StrokeWidth(2.5)
+                .ShowGrid(true).ShowAxes(true)
+                .XTickLabelView(t => VStack(2,
+                    TextBlock(months[Math.Clamp((int)t - 1, 0, months.Length - 1)])
+                        .FontSize(11).SemiBold(),
+                    TextBlock("month").FontSize(8).Opacity(0.6)))
+            // </snippet:axis-tick-view>
+        ).Padding(24);
+    }
+}
+
 // <snippet:accessible-chart>
 /// <summary>
 /// Canonical accessible chart pattern — demonstrates all recommended accessibility
@@ -251,6 +318,8 @@ class ChartingApp : Component
                 Component<PieChartDemo>(),
                 Component<CombinedChartDemo>(),
                 Component<DynamicDataDemo>(),
+                Component<PieLabelViewDemo>(),
+                Component<AxisTickViewDemo>(),
                 Component<AccessibleChartDemo>()
             ).Padding(24)
         );

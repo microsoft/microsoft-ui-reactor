@@ -272,6 +272,72 @@ class DynamicDataDemo : Component
 For high-frequency updates (60fps streaming), use `OnReady` to get a
 handle that exposes the underlying `Canvas` for direct manipulation.
 
+## Custom Label Elements
+
+Most charts only need the string-based label APIs (`AxisLabel`,
+`LabelAccessor`, `DataLabel`). Reach for the `*View` extensions only when
+plain text isn't enough — for icon-plus-text ticks, multi-line labels with
+mixed typography, or rendering a slice's percent inside the slice itself.
+
+### Pie slice labels
+
+`LabelView` replaces the built-in text label on each pie slice. The delegate
+receives the slice's data item plus a `PieSliceLayout` describing its
+geometry, and returns any Element:
+
+```csharp
+// Percent rendered inside the slice. The string label accessor
+// is still passed so screen readers describe the slice.
+PieChart(data, d => d.Value, d => d.Name)
+    .Title("Team Distribution")
+    .Width(300).Height(300)
+    .InnerRadius(50).PadAngle(0.02)
+    .LabelView((d, layout) =>
+        TextBlock($"{layout.Fraction:P0}")
+            .FontSize(12).Bold().Foreground("White"))
+```
+
+![Pie chart with the percent rendered inside each slice](images/charting/pie-label-view.png)
+
+`PieSliceLayout` exposes the slice's `Index`, `Value`, `Fraction`,
+`CentroidX`/`CentroidY`, `StartAngle`/`EndAngle`, `InnerRadius`/`OuterRadius`,
+and the resolved palette `Color` so a label can echo slice geometry without
+recomputing it.
+
+### Axis tick labels
+
+`XTickLabelView` and `YTickLabelView` replace the numeric tick labels with
+any Element. Each delegate receives the tick's domain value:
+
+```csharp
+// X axis ticks: render month name plus a caption per tick.
+LineChart(data, d => d.Month, d => d.Revenue)
+    .Title("Revenue by Month")
+    .SeriesName("Revenue")
+    .Width(600).Height(220)
+    .Stroke("#0078D4").StrokeWidth(2.5)
+    .ShowGrid(true).ShowAxes(true)
+    .XTickLabelView(t => VStack(2,
+        TextBlock(months[Math.Clamp((int)t - 1, 0, months.Length - 1)])
+            .FontSize(11).SemiBold(),
+        TextBlock("month").FontSize(8).Opacity(0.6)))
+```
+
+![Line chart with month-name axis ticks](images/charting/axis-tick-view.png)
+
+| Method | Purpose |
+|--------|---------|
+| `PieChartElement<T>.LabelView(Func<T, PieSliceLayout, Element>)` | Replace the built-in slice text with any Element, anchored on the slice centroid |
+| `ChartElement<T>.XTickLabelView(Func<double, Element>)` | Replace the X-axis tick label, horizontally centered on the tick |
+| `ChartElement<T>.YTickLabelView(Func<double, Element>)` | Replace the Y-axis tick label, right-anchored to the axis edge |
+
+The element you return is auto-anchored — you don't need a known size at
+construction time, and the chart re-positions on layout. It is also rendered
+non-interactive and hidden from the UIA tree, so the chart's structured
+accessibility description (see below) stays canonical. Always keep the
+string `LabelAccessor` (pie) or `DataLabel` (line/bar/area) set when you use
+a `*View` override; that's what screen readers read.
+
 ## Chart Accessibility
 
 Charts are fully accessible out of the box. Add `.Title()` and

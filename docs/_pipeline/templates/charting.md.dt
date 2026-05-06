@@ -123,6 +123,52 @@ diffs the old and new element trees and patches only what changed:
 For high-frequency updates (60fps streaming), use `OnReady` to get a
 handle that exposes the underlying `Canvas` for direct manipulation.
 
+## Custom Label Elements
+
+Most charts only need the string-based label APIs (`AxisLabel`,
+`LabelAccessor`, `DataLabel`). Reach for the `*View` extensions only when
+plain text isn't enough — for icon-plus-text ticks, multi-line labels with
+mixed typography, or rendering a slice's percent inside the slice itself.
+
+### Pie slice labels
+
+`LabelView` replaces the built-in text label on each pie slice. The delegate
+receives the slice's data item plus a `PieSliceLayout` describing its
+geometry, and returns any Element:
+
+```csharp snippet="charting/pie-label-view"
+```
+
+![Pie chart with the percent rendered inside each slice](screenshot://charting/pie-label-view)
+
+`PieSliceLayout` exposes the slice's `Index`, `Value`, `Fraction`,
+`CentroidX`/`CentroidY`, `StartAngle`/`EndAngle`, `InnerRadius`/`OuterRadius`,
+and the resolved palette `Color` so a label can echo slice geometry without
+recomputing it.
+
+### Axis tick labels
+
+`XTickLabelView` and `YTickLabelView` replace the numeric tick labels with
+any Element. Each delegate receives the tick's domain value:
+
+```csharp snippet="charting/axis-tick-view"
+```
+
+![Line chart with month-name axis ticks](screenshot://charting/axis-tick-view)
+
+| Method | Purpose |
+|--------|---------|
+| `PieChartElement<T>.LabelView(Func<T, PieSliceLayout, Element>)` | Replace the built-in slice text with any Element, anchored on the slice centroid |
+| `ChartElement<T>.XTickLabelView(Func<double, Element>)` | Replace the X-axis tick label, horizontally centered on the tick |
+| `ChartElement<T>.YTickLabelView(Func<double, Element>)` | Replace the Y-axis tick label, right-anchored to the axis edge |
+
+The element you return is auto-anchored — you don't need a known size at
+construction time, and the chart re-positions on layout. It is also rendered
+non-interactive and hidden from the UIA tree, so the chart's structured
+accessibility description (see below) stays canonical. Always keep the
+string `LabelAccessor` (pie) or `DataLabel` (line/bar/area) set when you use
+a `*View` override; that's what screen readers read.
+
 ## Chart Accessibility
 
 Charts are fully accessible out of the box. Add `.Title()` and

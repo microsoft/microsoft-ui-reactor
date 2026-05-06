@@ -35,6 +35,16 @@ screenshots:
     component: DynamicDataDemo
     region: client
     format: png
+  - id: pie-label-view
+    description: "Pie chart with percent rendered inside each slice via LabelView"
+    component: PieLabelViewDemo
+    region: client
+    format: png
+  - id: axis-tick-view
+    description: "Line chart with month-name axis ticks via XTickLabelView"
+    component: AxisTickViewDemo
+    region: client
+    format: png
   - id: accessible-chart
     description: "Accessible chart with screen-reader annotations and keyboard navigation"
     component: AccessibleChartDemo
