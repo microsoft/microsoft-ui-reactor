@@ -18,6 +18,9 @@ static class HotReloadService
     /// <summary>Called after the metadata update is applied. Re-renders the UI.</summary>
     public static void UpdateApplication(Type[]? updatedTypes)
     {
-        ReactorApp.ActiveHost?.RequestRender();
+        // force: true bypasses component memo (Props/deps equality) for this
+        // pass — the updated Render() body would otherwise be skipped because
+        // props and hook deps haven't changed.
+        ReactorApp.ActiveHost?.RequestRender(force: true);
     }
 }

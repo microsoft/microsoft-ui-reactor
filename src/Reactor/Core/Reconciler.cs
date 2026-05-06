@@ -120,6 +120,18 @@ public sealed partial class Reconciler : IDisposable
     public int DebugUIElementsModified;
     private int _debugReconcileDepth;
 
+    // Hot reload signal: when set, the next top-level Reconcile() pass bypasses
+    // Component memo (props/deps equality) so updated method bodies are picked up
+    // even when props are unchanged. Cleared at the start of that pass.
+    internal volatile bool ForceFullRenderPending;
+    private bool _forceFullRenderActive;
+
+    // True only during a force pass and only for the wrapper elements whose
+    // skip would prevent ReconcileComponent from running. Used by Update()
+    // and ChildReconciler to bypass their structural-equality short-circuits.
+    internal bool ForceRenderThroughWrapper(Element el) =>
+        _forceFullRenderActive && el is ComponentElement or MemoElement or FuncElement;
+
     // ── Reconcile-highlight capture (gated by ReactorFeatureFlags.HighlightReconcileChanges) ──
     private List<UIElement>? _highlightMounted;
     private List<UIElement>? _highlightModified;
@@ -541,6 +553,10 @@ public sealed partial class Reconciler : IDisposable
                 (_highlightMounted ??= new()).Clear();
                 (_highlightModified ??= new()).Clear();
             }
+            // Consume the hot-reload signal exactly once per top-level pass so
+            // every component re-runs Render() even when props/deps are unchanged.
+            _forceFullRenderActive = ForceFullRenderPending;
+            ForceFullRenderPending = false;
         }
         try {
         try
@@ -567,7 +583,11 @@ public sealed partial class Reconciler : IDisposable
                     DebugUIElementsCreated, DebugUIElementsModified);
             }
         }
-        } finally { _debugReconcileDepth--; }
+        } finally
+        {
+            if (--_debugReconcileDepth == 0)
+                _forceFullRenderActive = false;
+        }
     }
 
     // Tracks top-level Reconcile() entries so trace start/stop only fires once
@@ -649,6 +669,12 @@ public sealed partial class Reconciler : IDisposable
         // ── Memo check: skip render if props/context unchanged and not self-triggered ──
         bool selfTriggered = node.SelfTriggered;
         node.SelfTriggered = false;
+
+        // Hot reload forces every component to re-run Render(); the new method
+        // body lives only on the type, not in props/deps, so the memo gate
+        // would otherwise skip it.
+        if (_forceFullRenderActive)
+            selfTriggered = true;
 
         if (!selfTriggered)
         {

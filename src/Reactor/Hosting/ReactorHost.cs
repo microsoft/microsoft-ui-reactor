@@ -354,10 +354,17 @@ public sealed class ReactorHost : IDisposable
     /// During render: setState calls set _needsRerender (no enqueue).
     /// Between renders: first setState CAS-flips _renderPending 0→1 and enqueues.
     /// _renderPending stays 1 throughout the render, blocking duplicate enqueues.
+    ///
+    /// Pass <paramref name="force"/>=true to bypass component memoization
+    /// (Props/deps equality, ShouldUpdate) for the next pass — used by hot
+    /// reload where the updated Render() body lives on the type, not in props.
     /// </summary>
-    internal void RequestRender()
+    internal void RequestRender(bool force = false)
     {
         if (_disposed) return;
+
+        if (force)
+            _reconciler.ForceFullRenderPending = true;
 
         // Capture ambient animation curve so the async render pass can restore it.
         // Multiple state changes may fire before the render — last curve wins.
@@ -420,9 +427,13 @@ public sealed class ReactorHost : IDisposable
             Charting.D3Charts.IsReducedMotion = _isReducedMotion;
             Charting.D3Charts.ForcedColors = _forcedColorsTheme;
 
+            // RequestRender has an optional `force` parameter, so it can't bind
+            // directly to an Action method group — wrap once and reuse.
+            Action rerender = () => RequestRender();
+
             if (_rootComponent is not null)
             {
-                _rootComponent.Context.BeginRender(RequestRender);
+                _rootComponent.Context.BeginRender(rerender);
                 try
                 {
                     newTree = _rootComponent.Render();
@@ -436,7 +447,7 @@ public sealed class ReactorHost : IDisposable
             }
             else if (_rootRenderFunc is not null && _funcContext is not null)
             {
-                _funcContext.BeginRender(RequestRender);
+                _funcContext.BeginRender(rerender);
                 try
                 {
                     newTree = _rootRenderFunc(_funcContext);
@@ -468,7 +479,7 @@ public sealed class ReactorHost : IDisposable
                     _currentTree,
                     newTree,
                     _currentControl,
-                    RequestRender
+                    rerender
                 );
             }
             finally

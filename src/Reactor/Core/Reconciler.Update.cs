@@ -70,7 +70,8 @@ public sealed partial class Reconciler
         // null→non-null checks (non-poolable) can subscribe.
         if (Element.ShallowEquals(oldEl, newEl)
             && Element.ModifiersEqual(oldModifiers, modifiers)
-            && oldEl.HasCallbacks == newEl.HasCallbacks)
+            && oldEl.HasCallbacks == newEl.HasCallbacks
+            && !ForceRenderThroughWrapper(newEl))
         {
             DebugElementsSkipped++;
             // Refresh Tag so the event trampoline dispatches into the new element's

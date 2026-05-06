@@ -67,7 +67,8 @@ internal static class ChildReconciler
             // unchanged child (IVector.GetAt + all the property diffing inside Update).
             var oldEl = oldChildren[i];
             var newEl = newChildren[i];
-            if (Element.CanSkipUpdate(oldEl, newEl))
+            if (Element.CanSkipUpdate(oldEl, newEl)
+                && !reconciler.ForceRenderThroughWrapper(newEl))
             {
                 reconciler.DebugElementsSkipped++;
                 // Refresh Tag when the element carries callbacks. The skip short-
