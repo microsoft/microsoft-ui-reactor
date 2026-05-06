@@ -22,6 +22,7 @@ public static class SampleRegistry
         new LineChartMissingData(),
         new SlopeChart(),
         new CandlestickChart(),
+        new WeeklyForecastSample(),
 
         // ── Areas ─────────────────────────────────────────────
         new AreaChart(),
@@ -33,6 +34,7 @@ public static class SampleRegistry
         // ── Radial ────────────────────────────────────────────
         new PieChartSample(),
         new DonutChartSample(),
+        new BrowserSharePieSample(),
 
         // ── Dots ──────────────────────────────────────────────
         new ScatterplotSample(),

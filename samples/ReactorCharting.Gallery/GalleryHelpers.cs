@@ -18,5 +18,5 @@ public abstract class GallerySample
     public abstract Element Render();
 
     /// <summary>SVG icon filename (without extension), derived from class name.</summary>
-    public string IconName => GetType().Name.Replace("Sample", "");
+    public virtual string IconName => GetType().Name.Replace("Sample", "");
 }
