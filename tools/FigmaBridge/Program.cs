@@ -55,7 +55,7 @@ var llmModel = args.SkipWhile(a => a != "--llm-model").Skip(1).FirstOrDefault()
     ?? "gpt-4o";
 
 // Load skill files for LLM prompt construction
-var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", ".."));
 var figmaSkill = TryReadFile(Path.Combine(repoRoot, "skills", "figma.md"));
 var designSkill = TryReadFile(Path.Combine(repoRoot, "skills", "design.md"));
 var mainSkill = TryReadFile(Path.Combine(repoRoot, "SKILL.md"));
@@ -108,7 +108,169 @@ app.Map("/figma", async (HttpContext context) =>
             var jsonDoc = JsonDocument.Parse(json);
             var msgType = jsonDoc.RootElement.GetProperty("type").GetString() ?? "";
 
-            if (msgType == "incremental" && outputDir != null)
+            if (msgType == "set-output")
+            {
+                var path = jsonDoc.RootElement.GetProperty("path").GetString() ?? "";
+                if (!string.IsNullOrEmpty(path))
+                {
+                    outputDir = path;
+                    Directory.CreateDirectory(outputDir);
+                    Console.WriteLine($"[FigmaBridge] Output set to: {outputDir}");
+                    var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                        new { type = "output-set", path = outputDir }));
+                    await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                }
+            }
+            else if (msgType == "create-project")
+            {
+                var name = jsonDoc.RootElement.GetProperty("name").GetString() ?? "FigmaApp";
+                var projectDir = Path.Combine(repoRoot, "samples", "apps", name.ToLowerInvariant());
+                try
+                {
+                    Directory.CreateDirectory(projectDir);
+                    // Write minimal .csproj
+                    var csproj = $"""
+                        <Project Sdk="Microsoft.NET.Sdk">
+                          <PropertyGroup>
+                            <OutputType>WinExe</OutputType>
+                            <TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
+                            <Platforms>x64;ARM64</Platforms>
+                            <ImplicitUsings>enable</ImplicitUsings>
+                            <Nullable>enable</Nullable>
+                            <UseWinUI>true</UseWinUI>
+                            <WindowsPackageType>None</WindowsPackageType>
+                          </PropertyGroup>
+                          <ItemGroup>
+                            <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+                          </ItemGroup>
+                          <ItemGroup>
+                            <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+                          </ItemGroup>
+                        </Project>
+                        """;
+                    File.WriteAllText(Path.Combine(projectDir, $"{name}.csproj"), csproj);
+                    // Write placeholder Program.cs
+                    File.WriteAllText(Path.Combine(projectDir, "Program.cs"),
+                        "using Microsoft.UI.Reactor;\nusing static Microsoft.UI.Reactor.Factories;\n\n" +
+                        $"ReactorApp.Run<{name}App>(\"App\", width: 1200, height: 800);\n\n" +
+                        $"class {name}App : Component\n{{\n    public override Element Render() =>\n        TextBlock(\"Waiting for Figma generation...\");\n}}\n");
+
+                    outputDir = projectDir;
+                    Console.WriteLine($"[FigmaBridge] Created project: {projectDir}");
+                    var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                        new { type = "project-created", path = projectDir }));
+                    await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                        new { type = "error", message = $"Failed to create project: {ex.Message}" }));
+                    await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                }
+            }
+            else if (msgType == "browse-output")
+            {
+                // Launch Windows PowerShell with a picker script file
+                try
+                {
+                    var initDir = (outputDir ?? Path.Combine(repoRoot, "samples", "apps")).Replace("\\", "\\\\");
+                    var resultFile = Path.Combine(Path.GetTempPath(), "figma-picker-result.txt").Replace("\\", "\\\\");
+                    if (File.Exists(resultFile.Replace("\\\\", "\\"))) File.Delete(resultFile.Replace("\\\\", "\\"));
+
+                    var scriptFile = Path.Combine(Path.GetTempPath(), "figma-picker.ps1");
+                    File.WriteAllText(scriptFile,
+                        "Add-Type -AssemblyName System.Windows.Forms\n" +
+                        "$d = New-Object System.Windows.Forms.OpenFileDialog\n" +
+                        "$d.Title = 'Select Reactor .csproj file'\n" +
+                        "$d.Filter = 'C# Project (*.csproj)|*.csproj'\n" +
+                        $"$d.InitialDirectory = '{initDir}'\n" +
+                        "if ($d.ShowDialog() -eq 'OK') {\n" +
+                        $"  $d.FileName | Out-File '{resultFile}' -NoNewline\n" +
+                        "}\n");
+
+                    Console.WriteLine($"[FigmaBridge] Opening file picker...");
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "powershell.exe",
+                        Arguments = $"-NoProfile -STA -File \"{scriptFile}\"",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                    };
+                    var proc = System.Diagnostics.Process.Start(psi);
+                    proc?.WaitForExit(60000);
+
+                    var actualResultFile = resultFile.Replace("\\\\", "\\");
+                    if (File.Exists(actualResultFile))
+                    {
+                        var selected = File.ReadAllText(actualResultFile).Trim();
+                        File.Delete(actualResultFile);
+                        if (!string.IsNullOrEmpty(selected))
+                        {
+                            outputDir = Path.GetDirectoryName(selected)!;
+                            Console.WriteLine($"[FigmaBridge] Output set via picker: {outputDir}");
+                            var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                                new { type = "output-set", path = outputDir }));
+                            await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                        }
+                        else
+                        {
+                            var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                                new { type = "status", message = "Picker cancelled" }));
+                            await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                        }
+                    }
+                    else
+                    {
+                        var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                            new { type = "status", message = "Picker cancelled" }));
+                        await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[FigmaBridge] Picker error: {ex.Message}");
+                    var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                        new { type = "error", message = $"Picker failed: {ex.Message}" }));
+                    await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                }
+            }
+            else if (msgType == "launch-watch")
+            {
+                if (outputDir == null)
+                {
+                    var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                        new { type = "error", message = "No output directory set" }));
+                    await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                }
+                else
+                {
+                    // Find the .csproj in the output dir
+                    var csprojFile = Directory.GetFiles(outputDir, "*.csproj").FirstOrDefault();
+                    if (csprojFile != null)
+                    {
+                        var psi = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "pwsh",
+                            Arguments = $"-NoExit -Command \"dotnet watch run --project '{csprojFile}'\"",
+                            WorkingDirectory = outputDir,
+                            UseShellExecute = true,
+                            CreateNoWindow = false,
+                        };
+                        System.Diagnostics.Process.Start(psi);
+                        Console.WriteLine($"[FigmaBridge] Launched dotnet watch: {csprojFile}");
+                        var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                            new { type = "watch-launched", project = csprojFile }));
+                        await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                    }
+                    else
+                    {
+                        var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                            new { type = "error", message = $"No .csproj found in {outputDir}" }));
+                        await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                    }
+                }
+            }
+            else if (msgType == "incremental" && outputDir != null)
             {
                 // Fast path: apply codegen patches to Program.cs
                 var patches = jsonDoc.RootElement.GetProperty("patches");
@@ -126,8 +288,16 @@ app.Map("/figma", async (HttpContext context) =>
 
                 Console.WriteLine($"[FigmaBridge] Received: {msg.Type} — {msg.FrameName} ({msg.FrameId})");
 
-                if (msg.Type == "generate" && outputDir != null && msg.Tree != null)
+                if (msg.Type == "generate" && msg.Tree != null)
                 {
+                    if (outputDir == null)
+                    {
+                        var errMsg = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                            new { type = "error", message = "Set the output project directory first (use 'Set Output' or '+ New Project')" }));
+                        await ws.SendAsync(errMsg, WebSocketMessageType.Text, true, CancellationToken.None);
+                        lock (syncLock) { latestSync = msg; }
+                        continue;
+                    }
                     // ── Phase 1: LLM Generation ──────────────────────────
                     lock (syncLock) { latestSync = msg; }
 
@@ -599,9 +769,30 @@ static class LlmGenerator
         File.WriteAllText(summaryFile, designSummary);
 
         var targetFile = Path.Combine(outputDir, "Program.cs");
+        var csprojFile = Directory.GetFiles(outputDir, "*.csproj").FirstOrDefault() ?? "*.csproj";
 
         // Write prompt to a file to avoid cmd.exe quoting issues
-        var prompt = $"Read the Figma design summary from {summaryFile} and translate it into a Reactor WinUI app. Write the output to {targetFile} as a complete, runnable Program.cs file. Follow the figma.md skill for control mapping and the design.md skill for best practices. Use proper WinUI controls: NavigationView for side nav, TitleBar for title bars, Button/HyperlinkButton for buttons. Use Theme tokens for all colors. Use semantic typography (Caption, SubHeading, Heading, ApplyStyle). Include ReactorApp.Run<ComponentName>() with devtools:true in DEBUG.";
+        var prompt = $@"Read the Figma design summary from {summaryFile} and translate it into a pixel-accurate Reactor WinUI app.
+
+CRITICAL — PIXEL FIDELITY RULES:
+- Every element MUST have its exact width and height from the Figma design applied via .Width() and .Height(), or .MinWidth()/.MinHeight() for text containers.
+- Every gap value (itemSpacing) MUST be applied exactly as the gap parameter in VStack(gap, ...) or HStack(gap, ...).
+- Every padding value MUST be applied exactly using .Padding(left, top, right, bottom) wrapped in a Border.
+- Every margin between elements MUST be applied using .Margin().
+- Corner radius values from Figma: use ControlCornerRadius for 4px, OverlayCornerRadius for 8px, and exact values for other radii.
+- The layout tree in the summary shows precise dimensions like [280×817, gap=4, pad=0,4,0,0] — use these EXACT values.
+- Round spacing values to the nearest 4px grid value only if design.md requires it.
+
+CONTROLS:
+- Use NavigationView for side nav patterns, TitleBar for title bars.
+- Use Button, HyperlinkButton, CheckBox, ToggleSwitch, AutoSuggestBox etc. for interactive controls.
+- Use Theme tokens for all colors (CardBackground, Accent, SecondaryText, DividerStroke, etc.).
+- Use semantic typography: Caption(), SubHeading(), Heading(), .ApplyStyle(""TitleLargeTextBlockStyle"").
+
+OUTPUT:
+- Write to {targetFile} as a complete, runnable Program.cs.
+- Include ReactorApp.Run<ComponentName>() with devtools:true in DEBUG.
+- After writing Program.cs, launch the app: dotnet watch run --project {csprojFile}";
 
         var promptFile = Path.Combine(Path.GetTempPath(), "figma-copilot-prompt.txt");
         File.WriteAllText(promptFile, prompt);
@@ -776,7 +967,7 @@ static class DesignSummarizer
             || nameLower.Contains("gradient") || nameLower.Contains(".ruler")
             || nameLower.Contains("backdrop")) return;
 
-        // Compact description
+        // Compact description with precise dimensions
         var parts = new List<string>();
         if (node.Type == "TEXT" && node.Characters != null)
         {
@@ -789,15 +980,25 @@ static class DesignSummarizer
             if (node.Type == "INSTANCE") parts.Add("INSTANCE");
             if (node.LayoutMode is "VERTICAL") parts.Add("↓");
             else if (node.LayoutMode is "HORIZONTAL") parts.Add("→");
+            // Precise dimensions
+            parts.Add($"{node.Width:0}×{node.Height:0}");
             if (node.ItemSpacing > 0) parts.Add($"gap={node.ItemSpacing:0}");
+            // Precise padding
+            var pt = node.PaddingTop ?? 0; var pr = node.PaddingRight ?? 0;
+            var pb = node.PaddingBottom ?? 0; var pl = node.PaddingLeft ?? 0;
+            if (pt > 0 || pr > 0 || pb > 0 || pl > 0)
+            {
+                if (pt == pb && pl == pr && pt == pl) parts.Add($"pad={pt:0}");
+                else parts.Add($"pad={pl:0},{pt:0},{pr:0},{pb:0}");
+            }
             if (node.CornerRadius > 0) parts.Add($"r={node.CornerRadius:0}");
         }
 
         var desc = parts.Count > 0 ? $" [{string.Join(", ", parts)}]" : "";
         sb.AppendLine($"{prefix}{name}{desc}");
 
-        // Recurse (max depth 6 for readability)
-        if (node.Children != null && indent < 6)
+        // Recurse (max depth 8 for detailed structure)
+        if (node.Children != null && indent < 8)
         {
             foreach (var child in node.Children)
                 WriteCompactTree(child, sb, indent + 1);

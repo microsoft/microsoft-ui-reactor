@@ -1,6 +1,6 @@
 {
   "name": "reactor-figma-sync",
-  "id": "",
+  "id": "reactor-figma-sync-dev",
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/ui.html",

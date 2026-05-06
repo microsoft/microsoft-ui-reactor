@@ -292,7 +292,7 @@ function onNodeChange(event: NodeChangeEvent) {
 
 // ─── Plugin Lifecycle ────────────────────────────────────────────────────────
 
-figma.showUI(__html__, { width: 320, height: 200, themeColors: true });
+figma.showUI(__html__, { width: 340, height: 320, themeColors: true });
 
 // Watch for selection changes — also triggers when exiting text edit mode
 figma.on("selectionchange", () => {
@@ -314,11 +314,10 @@ figma.on("selectionchange", () => {
 figma.currentPage.on("nodechange", onNodeChange);
 
 // Handle messages from the UI iframe
-figma.ui.onmessage = (msg: { type: string }) => {
+figma.ui.onmessage = (msg: { type: string; outputPath?: string }) => {
   if (msg.type === "request-sync") {
     sendFullSync();
   } else if (msg.type === "generate") {
-    // Phase 1: Generate — send full tree with "generate" flag
     const frame = getWatchedFrame();
     if (frame) {
       watchedFrameId = frame.id;
@@ -326,9 +325,15 @@ figma.ui.onmessage = (msg: { type: string }) => {
     if (watchedFrameId) {
       (async () => {
         const frame = await figma.getNodeByIdAsync(watchedFrameId!) as SceneNode;
-        if (!frame) return;
+        if (!frame) {
+          figma.ui.postMessage({ type: "status", message: "Frame not found — select a frame first" });
+          return;
+        }
         const tree = await extractNode(frame);
-        if (!tree) return;
+        if (!tree) {
+          figma.ui.postMessage({ type: "status", message: "Failed to extract frame" });
+          return;
+        }
         figma.ui.postMessage({
           type: "sync",
           payload: {
@@ -340,7 +345,21 @@ figma.ui.onmessage = (msg: { type: string }) => {
           },
         });
       })();
+    } else {
+      figma.ui.postMessage({ type: "status", message: "No frame selected — select a frame in Figma first" });
     }
+  } else if (msg.type === "save-config") {
+    if (msg.outputPath) {
+      figma.clientStorage.setAsync("outputPath", msg.outputPath);
+    }
+  } else if (msg.type === "load-config") {
+    (async () => {
+      const outputPath = await figma.clientStorage.getAsync("outputPath");
+      figma.ui.postMessage({
+        type: "config-loaded",
+        outputPath: outputPath || "",
+      });
+    })();
   }
 };
 

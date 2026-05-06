@@ -226,7 +226,7 @@ function onNodeChange(event) {
     }, DEBOUNCE_MS);
 }
 // ─── Plugin Lifecycle ────────────────────────────────────────────────────────
-figma.showUI(__html__, { width: 320, height: 200, themeColors: true });
+figma.showUI(__html__, { width: 340, height: 320, themeColors: true });
 // Watch for selection changes — also triggers when exiting text edit mode
 figma.on("selectionchange", () => {
     const frame = getWatchedFrame();
@@ -250,7 +250,6 @@ figma.ui.onmessage = (msg) => {
         sendFullSync();
     }
     else if (msg.type === "generate") {
-        // Phase 1: Generate — send full tree with "generate" flag
         const frame = getWatchedFrame();
         if (frame) {
             watchedFrameId = frame.id;
@@ -258,11 +257,15 @@ figma.ui.onmessage = (msg) => {
         if (watchedFrameId) {
             (async () => {
                 const frame = await figma.getNodeByIdAsync(watchedFrameId);
-                if (!frame)
+                if (!frame) {
+                    figma.ui.postMessage({ type: "status", message: "Frame not found — select a frame first" });
                     return;
+                }
                 const tree = await extractNode(frame);
-                if (!tree)
+                if (!tree) {
+                    figma.ui.postMessage({ type: "status", message: "Failed to extract frame" });
                     return;
+                }
                 figma.ui.postMessage({
                     type: "sync",
                     payload: {
@@ -275,6 +278,23 @@ figma.ui.onmessage = (msg) => {
                 });
             })();
         }
+        else {
+            figma.ui.postMessage({ type: "status", message: "No frame selected — select a frame in Figma first" });
+        }
+    }
+    else if (msg.type === "save-config") {
+        if (msg.outputPath) {
+            figma.clientStorage.setAsync("outputPath", msg.outputPath);
+        }
+    }
+    else if (msg.type === "load-config") {
+        (async () => {
+            const outputPath = await figma.clientStorage.getAsync("outputPath");
+            figma.ui.postMessage({
+                type: "config-loaded",
+                outputPath: outputPath || "",
+            });
+        })();
     }
 };
 // Initial sync if a frame is already selected

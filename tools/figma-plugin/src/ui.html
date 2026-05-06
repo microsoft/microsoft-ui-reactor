@@ -10,135 +10,325 @@
       color: var(--figma-color-text);
       background: var(--figma-color-bg);
     }
+    .status-row {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+    }
     .status {
-      padding: 8px;
-      border-radius: 4px;
+      padding: 6px 8px; border-radius: 4px;
       background: var(--figma-color-bg-secondary);
-      margin-bottom: 8px;
+      flex: 1; font-size: 11px;
     }
     .connected { color: #0fa573; }
     .disconnected { color: #f24822; }
+    .section-label {
+      font-size: 10px; font-weight: 600; opacity: 0.6;
+      margin: 8px 0 4px 0; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .config-row {
+      display: flex; gap: 4px; align-items: center; margin-bottom: 4px;
+    }
+    .config-row input {
+      flex: 1; padding: 4px 8px; border-radius: 4px; font-size: 11px;
+      border: 1px solid var(--figma-color-border);
+      background: var(--figma-color-bg); color: var(--figma-color-text);
+    }
     .log {
-      font-family: monospace;
-      font-size: 10px;
-      max-height: 100px;
-      overflow-y: auto;
-      padding: 4px;
-      background: var(--figma-color-bg-tertiary);
-      border-radius: 4px;
+      font-family: monospace; font-size: 10px;
+      max-height: 80px; overflow-y: auto; padding: 4px;
+      background: var(--figma-color-bg-tertiary); border-radius: 4px;
+      margin-top: 8px;
     }
     .log-entry { padding: 1px 0; opacity: 0.8; }
-    button {
-      padding: 6px 12px;
-      border-radius: 4px;
+    button, .btn {
+      padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;
       border: 1px solid var(--figma-color-border);
+      background: var(--figma-color-bg-secondary);
+      color: var(--figma-color-text);
+    }
+    .btn-primary {
       background: var(--figma-color-bg-brand);
       color: var(--figma-color-text-onbrand);
-      cursor: pointer;
-      margin-top: 8px;
-      font-size: 11px;
+      border-color: var(--figma-color-bg-brand); font-weight: 600;
     }
+    .btn-sm { padding: 3px 8px; font-size: 10px; }
+    .btn-row { display: flex; gap: 6px; margin-top: 6px; }
+    .mode-status {
+      padding: 4px 8px; border-radius: 4px; font-size: 10px; opacity: 0.7;
+      background: var(--figma-color-bg-secondary); margin-top: 6px;
+    }
+    .flyout-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.3); z-index: 10;
+    }
+    .flyout-overlay.open { display: flex; align-items: center; justify-content: center; }
+    .flyout {
+      background: var(--figma-color-bg); border: 1px solid var(--figma-color-border);
+      border-radius: 8px; padding: 16px; width: 300px; max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+    .flyout h3 { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+    .flyout .close-btn {
+      float: right; background: none; border: none; font-size: 16px;
+      cursor: pointer; color: var(--figma-color-text); opacity: 0.6; padding: 0;
+    }
+    .flyout .close-btn:hover { opacity: 1; }
+    .copy-cmd {
+      font-family: monospace; font-size: 10px; padding: 8px;
+      background: var(--figma-color-bg-tertiary); border-radius: 4px;
+      margin: 8px 0; word-break: break-all; cursor: pointer;
+      border: 1px dashed var(--figma-color-border); line-height: 1.5;
+    }
+    .copy-cmd:hover { opacity: 0.8; }
+    .copy-cmd:active { opacity: 0.6; }
+    .project-tab { border-radius: 4px 4px 0 0; border-bottom: 2px solid transparent; }
+    .project-tab.active { border-bottom-color: var(--figma-color-bg-brand); font-weight: 600; }
+    .hidden { display: none; }
+    .hint { font-size: 10px; opacity: 0.6; margin-top: 4px; }
   </style>
 </head>
 <body>
-  <div class="status" id="status">Connecting to bridge...</div>
+
+  <!-- Connection Status -->
+  <div class="status-row">
+    <div class="status" id="status">Connecting...</div>
+    <button class="btn btn-sm" id="bridge-btn" onclick="openSetup()">⚙ Setup</button>
+  </div>
+
+  <!-- Frame Status -->
   <div class="status" id="frame-status">No frame selected</div>
-  <div style="display: flex; gap: 8px; margin-top: 8px;">
-    <button id="generate-btn" onclick="generate()" style="flex: 1; background: var(--figma-color-bg-brand); color: var(--figma-color-text-onbrand); font-weight: 600;">
-      ▶ Generate as Reactor
-    </button>
-    <button id="sync-btn" onclick="requestSync()" style="flex: 0;">↻ Sync</button>
+
+  <!-- Actions -->
+  <div class="btn-row">
+    <button class="btn btn-primary" style="flex: 1;" id="generate-btn" onclick="generate()">▶ Generate as Reactor</button>
+    <button class="btn btn-sm" onclick="launchWatch()">⟳ Watch</button>
+    <button class="btn btn-sm" onclick="requestSync()">↻ Sync</button>
   </div>
-  <div class="status" id="mode-status" style="margin-top: 8px; font-size: 10px; opacity: 0.7;">
-    Mode: Waiting for generation
-  </div>
+
+  <div class="mode-status" id="mode-status">Waiting for generation</div>
   <div class="log" id="log"></div>
+
+  <!-- Setup Flyout -->
+  <div class="flyout-overlay" id="setup-flyout" onclick="closeSetupIfOverlay(event)">
+    <div class="flyout">
+      <button class="close-btn" onclick="closeSetup()">✕</button>
+      <h3>Bridge Setup</h3>
+
+      <div class="section-label">1. Output Project</div>
+      <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+        <button class="btn btn-sm project-tab active" id="tab-new" onclick="selectTab('new')">+ New Project</button>
+        <button class="btn btn-sm project-tab" id="tab-existing" onclick="selectTab('existing')">Existing Project…</button>
+      </div>
+      <div id="panel-new">
+        <div class="config-row">
+          <input type="text" id="new-project-name" placeholder="Project name" value="FigmaApp" oninput="updateStartCmd()" />
+        </div>
+        <div class="hint">A new Reactor app will be created under samples/apps/ when you generate.</div>
+      </div>
+      <div id="panel-existing" class="hidden">
+        <div class="config-row">
+          <input type="text" id="output-path" placeholder="Paste .csproj path here" oninput="updateStartCmd()" />
+        </div>
+        <div class="hint">Paste the full path to your .csproj file (e.g. C:\repos\...\MyApp.csproj)</div>
+      </div>
+
+      <div class="section-label" style="margin-top: 12px;">2. Start Bridge & App</div>
+      <div class="hint">Copy & paste into a terminal — starts bridge + app:</div>
+      <div class="copy-cmd" id="start-cmd" onclick="copyStartCmd()" title="Click to copy"></div>
+      <div class="hint" id="copy-hint">Click to copy to clipboard</div>
+    </div>
+  </div>
 
   <script>
     const BRIDGE_URL = "ws://localhost:9228/figma";
+    const BRIDGE_ROOT = "C:\\repos\\microsoft-ui-reactor\\tools\\FigmaBridge";
     let ws = null;
     let reconnectTimer = null;
 
+    // ── Logging ──
     function log(msg) {
       const el = document.getElementById("log");
       const entry = document.createElement("div");
       entry.className = "log-entry";
-      entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      entry.textContent = "[" + new Date().toLocaleTimeString() + "] " + msg;
       el.appendChild(entry);
       el.scrollTop = el.scrollHeight;
-      // Keep last 50 entries
       while (el.children.length > 50) el.removeChild(el.firstChild);
     }
 
+    // ── Connection ──
     function setStatus(connected) {
       const el = document.getElementById("status");
-      el.textContent = connected ? "Connected to bridge" : "Disconnected";
-      el.className = `status ${connected ? "connected" : "disconnected"}`;
+      el.textContent = connected ? "✓ Connected to bridge" : "✗ Disconnected";
+      el.className = "status " + (connected ? "connected" : "disconnected");
+      document.getElementById("bridge-btn").textContent = connected ? "⚙ Setup" : "⚙ Setup";
     }
 
     function connect() {
       if (ws && ws.readyState <= WebSocket.OPEN) return;
-
       try {
         ws = new WebSocket(BRIDGE_URL);
-
         ws.onopen = () => {
           setStatus(true);
-          log("WebSocket connected");
-          if (reconnectTimer) {
-            clearInterval(reconnectTimer);
-            reconnectTimer = null;
-          }
-          // Request initial sync from plugin main thread
+          log("Connected to bridge");
+          if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; }
           parent.postMessage({ pluginMessage: { type: "request-sync" } }, "*");
+          const savedPath = document.getElementById("output-path").value;
+          if (savedPath) sendToBridge({ type: "set-output", path: savedPath });
         };
-
-        ws.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          
-          if (data.type === "connected") {
-            log("Bridge connected");
-          } else if (data.type === "status") {
-            log("⏳ " + data.message);
-            document.getElementById("mode-status").textContent = "Mode: " + data.message;
-          } else if (data.type === "generated") {
-            log("✓ Code generated! " + data.chars + " chars → " + data.file);
-            document.getElementById("mode-status").textContent = "Mode: Live patching (code generated)";
-          } else if (data.type === "generating") {
-            log("▶ " + data.message);
-            document.getElementById("mode-status").textContent = "Mode: Copilot CLI generating...";
-          } else if (data.type === "patched") {
-            log("✓ Live patch: " + data.count + " changes applied");
-            document.getElementById("mode-status").textContent = "Mode: Live patching";
-          } else if (data.type === "ack") {
-            log("✓ Design data synced");
-          } else if (data.type === "error") {
-            log("✗ Error: " + data.message);
-            document.getElementById("mode-status").textContent = "Mode: Error — see log";
-          } else {
-            log("Bridge: " + JSON.stringify(data).substring(0, 100));
-          }
-        };
-
-        ws.onclose = () => {
-          setStatus(false);
-          log("WebSocket closed, reconnecting...");
-          scheduleReconnect();
-        };
-
-        ws.onerror = () => {
-          setStatus(false);
-        };
+        ws.onmessage = (event) => handleBridgeMessage(JSON.parse(event.data));
+        ws.onclose = () => { setStatus(false); scheduleReconnect(); };
+        ws.onerror = () => { setStatus(false); };
       } catch (e) {
-        setStatus(false);
-        log(`Connection error: ${e}`);
-        scheduleReconnect();
+        setStatus(false); scheduleReconnect();
       }
     }
 
     function scheduleReconnect() {
-      if (!reconnectTimer) {
-        reconnectTimer = setInterval(connect, 3000);
+      if (!reconnectTimer) reconnectTimer = setInterval(connect, 3000);
+    }
+
+    function sendToBridge(data) {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
+    }
+
+    // ── Bridge Messages ──
+    function handleBridgeMessage(data) {
+      if (data.type === "connected") {
+        log("Bridge ready");
+      } else if (data.type === "status") {
+        log("⏳ " + data.message);
+        document.getElementById("mode-status").textContent = data.message;
+      } else if (data.type === "generated") {
+        log("✓ Generated " + data.chars + " chars → " + data.file);
+        document.getElementById("mode-status").textContent = "✓ Generated — launching watch...";
+        sendToBridge({ type: "launch-watch" });
+      } else if (data.type === "generating") {
+        log("▶ " + data.message);
+        document.getElementById("mode-status").textContent = "Copilot generating...";
+      } else if (data.type === "patched") {
+        log("✓ " + data.count + " patches applied");
+        document.getElementById("mode-status").textContent = "Live patching";
+      } else if (data.type === "ack") {
+        log("✓ Synced");
+      } else if (data.type === "watch-launched") {
+        log("✓ dotnet watch running");
+        document.getElementById("mode-status").textContent = "✓ Live — app running";
+      } else if (data.type === "project-created") {
+        log("✓ Project: " + data.path);
+        document.getElementById("output-path").value = data.path;
+        updateStartCmd();
+        document.getElementById("mode-status").textContent = "Project created — ready to generate";
+      } else if (data.type === "output-set") {
+        log("✓ Output: " + data.path);
+        document.getElementById("output-path").value = data.path;
+        parent.postMessage({ pluginMessage: { type: "save-config", outputPath: data.path } }, "*");
+        updateStartCmd();
+      } else if (data.type === "error") {
+        log("✗ " + data.message);
+        document.getElementById("mode-status").textContent = "Error — see log";
+      } else {
+        log(JSON.stringify(data).substring(0, 80));
+      }
+    }
+
+    // ── Setup Flyout ──
+    function openSetup() {
+      updateStartCmd();
+      document.getElementById("setup-flyout").className = "flyout-overlay open";
+    }
+
+    function closeSetup() {
+      document.getElementById("setup-flyout").className = "flyout-overlay";
+    }
+
+    function closeSetupIfOverlay(e) {
+      if (e.target === document.getElementById("setup-flyout")) closeSetup();
+    }
+
+    function getOutputPath() {
+      var isNew = document.getElementById("tab-new").className.includes("active");
+      if (isNew) {
+        var name = (document.getElementById("new-project-name").value.trim() || "FigmaApp").toLowerCase();
+        return { dir: BRIDGE_ROOT.replace("\\tools\\FigmaBridge", "\\samples\\apps\\" + name), csproj: null, isNew: true };
+      }
+      var raw = document.getElementById("output-path").value.trim();
+      if (!raw) return { dir: "<paste-csproj-path>", csproj: null, isNew: false };
+      // If user pasted a .csproj path, extract directory and csproj name
+      if (raw.toLowerCase().endsWith(".csproj")) {
+        var parts = raw.replace(/\//g, "\\").split("\\");
+        var csproj = parts.pop();
+        return { dir: parts.join("\\"), csproj: raw, isNew: false };
+      }
+      return { dir: raw, csproj: null, isNew: false };
+    }
+
+    function updateStartCmd() {
+      var out = getOutputPath();
+      var bridgeCmd = "cd " + BRIDGE_ROOT + "; dotnet run -- --output " + out.dir;
+      if (!out.isNew && out.csproj) {
+        // Start-Process launches dotnet watch in a new window, then bridge runs here
+        var cmd = "Start-Process pwsh -ArgumentList '-NoExit','-Command','dotnet watch run --project " + out.csproj + "'; " + bridgeCmd;
+        document.getElementById("start-cmd").textContent = cmd;
+      } else {
+        document.getElementById("start-cmd").textContent = bridgeCmd;
+      }
+    }
+
+    function copyStartCmd() {
+      var text = document.getElementById("start-cmd").innerText;
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      document.getElementById("copy-hint").textContent = "✓ Copied!";
+      setTimeout(function() { document.getElementById("copy-hint").textContent = "Click to copy to clipboard"; }, 2000);
+    }
+
+    // ── Actions ──
+    function selectTab(tab) {
+      document.getElementById("tab-new").className = "btn btn-sm project-tab" + (tab === "new" ? " active" : "");
+      document.getElementById("tab-existing").className = "btn btn-sm project-tab" + (tab === "existing" ? " active" : "");
+      document.getElementById("panel-new").className = tab === "new" ? "" : "hidden";
+      document.getElementById("panel-existing").className = tab === "existing" ? "" : "hidden";
+      updateStartCmd();
+    }
+
+    function createProject() {
+      var name = document.getElementById("new-project-name").value.trim();
+      if (!name) { name = "FigmaApp"; }
+      sendToBridge({ type: "create-project", name: name });
+    }
+
+    function launchWatch() {
+      sendToBridge({ type: "launch-watch" });
+      log("Launching dotnet watch...");
+    }
+
+    function generate() {
+      var out = getOutputPath();
+      var isNew = out.isNew;
+      if (isNew) {
+        var name = document.getElementById("new-project-name").value.trim() || "FigmaApp";
+        sendToBridge({ type: "create-project", name: name });
+        document.getElementById("mode-status").textContent = "Creating project...";
+        log("Creating project: " + name);
+        setTimeout(function() {
+          parent.postMessage({ pluginMessage: { type: "generate" } }, "*");
+          document.getElementById("mode-status").textContent = "Generating...";
+          log("Triggered generation");
+        }, 1500);
+      } else {
+        // For existing project, send the output path to bridge first
+        if (out.dir && out.dir !== "<paste-csproj-path>") {
+          sendToBridge({ type: "set-output", path: out.dir });
+        }
+        parent.postMessage({ pluginMessage: { type: "generate" } }, "*");
+        document.getElementById("mode-status").textContent = "Generating...";
+        log("Triggered generation");
       }
     }
 
@@ -146,41 +336,33 @@
       parent.postMessage({ pluginMessage: { type: "request-sync" } }, "*");
     }
 
-    function generate() {
-      parent.postMessage({ pluginMessage: { type: "generate" } }, "*");
-      document.getElementById("mode-status").textContent = "Mode: Generating via LLM...";
-      log("Triggered initial generation");
-    }
-
-    // Receive messages from plugin main thread
+    // ── Plugin Messages ──
     window.onmessage = (event) => {
       const msg = event.data?.pluginMessage;
       if (!msg) return;
-
       if (msg.type === "sync") {
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify(msg.payload));
-          const mode = msg.payload.type;
-          if (mode === "generate") {
-            log("Sent: full design tree to bridge");
-            log("→ Now ask Copilot: 'Call figma_summary and translate to Reactor code'");
-            document.getElementById("mode-status").textContent = "Mode: Awaiting Copilot agent...";
-          } else if (mode === "incremental") {
-            const count = msg.payload.patches ? msg.payload.patches.length : 0;
-            log("Sent: patch (" + count + " changes)");
-            document.getElementById("mode-status").textContent = "Mode: Live patching";
+          if (msg.payload.type === "generate") {
+            log("Design tree sent → Copilot launching...");
+            document.getElementById("mode-status").textContent = "Copilot generating...";
+          } else if (msg.payload.type === "incremental") {
+            log(msg.payload.patches ? msg.payload.patches.length + " patches" : "patch");
           } else {
-            log("Sent: full-sync (" + msg.payload.frameName + ")");
+            log("Synced: " + msg.payload.frameName);
           }
         } else {
-          log("Not connected — queued");
+          log("Not connected — open Setup to start bridge");
         }
       } else if (msg.type === "status") {
         document.getElementById("frame-status").textContent = msg.message;
+      } else if (msg.type === "config-loaded") {
+        if (msg.outputPath) { document.getElementById("output-path").value = msg.outputPath; updateStartCmd(); }
       }
     };
 
-    // Start connection
+    // ── Init ──
+    parent.postMessage({ pluginMessage: { type: "load-config" } }, "*");
     connect();
   </script>
 </body>
