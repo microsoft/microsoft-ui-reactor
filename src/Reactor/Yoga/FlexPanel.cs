@@ -325,39 +325,57 @@ public partial class FlexPanel : Panel
                 : YogaValue.Undefined;
         }
 
-        // Block axis: CSS-faithful semantics keyed off the panel's *declared*
-        // height (the FrameworkElement.Height property), not the parent's
-        // offer (availableSize.Height).
+        // Block axis: three modes, in priority order.
         //
-        // - Explicit Height(N): CSS `height: N` — definite container size.
-        //   Run Yoga in StretchFit mode by passing N as the availableHeight
-        //   to CalculateLayout (with MaxHeight cleared so the algorithm hits
-        //   the StretchFit fall-through). justify-content / align-items:
-        //   stretch / align-self all need a definite main-axis size to act
-        //   on, and Yoga only treats the axis as definite when the param
-        //   itself is finite and the style has no MaxHeight that overrides.
+        // 1. Explicit Height(N): CSS `height: N` — definite container size.
+        //    Pass N to Yoga; Yoga falls into StretchFit mode (justify-content
+        //    / align-items / align-self all need a definite main axis).
         //
-        // - No Height: CSS `height: auto` — content-sized, no constraint to
-        //   shrink against. Pass NaN: MaxContent mode, no shrink. If the
-        //   parent's offer is smaller than content, content overflows the
-        //   parent rather than redistributing inside the FlexPanel. Pushing
-        //   availableSize.Height into Yoga as a max here would re-introduce
-        //   the resize-jiggle from the original code: every sub-pixel
-        //   finalSize.Height shift would re-run shrink across siblings.
+        // 2. VerticalAlignment.Stretch with a definite parent offer: WinUI
+        //    Stretch + finite availableSize.Height means "fill my parent's
+        //    slot" (analogous to CSS `height: 100%` against a definite-height
+        //    parent). Pass availableSize.Height to Yoga as the container
+        //    size so flex-grow children have a definite pool to distribute.
+        //    This is the symmetric counterpart to inline-axis Stretch above
+        //    and is what makes the canonical web flex pattern —
+        //    header(auto) / body(flex:1) / footer(auto) filling a viewport —
+        //    work without a hard-coded `.Height(N)` on the column.
+        //
+        //    Wobble safety: when an outer FlexPanel runs Yoga in MaxContent
+        //    mode (no explicit height, parent offer infinite — case 3
+        //    below), Yoga's MeasureFunction calls children with
+        //    hMode=Undefined; the MeasureFunction wrapper translates that
+        //    into availableSize.Height = +∞ for the child. With +∞, the
+        //    child below sees `hasDefiniteHeight = false` and falls into
+        //    case 3 — content-sized — exactly as before. So nested
+        //    FlexPanels under an unconstrained outer behave identically to
+        //    the pre-fix code (no DesiredSize drift on horizontal resize).
+        //
+        // 3. Otherwise (no explicit Height, or parent offer is infinite, or
+        //    VerticalAlignment != Stretch): CSS `height: auto`. Pass NaN —
+        //    MaxContent mode, no shrink. Content overflows a smaller parent.
         bool hasExplicitHeight = !double.IsNaN(Height);
+        bool fillBlockAxis = !hasExplicitHeight
+            && VerticalAlignment == VerticalAlignment.Stretch
+            && hasDefiniteHeight;
         _rootNode.MaxHeight = YogaValue.Undefined;
+
+        float rootHeight = hasExplicitHeight
+            ? (float)Height
+            : fillBlockAxis ? (float)availableSize.Height
+            : float.NaN;
 
         _rootNode.CalculateLayout(
             rootWidth,
-            hasExplicitHeight ? (float)Height : float.NaN,
+            rootHeight,
             LayoutDirection);
 
-        // Clamp the reported height to availableSize.Height *only* when the
-        // panel has an explicit Height (CSS `height: N` — the box resolves to
-        // N, never more). Auto-height (CSS `height: auto`) reports the content
-        // size and is allowed to overflow the parent; a smaller parent offer
-        // is not a constraint on `auto`.
-        float reportedHeight = hasExplicitHeight
+        // Clamp the reported height when the panel has a definite own-height
+        // (explicit Height(N) or block-axis fill against a definite parent
+        // offer — both cases the box resolves to that size, never more).
+        // Auto-height reports the content size and overflows.
+        bool hasDefiniteOwnHeight = hasExplicitHeight || fillBlockAxis;
+        float reportedHeight = hasDefiniteOwnHeight
             ? Math.Min(_rootNode.LayoutHeight, (float)availableSize.Height)
             : _rootNode.LayoutHeight;
         _cachedDesiredSize = new Size(_rootNode.LayoutWidth, reportedHeight);
@@ -420,17 +438,38 @@ public partial class FlexPanel : Panel
             {
                 _rootNode.MaxWidth = YogaValue.Undefined;
                 _rootNode.MaxHeight = YogaValue.Undefined;
-                // Mirror MeasureOverride's height policy:
-                //  - explicit Height: pass finalSize.Height as definite so
-                //    Yoga falls into StretchFit (justify-content, align-items
-                //    stretch, align-self all need a definite container).
-                //  - no Height: pass NaN so Yoga is in MaxContent mode and
-                //    sub-pixel finalSize.Height jitter during a horizontal
-                //    drag doesn't trigger flex-shrink across children.
+                // Block-axis policy at arrange time:
+                //  - explicit Height: pass finalSize.Height (== Height) as
+                //    definite so Yoga falls into StretchFit.
+                //  - VerticalAlignment.Stretch (the user opted into "fill
+                //    my parent's slot" — symmetric to the inline axis, which
+                //    has always been treated as definite at finalSize.Width
+                //    a few lines above): pass finalSize.Height as definite
+                //    so Yoga distributes the slot across grow/shrink
+                //    children. This is what gives the canonical web flex
+                //    pattern — `header(auto) / body(flex:1) / footer(auto)`
+                //    filling a viewport — a definite main-axis pool to
+                //    distribute, without forcing a hardcoded `.Height(N)`.
+                //    Wobble protection: this is in Arrange, not Measure, so
+                //    DesiredSize is unaffected. The _arranging flag makes
+                //    the Yoga rerun's MeasureFunction return cached child
+                //    DesiredSize without re-measuring — sub-pixel jitter
+                //    only shifts Yoga's internal positions, not children's
+                //    own DesiredSize.
+                //  - VerticalAlignment != Stretch (caller asked for
+                //    fit-content vertically): pass NaN so Yoga stays in
+                //    MaxContent mode and a horizontal-drag's sub-pixel
+                //    finalSize.Height jitter doesn't drive flex-shrink.
                 bool hasExplicitHeight = !double.IsNaN(Height);
+                bool fillBlockAxisAtArrange = !hasExplicitHeight
+                    && VerticalAlignment == VerticalAlignment.Stretch
+                    && !double.IsInfinity(finalSize.Height);
+                float arrangeHeight = (hasExplicitHeight || fillBlockAxisAtArrange)
+                    ? (float)finalSize.Height
+                    : float.NaN;
                 _rootNode.CalculateLayout(
                     (float)finalSize.Width,
-                    hasExplicitHeight ? (float)finalSize.Height : float.NaN,
+                    arrangeHeight,
                     LayoutDirection);
 
                 // Update cached positions from the new layout
@@ -551,8 +590,26 @@ public partial class FlexPanel : Panel
 
                     // Yoga's constraints are content-area (excluding margin).
                     // Add margin so WinUI's subtraction yields the correct content area.
-                    var constraintW = wMode == YogaMeasureMode.Undefined ? double.PositiveInfinity : w + mH;
-                    var constraintH = hMode == YogaMeasureMode.Undefined ? double.PositiveInfinity : h + mV;
+                    //
+                    // Mode mapping for WinUI Measure (which only models AtMost
+                    // or Infinity — there is no "Exactly"):
+                    //  - Yoga Undefined → infinite (give me your content size).
+                    //  - Yoga AtMost   → infinite. AtMost is a soft cap Yoga
+                    //    uses during the basis/MaxContent phase; treating it
+                    //    as a definite-fill target would make a nested
+                    //    FlexPanel with VerticalAlignment.Stretch report the
+                    //    cap as its DesiredSize, defeating the outer's
+                    //    flex-grow distribution. The cap is only an upper
+                    //    bound on content; the child must still report what
+                    //    it actually wants. Yoga clamps as needed.
+                    //  - Yoga Exactly  → finite (h). Exactly mode is the
+                    //    StretchFit pass — Yoga has already resolved the
+                    //    child's main-axis allocation and is asking the
+                    //    child to lay itself out at exactly that size.
+                    //    Passing finite here lets a nested FlexPanel honor
+                    //    its VerticalAlignment.Stretch correctly.
+                    var constraintW = wMode == YogaMeasureMode.Exactly ? w + mH : double.PositiveInfinity;
+                    var constraintH = hMode == YogaMeasureMode.Exactly ? h + mV : double.PositiveInfinity;
                     capturedChild.Measure(new Size(constraintW, constraintH));
                     panel._measuredThisPass.Add(capturedChild);
                     // Return content size (without margin) since Yoga tracks margins separately

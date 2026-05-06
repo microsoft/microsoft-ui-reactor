@@ -982,4 +982,84 @@ internal static class FlexLayoutFixtures
                 mutatedRedH > 10 && mutatedBlueH > 10);
         }
     }
+
+    // ----------------------------------------------------------------
+    // Header / body(flex:1) / footer fills parent's allocated slot
+    // without an explicit .Height(N) on the FlexColumn.
+    //
+    // Canonical web flex pattern:
+    //
+    //   <body style="height:100vh; display:flex; flex-direction:column">
+    //     <header>auto</header>
+    //     <main style="flex:1">grows</main>
+    //     <footer>auto</footer>
+    //   </body>
+    //
+    // The CSS-faithful semantics in MeasureOverride keep DesiredSize
+    // content-sized (no parent-height influence — preserves the resize
+    // wobble fix), and ArrangeOverride re-runs Yoga at finalSize.Height
+    // when the parent has stretched our slot beyond content. That gives
+    // grow:1 a definite main-axis pool to expand into without forcing the
+    // user to hand-set a height on the column.
+    // ----------------------------------------------------------------
+
+    internal class FlexColumnFillsParentSlot(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // FlexColumn with NO explicit .Height(N). Relies on the default
+            // VerticalAlignment.Stretch + a definite parent offer from the
+            // Reactor host's ContentControl to fill its slot. Body
+            // (ScrollView with flex:1, basis:0) should resolve to
+            // slot − header − footer.
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+                FlexColumn(
+                    TextBlock("Header").Height(50).Background("LightCoral")
+                        .AutomationId("HBF_Header"),
+                    ScrollView(
+                        VStack(0,
+                            TextBlock("Item 1").Height(80),
+                            TextBlock("Item 2").Height(80),
+                            TextBlock("Item 3").Height(80),
+                            TextBlock("Item 4").Height(80),
+                            TextBlock("Item 5").Height(80),
+                            TextBlock("Item 6").Height(80),
+                            TextBlock("Item 7").Height(80),
+                            TextBlock("Item 8").Height(80)))
+                        .Flex(grow: 1, basis: 0)
+                        .Background("LightGreen")
+                        .AutomationId("HBF_Body"),
+                    TextBlock("Footer").Height(60).Background("LightBlue")
+                        .AutomationId("HBF_Footer"))
+                    .AutomationId("HBF_Column"));
+
+            await Harness.Render();
+
+            H.Check("HBF_AllPresent",
+                H.FindText("Header") is not null &&
+                H.FindText("Footer") is not null);
+
+            var col = H.FindControl<FlexPanel>(p =>
+                p.Direction == FlexDirection.Column && p.Children.Count == 3);
+            var scrollViewer = H.FindControl<WinUI.ScrollViewer>(_ => true);
+            H.Check("HBF_ColumnExists", col is not null);
+            H.Check("HBF_ScrollViewerExists", scrollViewer is not null);
+
+            if (col is not null && scrollViewer is not null)
+            {
+                // Body should resolve to whatever's left of the column slot
+                // after taking out the 50px header and 60px footer.
+                double expectedBodyH = col.ActualHeight - 50 - 60;
+                H.Check("HBF_BodyFilledRemainder",
+                    expectedBodyH > 50 &&
+                    Near(scrollViewer.RenderSize.Height, expectedBodyH, 5));
+
+                // 8 × 80 = 640 of content inside a constrained slot ⇒
+                // scrollable rather than overflowing.
+                H.Check("HBF_BodyContentScrollable",
+                    scrollViewer.ScrollableHeight > 100);
+            }
+        }
+    }
 }
