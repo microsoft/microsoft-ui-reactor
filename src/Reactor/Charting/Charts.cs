@@ -531,19 +531,28 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     private Element BuildElement(IReadOnlyList<T> data)
     {
         var chartName = _title ?? "Plot area";
+
+        // Clamp width/height to a safe finite, non-negative range up front. Canvas
+        // rejects NaN/negative dimensions and ArcGenerator must never see negative
+        // or NaN radii — clamping once here also lets the degenerate-size check
+        // below rely on simple `<= 0` comparisons (NaN slips past those).
+        double w = double.IsFinite(_width) && _width > 0 ? _width : 0;
+        double h = double.IsFinite(_height) && _height > 0 ? _height : 0;
+
         if (data.Count == 0)
-            return AttachChartData(D3Canvas(_width, _height))
+            return AttachChartData(D3Canvas(w, h))
                 .AutomationName(chartName);
 
         var palette = _colorPalette ?? D3Color.Category10;
-        double cx = _width / 2, cy = _height / 2;
+        double cx = w / 2, cy = h / 2;
         double outerRadius = Math.Min(cx, cy) - 10;
+        double innerRadius = double.IsFinite(_innerRadius) && _innerRadius > 0 ? _innerRadius : 0;
 
         // Degenerate canvas (transient layout pass, very small container, or
         // caller passed bogus dimensions): emit an empty canvas rather than feeding
-        // negative/NaN radii into ArcGenerator and tripping Path.Data validation.
-        if (outerRadius <= 0 || _innerRadius >= outerRadius)
-            return AttachChartData(D3Canvas(_width, _height))
+        // non-positive radii into ArcGenerator and tripping Path.Data validation.
+        if (outerRadius <= 0 || innerRadius >= outerRadius)
+            return AttachChartData(D3Canvas(w, h))
                 .AutomationName(chartName);
 
         var whiteBrush = new SolidColorBrush(Microsoft.UI.Colors.White);
@@ -555,8 +564,8 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
 
         // Pass the same palette to D3Pie that RenderLabelViews resolved above, so
         // PieSliceLayout.Color (label-side) always matches the actual rendered slice.
-        var canvas = D3Canvas(_width, _height,
-            [.. D3Pie(data, ValueAccessor, cx, cy, outerRadius, _innerRadius, _padAngle,
+        var canvas = D3Canvas(w, h,
+            [.. D3Pie(data, ValueAccessor, cx, cy, outerRadius, innerRadius, _padAngle,
                     stroke: whiteBrush, palette: palette),
              .. labels]);
 

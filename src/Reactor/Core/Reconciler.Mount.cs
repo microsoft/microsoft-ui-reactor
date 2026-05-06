@@ -2524,6 +2524,28 @@ public sealed partial class Reconciler
                         + $"DataType={pa.Data.GetType().Name}; inner={ex.Message}.{xamlNote}", ex);
                 }
             }
+            else if (pa.PathDataString is { Length: > 0 } pdsFallback)
+            {
+                // XamlReader.Load failed (or returned non-Path) and no pre-built Geometry
+                // was supplied. Fall back to our own parser so a non-empty PathDataString
+                // never silently mounts as an empty Path. If parsing also fails, surface
+                // both errors together so the next regression has actionable context.
+                global::System.Exception? parserError = null;
+                try { p.Data = global::Microsoft.UI.Reactor.Charting.PathDataParser.Parse(pdsFallback); }
+                catch (global::System.Exception ex) { parserError = ex; }
+
+                if (parserError is not null)
+                {
+                    var xamlNote = xamlReaderError is not null
+                        ? $"XamlReader.Load failed: {xamlReaderError.GetType().Name}: {xamlReaderError.Message}. Attempted XAML: {attemptedXaml}. "
+                        : "XamlReader.Load returned non-Path. ";
+                    throw new global::System.ArgumentException(
+                        $"Could not mount PathElement from PathDataString='{pdsFallback}'. "
+                        + xamlNote
+                        + $"PathDataParser.Parse also failed: {parserError.GetType().Name}: {parserError.Message}.",
+                        parserError);
+                }
+            }
         }
 
         if (pa.Fill is not null) p.Fill = pa.Fill;
