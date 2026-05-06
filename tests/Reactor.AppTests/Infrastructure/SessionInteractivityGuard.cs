@@ -29,7 +29,18 @@ public static class SessionInteractivityGuard
 
         var hDesktop = OpenInputDesktop(0, false, DESKTOP_READOBJECTS);
         if (hDesktop == IntPtr.Zero)
-            return SessionInteractivity.Locked;
+        {
+            // Read GetLastError before any other call can clobber it.
+            // ERROR_ACCESS_DENIED is the documented signal that the calling
+            // thread can't access the active input desktop — what happens when
+            // Winlogon's secure desktop is up. Other failures (invalid handle,
+            // out of memory, transient) are genuinely Unknown — don't tag them
+            // Locked, or real test failures get masked as Inconclusive.
+            var err = Marshal.GetLastWin32Error();
+            return err == ERROR_ACCESS_DENIED
+                ? SessionInteractivity.Locked
+                : SessionInteractivity.Unknown;
+        }
 
         try
         {
@@ -67,7 +78,11 @@ public static class SessionInteractivityGuard
     public static void EnsureInteractive(string operation)
     {
         var state = GetState();
-        if (state == SessionInteractivity.Active)
+        // Unknown means the OS gave us an unexpected error from the desktop
+        // probe — don't fabricate a verdict. Let the test run; if WinAppDriver
+        // really can't drive input, the WebDriverException recheck will catch
+        // a definite Locked/Disconnected on the second look.
+        if (state == SessionInteractivity.Active || state == SessionInteractivity.Unknown)
             return;
 
         WriteMarker(state, operation);
@@ -87,7 +102,12 @@ public static class SessionInteractivityGuard
     public static void RecheckAfterWebDriverFailure(string operation)
     {
         var state = GetState();
-        if (state == SessionInteractivity.Active)
+        // Only reclassify when we have positive evidence the desktop is
+        // unreachable. Active and Unknown both fall through and the original
+        // WebDriverException is rethrown — masking a real failure as
+        // Inconclusive on Unknown would lose signal in the diagnostic loop
+        // we built this for.
+        if (state == SessionInteractivity.Active || state == SessionInteractivity.Unknown)
             return; // Real test failure — caller should rethrow.
 
         WriteMarker(state, operation);
@@ -105,15 +125,24 @@ public static class SessionInteractivityGuard
             if (string.IsNullOrEmpty(path))
                 path = Path.Combine(Path.GetTempPath(), "reactor_e2e_session_locked.flag");
 
-            // First-writer wins so we capture the originating operation.
-            if (!File.Exists(path))
-            {
-                File.WriteAllText(path,
-                    $"timestamp={DateTimeOffset.Now:O}\n" +
-                    $"state={state}\n" +
-                    $"operation={operation}\n" +
-                    $"pid={Environment.ProcessId}\n");
-            }
+            // FileMode.CreateNew is atomic — first writer wins under parallel
+            // contention, and a stale marker from a previous loop won't get
+            // silently overwritten with a misleading new timestamp. The runner
+            // is responsible for clearing the path between iterations (it
+            // points at a fresh per-run directory each time).
+            var bytes = System.Text.Encoding.UTF8.GetBytes(
+                $"timestamp={DateTimeOffset.Now:O}\n" +
+                $"state={state}\n" +
+                $"operation={operation}\n" +
+                $"pid={Environment.ProcessId}\n");
+            using var fs = new FileStream(
+                path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+            fs.Write(bytes, 0, bytes.Length);
+        }
+        catch (IOException)
+        {
+            // Marker already exists — first writer won. Their state/operation
+            // is what we want to preserve, so don't overwrite.
         }
         catch
         {
@@ -125,6 +154,7 @@ public static class SessionInteractivityGuard
 
     private const uint DESKTOP_READOBJECTS = 0x0001;
     private const int UOI_NAME = 2;
+    private const int ERROR_ACCESS_DENIED = 5;
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr OpenInputDesktop(uint dwFlags, bool fInherit, uint dwDesiredAccess);

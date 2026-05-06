@@ -61,11 +61,13 @@ public class TestSession
         });
         Console.WriteLine($"Host app launched (PID {_appProcess?.Id}).");
 
-        // Poll for the app window instead of a fixed sleep
-        WaitForHostWindow();
-
         try
         {
+            // Poll for the app window instead of a fixed sleep. WaitForHostWindow
+            // throws TimeoutException after swallowing per-poll WebDriverExceptions —
+            // a mid-init screen lock surfaces here, not as a WebDriverException.
+            WaitForHostWindow();
+
             // Step 2: Create a Desktop session and find the app window
             var desktopOptions = new AppiumOptions();
             desktopOptions.AddAdditionalCapability("app", "Root");
@@ -89,8 +91,11 @@ public class TestSession
 
             Console.WriteLine("WindowsDriver session attached to Host app.");
         }
-        catch (OpenQA.Selenium.WebDriverException)
+        catch (Exception ex) when (ex is OpenQA.Selenium.WebDriverException || ex is TimeoutException)
         {
+            // Catches both: WebDriverException from the session steps, and
+            // TimeoutException from WaitForHostWindow. Either could mask a
+            // workstation lock that happened after the AssemblyInit preflight.
             SessionInteractivityGuard.RecheckAfterWebDriverFailure("TestSession session bootstrap");
             throw;
         }

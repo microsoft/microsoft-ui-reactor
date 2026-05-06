@@ -64,9 +64,6 @@ public class AppTestBase
                     Thread.Sleep(250);
                 }
             }
-            // Final attempt: longer timeout, no further retry.
-            WaitForText("FixtureStatus", expected, timeoutMs: 5000);
-            _currentFixture = name;
         }
         catch (WebDriverException)
         {
