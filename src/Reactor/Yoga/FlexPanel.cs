@@ -22,18 +22,59 @@ namespace Microsoft.UI.Reactor.Layout;
 public partial class FlexPanel : Panel
 {
     // ── Yoga node cache: one YogaNode per UIElement child ──
+    // Per-instance YogaConfig so PointScaleFactor can track the live
+    // XamlRoot.RasterizationScale; default 1.0 rounds to integer DIPs and
+    // disagrees with WinUI's physical-pixel layout rounding on non-100%
+    // scales, producing ±1 px wobble during resize.
+    private readonly YogaConfig _yogaConfig = new();
     private readonly Dictionary<UIElement, YogaNode> _nodeCache = new();
-    private readonly YogaNode _rootNode = new();
+    private readonly YogaNode _rootNode;
     private readonly HashSet<UIElement> _syncCurrentChildren = new();
     private readonly List<UIElement> _syncToRemove = new();
+    private XamlRoot? _subscribedXamlRoot;
 
     public FlexPanel()
     {
+        _rootNode = new YogaNode(_yogaConfig);
+        Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        var current = XamlRoot;
+        if (current is null || ReferenceEquals(current, _subscribedXamlRoot))
+            return;
+
+        if (_subscribedXamlRoot is not null)
+            _subscribedXamlRoot.Changed -= OnXamlRootChanged;
+        _subscribedXamlRoot = current;
+        _subscribedXamlRoot.Changed += OnXamlRootChanged;
+        SyncPointScaleFromXamlRoot();
+    }
+
+    private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
+    {
+        SyncPointScaleFromXamlRoot();
+    }
+
+    private void SyncPointScaleFromXamlRoot()
+    {
+        var scale = (float)(_subscribedXamlRoot?.RasterizationScale ?? 1.0);
+        if (scale <= 0) return;
+        if (Math.Abs(_yogaConfig.PointScaleFactor - scale) < 0.0001f) return;
+        _yogaConfig.PointScaleFactor = scale;
+        _rootNode.MarkDirtyAndPropagate();
+        InvalidateMeasure();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        if (_subscribedXamlRoot is not null)
+        {
+            _subscribedXamlRoot.Changed -= OnXamlRootChanged;
+            _subscribedXamlRoot = null;
+        }
         // Clear Yoga node cache when removed from the visual tree to avoid leaking references
         foreach (var node in _nodeCache.Values)
             _rootNode.RemoveChild(node);
@@ -241,8 +282,21 @@ public partial class FlexPanel : Panel
     private Size _cachedDesiredSize;
     private bool _arranging;
 
+    // Tracks which children already had child.Measure() called via Yoga's
+    // MeasureFunction during the current pass. Children measured by Yoga
+    // must NOT be measured a second time with Yoga's resolved (rounded)
+    // layout size: a finite-height re-measure makes the child re-run its
+    // own measure logic and DesiredSize can drift by a sub-pixel — visible
+    // as ±1 px height wobble during pure-width window resize. StackPanel
+    // measures each child exactly once (Measure(availWidth, INF)); we do
+    // the same for children Yoga already measured, and only call Measure
+    // ourselves for children Yoga skipped (e.g. fixed-size children where
+    // Yoga uses the explicit dimension and bypasses MeasureFunction).
+    private readonly HashSet<UIElement> _measuredThisPass = new();
+
     protected override Size MeasureOverride(Size availableSize)
     {
+        _measuredThisPass.Clear();
         SyncYogaTree();
         SetRootConstraints(availableSize);
 
@@ -271,15 +325,37 @@ public partial class FlexPanel : Panel
                 : YogaValue.Undefined;
         }
 
-        // Block axis is always content-sized, with availableSize as a cap so
-        // unbounded child lists can't exceed the scroll host's viewport.
-        _rootNode.MaxHeight = hasDefiniteHeight
-            ? YogaValue.Point((float)availableSize.Height)
-            : YogaValue.Undefined;
+        // Block axis: CSS-faithful semantics keyed off the panel's *declared*
+        // height (the FrameworkElement.Height property), not the parent's
+        // offer (availableSize.Height).
+        //
+        // - Explicit Height(N): CSS `height: N` — definite container size.
+        //   Run Yoga in StretchFit mode by passing N as the availableHeight
+        //   to CalculateLayout (with MaxHeight cleared so the algorithm hits
+        //   the StretchFit fall-through). justify-content / align-items:
+        //   stretch / align-self all need a definite main-axis size to act
+        //   on, and Yoga only treats the axis as definite when the param
+        //   itself is finite and the style has no MaxHeight that overrides.
+        //
+        // - No Height: CSS `height: auto` — content-sized, no constraint to
+        //   shrink against. Pass NaN: MaxContent mode, no shrink. If the
+        //   parent's offer is smaller than content, content overflows the
+        //   parent rather than redistributing inside the FlexPanel. Pushing
+        //   availableSize.Height into Yoga as a max here would re-introduce
+        //   the resize-jiggle from the original code: every sub-pixel
+        //   finalSize.Height shift would re-run shrink across siblings.
+        bool hasExplicitHeight = !double.IsNaN(Height);
+        _rootNode.MaxHeight = YogaValue.Undefined;
 
-        _rootNode.CalculateLayout(rootWidth, float.NaN, LayoutDirection);
+        _rootNode.CalculateLayout(
+            rootWidth,
+            hasExplicitHeight ? (float)Height : float.NaN,
+            LayoutDirection);
 
-        _cachedDesiredSize = new Size(_rootNode.LayoutWidth, _rootNode.LayoutHeight);
+        float reportedHeight = hasDefiniteHeight
+            ? Math.Min(_rootNode.LayoutHeight, (float)availableSize.Height)
+            : _rootNode.LayoutHeight;
+        _cachedDesiredSize = new Size(_rootNode.LayoutWidth, reportedHeight);
 
         // Cache child positions and measure children at Yoga's resolved sizes.
         // This fulfills the WinUI contract that all children must be Measured
@@ -298,12 +374,19 @@ public partial class FlexPanel : Panel
                     Height = childNode.LayoutHeight
                 };
                 _cachedChildLayouts.Add(layout);
-                // Add margin back: Yoga's layout sizes are content-area,
-                // but WinUI's Measure subtracts the child's Margin.
-                var m = child is FrameworkElement cfe ? cfe.Margin : default;
-                child.Measure(new Size(
-                    layout.Width + m.Left + m.Right,
-                    layout.Height + m.Top + m.Bottom));
+                // Only measure here for children Yoga didn't already measure
+                // (fixed-dimension children where Yoga uses the explicit value
+                // and bypasses MeasureFunction). Re-measuring a child that
+                // Yoga already measured — with the now-finite height —
+                // perturbs the child's own DesiredSize through internal
+                // sub-pixel rounding and is the cause of the resize wobble.
+                if (!_measuredThisPass.Contains(child))
+                {
+                    var m = child is FrameworkElement cfe ? cfe.Margin : default;
+                    child.Measure(new Size(
+                        layout.Width + m.Left + m.Right,
+                        layout.Height + m.Top + m.Bottom));
+                }
             }
             else
             {
@@ -332,9 +415,17 @@ public partial class FlexPanel : Panel
             {
                 _rootNode.MaxWidth = YogaValue.Undefined;
                 _rootNode.MaxHeight = YogaValue.Undefined;
+                // Mirror MeasureOverride's height policy:
+                //  - explicit Height: pass finalSize.Height as definite so
+                //    Yoga falls into StretchFit (justify-content, align-items
+                //    stretch, align-self all need a definite container).
+                //  - no Height: pass NaN so Yoga is in MaxContent mode and
+                //    sub-pixel finalSize.Height jitter during a horizontal
+                //    drag doesn't trigger flex-shrink across children.
+                bool hasExplicitHeight = !double.IsNaN(Height);
                 _rootNode.CalculateLayout(
                     (float)finalSize.Width,
-                    (float)finalSize.Height,
+                    hasExplicitHeight ? (float)finalSize.Height : float.NaN,
                     LayoutDirection);
 
                 // Update cached positions from the new layout
@@ -426,7 +517,7 @@ public partial class FlexPanel : Panel
             var child = Children[i];
             if (!_nodeCache.TryGetValue(child, out var childNode))
             {
-                childNode = new YogaNode();
+                childNode = new YogaNode(_yogaConfig);
                 _nodeCache[child] = childNode;
 
                 // Set measure function: delegates to WinUI Measure.
@@ -458,6 +549,7 @@ public partial class FlexPanel : Panel
                     var constraintW = wMode == YogaMeasureMode.Undefined ? double.PositiveInfinity : w + mH;
                     var constraintH = hMode == YogaMeasureMode.Undefined ? double.PositiveInfinity : h + mV;
                     capturedChild.Measure(new Size(constraintW, constraintH));
+                    panel._measuredThisPass.Add(capturedChild);
                     // Return content size (without margin) since Yoga tracks margins separately
                     return new YogaSize(
                         Math.Max(0, (float)(capturedChild.DesiredSize.Width - mH)),
