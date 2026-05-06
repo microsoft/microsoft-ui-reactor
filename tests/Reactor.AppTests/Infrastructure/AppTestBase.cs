@@ -18,8 +18,14 @@ public class AppTestBase
     /// </summary>
     protected static WindowsDriver<WindowsElement> Session => TestSession.Session;
 
-    // No TestInitialize/TestCleanup — NavigateToFixture handles fixture switching.
-    // Resetting between every test wastes ~5s on the implicit wait timeout.
+    // Per-test interactivity preflight — bails out as Inconclusive (not Failed)
+    // when the workstation is locked or the session is disconnected, so flake
+    // reports don't drown in environmental noise.
+    [TestInitialize]
+    public void GuardSessionInteractive()
+    {
+        SessionInteractivityGuard.EnsureInteractive("TestInitialize");
+    }
 
     private static string? _currentFixture;
 
@@ -40,25 +46,36 @@ public class AppTestBase
         // navigator's hit-test rebuild), the wait times out — retry the click
         // once before giving up. This keeps fast paths fast (no extra waits in
         // the common case) but absorbs the occasional missed click.
-        for (int attempt = 0; attempt < 2; attempt++)
+        try
         {
-            Session.FindElement(MobileBy.AccessibilityId($"Nav_{name}")).Click();
-            try
+            for (int attempt = 0; attempt < 2; attempt++)
             {
-                WaitForText("FixtureStatus", expected, timeoutMs: 5000);
-                _currentFixture = name;
-                return;
+                Session.FindElement(MobileBy.AccessibilityId($"Nav_{name}")).Click();
+                try
+                {
+                    WaitForText("FixtureStatus", expected, timeoutMs: 5000);
+                    _currentFixture = name;
+                    return;
+                }
+                catch (WebDriverTimeoutException) when (attempt == 0)
+                {
+                    // Brief pause before the retry so the next click doesn't land in
+                    // the same window that swallowed the first one.
+                    Thread.Sleep(250);
+                }
             }
-            catch (WebDriverTimeoutException) when (attempt == 0)
-            {
-                // Brief pause before the retry so the next click doesn't land in
-                // the same window that swallowed the first one.
-                Thread.Sleep(250);
-            }
+            // Final attempt: longer timeout, no further retry.
+            WaitForText("FixtureStatus", expected, timeoutMs: 5000);
+            _currentFixture = name;
         }
-        // Final attempt: longer timeout, no further retry.
-        WaitForText("FixtureStatus", expected, timeoutMs: 5000);
-        _currentFixture = name;
+        catch (WebDriverException)
+        {
+            // The screen may have locked between the preflight check and the click.
+            // Recheck — if locked, surface as Inconclusive; otherwise rethrow as a
+            // real test failure.
+            SessionInteractivityGuard.RecheckAfterWebDriverFailure($"NavigateToFixture({name})");
+            throw;
+        }
     }
 
     /// <summary>

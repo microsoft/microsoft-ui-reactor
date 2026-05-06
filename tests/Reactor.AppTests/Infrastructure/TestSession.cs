@@ -41,6 +41,11 @@ public class TestSession
             return;
         }
 
+        // Bail out cleanly if the desktop is already locked / disconnected.
+        // Without this, we'd spend minutes booting WinAppDriver + the host app,
+        // only to fail every test on the first Click() with a generic error.
+        SessionInteractivityGuard.EnsureInteractive("TestSession.AssemblyInit");
+
         // Kill any orphaned processes from a previous failed run
         KillOrphanedProcesses();
 
@@ -59,28 +64,36 @@ public class TestSession
         // Poll for the app window instead of a fixed sleep
         WaitForHostWindow();
 
-        // Step 2: Create a Desktop session and find the app window
-        var desktopOptions = new AppiumOptions();
-        desktopOptions.AddAdditionalCapability("app", "Root");
-        desktopOptions.AddAdditionalCapability("deviceName", "WindowsPC");
+        try
+        {
+            // Step 2: Create a Desktop session and find the app window
+            var desktopOptions = new AppiumOptions();
+            desktopOptions.AddAdditionalCapability("app", "Root");
+            desktopOptions.AddAdditionalCapability("deviceName", "WindowsPC");
 
-        using var desktopSession = new WindowsDriver<WindowsElement>(
-            new Uri(WinAppDriverUrl), desktopOptions);
+            using var desktopSession = new WindowsDriver<WindowsElement>(
+                new Uri(WinAppDriverUrl), desktopOptions);
 
-        // Find the Host app window by title
-        var appWindow = desktopSession.FindElementByName("Reactor Test Host");
-        var appWindowHandle = appWindow.GetAttribute("NativeWindowHandle");
-        var hwnd = int.Parse(appWindowHandle).ToString("x"); // hex for WinAppDriver
+            // Find the Host app window by title
+            var appWindow = desktopSession.FindElementByName("Reactor Test Host");
+            var appWindowHandle = appWindow.GetAttribute("NativeWindowHandle");
+            var hwnd = int.Parse(appWindowHandle).ToString("x"); // hex for WinAppDriver
 
-        // Step 3: Create a session attached to the app window
-        var appOptions = new AppiumOptions();
-        appOptions.AddAdditionalCapability("appTopLevelWindow", $"0x{hwnd}");
-        appOptions.AddAdditionalCapability("deviceName", "WindowsPC");
+            // Step 3: Create a session attached to the app window
+            var appOptions = new AppiumOptions();
+            appOptions.AddAdditionalCapability("appTopLevelWindow", $"0x{hwnd}");
+            appOptions.AddAdditionalCapability("deviceName", "WindowsPC");
 
-        _session = new WindowsDriver<WindowsElement>(new Uri(WinAppDriverUrl), appOptions);
-        _session.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(2);
+            _session = new WindowsDriver<WindowsElement>(new Uri(WinAppDriverUrl), appOptions);
+            _session.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(2);
 
-        Console.WriteLine("WindowsDriver session attached to Host app.");
+            Console.WriteLine("WindowsDriver session attached to Host app.");
+        }
+        catch (OpenQA.Selenium.WebDriverException)
+        {
+            SessionInteractivityGuard.RecheckAfterWebDriverFailure("TestSession session bootstrap");
+            throw;
+        }
     }
 
     /// <summary>
