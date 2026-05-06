@@ -9,6 +9,7 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DisableEmbeddedXbf>false</DisableEmbeddedXbf>
     <!-- Override Directory.Build.props (true) — this library should not bundle
          the WinUI runtime; the consuming executable controls self-containedness. -->
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
