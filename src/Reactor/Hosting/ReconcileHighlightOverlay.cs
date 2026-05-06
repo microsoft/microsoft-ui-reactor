@@ -18,7 +18,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 internal sealed class ReconcileHighlightOverlay : IDisposable
 {
     private const float MountedOpacity = 0.22f;
-    private const float ModifiedOpacity = 0.17f;
+    private const float ModifiedOpacity = 0.22f;
     private const int FadeDurationMs = 600;
     private const float StripeWidth = 5f;
 
@@ -84,38 +84,39 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
         // (or from the catch path below) so long debugging sessions don't leak COM/resource
         // pressure one batch at a time.
         var batch = _compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
-        var container = _container;
         bool disposeInCompleted = false;
+        var thisFlushSprites = new List<SpriteVisual>(Math.Min(mounted.Count + modified.Count, MaxSpritesPerFlush));
 
         try
         {
             for (int i = 0; i < mounted.Count && budget > 0; i++)
             {
-                if (TryAddHighlight(host, mounted[i], _mountedBrush, MountedOpacity, _fadeMountedAnim))
+                if (TryAddHighlight(host, mounted[i], _mountedBrush, MountedOpacity, _fadeMountedAnim, thisFlushSprites))
                     budget--;
             }
 
             for (int i = 0; i < modified.Count && budget > 0; i++)
             {
-                if (TryAddHighlight(host, modified[i], _modifiedBrush, ModifiedOpacity, _fadeModifiedAnim))
+                if (TryAddHighlight(host, modified[i], _modifiedBrush, ModifiedOpacity, _fadeModifiedAnim, thisFlushSprites))
                     budget--;
             }
 
-            // When all animations in this batch complete, bulk-remove the sprites.
+            // When the batch's animations complete, remove exactly the sprites
+            // we added in this flush. We can't use sprite.Opacity to decide —
+            // CompositionAnimation drives the rendered value but does not write
+            // back to the static property, so the getter still reads the last
+            // value we assigned (0.17 / 0.22) even after the fade completes.
+            // Tracking the per-flush list directly avoids that pitfall and
+            // prevents sprites from leaking permanently into the container.
+            var container = _container;
             batch.Completed += (_, _) =>
             {
                 try
                 {
-                    // Remove sprites that have fully faded (opacity ≈ 0).
-                    // Walk in reverse to safely remove while iterating.
-                    for (int i = container.Children.Count - 1; i >= 0; i--)
+                    foreach (var sprite in thisFlushSprites)
                     {
-                        var child = container.Children.ElementAt(i);
-                        if (child.Opacity <= 0.001f)
-                        {
-                            container.Children.Remove(child);
-                            child.Dispose();
-                        }
+                        try { container.Children.Remove(sprite); } catch { }
+                        try { sprite.Dispose(); } catch { }
                     }
                 }
                 finally
@@ -135,7 +136,7 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
     }
 
     private bool TryAddHighlight(UIElement host, UIElement target, CompositionBrush brush,
-        float opacity, ScalarKeyFrameAnimation fadeAnim)
+        float opacity, ScalarKeyFrameAnimation fadeAnim, List<SpriteVisual> flushSprites)
     {
         if (target is not FrameworkElement fe) return false;
         if (fe.ActualWidth <= 0 || fe.ActualHeight <= 0) return false;
@@ -152,6 +153,7 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
             sprite.Brush = brush;
 
             _container.Children.InsertAtTop(sprite);
+            flushSprites.Add(sprite);
             sprite.StartAnimation("Opacity", fadeAnim);
             return true;
         }

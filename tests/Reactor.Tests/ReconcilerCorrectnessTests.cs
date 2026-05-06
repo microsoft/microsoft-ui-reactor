@@ -479,6 +479,69 @@ public class ReconcilerCorrectnessTests
     // require a XAML dispatcher and can't run in headless unit tests.
 
     // ════════════════════════════════════════════════════════════════
+    //  ModifiersEqual — accessibility sub-record value equality
+    //
+    //  The fluent .AccessibilityView / .LiveRegion / .ItemStatus helpers
+    //  allocate a fresh AccessibilityModifiers on every render. Without
+    //  value-equality on this slot, every chart element with one of those
+    //  modifiers (axis ticks, slice labels, the chart canvas itself) would
+    //  fail the Update fast-path AND get falsely flagged by the reconcile-
+    //  highlight overlay every render — making the visualizer look like the
+    //  whole chart recomputes when only one descendant property changed.
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ShallowEquals_AccessibilityView_Same_Value_Different_Reference()
+    {
+        var a = new TextBlockElement("hi").AccessibilityView(
+            Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+        var b = new TextBlockElement("hi").AccessibilityView(
+            Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+
+        // Sanity: the AccessibilityModifiers slot was allocated fresh — not ref-equal.
+        Assert.False(ReferenceEquals(a.Modifiers!.Accessibility, b.Modifiers!.Accessibility));
+
+        Assert.True(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_LiveRegion_Same_Value_Different_Reference()
+    {
+        var a = new TextBlockElement("hi").LiveRegion(
+            Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+        var b = new TextBlockElement("hi").LiveRegion(
+            Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+        Assert.True(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_AccessibilityView_Different_Value_Returns_False()
+    {
+        var a = new TextBlockElement("hi").AccessibilityView(
+            Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+        var b = new TextBlockElement("hi").AccessibilityView(
+            Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Content);
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_AccessibilityView_Vs_None_Returns_False()
+    {
+        var a = new TextBlockElement("hi").AccessibilityView(
+            Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+        var b = new TextBlockElement("hi");
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_ItemStatus_Same_Value_Different_Reference()
+    {
+        var a = new TextBlockElement("hi").ItemStatus("3 unread");
+        var b = new TextBlockElement("hi").ItemStatus("3 unread");
+        Assert.True(Element.ShallowEquals(a, b));
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //  ChildReconciler.ComputeLIS — stress test for correctness
     // ════════════════════════════════════════════════════════════════
 

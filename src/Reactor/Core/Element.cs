@@ -765,8 +765,22 @@ public abstract record Element
             && a.IsTabStop == b.IsTabStop
             && a.TabIndex == b.TabIndex
             && a.AccessKey == b.AccessKey
-            // Accessibility Tier 2/3 — short-circuit on null
-            && ReferenceEquals(a.Accessibility, b.Accessibility);
+            // Accessibility Tier 2/3. AccessibilityModifiers is a record of
+            // scalar/string fields, but every fluent helper (.AccessibilityView,
+            // .LiveRegion, .ItemStatus, …) allocates a fresh instance per render
+            // — so reference equality always fails for elements that set any
+            // accessibility modifier, even when the values are unchanged.
+            // Falsely missing this match cascades into the reconcile-highlight
+            // overlay, which paints those elements as "modified" every render.
+            // Use record value-equality instead.
+            && AccessibilityEqual(a.Accessibility, b.Accessibility);
+    }
+
+    private static bool AccessibilityEqual(AccessibilityModifiers? a, AccessibilityModifiers? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+        return a.Equals(b);
     }
 
     /// <summary>
