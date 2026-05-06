@@ -11,8 +11,10 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <summary>
 /// Lifecycle / dedup / no-animation regression coverage for
 /// <see cref="ReconcileHighlightOverlay"/>. These pin the architectural
-/// decisions made under issue #167 — see C:\temp\visualizer-bug\log.md
-/// for the full investigation history. The headline invariants are:
+/// decisions made under issue #167
+/// (https://github.com/microsoft/microsoft-ui-reactor/issues/167) —
+/// see that issue for the full investigation history. The headline
+/// invariants are:
 ///   - One sprite per distinct target while live (no stacking on rapid Shows)
 ///   - Refresh path resets the expiry timer instead of creating a duplicate
 ///   - No Composition animations are involved in the sprite lifecycle

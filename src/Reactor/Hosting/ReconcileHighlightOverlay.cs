@@ -1,10 +1,8 @@
 using System.Numerics;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Hosting;
 
 namespace Microsoft.UI.Reactor.Hosting;
 
@@ -28,7 +26,8 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// solid <c>CompositionColorBrush</c> at any opacity (1.0 or 0.33) clears
 /// the bug; the gradient brush at 0.33 reproduces it. This file uses solid
 /// color brushes only. Distinguishability stays via color (red vs yellow).
-/// See <c>C:\temp\visualizer-bug\log.md</c> for full repro investigation.
+/// See https://github.com/microsoft/microsoft-ui-reactor/issues/167 for
+/// the full repro investigation and bisect data.
 /// </remarks>
 internal sealed class ReconcileHighlightOverlay : IDisposable
 {
