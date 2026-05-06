@@ -309,6 +309,16 @@ public static class D3Charts
     }
 
     /// <summary>Creates pie/donut slice elements directly from data, collapsing PieGenerator + ArcGenerator + iteration into one expression.</summary>
+    /// <param name="data">Source data items, one per slice.</param>
+    /// <param name="value">Selector returning the magnitude for each item.</param>
+    /// <param name="cx">Center X coordinate (slices are translated into place).</param>
+    /// <param name="cy">Center Y coordinate.</param>
+    /// <param name="outerRadius">Outer radius of the pie/donut.</param>
+    /// <param name="innerRadius">Inner radius — non-zero produces a donut.</param>
+    /// <param name="padAngle">Angular padding between slices, in radians.</param>
+    /// <param name="sort">When true, slices are sorted by descending value.</param>
+    /// <param name="stroke">Optional stroke brush for slice borders.</param>
+    /// <param name="strokeWidth">Stroke thickness.</param>
     /// <param name="palette">
     /// Optional color palette. When null or empty, falls back to <see cref="Palette"/>
     /// (D3 Category10). Callers that want slice colors to match an external label
