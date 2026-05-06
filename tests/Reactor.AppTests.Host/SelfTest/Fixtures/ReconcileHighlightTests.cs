@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -244,6 +245,118 @@ internal static class ReconcileHighlightTests
             // No new elements should be created (Update path, not Mount).
             H.Check("MenuFlyoutUpdate_NoNewCreations",
                 host.Reconciler.DebugUIElementsCreated == 0);
+        }
+    }
+
+    // ── Rapid-burst integration test for issue #167 dedup behavior ──
+    // Repeated clicks on the same button used to stack a sprite per click on
+    // the same affected UIElements (one for the count TextBlock, one per
+    // surrounding element re-rendered, etc.). With per-target dedup, the
+    // distinct-target count stays bounded by the actual reconcile output
+    // rather than scaling with click cadence.
+    internal class RapidRepeatedClicks_NoSpriteAccumulation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var prev = ReactorFeatureFlags.HighlightReconcileChanges;
+            ReconcileHighlightOverlay.TestHoldDurationOverrideMs = 250;
+            try
+            {
+                ReactorFeatureFlags.HighlightReconcileChanges = true;
+
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (count, setCount) = ctx.UseState(0);
+                    return VStack(
+                        TextBlock($"count: {count}").AutomationId("rapidCount"),
+                        Button("inc", () => setCount(count + 1))
+                    );
+                });
+
+                await Harness.Render();
+
+                // 20 clicks back-to-back, settling between each. Each click
+                // marks (at minimum) the TextBlock as modified.
+                for (int i = 0; i < 20; i++)
+                {
+                    H.ClickButton("inc");
+                    await Harness.Render();
+                }
+
+                host.OverlayWiring?.DebugForceHighlightFlush();
+                var overlay = host.OverlayWiring?.HighlightOverlay;
+
+                H.Check("RapidClicks_OverlayConstructed", overlay is not null);
+
+                if (overlay is not null)
+                {
+                    // We don't pin an exact upper bound (depends on reconcile
+                    // shape) but it must be FAR below "20× distinct elements".
+                    // A typical run touches < 10 distinct UIElements.
+                    H.Check("RapidClicks_BoundedActiveTargets",
+                        overlay.ActiveTargetCount <= 25);
+                    H.Check("RapidClicks_LiveSpritesMatchActive",
+                        overlay.LiveSpriteCount == overlay.ActiveTargetCount);
+                }
+            }
+            finally
+            {
+                ReactorFeatureFlags.HighlightReconcileChanges = prev;
+                ReconcileHighlightOverlay.TestHoldDurationOverrideMs = null;
+            }
+        }
+    }
+
+    // ── After a click burst settles, all sprites must clear within HoldDuration ──
+    internal class RapidClicksThenWait_AllSpritesEventuallyClear(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var prev = ReactorFeatureFlags.HighlightReconcileChanges;
+            ReconcileHighlightOverlay.TestHoldDurationOverrideMs = 150;
+            try
+            {
+                ReactorFeatureFlags.HighlightReconcileChanges = true;
+
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (count, setCount) = ctx.UseState(0);
+                    return VStack(
+                        TextBlock($"n: {count}").AutomationId("clearCount"),
+                        Button("bump", () => setCount(count + 1))
+                    );
+                });
+
+                await Harness.Render();
+
+                for (int i = 0; i < 8; i++)
+                {
+                    H.ClickButton("bump");
+                    await Harness.Render();
+                }
+
+                host.OverlayWiring?.DebugForceHighlightFlush();
+                var overlay = host.OverlayWiring?.HighlightOverlay;
+                H.Check("RapidClearWait_OverlayConstructed", overlay is not null);
+
+                // Wait past hold duration plus generous slack for timer dispatch.
+                await Task.Delay(400);
+
+                if (overlay is not null)
+                {
+                    H.Check("RapidClearWait_AllSpritesGone",
+                        overlay.LiveSpriteCount == 0);
+                    H.Check("RapidClearWait_ActiveDictDrained",
+                        overlay.ActiveTargetCount == 0);
+                }
+            }
+            finally
+            {
+                ReactorFeatureFlags.HighlightReconcileChanges = prev;
+                ReconcileHighlightOverlay.TestHoldDurationOverrideMs = null;
+            }
         }
     }
 }

@@ -81,6 +81,22 @@ internal sealed class OverlayHostWiring : IDisposable
     public Grid? WrapperRoot => _wrapperRoot;
     public Canvas? OverlayCanvas => _overlayCanvas;
 
+    /// <summary>Test-only: live reconcile-highlight overlay (null if not yet created).</summary>
+    internal ReconcileHighlightOverlay? HighlightOverlay => _highlightOverlay;
+
+    /// <summary>
+    /// Test-only: bypass the highlight cooldown and dispatch a flush
+    /// synchronously. Returns false if no overlay context exists yet.
+    /// </summary>
+    internal bool DebugForceHighlightFlush()
+    {
+        if (_overlayCanvas is null) return false;
+        _highlightCooldown.Reset();
+        _highlightFlushPending = false;
+        FlushHighlight();
+        return true;
+    }
+
     /// <summary>
     /// Install <paramref name="newControl"/> into the shared wrapper Grid.
     /// The wrapper + Canvas are created on first call and reused forever

@@ -71,6 +71,9 @@ public sealed class ReactorHost : IDisposable
     // flips on.
     private OverlayHostWiring? _overlayWiring;
 
+    /// <summary>Test-only: access the live overlay-host wiring (null if not constructed).</summary>
+    internal OverlayHostWiring? OverlayWiring => _overlayWiring;
+
     // ── Layout cost overlay data pipeline (gated by ReactorFeatureFlags.ShowLayoutCost) ──
     // Owned by the host so the ETW session lifetime matches the host's lifetime.
     // Constructed lazily on first observed flag-on; never torn down except on Dispose
