@@ -140,38 +140,89 @@ async function sendFullSync() {
 function onNodeChange(event) {
     if (!watchedFrameId)
         return;
-    // Accept any PROPERTY_CHANGE as potentially relevant — the parent walk
-    // can fail on deeply nested instance sublayers. A full-sync is cheap
-    // compared to missing a real change.
-    const isRelevant = event.nodeChanges.some((change) => {
-        if (change.type === "PROPERTY_CHANGE" || change.type === "CREATE" || change.type === "DELETE") {
-            // Quick check: try to walk up to the watched frame
-            try {
-                let current = change.type === "DELETE" ? null : change.node;
-                while (current) {
-                    if (current.id === watchedFrameId)
-                        return true;
-                    current = current.parent;
+    // Collect incremental property changes for the fast codegen path
+    const patches = [];
+    for (const change of event.nodeChanges) {
+        if (change.type === "PROPERTY_CHANGE") {
+            const node = change.node;
+            for (const prop of change.properties) {
+                // Fast-path properties: text, spacing, sizing, radius
+                if (prop === "characters" && node.type === "TEXT") {
+                    patches.push({
+                        nodeId: node.id,
+                        nodeName: node.name,
+                        property: "characters",
+                        value: node.characters,
+                    });
+                }
+                else if (prop === "fontSize" && node.type === "TEXT") {
+                    const fontSize = node.fontSize;
+                    if (typeof fontSize === "number") {
+                        patches.push({ nodeId: node.id, nodeName: node.name, property: "fontSize", value: fontSize });
+                    }
+                }
+                else if (prop === "fontName" && node.type === "TEXT") {
+                    const fw = node.fontWeight;
+                    if (typeof fw === "number") {
+                        patches.push({ nodeId: node.id, nodeName: node.name, property: "fontWeight", value: fw });
+                    }
+                }
+                else if (prop === "itemSpacing" && "itemSpacing" in node) {
+                    patches.push({ nodeId: node.id, nodeName: node.name, property: "itemSpacing", value: node.itemSpacing });
+                }
+                else if (prop === "paddingTop" && "paddingTop" in node) {
+                    const f = node;
+                    patches.push({ nodeId: node.id, nodeName: node.name, property: "padding", value: [f.paddingLeft, f.paddingTop, f.paddingRight, f.paddingBottom] });
+                }
+                else if (prop === "paddingLeft" || prop === "paddingRight" || prop === "paddingBottom") {
+                    // Already handled by paddingTop batch above — skip duplicate
+                }
+                else if (prop === "width") {
+                    patches.push({ nodeId: node.id, nodeName: node.name, property: "width", value: node.width });
+                }
+                else if (prop === "height") {
+                    patches.push({ nodeId: node.id, nodeName: node.name, property: "height", value: node.height });
+                }
+                else if (prop === "cornerRadius" && "cornerRadius" in node) {
+                    const cr = node.cornerRadius;
+                    if (typeof cr === "number") {
+                        patches.push({ nodeId: node.id, nodeName: node.name, property: "cornerRadius", value: cr });
+                    }
+                }
+                else if (prop === "visible") {
+                    patches.push({ nodeId: node.id, nodeName: node.name, property: "visible", value: node.visible });
                 }
             }
-            catch (_) {
-                // Parent walk failed (removed node, etc.) — assume relevant
-            }
-            // If walk didn't find the frame, still accept it — could be a
-            // deeply nested instance sublayer where parent refs are broken
-            return true;
         }
-        return false;
-    });
-    if (!isRelevant)
-        return;
-    // Debounce: wait for rapid changes to settle
+        else if (change.type === "CREATE" || change.type === "DELETE") {
+            // Structural changes → need full re-sync (LLM path)
+            patches.length = 0; // clear patches — full sync needed
+            break;
+        }
+    }
+    // Debounce
     if (debounceTimer !== null) {
         clearTimeout(debounceTimer);
     }
     debounceTimer = setTimeout(() => {
         debounceTimer = null;
-        sendFullSync();
+        if (patches.length > 0) {
+            // Fast path: send incremental patches
+            figma.ui.postMessage({
+                type: "sync",
+                payload: {
+                    type: "incremental",
+                    frameId: watchedFrameId,
+                    frameName: "",
+                    timestamp: Date.now(),
+                    patches,
+                },
+            });
+        }
+        else {
+            // Slow path: full re-sync for structural changes
+            sendFullSync();
+        }
     }, DEBOUNCE_MS);
 }
 // ─── Plugin Lifecycle ────────────────────────────────────────────────────────
@@ -197,6 +248,33 @@ figma.currentPage.on("nodechange", onNodeChange);
 figma.ui.onmessage = (msg) => {
     if (msg.type === "request-sync") {
         sendFullSync();
+    }
+    else if (msg.type === "generate") {
+        // Phase 1: Generate — send full tree with "generate" flag
+        const frame = getWatchedFrame();
+        if (frame) {
+            watchedFrameId = frame.id;
+        }
+        if (watchedFrameId) {
+            (async () => {
+                const frame = await figma.getNodeByIdAsync(watchedFrameId);
+                if (!frame)
+                    return;
+                const tree = await extractNode(frame);
+                if (!tree)
+                    return;
+                figma.ui.postMessage({
+                    type: "sync",
+                    payload: {
+                        type: "generate",
+                        frameId: frame.id,
+                        frameName: frame.name,
+                        timestamp: Date.now(),
+                        tree,
+                    },
+                });
+            })();
+        }
     }
 };
 // Initial sync if a frame is already selected

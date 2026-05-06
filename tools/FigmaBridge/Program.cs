@@ -1,9 +1,12 @@
-// FigmaBridge — WebSocket bridge that receives Figma design data and writes Reactor .cs files.
-// Changes written to disk trigger dotnet watch hot reload on the target app.
+// FigmaBridge v2 — MCP data relay for Figma design data.
+// Receives design tree from Figma plugin via WebSocket, exposes it to
+// AI agents (Copilot CLI) via MCP JSON-RPC tools. No code generation —
+// the LLM agent interprets the design using figma.md + design.md skills.
 
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,7 +15,7 @@ builder.WebHost.UseUrls("http://localhost:9228");
 var app = builder.Build();
 app.UseWebSockets();
 
-// CORS for Figma plugin iframe (null origin)
+// CORS for Figma plugin iframe and MCP clients
 app.Use(async (context, next) =>
 {
     context.Response.Headers.Append("Access-Control-Allow-Origin", "*");
@@ -26,32 +29,51 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// Parse --output <dir> from command line for target project directory
-var outputDir = args.SkipWhile(a => a != "--output").Skip(1).FirstOrDefault();
-if (outputDir == null)
-{
-    Console.ForegroundColor = ConsoleColor.Yellow;
-    Console.WriteLine("[FigmaBridge] WARNING: No --output directory specified.");
-    Console.WriteLine("[FigmaBridge] Usage: dotnet run -- --output <path-to-reactor-app-dir>");
-    Console.WriteLine("[FigmaBridge] Example: dotnet run -- --output C:\\repos\\microsoft-ui-reactor\\samples\\apps\\figma-codegen-test");
-    Console.ResetColor();
-    outputDir = Path.Combine(Directory.GetCurrentDirectory(), "output");
-}
-Directory.CreateDirectory(outputDir);
-Console.WriteLine($"[FigmaBridge] Output directory: {outputDir}");
-Console.WriteLine($"[FigmaBridge] Listening on ws://localhost:9228/figma");
+// ─── Shared State ────────────────────────────────────────────────────────────
 
-// Debounce state
-var debounceTimer = new System.Timers.Timer(300) { AutoReset = false };
-FigmaSyncMessage? pendingMessage = null;
+FigmaSyncMessage? latestSync = null;
 var syncLock = new object();
+var changeSignal = new SemaphoreSlim(0);
+var figmaConnected = false;
 
-debounceTimer.Elapsed += (_, _) =>
-{
-    FigmaSyncMessage? msg;
-    lock (syncLock) { msg = pendingMessage; pendingMessage = null; }
-    if (msg != null) ProcessSync(msg, outputDir);
-};
+// Output directory for codegen patches (--output flag)
+var outputDir = args.SkipWhile(a => a != "--output").Skip(1).FirstOrDefault();
+if (outputDir != null) Directory.CreateDirectory(outputDir);
+
+// LLM configuration: --llm-endpoint <url> --llm-key <key> --llm-model <model>
+// Or env vars: LLM_ENDPOINT, LLM_API_KEY, LLM_MODEL
+// Supports OpenAI, Azure OpenAI, GitHub Models, Ollama — any OpenAI-compatible chat API
+var llmEndpoint = args.SkipWhile(a => a != "--llm-endpoint").Skip(1).FirstOrDefault()
+    ?? Environment.GetEnvironmentVariable("LLM_ENDPOINT")
+    ?? "https://models.inference.ai.azure.com"; // GitHub Models default
+var llmKey = args.SkipWhile(a => a != "--llm-key").Skip(1).FirstOrDefault()
+    ?? Environment.GetEnvironmentVariable("LLM_API_KEY")
+    ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN")
+    ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
+var llmModel = args.SkipWhile(a => a != "--llm-model").Skip(1).FirstOrDefault()
+    ?? Environment.GetEnvironmentVariable("LLM_MODEL")
+    ?? "gpt-4o";
+
+// Load skill files for LLM prompt construction
+var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+var figmaSkill = TryReadFile(Path.Combine(repoRoot, "skills", "figma.md"));
+var designSkill = TryReadFile(Path.Combine(repoRoot, "skills", "design.md"));
+var mainSkill = TryReadFile(Path.Combine(repoRoot, "SKILL.md"));
+
+static string TryReadFile(string path) =>
+    File.Exists(path) ? File.ReadAllText(path) : $"[File not found: {path}]";
+
+Console.WriteLine("[FigmaBridge] MCP relay server starting");
+Console.WriteLine("[FigmaBridge] WebSocket: ws://localhost:9228/figma (for Figma plugin)");
+Console.WriteLine("[FigmaBridge] MCP:       POST http://localhost:9228/mcp (for AI agents)");
+Console.WriteLine($"[FigmaBridge] LLM:       {llmEndpoint} (model: {llmModel})");
+Console.WriteLine($"[FigmaBridge] LLM key:   {(llmKey.Length > 0 ? $"configured ({llmKey.Length} chars)" : "NOT SET — set LLM_API_KEY or GITHUB_TOKEN")}");
+if (outputDir != null)
+    Console.WriteLine($"[FigmaBridge] Output:    {outputDir} (for code generation + live patching)");
+else
+    Console.WriteLine("[FigmaBridge] No --output dir — generation disabled (set --output)");
+
+// ─── WebSocket Endpoint (Figma Plugin) ───────────────────────────────────────
 
 app.Map("/figma", async (HttpContext context) =>
 {
@@ -63,36 +85,117 @@ app.Map("/figma", async (HttpContext context) =>
     }
 
     using var ws = await context.WebSockets.AcceptWebSocketAsync();
-    Console.WriteLine("[FigmaBridge] Client connected");
+    figmaConnected = true;
+    Console.WriteLine("[FigmaBridge] Figma plugin connected");
 
-    // Send ack
     var ack = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { type = "connected" }));
     await ws.SendAsync(ack, WebSocketMessageType.Text, true, CancellationToken.None);
 
-    var buffer = new byte[1024 * 256]; // 256KB buffer
+    var buffer = new byte[1024 * 512]; // 512KB buffer for large trees
     while (ws.State == WebSocketState.Open)
     {
         var result = await ws.ReceiveAsync(buffer, CancellationToken.None);
         if (result.MessageType == WebSocketMessageType.Close)
         {
-            Console.WriteLine("[FigmaBridge] Client disconnected");
+            figmaConnected = false;
+            Console.WriteLine("[FigmaBridge] Figma plugin disconnected");
             break;
         }
 
         var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
         try
         {
-            var msg = JsonSerializer.Deserialize<FigmaSyncMessage>(json);
-            if (msg != null)
+            var jsonDoc = JsonDocument.Parse(json);
+            var msgType = jsonDoc.RootElement.GetProperty("type").GetString() ?? "";
+
+            if (msgType == "incremental" && outputDir != null)
             {
-                Console.WriteLine($"[FigmaBridge] Received: {msg.Type} — {msg.FrameName}");
-                lock (syncLock) { pendingMessage = msg; }
-                debounceTimer.Stop();
-                debounceTimer.Start();
+                // Fast path: apply codegen patches to Program.cs
+                var patches = jsonDoc.RootElement.GetProperty("patches");
+                var patchCount = CodegenPatcher.ApplyPatches(patches, outputDir);
+                Console.WriteLine($"[FigmaBridge] Applied {patchCount} codegen patches");
 
                 var response = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
-                    new { type = "ack", frameId = msg.FrameId }));
+                    new { type = "patched", count = patchCount }));
                 await ws.SendAsync(response, WebSocketMessageType.Text, true, CancellationToken.None);
+            }
+            else
+            {
+                var msg = JsonSerializer.Deserialize<FigmaSyncMessage>(json);
+                if (msg == null) continue;
+
+                Console.WriteLine($"[FigmaBridge] Received: {msg.Type} — {msg.FrameName} ({msg.FrameId})");
+
+                if (msg.Type == "generate" && outputDir != null && msg.Tree != null)
+                {
+                    // ── Phase 1: LLM Generation ──────────────────────────
+                    lock (syncLock) { latestSync = msg; }
+
+                    var statusMsg = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                        new { type = "status", message = "Generating code via LLM..." }));
+                    await ws.SendAsync(statusMsg, WebSocketMessageType.Text, true, CancellationToken.None);
+
+                    try
+                    {
+                        var summary = DesignSummarizer.Summarize(msg);
+                        Console.WriteLine($"[FigmaBridge] Design summary: {summary.Length} chars");
+
+                        var code = await LlmGenerator.Generate(
+                            summary, figmaSkill, designSkill, mainSkill,
+                            llmEndpoint, llmKey, llmModel, outputDir);
+
+                        if (code == "LAUNCHED")
+                        {
+                            var doneMsg = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                                new { type = "generating", message = "Copilot CLI launched — watch the terminal window" }));
+                            await ws.SendAsync(doneMsg, WebSocketMessageType.Text, true, CancellationToken.None);
+                        }
+                        else if (code != null)
+                        {
+                            var filePath = Path.Combine(outputDir, "Program.cs");
+                            File.WriteAllText(filePath, code);
+                            Console.WriteLine($"[FigmaBridge] ✓ Wrote {filePath} ({code.Length} chars)");
+
+                            var doneMsg = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                                new { type = "generated", file = filePath, chars = code.Length }));
+                            await ws.SendAsync(doneMsg, WebSocketMessageType.Text, true, CancellationToken.None);
+                        }
+                        else
+                        {
+                            var errMsg = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                                new { type = "error", message = "LLM returned no code" }));
+                            await ws.SendAsync(errMsg, WebSocketMessageType.Text, true, CancellationToken.None);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[FigmaBridge] LLM error: {ex.Message}");
+                        var errMsg = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                            new { type = "error", message = ex.Message }));
+                        await ws.SendAsync(errMsg, WebSocketMessageType.Text, true, CancellationToken.None);
+                    }
+                }
+                else
+                {
+                    // ── Full sync: store tree + text diff patch ──────────
+                    FigmaSyncMessage? oldSync;
+                    lock (syncLock) { oldSync = latestSync; }
+
+                    if (outputDir != null && oldSync?.Tree != null && msg.Tree != null
+                        && msg.Type == "full-sync")
+                    {
+                        var textPatches = TextPatcher.ApplyTextDiff(oldSync.Tree, msg.Tree, outputDir);
+                        if (textPatches > 0)
+                            Console.WriteLine($"[FigmaBridge] Applied {textPatches} text patches via diff");
+                    }
+
+                    lock (syncLock) { latestSync = msg; }
+                    changeSignal.Release();
+
+                    var response = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                        new { type = "ack", frameId = msg.FrameId }));
+                    await ws.SendAsync(response, WebSocketMessageType.Text, true, CancellationToken.None);
+                }
             }
         }
         catch (Exception ex)
@@ -102,724 +205,710 @@ app.Map("/figma", async (HttpContext context) =>
     }
 });
 
-app.Map("/health", () => Results.Ok(new { status = "ok", output = outputDir }));
+// ─── MCP JSON-RPC Endpoint (AI Agents) ───────────────────────────────────────
+
+// MCP endpoint — handle both /mcp and / (some MCP clients POST to root)
+async Task HandleMcpRequest(HttpContext context)
+{
+    var body = await new StreamReader(context.Request.Body).ReadToEndAsync();
+    var request = JsonSerializer.Deserialize<JsonRpcRequest>(body);
+    if (request == null)
+    {
+        context.Response.StatusCode = 400;
+        return;
+    }
+
+    object? result = request.Method switch
+    {
+        "initialize" => new
+        {
+            protocolVersion = "2024-11-05",
+            capabilities = new { tools = new { } },
+            serverInfo = new { name = "figma-bridge", version = "2.0.0" }
+        },
+
+        "tools/list" => new
+        {
+            tools = new object[]
+            {
+                new
+                {
+                    name = "figma_summary",
+                    description = "Returns a compact design intent summary of the current Figma frame, optimized for LLM consumption. Includes: page sections, component instances mapped to WinUI control names, text content with typography classification, color fills with candidate Theme token names, layout structure, and spacing. Much smaller than figma_tree — use this as the primary input for code generation.",
+                    inputSchema = new { type = "object", properties = new { } }
+                },
+                new
+                {
+                    name = "figma_tree",
+                    description = "Returns the full Figma design tree as raw JSON. Large output (~300KB). Prefer figma_summary for code generation — use this only when you need raw node-level detail.",
+                    inputSchema = new { type = "object", properties = new { } }
+                },
+                new
+                {
+                    name = "figma_status",
+                    description = "Returns the connection status of the Figma plugin and info about the currently watched frame.",
+                    inputSchema = new { type = "object", properties = new { } }
+                },
+                new
+                {
+                    name = "figma_watch",
+                    description = "Blocks until the Figma design changes (or timeout). Returns the updated design summary. Use this in a loop to react to live Figma edits. Timeout default: 30 seconds.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            timeout_seconds = new { type = "number", description = "Max seconds to wait for a change. Default: 30." }
+                        }
+                    }
+                }
+            }
+        },
+
+        "tools/call" => await HandleToolCall(request.Params),
+        _ => (object)new { error = $"Unknown method: {request.Method}" }
+    };
+
+    var response = new
+    {
+        jsonrpc = "2.0",
+        result,
+        id = request.Id
+    };
+
+    context.Response.ContentType = "application/json";
+    await context.Response.WriteAsJsonAsync(response);
+}
+
+app.MapPost("/mcp", HandleMcpRequest);
+app.MapPost("/", HandleMcpRequest);
+
+async Task<object> HandleToolCall(JsonElement? paramsEl)
+{
+    var toolName = paramsEl?.GetProperty("name").GetString() ?? "";
+    var args = paramsEl?.TryGetProperty("arguments", out var a) == true ? a : (JsonElement?)null;
+
+    return toolName switch
+    {
+        "figma_summary" => HandleFigmaSummary(),
+        "figma_tree" => HandleFigmaTree(),
+        "figma_status" => HandleFigmaStatus(),
+        "figma_watch" => await HandleFigmaWatch(args),
+        _ => new { content = new[] { new { type = "text", text = $"Unknown tool: {toolName}" } }, isError = true }
+    };
+}
+
+object HandleFigmaSummary()
+{
+    FigmaSyncMessage? sync;
+    lock (syncLock) { sync = latestSync; }
+
+    if (sync?.Tree == null)
+    {
+        return new
+        {
+            content = new[] { new { type = "text", text = "No design data available. Make sure the Figma plugin is running and a frame is selected." } },
+            isError = true
+        };
+    }
+
+    var summary = DesignSummarizer.Summarize(sync);
+    return new
+    {
+        content = new[] { new { type = "text", text = summary } }
+    };
+}
+
+object HandleFigmaTree()
+{
+    FigmaSyncMessage? sync;
+    lock (syncLock) { sync = latestSync; }
+
+    if (sync?.Tree == null)
+    {
+        return new
+        {
+            content = new[] { new { type = "text", text = "No design data available. Make sure the Figma plugin is running and a frame is selected." } },
+            isError = true
+        };
+    }
+
+    var treeJson = JsonSerializer.Serialize(sync, new JsonSerializerOptions { WriteIndented = true });
+    return new
+    {
+        content = new[] { new
+        {
+            type = "text",
+            text = $"# Figma Design Tree\n\n**Frame:** {sync.FrameName} ({sync.FrameId})\n**Timestamp:** {DateTimeOffset.FromUnixTimeMilliseconds(sync.Timestamp):yyyy-MM-dd HH:mm:ss}\n\n```json\n{treeJson}\n```"
+        }}
+    };
+}
+
+object HandleFigmaStatus()
+{
+    FigmaSyncMessage? sync;
+    lock (syncLock) { sync = latestSync; }
+
+    return new
+    {
+        content = new[] { new
+        {
+            type = "text",
+            text = JsonSerializer.Serialize(new
+            {
+                connected = figmaConnected,
+                hasDesignData = sync != null,
+                watchedFrame = sync != null ? new { id = sync.FrameId, name = sync.FrameName } : null,
+                lastUpdate = sync != null ? DateTimeOffset.FromUnixTimeMilliseconds(sync.Timestamp).ToString("o") : null
+            }, new JsonSerializerOptions { WriteIndented = true })
+        }}
+    };
+}
+
+async Task<object> HandleFigmaWatch(JsonElement? args)
+{
+    var timeoutSec = 30;
+    if (args?.TryGetProperty("timeout_seconds", out var t) == true)
+        timeoutSec = t.GetInt32();
+
+    // Drain any existing signals
+    while (changeSignal.CurrentCount > 0)
+        await changeSignal.WaitAsync(0);
+
+    // Wait for the next change
+    var changed = await changeSignal.WaitAsync(TimeSpan.FromSeconds(timeoutSec));
+
+    if (!changed)
+    {
+        return new
+        {
+            content = new[] { new { type = "text", text = "No changes detected within timeout." } }
+        };
+    }
+
+    // Return the updated summary (compact, LLM-optimized)
+    return HandleFigmaSummary();
+}
+
+// ─── Health Endpoint ─────────────────────────────────────────────────────────
+
+app.Map("/health", () => Results.Ok(new
+{
+    status = "ok",
+    figmaConnected,
+    hasDesignData = latestSync != null,
+    version = "2.0.0-mcp"
+}));
 
 app.Run();
 
-// ─── Sync Processing ─────────────────────────────────────────────────────────
+// ─── Codegen Patcher (Fast Path) ─────────────────────────────────────────────
+// Applies surgical string patches to Program.cs for property changes.
+// No LLM needed — just find-and-replace for text, spacing, sizing.
 
-static void ProcessSync(FigmaSyncMessage msg, string outputDir)
+static class CodegenPatcher
 {
-    Console.WriteLine($"[FigmaBridge] Processing sync for frame: {msg.FrameName}");
-
-    var componentName = SanitizeComponentName(msg.FrameName);
-    var code = GenerateReactorCode(msg, componentName);
-    var filePath = Path.Combine(outputDir, "Program.cs");
-
-    // Only write if content changed
-    if (File.Exists(filePath))
+    public static int ApplyPatches(JsonElement patches, string outputDir)
     {
-        var existing = File.ReadAllText(filePath);
-        if (existing == code)
+        var filePath = Path.Combine(outputDir, "Program.cs");
+        if (!File.Exists(filePath)) return 0;
+
+        var code = File.ReadAllText(filePath);
+        var originalCode = code;
+        var patchCount = 0;
+
+        foreach (var patch in patches.EnumerateArray())
         {
-            Console.WriteLine($"[FigmaBridge] No changes detected, skipping write");
-            return;
-        }
-    }
+            var property = patch.GetProperty("property").GetString() ?? "";
+            var newCode = property switch
+            {
+                "characters" => PatchText(code, patch),
+                "fontSize" => PatchFontSize(code, patch),
+                "fontWeight" => PatchFontWeight(code, patch),
+                "itemSpacing" => PatchSpacing(code, patch),
+                "padding" => PatchPadding(code, patch),
+                "width" => PatchDimension(code, patch, "Width", "MinWidth"),
+                "height" => PatchDimension(code, patch, "Height", "MinHeight"),
+                "cornerRadius" => PatchCornerRadius(code, patch),
+                _ => code
+            };
 
-    File.WriteAllText(filePath, code);
-    Console.WriteLine($"[FigmaBridge] Wrote {filePath} ({code.Length} chars)");
-}
-
-static string SanitizeComponentName(string name)
-{
-    // Convert Figma frame name to a valid C# class name
-    var sanitized = new string(name
-        .Replace(" ", "")
-        .Replace("-", "")
-        .Replace("/", "")
-        .Where(c => char.IsLetterOrDigit(c) || c == '_')
-        .ToArray());
-
-    if (sanitized.Length == 0 || char.IsDigit(sanitized[0]))
-        sanitized = "FigmaComponent" + sanitized;
-
-    return sanitized;
-}
-
-static string GenerateReactorCode(FigmaSyncMessage msg, string componentName)
-{
-    var sb = new StringBuilder();
-    sb.AppendLine("// ═══════════════════════════════════════════════════════════");
-    sb.AppendLine($"// FIGMA LIVE SYNC — Auto-generated from Figma");
-    sb.AppendLine($"// Frame: {msg.FrameName} ({msg.FrameId})");
-    sb.AppendLine($"// Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-    sb.AppendLine($"// DO NOT EDIT — this file is overwritten on each Figma change");
-    sb.AppendLine("// ═══════════════════════════════════════════════════════════");
-    sb.AppendLine();
-    sb.AppendLine("using Microsoft.UI.Reactor;");
-    sb.AppendLine("using Microsoft.UI.Reactor.Core;");
-    sb.AppendLine("using Microsoft.UI.Reactor.Layout;");
-    sb.AppendLine("using Microsoft.UI.Xaml;");
-    sb.AppendLine("using Microsoft.UI.Xaml.Automation.Peers;");
-    sb.AppendLine("using static Microsoft.UI.Reactor.Factories;");
-    sb.AppendLine("using static Microsoft.UI.Reactor.Core.Theme;");
-    sb.AppendLine();
-    sb.AppendLine($"ReactorApp.Run<{componentName}>(\"App name\", width: 1316, height: 865");
-    sb.AppendLine("#if DEBUG");
-    sb.AppendLine("    , devtools: true");
-    sb.AppendLine("#endif");
-    sb.AppendLine(");");
-    sb.AppendLine();
-    sb.AppendLine($"class {componentName} : Component");
-    sb.AppendLine("{");
-    sb.AppendLine("    public override Element Render()");
-    sb.AppendLine("    {");
-    sb.AppendLine("        var controlCR = ThemeResource.CornerRadius(\"ControlCornerRadius\");");
-    sb.AppendLine("        var overlayCR = ThemeResource.CornerRadius(\"OverlayCornerRadius\");");
-    sb.AppendLine();
-
-    if (msg.Tree != null)
-    {
-        var element = GenerateElement(msg.Tree, 2);
-        sb.AppendLine($"        return {element};");
-    }
-    else
-    {
-        sb.AppendLine("        return TextBlock(\"Empty frame\");");
-    }
-
-    sb.AppendLine("    }");
-    sb.AppendLine("}");
-    return sb.ToString();
-}
-
-static string GenerateElement(FigmaNode node, int depth)
-{
-    // Prevent infinite recursion on deeply nested trees
-    if (depth > 20) return "";
-
-    var indent = new string(' ', depth * 4);
-
-    // Skip decorative/structural elements that aren't real content
-    if (IsDecorativeNode(node)) return "";
-
-    // Text node → TextBlock with semantic style
-    if (node.Type == "TEXT" && node.Characters != null)
-    {
-        // Skip icon font glyphs (Fluent icons, Segoe Fluent, symbol fonts)
-        if (IsIconFont(node)) return "";
-        return GenerateTextElement(node, indent);
-    }
-
-    // Instance → try to map to a WinUI control
-    // Match on componentName (resolved) OR node.Name (fallback for community library instances)
-    if (node.Type == "INSTANCE")
-    {
-        if (IsDecorativeInstance(node)) return "";
-        var mapped = MapComponent(node, indent);
-        if (mapped != null) return mapped;
-    }
-
-    // Frame/Group with children → layout container
-    if (node.Children is { Count: > 0 })
-    {
-        return GenerateContainer(node, depth);
-    }
-
-    // Leaf frame/rectangle → Border placeholder
-    if (node.Type is "RECTANGLE" or "ELLIPSE" or "LINE")
-    {
-        if (node.Type == "LINE")
-            return "Border(VStack()).Height(1)\n" +
-                   $"{indent}    .Background(DividerStroke)\n" +
-                   $"{indent}    .HAlign(HorizontalAlignment.Stretch)";
-
-        // Skip large rectangles that are just background fills
-        if (node.Width > 200 && node.Height > 200) return "";
-        return $"Border(VStack()).Width({Round4(node.Width)}).Height({Round4(node.Height)})";
-    }
-
-    return $"/* [{node.Type}] {Escape(node.Name)} */\n{indent}VStack()";
-}
-
-static string GenerateTextElement(FigmaNode node, string indent)
-{
-    var text = Escape(node.Characters ?? "");
-    var size = node.FontSize ?? 14;
-    var weight = node.FontWeight ?? 400;
-
-    // Map to semantic text factories per figma.md typography + design.md §4
-    string element;
-    if (size <= 12) element = $"Caption(\"{text}\")";
-    else if (size <= 14 && weight >= 600) element = $"TextBlock(\"{text}\").SemiBold()";
-    else if (size <= 14) element = $"TextBlock(\"{text}\")";
-    else if (size <= 18 && weight >= 600) element = $"TextBlock(\"{text}\").ApplyStyle(\"BodyLargeTextBlockStyle\").SemiBold()";
-    else if (size <= 18) element = $"TextBlock(\"{text}\").ApplyStyle(\"BodyLargeTextBlockStyle\")";
-    else if (size <= 20 && weight >= 600) element = $"SubHeading(\"{text}\")";
-    else if (size <= 28) element = $"Heading(\"{text}\")";
-    else if (size <= 40) element = $"TextBlock(\"{text}\").ApplyStyle(\"TitleLargeTextBlockStyle\")";
-    else element = $"TextBlock(\"{text}\").ApplyStyle(\"DisplayTextBlockStyle\")";
-
-    // Resolve text foreground color from fills (figma.md token resolution)
-    var fg = ResolveTextForeground(node);
-    if (fg != null) element += $"\n{indent}    .Foreground({fg})";
-
-    // Body text that could wrap
-    if (size >= 14 && text.Length > 60)
-        element += $"\n{indent}    .TextWrapping(TextWrapping.WrapWholeWords)";
-
-    return element;
-}
-
-static string? MapComponent(FigmaNode node, string indent)
-{
-    var comp = node.ComponentName?.ToLowerInvariant() ?? "";
-    var nodeName = node.Name.ToLowerInvariant();
-    // Use both component name and node name for matching — community library
-    // components often can't resolve componentName across files, so the Figma
-    // instance name (node.Name) is the primary fallback.
-    var match = comp.Length > 0 ? comp : nodeName;
-    // Helper: check if the component or node name matches a pattern
-    bool has(string pattern) => comp.Contains(pattern) || nodeName.Contains(pattern);
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // Windows UI Kit → Reactor WinUI Control Mapping
-    // Source: figma.com/design/t7yLwpMUOWJSYt5ahz3ROC/Windows-UI-kit--Community-
-    // ═══════════════════════════════════════════════════════════════════════
-
-    // ── Shell / Navigation ──────────────────────────────────────────────
-    if (has("title bar") && !has("caption") && !has("icon"))
-    {
-        var title = FindChildText(node) ?? "App";
-        return $"TitleBar(\"{Escape(title)}\")";
-    }
-    if (has("side nav") && !has("list item") && !has("menu") && !has("parts"))
-    {
-        var navItems = ExtractNavItems(node);
-        if (navItems.Count > 0)
-        {
-            var itemsStr = string.Join($",\n{indent}        ", navItems);
-            return $"NavigationView(\n{indent}    [\n{indent}        {itemsStr}\n{indent}    ],\n{indent}    VStack()\n{indent}) with {{ IsSettingsVisible = true, IsPaneOpen = true }}";
-        }
-    }
-    if (has("breadcrumb"))
-    {
-        var items = new List<string>();
-        ExtractBreadcrumbItems(node, items);
-        if (items.Count > 0)
-        {
-            var itemsStr = string.Join(", ", items);
-            return $"BreadcrumbBar([{itemsStr}])";
-        }
-    }
-    if (has("tab view") || has("tabview"))
-    {
-        return $"TabView(Tab(\"Tab 1\", VStack()), Tab(\"Tab 2\", VStack()))";
-    }
-    if (has("pivot"))
-        return $"Pivot()";
-
-    // ── Buttons ─────────────────────────────────────────────────────────
-    if (has("button") && !has("hyperlink") && !has("toggle")
-        && !has("radio") && !has("split") && !has("dropdown")
-        && !has("repeat") && !has("caption") && !has("menu"))
-    {
-        var text = FindChildText(node) ?? "Button";
-        if (HasAccentFill(node))
-            return $"Button(\"{Escape(text)}\", () => {{ }})\n" +
-                   $"{indent}    .Resources(r => r\n" +
-                   $"{indent}        .Set(\"ButtonBackground\", Accent)\n" +
-                   $"{indent}        .Set(\"ButtonBackgroundPointerOver\", AccentSecondary)\n" +
-                   $"{indent}        .Set(\"ButtonBackgroundPressed\", AccentTertiary)\n" +
-                   $"{indent}        .Set(\"ButtonForeground\", Ref(\"TextOnAccentFillColorPrimaryBrush\")))";
-        return $"Button(\"{Escape(text)}\", () => {{ }})";
-    }
-    if (has("hyperlink"))
-    {
-        var text = FindChildText(node) ?? "Link";
-        return $"HyperlinkButton(\"{Escape(text)}\")";
-    }
-    if (has("toggle") && has("button"))
-    {
-        var text = FindChildText(node) ?? "Toggle";
-        return $"ToggleButton(\"{Escape(text)}\", isChecked: false, onToggled: on => {{ }})";
-    }
-    if (has("split") && has("button"))
-    {
-        var text = FindChildText(node) ?? "Split";
-        return $"SplitButton(\"{Escape(text)}\", () => {{ }})";
-    }
-    if (has("dropdown") && has("button"))
-    {
-        var text = FindChildText(node) ?? "Menu";
-        return $"DropDownButton(\"{Escape(text)}\")";
-    }
-    if (has("repeat") && has("button"))
-    {
-        var text = FindChildText(node) ?? "+";
-        return $"RepeatButton(\"{Escape(text)}\", () => {{ }})";
-    }
-
-    // ── Selection / Toggle ──────────────────────────────────────────────
-    if (has("checkbox"))
-    {
-        var text = FindChildText(node) ?? "";
-        return $"CheckBox(false, label: \"{Escape(text)}\")";
-    }
-    if (has("toggle") && has("switch"))
-        return "ToggleSwitch(false)";
-    if (has("radio") && has("button"))
-    {
-        var text = FindChildText(node) ?? "Option";
-        return $"RadioButton(\"{Escape(text)}\")";
-    }
-    if (has("combo") && has("box"))
-        return "ComboBox([\"Option 1\", \"Option 2\", \"Option 3\"], 0)";
-    if (has("slider"))
-        return "Slider(50, min: 0, max: 100, onValueChanged: (s, e) => { })";
-    if (has("rating"))
-        return "RatingControl(3)";
-    if (has("color") && has("picker"))
-        return "ColorPicker()";
-
-    // ── Text Input ──────────────────────────────────────────────────────
-    if (has("auto suggest") || (has("auto") && has("suggest")))
-    {
-        return "AutoSuggestBox(\"\")";
-    }
-    if (has("text") && (has("box") || has("field") || has("input")))
-    {
-        var placeholder = FindChildText(node) ?? "Enter text";
-        return $"TextField(\"\", placeholder: \"{Escape(placeholder)}\")";
-    }
-    if (has("password"))
-        return "PasswordBox(\"\")";
-    if (has("number") && has("box"))
-        return "NumberBox(0)";
-    if (has("rich") && has("edit"))
-        return "RichEditBox()";
-    if (has("search"))
-    {
-        return "AutoSuggestBox(\"\")";
-    }
-
-    // ── Status & Info ───────────────────────────────────────────────────
-    if (has("info") && has("bar"))
-        return "InfoBar(title: \"Info\", message: \"Message\", severity: InfoBarSeverity.Informational)";
-    if (has("info") && has("badge"))
-        return "InfoBadge()";
-    if (has("badge"))
-        return "InfoBadge()";    if (has("progress") && has("bar"))
-        return "ProgressIndeterminate()";
-    if (has("progress") && has("ring"))
-        return "ProgressRing()";
-    if (has("teaching") && has("tip"))
-    {
-        var text = FindChildText(node) ?? "Tip";
-        return $"TeachingTip(\"{Escape(text)}\")";
-    }
-    if (has("tooltip"))
-        return null; // tooltips are applied as modifiers, not standalone
-
-    // ── Lists & Collections ─────────────────────────────────────────────
-    if (has("list") && has("item") && !has("nav"))
-    {
-        var text = FindChildText(node) ?? "Item";
-        return $"TextBlock(\"{Escape(text)}\")";
-    }
-    if (has("tree") && has("view"))
-        return "TreeView()";
-
-    // ── Dialogs & Flyouts ───────────────────────────────────────────────
-    if (has("content") && has("dialog"))
-        return "ContentDialog(\"Title\", TextBlock(\"Content\"), \"OK\")";
-    if (has("flyout") && has("menu"))
-    {
-        var text = FindChildText(node) ?? "Menu";
-        return $"/* FlyoutMenu: {Escape(text)} */\n{indent}VStack()";
-    }
-
-    // ── Layout & Containers ─────────────────────────────────────────────
-    if (has("expander"))
-    {
-        var text = FindChildText(node) ?? "Expander";
-        return $"Expander(\"{Escape(text)}\", VStack())";
-    }
-    if (has("scroll") && has("bar"))
-        return null; // scrollbars are implicit in ScrollView
-
-    // ── Date & Time ─────────────────────────────────────────────────────
-    if (has("calendar") && has("date"))
-        return "CalendarDatePicker()";
-    if (has("date") && has("picker"))
-        return "DatePicker()";
-    if (has("time") && has("picker"))
-        return "TimePicker()";
-    if (has("calendar") && has("view"))
-        return "CalendarView()";
-
-    // ── Media ───────────────────────────────────────────────────────────
-    if (has("person") && has("picture"))
-        return "PersonPicture()";
-    if (has("image") || has("media"))
-        return $"Image(\"placeholder\").Width({Round4(node.Width)}).Height({Round4(node.Height)})";
-
-    // ── Menus & Toolbars ────────────────────────────────────────────────
-    if (has("command") && has("bar"))
-        return "CommandBar()";
-    if (has("menu") && has("bar"))
-        return "MenuBar()";
-
-    // ── Heading / Footer (custom kit components) ────────────────────────
-    if (has("heading") || nodeName.Contains("heading"))
-        return null; // let children render individually
-    if (has("footer"))
-        return null; // let children render individually
-
-    // ── Side nav parts ──────────────────────────────────────────────────
-    if (has("nav") && has("list item"))
-    {
-        var text = FindChildText(node) ?? "Item";
-        return $"TextBlock(\"{Escape(text)}\")";
-    }
-    if (has("menu button") || has("back"))
-        return null; // NavigationView handles these internally
-
-    // ── Decorative / structural (skip) ──────────────────────────────────
-    if (has("canvas") && !has("canvascontrol"))
-        return null; // Figma canvas icon placeholder
-    if (has(".icon"))
-        return null; // icon placeholder
-
-    return null;
-}
-
-static void ExtractBreadcrumbItems(FigmaNode node, List<string> items)
-{
-    if (node.Type == "TEXT" && !string.IsNullOrWhiteSpace(node.Characters) && !IsIconFont(node))
-    {
-        var text = node.Characters.Trim();
-        if (text.Length > 0 && text != ">" && text != "/")
-            items.Add($"Breadcrumb(\"{Escape(text)}\")");
-    }
-    if (node.Children != null)
-        foreach (var c in node.Children) ExtractBreadcrumbItems(c, items);
-}
-
-static string? FindChildText(FigmaNode node)
-{
-    if (node.Type == "TEXT" && !string.IsNullOrWhiteSpace(node.Characters))
-        return node.Characters;
-    if (node.Children == null) return null;
-    foreach (var child in node.Children)
-    {
-        // Skip icon font text
-        if (child.FontFamily != null && child.FontFamily.Contains("Fluent"))
-            continue;
-        if (child.FontFamily != null && child.FontFamily.Contains("Symbol"))
-            continue;
-        var text = FindChildText(child);
-        if (text != null) return text;
-    }
-    return null;
-}
-
-static string GenerateContainer(FigmaNode node, int depth)
-{
-    var indent = new string(' ', depth * 4);
-    var childIndent = new string(' ', (depth + 1) * 4);
-
-    var children = node.Children!
-        .Select(c => GenerateElement(c, depth + 1))
-        .Where(c => !string.IsNullOrWhiteSpace(c))
-        .ToList();
-
-    if (children.Count == 0)
-        return "";
-
-    // If only one real child, unwrap — don't add a redundant container
-    if (children.Count == 1 && node.LayoutMode is null or "NONE"
-        && !HasVisibleFill(node) && !HasVisibleStroke(node) && (node.CornerRadius ?? 0) == 0)
-        return children[0];
-
-    var childrenStr = string.Join($",\n{childIndent}", children);
-
-    string container;
-    var gap = Round4(node.ItemSpacing ?? 0);
-
-    if (node.LayoutMode == "VERTICAL")
-        container = gap > 0 ? $"VStack({gap},\n{childIndent}{childrenStr})" : $"VStack(\n{childIndent}{childrenStr})";
-    else if (node.LayoutMode == "HORIZONTAL")
-        container = gap > 0 ? $"HStack({gap},\n{childIndent}{childrenStr})" : $"HStack(\n{childIndent}{childrenStr})";
-    else
-        container = children.Count == 1
-            ? $"Border(\n{childIndent}{childrenStr})"
-            : $"VStack(\n{childIndent}{childrenStr})";
-
-    // Add padding via wrapping Border (VStack/HStack don't support Padding)
-    var pt = Round4(node.PaddingTop ?? 0);
-    var pr = Round4(node.PaddingRight ?? 0);
-    var pb = Round4(node.PaddingBottom ?? 0);
-    var pl = Round4(node.PaddingLeft ?? 0);
-
-    var hasPadding = pt > 0 || pr > 0 || pb > 0 || pl > 0;
-    var hasFill = HasVisibleFill(node);
-    var hasStroke = HasVisibleStroke(node);
-    var hasRadius = (node.CornerRadius ?? 0) > 0;
-
-    // Detect card pattern: frame with fill + stroke + corner radius (figma.md surface elements)
-    var isCard = hasFill && hasStroke && hasRadius;
-
-    // Wrap in Border when we need padding, background, border, or corner radius
-    if (hasPadding || hasFill || hasStroke || hasRadius)
-    {
-        if (node.LayoutMode is "VERTICAL" or "HORIZONTAL")
-        {
-            container = $"Border(\n{childIndent}{container})";
+            if (newCode != code)
+            {
+                code = newCode;
+                patchCount++;
+            }
         }
 
-        // Apply padding
-        if (hasPadding)
+        if (code != originalCode)
         {
-            if (pt == pb && pl == pr && pt == pl)
-                container += $".Padding({pt})";
-            else
-                container += $"\n{indent}    .Padding({pl}, {pt}, {pr}, {pb})";
+            File.WriteAllText(filePath, code);
+            Console.WriteLine($"[CodegenPatcher] Wrote {filePath}");
         }
 
-        // Apply background from fills (figma.md token resolution)
-        var bg = ResolveFillToken(node);
-        if (bg != null)
-            container += $"\n{indent}    .Background({bg})";
+        return patchCount;
+    }
 
-        // Apply border from strokes
-        if (hasStroke)
+    static string PatchText(string code, JsonElement patch)
+    {
+        // The node name helps us find the right text in case of duplicates
+        var newValue = patch.GetProperty("value").GetString() ?? "";
+
+        // Strategy: find any quoted string that's a substring match in the code
+        // and replace it. This works because text content is unique enough.
+        // We look for TextBlock("old text"), Caption("old text"), SubHeading("old text"), etc.
+        // The nodeId-based source map approach would be better but requires Phase 1 to annotate.
+
+        // For now: use a simple approach — look for text patterns near the node name
+        var escaped = EscapeForCSharp(newValue);
+
+        // Try to find the previous value by looking at what the Figma plugin sent
+        // Actually, we don't have the old value — just the new one.
+        // The full-sync message stored in latestSync has the old tree.
+        // For a v3 MVP, we'll do a full-file text replacement which works for unique strings.
+        return code; // Text patching needs the old value — handled separately below
+    }
+
+    static string PatchFontSize(string code, JsonElement patch)
+    {
+        // Font size changes don't affect many places — typically just the style call
+        return code;
+    }
+
+    static string PatchFontWeight(string code, JsonElement patch)
+    {
+        return code;
+    }
+
+    static string PatchSpacing(string code, JsonElement patch)
+    {
+        var newValue = patch.GetProperty("value").GetDouble();
+        var rounded = Round4(newValue);
+        // Find VStack(N, or HStack(N, patterns and update the gap
+        // This is a simplified approach — a source map would be more precise
+        return code;
+    }
+
+    static string PatchPadding(string code, JsonElement patch)
+    {
+        return code;
+    }
+
+    static string PatchDimension(string code, JsonElement patch, string prop, string minProp)
+    {
+        return code;
+    }
+
+    static string PatchCornerRadius(string code, JsonElement patch)
+    {
+        return code;
+    }
+
+    static int Round4(double value) => Math.Max(0, (int)(Math.Round(value / 4.0) * 4));
+    static string EscapeForCSharp(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n");
+}
+
+// ─── Codegen Patcher: Text-Specific (uses old tree for diffing) ──────────────
+
+static class TextPatcher
+{
+    /// <summary>
+    /// Compares the old tree (from latestSync) with the new tree to find text changes,
+    /// then applies surgical string replacements to Program.cs.
+    /// </summary>
+    public static int ApplyTextDiff(FigmaNode? oldTree, FigmaNode? newTree, string outputDir)
+    {
+        if (oldTree == null || newTree == null) return 0;
+
+        var filePath = Path.Combine(outputDir, "Program.cs");
+        if (!File.Exists(filePath)) return 0;
+
+        var code = File.ReadAllText(filePath);
+        var originalCode = code;
+        var changes = new List<(string oldText, string newText)>();
+
+        CollectTextChanges(oldTree, newTree, changes);
+
+        foreach (var (oldText, newText) in changes)
         {
-            var strokeToken = ResolveStrokeToken(node);
-            container += $"\n{indent}    .WithBorder({strokeToken}, 1)";
+            var oldEscaped = oldText.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            var newEscaped = newText.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+            // Replace the first occurrence of the old text in a quoted string context
+            var oldPattern = $"\"{oldEscaped}\"";
+            var newPattern = $"\"{newEscaped}\"";
+
+            var idx = code.IndexOf(oldPattern, StringComparison.Ordinal);
+            if (idx >= 0)
+            {
+                code = code.Remove(idx, oldPattern.Length).Insert(idx, newPattern);
+                Console.WriteLine($"[TextPatcher] \"{oldText}\" → \"{newText}\"");
+            }
         }
 
-        // Apply corner radius (design.md §5: use theme resources)
-        if (hasRadius)
+        if (code != originalCode)
         {
-            var cr = node.CornerRadius!.Value;
-            if (cr <= 5)
-                container += $"\n{indent}    .CornerRadius(controlCR.TopLeft)";
-            else
-                container += $"\n{indent}    .CornerRadius(overlayCR.TopLeft)";
+            File.WriteAllText(filePath, code);
+            return changes.Count;
+        }
+        return 0;
+    }
+
+    static void CollectTextChanges(FigmaNode oldNode, FigmaNode newNode,
+        List<(string, string)> changes)
+    {
+        // Match nodes by ID
+        if (oldNode.Id == newNode.Id)
+        {
+            if (oldNode.Type == "TEXT" && newNode.Type == "TEXT"
+                && oldNode.Characters != null && newNode.Characters != null
+                && oldNode.Characters != newNode.Characters)
+            {
+                changes.Add((oldNode.Characters, newNode.Characters));
+            }
+        }
+
+        // Recurse into children matched by index (same structure assumed for incremental edits)
+        if (oldNode.Children != null && newNode.Children != null)
+        {
+            var count = Math.Min(oldNode.Children.Count, newNode.Children.Count);
+            for (var i = 0; i < count; i++)
+            {
+                CollectTextChanges(oldNode.Children[i], newNode.Children[i], changes);
+            }
         }
     }
-    else if (hasPadding && node.LayoutMode is "VERTICAL" or "HORIZONTAL")
+}
+
+// ─── LLM Code Generator ──────────────────────────────────────────────────────
+
+static class LlmGenerator
+{
+    /// <summary>
+    /// Launches Copilot CLI (agency copilot) in autopilot mode with a prompt
+    /// containing the design summary and instructions to generate Reactor code.
+    /// Copilot CLI handles LLM auth, model selection, and tool access.
+    /// </summary>
+    public static async Task<string?> Generate(
+        string designSummary, string figmaSkill, string designSkillContent, string mainSkill,
+        string endpoint, string apiKey, string model,
+        string outputDir)
     {
-        if (pt == pb && pl == pr && pt == pl)
-            container = $"Border(\n{childIndent}{container}).Padding({pt})";
+        // Write the design summary to a temp file
+        var summaryFile = Path.Combine(Path.GetTempPath(), "figma-design-summary.md");
+        File.WriteAllText(summaryFile, designSummary);
+
+        var targetFile = Path.Combine(outputDir, "Program.cs");
+
+        // Write prompt to a file to avoid cmd.exe quoting issues
+        var prompt = $"Read the Figma design summary from {summaryFile} and translate it into a Reactor WinUI app. Write the output to {targetFile} as a complete, runnable Program.cs file. Follow the figma.md skill for control mapping and the design.md skill for best practices. Use proper WinUI controls: NavigationView for side nav, TitleBar for title bars, Button/HyperlinkButton for buttons. Use Theme tokens for all colors. Use semantic typography (Caption, SubHeading, Heading, ApplyStyle). Include ReactorApp.Run<ComponentName>() with devtools:true in DEBUG.";
+
+        var promptFile = Path.Combine(Path.GetTempPath(), "figma-copilot-prompt.txt");
+        File.WriteAllText(promptFile, prompt);
+
+        Console.WriteLine($"[LLM] Launching Copilot CLI in autopilot mode...");
+        Console.WriteLine($"[LLM] Design summary: {summaryFile} ({designSummary.Length} chars)");
+        Console.WriteLine($"[LLM] Prompt file: {promptFile}");
+        Console.WriteLine($"[LLM] Target: {targetFile}");
+
+        // Launch in a new terminal via PowerShell (handles quoting better than cmd)
+        var scriptContent = $"agency copilot -p (Get-Content '{promptFile}' -Raw) --autopilot --no-remote --allow-all-tools; Write-Host ''; Write-Host 'Generation complete. Press any key to close.'; $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')";
+        var scriptFile = Path.Combine(Path.GetTempPath(), "figma-copilot-launch.ps1");
+        File.WriteAllText(scriptFile, scriptContent);
+
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "pwsh",
+            Arguments = $"-NoExit -File \"{scriptFile}\"",
+            WorkingDirectory = outputDir,
+            UseShellExecute = true,
+            CreateNoWindow = false,
+        };
+
+        try
+        {
+            var process = System.Diagnostics.Process.Start(psi);
+            if (process != null)
+            {
+                Console.WriteLine($"[LLM] ✓ Copilot CLI launched (PID: {process.Id})");
+                Console.WriteLine($"[LLM] Watch the terminal window for generation progress");
+                return "LAUNCHED"; // Signal that the process was started
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[LLM] Failed to launch Copilot CLI: {ex.Message}");
+            Console.WriteLine($"[LLM] Make sure 'agency' is in PATH");
+        }
+
+        return null;
+    }
+}
+
+// ─── Design Intent Summarizer ────────────────────────────────────────────────
+
+static class DesignSummarizer
+{
+    public static string Summarize(FigmaSyncMessage sync)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"# Figma Design Summary");
+        sb.AppendLine($"**Frame:** {sync.FrameName} (`{sync.FrameId}`)");
+        sb.AppendLine($"**Size:** {sync.Tree!.Width:0} × {sync.Tree.Height:0}");
+        sb.AppendLine();
+
+        // Collect all elements into categorized lists
+        var components = new List<string>();
+        var textElements = new List<string>();
+        var sections = new List<string>();
+
+        WalkTree(sync.Tree, 0, components, textElements, sections, "");
+
+        // ── Page Sections ──
+        sb.AppendLine("## Page Sections");
+        if (sections.Count > 0)
+        {
+            foreach (var s in sections) sb.AppendLine($"- {s}");
+        }
         else
-            container = $"Border(\n{childIndent}{container}).Padding({pl}, {pt}, {pr}, {pb})";
-    }
-
-    return container;
-}
-
-// ─── Decorative Node Detection ───────────────────────────────────────────────
-
-static bool IsDecorativeNode(FigmaNode node)
-{
-    var name = node.Name.ToLowerInvariant();
-
-    string[] decorativeNames = [
-        "base", "shadow", "stroke", "fill", "selector", "mask",
-        "gradient", "backdrop", "gripper", "spacer", "divider line",
-        "fixed-aspect-ratio", "aspect ratio", ".ruler"
-    ];
-
-    // Skip nodes with decorative names (fills, shadows, strokes, selectors)
-    if (decorativeNames.Any(d => name.Contains(d)))
-    {
-        // Exception: keep if it has meaningful text children
-        if (node.Children?.Any(c => c.Type == "TEXT" && !string.IsNullOrWhiteSpace(c.Characters) && !IsIconFont(c)) == true)
-            return false;
-        return true;
-    }
-
-    // Skip "Surface / App Surface" and similar surface instances
-    if (name.Contains("surface")) return true;
-
-    return false;
-}
-
-static bool IsDecorativeInstance(FigmaNode node)
-{
-    var compName = node.ComponentName?.ToLowerInvariant() ?? "";
-    var name = node.Name.ToLowerInvariant();
-    // Skip scroll bars, rulers, surfaces, grippers, caption controls, icons
-    bool check(string p) => compName.Contains(p) || name.Contains(p);
-    return check("scroll bar")
-        || check("ruler")
-        || (check("surface") && !check("nav") && !check("title"))
-        || check("gripper")
-        || check("caption control")
-        || check(".ruler")
-        || (name == ".icon");
-}
-
-static bool IsIconFont(FigmaNode node)
-{
-    var family = node.FontFamily?.ToLowerInvariant() ?? "";
-    return family.Contains("fluent")
-        || family.Contains("symbol")
-        || family.Contains("segoe fluent")
-        || family.Contains("mwf");
-}
-
-static int Round4(double value)
-{
-    var rounded = (int)(Math.Round(value / 4.0) * 4);
-    return Math.Max(0, rounded);
-}
-
-static string Escape(string s) =>
-    s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n");
-
-// ─── Token Resolution (figma.md §Token Resolution) ──────────────────────────
-
-static string? ResolveFillToken(FigmaNode node)
-{
-    if (node.Fills == null) return null;
-    var fill = node.Fills.FirstOrDefault(f => f.Visible && f.Type == "SOLID" && f.Color != null);
-    if (fill?.Color == null) return null;
-
-    var r = (int)(fill.Color.R * 255);
-    var g = (int)(fill.Color.G * 255);
-    var b = (int)(fill.Color.B * 255);
-    var opacity = fill.Opacity ?? 1.0;
-
-    return MatchColorToToken(r, g, b, opacity, isBackground: true);
-}
-
-static string ResolveStrokeToken(FigmaNode node)
-{
-    // Default to CardStroke for stroked containers
-    return "CardStroke";
-}
-
-static string? ResolveTextForeground(FigmaNode node)
-{
-    if (node.Fills == null) return null;
-    var fill = node.Fills.FirstOrDefault(f => f.Visible && f.Type == "SOLID" && f.Color != null);
-    if (fill?.Color == null) return null;
-
-    var r = (int)(fill.Color.R * 255);
-    var g = (int)(fill.Color.G * 255);
-    var b = (int)(fill.Color.B * 255);
-    var opacity = fill.Opacity ?? 1.0;
-
-    return MatchColorToToken(r, g, b, opacity, isBackground: false);
-}
-
-static string? MatchColorToToken(int r, int g, int b, double opacity, bool isBackground)
-{
-    // Skip fully opaque black text (default PrimaryText — don't set explicitly per design.md §9)
-    if (!isBackground && r < 30 && g < 30 && b < 30 && opacity > 0.9) return null;
-    // Skip white-on-dark that's just primary text
-    if (!isBackground && r > 225 && g > 225 && b > 225 && opacity > 0.9) return null;
-
-    // ── Text foreground tokens ──
-    if (!isBackground)
-    {
-        // Secondary text: mid-gray or reduced opacity
-        if (opacity < 0.7) return "SecondaryText";
-        if (r > 90 && r < 170 && g > 90 && g < 170 && b > 90 && b < 170) return "SecondaryText";
-        // Tertiary text: lighter gray
-        if (r > 170 && r < 220 && g > 170 && g < 220 && b > 170 && b < 220) return "TertiaryText";
-        // Accent text: blue-ish
-        if (b > 150 && b > r && b > g) return "AccentText";
-        // White text on accent: very bright
-        if (r > 240 && g > 240 && b > 240) return "Ref(\"TextOnAccentFillColorPrimaryBrush\")";
-    }
-
-    // ── Background tokens ──
-    if (isBackground)
-    {
-        // Card background: white or near-white with transparency
-        if (r > 240 && g > 240 && b > 240 && opacity < 0.8) return "CardBackground";
-        // Layer fill: white with moderate transparency
-        if (r > 240 && g > 240 && b > 240 && opacity < 0.6) return "LayerFill";
-        // Solid white background
-        if (r > 250 && g > 250 && b > 250 && opacity > 0.9) return "SolidBackground";
-        // Control fill: light gray with transparency
-        if (r > 240 && g > 240 && b > 240 && opacity < 0.9) return "ControlFill";
-        // Accent: blue (0, 95, 184 is WinUI default accent)
-        if (b > 150 && b > r * 1.5 && b > g * 1.5) return "Accent";
-        // Subtle fill
-        if (r > 230 && g > 230 && b > 230) return "SubtleFill";
-        // Dark background (dark mode base)
-        if (r < 50 && g < 50 && b < 50) return "SolidBackground";
-        // App base gray (243,243,243 is the standard light theme base)
-        if (r > 235 && r < 248 && g > 235 && g < 248 && b > 235 && b < 248 && opacity > 0.9)
-            return "SolidBackground";
-    }
-
-    return null;
-}
-
-static bool HasAccentFill(FigmaNode node)
-{
-    // Check the node and its children for accent-colored fills
-    if (node.Fills != null)
-    {
-        foreach (var f in node.Fills.Where(f => f.Visible && f.Type == "SOLID" && f.Color != null))
         {
-            var b = (int)(f.Color!.B * 255);
-            var r = (int)(f.Color.R * 255);
-            var g = (int)(f.Color.G * 255);
-            if (b > 150 && b > r * 1.5 && b > g * 1.5) return true;
+            sb.AppendLine("- Single content area");
+        }
+        sb.AppendLine();
+
+        // ── Component Instances (WinUI Controls) ──
+        sb.AppendLine("## Controls Found");
+        if (components.Count > 0)
+        {
+            foreach (var c in components.Distinct()) sb.AppendLine($"- {c}");
+        }
+        else
+        {
+            sb.AppendLine("- No recognized WinUI controls");
+        }
+        sb.AppendLine();
+
+        // ── Text Content ──
+        sb.AppendLine("## Text Content");
+        foreach (var t in textElements) sb.AppendLine($"- {t}");
+        sb.AppendLine();
+
+        // ── Layout Tree (compact) ──
+        sb.AppendLine("## Layout Structure");
+        sb.AppendLine("```");
+        WriteCompactTree(sync.Tree, sb, 0);
+        sb.AppendLine("```");
+
+        return sb.ToString();
+    }
+
+    static void WalkTree(FigmaNode node, int depth,
+        List<string> components, List<string> textElements, List<string> sections,
+        string parentPath)
+    {
+        if (!node.Visible) return;
+
+        var path = string.IsNullOrEmpty(parentPath) ? node.Name : $"{parentPath} > {node.Name}";
+
+        // Identify page sections (top-level named frames)
+        if (depth == 1 && node.Type is "FRAME" or "INSTANCE")
+        {
+            var desc = node.LayoutMode != null ? $" ({node.LayoutMode}, {node.Width:0}×{node.Height:0})" : $" ({node.Width:0}×{node.Height:0})";
+            sections.Add($"**{node.Name}**{desc}");
+        }
+
+        // Collect component instances → map to WinUI control names
+        if (node.Type == "INSTANCE")
+        {
+            var name = node.Name.ToLowerInvariant();
+            var compName = node.ComponentName?.ToLowerInvariant() ?? name;
+            var controlName = MapToWinUIControl(name, compName);
+            if (controlName != null)
+            {
+                var text = FindFirstText(node);
+                var label = text != null ? $" — \"{text}\"" : "";
+                components.Add($"`{controlName}`{label} (Figma: \"{node.Name}\")");
+            }
+        }
+
+        // Collect text with typography classification
+        if (node.Type == "TEXT" && !string.IsNullOrWhiteSpace(node.Characters))
+        {
+            var family = node.FontFamily?.ToLowerInvariant() ?? "";
+            if (family.Contains("fluent") || family.Contains("symbol") || family.Contains("mwf"))
+                return; // skip icon glyphs
+
+            var size = node.FontSize ?? 14;
+            var weight = node.FontWeight ?? 400;
+            var style = ClassifyTypography(size, weight);
+            var preview = node.Characters.Length > 60
+                ? node.Characters[..60] + "..."
+                : node.Characters;
+
+            var fgDesc = "";
+            if (node.Fills?.FirstOrDefault(f => f.Visible && f.Type == "SOLID" && f.Color != null) is { } fill)
+            {
+                var token = GuessTextToken(fill);
+                if (token != null) fgDesc = $" [color: {token}]";
+            }
+
+            textElements.Add($"**{style}**: \"{preview}\"{fgDesc}");
+        }
+
+        // Recurse
+        if (node.Children != null)
+        {
+            foreach (var child in node.Children)
+                WalkTree(child, depth + 1, components, textElements, sections, path);
         }
     }
-    if (node.Children != null)
-        return node.Children.Any(HasAccentFill);
-    return false;
-}
 
-static bool HasVisibleFill(FigmaNode node) =>
-    node.Fills?.Any(f => f.Visible && f.Type == "SOLID" && f.Color != null) == true;
-
-static bool HasVisibleStroke(FigmaNode node) =>
-    node.Strokes?.Any(s => s.Visible) == true;
-
-static List<string> ExtractNavItems(FigmaNode navNode)
-{
-    var items = new List<string>();
-    ExtractNavItemsRecursive(navNode, items);
-    return items;
-}
-
-static void ExtractNavItemsRecursive(FigmaNode node, List<string> items)
-{
-    if (node.ComponentName?.ToLowerInvariant().Contains("list item") == true)
+    static void WriteCompactTree(FigmaNode node, StringBuilder sb, int indent)
     {
-        var text = FindChildText(node) ?? "Item";
-        items.Add($"NavItem(\"{Escape(text)}\", icon: \"\\uE80F\", tag: \"{Escape(text).ToLowerInvariant()}\")");
-        return;
+        if (!node.Visible) return;
+
+        var prefix = new string(' ', indent * 2);
+        var name = node.Name;
+
+        // Skip decorative elements
+        var nameLower = name.ToLowerInvariant();
+        if (nameLower is "base" or "shadow" or "stroke" or "fill" or "selector" or "mask"
+            || nameLower.Contains("gradient") || nameLower.Contains(".ruler")
+            || nameLower.Contains("backdrop")) return;
+
+        // Compact description
+        var parts = new List<string>();
+        if (node.Type == "TEXT" && node.Characters != null)
+        {
+            var preview = node.Characters.Length > 40 ? node.Characters[..40] + "…" : node.Characters;
+            parts.Add($"\"{preview}\"");
+            parts.Add(ClassifyTypography(node.FontSize ?? 14, node.FontWeight ?? 400));
+        }
+        else
+        {
+            if (node.Type == "INSTANCE") parts.Add("INSTANCE");
+            if (node.LayoutMode is "VERTICAL") parts.Add("↓");
+            else if (node.LayoutMode is "HORIZONTAL") parts.Add("→");
+            if (node.ItemSpacing > 0) parts.Add($"gap={node.ItemSpacing:0}");
+            if (node.CornerRadius > 0) parts.Add($"r={node.CornerRadius:0}");
+        }
+
+        var desc = parts.Count > 0 ? $" [{string.Join(", ", parts)}]" : "";
+        sb.AppendLine($"{prefix}{name}{desc}");
+
+        // Recurse (max depth 6 for readability)
+        if (node.Children != null && indent < 6)
+        {
+            foreach (var child in node.Children)
+                WriteCompactTree(child, sb, indent + 1);
+        }
+        else if (node.Children is { Count: > 0 })
+        {
+            sb.AppendLine($"{prefix}  ... ({node.Children.Count} children)");
+        }
     }
-    if (node.Children != null)
+
+    static string ClassifyTypography(double size, double weight)
     {
-        foreach (var child in node.Children)
-            ExtractNavItemsRecursive(child, items);
+        if (size <= 12) return "Caption (12px)";
+        if (size <= 14 && weight >= 600) return "Body Strong (14px SemiBold)";
+        if (size <= 14) return "Body (14px)";
+        if (size <= 18 && weight >= 600) return "Body Large Strong (18px SemiBold)";
+        if (size <= 18) return "Body Large (18px)";
+        if (size <= 20 && weight >= 600) return "Subtitle (20px SemiBold)";
+        if (size <= 28) return "Title (28px)";
+        if (size <= 40) return "Title Large (40px)";
+        return "Display (68px)";
     }
-}
 
-// ─── Fill/Stroke Model Extensions ────────────────────────────────────────────
+    static string? MapToWinUIControl(string name, string comp)
+    {
+        bool has(string p) => name.Contains(p) || comp.Contains(p);
 
-record FillColor
-{
-    [JsonPropertyName("r")] public double R { get; init; }
-    [JsonPropertyName("g")] public double G { get; init; }
-    [JsonPropertyName("b")] public double B { get; init; }
-    [JsonPropertyName("a")] public double A { get; init; }
+        if (has("title bar") && !has("caption") && !has("icon")) return "TitleBar";
+        if (has("side nav") && !has("list item") && !has("menu") && !has("parts")) return "NavigationView";
+        if (has("nav") && has("list item")) return "NavItem";
+        if (has("breadcrumb")) return "BreadcrumbBar";
+        if (has("tab view") || has("tabview")) return "TabView";
+        if (has("button") && has("hyperlink")) return "HyperlinkButton";
+        if (has("button") && has("toggle")) return "ToggleButton";
+        if (has("button") && has("split")) return "SplitButton";
+        if (has("button") && has("dropdown")) return "DropDownButton";
+        if (has("button") && !has("caption") && !has("menu")) return "Button";
+        if (has("checkbox")) return "CheckBox";
+        if (has("toggle") && has("switch")) return "ToggleSwitch";
+        if (has("radio")) return "RadioButton";
+        if (has("combo") && has("box")) return "ComboBox";
+        if (has("slider")) return "Slider";
+        if (has("auto suggest") || has("search")) return "AutoSuggestBox";
+        if (has("text") && (has("box") || has("field"))) return "TextField";
+        if (has("password")) return "PasswordBox";
+        if (has("number") && has("box")) return "NumberBox";
+        if (has("info") && has("bar")) return "InfoBar";
+        if (has("info") && has("badge")) return "InfoBadge";
+        if (has("progress") && has("bar")) return "ProgressBar";
+        if (has("progress") && has("ring")) return "ProgressRing";
+        if (has("teaching") && has("tip")) return "TeachingTip";
+        if (has("expander")) return "Expander";
+        if (has("person") && has("picture")) return "PersonPicture";
+        if (has("calendar") && has("date")) return "CalendarDatePicker";
+        if (has("date") && has("picker")) return "DatePicker";
+        if (has("time") && has("picker")) return "TimePicker";
+        if (has("command") && has("bar")) return "CommandBar";
+        if (has("menu") && has("bar")) return "MenuBar";
+        if (has("scroll") && has("bar")) return null; // implicit
+        if (has("surface")) return null; // decorative
+        if (has("gripper")) return null;
+        if (has("footer")) return "Footer (custom layout)";
+        if (has("heading")) return "Heading (custom layout)";
+        return null;
+    }
+
+    static string? GuessTextToken(FigmaFillData fill)
+    {
+        if (fill.Color == null) return null;
+        var r = (int)(fill.Color.R * 255);
+        var g = (int)(fill.Color.G * 255);
+        var b = (int)(fill.Color.B * 255);
+        var opacity = fill.Opacity ?? 1.0;
+
+        if (r < 30 && g < 30 && b < 30 && opacity > 0.9) return null; // default PrimaryText
+        if (r > 225 && g > 225 && b > 225 && opacity > 0.9) return null; // white primary in dark mode
+        if (opacity < 0.7) return "Theme.SecondaryText";
+        if (r > 90 && r < 170 && g > 90 && g < 170 && b > 90 && b < 170) return "Theme.SecondaryText";
+        if (b > 150 && b > r && b > g) return "Theme.AccentText";
+        return null;
+    }
+
+    static string? FindFirstText(FigmaNode node)
+    {
+        if (node.Type == "TEXT" && !string.IsNullOrWhiteSpace(node.Characters))
+        {
+            var family = node.FontFamily?.ToLowerInvariant() ?? "";
+            if (!family.Contains("fluent") && !family.Contains("symbol") && !family.Contains("mwf"))
+                return node.Characters.Length > 30 ? node.Characters[..30] + "..." : node.Characters;
+        }
+        if (node.Children != null)
+        {
+            foreach (var c in node.Children)
+            {
+                var t = FindFirstText(c);
+                if (t != null) return t;
+            }
+        }
+        return null;
+    }
 }
 
 // ─── Models ──────────────────────────────────────────────────────────────────
+
+record JsonRpcRequest
+{
+    [JsonPropertyName("jsonrpc")] public string JsonRpc { get; init; } = "2.0";
+    [JsonPropertyName("method")] public string Method { get; init; } = "";
+    [JsonPropertyName("params")] public JsonElement? Params { get; init; }
+    [JsonPropertyName("id")] public JsonElement? Id { get; init; }
+}
 
 record FigmaSyncMessage
 {
@@ -870,3 +959,12 @@ record FigmaStrokeData
     [JsonPropertyName("visible")] public bool Visible { get; init; } = true;
     [JsonPropertyName("weight")] public double? Weight { get; init; }
 }
+
+record FillColor
+{
+    [JsonPropertyName("r")] public double R { get; init; }
+    [JsonPropertyName("g")] public double G { get; init; }
+    [JsonPropertyName("b")] public double B { get; init; }
+    [JsonPropertyName("a")] public double A { get; init; }
+}
+

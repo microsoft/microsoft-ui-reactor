@@ -1,15 +1,11 @@
-// ═══════════════════════════════════════════════════════════
-// FIGMA LIVE SYNC — Auto-generated from Figma
-// Frame: Frame 3465089 (2001:21036)
-// Generated: 2026-05-05 21:36:47
-// DO NOT EDIT — this file is overwritten on each Figma change
-// ═══════════════════════════════════════════════════════════
+// Figma Design Translation — Frame 3465089 (2001:21036)
+// Idiomatic Reactor WinUI app with NavigationView, TitleBar, cards layout.
 
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Layout;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
 
@@ -23,137 +19,100 @@ class Frame3465089 : Component
 {
     public override Element Render()
     {
+        var (searchText, setSearchText) = UseState("");
+        var (selectedNav, setSelectedNav) = UseState<string?>("page1");
         var controlCR = ThemeResource.CornerRadius("ControlCornerRadius");
-        var overlayCR = ThemeResource.CornerRadius("OverlayCornerRadius");
 
-        return VStack(
-                HStack(
+        return FlexColumn(
+            // ── Title bar ───────────────────────────────────────────
+            (TitleBar("App name") with
+            {
+                Content = (AutoSuggestBox(searchText, onTextChanged: setSearchText) with
+                {
+                    PlaceholderText = "Search"
+                }).Width(200),
+
+                RightHeader = PersonPicture().Initials("JD").Width(32).Height(32),
+            }).Flex(shrink: 0),
+
+            // ── Navigation + content ────────────────────────────────
+            (NavigationView(
+                [
+                    NavItem("Text", icon: "\uE8A5", tag: "page1"),
+                    NavItem("Text", icon: "\uE8A5", tag: "page2"),
+                ],
+                // Scrollable page content
+                ScrollView(
                     VStack(
-                        Border(
-                            VStack(
-                            VStack(
-                                InfoBadge(),
-                                InfoBadge())))
-                            .Padding(0, 4, 0, 0),
-                        Border(
-                            VStack(
-                            InfoBadge()))
-                            .Padding(0, 0, 0, 4)),
-                    VStack(
-                        Border(
-                            VStack(
-                            HStack(24,
-                                VStack(24,
-                                    TextBlock("Test Title testing").ApplyStyle("TitleLargeTextBlockStyle"),
-                                    TextBlock("Amet minim mollit non deserunt ullamco est sit aliqua dolor do amet sint. Velit officia consequat duis enim velit mollit. Exercitation veniam consequat sunt nostrud amet.")
-                                        .TextWrapping(TextWrapping.WrapWholeWords))),
-                            VStack(4,
-                                Border(
-                                    VStack(4,
-                                    HStack(48,
-                                        VStack(12,
-                                            HStack(12,
-                                                SubHeading("Section title")))),
-                                    Border(
-                                        VStack(
-                                        Border(VStack()).Height(1)
-                                            .Background(DividerStroke)
-                                            .HAlign(HorizontalAlignment.Stretch)))
-                                        .Padding(0, 20, 0, 0)))
-                                    .Padding(0, 24, 0, 0),
-                                HStack(12,
-                                    Border(
-                                        VStack(12,
-                                        VStack(
-                                                /* [VECTOR] Rectangle */
-                                                VStack(),
-                                                VStack(
-                                                    Border(VStack()).Width(8).Height(8),
-                                                    Border(VStack()).Width(8).Height(8),
-                                                    VStack(
-                                                        Border(VStack()).Width(8).Height(8),
-                                                        Border(VStack()).Width(8).Height(8)),
-                                                    Border(VStack()).Width(8).Height(8),
-                                                    VStack(
-                                                        Border(VStack()).Width(8).Height(8),
-                                                        Border(VStack()).Width(8).Height(8)),
-                                                    Border(VStack()).Width(8).Height(8),
-                                                    VStack(
-                                                        Border(VStack()).Width(8).Height(8),
-                                                        Border(VStack()).Width(8).Height(8)),
-                                                    Border(VStack()).Width(8).Height(8))),
-                                        Caption("Caption text"),
-                                        VStack(8,
-                                            TextBlock("Small header").ApplyStyle("BodyLargeTextBlockStyle").SemiBold(),
-                                            TextBlock("Amet minim mollit non deserunt ullamco est sit aliqua dolor do amet sint. Velit officia consequat duis enim velit mollit. Exercitation veniam consequat sunt nostrud amet.")
-                                                .TextWrapping(TextWrapping.WrapWholeWords)),
-                                        Button("Button text", () => { })))
-                                        .Padding(36, 36, 36, 100)
-                                        .Background(CardBackground)
-                                        .WithBorder(CardStroke, 1)
-                                        .CornerRadius(overlayCR.TopLeft),
-                                    Border(
-                                        VStack(12,
-                                        VStack(
-                                                /* [VECTOR] Rectangle */
-                                                VStack(),
-                                                VStack(
-                                                    Border(VStack()).Width(8).Height(8),
-                                                    Border(VStack()).Width(8).Height(8),
-                                                    VStack(
-                                                        Border(VStack()).Width(8).Height(8),
-                                                        Border(VStack()).Width(8).Height(8)),
-                                                    Border(VStack()).Width(8).Height(8),
-                                                    VStack(
-                                                        Border(VStack()).Width(8).Height(8),
-                                                        Border(VStack()).Width(8).Height(8)),
-                                                    Border(VStack()).Width(8).Height(8),
-                                                    VStack(
-                                                        Border(VStack()).Width(8).Height(8),
-                                                        Border(VStack()).Width(8).Height(8)),
-                                                    Border(VStack()).Width(8).Height(8))),
-                                        Caption("Caption text"),
-                                        VStack(8,
-                                            TextBlock("Small header").ApplyStyle("BodyLargeTextBlockStyle").SemiBold(),
-                                            TextBlock("Amet minim mollit non deserunt ullamco est sit aliqua dolor do amet sint. Velit officia consequat duis enim velit mollit. Exercitation veniam consequat sunt nostrud amet.")
-                                                .TextWrapping(TextWrapping.WrapWholeWords)),
-                                        Button("Button text", () => { })))
-                                        .Padding(36, 36, 36, 100)
-                                        .Background(CardBackground)
-                                        .WithBorder(CardStroke, 1)
-                                        .CornerRadius(overlayCR.TopLeft),
-                                    Border(
-                                        VStack(12,
-                                        VStack(
-                                                /* [VECTOR] Rectangle */
-                                                VStack(),
-                                                VStack(
-                                                    Border(VStack()).Width(8).Height(8),
-                                                    Border(VStack()).Width(8).Height(8),
-                                                    VStack(
-                                                        Border(VStack()).Width(8).Height(8),
-                                                        Border(VStack()).Width(8).Height(8)),
-                                                    Border(VStack()).Width(8).Height(8),
-                                                    VStack(
-                                                        Border(VStack()).Width(8).Height(8),
-                                                        Border(VStack()).Width(8).Height(8)),
-                                                    Border(VStack()).Width(8).Height(8),
-                                                    VStack(
-                                                        Border(VStack()).Width(8).Height(8),
-                                                        Border(VStack()).Width(8).Height(8)),
-                                                    Border(VStack()).Width(8).Height(8))),
-                                        Caption("Caption text"),
-                                        VStack(8,
-                                            TextBlock("Small header").ApplyStyle("BodyLargeTextBlockStyle").SemiBold(),
-                                            TextBlock("Amet minim mollit non deserunt ullamco est sit aliqua dolor do amet sint. Velit officia consequat duis enim velit mollit. Exercitation veniam consequat sunt nostrud amet.")
-                                                .TextWrapping(TextWrapping.WrapWholeWords)),
-                                        Button("Button text", () => { })))
-                                        .Padding(36, 36, 36, 100)
-                                        .Background(CardBackground)
-                                        .WithBorder(CardStroke, 1)
-                                        .CornerRadius(overlayCR.TopLeft)))))
-                            .Padding(24, 48, 24, 0))),
-                TitleBar("Search"))
-                .CornerRadius(overlayCR.TopLeft);
+                        // ── Hero banner ─────────────────────────────
+                        HStack(24,
+                            VStack(24,
+                                TextBlock("Test Title")
+                                    .ApplyStyle("TitleLargeTextBlockStyle"),
+                                TextBlock("Amet minim mollit non deserunt ullamco est sit aliqua dolor do amet sint. Velit officia consequat duis enim velit mollit. Exercitation veniam consequat sunt nostrud amet.")
+                                    .TextWrapping(TextWrapping.WrapWholeWords)
+                            ),
+                            // Video placeholder
+                            Border(VStack())
+                                .Width(300).Height(180)
+                                .Background(SubtleFill)
+                                .CornerRadius(controlCR.TopLeft)
+                        ).Padding(24, 48, 24, 0),
+
+                        // ── Section heading + divider ───────────────
+                        VStack(4,
+                            SubHeading("Section title"),
+                            Border(VStack()).Height(1)
+                                .Background(DividerStroke)
+                                .HAlign(HorizontalAlignment.Stretch)
+                        ).Padding(24, 24, 24, 0),
+
+                        // ── Card row ────────────────────────────────
+                        HStack(12,
+                            Card("Caption text", "Small header",
+                                "Amet minim mollit non deserunt ullamco est sit aliqua dolor do amet sint. Velit officia consequat duis enim velit mollit. Exercitation veniam consequat sunt nostrud amet.",
+                                controlCR),
+                            Card("Caption text", "Small header",
+                                "Amet minim mollit non deserunt ullamco est sit aliqua dolor do amet sint. Velit officia consequat duis enim velit mollit. Exercitation veniam consequat sunt nostrud amet.",
+                                controlCR),
+                            Card("Caption text", "Small header",
+                                "Amet minim mollit non deserunt ullamco est sit aliqua dolor do amet sint. Velit officia consequat duis enim velit mollit. Exercitation veniam consequat sunt nostrud amet.",
+                                controlCR)
+                        ).Padding(24, 12, 24, 24)
+                    )
+                )
+            ) with
+            {
+                IsSettingsVisible = true,
+                SelectedTag = selectedNav,
+                OnSelectionChanged = tag => setSelectedNav(tag),
+                PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
+            }).Flex(grow: 1)
+        );
     }
+
+    /// <summary>Renders a content card with image placeholder, caption, header, body, and action button.</summary>
+    static Element Card(string caption, string header, string body, CornerRadius cornerRadius) =>
+        Border(
+            VStack(12,
+                // Image placeholder
+                Border(VStack())
+                    .Height(120)
+                    .Background(SubtleFill)
+                    .CornerRadius(cornerRadius.TopLeft)
+                    .HAlign(HorizontalAlignment.Stretch),
+                Caption(caption),
+                VStack(8,
+                    TextBlock(header)
+                        .ApplyStyle("BodyLargeTextBlockStyle").SemiBold(),
+                    TextBlock(body)
+                        .TextWrapping(TextWrapping.WrapWholeWords)
+                ),
+                Button("Button text", () => { })
+            )
+        )
+        .Padding(36, 36, 36, 36)
+        .Background(CardBackground)
+        .WithBorder(CardStroke, 1)
+        .CornerRadius(cornerRadius.TopLeft);
 }

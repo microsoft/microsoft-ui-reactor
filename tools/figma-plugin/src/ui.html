@@ -43,7 +43,15 @@
 <body>
   <div class="status" id="status">Connecting to bridge...</div>
   <div class="status" id="frame-status">No frame selected</div>
-  <button id="sync-btn" onclick="requestSync()">Force Sync</button>
+  <div style="display: flex; gap: 8px; margin-top: 8px;">
+    <button id="generate-btn" onclick="generate()" style="flex: 1; background: var(--figma-color-bg-brand); color: var(--figma-color-text-onbrand); font-weight: 600;">
+      ▶ Generate as Reactor
+    </button>
+    <button id="sync-btn" onclick="requestSync()" style="flex: 0;">↻ Sync</button>
+  </div>
+  <div class="status" id="mode-status" style="margin-top: 8px; font-size: 10px; opacity: 0.7;">
+    Mode: Waiting for generation
+  </div>
   <div class="log" id="log"></div>
 
   <script>
@@ -87,7 +95,29 @@
 
         ws.onmessage = (event) => {
           const data = JSON.parse(event.data);
-          log(`Bridge: ${data.type || "message"}`);
+          
+          if (data.type === "connected") {
+            log("Bridge connected");
+          } else if (data.type === "status") {
+            log("⏳ " + data.message);
+            document.getElementById("mode-status").textContent = "Mode: " + data.message;
+          } else if (data.type === "generated") {
+            log("✓ Code generated! " + data.chars + " chars → " + data.file);
+            document.getElementById("mode-status").textContent = "Mode: Live patching (code generated)";
+          } else if (data.type === "generating") {
+            log("▶ " + data.message);
+            document.getElementById("mode-status").textContent = "Mode: Copilot CLI generating...";
+          } else if (data.type === "patched") {
+            log("✓ Live patch: " + data.count + " changes applied");
+            document.getElementById("mode-status").textContent = "Mode: Live patching";
+          } else if (data.type === "ack") {
+            log("✓ Design data synced");
+          } else if (data.type === "error") {
+            log("✗ Error: " + data.message);
+            document.getElementById("mode-status").textContent = "Mode: Error — see log";
+          } else {
+            log("Bridge: " + JSON.stringify(data).substring(0, 100));
+          }
         };
 
         ws.onclose = () => {
@@ -116,18 +146,34 @@
       parent.postMessage({ pluginMessage: { type: "request-sync" } }, "*");
     }
 
+    function generate() {
+      parent.postMessage({ pluginMessage: { type: "generate" } }, "*");
+      document.getElementById("mode-status").textContent = "Mode: Generating via LLM...";
+      log("Triggered initial generation");
+    }
+
     // Receive messages from plugin main thread
     window.onmessage = (event) => {
       const msg = event.data?.pluginMessage;
       if (!msg) return;
 
       if (msg.type === "sync") {
-        // Forward design data to bridge server
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify(msg.payload));
-          log(`Sent: ${msg.payload.type} (${msg.payload.frameName})`);
+          const mode = msg.payload.type;
+          if (mode === "generate") {
+            log("Sent: full design tree to bridge");
+            log("→ Now ask Copilot: 'Call figma_summary and translate to Reactor code'");
+            document.getElementById("mode-status").textContent = "Mode: Awaiting Copilot agent...";
+          } else if (mode === "incremental") {
+            const count = msg.payload.patches ? msg.payload.patches.length : 0;
+            log("Sent: patch (" + count + " changes)");
+            document.getElementById("mode-status").textContent = "Mode: Live patching";
+          } else {
+            log("Sent: full-sync (" + msg.payload.frameName + ")");
+          }
         } else {
-          log("Not connected — sync queued");
+          log("Not connected — queued");
         }
       } else if (msg.type === "status") {
         document.getElementById("frame-status").textContent = msg.message;
