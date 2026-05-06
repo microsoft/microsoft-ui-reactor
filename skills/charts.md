@@ -2,13 +2,14 @@
 name: reactor-charts
 description: >
   Reactor charting skill. Covers (1) choosing the right chart for the data,
-  (2) the chart DSL surface (LineChart, BarChart, AreaChart, PieChart) and
-  the new *View extension points that let axis ticks and pie slices render
-  any Reactor Element, (3) D3 scales/axes pitfalls, (4) labeling and a11y
-  rules, and (5) the most-cited visualization mistakes to refuse to ship.
-  Read when a user asks for charts — even if they didn't ask for advice on
-  which chart to use, the answer to "should I use a pie chart for this?" is
-  almost always "no, use a sorted bar chart."
+  (2) the DSL surface — LineChart, BarChart, AreaChart, PieChart (donut via
+  InnerRadius), TreeChart, ForceGraph — plus the *View extension points
+  that let axis ticks and pie slices render any Reactor Element, (3) D3
+  scales/axes pitfalls, (4) labeling and a11y rules, and (5) the most-cited
+  visualization mistakes to refuse to ship. Read when a user asks for
+  charts — even if they didn't ask for advice on which chart to use, the
+  answer to "should I use a pie chart for this?" is almost always "no, use
+  a sorted bar chart."
 ---
 
 # Reactor Charts
@@ -36,19 +37,35 @@ rules of thumb:
 | **Line** | Continuous data, many x-values, trends/slopes, autocorrelated series (prices, sensor readings). | Few categorical observations — use bar. |
 | **Area** | Cumulative magnitude or parts-of-whole over time. | Series cross frequently — overlap occludes; switch to line. |
 | **Pie** | Parts-of-a-whole **and** ≤5 slices **and** large differences **and** proportions land near recognizable fractions (½, ¼, ⅓). | Anything else. Ranking, change-over-time, negative values, precise comparison — use a sorted bar chart. |
+| **Donut** (`PieChart` with `InnerRadius > 0`) | Same conditions as pie. The inner hole gives you a place for a center label (total, current selection) — useful when the chart sits inside a dashboard. | Same as pie. The hole doesn't fix pie's ranking weakness. |
+| **Tree** (`TreeChart`) | Hierarchical data: org charts, file/folder structures, taxonomies, decision trees. Visualizes parent→child links. | Wide hierarchies (>~30 nodes per level) — the tree gets unreadable; consider a treemap (use the `D3.Layout.Treemap` primitive — no top-level factory yet). |
+| **Force graph** (`ForceGraph`) | Relationship networks: dependency graphs, social graphs, knowledge graphs. Shows which nodes cluster. | Hierarchical data — use `TreeChart` (an explicit layout always reads better when one exists). Static print/snapshot output — force layouts converge differently each run. |
 
 When the user asks for a pie chart, push back unless all four pie conditions
 hold. A sorted bar chart usually wins. (Few/Tufte say "almost never pie";
 Cairo/Wilke allow the narrow case above. Default to "no" and concede when
 the conditions are met.)
 
+**Charts not yet exposed as top-level factories:** Sankey, Treemap, Cluster
+dendrograms, partition/sunburst, stratified hierarchies. The math primitives
+exist in `src/Reactor/Charting/D3/Layout/` (`Sankey.cs`, `Treemap.cs`,
+`Cluster.cs`, `Stratify.cs`, `TreeLayout.cs`) and can be composed with
+`D3Canvas` + the d3 shape generators. If a user asks for one of these and
+isn't comfortable assembling D3 primitives directly, suggest filing a
+factory request rather than hand-rolling — the resulting chart will lack
+the shared accessibility surface.
+
 ## The DSL — quick reference
 
 ```csharp
-LineChart(data, x, y)       // continuous line
-BarChart (data, x, y)       // vertical bars (always anchored at zero — see pitfalls)
-AreaChart(data, x, y)       // filled area
-PieChart (data, value)      // slices summing to 100%
+LineChart (data, x, y)              // continuous line
+BarChart  (data, x, y)              // vertical bars (always anchored at zero — see pitfalls)
+AreaChart (data, x, y)              // filled area
+PieChart  (data, value)             // slices summing to 100%
+PieChart  (data, value)             // donut variant: chain .InnerRadius(40+)
+    .InnerRadius(60)
+TreeChart (root, children)          // hierarchical (org chart, file tree, taxonomy)
+ForceGraph(nodes, links)            // network graph (dependencies, relationships)
 ```
 
 Common fluent knobs (chain-call any subset):
@@ -267,9 +284,15 @@ Skip it when a `string` works:
 - `docs/guide/charting.md` — full user-facing chart guide.
 - `src/Reactor/Charting/Charts.cs` — `ChartElement<T>` / `PieChartElement<T>`
   fluent API. `*View` methods sit near the bottom of each class.
+- `src/Reactor/Charting/Charts.Tree.cs` — `TreeChart` and `ForceGraph`
+  factories + their elements.
 - `src/Reactor/Charting/D3Charts.cs` — d3 primitives (`D3Pie`, `D3Axes`,
-  `D3Grid`). `D3Axes` is where the optional `xTickLabel` / `yTickLabel`
-  delegates plug in.
+  `D3Grid`, `D3Canvas`). `D3Axes` is where the optional `xTickLabel` /
+  `yTickLabel` delegates plug in.
+- `src/Reactor/Charting/D3/Layout/` — composable layout algorithms
+  (`Sankey.cs`, `Treemap.cs`, `Cluster.cs`, `Stratify.cs`, `TreeLayout.cs`).
+  No top-level factory wrapping these yet; they're the building blocks for
+  one when the time comes.
 - `src/Reactor/Elements/CanvasExtensions.cs` — `CenterAt` and the anchor
   overload of `Canvas`.
 
