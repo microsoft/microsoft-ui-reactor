@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
@@ -147,8 +148,8 @@ internal sealed partial class ChartPointProvider : AutomationPeer,
     {
         // Format intelligently: integers without decimals, others with reasonable precision
         var formatted = value == Math.Truncate(value)
-            ? value.ToString("N0")
-            : value.ToString("N2");
+            ? value.ToString("N0", CultureInfo.InvariantCulture)
+            : value.ToString("N2", CultureInfo.InvariantCulture);
 
         return units != null ? $"{formatted}{units}" : formatted;
     }

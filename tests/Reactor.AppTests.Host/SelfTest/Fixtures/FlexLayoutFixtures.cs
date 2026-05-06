@@ -250,8 +250,8 @@ internal static class FlexLayoutFixtures
                 VStack(8,
                     Border(
                         FlexRow(
-                            TextBlock("Left").Flex(grow: 1).Background("LightCoral"),
-                            TextBlock("Right").Flex(grow: 1).Background("LightBlue")
+                            TextBlock("Left").Flex(basis: 0, grow: 1).Background("LightCoral"),
+                            TextBlock("Right").Flex(basis: 0, grow: 1).Background("LightBlue")
                         )
                     ).Width(600).Background("LightGray"),
 

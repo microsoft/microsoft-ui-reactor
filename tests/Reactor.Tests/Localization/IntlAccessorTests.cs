@@ -91,7 +91,8 @@ public class IntlAccessorTests
         var provider = new InMemoryResourceProvider();
         var t = CreateAccessor("en-US", provider);
 
-        var result = t.FormatNumber(1234.56);
+        var result = t.FormatNumber(1234.56,
+            new NumberFormatOptions { MinimumFractionDigits = 2, MaximumFractionDigits = 2 });
         Assert.Equal("1,234.56", result);
     }
 
@@ -111,7 +112,12 @@ public class IntlAccessorTests
         var provider = new InMemoryResourceProvider();
         var t = CreateAccessor("en-US", provider);
 
-        var result = t.FormatNumber(0.75, new NumberFormatOptions { Style = NumberStyle.Percent });
+        var result = t.FormatNumber(0.75, new NumberFormatOptions
+        {
+            Style = NumberStyle.Percent,
+            MinimumFractionDigits = 2,
+            MaximumFractionDigits = 2,
+        });
         Assert.Equal("75.00%", result);
     }
 

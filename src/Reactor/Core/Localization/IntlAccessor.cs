@@ -194,12 +194,13 @@ public sealed class IntlAccessor
         {
             var effectiveMin = Math.Min(min, max);
             var effectiveMax = Math.Max(min, max);
-            nfi.NumberDecimalDigits = Math.Clamp(nfi.NumberDecimalDigits, effectiveMin, effectiveMax);
+            ApplyFractionDigits(nfi, style,
+                d => Math.Clamp(d, effectiveMin, effectiveMax));
         }
         else if (options?.MinimumFractionDigits is int minOnly)
-            nfi.NumberDecimalDigits = Math.Max(nfi.NumberDecimalDigits, minOnly);
+            ApplyFractionDigits(nfi, style, d => Math.Max(d, minOnly));
         else if (options?.MaximumFractionDigits is int maxOnly)
-            nfi.NumberDecimalDigits = Math.Min(nfi.NumberDecimalDigits, maxOnly);
+            ApplyFractionDigits(nfi, style, d => Math.Min(d, maxOnly));
 
         return style switch
         {
@@ -207,6 +208,23 @@ public sealed class IntlAccessor
             NumberStyle.Percent => value.ToString("P", nfi),
             _ => value.ToString("N", nfi)
         };
+    }
+
+    private static void ApplyFractionDigits(
+        NumberFormatInfo nfi, NumberStyle style, Func<int, int> transform)
+    {
+        switch (style)
+        {
+            case NumberStyle.Percent:
+                nfi.PercentDecimalDigits = transform(nfi.PercentDecimalDigits);
+                break;
+            case NumberStyle.Currency:
+                nfi.CurrencyDecimalDigits = transform(nfi.CurrencyDecimalDigits);
+                break;
+            default:
+                nfi.NumberDecimalDigits = transform(nfi.NumberDecimalDigits);
+                break;
+        }
     }
 
     /// <summary>
