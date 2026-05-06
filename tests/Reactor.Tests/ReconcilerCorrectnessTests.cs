@@ -353,6 +353,132 @@ public class ReconcilerCorrectnessTests
     }
 
     // ════════════════════════════════════════════════════════════════
+    //  ShallowEquals — chart primitives (PathElement / LineElement / CanvasElement)
+    //
+    //  Charts emit these in bulk via D3Charts. Without these fast-path arms,
+    //  every parent re-render reassigns Fill/Stroke/StrokeThickness on every
+    //  WinUI Path. Regression coverage so future edits don't accidentally
+    //  reintroduce per-render updates for unchanged chart geometry.
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ShallowEquals_PathElement_Same_PathDataString_Returns_True()
+    {
+        var a = new PathElement { PathDataString = "M0,0 L10,10", StrokeThickness = 1.5 };
+        var b = new PathElement { PathDataString = "M0,0 L10,10", StrokeThickness = 1.5 };
+        Assert.True(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_PathElement_Different_PathDataString_Returns_False()
+    {
+        var a = new PathElement { PathDataString = "M0,0 L10,10" };
+        var b = new PathElement { PathDataString = "M0,0 L20,20" };
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_PathElement_Different_StrokeThickness_Returns_False()
+    {
+        var a = new PathElement { PathDataString = "M0,0 L10,10", StrokeThickness = 1.0 };
+        var b = new PathElement { PathDataString = "M0,0 L10,10", StrokeThickness = 2.0 };
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_PathElement_Both_Brushes_Null_Returns_True()
+    {
+        // BrushesEqual short-circuits on ReferenceEquals — both null is the
+        // common case for chart paths whose color comes from a sibling property.
+        var a = new PathElement { PathDataString = "M0,0 L10,10" };
+        var b = new PathElement { PathDataString = "M0,0 L10,10" };
+        Assert.True(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_PathElement_With_Setters_Returns_False()
+    {
+        // Authors who attach raw Setters need the slow path so their callbacks fire.
+        var a = new PathElement
+        {
+            PathDataString = "M0,0 L10,10",
+            Setters = [_ => { }],
+        };
+        var b = new PathElement { PathDataString = "M0,0 L10,10" };
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_LineElement_Same_Coords_Returns_True()
+    {
+        var a = new LineElement { X1 = 0, Y1 = 0, X2 = 100, Y2 = 100, StrokeThickness = 1 };
+        var b = new LineElement { X1 = 0, Y1 = 0, X2 = 100, Y2 = 100, StrokeThickness = 1 };
+        Assert.True(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_LineElement_Different_X1_Returns_False()
+    {
+        var a = new LineElement { X1 = 0, Y1 = 0, X2 = 100, Y2 = 100 };
+        var b = new LineElement { X1 = 5, Y1 = 0, X2 = 100, Y2 = 100 };
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_LineElement_Different_Y2_Returns_False()
+    {
+        var a = new LineElement { X1 = 0, Y1 = 0, X2 = 100, Y2 = 100 };
+        var b = new LineElement { X1 = 0, Y1 = 0, X2 = 100, Y2 = 50 };
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_CanvasElement_Same_Children_Reference_Returns_True()
+    {
+        // Same Children array reference = whole subtree provably unchanged.
+        // This is the primary skip path for static / memoized chart canvases.
+        var children = new Element[] { new TextBlockElement("a"), new TextBlockElement("b") };
+        var a = new CanvasElement(children) { Width = 400, Height = 300 };
+        var b = new CanvasElement(children) { Width = 400, Height = 300 };
+        Assert.True(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_CanvasElement_Different_Children_Reference_Returns_False()
+    {
+        // Different array refs even with identical contents: don't skip — the
+        // outer Update path recurses into children, where each child's own
+        // ShallowEquals arm decides whether to skip individually.
+        var a = new CanvasElement([new TextBlockElement("a")]) { Width = 400, Height = 300 };
+        var b = new CanvasElement([new TextBlockElement("a")]) { Width = 400, Height = 300 };
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_CanvasElement_Different_Width_Returns_False()
+    {
+        var children = new Element[] { new TextBlockElement("a") };
+        var a = new CanvasElement(children) { Width = 400, Height = 300 };
+        var b = new CanvasElement(children) { Width = 500, Height = 300 };
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_CanvasElement_Different_IsInteractive_Returns_False()
+    {
+        // Chart accessibility flags must round-trip through Update so the
+        // keyboard wrapper and scanner hint stay in sync with the element state.
+        var children = new Element[] { new TextBlockElement("a") };
+        var a = new CanvasElement(children) { Width = 400, IsInteractive = false };
+        var b = new CanvasElement(children) { Width = 400, IsInteractive = true };
+        Assert.False(Element.ShallowEquals(a, b));
+    }
+
+    // TransformsEqual is exercised in tests/Reactor.AppTests.Host/SelfTest/Fixtures/
+    // — TranslateTransform, RotateTransform, and DoubleCollection constructors
+    // require a XAML dispatcher and can't run in headless unit tests.
+
+    // ════════════════════════════════════════════════════════════════
     //  ChildReconciler.ComputeLIS — stress test for correctness
     // ════════════════════════════════════════════════════════════════
 

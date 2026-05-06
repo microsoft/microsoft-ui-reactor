@@ -3,6 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
@@ -355,6 +356,128 @@ internal static class ReconcilerFixtures
                 H.FindText("F0") is not null && H.FindText("F1") is not null &&
                 H.FindText("W0") is not null && H.FindText("W1") is not null &&
                 H.FindText("C0") is not null && H.FindText("C1") is not null);
+        }
+    }
+
+    /// <summary>
+    /// Regression coverage for the chart-primitive ShallowEquals fast paths in
+    /// Element.cs. The brush + transform structural-equality helpers can't be
+    /// exercised in headless xUnit tests because SolidColorBrush / TranslateTransform
+    /// constructors require a XAML dispatcher, so the coverage lives here.
+    /// </summary>
+    internal class ShallowEqualsChartPrimitives(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            // ── PathElement.Fill — distinct SolidColorBrush, same color → equal ──
+            // D3Charts.Brush(...) allocates a fresh SolidColorBrush on every call,
+            // so reference equality never holds for the chart hot path.
+            var redA = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 200, 0, 0));
+            var redB = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 200, 0, 0));
+            var blue = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 0, 0, 200));
+
+            H.Check("ShallowEquals_PathElement_Same_Color_Distinct_Brush_Returns_True",
+                Element.ShallowEquals(
+                    new PathElement { PathDataString = "M0,0 L10,10", Fill = redA },
+                    new PathElement { PathDataString = "M0,0 L10,10", Fill = redB }));
+
+            H.Check("ShallowEquals_PathElement_Different_Color_Returns_False",
+                !Element.ShallowEquals(
+                    new PathElement { PathDataString = "M0,0 L10,10", Fill = redA },
+                    new PathElement { PathDataString = "M0,0 L10,10", Fill = blue }));
+
+            H.Check("ShallowEquals_PathElement_Different_Stroke_Color_Returns_False",
+                !Element.ShallowEquals(
+                    new PathElement { PathDataString = "M0,0 L10,10", Stroke = redA },
+                    new PathElement { PathDataString = "M0,0 L10,10", Stroke = blue }));
+
+            H.Check("ShallowEquals_PathElement_One_Brush_Null_Returns_False",
+                !Element.ShallowEquals(
+                    new PathElement { PathDataString = "M0,0 L10,10", Fill = redA },
+                    new PathElement { PathDataString = "M0,0 L10,10" }));
+
+            // ── PathElement.RenderTransform — TransformsEqual coverage ──
+            // D3PathTranslated allocates a fresh TranslateTransform per render —
+            // structural compare is the whole point of the helper.
+            var t1 = new TranslateTransform { X = 100, Y = 50 };
+            var t2 = new TranslateTransform { X = 100, Y = 50 };
+            var tDifferentX = new TranslateTransform { X = 200, Y = 50 };
+            var tDifferentY = new TranslateTransform { X = 100, Y = 75 };
+            var rotate1 = new RotateTransform { Angle = 30 };
+            var rotate2 = new RotateTransform { Angle = 30 };
+
+            H.Check("ShallowEquals_PathElement_Distinct_TranslateTransforms_Same_XY_Returns_True",
+                Element.ShallowEquals(
+                    new PathElement { PathDataString = "M0,0 L10,10", RenderTransform = t1 },
+                    new PathElement { PathDataString = "M0,0 L10,10", RenderTransform = t2 }));
+
+            H.Check("ShallowEquals_PathElement_TranslateTransform_Different_X_Returns_False",
+                !Element.ShallowEquals(
+                    new PathElement { PathDataString = "M0,0 L10,10", RenderTransform = t1 },
+                    new PathElement { PathDataString = "M0,0 L10,10", RenderTransform = tDifferentX }));
+
+            H.Check("ShallowEquals_PathElement_TranslateTransform_Different_Y_Returns_False",
+                !Element.ShallowEquals(
+                    new PathElement { PathDataString = "M0,0 L10,10", RenderTransform = t1 },
+                    new PathElement { PathDataString = "M0,0 L10,10", RenderTransform = tDifferentY }));
+
+            // Non-TranslateTransform falls back to ReferenceEquals — distinct
+            // RotateTransform instances must NOT be treated as equal even with same Angle.
+            H.Check("ShallowEquals_PathElement_Distinct_RotateTransforms_Returns_False",
+                !Element.ShallowEquals(
+                    new PathElement { PathDataString = "M0,0 L10,10", RenderTransform = rotate1 },
+                    new PathElement { PathDataString = "M0,0 L10,10", RenderTransform = rotate2 }));
+
+            // Mismatched transform types must not pretend to be equal.
+            H.Check("ShallowEquals_PathElement_Mismatched_Transform_Types_Returns_False",
+                !Element.ShallowEquals(
+                    new PathElement { PathDataString = "M0,0 L10,10", RenderTransform = t1 },
+                    new PathElement { PathDataString = "M0,0 L10,10", RenderTransform = rotate1 }));
+
+            H.Check("ShallowEquals_PathElement_One_Transform_Null_Returns_False",
+                !Element.ShallowEquals(
+                    new PathElement { PathDataString = "M0,0 L10,10", RenderTransform = t1 },
+                    new PathElement { PathDataString = "M0,0 L10,10" }));
+
+            // ── PathElement.StrokeDashArray — reference compare ──
+            // Distinct DoubleCollection instances force the slow path even when
+            // their values match. Mirrors how Children references are compared.
+            var dashA = new DoubleCollection { 2, 2 };
+            var dashB = new DoubleCollection { 2, 2 };
+
+            H.Check("ShallowEquals_PathElement_Distinct_StrokeDashArray_Returns_False",
+                !Element.ShallowEquals(
+                    new PathElement { PathDataString = "M0,0 L10,10", StrokeDashArray = dashA },
+                    new PathElement { PathDataString = "M0,0 L10,10", StrokeDashArray = dashB }));
+
+            H.Check("ShallowEquals_PathElement_Same_StrokeDashArray_Reference_Returns_True",
+                Element.ShallowEquals(
+                    new PathElement { PathDataString = "M0,0 L10,10", StrokeDashArray = dashA },
+                    new PathElement { PathDataString = "M0,0 L10,10", StrokeDashArray = dashA }));
+
+            // ── LineElement + CanvasElement with brushes ──
+            H.Check("ShallowEquals_LineElement_Same_Color_Distinct_Brush_Returns_True",
+                Element.ShallowEquals(
+                    new LineElement { X1 = 0, Y1 = 0, X2 = 100, Y2 = 100, Stroke = redA },
+                    new LineElement { X1 = 0, Y1 = 0, X2 = 100, Y2 = 100, Stroke = redB }));
+
+            H.Check("ShallowEquals_LineElement_Different_Color_Returns_False",
+                !Element.ShallowEquals(
+                    new LineElement { X1 = 0, Y1 = 0, X2 = 100, Y2 = 100, Stroke = redA },
+                    new LineElement { X1 = 0, Y1 = 0, X2 = 100, Y2 = 100, Stroke = blue }));
+
+            var canvasChildren = new Element[] { new TextBlockElement("a") };
+            H.Check("ShallowEquals_CanvasElement_Same_Children_And_Background_Returns_True",
+                Element.ShallowEquals(
+                    new CanvasElement(canvasChildren) { Width = 400, Background = redA },
+                    new CanvasElement(canvasChildren) { Width = 400, Background = redB }));
+
+            H.Check("ShallowEquals_CanvasElement_Different_Background_Returns_False",
+                !Element.ShallowEquals(
+                    new CanvasElement(canvasChildren) { Width = 400, Background = redA },
+                    new CanvasElement(canvasChildren) { Width = 400, Background = blue }));
+
+            return Task.CompletedTask;
         }
     }
 }
