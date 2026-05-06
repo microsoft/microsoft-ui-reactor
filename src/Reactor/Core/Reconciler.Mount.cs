@@ -2314,7 +2314,7 @@ public sealed partial class Reconciler
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
             _logger.LogError(ex, "Component Render() threw during mount: {ComponentName}", compElement.GetType().Name);
-            childElement = new TextBlockElement($"⚠ Render error: {ex.Message}");
+            childElement = ErrorFallback.BuildElement(ex);
         }
         UIElement? childControl;
         try
@@ -2359,7 +2359,7 @@ public sealed partial class Reconciler
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
             _logger.LogError(ex, "FuncComponent Render() threw during mount");
-            childElement = new TextBlockElement($"⚠ Render error: {ex.Message}");
+            childElement = ErrorFallback.BuildElement(ex);
         }
         UIElement? childControl;
         try
@@ -2405,7 +2405,7 @@ public sealed partial class Reconciler
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
             _logger.LogError(ex, "MemoComponent Render() threw during mount");
-            childElement = new TextBlockElement($"⚠ Render error: {ex.Message}");
+            childElement = ErrorFallback.BuildElement(ex);
         }
         UIElement? childControl;
         try
@@ -2483,8 +2483,49 @@ public sealed partial class Reconciler
 
     private WinShapes.Path MountPath(PathElement pa)
     {
-        var p = new WinShapes.Path();
-        if (pa.Data is not null) p.Data = pa.Data;
+        // Prefer constructing the Path via WinUI's native XAML parser when a path
+        // data string is available. Hand-built PathGeometry trees can trip
+        // Path.Data validation ("Value does not fall within the expected range")
+        // even when geometrically valid, and a Geometry already attached to one
+        // Path cannot be re-parented to another. Building the Path + Geometry
+        // together via XamlReader avoids both pitfalls.
+        WinShapes.Path? p = null;
+        global::System.Exception? xamlReaderError = null;
+        string? attemptedXaml = null;
+        if (pa.PathDataString is { Length: > 0 } pds)
+        {
+            try
+            {
+                var safe = global::System.Net.WebUtility.HtmlEncode(pds);
+                attemptedXaml =
+                    "<Path xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\""
+                    + safe + "\" />";
+                p = Microsoft.UI.Xaml.Markup.XamlReader.Load(attemptedXaml) as WinShapes.Path;
+            }
+            catch (global::System.Exception ex)
+            {
+                xamlReaderError = ex;
+            }
+        }
+
+        if (p is null)
+        {
+            p = new WinShapes.Path();
+            if (pa.Data is not null)
+            {
+                try { p.Data = pa.Data; }
+                catch (global::System.Exception ex)
+                {
+                    var xamlNote = xamlReaderError is not null
+                        ? $" XamlReader.Load also failed: {xamlReaderError.GetType().Name}: {xamlReaderError.Message}. Attempted XAML: {attemptedXaml}"
+                        : " (XamlReader.Load returned non-Path or wasn't attempted)";
+                    throw new global::System.ArgumentException(
+                        $"Path.Data rejected by WinUI. PathDataString={pa.PathDataString ?? "(null)"}; "
+                        + $"DataType={pa.Data.GetType().Name}; inner={ex.Message}.{xamlNote}", ex);
+                }
+            }
+        }
+
         if (pa.Fill is not null) p.Fill = pa.Fill;
         if (pa.Stroke is not null) p.Stroke = pa.Stroke;
         if (pa.StrokeThickness > 0) p.StrokeThickness = pa.StrokeThickness;

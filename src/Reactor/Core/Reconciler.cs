@@ -760,7 +760,7 @@ public sealed partial class Reconciler : IDisposable
                 Diagnostics.ReactorEventSource.Log.RenderError(
                     componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
             }
-            newChildElement = new TextBlockElement($"⚠ Render error: {ex.Message}");
+            newChildElement = ErrorFallback.BuildElement(ex);
         }
 
         if (traceRender)

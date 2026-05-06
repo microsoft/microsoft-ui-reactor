@@ -24,6 +24,16 @@ public static class PathDataParser
         PathFigure? figure = null;
         double cx = 0, cy = 0; // current point
 
+        // Build each PathFigure to completion (StartPoint + segments + IsClosed)
+        // before adding it to geometry.Figures. Mutating a child of a WinRT-projected
+        // collection after insertion is fragile in general; doing the insertion last
+        // keeps construction predictable for any future segment commands.
+
+        void Commit()
+        {
+            if (figure is not null) geometry.Figures.Add(figure);
+        }
+
         int i = 0;
         while (i < pathData.Length)
         {
@@ -37,8 +47,8 @@ public static class PathDataParser
                     double mx = ReadNumber(pathData, ref i);
                     SkipComma(pathData, ref i);
                     double my = ReadNumber(pathData, ref i);
+                    Commit();
                     figure = new PathFigure { StartPoint = new Point(mx, my), IsClosed = false };
-                    geometry.Figures.Add(figure);
                     cx = mx; cy = my;
                     break;
 
@@ -142,6 +152,7 @@ public static class PathDataParser
             }
         }
 
+        Commit();
         return geometry;
     }
 

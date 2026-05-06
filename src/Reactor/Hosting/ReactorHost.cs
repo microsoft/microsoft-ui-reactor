@@ -764,19 +764,7 @@ public sealed class ReactorHost : IDisposable
 
     private void ShowErrorFallback(Exception ex)
     {
-        var errorPanel = new WinUI.Border
-        {
-            BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                global::Windows.UI.Color.FromArgb(255, 255, 0, 0)),
-            BorderThickness = new Thickness(2),
-            Padding = new Thickness(16),
-            Child = new WinUI.TextBlock
-            {
-                Text = $"Render error: {ex.GetType().Name}: {ex.Message}",
-                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
-                IsTextSelectionEnabled = true,
-            }
-        };
+        var errorPanel = Microsoft.UI.Reactor.Core.ErrorFallback.BuildPanel(ex);
         if (_overlayWiring is not null && _overlayWiring.TryShowErrorInWrapper(errorPanel))
         {
             // shared overlay wrapper took it

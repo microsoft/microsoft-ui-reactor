@@ -539,6 +539,13 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         double cx = _width / 2, cy = _height / 2;
         double outerRadius = Math.Min(cx, cy) - 10;
 
+        // Degenerate canvas (transient layout pass, very small container, or
+        // caller passed bogus dimensions): emit an empty canvas rather than feeding
+        // negative/NaN radii into ArcGenerator and tripping Path.Data validation.
+        if (outerRadius <= 0 || _innerRadius >= outerRadius)
+            return AttachChartData(D3Canvas(_width, _height))
+                .AutomationName(chartName);
+
         var whiteBrush = new SolidColorBrush(Microsoft.UI.Colors.White);
 
         var labels =
