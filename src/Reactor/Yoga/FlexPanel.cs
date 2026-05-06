@@ -294,6 +294,21 @@ public partial class FlexPanel : Panel
     // Yoga uses the explicit dimension and bypasses MeasureFunction).
     private readonly HashSet<UIElement> _measuredThisPass = new();
 
+    // Yoga's height-axis MeasureMode for the current MeasureFunction call,
+    // threaded down to a nested FlexPanel via [ThreadStatic]. Lets a child
+    // FlexPanel disambiguate two semantically-different "AtMost" cases:
+    //   - WinUI AtMost from a non-Yoga parent (the standard Measure
+    //     contract — VerticalAlignment.Stretch means "fill up to this"),
+    //   - Yoga AtMost from an outer FlexPanel doing basis/FitContent
+    //     measurement (a soft cap on content size, NOT a fill target —
+    //     treating it as fill would make the inner report the cap as its
+    //     DesiredSize and defeat the outer's flex-grow distribution).
+    // null = not nested under a FlexPanel measurement → use the WinUI
+    // contract directly. Yoga Exactly = stretch-fit allocation → fill.
+    // Yoga Undefined / AtMost = basis content measurement → do not fill.
+    [global::System.ThreadStatic]
+    private static YogaMeasureMode? _outerYogaHeightMode;
+
     protected override Size MeasureOverride(Size availableSize)
     {
         _measuredThisPass.Clear();
@@ -354,8 +369,49 @@ public partial class FlexPanel : Panel
         // 3. Otherwise (no explicit Height, or parent offer is infinite, or
         //    VerticalAlignment != Stretch): CSS `height: auto`. Pass NaN —
         //    MaxContent mode, no shrink. Content overflows a smaller parent.
+        // Block axis: three modes, in priority order.
+        //
+        // 1. Explicit .Height(N): CSS `height: N` — definite. Pass N to
+        //    Yoga (StretchFit mode for justify-content / align-items).
+        //
+        // 2. VerticalAlignment.Stretch with a definite parent offer: WinUI
+        //    Stretch + finite availableSize.Height = "fill my parent's
+        //    slot" (analogous to CSS `height: 100%` against a definite
+        //    parent). Pass availableSize.Height to Yoga as the container
+        //    size so flex-grow children have a definite pool to
+        //    distribute. This is the symmetric counterpart to the inline
+        //    axis above and is what makes the canonical web flex pattern —
+        //    header(auto) / body(flex:1) / footer(auto) filling a
+        //    viewport — work without forcing a hardcoded `.Height(N)`.
+        //
+        //    The "is parent's AtMost a fill target?" question is what the
+        //    [ThreadStatic] _outerYogaHeightMode resolves: when a parent
+        //    FlexPanel's Yoga is in basis/FitContent measurement, we want
+        //    to report content size, not the cap. Only Yoga's Exactly
+        //    mode (and "no flex parent at all" — the normal WinUI
+        //    contract) means fill. Without this discrimination a nested
+        //    FlexPanel.Stretch under a flex-grow:1 sibling would report
+        //    the cap as its DesiredSize and break the outer's grow
+        //    distribution.
+        //
+        //    Trade-off: `Border` (or any auto-height container with no
+        //    flex semantics) wrapping a FlexPanel will inflate to the
+        //    parent's offer rather than shrink-wrap content, because
+        //    `_outerYogaHeightMode` is null in that case (no flex parent)
+        //    so the WinUI Stretch contract applies. Users who want a
+        //    content-sized FlexPanel inside an auto-height container
+        //    should set `VerticalAlignment.Top` (or any non-Stretch).
+        //
+        // 3. Otherwise (no explicit Height and either parent offer is
+        //    infinite, alignment != Stretch, or outer flex wants content
+        //    size): CSS `height: auto`. Pass NaN — MaxContent mode, no
+        //    shrink, content overflows a smaller parent.
         bool hasExplicitHeight = !double.IsNaN(Height);
+        bool outerFlexWantsContent =
+            _outerYogaHeightMode == YogaMeasureMode.Undefined
+            || _outerYogaHeightMode == YogaMeasureMode.AtMost;
         bool fillBlockAxis = !hasExplicitHeight
+            && !outerFlexWantsContent
             && VerticalAlignment == VerticalAlignment.Stretch
             && hasDefiniteHeight;
         _rootNode.MaxHeight = YogaValue.Undefined;
@@ -373,7 +429,6 @@ public partial class FlexPanel : Panel
         // Clamp the reported height when the panel has a definite own-height
         // (explicit Height(N) or block-axis fill against a definite parent
         // offer — both cases the box resolves to that size, never more).
-        // Auto-height reports the content size and overflows.
         bool hasDefiniteOwnHeight = hasExplicitHeight || fillBlockAxis;
         float reportedHeight = hasDefiniteOwnHeight
             ? Math.Min(_rootNode.LayoutHeight, (float)availableSize.Height)
@@ -591,26 +646,32 @@ public partial class FlexPanel : Panel
                     // Yoga's constraints are content-area (excluding margin).
                     // Add margin so WinUI's subtraction yields the correct content area.
                     //
-                    // Mode mapping for WinUI Measure (which only models AtMost
-                    // or Infinity — there is no "Exactly"):
-                    //  - Yoga Undefined → infinite (give me your content size).
-                    //  - Yoga AtMost   → infinite. AtMost is a soft cap Yoga
-                    //    uses during the basis/MaxContent phase; treating it
-                    //    as a definite-fill target would make a nested
-                    //    FlexPanel with VerticalAlignment.Stretch report the
-                    //    cap as its DesiredSize, defeating the outer's
-                    //    flex-grow distribution. The cap is only an upper
-                    //    bound on content; the child must still report what
-                    //    it actually wants. Yoga clamps as needed.
-                    //  - Yoga Exactly  → finite (h). Exactly mode is the
-                    //    StretchFit pass — Yoga has already resolved the
-                    //    child's main-axis allocation and is asking the
-                    //    child to lay itself out at exactly that size.
-                    //    Passing finite here lets a nested FlexPanel honor
-                    //    its VerticalAlignment.Stretch correctly.
-                    var constraintW = wMode == YogaMeasureMode.Exactly ? w + mH : double.PositiveInfinity;
-                    var constraintH = hMode == YogaMeasureMode.Exactly ? h + mV : double.PositiveInfinity;
-                    capturedChild.Measure(new Size(constraintW, constraintH));
+                    // Mode → WinUI constraint:
+                    //  - Undefined → +∞ (give me your content size).
+                    //  - AtMost / Exactly → finite (w + margin). Preserves
+                    //    the standard WinUI Measure contract — TextBlock
+                    //    wrapping, Image stretch sizing, etc. all depend on
+                    //    receiving a real cap rather than infinity.
+                    //
+                    // The "is this AtMost a fill target?" discrimination is
+                    // not done by changing the constraint — that would break
+                    // text wrapping. Instead the wrapper publishes Yoga's
+                    // hMode via [ThreadStatic] _outerYogaHeightMode so a
+                    // nested FlexPanel.MeasureOverride can tell whether it
+                    // is being measured for content (Undefined / AtMost) or
+                    // for fill (Exactly). See fillBlockAxis above.
+                    var constraintW = wMode == YogaMeasureMode.Undefined ? double.PositiveInfinity : w + mH;
+                    var constraintH = hMode == YogaMeasureMode.Undefined ? double.PositiveInfinity : h + mV;
+                    var prevYogaH = _outerYogaHeightMode;
+                    _outerYogaHeightMode = hMode;
+                    try
+                    {
+                        capturedChild.Measure(new Size(constraintW, constraintH));
+                    }
+                    finally
+                    {
+                        _outerYogaHeightMode = prevYogaH;
+                    }
                     panel._measuredThisPass.Add(capturedChild);
                     // Return content size (without margin) since Yoga tracks margins separately
                     return new YogaSize(
