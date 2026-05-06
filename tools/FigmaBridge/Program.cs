@@ -38,7 +38,12 @@ var figmaConnected = false;
 
 // Output directory for codegen patches (--output flag)
 var outputDir = args.SkipWhile(a => a != "--output").Skip(1).FirstOrDefault();
-if (outputDir != null) Directory.CreateDirectory(outputDir);
+if (outputDir != null)
+{
+    if (outputDir.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+        outputDir = Path.GetDirectoryName(outputDir) ?? outputDir;
+    Directory.CreateDirectory(outputDir);
+}
 
 // LLM configuration: --llm-endpoint <url> --llm-key <key> --llm-model <model>
 // Or env vars: LLM_ENDPOINT, LLM_API_KEY, LLM_MODEL
@@ -113,6 +118,9 @@ app.Map("/figma", async (HttpContext context) =>
                 var path = jsonDoc.RootElement.GetProperty("path").GetString() ?? "";
                 if (!string.IsNullOrEmpty(path))
                 {
+                    // If user passed a .csproj path, use its directory
+                    if (path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+                        path = Path.GetDirectoryName(path) ?? path;
                     outputDir = path;
                     Directory.CreateDirectory(outputDir);
                     Console.WriteLine($"[FigmaBridge] Output set to: {outputDir}");
@@ -127,39 +135,50 @@ app.Map("/figma", async (HttpContext context) =>
                 var projectDir = Path.Combine(repoRoot, "samples", "apps", name.ToLowerInvariant());
                 try
                 {
-                    Directory.CreateDirectory(projectDir);
-                    // Write minimal .csproj
-                    var csproj = $"""
-                        <Project Sdk="Microsoft.NET.Sdk">
-                          <PropertyGroup>
-                            <OutputType>WinExe</OutputType>
-                            <TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
-                            <Platforms>x64;ARM64</Platforms>
-                            <ImplicitUsings>enable</ImplicitUsings>
-                            <Nullable>enable</Nullable>
-                            <UseWinUI>true</UseWinUI>
-                            <WindowsPackageType>None</WindowsPackageType>
-                          </PropertyGroup>
-                          <ItemGroup>
-                            <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
-                          </ItemGroup>
-                          <ItemGroup>
-                            <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
-                          </ItemGroup>
-                        </Project>
-                        """;
-                    File.WriteAllText(Path.Combine(projectDir, $"{name}.csproj"), csproj);
-                    // Write placeholder Program.cs
-                    File.WriteAllText(Path.Combine(projectDir, "Program.cs"),
-                        "using Microsoft.UI.Reactor;\nusing static Microsoft.UI.Reactor.Factories;\n\n" +
-                        $"ReactorApp.Run<{name}App>(\"App\", width: 1200, height: 800);\n\n" +
-                        $"class {name}App : Component\n{{\n    public override Element Render() =>\n        TextBlock(\"Waiting for Figma generation...\");\n}}\n");
+                    var csprojPath = Path.Combine(projectDir, $"{name}.csproj");
+                    if (Directory.Exists(projectDir) && File.Exists(csprojPath))
+                    {
+                        // Project already exists — just set output to it
+                        outputDir = projectDir;
+                        Console.WriteLine($"[FigmaBridge] Project exists, using: {projectDir}");
+                        var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                            new { type = "project-created", path = projectDir }));
+                        await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                    }
+                    else
+                    {
+                        Directory.CreateDirectory(projectDir);
+                        var csproj = $"""
+                            <Project Sdk="Microsoft.NET.Sdk">
+                              <PropertyGroup>
+                                <OutputType>WinExe</OutputType>
+                                <TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
+                                <Platforms>x64;ARM64</Platforms>
+                                <ImplicitUsings>enable</ImplicitUsings>
+                                <Nullable>enable</Nullable>
+                                <UseWinUI>true</UseWinUI>
+                                <WindowsPackageType>None</WindowsPackageType>
+                              </PropertyGroup>
+                              <ItemGroup>
+                                <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+                              </ItemGroup>
+                              <ItemGroup>
+                                <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+                              </ItemGroup>
+                            </Project>
+                            """;
+                        File.WriteAllText(csprojPath, csproj);
+                        File.WriteAllText(Path.Combine(projectDir, "Program.cs"),
+                            "using Microsoft.UI.Reactor;\nusing static Microsoft.UI.Reactor.Factories;\n\n" +
+                            $"ReactorApp.Run<{name}App>(\"App\", width: 1200, height: 800);\n\n" +
+                            $"class {name}App : Component\n{{\n    public override Element Render() =>\n        TextBlock(\"Waiting for Figma generation...\");\n}}\n");
 
-                    outputDir = projectDir;
-                    Console.WriteLine($"[FigmaBridge] Created project: {projectDir}");
-                    var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
-                        new { type = "project-created", path = projectDir }));
-                    await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                        outputDir = projectDir;
+                        Console.WriteLine($"[FigmaBridge] Created project: {projectDir}");
+                        var resp = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                            new { type = "project-created", path = projectDir }));
+                        await ws.SendAsync(resp, WebSocketMessageType.Text, true, CancellationToken.None);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -272,13 +291,12 @@ app.Map("/figma", async (HttpContext context) =>
             }
             else if (msgType == "incremental" && outputDir != null)
             {
-                // Fast path: apply codegen patches to Program.cs
-                var patches = jsonDoc.RootElement.GetProperty("patches");
-                var patchCount = CodegenPatcher.ApplyPatches(patches, outputDir);
-                Console.WriteLine($"[FigmaBridge] Applied {patchCount} codegen patches");
-
+                // Incremental changes received — request a full sync to diff the tree
+                // The tree differ handles text, spacing, padding, width, height, and radius
+                Console.WriteLine($"[FigmaBridge] Incremental change — waiting for full sync to diff");
                 var response = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
-                    new { type = "patched", count = patchCount }));
+                    new { type = "request-sync" }));
+                await ws.SendAsync(response, WebSocketMessageType.Text, true, CancellationToken.None);
                 await ws.SendAsync(response, WebSocketMessageType.Text, true, CancellationToken.None);
             }
             else
@@ -354,7 +372,7 @@ app.Map("/figma", async (HttpContext context) =>
                     if (outputDir != null && oldSync?.Tree != null && msg.Tree != null
                         && msg.Type == "full-sync")
                     {
-                        var textPatches = TextPatcher.ApplyTextDiff(oldSync.Tree, msg.Tree, outputDir);
+                        var textPatches = TreeDiffPatcher.ApplyDiff(oldSync.Tree, msg.Tree, outputDir);
                         if (textPatches > 0)
                             Console.WriteLine($"[FigmaBridge] Applied {textPatches} text patches via diff");
                     }
@@ -678,15 +696,11 @@ static class CodegenPatcher
     static string EscapeForCSharp(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n");
 }
 
-// ─── Codegen Patcher: Text-Specific (uses old tree for diffing) ──────────────
+// ─── Tree Diff Patcher (compares old/new tree and patches Program.cs) ────────
 
-static class TextPatcher
+static class TreeDiffPatcher
 {
-    /// <summary>
-    /// Compares the old tree (from latestSync) with the new tree to find text changes,
-    /// then applies surgical string replacements to Program.cs.
-    /// </summary>
-    public static int ApplyTextDiff(FigmaNode? oldTree, FigmaNode? newTree, string outputDir)
+    public static int ApplyDiff(FigmaNode? oldTree, FigmaNode? newTree, string outputDir)
     {
         if (oldTree == null || newTree == null) return 0;
 
@@ -695,59 +709,165 @@ static class TextPatcher
 
         var code = File.ReadAllText(filePath);
         var originalCode = code;
-        var changes = new List<(string oldText, string newText)>();
+        var patches = new List<(string desc, string oldStr, string newStr)>();
 
-        CollectTextChanges(oldTree, newTree, changes);
+        CollectChanges(oldTree, newTree, patches);
 
-        foreach (var (oldText, newText) in changes)
+        foreach (var (desc, oldStr, newStr) in patches)
         {
-            var oldEscaped = oldText.Replace("\\", "\\\\").Replace("\"", "\\\"");
-            var newEscaped = newText.Replace("\\", "\\\\").Replace("\"", "\\\"");
-
-            // Replace the first occurrence of the old text in a quoted string context
-            var oldPattern = $"\"{oldEscaped}\"";
-            var newPattern = $"\"{newEscaped}\"";
-
-            var idx = code.IndexOf(oldPattern, StringComparison.Ordinal);
-            if (idx >= 0)
+            // Try to find with context first (avoids replacing wrong occurrence)
+            var found = false;
+            if (oldStr.StartsWith("\"") && oldStr.EndsWith("\""))
             {
-                code = code.Remove(idx, oldPattern.Length).Insert(idx, newPattern);
-                Console.WriteLine($"[TextPatcher] \"{oldText}\" → \"{newText}\"");
+                // Text change — try with surrounding factory call context
+                string[] prefixes = ["TextBlock(", "SubHeading(", "Heading(", "Caption(", 
+                    "Button(", "HyperlinkButton(", ".ApplyStyle(", "= \"", "NavItem("];
+                foreach (var prefix in prefixes)
+                {
+                    var contextOld = prefix + oldStr;
+                    var contextNew = prefix + newStr;
+                    var idx = code.IndexOf(contextOld, StringComparison.Ordinal);
+                    if (idx >= 0)
+                    {
+                        code = code.Remove(idx, contextOld.Length).Insert(idx, contextNew);
+                        Console.WriteLine($"[Patcher] {desc} (matched via {prefix})");
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found)
+            {
+                var idx = code.IndexOf(oldStr, StringComparison.Ordinal);
+                if (idx >= 0)
+                {
+                    code = code.Remove(idx, oldStr.Length).Insert(idx, newStr);
+                    Console.WriteLine($"[Patcher] {desc}");
+                }
             }
         }
 
         if (code != originalCode)
         {
             File.WriteAllText(filePath, code);
-            return changes.Count;
+            Console.WriteLine($"[Patcher] Wrote {filePath} ({patches.Count} patches)");
+            return patches.Count;
         }
         return 0;
     }
 
-    static void CollectTextChanges(FigmaNode oldNode, FigmaNode newNode,
-        List<(string, string)> changes)
+    static void CollectChanges(FigmaNode oldNode, FigmaNode newNode,
+        List<(string, string, string)> patches)
     {
-        // Match nodes by ID
-        if (oldNode.Id == newNode.Id)
-        {
-            if (oldNode.Type == "TEXT" && newNode.Type == "TEXT"
-                && oldNode.Characters != null && newNode.Characters != null
-                && oldNode.Characters != newNode.Characters)
-            {
-                changes.Add((oldNode.Characters, newNode.Characters));
-            }
-        }
+        // Build flat maps keyed by node ID for reliable matching
+        var oldMap = new Dictionary<string, FigmaNode>();
+        var newMap = new Dictionary<string, FigmaNode>();
+        FlattenTree(oldNode, oldMap);
+        FlattenTree(newNode, newMap);
 
-        // Recurse into children matched by index (same structure assumed for incremental edits)
-        if (oldNode.Children != null && newNode.Children != null)
+        foreach (var (id, newN) in newMap)
         {
-            var count = Math.Min(oldNode.Children.Count, newNode.Children.Count);
-            for (var i = 0; i < count; i++)
+            if (!oldMap.TryGetValue(id, out var oldN)) continue;
+
+            // Text content changes — include likely factory prefix for targeted replacement
+            if (oldN.Type == "TEXT" && newN.Type == "TEXT"
+                && oldN.Characters != null && newN.Characters != null
+                && oldN.Characters != newN.Characters)
             {
-                CollectTextChanges(oldNode.Children[i], newNode.Children[i], changes);
+                var oldEsc = Esc(oldN.Characters);
+                var newEsc = Esc(newN.Characters);
+                // Guess the Reactor factory from font size to target the right occurrence
+                var size = oldN.FontSize ?? 14;
+                var weight = oldN.FontWeight ?? 400;
+                string hint;
+                if (size <= 12) hint = "Caption(";
+                else if (size <= 20 && weight >= 600) hint = "SubHeading(";
+                else if (size <= 28) hint = "Heading(";
+                else if (size <= 40) hint = "TitleLarge:";
+                else hint = "TextBlock(";
+
+                patches.Add(($"text[{hint.TrimEnd('(', ':')}]: \"{Trunc(oldN.Characters)}\" → \"{Trunc(newN.Characters)}\"",
+                    $"\"{oldEsc}\"", $"\"{newEsc}\""));
+            }
+
+            // Spacing (itemSpacing)
+            if (oldN.ItemSpacing != newN.ItemSpacing
+                && oldN.ItemSpacing > 0 && newN.ItemSpacing > 0)
+            {
+                var oldGap = R4(oldN.ItemSpacing ?? 0);
+                var newGap = R4(newN.ItemSpacing ?? 0);
+                if (oldGap != newGap)
+                    patches.Add(($"gap: {oldGap} → {newGap}",
+                        $"Stack({oldGap},", $"Stack({newGap},"));
+            }
+
+            // Padding changes
+            var oldPad = Pad(oldN);
+            var newPad = Pad(newN);
+            if (oldPad != null && newPad != null && oldPad != newPad)
+                patches.Add(($"padding: {oldPad} → {newPad}",
+                    $".Padding({oldPad})", $".Padding({newPad})"));
+
+            // Width changes
+            if (oldN.Width != newN.Width && oldN.Width > 0 && newN.Width > 0)
+            {
+                var oldW = R4(oldN.Width); var newW = R4(newN.Width);
+                if (oldW != newW && oldW > 0)
+                {
+                    TryPatchDim(patches, "Width", oldW, newW);
+                    TryPatchDim(patches, "MinWidth", oldW, newW);
+                }
+            }
+
+            // Height changes
+            if (oldN.Height != newN.Height && oldN.Height > 0 && newN.Height > 0)
+            {
+                var oldH = R4(oldN.Height); var newH = R4(newN.Height);
+                if (oldH != newH && oldH > 0)
+                {
+                    TryPatchDim(patches, "Height", oldH, newH);
+                    TryPatchDim(patches, "MinHeight", oldH, newH);
+                }
+            }
+
+            // Corner radius changes
+            if (oldN.CornerRadius != newN.CornerRadius
+                && oldN.CornerRadius > 0 && newN.CornerRadius > 0)
+            {
+                var oldR = (int)(oldN.CornerRadius ?? 0);
+                var newR = (int)(newN.CornerRadius ?? 0);
+                patches.Add(($"radius: {oldR} → {newR}",
+                    $".CornerRadius({oldR})", $".CornerRadius({newR})"));
             }
         }
     }
+
+    static void FlattenTree(FigmaNode node, Dictionary<string, FigmaNode> map)
+    {
+        map[node.Id] = node;
+        if (node.Children != null)
+            foreach (var c in node.Children) FlattenTree(c, map);
+    }
+
+    static string Trunc(string s) => s.Length > 30 ? s[..30] + "..." : s;
+
+    static void TryPatchDim(List<(string, string, string)> patches, string prop, int oldV, int newV)
+    {
+        patches.Add(($"{prop}: {oldV} → {newV}",
+            $".{prop}({oldV})", $".{prop}({newV})"));
+    }
+
+    static string? Pad(FigmaNode n)
+    {
+        var t = R4(n.PaddingTop ?? 0); var r = R4(n.PaddingRight ?? 0);
+        var b = R4(n.PaddingBottom ?? 0); var l = R4(n.PaddingLeft ?? 0);
+        if (t == 0 && r == 0 && b == 0 && l == 0) return null;
+        if (t == b && l == r && t == l) return $"{t}";
+        return $"{l}, {t}, {r}, {b}";
+    }
+
+    static int R4(double v) => Math.Max(0, (int)(Math.Round(v / 4.0) * 4));
+    static string Esc(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 }
 
 // ─── LLM Code Generator ──────────────────────────────────────────────────────
@@ -788,6 +908,19 @@ CONTROLS:
 - Use Button, HyperlinkButton, CheckBox, ToggleSwitch, AutoSuggestBox etc. for interactive controls.
 - Use Theme tokens for all colors (CardBackground, Accent, SecondaryText, DividerStroke, etc.).
 - Use semantic typography: Caption(), SubHeading(), Heading(), .ApplyStyle(""TitleLargeTextBlockStyle"").
+
+BRUSHES & SURFACES — Map Figma fills/strokes to Reactor Theme tokens:
+- ""Surface / App Surface"" App Base (Fill) → .Background(Theme.SolidBackground)
+- ""Surface / App Surface"" App Base (Stroke) → .WithBorder(Theme.SurfaceStroke, 1)
+- ""Surface / App Surface"" App Base (Shadow) → .Translation(0, 0, 32).Set(b => {{ b.Shadow = new ThemeShadow(); }})
+- App Layer (Fill) → .Background(Theme.LayerFill)
+- Card backgrounds with opacity → .Background(Theme.CardBackground).WithBorder(Theme.CardStroke, 1)
+- Divider lines → Border(VStack()).Height(1).Background(Theme.DividerStroke)
+- Control fills → .Background(Theme.ControlFill)
+- Subtle/transparent fills → .Background(Theme.SubtleFill)
+- Accent/blue fills (e.g. #005AB8) → .Background(Theme.Accent) or accent button Resources
+- For any WinUI brush not in Theme.*, use Theme.Ref(""BrushKeyName"")
+- NEVER use hardcoded hex colors for themed surfaces
 
 OUTPUT:
 - Write to {targetFile} as a complete, runnable Program.cs.

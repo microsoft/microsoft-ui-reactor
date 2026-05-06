@@ -226,7 +226,7 @@ function onNodeChange(event) {
     }, DEBOUNCE_MS);
 }
 // ─── Plugin Lifecycle ────────────────────────────────────────────────────────
-figma.showUI(__html__, { width: 340, height: 320, themeColors: true });
+figma.showUI(__html__, { width: 340, height: 245, themeColors: true });
 // Watch for selection changes — also triggers when exiting text edit mode
 figma.on("selectionchange", () => {
     const frame = getWatchedFrame();
