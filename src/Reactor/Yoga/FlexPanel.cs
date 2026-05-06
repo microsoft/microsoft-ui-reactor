@@ -352,7 +352,12 @@ public partial class FlexPanel : Panel
             hasExplicitHeight ? (float)Height : float.NaN,
             LayoutDirection);
 
-        float reportedHeight = hasDefiniteHeight
+        // Clamp the reported height to availableSize.Height *only* when the
+        // panel has an explicit Height (CSS `height: N` — the box resolves to
+        // N, never more). Auto-height (CSS `height: auto`) reports the content
+        // size and is allowed to overflow the parent; a smaller parent offer
+        // is not a constraint on `auto`.
+        float reportedHeight = hasExplicitHeight
             ? Math.Min(_rootNode.LayoutHeight, (float)availableSize.Height)
             : _rootNode.LayoutHeight;
         _cachedDesiredSize = new Size(_rootNode.LayoutWidth, reportedHeight);
