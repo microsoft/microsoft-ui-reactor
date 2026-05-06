@@ -218,19 +218,24 @@ class SampleDetailPage : Component<GallerySample>
                     .Foreground(Theme.SecondaryText)
                     .Set(tb => tb.TextWrapping = TextWrapping.Wrap),
 
-                Border(sample.Render())
+                // Chart card. The sample's rendered Element is centered horizontally
+                // so charts with explicit Width sit in the middle of the card rather
+                // than slamming against the left edge or drifting right.
+                Border(sample.Render().HAlign(HorizontalAlignment.Center))
                     .Background(Theme.CardBackground)
                     .WithBorder(Theme.CardStroke)
                     .CornerRadius(8)
                     .Padding(16),
 
                 SubHeading("Source Code").Foreground(Theme.PrimaryText),
+                // Source-code card: long lines scroll horizontally inside this box
+                // so the outer page doesn't grow wider than the window.
                 Border(
                     ScrollView(
                         (TextBlock(sample.SourceCode) with
                         {
                             IsTextSelectionEnabled = true,
-                            TextWrapping = TextWrapping.Wrap,
+                            TextWrapping = TextWrapping.NoWrap,
                         })
                         .Set(tb =>
                         {
@@ -238,13 +243,19 @@ class SampleDetailPage : Component<GallerySample>
                             tb.FontSize = 12;
                         })
                         .Foreground(Theme.PrimaryText)
-                    ).Set(sv => sv.MaxHeight = 400)
+                    )
+                    .HorizontalScrollMode(ScrollMode.Auto)
+                    .Set(sv =>
+                    {
+                        sv.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
+                        sv.MaxHeight = 400;
+                    })
                 )
                 .Background(Theme.LayerFill)
                 .WithBorder(Theme.SurfaceStroke)
                 .CornerRadius(6)
                 .Padding(16)
             ).Padding(24, 16, 24, 24)
-        );
+        ).Set(sv => sv.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled);
     }
 }
