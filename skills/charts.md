@@ -1,29 +1,55 @@
 ---
 name: reactor-charts
 description: >
-  Reactor charting skill. Covers the chart DSL surface (LineChart, BarChart,
-  AreaChart, PieChart) and — when ordinary string labels aren't enough — the
-  *View extension points that let axis ticks and pie slices render any Reactor
-  Element. Read when a user asks for chart customizations beyond color/title/
-  axis-label, especially anything involving icons, multi-line tick labels,
-  inline legends, or labels-positioned-on-the-chart-itself.
+  Reactor charting skill. Covers (1) choosing the right chart for the data,
+  (2) the chart DSL surface (LineChart, BarChart, AreaChart, PieChart) and
+  the new *View extension points that let axis ticks and pie slices render
+  any Reactor Element, (3) D3 scales/axes pitfalls, (4) labeling and a11y
+  rules, and (5) the most-cited visualization mistakes to refuse to ship.
+  Read when a user asks for charts — even if they didn't ask for advice on
+  which chart to use, the answer to "should I use a pie chart for this?" is
+  almost always "no, use a sorted bar chart."
 ---
 
 # Reactor Charts
 
-The everyday surface lives in `Reactor.D3.Charts` and is documented in
-`docs/guide/charting.md`. Quick reminder of the four factories:
+The chart surface lives in `Reactor.D3.Charts` (full guide:
+`docs/guide/charting.md`). This skill is the AI-agent quick reference —
+chart-choice rules, the new `*View` extension points, and the a11y/accuracy
+rails you should keep on by default.
+
+## Choose the right chart first
+
+Most "my chart looks bad" problems are wrong-chart problems, not styling
+problems. Cleveland & McGill's perceptual ranking (1984) — accuracy of
+graphical judgment, best to worst:
+
+> position on a common scale > position on non-aligned scales > length /
+> direction / angle > area > volume > shading / color saturation
+
+That ordering is why bars and dots win and why pies lose. Translate it into
+rules of thumb:
+
+| Chart | Use when | Avoid when |
+|---|---|---|
+| **Bar** | Discrete categories, time buckets (Q1..Q4), ranked comparison. **Default when in doubt.** | (Use a different chart if the data is continuous, e.g. dense time-series — line is clearer.) |
+| **Line** | Continuous data, many x-values, trends/slopes, autocorrelated series (prices, sensor readings). | Few categorical observations — use bar. |
+| **Area** | Cumulative magnitude or parts-of-whole over time. | Series cross frequently — overlap occludes; switch to line. |
+| **Pie** | Parts-of-a-whole **and** ≤5 slices **and** large differences **and** proportions land near recognizable fractions (½, ¼, ⅓). | Anything else. Ranking, change-over-time, negative values, precise comparison — use a sorted bar chart. |
+
+When the user asks for a pie chart, push back unless all four pie conditions
+hold. A sorted bar chart usually wins. (Few/Tufte say "almost never pie";
+Cairo/Wilke allow the narrow case above. Default to "no" and concede when
+the conditions are met.)
+
+## The DSL — quick reference
 
 ```csharp
 LineChart(data, x, y)       // continuous line
-BarChart (data, x, y)       // vertical bars
+BarChart (data, x, y)       // vertical bars (always anchored at zero — see pitfalls)
 AreaChart(data, x, y)       // filled area
 PieChart (data, value)      // slices summing to 100%
 ```
-
-All four return Reactor elements that you can mount anywhere a regular Element
-goes. They diff efficiently — re-rendering with new data updates the existing
-shapes; no full redraw.
 
 Common fluent knobs (chain-call any subset):
 
@@ -35,27 +61,49 @@ Common fluent knobs (chain-call any subset):
 .AxisLabel(ChartAxisType.Y, "Revenue (USD)")
 .Width(600).Height(250)
 .Stroke("#0078D4").StrokeWidth(2.5)
-.Fill("#50C878")                       // bars / area / pie slice baseline
+.Fill("#50C878")                                  // bars / area / pie slice baseline
 .ShowGrid(true).ShowAxes(true)
 .DataLabel((point, idx) => $"{point.Revenue:C}")  // string label per point
-.Palette(ChartPalette.Categorical)     // pie color palette
+.Palette(ChartPalette.Categorical)                // pie color palette
 ```
 
-Accessibility rides for free: every chart implements `IChartAccessibilityData`,
-exposing axis ranges, units, point values, and (for pie) slice descriptors via
-UIA. **Don't disable this**, even when you customize visuals — see the
-"a11y rules" section below.
+`AxisLabel` text and `Title` are reserved for *labeling the chart*, not
+labeling individual data points or ticks — for those, see the next two
+sections.
 
-## When the built-in labels aren't enough
+## Make D3 do the work
 
-Three cases you can't handle with the string-label APIs (`DataLabel`,
-`AxisLabel`, `LabelAccessor`):
+Charts compose D3-style scales and generators internally. When you reach
+under the DSL hood (or hand-roll Canvas drawings), follow these:
+
+- **Scales map domain → range — never compute pixel positions by hand.** A
+  `LinearScale` from `[min, max]` to `[plotLeft, plotRight]` is the boundary
+  between "data" and "pixels". Mixing them is the #1 source of "off by 5px"
+  bugs.
+- **Pick the right scale type for the data.** Linear for quantitative,
+  log for exponential, time for dates, ordinal/band for categories. Linear-
+  on-exponential hides patterns; log-on-linear inflates them.
+- **Always `.nice()` quantitative domains.** Axis bounds should round to
+  human-friendly numbers (0/100/200, not 13.7/187.4). Pair with `.ticks(n)`
+  as a *suggestion*, not a hard count — D3 picks readable intervals.
+- **Reserve margins.** Long y-axis labels and multi-line tick `*View`
+  elements need gutter. The Bostock margin convention
+  (`{top, right, bottom, left}`) is the safe default; if you customize tick
+  labels (next section), measure the longest one and grow the margin.
+- **Don't reinvent the axis.** The built-in axis generator handles tick
+  selection, formatting, alignment, label rotation. Custom tick code is
+  where charts go to die.
+
+## When string labels aren't enough — `*View`
+
+Three cases the string-label APIs (`DataLabel`, `AxisLabel`, `LabelAccessor`)
+can't handle:
 
 1. The label needs an **icon** next to or inside the text.
-2. The label needs **multi-line text**, wrapping, or different colors / weights
-   per fragment.
-3. The label needs to render a **mini sub-tree** (badge, sparkline, button,
-   anything Reactor can build).
+2. The label needs **multi-line text**, wrapping, or different colors /
+   weights per fragment.
+3. The label needs to render a **mini sub-tree** (badge, sparkline, mini
+   button, anything Reactor can build).
 
 For these, reach for the `*View` extensions. They take a render delegate and
 substitute its returned `Element` for the built-in `TextBlock` at the same
@@ -101,47 +149,99 @@ Same pattern for axis ticks. The delegate receives the tick's domain value
 (`double`); X labels are anchored horizontally centered on the tick mark, Y
 labels right-anchored to the axis edge and vertically centered.
 
-## Anchor primitive (used by `*View` internally; you'll rarely call it directly)
+## Direct labeling vs legend vs tooltip
 
-The `*View` methods are built on `Canvas`'s anchor extensions (`CanvasExtensions.cs`):
+A label-placement decision tree (Tufte, Cleveland — direct labeling raises
+the data-ink ratio and avoids legend ping-pong):
+
+1. **Direct labels first.** Label series at the end of each line, label pie
+   slices on the chart, label bars above the bar. `LabelView` /
+   `*TickLabelView` exist precisely so you can do this without re-templating
+   the whole chart. Eyes don't ping-pong from line to legend; print works;
+   screen readers work.
+2. **Use a legend** only when direct labeling would collide — many series,
+   tightly-packed lines, repeating palette across small multiples. Treat it
+   as a fallback, not a default.
+3. **Use a tooltip** for precise values on dense data, *in addition to* —
+   never *instead of* — direct labels or a legend. Tooltips fail print,
+   screen readers, mobile-tap accuracy, and keyboard navigation.
+4. **Pie slices**: large slices get inside-labels; small slices (<~5%) need
+   outside leader lines or get rolled into "Other". Don't label tiny slices
+   inline — they overlap.
+5. **Backfire cases**: dense scatterplots, tightly-packed bars, many
+   overlapping line endpoints. Label collisions there are worse than a
+   legend; switch to legend.
+
+## Anchor primitive (used by `*View` internally)
+
+The `*View` methods are built on `Canvas`'s anchor extensions
+(`CanvasExtensions.cs`). You'll rarely call them directly, but if you need to
+position arbitrary content on a Reactor `Canvas` without knowing its size at
+build time (overlay markers, custom callouts), use these:
 
 ```csharp
 .Canvas(left, top, anchorX, anchorY)   // 0..1 fractions of rendered size
 .CenterAt(x, y)                        // sugar for anchor (0.5, 0.5)
 ```
 
-If you need to position arbitrary content on a Reactor `Canvas` without
-knowing its size at build time (overlay markers, custom callouts), use these.
-The reconciler subscribes once to `Loaded` + `SizeChanged` per anchored element
+The reconciler subscribes once to `Loaded + SizeChanged` per anchored element
 and recomputes `Canvas.Left/Top` as `target − anchor × ActualWidth/Height`.
 Zero-anchor `(0, 0)` is the legacy fast path with no subscription overhead.
 
-## A11y rules — don't break the screen reader
+## Accessibility — beyond the framework defaults
 
-`*View`-rendered labels are emitted with two defensive defaults applied
-automatically by the reconciler:
+Charts implement `IChartAccessibilityData`, which exposes axis ranges, units,
+point values, and (for pie) slice descriptors via UIA. Don't disable that.
+Beyond that, your responsibilities:
 
-- `IsHitTestVisible = false` — labels are visual decoration, not interactive
-  surface area.
-- `AccessibilityView = AccessibilityView.Raw` — labels are *hidden* from the
-  UIA tree.
+- **Color is never the sole channel** (WCAG 1.4.1). Pair color with shape,
+  pattern, dash style, or — best — a direct text label. Useful for series
+  identification when the user can't distinguish two of your colors.
+- **Color-blind-safe palettes.** Use `ChartPalette.Categorical` (Reactor's
+  curated set; Okabe-Ito-style). Avoid red/green pairings. Avoid rainbow
+  for ordinal data — use a sequential ramp (Viridis-style) instead.
+- **Contrast.** WCAG 1.4.11 — 3:1 for non-text essential graphics, 4.5:1
+  for text labels. The default chart palette meets this against the
+  framework's surface tokens; if you override with `.Stroke("#…")` /
+  `.Fill("#…")`, check contrast against `Theme.SurfaceBackground`.
+- **Screen-reader fallback.** UIA structured data is good but not enough
+  for screen-reader-only users — a hidden, expandable data table next to
+  the chart is the pattern Tenon and the W3C WAI accessibility guidance
+  recommend. Build it from the same data the chart consumed.
+- **Keyboard nav.** Data points should be focusable in reading order, and
+  focus should announce category + value. The `IChartAccessibilityData`
+  surface drives this; if you turn the chart `Interactive(false)` you lose
+  it — keep it on unless there's a reason.
+- **`*View` defaults.** Custom labels are auto-stamped with
+  `IsHitTestVisible=false` and `AccessibilityView=Raw` so they don't
+  duplicate the structured UIA description. **Always** keep the string
+  `LabelAccessor` (PieChart) or `DataLabel` (line/bar/area) set — those
+  feed UIA. Custom visuals augment the visual; they don't replace the
+  accessible description.
 
-That's intentional. The chart's `IChartAccessibilityData` already describes
-the data points; if your custom `Element` were also exposed to UIA, screen
-readers would announce slice values twice (once from the chart's structured
-description, once from your visible label).
+## Common pitfalls — refuse to ship these
 
-So:
+The most-cited visualization mistakes (Tufte, Few, Cairo, Wilke). If a user
+asks for one, push back with the alternative.
 
-- **Always** set the string `LabelAccessor` (PieChart) or `DataLabel` (line/
-  bar/area) when you use `LabelView` — the chart's UIA descriptor still
-  reads from those. Custom visuals don't replace the accessible description,
-  they augment the visual.
-- If your `LabelView` element brings its own UIA peers (`HyperlinkButton`
-  inside a label, etc.), those will be `AccessibilityView.Raw` too. If you
-  *want* them announced, that's a different design — consider whether the
-  chart is really the right home for an interactive control vs. a sibling
-  legend.
+- **Truncated bar baselines.** Bars MUST start at zero. A 3% gap with a
+  truncated baseline visually looks like 300%. Cairo's *How Charts Lie*
+  spends a chapter on this. Line charts may truncate because shape, not
+  height, conveys meaning — bars never.
+- **Dual y-axes.** Fabricates correlation between unrelated series. Use two
+  small multiples or normalize both series to an index (e.g. `(value /
+  baseline) × 100`) so they share a single axis.
+- **3D / exploded pies, drop shadows, gradients on bars.** Tufte's
+  "chartjunk." 3D pies are actively misleading — angle distortion changes
+  the visual proportion of slices.
+- **Too many series.** >5–7 lines, >7 pie slices. Group the tail into
+  "Other" or split into small multiples.
+- **Rainbow / unordered categorical palettes on ordinal data.** When the
+  variable has order (low/medium/high, age buckets, sentiment), use a
+  sequential ramp. A categorical palette implies "different kind", not
+  "different magnitude".
+- **Pie chart for ranking.** Pies hide rank — angle judgments are
+  imprecise. A sorted bar chart shows it directly.
 
 ## When to reach for `*View` (and when not to)
 
@@ -149,15 +249,15 @@ Reach for it when:
 
 - You need an **icon-plus-text** axis tick or slice label.
 - You need to render the slice **percent** in the slice itself instead of a
-  side legend.
+  side legend (direct labeling, see above).
 - You're embedding a chart in a dashboard whose typography contract demands
-  consistent fonts/colors that the built-in `ChartAxis` style doesn't match.
+  fonts/colors the built-in `ChartAxis` style doesn't match.
 
 Skip it when a `string` works:
 
-- Plain numeric formatting → use `DataLabel((d, i) => d.Value.ToString("C"))`.
-- Custom number-to-string for ticks → use built-in tick formatting (the
-  default already calls `Fmt(t)` which handles short numbers cleanly).
+- Plain numeric formatting → `DataLabel((d, i) => d.Value.ToString("C"))`.
+- Custom number-to-string for ticks → built-in tick formatting (`Fmt(t)`
+  handles short numbers cleanly).
 - Just changing color/font of a built-in label — that's not exposed yet;
   if you need it, file an issue rather than dropping to `*View` for a
   one-property override.
@@ -166,9 +266,18 @@ Skip it when a `string` works:
 
 - `docs/guide/charting.md` — full user-facing chart guide.
 - `src/Reactor/Charting/Charts.cs` — `ChartElement<T>` / `PieChartElement<T>`
-  fluent API. The `*View` methods live near the bottom of each.
-- `src/Reactor/Charting/D3Charts.cs` — lower-level d3 primitives
-  (`D3Pie`, `D3Axes`, `D3Grid`). `D3Axes` is where the optional `xTickLabel`
-  / `yTickLabel` delegates plug in.
+  fluent API. `*View` methods sit near the bottom of each class.
+- `src/Reactor/Charting/D3Charts.cs` — d3 primitives (`D3Pie`, `D3Axes`,
+  `D3Grid`). `D3Axes` is where the optional `xTickLabel` / `yTickLabel`
+  delegates plug in.
 - `src/Reactor/Elements/CanvasExtensions.cs` — `CenterAt` and the anchor
   overload of `Canvas`.
+
+External (read these once if charting is new to you):
+
+- Cleveland & McGill (1984), *Graphical Perception* — the perceptual ranking.
+- Edward Tufte, *The Visual Display of Quantitative Information* — data-ink ratio, chartjunk.
+- Stephen Few, *Show Me the Numbers* — practitioner playbook for business charts.
+- Claus Wilke, *Fundamentals of Data Visualization* — free online; the modern reference.
+- Alberto Cairo, *How Charts Lie* — the pitfalls chapter is required reading.
+- d3js.org docs on `d3-scale`, `d3-axis`, `d3-shape` — even when working through Reactor's wrappers.

@@ -25,6 +25,7 @@ re-renders automatically. No XAML. No data binding. No ViewModels.
 | [`skills/navigation.md`](skills/navigation.md) | Multi-page apps, sidebar/tab navigation, routes, deep linking, page transitions, caching. `UseNavigation`, `NavigationHost`, `NavigationView`, `TabView`. |
 | [`skills/forms.md`](skills/forms.md) | Data-entry screens, validation, masked/formatted input. `UseValidationContext`, `FormField`, `MaskEngine`, `InputFormatter`. |
 | [`skills/input.md`](skills/input.md) | Gestures, pointer events, drag-and-drop, focus management. `OnPan`, `OnPinch`, `OnRotate`, `OnDragStarting`, `UseElementFocus`. |
+| [`skills/charts.md`](skills/charts.md) | Data visualization — choosing a chart type, the `LineChart` / `BarChart` / `AreaChart` / `PieChart` DSL, the `LabelView` / `XTickLabelView` / `YTickLabelView` extension points for icon-plus-text and rich labels, plus the visualization-best-practices rules to refuse to break. |
 | [`skills/dsl-reference.md`](skills/dsl-reference.md) | Look up signatures — every factory, modifier, and enum in the DSL. |
 
 ## Project Setup
