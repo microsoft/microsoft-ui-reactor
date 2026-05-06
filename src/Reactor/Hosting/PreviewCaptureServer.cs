@@ -101,11 +101,14 @@ internal sealed class PreviewCaptureServer : IDisposable
             tm.RequestQueue = TimeSpan.FromSeconds(10);
         }
         catch { /* not all hosts expose TimeoutManager */ }
-        _listener.Start();
-        // SECURITY (TASK-026): now that HttpListener owns the port, release
-        // the TcpListener we used as a placeholder.
+        // SECURITY (TASK-026): release the TcpListener placeholder before
+        // binding HttpListener — the kernel only lets one socket own the
+        // loopback port, so we can't keep both alive simultaneously. The
+        // TOCTOU window between Stop() and Start() is microseconds wide
+        // and confined to loopback; not a meaningful local-attack surface.
         try { _portHolder?.Stop(); } catch { }
         _portHolder = null;
+        _listener.Start();
         // TASK-025: don't start the capture timer until a reader attaches.
         // _captureTimer.Start();
         _ = ListenAsync().ContinueWith(
@@ -329,10 +332,13 @@ internal sealed class PreviewCaptureServer : IDisposable
 
     private void ServeFrame(HttpListenerResponse response)
     {
-        // TASK-025: track active readers and start/stop the capture timer.
-        // First reader through the door starts the timer; once the response
-        // is finished we decrement and (on the dispatcher) stop the timer if
-        // no readers remain.
+        // TASK-025: lazy-start the capture timer on the first reader so an
+        // idle preview doesn't spin PrintWindow at 10 fps. We do NOT stop on
+        // idle: each request increments+decrements _activeReaders so quickly
+        // that a Start/Stop pair queued on the dispatcher cancels itself out
+        // before any tick fires, and the docs-pipeline client (which polls
+        // /frame in serial) never received a single frame. The CPU cost of
+        // the timer running idle until Dispose is negligible at <=10 fps.
         Interlocked.Increment(ref _activeReaders);
         try { _dispatcherQueue.TryEnqueue(() => { if (!_disposed) _captureTimer.Start(); }); } catch { }
         try
@@ -353,10 +359,7 @@ internal sealed class PreviewCaptureServer : IDisposable
         }
         finally
         {
-            if (Interlocked.Decrement(ref _activeReaders) <= 0)
-            {
-                try { _dispatcherQueue.TryEnqueue(() => { if (!_disposed && _activeReaders <= 0) _captureTimer.Stop(); }); } catch { }
-            }
+            Interlocked.Decrement(ref _activeReaders);
         }
     }
 

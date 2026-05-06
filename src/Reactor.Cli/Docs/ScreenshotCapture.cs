@@ -44,8 +44,8 @@ internal static class ScreenshotCapture
 
         try
         {
-            var port = await WaitForCapturePort(process, TimeSpan.FromSeconds(30));
-            if (port < 0)
+            var (port, token) = await WaitForCaptureHandshake(process, TimeSpan.FromSeconds(30));
+            if (port < 0 || token is null)
             {
                 Console.Error.WriteLine("    ✗ Timed out waiting for capture port");
                 return false;
@@ -61,6 +61,17 @@ internal static class ScreenshotCapture
             Directory.CreateDirectory(topicDir);
 
             using var http = new HttpClient();
+            // SECURITY (TASK-018): the capture server requires a per-launch
+            // bearer token on every request. We read it from the app's stdout
+            // alongside CAPTURE_PORT.
+            http.DefaultRequestHeaders.Authorization =
+                new global::System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            // Warm-up: the capture server starts its capture timer lazily on the
+            // first /frame call. Kick it now and wait for the first frame so the
+            // first manifest entry doesn't pay the timer-startup latency.
+            await PollForFrame(http, port, TimeSpan.FromSeconds(10));
+
             foreach (var screenshot in manifest.Screenshots)
             {
                 Console.Write($"    Capturing {screenshot.Id}...");
@@ -83,7 +94,15 @@ internal static class ScreenshotCapture
                         await Task.Delay(1000);
                     }
 
-                    var frameBytes = await http.GetByteArrayAsync($"http://localhost:{port}/frame");
+                    // The capture timer only starts once a reader hits /frame
+                    // (TASK-025), so the first call returns 204 with no body.
+                    // Poll until a frame is ready or we exceed the deadline.
+                    var frameBytes = await PollForFrame(http, port, TimeSpan.FromSeconds(5));
+                    if (frameBytes.Length == 0)
+                    {
+                        Console.Error.WriteLine($" ✗ no frame produced within deadline");
+                        continue;
+                    }
                     var outputPath = Path.GetFullPath(Path.Combine(topicDir, $"{screenshot.Id}.{screenshot.Format}"));
                     if (!outputPath.StartsWith(Path.GetFullPath(topicDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidOperationException($"Screenshot id '{screenshot.Id}' would escape output directory");
@@ -114,30 +133,67 @@ internal static class ScreenshotCapture
         }
     }
 
-    private static async Task<int> WaitForCapturePort(Process process, TimeSpan timeout)
+    /// <summary>
+    /// Polls <c>/frame</c> until the server returns a non-empty body or the
+    /// deadline expires. The capture timer starts lazily on first reader, so
+    /// early calls return HTTP 204 with no content.
+    /// </summary>
+    private static async Task<byte[]> PollForFrame(HttpClient http, int port, TimeSpan deadline)
+    {
+        var sw = global::System.Diagnostics.Stopwatch.StartNew();
+        while (sw.Elapsed < deadline)
+        {
+            using var resp = await http.GetAsync($"http://localhost:{port}/frame");
+            if (resp.StatusCode == global::System.Net.HttpStatusCode.OK)
+            {
+                var bytes = await resp.Content.ReadAsByteArrayAsync();
+                if (bytes.Length > 0) return bytes;
+            }
+            await Task.Delay(100);
+        }
+        return Array.Empty<byte>();
+    }
+
+    /// <summary>
+    /// Reads the app's stdout for the <c>CAPTURE_PORT=</c> and <c>CAPTURE_TOKEN=</c>
+    /// handshake lines emitted by <see cref="Reactor.Hosting.PreviewCaptureServer.Start"/>.
+    /// Both must arrive within <paramref name="timeout"/> for the capture client to
+    /// authenticate. Returns <c>(-1, null)</c> on timeout.
+    /// </summary>
+    private static async Task<(int Port, string? Token)> WaitForCaptureHandshake(Process process, TimeSpan timeout)
     {
         using var cts = new CancellationTokenSource(timeout);
+        int port = -1;
+        string? token = null;
         try
         {
-            while (!cts.Token.IsCancellationRequested)
+            while (!cts.Token.IsCancellationRequested && (port < 0 || token is null))
             {
                 var line = await process.StandardOutput.ReadLineAsync(cts.Token);
                 if (line == null) break;
 
-                if (line.StartsWith("CAPTURE_PORT=") &&
-                    int.TryParse(line.AsSpan("CAPTURE_PORT=".Length), out var port))
+                if (port < 0 && line.StartsWith("CAPTURE_PORT=") &&
+                    int.TryParse(line.AsSpan("CAPTURE_PORT=".Length), out var parsed))
                 {
-                    // Drain stdout in background to prevent buffer deadlock
-                    _ = Task.Run(async () =>
-                    {
-                        while (await process.StandardOutput.ReadLineAsync() != null) { }
-                    });
-                    return port;
+                    port = parsed;
+                }
+                else if (token is null && line.StartsWith("CAPTURE_TOKEN="))
+                {
+                    token = line.Substring("CAPTURE_TOKEN=".Length);
                 }
             }
         }
         catch (OperationCanceledException) { }
 
-        return -1;
+        if (port >= 0 && token is not null)
+        {
+            // Drain stdout in background to prevent buffer deadlock
+            _ = Task.Run(async () =>
+            {
+                while (await process.StandardOutput.ReadLineAsync() != null) { }
+            });
+            return (port, token);
+        }
+        return (-1, null);
     }
 }
