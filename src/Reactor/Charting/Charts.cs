@@ -86,6 +86,11 @@ public sealed class ChartElement<T> : IChartAccessibilityData
     // Alternate view
     private Element? _alternateView;
 
+    // Custom axis tick label rendering — returned element is anchored at the tick
+    // position and rendered non-interactive, hidden from the UIA tree.
+    private Func<double, Element>? _xTickLabelView;
+    private Func<double, Element>? _yTickLabelView;
+
     // Interactive / keyboard navigation fields
     private bool _interactive;
     private bool _disableKeyboard;
@@ -121,6 +126,20 @@ public sealed class ChartElement<T> : IChartAccessibilityData
 
     /// <summary>Per-point label override. Receives the data item and its index.</summary>
     public ChartElement<T> DataLabel(Func<T, int, string> labeller) { _dataLabel = labeller; return this; }
+
+    /// <summary>
+    /// Replaces the built-in numeric X-axis tick label with a caller-supplied <see cref="Element"/>.
+    /// The element is horizontally centered on the tick mark. Rendered non-interactive and hidden
+    /// from the UIA tree (the chart's accessibility data continues to describe axis ticks).
+    /// </summary>
+    public ChartElement<T> XTickLabelView(Func<double, Element> render) { _xTickLabelView = render; return this; }
+
+    /// <summary>
+    /// Replaces the built-in numeric Y-axis tick label with a caller-supplied <see cref="Element"/>.
+    /// The element is right-anchored to the axis edge and vertically centered on the tick. Rendered
+    /// non-interactive and hidden from the UIA tree.
+    /// </summary>
+    public ChartElement<T> YTickLabelView(Func<double, Element> render) { _yTickLabelView = render; return this; }
 
     /// <summary>Axis unit annotations (e.g., "months", "USD").</summary>
     public ChartElement<T> Units(string? xUnits = null, string? yUnits = null) { _xUnits = xUnits; _yUnits = yUnits; return this; }
@@ -257,7 +276,8 @@ public sealed class ChartElement<T> : IChartAccessibilityData
         var canvas = D3Canvas(_width, _height,
             [.. _showGrid ? D3Grid(yScale, plotLeft, plotWidth) : [],
              .. RenderData(data, xScale, yScale, plotLeft, plotTop, plotWidth, plotHeight),
-             .. _showAxes ? D3Axes(xScale, yScale, plotLeft, plotTop, plotWidth, plotHeight) : []]);
+             .. _showAxes ? D3Axes(xScale, yScale, plotLeft, plotTop, plotWidth, plotHeight,
+                    xTickLabel: _xTickLabelView, yTickLabel: _yTickLabelView) : []]);
 
         if (_onReady is { } cb)
             canvas = canvas.Set(c => cb(new ChartHandle<T>(c)));
@@ -435,6 +455,11 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     private Accessibility.ChartPalette? _palette;
     private bool _colorOnly;
 
+    // Custom label rendering — when set, replaces the built-in TextBlock label
+    // produced from LabelAccessor. The string LabelAccessor is still consulted
+    // for accessibility (slice descriptors), so screen-reader summaries keep working.
+    private Func<T, PieSliceLayout, Element>? _labelView;
+
     public PieChartElement<T> Width(double w) { _width = w; return this; }
     public PieChartElement<T> Height(double h) { _height = h; return this; }
     public PieChartElement<T> InnerRadius(double r) { _innerRadius = r; return this; }
@@ -453,6 +478,17 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
 
     /// <summary>Per-slice label override.</summary>
     public PieChartElement<T> DataLabel(Func<T, int, string> labeller) { _dataLabel = labeller; return this; }
+
+    /// <summary>
+    /// Replaces the built-in text label for each slice with a caller-supplied <see cref="Element"/>.
+    /// The element is positioned centered on the slice's centroid (it does not need a known size),
+    /// rendered non-interactive by default (no hit-testing), and hidden from the UIA tree so the
+    /// chart's <see cref="IChartAccessibilityData"/> remains the single accessible representation
+    /// of slice data. Set the original string label via the <c>label</c> parameter on
+    /// <see cref="Charts.PieChart{T}"/> or <see cref="DataLabel"/> to keep accessibility metadata
+    /// when overriding the visual.
+    /// </summary>
+    public PieChartElement<T> LabelView(Func<T, PieSliceLayout, Element> render) { _labelView = render; return this; }
 
     /// <summary>Sets a curated accessible palette (Tier 1).</summary>
     public PieChartElement<T> Palette(Accessibility.ChartPalette palette) { _palette = palette; return this; }
@@ -494,10 +530,15 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
 
         var whiteBrush = new SolidColorBrush(Microsoft.UI.Colors.White);
 
+        var labels =
+            _labelView != null ? RenderLabelViews(data, palette, cx, cy, outerRadius)
+            : LabelAccessor != null ? RenderLabels(data, cx, cy, outerRadius)
+            : [];
+
         var canvas = D3Canvas(_width, _height,
             [.. D3Pie(data, ValueAccessor, cx, cy, outerRadius, _innerRadius, _padAngle,
                     stroke: whiteBrush),
-             .. LabelAccessor != null ? RenderLabels(data, cx, cy, outerRadius) : []]);
+             .. labels]);
 
         if (_onReady is { } cb)
             canvas = canvas.Set(c => cb(new PieChartHandle<T>(c)));
@@ -531,6 +572,40 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         {
             var (lx, ly) = arcGen.Centroid(arc.StartAngle, arc.EndAngle);
             return (Element)D3Charts.Text(cx + lx - 10, cy + ly - 7, LabelAccessor!(arc.Data), 11, whiteBrush);
+        }).ToArray();
+    }
+
+    private Element[] RenderLabelViews(IReadOnlyList<T> data, IReadOnlyList<D3Color> palette,
+        double cx, double cy, double outerRadius)
+    {
+        var pieGen = PieGenerator.Create<T>(ValueAccessor).SetPadAngle(_padAngle);
+        var arcs = pieGen.Generate(data);
+        var arcGen = new ArcGenerator().SetInnerRadius(_innerRadius).SetOuterRadius(outerRadius);
+
+        // Total of positive values — matches the normalization PieGenerator uses internally.
+        double total = 0;
+        for (int i = 0; i < arcs.Length; i++)
+            if (arcs[i].Value > 0) total += arcs[i].Value;
+
+        return arcs.Select(arc =>
+        {
+            var (lx, ly) = arcGen.Centroid(arc.StartAngle, arc.EndAngle);
+            var layout = new PieSliceLayout(
+                Index: arc.Index,
+                Value: arc.Value,
+                Fraction: total > 0 ? arc.Value / total : 0,
+                CentroidX: cx + lx,
+                CentroidY: cy + ly,
+                StartAngle: arc.StartAngle,
+                EndAngle: arc.EndAngle,
+                InnerRadius: _innerRadius,
+                OuterRadius: outerRadius,
+                Color: palette[arc.Index % palette.Count]);
+
+            return _labelView!(arc.Data, layout)
+                .CenterAt(layout.CentroidX, layout.CentroidY)
+                .OnMount(static fe => fe.IsHitTestVisible = false)
+                .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         }).ToArray();
     }
 
@@ -578,3 +653,20 @@ public sealed class PieChartHandle<T>
               "Charts are now native Reactor elements that diff efficiently.")]
     public void Redraw(IReadOnlyList<T> data) { }
 }
+
+/// <summary>
+/// Layout metadata for a single pie slice, supplied to <see cref="PieChartElement{T}.LabelView"/>
+/// callbacks. Centroid coordinates are absolute within the chart canvas; angles are radians
+/// measured clockwise from 12 o'clock (matches d3-shape semantics).
+/// </summary>
+public readonly record struct PieSliceLayout(
+    int Index,
+    double Value,
+    double Fraction,
+    double CentroidX,
+    double CentroidY,
+    double StartAngle,
+    double EndAngle,
+    double InnerRadius,
+    double OuterRadius,
+    D3.D3Color Color);

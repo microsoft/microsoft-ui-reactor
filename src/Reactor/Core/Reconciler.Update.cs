@@ -1199,10 +1199,7 @@ public sealed partial class Reconciler
             if (n.Children[i] is null or EmptyElement) continue;
             var ca = n.Children[i].GetAttached<CanvasAttached>();
             if (ca is not null && canvas.Children[panelIdx] is FrameworkElement fe)
-            {
-                WinUI.Canvas.SetLeft(fe, ca.Left);
-                WinUI.Canvas.SetTop(fe, ca.Top);
-            }
+                ApplyCanvasPosition(fe, ca);
             panelIdx++;
         }
 

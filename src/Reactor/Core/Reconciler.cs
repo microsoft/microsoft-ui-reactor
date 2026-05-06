@@ -387,6 +387,62 @@ public sealed partial class Reconciler : IDisposable
         _poolableWireFlags.GetValue(fe, static _ => new PoolableWireFlags());
 
     // ════════════════════════════════════════════════════════════════════
+    //  Canvas anchor positioning
+    // ════════════════════════════════════════════════════════════════════
+    //  CanvasAttached.AnchorX/AnchorY express positioning as a fraction of
+    //  the element's rendered size (0,0 = top-left, 0.5,0.5 = centered).
+    //  Final position depends on ActualWidth/ActualHeight, which is unknown
+    //  at mount time, so we recompute on Loaded + SizeChanged. The current
+    //  CanvasAttached is held in per-FE state so updates can swap anchor
+    //  values without re-subscribing.
+
+    private sealed class CanvasAnchorState
+    {
+        public CanvasAttached Current = new();
+        public bool Subscribed;
+    }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, CanvasAnchorState> _canvasAnchorStates = new();
+
+    internal static void ApplyCanvasPosition(FrameworkElement fe, CanvasAttached ca)
+    {
+        if (ca.AnchorX == 0 && ca.AnchorY == 0)
+        {
+            WinUI.Canvas.SetLeft(fe, ca.Left);
+            WinUI.Canvas.SetTop(fe, ca.Top);
+            // If anchor handlers were previously installed (e.g. element re-used after
+            // a different anchor), keep them but update Current so they become a no-op.
+            if (_canvasAnchorStates.TryGetValue(fe, out var existing))
+                existing.Current = ca;
+            return;
+        }
+
+        var state = _canvasAnchorStates.GetValue(fe, static _ => new CanvasAnchorState());
+        state.Current = ca;
+        RecomputeCanvasAnchor(fe, state.Current);
+
+        if (state.Subscribed) return;
+        state.Subscribed = true;
+
+        fe.SizeChanged += (_, _) =>
+        {
+            if (_canvasAnchorStates.TryGetValue(fe, out var s))
+                RecomputeCanvasAnchor(fe, s.Current);
+        };
+        fe.Loaded += (_, _) =>
+        {
+            if (_canvasAnchorStates.TryGetValue(fe, out var s))
+                RecomputeCanvasAnchor(fe, s.Current);
+        };
+    }
+
+    private static void RecomputeCanvasAnchor(FrameworkElement fe, CanvasAttached ca)
+    {
+        WinUI.Canvas.SetLeft(fe, ca.Left - ca.AnchorX * fe.ActualWidth);
+        WinUI.Canvas.SetTop(fe, ca.Top - ca.AnchorY * fe.ActualHeight);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     //  Extensible type registry (Feature 1: RegisterType API)
     // ════════════════════════════════════════════════════════════════════
 

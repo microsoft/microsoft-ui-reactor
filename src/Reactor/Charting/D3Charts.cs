@@ -348,8 +348,28 @@ public static class D3Charts
 
 
     /// <summary>Creates X and Y axis lines with tick labels as a flat array of Elements.</summary>
+    /// <param name="xs">Scale that maps domain values to X-axis pixel positions.</param>
+    /// <param name="ys">Scale that maps domain values to Y-axis pixel positions.</param>
+    /// <param name="left">X coordinate of the plot area's left edge.</param>
+    /// <param name="top">Y coordinate of the plot area's top edge.</param>
+    /// <param name="width">Plot area width.</param>
+    /// <param name="height">Plot area height.</param>
+    /// <param name="xTicks">Approximate number of ticks to generate on the X axis.</param>
+    /// <param name="yTicks">Approximate number of ticks to generate on the Y axis.</param>
+    /// <param name="xTickLabel">
+    /// Optional custom renderer for X-axis tick labels. Receives the tick value and returns
+    /// any <see cref="Element"/>; the chart anchors it horizontally centered on the tick mark.
+    /// When null, a built-in numeric <c>TextBlock</c> is rendered.
+    /// </param>
+    /// <param name="yTickLabel">
+    /// Optional custom renderer for Y-axis tick labels. The returned element is right-anchored
+    /// to the axis edge and vertically centered on the tick. When null, a built-in numeric
+    /// <c>TextBlock</c> is rendered.
+    /// </param>
     public static Element[] D3Axes(LinearScale xs, LinearScale ys,
-        double left, double top, double width, double height, int xTicks = 6, int yTicks = 5)
+        double left, double top, double width, double height, int xTicks = 6, int yTicks = 5,
+        Func<double, Element>? xTickLabel = null,
+        Func<double, Element>? yTickLabel = null)
     {
         var ab = ChartAxis;
         double bot = top + height;
@@ -362,12 +382,36 @@ public static class D3Charts
         };
 
         foreach (var t in xs.Ticks(xTicks))
-            elements.Add(Text(xs.Map(t) - 12, bot + 4, Fmt(t), 10, ab)
-                .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw));
+        {
+            if (xTickLabel is null)
+            {
+                elements.Add(Text(xs.Map(t) - 12, bot + 4, Fmt(t), 10, ab)
+                    .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw));
+            }
+            else
+            {
+                elements.Add(xTickLabel(t)
+                    .Canvas(xs.Map(t), bot + 4, anchorX: 0.5, anchorY: 0)
+                    .OnMount(static fe => fe.IsHitTestVisible = false)
+                    .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw));
+            }
+        }
 
         foreach (var t in ys.Ticks(yTicks))
-            elements.Add(TextRight(0, ys.Map(t) - 7, Fmt(t), left - 6, 10, ab)
-                .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw));
+        {
+            if (yTickLabel is null)
+            {
+                elements.Add(TextRight(0, ys.Map(t) - 7, Fmt(t), left - 6, 10, ab)
+                    .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw));
+            }
+            else
+            {
+                elements.Add(yTickLabel(t)
+                    .Canvas(left - 6, ys.Map(t), anchorX: 1.0, anchorY: 0.5)
+                    .OnMount(static fe => fe.IsHitTestVisible = false)
+                    .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw));
+            }
+        }
 
         return elements.ToArray();
     }
