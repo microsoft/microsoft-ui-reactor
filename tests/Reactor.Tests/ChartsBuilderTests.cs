@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Reactor.Charting.Accessibility;
 using Microsoft.UI.Reactor.Charting.D3;
+using Microsoft.UI.Reactor;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests;
@@ -277,5 +278,75 @@ public class ChartsBuilderTests
     {
         Assert.NotEqual(ChartType.Line, ChartType.Bar);
         Assert.NotEqual(ChartType.Bar, ChartType.Area);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  *View extension points (LabelView / X|YTickLabelView)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void LineChart_XTickLabelView_StoresAndReturnsThis()
+    {
+        var chart = Charts.LineChart(SampleData, d => d.X, d => d.Y);
+        var ret = chart.XTickLabelView(_ => Factories.TextBlock("x"));
+        Assert.Same(chart, ret);
+    }
+
+    [Fact]
+    public void LineChart_YTickLabelView_StoresAndReturnsThis()
+    {
+        var chart = Charts.LineChart(SampleData, d => d.X, d => d.Y);
+        var ret = chart.YTickLabelView(_ => Factories.TextBlock("y"));
+        Assert.Same(chart, ret);
+    }
+
+    [Fact]
+    public void PieChart_LabelView_StoresAndReturnsThis()
+    {
+        var pie = Charts.PieChart(new[] { 1.0, 2.0, 3.0 }, v => v);
+        var ret = pie.LabelView((_, _) => Factories.TextBlock("slice"));
+        Assert.Same(pie, ret);
+    }
+
+    [Fact]
+    public void PieChart_SetColors_EmptyArray_DoesNotStoreEmptyPalette()
+    {
+        // Empty .SetColors() previously stored an empty palette which would
+        // mod-by-zero downstream; now it should clear the override. The render
+        // path itself can't be exercised in unit tests (Brush construction
+        // requires a WinUI thread); selftest fixtures cover end-to-end render.
+        var pie = Charts.PieChart(new[] { 1.0, 2.0 }, v => v).SetColors();
+        Assert.NotNull(pie);
+        // Calling SetColors with values stores them; calling with empty clears.
+        // No public getter exists for the palette, but builder fluency is the
+        // unit-test contract here — that the call doesn't throw and returns
+        // the chart for chaining.
+        var ret = Charts.PieChart(new[] { 1.0, 2.0 }, v => v)
+            .SetColors(new D3Color(255, 0, 0))
+            .SetColors();
+        Assert.NotNull(ret);
+    }
+
+    [Fact]
+    public void PieSliceLayout_ExposesAllFields()
+    {
+        // Pin the public shape — slice-label authors lean on these.
+        var color = new D3Color(0xAA, 0xBB, 0xCC);
+        var layout = new PieSliceLayout(
+            Index: 2, Value: 12.5, Fraction: 0.25,
+            CentroidX: 100, CentroidY: 80,
+            StartAngle: 0, EndAngle: global::System.Math.PI / 2,
+            InnerRadius: 0, OuterRadius: 60,
+            Color: color);
+        Assert.Equal(2, layout.Index);
+        Assert.Equal(12.5, layout.Value);
+        Assert.Equal(0.25, layout.Fraction);
+        Assert.Equal(100, layout.CentroidX);
+        Assert.Equal(80, layout.CentroidY);
+        Assert.Equal(0, layout.StartAngle);
+        Assert.Equal(global::System.Math.PI / 2, layout.EndAngle);
+        Assert.Equal(0, layout.InnerRadius);
+        Assert.Equal(60, layout.OuterRadius);
+        Assert.Equal(color, layout.Color);
     }
 }

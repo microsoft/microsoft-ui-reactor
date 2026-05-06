@@ -464,7 +464,18 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     public PieChartElement<T> Height(double h) { _height = h; return this; }
     public PieChartElement<T> InnerRadius(double r) { _innerRadius = r; return this; }
     public PieChartElement<T> PadAngle(double a) { _padAngle = a; return this; }
-    public PieChartElement<T> SetColors(params D3Color[] colors) { _colorPalette = Array.AsReadOnly(colors); return this; }
+    /// <summary>
+    /// Override the slice color palette. Colors cycle modulo the palette length when
+    /// there are more slices than colors. Calling with an empty argument list clears
+    /// the override and restores the default palette — we deliberately don't store an
+    /// empty palette because every downstream consumer would have to mod-by-zero
+    /// guard, and "no colors" isn't a meaningful render state.
+    /// </summary>
+    public PieChartElement<T> SetColors(params D3Color[] colors)
+    {
+        _colorPalette = colors is { Length: > 0 } ? Array.AsReadOnly(colors) : null;
+        return this;
+    }
     public PieChartElement<T> OnReady(Action<PieChartHandle<T>> callback) { _onReady = callback; return this; }
 
     /// <summary>Sets visible title + accessible name for the chart.</summary>
@@ -535,9 +546,11 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
             : LabelAccessor != null ? RenderLabels(data, cx, cy, outerRadius)
             : [];
 
+        // Pass the same palette to D3Pie that RenderLabelViews resolved above, so
+        // PieSliceLayout.Color (label-side) always matches the actual rendered slice.
         var canvas = D3Canvas(_width, _height,
             [.. D3Pie(data, ValueAccessor, cx, cy, outerRadius, _innerRadius, _padAngle,
-                    stroke: whiteBrush),
+                    stroke: whiteBrush, palette: palette),
              .. labels]);
 
         if (_onReady is { } cb)
@@ -602,9 +615,13 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
                 OuterRadius: outerRadius,
                 Color: palette[arc.Index % palette.Count]);
 
+            // OnMountAdd (not OnMount) — preserves any mount-time wiring the
+            // caller put on the returned element. ElementModifiers stores a
+            // single OnMountAction, so plain `.OnMount(…)` would silently
+            // overwrite the caller's hook.
             return _labelView!(arc.Data, layout)
                 .CenterAt(layout.CentroidX, layout.CentroidY)
-                .OnMount(static fe => fe.IsHitTestVisible = false)
+                .OnMountAdd(static fe => fe.IsHitTestVisible = false)
                 .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         }).ToArray();
     }

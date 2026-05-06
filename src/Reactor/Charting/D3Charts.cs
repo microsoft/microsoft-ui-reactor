@@ -309,16 +309,23 @@ public static class D3Charts
     }
 
     /// <summary>Creates pie/donut slice elements directly from data, collapsing PieGenerator + ArcGenerator + iteration into one expression.</summary>
+    /// <param name="palette">
+    /// Optional color palette. When null or empty, falls back to <see cref="Palette"/>
+    /// (D3 Category10). Callers that want slice colors to match an external label
+    /// computation should pass the same palette here that they use for those labels.
+    /// </param>
     public static Element[] D3Pie<T>(IReadOnlyList<T> data, Func<T, double> value, double cx, double cy,
         double outerRadius = 150, double innerRadius = 0,
         double padAngle = 0, bool sort = true,
-        Brush? stroke = null, double strokeWidth = 1.5)
+        Brush? stroke = null, double strokeWidth = 1.5,
+        IReadOnlyList<D3Color>? palette = null)
     {
         var arcs = PieGenerator.Generate(data, value, sort, padAngle);
         var arc = new ArcGenerator().SetOuterRadius(outerRadius).SetInnerRadius(innerRadius);
+        var resolved = palette is { Count: > 0 } p ? p : Palette;
         return arcs.Select((a, i) =>
             (Element)D3PathTranslated(arc.Generate(a), cx, cy,
-                fill: Brush(Palette[i % Palette.Count]),
+                fill: Brush(resolved[i % resolved.Count]),
                 stroke: stroke,
                 strokeWidth: strokeWidth)
         ).ToArray();
@@ -392,7 +399,8 @@ public static class D3Charts
             {
                 elements.Add(xTickLabel(t)
                     .Canvas(xs.Map(t), bot + 4, anchorX: 0.5, anchorY: 0)
-                    .OnMount(static fe => fe.IsHitTestVisible = false)
+                    // OnMountAdd preserves the caller's own mount hook, if any.
+                    .OnMountAdd(static fe => fe.IsHitTestVisible = false)
                     .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw));
             }
         }
@@ -408,7 +416,8 @@ public static class D3Charts
             {
                 elements.Add(yTickLabel(t)
                     .Canvas(left - 6, ys.Map(t), anchorX: 1.0, anchorY: 0.5)
-                    .OnMount(static fe => fe.IsHitTestVisible = false)
+                    // OnMountAdd preserves the caller's own mount hook, if any.
+                    .OnMountAdd(static fe => fe.IsHitTestVisible = false)
                     .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw));
             }
         }

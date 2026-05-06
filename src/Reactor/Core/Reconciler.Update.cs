@@ -2507,21 +2507,37 @@ public sealed partial class Reconciler
     /// <summary>
     /// Walks visible (realized) containers and reconciles each item's Element
     /// using the stored reactor element (attached DP) as the old element.
-    /// Null containers (virtualized out) are skipped — ContainerContentChanging handles them on scroll.
+    /// Iterates the realized panel children directly rather than calling
+    /// ContainerFromIndex(i) for every i in 0..ItemCount — on a virtualized
+    /// list with thousands of items but a small viewport, that loop would do
+    /// thousands of cross-WinRT lookups per parent re-render and discard
+    /// most as null. Children of the realized panel IS the realized set, so
+    /// iterating it is O(realized) instead of O(total).
     /// </summary>
     private void RefreshRealizedContainers(WinUI.ListViewBase listViewBase, TemplatedListElementBase newEl, Action requestRerender)
     {
-        for (int i = 0; i < newEl.ItemCount; i++)
+        var panel = listViewBase.ItemsPanelRoot;
+        if (panel is null) return;
+
+        // Snapshot first — Update may indirectly mount new controls and modifying
+        // Children during enumeration throws (WinUI's UIElementCollection enforces
+        // this). Counts are small (one viewport's worth) so the copy is cheap.
+        var realized = new List<UIElement>(panel.Children.Count);
+        foreach (var child in panel.Children) realized.Add(child);
+
+        foreach (var child in realized)
         {
             // Cast to SelectorItem so both ListView (ListViewItem) and GridView
             // (GridViewItem) containers are handled — both derive from SelectorItem
-            // and share the same ContentTemplateRoot pattern. Casting to ListViewItem
-            // alone silently dropped GridView containers.
-            var container = listViewBase.ContainerFromIndex(i) as Microsoft.UI.Xaml.Controls.Primitives.SelectorItem;
-            if (container?.ContentTemplateRoot is not ContentControl cc) continue;
+            // and share the same ContentTemplateRoot pattern.
+            if (child is not Microsoft.UI.Xaml.Controls.Primitives.SelectorItem container) continue;
+            if (container.ContentTemplateRoot is not ContentControl cc) continue;
+
+            var index = listViewBase.IndexFromContainer(container);
+            if (index < 0 || index >= newEl.ItemCount) continue;
 
             var oldItemElement = GetElementTag(cc);
-            var newItemElement = newEl.BuildItemView(i);
+            var newItemElement = newEl.BuildItemView(index);
 
             if (oldItemElement is not null && cc.Content is UIElement existingCtrl && CanUpdate(oldItemElement, newItemElement))
             {

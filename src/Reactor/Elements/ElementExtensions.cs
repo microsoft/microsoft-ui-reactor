@@ -1343,6 +1343,22 @@ public static class ElementExtensions
     public static T OnMount<T>(this T el, Action<FrameworkElement> action) where T : Element =>
         Modify(el, new ElementModifiers { OnMountAction = action });
 
+    /// <summary>
+    /// Like <see cref="OnMount"/>, but composes with any mount action already on the
+    /// element instead of overwriting it. Useful for framework code that wants to
+    /// apply defensive defaults (e.g. <c>IsHitTestVisible = false</c>) to a
+    /// caller-supplied <see cref="Element"/> without silently dropping the caller's
+    /// own mount-time wiring. The pre-existing action runs first, then the new one.
+    /// </summary>
+    public static T OnMountAdd<T>(this T el, Action<FrameworkElement> action) where T : Element
+    {
+        var existing = el.Modifiers?.OnMountAction;
+        Action<FrameworkElement> combined = existing is null
+            ? action
+            : fe => { existing(fe); action(fe); };
+        return Modify(el, new ElementModifiers { OnMountAction = combined });
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  Accessibility — Tier 1 (inline on ElementModifiers)
     // ════════════════════════════════════════════════════════════════
