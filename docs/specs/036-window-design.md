@@ -331,10 +331,21 @@ public static partial class ReactorApp
     public static void Run(Action<ReactorAppContext> startup);
 
     public static IReadOnlyList<ReactorWindow> Windows { get; }
-    public static ReactorWindow? PrimaryWindow { get; }
+    public static ReactorWindow? PrimaryWindow { get; }   // null in tray-only apps
     public static DispatcherQueue UIDispatcher { get; }
     public static ShutdownPolicy ShutdownPolicy { get; set; }
         = ShutdownPolicy.OnPrimaryWindowClosed;
+
+    // Window operations — usable from anywhere on the UI thread once Run has
+    // entered the startup callback. Tray click handlers, menu commands, MCP
+    // tools, etc. all call into the same surface.
+    public static ReactorWindow OpenWindow(WindowSpec spec, Func<Component> root);
+    public static ReactorWindow OpenWindow(WindowSpec spec, Func<RenderContext, Element> render);
+    public static ReactorWindow? FindWindow(WindowKey key);
+
+    // Process-scoped tray icons. Registered without a window; survive
+    // window-close cycles. Returns a handle whose Dispose removes the icon.
+    public static TrayIcon RegisterTrayIcon(TrayIconSpec spec);
 
     public static event EventHandler<ReactorWindow>? WindowOpened;
     public static event EventHandler<ReactorWindow>? WindowClosed;
@@ -345,11 +356,16 @@ public static partial class ReactorApp
     public static ReactorHost? ActiveHost { get; }
 }
 
+// The startup-callback context is a thin facade over ReactorApp giving access
+// to the launch activation. It does not hold per-startup state; calls forward
+// to the static ReactorApp surface and remain valid after Run returns control.
 public sealed class ReactorAppContext
 {
+    public LaunchActivation LaunchActivation { get; }
     public ReactorWindow OpenWindow(WindowSpec spec, Func<Component> root);
     public ReactorWindow OpenWindow(WindowSpec spec, Func<RenderContext, Element> render);
     public ReactorWindow? FindWindow(WindowKey key);
+    public TrayIcon RegisterTrayIcon(TrayIconSpec spec);
 }
 
 public enum ShutdownPolicy
@@ -446,12 +462,21 @@ Process start
 
 - **OnPrimaryWindowClosed** *(default)* — closing the primary window
   exits the process, regardless of secondary windows still open. This
-  matches today's `Run<TRoot>` semantics.
+  matches today's `Run<TRoot>` semantics. If startup opens zero
+  windows under this policy, the app exits immediately — pick a
+  different policy for tray-only apps.
 - **OnLastWindowClosed** — close the last window to exit. Secondary
-  windows can outlive the primary.
+  windows can outlive the primary. Same caveat as above for the
+  zero-windows-at-startup case.
 - **Explicit** — windows close, but the process keeps running until
-  `ReactorApp.Exit()` is called. Useful for tray-resident apps (when
-  tray support arrives) and for headless windows that re-spawn.
+  `ReactorApp.Exit()` is called. The supported policy for
+  **tray-only startup** (§13.6), background sync agents, headless
+  window respawn, and any other shape where "no windows open" is a
+  valid running state.
+
+The startup callback is allowed to open zero windows. `ReactorApp.Run`
+does not require at least one `OpenWindow` call — only that the
+selected `ShutdownPolicy` permits the resulting state.
 
 ### 6.3 Per-window teardown
 
@@ -683,6 +708,12 @@ process-arg parser the app can reuse.
 
 ### 11.4 System tray icon
 
+Tray icons are **process-scoped**, not window-scoped. They live for
+the duration of the process (or until disposed) and survive
+window-open / window-close cycles. This is important for the
+"tray-only startup" pattern (§13.6) where the app boots with no
+visible window and an explicit shutdown policy.
+
 ```csharp
 public sealed record TrayIconSpec(
     WindowIcon Icon,
@@ -703,15 +734,16 @@ public sealed class TrayIcon : IDisposable
     public void HideFlyout();
 }
 
-// On ReactorWindow:
-public TrayIcon RegisterTrayIcon(TrayIconSpec spec);
+// Registered on the app, not on a window:
+public static TrayIcon ReactorApp.RegisterTrayIcon(TrayIconSpec spec);
 ```
 
 The tray icon's flyout content goes through the reconciler exactly
 like the rest of Reactor — the API takes an `Element`, not a
 WinUI control. Implementation borrows from `WinUIEx.TrayIcon`
 (`Shell_NotifyIcon` + a hidden popup window for the flyout
-`XamlRoot`).
+`XamlRoot`); the hidden window is internal and never exposed to
+app code.
 
 A common UX pattern is "minimize to tray". This is built on the
 public surface, not baked in:
@@ -741,8 +773,10 @@ class App : Component
 }
 ```
 
-`UseTrayIcon` is a thin hook over `RegisterTrayIcon` that disposes
-the icon on cleanup.
+`UseTrayIcon` is a thin hook over `ReactorApp.RegisterTrayIcon` that
+disposes the icon on the calling component's cleanup. For tray-only
+apps that have no component tree at startup (§13.6), call
+`ReactorApp.RegisterTrayIcon` directly from the startup callback.
 
 ### 11.5 Thumbnail toolbar
 
@@ -958,6 +992,100 @@ ReactorApp.Run(ctx =>
                        PersistenceId: "inspector",
                        StartPosition: WindowStartPosition.RestoreFromPersistence),
         () => new InspectorShell());
+});
+```
+
+### 13.6 Tray-only startup — no initial window
+
+A class of apps (chat clients, sync agents, clipboard managers,
+quick-launchers) wants to live in the system tray with no visible
+window at startup. The user opens a window on demand via the tray
+icon; closing it returns the app to its tray-only state. The app
+exits only via an explicit "Quit" command.
+
+This shape falls out of three pieces the spec already provides:
+
+1. The startup callback is allowed to open zero windows.
+   `ReactorApp.PrimaryWindow` is `null` in that case, and
+   `Run` does **not** consider that an error.
+2. `ShutdownPolicy.Explicit` keeps the message loop alive across
+   "all windows closed" transitions.
+3. `ReactorApp.RegisterTrayIcon(...)` is process-scoped — registering
+   it from startup, before any window is opened, is the supported
+   path.
+
+```csharp
+ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+
+ReactorApp.Run(ctx =>
+{
+    var tray = ctx.RegisterTrayIcon(new TrayIconSpec(
+        Icon: WindowIcon.FromResource("Assets/tray.ico"),
+        Tooltip: "Sync Agent — idle"));
+
+    // Single-instance window keyed by "main". Opening it twice from
+    // a double-click reuses the existing window. Closing it removes
+    // the entry from ReactorApp.Windows; the next click reopens.
+    void ToggleMainWindow()
+    {
+        if (ReactorApp.FindWindow("main") is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+
+        ReactorApp.OpenWindow(
+            new WindowSpec(
+                Key: "main",
+                Title: "Sync Agent",
+                Width: 720, Height: 520,
+                StartPosition: WindowStartPosition.RestoreFromPersistence,
+                PersistenceId: "main"),
+            () => new SyncAgentShell());
+    }
+
+    tray.Click += (_, _) => ToggleMainWindow();
+    tray.RightClick += (_, _) => tray.ShowFlyout(BuildContextMenu());
+
+    Element BuildContextMenu() =>
+        VStack(
+            Button("Open", () => { ToggleMainWindow(); tray.HideFlyout(); }),
+            Button("Pause sync", () => SyncService.Pause()),
+            Separator(),
+            Button("Quit", () => ReactorApp.Exit()));
+});
+```
+
+Key behaviors this exercises:
+
+- Startup callback returns with **zero windows open** — the message
+  loop runs because `ShutdownPolicy.Explicit` doesn't gate on
+  windows.
+- The tray icon's right-click flyout content is a Reactor `Element`
+  reconciled into the hidden flyout window.
+- Closing the main window does **not** exit the app. The tray icon
+  stays put.
+- `ReactorApp.Exit()` is the only path that ends the process.
+- A second click of the tray icon while the window is already open
+  calls `Activate()` on the existing window rather than spawning a
+  new one — `WindowKey` semantics fall out naturally because we
+  used `FindWindow("main")` before `OpenWindow`.
+
+The complementary pattern — start with a window visible, fall back
+to tray-only when the user closes it — uses
+`ShutdownPolicy.Explicit` plus the `Closing` guard:
+
+```csharp
+ReactorApp.Run(ctx =>
+{
+    ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+
+    var tray = ctx.RegisterTrayIcon(new TrayIconSpec(/* … */));
+    tray.Click += (_, _) => /* show / hide window */;
+
+    ReactorApp.OpenWindow(
+        new WindowSpec(Key: "main", Title: "Chat", Width: 480, Height: 720),
+        () => new ChatShell());
 });
 ```
 
