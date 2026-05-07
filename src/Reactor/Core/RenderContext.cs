@@ -944,12 +944,65 @@ public sealed class RenderContext
     }
 
     /// <summary>
+    /// Parameterless overload — resolves the current host's window via
+    /// <c>ReactorHost.OwningWindow.NativeWindow</c> and re-renders on resize.
+    /// Returns <c>(0, 0)</c> when called outside a window (e.g. tray-flyout
+    /// content). (spec 036 §5.2 / §7.1)
+    /// </summary>
+    public (double Width, double Height) UseWindowSize()
+    {
+        var owningWindow = Microsoft.UI.Reactor.ReactorApp.PrimaryWindow;
+        // Resolve the current host's owning window via the active host's
+        // back-pointer. The render-time host has been routed via
+        // ReactorApp.ActiveHostInternal during the OpenWindowCore path.
+        var hostWindow = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow ?? owningWindow;
+        if (hostWindow is null) { _ = UseState(0); return (0, 0); }
+        return UseWindowSize(hostWindow.NativeWindow);
+    }
+
+    /// <summary>
+    /// Returns the current per-window DPI (<see cref="Microsoft.UI.Reactor.ReactorWindow.Dpi"/>)
+    /// and re-renders on DPI change. Returns the system primary-monitor DPI when
+    /// called outside a window. (spec 036 §5.2)
+    /// </summary>
+    public uint UseDpi()
+    {
+        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        if (win is null)
+        {
+            _ = UseState((uint)0);
+            return DpiHelpers.GetSystemDpiSafe();
+        }
+
+        var (dpi, setDpi) = UseState(win.Dpi);
+
+        UseEffect(() =>
+        {
+            void handler(object? sender, uint newDpi) => setDpi(newDpi);
+            win.DpiChanged += handler;
+            return () => win.DpiChanged -= handler;
+        }, win);
+
+        return dpi == 0 ? win.Dpi : dpi;
+    }
+
+    /// <summary>
     /// Returns true when the given window's width is >= minWidth.
     /// Re-renders when the window resizes across the breakpoint.
     /// </summary>
     public bool UseBreakpoint(Microsoft.UI.Xaml.Window window, double minWidth)
     {
         var (width, _) = UseWindowSize(window);
+        return width >= minWidth;
+    }
+
+    /// <summary>
+    /// Parameterless overload — resolves the current host's window. Returns
+    /// false when called outside a window. (spec 036 §5.2)
+    /// </summary>
+    public bool UseBreakpoint(double minWidth)
+    {
+        var (width, _) = UseWindowSize();
         return width >= minWidth;
     }
 

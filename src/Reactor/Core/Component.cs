@@ -57,8 +57,31 @@ public abstract class Component
     protected (double Width, double Height) UseWindowSize(Microsoft.UI.Xaml.Window window)
         => Context.UseWindowSize(window);
 
+    /// <summary>
+    /// Parameterless overload — resolves the host window from the current
+    /// host's owning window. Returns <c>(0, 0)</c> outside a window.
+    /// (spec 036 §5.2)
+    /// </summary>
+    protected (double Width, double Height) UseWindowSize()
+        => Context.UseWindowSize();
+
     protected bool UseBreakpoint(Microsoft.UI.Xaml.Window window, double minWidth)
         => Context.UseBreakpoint(window, minWidth);
+
+    /// <summary>
+    /// Parameterless overload — resolves the host window. Returns
+    /// <c>false</c> outside a window. (spec 036 §5.2)
+    /// </summary>
+    protected bool UseBreakpoint(double minWidth)
+        => Context.UseBreakpoint(minWidth);
+
+    /// <summary>
+    /// Per-monitor DPI of the host window; re-renders on DPI change. Returns
+    /// the system primary-monitor DPI when called outside a window.
+    /// (spec 036 §5.2)
+    /// </summary>
+    protected uint UseDpi()
+        => Context.UseDpi();
 
     protected T UseObservableTree<T>(T source) where T : global::System.ComponentModel.INotifyPropertyChanged
         => Context.UseObservableTree(source);

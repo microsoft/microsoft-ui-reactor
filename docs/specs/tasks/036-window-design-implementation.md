@@ -319,62 +319,58 @@ Behavior change phase. After this lands, `Run<TRoot>(width, height)` and
 
 ### 2.1 Win32 message pump
 
-- [ ] Create `src/Reactor/Hosting/Messaging/WindowMessageMonitor.cs` —
-  minimal port of the WinUIEx helper (~80 LOC per spec §5.1). Subclasses
-  the HWND via `SetWindowLongPtr(GWL_WNDPROC)`, raises events for
-  `WM_DPICHANGED`, `WM_GETMINMAXINFO`, `WM_SHOWWINDOW`, `WM_SIZING`,
-  `WM_ENTERSIZEMOVE`, `WM_EXITSIZEMOVE`. Carefully restore the original
-  WndProc on dispose; never leak a subclass.
-- [ ] **Threading invariant**: WndProc runs on the UI thread (lifted XAML
-  message pump). The monitor surfaces events synchronously.
-- [ ] **AOT/trim-safety**: no reflection, no dynamic delegates — use a
-  static `WndProc` that resolves the monitor instance via
-  `GetWindowLongPtr(GWL_USERDATA)` set in the subclass.
-- [ ] Unit: a fake monitor that fires `WM_DPICHANGED(192)` reaches the
-  subscriber with the right DPI.
+- [x] `src/Reactor/Hosting/Messaging/WindowMessageMonitor.cs` — uses
+  COMCTL32 `SetWindowSubclass` with a per-process monotonic subclass id
+  and a weak `GCHandle` round-tripped through the `dwRefData` slot. Raises
+  events for WM_DPICHANGED, WM_GETMINMAXINFO, WM_SHOWWINDOW, WM_SIZING,
+  WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE.
+- [x] Subclass is removed in `Dispose()`; finalizer frees the GCHandle as
+  a safety net.
+- [x] Threading invariant — WndProc runs on the lifted-XAML UI thread;
+  events propagate synchronously to subscribers.
+- [x] AOT / trim safety — `[UnmanagedCallersOnly]` static WndProc plus a
+  function-pointer-typed PInvoke (`delegate*&nbsp;unmanaged[Stdcall]<...>`)
+  for `SetWindowSubclass` / `RemoveWindowSubclass`. No reflection, no
+  Marshal.GetFunctionPointerForDelegate.
+- [/] Unit test for the static WndProc — deferred to the Phase-3 fixture
+  pass since exercising SetWindowSubclass cleanly requires a real HWND.
 
 ### 2.2 DPI surface on `ReactorWindow`
 
-- [ ] `ReactorWindow.Dpi { get; }` — initial value from `GetDpiForWindow`
-  on the HWND immediately after window creation, fall back to system
-  primary monitor DPI if the HWND isn't yet realized.
-- [ ] `ReactorWindow.DipScale => Dpi / 96.0`.
-- [ ] `ReactorWindow.DpiChanged` event — fires from
-  `WindowMessageMonitor`'s `WM_DPICHANGED` after updating `Dpi`.
-- [ ] **First-DPI re-apply**: track `_userResized = false` flag. On first
-  DPI report, if `!_userResized`, re-apply the spec's DIP-denominated
-  size against the now-known DPI. After the user resizes once
-  (`WM_SIZING` / `WM_EXITSIZEMOVE`), set `_userResized = true` and never
-  overwrite.
+- [x] `ReactorWindow.Dpi` snapshots `GetDpiForWindow(hwnd)` at construction;
+  falls back to `GetDpiForSystem` then 96 on failure.
+- [x] `ReactorWindow.DipScale => Dpi / 96.0`.
+- [x] `ReactorWindow.DpiChanged` event raised from `WM_DPICHANGED` *after*
+  updating `Dpi`.
+- [x] First-DPI re-apply: `_firstDpiApplied` + `_userResized` flags.
+  `SetSize` flips `_userResized = true`; `WM_SIZING` / `WM_EXITSIZEMOVE`
+  also flip it. After the first WM_DPICHANGED post-creation, if the user
+  hasn't already resized, the spec's DIP size is re-applied at the
+  now-known DPI.
 
 ### 2.3 DIP-denominated sizing
 
-- [ ] `WindowSpec.Width / Height` (DIPs) → physical px at apply time:
-  `(int)Math.Round(width * dpi / 96.0)`, then `AppWindow.Resize(SizeInt32)`.
-- [ ] `WindowSpec.MinWidth / MinHeight / MaxWidth / MaxHeight` flow into
-  `WM_GETMINMAXINFO`. Without this hook, dragging across a DPI boundary
-  lets users shrink past min — the message hook is **mandatory**, not an
-  optimization.
-- [ ] `WindowSpec.ManualPosition` (DIPs) → physical px via
-  `AppWindow.Move`.
-- [ ] `ReactorWindow.SetSize(double, double)` and `SetPosition(double,
-  double)` always convert at the **current** `Dpi`.
-- [ ] Update `Run<TRoot>(double width, double height, ...)` info-line on
-  stderr: emit one `[reactor]` line on the first call per process,
-  describing the DIP behavior. Use a static `int` flag with `Interlocked
-  .CompareExchange` so the line emits exactly once. (Spec §12.1.)
+- [x] `WindowSpec.Width / Height` flow through `DipToPhysicalSize` at
+  initial apply time and on the first-DPI re-apply.
+- [x] Min/max constraints enforced via WM_GETMINMAXINFO with DIP→physical
+  conversion at the *current* per-window DPI. `Handled` short-circuits
+  `DefSubclassProc`.
+- [/] `WindowSpec.ManualPosition` → physical via `DipToPhysicalPoint`.
+  Hooked up in chrome apply path; Phase 5 owns the actual placement
+  application after persistence resolution.
+- [x] `ReactorWindow.SetSize` / `SetPosition` convert at current `Dpi`.
+- [x] One-shot `[reactor]` info-line on first `Run()` per process —
+  `EmitDipBehaviorChangeNoticeOnce` with `Interlocked.CompareExchange`.
 
 ### 2.4 `RenderContext.UseDpi`
 
-- [ ] Add `RenderContext.UseDpi()` per spec §5.2. Resolves to current
-  host's `OwningWindow?.Dpi`, falling back to system primary DPI when
-  outside a window (tray flyout — see §7.1). Subscribes to `DpiChanged`,
-  triggers re-render on change. Returns `uint`.
-- [ ] Add a parameterless overload of `UseWindowSize` per spec §5.2 —
-  resolves the current host's window and returns `(double Width, double
-  Height)`. Existing `UseWindowSize(Window)` overload stays for back-compat
-  (`Component.cs:57-60`).
-- [ ] Update the matching `Component` mirror methods.
+- [x] `RenderContext.UseDpi()` — subscribes to `OwningWindow.DpiChanged`,
+  re-renders on change. Falls back to `DpiHelpers.GetSystemDpiSafe()`
+  when no owning window. Component mirror added.
+- [x] Parameterless `UseWindowSize()` and `UseBreakpoint(double)` —
+  resolve the host window and return `(0, 0)` / `false` outside a window.
+  Existing `(Window)` overloads preserved for back-compat. Component
+  mirrors added.
 
 ### 2.5 Tests — Phase 2
 

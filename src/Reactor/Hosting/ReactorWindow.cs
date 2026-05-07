@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
+using Microsoft.UI.Reactor.Hosting.Messaging;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
@@ -32,10 +34,14 @@ public sealed class ReactorWindow : IDisposable
     private readonly Window _window;
     private readonly AppWindow _appWindow;
     private readonly ReactorHost _host;
+    private readonly nint _hwnd;
+    private readonly WindowMessageMonitor _messageMonitor;
     private WindowSpec _spec;
     private uint _dpi = 96;
     private int _stateValue; // backing storage for State (cast WindowState <-> int)
     private bool _disposed;
+    private bool _userResized; // Phase 2: once true we no longer overwrite size on DPI events.
+    private bool _firstDpiApplied;
     private WindowCloseReason _closingReason = WindowCloseReason.UserClosed;
 
     /// <summary>Stable id, e.g. <c>"win-3"</c>. Allocated monotonically per process.</summary>
@@ -137,14 +143,56 @@ public sealed class ReactorWindow : IDisposable
 
         _window = new Window { Title = spec.Title };
         _appWindow = _window.AppWindow;
+        _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
+
+        // Snapshot initial per-window DPI before applying spec sizing so the
+        // DIP -> physical conversion is correct on the first Resize call.
+        _dpi = QueryDpiForWindow(_hwnd);
 
         ApplyChrome(spec, isInitial: true);
 
         _host = new ReactorHost(_window);
         _host.OwningWindow = this;
 
+        // Subscribe before Activate() so WM_SHOWWINDOW / WM_DPICHANGED routed
+        // during the first paint reach our handlers. The monitor is per-window
+        // and disposed in our Dispose().
+        _messageMonitor = new WindowMessageMonitor(_hwnd);
+        _messageMonitor.MessageReceived += OnWindowMessage;
+
         _window.Activated += OnNativeActivated;
         _window.Closed += OnNativeClosed;
+    }
+
+    private static uint QueryDpiForWindow(nint hwnd)
+    {
+        try
+        {
+            uint dpi = NativeDpi.GetDpiForWindow(hwnd);
+            // Some non-realized HWNDs report 0; use the system DPI as a fallback.
+            if (dpi == 0)
+                dpi = NativeDpi.GetDpiForSystemFallback();
+            return dpi == 0 ? 96 : dpi;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor] QueryDpiForWindow failed: {ex.Message}");
+            return 96;
+        }
+    }
+
+    private static class NativeDpi
+    {
+        [DllImport("user32.dll")]
+        public static extern uint GetDpiForWindow(nint hwnd);
+
+        [DllImport("user32.dll")]
+        public static extern uint GetDpiForSystem();
+
+        public static uint GetDpiForSystemFallback()
+        {
+            try { return GetDpiForSystem(); } catch { return 96; }
+        }
     }
 
     /// <summary>
@@ -204,20 +252,119 @@ public sealed class ReactorWindow : IDisposable
         try { _window.ExtendsContentIntoTitleBar = spec.ExtendsContentIntoTitleBar; }
         catch (Exception ex) { Debug.WriteLine($"[Reactor] ExtendsContentIntoTitleBar failed: {ex.Message}"); }
 
-        // Sizing — Phase 1 still uses raw pixel semantics. Phase 2 layers a
-        // DIP→physical conversion atop AppWindow.Resize via the per-window DPI.
+        // Sizing — DIP -> physical at the current per-window DPI. (spec 036 §5.1)
         if (isInitial && spec.Presenter == PresenterKind.Overlapped)
         {
             try
             {
-                _appWindow.Resize(new global::Windows.Graphics.SizeInt32(
-                    (int)Math.Round(spec.Width), (int)Math.Round(spec.Height)));
+                _appWindow.Resize(DipToPhysicalSize(spec.Width, spec.Height));
             }
             catch (Exception ex) { Debug.WriteLine($"[Reactor] Initial resize failed: {ex.Message}"); }
         }
 
         if (spec.Icon is { } icon)
             icon.Apply(_appWindow);
+    }
+
+    private global::Windows.Graphics.SizeInt32 DipToPhysicalSize(double widthDip, double heightDip)
+    {
+        var dpi = Dpi == 0 ? 96 : Dpi;
+        return new global::Windows.Graphics.SizeInt32(
+            (int)Math.Round(widthDip * dpi / 96.0),
+            (int)Math.Round(heightDip * dpi / 96.0));
+    }
+
+    private global::Windows.Graphics.PointInt32 DipToPhysicalPoint(double xDip, double yDip)
+    {
+        var dpi = Dpi == 0 ? 96 : Dpi;
+        return new global::Windows.Graphics.PointInt32(
+            (int)Math.Round(xDip * dpi / 96.0),
+            (int)Math.Round(yDip * dpi / 96.0));
+    }
+
+    private void OnWindowMessage(object? sender, WindowMessageEventArgs args)
+    {
+        switch (args.Msg)
+        {
+            case WindowMessageMonitor.WM_DPICHANGED:
+                {
+                    // wParam.HIWORD = newDPI Y, wParam.LOWORD = newDPI X. Both are
+                    // identical on every system Reactor will run on; the OS only
+                    // splits them for legacy 16-bit alignment.
+                    var newDpi = (uint)(args.WParam & 0xFFFF);
+                    if (newDpi == 0) newDpi = 96;
+                    var prevDpi = Dpi;
+                    Dpi = newDpi;
+                    if (newDpi != prevDpi)
+                        DpiChanged?.Invoke(this, newDpi);
+
+                    // First DPI report after window creation: re-apply spec
+                    // sizing against the now-known per-window DPI, but only if
+                    // the user hasn't already resized the window manually.
+                    if (!_userResized && !_firstDpiApplied)
+                    {
+                        _firstDpiApplied = true;
+                        try
+                        {
+                            _appWindow.Resize(DipToPhysicalSize(_spec.Width, _spec.Height));
+                        }
+                        catch (Exception ex) { Debug.WriteLine($"[Reactor] First-DPI resize failed: {ex.Message}"); }
+                    }
+                    break;
+                }
+            case WindowMessageMonitor.WM_GETMINMAXINFO:
+                ApplyMinMaxInfo(args);
+                break;
+            case WindowMessageMonitor.WM_SIZING:
+            case WindowMessageMonitor.WM_EXITSIZEMOVE:
+                _userResized = true;
+                break;
+            case WindowMessageMonitor.WM_SHOWWINDOW:
+                if (args.WParam != 0) IsVisible = true;
+                else IsVisible = false;
+                break;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT { public int X; public int Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MINMAXINFO
+    {
+        public POINT ptReserved;
+        public POINT ptMaxSize;
+        public POINT ptMaxPosition;
+        public POINT ptMinTrackSize;
+        public POINT ptMaxTrackSize;
+    }
+
+    private unsafe void ApplyMinMaxInfo(WindowMessageEventArgs args)
+    {
+        var spec = _spec;
+        // Skip when nothing is constrained — let WinUI's default min/max stand.
+        if (spec.MinWidth is null && spec.MinHeight is null && spec.MaxWidth is null && spec.MaxHeight is null)
+            return;
+
+        try
+        {
+            var info = (MINMAXINFO*)args.LParam;
+            if (info == null) return;
+            var dpi = Dpi == 0 ? 96 : Dpi;
+
+            int DipToPxScalar(double dip) => (int)Math.Round(dip * dpi / 96.0);
+
+            if (spec.MinWidth is { } mnw) info->ptMinTrackSize.X = DipToPxScalar(mnw);
+            if (spec.MinHeight is { } mnh) info->ptMinTrackSize.Y = DipToPxScalar(mnh);
+            if (spec.MaxWidth is { } mxw) info->ptMaxTrackSize.X = DipToPxScalar(mxw);
+            if (spec.MaxHeight is { } mxh) info->ptMaxTrackSize.Y = DipToPxScalar(mxh);
+            args.Handled = true;
+            args.Result = 0;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor] WM_GETMINMAXINFO apply failed: {ex.Message}");
+        }
     }
 
     private void OnNativeActivated(object? sender, WindowActivatedEventArgs args)
@@ -320,12 +467,10 @@ public sealed class ReactorWindow : IDisposable
         if (_disposed) return;
         if (!(width > 0) || !(height > 0))
             throw new ArgumentOutOfRangeException(nameof(width), "Width and height must be positive.");
-        // Phase 1: pixel-pass-through sizing (DPI conversion in Phase 2).
-        try
-        {
-            _appWindow.Resize(new global::Windows.Graphics.SizeInt32(
-                (int)Math.Round(width), (int)Math.Round(height)));
-        }
+        // SetSize counts as a "user resize" — once the app code resizes, the
+        // first-DPI re-apply path stops fighting it. (spec 036 §5.1)
+        _userResized = true;
+        try { _appWindow.Resize(DipToPhysicalSize(width, height)); }
         catch (Exception ex) { Debug.WriteLine($"[Reactor] SetSize failed: {ex.Message}"); }
     }
 
@@ -334,11 +479,7 @@ public sealed class ReactorWindow : IDisposable
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetPosition));
         if (_disposed) return;
-        try
-        {
-            _appWindow.Move(new global::Windows.Graphics.PointInt32(
-                (int)Math.Round(x), (int)Math.Round(y)));
-        }
+        try { _appWindow.Move(DipToPhysicalPoint(x, y)); }
         catch (Exception ex) { Debug.WriteLine($"[Reactor] SetPosition failed: {ex.Message}"); }
     }
 
@@ -390,6 +531,7 @@ public sealed class ReactorWindow : IDisposable
 
         try { _window.Activated -= OnNativeActivated; } catch { /* best effort */ }
         try { _window.Closed -= OnNativeClosed; } catch { /* best effort */ }
+        try { _messageMonitor.Dispose(); } catch (Exception ex) { Debug.WriteLine($"[Reactor] MessageMonitor dispose failed: {ex.Message}"); }
 
         // ReactorHost already subscribes to Window.Closed; let it dispose itself.
         // We avoid double-dispose because Dispose() is idempotent there too.
