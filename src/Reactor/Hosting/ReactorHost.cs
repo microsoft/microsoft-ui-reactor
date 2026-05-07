@@ -33,10 +33,10 @@ public sealed class ReactorHost : IDisposable
     private readonly Window _window;
     private readonly Reconciler _reconciler;
     private readonly DispatcherQueue _dispatcherQueue;
-    // Null by default. Populated only when the caller passes an ILogger
-    // (or devtools is enabled and assigns one via ReactorApp.AppLogger).
-    // Apps that don't pass a logger never JIT a real Microsoft.Extensions.Logging
-    // call path — saves ~3-5 ms of cold-start JIT + assembly resolve.
+    // Null when the caller passes no logger and ReactorApp.AppLogger is unset.
+    // Snapshotted at ctor; later AppLogger writes don't retro-wire this host.
+    // Leaving null keeps the Microsoft.Extensions.Logging call paths off the
+    // JIT critical path — saves ~3-5 ms of cold-start JIT + assembly resolve.
     private readonly ILogger? _logger;
 
     private Component? _rootComponent;
@@ -66,7 +66,10 @@ public sealed class ReactorHost : IDisposable
     private volatile bool _isForcedColors;
     private volatile bool _isReducedMotion;
     private Charting.ForcedColorsTheme? _forcedColorsTheme;
-    private bool _chartingActive;
+    // 0 = inactive, 1 = activation in flight or done. Flipped atomically
+    // via Interlocked.CompareExchange so concurrent chart-element creation
+    // from background threads can't double-subscribe HighContrastChanged.
+    private int _chartingActiveFlag;
 
     // Captured AnimationScope curve — when a state setter is called inside
     // WithAnimation, the scope is synchronous but the render is async.
@@ -144,10 +147,12 @@ public sealed class ReactorHost : IDisposable
 
     public ReactorHost(Window window, ILogger? logger = null)
     {
-        // Pick up an AppLogger published by the devtools subverb if the
-        // caller didn't pass an explicit logger — keeps Render-loop diagnostics
-        // visible whenever devtools is live, without forcing every app to wire
-        // up Microsoft.Extensions.Logging on the cold path.
+        // Fall back to <see cref="ReactorApp.AppLogger"/> when the caller
+        // didn't pass one — apps that want unified host diagnostics set
+        // AppLogger once before constructing their first host. Snapshotted
+        // at ctor time; later AppLogger writes don't propagate to existing
+        // hosts. Apps that don't set either pay zero JIT cost for the
+        // Microsoft.Extensions.Logging call paths.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
         _window = window;
@@ -338,13 +343,30 @@ public sealed class ReactorHost : IDisposable
     /// notifications, and pushes the values into <see cref="Charting.D3Charts"/>'s
     /// thread-statics so the about-to-mount chart sees correct forced-colors /
     /// reduced-motion state.
-    /// Idempotent — subsequent chart elements are zero-cost.
+    /// <para>
+    /// Idempotent and thread-safe. The 0→1 transition is gated by an
+    /// <see cref="Interlocked.CompareExchange(ref int, int, int)"/> so concurrent
+    /// callers can't double-subscribe the change handlers. The init body runs
+    /// on the dispatcher thread regardless of the caller's thread —
+    /// <c>AccessibilitySettings</c> / <c>UISettings</c> are WinRT projections
+    /// that prefer the UI thread, and <c>D3Charts</c>'s <c>[ThreadStatic]</c>
+    /// flags must be written on the thread that will read them (the UI thread,
+    /// where reconciliation runs).
+    /// </para>
     /// </summary>
     internal void EnsureChartingActive()
     {
-        if (_chartingActive) return;
-        _chartingActive = true;
+        if (Interlocked.CompareExchange(ref _chartingActiveFlag, 1, 0) != 0)
+            return;
 
+        if (_dispatcherQueue.HasThreadAccess)
+            InitChartingState();
+        else
+            _dispatcherQueue.TryEnqueue(InitChartingState);
+    }
+
+    private void InitChartingState()
+    {
         try
         {
             _accessibilitySettings = new global::Windows.UI.ViewManagement.AccessibilitySettings();
@@ -484,7 +506,11 @@ public sealed class ReactorHost : IDisposable
             // chart has ever been mounted in this host. PushChartingState is
             // a separate method so the JIT doesn't load Charting.D3Charts
             // when Render() is compiled.
-            if (_chartingActive) PushChartingState();
+            // Volatile read so a chart-element create on a background thread
+            // that flipped _chartingActiveFlag is observed by this UI-thread
+            // render. Plain reads can hoist past the Interlocked write under
+            // sufficiently aggressive JITs.
+            if (Volatile.Read(ref _chartingActiveFlag) != 0) PushChartingState();
 
             // RequestRender has an optional `force` parameter, so it can't bind
             // directly to an Action method group — wrap once and reuse.

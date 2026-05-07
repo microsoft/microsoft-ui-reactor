@@ -43,11 +43,15 @@ public static class ReactorApp
     }
 
     // Process-wide ILogger picked up by ReactorHost / ReactorHostControl when
-    // the caller doesn't pass one explicitly. Null by default; populated by
-    // the devtools subverbs and by app code that wants a unified fallback.
-    // Reads on the ReactorHost ctor hot path stay AOT/JIT-cheap because the
-    // field is just a reference — no Microsoft.Extensions.Logging machinery
-    // loads unless the field is actually non-null.
+    // the caller doesn't pass one explicitly. Null by default. Apps that want
+    // a unified fallback should set this BEFORE creating the first host —
+    // hosts snapshot the value at construction, so a later set won't retro-
+    // actively wire up already-running hosts. Also routes ReactorApplication's
+    // unhandled-exception handler when devtools is off.
+    //
+    // Cold-path note: leaving this null keeps Microsoft.Extensions.Logging
+    // resolution off the JIT critical path entirely — none of the LoggerExtensions
+    // call sites get walked when the field is null.
     private static ILogger? _appLogger;
     public static ILogger? AppLogger
     {

@@ -124,6 +124,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
     public ReactorHostControl(Component? component = null, ILogger? logger = null)
     {
+        // Fall back to ReactorApp.AppLogger so an app that sets the process-wide
+        // logger before constructing controls gets unified diagnostics. Snapshot
+        // at ctor time; later AppLogger writes don't retroactively wire up
+        // already-constructed controls.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
