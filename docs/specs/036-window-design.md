@@ -33,7 +33,7 @@ shape.
 - [§12 Migration](#12-migration)
 - [§13 Examples](#13-examples)
 - [§14 Implementation plan](#14-implementation-plan)
-- [§15 Open questions](#15-open-questions)
+- [§15 Resolved questions](#15-resolved-questions)
 - [§16 Out of scope](#16-out-of-scope)
 
 ---
@@ -127,9 +127,11 @@ line" shape that makes the samples readable.
 - **N4.** Modal dialogs as separate top-level windows — Reactor already
   has `ContentDialog` and modal flyouts that cover that need; modal
   *top-level* windows are a §9 future option.
-- **N5.** Custom title-bar layout. `ExtendsContentIntoTitleBar` plus the
-  app's own `SetTitleBar(UIElement)` cover it; we do not introduce a
-  Reactor-specific title-bar element here.
+- **N5.** New title-bar primitives. Reactor already exposes a
+  `TitleBar(...)` factory (`src/Reactor/Elements/Dsl.cs`) that owns
+  title-bar customization; this spec does not extend or replace that
+  model. `WindowSpec.ExtendsContentIntoTitleBar` is the only knob this
+  spec adds.
 
 ## §3 Model
 
@@ -979,38 +981,52 @@ Each phase ships independently. Phases 4–6 are gated by 1–3. Phases 7–8
 are gated by 1 (they need `ReactorWindow`) but otherwise stand alone
 and can ship in parallel with 4–6.
 
-## §15 Open questions
+## §15 Resolved questions
 
-1. **Modal top-level windows.** `OverlappedPresenter.IsModal` throws on
-   lifted WinUI today. Wait for the WinAppSDK fix or hand-roll via
-   `EnableWindow(parent, false)` + window-message routing? Defer to a
-   follow-up; this spec does not ship modal top-level windows.
+These were open at spec-acceptance review (2026-05-07) and have
+since been answered. Recording the disposition here so the rationale
+stays with the spec.
 
-2. **Tray icons.** WinUIEx's `TrayIcon` is the cleanest reference. Does
-   it belong in core Reactor or an `Reactor.Tray` package? Most apps
-   don't need it; out of v1.
+1. **Modal top-level windows.** *Deferred.* `OverlappedPresenter.IsModal`
+   throws on lifted WinUI today; the hand-rolled
+   `EnableWindow(parent, false)` + message-routing path is a sizeable
+   side quest. We wait for the WinAppSDK fix and revisit in a
+   follow-up. `ContentDialog` covers the common in-window modal case
+   in the meantime.
 
-3. **Multi-instance / single-instance app pattern.** Reactor today has
-   no opinion. Should `WindowKey` be allowed to span instances via
-   AppInstance redirection? Out of v1, but the Key shape is forward-
-   compatible.
+2. **Tray icons.** *In scope.* Tray support is one of the top
+   requested features; it ships as part of phase 8 (§14) and lives in
+   core Reactor under `ReactorWindow.RegisterTrayIcon` /
+   `UseTrayIcon`. No separate `Reactor.Tray` package — keeping it in
+   core matches developer expectations and avoids splitting the
+   shell-integration surface across two assemblies. See §11.4 for the
+   full API.
 
-4. **Title bar customization.** This spec exposes
-   `ExtendsContentIntoTitleBar` only. A `TitleBarRegion` element
-   (drag-region descriptor + caption-button hosting) is a candidate
-   future spec.
+3. **Multi-instance / single-instance app pattern.** *Deferred.*
+   Reactor v1 stays neutral on AppInstance redirection. `WindowKey`'s
+   shape is process-scoped today and forward-compatible with a
+   future cross-instance broadening; no API churn expected when we
+   add it.
 
-5. **"Window-level" effects.** A `UseEffect` that runs on
-   `Activated`/`Deactivated` is composable from the new hooks but
-   maybe deserves a `UseWindowActivation(...)` shorthand. Wait for
-   evidence from sample apps.
+4. **Title bar customization.** *No expansion.* Reactor already has a
+   `TitleBar(...)` factory (`src/Reactor/Elements/Dsl.cs:412`) that
+   covers the title-bar customization story. We do not add a second
+   primitive. `WindowSpec.ExtendsContentIntoTitleBar` toggles the
+   content-extension behavior; everything else flows through the
+   existing component.
 
-6. **`UseOpenWindow` cleanup semantics.** If the parent component
-   unmounts while the secondary window is open, do we close the
-   secondary window automatically? Proposed default: **no** — the
-   user opened it, the user closes it. The hook returns a handle the
-   parent can `.Close()` from a cleanup if it wants the inverse. Open
-   for review.
+5. **"Window-level" effects shorthand.** *Deferred.* A
+   `UseWindowActivation(...)` wrapper is easy to add later if usage
+   patterns demand it; `UseEffect` over the `Activated` / `Deactivated`
+   events on `UseWindow()` covers the case today. Wait for sample-app
+   evidence before introducing a second hook.
+
+6. **`UseOpenWindow` cleanup semantics.** *Resolved as proposed:* if
+   the parent component unmounts while the secondary window is open,
+   we **do not** close it automatically. The user opened the window,
+   the user (or the app code) closes it. Components that want the
+   inverse behavior call `.Close()` from a `UseEffect` cleanup on the
+   handle returned by `UseOpenWindow`.
 
 ## §16 Out of scope
 
