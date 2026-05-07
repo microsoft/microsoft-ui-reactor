@@ -20,7 +20,7 @@ internal static partial class CompileCommand
         var repoRoot = FindRepoRoot();
         if (repoRoot == null)
         {
-            Console.Error.WriteLine("Error: Could not find repository root (looking for Reactor.sln or .git).");
+            Console.Error.WriteLine("Error: Could not find repository root (looking for Reactor.slnx or .git).");
             return 1;
         }
 
@@ -284,7 +284,7 @@ internal static partial class CompileCommand
         var dir = Directory.GetCurrentDirectory();
         while (dir != null)
         {
-            if (File.Exists(Path.Combine(dir, "Reactor.sln")) || Directory.Exists(Path.Combine(dir, ".git")))
+            if (File.Exists(Path.Combine(dir, "Reactor.slnx")) || Directory.Exists(Path.Combine(dir, ".git")))
                 return dir;
             dir = Path.GetDirectoryName(dir);
         }

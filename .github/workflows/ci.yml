@@ -68,10 +68,10 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj
+        run: dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64
 
       - name: Test
-        run: dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore --logger "console;verbosity=normal"
+        run: dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal"
 
   selftests:
     name: Selftests
@@ -87,10 +87,10 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore tests/Reactor.SelfTests/Reactor.SelfTests.csproj
+        run: dotnet restore tests/Reactor.SelfTests/Reactor.SelfTests.csproj -p:Platform=x64
 
       - name: Test
-        run: dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore --logger "console;verbosity=normal"
+        run: dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal"
 
   build-solution:
     name: Build solution

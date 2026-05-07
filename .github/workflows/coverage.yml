@@ -66,16 +66,16 @@ jobs:
       - name: Build for instrumentation
         shell: pwsh
         run: |
-          dotnet build tests/Reactor.Tests           -c Debug -p:Optimize=false -p:DebugType=portable
+          dotnet build tests/Reactor.Tests           -c Debug -p:Platform=x64 -p:Optimize=false -p:DebugType=portable
           dotnet build src/Reactor                   -c Debug -p:Optimize=false -p:DebugType=portable --no-incremental
-          dotnet build tests/Reactor.AppTests.Host   -c Debug -p:Optimize=false -p:DebugType=portable --no-incremental
+          dotnet build tests/Reactor.AppTests.Host   -c Debug -p:Platform=x64 -p:Optimize=false -p:DebugType=portable --no-incremental
 
       - name: Collect unit coverage
         shell: pwsh
         run: |
           dotnet-coverage collect -s coverage.settings.xml `
             --output unit.cobertura.xml --output-format cobertura `
-            -- dotnet test tests/Reactor.Tests --no-build
+            -- dotnet test tests/Reactor.Tests --no-build -p:Platform=x64
 
       - name: Instrument Reactor.dll
         shell: pwsh
@@ -94,7 +94,7 @@ jobs:
         run: |
           dotnet-coverage collect -s coverage.settings.xml `
             --output selftest.cobertura.xml --output-format cobertura `
-            -- dotnet run --project tests/Reactor.AppTests.Host --no-build -- --self-test
+            -- dotnet run --project tests/Reactor.AppTests.Host --no-build -p:Platform=x64 -- --self-test
 
       - name: Merge cobertura reports
         shell: pwsh

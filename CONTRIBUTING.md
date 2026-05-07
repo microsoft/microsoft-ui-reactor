@@ -55,7 +55,14 @@ Visual Studio will restore NuGet packages on first load, pulling the experimenta
 
 ### Platforms
 
-Application projects (samples, tests, CLI) target `x64` and `ARM64`. The default platform matches the current machine architecture. Library projects (`Reactor`, `Reactor.Interop.WinForms`) are architecture-neutral (`AnyCPU`).
+Library projects (`Reactor`, `Reactor.Interop.WinForms`) are architecture-neutral (`AnyCPU`). Application projects (samples, tests, CLI) target `x64` and `ARM64`.
+
+When building via the solution (`dotnet build Reactor.slnx`), the platform is selected automatically. When building a single app project directly, pass `-p:Platform=x64` (or `ARM64`):
+
+```bash
+dotnet build tests/Reactor.Tests -p:Platform=x64
+dotnet test  tests/Reactor.Tests -p:Platform=x64
+```
 
 ---
 
