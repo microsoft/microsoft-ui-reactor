@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageType>Template</PackageType>
+	<Platform>AnyCPU</Platform>
     <PackageId>Microsoft.UI.Reactor.ProjectTemplates</PackageId>
     <Title>Project templates for Microsoft.UI.Reactor</Title>
     <Authors>Microsoft</Authors>
