@@ -14,7 +14,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <NoWarn>$(NoWarn);NU5128</NoWarn> <!-- Ignore warning generated when setting IncludeBuildOutput=False https://github.com/nuget/home/issues/8583 -->
     <Version Condition="'$(Version)' == ''">0.0.0-local</Version>
-	<MicrosoftUIReactorVersion>$(Version)</MicrosoftUIReactorVersion> <!-- NuGet version template should reference -->
+    <MicrosoftUIReactorVersion Condition="'$(MicrosoftUIReactorVersion)' == ''">$(Version)</MicrosoftUIReactorVersion> <!-- NuGet version template should reference -->
   </PropertyGroup>
 
  <ItemGroup>
@@ -30,9 +30,7 @@
     <BeforePack>_UpdateTemplateVersions</BeforePack>
   </PropertyGroup>
 
-  <Target Name="_UpdateTemplateVersions"
-      Inputs="@(TemplateJsonInput)"
-      Outputs="%(TemplateJsonInput.IntermediateLocation)">
+  <Target Name="_UpdateTemplateVersions">
 
      <!-- Copy files to their output name -->
     <Copy
