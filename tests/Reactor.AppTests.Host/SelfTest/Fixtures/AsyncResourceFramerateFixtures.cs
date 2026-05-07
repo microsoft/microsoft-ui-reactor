@@ -111,11 +111,14 @@ internal static class AsyncResourceFramerateFixtures
                     cancelled >= started - 1);
 
                 // Invariant 4: no fetch body completes — all use Timeout.Infinite delays and
-                // exit only via cancellation. completed stays 0; guard against regression.
+                // exit only via cancellation. completed must be exactly 0.
                 H.Check($"DepsThrashing_AtMostOneCompleted (completed={completed})",
-                    completed <= 1);
+                    completed == 0);
 
                 // Invariant 5: no unobserved task exceptions escaped under this load.
+                // Dispose the host first so the last in-flight Task.Delay(Infinite, ct) is
+                // cancelled via UseEffect teardown before we drain for unobserved exceptions.
+                host.Dispose();
                 await Harness.Render();
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
