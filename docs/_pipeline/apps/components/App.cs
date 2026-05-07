@@ -97,6 +97,15 @@ class FunctionComponentDemo : Component
 }
 // </snippet:function-component>
 
+// <snippet:factory-helpers>
+static class Components
+{
+    public static ComponentElement Alert(string title, string message,
+        string severity = "info") =>
+        Component<global::Alert, AlertProps>(new(title, message, severity));
+}
+// </snippet:factory-helpers>
+
 // <snippet:composition>
 class ComponentsApp : Component
 {

@@ -47,6 +47,37 @@ changed structurally, the child skips its `Render()` call.
 Access props via `Props.PropertyName` inside `Render()`. The parent sets
 props by assigning the `Props` property when creating the component instance.
 
+## Factory Helpers for Cleaner Call Sites
+
+`Component<T, TProps>(new(...))` reads heavily at the call site, especially
+when nested in an element tree. The idiomatic Reactor pattern is to wrap each
+class component in a free-function factory that matches the rest of the DSL:
+
+```csharp snippet="components/factory-helpers"
+```
+
+With `using static Components;` at the top of the consuming file, the call
+site collapses to a normal function call:
+
+| Before                                                | After                                |
+|-------------------------------------------------------|--------------------------------------|
+| `Component<Alert, AlertProps>(new("Saved", "Done"))`  | `Alert("Saved", "Done")`             |
+| `Component<Alert, AlertProps>(new("Hi", "x", "warn"))`| `Alert("Hi", "x", "warn")`           |
+
+The class `Alert` and the helper method `Alert` coexist in the same scope —
+C# resolves `Alert(args)` as a method call and `Component<Alert, ...>` as a
+type reference, based on syntactic position.
+
+Conventions:
+
+- **Match the component name.** Helper `Alert` for class `Alert` reads like
+  JSX: `Alert(...)` instead of `<Alert ... />`.
+- **Group helpers in a single static class** named `Components` (or per
+  feature). One `using static` import per consuming file is plenty.
+- **Skip `Create` / `Of` / `New` prefixes.** Reactor's built-in element
+  factories (`Button`, `TextBlock`, `FlexRow`) all read as bare functions;
+  user helpers should match that grammar.
+
 ## Custom ShouldUpdate
 
 Override `ShouldUpdate` to control when a component re-renders:
