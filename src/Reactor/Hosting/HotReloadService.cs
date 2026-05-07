@@ -55,6 +55,6 @@ internal static class HotReloadService
         // force: true bypasses component memo (Props/deps equality) for this
         // pass — the updated Render() body would otherwise be skipped because
         // props and hook deps haven't changed.
-        ReactorApp.ActiveHost?.RequestRender(force: true);
+        ReactorApp.ActiveHostInternal?.RequestRender(force: true);
     }
 }

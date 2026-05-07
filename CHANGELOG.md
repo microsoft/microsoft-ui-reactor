@@ -29,6 +29,15 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- `WindowSpec`, `ReactorWindow`, `WindowKey`, `WindowStartPosition`,
+  `PresenterKind`, `WindowState`, `WindowIcon`, `WindowDipSizeChangedEventArgs`,
+  `WindowClosingEventArgs`, `ReactorAppContext` — first-class Window primitive
+  promoted out of internal hosting wiring. `ReactorApp.Run(Action<ReactorAppContext>)`
+  is the new multi-window startup surface; the existing `Run<TRoot>` overload is
+  preserved as a thin wrapper. (spec 036 §3, §4)
+- `ReactorApp.OpenWindow`, `Windows`, `PrimaryWindow`, `FindWindow`,
+  `WindowOpened` / `WindowClosed`, `Exit`, `ShutdownPolicy`, `UIDispatcher` —
+  process-wide window topology. (spec 036 §4.3, §6)
 - `Microsoft.UI.Reactor.Hooks.UseMemoCells` /
   `UseMemoCellsByKey` / `UseMemoCellsByIndex` — cell-level memoization
   hooks (extension methods on `RenderContext`, plus matching `Component`

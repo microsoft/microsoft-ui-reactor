@@ -1180,7 +1180,7 @@ public sealed partial class Reconciler
         ApplySetters(tb.Setters, titleBar);
 
         // Register with the window for drag regions and caption buttons
-        if (Microsoft.UI.Reactor.ReactorApp.ActiveHost is { } host)
+        if (Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal is { } host)
         {
             host.Window.ExtendsContentIntoTitleBar = true;
             host.Window.SetTitleBar(titleBar);

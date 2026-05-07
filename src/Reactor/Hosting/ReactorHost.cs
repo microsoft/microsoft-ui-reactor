@@ -133,6 +133,19 @@ public sealed class ReactorHost : IDisposable
     public Window Window => _window;
 
     /// <summary>
+    /// The <see cref="ReactorWindow"/> that owns this host, when the host was
+    /// constructed by Reactor's window primitive. Null for hosts created
+    /// directly (test harnesses, <see cref="ReactorHostControl"/> embeds).
+    /// (spec 036 §3.4)
+    /// </summary>
+    public ReactorWindow? OwningWindow
+    {
+        get => Volatile.Read(ref _owningWindow);
+        internal set => Volatile.Write(ref _owningWindow, value);
+    }
+    private ReactorWindow? _owningWindow;
+
+    /// <summary>
     /// The currently mounted root Component, if any. Used by MCP devtools to
     /// resolve event handlers on the root for the <c>fire</c> escape-hatch tool.
     /// </summary>
@@ -161,7 +174,7 @@ public sealed class ReactorHost : IDisposable
         // First-host-wins capture so off-thread rerenders can marshal onto
         // the UI thread without explicit plumbing. TASK-063.
         MainDispatcherQueue ??= _dispatcherQueue;
-        ReactorApp.ActiveHost = this;
+        ReactorApp.ActiveHostInternal = this;
 
         // Route QueryCache.EntryChanged notifications through our dispatcher so subscribers
         // observe cache changes on the UI thread even when Set/Invalidate were called from
@@ -879,7 +892,7 @@ public sealed class ReactorHost : IDisposable
         _eventPairing = null;
         _eventRing = null;
 
-        ReactorApp.ActiveHost = null;
+        ReactorApp.ActiveHostInternal = null;
     }
 
     private void ShowErrorFallback(Exception ex)

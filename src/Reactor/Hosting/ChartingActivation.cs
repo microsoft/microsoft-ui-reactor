@@ -14,6 +14,6 @@ internal static class ChartingActivation
 {
     public static void RequestActivation()
     {
-        ReactorApp.ActiveHost?.EnsureChartingActive();
+        ReactorApp.ActiveHostInternal?.EnsureChartingActive();
     }
 }

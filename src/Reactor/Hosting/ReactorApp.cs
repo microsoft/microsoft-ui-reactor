@@ -21,9 +21,10 @@ internal record ReactorAppOptions(
     Func<RenderContext, Element>? RootRenderFunc = null,
     Action<ReactorHost>? Configure = null,
     string WindowTitle = "Reactor App",
-    int WindowWidth = 1024,
-    int WindowHeight = 768,
-    bool FullScreen = false);
+    double WindowWidth = 1024,
+    double WindowHeight = 768,
+    bool FullScreen = false,
+    Action<ReactorAppContext>? Startup = null);
 
 public static class ReactorApp
 {
@@ -36,11 +37,71 @@ public static class ReactorApp
         set => Volatile.Write(ref _options, value);
     }
     private static ReactorHost? _activeHost;
+    /// <summary>
+    /// Legacy alias for the host of the first window opened in this process.
+    /// (spec 036 §4.3 / §12.4)
+    /// </summary>
+    [Obsolete("Use ReactorApp.PrimaryWindow.Host or ReactorApp.Windows.")]
     public static ReactorHost? ActiveHost
     {
         get => Volatile.Read(ref _activeHost);
         internal set => Volatile.Write(ref _activeHost, value);
     }
+
+    // Internal setter that bypasses the obsolete shim — used by ReactorHost
+    // and the Window primitive. Treated as the single source of truth for the
+    // legacy alias. Phase 4 deletes this once consumers migrate.
+    internal static ReactorHost? ActiveHostInternal
+    {
+        get => Volatile.Read(ref _activeHost);
+        set => Volatile.Write(ref _activeHost, value);
+    }
+
+    // ── Spec 036: process-wide window topology ─────────────────────────────
+    private static ReactorWindow[] _windows = global::System.Array.Empty<ReactorWindow>();
+    private static ReactorWindow? _primaryWindow;
+    private static int _shutdownPolicy = (int)ShutdownPolicy.OnPrimaryWindowClosed;
+    private static Microsoft.UI.Dispatching.DispatcherQueue? _uiDispatcher;
+    private static ReactorAppContext? _appContext;
+
+    /// <summary>
+    /// Snapshot of every open <see cref="ReactorWindow"/>. Copy-on-write; safe
+    /// to enumerate from any thread.
+    /// </summary>
+    public static IReadOnlyList<ReactorWindow> Windows => Volatile.Read(ref _windows);
+
+    /// <summary>
+    /// The first window opened during this process's startup callback, or
+    /// <c>null</c> when none has been opened (tray-only / pre-startup).
+    /// </summary>
+    public static ReactorWindow? PrimaryWindow
+    {
+        get => Volatile.Read(ref _primaryWindow);
+        internal set => Volatile.Write(ref _primaryWindow, value);
+    }
+
+    /// <summary>
+    /// The UI <see cref="Microsoft.UI.Dispatching.DispatcherQueue"/> captured
+    /// at <c>OnLaunched</c> — null until the first window has been bootstrapped.
+    /// </summary>
+    public static Microsoft.UI.Dispatching.DispatcherQueue? UIDispatcher
+    {
+        get => Volatile.Read(ref _uiDispatcher);
+        internal set => Volatile.Write(ref _uiDispatcher, value);
+    }
+
+    /// <summary>Process-shutdown policy. Defaults to <see cref="ShutdownPolicy.OnPrimaryWindowClosed"/>.</summary>
+    public static ShutdownPolicy ShutdownPolicy
+    {
+        get => (ShutdownPolicy)Volatile.Read(ref _shutdownPolicy);
+        set => Volatile.Write(ref _shutdownPolicy, (int)value);
+    }
+
+    /// <summary>Fires on the UI thread when a <see cref="ReactorWindow"/> opens.</summary>
+    public static event EventHandler<ReactorWindow>? WindowOpened;
+
+    /// <summary>Fires on the UI thread when a <see cref="ReactorWindow"/> closes.</summary>
+    public static event EventHandler<ReactorWindow>? WindowClosed;
 
     // Process-wide ILogger picked up by ReactorHost / ReactorHostControl when
     // the caller doesn't pass one explicitly. Null by default. Apps that want
@@ -81,7 +142,7 @@ public static class ReactorApp
     /// XAML loader for this process. Required when a third-party control library
     /// is referenced from a Reactor app that has no XAML files of its own (and
     /// therefore no compiler-generated provider that would auto-chain to the
-    /// library). Call before <see cref="Run{TRoot}(string, int, int, bool, bool, bool, Action{ReactorHost}?)"/>.
+    /// library). Call before <see cref="Run{TRoot}(string, double, double, bool, bool, bool, Action{ReactorHost}?)"/>.
     /// Idempotent (same instance is added at most once) and thread-safe.
     /// See https://github.com/microsoft/microsoft-ui-reactor/issues/142.
     /// </summary>
@@ -176,8 +237,8 @@ public static class ReactorApp
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools uses Assembly.GetTypes(); non-devtools code paths are trim-safe.")]
     public static void Run<TRoot>(
         string title = "Reactor App",
-        int width = 1024,
-        int height = 768,
+        double width = 1024,
+        double height = 768,
         bool fullScreen = false,
         bool devtools = false,
         // DEPRECATED: use 'devtools:'. Kept for one release. The runtime emits a
@@ -186,6 +247,7 @@ public static class ReactorApp
         Action<ReactorHost>? configure = null)
         where TRoot : Component, new()
     {
+        EmitDipBehaviorChangeNoticeOnce();
         var effectiveDevtools = ResolveDevtoolsParam(devtools, preview);
         if (effectiveDevtools && TryRunDevtools(title, width, height, configure, hostRoot: typeof(TRoot))) return;
 
@@ -217,8 +279,8 @@ public static class ReactorApp
     public static void Run(
         string title,
         Func<RenderContext, Element> rootRender,
-        int width = 1024,
-        int height = 768,
+        double width = 1024,
+        double height = 768,
         bool fullScreen = false,
         bool devtools = false,
         // DEPRECATED: use 'devtools:'. Kept for one release. The runtime emits a
@@ -226,6 +288,7 @@ public static class ReactorApp
         bool preview = false,
         Action<ReactorHost>? configure = null)
     {
+        EmitDipBehaviorChangeNoticeOnce();
         var effectiveDevtools = ResolveDevtoolsParam(devtools, preview);
         if (effectiveDevtools && TryRunDevtools(title, width, height, configure)) return;
 
@@ -250,6 +313,196 @@ public static class ReactorApp
     }
 
     /// <summary>
+    /// Multi-window startup entry. The <paramref name="startup"/> callback runs
+    /// on the UI thread after WinUI bootstraps and before any default window is
+    /// opened. Open windows or tray icons (Phase 8) directly from inside the
+    /// callback. (spec 036 §4.3 / §6.1)
+    /// </summary>
+    public static void Run(Action<ReactorAppContext> startup)
+    {
+        ArgumentNullException.ThrowIfNull(startup);
+        EmitDipBehaviorChangeNoticeOnce();
+        RunOnSta(() =>
+        {
+            InitProcess();
+            Options = new ReactorAppOptions(Startup: startup);
+            Application.Start(_ =>
+            {
+                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
+                SynchronizationContext.SetSynchronizationContext(context);
+                new ReactorApplication();
+            });
+        });
+    }
+
+    // ── window topology ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Open a window with a <see cref="Component"/> root. UI-thread only.
+    /// (spec 036 §4.3)
+    /// </summary>
+    public static ReactorWindow OpenWindow(WindowSpec spec, Func<Component> root)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentNullException.ThrowIfNull(root);
+        ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
+        return OpenWindowCore(spec, root, renderFunc: null, configure: null);
+    }
+
+    /// <summary>
+    /// Open a window with a render-function root. UI-thread only.
+    /// </summary>
+    public static ReactorWindow OpenWindow(WindowSpec spec, Func<RenderContext, Element> render)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentNullException.ThrowIfNull(render);
+        ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
+        return OpenWindowCore(spec, rootFactory: null, render, configure: null);
+    }
+
+    // Internal overload used by the legacy Run<TRoot>/Run(string, Func) bridges
+    // so they can plug in their pre-mount Configure callback in the slot the
+    // public OpenWindow path doesn't expose.
+    internal static ReactorWindow OpenWindowCore(
+        WindowSpec spec,
+        Func<Component>? rootFactory,
+        Func<RenderContext, Element>? renderFunc,
+        Action<ReactorHost>? configure)
+    {
+        var window = new ReactorWindow(spec);
+        configure?.Invoke(window.Host);
+        RegisterWindow(window);
+        try
+        {
+            window.MountAndActivate(rootFactory, renderFunc);
+        }
+        catch
+        {
+            UnregisterWindow(window);
+            try { window.Dispose(); } catch { /* best effort */ }
+            throw;
+        }
+        return window;
+    }
+
+    /// <summary>Look up an open window by <see cref="WindowKey"/>.</summary>
+    public static ReactorWindow? FindWindow(WindowKey key)
+    {
+        var snapshot = Windows;
+        for (int i = 0; i < snapshot.Count; i++)
+        {
+            var w = snapshot[i];
+            if (w.Key is { } k && k.Equals(key)) return w;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Exit the process via <see cref="Application.Exit"/>. UI-thread only.
+    /// </summary>
+    public static void Exit(int exitCode = 0)
+    {
+        ThreadAffinity.ThrowIfNotOnUIThread(nameof(Exit));
+        try { Application.Current?.Exit(); }
+        catch { /* best effort */ }
+        if (exitCode != 0)
+            Environment.ExitCode = exitCode;
+    }
+
+    // Copy-on-write add. UI-thread only — reads can happen anywhere.
+    internal static void RegisterWindow(ReactorWindow window)
+    {
+        var current = Volatile.Read(ref _windows);
+        var next = new ReactorWindow[current.Length + 1];
+        Array.Copy(current, next, current.Length);
+        next[^1] = window;
+        Volatile.Write(ref _windows, next);
+
+        if (PrimaryWindow is null)
+            PrimaryWindow = window;
+
+        try { WindowOpened?.Invoke(null, window); }
+        catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowOpened threw: {ex.Message}"); }
+    }
+
+    // Copy-on-write remove. Idempotent — removing an already-removed window
+    // (Phase 1 path runs Dispose → close cascade twice in some failure modes)
+    // is a no-op.
+    internal static void UnregisterWindow(ReactorWindow window)
+    {
+        var current = Volatile.Read(ref _windows);
+        int idx = Array.IndexOf(current, window);
+        if (idx < 0) return;
+
+        var next = new ReactorWindow[current.Length - 1];
+        if (idx > 0) Array.Copy(current, 0, next, 0, idx);
+        if (idx < current.Length - 1) Array.Copy(current, idx + 1, next, idx, current.Length - idx - 1);
+        Volatile.Write(ref _windows, next);
+
+        if (ReferenceEquals(PrimaryWindow, window))
+            PrimaryWindow = next.Length > 0 ? next[0] : null;
+
+        try { WindowClosed?.Invoke(null, window); }
+        catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowClosed threw: {ex.Message}"); }
+
+        EvaluateShutdownPolicy(closed: window);
+    }
+
+    // Phase-1 minimum: OnPrimaryWindowClosed exits when the primary closes.
+    // Phase-4 broadens this with OnLastSurfaceClosed and Explicit.
+    private static void EvaluateShutdownPolicy(ReactorWindow? closed)
+    {
+        var policy = ShutdownPolicy;
+        var snapshot = Windows;
+        switch (policy)
+        {
+            case ShutdownPolicy.OnPrimaryWindowClosed:
+                // The original primary may have been replaced after the close.
+                // We approximate by exiting when the snapshot is empty AND the
+                // closed window WAS the primary at registration time.
+                if (snapshot.Count == 0)
+                    SafeExit();
+                break;
+            case ShutdownPolicy.OnLastSurfaceClosed:
+                if (snapshot.Count == 0) // tray-icon count comes online in Phase 8
+                    SafeExit();
+                break;
+            case ShutdownPolicy.Explicit:
+                break;
+        }
+    }
+
+    private static void SafeExit()
+    {
+        try { Application.Current?.Exit(); }
+        catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] Application.Exit threw: {ex.Message}"); }
+    }
+
+    // Internal accessor for ReactorApplication.OnLaunched and tests.
+    internal static ReactorAppContext? AppContext
+    {
+        get => Volatile.Read(ref _appContext);
+        set => Volatile.Write(ref _appContext, value);
+    }
+
+    private static int _dipBehaviorChangeNoticeEmitted;
+
+    /// <summary>
+    /// Emit one stderr <c>[reactor]</c> info-line per process the first time
+    /// any <c>Run</c> overload is invoked, describing the DIP-vs-pixel size
+    /// behavior change. (spec 036 §12.1) The Phase-2 layer adds the actual
+    /// DIP→pixel conversion; the message is wired now so the diagnostic
+    /// surface lands in the same release.
+    /// </summary>
+    internal static void EmitDipBehaviorChangeNoticeOnce()
+    {
+        if (Interlocked.CompareExchange(ref _dipBehaviorChangeNoticeEmitted, 1, 0) != 0) return;
+        Console.Error.WriteLine(
+            "[reactor] WindowSpec.Width / Height and ReactorApp.Run<T>(width, height) are now DIPs. " +
+            "On a 100% display this is unchanged; on 200% the window is twice as large in physical pixels. (spec 036 §12.1)");
+    }
+
+    /// <summary>
     /// Reconciles the deprecated <c>preview:</c> parameter with the new <c>devtools:</c>.
     /// If only <c>preview</c> is set, emit a one-time deprecation warning to stderr.
     /// </summary>
@@ -269,7 +522,7 @@ public static class ReactorApp
     /// active when the caller passes <c>devtools: true</c>.
     /// </summary>
     [RequiresUnreferencedCode("Devtools uses Assembly.GetTypes() for component discovery.")]
-    private static bool TryRunDevtools(string title, int width, int height, Action<ReactorHost>? configure, Type? hostRoot = null)
+    private static bool TryRunDevtools(string title, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null)
     {
         var args = Environment.GetCommandLineArgs();
         var options = DevtoolsCliParser.Parse(args);
@@ -325,7 +578,7 @@ public static class ReactorApp
     }
 
     [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes().")]
-    private static bool RunScreenshotSubverb(DevtoolsCliOptions options, int width, int height, Action<ReactorHost>? configure, Type? hostRoot = null)
+    private static bool RunScreenshotSubverb(DevtoolsCliOptions options, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null)
     {
         if (string.IsNullOrEmpty(options.ScreenshotOutputPath))
         {
@@ -406,7 +659,7 @@ public static class ReactorApp
     }
 
     [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes() and Activator.CreateInstance.")]
-    private static bool RunRunSubverb(DevtoolsCliOptions options, string title, int width, int height, Action<ReactorHost>? configure, Type? hostRoot = null)
+    private static bool RunRunSubverb(DevtoolsCliOptions options, string title, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null)
     {
         _ = title;
 
@@ -850,28 +1103,45 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // Capture the UI dispatcher first thing so anything below — including
+        // a startup callback that itself opens windows — sees the right
+        // process-wide UI thread reference. (spec 036 §4.3 / §6.1)
+        ReactorApp.UIDispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
         var opts = ReactorApp.Options;
-        var window = new Window { Title = opts.WindowTitle };
-        if (opts.FullScreen)
-            window.AppWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.FullScreen);
-        else
-            window.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(opts.WindowWidth, opts.WindowHeight));
+        var ctx = new ReactorAppContext(LaunchActivation.Normal);
+        ReactorApp.AppContext = ctx;
 
-        var host = new ReactorHost(window);
-
-        opts.Configure?.Invoke(host);
-
-        if (opts.RootFactory is not null)
+        // ── Path 1: explicit Run(Action<ReactorAppContext>) startup callback.
+        if (opts.Startup is not null)
         {
-            host.Mount(opts.RootFactory());
-        }
-        else if (opts.RootRenderFunc is not null)
-        {
-            host.Mount(opts.RootRenderFunc);
+            opts.Startup(ctx);
+
+            // Spec 036 §6.2: with the default OnPrimaryWindowClosed policy, a
+            // startup that opens zero windows must exit immediately — that's
+            // the only sane default for "I forgot to OpenWindow." Apps that
+            // want zero-window startup pick Explicit or OnLastSurfaceClosed
+            // before returning from the callback.
+            if (ReactorApp.Windows.Count == 0 && ReactorApp.ShutdownPolicy == ShutdownPolicy.OnPrimaryWindowClosed)
+            {
+                try { Application.Current?.Exit(); } catch { /* best effort */ }
+            }
+            return;
         }
 
-        window.Activate();
+        // ── Path 2: legacy Run<TRoot> / Run(string, Func) bridge — synthesize
+        //   a WindowSpec and route through OpenWindowCore so devtools / sample
+        //   call sites continue to see one host, one window, with the same
+        //   pre-mount Configure callback timing.
+        var spec = new WindowSpec
+        {
+            Title = opts.WindowTitle,
+            Width = opts.WindowWidth,
+            Height = opts.WindowHeight,
+            Presenter = opts.FullScreen ? PresenterKind.FullScreen : PresenterKind.Overlapped,
+        };
+
+        ReactorApp.OpenWindowCore(spec, opts.RootFactory, opts.RootRenderFunc, opts.Configure);
     }
 
     // IXamlMetadataProvider — delegate to the library's generated provider (which already
