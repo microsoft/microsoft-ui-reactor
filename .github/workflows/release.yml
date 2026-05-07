@@ -112,6 +112,12 @@ jobs:
           -p:Platform=AnyCPU
           -o artifacts/nupkg
 
+      - name: Template package smoke test
+        run: >
+          dotnet test tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj
+          --no-restore
+          --logger "console;verbosity=normal"
+
       # Framework-dependent: the consumer's machine supplies the .NET 10
       # runtime — saves ~70 MB per RID. install-skill-kit.ps1 checks for it
       # and errors out with an install hint if it's missing. See spec 022 §6.
