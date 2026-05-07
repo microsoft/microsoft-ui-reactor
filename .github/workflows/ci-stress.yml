@@ -1,0 +1,191 @@
+name: CI Stress
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "Total iterations to run (split across shards)"
+        required: true
+        default: "100"
+        type: string
+      target:
+        description: "Which test suite(s) to stress"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - unit
+          - selftests
+          - both
+      shards:
+        description: "Number of parallel runners (iterations are divided across shards)"
+        required: true
+        default: "20"
+        type: string
+
+jobs:
+  plan:
+    name: Plan shards
+    runs-on: ubuntu-latest
+    outputs:
+      shard-list: ${{ steps.shards.outputs.list }}
+      per-shard: ${{ steps.shards.outputs.per-shard }}
+      remainder: ${{ steps.shards.outputs.remainder }}
+    steps:
+      - id: shards
+        env:
+          ITERS: ${{ inputs.iterations }}
+          SHARDS: ${{ inputs.shards }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$ITERS" =~ ^[0-9]+$ ]] || [ "$ITERS" -lt 1 ]; then
+            echo "iterations must be a positive integer; got '$ITERS'" >&2
+            exit 1
+          fi
+          if ! [[ "$SHARDS" =~ ^[0-9]+$ ]] || [ "$SHARDS" -lt 1 ] || [ "$SHARDS" -gt 256 ]; then
+            echo "shards must be 1..256; got '$SHARDS'" >&2
+            exit 1
+          fi
+          if [ "$SHARDS" -gt "$ITERS" ]; then
+            SHARDS="$ITERS"
+          fi
+          per=$(( ITERS / SHARDS ))
+          rem=$(( ITERS % SHARDS ))
+          list=$(seq 1 "$SHARDS" | jq -R -s -c 'split("\n") | map(select(length>0) | tonumber)')
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+          echo "per-shard=$per" >> "$GITHUB_OUTPUT"
+          echo "remainder=$rem" >> "$GITHUB_OUTPUT"
+          echo "Plan: $ITERS iterations across $SHARDS shards (~$per each, +1 for first $rem)"
+
+  unit-tests:
+    name: Unit (shard ${{ matrix.shard }})
+    needs: plan
+    if: ${{ inputs.target == 'unit' || inputs.target == 'both' }}
+    runs-on: windows-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shard-list) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj
+
+      - name: Build (once)
+        run: dotnet build tests/Reactor.Tests/Reactor.Tests.csproj --no-restore --configuration Debug
+
+      - name: Stress loop
+        shell: pwsh
+        env:
+          PER_SHARD: ${{ needs.plan.outputs.per-shard }}
+          REMAINDER: ${{ needs.plan.outputs.remainder }}
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          $per = [int]$env:PER_SHARD
+          $rem = [int]$env:REMAINDER
+          $idx = [int]$env:SHARD_INDEX
+          $count = if ($idx -le $rem) { $per + 1 } else { $per }
+          if ($count -lt 1) { Write-Host "Shard $idx has no work."; exit 0 }
+          $failures = New-Object System.Collections.Generic.List[int]
+          for ($i = 1; $i -le $count; $i++) {
+            Write-Host "::group::Unit iteration $i / $count (shard $idx)"
+            dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore --no-build --logger "console;verbosity=normal"
+            $code = $LASTEXITCODE
+            Write-Host "::endgroup::"
+            if ($code -ne 0) {
+              Write-Host "::warning::Unit iteration $i (shard $idx) failed with exit $code"
+              $failures.Add($i) | Out-Null
+            }
+          }
+          if ($failures.Count -gt 0) {
+            Write-Host "::error::Shard $idx had $($failures.Count) failed iteration(s): $($failures -join ', ')"
+            exit 1
+          }
+          Write-Host "Shard $idx: $count iterations passed."
+
+  selftests:
+    name: Selftests (shard ${{ matrix.shard }})
+    needs: plan
+    if: ${{ inputs.target == 'selftests' || inputs.target == 'both' }}
+    runs-on: windows-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shard-list) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore tests/Reactor.SelfTests/Reactor.SelfTests.csproj
+
+      - name: Build (once)
+        run: dotnet build tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore --configuration Debug
+
+      - name: Stress loop
+        shell: pwsh
+        env:
+          PER_SHARD: ${{ needs.plan.outputs.per-shard }}
+          REMAINDER: ${{ needs.plan.outputs.remainder }}
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          $per = [int]$env:PER_SHARD
+          $rem = [int]$env:REMAINDER
+          $idx = [int]$env:SHARD_INDEX
+          $count = if ($idx -le $rem) { $per + 1 } else { $per }
+          if ($count -lt 1) { Write-Host "Shard $idx has no work."; exit 0 }
+          $failures = New-Object System.Collections.Generic.List[int]
+          for ($i = 1; $i -le $count; $i++) {
+            Write-Host "::group::Selftest iteration $i / $count (shard $idx)"
+            dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore --no-build --logger "console;verbosity=normal"
+            $code = $LASTEXITCODE
+            Write-Host "::endgroup::"
+            if ($code -ne 0) {
+              Write-Host "::warning::Selftest iteration $i (shard $idx) failed with exit $code"
+              $failures.Add($i) | Out-Null
+            }
+          }
+          if ($failures.Count -gt 0) {
+            Write-Host "::error::Shard $idx had $($failures.Count) failed iteration(s): $($failures -join ', ')"
+            exit 1
+          }
+          Write-Host "Shard $idx: $count iterations passed."
+
+  summary:
+    name: Stress summary
+    needs: [plan, unit-tests, selftests]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report
+        env:
+          UNIT_RESULT: ${{ needs.unit-tests.result }}
+          SELFTESTS_RESULT: ${{ needs.selftests.result }}
+        run: |
+          echo "Unit shards:      $UNIT_RESULT"
+          echo "Selftest shards:  $SELFTESTS_RESULT"
+          fail=0
+          # 'skipped' is OK (target filter); 'success' is OK; anything else is a fail.
+          for r in "$UNIT_RESULT" "$SELFTESTS_RESULT"; do
+            case "$r" in
+              success|skipped|"") ;;
+              *) fail=1 ;;
+            esac
+          done
+          if [ "$fail" -eq 1 ]; then
+            echo "::error::One or more stress shards failed. See per-shard logs."
+            exit 1
+          fi
+          echo "All shards passed."
