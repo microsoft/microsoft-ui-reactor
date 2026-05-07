@@ -10,6 +10,14 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- CsWinRT1032 (collection-literal targeting non-mutable interface) and
+         CsWinRT1033 (cast through [ComImport] interface) are AOT/trimming
+         warnings about data flowing across a WinRT ABI boundary. The
+         selftest harness uses ITaskbarList3 via classic COM interop and the
+         fixtures pass collection literals into managed Reactor APIs — neither
+         crosses a WinRT projection boundary, and the host is never AOT-
+         published. Suppress to keep selftest code idiomatic. -->
+    <NoWarn>$(NoWarn);CsWinRT1032;CsWinRT1033</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

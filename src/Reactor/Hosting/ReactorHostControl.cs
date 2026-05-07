@@ -357,7 +357,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // additional reset steps, throttling) only need editing here.
         void RecoverFromHookOrder(HookOrderException ex, RenderContext ctx, string mode)
         {
-            _logger.LogWarning(ex,
+            _logger?.LogWarning(ex,
                 "Hot reload: hook order/type changed — resetting {Mode} state and re-rendering",
                 mode);
             ctx.ResetForHotReload();

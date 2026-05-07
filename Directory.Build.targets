@@ -28,4 +28,20 @@
     <PublishAot>false</PublishAot>
   </PropertyGroup>
 
+  <!-- ───────────────────────────────────────────────────────────────────
+       Pin Microsoft.Windows.CsWinRT to the version centralized in
+       $(CsWinRTVersion) (Directory.Build.props). Without this the version
+       floats with whatever WinAppSDK pulls in transitively — currently a
+       very old 2.0.x — and we lose access to newer projection generators
+       and analyzer rules.
+
+       PrivateAssets=all because CsWinRT is a build-time generator; the
+       downstream nupkg should not list it as a dependency.
+       ─────────────────────────────────────────────────────────────────── -->
+  <ItemGroup Condition="'$(UseWinUI)' == 'true'">
+    <PackageReference Include="Microsoft.Windows.CsWinRT"
+                      Version="$(CsWinRTVersion)"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
 </Project>

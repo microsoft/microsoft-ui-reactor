@@ -11,6 +11,12 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <OutputType>Library</OutputType>
+    <!-- CsWinRT1032 (collection-literal targeting non-mutable interface) and
+         CsWinRT1033 (cast through [ComImport] interface) are AOT/trimming
+         warnings about data flowing across a WinRT ABI boundary. These tests
+         call managed Reactor APIs directly and are never AOT-published, so
+         neither concern applies. Suppress to keep test code idiomatic. -->
+    <NoWarn>$(NoWarn);CsWinRT1032;CsWinRT1033</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

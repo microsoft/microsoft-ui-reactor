@@ -1,13 +1,46 @@
 <Project>
 
   <!--
-    Centralize the Windows App SDK version so all projects stay in sync.
+    Centralize the Windows App SDK + CsWinRT versions so all projects stay in sync.
     This uses the public Microsoft.WindowsAppSDK package from NuGet.
     To install: dotnet restore (NuGet will pull the package automatically).
   -->
   <PropertyGroup>
     <WindowsAppSDKVersion>2.0.1</WindowsAppSDKVersion>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- CsWinRT pin. Latest 2.3.x is currently a prerelease; bump to the next
+         stable when it ships. The PackageReference is added in
+         Directory.Build.targets for any project that opts into WinUI. -->
+    <CsWinRTVersion>2.3.0-prerelease.251115.2</CsWinRTVersion>
+  </PropertyGroup>
+
+  <!-- ──────────────────────────────────────────────────────────────────
+       CsWinRT best-practice defaults for WinUI projects.
+
+       Modeled on OSClient's UES.Common.CSharp.SDK.props
+       (microsoft.visualstudio.com/OS — Build/MSBuild/UES.Common.CSharp.SDK.props),
+       trimmed to the settings that make sense for a pure WinAppSDK repo
+       (no UWP, no OS XAML mixing, no AOT-merged WinRT components).
+
+       Gated on UseWinUI=true so analyzers/source-generators/etc that don't
+       reference WinAppSDK keep their default behavior.
+       ────────────────────────────────────────────────────────────────── -->
+  <PropertyGroup Condition="'$(UseWinUI)' == 'true'">
+    <!-- Get verbose CsWinRT diagnostics in the build log — same default OSClient uses. -->
+    <CsWinRTEnableLogging>true</CsWinRTEnableLogging>
+
+    <!-- We don't author WinRT projections in this repo (we only consume them).
+         IID patching adds startup cost for projection authors and is not needed
+         for consumers. -->
+    <CsWinRTIIDOptimizerOptOut>true</CsWinRTIIDOptimizerOptOut>
+
+    <!-- Don't pick up a side-by-side UWP toolset that may exist on a dev box.
+         Keeps local builds matching what the CI/lab build will produce. -->
+    <CsWinRTUseEnvironmentalTools>false</CsWinRTUseEnvironmentalTools>
+
+    <!-- By default CsWinRT loads WinRT components into a separate AssemblyLoadContext,
+         which breaks JIT-only test/sample apps. Production AOT builds aren't affected. -->
+    <CsWinRTLoadComponentsInDefaultALC>true</CsWinRTLoadComponentsInDefaultALC>
   </PropertyGroup>
 
   <!-- Default Platform to the current machine architecture so that

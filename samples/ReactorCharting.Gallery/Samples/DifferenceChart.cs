@@ -85,7 +85,7 @@ D3Canvas(W, H,
                 stroke: greenBrush, strokeWidth: 2, curve: D3Curve.MonotoneX),
             D3LinePath(data, x: d => xScale.Map(d.X), y: d => yScale.Map(d.B),
                 stroke: redBrush, strokeWidth: 2, curve: D3Curve.MonotoneX),
-            .. D3Legend(lx, marginTop + 6, [("Revenue", greenBrush), ("Expenses", redBrush)]),
+            .. D3Legend(lx, marginTop + 6, ((string, Microsoft.UI.Xaml.Media.SolidColorBrush)[])[("Revenue", greenBrush), ("Expenses", redBrush)]),
             Microsoft.UI.Reactor.Charting.D3Charts.Text(marginLeft, 4, "Difference Chart (Revenue vs Expenses)", 14, ChartForeground),
         ])
             .AutomationName("Difference Chart (Revenue vs Expenses)")

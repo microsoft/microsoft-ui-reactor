@@ -98,7 +98,7 @@ public class CandlestickChart : GallerySample
              .. Enumerable.Range(0, 4).Select(n => n * 5)
                  .Select(i => D3Charts.Text(xs.Map(i) - 12, top + height + 4, $"Day {i + 1}", 10, ChartMutedForeground)),
              D3Charts.Text(2, top - 14, "Price", 11, ChartMutedForeground),
-             .. D3Legend(left + width - 120, top + 5, [("Bullish", bullBrush), ("Bearish", bearBrush)])]
+             .. D3Legend(left + width - 120, top + 5, ((string, Microsoft.UI.Xaml.Media.SolidColorBrush)[])[("Bullish", bullBrush), ("Bearish", bearBrush)])]
         )
             .AutomationName("Stock Price Candlestick Chart")
             .FullDescription("Candlestick chart showing 20 trading days of OHLC price data, with green candles for bullish and red for bearish days.");
