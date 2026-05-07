@@ -500,22 +500,29 @@ only that the selected `ShutdownPolicy` permits the resulting state.
 ## §7 Hooks
 
 ```csharp
-// Returns the ReactorWindow hosting the current component.
-ReactorWindow RenderContext.UseWindow();
+// Returns the ReactorWindow hosting the current component, or null
+// when the component renders outside a window (e.g. tray-icon flyout
+// content — see §7.1).
+ReactorWindow? RenderContext.UseWindow();
 
 // DIP size of the host window; re-renders on resize.
+// Returns (0, 0) when called outside a window (e.g. tray-flyout content).
 (double Width, double Height) RenderContext.UseWindowSize();
 
 // Per-monitor DPI; re-renders on DPI change.
+// Returns the system primary-monitor DPI when called outside a window.
 uint RenderContext.UseDpi();
 
 // Window state; re-renders on minimize/maximize/restore/etc.
+// Returns Normal when called outside a window.
 WindowState RenderContext.UseWindowState();
 
 // Activation; re-renders on activated/deactivated.
+// Returns true when called outside a window (the flyout is "active" while shown).
 bool RenderContext.UseIsActive();
 
 // Confirmation gate for Closing — return false to cancel close.
+// No-op when called outside a window (no Closing event source).
 // The function runs synchronously on the UI thread; for async confirms,
 // cancel the close and re-issue programmatically when the user decides.
 void RenderContext.UseClosingGuard(Func<bool> canClose);
@@ -532,6 +539,38 @@ The mirror methods on `Component` (currently `UseWindowSize(Window)` /
 `UseBreakpoint(Window)` — `Component.cs:57-60`) get parameterless
 overloads. The explicit `Window`-typed overloads stay for back compat
 and for consumers that hold a reference to a non-Reactor `Window`.
+
+### 7.1 Reaching the host window from a render
+
+`UseWindow()` is the canonical answer to "which window is rendering
+me?". It does an O(1) field read on the current `ReactorHost` — no
+subscription, no re-render trigger. Use it whenever you need the
+window handle (open another window with this one as `Owner`, set
+taskbar progress, dispatch a window-level command, etc.). For
+behavior that should re-render on changes, use the targeted hooks:
+`UseWindowSize`, `UseDpi`, `UseWindowState`, `UseIsActive`.
+
+**Returns `null` for tray-icon flyout content.** A tray icon's
+flyout (§11.4) is reconciled into a hidden internal popup window,
+not a `ReactorWindow`. Components that may render in either context
+should null-check:
+
+```csharp
+class StatusBadge : Component
+{
+    protected override Element Render()
+    {
+        var window = UseWindow();
+        // Same component used inside the main window AND in the tray
+        // flyout. The tray-flyout case has no window handle.
+        var dpiHint = window is null ? "" : $" @ {window.Dpi}dpi";
+        return Text($"Status: connected{dpiHint}");
+    }
+}
+```
+
+For components that only ever render inside a window (the common
+case), `UseWindow()!` is fine.
 
 ## §8 Persistence
 
