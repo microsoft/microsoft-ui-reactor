@@ -4,10 +4,7 @@
     <Platform Name="ARM64" />
   </Configurations>
   <Folder Name="/perf_bench/">
-    <Project Path="tests/perf_bench/PerfBench.Shared/PerfBench.Shared.csproj">
-      <Platform Solution="*|ARM64" Project="ARM64" />
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
+    <Project Path="tests/perf_bench/PerfBench.Shared/PerfBench.Shared.csproj" />
   </Folder>
   <Folder Name="/perf_bench/Allocation/">
     <Project Path="tests/perf_bench/PerfBench.Allocation/Allocation.Bound/Allocation.Bound.csproj">
@@ -210,10 +207,7 @@
   </Folder>
   <Folder Name="/samples/apps/chat/">
     <Project Path="samples/apps/chat/Chat.Model/Chat.Model.csproj" />
-    <Project Path="samples/apps/chat/Chat.UI/Chat.UI.csproj">
-      <Platform Solution="*|ARM64" Project="ARM64" />
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
+    <Project Path="samples/apps/chat/Chat.UI/Chat.UI.csproj" />
   </Folder>
   <Folder Name="/samples/apps/chat/App/">
     <Project Path="samples/apps/chat/App/ChatSample.csproj">
@@ -271,10 +265,7 @@
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
-    <Project Path="tests/Reactor.SelfTests/Reactor.SelfTests.csproj">
-      <Platform Solution="*|ARM64" Project="ARM64" />
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
+    <Project Path="tests/Reactor.SelfTests/Reactor.SelfTests.csproj" />
     <Project Path="tests/Reactor.Tests/Reactor.Tests.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
@@ -309,14 +300,8 @@
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
-    <Project Path="tests/stress_perf/StressPerf.Shared/StressPerf.Shared.csproj">
-      <Platform Solution="*|ARM64" Project="ARM64" />
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
-    <Project Path="tests/stress_perf/StressPerf.Wpf/StressPerf.Wpf.csproj">
-      <Platform Solution="*|ARM64" Project="ARM64" />
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
+    <Project Path="tests/stress_perf/StressPerf.Shared/StressPerf.Shared.csproj" />
+    <Project Path="tests/stress_perf/StressPerf.Wpf/StressPerf.Wpf.csproj" />
   </Folder>
   <Project Path="src/Reactor.Analyzers/Reactor.Analyzers.csproj" />
   <Project Path="src/Reactor.Cli/Reactor.Cli.csproj">
