@@ -325,28 +325,41 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private void Render()
     {
         _isRendering = true;
-        // Capture-and-clear gives us at-most-once recovery per
+        // Atomic capture-and-clear gives us at-most-once recovery per
         // UpdateApplication call:
         //
-        //   UpdateApplication fires:    UpdatePending = true
-        //   Render runs:                hotReloadRender = true,
-        //                               UpdatePending = false  (consumed)
+        //   UpdateApplication fires:    UpdatePending = 1
+        //   Render runs:                ConsumeUpdatePending() → true
+        //                               (atomic Interlocked.Exchange to 0)
         //     hooks throw:              recover + RequestRender, return
-        //   Recovery render runs:       hotReloadRender = false  (already consumed)
+        //   Recovery render runs:       ConsumeUpdatePending() → false
         //     hooks throw again:        falls through `when (hotReloadRender)`
         //                               filter → ShowErrorFallback
         //
-        // So a developer who has saved genuinely broken code (hooks that
+        // A developer who has saved genuinely broken code (hooks that
         // continue to throw after a fresh hook list) sees the error
         // fallback once, not an infinite reset loop. Each subsequent save
-        // sets UpdatePending again and grants exactly one more retry.
+        // raises UpdatePending again and grants exactly one more retry.
         //
-        // Coalesced bursts (multiple UpdateApplication calls before any
-        // render dispatches) collapse to one retry — UpdatePending stays
-        // true through the burst and is consumed by the next render. That
-        // matches the dispatcher's RequestRender coalescing behavior.
-        bool hotReloadRender = HotReloadService.UpdatePending;
-        HotReloadService.UpdatePending = false;
+        // Atomicity matters because UpdateApplication is invoked by the
+        // hot-reload runtime on a non-UI thread; a non-atomic read-then-
+        // write here could miss a pending update if the hot-reload thread
+        // raises the flag in the window between the read and the write.
+        bool hotReloadRender = HotReloadService.ConsumeUpdatePending();
+
+        // Local helper centralizes the recovery sequence (log → reset
+        // RenderContext → request a fresh render). Both component-mode
+        // and function-mode catches share it; future tweaks (telemetry,
+        // additional reset steps, throttling) only need editing here.
+        void RecoverFromHookOrder(HookOrderException ex, RenderContext ctx, string mode)
+        {
+            _logger.LogWarning(ex,
+                "Hot reload: hook order/type changed — resetting {Mode} state and re-rendering",
+                mode);
+            ctx.ResetForHotReload();
+            RequestRender();
+        }
+
         try
         {
             Element? newTree = null;
@@ -362,10 +375,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 }
                 catch (HookOrderException ex) when (hotReloadRender)
                 {
-                    _logger.LogWarning(ex,
-                        "Hot reload: hook order/type changed — resetting component state and re-rendering");
-                    _rootComponent.Context.ResetForHotReload();
-                    RequestRender();
+                    RecoverFromHookOrder(ex, _rootComponent.Context, "component");
                     return;
                 }
                 catch (Exception ex)
@@ -384,10 +394,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 }
                 catch (HookOrderException ex) when (hotReloadRender)
                 {
-                    _logger.LogWarning(ex,
-                        "Hot reload: hook order/type changed — resetting function-component state and re-rendering");
-                    _funcContext.ResetForHotReload();
-                    RequestRender();
+                    RecoverFromHookOrder(ex, _funcContext, "function-component");
                     return;
                 }
                 catch (Exception ex)
