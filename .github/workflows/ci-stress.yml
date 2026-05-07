@@ -108,7 +108,7 @@ jobs:
             Write-Host "::error::Shard $idx had $($failures.Count) failed iteration(s): $($failures -join ', ')"
             exit 1
           }
-          Write-Host "Shard $idx: $count iterations passed."
+          Write-Host "Shard ${idx}: $count iterations passed."
 
   selftests:
     name: Selftests (shard ${{ matrix.shard }})
@@ -161,7 +161,7 @@ jobs:
             Write-Host "::error::Shard $idx had $($failures.Count) failed iteration(s): $($failures -join ', ')"
             exit 1
           }
-          Write-Host "Shard $idx: $count iterations passed."
+          Write-Host "Shard ${idx}: $count iterations passed."
 
   summary:
     name: Stress summary
