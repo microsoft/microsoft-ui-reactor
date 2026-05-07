@@ -19,6 +19,15 @@ namespace Microsoft.UI.Reactor.Charting;
 /// </summary>
 public static class D3Charts
 {
+    // Cctor — runs the first time anything in this class is touched. Tells
+    // the active host to lazy-init forced-colors / reduced-motion watchers
+    // and push their values into our thread-statics, before chart code
+    // reads them. See Hosting.ChartingActivation for details.
+    static D3Charts()
+    {
+        Hosting.ChartingActivation.RequestActivation();
+    }
+
     // ── Color helpers ───────────────────────────────────────────────────
 
     public static readonly IReadOnlyList<D3Color> Palette = D3Color.Category10;

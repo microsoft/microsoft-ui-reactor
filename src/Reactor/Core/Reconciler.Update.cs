@@ -769,7 +769,7 @@ public sealed partial class Reconciler
         {
             // Uncontrolled divergence: value is set but no onChange to reconcile.
             // Log once per field to help developers catch mismatched bindings.
-            _logger.LogWarning(
+            _logger?.LogWarning(
                 "TextField value diverged from controlled value with no OnChanged handler. " +
                 "Controlled: \"{ControlledValue}\", Actual: \"{ActualValue}\". " +
                 "Wire up OnChanged to keep state in sync, or this field won't reflect user edits after re-renders.",
@@ -3445,7 +3445,7 @@ public sealed partial class Reconciler
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "ErrorBoundary caught render error during update");
+            _logger?.LogWarning(ex, "ErrorBoundary caught render error during update");
             caughtEx = ex;
             if (existingChild is not null)
                 Unmount(existingChild);

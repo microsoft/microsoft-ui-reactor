@@ -42,6 +42,19 @@ public static class ReactorApp
         internal set => Volatile.Write(ref _activeHost, value);
     }
 
+    // Process-wide ILogger picked up by ReactorHost / ReactorHostControl when
+    // the caller doesn't pass one explicitly. Null by default; populated by
+    // the devtools subverbs and by app code that wants a unified fallback.
+    // Reads on the ReactorHost ctor hot path stay AOT/JIT-cheap because the
+    // field is just a reference — no Microsoft.Extensions.Logging machinery
+    // loads unless the field is actually non-null.
+    private static ILogger? _appLogger;
+    public static ILogger? AppLogger
+    {
+        get => Volatile.Read(ref _appLogger);
+        set => Volatile.Write(ref _appLogger, value);
+    }
+
     private static int _previewParamDeprecationWarned;
 
     // ── XAML control-assembly registration ─────────────────────────────────
@@ -812,8 +825,6 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
     /// </summary>
     public static Func<Exception, bool>? OnUnhandledException { get; set; }
 
-    private readonly ILogger _logger = NullLogger.Instance;
-
     public ReactorApplication()
     {
         // Loads ReactorApplication.xaml (which references XamlControlsResources) via the
@@ -825,7 +836,7 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
 
         UnhandledException += (_, e) =>
         {
-            _logger.LogError(e.Exception, "UnhandledException: {ExceptionType}: {ExceptionMessage}", e.Exception.GetType().Name, e.Exception.Message);
+            ReactorApp.AppLogger?.LogError(e.Exception, "UnhandledException: {ExceptionType}: {ExceptionMessage}", e.Exception.GetType().Name, e.Exception.Message);
             if (OnUnhandledException is not null)
                 e.Handled = OnUnhandledException(e.Exception);
             // Don't set e.Handled = true for unknown exceptions — let the app crash

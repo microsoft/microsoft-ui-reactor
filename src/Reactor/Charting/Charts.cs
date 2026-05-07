@@ -255,7 +255,11 @@ public sealed class ChartElement<T> : IChartAccessibilityData
 
         return chart;
     }
-    public static implicit operator Element(ChartElement<T> chart) => chart.ToElement();
+    public static implicit operator Element(ChartElement<T> chart)
+    {
+        Hosting.ChartingActivation.RequestActivation();
+        return chart.ToElement();
+    }
 
     private Element BuildElement(IReadOnlyList<T> data)
     {
@@ -526,7 +530,11 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
             chart = Accessibility.ChartAlternateViewWrapper.Wrap(chart, alt);
         return chart;
     }
-    public static implicit operator Element(PieChartElement<T> chart) => chart.ToElement();
+    public static implicit operator Element(PieChartElement<T> chart)
+    {
+        Hosting.ChartingActivation.RequestActivation();
+        return chart.ToElement();
+    }
 
     private Element BuildElement(IReadOnlyList<T> data)
     {

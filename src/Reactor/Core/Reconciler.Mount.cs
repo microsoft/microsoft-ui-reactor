@@ -2250,7 +2250,7 @@ public sealed partial class Reconciler
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "ErrorBoundary caught render error");
+            _logger?.LogWarning(ex, "ErrorBoundary caught render error");
             caughtEx = ex;
             renderedElement = eb.Fallback(ex);
             wrapper.Child = Mount(renderedElement, requestRerender);
@@ -2313,7 +2313,7 @@ public sealed partial class Reconciler
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
-            _logger.LogError(ex, "Component Render() threw during mount: {ComponentName}", compElement.GetType().Name);
+            _logger?.LogError(ex, "Component Render() threw during mount: {ComponentName}", compElement.GetType().Name);
             childElement = ErrorFallback.BuildElement(ex);
         }
         UIElement? childControl;
@@ -2358,7 +2358,7 @@ public sealed partial class Reconciler
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
-            _logger.LogError(ex, "FuncComponent Render() threw during mount");
+            _logger?.LogError(ex, "FuncComponent Render() threw during mount");
             childElement = ErrorFallback.BuildElement(ex);
         }
         UIElement? childControl;
@@ -2404,7 +2404,7 @@ public sealed partial class Reconciler
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
-            _logger.LogError(ex, "MemoComponent Render() threw during mount");
+            _logger?.LogError(ex, "MemoComponent Render() threw during mount");
             childElement = ErrorFallback.BuildElement(ex);
         }
         UIElement? childControl;

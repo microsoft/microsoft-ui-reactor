@@ -86,7 +86,11 @@ public sealed class TreeChartElement<T> : IChartAccessibilityData
             chart = Accessibility.ChartAlternateViewWrapper.Wrap(chart, alt);
         return chart;
     }
-    public static implicit operator Element(TreeChartElement<T> chart) => chart.ToElement();
+    public static implicit operator Element(TreeChartElement<T> chart)
+    {
+        Hosting.ChartingActivation.RequestActivation();
+        return chart.ToElement();
+    }
 
     private Element BuildElement(T rootData)
     {
@@ -243,7 +247,11 @@ public sealed class ForceGraphElement : IChartAccessibilityData
             chart = Accessibility.ChartAlternateViewWrapper.Wrap(chart, alt);
         return chart;
     }
-    public static implicit operator Element(ForceGraphElement chart) => chart.ToElement();
+    public static implicit operator Element(ForceGraphElement chart)
+    {
+        Hosting.ChartingActivation.RequestActivation();
+        return chart.ToElement();
+    }
 
     private ForceSimulation? _sim;
 

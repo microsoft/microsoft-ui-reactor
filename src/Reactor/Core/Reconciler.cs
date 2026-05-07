@@ -30,7 +30,10 @@ public sealed partial class Reconciler : IDisposable
     private readonly Dictionary<UIElement, NavigationHostNode> _navigationHostNodes = new();
     private readonly ElementPool _pool = new();
     private readonly Dictionary<Type, ITypeRegistration> _typeRegistry = new();
-    private readonly ILogger _logger;
+    // Null when no caller-supplied logger and no devtools logger is published.
+    // All call sites use null-conditional access so the M.E.Logging code path
+    // doesn't run (and stays JIT-cold) for default apps.
+    private readonly ILogger? _logger;
     private readonly List<(ConnectedAnimation Animation, UIElement Target)> _pendingConnectedAnimationStarts = new();
     private readonly ContextScope _contextScope = new();
     private int _errorBoundaryDepth;
@@ -220,11 +223,11 @@ public sealed partial class Reconciler : IDisposable
         set => _enableBitmaskDiff = value;
     }
 
-    public Reconciler() : this(NullLogger.Instance) { }
+    public Reconciler() : this(null) { }
 
-    public Reconciler(ILogger logger)
+    public Reconciler(ILogger? logger)
     {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _logger = logger;
     }
 
     /// <summary>
@@ -662,7 +665,7 @@ public sealed partial class Reconciler : IDisposable
     {
         if (!_componentNodes.TryGetValue(control, out var node))
         {
-            _logger.LogWarning("ReconcileComponent: component node not found for control — component will not update");
+            _logger?.LogWarning("ReconcileComponent: component node not found for control — component will not update");
             return;
         }
 
@@ -778,7 +781,7 @@ public sealed partial class Reconciler : IDisposable
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
-            _logger.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
+            _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
             if (Diagnostics.ReactorEventSource.Log.IsEnabled(
                     global::System.Diagnostics.Tracing.EventLevel.Error,
                     Diagnostics.ReactorEventSource.Keywords.Errors))

@@ -48,7 +48,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
     private readonly Reconciler _reconciler;
     private readonly DispatcherQueue _dispatcherQueue;
-    private readonly ILogger _logger;
+    private readonly ILogger? _logger;
 
     private Component? _rootComponent;
     private Func<RenderContext, Element>? _rootRenderFunc;
@@ -124,7 +124,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
     public ReactorHostControl(Component? component = null, ILogger? logger = null)
     {
-        _logger = logger ?? NullLogger.Instance;
+        _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
@@ -340,7 +340,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Component Render() threw");
+                    _logger?.LogError(ex, "Component Render() threw");
                     ShowErrorFallback(ex);
                     return;
                 }
@@ -354,7 +354,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Function component threw");
+                    _logger?.LogError(ex, "Function component threw");
                     ShowErrorFallback(ex);
                     return;
                 }
@@ -463,7 +463,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             OnRenderComplete?.Invoke(treeBuildMs, reconcileMs, effectsMs);
 
 #if DEBUG
-            _logger.LogDebug(
+            _logger?.LogDebug(
                 "RECONCILE: tree={TreeBuildMs:F2}ms  reconcile={ReconcileMs:F2}ms  effects={EffectsMs:F2}ms  total={TotalMs:F2}ms  |  diffed={Diffed}  skipped={Skipped}  created={Created}  modified={Modified}",
                 treeBuildMs, reconcileMs, effectsMs, treeBuildMs + reconcileMs + effectsMs,
                 _reconciler.DebugElementsDiffed, _reconciler.DebugElementsSkipped,
@@ -499,7 +499,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                     LastModified = _reconciler.DebugUIElementsModified,
                 };
 
-                _logger.LogDebug(
+                _logger?.LogDebug(
                     "PERF [{RenderCount} renders]: tree={TreeMs:F2}ms  reconcile={ReconcileMs:F2}ms  effects={EffectsMs:F2}ms  total={TotalMs:F2}ms",
                     _renderCount, avgTree, avgReconcile, avgEffects, avgTotal);
                 _treeBuildSum = 0;
@@ -511,7 +511,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Render FAILED");
+            _logger?.LogError(ex, "Render FAILED");
             ShowErrorFallback(ex);
         }
         finally
@@ -534,7 +534,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
         fe.ActualThemeChanged += (_, _) =>
         {
-            _logger.LogDebug("Theme changed to {Theme} — re-rendering", fe.ActualTheme);
+            _logger?.LogDebug("Theme changed to {Theme} — re-rendering", fe.ActualTheme);
             RequestRender();
         };
     }

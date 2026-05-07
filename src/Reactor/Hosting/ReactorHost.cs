@@ -33,7 +33,11 @@ public sealed class ReactorHost : IDisposable
     private readonly Window _window;
     private readonly Reconciler _reconciler;
     private readonly DispatcherQueue _dispatcherQueue;
-    private readonly ILogger _logger;
+    // Null by default. Populated only when the caller passes an ILogger
+    // (or devtools is enabled and assigns one via ReactorApp.AppLogger).
+    // Apps that don't pass a logger never JIT a real Microsoft.Extensions.Logging
+    // call path — saves ~3-5 ms of cold-start JIT + assembly resolve.
+    private readonly ILogger? _logger;
 
     private Component? _rootComponent;
     private Func<RenderContext, Element>? _rootRenderFunc;
@@ -53,12 +57,16 @@ public sealed class ReactorHost : IDisposable
     private readonly BackdropApplier _backdropApplier;
     private readonly global::Windows.Foundation.TypedEventHandler<object, WindowEventArgs> _closedHandler;
 
-    // Accessibility: forced-colors and reduced-motion auto-propagation
+    // Accessibility: forced-colors and reduced-motion auto-propagation.
+    // Allocation is deferred until the first chart element is created (see
+    // EnsureChartingActive). Apps without charts skip the WinRT activation
+    // cost (15–30 ms each) and the Charting.D3Charts cctor cascade.
     private global::Windows.UI.ViewManagement.AccessibilitySettings? _accessibilitySettings;
     private global::Windows.UI.ViewManagement.UISettings? _uiSettings;
     private volatile bool _isForcedColors;
     private volatile bool _isReducedMotion;
     private Charting.ForcedColorsTheme? _forcedColorsTheme;
+    private bool _chartingActive;
 
     // Captured AnimationScope curve — when a state setter is called inside
     // WithAnimation, the scope is synchronous but the render is async.
@@ -136,7 +144,11 @@ public sealed class ReactorHost : IDisposable
 
     public ReactorHost(Window window, ILogger? logger = null)
     {
-        _logger = logger ?? NullLogger.Instance;
+        // Pick up an AppLogger published by the devtools subverb if the
+        // caller didn't pass an explicit logger — keeps Render-loop diagnostics
+        // visible whenever devtools is live, without forcing every app to wire
+        // up Microsoft.Extensions.Logging on the cold path.
+        _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
         _window = window;
         _backdropApplier = new BackdropApplier(window);
@@ -178,25 +190,10 @@ public sealed class ReactorHost : IDisposable
             catch { /* windowless / headless host — no activation hook */ }
         }
 
-        // ── Accessibility: auto-detect forced-colors and reduced-motion ──
-        // D3Charts.IsForcedColors is set each render; listeners trigger re-render.
-        try
-        {
-            _accessibilitySettings = new global::Windows.UI.ViewManagement.AccessibilitySettings();
-            _isForcedColors = _accessibilitySettings.HighContrast;
-            if (_isForcedColors)
-                _forcedColorsTheme = Charting.ForcedColorsTheme.FromSystem();
-            _accessibilitySettings.HighContrastChanged += OnHighContrastChanged;
-        }
-        catch { /* headless / unit-test host — no accessibility settings */ }
-
-        try
-        {
-            _uiSettings = new global::Windows.UI.ViewManagement.UISettings();
-            _isReducedMotion = !_uiSettings.AnimationsEnabled;
-            _uiSettings.ColorValuesChanged += OnColorValuesChanged;
-        }
-        catch { /* headless / unit-test host — no UI settings */ }
+        // ── Accessibility: forced-colors / reduced-motion ──
+        // Deferred to EnsureChartingActive(), called the first time a chart
+        // element is constructed (Charting.ChartingActivation.RequestActivation).
+        // Apps without charts pay zero cost here.
 
         // Register built-in custom element types
         Controls.ResizeGripRegistration.Register(_reconciler);
@@ -334,6 +331,52 @@ public sealed class ReactorHost : IDisposable
     /// <summary>Internal debug hook — paired-event ring buffer (or null when flag was off).</summary>
     internal LayoutEventRing? EventRing => _eventRing;
 
+    /// <summary>
+    /// Called by chart elements (via <see cref="ChartingActivation.RequestActivation"/>)
+    /// the first time a chart appears in the tree. Lazily allocates the WinRT
+    /// accessibility settings, reads their initial values, subscribes for change
+    /// notifications, and pushes the values into <see cref="Charting.D3Charts"/>'s
+    /// thread-statics so the about-to-mount chart sees correct forced-colors /
+    /// reduced-motion state.
+    /// Idempotent — subsequent chart elements are zero-cost.
+    /// </summary>
+    internal void EnsureChartingActive()
+    {
+        if (_chartingActive) return;
+        _chartingActive = true;
+
+        try
+        {
+            _accessibilitySettings = new global::Windows.UI.ViewManagement.AccessibilitySettings();
+            _isForcedColors = _accessibilitySettings.HighContrast;
+            if (_isForcedColors)
+                _forcedColorsTheme = Charting.ForcedColorsTheme.FromSystem();
+            _accessibilitySettings.HighContrastChanged += OnHighContrastChanged;
+        }
+        catch { /* headless / unit-test host — no accessibility settings */ }
+
+        try
+        {
+            _uiSettings = new global::Windows.UI.ViewManagement.UISettings();
+            _isReducedMotion = !_uiSettings.AnimationsEnabled;
+            _uiSettings.ColorValuesChanged += OnColorValuesChanged;
+        }
+        catch { /* headless / unit-test host — no UI settings */ }
+
+        PushChartingState();
+    }
+
+    // Kept in a separate method so the JIT doesn't resolve Charting.D3Charts
+    // when Render() is compiled — D3Charts only loads (and runs its cctor)
+    // the first time PushChartingState is actually invoked, which only
+    // happens for apps that use charts.
+    private void PushChartingState()
+    {
+        Charting.D3Charts.IsForcedColors = _isForcedColors;
+        Charting.D3Charts.IsReducedMotion = _isReducedMotion;
+        Charting.D3Charts.ForcedColors = _forcedColorsTheme;
+    }
+
     public void Mount(Component component)
     {
         _rootComponent = component;
@@ -385,6 +428,20 @@ public sealed class ReactorHost : IDisposable
             return;
         }
 
+        // First render synchronous-on-UI-thread: the very first render
+        // fires from Mount() inside OnLaunched, which is already on the
+        // dispatcher. Skipping the queue saves one tick (~2-5 ms on cold
+        // start) and lets content attach before window.Activate() returns,
+        // matching what an imperative WinUI3 app does. Only the very first
+        // render takes this path — subsequent setStates keep the existing
+        // batch-via-dispatcher behavior so multiple synchronous setState
+        // calls still coalesce into one render.
+        if (_currentControl is null && _dispatcherQueue.HasThreadAccess)
+        {
+            RenderLoop();
+            return;
+        }
+
         _dispatcherQueue.TryEnqueue(RenderLoop);
     }
 
@@ -421,11 +478,13 @@ public sealed class ReactorHost : IDisposable
 
             _phaseSw.Restart();
 
-            // Propagate accessibility state to D3Charts thread-statics so all chart
-            // rendering picks up forced-colors / reduced-motion automatically.
-            Charting.D3Charts.IsForcedColors = _isForcedColors;
-            Charting.D3Charts.IsReducedMotion = _isReducedMotion;
-            Charting.D3Charts.ForcedColors = _forcedColorsTheme;
+            // Propagate accessibility state to D3Charts thread-statics so all
+            // chart rendering picks up forced-colors / reduced-motion. Skipped
+            // entirely (no D3Charts type touch, no cctor cascade) when no
+            // chart has ever been mounted in this host. PushChartingState is
+            // a separate method so the JIT doesn't load Charting.D3Charts
+            // when Render() is compiled.
+            if (_chartingActive) PushChartingState();
 
             // RequestRender has an optional `force` parameter, so it can't bind
             // directly to an Action method group — wrap once and reuse.
@@ -440,7 +499,7 @@ public sealed class ReactorHost : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Component Render() threw");
+                    _logger?.LogError(ex, "Component Render() threw");
                     ShowErrorFallback(ex);
                     return;
                 }
@@ -454,7 +513,7 @@ public sealed class ReactorHost : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Function component threw");
+                    _logger?.LogError(ex, "Function component threw");
                     ShowErrorFallback(ex);
                     return;
                 }
@@ -584,7 +643,7 @@ public sealed class ReactorHost : IDisposable
             OnRenderComplete?.Invoke(treeBuildMs, reconcileMs, effectsMs);
 
 #if DEBUG
-            _logger.LogDebug(
+            _logger?.LogDebug(
                 "RECONCILE: tree={TreeBuildMs:F2}ms  reconcile={ReconcileMs:F2}ms  effects={EffectsMs:F2}ms  total={TotalMs:F2}ms  |  diffed={Diffed}  skipped={Skipped}  created={Created}  modified={Modified}",
                 treeBuildMs, reconcileMs, effectsMs, treeBuildMs + reconcileMs + effectsMs,
                 _reconciler.DebugElementsDiffed, _reconciler.DebugElementsSkipped,
@@ -620,7 +679,7 @@ public sealed class ReactorHost : IDisposable
                     LastModified = _reconciler.DebugUIElementsModified,
                 };
 
-                _logger.LogDebug(
+                _logger?.LogDebug(
                     "PERF [{RenderCount} renders]: tree={TreeMs:F2}ms  reconcile={ReconcileMs:F2}ms  effects={EffectsMs:F2}ms  total={TotalMs:F2}ms",
                     _renderCount, avgTree, avgReconcile, avgEffects, avgTotal);
                 _treeBuildSum = 0;
@@ -632,7 +691,7 @@ public sealed class ReactorHost : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Render FAILED");
+            _logger?.LogError(ex, "Render FAILED");
             ShowErrorFallback(ex);
         }
         finally
@@ -665,7 +724,7 @@ public sealed class ReactorHost : IDisposable
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
     {
-        _logger.LogDebug("Theme changed to {Theme} — re-rendering", sender.ActualTheme);
+        _logger?.LogDebug("Theme changed to {Theme} — re-rendering", sender.ActualTheme);
         Microsoft.UI.Reactor.Core.Reconciler.ClearStyleCache();
         RequestRender();
     }
@@ -675,7 +734,7 @@ public sealed class ReactorHost : IDisposable
     {
         _isForcedColors = sender.HighContrast;
         _forcedColorsTheme = _isForcedColors ? Charting.ForcedColorsTheme.FromSystem() : null;
-        _logger.LogDebug("High-contrast changed to {IsHighContrast} — re-rendering", _isForcedColors);
+        _logger?.LogDebug("High-contrast changed to {IsHighContrast} — re-rendering", _isForcedColors);
         RequestRender();
     }
 

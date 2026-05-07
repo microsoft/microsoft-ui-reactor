@@ -53,7 +53,7 @@ if (-not (Test-Path $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir
 # ---- Variant table ---------------------------------------------------------
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "ARM64" } else { "x64" }
 $rid = if ($arch -eq "ARM64") { "win-arm64" } else { "win-x64" }
-$tfm = "net9.0-windows10.0.22621.0"
+$tfm = "net10.0-windows10.0.22621.0"
 
 # C# variants are non-AOT (PublishAot=false in csproj — NativeAOT trims the
 # EventSource subclass and emits zero ETW events). Build path therefore has
