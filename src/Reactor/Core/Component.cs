@@ -83,6 +83,27 @@ public abstract class Component
     protected uint UseDpi()
         => Context.UseDpi();
 
+    /// <summary>
+    /// Returns the host window or <c>null</c> outside a window. (spec 036 §7)
+    /// </summary>
+    protected Microsoft.UI.Reactor.ReactorWindow? UseWindow()
+        => Context.UseWindow();
+
+    /// <summary>Re-renders on window state changes. (spec 036 §7)</summary>
+    protected Microsoft.UI.Reactor.WindowState UseWindowState()
+        => Context.UseWindowState();
+
+    /// <summary>Re-renders on window activation changes. (spec 036 §7)</summary>
+    protected bool UseIsActive()
+        => Context.UseIsActive();
+
+    /// <summary>
+    /// Register a synchronous "can the window close right now?" predicate.
+    /// (spec 036 §7 / §13.4)
+    /// </summary>
+    protected void UseClosingGuard(Func<bool> canClose)
+        => Context.UseClosingGuard(canClose);
+
     protected T UseObservableTree<T>(T source) where T : global::System.ComponentModel.INotifyPropertyChanged
         => Context.UseObservableTree(source);
 

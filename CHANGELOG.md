@@ -38,6 +38,20 @@ to land under these conventions; subsequent specs follow this shape.
 - `ReactorApp.OpenWindow`, `Windows`, `PrimaryWindow`, `FindWindow`,
   `WindowOpened` / `WindowClosed`, `Exit`, `ShutdownPolicy`, `UIDispatcher` —
   process-wide window topology. (spec 036 §4.3, §6)
+- Per-window DPI awareness — `ReactorWindow.Dpi`, `DipScale`, `DpiChanged`;
+  WindowMessageMonitor (`SetWindowSubclass`) for WM_DPICHANGED and
+  WM_GETMINMAXINFO; DIP→physical conversion in initial size, `SetSize`,
+  `SetPosition`. Min/max constraints flow through WM_GETMINMAXINFO so
+  dragging across a DPI boundary respects spec'd minimums. (spec 036 §5)
+- `RenderContext.UseDpi()`, parameterless `UseWindowSize()`,
+  `UseBreakpoint(double)`. (spec 036 §5.2)
+- `ReactorWindow.Activated`, `Deactivated`, `SizeChanged`, `StateChanged`,
+  `Closing`, `Closed` events with UI-thread synchronous dispatch.
+  `Closing` runs `UseClosingGuard` predicates first then subscribers; any
+  false cancels. (spec 036 §6.3, §7)
+- `RenderContext.UseWindow()`, `UseWindowState()`, `UseIsActive()`,
+  `UseClosingGuard(Func<bool>)`. Tray-flyout fallback semantics match
+  spec §7.1 (null/Normal/true/no-op). (spec 036 §7)
 - `Microsoft.UI.Reactor.Hooks.UseMemoCells` /
   `UseMemoCellsByKey` / `UseMemoCellsByIndex` — cell-level memoization
   hooks (extension methods on `RenderContext`, plus matching `Component`

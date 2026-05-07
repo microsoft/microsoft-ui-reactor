@@ -161,7 +161,36 @@ public sealed class ReactorWindow : IDisposable
         _messageMonitor.MessageReceived += OnWindowMessage;
 
         _window.Activated += OnNativeActivated;
+        _window.SizeChanged += OnNativeSizeChanged;
+        _appWindow.Changed += OnAppWindowChanged;
+        _appWindow.Closing += OnAppWindowClosing;
         _window.Closed += OnNativeClosed;
+
+        // Snapshot initial state from the realized presenter.
+        _stateValue = (int)ResolveCurrentState();
+    }
+
+    private WindowState ResolveCurrentState()
+    {
+        try
+        {
+            switch (_appWindow.Presenter)
+            {
+                case OverlappedPresenter op:
+                    return op.State switch
+                    {
+                        OverlappedPresenterState.Minimized => Microsoft.UI.Reactor.WindowState.Minimized,
+                        OverlappedPresenterState.Maximized => Microsoft.UI.Reactor.WindowState.Maximized,
+                        _ => Microsoft.UI.Reactor.WindowState.Normal,
+                    };
+                case Microsoft.UI.Windowing.FullScreenPresenter:
+                    return Microsoft.UI.Reactor.WindowState.FullScreen;
+                case CompactOverlayPresenter:
+                    return Microsoft.UI.Reactor.WindowState.CompactOverlay;
+            }
+        }
+        catch (Exception ex) { Debug.WriteLine($"[Reactor] ResolveCurrentState failed: {ex.Message}"); }
+        return Microsoft.UI.Reactor.WindowState.Normal;
     }
 
     private static uint QueryDpiForWindow(nint hwnd)
@@ -379,6 +408,101 @@ public sealed class ReactorWindow : IDisposable
             Deactivated?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnNativeSizeChanged(object sender, Microsoft.UI.Xaml.WindowSizeChangedEventArgs args)
+    {
+        try
+        {
+            // Window.Bounds is already DIPs (the WinUI XAML rendering surface).
+            var dip = (args.Size.Width, args.Size.Height);
+            SizeChanged?.Invoke(this, new WindowDipSizeChangedEventArgs(dip, args));
+        }
+        catch (Exception ex) { Debug.WriteLine($"[Reactor] SizeChanged dispatch failed: {ex.Message}"); }
+    }
+
+    private void OnAppWindowChanged(AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args)
+    {
+        if (!args.DidPresenterChange && !args.DidVisibilityChange) return;
+        var newState = ResolveCurrentState();
+        var prev = (WindowState)Volatile.Read(ref _stateValue);
+        if (newState != prev)
+        {
+            Volatile.Write(ref _stateValue, (int)newState);
+            try { StateChanged?.Invoke(this, newState); }
+            catch (Exception ex) { Debug.WriteLine($"[Reactor] StateChanged dispatch failed: {ex.Message}"); }
+        }
+    }
+
+    private void OnAppWindowClosing(AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
+    {
+        var reason = _closingReason; // populated by Close()/Exit() / OwnerClosed cascade.
+        var cea = new WindowClosingEventArgs(reason);
+
+        // Run UseClosingGuard registrations first — any returning false
+        // cancels. Snapshot the list so a guard's cleanup that mutates
+        // the registration list mid-iteration doesn't crash.
+        ClosingGuard[] guards;
+        lock (_closingGuardsLock) { guards = _closingGuards.ToArray(); }
+        bool cancel = false;
+        for (int i = 0; i < guards.Length; i++)
+        {
+            try { if (!guards[i].CanClose()) { cancel = true; break; } }
+            catch (Exception ex)
+            {
+                // Fail-safe: treat a throwing guard as "cancel" with a stderr
+                // notice. (spec 036 §3.4 tests).
+                Debug.WriteLine($"[Reactor] ClosingGuard threw — cancelling close: {ex.Message}");
+                cancel = true;
+                break;
+            }
+        }
+
+        if (!cancel)
+        {
+            try { Closing?.Invoke(this, cea); }
+            catch (Exception ex) { Debug.WriteLine($"[Reactor] Closing handler threw: {ex.Message}"); }
+            cancel = cea.Cancel;
+        }
+
+        if (cancel) args.Cancel = true;
+        else _closingReason = WindowCloseReason.UserClosed; // reset for the next attempt
+    }
+
+    // ── UseClosingGuard registration ──────────────────────────────────
+    private sealed class ClosingGuard
+    {
+        public Func<bool> CanClose { get; }
+        public ClosingGuard(Func<bool> fn) { CanClose = fn; }
+    }
+    private readonly object _closingGuardsLock = new();
+    private readonly List<ClosingGuard> _closingGuards = new();
+
+    /// <summary>
+    /// Register a synchronous "can the window close right now?" predicate.
+    /// Returns an unregister token that must run during the calling
+    /// component's cleanup. Multiple guards stack — any returning <c>false</c>
+    /// cancels the close. (spec 036 §7 / §3.4)
+    /// </summary>
+    internal IDisposable RegisterClosingGuard(Func<bool> canClose)
+    {
+        ArgumentNullException.ThrowIfNull(canClose);
+        var guard = new ClosingGuard(canClose);
+        lock (_closingGuardsLock) { _closingGuards.Add(guard); }
+        return new GuardToken(this, guard);
+    }
+
+    private sealed class GuardToken : IDisposable
+    {
+        private readonly ReactorWindow _owner;
+        private ClosingGuard? _guard;
+        public GuardToken(ReactorWindow owner, ClosingGuard guard) { _owner = owner; _guard = guard; }
+        public void Dispose()
+        {
+            var g = Interlocked.Exchange(ref _guard, null);
+            if (g is null) return;
+            lock (_owner._closingGuardsLock) { _owner._closingGuards.Remove(g); }
+        }
+    }
+
     private void OnNativeClosed(object? sender, WindowEventArgs args)
     {
         if (_disposed) return;
@@ -530,6 +654,9 @@ public sealed class ReactorWindow : IDisposable
         _disposed = true;
 
         try { _window.Activated -= OnNativeActivated; } catch { /* best effort */ }
+        try { _window.SizeChanged -= OnNativeSizeChanged; } catch { /* best effort */ }
+        try { _appWindow.Changed -= OnAppWindowChanged; } catch { /* best effort */ }
+        try { _appWindow.Closing -= OnAppWindowClosing; } catch { /* best effort */ }
         try { _window.Closed -= OnNativeClosed; } catch { /* best effort */ }
         try { _messageMonitor.Dispose(); } catch (Exception ex) { Debug.WriteLine($"[Reactor] MessageMonitor dispose failed: {ex.Message}"); }
 

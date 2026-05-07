@@ -961,6 +961,77 @@ public sealed class RenderContext
     }
 
     /// <summary>
+    /// Resolves the current host's <see cref="Microsoft.UI.Reactor.ReactorWindow"/>
+    /// (or <c>null</c> when called outside a window — e.g. tray-flyout content).
+    /// O(1) field read; no subscription, no re-render trigger. (spec 036 §7 / §7.1)
+    /// </summary>
+    public Microsoft.UI.Reactor.ReactorWindow? UseWindow()
+        => Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+
+    /// <summary>
+    /// Subscribes to the host window's <c>StateChanged</c> event and re-renders
+    /// on change. Returns <see cref="Microsoft.UI.Reactor.WindowState.Normal"/>
+    /// outside a window. (spec 036 §7)
+    /// </summary>
+    public Microsoft.UI.Reactor.WindowState UseWindowState()
+    {
+        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        if (win is null) { _ = UseState(Microsoft.UI.Reactor.WindowState.Normal); return Microsoft.UI.Reactor.WindowState.Normal; }
+        var (state, setState) = UseState(win.State);
+        UseEffect(() =>
+        {
+            void handler(object? sender, Microsoft.UI.Reactor.WindowState newState) => setState(newState);
+            win.StateChanged += handler;
+            return () => win.StateChanged -= handler;
+        }, win);
+        return state;
+    }
+
+    /// <summary>
+    /// Subscribes to the host window's activation events and re-renders on
+    /// change. Returns <c>true</c> outside a window (the surface is "active"
+    /// while shown). (spec 036 §7)
+    /// </summary>
+    public bool UseIsActive()
+    {
+        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        if (win is null) { _ = UseState(true); return true; }
+        var (active, setActive) = UseState(win.IsActive);
+        UseEffect(() =>
+        {
+            void onAct(object? s, EventArgs e) => setActive(true);
+            void onDeact(object? s, EventArgs e) => setActive(false);
+            win.Activated += onAct;
+            win.Deactivated += onDeact;
+            return () =>
+            {
+                win.Activated -= onAct;
+                win.Deactivated -= onDeact;
+            };
+        }, win);
+        return active;
+    }
+
+    /// <summary>
+    /// Registers a synchronous "can the window close right now?" predicate.
+    /// Multiple guards stack — any returning <c>false</c> cancels the close.
+    /// Runs on the UI thread; for async confirmation, return <c>false</c> and
+    /// re-trigger <see cref="Microsoft.UI.Reactor.ReactorWindow.Close"/> from
+    /// the dialog callback. No-op outside a window. (spec 036 §7 / §13.4)
+    /// </summary>
+    public void UseClosingGuard(Func<bool> canClose)
+    {
+        ArgumentNullException.ThrowIfNull(canClose);
+        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        if (win is null) { UseEffect(() => { /* no-op */ }, canClose); return; }
+        UseEffect(() =>
+        {
+            var token = win.RegisterClosingGuard(canClose);
+            return () => token.Dispose();
+        }, win, canClose);
+    }
+
+    /// <summary>
     /// Returns the current per-window DPI (<see cref="Microsoft.UI.Reactor.ReactorWindow.Dpi"/>)
     /// and re-renders on DPI change. Returns the system primary-monitor DPI when
     /// called outside a window. (spec 036 §5.2)

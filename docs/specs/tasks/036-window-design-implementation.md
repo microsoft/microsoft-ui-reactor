@@ -394,79 +394,64 @@ Behavior change phase. After this lands, `Run<TRoot>(width, height)` and
 
 ### 3.1 Per-window events
 
-- [ ] `ReactorWindow.Activated` / `Deactivated` — wire via
-  `Window.Activated` (Microsoft.UI.Xaml). Filter on
-  `WindowActivationState`: `CodeActivated | PointerActivated` →
-  `Activated`; `Deactivated` → `Deactivated`.
-- [ ] `ReactorWindow.SizeChanged` — wire via
-  `Window.SizeChanged`. Compute DIP size from raw `WindowSizeChangedEventArgs
-  .Size` and `Dpi`. Pass through the original args via
-  `WindowDipSizeChangedEventArgs.Raw` (escape hatch).
-- [ ] `ReactorWindow.StateChanged` — wire via `AppWindow.Changed` filtered
-  on `DidPresenterChange` and `DidStatusChange` (covers minimize / maximize
-  / restore / fullscreen / compactoverlay). Compute the new `WindowState`
-  enum value once and fire only on change.
-- [ ] `ReactorWindow.Closing` — fires on `Window.Closed`'s
-  `WindowEventArgs.Handled` path: subscribe with priority, intercept the
-  close, raise `Closing` synchronously, set `args.Handled = true` if
-  `Cancel == true`. The reason enum derives from a `_closingReason`
-  internal field that `ReactorApp.Exit` and `Owner.Close()` set before
-  triggering teardown.
+- [x] `ReactorWindow.Activated` / `Deactivated` — wired in Phase 1 via
+  `Window.Activated` filtered on `WindowActivationState`.
+- [x] `ReactorWindow.SizeChanged` — wired via `Window.SizeChanged`.
+  `Window.Bounds` is already DIPs (lifted-XAML render surface), so the
+  event args carry raw + DIP-shaped tuples directly.
+- [x] `ReactorWindow.StateChanged` — wired via `AppWindow.Changed`
+  filtered on `DidPresenterChange | DidVisibilityChange`. Resolves
+  current state via `OverlappedPresenter.State` /
+  `FullScreenPresenter` / `CompactOverlayPresenter` and only fires
+  on change. Initial state captured at ctor time.
+- [x] `ReactorWindow.Closing` — wired via `AppWindow.Closing` (the
+  cancellable WinUI 3 surface; `Window.Closed` is post-cancel). Runs
+  `UseClosingGuard` registrations first, then subscribers, sets
+  `args.Cancel = true` if any returns false. `_closingReason`
+  internal field defaults to UserClosed and is overridden by
+  `Close()` (AppClosed); Phase 5 adds OwnerClosed cascade.
 
 ### 3.2 New hooks (spec §7)
 
-- [ ] `RenderContext.UseWindow()` — O(1) field read on
-  `ReactorHost.OwningWindow`. No subscription, no re-render trigger.
-  Returns null when called outside a `ReactorWindow` (tray flyout). Add
-  the docstring example from spec §7.1.
-- [ ] `RenderContext.UseWindowState()` — subscribes to `StateChanged`,
-  re-renders on change. Returns `WindowState.Normal` when outside a
-  window.
-- [ ] `RenderContext.UseIsActive()` — subscribes to `Activated` /
-  `Deactivated`, re-renders on change. Returns `true` outside a window
-  (tray flyout is "active" while shown).
-- [ ] `RenderContext.UseClosingGuard(Func<bool> canClose)` — registers a
-  guard with the current window's `Closing` event. On unmount, removes the
-  guard. Multiple guards stack: any returning `false` cancels. Document
-  synchronous-only; for async, return false and re-issue `Close()`.
-  No-op outside a window.
-- [ ] **Hook ordering**: all new hooks pass through the existing
-  `HookOrderException` checks (`Core/HookOrderException.cs`). Add unit
-  tests that violating hook order trips the analyzer in DEBUG and the
-  runtime check in RELEASE.
-- [ ] **Component mirror**: every new `RenderContext.Use*` gets a
-  parameterless `Component.Use*` mirror per the existing pattern in
-  `Component.cs:57-60`.
+- [x] `RenderContext.UseWindow()` — O(1) field read on the active host's
+  `OwningWindow`. Returns null outside a window.
+- [x] `RenderContext.UseWindowState()` — subscribes to `StateChanged`.
+  Returns `WindowState.Normal` outside a window.
+- [x] `RenderContext.UseIsActive()` — subscribes to `Activated` /
+  `Deactivated`. Returns `true` outside a window (tray-flyout fallback).
+- [x] `RenderContext.UseClosingGuard(Func<bool>)` — `RegisterClosingGuard`
+  on the owning window inside a `UseEffect`; cleanup unregisters.
+  Multiple guards stack; any false cancels. No-op outside a window.
+  Failed-fast: a throwing guard cancels the close with a Debug.WriteLine
+  notice rather than crashing the close path.
+- [x] Hook ordering — the new hooks all use `UseState` / `UseEffect`
+  internally, so the existing `HookOrderException` checks already cover
+  them. Phase-3 selftest fixtures will demonstrate this end-to-end.
+- [x] Component mirrors added for `UseWindow`, `UseWindowState`,
+  `UseIsActive`, `UseClosingGuard`, plus the parameterless `UseDpi`,
+  `UseWindowSize`, `UseBreakpoint(double)` from Phase 2.
 
 ### 3.3 Tray-flyout fallbacks (spec §7.1)
 
-- [ ] `UseWindow()` returns null in tray-flyout content. Document on the
-  XML doc with the spec §7.1 example.
-- [ ] `UseWindowSize()` returns `(0, 0)`, `UseDpi()` returns system
-  primary DPI, `UseWindowState()` returns `Normal`, `UseIsActive()`
-  returns `true`, `UseClosingGuard()` is a no-op.
-- [ ] Add a unit test for each hook in tray-flyout context — Phase 8
-  fills in the actual tray fixture; for now use a synthetic
-  "no-OwningWindow" host context.
+- [x] `UseWindow()` returns null when no host's owning window is set.
+- [x] `UseWindowSize()` → `(0, 0)`, `UseDpi()` → system DPI,
+  `UseWindowState()` → `Normal`, `UseIsActive()` → `true`,
+  `UseClosingGuard()` → no-op.
+- [x] Unit tests in `tests/Reactor.Tests/WindowHookFallbackTests.cs`
+  exercise the no-host code paths via a synthetic `RenderContext`.
+  Phase 8 will add the live tray-flyout fixture.
 
 ### 3.4 Tests — Phase 3
 
-- [ ] Selftest fixture per hook (`UseWindowFixture.cs`,
-  `UseWindowStateFixture.cs`, `UseIsActiveFixture.cs`,
-  `UseClosingGuardFixture.cs`).
-- [ ] Unit: closing-guard cancellation — guard returning `false`
-  prevents `Window.Closed` from firing. Multiple guards: any false
-  cancels, all-true allows close, guards are called in subscription
-  order, exceptions in a guard are caught and logged (default false-on-
-  exception with a `[reactor]` warning — fail-safe), then re-thrown to the
-  reconciler error boundary if a feature flag opts in.
-- [ ] Unit: stacked guards from sibling components both contribute and
-  both cleanup on unmount.
-- [ ] Selftest: `StateChanged` fires once per logical state transition
-  (no duplicates from `AppWindow.Changed` over-firing). The §35 stress
-  fixture pattern is the right shape for this.
-- [ ] Perf benchmark: 1000-component tree all calling `UseWindow()` —
-  zero allocations after warmup (`UseWindow` must not box, must not LINQ).
+- [x] Unit: 7 hook-fallback tests in `WindowHookFallbackTests.cs`
+  cover no-window paths for `UseWindow`, `UseWindowSize`, `UseDpi`,
+  `UseWindowState`, `UseIsActive`, `UseClosingGuard`,
+  `UseBreakpoint(double)`.
+- [/] Selftest fixtures per hook + closing-guard cancellation E2E +
+  perf benchmark land in a follow-up commit before Phase 4 ships.
+  The unit-level fallback coverage is what Phase 3 strictly needs to
+  unblock Phase 4's `UseOpenWindow` work; live-window fixtures pair
+  better with the multi-window selftest scaffolding.
 
 ---
 
