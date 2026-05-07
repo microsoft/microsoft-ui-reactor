@@ -299,7 +299,7 @@ dotnet test tests/Reactor.SelfTests
 dotnet test tests/Reactor.AppTests --filter "ClassName=Reactor.AppTests.Tests.InteractiveTests"
 
 # Everything
-dotnet test Reactor.sln
+dotnet test Reactor.slnx
 ```
 
 `samples/Reactor.TestApp` is the interactive demo, not a test runner.

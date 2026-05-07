@@ -10,8 +10,19 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
-  <!-- Platform defaults to AnyCPU (the standard .NET default).
-       Architecture-specific native assets (Windows App SDK) are resolved
-       via RuntimeIdentifier, set in Directory.Build.targets. -->
+  <!-- Default platforms for application and test projects. Library projects
+       that should be architecture-neutral override Platforms to AnyCPU in
+       their own .csproj. -->
+  <PropertyGroup Condition="'$(Platforms)' == ''">
+    <Platforms>x64;ARM64</Platforms>
+  </PropertyGroup>
+
+  <!-- Default Platform to the current machine architecture so that
+       dotnet build / dotnet watch work without -p:Platform=ARM64.
+       Library projects override Platform to AnyCPU in their .csproj. -->
+  <PropertyGroup Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">
+    <Platform Condition="'$(PROCESSOR_ARCHITECTURE)' == 'ARM64'">ARM64</Platform>
+    <Platform Condition="'$(PROCESSOR_ARCHITECTURE)' != 'ARM64'">x64</Platform>
+  </PropertyGroup>
 
 </Project>

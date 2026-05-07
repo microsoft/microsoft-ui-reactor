@@ -1,17 +1,5 @@
 <Project>
 
-  <!-- Default RuntimeIdentifier for Windows-targeted projects so that
-       AnyCPU builds automatically get the correct native Windows App SDK
-       assets.  When Platform is concrete (x64/ARM64), the SDK resolves
-       native assets from Platform directly and no RID is needed.
-       Placed in .targets so TargetFramework is already resolved. -->
-  <PropertyGroup Condition="'$(RuntimeIdentifier)' == ''
-                            and ('$(Platform)' == '' or '$(Platform)' == 'AnyCPU' or '$(Platform)' == 'Any CPU')
-                            and $([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">
-    <RuntimeIdentifier Condition="'$(PROCESSOR_ARCHITECTURE)' == 'ARM64'">win-arm64</RuntimeIdentifier>
-    <RuntimeIdentifier Condition="'$(PROCESSOR_ARCHITECTURE)' != 'ARM64'">win-x64</RuntimeIdentifier>
-  </PropertyGroup>
-
   <!-- Enable AOT compatibility analysis on all projects except Roslyn
        analyzers / source-generators (netstandard2.0). Placed in .targets
        so that TargetFramework from the project file is already resolved. -->

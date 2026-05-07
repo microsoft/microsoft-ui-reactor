@@ -106,7 +106,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore Reactor.sln
+        run: dotnet restore Reactor.slnx
 
       - name: Build
-        run: dotnet build Reactor.sln --no-restore --configuration Release
+        run: dotnet build Reactor.slnx --no-restore --configuration Release

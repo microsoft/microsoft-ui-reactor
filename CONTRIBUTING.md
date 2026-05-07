@@ -36,10 +36,10 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 
 ```bash
 # Restore packages (pulls experimental WinUI 3 from NuGet)
-dotnet restore Reactor.sln
+dotnet restore Reactor.slnx
 
 # Build the entire solution (framework, tests, test app, samples)
-dotnet build Reactor.sln
+dotnet build Reactor.slnx
 
 # Build just the framework
 dotnet build src/Reactor/Reactor.csproj
@@ -47,15 +47,15 @@ dotnet build src/Reactor/Reactor.csproj
 
 ### From Visual Studio
 
-1. Open `Reactor.sln` in Visual Studio 2022 (17.8+)
-2. Select the **Any CPU**, **x64**, or **ARM64** platform from the toolbar
+1. Open `Reactor.slnx` in Visual Studio 2022 (17.8+)
+2. Select the **x64** or **ARM64** platform from the toolbar
 3. Build the solution (Ctrl+Shift+B)
 
 Visual Studio will restore NuGet packages on first load, pulling the experimental Windows App SDK.
 
 ### Platforms
 
-The solution defaults to `AnyCPU`. Architecture-specific native assets (Windows App SDK) are resolved automatically via `RuntimeIdentifier` in `Directory.Build.targets`. You can still force a platform with `-p:Platform=x64` or `-p:Platform=ARM64` if needed.
+Application projects (samples, tests, CLI) target `x64` and `ARM64`. The default platform matches the current machine architecture. Library projects (`Reactor`, `Reactor.Interop.WinForms`) are architecture-neutral (`AnyCPU`).
 
 ---
 

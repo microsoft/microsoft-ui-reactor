@@ -91,10 +91,10 @@ jobs:
           Write-Host "Version: $version  (event=$eventName, isTag=$isTag)"
 
       - name: Restore
-        run: dotnet restore Reactor.sln
+        run: dotnet restore Reactor.slnx
 
       - name: Build framework + analyzers
-        run: dotnet build Reactor.sln --no-restore --configuration Release
+        run: dotnet build Reactor.slnx --no-restore --configuration Release
 
       - name: Pack framework NuGet
         run: >

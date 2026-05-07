@@ -190,8 +190,8 @@ class App : Component
 
 ```bash
 # Restore and build
-dotnet restore Reactor.sln
-dotnet build Reactor.sln
+dotnet restore Reactor.slnx
+dotnet build Reactor.slnx
 
 # Run the interactive demo app
 dotnet run --project samples/Reactor.TestApp
