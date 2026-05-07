@@ -494,6 +494,20 @@ public sealed class ReactorHost : IDisposable
     private void Render()
     {
         _isRendering = true;
+        // Atomic capture-and-clear gives us at-most-once recovery per
+        // UpdateApplication call — see the matching block in
+        // ReactorHostControl.Render() for the full rationale.
+        bool hotReloadRender = HotReloadService.ConsumeUpdatePending();
+
+        void RecoverFromHookOrder(HookOrderException ex, RenderContext ctx, string mode)
+        {
+            _logger?.LogWarning(ex,
+                "Hot reload: hook order/type changed — resetting {Mode} state and re-rendering",
+                mode);
+            ctx.ResetForHotReload();
+            RequestRender();
+        }
+
         try
         {
             Element? newTree = null;
@@ -523,6 +537,11 @@ public sealed class ReactorHost : IDisposable
                 {
                     newTree = _rootComponent.Render();
                 }
+                catch (HookOrderException ex) when (hotReloadRender)
+                {
+                    RecoverFromHookOrder(ex, _rootComponent.Context, "component");
+                    return;
+                }
                 catch (Exception ex)
                 {
                     _logger?.LogError(ex, "Component Render() threw");
@@ -536,6 +555,11 @@ public sealed class ReactorHost : IDisposable
                 try
                 {
                     newTree = _rootRenderFunc(_funcContext);
+                }
+                catch (HookOrderException ex) when (hotReloadRender)
+                {
+                    RecoverFromHookOrder(ex, _funcContext, "function-component");
+                    return;
                 }
                 catch (Exception ex)
                 {
