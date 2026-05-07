@@ -66,10 +66,11 @@
     <ProjectReference Include="..\Reactor.Localization.Generator\Reactor.Localization.Generator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
-    <!-- Reactor.Analyzers is NOT a ProjectReference here — we don't want its
-         rules running on the framework itself, only on consumer code. The
-         release workflow builds Reactor.sln first, so the analyzer DLL exists
-         before pack runs (see <None Include> below). -->
+    <ProjectReference Include="..\Reactor.Analyzers\Reactor.Analyzers.csproj"
+                      ReferenceOutputAssembly="false" />
+    <!-- Reactor.Analyzers is not referenced as an analyzer here — we don't want its
+         rules running on the framework itself, only on consumer code, but it's a dependency 
+         in order to pack the analyzer's output -->
   </ItemGroup>
 
   <!-- Bundle the analyzer + source-generator DLLs into the framework package
@@ -85,17 +86,6 @@
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
   </ItemGroup>
-
-  <Target Name="AssertAnalyzerDllsExist" BeforeTargets="Pack">
-    <PropertyGroup>
-      <_ReactorAnalyzersDll>..\Reactor.Analyzers\bin\$(Configuration)\netstandard2.0\Reactor.Analyzers.dll</_ReactorAnalyzersDll>
-      <_ReactorLocGenDll>..\Reactor.Localization.Generator\bin\$(Configuration)\netstandard2.0\Reactor.Localization.Generator.dll</_ReactorLocGenDll>
-    </PropertyGroup>
-    <Error Condition="!Exists('$(_ReactorAnalyzersDll)')"
-           Text="Reactor.Analyzers.dll not found at $(_ReactorAnalyzersDll). Run 'dotnet build Reactor.sln -c $(Configuration)' before 'dotnet pack' so the analyzer assemblies exist for bundling." />
-    <Error Condition="!Exists('$(_ReactorLocGenDll)')"
-           Text="Reactor.Localization.Generator.dll not found at $(_ReactorLocGenDll). Run 'dotnet build Reactor.sln -c $(Configuration)' before 'dotnet pack'." />
-  </Target>
 
   <!-- ═══════════════════════════════════════════════════════════════════
        Localization — .resw files fed to the source generator
