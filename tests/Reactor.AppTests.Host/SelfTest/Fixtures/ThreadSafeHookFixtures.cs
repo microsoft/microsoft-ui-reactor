@@ -1,3 +1,4 @@
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
@@ -260,9 +261,14 @@ internal static class ThreadSafeHookFixtures
     // ════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Verifies that rapid setState calls coalesce into far fewer actual renders.
-    /// A component tracks its render count via UseRef. After 1000 rapid setState
-    /// calls, the render count should be much less than 1000.
+    /// Verifies that rapid background-thread setState calls coalesce into fewer
+    /// renders than calls. The CAS gate in RequestRender promises "at most one
+    /// RenderLoop pending at a time" — it does not promise N calls → ~1 render
+    /// when the producer runs in parallel with an idle UI thread, because the
+    /// UI thread can drain RenderLoop between each setState. Under that worst
+    /// case (multi-core CI runner, no real WinUI work to keep the UI thread
+    /// busy), coalescing ratio drops to ~50%. The strict-coalescing invariant
+    /// is tested by the sibling RenderCoalescingDispatcherBatch fixture.
     /// </summary>
     internal class RenderCoalescing(Harness h) : SelfTestFixtureBase(h)
     {
@@ -287,9 +293,10 @@ internal static class ThreadSafeHookFixtures
             H.Check("Coalesce_Initial", H.FindText("Value: 0") is not null);
 
             // Fire 1000 setState calls as fast as possible from one thread
+            const int writes = 1000;
             await Task.Run(() =>
             {
-                for (int i = 1; i <= 1000; i++)
+                for (int i = 1; i <= writes; i++)
                     setValue!(i);
             });
 
@@ -297,17 +304,78 @@ internal static class ThreadSafeHookFixtures
 
             H.Check("Coalesce_FinalValue", H.FindText("Value: 1000") is not null);
 
-            // Render count should be far less than 1000 due to coalescing.
-            // Threshold is loose (1/5 of writes) to tolerate scheduler interleaving
-            // on CI runners where the UI thread can sneak in renders between
-            // background-thread setState calls; full coalescing on a quiet machine
-            // produces ~2 renders.
+            // Honest threshold: renders < writes proves *some* coalescing happened
+            // (a totally broken gate would give renders == writes). The "strict"
+            // invariant — many calls collapse to ~1 render — only holds when the
+            // producer cannot be interleaved with RenderLoop, which is what the
+            // sibling RenderCoalescingDispatcherBatch fixture verifies.
             var renderText = H.FindControl<TextBlock>(tb =>
                 tb.Text?.StartsWith("Renders:") == true);
             if (renderText is not null)
             {
                 var renders = int.Parse(renderText.Text.Replace("Renders: ", ""));
-                H.Check($"Coalesce_FarFewerRenders (renders={renders})", renders < 200);
+                H.Check($"Coalesce_FewerRendersThanWrites (renders={renders}, writes={writes})", renders < writes);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Strict render coalescing: setStates inside one dispatcher block
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Strict-coalescing complement to RenderCoalescing. Fires 1000 setState
+    /// calls from inside a single DispatcherQueue.TryEnqueue block on the UI
+    /// thread. Because the UI thread is busy executing the loop, RenderLoop
+    /// cannot drain between calls — every setState after the first finds the
+    /// CAS gate held and is coalesced. Verifies the actual invariant the
+    /// production gate is designed for: a burst of setStates that arrive
+    /// faster than RenderLoop drains collapses to ~1 follow-up render.
+    /// </summary>
+    internal class RenderCoalescingDispatcherBatch(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            Action<int>? setValue = null;
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (value, set) = ctx.UseState(0, threadSafe: true);
+                var renderCount = ctx.UseRef(0);
+                renderCount.Current++;
+                setValue = set;
+                return VStack(
+                    TextBlock($"Value: {value}"),
+                    TextBlock($"Renders: {renderCount.Current}")
+                );
+            });
+
+            await Harness.Render();
+            H.Check("CoalesceBatch_Initial", H.FindText("Value: 0") is not null);
+
+            const int writes = 1000;
+            var dq = DispatcherQueue.GetForCurrentThread();
+            var done = new TaskCompletionSource();
+            dq.TryEnqueue(() =>
+            {
+                for (int i = 1; i <= writes; i++) setValue!(i);
+                done.SetResult();
+            });
+            await done.Task;
+            await Harness.Render();
+
+            H.Check("CoalesceBatch_FinalValue", H.FindText("Value: 1000") is not null);
+
+            // Strict bound: 1000 writes inside one dispatcher block cannot
+            // schedule more than a handful of renders. Allow a small margin
+            // for any _needsRerender → re-enqueue paths after Render() drains.
+            var renderText = H.FindControl<TextBlock>(tb =>
+                tb.Text?.StartsWith("Renders:") == true);
+            if (renderText is not null)
+            {
+                var renders = int.Parse(renderText.Text.Replace("Renders: ", ""));
+                H.Check($"CoalesceBatch_StrictCoalescing (renders={renders}, writes={writes})", renders <= 5);
             }
         }
     }

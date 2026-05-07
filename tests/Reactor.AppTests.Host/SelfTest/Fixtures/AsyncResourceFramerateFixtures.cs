@@ -72,6 +72,15 @@ internal static class AsyncResourceFramerateFixtures
                             {
                                 ct.Register(() => Interlocked.Increment(ref cancelled));
                                 await Task.Delay(200, ct);
+                                // Close the race where Task.Delay's 200ms timer
+                                // fires almost simultaneously with cancellation:
+                                // Task.Delay can complete normally (timer wins
+                                // the atomic result-set) even though Cancel()
+                                // was called, leaving the await to resume and
+                                // increment `completed` for a fetch the hook
+                                // will correctly discard. Re-checking the CT
+                                // after the await observes the cancellation.
+                                ct.ThrowIfCancellationRequested();
                                 Interlocked.Increment(ref completed);
                                 return $"dep={dep}";
                             }
