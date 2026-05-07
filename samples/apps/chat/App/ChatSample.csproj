@@ -3,7 +3,6 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
-    <Platforms>x64;ARM64</Platforms>
     <RootNamespace>ChatSample.App</RootNamespace>
     <AssemblyName>ChatSample</AssemblyName>
     <Product>Chat Sample</Product>

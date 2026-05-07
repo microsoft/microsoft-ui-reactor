@@ -39,23 +39,23 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 dotnet restore Reactor.sln
 
 # Build the entire solution (framework, tests, test app, samples)
-dotnet build Reactor.sln -p:Platform=x64
+dotnet build Reactor.sln
 
 # Build just the framework
-dotnet build src/Reactor/Reactor.csproj -p:Platform=x64
+dotnet build src/Reactor/Reactor.csproj
 ```
 
 ### From Visual Studio
 
 1. Open `Reactor.sln` in Visual Studio 2022 (17.8+)
-2. Select the **x64** or **ARM64** platform from the toolbar (not "Any CPU")
+2. Select the **Any CPU**, **x64**, or **ARM64** platform from the toolbar
 3. Build the solution (Ctrl+Shift+B)
 
 Visual Studio will restore NuGet packages on first load, pulling the experimental Windows App SDK.
 
 ### Platforms
 
-The solution targets `x64` and `ARM64`. Omit `-p:Platform=...` to use the default (ARM64 on ARM machines, x64 on Intel). Add `-p:Platform=ARM64` or `-p:Platform=x64` to force one.
+The solution defaults to `AnyCPU`. Architecture-specific native assets (Windows App SDK) are resolved automatically via `RuntimeIdentifier` in `Directory.Build.targets`. You can still force a platform with `-p:Platform=x64` or `-p:Platform=ARM64` if needed.
 
 ---
 
@@ -201,7 +201,7 @@ Replace `$(RuntimeIdentifier)` with `ARM64` or `x64`, or omit the platform segme
 The interactive demo app exercises every built-in control:
 
 ```bash
-dotnet run --project samples/Reactor.TestApp -p:Platform=x64
+dotnet run --project samples/Reactor.TestApp
 ```
 
 ---

@@ -4,7 +4,6 @@
     <RootNamespace>Microsoft.UI.Reactor.AppTests</RootNamespace>
     <AssemblyName>Reactor.AppTests</AssemblyName>
     <IsTestProject>true</IsTestProject>
-    <Platforms>x64;ARM64</Platforms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
