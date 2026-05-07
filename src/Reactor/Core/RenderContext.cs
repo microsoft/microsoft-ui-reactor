@@ -70,7 +70,7 @@ public sealed class RenderContext
         _hookIndex++;
 
         if (_hooks[currentIndex] is not ValueHookState<T> hook)
-            throw new InvalidOperationException(
+            throw new HookOrderException(
                 $"Hook at index {currentIndex} is {_hooks[currentIndex].GetType().Name}, expected ValueHookState<{typeof(T).Name}> (UseState). " +
                 "Hooks must be called in the same order every render.");
 
@@ -129,7 +129,7 @@ public sealed class RenderContext
         _hookIndex++;
 
         if (_hooks[currentIndex] is not ValueHookState<T> hook)
-            throw new InvalidOperationException(
+            throw new HookOrderException(
                 $"Hook at index {currentIndex} is {_hooks[currentIndex].GetType().Name}, expected ValueHookState<{typeof(T).Name}> (UseReducer). " +
                 "Hooks must be called in the same order every render.");
 
@@ -194,7 +194,7 @@ public sealed class RenderContext
         _hookIndex++;
 
         if (_hooks[currentIndex] is not ValueHookState<TState> hook)
-            throw new InvalidOperationException(
+            throw new HookOrderException(
                 $"Hook at index {currentIndex} is {_hooks[currentIndex].GetType().Name}, expected ValueHookState<{typeof(TState).Name}> (UseReducer). " +
                 "Hooks must be called in the same order every render.");
 
@@ -248,7 +248,7 @@ public sealed class RenderContext
         }
 
         if (_hooks[_hookIndex] is not EffectHookState hook)
-            throw new InvalidOperationException(
+            throw new HookOrderException(
                 $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected EffectHookState. " +
                 "Hooks must be called in the same order every render.");
         _hookIndex++;
@@ -274,7 +274,7 @@ public sealed class RenderContext
         }
 
         if (_hooks[_hookIndex] is not EffectHookState hook)
-            throw new InvalidOperationException(
+            throw new HookOrderException(
                 $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected EffectHookState. " +
                 "Hooks must be called in the same order every render.");
         _hookIndex++;
@@ -300,7 +300,7 @@ public sealed class RenderContext
         }
 
         if (_hooks[_hookIndex] is not MemoHookState<T> hook)
-            throw new InvalidOperationException(
+            throw new HookOrderException(
                 $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected MemoHookState<{typeof(T).Name}>. " +
                 "Hooks must be called in the same order every render.");
         _hookIndex++;
@@ -336,7 +336,7 @@ public sealed class RenderContext
         _hookIndex++;
 
         if (_hooks[currentIndex] is not ValueHookState<Ref<T>> hook)
-            throw new InvalidOperationException(
+            throw new HookOrderException(
                 $"Hook at index {currentIndex} expected ValueHookState<Ref<{typeof(T).Name}>>, got {_hooks[currentIndex].GetType().Name}. " +
                 "Hooks must be called in the same order every render.");
         return hook.Value;
@@ -386,7 +386,7 @@ public sealed class RenderContext
         _hookIndex++;
 
         if (_hooks[currentIndex] is not PersistedHookState<T> hook)
-            throw new InvalidOperationException(
+            throw new HookOrderException(
                 $"Hook at index {currentIndex} is {_hooks[currentIndex].GetType().Name}, expected PersistedHookState<{typeof(T).Name}> (UsePersisted). " +
                 "Hooks must be called in the same order every render.");
 
@@ -593,7 +593,7 @@ public sealed class RenderContext
         }
 
         if (_hooks[_hookIndex] is not NavigationLifecycleHookState hook)
-            throw new InvalidOperationException(
+            throw new HookOrderException(
                 $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected NavigationLifecycleHookState. " +
                 "Hooks must be called in the same order every render.");
         _hookIndex++;
@@ -636,7 +636,7 @@ public sealed class RenderContext
         }
 
         if (_hooks[_hookIndex] is not ContextHookState hook)
-            throw new InvalidOperationException(
+            throw new HookOrderException(
                 $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected ContextHookState (UseContext). " +
                 "Hooks must be called in the same order every render.");
         _hookIndex++;
@@ -1031,6 +1031,23 @@ public sealed class RenderContext
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Hot Reload recovery: run effect cleanups and discard the entire hook
+    /// list so the next BeginRender starts with a fresh hook sequence. Used
+    /// by the host when a HookOrderException surfaces during a hot-reload-
+    /// triggered render — an edit that reorders or changes hook types is
+    /// the expected outcome of a developer change, so we trade away state
+    /// (which we cannot reliably re-key onto a new hook shape) to keep the
+    /// dev loop alive instead of leaving the user staring at an error
+    /// fallback.
+    /// </summary>
+    internal void ResetForHotReload()
+    {
+        RunCleanups();
+        _hooks.Clear();
+        _hookIndex = 0;
     }
 
     private static bool DepsEqual(object[] prev, object[] next)

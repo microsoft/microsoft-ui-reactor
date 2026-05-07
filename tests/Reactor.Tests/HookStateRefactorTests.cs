@@ -238,7 +238,7 @@ public class HookStateRefactorTests
 
         // Second render: try to call UseEffect where UseState was — should throw
         ctx.BeginRender(() => { });
-        var ex = Assert.Throws<InvalidOperationException>(() => ctx.UseEffect(() => { }, "dep"));
+        var ex = Assert.Throws<HookOrderException>(() => ctx.UseEffect(() => { }, "dep"));
         Assert.Contains("ValueHookState", ex.Message);
     }
 
@@ -255,9 +255,66 @@ public class HookStateRefactorTests
 
         // Second render: UseState where UseEffect was — should throw
         ctx.BeginRender(() => { });
-        var ex = Assert.Throws<InvalidOperationException>(() => ctx.UseState(0));
+        var ex = Assert.Throws<HookOrderException>(() => ctx.UseState(0));
         Assert.Contains("EffectHookState", ex.Message);
         Assert.Contains("ValueHookState", ex.Message);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Hot Reload recovery: ResetForHotReload clears state + cleanups
+    //  so a render after a hook-order break can succeed
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ResetForHotReload_RunsCleanups_And_ClearsHooks_So_Next_Render_Sees_Fresh_Sequence()
+    {
+        var ctx = new RenderContext();
+        bool cleanupRan = false;
+
+        // Render 1 (pre-edit): UseState + UseEffect with cleanup.
+        ctx.BeginRender(() => { });
+        ctx.UseState(42);
+        ctx.UseEffect(() => () => cleanupRan = true, "dep");
+        ctx.FlushEffects();
+
+        // Render 2 (post-edit): the developer reordered hooks. Calling
+        // UseEffect at index 0 (where UseState lived) throws.
+        ctx.BeginRender(() => { });
+        Assert.Throws<HookOrderException>(() => ctx.UseEffect(() => { }, "dep"));
+
+        // Hot reload recovery: cleanups run, hook list reset.
+        ctx.ResetForHotReload();
+        Assert.True(cleanupRan, "Effect cleanup should run during ResetForHotReload");
+
+        // Render 3 (recovery): the new hook order is accepted as if first
+        // mount — UseEffect-then-UseState now works because the hook list
+        // starts empty. State is lost (the 42 from render 1), which is the
+        // documented trade-off.
+        ctx.BeginRender(() => { });
+        ctx.UseEffect(() => { }, "dep");
+        var (value, _) = ctx.UseState(0);
+        Assert.Equal(0, value);
+    }
+
+    [Fact]
+    public void ResetForHotReload_Allows_Different_Hook_Type_At_Same_Index()
+    {
+        var ctx = new RenderContext();
+
+        // Render 1: UseState<int>.
+        ctx.BeginRender(() => { });
+        ctx.UseState(7);
+
+        // Render 2: developer changed UseState<int> to UseState<string>.
+        // Same hook *kind* but different generic — different ValueHookState<T>.
+        ctx.BeginRender(() => { });
+        Assert.Throws<HookOrderException>(() => ctx.UseState("hello"));
+
+        // After recovery the new shape works.
+        ctx.ResetForHotReload();
+        ctx.BeginRender(() => { });
+        var (s, _) = ctx.UseState("hello");
+        Assert.Equal("hello", s);
     }
 
     // ════════════════════════════════════════════════════════════════

@@ -42,7 +42,7 @@ public static partial class Factories
     /// component via <c>ctx.UseObservable(flag)</c>.
     /// </summary>
     public static Element DevtoolsMenu(
-        Func<IEnumerable<MenuFlyoutItemBase>> items,
+        Func<IEnumerable<MenuFlyoutItemBase>>? items = null,
         string glyph = "⚡",
         string toolTip = "Devtools",
         string? automationId = null)

@@ -154,7 +154,7 @@ public class NavigationLifecycleTests
 
         // Second render: try UseNavigationLifecycle at UseState's index
         ctx.BeginRender(() => { });
-        Assert.Throws<InvalidOperationException>(() => ctx.UseNavigationLifecycle());
+        Assert.Throws<HookOrderException>(() => ctx.UseNavigationLifecycle());
     }
 
     // ════════════════════════════════════════════════════════════════
