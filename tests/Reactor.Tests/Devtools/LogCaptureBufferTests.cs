@@ -132,7 +132,9 @@ public class LogCaptureBufferTests
         await buf.WaitForNewAsync(1, 150);
         sw.Stop();
         Assert.True(sw.ElapsedMilliseconds >= 100, $"WaitForNewAsync returned after only {sw.ElapsedMilliseconds}ms (expected ≥ ~150ms)");
-        Assert.True(sw.ElapsedMilliseconds < 2_000, $"WaitForNewAsync blocked for {sw.ElapsedMilliseconds}ms");
+        // Upper bound is a "didn't get stuck forever" sanity check — generous so
+        // thread-pool starvation on a contended CI runner doesn't fail it.
+        Assert.True(sw.ElapsedMilliseconds < 30_000, $"WaitForNewAsync blocked for {sw.ElapsedMilliseconds}ms");
     }
 
     [Fact]

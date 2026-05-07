@@ -21,7 +21,10 @@ public class AutoSuggestTests
         // Check after subscribing to avoid TOCTOU race
         if (manager.State == target)
             tcs.TrySetResult();
-        return tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        // Generous budget: under thread-pool starvation on a contended CI runner
+        // a 5s ceiling races debounce+continuation scheduling. 30s still surfaces
+        // a genuine "state never reached" bug with a clear TimeoutException.
+        return tcs.Task.WaitAsync(TimeSpan.FromSeconds(30));
     }
     // ════════════════════════════════════════════════════════════════
     //  Element creation

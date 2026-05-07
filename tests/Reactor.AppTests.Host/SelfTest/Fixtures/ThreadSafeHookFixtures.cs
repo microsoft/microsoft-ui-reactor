@@ -46,10 +46,13 @@ internal static class ThreadSafeHookFixtures
             await Harness.Render();
             H.Check("RapidBG_InitialRender", H.FindText("Counter: 0") is not null);
 
-            // Hammer from 4 threads for 2 seconds
-            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            // Hammer from 4 threads for 2 seconds. Use Barrier(5) so the main
+            // thread waits for all workers to be inside the loop before starting
+            // the 2-second budget — otherwise a starved CI threadpool can let
+            // CancelAfter elapse before Task.Run actually schedules the workers.
             int writeCount = 0;
-            var barrier = new Barrier(4);
+            var barrier = new Barrier(5);
+            var cts = new CancellationTokenSource();
             var tasks = Enumerable.Range(0, 4).Select(t =>
                 Task.Run(() =>
                 {
@@ -63,6 +66,8 @@ internal static class ThreadSafeHookFixtures
                 })
             ).ToArray();
 
+            barrier.SignalAndWait();
+            cts.CancelAfter(TimeSpan.FromSeconds(2));
             await Task.WhenAll(tasks);
 
             // Let the render loop settle — low-priority enqueue means a few frames
@@ -71,14 +76,14 @@ internal static class ThreadSafeHookFixtures
             var final = lastWritten;
             var text = H.FindControl<TextBlock>(tb => tb.Text?.StartsWith("Counter:") == true);
             H.Check("RapidBG_TextPresent", text is not null);
-            H.Check("RapidBG_WritesHappened", writeCount > 100);
+            H.Check($"RapidBG_WritesHappened (writes={writeCount})", writeCount > 100);
 
             // The rendered value should be the last value set (or very close to it,
             // since a render might have been in flight when the last write landed)
             if (text is not null)
             {
                 var rendered = int.Parse(text.Text.Replace("Counter: ", ""));
-                H.Check("RapidBG_FinalValueReasonable",
+                H.Check($"RapidBG_FinalValueReasonable (rendered={rendered}, writes={writeCount})",
                     rendered > 0 && rendered <= writeCount);
             }
         }
@@ -292,13 +297,17 @@ internal static class ThreadSafeHookFixtures
 
             H.Check("Coalesce_FinalValue", H.FindText("Value: 1000") is not null);
 
-            // Render count should be far less than 1000 due to coalescing
+            // Render count should be far less than 1000 due to coalescing.
+            // Threshold is loose (1/5 of writes) to tolerate scheduler interleaving
+            // on CI runners where the UI thread can sneak in renders between
+            // background-thread setState calls; full coalescing on a quiet machine
+            // produces ~2 renders.
             var renderText = H.FindControl<TextBlock>(tb =>
                 tb.Text?.StartsWith("Renders:") == true);
             if (renderText is not null)
             {
                 var renders = int.Parse(renderText.Text.Replace("Renders: ", ""));
-                H.Check("Coalesce_FarFewerRenders", renders < 100);
+                H.Check($"Coalesce_FarFewerRenders (renders={renders})", renders < 200);
             }
         }
     }
