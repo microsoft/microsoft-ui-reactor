@@ -104,6 +104,14 @@ jobs:
           -p:Platform=x64
           -o artifacts/nupkg
 
+      - name: Pack Templates
+        run: >
+          dotnet pack tools\Templates\Microsoft.UI.Reactor.Templates.csproj
+          --no-build --configuration Release
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:Platform=AnyCPU
+          -o artifacts/nupkg
+
       # Framework-dependent: the consumer's machine supplies the .NET 10
       # runtime — saves ~70 MB per RID. install-skill-kit.ps1 checks for it
       # and errors out with an install hint if it's missing. See spec 022 §6.
