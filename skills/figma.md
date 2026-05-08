@@ -35,16 +35,20 @@ Translate Figma designs built with the [Windows UI Kit (Community)](https://www.
 
 For iterating alongside a designer making live edits in Figma:
 
-1. Agent starts `mur figma watch <figma-url> --interval 10` as a background process
-2. The watch command polls the Figma REST API `lastModified` timestamp
-3. When a change is detected, it emits a JSON event to stdout:
+1. Ensure `FIGMA_API_KEY` is set (same token as the Figma MCP server)
+2. Agent starts the watch as a background shell process:
+   ```bash
+   mur figma watch "<figma-url>" --interval 10
+   ```
+3. The watch command polls the Figma REST API `lastModified` timestamp
+4. When a change is detected, it emits a JSON event to stdout:
    ```json
    {"event":"changed","fileKey":"abc123","nodeId":"29792:125378","fileName":"My Design","lastModified":"2026-05-08T10:30:00Z"}
    ```
-4. Agent reads the event and re-fetches design data via the Figma MCP `get_figma_data` tool
-5. Agent diffs the new tree against the previously generated code
-6. Agent applies targeted edits (text, spacing, sizing) or regenerates as needed
-7. `dotnet watch` / `mur devtools reload` picks up the code changes
+5. Agent reads the event and re-fetches design data via the Figma MCP `get_figma_data` tool using the `figmaUrl` from the event
+6. Agent diffs the new tree against the previously generated code
+7. Agent applies targeted edits (text, spacing, sizing) or regenerates as needed
+8. `dotnet watch` picks up the code changes and hot-reloads the app
 
 **No bridge server, no open ports, no Figma plugin required.** Authentication
 uses the same `FIGMA_API_KEY` token as the Figma MCP server.
