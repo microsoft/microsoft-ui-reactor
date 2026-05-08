@@ -192,13 +192,14 @@
       var csproj = getCsprojPath();
       var name = getProjectName();
 
-      // Build the copilot CLI command
+      // Build the prompt — reference skills for accurate translation
       var prompt;
       if (isNewProject()) {
         prompt = 'Create a new Reactor app called ' + name +
           ' using mur --create ' + name +
           ', then translate this Figma design into it: ' + url +
-          '. After generating the code, run: dotnet watch run --project ' + csproj;
+          '. Read the skills/figma.md and skills/design.md files in the repo for translation rules, theme tokens, typography, and layout patterns.' +
+          ' After generating the code, run: dotnet watch run --project ' + csproj;
       } else {
         if (!csproj) {
           showToast('Set the project path first');
@@ -206,19 +207,23 @@
         }
         prompt = 'Translate this Figma design into Reactor code: ' + url +
           '. Write the output to the project at ' + csproj +
-          '. After generating, run: dotnet watch run --project ' + csproj;
+          '. Read the skills/figma.md and skills/design.md files in the repo for translation rules, theme tokens, typography, and layout patterns.' +
+          ' After generating, run: dotnet watch run --project ' + csproj;
       }
 
-      var cmd = 'copilot -p "' + prompt.replace(/"/g, '\\"') + '"';
+      // Build a PowerShell command that opens a new terminal window and runs copilot
+      var escaped = prompt.replace(/'/g, "''");
+      var cmd = "Start-Process pwsh -ArgumentList '-NoExit','-Command','copilot -p ''" + escaped + "'''";
       copyToClipboard(cmd);
-      showToast('Copilot command copied — paste in terminal');
+      showToast('Paste in any terminal to launch Copilot');
     }
 
     function copyRunCmd() {
       var csproj = getCsprojPath();
       if (csproj) {
-        copyToClipboard('dotnet watch run --project ' + csproj);
-        showToast('Run command copied');
+        var cmd = "Start-Process pwsh -ArgumentList '-NoExit','-Command','dotnet watch run --project " + csproj + "'";
+        copyToClipboard(cmd);
+        showToast('Paste in terminal to launch app');
       }
     }
 
