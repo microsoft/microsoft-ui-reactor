@@ -51,7 +51,17 @@ public sealed class ReactorTrayIcon : IDisposable
         {
             ArgumentNullException.ThrowIfNull(value);
             ThreadAffinity.ThrowIfNotOnUIThread(nameof(Icon));
+            if (ReferenceEquals(_spec.Icon, value)) return;
             _spec = _spec with { Icon = value };
+            // Drop the cached HICON so ApplyToShell reloads from the new
+            // source. ApplyToShell only refreshes when _hIcon == 0 or on
+            // NIM_ADD, so without this the tray would keep showing the old
+            // bitmap on a NIM_MODIFY.
+            if (_hIcon != 0)
+            {
+                try { TrayIconComInterop.DestroyIcon(_hIcon); } catch { }
+                _hIcon = 0;
+            }
             ApplyToShell(TrayIconComInterop.NIM_MODIFY);
         }
     }

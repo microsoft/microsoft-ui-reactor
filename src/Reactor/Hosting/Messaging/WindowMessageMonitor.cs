@@ -176,9 +176,19 @@ internal sealed class WindowMessageMonitor : IDisposable
 
     ~WindowMessageMonitor()
     {
-        // Finalizer fallback — best effort. The static WndProc resolves a
-        // weak-reference GCHandle so a missed Dispose just makes the events
-        // stop firing rather than leaking unmanaged state for long.
+        // Finalizer fallback — best effort. The subclass MUST come off before
+        // we free the GCHandle, or COMCTL32 will keep dispatching messages
+        // through SubclassProcStatic with a freed dwRefData and the static
+        // WndProc will dereference a stale handle (use-after-free).
+        unsafe
+        {
+            if (_subclassed)
+            {
+                try { RemoveWindowSubclass(_hwnd, &SubclassProcStatic, _subclassId); }
+                catch { /* best effort — HWND may already be destroyed */ }
+                _subclassed = false;
+            }
+        }
         if (_selfHandle.IsAllocated)
             _selfHandle.Free();
     }

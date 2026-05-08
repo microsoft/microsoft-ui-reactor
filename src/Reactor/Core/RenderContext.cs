@@ -949,19 +949,24 @@ public sealed class RenderContext
     }
 
     /// <summary>
-    /// Parameterless overload — resolves the current host's window via
-    /// <c>ReactorHost.OwningWindow.NativeWindow</c> and re-renders on resize.
-    /// Returns <c>(0, 0)</c> when called outside a window (e.g. tray-flyout
-    /// content). (spec 036 §5.2 / §7.1)
+    /// Parameterless overload — resolves the current host's window via the
+    /// active host's back-pointer and re-renders on resize. Returns
+    /// <c>(0, 0)</c> when called outside a window (e.g. tray-flyout content);
+    /// no implicit fallback to <c>PrimaryWindow</c>. (spec 036 §5.2 / §7.1)
     /// </summary>
     public (double Width, double Height) UseWindowSize()
     {
-        var owningWindow = Microsoft.UI.Reactor.ReactorApp.PrimaryWindow;
-        // Resolve the current host's owning window via the active host's
-        // back-pointer. The render-time host has been routed via
-        // ReactorApp.ActiveHostInternal during the OpenWindowCore path.
-        var hostWindow = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow ?? owningWindow;
-        if (hostWindow is null) { _ = UseState(0); return (0, 0); }
+        var hostWindow = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        if (hostWindow is null)
+        {
+            // Reserve the same hook slots as the live branch (UseState +
+            // UseEffect) and use the same tuple-shaped state so a render that
+            // crosses the no-window → window transition doesn't trip the
+            // hook-state type check.
+            _ = UseState((0.0, 0.0));
+            UseEffect(() => { /* no-op */ }, this);
+            return (0, 0);
+        }
         return UseWindowSize(hostWindow.NativeWindow);
     }
 
@@ -1247,12 +1252,14 @@ public sealed class RenderContext
         }
 
         // Component-scoped lifetime — close on unmount. UseEffect with
-        // empty deps runs once.
+        // empty deps runs once. Read the icon via handleRef inside the
+        // cleanup so a late-bound icon (e.g. UIDispatcher captured after the
+        // first render) still gets closed.
         UseEffect(() =>
         {
             return () =>
             {
-                try { icon?.Close(); } catch { /* best effort */ }
+                try { handleRef.Current?.Close(); } catch { /* best effort */ }
             };
         });
 

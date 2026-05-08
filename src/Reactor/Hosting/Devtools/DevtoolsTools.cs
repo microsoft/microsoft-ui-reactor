@@ -357,7 +357,20 @@ internal static class DevtoolsTools
                 var id = ReadString(@params, "id")
                     ?? throw new McpToolException("windows.close requires an 'id' argument.",
                         JsonRpcErrorCodes.InvalidParams);
-                return server.OnDispatcher<object>(() =>
+
+                // Window.Close() is async: AppWindow.Closing / Window.Closed
+                // pump after WM_CLOSE drains. Subscribe before invoking Close
+                // and wait briefly outside the dispatcher so the message pump
+                // can run; then resolve cancellation by what we observed plus
+                // a final registry check (a UseClosingGuard veto short-circuits
+                // before our Closing handler fires, so it falls through to the
+                // post-timeout still-open branch).
+                var doneTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var observedCancel = false;
+                EventHandler? onClosed = null;
+                EventHandler<WindowClosingEventArgs>? onClosing = null;
+
+                server.OnDispatcher(() =>
                 {
                     var rw = ctx.Windows.ResolveReactorWindow(id);
                     if (rw is null)
@@ -365,13 +378,33 @@ internal static class DevtoolsTools
                             $"Window '{id}' not found.",
                             JsonRpcErrorCodes.ToolExecution,
                             new { code = "unknown-window" });
+
+                    onClosed = (_, _) => doneTcs.TrySetResult(true);
+                    onClosing = (_, e) =>
+                    {
+                        // Reactor sets cea.Cancel synchronously inside
+                        // OnAppWindowClosing — by the time our (last-added)
+                        // handler runs it reflects the final decision.
+                        if (e.Cancel) { observedCancel = true; doneTcs.TrySetResult(true); }
+                    };
+                    rw.Closed += onClosed;
+                    rw.Closing += onClosing;
                     rw.Close();
-                    // Close() runs synchronously; if a guard cancelled, the
-                    // window is still in ReactorApp.Windows. Surface that as
-                    // a non-throwing structured result so MCP callers don't
-                    // hang waiting on a close that was vetoed.
-                    var stillOpen = ReactorApp.Windows.Contains(rw);
-                    return new { ok = !stillOpen, cancelled = stillOpen, id };
+                });
+
+                doneTcs.Task.Wait(2000);
+
+                return server.OnDispatcher<object>(() =>
+                {
+                    var rw = ctx.Windows.ResolveReactorWindow(id);
+                    if (rw is not null)
+                    {
+                        if (onClosed is not null) rw.Closed -= onClosed;
+                        if (onClosing is not null) rw.Closing -= onClosing;
+                    }
+                    var stillOpen = rw is not null;
+                    var cancelled = observedCancel || stillOpen;
+                    return new { ok = !cancelled, cancelled, id };
                 });
             });
     }
