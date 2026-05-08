@@ -6,62 +6,51 @@ using Xunit.Sdk;
 
 namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 
-public sealed class TemplatePackageSmokeTests : IDisposable
+public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmokeTestFixture>, IDisposable
 {
+    private readonly TemplatePackageSmokeTestFixture _fixture;
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"reactor-template-smoke-{Guid.NewGuid():N}");
 
-    public TemplatePackageSmokeTests()
+    public TemplatePackageSmokeTests(TemplatePackageSmokeTestFixture fixture)
     {
+        _fixture = fixture;
         Directory.CreateDirectory(_tempRoot);
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ReactorTemplatePackage_CanCreateBuildAndRunApp(bool useProgramMain)
+    public void RunTemplateScenario(bool useProgramMain)
     {
-        var repoRoot = FindRepoRoot();
-        var packageVersion = $"0.0.0-template-smoke-{Guid.NewGuid():N}";
-        var packageSourceDir = CreateDirectory("packages");
-        var nugetPackagesDir = CreateDirectory("nuget-global-packages");
-        var nugetHttpCacheDir = CreateDirectory("nuget-http-cache");
-        var dotnetCliHomeDir = CreateDirectory("dotnet-home");
-        var templateHiveDir = CreateDirectory("template-hive");
-        var runArchitecture = GetRunArchitecture();
-        var packPlatform = GetPackPlatform();
+        var scenarioName = useProgramMain ? "program-main" : "top-level";
+        var appDir = CreateDirectory($"generated-app-{scenarioName}");
+        var projectName = CreateProjectName(useProgramMain);
 
-        var commandEnvironment = CreateCommandEnvironment(dotnetCliHomeDir, nugetHttpCacheDir);
+        CreateNuGetConfig(appDir, _fixture.PackageSourceDir, _fixture.NugetPackagesDir, _fixture.CommandEnvironment);
 
         RunDotnet(
-            $"pack \"{Path.Combine(repoRoot, "src", "Reactor", "Reactor.csproj")}\" -c Release -o \"{packageSourceDir}\" -p:Version={packageVersion}",
-            repoRoot,
-            commandEnvironment,
-            timeoutMs: 300_000);
-
-        RunDotnet(
-            $"pack \"{Path.Combine(repoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" -c Release -o \"{packageSourceDir}\" -p:Version={packageVersion} -p:MicrosoftUIReactorVersion={packageVersion}",
-            repoRoot,
-            commandEnvironment,
+            $"new reactorapp --debug:custom-hive \"{_fixture.TemplateHiveDir}\" --use-program-main {useProgramMain.ToString().ToLowerInvariant()} --name {projectName} --output \"{appDir}\" --force",
+            _fixture.RepoRoot,
+            _fixture.CommandEnvironment,
             timeoutMs: 180_000);
 
-        var frameworkPackage = FindPackage(packageSourceDir, "Microsoft.UI.Reactor", packageVersion);
-        var templatePackage = FindPackage(packageSourceDir, "Microsoft.UI.Reactor.ProjectTemplates", packageVersion);
+        var projectPath = Path.Combine(appDir, $"{projectName}.csproj");
+        Assert.True(File.Exists(projectPath), $"Expected generated project at '{projectPath}'.");
+
+        AssertTemplateProgramMode(appDir, useProgramMain);
 
         RunDotnet(
-            $"new install --debug:custom-hive \"{templateHiveDir}\" \"{templatePackage}\"",
-            repoRoot,
-            commandEnvironment,
-            timeoutMs: 120_000);
+            $"build -a {_fixture.RunArchitecture}",
+            appDir,
+            _fixture.CommandEnvironment,
+            timeoutMs: 300_000);
 
-        Assert.True(File.Exists(frameworkPackage), $"Expected packed framework package at '{frameworkPackage}'.");
-        RunTemplateScenario(
-            repoRoot,
-            packageSourceDir,
-            nugetPackagesDir,
-            templateHiveDir,
-            runArchitecture,
-            commandEnvironment,
-            useProgramMain);
+        RunDotnetRun(
+            appDir,
+            projectName,
+            _fixture.RunArchitecture,
+            _fixture.CommandEnvironment,
+            timeoutMs: 120_000);
     }
 
     public void Dispose()
@@ -86,7 +75,7 @@ public sealed class TemplatePackageSmokeTests : IDisposable
         return path;
     }
 
-    private static Dictionary<string, string?> CreateCommandEnvironment(string dotnetCliHomeDir, string nugetHttpCacheDir)
+    internal static Dictionary<string, string?> CreateCommandEnvironment(string dotnetCliHomeDir, string nugetHttpCacheDir)
     {
         return new(StringComparer.OrdinalIgnoreCase)
         {
@@ -125,51 +114,11 @@ public sealed class TemplatePackageSmokeTests : IDisposable
             timeoutMs: 30_000);
     }
 
-    private static string FindPackage(string packageSourceDir, string packageId, string version)
+    internal static string FindPackage(string packageSourceDir, string packageId, string version)
     {
         var packagePath = Path.Combine(packageSourceDir, $"{packageId}.{version}.nupkg");
         Assert.True(File.Exists(packagePath), $"Expected package '{packagePath}' to exist.");
         return packagePath;
-    }
-
-    private void RunTemplateScenario(
-        string repoRoot,
-        string packageSourceDir,
-        string nugetPackagesDir,
-        string templateHiveDir,
-        string runArchitecture,
-        IReadOnlyDictionary<string, string?> commandEnvironment,
-        bool useProgramMain)
-    {
-        var scenarioName = useProgramMain ? "program-main" : "top-level";
-        var appDir = CreateDirectory($"generated-app-{scenarioName}");
-        var projectName = CreateProjectName(useProgramMain);
-
-        CreateNuGetConfig(appDir, packageSourceDir, nugetPackagesDir, commandEnvironment);
-
-        RunDotnet(
-            $"new reactorapp --debug:custom-hive \"{templateHiveDir}\" --use-program-main {useProgramMain.ToString().ToLowerInvariant()} --name {projectName} --output \"{appDir}\" --force",
-            repoRoot,
-            commandEnvironment,
-            timeoutMs: 180_000);
-
-        var projectPath = Path.Combine(appDir, $"{projectName}.csproj");
-        Assert.True(File.Exists(projectPath), $"Expected generated project at '{projectPath}'.");
-
-        AssertTemplateProgramMode(appDir, useProgramMain);
-
-        RunDotnet(
-            $"build -a {runArchitecture}",
-            appDir,
-            commandEnvironment,
-            timeoutMs: 300_000);
-
-        RunDotnetRunSmoke(
-            appDir,
-            projectName,
-            runArchitecture,
-            commandEnvironment,
-            timeoutMs: 120_000);
     }
 
     private static void AssertTemplateProgramMode(string appDir, bool useProgramMain)
@@ -205,11 +154,9 @@ public sealed class TemplatePackageSmokeTests : IDisposable
         return dir ?? throw new DirectoryNotFoundException("Could not find repo root (Reactor.sln).");
     }
 
-    private static string GetPackPlatform() => RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "ARM64" : "x64";
+    internal static string GetRunArchitecture() => RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64";
 
-    private static string GetRunArchitecture() => RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64";
-
-    private static void RunDotnetRunSmoke(
+    private static void RunDotnetRun(
         string workingDirectory,
         string projectName,
         string architecture,
@@ -335,7 +282,7 @@ public sealed class TemplatePackageSmokeTests : IDisposable
         }
     }
 
-    private static void RunDotnet(
+    internal static void RunDotnet(
         string arguments,
         string workingDirectory,
         IReadOnlyDictionary<string, string?> environmentVariables,
@@ -535,4 +482,94 @@ exit 1
     }
 
     private readonly record struct ProcessResult(int ExitCode, string Stdout, string Stderr);
+}
+
+public sealed class TemplatePackageSmokeTestFixture : IDisposable
+{
+    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"reactor-template-packages-{Guid.NewGuid():N}");
+
+    public TemplatePackageSmokeTestFixture()
+    {
+        Directory.CreateDirectory(_tempRoot);
+
+        RepoRoot = FindRepoRoot();
+        PackageVersion = $"0.0.0-template-smoke-{Guid.NewGuid():N}";
+        PackageSourceDir = CreateDirectory("packages");
+        NugetPackagesDir = CreateDirectory("nuget-global-packages");
+        var nugetHttpCacheDir = CreateDirectory("nuget-http-cache");
+        var dotnetCliHomeDir = CreateDirectory("dotnet-home");
+        TemplateHiveDir = CreateDirectory("template-hive");
+        RunArchitecture = TemplatePackageSmokeTests.GetRunArchitecture();
+        CommandEnvironment = TemplatePackageSmokeTests.CreateCommandEnvironment(dotnetCliHomeDir, nugetHttpCacheDir);
+
+        TemplatePackageSmokeTests.RunDotnet(
+            $"pack \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" -c Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
+            RepoRoot,
+            CommandEnvironment,
+            timeoutMs: 300_000);
+
+        TemplatePackageSmokeTests.RunDotnet(
+            $"pack \"{Path.Combine(RepoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" -c Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion} -p:MicrosoftUIReactorVersion={PackageVersion}",
+            RepoRoot,
+            CommandEnvironment,
+            timeoutMs: 180_000);
+
+        var frameworkPackage = TemplatePackageSmokeTests.FindPackage(PackageSourceDir, "Microsoft.UI.Reactor", PackageVersion);
+        var templatePackage = TemplatePackageSmokeTests.FindPackage(PackageSourceDir, "Microsoft.UI.Reactor.ProjectTemplates", PackageVersion);
+
+        TemplatePackageSmokeTests.RunDotnet(
+            $"new install --debug:custom-hive \"{TemplateHiveDir}\" \"{templatePackage}\"",
+            RepoRoot,
+            CommandEnvironment,
+            timeoutMs: 120_000);
+
+        Assert.True(File.Exists(frameworkPackage), $"Expected packed framework package at '{frameworkPackage}'.");
+    }
+
+    public string RepoRoot { get; }
+
+    public string PackageVersion { get; }
+
+    public string PackageSourceDir { get; }
+
+    public string NugetPackagesDir { get; }
+
+    public string TemplateHiveDir { get; }
+
+    public string RunArchitecture { get; }
+
+    public IReadOnlyDictionary<string, string?> CommandEnvironment { get; }
+
+    public void Dispose()
+    {
+        try
+        {
+            if (Directory.Exists(_tempRoot))
+            {
+                Directory.Delete(_tempRoot, recursive: true);
+            }
+        }
+        catch
+        {
+            // Best-effort cleanup for shared package-setup artifacts.
+        }
+    }
+
+    private string CreateDirectory(string name)
+    {
+        var path = Path.Combine(_tempRoot, name);
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    private static string FindRepoRoot()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir != null && !File.Exists(Path.Combine(dir, "Reactor.slnx")))
+        {
+            dir = Path.GetDirectoryName(dir);
+        }
+
+        return dir ?? throw new DirectoryNotFoundException("Could not find repo root (Reactor.sln).");
+    }
 }
