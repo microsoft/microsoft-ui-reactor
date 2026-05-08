@@ -157,11 +157,15 @@ internal sealed class MatchValidator : IValidator
         if (pattern is null) throw new ArgumentNullException(nameof(pattern));
         if (pattern.Length > MaxPatternLength)
             throw new ArgumentException($"Match pattern too long (>{MaxPatternLength} chars).", nameof(pattern));
-        // SECURITY (TASK-094): cap regex execution at 200ms so a pathological
-        // pattern can't tarpit the UI thread on every keystroke. 200ms matches
-        // the cap used elsewhere (DevtoolsPropertyTools, LogCaptureBuffer,
-        // WaitForPredicate) and tolerates cold-JIT under CI load.
-        _regex = new Regex(pattern, RegexOptions.Compiled, TimeSpan.FromMilliseconds(200));
+        // SECURITY (TASK-094): cap regex execution so a pathological pattern
+        // can't tarpit the UI thread on every keystroke. 1s rather than the
+        // 200ms used by diagnostic paths (DevtoolsPropertyTools, LogCaptureBuffer):
+        // RegexMatchTimeout is wall-clock, and under threadpool starvation a
+        // non-pathological match against a short input can blow past 200ms even
+        // though CPU time is microseconds. False-invalid validation on legitimate
+        // input is worse UX than slower tarpit detection on adversarial input,
+        // since the former affects every user on every CI-loaded environment.
+        _regex = new Regex(pattern, RegexOptions.Compiled, TimeSpan.FromSeconds(1));
         _message = message;
         _code = code;
     }

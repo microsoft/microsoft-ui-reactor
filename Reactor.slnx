@@ -303,6 +303,10 @@
     <Project Path="tests/stress_perf/StressPerf.Shared/StressPerf.Shared.csproj" />
     <Project Path="tests/stress_perf/StressPerf.Wpf/StressPerf.Wpf.csproj" />
   </Folder>
+  <Folder Name="/tools/" />
+  <Folder Name="/tools/Templates/">
+    <Project Path="tools/Templates/Microsoft.UI.Reactor.Templates.csproj" />
+  </Folder>
   <Project Path="src/Reactor.Analyzers/Reactor.Analyzers.csproj" />
   <Project Path="src/Reactor.Cli/Reactor.Cli.csproj">
     <Platform Solution="*|ARM64" Project="ARM64" />

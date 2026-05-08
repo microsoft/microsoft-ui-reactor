@@ -349,7 +349,7 @@ public class PersistedStateTests : IDisposable
 
         // Second render: try UsePersisted where UseState was
         ctx.BeginRender(() => { });
-        var ex = Assert.Throws<InvalidOperationException>(() => ctx.UsePersisted("key", "hello"));
+        var ex = Assert.Throws<HookOrderException>(() => ctx.UsePersisted("key", "hello"));
         Assert.Contains("PersistedHookState", ex.Message);
     }
 }

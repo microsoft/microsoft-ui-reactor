@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework Condition="'$(TargetFrameworkOverride)' == ''">net10.0-windows10.0.22621.0</TargetFramework>
+        <TargetFramework Condition="'$(TargetFrameworkOverride)' != ''">TargetFrameworkOverride-windows10.0.22621.0</TargetFramework>
+        <Platforms>ARM64;X86;X64</Platforms>    
+        <UseWinUI>true</UseWinUI>
+        <WindowsPackageType>None</WindowsPackageType>
+        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+        <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <!--#if (NativeAot) -->
+        <PublishAot>true</PublishAot>
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <!--#endif -->
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Using Include="Microsoft.UI.Reactor" />
+        <Using Include="Microsoft.UI.Reactor.Core" />
+        <Using Include="Microsoft.UI.Reactor.Factories" Static="true" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.1" />
+        <PackageReference Include="Microsoft.UI.Reactor" Version="MS_UI_REACTOR_VERSION" />
+    </ItemGroup>
+    
+</Project>

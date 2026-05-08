@@ -1219,7 +1219,7 @@
       "files": [
         "Directory.Build.props",
         "Directory.Build.targets",
-        "Reactor.sln",
+        "Reactor.slnx",
         "Reactor/Reactor.csproj",
         "Reactor.Cli/Reactor.Cli.csproj",
         "Reactor.Localization.Generator/Reactor.Localization.Generator.csproj"

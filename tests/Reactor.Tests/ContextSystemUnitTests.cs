@@ -210,7 +210,7 @@ public class ContextSystemUnitTests
 
         // Second render: try UseContext where UseState was
         ctx.BeginRender(() => { }, scope);
-        var ex = Assert.Throws<InvalidOperationException>(() => ctx.UseContext(TestTheme));
+        var ex = Assert.Throws<HookOrderException>(() => ctx.UseContext(TestTheme));
         Assert.Contains("ContextHookState", ex.Message);
     }
 

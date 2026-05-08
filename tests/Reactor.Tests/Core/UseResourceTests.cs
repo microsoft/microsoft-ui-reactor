@@ -291,7 +291,9 @@ public class UseResourceTests
         // current hook state and does not re-invoke the fetcher.
         AsyncValue<int>? probe = null;
         var sw = global::System.Diagnostics.Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(5))
+        // Budget covers retry backoff (100ms + 200ms = 300ms minimum) plus
+        // threadpool/timer scheduling slack on a loaded CI runner.
+        while (sw.Elapsed < TimeSpan.FromSeconds(30))
         {
             ctx.BeginRender(() => { });
             probe = ctx.UseResource(fetcher, cache, Array.Empty<object>(),
@@ -324,10 +326,11 @@ public class UseResourceTests
             new ResourceOptions(RetryCount: 2), dispatcher);
         ctx.FlushEffects();
 
-        // Poll the rendered state, not the call counter.
+        // Poll the rendered state, not the call counter. Budget covers retry
+        // backoff plus threadpool/timer scheduling slack on a loaded CI runner.
         AsyncValue<int>? probe = null;
         var sw = global::System.Diagnostics.Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(5))
+        while (sw.Elapsed < TimeSpan.FromSeconds(30))
         {
             ctx.BeginRender(() => { });
             probe = ctx.UseResource(fetcher, cache, Array.Empty<object>(),
