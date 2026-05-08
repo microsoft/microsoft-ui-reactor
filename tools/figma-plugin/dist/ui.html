@@ -3,35 +3,55 @@
 <head>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Inter, -apple-system, sans-serif; font-size: 13px; background: #FFFFFF; color: #101828; }
-    .container { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-    .frame-status { display: flex; align-items: center; gap: 6px; padding: 10px; background: #F9FAFB; border-radius: 6px; font-size: 13px; color: #4A5565; }
+    body { font-family: Inter, -apple-system, sans-serif; font-size: 11px; background: #FFFFFF; color: #1D1D1D; }
+    .container { padding: 8px; display: flex; flex-direction: column; gap: 12px; }
+
+    /* Frame status */
+    .frame-status { display: flex; align-items: center; gap: 6px; padding: 8px; background: #F9FAFB; border-radius: 6px; font-size: 11px; color: #4A5565; }
     .frame-status.watching { color: #12B76A; }
-    .frame-icon { width: 14px; height: 14px; opacity: 0.4; flex-shrink: 0; }
+    .frame-icon { width: 12px; height: 12px; opacity: 0.4; flex-shrink: 0; }
     .frame-status.watching .frame-icon { opacity: 1; }
-    .frame-detail { font-size: 11px; color: #99A1AF; margin-top: 2px; }
-    .section-label { font-size: 11px; font-weight: 600; color: #99A1AF; text-transform: uppercase; letter-spacing: 0.5px; margin: 4px 0 4px 0; }
-    .config-row { display: flex; gap: 6px; align-items: center; }
-    .config-row input { flex: 1; padding: 6px 8px; border-radius: 4px; font-size: 12px; border: 1px solid #D1D5DB; background: #FFF; color: #101828; }
-    .config-row input::placeholder { color: #C0C5CC; }
-    .hint { font-size: 11px; color: #99A1AF; margin: 2px 0 6px 0; }
-    .cmd-box { font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 11px; padding: 8px 10px; background: #1E1E2E; color: #CDD6F4; border-radius: 6px; cursor: pointer; word-break: break-all; line-height: 1.5; position: relative; border: 1px solid #313244; }
-    .cmd-box:hover { background: #2A2A3C; }
-    .cmd-box .copy-hint { position: absolute; top: 4px; right: 6px; font-size: 10px; color: #6C7086; }
-    .bottom-bar { padding: 0 12px 12px 12px; }
-    .btn-row { display: flex; gap: 6px; }
-    .btn { flex: 1; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; gap: 6px; }
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .frame-detail { font-size: 10px; color: #99A1AF; margin-top: 1px; }
+
+    /* Project path section */
+    .field-group { display: flex; flex-direction: column; gap: 6px; }
+    .field-header { display: flex; justify-content: space-between; align-items: center; }
+    .field-label { font-size: 11px; font-weight: 600; color: #1D1D1D; }
+
+    /* Toggle switch */
+    .toggle-row { display: flex; align-items: center; gap: 6px; }
+    .toggle-text { font-size: 11px; color: #6B7280; cursor: pointer; user-select: none; }
+    .toggle-text.active { color: #1D1D1D; font-weight: 500; }
+    .toggle-track { width: 28px; height: 16px; border-radius: 999px; background: #CBCED4; cursor: pointer; position: relative; transition: background 0.2s; flex-shrink: 0; }
+    .toggle-track.on { background: #0C8CE9; }
+    .toggle-knob { width: 12px; height: 12px; border-radius: 50%; background: #FFF; position: absolute; top: 2px; left: 2px; transition: left 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+    .toggle-track.on .toggle-knob { left: 14px; }
+
+    /* Input field */
+    .text-input { width: 100%; padding: 5px 8px; border-radius: 4px; font-size: 11px; border: 1px solid #E5E7EB; background: #FFF; color: #1D1D1D; font-family: inherit; outline: none; }
+    .text-input:focus { border-color: #0C8CE9; }
+    .text-input::placeholder { color: #9CA3AF; }
+
+    /* Buttons */
+    .btn-row { display: flex; gap: 8px; padding-top: 4px; }
+    .btn { flex: 1; height: 28px; border-radius: 6px; font-size: 11px; font-weight: 500; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; gap: 4px; font-family: inherit; position: relative; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .btn-primary { background: #0C8CE9; color: #FFF; }
     .btn-primary:hover:not(:disabled) { background: #0A7BD4; }
-    .btn-secondary { background: #F3F4F6; color: #101828; border: 1px solid #D1D5DB; }
-    .btn-secondary:hover:not(:disabled) { background: #E5E7EB; }
-    .tab-row { display: flex; gap: 4px; margin-bottom: 6px; }
-    .tab-btn { padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; border: 1px solid #D1D5DB; background: #FFF; color: #4A5565; }
-    .tab-btn.active { background: #101828; color: #FFF; border-color: #101828; }
+    .btn-primary.active-state { background: #059669; }
+    .btn-secondary { background: #ECEEF2; color: #030213; }
+    .btn-secondary:hover:not(:disabled) { background: #DDDFE5; }
+    .btn-secondary.active-state { background: #D1FAE5; color: #065F46; }
+    .btn .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+    .btn .status-dot.green { background: #12B76A; }
+    .btn .status-dot.pulse { animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .btn-icon { width: 12px; height: 12px; flex-shrink: 0; }
+
     .hidden { display: none; }
-    .toast { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); background: #101828; color: #FFF; padding: 6px 14px; border-radius: 6px; font-size: 12px; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+    .toast { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%); background: #1D1D1D; color: #FFF; padding: 4px 10px; border-radius: 4px; font-size: 11px; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
     .toast.show { opacity: 1; }
+    .hint { font-size: 10px; color: #9CA3AF; margin-top: -2px; }
   </style>
 </head>
 <body>
@@ -49,46 +69,51 @@
       </div>
     </div>
 
-    <!-- Project config -->
-    <div class="section-label">Output Project</div>
-    <div class="tab-row">
-      <button class="tab-btn active" id="tab-new" onclick="selectTab('new')">+ New Project</button>
-      <button class="tab-btn" id="tab-existing" onclick="selectTab('existing')">Existing Project</button>
-    </div>
-    <div id="panel-new">
-      <div class="config-row">
-        <input type="text" id="new-project-name" placeholder="Project name" value="FigmaApp" oninput="updateCommands()" />
+    <!-- Project path -->
+    <div class="field-group">
+      <div class="field-header">
+        <span class="field-label">Output Project</span>
+        <div class="toggle-row">
+          <span class="toggle-text active" id="toggle-new" onclick="toggleMode()">New</span>
+          <div class="toggle-track" id="toggle-track" onclick="toggleMode()">
+            <div class="toggle-knob"></div>
+          </div>
+          <span class="toggle-text" id="toggle-existing" onclick="toggleMode()">Existing</span>
+        </div>
       </div>
-      <div class="hint">Creates a new Reactor app via <code>mur --create</code></div>
-    </div>
-    <div id="panel-existing" class="hidden">
-      <div class="config-row">
-        <input type="text" id="project-path" placeholder="Path to .csproj" oninput="updateCommands()" />
+      <div id="panel-new">
+        <input type="text" class="text-input" id="new-project-name" placeholder="Enter new project name" value="FigmaApp" oninput="updateCommands()" />
       </div>
-      <div class="hint">Full path to your existing Reactor .csproj</div>
+      <div id="panel-existing" class="hidden">
+        <input type="text" class="text-input" id="project-path" placeholder="Path to .csproj file" oninput="updateCommands()" />
+      </div>
     </div>
 
-    <!-- Watch command (copyable) -->
-    <div class="section-label">Live Watch <span style="font-weight:400; text-transform:none">(optional)</span></div>
+    <!-- File URL fallback (hidden unless needed) -->
     <div id="file-url-input" class="hidden">
-      <div class="config-row" style="margin-bottom:4px">
-        <input type="text" id="figma-url" placeholder="Paste Figma file URL here" oninput="onFileUrlInput()" />
+      <div class="field-group">
+        <span class="field-label">File URL</span>
+        <input type="text" class="text-input" id="figma-url" placeholder="Paste Figma file URL here" oninput="onFileUrlInput()" />
+        <div class="hint">Paste any URL from this Figma file to enable generate</div>
       </div>
-      <div class="hint">Paste any URL from this Figma file to enable watch &amp; generate</div>
     </div>
-    <div class="cmd-box" id="watch-cmd" onclick="copyText('watch-cmd')">
-      <span class="copy-hint">click to copy</span>
-    </div>
-    <div class="hint" id="watch-hint">Run this in a terminal to watch for Figma changes</div>
   </div>
 
-  <div class="bottom-bar">
+  <div style="padding: 0 8px 0;">
     <div class="btn-row">
       <button class="btn btn-primary" id="generate-btn" onclick="generate()" disabled>
-        <span style="font-size:15px">&#10022;</span> Generate
+        <span id="generate-dot" class="status-dot" style="display:none"></span>
+        <svg class="btn-icon" id="generate-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0L9.41 5.14L14.15 3.85L10.83 7.99L16 8L10.83 8.01L14.15 12.15L9.41 10.86L8 16L6.59 10.86L1.85 12.15L5.17 8.01L0 8L5.17 7.99L1.85 3.85L6.59 5.14L8 0Z"/>
+        </svg>
+        <span id="generate-label">Generate</span>
       </button>
       <button class="btn btn-secondary" id="run-btn" onclick="copyRunCmd()" disabled title="Copy dotnet watch command">
-        &#9654; Run
+        <span id="run-dot" class="status-dot" style="display:none"></span>
+        <svg class="btn-icon" id="run-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M4.5 2.5C4.5 2.1 4.72 1.93 5.08 2.14L13.08 7.14C13.44 7.36 13.44 7.64 13.08 7.86L5.08 12.86C4.72 13.07 4.5 12.9 4.5 12.5V2.5Z"/>
+        </svg>
+        <span id="run-label">Run</span>
       </button>
     </div>
   </div>
@@ -98,6 +123,9 @@
   <script>
     // ─── State ───────────────────────────────────────────────────────────────
     var frameInfo = null;
+    var generatedState = false;
+    var runningState = false;
+    var existingMode = false;
 
     // ─── Frame tracking ──────────────────────────────────────────────────────
     function setFrame(info) {
@@ -105,35 +133,52 @@
       var el = document.getElementById('frame-text');
       var detail = document.getElementById('frame-detail');
       var container = document.getElementById('frame-status');
-      var urlInput = document.getElementById('file-url-input');
 
       if (info) {
         el.textContent = info.frameName;
         detail.textContent = info.width + ' × ' + info.height + '  ·  ' + info.nodeId;
         container.className = 'frame-status watching';
-        // Show URL input if fileKey is not available
-        urlInput.className = info.needsFileKey ? '' : 'hidden';
+        // Auto-populate project name from frame name (sanitize to valid identifier)
+        if (isNewProject()) {
+          var safeName = info.frameName.replace(/[^a-zA-Z0-9]/g, '');
+          if (safeName) {
+            document.getElementById('new-project-name').value = safeName;
+          }
+        }
       } else {
         el.textContent = 'Select a frame';
         detail.textContent = '';
         container.className = 'frame-status';
-        urlInput.className = 'hidden';
       }
       updateCommands();
     }
 
-    // ─── Tab switching ───────────────────────────────────────────────────────
-    function selectTab(t) {
-      document.getElementById('tab-new').className = 'tab-btn' + (t === 'new' ? ' active' : '');
-      document.getElementById('tab-existing').className = 'tab-btn' + (t === 'existing' ? ' active' : '');
-      document.getElementById('panel-new').className = t === 'new' ? '' : 'hidden';
-      document.getElementById('panel-existing').className = t === 'existing' ? '' : 'hidden';
+    // ─── Toggle switch ───────────────────────────────────────────────────────
+    function toggleMode() {
+      existingMode = !existingMode;
+      document.getElementById('toggle-track').className = 'toggle-track' + (existingMode ? ' on' : '');
+      document.getElementById('toggle-new').className = 'toggle-text' + (existingMode ? '' : ' active');
+      document.getElementById('toggle-existing').className = 'toggle-text' + (existingMode ? ' active' : '');
+      document.getElementById('panel-new').className = existingMode ? 'hidden' : '';
+      document.getElementById('panel-existing').className = existingMode ? '' : 'hidden';
+      generatedState = false;
+      runningState = false;
+      updateButtonStates();
       updateCommands();
     }
 
-    function isNewProject() {
-      return document.getElementById('tab-new').className.includes('active');
+    function setExistingMode(csproj) {
+      existingMode = true;
+      document.getElementById('toggle-track').className = 'toggle-track on';
+      document.getElementById('toggle-new').className = 'toggle-text';
+      document.getElementById('toggle-existing').className = 'toggle-text active';
+      document.getElementById('panel-new').className = 'hidden';
+      document.getElementById('panel-existing').className = '';
+      document.getElementById('project-path').value = csproj;
+      updateCommands();
     }
+
+    function isNewProject() { return !existingMode; }
 
     function getProjectName() {
       return (document.getElementById('new-project-name').value.trim() || 'FigmaApp');
@@ -146,34 +191,15 @@
     // ─── Command generation ──────────────────────────────────────────────────
     function updateCommands() {
       var hasFrame = !!frameInfo;
-      var hasUrl = hasFrame && frameInfo.figmaUrl;
       document.getElementById('generate-btn').disabled = !hasFrame;
-      document.getElementById('run-btn').disabled = !hasFrame;
+      document.getElementById('run-btn').disabled = !hasFrame || isNewProject();
 
-      var watchEl = document.getElementById('watch-cmd');
-      if (hasUrl) {
-        watchEl.innerHTML = '<span class="copy-hint">click to copy</span>' +
-          escHtml('mur figma watch "' + frameInfo.figmaUrl + '"');
-      } else if (hasFrame) {
-        watchEl.innerHTML = '<span class="copy-hint"></span><em style="color:#6C7086">File key not available — copy the URL from your browser instead</em>';
+      var urlInput = document.getElementById('file-url-input');
+      if (hasFrame && frameInfo.needsFileKey) {
+        urlInput.className = '';
       } else {
-        watchEl.innerHTML = '<span class="copy-hint"></span><em style="color:#6C7086">Select a frame to see the watch command</em>';
+        urlInput.className = 'hidden';
       }
-    }
-
-    function getProjectDir() {
-      if (isNewProject()) {
-        return getProjectName();
-      }
-      var p = getProjectPath();
-      if (!p) return null;
-      // Extract directory from .csproj path
-      if (p.toLowerCase().endsWith('.csproj')) {
-        var parts = p.replace(/\//g, '\\').split('\\');
-        parts.pop();
-        return parts.join('\\');
-      }
-      return p;
     }
 
     function getCsprojPath() {
@@ -182,6 +208,44 @@
         return name + '\\' + name + '.csproj';
       }
       return getProjectPath();
+    }
+
+    // ─── Button state management ────────────────────────────────────────────
+    function updateButtonStates() {
+      var genBtn = document.getElementById('generate-btn');
+      var genDot = document.getElementById('generate-dot');
+      var genIcon = document.getElementById('generate-icon');
+      var genLabel = document.getElementById('generate-label');
+      var runBtn = document.getElementById('run-btn');
+      var runDot = document.getElementById('run-dot');
+      var runIcon = document.getElementById('run-icon');
+      var runLabel = document.getElementById('run-label');
+
+      if (generatedState) {
+        genDot.style.display = 'inline-block';
+        genDot.className = 'status-dot green pulse';
+        genIcon.style.display = 'none';
+        genLabel.textContent = 'Generating...';
+        genBtn.className = 'btn btn-primary active-state';
+      } else {
+        genDot.style.display = 'none';
+        genIcon.style.display = '';
+        genLabel.textContent = existingMode ? 'Re-generate' : 'Generate';
+        genBtn.className = 'btn btn-primary';
+      }
+
+      if (runningState) {
+        runDot.style.display = 'inline-block';
+        runDot.className = 'status-dot green';
+        runIcon.style.display = 'none';
+        runLabel.textContent = 'Running';
+        runBtn.className = 'btn btn-secondary active-state';
+      } else {
+        runDot.style.display = 'none';
+        runIcon.style.display = '';
+        runLabel.textContent = 'Run';
+        runBtn.className = 'btn btn-secondary';
+      }
     }
 
     // ─── Generate ────────────────────────────────────────────────────────────
@@ -193,7 +257,7 @@
       var name = getProjectName();
 
       var skillRef = 'Read skills/figma.md for Figma-to-Reactor control mapping, theme tokens, typography, and layout rules. Read skills/design.md for WinUI design best practices. Match every dimension, gap, and padding value exactly from the Figma design for pixel-accurate output.';
-      var watchRef = ' Then start watching for Figma changes: run mur figma watch ' + url + ' --interval 10 in the background. When a change is detected, re-fetch the design via get_figma_data and update the code accordingly.';
+      var watchSuffix = ' Then start watching for Figma changes: run mur figma watch "' + url + '" --interval 10 in the background. When a change is detected, re-fetch the design via get_figma_data and update the code accordingly.';
 
       var prompt;
       if (isNewProject()) {
@@ -202,22 +266,32 @@
           ', then translate this Figma design into it: ' + url +
           '. ' + skillRef +
           ' After generating the code, run: dotnet watch run --project ' + csproj + '.' +
-          watchRef;
+          watchSuffix;
       } else {
         if (!csproj) {
           showToast('Set the project path first');
           return;
         }
         prompt = 'I have an existing Reactor app at ' + csproj +
-          '. Watch this Figma design for changes and keep the code in sync: ' + url +
-          '. ' + skillRef +
-          ' Start by fetching the current design via get_figma_data, then update the code.' +
-          watchRef;
+          '. Fetch this Figma design via get_figma_data: ' + url +
+          '. Then read the current Program.cs in the project and diff it against the Figma frame.' +
+          ' Apply only the changes needed to bring the code in sync with the design — update text, spacing, sizing, colors, and layout to match.' +
+          ' Do not regenerate from scratch unless the structure has fundamentally changed.' +
+          ' ' + skillRef +
+          ' After updating the code, run: dotnet watch run --project ' + csproj + '.' +
+          watchSuffix;
       }
 
-      // Use single quotes for PowerShell to avoid escaping issues
       var cmd = "copilot -p '" + prompt.replace(/'/g, "''") + "'";
       copyToClipboard(cmd);
+      generatedState = true;
+
+      if (isNewProject()) {
+        setExistingMode(csproj);
+        generatedState = true;
+      }
+
+      updateButtonStates();
       showToast('Copied — paste in terminal');
     }
 
@@ -225,21 +299,13 @@
       var csproj = getCsprojPath();
       if (csproj) {
         copyToClipboard('dotnet watch run --project ' + csproj);
+        runningState = true;
+        updateButtonStates();
         showToast('Copied — paste in terminal');
       }
     }
 
     // ─── Clipboard / toast ───────────────────────────────────────────────────
-    function copyText(elId) {
-      var el = document.getElementById(elId);
-      // Get text without the "click to copy" hint
-      var text = el.innerText.replace('click to copy', '').trim();
-      if (text && !text.startsWith('Select')) {
-        copyToClipboard(text);
-        showToast('Copied!');
-      }
-    }
-
     function copyToClipboard(text) {
       var ta = document.createElement('textarea');
       ta.value = text;
@@ -256,10 +322,6 @@
       el.textContent = msg;
       el.className = 'toast show';
       setTimeout(function() { el.className = 'toast'; }, 2000);
-    }
-
-    function escHtml(s) {
-      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     // ─── File URL input (fallback when fileKey unavailable) ─────────────────
@@ -279,14 +341,12 @@
         setFrame(msg);
       } else if (msg.type === 'no-frame') {
         setFrame(null);
-        // Show diagnostic info
         if (msg.message) {
           document.getElementById('frame-detail').textContent = msg.message;
         }
       }
     };
 
-    // Request initial frame info
     parent.postMessage({ pluginMessage: { type: 'request-frame-info' } }, '*');
   </script>
 </body>

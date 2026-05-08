@@ -5,7 +5,7 @@
 
 // ─── Plugin Lifecycle ────────────────────────────────────────────────────────
 
-figma.showUI(__html__, { width: 360, height: 370, themeColors: true });
+figma.showUI(__html__, { width: 340, height: 160, themeColors: true });
 
 // Accept FRAME, COMPONENT, COMPONENT_SET, and SECTION as valid targets
 const FRAME_TYPES: string[] = ["FRAME", "COMPONENT", "COMPONENT_SET", "SECTION"];

@@ -42,8 +42,10 @@ internal static class FigmaCommand
         Console.Error.WriteLine("agent reads these events and re-fetches design data via the");
         Console.Error.WriteLine("Figma MCP server (figma-developer-mcp).");
         Console.Error.WriteLine();
-        Console.Error.WriteLine("Environment:");
-        Console.Error.WriteLine("  FIGMA_API_KEY   Figma personal access token (required)");
+        Console.Error.WriteLine("Environment / Config (checked in order):");
+        Console.Error.WriteLine("  FIGMA_API_KEY              Environment variable");
+        Console.Error.WriteLine("  ~/.copilot/mcp-config.json --figma-api-key in Figma MCP server args");
+        Console.Error.WriteLine("  .vscode/mcp.json           --figma-api-key in Figma MCP server args");
         return error != null ? 1 : 0;
     }
 }

@@ -31,7 +31,16 @@ internal sealed class FigmaClient : IDisposable
         // depth=1 returns only top-level metadata without traversing the full tree
         var response = await _http.GetAsync($"v1/files/{fileKey}?depth=1", ct);
         if (!response.IsSuccessStatusCode)
+        {
+            var status = (int)response.StatusCode;
+            if (status == 429)
+                Console.Error.WriteLine("[mur figma] Figma API rate limit exceeded (429). Wait a minute and retry.");
+            else if (status == 403)
+                Console.Error.WriteLine("[mur figma] Figma API key is invalid or expired (403).");
+            else
+                Console.Error.WriteLine($"[mur figma] Figma API returned HTTP {status}.");
             return null;
+        }
 
         var json = await response.Content.ReadAsStringAsync(ct);
         using var doc = JsonDocument.Parse(json);

@@ -45,15 +45,23 @@ internal static class FigmaWatchCommand
             Console.Error.WriteLine("Options:");
             Console.Error.WriteLine("  --interval, -i   Poll interval in seconds (default: 10)");
             Console.Error.WriteLine();
-            Console.Error.WriteLine("Environment:");
-            Console.Error.WriteLine("  FIGMA_API_KEY    Figma personal access token (required)");
+            Console.Error.WriteLine("Environment / Config (checked in order):");
+            Console.Error.WriteLine("  FIGMA_API_KEY              Environment variable");
+            Console.Error.WriteLine("  ~/.copilot/mcp-config.json --figma-api-key in Figma MCP server args");
+            Console.Error.WriteLine("  .vscode/mcp.json           --figma-api-key in Figma MCP server args");
             return 1;
         }
 
-        var apiKey = Environment.GetEnvironmentVariable("FIGMA_API_KEY");
+        var apiKey = FigmaApiKeyResolver.Resolve();
         if (string.IsNullOrEmpty(apiKey))
         {
-            Console.Error.WriteLine("Error: FIGMA_API_KEY environment variable is not set.");
+            Console.Error.WriteLine("Error: Figma API key not found.");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Searched (in order):");
+            Console.Error.WriteLine("  1. FIGMA_API_KEY environment variable");
+            Console.Error.WriteLine("  2. ~/.copilot/mcp-config.json (--figma-api-key in args)");
+            Console.Error.WriteLine("  3. .vscode/mcp.json (--figma-api-key in args)");
+            Console.Error.WriteLine();
             Console.Error.WriteLine("Create a Figma personal access token at:");
             Console.Error.WriteLine("  https://help.figma.com/hc/en-us/articles/8085703771159");
             return 1;
@@ -72,11 +80,24 @@ internal static class FigmaWatchCommand
 
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
-        // Initial fetch to establish baseline
-        var info = await client.GetFileInfoAsync(parsed.FileKey, cts.Token);
+        // Initial fetch to establish baseline (retry up to 3 times for rate limits)
+        FigmaFileInfo? info = null;
+        for (int attempt = 1; attempt <= 3; attempt++)
+        {
+            info = await client.GetFileInfoAsync(parsed.FileKey, cts.Token);
+            if (info != null) break;
+            if (attempt < 3)
+            {
+                var delay = attempt * 15;
+                Console.Error.WriteLine($"[mur figma watch] Retrying in {delay}s (attempt {attempt}/3)...");
+                try { await Task.Delay(TimeSpan.FromSeconds(delay), cts.Token); }
+                catch (OperationCanceledException) { return 1; }
+            }
+        }
         if (info == null)
         {
-            Console.Error.WriteLine("Error: could not fetch file info. Check your FIGMA_API_KEY and URL.");
+            Console.Error.WriteLine("Error: could not fetch file info after 3 attempts.");
+            Console.Error.WriteLine("If rate-limited (429), wait a minute and try again.");
             return 1;
         }
 
