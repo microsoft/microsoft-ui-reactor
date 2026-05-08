@@ -13,12 +13,9 @@ description: >
 Translate Figma designs built with the [Windows UI Kit (Community)](https://www.figma.com/design/t7yLwpMUOWJSYt5ahz3ROC/Windows-UI-kit--Community-) into Reactor C# code. This skill provides the mapping tables and rules the agent applies during code generation.
 
 **Prerequisites:**
-- A Figma MCP server must be configured (e.g., `figma-developer-mcp`) for URL-based extraction.
-- For live sync: the FigmaBridge MCP relay (`figma-bridge`) must be running and registered in MCP config. See [spec 033](../docs/specs/033-figma-to-reactor.md) for the full workflow architecture.
+- A Figma MCP server must be configured (e.g., `figma-developer-mcp`) for URL-based extraction. See [spec 033](../docs/specs/033-figma-to-reactor.md) for the full workflow architecture.
 
-## Workflow Summary
-
-### Mode A: URL-Based (One-Shot Translation)
+## Workflow
 
 1. Developer pastes a Figma frame URL
 2. Agent extracts `file_key` and `node_id` from the URL
@@ -31,29 +28,6 @@ Translate Figma designs built with the [Windows UI Kit (Community)](https://www.
 9. Agent launches app via `dotnet run -- --devtools run`
 10. Agent verifies via `mur devtools tree` and `mur devtools screenshot`
 11. Agent iterates until structure matches
-
-### Mode B: Live Sync (FigmaBridge MCP Relay)
-
-For continuous Figma → app synchronization:
-
-1. Developer starts FigmaBridge: `dotnet run --project tools/FigmaBridge`
-2. Developer opens Figma and runs the `reactor-figma-sync` plugin
-3. Developer selects a frame in Figma (plugin starts watching)
-4. Developer starts target app: `dotnet watch run --project <app>`
-5. Developer asks agent: "Translate the current Figma frame"
-6. Agent calls `figma_tree` tool → receives the design tree JSON
-7. Agent interprets the design using THIS skill file + `design.md` + `SKILL.md`
-8. Agent generates `Program.cs` and writes it to the target project
-9. `dotnet watch` detects change → rebuilds → app updates live
-10. For ongoing sync: agent calls `figma_watch` tool → waits for changes → regenerates
-
-**FigmaBridge MCP tools:**
-
-| Tool | Description |
-|------|-------------|
-| `figma_tree` | Returns the current Figma design tree as JSON (visible nodes only) |
-| `figma_status` | Returns connection status and watched frame info |
-| `figma_watch` | Blocks until the design changes, then returns updated tree |
 
 ## URL Parsing
 

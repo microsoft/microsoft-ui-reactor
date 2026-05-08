@@ -615,3 +615,40 @@ file:
 5. **Design handoff format:** If the Figma MCP is not available, should
    there be a fallback path where the developer exports a Figma JSON
    file and the agent reads it locally?
+
+---
+
+## Appendix A: FigmaBridge Removal (Security)
+
+An earlier iteration of this spec included a **FigmaBridge** component
+(`tools/FigmaBridge`) — a localhost HTTP/WebSocket relay that received
+design trees from a Figma plugin and exposed them to AI agents via
+custom MCP tools (`figma_tree`, `figma_watch`, `figma_status`). The
+bridge was removed due to the following security concerns:
+
+1. **Open localhost surface with `Access-Control-Allow-Origin: *`** —
+   any website in the user's browser could make requests to the bridge,
+   read design data, or trigger code generation.
+2. **Arbitrary filesystem writes** — the bridge accepted output paths
+   over WebSocket with no validation or allowlist, then wrote generated
+   code to those paths.
+3. **Shell command injection surface** — the bridge launched `pwsh` and
+   `dotnet` processes using paths received over unauthenticated
+   WebSocket messages.
+4. **No authentication on any endpoint** — both the WebSocket and HTTP
+   MCP endpoints were open to all localhost callers.
+5. **Temporary script generation** — the bridge wrote `.ps1` scripts to
+   `%TEMP%` with user-controlled values, creating TOCTOU and injection
+   risks.
+
+The bridge's only purpose was **live push sync** (watching for real-time
+Figma edits). This use case is adequately served by the standard
+URL-based workflow (Mode A), where the agent calls the Figma MCP server
+(`figma-developer-mcp`) directly. The Figma MCP server authenticates via
+a scoped personal access token and does not require a localhost relay.
+
+If live sync is revisited in the future, it should be redesigned with:
+- Localhost bearer-token authentication on all endpoints
+- Path allowlisting for filesystem writes
+- No shell execution from untrusted input
+- TLS or Unix domain sockets instead of plaintext HTTP
