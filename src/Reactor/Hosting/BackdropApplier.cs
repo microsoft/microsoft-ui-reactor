@@ -31,9 +31,27 @@ internal sealed class BackdropApplier
     private global::System.Func<SystemBackdrop?>? _lastFactory;
     private bool _hasApplied;
 
+    // Spec 036 §3.3 — a window-level default seeded by WindowSpec.Backdrop.
+    // The render-pass Apply consults this when the tree's modifier is null
+    // so apps that declare backdrop on the spec don't have to also push a
+    // Backdrop modifier through the root component.
+    private BackdropChoice? _windowDefault;
+
     public BackdropApplier(Window? window)
     {
         _window = window;
+    }
+
+    /// <summary>
+    /// Sets the window-level default backdrop. Used by
+    /// <see cref="ReactorWindow"/> to apply <see cref="WindowSpec.Backdrop"/>
+    /// before the first render so the user sees the right material from
+    /// frame zero. Tree-level <c>BackdropChoice</c> modifiers still take
+    /// precedence on subsequent renders.
+    /// </summary>
+    internal void SetWindowDefault(BackdropChoice? choice)
+    {
+        _windowDefault = choice;
     }
 
     /// <summary>True when this applier has a real owning window to mutate.</summary>
@@ -49,6 +67,9 @@ internal sealed class BackdropApplier
     /// </returns>
     public bool Apply(BackdropChoice? choice)
     {
+        // Tree modifier wins; fall back to the window-level default seeded
+        // from WindowSpec.Backdrop. (spec 036 §3.3)
+        choice ??= _windowDefault;
         if (_window is null)
         {
             // Spec: no-op + debug log when the host does not own a Window.

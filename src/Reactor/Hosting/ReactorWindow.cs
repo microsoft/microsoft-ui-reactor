@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Hosting.Messaging;
+using Microsoft.UI.Reactor.Hosting.Persistence;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
@@ -37,12 +38,18 @@ public sealed class ReactorWindow : IDisposable
     private readonly nint _hwnd;
     private readonly WindowMessageMonitor _messageMonitor;
     private readonly Core.WindowPersistedScope _persistedScope = new();
+    // Owned windows (this window's children). Copy-on-write so the cascade
+    // path can iterate without holding a lock during user-supplied close
+    // handlers / guards.
+    private ReactorWindow[] _ownedWindows = global::System.Array.Empty<ReactorWindow>();
+    private readonly object _ownedLock = new();
     private WindowSpec _spec;
     private uint _dpi = 96;
     private int _stateValue; // backing storage for State (cast WindowState <-> int)
     private bool _disposed;
     private bool _userResized; // Phase 2: once true we no longer overwrite size on DPI events.
     private bool _firstDpiApplied;
+    private bool _persistenceRestoreAttempted;
     private WindowCloseReason _closingReason = WindowCloseReason.UserClosed;
 
     /// <summary>Stable id, e.g. <c>"win-3"</c>. Allocated monotonically per process.</summary>
@@ -163,6 +170,10 @@ public sealed class ReactorWindow : IDisposable
 
         _host = new ReactorHost(_window);
         _host.OwningWindow = this;
+        // Seed the window-level backdrop default so the first render sees it
+        // even if the root tree doesn't carry a BackdropChoice modifier.
+        // (spec 036 §3.3)
+        _host.BackdropApplier.SetWindowDefault(spec.Backdrop);
 
         // Subscribe before Activate() so WM_SHOWWINDOW / WM_DPICHANGED routed
         // during the first paint reach our handlers. The monitor is per-window
@@ -285,7 +296,15 @@ public sealed class ReactorWindow : IDisposable
         }
         catch (Exception ex) { Debug.WriteLine($"[Reactor] Presenter apply failed: {ex.Message}"); }
 
-        try { _appWindow.IsShownInSwitchers = spec.IsShownInSwitchers; }
+        try
+        {
+            // Owned windows hide from the taskbar / Alt-Tab switcher by
+            // default — that's the conventional shell behavior for owned
+            // top-level windows (about box, settings, picker). The
+            // IsShownInSwitchers bool only flips when the owner is null;
+            // owned windows ignore it. (spec 036 §9)
+            _appWindow.IsShownInSwitchers = spec.Owner is null && spec.IsShownInSwitchers;
+        }
         catch (Exception ex) { Debug.WriteLine($"[Reactor] IsShownInSwitchers failed: {ex.Message}"); }
 
         try { _window.ExtendsContentIntoTitleBar = spec.ExtendsContentIntoTitleBar; }
@@ -303,6 +322,67 @@ public sealed class ReactorWindow : IDisposable
 
         if (spec.Icon is { } icon)
             icon.Apply(_appWindow);
+
+        // Owner relationship — only meaningful at initial apply time.
+        // Subsequent Update calls do not re-parent (changing ownership of a
+        // realized window has no AppWindow API and is rarely the right thing
+        // for an app to do). (spec 036 §9)
+        if (isInitial && spec.Owner is { } owner && !owner._disposed)
+        {
+            try
+            {
+                NativeOwnership.SetOwner(_hwnd, owner._hwnd);
+            }
+            catch (Exception ex) { Debug.WriteLine($"[Reactor] SetOwner failed: {ex.Message}"); }
+            owner.AddOwned(this);
+        }
+    }
+
+    /// <summary>Owner-window list snapshot. Copy-on-write under <see cref="_ownedLock"/>.</summary>
+    internal IReadOnlyList<ReactorWindow> OwnedWindows => Volatile.Read(ref _ownedWindows);
+
+    private void AddOwned(ReactorWindow child)
+    {
+        lock (_ownedLock)
+        {
+            var current = Volatile.Read(ref _ownedWindows);
+            if (Array.IndexOf(current, child) >= 0) return;
+            var next = new ReactorWindow[current.Length + 1];
+            Array.Copy(current, next, current.Length);
+            next[^1] = child;
+            Volatile.Write(ref _ownedWindows, next);
+        }
+    }
+
+    private void RemoveOwned(ReactorWindow child)
+    {
+        lock (_ownedLock)
+        {
+            var current = Volatile.Read(ref _ownedWindows);
+            int idx = Array.IndexOf(current, child);
+            if (idx < 0) return;
+            var next = new ReactorWindow[current.Length - 1];
+            if (idx > 0) Array.Copy(current, 0, next, 0, idx);
+            if (idx < current.Length - 1) Array.Copy(current, idx + 1, next, idx, current.Length - idx - 1);
+            Volatile.Write(ref _ownedWindows, next);
+        }
+    }
+
+    private static class NativeOwnership
+    {
+        // GWLP_HWNDPARENT — the owner-window slot. Distinct from the
+        // GWLP_PARENT used by child controls (which we never want for top-
+        // level windows). 64-bit Reactor builds always use SetWindowLongPtrW.
+        private const int GWLP_HWNDPARENT = -8;
+
+        [global::System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+        private static extern nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong);
+
+        public static void SetOwner(nint child, nint owner)
+        {
+            if (child == 0 || owner == 0) return;
+            _ = SetWindowLongPtr(child, GWLP_HWNDPARENT, owner);
+        }
     }
 
     private global::Windows.Graphics.SizeInt32 DipToPhysicalSize(double widthDip, double heightDip)
@@ -359,7 +439,11 @@ public sealed class ReactorWindow : IDisposable
                 _userResized = true;
                 break;
             case WindowMessageMonitor.WM_SHOWWINDOW:
-                if (args.WParam != 0) IsVisible = true;
+                if (args.WParam != 0)
+                {
+                    IsVisible = true;
+                    TryRestorePersistedPlacement();
+                }
                 else IsVisible = false;
                 break;
         }
@@ -473,6 +557,29 @@ public sealed class ReactorWindow : IDisposable
             cancel = cea.Cancel;
         }
 
+        // Owner-close cascade: if this window has owned children, try to
+        // close them first under reason=OwnerClosed. If any owned guard
+        // cancels, the owner-close cancels too. (spec 036 §9)
+        if (!cancel)
+        {
+            var owned = OwnedWindows;
+            for (int i = 0; i < owned.Count; i++)
+            {
+                var child = owned[i];
+                if (child._disposed) continue;
+                child._closingReason = WindowCloseReason.OwnerClosed;
+                try { child._window.Close(); }
+                catch (Exception ex) { Debug.WriteLine($"[Reactor] Owned window close threw: {ex.Message}"); }
+                // After Close(), if the child is still alive (a guard
+                // cancelled), abort the owner close.
+                if (!child._disposed)
+                {
+                    cancel = true;
+                    break;
+                }
+            }
+        }
+
         if (cancel) args.Cancel = true;
         else _closingReason = WindowCloseReason.UserClosed; // reset for the next attempt
     }
@@ -516,8 +623,19 @@ public sealed class ReactorWindow : IDisposable
     private void OnNativeClosed(object? sender, WindowEventArgs args)
     {
         if (_disposed) return;
+
+        // Save BEFORE disposing the host — at this point the HWND is still
+        // alive but the close is irrevocable, so GetWindowPlacement returns
+        // the user's last interactive size/position. Best-effort.
+        TrySavePersistedPlacement();
+
         try { Closed?.Invoke(this, EventArgs.Empty); }
         catch (Exception ex) { Debug.WriteLine($"[Reactor] Closed handler threw: {ex.Message}"); }
+
+        // Detach from the owner's child-list so a later owner-close cascade
+        // doesn't iterate over an already-closed pointer. (spec 036 §9)
+        var spec = _spec;
+        spec.Owner?.RemoveOwned(this);
 
         ReactorApp.UnregisterWindow(this);
         Dispose();
@@ -591,7 +709,14 @@ public sealed class ReactorWindow : IDisposable
         var prev = _spec;
         Volatile.Write(ref _spec, next);
         if (!Equals(prev, next))
+        {
             ApplyChrome(next, isInitial: false);
+            // Re-seed backdrop default in case Update changed it. The next
+            // render-pass Apply call will pick up the new default if the
+            // tree carries no Backdrop modifier of its own. (spec 036 §3.3)
+            if (!Equals(prev.Backdrop, next.Backdrop))
+                _host.BackdropApplier.SetWindowDefault(next.Backdrop);
+        }
     }
 
     /// <summary>Resize to <paramref name="width"/> x <paramref name="height"/> DIPs. UI-thread only.</summary>
@@ -680,4 +805,75 @@ public sealed class ReactorWindow : IDisposable
 
     /// <summary>The reason the close currently in progress was initiated. Phase 3.</summary>
     internal WindowCloseReason ClosingReason => _closingReason;
+
+    // ── Persistence (spec 036 §8) ──────────────────────────────────────
+
+    /// <summary>
+    /// On the first <c>WM_SHOWWINDOW</c>, read the persisted placement (if any)
+    /// from the registered <see cref="ReactorApp.WindowPersistenceStore"/> and
+    /// re-apply it via <c>SetWindowPlacement</c>. Idempotent: subsequent shows
+    /// take no action so a hide/show cycle preserves the user's interactive
+    /// resize. (spec 036 §8)
+    /// </summary>
+    private void TryRestorePersistedPlacement()
+    {
+        if (_persistenceRestoreAttempted) return;
+        _persistenceRestoreAttempted = true;
+
+        var spec = _spec;
+        if (string.IsNullOrEmpty(spec.PersistenceId) &&
+            spec.StartPosition != WindowStartPosition.RestoreFromPersistence)
+            return;
+
+        var store = ReactorApp.ResolvePersistenceStore();
+        if (store is null) return;
+        if (string.IsNullOrEmpty(spec.PersistenceId)) return;
+
+        try
+        {
+            if (!store.TryRead(spec.PersistenceId!, out var data) || data is null)
+                return;
+            var monitors = MonitorEnumeration.Snapshot();
+            if (!WindowPlacementCodec.Restore(_hwnd, data, monitors))
+            {
+                // Fingerprint mismatch / malformed payload — caller falls
+                // back to the spec's default placement, which has already
+                // been applied by ApplyChrome.
+                return;
+            }
+            // The placement we just applied counts as a user-resized state
+            // so the first-DPI re-apply path doesn't fight it.
+            _userResized = true;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor] TryRestorePersistedPlacement failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Capture the current placement on close into the persistence store.
+    /// Best-effort: failures log and don't bubble into the close path.
+    /// (spec 036 §8)
+    /// </summary>
+    private void TrySavePersistedPlacement()
+    {
+        var spec = _spec;
+        if (string.IsNullOrEmpty(spec.PersistenceId)) return;
+
+        var store = ReactorApp.ResolvePersistenceStore();
+        if (store is null) return;
+
+        try
+        {
+            var monitors = MonitorEnumeration.Snapshot();
+            var payload = WindowPlacementCodec.Capture(_hwnd, monitors);
+            if (payload is null) return;
+            store.Write(spec.PersistenceId!, payload);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor] TrySavePersistedPlacement failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
 }

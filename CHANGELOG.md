@@ -69,6 +69,25 @@ to land under these conventions; subsequent specs follow this shape.
   zero-window startup-callback path now exits under
   `OnLastSurfaceClosed` too when no tray icons were opened. (spec 036
   §6.2)
+- `IWindowPersistenceStore`, `PackagedSettingsStore`, `JsonFileStore`,
+  and `ReactorApp.WindowPersistenceStore` — pluggable per-window
+  placement persistence. Default auto-detect picks the WinRT settings
+  store for packaged apps and a hand-rolled, AOT-safe JSON file store
+  (1 MB cap, atomic write-then-rename, base64-per-id) for unpackaged
+  apps. `WindowSpec.PersistenceId` opts in; placement saves on close
+  and restores on first show via `WindowPlacementCodec` with a monitor-
+  layout fingerprint borrowed from `WinUIEx.WindowManager`. (spec 036
+  §8)
+- `WindowSpec.Backdrop` is now seeded as a window-level default through
+  `BackdropApplier.SetWindowDefault`, so the first frame paints the
+  declared material even when the root component tree carries no
+  `BackdropChoice` modifier. Tree-level modifiers still win on
+  subsequent renders. (spec 036 §3.3)
+- Owned-window relationship via `WindowSpec.Owner` — applies the Win32
+  `GWLP_HWNDPARENT` slot at construction time and force-hides the owned
+  window from the taskbar / Alt-Tab. Owner-close cascades to owned
+  children with `WindowCloseReason.OwnerClosed`; if any owned guard
+  cancels, the owner-close cancels too. (spec 036 §9)
 - `Microsoft.UI.Reactor.Hooks.UseMemoCells` /
   `UseMemoCellsByKey` / `UseMemoCellsByIndex` — cell-level memoization
   hooks (extension methods on `RenderContext`, plus matching `Component`

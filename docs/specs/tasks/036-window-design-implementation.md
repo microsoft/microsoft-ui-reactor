@@ -539,79 +539,70 @@ Behavior change phase. After this lands, `Run<TRoot>(width, height)` and
 
 ### 5.1 Persistence
 
-- [ ] `IWindowPersistenceStore` interface per spec §8.
-- [ ] Default packaged-app store: `PackagedSettingsStore` writes to
-  `ApplicationData.Current.LocalSettings`. Match WinUIEx's key namespacing.
-- [ ] Default unpackaged store: `JsonFileStore` writes to
-  `%LOCALAPPDATA%/<ProcessName>/reactor-windows.json`. **Security:**
-  file size cap (1 MB), `FileShare.None`, validate JSON shape before
-  applying, never throw to user code on read failure (warn-and-default).
-- [ ] `ReactorApp.WindowPersistenceStore` settable static (must be set
-  before the first `OpenWindow` — guard with `Interlocked.CompareExchange`
-  and throw `InvalidOperationException` on a late set).
-- [ ] On `Window.Closed`, serialize `WINDOWPLACEMENT` + monitor-layout
-  fingerprint via the active store keyed by `PersistenceId`. Best-effort:
-  failures log and don't bubble.
-- [ ] On `WM_SHOWWINDOW` first-shown, read back via the store; if the
-  monitor fingerprint matches, call `SetWindowPlacement`. Otherwise
-  fall back to `WindowSpec.StartPosition`. (Spec §8 — borrows
-  fingerprint logic from WinUIEx `WindowManager.LoadPersistence`.)
-- [ ] `WindowStartPosition.RestoreFromPersistence` activates this path
-  unconditionally; other start positions only restore if a prior session
-  saved one.
+- [x] `IWindowPersistenceStore` interface — `bool TryRead(string id, out
+  byte[]? data)` / `void Write(string id, byte[] data)`. Lives in
+  `Hosting/Persistence/IWindowPersistenceStore.cs`.
+- [x] `PackagedSettingsStore` — routes through
+  `ApplicationData.Current.LocalSettings` under a "Reactor" container,
+  key prefix `WindowPersistence_<id>` (matches WinUIEx wire shape).
+- [x] `JsonFileStore` — writes to
+  `%LOCALAPPDATA%/<SanitizedProcessName>/reactor-windows.json` with a
+  hand-rolled flat string-map encoder so we stay AOT-safe (no
+  `JsonSerializer.Deserialize<Dictionary<,>>`). 1 MB cap on read AND
+  write; `FileShare.Read` for concurrent same-process readers; atomic
+  via write-then-rename.
+- [x] `ReactorApp.WindowPersistenceStore` settable; first `OpenWindow`
+  flips an internal lock so a later set throws
+  `InvalidOperationException`. Auto-detect on first read picks
+  `PackagedSettingsStore` for packaged apps, `JsonFileStore` otherwise.
+- [x] `ReactorWindow.OnNativeClosed` calls `TrySavePersistedPlacement` —
+  `GetWindowPlacement` + monitor-layout fingerprint serialized via
+  `WindowPlacementCodec`. Best-effort: failures log to `Debug.WriteLine`
+  and do not bubble.
+- [x] `WM_SHOWWINDOW` first-true triggers `TryRestorePersistedPlacement`
+  (idempotent via `_persistenceRestoreAttempted`). Fingerprint mismatch
+  / malformed payload silently falls back to spec default placement.
+  Wire format borrows from WinUIEx `WindowManager.LoadPersistence`.
 
-### 5.2 Chrome — icon, presenter, resizable/minimizable/maximizable, always-on-top
+### 5.2 Chrome
 
-- [ ] `WindowSpec.Icon` → `WindowIcon.Apply(AppWindow)` invoked at apply
-  time. Test both `FromPath` and `FromResource`.
-- [ ] `WindowSpec.Presenter` (`Overlapped | FullScreen | CompactOverlay`)
-  → `AppWindow.SetPresenter(...)`. `Update(spec)` flips presenters.
-- [ ] `WindowSpec.IsResizable / IsMinimizable / IsMaximizable` → on
-  `OverlappedPresenter` only, set the equivalent properties. On
-  `FullScreen` / `CompactOverlay`, these flags have no effect; document
-  this.
-- [ ] `WindowSpec.IsAlwaysOnTop` → `OverlappedPresenter.IsAlwaysOnTop`.
-- [ ] `WindowSpec.IsShownInSwitchers` →
-  `AppWindow.IsShownInSwitchers`.
-- [ ] `WindowSpec.ExtendsContentIntoTitleBar` → `Window.ExtendsContent
-  IntoTitleBar`. (Spec §N5 — only knob added; existing `TitleBar(...)`
-  factory owns the rest.)
-- [ ] `WindowSpec.Backdrop` (`BackdropChoice?`) → seed the existing
-  `BackdropApplier` modifier on the host's root tree before mount. (Spec
-  §3.3.) Verify spec 033's `BackdropApplier` API is the right surface
-  here.
-- [ ] `WindowSpec.ActivateOnOpen` → call `Activate()` after mount and
-  persistence restore.
+- [x] Backdrop seeding: `BackdropApplier.SetWindowDefault(BackdropChoice?)`
+  retains the spec's backdrop as a render-pass fallback so the first
+  frame paints the right material even when the root tree carries no
+  `BackdropChoice` modifier. Tree modifiers still take precedence; spec
+  changes flow through `Update`.
+- [/] Icon / presenter / resizable / minimizable / maximizable /
+  always-on-top / IsShownInSwitchers / ExtendsContentIntoTitleBar /
+  ActivateOnOpen wiring — already shipped in Phase 1's
+  `ApplyChrome(initial: true)`. Phase 5 adds the owner-aware switcher
+  override (see §5.3) and the backdrop seeding above.
 
 ### 5.3 Owned windows (spec §9)
 
-- [ ] `WindowSpec.Owner` → at apply time, call `AppWindow.SetParent` (or
-  Win32 `SetWindowLongPtr(GWLP_HWNDPARENT)` fallback for cases where
-  AppWindow doesn't expose what we need).
-- [ ] Owner-close cascading: when an owner closes, its owned windows
-  close first with `WindowClosingEventArgs.Reason = OwnerClosed`. Honor
-  guard cancellation; if any owned window cancels, the owner-close is
-  also cancelled.
-- [ ] Owned windows hide from the taskbar by default
-  (`IsShownInSwitchers = false` is the default for owned windows unless
-  the spec explicitly overrides).
+- [x] `WindowSpec.Owner` → at apply time, call
+  `SetWindowLongPtrW(GWLP_HWNDPARENT)`. Owner registers the child in a
+  copy-on-write `_ownedWindows` array under `_ownedLock`.
+- [x] Owner-close cascade: `OnAppWindowClosing` walks owned windows
+  first with `_closingReason = OwnerClosed`, calls `Window.Close` on
+  each, and aborts the owner close (`args.Cancel = true`) if any owned
+  window survives the close attempt (a guard cancelled).
+- [x] Owned windows force `IsShownInSwitchers = false` (the spec
+  default `true` is interpreted as "visible only when there's no
+  owner"). Apps that want owned-in-switcher must currently keep their
+  window unowned.
 
 ### 5.4 Tests — Phase 5
 
-- [ ] Unit: `JsonFileStore` round-trip — write → read returns the same
-  bytes. Corrupted file (truncated, garbage JSON) returns null and
-  emits a warn log without throwing.
-- [ ] Unit: monitor-fingerprint mismatch → returns null → fall back to
-  default position. Use a fake `IDisplayInfoProvider`.
-- [ ] Unit: 1 MB cap — reading a 2 MB persistence file is rejected.
-- [ ] Unit: `Owner.Close()` cascades. Test cancellation: an owned-window
-  guard returning false cancels the owner's close.
-- [ ] Selftest: presenter switch (Overlapped → FullScreen → Overlapped)
-  preserves window content tree (no remount).
-- [ ] Selftest: persistence — open window, resize, close, reopen,
-  assert restored size and position match.
-- [ ] Selftest: backdrop seeding via `WindowSpec.Backdrop` matches the
-  declarative `Backdrop(...)` modifier path for visual identity.
+- [x] Unit: `JsonFileStoreTests` covers round-trip, multi-id coexistence,
+  overwrite, missing file / id, malformed JSON, oversize-rejection, and
+  default-path shape (9 facts).
+- [x] Unit: `WindowPlacementCodecTests` covers fingerprint mismatch
+  (count + bounds), implausible monitor count, truncated payload, and
+  `MonitorRect` structural equality (5 facts). The Capture path
+  requires a real HWND; selftest fixtures own that.
+- [/] Owner-close cascade unit tests, presenter-switch selftests, and
+  the persistence round-trip selftest deferred — paired with the Phase
+  9 selftest matrix where they share the multi-window scaffolding.
 
 ---
 

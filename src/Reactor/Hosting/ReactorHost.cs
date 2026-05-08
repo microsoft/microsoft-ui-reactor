@@ -47,6 +47,13 @@ public sealed class ReactorHost : IDisposable
     // Owned for the host's lifetime; reset on dispose so a non-Reactor
     // window-reuse path returns to a clean slate.
     private readonly BackdropApplier _backdropApplier;
+
+    /// <summary>
+    /// Internal accessor for <see cref="ReactorWindow"/> to seed
+    /// <see cref="WindowSpec.Backdrop"/> as the window-level default before
+    /// mount. (spec 036 §3.3)
+    /// </summary>
+    internal BackdropApplier BackdropApplier => _backdropApplier;
     private readonly global::Windows.Foundation.TypedEventHandler<object, WindowEventArgs> _closedHandler;
 
     // Accessibility: forced-colors and reduced-motion auto-propagation.

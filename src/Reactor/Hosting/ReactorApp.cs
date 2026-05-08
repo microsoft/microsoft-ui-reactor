@@ -90,6 +90,54 @@ public static class ReactorApp
         internal set => Volatile.Write(ref _uiDispatcher, value);
     }
 
+    private static Hosting.Persistence.IWindowPersistenceStore? _windowPersistenceStore;
+    private static int _persistenceStoreLocked;
+
+    /// <summary>
+    /// Process-wide store backing <see cref="WindowSpec.PersistenceId"/>.
+    /// Defaults are picked lazily on first window open: packaged apps get
+    /// <see cref="Hosting.Persistence.PackagedSettingsStore"/>; unpackaged apps
+    /// get <see cref="Hosting.Persistence.JsonFileStore"/>. Setting this
+    /// property after the first <c>OpenWindow</c> throws — windows that
+    /// already loaded their placement from the previous store would get a
+    /// half-populated state. (spec 036 §8)
+    /// </summary>
+    public static Hosting.Persistence.IWindowPersistenceStore? WindowPersistenceStore
+    {
+        get => Volatile.Read(ref _windowPersistenceStore);
+        set
+        {
+            if (Volatile.Read(ref _persistenceStoreLocked) != 0)
+                throw new InvalidOperationException(
+                    "ReactorApp.WindowPersistenceStore can only be set before the first OpenWindow. (spec 036 §8)");
+            Volatile.Write(ref _windowPersistenceStore, value);
+        }
+    }
+
+    internal static Hosting.Persistence.IWindowPersistenceStore? ResolvePersistenceStore()
+    {
+        // Snapshot once and lock subsequent assignments. Idempotent; the
+        // CompareExchange flips 0→1 on the first window open per process.
+        Interlocked.CompareExchange(ref _persistenceStoreLocked, 1, 0);
+        var store = Volatile.Read(ref _windowPersistenceStore);
+        if (store is not null) return store;
+
+        // Auto-pick: packaged apps get the WinRT settings store; unpackaged
+        // apps get the JSON file store.
+        try
+        {
+            store = Hosting.Persistence.PackagedSettingsStore.IsAvailable()
+                ? new Hosting.Persistence.PackagedSettingsStore()
+                : new Hosting.Persistence.JsonFileStore();
+            Volatile.Write(ref _windowPersistenceStore, store);
+        }
+        catch (Exception ex)
+        {
+            global::System.Diagnostics.Debug.WriteLine($"[Reactor] ResolvePersistenceStore failed: {ex.GetType().Name}: {ex.Message}");
+        }
+        return store;
+    }
+
     /// <summary>Process-shutdown policy. Defaults to <see cref="ShutdownPolicy.OnPrimaryWindowClosed"/>.</summary>
     public static ShutdownPolicy ShutdownPolicy
     {
