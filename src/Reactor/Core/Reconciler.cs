@@ -327,11 +327,17 @@ public sealed partial class Reconciler : IDisposable
     /// underlying control. Call from <see cref="ElementPool.CleanElement"/>
     /// so the next rent doesn't fire the previous component's captured
     /// rerender closure. TASK-060.
+    /// Also resets the echo-suppress counter so a stranded BeginSuppress
+    /// (e.g. a write whose change-event got swallowed) can't suppress a
+    /// real user event after the element is rented to a new owner.
     /// </summary>
     internal static void ClearCurrentEventHandlers(FrameworkElement fe)
     {
         if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+        {
             state.Events?.ClearCurrentHandlers();
+            state.EchoSuppressCount = 0;
+        }
     }
 
     /// <summary>
@@ -350,6 +356,7 @@ public sealed partial class Reconciler : IDisposable
         state.Element = null;
         state.Events?.ClearCurrentHandlers();
         state.Events = null;
+        state.EchoSuppressCount = 0;
     }
 
     // ════════════════════════════════════════════════════════════════════
