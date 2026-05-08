@@ -46,7 +46,11 @@ internal sealed class WindowRegistry
     public void Attach(Window window, bool isMain = false, string? stableId = null)
     {
         RegisterCore(window, reactorWindow: null, isMain, stableId);
-        window.Activated += (_, _) => RegisterCore(window, reactorWindow: null, isMain, stableId);
+        // The Activated re-register subscription that used to live here was
+        // dead code (RegisterCore early-exits when the entry is already
+        // present) and racy on close (after Forget removes the entry, a
+        // late Activated would hit RegisterCore's window.Title getter on
+        // a window mid-teardown and COMException). Drop it.
         window.Closed += (_, _) => Forget(window);
     }
 
@@ -59,7 +63,13 @@ internal sealed class WindowRegistry
     {
         ArgumentNullException.ThrowIfNull(window);
         RegisterCore(window.NativeWindow, window, isMain, stableId);
-        window.NativeWindow.Activated += (_, _) => RegisterCore(window.NativeWindow, window, isMain, stableId);
+        // Forget on close. Note: we do NOT re-register on Activated. The
+        // initial RegisterCore covers the entry's lifetime, and re-firing
+        // RegisterCore from a late Activated event after Forget already ran
+        // hits a COMException reading window.Title on a window the OS is
+        // tearing down. The early-exit on line 87 of RegisterCore makes a
+        // re-register a no-op anyway, so the Activated subscription was
+        // dead code before this fix and racy after Close.
         window.NativeWindow.Closed += (_, _) => Forget(window.NativeWindow);
     }
 
@@ -95,9 +105,19 @@ internal sealed class WindowRegistry
             // The devtools main window pins to "main" so the id survives
             // switchComponent (which updates the window title). Secondary
             // windows fall through to the title-based allocator.
+            // window.Title can throw COMException when the window's native
+            // peer is mid-teardown — fall back to a generic seed so a late
+            // registration doesn't crash the close path.
+            string title;
+            try { title = window.Title ?? string.Empty; }
+            catch (Exception ex)
+            {
+                global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowRegistry.RegisterCore Title getter threw: {ex.Message}");
+                title = "(unknown)";
+            }
             var id = stableId is not null
                 ? _allocator.Reserve(stableId)
-                : _allocator.Allocate(window.Title);
+                : _allocator.Allocate(title);
             _entries.Add(new Entry(
                 id,
                 new WeakReference(window),
