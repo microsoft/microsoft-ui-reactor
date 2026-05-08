@@ -5,9 +5,15 @@
 // developer runs in their terminal.
 // ─── Plugin Lifecycle ────────────────────────────────────────────────────────
 figma.showUI(__html__, { width: 360, height: 320, themeColors: true });
+// Accept FRAME, COMPONENT, COMPONENT_SET, and SECTION as valid targets
+const FRAME_TYPES = ["FRAME", "COMPONENT", "COMPONENT_SET", "SECTION"];
 function getSelectedFrame() {
     const selection = figma.currentPage.selection;
-    if (selection.length === 1 && selection[0].type === "FRAME") {
+    if (selection.length === 1 && FRAME_TYPES.includes(selection[0].type)) {
+        return selection[0];
+    }
+    // Also accept any node that has children (group, instance, etc.)
+    if (selection.length === 1 && "children" in selection[0]) {
         return selection[0];
     }
     return null;
@@ -20,15 +26,16 @@ function sendFrameInfo() {
         const nodeId = frame.id; // format: "123:456"
         const urlNodeId = nodeId.replace(":", "-"); // URL format: "123-456"
         const figmaUrl = fileKey
-            ? `https://www.figma.com/design/${fileKey}/${encodeURIComponent(figma.root.name)}?node-id=${urlNodeId}`
+            ? "https://www.figma.com/design/" + fileKey + "/" +
+                encodeURIComponent(figma.root.name) + "?node-id=" + urlNodeId
             : null;
         figma.ui.postMessage({
             type: "frame-selected",
             frameId: frame.id,
             frameName: frame.name,
-            fileKey: fileKey !== null && fileKey !== void 0 ? fileKey : "",
+            fileKey: fileKey || "",
             nodeId: urlNodeId,
-            figmaUrl,
+            figmaUrl: figmaUrl,
             width: Math.round(frame.width),
             height: Math.round(frame.height),
         });
@@ -36,6 +43,9 @@ function sendFrameInfo() {
     else {
         figma.ui.postMessage({
             type: "no-frame",
+            message: figma.currentPage.selection.length === 0
+                ? "Nothing selected"
+                : "Selected node type: " + figma.currentPage.selection[0].type,
         });
     }
 }

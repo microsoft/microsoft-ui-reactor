@@ -251,6 +251,10 @@
         setFrame(msg);
       } else if (msg.type === 'no-frame') {
         setFrame(null);
+        // Show diagnostic info
+        if (msg.message) {
+          document.getElementById('frame-detail').textContent = msg.message;
+        }
       }
     };
 
