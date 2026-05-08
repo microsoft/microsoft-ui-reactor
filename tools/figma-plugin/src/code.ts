@@ -5,7 +5,7 @@
 
 // ─── Plugin Lifecycle ────────────────────────────────────────────────────────
 
-figma.showUI(__html__, { width: 360, height: 320, themeColors: true });
+figma.showUI(__html__, { width: 360, height: 370, themeColors: true });
 
 // Accept FRAME, COMPONENT, COMPONENT_SET, and SECTION as valid targets
 const FRAME_TYPES: string[] = ["FRAME", "COMPONENT", "COMPONENT_SET", "SECTION"];
@@ -15,26 +15,37 @@ function getSelectedFrame(): SceneNode | null {
   if (selection.length === 1 && FRAME_TYPES.includes(selection[0].type)) {
     return selection[0];
   }
-  // Also accept any node that has children (group, instance, etc.)
   if (selection.length === 1 && "children" in selection[0]) {
     return selection[0];
   }
   return null;
 }
 
-function sendFrameInfo() {
+// Resolve file key: figma.fileKey (private plugins) or user-provided fallback
+let cachedFileKey: string | null = null;
+
+async function resolveFileKey(): Promise<string | null> {
+  // 1. Try the native API (requires enablePrivatePluginApi + private plugin)
+  if (figma.fileKey) return figma.fileKey;
+  // 2. Try cached value from this session
+  if (cachedFileKey) return cachedFileKey;
+  // 3. Try persisted value from clientStorage
+  const stored = await figma.clientStorage.getAsync("fileKey") as string | undefined;
+  if (stored) { cachedFileKey = stored; return stored; }
+  return null;
+}
+
+async function sendFrameInfo() {
   const frame = getSelectedFrame();
   if (frame) {
-    // Build the Figma URL for this frame
-    const fileKey = figma.fileKey;
-    const nodeId = frame.id; // format: "123:456"
-    const urlNodeId = nodeId.replace(":", "-"); // URL format: "123-456"
+    const fileKey = await resolveFileKey();
+    const nodeId = frame.id;
+    const urlNodeId = nodeId.replace(":", "-");
 
-    // figma.fileKey can be null in dev mode or for unsaved files
-    var figmaUrl: string | null = null;
+    var figmaUrl = "";
     if (fileKey) {
-      figmaUrl = "https://www.figma.com/design/" + fileKey + "/" +
-        encodeURIComponent(figma.root.name) + "?node-id=" + urlNodeId;
+      figmaUrl = "https://www.figma.com/design/" + fileKey +
+        "?node-id=" + urlNodeId;
     }
 
     figma.ui.postMessage({
@@ -43,9 +54,10 @@ function sendFrameInfo() {
       frameName: frame.name,
       fileKey: fileKey || "",
       nodeId: urlNodeId,
-      figmaUrl: figmaUrl || "",
+      figmaUrl: figmaUrl,
       width: Math.round(frame.width),
       height: Math.round(frame.height),
+      needsFileKey: !fileKey,
     });
   } else {
     figma.ui.postMessage({
@@ -58,12 +70,20 @@ function sendFrameInfo() {
 }
 
 // Track selection changes
-figma.on("selectionchange", sendFrameInfo);
+figma.on("selectionchange", () => { sendFrameInfo(); });
 
 // Handle messages from the UI
-figma.ui.onmessage = (msg: { type: string }) => {
+figma.ui.onmessage = (msg: { type: string; url?: string }) => {
   if (msg.type === "request-frame-info") {
     sendFrameInfo();
+  } else if (msg.type === "set-file-url" && msg.url) {
+    // User pasted a Figma URL — extract the file key
+    const match = msg.url.match(/figma\.com\/(?:design|file)\/([a-zA-Z0-9]+)/i);
+    if (match) {
+      cachedFileKey = match[1];
+      figma.clientStorage.setAsync("fileKey", cachedFileKey);
+      sendFrameInfo(); // re-send with the resolved key
+    }
   }
 };
 

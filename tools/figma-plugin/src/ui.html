@@ -70,10 +70,16 @@
 
     <!-- Watch command (copyable) -->
     <div class="section-label">Live Watch <span style="font-weight:400; text-transform:none">(optional)</span></div>
+    <div id="file-url-input" class="hidden">
+      <div class="config-row" style="margin-bottom:4px">
+        <input type="text" id="figma-url" placeholder="Paste Figma file URL here" oninput="onFileUrlInput()" />
+      </div>
+      <div class="hint">Paste any URL from this Figma file to enable watch &amp; generate</div>
+    </div>
     <div class="cmd-box" id="watch-cmd" onclick="copyText('watch-cmd')">
       <span class="copy-hint">click to copy</span>
     </div>
-    <div class="hint">Run this in a terminal to watch for Figma changes</div>
+    <div class="hint" id="watch-hint">Run this in a terminal to watch for Figma changes</div>
   </div>
 
   <div class="bottom-bar">
@@ -99,15 +105,19 @@
       var el = document.getElementById('frame-text');
       var detail = document.getElementById('frame-detail');
       var container = document.getElementById('frame-status');
+      var urlInput = document.getElementById('file-url-input');
 
       if (info) {
         el.textContent = info.frameName;
         detail.textContent = info.width + ' × ' + info.height + '  ·  ' + info.nodeId;
         container.className = 'frame-status watching';
+        // Show URL input if fileKey is not available
+        urlInput.className = info.needsFileKey ? '' : 'hidden';
       } else {
         el.textContent = 'Select a frame';
         detail.textContent = '';
         container.className = 'frame-status';
+        urlInput.className = 'hidden';
       }
       updateCommands();
     }
@@ -243,6 +253,14 @@
 
     function escHtml(s) {
       return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // ─── File URL input (fallback when fileKey unavailable) ─────────────────
+    function onFileUrlInput() {
+      var url = document.getElementById('figma-url').value.trim();
+      if (url && url.indexOf('figma.com') !== -1) {
+        parent.postMessage({ pluginMessage: { type: 'set-file-url', url: url } }, '*');
+      }
     }
 
     // ─── Messages from plugin sandbox ────────────────────────────────────────

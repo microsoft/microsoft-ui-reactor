@@ -5,6 +5,7 @@
   "main": "dist/code.js",
   "ui": "dist/ui.html",
   "documentAccess": "dynamic-page",
+  "enablePrivatePluginApi": true,
   "editorType": ["figma"],
   "networkAccess": {
     "allowedDomains": ["none"]
