@@ -25,6 +25,14 @@ class WindowsDemo : Component
         var (childCount, setChildCount) = UseState(0);
         var (showSecondary, setShowSecondary) = UseState(false);
 
+        // Icons are stable for the life of this component — memoize so a
+        // re-render doesn't reallocate the WindowIcon record (and so any
+        // future record-equality compare on WindowSpec sees the same
+        // reference and skips ApplyChrome). UseMemo with no deps == compute
+        // once on first render, reuse forever.
+        var appIcon = UseMemo(() => WindowIcon.FromPath(global::System.IO.Path.Combine(
+            global::System.AppContext.BaseDirectory, "Assets", "AppIcon.ico")));
+
         // 1) Keyed secondary window via UseOpenWindow. Same key across renders
         //    => same handle. Toggling `showSecondary` opens / closes it.
         var keyedWindow = showSecondary
@@ -35,17 +43,26 @@ class WindowsDemo : Component
                     Title = "Keyed Secondary Window",
                     Width = 480,
                     Height = 320,
+                    Icon = appIcon,
                 },
                 () => new SecondaryWindowContent("Keyed window — same handle on every render"))
             : null;
 
-        // 2) Tray icon scoped to this component. Using a path that may not
-        //    resolve to a real .ico just to show the wiring — Reactor logs
-        //    a Debug.WriteLine and registers an invisible icon, but Click
-        //    events still fire. Drop a real .ico path in here to see the
-        //    icon in your notification tray.
+        // 2) Tray icon scoped to this component. Loads a real .ico shipped
+        //    next to the exe (Assets/TrayIcon.ico — borrowed from the
+        //    MIT-licensed microsoft-ui-xaml WinUI Gallery sample). Swap
+        //    in your own .ico to see your own glyph in the tray.
+        //
+        //    Memoize the path + WindowIcon record so we don't reallocate
+        //    them per render. The TrayIconSpec record itself we DON'T
+        //    memoize — its value-equality (compared by UseTrayIcon's
+        //    UseEffect) means an identical-by-value spec triggers no
+        //    Update call, so a fresh record per render is cheap.
+        var trayIconPath = UseMemo(() => global::System.IO.Path.Combine(
+            global::System.AppContext.BaseDirectory, "Assets", "TrayIcon.ico"));
+        var trayIcon = UseMemo(() => WindowIcon.FromPath(trayIconPath), trayIconPath);
         var tray = UseTrayIcon(new TrayIconSpec(
-            Icon: WindowIcon.FromPath(@"C:\Windows\System32\shell32.dll"), // any HICON resource works
+            Icon: trayIcon,
             Tooltip: "Reactor TestApp — WindowsDemo tab",
             Key: WindowKey.Of("testapp-tray")));
 
@@ -101,6 +118,7 @@ class WindowsDemo : Component
                                 Title = $"Document #{n}",
                                 Width = 360,
                                 Height = 240,
+                                Icon = appIcon,
                             },
                             () => new SecondaryWindowContent($"This is document #{n}"));
                         setChildCount(n);
@@ -132,7 +150,7 @@ class WindowsDemo : Component
                     .Foreground(TertiaryText),
                 TextBlock("Left-click the icon: opens the keyed window above. Right-click: closes it.")
                     .Foreground(TertiaryText),
-                TextBlock("Hint: change the `WindowIcon.FromPath(...)` argument in WindowsDemo.cs to a real .ico to see the icon glyph.")
+                TextBlock($"Icon source: {trayIconPath}")
                     .Foreground(TertiaryText)
             ).Padding(12)).Background(CardBackground).CornerRadius(8)
         );

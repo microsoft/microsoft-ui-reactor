@@ -1,0 +1,11 @@
+<Project>
+
+  <!--
+    Chain to the repo-root Directory.Build.targets — without this explicit
+    import the root one (which configures NoWarn for trim/AOT warnings on
+    samples) wouldn't be picked up because MSBuild's auto-walk stops at the
+    first Directory.Build.targets it finds.
+  -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)../'))" />
+
+</Project>

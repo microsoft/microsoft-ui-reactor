@@ -88,9 +88,16 @@ class DemoApp : Component
         var debugUI = UseObservable(AppFlags.DebugUI).Value;
         var outline = UseObservable(AppFlags.OutlineLayout).Value;
 
+        // The shared WinUI logo .ico is bundled at samples/Assets/WinUI.ico
+        // and is also wired into the EXE PE resources via the
+        // samples/Directory.Build.props default <ApplicationIcon>. Surfacing
+        // it through TitleBar.Icon shows the same glyph inside the custom
+        // title bar rather than only on the taskbar / Alt-Tab entry.
         return FlexColumn(
             (TitleBar("TestApp") with
             {
+                Icon = new ImageIconData(new Uri(global::System.IO.Path.Combine(
+                    global::System.AppContext.BaseDirectory, "Assets", "AppIcon.ico"))),
                 Content = HStack(8,
                     ComboBox(TabElements, (int)currentTab, i => setTab((Tab)i)).Width(240),
                     ComboBox(Languages, langIndex, setLangIndex),
