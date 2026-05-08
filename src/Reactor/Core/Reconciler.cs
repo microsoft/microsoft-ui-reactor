@@ -1377,7 +1377,7 @@ public sealed partial class Reconciler : IDisposable
             }
         }
 
-        if (themeT?.Children is { Length: > 0 } children)
+        if (themeT?.Children is { } children)
         {
             var tc = new Microsoft.UI.Xaml.Media.Animation.TransitionCollection();
             foreach (var t in children) tc.Add(t);
@@ -1392,7 +1392,7 @@ public sealed partial class Reconciler : IDisposable
             }
         }
 
-        if (themeT?.ItemContainer is { Length: > 0 } itemTransitions)
+        if (themeT?.ItemContainer is { } itemTransitions)
         {
             var tc = new Microsoft.UI.Xaml.Media.Animation.TransitionCollection();
             foreach (var t in itemTransitions) tc.Add(t);
