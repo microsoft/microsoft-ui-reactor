@@ -1562,6 +1562,13 @@ public sealed partial class Reconciler
         titleBar.IsBackButtonEnabled = n.IsBackButtonEnabled;
         titleBar.IsPaneToggleButtonVisible = n.IsPaneToggleButtonVisible;
 
+        // Icon: only re-resolve when the IconData record changed (record
+        // value equality covers the path / kind delta). Skipping when
+        // unchanged avoids reallocating BitmapImage and keeps the title
+        // bar's icon stable across re-renders.
+        if (!Equals(o.Icon, n.Icon))
+            titleBar.IconSource = ResolveIconSource(n.Icon);
+
         ReconcileChild(o.Content, n.Content,
             () => titleBar.Content as UIElement,
             c => titleBar.Content = c,

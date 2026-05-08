@@ -704,6 +704,34 @@ public class MoreCoverageTests2
     }
 
     [Fact]
+    public void TitleBarElement_Icon_Defaults_To_Null_And_Round_Trips()
+    {
+        var bare = new TitleBarElement("App");
+        Assert.Null(bare.Icon);
+
+        var symbol = new TitleBarElement("App") { Icon = new SymbolIconData("Home") };
+        Assert.IsType<SymbolIconData>(symbol.Icon);
+        Assert.Equal("Home", ((SymbolIconData)symbol.Icon!).Symbol);
+
+        var image = new TitleBarElement("App")
+        {
+            Icon = new ImageIconData(new Uri("ms-appx:///Assets/AppIcon.ico")),
+        };
+        Assert.IsType<ImageIconData>(image.Icon);
+    }
+
+    [Fact]
+    public void TitleBarElement_Icon_Participates_In_Record_Equality()
+    {
+        var a = new TitleBarElement("App") { Icon = new SymbolIconData("Home") };
+        var b = new TitleBarElement("App") { Icon = new SymbolIconData("Home") };
+        Assert.Equal(a, b);
+
+        var c = new TitleBarElement("App") { Icon = new SymbolIconData("Edit") };
+        Assert.NotEqual(a, c);
+    }
+
+    [Fact]
     public void PivotElement_Defaults_AreSet()
     {
         var p = new PivotElement(Array.Empty<PivotItemData>())
