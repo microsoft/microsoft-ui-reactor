@@ -4,9 +4,11 @@
     <RootNamespace>Microsoft.UI.Reactor.SelfTests</RootNamespace>
     <AssemblyName>Reactor.SelfTests</AssemblyName>
     <IsTestProject>true</IsTestProject>
-    <Platforms>x64;ARM64</Platforms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Pure MSTest runner — launches AppTests.Host as a subprocess.
+         No Windows App SDK dependency; opt out of self-contained. -->
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />

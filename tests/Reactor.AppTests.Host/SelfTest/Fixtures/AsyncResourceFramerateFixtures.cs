@@ -71,16 +71,12 @@ internal static class AsyncResourceFramerateFixtures
                             try
                             {
                                 ct.Register(() => Interlocked.Increment(ref cancelled));
-                                await Task.Delay(200, ct);
-                                // Close the race where Task.Delay's 200ms timer
-                                // fires almost simultaneously with cancellation:
-                                // Task.Delay can complete normally (timer wins
-                                // the atomic result-set) even though Cancel()
-                                // was called, leaving the await to resume and
-                                // increment `completed` for a fetch the hook
-                                // will correctly discard. Re-checking the CT
-                                // after the await observes the cancellation.
-                                ct.ThrowIfCancellationRequested();
+                                // Infinite delay: the only exit is OperationCanceledException
+                                // when the CT fires. This eliminates the timer-vs-cancel race
+                                // that made completed reach 2 when CI render ticks approached
+                                // the old 200ms fixed delay. `completed` stays 0; the
+                                // assertion below guards against regressions.
+                                await Task.Delay(Timeout.Infinite, ct);
                                 Interlocked.Increment(ref completed);
                                 return $"dep={dep}";
                             }
@@ -101,9 +97,6 @@ internal static class AsyncResourceFramerateFixtures
                     await Harness.Render();
                 }
 
-                // Only the final deps value's fetch should survive. Let it resolve.
-                await Harness.Render(400);
-
                 // Invariant 1: fetches started roughly once per deps-change (some coalesce).
                 H.Check($"DepsThrashing_Started (started={started}, frames={Frames})",
                     started >= Frames / 3 && started <= Frames + 2);
@@ -117,11 +110,15 @@ internal static class AsyncResourceFramerateFixtures
                 H.Check($"DepsThrashing_StaleCancelled (cancelled={cancelled}, started={started})",
                     cancelled >= started - 1);
 
-                // Invariant 4: at most one fetch ran to completion — the last deps' one.
+                // Invariant 4: no fetch body completes — all use Timeout.Infinite delays and
+                // exit only via cancellation. completed must be exactly 0.
                 H.Check($"DepsThrashing_AtMostOneCompleted (completed={completed})",
-                    completed <= 1);
+                    completed == 0);
 
                 // Invariant 5: no unobserved task exceptions escaped under this load.
+                // Dispose the host first so the last in-flight Task.Delay(Infinite, ct) is
+                // cancelled via UseEffect teardown before we drain for unobserved exceptions.
+                host.Dispose();
                 await Harness.Render();
                 GC.Collect();
                 GC.WaitForPendingFinalizers();

@@ -1,0 +1,318 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="ARM64" />
+  </Configurations>
+  <Folder Name="/perf_bench/">
+    <Project Path="tests/perf_bench/PerfBench.Shared/PerfBench.Shared.csproj" />
+  </Folder>
+  <Folder Name="/perf_bench/Allocation/">
+    <Project Path="tests/perf_bench/PerfBench.Allocation/Allocation.Bound/Allocation.Bound.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.Allocation/Allocation.Direct/Allocation.Direct.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.Allocation/Allocation.Reactor/Allocation.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/perf_bench/DeferredMount/">
+    <Project Path="tests/perf_bench/PerfBench.DeferredMount/DeferredMount.Bound/DeferredMount.Bound.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.DeferredMount/DeferredMount.Direct/DeferredMount.Direct.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.DeferredMount/DeferredMount.Reactor/DeferredMount.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/perf_bench/DirtyTracking/">
+    <Project Path="tests/perf_bench/PerfBench.DirtyTracking/DirtyTracking.Bound/DirtyTracking.Bound.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.DirtyTracking/DirtyTracking.Direct/DirtyTracking.Direct.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.DirtyTracking/DirtyTracking.Reactor/DirtyTracking.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/perf_bench/InteractivePool/">
+    <Project Path="tests/perf_bench/PerfBench.InteractivePool/InteractivePool.Bound/InteractivePool.Bound.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.InteractivePool/InteractivePool.Direct/InteractivePool.Direct.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.InteractivePool/InteractivePool.Reactor/InteractivePool.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/perf_bench/Journal/">
+    <Project Path="tests/perf_bench/PerfBench.Journal/Journal.Bound/Journal.Bound.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.Journal/Journal.Direct/Journal.Direct.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.Journal/Journal.Reactor/Journal.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/perf_bench/OffThread/">
+    <Project Path="tests/perf_bench/PerfBench.OffThread/OffThread.Bound/OffThread.Bound.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.OffThread/OffThread.Direct/OffThread.Direct.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.OffThread/OffThread.Reactor/OffThread.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/perf_bench/Priorities/">
+    <Project Path="tests/perf_bench/PerfBench.Priorities/Priorities.Bound/Priorities.Bound.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.Priorities/Priorities.Direct/Priorities.Direct.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.Priorities/Priorities.Reactor/Priorities.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/perf_bench/PropertyDiff/">
+    <Project Path="tests/perf_bench/PerfBench.PropertyDiff/PropertyDiff.Bound/PropertyDiff.Bound.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.PropertyDiff/PropertyDiff.Direct/PropertyDiff.Direct.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.PropertyDiff/PropertyDiff.Reactor/PropertyDiff.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/perf_bench/StructuralSharing/">
+    <Project Path="tests/perf_bench/PerfBench.StructuralSharing/StructuralSharing.Bound/StructuralSharing.Bound.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.StructuralSharing/StructuralSharing.Direct/StructuralSharing.Direct.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.StructuralSharing/StructuralSharing.Reactor/StructuralSharing.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/perf_bench/TimeSlice/">
+    <Project Path="tests/perf_bench/PerfBench.TimeSlice/TimeSlice.Bound/TimeSlice.Bound.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.TimeSlice/TimeSlice.Direct/TimeSlice.Direct.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/perf_bench/PerfBench.TimeSlice/TimeSlice.Reactor/TimeSlice.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/CommandingDemo/CommandingDemo.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="samples/InteropFirst/InteropFirst.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="samples/NavigationDemo/NavigationDemo.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="samples/Reactor.TestApp/Reactor.TestApp.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="samples/ReactorCharting.Gallery/ReactorCharting.Gallery.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="samples/ReactorCharting.Sample/ReactorCharting.Sample.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="samples/ReactorGallery/ReactorGallery.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="samples/ReactorHostControlDemo/ReactorHostControlDemo.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="samples/StylingGallery/StylingGallery.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="samples/TodoApp/TodoApp.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="samples/WinFormsInterop/WinFormsInterop.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="src/Reactor.Interop.WinForms/Reactor.Interop.WinForms.csproj" />
+  </Folder>
+  <Folder Name="/samples/apps/">
+    <Project Path="samples/apps/demo-script-tool/App/DemoScriptTool.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/apps/a11y-showcase/">
+    <Project Path="samples/apps/a11y-showcase/A11yShowcase.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/apps/chat/">
+    <Project Path="samples/apps/chat/Chat.Model/Chat.Model.csproj" />
+    <Project Path="samples/apps/chat/Chat.UI/Chat.UI.csproj" />
+  </Folder>
+  <Folder Name="/samples/apps/chat/App/">
+    <Project Path="samples/apps/chat/App/ChatSample.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/apps/headtrax/">
+    <Project Path="samples/apps/headtrax/HeadTrax/HeadTrax.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/apps/monaco-editor/">
+    <Project Path="samples/apps/monaco-editor/MonacoEditorApp.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/apps/netpulse/">
+    <Project Path="samples/apps/netpulse/NetPulse.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/apps/regedit/">
+    <Project Path="samples/apps/regedit/ReactorRegedit.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/apps/validation-showcase/">
+    <Project Path="samples/apps/validation-showcase/ValidationShowcase.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/apps/wordpuzzle/">
+    <Project Path="samples/apps/wordpuzzle/WordPuzzle.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/src/" />
+  <Folder Name="/tests/">
+    <Project Path="tests/Reactor.AppTests.Host/Reactor.AppTests.Host.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/Reactor.AppTests.ThirdPartyControls/Reactor.AppTests.ThirdPartyControls.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/Reactor.AppTests/Reactor.AppTests.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj" />
+    <Project Path="tests/Reactor.SelfTests/Reactor.SelfTests.csproj" />
+    <Project Path="tests/Reactor.Tests/Reactor.Tests.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/Reactor.WinFormsTests.Host/Reactor.WinFormsTests.Host.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/tests/stress_perf/">
+    <Project Path="tests/stress_perf/StressPerf.Bound/StressPerf.Bound.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/stress_perf/StressPerf.Direct/StressPerf.Direct.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/stress_perf/StressPerf.DirectX/StressPerf.DirectX.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/stress_perf/StressPerf.Reactor/StressPerf.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/stress_perf/StressPerf.ReactorGrid/StressPerf.ReactorGrid.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/stress_perf/StressPerf.ReactorOptimized/StressPerf.ReactorOptimized.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/stress_perf/StressPerf.Shared/StressPerf.Shared.csproj" />
+    <Project Path="tests/stress_perf/StressPerf.Wpf/StressPerf.Wpf.csproj" />
+  </Folder>
+  <Folder Name="/tools/" />
+  <Folder Name="/tools/Templates/">
+    <Project Path="tools/Templates/Microsoft.UI.Reactor.Templates.csproj" />
+  </Folder>
+  <Project Path="src/Reactor.Analyzers/Reactor.Analyzers.csproj" />
+  <Project Path="src/Reactor.Cli/Reactor.Cli.csproj">
+    <Platform Solution="*|ARM64" Project="ARM64" />
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="src/Reactor.Localization.Generator/Reactor.Localization.Generator.csproj" />
+  <Project Path="src/Reactor/Reactor.csproj" />
+</Solution>

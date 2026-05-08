@@ -426,14 +426,19 @@ public sealed partial class Reconciler
         // this mount's element, not the pool's last owner. The BeginSuppress
         // guard below is additional belt-and-suspenders against echo.
         SetElementTag(textBox, tf);
+        // AcceptsReturn and TextWrapping must be set BEFORE Text. WinUI TextBox
+        // defaults to single-line mode (AcceptsReturn=false); assigning Text
+        // with embedded \r\n while in single-line mode silently strips the
+        // newlines, keeping only the first paragraph. Setting these first
+        // ensures multi-line content round-trips correctly on mount.
+        if (tf.AcceptsReturn == true) textBox.AcceptsReturn = true;
+        if (tf.TextWrapping.HasValue) textBox.TextWrapping = tf.TextWrapping.Value;
         if (rented is not null && textBox.Text != tf.Value)
             ChangeEchoSuppressor.BeginSuppress(textBox);
         textBox.Text = tf.Value;
         textBox.PlaceholderText = tf.Placeholder ?? "";
         if (tf.Header is not null) textBox.Header = tf.Header;
         if (tf.IsReadOnly == true) textBox.IsReadOnly = true;
-        if (tf.AcceptsReturn == true) textBox.AcceptsReturn = true;
-        if (tf.TextWrapping.HasValue) textBox.TextWrapping = tf.TextWrapping.Value;
         if (tf.SelectionStart.HasValue) textBox.SelectionStart = tf.SelectionStart.Value;
         if (tf.SelectionLength.HasValue) textBox.SelectionLength = tf.SelectionLength.Value;
         EnsureTextFieldWiring(textBox, tf, requestRerender);

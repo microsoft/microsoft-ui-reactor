@@ -165,7 +165,14 @@ internal static class DataGridScrollFixtures
 
             await Harness.Render(500);
 
-            // Verify initial data
+            // WaitForIdleAsync returns once the first render pass is idle, but the
+            // DataGrid's async block fetch fires after that pass and isn't tracked
+            // by _renderPending. Poll until data appears rather than betting on a
+            // fixed delay.
+            var deadline = Environment.TickCount64 + 5_000;
+            while (H.FindTextContaining("Emp-000000") is null && Environment.TickCount64 < deadline)
+                await Harness.Render(200);
+
             H.Check("ScrollBack_InitialData",
                 H.FindTextContaining("Emp-000000") is not null);
 

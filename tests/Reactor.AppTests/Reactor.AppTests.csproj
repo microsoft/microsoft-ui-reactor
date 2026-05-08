@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
     <RootNamespace>Microsoft.UI.Reactor.AppTests</RootNamespace>
     <AssemblyName>Reactor.AppTests</AssemblyName>
     <IsTestProject>true</IsTestProject>
-    <Platforms>x64;ARM64</Platforms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>

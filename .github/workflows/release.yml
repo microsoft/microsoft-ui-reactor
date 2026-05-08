@@ -91,17 +91,16 @@ jobs:
           Write-Host "Version: $version  (event=$eventName, isTag=$isTag)"
 
       - name: Restore
-        run: dotnet restore Reactor.sln
+        run: dotnet restore Reactor.slnx
 
       - name: Build framework + analyzers
-        run: dotnet build Reactor.sln --no-restore --configuration Release -p:Platform=x64
+        run: dotnet build Reactor.slnx --no-restore --configuration Release
 
       - name: Pack framework NuGet
         run: >
           dotnet pack src/Reactor/Reactor.csproj
           --no-build --configuration Release
           -p:Version=${{ steps.version.outputs.version }}
-          -p:Platform=x64
           -o artifacts/nupkg
 
       - name: Pack Templates
@@ -127,7 +126,6 @@ jobs:
           --configuration Release
           --runtime win-x64
           --self-contained false
-          -p:Platform=x64
           -p:Version=${{ steps.version.outputs.version }}
           -o artifacts/mur/x64
 
@@ -137,7 +135,6 @@ jobs:
           --configuration Release
           --runtime win-arm64
           --self-contained false
-          -p:Platform=ARM64
           -p:Version=${{ steps.version.outputs.version }}
           -o artifacts/mur/arm64
 

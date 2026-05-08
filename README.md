@@ -190,11 +190,11 @@ class App : Component
 
 ```bash
 # Restore and build
-dotnet restore Reactor.sln
-dotnet build Reactor.sln -p:Platform=x64
+dotnet restore Reactor.slnx
+dotnet build Reactor.slnx
 
 # Run the interactive demo app
-dotnet run --project samples/Reactor.TestApp -p:Platform=x64
+dotnet run --project samples/Reactor.TestApp
 
 # Unit tests (xUnit, headless)
 dotnet test tests/Reactor.Tests

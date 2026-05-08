@@ -470,6 +470,10 @@ internal static class SelfTestFixtureRegistry
         "EchoSuppress_PasswordBox",
         "EchoSuppress_TextField",
         "EchoSuppress_ToggleSplitButton",
+        // TextField mount property-ordering: AcceptsReturn must precede Text.
+        "TF_Mount_MultiLinePreserved",
+        "TF_Mount_SingleLineCorrect",
+        "TF_Mount_MultiLineUpdatePreserved",
         // Control identity preservation under unrelated sibling re-render.
         // Regression coverage for the "Update falls through to Mount" bug
         // fixed in #76 — verifies the 14 controls' WinUI instances survive.
@@ -1236,6 +1240,9 @@ internal static class SelfTestFixtureRegistry
         "EchoSuppress_PasswordBox" => new EchoSuppressionFixtures.PasswordBoxNoEcho(harness),
         "EchoSuppress_TextField" => new EchoSuppressionFixtures.TextFieldNoEcho(harness),
         "EchoSuppress_ToggleSplitButton" => new EchoSuppressionFixtures.ToggleSplitButtonNoEcho(harness),
+        "TF_Mount_MultiLinePreserved" => new TextFieldMountFixtures.MultiLineTextPreserved(harness),
+        "TF_Mount_SingleLineCorrect" => new TextFieldMountFixtures.SingleLineMountCorrect(harness),
+        "TF_Mount_MultiLineUpdatePreserved" => new TextFieldMountFixtures.MultiLineUpdatePreserved(harness),
         // Control identity preservation
         "IdentityPreserve_ComboBox" => new IdentityPreservationFixtures.ComboBoxSurvivesSiblingUpdate(harness),
         "IdentityPreserve_ComboBoxElements" => new IdentityPreservationFixtures.ComboBoxElementItemsSurvivesSiblingUpdate(harness),

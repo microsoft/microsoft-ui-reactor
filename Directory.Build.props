@@ -10,11 +10,4 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
-  <!-- Default Platform to the current machine architecture so that
-       dotnet build / dotnet watch work without -p:Platform=ARM64. -->
-  <PropertyGroup Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">
-    <Platform Condition="'$(PROCESSOR_ARCHITECTURE)' == 'ARM64'">ARM64</Platform>
-    <Platform Condition="'$(PROCESSOR_ARCHITECTURE)' != 'ARM64'">x64</Platform>
-  </PropertyGroup>
-
 </Project>

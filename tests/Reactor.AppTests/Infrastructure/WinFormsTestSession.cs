@@ -156,11 +156,11 @@ public class WinFormsTestSession
     private static string FindHostExe()
     {
         var dir = AppContext.BaseDirectory;
-        while (dir != null && !File.Exists(Path.Combine(dir, "Reactor.sln")))
+        while (dir != null && !File.Exists(Path.Combine(dir, "Reactor.slnx")))
             dir = Path.GetDirectoryName(dir);
 
         if (dir == null)
-            throw new DirectoryNotFoundException("Could not find repo root (Reactor.sln)");
+            throw new DirectoryNotFoundException("Could not find repo root (Reactor.slnx)");
 
         var platform = RuntimeInformation.ProcessArchitecture switch
         {
