@@ -39,6 +39,14 @@ class WindowsDemo : Component
         //    keep a UseRef of the live handle and reconcile open/close in a
         //    UseEffect keyed on `showSecondary`. The hook surface stays
         //    constant; the imperative side-effect tracks the toggle.
+        //
+        //    The trickier piece: when the user closes the window themselves
+        //    (internal "Close this window" button or the system X), our
+        //    `showSecondary` state stays `true` — so the next tray click
+        //    sets state to a value it already has, no re-render fires, and
+        //    nothing opens. We listen on the window's Closed event and
+        //    flip `showSecondary` back to false so the next tray click
+        //    is a real state transition.
         var keyedWindowRef = UseRef<ReactorWindow?>(null);
         UseEffect(() =>
         {
@@ -47,9 +55,11 @@ class WindowsDemo : Component
             var existing = ReactorApp.FindWindow(WindowKey.Of("testapp-keyed"));
             keyedWindowRef.Current = existing;
 
+            ReactorWindow? opened = null;
+            EventHandler? onClosed = null;
             if (showSecondary && existing is null)
             {
-                keyedWindowRef.Current = ReactorApp.OpenWindow(
+                opened = ReactorApp.OpenWindow(
                     new WindowSpec
                     {
                         Title = "Keyed Secondary Window",
@@ -59,12 +69,26 @@ class WindowsDemo : Component
                         Key = WindowKey.Of("testapp-keyed"),
                     },
                     () => new SecondaryWindowContent("Keyed window — same handle while showSecondary is true"));
+                keyedWindowRef.Current = opened;
+                onClosed = (_, _) => setShowSecondary(false);
+                opened.Closed += onClosed;
             }
             else if (!showSecondary && existing is not null)
             {
                 existing.Close();
                 keyedWindowRef.Current = null;
             }
+
+            // Cleanup runs when deps change next time (or on unmount).
+            // Unsub the Closed handler we just attached — try/catch covers
+            // the disposed-window case where -= can throw.
+            return () =>
+            {
+                if (opened is not null && onClosed is not null)
+                {
+                    try { opened.Closed -= onClosed; } catch { /* best effort */ }
+                }
+            };
         }, showSecondary, appIcon);
         var keyedWindow = keyedWindowRef.Current;
 
