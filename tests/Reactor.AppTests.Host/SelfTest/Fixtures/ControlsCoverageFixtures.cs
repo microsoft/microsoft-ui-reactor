@@ -335,11 +335,19 @@ internal static class ControlsCoverageFixtures
 
             // Trigger a real search
             var stateChanges = new List<SearchState>();
-            mgr.StateChanged += () => stateChanges.Add(mgr.State);
+            var searchSettled = new TaskCompletionSource();
+            mgr.StateChanged += () =>
+            {
+                stateChanges.Add(mgr.State);
+                // Signal once search leaves the transient Loading state
+                if (mgr.State != SearchState.Loading && mgr.State != SearchState.Idle)
+                    searchSettled.TrySetResult();
+            };
             mgr.Search("Ap");
 
-            // Wait for debounce + search to complete
-            await Task.Delay(300);
+            // Wait for the StateChanged signal rather than a fixed wall-clock delay;
+            // System.Threading.Timer debounce is imprecise under CI load.
+            await Task.WhenAny(searchSettled.Task, Task.Delay(5_000));
             H.Check("SM_SearchCalled", searchCalled);
             H.Check("SM_HasResults", mgr.Results.Count == 2); // Apple, Apricot
             H.Check("SM_ResultsState", mgr.State == SearchState.Results);

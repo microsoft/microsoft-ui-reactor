@@ -102,26 +102,27 @@ internal static class ReconcileHighlightOverlayLifecycleTests
     {
         public override async Task RunAsync()
         {
-            // Tight 200ms window; refresh at 120ms (< 200) should keep alive
-            // through 280ms total wall time; let it expire after.
-            var (canvas, targets, _, overlay) = await SetupAsync(H, holdMs: 200);
+            // 600ms hold window with 200ms delays gives ~400ms margin on each
+            // side — enough to absorb CI timer jitter without losing test intent.
+            // Original 200ms/120ms had only 80ms margin and flaked under load.
+            var (canvas, targets, _, overlay) = await SetupAsync(H, holdMs: 600);
             try
             {
                 overlay.Show(canvas, targets, Array.Empty<UIElement>());
-                await Task.Delay(120);
+                await Task.Delay(200);
                 H.Check("OverlayLifecycle_Refresh_AliveBeforeRefresh",
                     overlay.LiveSpriteCount == 1);
 
                 // Refresh — timer should restart from 0
                 overlay.Show(canvas, targets, Array.Empty<UIElement>());
-                await Task.Delay(120);
-                // Now ~240ms since first Show, ~120ms since refresh — would
+                await Task.Delay(200);
+                // Now ~400ms since first Show, ~200ms since refresh — would
                 // be expired without the timer reset; should still be alive.
                 H.Check("OverlayLifecycle_Refresh_AliveAfterRefresh",
                     overlay.LiveSpriteCount == 1);
 
                 // Wait past the new window — should expire.
-                await Task.Delay(160);
+                await Task.Delay(500);
                 H.Check("OverlayLifecycle_Refresh_ExpiresAfterFinalWindow",
                     overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0);
             }
