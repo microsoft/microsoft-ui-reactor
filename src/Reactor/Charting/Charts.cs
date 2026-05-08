@@ -607,21 +607,28 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
             CustomPalette = _palette,
         };
 
+    // Non-finite offsets would propagate NaN/Infinity into Canvas.Left/Top and
+    // can crash WinUI layout — treat them as 0 to match how Width/Height/InnerRadius
+    // are normalized in BuildElement.
+    private double SafeLabelRadiusOffset =>
+        double.IsFinite(_labelRadiusOffset) ? _labelRadiusOffset : 0;
+
     private Element[] RenderLabels(IReadOnlyList<T> data, double cx, double cy, double outerRadius)
     {
         var pieGen = PieGenerator.Create<T>(ValueAccessor).SetPadAngle(_padAngle);
         var arcs = pieGen.Generate(data);
         var arcGen = new ArcGenerator().SetInnerRadius(_innerRadius).SetOuterRadius(outerRadius);
         var whiteBrush = new SolidColorBrush(Microsoft.UI.Colors.White);
+        double offset = SafeLabelRadiusOffset;
 
         return arcs.Select(arc =>
         {
             var (lx, ly) = arcGen.Centroid(arc.StartAngle, arc.EndAngle);
-            if (_labelRadiusOffset != 0)
+            if (offset != 0)
             {
                 double midAngle = (arc.StartAngle + arc.EndAngle) / 2 - Math.PI / 2;
-                lx += Math.Cos(midAngle) * _labelRadiusOffset;
-                ly += Math.Sin(midAngle) * _labelRadiusOffset;
+                lx += Math.Cos(midAngle) * offset;
+                ly += Math.Sin(midAngle) * offset;
             }
             return (Element)D3Charts.Text(cx + lx - 10, cy + ly - 7, LabelAccessor!(arc.Data), 11, whiteBrush);
         }).ToArray();
@@ -633,6 +640,7 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         var pieGen = PieGenerator.Create<T>(ValueAccessor).SetPadAngle(_padAngle);
         var arcs = pieGen.Generate(data);
         var arcGen = new ArcGenerator().SetInnerRadius(_innerRadius).SetOuterRadius(outerRadius);
+        double offset = SafeLabelRadiusOffset;
 
         // Total of positive values — matches the normalization PieGenerator uses internally.
         double total = 0;
@@ -642,11 +650,17 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         return arcs.Select(arc =>
         {
             var (lx, ly) = arcGen.Centroid(arc.StartAngle, arc.EndAngle);
-            if (_labelRadiusOffset != 0)
+            // PieSliceLayout.CentroidX/Y always reports the true arc centroid;
+            // LabelRadiusOffset only shifts the position the chart uses to anchor
+            // the returned element, so callers reading CentroidX/Y (e.g. to draw
+            // a leader line back to the slice) keep getting the actual centroid.
+            double labelX = cx + lx;
+            double labelY = cy + ly;
+            if (offset != 0)
             {
                 double midAngle = (arc.StartAngle + arc.EndAngle) / 2 - Math.PI / 2;
-                lx += Math.Cos(midAngle) * _labelRadiusOffset;
-                ly += Math.Sin(midAngle) * _labelRadiusOffset;
+                labelX += Math.Cos(midAngle) * offset;
+                labelY += Math.Sin(midAngle) * offset;
             }
             var layout = new PieSliceLayout(
                 Index: arc.Index,
@@ -665,7 +679,7 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
             // single OnMountAction, so plain `.OnMount(…)` would silently
             // overwrite the caller's hook.
             return _labelView!(arc.Data, layout)
-                .CenterAt(layout.CentroidX, layout.CentroidY)
+                .CenterAt(labelX, labelY)
                 .OnMountAdd(static fe => fe.IsHitTestVisible = false)
                 .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         }).ToArray();
