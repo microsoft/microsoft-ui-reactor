@@ -211,19 +211,16 @@
           ' After generating, run: dotnet watch run --project ' + csproj;
       }
 
-      // Build a PowerShell command that opens a new terminal window and runs copilot
-      var escaped = prompt.replace(/'/g, "''");
-      var cmd = "Start-Process pwsh -ArgumentList '-NoExit','-Command','copilot -p ''" + escaped + "'''";
+      var cmd = 'copilot -p "' + prompt.replace(/"/g, '\\"') + '"';
       copyToClipboard(cmd);
-      showToast('Paste in any terminal to launch Copilot');
+      showToast('Copied — paste in terminal');
     }
 
     function copyRunCmd() {
       var csproj = getCsprojPath();
       if (csproj) {
-        var cmd = "Start-Process pwsh -ArgumentList '-NoExit','-Command','dotnet watch run --project " + csproj + "'";
-        copyToClipboard(cmd);
-        showToast('Paste in terminal to launch app');
+        copyToClipboard('dotnet watch run --project ' + csproj);
+        showToast('Copied — paste in terminal');
       }
     }
 
