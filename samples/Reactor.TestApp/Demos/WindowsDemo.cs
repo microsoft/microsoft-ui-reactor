@@ -33,20 +33,40 @@ class WindowsDemo : Component
         var appIcon = UseMemo(() => WindowIcon.FromPath(global::System.IO.Path.Combine(
             global::System.AppContext.BaseDirectory, "Assets", "AppIcon.ico")));
 
-        // 1) Keyed secondary window via UseOpenWindow. Same key across renders
-        //    => same handle. Toggling `showSecondary` opens / closes it.
-        var keyedWindow = showSecondary
-            ? UseOpenWindow(
-                WindowKey.Of("testapp-keyed"),
-                new WindowSpec
-                {
-                    Title = "Keyed Secondary Window",
-                    Width = 480,
-                    Height = 320,
-                    Icon = appIcon,
-                },
-                () => new SecondaryWindowContent("Keyed window — same handle on every render"))
-            : null;
+        // 1) Keyed secondary window — imperative open/close. We can't gate a
+        //    UseOpenWindow call behind `showSecondary` because that changes
+        //    the hook count between renders (HookOrderException). Instead
+        //    keep a UseRef of the live handle and reconcile open/close in a
+        //    UseEffect keyed on `showSecondary`. The hook surface stays
+        //    constant; the imperative side-effect tracks the toggle.
+        var keyedWindowRef = UseRef<ReactorWindow?>(null);
+        UseEffect(() =>
+        {
+            // Always re-resolve through the registry so a window closed
+            // externally doesn't leave us pointing at a disposed handle.
+            var existing = ReactorApp.FindWindow(WindowKey.Of("testapp-keyed"));
+            keyedWindowRef.Current = existing;
+
+            if (showSecondary && existing is null)
+            {
+                keyedWindowRef.Current = ReactorApp.OpenWindow(
+                    new WindowSpec
+                    {
+                        Title = "Keyed Secondary Window",
+                        Width = 480,
+                        Height = 320,
+                        Icon = appIcon,
+                        Key = WindowKey.Of("testapp-keyed"),
+                    },
+                    () => new SecondaryWindowContent("Keyed window — same handle while showSecondary is true"));
+            }
+            else if (!showSecondary && existing is not null)
+            {
+                existing.Close();
+                keyedWindowRef.Current = null;
+            }
+        }, showSecondary, appIcon);
+        var keyedWindow = keyedWindowRef.Current;
 
         // 2) Tray icon scoped to this component. Loads a real .ico shipped
         //    next to the exe (Assets/TrayIcon.ico — borrowed from the
