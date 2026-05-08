@@ -76,10 +76,10 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj
+        run: dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64
 
       - name: Build (once)
-        run: dotnet build tests/Reactor.Tests/Reactor.Tests.csproj --no-restore --configuration Debug
+        run: dotnet build tests/Reactor.Tests/Reactor.Tests.csproj --no-restore --configuration Debug -p:Platform=x64
 
       - name: Stress loop
         shell: pwsh
@@ -96,7 +96,7 @@ jobs:
           $failures = New-Object System.Collections.Generic.List[int]
           for ($i = 1; $i -le $count; $i++) {
             Write-Host "::group::Unit iteration $i / $count (shard $idx)"
-            dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore --no-build --logger "console;verbosity=normal"
+            dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore --no-build -p:Platform=x64 --logger "console;verbosity=normal"
             $code = $LASTEXITCODE
             Write-Host "::endgroup::"
             if ($code -ne 0) {
@@ -129,10 +129,10 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore tests/Reactor.SelfTests/Reactor.SelfTests.csproj
+        run: dotnet restore tests/Reactor.SelfTests/Reactor.SelfTests.csproj -p:Platform=x64
 
       - name: Build (once)
-        run: dotnet build tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore --configuration Debug
+        run: dotnet build tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore --configuration Debug -p:Platform=x64
 
       - name: Stress loop
         shell: pwsh
@@ -149,7 +149,7 @@ jobs:
           $failures = New-Object System.Collections.Generic.List[int]
           for ($i = 1; $i -le $count; $i++) {
             Write-Host "::group::Selftest iteration $i / $count (shard $idx)"
-            dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore --no-build --logger "console;verbosity=normal"
+            dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore --no-build -p:Platform=x64 --logger "console;verbosity=normal"
             $code = $LASTEXITCODE
             Write-Host "::endgroup::"
             if ($code -ne 0) {
