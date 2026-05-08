@@ -102,27 +102,30 @@ internal static class ReconcileHighlightOverlayLifecycleTests
     {
         public override async Task RunAsync()
         {
-            // 600ms hold window with 200ms delays gives ~400ms margin on each
-            // side — enough to absorb CI timer jitter without losing test intent.
+            // holdMs=500, firstDelay=350, secondDelay=250:
+            //   350 < 500            → alive before refresh (150ms margin)
+            //   350+250=600 > 500    → would have expired without timer reset
+            //   250 < 500            → still alive after refresh (250ms margin)
             // Original 200ms/120ms had only 80ms margin and flaked under load.
-            var (canvas, targets, _, overlay) = await SetupAsync(H, holdMs: 600);
+            var (canvas, targets, _, overlay) = await SetupAsync(H, holdMs: 500);
             try
             {
                 overlay.Show(canvas, targets, Array.Empty<UIElement>());
-                await Task.Delay(200);
+                await Task.Delay(350);
                 H.Check("OverlayLifecycle_Refresh_AliveBeforeRefresh",
                     overlay.LiveSpriteCount == 1);
 
                 // Refresh — timer should restart from 0
                 overlay.Show(canvas, targets, Array.Empty<UIElement>());
-                await Task.Delay(200);
-                // Now ~400ms since first Show, ~200ms since refresh — would
-                // be expired without the timer reset; should still be alive.
+                await Task.Delay(250);
+                // ~600ms since first Show, ~250ms since refresh.
+                // Without the timer reset the sprite would have expired at 500ms;
+                // with the reset it should still be alive.
                 H.Check("OverlayLifecycle_Refresh_AliveAfterRefresh",
                     overlay.LiveSpriteCount == 1);
 
                 // Wait past the new window — should expire.
-                await Task.Delay(500);
+                await Task.Delay(350);
                 H.Check("OverlayLifecycle_Refresh_ExpiresAfterFinalWindow",
                     overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0);
             }
