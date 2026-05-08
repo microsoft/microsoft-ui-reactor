@@ -38,6 +38,12 @@ public sealed class ReactorWindow : IDisposable
     private readonly nint _hwnd;
     private readonly WindowMessageMonitor _messageMonitor;
     private readonly Core.WindowPersistedScope _persistedScope = new();
+    // Lazy-init shell wrappers — apps that never read these never instantiate
+    // them, keeping the cold-start budget clean (spec 036 §0.7 / §11.7).
+    private TaskbarProgress? _taskbarProgress;
+    private TaskbarOverlay? _taskbarOverlay;
+    private Hosting.Shell.ThumbnailToolbarState? _thumbnailToolbar;
+    private readonly object _shellLock = new();
     // Owned windows (this window's children). Copy-on-write so the cascade
     // path can iterate without holding a lock during user-supplied close
     // handlers / guards.
@@ -78,6 +84,44 @@ public sealed class ReactorWindow : IDisposable
 
     /// <summary>Last applied <see cref="WindowSpec"/> snapshot.</summary>
     public WindowSpec Spec => Volatile.Read(ref _spec);
+
+    /// <summary>
+    /// Taskbar progress indicator for this window. Lazily allocated on first
+    /// read; apps that never touch it pay no shell-COM init cost.
+    /// (spec 036 §11.1)
+    /// </summary>
+    public TaskbarProgress Progress
+    {
+        get
+        {
+            var existing = Volatile.Read(ref _taskbarProgress);
+            if (existing is not null) return existing;
+            lock (_shellLock)
+            {
+                if (_taskbarProgress is not null) return _taskbarProgress;
+                _taskbarProgress = new TaskbarProgress(_hwnd, () => _disposed);
+                return _taskbarProgress;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Taskbar overlay icon ("badge"). Lazily allocated. (spec 036 §11.2)
+    /// </summary>
+    public TaskbarOverlay Overlay
+    {
+        get
+        {
+            var existing = Volatile.Read(ref _taskbarOverlay);
+            if (existing is not null) return existing;
+            lock (_shellLock)
+            {
+                if (_taskbarOverlay is not null) return _taskbarOverlay;
+                _taskbarOverlay = new TaskbarOverlay(_hwnd, () => _disposed);
+                return _taskbarOverlay;
+            }
+        }
+    }
 
     /// <summary>Per-window DPI in raw units (96, 120, 144, 192, ...). Phase 2 makes this observable.</summary>
     public uint Dpi
@@ -446,6 +490,23 @@ public sealed class ReactorWindow : IDisposable
                 }
                 else IsVisible = false;
                 break;
+            case WindowMessageMonitor.WM_COMMAND:
+                {
+                    // Thumbnail-toolbar clicks arrive as WM_COMMAND with the
+                    // button's iId in the LOWORD of wParam. The HIWORD is the
+                    // notification code (0 for thumb buttons, but we don't
+                    // filter on it — non-thumb commands are just ignored when
+                    // the iId doesn't match a slot). (spec 036 §11.5)
+                    var bar = Volatile.Read(ref _thumbnailToolbar);
+                    if (bar is null) break;
+                    var slot = (uint)(args.WParam & 0xFFFF);
+                    if (bar.TryDispatchClick(slot))
+                    {
+                        args.Handled = true;
+                        args.Result = 0;
+                    }
+                    break;
+                }
         }
     }
 
@@ -758,6 +819,41 @@ public sealed class ReactorWindow : IDisposable
         catch (Exception ex) { Debug.WriteLine($"[Reactor] CenterOnScreen failed: {ex.Message}"); }
     }
 
+    /// <summary>
+    /// Replace the thumbnail-toolbar buttons for this window. Up to seven
+    /// buttons; duplicate ids throw. The first call adds the button set, later
+    /// calls diff and update only the changed slots. (spec 036 §11.5)
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when more than seven buttons are supplied or when ids are
+    /// duplicated.
+    /// </exception>
+    public void SetThumbnailToolbar(IReadOnlyList<ThumbnailToolbarButton> buttons)
+    {
+        ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetThumbnailToolbar));
+        if (_disposed) throw new ObjectDisposedException(nameof(ReactorWindow));
+        ArgumentNullException.ThrowIfNull(buttons);
+
+        Hosting.Shell.ThumbnailToolbarState state;
+        lock (_shellLock)
+        {
+            state = _thumbnailToolbar ??= new Hosting.Shell.ThumbnailToolbarState(_hwnd);
+        }
+        state.Replace(buttons);
+    }
+
+    /// <summary>
+    /// Hide all thumbnail-toolbar buttons. Idempotent; safe to call before
+    /// <see cref="SetThumbnailToolbar"/> has been called. (spec 036 §11.5)
+    /// </summary>
+    public void ClearThumbnailToolbar()
+    {
+        ThreadAffinity.ThrowIfNotOnUIThread(nameof(ClearThumbnailToolbar));
+        if (_disposed) return;
+        var state = Volatile.Read(ref _thumbnailToolbar);
+        state?.Replace(global::System.Array.Empty<ThumbnailToolbarButton>());
+    }
+
     /// <summary>Mount a new component root. UI-thread only.</summary>
     public void Mount(Component root)
     {
@@ -801,6 +897,10 @@ public sealed class ReactorWindow : IDisposable
 
         // Drop per-window persisted state — bounded by window lifetime per spec.
         try { _persistedScope.Dispose(); } catch (Exception ex) { Debug.WriteLine($"[Reactor] PersistedScope dispose failed: {ex.Message}"); }
+
+        // Release thumbnail-toolbar HICONs and clear the click-dispatch map so
+        // a late WM_COMMAND can't reach freed handlers. (spec 036 §11.5)
+        try { Volatile.Read(ref _thumbnailToolbar)?.Dispose(); } catch { /* best effort */ }
     }
 
     /// <summary>The reason the close currently in progress was initiated. Phase 3.</summary>

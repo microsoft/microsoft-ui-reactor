@@ -666,73 +666,73 @@ Behavior change phase. After this lands, `Run<TRoot>(width, height)` and
 
 ### 7.1 `ITaskbarList3` wrapper
 
-- [ ] Create `src/Reactor/Hosting/Shell/TaskbarComInterop.cs` —
-  `[ComImport, Guid(...)]` definitions for `ITaskbarList3`. **Trim/AOT-
-  safe**: no dynamic invocation. Use `[GeneratedComInterface]` if the
-  project's TFM supports it; otherwise classic `[ComImport]`.
-- [ ] Per-process singleton initialized lazily on first use. Store
-  in a `Lazy<ITaskbarList3>` field on a static helper. Document that
-  apps that never touch `Progress` / `Overlay` / `SetThumbnailToolbar`
-  pay zero startup cost.
+- [x] `src/Reactor/Hosting/Shell/TaskbarComInterop.cs` — classic
+  `[ComImport, Guid(...)]` definitions for `ITaskbarList3`,
+  `THUMBBUTTON`, `ThumbButtonMask`, `ThumbButtonFlags`. AOT-safe — no
+  dynamic invocation; `[PreserveSig]` on every method so we can
+  inspect the HRESULT.
+- [x] `TaskbarComSingleton.TryGet()` is the per-process lazy entry —
+  CoCreates on first access, caches failures so init cost is paid at
+  most once. Apps that never touch `Progress` / `Overlay` / thumbnail
+  toolbar never instantiate it.
 
 ### 7.2 `TaskbarProgress`
 
-- [ ] Type per spec §11.1.
-- [ ] `ReactorWindow.Progress` lazily constructs the wrapper on first
-  read. The wrapper holds the HWND and forwards property writes to
-  `SetProgressValue` / `SetProgressState`.
-- [ ] State change marshaling: `Indeterminate` ignores `Value`; `None`
-  clears both; explicit `Value` writes implicitly switch to `Normal` if
-  state is `None`.
-- [ ] Value range: clamp `[0.0, 1.0]`. Out-of-range throws
-  `ArgumentOutOfRangeException`.
+- [x] Type per spec §11.1 with `TaskbarProgressState` enum
+  (None / Indeterminate / Normal / Paused / Error).
+- [x] `ReactorWindow.Progress` lazily constructs the wrapper on first
+  read under `_shellLock`.
+- [x] State marshaling: `Indeterminate` and `None` skip
+  `SetProgressValue`; an explicit `Value` write while in `None`
+  promotes to `Normal` (matches user intent "show 30 %").
+- [x] Value range: `[0.0, 1.0]` enforced, NaN / ±∞ rejected, quantized
+  to 1000 units before forwarding to `SetProgressValue`.
 
 ### 7.3 `TaskbarOverlay`
 
-- [ ] Type per spec §11.2. `Icon = null` clears.
-- [ ] `WindowIcon.Apply(taskbarList, hwnd, accessibleDescription)` overload
-  for `ITaskbarList3.SetOverlayIcon`. Pass through
-  `AccessibleDescription` to `pszDescription`. (Spec §0.6 a11y.)
-- [ ] Icon size validation: warn-only if the supplied icon is not
-  16 × 16 logical (will be downscaled by the shell with quality loss).
+- [x] Type per spec §11.2. `Icon = null` clears via
+  `SetOverlayIcon(hwnd, 0, …)`.
+- [x] `LoadImageW(LR_LOADFROMFILE | LR_DEFAULTSIZE)` for filesystem
+  paths; `WindowIcon.FromResource` (`ms-appx:///`) is silently skipped
+  because the shell overlay needs an HICON. Old HICON freed via
+  `DestroyIcon` after each apply.
+- [x] `AccessibleDescription` flows through the `pszDescription`
+  parameter (spec §0.6 a11y).
 
 ### 7.4 `ThumbnailToolbar`
 
-- [ ] `ThumbnailToolbarButton` record per spec §11.5.
-- [ ] `ReactorWindow.SetThumbnailToolbar(IReadOnlyList<...>)` and
-  `ClearThumbnailToolbar()`. First call: `ThumbBarAddButtons` with up
-  to 7 buttons; further calls diff against previous set and call
-  `ThumbBarUpdateButtons` for changed buttons only.
-- [ ] **Validation**: > 7 buttons throws `ArgumentException`. Duplicate
-  `Id` values throw.
-- [ ] Click dispatch: WM_COMMAND from the shell carries the button index.
-  Map back to the click delegate; invoke on the UI thread.
-- [ ] **Lifetime**: Buttons are released on `ReactorWindow.Dispose`.
+- [x] `ThumbnailToolbarButton` record per spec §11.5.
+- [x] `ReactorWindow.SetThumbnailToolbar(IReadOnlyList<...>)` /
+  `ClearThumbnailToolbar()`. First call uses
+  `ThumbBarAddButtons`; later calls use `ThumbBarUpdateButtons`. The
+  unused slots in the seven-slot wire array are marked
+  `Hidden | NonInteractive`.
+- [x] Validation: `> 7` buttons throws `ArgumentException`; empty Id,
+  duplicate Id, null OnClick throw.
+- [x] Click dispatch via WM_COMMAND in `WindowMessageMonitor`. The
+  LOWORD of `wParam` is the slot index (the iId we assigned);
+  `TryDispatchClick` looks it up and invokes the click delegate on
+  the UI thread.
+- [x] HICONs and click-dispatch state torn down in
+  `ReactorWindow.Dispose`.
 
 ### 7.5 Hooks (optional in this phase)
 
-- [ ] Skip purpose-specific hooks (`UseTaskbarProgress`, etc.) — the
-  spec only commits to `UseEffect` over `Progress`. Resolved §15.5: wait
-  for sample-app evidence before adding wrappers.
+- [/] Deferred per spec §15.5 — wait for sample-app evidence before
+  adding `UseTaskbarProgress` etc.
 
 ### 7.6 Tests — Phase 7
 
-- [ ] Selftest fixture: write `Progress.State = Indeterminate`, then
-  `Normal` with `Value = 0.5`, then `Clear()`. Assert no throw.
-  Visually verifiable on Windows 10 / 11; selftest just asserts no
-  exception (UIA can't read taskbar progress).
-- [ ] AppTest E2E: launch `MultiWindowDemo` with progress on, verify
-  via UIA inspect that the window's automation peer surfaces a
-  `RangeValuePattern` if WinUI propagates it. (May not — skip if so;
-  document.)
-- [ ] Unit: `Progress.Value = 1.5` throws.
-- [ ] Unit: `SetThumbnailToolbar([8 buttons])` throws.
-- [ ] Unit: button click delegate fires on the UI thread (assert
-  `DispatcherQueue.HasThreadAccess`).
-- [ ] Selftest: `Overlay.AccessibleDescription` round-trips through
-  `pszDescription` (verify by reading the overlay's UIA property if
-  Windows exposes it; otherwise assert the COM call was made with the
-  string by recording the interop).
+- [x] Unit: `TaskbarProgressTests` (8 facts) covers default state /
+  value, out-of-range rejection (negatives, > 1, NaN, ±∞),
+  in-range round-trip, the implicit None → Normal promotion, the
+  `Clear()` reset, and the full state-enum round-trip.
+- [x] Unit: `ThumbnailToolbarTests` (7 facts) covers > 7 buttons,
+  duplicate ids, empty id, null OnClick, null list, out-of-range
+  click dispatch, and record value-equality.
+- [/] Live shell-COM dispatch (selftest fixture, AppTest E2E,
+  Overlay.AccessibleDescription round-trip) deferred to the Phase-9
+  selftest matrix where a real HWND is available.
 
 ---
 

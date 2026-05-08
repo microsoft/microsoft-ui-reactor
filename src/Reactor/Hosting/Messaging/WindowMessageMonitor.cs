@@ -40,6 +40,9 @@ internal sealed class WindowMessageMonitor : IDisposable
     /// <summary>WM_EXITSIZEMOVE — end of a modal resize/drag loop.</summary>
     public const uint WM_EXITSIZEMOVE = 0x0232;
 
+    /// <summary>WM_COMMAND — menu and thumbnail-toolbar button clicks.</summary>
+    public const uint WM_COMMAND = 0x0111;
+
     private readonly nint _hwnd;
     private GCHandle _selfHandle;
     private bool _subclassed;

@@ -88,6 +88,18 @@ to land under these conventions; subsequent specs follow this shape.
   window from the taskbar / Alt-Tab. Owner-close cascades to owned
   children with `WindowCloseReason.OwnerClosed`; if any owned guard
   cancels, the owner-close cancels too. (spec 036 §9)
+- `ReactorWindow.Progress` (`TaskbarProgress`, with `TaskbarProgressState`
+  enum: None / Indeterminate / Normal / Paused / Error) and
+  `ReactorWindow.Overlay` (`TaskbarOverlay` with `Icon` /
+  `AccessibleDescription`). Both lazy-initialize the
+  `ITaskbarList3` COM wrapper through `TaskbarComSingleton` so apps that
+  never touch the shell surface pay no startup cost. (spec 036 §11.1 / §11.2)
+- `ReactorWindow.SetThumbnailToolbar(IReadOnlyList<ThumbnailToolbarButton>)`
+  / `ClearThumbnailToolbar()` — up to seven buttons; first call uses
+  `ThumbBarAddButtons`, later calls use `ThumbBarUpdateButtons`.
+  Validation rejects > 7, duplicate Ids, empty Ids, null OnClick. Click
+  dispatch hooks WM_COMMAND in `WindowMessageMonitor`. HICONs are
+  released on `ReactorWindow.Dispose`. (spec 036 §11.5)
 - Devtools `windows.list / windows.activate / windows.close /
   windows.open` MCP tools (spec 036 §10). `windows.list` returns id,
   key, title, DIP size, DPI, state, isMain — driven by a new
