@@ -94,6 +94,11 @@ if (arg == "upgrade")
     return Microsoft.UI.Reactor.Cli.Upgrade.UpgradeCommand.Run(args.Skip(1).ToArray());
 }
 
+if (arg == "figma")
+{
+    return Microsoft.UI.Reactor.Cli.Figma.FigmaCommand.Run(args.Skip(1).ToArray());
+}
+
 Console.Error.WriteLine($"Unknown option: {args[0]}");
 Console.Error.WriteLine();
 ShowHelp();
@@ -130,6 +135,7 @@ void ShowHelp()
     Console.WriteLine("  clean-local      Remove local packages, NuGet cache entries, and templates");
     Console.WriteLine("  doctor           Verify the install (SDK, mur, local feed, template, plugin)");
     Console.WriteLine("  upgrade          Re-pack framework + templates and refresh plugin after `git pull`");
+    Console.WriteLine("  figma watch      Poll a Figma file for design changes");
 }
 
 int ShowSkill()

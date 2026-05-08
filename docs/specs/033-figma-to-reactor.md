@@ -618,37 +618,80 @@ file:
 
 ---
 
-## Appendix A: FigmaBridge Removal (Security)
+## Appendix A: Live Sync Architecture
 
-An earlier iteration of this spec included a **FigmaBridge** component
-(`tools/FigmaBridge`) — a localhost HTTP/WebSocket relay that received
-design trees from a Figma plugin and exposed them to AI agents via
-custom MCP tools (`figma_tree`, `figma_watch`, `figma_status`). The
-bridge was removed due to the following security concerns:
+### Background — FigmaBridge removal
 
-1. **Open localhost surface with `Access-Control-Allow-Origin: *`** —
-   any website in the user's browser could make requests to the bridge,
-   read design data, or trigger code generation.
-2. **Arbitrary filesystem writes** — the bridge accepted output paths
-   over WebSocket with no validation or allowlist, then wrote generated
-   code to those paths.
-3. **Shell command injection surface** — the bridge launched `pwsh` and
-   `dotnet` processes using paths received over unauthenticated
-   WebSocket messages.
-4. **No authentication on any endpoint** — both the WebSocket and HTTP
-   MCP endpoints were open to all localhost callers.
-5. **Temporary script generation** — the bridge wrote `.ps1` scripts to
-   `%TEMP%` with user-controlled values, creating TOCTOU and injection
-   risks.
+An earlier iteration included a **FigmaBridge** relay server
+(`tools/FigmaBridge`) that used a Figma plugin + WebSocket + localhost
+HTTP MCP to push design changes to agents in real-time. It was removed
+due to security concerns: `Access-Control-Allow-Origin: *`, arbitrary
+filesystem writes, unauthenticated endpoints, and shell command
+injection surfaces. See commit `e91c167` for details.
 
-The bridge's only purpose was **live push sync** (watching for real-time
-Figma edits). This use case is adequately served by the standard
-URL-based workflow (Mode A), where the agent calls the Figma MCP server
-(`figma-developer-mcp`) directly. The Figma MCP server authenticates via
-a scoped personal access token and does not require a localhost relay.
+### Figma Webhooks V2 — not viable for live sync
 
-If live sync is revisited in the future, it should be redesigned with:
-- Localhost bearer-token authentication on all endpoints
-- Path allowlisting for filesystem writes
-- No shell execution from untrusted input
-- TLS or Unix domain sockets instead of plaintext HTTP
+The Figma Webhooks V2 API was evaluated as a replacement. Key findings:
+
+| Event | Latency | Suitability |
+|---|---|---|
+| `FILE_UPDATE` | ~30 min after inactivity | ❌ Too slow for live sync |
+| `FILE_VERSION_UPDATE` | Immediate (designer clicks "Save version") | ✅ Good for explicit gates |
+| `FILE_DELETE` | Immediate | N/A |
+| `LIBRARY_PUBLISH` | Immediate | ✅ For design system workflows |
+
+`FILE_UPDATE` is heavily debounced (30-minute inactivity window) and its
+payload is minimal (no diff, no changed nodes). It is designed for "a
+work session ended" notifications, not real-time change detection.
+
+Webhooks also cannot scope below file level — no node/frame targeting.
+
+### Adopted approach: polling `lastModified`
+
+The `mur figma watch` CLI command replaces the bridge by polling the
+Figma REST API's `lastModified` timestamp at a configurable interval:
+
+```
+mur figma watch <figma-url> [--interval 10]
+```
+
+**How it works:**
+
+1. Parses `file_key` and `node_id` from the Figma URL
+2. Calls `GET /v1/files/:key?depth=1` to check `lastModified`
+   (lightweight — no document tree traversal)
+3. When the timestamp advances, emits a JSON event to stdout
+4. The agent reads the event and calls `figma-get_figma_data` via MCP
+   to fetch the updated design tree
+5. The agent diffs and regenerates code as needed
+
+**Security properties:**
+
+- No open ports — runs as a local CLI process
+- No CORS surface — no HTTP server
+- Auth via `FIGMA_API_KEY` env var — same scoped PAT the Figma MCP uses
+- No filesystem writes — only emits to stdout
+- No shell execution — agent handles code generation natively
+
+**Stdout event format:**
+
+```json
+{"event":"changed","fileKey":"abc123","nodeId":"29792:125378",
+ "fileName":"My Design","lastModified":"2026-05-08T10:30:00Z",
+ "version":"123456","figmaUrl":"https://www.figma.com/design/abc123?node-id=29792-125378"}
+```
+
+Status messages go to stderr, keeping stdout clean for machine parsing.
+
+### Future: webhook-gated sync (Tier 2)
+
+For team workflows where a designer explicitly signals "design is ready":
+
+1. Register a `FILE_VERSION_UPDATE` webhook via the Figma API
+2. Designer saves a named version in Figma → webhook fires immediately
+3. CI/agent picks up the event and triggers a one-shot translation
+
+This is documented but not yet implemented. `FILE_VERSION_UPDATE` has no
+debounce and fires immediately, making it suitable for explicit handoff
+gates. It requires a publicly reachable endpoint (ngrok, CI webhook
+receiver, etc.) and `webhooks:write` token scope.

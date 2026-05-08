@@ -17,6 +17,8 @@ Translate Figma designs built with the [Windows UI Kit (Community)](https://www.
 
 ## Workflow
 
+### One-Shot Translation (paste a URL)
+
 1. Developer pastes a Figma frame URL
 2. Agent extracts `file_key` and `node_id` from the URL
 3. Agent calls Figma MCP to get the scoped design context for that node
@@ -28,6 +30,24 @@ Translate Figma designs built with the [Windows UI Kit (Community)](https://www.
 9. Agent launches app via `dotnet run -- --devtools run`
 10. Agent verifies via `mur devtools tree` and `mur devtools screenshot`
 11. Agent iterates until structure matches
+
+### Watch-Based Sync (continuous)
+
+For iterating alongside a designer making live edits in Figma:
+
+1. Agent starts `mur figma watch <figma-url> --interval 10` as a background process
+2. The watch command polls the Figma REST API `lastModified` timestamp
+3. When a change is detected, it emits a JSON event to stdout:
+   ```json
+   {"event":"changed","fileKey":"abc123","nodeId":"29792:125378","fileName":"My Design","lastModified":"2026-05-08T10:30:00Z"}
+   ```
+4. Agent reads the event and re-fetches design data via the Figma MCP `get_figma_data` tool
+5. Agent diffs the new tree against the previously generated code
+6. Agent applies targeted edits (text, spacing, sizing) or regenerates as needed
+7. `dotnet watch` / `mur devtools reload` picks up the code changes
+
+**No bridge server, no open ports, no Figma plugin required.** Authentication
+uses the same `FIGMA_API_KEY` token as the Figma MCP server.
 
 ## URL Parsing
 
