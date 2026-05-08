@@ -3,4 +3,4 @@
 # Default reviewers for any change in the repo. Listed owners are auto-requested
 # on PRs that touch matching paths.
 
-* @codemonkeychris @jevansaks @andersonch
+* @codemonkeychris
