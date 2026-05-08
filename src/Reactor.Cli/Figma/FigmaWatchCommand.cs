@@ -103,7 +103,7 @@ internal static class FigmaWatchCommand
 
         var lastModified = info.LastModified;
 
-        Console.Error.WriteLine($"[mur figma watch] Watching: {info.FileName}");
+        Console.Error.WriteLine($"[mur figma watch] Watching: {SanitizeForStderr(info.FileName)}");
         Console.Error.WriteLine($"[mur figma watch] File key: {parsed.FileKey}");
         if (parsed.NodeId != null)
             Console.Error.WriteLine($"[mur figma watch] Node: {parsed.NodeId}");
@@ -186,5 +186,23 @@ internal static class FigmaWatchCommand
                 (parts.NodeId != null ? $"?node-id={parts.NodeId}" : ""),
         });
         Console.WriteLine(json);
+    }
+
+    /// <summary>
+    /// Strips control characters (U+0000–U+001F except tab/newline) from a
+    /// string before writing to stderr. Prevents ANSI escape injection from
+    /// attacker-controlled Figma file/frame names.
+    /// </summary>
+    internal static string SanitizeForStderr(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        var sb = new System.Text.StringBuilder(value.Length);
+        foreach (var c in value)
+        {
+            if (c < '\u0020' && c != '\t' && c != '\n' && c != '\r')
+                continue; // strip control characters
+            sb.Append(c);
+        }
+        return sb.ToString();
     }
 }

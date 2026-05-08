@@ -26,7 +26,7 @@ internal static class FigmaApiKeyResolver
         var copilotConfig = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".copilot", "mcp-config.json");
-        var key = TryExtractFromMcpConfig(copilotConfig);
+        var key = TryExtractFromMcpConfigFile(copilotConfig);
         if (key != null)
         {
             Console.Error.WriteLine($"[mur figma] Using API key from {copilotConfig}");
@@ -35,7 +35,7 @@ internal static class FigmaApiKeyResolver
 
         // 3. VS Code workspace MCP config (relative to cwd)
         var vscodeConfig = Path.Combine(Directory.GetCurrentDirectory(), ".vscode", "mcp.json");
-        key = TryExtractFromMcpConfig(vscodeConfig);
+        key = TryExtractFromMcpConfigFile(vscodeConfig);
         if (key != null)
         {
             Console.Error.WriteLine($"[mur figma] Using API key from {vscodeConfig}");
@@ -50,7 +50,7 @@ internal static class FigmaApiKeyResolver
     /// entry whose args contain <c>--figma-api-key=...</c> or whose env block
     /// contains <c>FIGMA_API_KEY</c>.
     /// </summary>
-    private static string? TryExtractFromMcpConfig(string path)
+    internal static string? TryExtractFromMcpConfigFile(string path)
     {
         if (!File.Exists(path))
             return null;
