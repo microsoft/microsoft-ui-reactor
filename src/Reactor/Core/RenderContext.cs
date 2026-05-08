@@ -1076,6 +1076,12 @@ public sealed class RenderContext
     /// the window explicitly — e.g. by registering a <c>UseEffect</c> cleanup
     /// that calls <see cref="Microsoft.UI.Reactor.ReactorWindow.Close"/> on the
     /// returned handle. (spec 036 §4.3 / §15.6)</para>
+    /// <para><b>Note — asymmetry with <see cref="UseTrayIcon"/>:</b> tray icons
+    /// are component-scoped and close on unmount; opened windows are app-scoped
+    /// and survive unmount. The asymmetry is deliberate (a window is normally
+    /// expected to outlive the menu item that opened it, while a tray icon
+    /// belongs to the component that declared it), so the two hooks behave
+    /// inversely despite the matching naming.</para>
     /// <para>Returns <c>null</c> when no UI dispatcher has been captured —
     /// happens in unit-test contexts where no <c>ReactorApp.Run</c> is in
     /// flight. In production this is unreachable.</para>

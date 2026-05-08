@@ -5,65 +5,62 @@ namespace Microsoft.UI.Reactor;
 
 /// <summary>
 /// The argument to <see cref="ReactorApp.Run(Action{ReactorAppContext})"/>'s
-/// startup callback. A thin facade over the static <see cref="ReactorApp"/>
-/// surface giving access to the launch activation. The instance has no
-/// lifetime of its own — calls forward to <see cref="ReactorApp"/> and remain
-/// valid after <c>Run</c> returns control. (spec 036 §4.3)
+/// startup callback. Carries the launch activation; all surface-management
+/// operations (open / find a window or tray icon, register events) go directly
+/// through the static <see cref="ReactorApp"/> API — call sites mix freely.
+/// (spec 036 §4.3)
 /// </summary>
+/// <remarks>
+/// Keep the context small on purpose: the static <see cref="ReactorApp"/>
+/// surface is the single source of truth for windows / tray icons / shutdown
+/// policy, and remains valid before <c>Run</c> enters this callback and after
+/// it returns. Doubling the API on the context just doubled the discovery
+/// cost without adding capability.
+/// </remarks>
 public sealed class ReactorAppContext
 {
-    /// <summary>
-    /// Information about how the process was launched. Populated in Phase 8;
-    /// returns a <see cref="LaunchKind.Normal"/> sentinel until then.
-    /// </summary>
+    /// <summary>How the process was launched. See <see cref="Microsoft.UI.Reactor.LaunchActivation"/>.</summary>
     public LaunchActivation LaunchActivation { get; }
 
     internal ReactorAppContext(LaunchActivation activation)
     {
         LaunchActivation = activation;
     }
-
-    /// <summary>Open a window with a <see cref="Component"/> root. UI-thread only.</summary>
-    public ReactorWindow OpenWindow(WindowSpec spec, Func<Component> root)
-        => ReactorApp.OpenWindow(spec, root);
-
-    /// <summary>Open a window with a render-function root. UI-thread only.</summary>
-    public ReactorWindow OpenWindow(WindowSpec spec, Func<RenderContext, Element> render)
-        => ReactorApp.OpenWindow(spec, render);
-
-    /// <summary>Look up an open window by <see cref="WindowKey"/>.</summary>
-    public ReactorWindow? FindWindow(WindowKey key) => ReactorApp.FindWindow(key);
-
-    /// <summary>Open a system-tray icon. UI-thread only. (spec 036 §11.4)</summary>
-    public ReactorTrayIcon OpenTrayIcon(TrayIconSpec spec) => ReactorApp.OpenTrayIcon(spec);
-
-    /// <summary>Look up an open tray icon by <see cref="WindowKey"/>.</summary>
-    public ReactorTrayIcon? FindTrayIcon(WindowKey key) => ReactorApp.FindTrayIcon(key);
 }
 
 /// <summary>
-/// How the process was launched. Phase 1 only carries the
-/// <see cref="LaunchKind.Normal"/> sentinel; Phase 8 wires real activation.
+/// How the process was launched.
 /// </summary>
+/// <remarks>
+/// <para>The OS shell presents jump-list entries, tray "Open" / double-click
+/// commands, and thumbnail-toolbar buttons as plain process re-launches —
+/// all three arrive at <c>OnLaunched</c> with the same shape (a non-empty
+/// argument string and no extended activation kind). Reactor cannot
+/// distinguish them from the WinUI surface, so all three roll up under
+/// <see cref="JumpList"/>. Apps that need finer granularity should encode
+/// it in the argument URI itself (e.g. a path prefix or query parameter)
+/// and inspect <see cref="LaunchActivation.Arguments"/>.</para>
+/// </remarks>
 public enum LaunchKind
 {
     /// <summary>Launched via the standard executable / shortcut entry point.</summary>
     Normal,
 
-    /// <summary>Launched from a jump-list entry. (Phase 8)</summary>
+    /// <summary>
+    /// Launched with a non-empty argument string from a shell re-launch — jump
+    /// list, tray "Open", or thumbnail-toolbar button. The three sources are
+    /// indistinguishable at the WinUI activation surface.
+    /// </summary>
     JumpList,
 
-    /// <summary>Launched in response to a toast click. (Phase 8)</summary>
+    /// <summary>Launched in response to a toast click.</summary>
     Toast,
 
-    /// <summary>Launched via a custom URI protocol handler. (Phase 8)</summary>
+    /// <summary>Launched via a custom URI protocol handler.</summary>
     Protocol,
 
-    /// <summary>Launched via file association. (Phase 8)</summary>
+    /// <summary>Launched via file association.</summary>
     File,
-
-    /// <summary>Launched via a system-tray "Open"/double-click. (Phase 8)</summary>
-    Tray,
 }
 
 /// <summary>

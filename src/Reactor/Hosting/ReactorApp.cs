@@ -402,23 +402,42 @@ public static class ReactorApp
     /// Open a window with a <see cref="Component"/> root. UI-thread only.
     /// (spec 036 §4.3)
     /// </summary>
-    public static ReactorWindow OpenWindow(WindowSpec spec, Func<Component> root)
+    /// <param name="spec">Declarative description of the window's chrome.</param>
+    /// <param name="root">Factory invoked once to materialize the root component.</param>
+    /// <param name="configure">
+    /// Optional callback invoked on the UI thread <b>before</b> the root mounts.
+    /// Use it for pre-mount setup that needs the live <see cref="ReactorHost"/>
+    /// (logger wiring, custom reconciler registrations, host-level event
+    /// hooks). Mirror of the <c>configure</c> parameter on the legacy
+    /// <see cref="Run{TRoot}(string, double, double, bool, bool, bool, Action{ReactorHost}?)"/>
+    /// entry — secondary windows now have the same escape hatch as the
+    /// primary.
+    /// </param>
+    public static ReactorWindow OpenWindow(
+        WindowSpec spec,
+        Func<Component> root,
+        Action<ReactorHost>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(root);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
-        return OpenWindowCore(spec, root, renderFunc: null, configure: null);
+        return OpenWindowCore(spec, root, renderFunc: null, configure: configure);
     }
 
     /// <summary>
-    /// Open a window with a render-function root. UI-thread only.
+    /// Open a window with a render-function root. UI-thread only. See the
+    /// <see cref="OpenWindow(WindowSpec, Func{Component}, Action{ReactorHost}?)"/>
+    /// overload for <paramref name="configure"/> semantics.
     /// </summary>
-    public static ReactorWindow OpenWindow(WindowSpec spec, Func<RenderContext, Element> render)
+    public static ReactorWindow OpenWindow(
+        WindowSpec spec,
+        Func<RenderContext, Element> render,
+        Action<ReactorHost>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(render);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
-        return OpenWindowCore(spec, rootFactory: null, render, configure: null);
+        return OpenWindowCore(spec, rootFactory: null, render, configure: configure);
     }
 
     // Internal overload used by the legacy Run<TRoot>/Run(string, Func) bridges
@@ -495,7 +514,15 @@ public static class ReactorApp
     }
 
     /// <summary>
-    /// Exit the process via <see cref="Application.Exit"/>. UI-thread only.
+    /// Exit the process. UI-thread only. With <paramref name="exitCode"/> set
+    /// to its default (<c>0</c>), routes through
+    /// <see cref="Application.Exit"/> so WinUI gets a clean unwind. With a
+    /// non-zero exit code, calls <see cref="Application.Exit"/> first to
+    /// release resources, then <see cref="Environment.Exit(int)"/> with the
+    /// requested code so the parent process sees it (assigning
+    /// <see cref="Environment.ExitCode"/> would only take effect on a
+    /// natural managed-entry-point return, which an app under
+    /// <c>Application.Start</c> does not perform).
     /// </summary>
     public static void Exit(int exitCode = 0)
     {
@@ -503,7 +530,7 @@ public static class ReactorApp
         try { Application.Current?.Exit(); }
         catch { /* best effort */ }
         if (exitCode != 0)
-            Environment.ExitCode = exitCode;
+            Environment.Exit(exitCode);
     }
 
     // Copy-on-write add. UI-thread only — reads can happen anywhere.

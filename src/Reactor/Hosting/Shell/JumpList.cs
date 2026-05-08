@@ -23,7 +23,18 @@ namespace Microsoft.UI.Reactor;
 /// </param>
 /// <param name="Kind">Whether this is a regular task, a separator, or part of a custom group.</param>
 /// <param name="Description">Optional tooltip / accessible description.</param>
-/// <param name="Icon">Optional icon shown next to the title.</param>
+/// <param name="Icon">
+/// Optional icon shown next to the title.
+/// <para><b>⚠ Packaged-only:</b> the WinRT jump-list path consumes
+/// <c>WindowIcon.FromResource</c> values (<c>ms-appx:///...</c> URIs) only.
+/// Filesystem paths from <c>WindowIcon.FromPath</c> are silently ignored on
+/// the packaged path because the WinRT <c>JumpListItem.Logo</c> requires a
+/// packaged <c>Uri</c>. The unpackaged Win32 jump-list path likewise prefers
+/// resource-style sources today; ship a sidecar <c>.ico</c> alongside the
+/// executable and reference it via <c>FromPath</c> for unpackaged scenarios
+/// only after confirming the icon shows up in your build.
+/// </para>
+/// </param>
 /// <param name="GroupCategory">Group label for <see cref="JumpListItemKind.Custom"/> items.</param>
 public sealed record JumpListItem(
     string Title,

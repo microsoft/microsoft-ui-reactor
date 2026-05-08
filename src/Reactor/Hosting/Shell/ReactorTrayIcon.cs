@@ -220,6 +220,8 @@ public sealed class ReactorTrayIcon : IDisposable
     /// Show a Reactor <see cref="Element"/> as the tray icon's flyout. UI-thread
     /// only. The flyout reconciles in a context without an owning window
     /// (<see cref="RenderContext.UseWindow"/> returns null inside).
+    /// Light-dismisses automatically when the user clicks outside it or
+    /// presses Escape.
     /// (spec 036 §7.1, §11.4)
     /// </summary>
     public void ShowFlyout(Element flyoutContent)
@@ -228,22 +230,15 @@ public sealed class ReactorTrayIcon : IDisposable
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(ShowFlyout));
         if (_disposed) return;
 
-        // Phase-8 minimum implementation: surface the spec'd hook but defer
-        // the WinUI Popup positioning to the selftest pass that exercises
-        // the live shell. The element ref is held so a same-frame HideFlyout
-        // is a no-op without leaks. Production-quality positioning lands
-        // alongside the live tray-flyout fixture.
-        _pendingFlyoutContent = flyoutContent;
-        Debug.WriteLine($"[Reactor] Tray flyout reconciliation deferred until selftest fixture lands. (spec 036 §11.4)");
+        var host = TrayFlyoutHostWindow.GetOrCreate();
+        host.Show(flyoutContent);
     }
-
-    private Element? _pendingFlyoutContent;
 
     /// <summary>Dismiss the tray flyout. UI-thread only. Idempotent.</summary>
     public void HideFlyout()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(HideFlyout));
-        _pendingFlyoutContent = null;
+        TrayFlyoutHostWindow.HideIfShown();
     }
 
     /// <summary>
@@ -305,7 +300,6 @@ public sealed class ReactorTrayIcon : IDisposable
         }
 
         _callbacks = null;
-        _pendingFlyoutContent = null;
 
         ReactorApp.UnregisterTrayIcon(this);
     }

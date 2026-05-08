@@ -85,4 +85,11 @@ internal static class TrayIconComInterop
 
     public const int SM_CXSMICON = 49;
     public const int SM_CYSMICON = 50;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT { public int x; public int y; }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetCursorPos(out POINT lpPoint);
 }

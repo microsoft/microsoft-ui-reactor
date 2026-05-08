@@ -11,8 +11,7 @@ namespace Microsoft.UI.Reactor;
 
 /// <summary>
 /// Owns one OS top-level Window and one <see cref="ReactorHost"/>. Created via
-/// <see cref="ReactorApp.OpenWindow(WindowSpec, Func{Component})"/> or
-/// <see cref="ReactorAppContext.OpenWindow(WindowSpec, Func{Component})"/>.
+/// <see cref="ReactorApp.OpenWindow(WindowSpec, Func{Component}, Action{ReactorHost})"/>.
 /// (spec 036 §3.2 / §4.2)
 /// </summary>
 /// <remarks>

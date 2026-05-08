@@ -515,6 +515,16 @@ public sealed class ReactorHost : IDisposable
         // ReactorHostControl.Render() for the full rationale.
         bool hotReloadRender = HotReloadService.ConsumeUpdatePending();
 
+        // Multi-window: hooks (UseWindow, UseDpi, UseWindowState, UseIsActive,
+        // UseClosingGuard, parameterless UseWindowSize) resolve "the rendering
+        // host" via ReactorApp.ActiveHostInternal. Without a per-render push,
+        // the ctor-time assignment of the most-recently-constructed host wins
+        // permanently and a second window's components observe the wrong
+        // owning window. Restore the previous value in the finally so
+        // re-entrant renders unwind correctly. (spec 036 §3.4 / §7.1)
+        var prevActiveHost = ReactorApp.ActiveHostInternal;
+        ReactorApp.ActiveHostInternal = this;
+
         void RecoverFromHookOrder(HookOrderException ex, RenderContext ctx, string mode)
         {
             _logger?.LogWarning(ex,
@@ -763,6 +773,7 @@ public sealed class ReactorHost : IDisposable
         finally
         {
             _isRendering = false;
+            ReactorApp.ActiveHostInternal = prevActiveHost;
         }
     }
 

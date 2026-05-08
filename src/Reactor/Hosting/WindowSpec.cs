@@ -4,10 +4,9 @@ namespace Microsoft.UI.Reactor;
 
 /// <summary>
 /// Immutable, declarative description of a top-level Reactor window. Hand to
-/// <see cref="ReactorApp.OpenWindow(WindowSpec, Func{Component})"/> or
-/// <see cref="ReactorAppContext.OpenWindow(WindowSpec, Func{Component})"/> to
-/// open a window; hand to <see cref="ReactorWindow.Update"/> to diff against the
-/// current spec and apply only changed fields.
+/// <see cref="ReactorApp.OpenWindow(WindowSpec, Func{Component}, Action{Microsoft.UI.Reactor.Hosting.ReactorHost})"/>
+/// to open a window; hand to <see cref="ReactorWindow.Update"/> to diff
+/// against the current spec and apply only changed fields.
 /// </summary>
 /// <remarks>
 /// <para>All sizes and positions are <b>DIPs</b> (device-independent pixels) —
