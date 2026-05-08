@@ -439,38 +439,45 @@ public static class ReactorApp
         if (idx < current.Length - 1) Array.Copy(current, idx + 1, next, idx, current.Length - idx - 1);
         Volatile.Write(ref _windows, next);
 
-        if (ReferenceEquals(PrimaryWindow, window))
+        // Capture whether this window was the primary BEFORE we re-elect, so
+        // ShutdownPolicy.OnPrimaryWindowClosed can distinguish "primary just
+        // died" from "secondary closed while primary still alive."
+        bool wasPrimary = ReferenceEquals(PrimaryWindow, window);
+        if (wasPrimary)
             PrimaryWindow = next.Length > 0 ? next[0] : null;
 
         try { WindowClosed?.Invoke(null, window); }
         catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowClosed threw: {ex.Message}"); }
 
-        EvaluateShutdownPolicy(closed: window);
+        EvaluateShutdownPolicy(closedWasPrimary: wasPrimary);
     }
 
-    // Phase-1 minimum: OnPrimaryWindowClosed exits when the primary closes.
-    // Phase-4 broadens this with OnLastSurfaceClosed and Explicit.
-    private static void EvaluateShutdownPolicy(ReactorWindow? closed)
+    // OnPrimaryWindowClosed: exit when the just-closed window was the primary.
+    // OnLastSurfaceClosed: exit when both windows and tray icons are gone.
+    // Explicit: never exit from a surface-close event — the app drives Exit().
+    internal static void EvaluateShutdownPolicy(bool closedWasPrimary)
     {
         var policy = ShutdownPolicy;
         var snapshot = Windows;
         switch (policy)
         {
             case ShutdownPolicy.OnPrimaryWindowClosed:
-                // The original primary may have been replaced after the close.
-                // We approximate by exiting when the snapshot is empty AND the
-                // closed window WAS the primary at registration time.
-                if (snapshot.Count == 0)
+                if (closedWasPrimary)
                     SafeExit();
                 break;
             case ShutdownPolicy.OnLastSurfaceClosed:
-                if (snapshot.Count == 0) // tray-icon count comes online in Phase 8
+                if (snapshot.Count == 0 && TrayIconCount == 0)
                     SafeExit();
                 break;
             case ShutdownPolicy.Explicit:
                 break;
         }
     }
+
+    // Phase-8 wires the real tray-icon registry; Phase-4 keeps the hook in
+    // place so OnLastSurfaceClosed can already special-case zero windows
+    // without referencing types that don't exist yet.
+    internal static int TrayIconCount => 0;
 
     private static void SafeExit()
     {
@@ -1121,8 +1128,16 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
             // startup that opens zero windows must exit immediately — that's
             // the only sane default for "I forgot to OpenWindow." Apps that
             // want zero-window startup pick Explicit or OnLastSurfaceClosed
-            // before returning from the callback.
-            if (ReactorApp.Windows.Count == 0 && ReactorApp.ShutdownPolicy == ShutdownPolicy.OnPrimaryWindowClosed)
+            // before returning from the callback. OnLastSurfaceClosed exits
+            // here only if NO tray icon was opened either; otherwise the tray
+            // keeps the process alive.
+            var noWindows = ReactorApp.Windows.Count == 0;
+            var policy = ReactorApp.ShutdownPolicy;
+            if (noWindows && policy == ShutdownPolicy.OnPrimaryWindowClosed)
+            {
+                try { Application.Current?.Exit(); } catch { /* best effort */ }
+            }
+            else if (noWindows && policy == ShutdownPolicy.OnLastSurfaceClosed && ReactorApp.TrayIconCount == 0)
             {
                 try { Application.Current?.Exit(); } catch { /* best effort */ }
             }
@@ -1133,6 +1148,16 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         //   a WindowSpec and route through OpenWindowCore so devtools / sample
         //   call sites continue to see one host, one window, with the same
         //   pre-mount Configure callback timing.
+        //
+        // When neither RootFactory nor RootRenderFunc is set, the
+        // ReactorApplication was constructed without going through
+        // ReactorApp.Run — the canonical case is the self-test host harness,
+        // which constructs the Application directly and owns its own Window
+        // creation. Skip the bridge so we don't try to open a window with
+        // nothing to mount (which would otherwise cascade into shutdown
+        // during OnLaunched). (spec 036 §4.3)
+        if (opts.RootFactory is null && opts.RootRenderFunc is null) return;
+
         var spec = new WindowSpec
         {
             Title = opts.WindowTitle,

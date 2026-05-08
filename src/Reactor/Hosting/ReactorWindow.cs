@@ -36,6 +36,7 @@ public sealed class ReactorWindow : IDisposable
     private readonly ReactorHost _host;
     private readonly nint _hwnd;
     private readonly WindowMessageMonitor _messageMonitor;
+    private readonly Core.WindowPersistedScope _persistedScope = new();
     private WindowSpec _spec;
     private uint _dpi = 96;
     private int _stateValue; // backing storage for State (cast WindowState <-> int)
@@ -58,6 +59,15 @@ public sealed class ReactorWindow : IDisposable
 
     /// <summary>The <see cref="ReactorHost"/> driving this window's render loop.</summary>
     public ReactorHost Host => _host;
+
+    /// <summary>
+    /// Per-window persisted-state scope. Bounded by this window's lifetime —
+    /// disposed when the window closes. Used by
+    /// <see cref="RenderContext.UsePersisted{T}(string, T, PersistedScope)"/>
+    /// when <see cref="PersistedScope.Window"/> is requested. (spec 036 §3.4 /
+    /// §4.4)
+    /// </summary>
+    public Core.WindowPersistedScope PersistedScope => _persistedScope;
 
     /// <summary>Last applied <see cref="WindowSpec"/> snapshot.</summary>
     public WindowSpec Spec => Volatile.Read(ref _spec);
@@ -663,6 +673,9 @@ public sealed class ReactorWindow : IDisposable
         // ReactorHost already subscribes to Window.Closed; let it dispose itself.
         // We avoid double-dispose because Dispose() is idempotent there too.
         try { _host.Dispose(); } catch (Exception ex) { Debug.WriteLine($"[Reactor] Host dispose failed: {ex.Message}"); }
+
+        // Drop per-window persisted state — bounded by window lifetime per spec.
+        try { _persistedScope.Dispose(); } catch (Exception ex) { Debug.WriteLine($"[Reactor] PersistedScope dispose failed: {ex.Message}"); }
     }
 
     /// <summary>The reason the close currently in progress was initiated. Phase 3.</summary>

@@ -52,6 +52,23 @@ to land under these conventions; subsequent specs follow this shape.
 - `RenderContext.UseWindow()`, `UseWindowState()`, `UseIsActive()`,
   `UseClosingGuard(Func<bool>)`. Tray-flyout fallback semantics match
   spec §7.1 (null/Normal/true/no-op). (spec 036 §7)
+- `RenderContext.UseOpenWindow(WindowKey, WindowSpec, Func<Component>)`
+  + `Component.UseOpenWindow` mirror — open or reuse a secondary window
+  keyed by `WindowKey`. Identity-stable across re-renders; spec changes
+  flow through `ReactorWindow.Update`; parent unmount does not
+  auto-close the child. (spec 036 §4.3 / §15.6)
+- `ReactorWindow.PersistedScope` — per-window
+  `Core.WindowPersistedScope`, disposed when the window closes.
+  `RenderContext.UsePersisted(_, _, PersistedScope.Window)` now resolves
+  to this per-window store, so two windows of the same component class
+  hold independent persisted state. (spec 036 §3.4 / §4.4 — closes spec
+  033 §7.5.)
+- `ShutdownPolicy.OnPrimaryWindowClosed` exits when the primary window
+  closes (not just when the snapshot empties); `OnLastSurfaceClosed`
+  considers tray icons (Phase 8 fills the registry). The default
+  zero-window startup-callback path now exits under
+  `OnLastSurfaceClosed` too when no tray icons were opened. (spec 036
+  §6.2)
 - `Microsoft.UI.Reactor.Hooks.UseMemoCells` /
   `UseMemoCellsByKey` / `UseMemoCellsByIndex` — cell-level memoization
   hooks (extension methods on `RenderContext`, plus matching `Component`
@@ -181,6 +198,13 @@ to land under these conventions; subsequent specs follow this shape.
   removal in the next minor release. (spec 033 §4)
 
 ### Removed
+
+- `ReactorHost.MainDispatcherQueue` (internal static, first-host-wins
+  capture). Cross-thread setState marshalling and AutoSuggest's
+  `RaiseStateChanged` now route through `ReactorApp.UIDispatcher`.
+  `ReactorHost` ctor seeds `UIDispatcher` for embedded
+  `ReactorHostControl` scenarios that bypass `ReactorApp.Run`.
+  (spec 036 §4.3)
 
 ### Fixed
 

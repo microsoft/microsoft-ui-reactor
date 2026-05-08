@@ -22,14 +22,6 @@ public sealed class ReactorHost : IDisposable
     private static readonly int MaxRenderIterations = 50;
 #pragma warning restore CS0414
 
-    /// <summary>
-    /// Process-wide UI DispatcherQueue. Captured by the first
-    /// <see cref="ReactorHost"/> created so that off-thread <c>setState</c>
-    /// callers in the reconciler can marshal back onto the UI thread without
-    /// having to plumb a queue reference through every component. TASK-063.
-    /// </summary>
-    internal static DispatcherQueue? MainDispatcherQueue { get; private set; }
-
     private readonly Window _window;
     private readonly Reconciler _reconciler;
     private readonly DispatcherQueue _dispatcherQueue;
@@ -171,9 +163,13 @@ public sealed class ReactorHost : IDisposable
         _window = window;
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-        // First-host-wins capture so off-thread rerenders can marshal onto
-        // the UI thread without explicit plumbing. TASK-063.
-        MainDispatcherQueue ??= _dispatcherQueue;
+        // Off-thread rerenders marshal via ReactorApp.UIDispatcher (captured
+        // in OnLaunched). For embedded ReactorHostControl scenarios where
+        // there's no Reactor.Run, fall back to seeding UIDispatcher with this
+        // host's queue if it hasn't been set yet so cross-thread setState
+        // callers still resolve a target. (spec 036 §4.3)
+        if (ReactorApp.UIDispatcher is null)
+            ReactorApp.UIDispatcher = _dispatcherQueue;
         ReactorApp.ActiveHostInternal = this;
 
         // Route QueryCache.EntryChanged notifications through our dispatcher so subscribers

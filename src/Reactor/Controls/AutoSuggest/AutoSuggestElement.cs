@@ -90,7 +90,7 @@ public sealed class SearchManager<T> : IDisposable
 
     private void RaiseStateChanged()
     {
-        var dq = global::Microsoft.UI.Reactor.Hosting.ReactorHost.MainDispatcherQueue;
+        var dq = global::Microsoft.UI.Reactor.ReactorApp.UIDispatcher;
         if (dq is not null && !dq.HasThreadAccess)
         {
             // SECURITY (TASK-098): marshal StateChanged onto the UI thread

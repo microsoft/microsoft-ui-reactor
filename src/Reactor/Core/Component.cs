@@ -104,6 +104,16 @@ public abstract class Component
     protected void UseClosingGuard(Func<bool> canClose)
         => Context.UseClosingGuard(canClose);
 
+    /// <summary>
+    /// Open or reuse a secondary window keyed by <paramref name="key"/>. Stable
+    /// identity across re-renders. (spec 036 §4.3)
+    /// </summary>
+    protected Microsoft.UI.Reactor.ReactorWindow? UseOpenWindow(
+        Microsoft.UI.Reactor.WindowKey key,
+        Microsoft.UI.Reactor.WindowSpec spec,
+        Func<Component> factory)
+        => Context.UseOpenWindow(key, spec, factory);
+
     protected T UseObservableTree<T>(T source) where T : global::System.ComponentModel.INotifyPropertyChanged
         => Context.UseObservableTree(source);
 

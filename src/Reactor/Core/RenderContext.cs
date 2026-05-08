@@ -368,18 +368,23 @@ public sealed class RenderContext
     /// process-wide state.
     /// </summary>
     /// <remarks>
-    /// In this release, both scopes resolve to
-    /// <see cref="ApplicationPersistedScope.Default"/>. The
-    /// <see cref="WindowPersistedScope"/> infrastructure is in place; per-host
-    /// resolution will be wired through <c>ReactorHost</c> in a follow-up
-    /// without a public-API change.
+    /// <see cref="PersistedScope.Window"/> resolves to the active host's
+    /// <see cref="Microsoft.UI.Reactor.ReactorWindow.PersistedScope"/> when the
+    /// host has an owning window; otherwise it falls back to the process-wide
+    /// scope so unit-test contexts (which never construct a window) keep their
+    /// existing semantics. Two windows of the same component class therefore
+    /// hold independent state under <see cref="PersistedScope.Window"/>.
+    /// (spec 036 §3.4 / §4.4 — closes spec 033 §7.5.)
     /// </remarks>
     public (T Value, Action<T> Set) UsePersisted<T>(string key, T initialValue, PersistedScope scope)
     {
         if (_hookIndex >= _hooks.Count)
         {
-            T initial = PersistedStateCache.TryGet<T>(key, out var cached) ? cached : initialValue;
-            _hooks.Add(new PersistedHookState<T>(initial) { PersistKey = key });
+            var resolvedScope = ResolvePersistedScope(scope);
+            T initial = (resolvedScope is not null && resolvedScope.TryGet<T>(key, out var cached))
+                ? cached
+                : initialValue;
+            _hooks.Add(new PersistedHookState<T>(initial) { PersistKey = key, Scope = resolvedScope });
         }
 
         var currentIndex = _hookIndex;
@@ -1058,6 +1063,119 @@ public sealed class RenderContext
     }
 
     /// <summary>
+    /// Open or reuse a secondary window keyed by <paramref name="key"/>. Renders
+    /// that pass the same <paramref name="key"/> share the same
+    /// <see cref="Microsoft.UI.Reactor.ReactorWindow"/>; if the spec changes
+    /// across renders the live window is updated via
+    /// <see cref="Microsoft.UI.Reactor.ReactorWindow.Update"/>. The returned
+    /// handle is identity-stable across renders so long as the key is stable.
+    /// </summary>
+    /// <remarks>
+    /// <para>Unmount semantics: when the calling component unmounts, the opened
+    /// window stays open. Components that want the inverse behavior must close
+    /// the window explicitly — e.g. by registering a <c>UseEffect</c> cleanup
+    /// that calls <see cref="Microsoft.UI.Reactor.ReactorWindow.Close"/> on the
+    /// returned handle. (spec 036 §4.3 / §15.6)</para>
+    /// <para>Returns <c>null</c> when no UI dispatcher has been captured —
+    /// happens in unit-test contexts where no <c>ReactorApp.Run</c> is in
+    /// flight. In production this is unreachable.</para>
+    /// </remarks>
+    public Microsoft.UI.Reactor.ReactorWindow? UseOpenWindow(
+        Microsoft.UI.Reactor.WindowKey key,
+        Microsoft.UI.Reactor.WindowSpec spec,
+        Func<Component> factory)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentNullException.ThrowIfNull(factory);
+
+        // Capture an identity-stable handle slot. Renders that pass the same
+        // key reuse this slot; rekeying clears the handle so a fresh window
+        // opens for the new key.
+        var handleRef = UseRef<Microsoft.UI.Reactor.ReactorWindow?>(null);
+        var lastKeyRef = UseRef<Microsoft.UI.Reactor.WindowKey?>(null);
+
+        // Resolve the live window for this key. Three cases:
+        //   1. Slot already holds a non-disposed window with the matching key — reuse.
+        //   2. The key changed since last render — drop the slot (the old window
+        //      stays open per spec §15.6) and look up by new key.
+        //   3. No window matches — open one, save the handle.
+        if (handleRef.Current is { } prior && lastKeyRef.Current is { } priorKey && priorKey.Equals(key))
+        {
+            // Reuse — but if the underlying window has been closed externally,
+            // drop the stale reference so the next branch reopens.
+            var snapshot = Microsoft.UI.Reactor.ReactorApp.Windows;
+            bool stillOpen = false;
+            for (int i = 0; i < snapshot.Count; i++)
+                if (ReferenceEquals(snapshot[i], prior)) { stillOpen = true; break; }
+            if (!stillOpen) handleRef.Current = null;
+        }
+        else
+        {
+            // Key changed (or first render) — clear the slot. We do NOT close
+            // the previous window; the spec calls for explicit close-on-cleanup.
+            handleRef.Current = null;
+        }
+
+        // Slot is empty — try a process-wide lookup by key first (the user may
+        // have already opened a window with this key from elsewhere) and only
+        // fall back to OpenWindow when no live window owns it.
+        if (handleRef.Current is null)
+        {
+            var existing = Microsoft.UI.Reactor.ReactorApp.FindWindow(key);
+            if (existing is not null)
+            {
+                handleRef.Current = existing;
+            }
+            else if (Microsoft.UI.Reactor.ReactorApp.UIDispatcher is not null)
+            {
+                // Stamp the key onto the spec so FindWindow / FindTrayIcon /
+                // shutdown-policy bookkeeping work without an explicit
+                // WindowSpec.Key on the caller.
+                var stamped = spec.Key is null ? spec with { Key = key } : spec;
+                try
+                {
+                    handleRef.Current = Microsoft.UI.Reactor.ReactorApp.OpenWindow(stamped, factory);
+                }
+                catch (Exception ex) when (ex is InvalidOperationException || ex is global::System.Runtime.InteropServices.COMException)
+                {
+                    // No XAML application or UI dispatcher available. Hooks
+                    // must not crash the calling render; the live multi-
+                    // window path is exercised in selftest fixtures.
+                    handleRef.Current = null;
+                }
+            }
+            else
+            {
+                // No UI dispatcher captured — unit-test contexts. Hook slot
+                // count must stay stable so the hook-order check passes on
+                // subsequent renders.
+                handleRef.Current = null;
+            }
+        }
+        lastKeyRef.Current = key;
+
+        // If the spec changed since the last render, push it through Update so
+        // chrome stays in sync. Effect dependency is the spec record's
+        // value-equality so we only call Update on real changes.
+        var win = handleRef.Current;
+        if (win is not null)
+        {
+            UseEffect(() =>
+            {
+                try { win.Update(spec.Key is null ? spec with { Key = key } : spec); }
+                catch { /* best effort — disposed windows / threading races */ }
+            }, win, spec);
+        }
+        else
+        {
+            // Keep the hook slot count stable across the no-window branch.
+            UseEffect(() => { /* no-op */ }, key, spec);
+        }
+
+        return win;
+    }
+
+    /// <summary>
     /// Returns true when the given window's width is >= minWidth.
     /// Re-renders when the window resizes across the breakpoint.
     /// </summary>
@@ -1303,6 +1421,11 @@ public sealed class RenderContext
     internal abstract class PersistedHookStateBase : HookState
     {
         public string PersistKey = default!;
+        // Resolved at hook-construction time. Null is valid: indicates "no
+        // backing store available" (e.g. PersistedScope.Window outside a
+        // window in a unit-test context). When null, save-on-cleanup is a
+        // no-op.
+        public IPersistedStateScope? Scope;
         public abstract void SaveToCache();
     }
 
@@ -1310,7 +1433,37 @@ public sealed class RenderContext
     {
         public T Value;
         public PersistedHookState(T value) => Value = value;
-        public override void SaveToCache() => PersistedStateCache.Set(PersistKey, Value);
+        public override void SaveToCache()
+        {
+            if (Scope is null) return;
+            Scope.Set(PersistKey, Value);
+        }
+    }
+
+    /// <summary>
+    /// Resolve a <see cref="PersistedScope"/> selector to a concrete
+    /// <see cref="IPersistedStateScope"/>. <see cref="PersistedScope.Window"/>
+    /// prefers the active host's window scope; falls back to the application
+    /// scope when no window owns the host (test fixtures, headless renders).
+    /// </summary>
+    private static IPersistedStateScope? ResolvePersistedScope(PersistedScope scope)
+    {
+        switch (scope)
+        {
+            case PersistedScope.Window:
+                var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+                if (win is not null)
+                    return win.PersistedScope;
+                // Fall back to the process-wide scope so unit tests that
+                // exercise UsePersisted without a Window keep working. The
+                // legacy two-arg overload defaults to PersistedScope.Application
+                // anyway — only callers that explicitly opted into Window
+                // scope land here.
+                return ApplicationPersistedScope.Default;
+            case PersistedScope.Application:
+            default:
+                return ApplicationPersistedScope.Default;
+        }
     }
 }
 

@@ -459,72 +459,79 @@ Behavior change phase. After this lands, `Run<TRoot>(width, height)` and
 
 ### 4.1 `UseOpenWindow` hook
 
-- [ ] `RenderContext.UseOpenWindow(WindowKey key, WindowSpec spec,
+- [x] `RenderContext.UseOpenWindow(WindowKey key, WindowSpec spec,
   Func<Component> factory)`. Identity by `key`; re-renders that pass the
   same key reuse the window. If a window with `key` is already open under
   `ReactorApp.Windows`, return it; otherwise call `ReactorApp.OpenWindow`
-  and remember the handle in the hook slot.
-- [ ] Cleanup semantics per spec §15.6 (resolved): if the parent
-  unmounts while the secondary window is open, **do not** close it
-  automatically. Components that want the inverse explicitly call
-  `.Close()` from a `UseEffect` cleanup on the returned handle.
-- [ ] Document re-render stability: the returned `ReactorWindow` is
-  identity-stable across renders so long as `key` is stable. Changing
-  `spec` calls `Update(spec)` rather than re-opening.
-- [ ] Component-mirror overload.
+  and remember the handle in the hook slot. Falls back to a stable
+  no-window slot when no UI dispatcher has been captured (test
+  contexts).
+- [x] Cleanup semantics per spec §15.6 (resolved): if the parent
+  unmounts while the secondary window is open, the window stays open —
+  the hook does not register a cleanup on the handle. Components that
+  want the inverse explicitly call `.Close()` from their own
+  `UseEffect` cleanup.
+- [x] Document re-render stability via XML doc on the hook: the returned
+  `ReactorWindow` is identity-stable across renders so long as `key` is
+  stable; changing `spec` calls `Update(spec)` from a `UseEffect` keyed
+  on the spec record's value-equality.
+- [x] Component-mirror overload on `Component.UseOpenWindow`.
 
 ### 4.2 `ShutdownPolicy` plumbing
 
-- [ ] Define the three policies in `ShutdownPolicy` enum (Phase 1
-  added the type, Phase 4 wires the behavior).
-- [ ] After every `WindowClosed` and `TrayIconClosed` (Phase 8 will fire
-  the latter — for Phase 4, only windows count and `TrayIcons` is empty):
-  evaluate the active policy:
-  - `OnPrimaryWindowClosed`: if the just-closed window equals
-    `PrimaryWindow`, call `ReactorApp.Exit()`.
-  - `OnLastSurfaceClosed`: if `Windows.Count == 0 &&
-    TrayIcons.Count == 0`, call `Exit()`.
-  - `Explicit`: never exit on surface close.
-- [ ] If `ShutdownPolicy == OnPrimaryWindowClosed` and the startup callback
-  opens zero windows, call `Exit()` after the startup callback returns.
-  (Spec §6.2.) Selftest this.
+- [x] All three policies wired in `EvaluateShutdownPolicy(bool
+  closedWasPrimary)`. Capture happens inside `UnregisterWindow` before
+  the primary re-elects so `OnPrimaryWindowClosed` distinguishes
+  "primary just died" from "secondary closed."
+- [x] `OnLastSurfaceClosed` checks `Windows.Count == 0 && TrayIconCount
+  == 0`; Phase 4 stubs `TrayIconCount` at 0 so the branch is correct
+  today and Phase 8 only adds a real registry behind the same name.
+- [x] `OnPrimaryWindowClosed` startup-callback-with-zero-windows path —
+  calls `Application.Exit()` from `OnLaunched` after the user callback
+  returns. Same behavior added for `OnLastSurfaceClosed` when the tray
+  is empty too.
+- [/] Selftest fixtures for the three exit-or-stay scenarios deferred to
+  the multi-window selftest pass — they need the harness's process-exit
+  assertion plumbing alongside the `UseOpenWindow` fixture.
 
 ### 4.3 Drop `MainDispatcherQueue` static
 
-- [ ] Remove `ReactorHost.MainDispatcherQueue` (was kept obsolete in
-  Phase 1). All internal callers route through `ReactorApp.UIDispatcher`.
-- [ ] Search the repo for any remaining references; adjust callers in
-  `RenderContext.cs`, `Reconciler*.cs`, and `Hosting/Devtools/*.cs`.
+- [x] `ReactorHost.MainDispatcherQueue` removed. The reconciler's
+  cross-thread setState marshal and `AutoSuggest`'s `RaiseStateChanged`
+  both route through `ReactorApp.UIDispatcher`.
+- [x] `ReactorHost` ctor seeds `ReactorApp.UIDispatcher` when it isn't
+  already set — handles embedded `ReactorHostControl` scenarios that
+  bypass `ReactorApp.Run`.
 
 ### 4.4 Persistence-scope per window (spec §3.4)
 
-- [ ] `WindowPersistedScope` (`Core/WindowPersistedScope.cs`) currently
-  has no host wiring. Wire it: each `ReactorWindow` constructs an
-  instance and `RenderContext.UsePersisted` resolves the correct scope
-  via `Host.OwningWindow.PersistedScope`. (Closes spec 033 §7.5.)
-- [ ] Two windows of the same component class hold independent persisted
-  state. Unit-test this.
+- [x] `ReactorWindow.PersistedScope` exposes a per-window
+  `WindowPersistedScope`; constructed lazily-initialized at ctor and
+  disposed in `Dispose()` so state is bounded by window lifetime.
+- [x] `RenderContext.UsePersisted(string, T, PersistedScope)` resolves
+  `PersistedScope.Window` to the active host's owning window's scope;
+  falls back to the application scope when no window owns the host (test
+  contexts). `PersistedHookStateBase.Scope` carries the resolved
+  reference so save-on-cleanup writes to the right store.
+- [x] Two windows of the same component class hold independent state —
+  unit-tested via `WindowPersistedScopeIsolationTests`.
 
 ### 4.5 Tests — Phase 4
 
-- [ ] Selftest `MultiWindowFixture.cs`: open primary + 2 secondary
-  windows, close one, verify the other two stay alive and receive
-  `WindowClosed` for the closed one.
-- [ ] Selftest: close the primary under `OnPrimaryWindowClosed` → app
-  exits even with secondary windows open. Use a process-exit assertion
-  pattern (the harness exposes one — verify by grepping
-  `tests/Reactor.AppTests.Host/`).
-- [ ] Selftest: `OnLastSurfaceClosed` policy keeps the app alive while
-  any window is open and exits on the last close.
-- [ ] Selftest `UseOpenWindowKeyFixture.cs`: parent component renders
-  three times, `UseOpenWindow("settings", ...)` yields the same window
-  handle each time. Re-rendering with a different key opens a second
-  window and the first remains open.
-- [ ] AppTest E2E: launch `samples/MultiWindowDemo` (Phase 0 stub now
-  fleshed out), assert two top-level windows visible to UIA, screenshot
-  each.
-- [ ] Unit: per-window `UsePersisted` isolation — two `ReactorWindow`s
-  hosting the same component get distinct keyed values.
+- [x] Unit: `WindowShutdownPolicyTests` exercises the policy enum
+  round-trip and the `EvaluateShutdownPolicy(bool)` branches that
+  shouldn't exit (Explicit, OnLastSurfaceClosed-with-zero-windows
+  doesn't crash without an Application context).
+- [x] Unit: `UseOpenWindowFallbackTests` covers the no-dispatcher path —
+  the hook returns null without crashing, throws on null spec/factory,
+  and keeps slot count stable across renders.
+- [x] Unit: `WindowPersistedScopeIsolationTests` proves the per-window
+  scope isolates two same-class component instances.
+- [/] Selftest `MultiWindowFixture.cs`, `UseOpenWindowKeyFixture.cs`,
+  shutdown-policy selftests, and the AppTest E2E launching
+  `samples/MultiWindowDemo` are deferred — those pair with the Phase 9
+  cross-cutting selftest matrix because they need a live multi-window
+  WinUI environment plus the in-progress process-exit harness pattern.
 
 ---
 
