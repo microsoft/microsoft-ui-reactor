@@ -197,7 +197,7 @@ public sealed class TemplatePackageSmokeTests : IDisposable
     private static string FindRepoRoot()
     {
         var dir = AppContext.BaseDirectory;
-        while (dir != null && !File.Exists(Path.Combine(dir, "Reactor.sln")))
+        while (dir != null && !File.Exists(Path.Combine(dir, "Reactor.slnx")))
         {
             dir = Path.GetDirectoryName(dir);
         }
