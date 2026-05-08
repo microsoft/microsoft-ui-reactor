@@ -31,6 +31,12 @@ internal sealed class TrayHiddenWindow : IDisposable
     private readonly object _entriesLock = new();
     private GCHandle _selfHandle;
     private bool _disposed;
+    // RegisterWindowMessageW("TaskbarCreated") — Explorer broadcasts this to
+    // every top-level window when the shell taskbar is recreated (Explorer
+    // restart, signout transitions). We re-register every tray icon on
+    // receipt; otherwise icons silently disappear after Explorer churn.
+    // (spec 036 §11.4)
+    private uint _taskbarCreatedMsg;
 
     /// <summary>The HWND used as the <c>hWnd</c> field of <c>NOTIFYICONDATAW</c>.</summary>
     public nint Hwnd => _hwnd;
@@ -116,6 +122,13 @@ internal sealed class TrayHiddenWindow : IDisposable
                 _hwnd = hwnd;
             }
         }
+
+        // RegisterWindowMessageW returns the same id for every caller in the
+        // session, so even though we register once per process this is the
+        // same value Explorer broadcasts. Zero on failure — we tolerate that
+        // and just lose Explorer-restart resilience for this process.
+        try { _taskbarCreatedMsg = RegisterWindowMessageW("TaskbarCreated"); }
+        catch (Exception ex) { Debug.WriteLine($"[Reactor] RegisterWindowMessage(TaskbarCreated) failed: {ex.Message}"); }
     }
 
     public uint Register(uint id, TrayCallbackEntry entry)
@@ -222,6 +235,13 @@ internal sealed class TrayHiddenWindow : IDisposable
                         self.DispatchCallback(iconId, notif);
                         return 0;
                     }
+                    if (self._taskbarCreatedMsg != 0 && msg == self._taskbarCreatedMsg)
+                    {
+                        self.DispatchTaskbarCreated();
+                        // Don't return 0 — TaskbarCreated is a broadcast and
+                        // other registered handlers (e.g. third-party shell
+                        // hooks living in the same process) might need it.
+                    }
                 }
             }
         }
@@ -230,6 +250,26 @@ internal sealed class TrayHiddenWindow : IDisposable
             Debug.WriteLine($"[Reactor] TrayHiddenWindow WndProc threw: {ex.Message}");
         }
         return DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+
+    private void DispatchTaskbarCreated()
+    {
+        // Snapshot under copy-on-write read; dispatch on UI thread so re-add
+        // calls (NIM_ADD + NIM_SETVERSION) run on the captured dispatcher,
+        // matching the threading invariant of the original registration path.
+        var entries = Volatile.Read(ref _entries);
+        if (entries.Length == 0) return;
+        _dispatcher.TryEnqueue(() =>
+        {
+            for (int i = 0; i < entries.Length; i++)
+            {
+                try { entries[i].OnReapply?.Invoke(); }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[Reactor] TrayIcon reapply after TaskbarCreated threw: {ex.Message}");
+                }
+            }
+        });
     }
 
     public void Dispose()
@@ -311,6 +351,9 @@ internal sealed class TrayHiddenWindow : IDisposable
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
     private static extern nint SetWindowLongPtrW(nint hWnd, int nIndex, nint dwNewLong);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint RegisterWindowMessageW([MarshalAs(UnmanagedType.LPWStr)] string lpString);
 }
 
 /// <summary>
@@ -322,4 +365,10 @@ internal sealed class TrayCallbackEntry
     public Action? OnClick { get; set; }
     public Action? OnDoubleClick { get; set; }
     public Action? OnRightClick { get; set; }
+    /// <summary>
+    /// Invoked on the UI thread when Explorer broadcasts <c>TaskbarCreated</c>
+    /// (Explorer restart, sign-out cycle). The owning <see cref="ReactorTrayIcon"/>
+    /// re-runs <c>NIM_ADD</c> + <c>NIM_SETVERSION</c> so the icon reappears.
+    /// </summary>
+    public Action? OnReapply { get; set; }
 }

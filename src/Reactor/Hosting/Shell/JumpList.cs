@@ -175,7 +175,15 @@ public static class JumpList
             return;
         }
 
-        // Unpackaged path — synchronous COM. Wrap so the contract stays async.
+        // Unpackaged path — caller-error gates run synchronously (before we
+        // hand off to the threadpool) so configuration mistakes surface as
+        // exceptions instead of disappearing into Debug.WriteLine. Platform-
+        // best-effort failures (missing COM, group policy, downlevel shell)
+        // still get swallowed.
+        if (string.IsNullOrEmpty(AppUserModelId))
+            throw new InvalidOperationException(
+                "JumpList.AppUserModelId must be set before UpdateAsync on unpackaged apps. (spec 036 §11.3)");
+
         try
         {
             await Task.Run(() => UpdateUnpackaged(snapshot)).ConfigureAwait(false);

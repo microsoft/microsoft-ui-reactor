@@ -46,6 +46,16 @@ public sealed record WindowSpec
     /// DIP top-left position. Set together with
     /// <see cref="WindowStartPosition.Manual"/>; otherwise <c>null</c>.
     /// </summary>
+    /// <remarks>
+    /// The DIP→physical conversion uses the window's <b>initial</b> DPI (the
+    /// monitor it opens on). Coordinates that target a different monitor on a
+    /// mixed-DPI desktop may land at a slightly different physical position
+    /// because Windows virtual-screen coordinates are physical pixels with no
+    /// global DIP coordinate space. For absolute placement on a specific
+    /// non-primary monitor, prefer <see cref="WindowStartPosition.CenterOnOwner"/>
+    /// (with an owner already on that monitor) or call
+    /// <see cref="ReactorWindow.SetPosition"/> after the window opens.
+    /// </remarks>
     public (double X, double Y)? ManualPosition { get; init; }
 
     /// <summary>Coarse presenter selection.</summary>

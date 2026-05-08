@@ -83,6 +83,15 @@ internal static class TrayIconComInterop
     [DllImport("user32.dll", SetLastError = true)]
     public static extern int GetSystemMetrics(int nIndex);
 
+    // GetSystemMetricsForDpi requires Windows 10 1607+; we ship min-version
+    // 10.0.19041 so it's always present, but call sites still tolerate a
+    // P/Invoke failure for forward-portability.
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern int GetSystemMetricsForDpi(int nIndex, uint dpi);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetDpiForSystem();
+
     public const int SM_CXSMICON = 49;
     public const int SM_CYSMICON = 50;
 

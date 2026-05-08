@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -113,16 +114,40 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
         _host = new ReactorHost(_window);
         _host.Mount(_ => flyoutContent);
 
-        // Position at cursor. Default size is intentionally compact — the
-        // content's own measure-arrange will lay out within these bounds; apps
-        // can size their root container if they need more space. We don't
-        // auto-fit because UpdateLayout-then-resize incurs an extra layout
-        // pass and a visible flicker.
+        // Position at the current cursor (a stand-in for the tray-icon anchor
+        // — Shell_NotifyIconGetRect would be more accurate but requires the
+        // owning icon's hWnd/uID and is a follow-up). Size is denominated in
+        // DIPs and scaled to the *destination* monitor's DPI so the flyout is
+        // visually consistent on mixed-DPI setups; the rect is then clamped to
+        // that monitor's work area so we never open off-screen near taskbar
+        // edges. We don't auto-fit content because an UpdateLayout-then-resize
+        // pass causes a visible flicker. (spec 036 §11.4)
+        const int LogicalWidth = 280;
+        const int LogicalHeight = 360;
         try
         {
             if (TrayIconComInterop.GetCursorPos(out var pt))
             {
-                _appWindow.MoveAndResize(new global::Windows.Graphics.RectInt32(pt.x, pt.y, 280, 360));
+                var area = DisplayArea.GetFromPoint(
+                    new global::Windows.Graphics.PointInt32(pt.x, pt.y),
+                    DisplayAreaFallback.Nearest);
+                var work = area?.WorkArea
+                    ?? DisplayArea.Primary?.WorkArea
+                    ?? new global::Windows.Graphics.RectInt32(0, 0, 1920, 1080);
+
+                uint dpi = GetDpiForMonitorSafe(pt);
+                int width  = (int)Math.Round(LogicalWidth  * dpi / 96.0);
+                int height = (int)Math.Round(LogicalHeight * dpi / 96.0);
+
+                // Clamp the origin so the flyout's full rect stays within the
+                // work area; if the cursor is in the bottom-right corner, the
+                // flyout opens above/left of the cursor instead of off-screen.
+                int x = Math.Min(pt.x, work.X + work.Width  - width);
+                int y = Math.Min(pt.y, work.Y + work.Height - height);
+                if (x < work.X) x = work.X;
+                if (y < work.Y) y = work.Y;
+
+                _appWindow.MoveAndResize(new global::Windows.Graphics.RectInt32(x, y, width, height));
             }
         }
         catch (Exception ex) { Debug.WriteLine($"[Reactor] TrayFlyout position failed: {ex.Message}"); }
@@ -145,6 +170,30 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
         try { _host?.Dispose(); } catch { /* best effort */ }
         _host = null;
     }
+
+    private static uint GetDpiForMonitorSafe(TrayIconComInterop.POINT pt)
+    {
+        try
+        {
+            var mon = MonitorFromPoint(new POINT { x = pt.x, y = pt.y }, MONITOR_DEFAULTTONEAREST);
+            if (mon != 0 && GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, out uint dx, out _) == 0)
+                return dx == 0 ? 96 : dx;
+        }
+        catch (Exception ex) { Debug.WriteLine($"[Reactor] GetDpiForMonitor failed: {ex.Message}"); }
+        return 96;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT { public int x; public int y; }
+
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
+    private const uint MDT_EFFECTIVE_DPI = 0;
+
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromPoint(POINT pt, uint dwFlags);
+
+    [DllImport("Shcore.dll")]
+    private static extern int GetDpiForMonitor(nint hMonitor, uint dpiType, out uint dpiX, out uint dpiY);
 
     /// <inheritdoc />
     public void Dispose()

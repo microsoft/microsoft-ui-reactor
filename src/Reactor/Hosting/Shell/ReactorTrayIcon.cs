@@ -124,22 +124,48 @@ public sealed class ReactorTrayIcon : IDisposable
             OnClick = () => Click?.Invoke(this, EventArgs.Empty),
             OnDoubleClick = () => DoubleClick?.Invoke(this, EventArgs.Empty),
             OnRightClick = () => RightClick?.Invoke(this, EventArgs.Empty),
+            OnReapply = ReapplyAfterShellRestart,
         };
         hidden.Register(_shellIconId, _callbacks);
 
+        ApplyShellAdd(hidden.Hwnd);
+
+        _registered = true;
+    }
+
+    private void ApplyShellAdd(nint hiddenHwnd)
+    {
         ApplyToShell(TrayIconComInterop.NIM_ADD);
 
         // Switch to v4 semantics so the wParam/lParam shape matches what
         // TrayHiddenWindow's WndProc expects.
         try
         {
-            var data = BuildNotifyIconData(_spec, _hIcon, hidden.Hwnd, _shellIconId);
+            var data = BuildNotifyIconData(_spec, _hIcon, hiddenHwnd, _shellIconId);
             data.uVersionOrTimeout = TrayIconComInterop.NOTIFYICON_VERSION_4;
             _ = TrayIconComInterop.Shell_NotifyIconW(TrayIconComInterop.NIM_SETVERSION, ref data);
         }
         catch (Exception ex) { Debug.WriteLine($"[Reactor] NIM_SETVERSION failed: {ex.Message}"); }
+    }
 
-        _registered = true;
+    /// <summary>
+    /// Re-add this icon to the shell after Explorer broadcasts
+    /// <c>TaskbarCreated</c> (Explorer restart, sign-out transition). Runs on
+    /// the UI dispatcher; <see cref="TrayHiddenWindow"/> dispatches us here.
+    /// </summary>
+    private void ReapplyAfterShellRestart()
+    {
+        if (_disposed || !_registered) return;
+        // Drop the cached HICON so we reload from the current icon source —
+        // some shell-restart transitions invalidate cached handles, and a
+        // fresh load is cheap. (spec 036 §11.4)
+        if (_hIcon != 0)
+        {
+            try { TrayIconComInterop.DestroyIcon(_hIcon); } catch { }
+            _hIcon = 0;
+        }
+        try { ApplyShellAdd(TrayHiddenWindow.GetOrCreate().Hwnd); }
+        catch (Exception ex) { Debug.WriteLine($"[Reactor] Tray reapply after TaskbarCreated failed: {ex.Message}"); }
     }
 
     private void ApplyToShell(uint message)
@@ -207,17 +233,39 @@ public sealed class ReactorTrayIcon : IDisposable
                 return 0;
             }
 
-            int cx = TrayIconComInterop.GetSystemMetrics(TrayIconComInterop.SM_CXSMICON);
-            int cy = TrayIconComInterop.GetSystemMetrics(TrayIconComInterop.SM_CYSMICON);
+            // Tray icons live on the taskbar's notification area, which is
+            // sized in the system DPI — so prefer GetSystemMetricsForDpi at
+            // GetDpiForSystem() over the system-DPI-locked GetSystemMetrics.
+            // Apps should still ship a multi-size .ico (16, 20, 24, 32, 40 px
+            // assets) so LoadImageW can pick the closest in-file frame.
+            uint dpi = 96;
+            try { dpi = TrayIconComInterop.GetDpiForSystem(); }
+            catch { /* fallback below */ }
+            if (dpi == 0) dpi = 96;
+
+            int cx, cy;
+            try
+            {
+                cx = TrayIconComInterop.GetSystemMetricsForDpi(TrayIconComInterop.SM_CXSMICON, dpi);
+                cy = TrayIconComInterop.GetSystemMetricsForDpi(TrayIconComInterop.SM_CYSMICON, dpi);
+            }
+            catch
+            {
+                cx = TrayIconComInterop.GetSystemMetrics(TrayIconComInterop.SM_CXSMICON);
+                cy = TrayIconComInterop.GetSystemMetrics(TrayIconComInterop.SM_CYSMICON);
+            }
             if (cx <= 0) cx = 16;
             if (cy <= 0) cy = 16;
 
+            // LR_DEFAULTSIZE is intentionally omitted — it would override the
+            // explicit size we just resolved when cx/cy are zero. Here cx/cy
+            // are the DPI-aware target so LoadImage selects the closest frame.
             return TrayIconComInterop.LoadImageW(
                 0,
                 icon.Source,
                 TrayIconComInterop.IMAGE_ICON,
                 cx, cy,
-                TrayIconComInterop.LR_LOADFROMFILE | TrayIconComInterop.LR_DEFAULTSIZE);
+                TrayIconComInterop.LR_LOADFROMFILE);
         }
         catch (Exception ex)
         {

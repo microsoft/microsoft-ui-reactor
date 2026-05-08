@@ -37,6 +37,16 @@ public sealed class ReactorWindow : IDisposable
     private readonly nint _hwnd;
     private readonly WindowMessageMonitor _messageMonitor;
     private readonly Core.WindowPersistedScope _persistedScope = new();
+    // HICON loaded by TryApplyExeIconFallback. We hold it for the window's
+    // lifetime and DestroyIcon in Dispose — Microsoft.UI.Win32Interop
+    // .GetIconIdFromIcon is a thin Windows.Graphics.IconId factory and does
+    // not transfer HICON ownership (per
+    // learn.microsoft.com/.../Microsoft.UI.Win32Interop.GetIconIdFromIcon —
+    // "the caller is responsible for the lifetime of the icon handle"). The
+    // AppWindow already holds its own reference internally by the time
+    // SetIcon returns, so destruction at window-close is safe and avoids
+    // leaking one HICON per window.
+    private nint _exeFallbackHIcon;
     // Lazy-init shell wrappers — apps that never read these never instantiate
     // them, keeping the cold-start budget clean (spec 036 §0.7 / §11.7).
     private TaskbarProgress? _taskbarProgress;
@@ -366,7 +376,7 @@ public sealed class ReactorWindow : IDisposable
         if (spec.Icon is { } icon)
             icon.Apply(_appWindow);
         else if (isInitial)
-            TryApplyExeIconFallback(_appWindow);
+            TryApplyExeIconFallback();
 
         // Owner relationship — only meaningful at initial apply time.
         // Subsequent Update calls do not re-parent (changing ownership of a
@@ -429,7 +439,7 @@ public sealed class ReactorWindow : IDisposable
     /// <para>Failures are silent — if there's no embedded icon, the AppWindow
     /// keeps its default. (spec 036 §4.1 — implementation-time addition)</para>
     /// </remarks>
-    private static void TryApplyExeIconFallback(AppWindow appWindow)
+    private void TryApplyExeIconFallback()
     {
         try
         {
@@ -448,10 +458,11 @@ public sealed class ReactorWindow : IDisposable
                 0, 0, NativeIcon.LR_LOADFROMFILE | NativeIcon.LR_DEFAULTSIZE);
             if (hIcon == 0) return;
 
-            // GetIconIdFromIcon adopts the HICON; the AppWindow holds the
-            // reference for its lifetime. We don't DestroyIcon ourselves.
             var iconId = Microsoft.UI.Win32Interop.GetIconIdFromIcon(hIcon);
-            appWindow.SetIcon(iconId);
+            _appWindow.SetIcon(iconId);
+            // Stash the HICON for Dispose to free — see field comment for
+            // ownership rationale.
+            _exeFallbackHIcon = hIcon;
         }
         catch (Exception ex)
         {
@@ -469,6 +480,10 @@ public sealed class ReactorWindow : IDisposable
         public static extern nint LoadImageW(nint hInst,
             [global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.LPWStr)] string lpszName,
             uint uType, int cxDesired, int cyDesired, uint fuLoad);
+
+        [global::System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        [return: global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.Bool)]
+        public static extern bool DestroyIcon(nint hIcon);
     }
 
     private static class NativeOwnership
@@ -545,7 +560,7 @@ public sealed class ReactorWindow : IDisposable
                 if (args.WParam != 0)
                 {
                     IsVisible = true;
-                    TryRestorePersistedPlacement();
+                    TryApplyInitialPlacement();
                 }
                 else IsVisible = false;
                 break;
@@ -853,7 +868,20 @@ public sealed class ReactorWindow : IDisposable
         catch (Exception ex) { Debug.WriteLine($"[Reactor] SetSize failed: {ex.Message}"); }
     }
 
-    /// <summary>Move to <paramref name="x"/>,<paramref name="y"/> DIPs. UI-thread only.</summary>
+    /// <summary>
+    /// Move to <paramref name="x"/>,<paramref name="y"/> DIPs. UI-thread only.
+    /// </summary>
+    /// <remarks>
+    /// The DIP→physical conversion uses the <b>current window's</b> DPI. On
+    /// mixed-DPI multi-monitor setups, moving across to a monitor with a
+    /// different scale factor can land at a slightly different physical
+    /// position than a caller expects, because Windows virtual-screen
+    /// coordinates are physical pixels with no global DIP coordinate space.
+    /// For predictable cross-monitor placement, prefer <see cref="CenterOnScreen"/>
+    /// (which resolves against the destination <see cref="DisplayArea"/>) or
+    /// move in two steps — <c>SetPosition</c> onto the target monitor, then
+    /// adjust within it. (spec 036 §5.2)
+    /// </remarks>
     public void SetPosition(double x, double y)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetPosition));
@@ -960,54 +988,115 @@ public sealed class ReactorWindow : IDisposable
         // Release thumbnail-toolbar HICONs and clear the click-dispatch map so
         // a late WM_COMMAND can't reach freed handlers. (spec 036 §11.5)
         try { Volatile.Read(ref _thumbnailToolbar)?.Dispose(); } catch { /* best effort */ }
+
+        // Free the EXE-fallback HICON if we loaded one. AppWindow keeps its
+        // own internal reference, so post-Close destruction is safe.
+        if (_exeFallbackHIcon != 0)
+        {
+            try { NativeIcon.DestroyIcon(_exeFallbackHIcon); } catch { /* best effort */ }
+            _exeFallbackHIcon = 0;
+        }
     }
 
     /// <summary>The reason the close currently in progress was initiated. Phase 3.</summary>
     internal WindowCloseReason ClosingReason => _closingReason;
 
-    // ── Persistence (spec 036 §8) ──────────────────────────────────────
+    // ── Persistence + initial placement (spec 036 §3.2 / §8) ──────────
 
     /// <summary>
-    /// On the first <c>WM_SHOWWINDOW</c>, read the persisted placement (if any)
-    /// from the registered <see cref="ReactorApp.WindowPersistenceStore"/> and
-    /// re-apply it via <c>SetWindowPlacement</c>. Idempotent: subsequent shows
-    /// take no action so a hide/show cycle preserves the user's interactive
-    /// resize. (spec 036 §8)
+    /// On the first <c>WM_SHOWWINDOW</c>, apply the spec's
+    /// <see cref="WindowSpec.StartPosition"/>. For
+    /// <see cref="WindowStartPosition.RestoreFromPersistence"/> we read the
+    /// persisted placement (if any) from
+    /// <see cref="ReactorApp.WindowPersistenceStore"/> and re-apply it via
+    /// <c>SetWindowPlacement</c>; on any of the failure modes we fall through
+    /// to the default placement so the window still appears. For the other
+    /// placement values we move/center the AppWindow against the resolved
+    /// monitor's work area. Idempotent: subsequent shows take no action so a
+    /// hide/show cycle preserves the user's interactive resize.
+    /// (spec 036 §3.2 / §8)
     /// </summary>
-    private void TryRestorePersistedPlacement()
+    private void TryApplyInitialPlacement()
     {
         if (_persistenceRestoreAttempted) return;
         _persistenceRestoreAttempted = true;
 
         var spec = _spec;
-        if (string.IsNullOrEmpty(spec.PersistenceId) &&
-            spec.StartPosition != WindowStartPosition.RestoreFromPersistence)
-            return;
 
+        bool restored = false;
+        if (spec.StartPosition == WindowStartPosition.RestoreFromPersistence
+            || !string.IsNullOrEmpty(spec.PersistenceId))
+        {
+            restored = TryRestorePersistedPlacementCore(spec);
+        }
+        if (restored)
+        {
+            // The placement we just applied counts as a user-resized state
+            // so the first-DPI re-apply path doesn't fight it.
+            _userResized = true;
+            return;
+        }
+
+        try
+        {
+            switch (spec.StartPosition)
+            {
+                case WindowStartPosition.Manual when spec.ManualPosition is { } pos:
+                    _appWindow.Move(DipToPhysicalPoint(pos.X, pos.Y));
+                    break;
+                case WindowStartPosition.CenterOnPrimary:
+                    CenterIn(DisplayArea.Primary);
+                    break;
+                case WindowStartPosition.CenterOnOwner:
+                    CenterIn(ResolveOwnerDisplayArea(spec.Owner));
+                    break;
+                // Default and RestoreFromPersistence (with no saved data)
+                // fall through to WinUI's default placement.
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor] TryApplyInitialPlacement failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private bool TryRestorePersistedPlacementCore(WindowSpec spec)
+    {
+        if (string.IsNullOrEmpty(spec.PersistenceId)) return false;
         var store = ReactorApp.ResolvePersistenceStore();
-        if (store is null) return;
-        if (string.IsNullOrEmpty(spec.PersistenceId)) return;
+        if (store is null) return false;
 
         try
         {
             if (!store.TryRead(spec.PersistenceId!, out var data) || data is null)
-                return;
+                return false;
             var monitors = MonitorEnumeration.Snapshot();
-            if (!WindowPlacementCodec.Restore(_hwnd, data, monitors))
-            {
-                // Fingerprint mismatch / malformed payload — caller falls
-                // back to the spec's default placement, which has already
-                // been applied by ApplyChrome.
-                return;
-            }
-            // The placement we just applied counts as a user-resized state
-            // so the first-DPI re-apply path doesn't fight it.
-            _userResized = true;
+            // Fingerprint mismatch / malformed payload returns false; caller
+            // falls back to spec's default placement.
+            return WindowPlacementCodec.Restore(_hwnd, data, monitors);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[Reactor] TryRestorePersistedPlacement failed: {ex.GetType().Name}: {ex.Message}");
+            return false;
         }
+    }
+
+    private void CenterIn(DisplayArea? area)
+    {
+        if (area is null) return;
+        var work = area.WorkArea;
+        var size = _appWindow.Size;
+        int x = work.X + Math.Max(0, (work.Width - size.Width) / 2);
+        int y = work.Y + Math.Max(0, (work.Height - size.Height) / 2);
+        _appWindow.Move(new global::Windows.Graphics.PointInt32(x, y));
+    }
+
+    private static DisplayArea? ResolveOwnerDisplayArea(ReactorWindow? owner)
+    {
+        if (owner is null || owner._disposed) return DisplayArea.Primary;
+        try { return DisplayArea.GetFromWindowId(owner._appWindow.Id, DisplayAreaFallback.Nearest); }
+        catch { return DisplayArea.Primary; }
     }
 
     /// <summary>
