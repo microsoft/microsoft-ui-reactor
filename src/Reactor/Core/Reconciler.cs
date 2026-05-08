@@ -260,6 +260,11 @@ public sealed partial class Reconciler : IDisposable
     {
         public Element? Element;
         public EventHandlerState? Events;
+        // Per-native-element echo-suppress counter consumed by ChangeEchoSuppressor.
+        // Lives here (not in a CWT-by-RCW) so that BeginSuppress on one managed
+        // wrapper and ShouldSuppress on a different wrapper for the same native
+        // DependencyObject see the same counter. See ChangeEchoSuppressor.cs.
+        public int EchoSuppressCount;
     }
 
     internal static class ReactorAttached
