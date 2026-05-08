@@ -26,7 +26,7 @@ function sendFrameInfo() {
             type: "frame-selected",
             frameId: frame.id,
             frameName: frame.name,
-            fileKey: fileKey ?? "",
+            fileKey: fileKey !== null && fileKey !== void 0 ? fileKey : "",
             nodeId: urlNodeId,
             figmaUrl,
             width: Math.round(frame.width),
