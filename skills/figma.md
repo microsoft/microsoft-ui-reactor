@@ -130,23 +130,116 @@ VStack(16, children)
 
 ## Control Mapping
 
-### Tier 1 Controls (v1)
+### Windows UI Kit Component → Reactor Factory
 
-| Figma Component | Reactor Code |
+Map Figma component instances from the Windows UI Kit to Reactor factory calls.
+These are the **exact** factory signatures from `Dsl.cs` — use them precisely.
+
+#### Basic Input
+
+| Figma Component | Reactor Factory Call |
 |---|---|
-| **Button** (Standard) | `Button(text, onClick)` |
-| **Button** (Accent) | `Button(text, onClick).Resources(r => r.Set("ButtonBackground", Theme.Accent).Set("ButtonBackgroundPointerOver", Theme.AccentSecondary).Set("ButtonBackgroundPressed", Theme.AccentTertiary).Set("ButtonForeground", Theme.Ref("TextOnAccentFillColorPrimaryBrush")))` |
-| **Button** (Subtle) | `Button(text, onClick).Resources(r => r.Set("ButtonBackground", Theme.SubtleFill).Set("ButtonBackgroundPointerOver", Theme.Ref("SubtleFillColorSecondaryBrush")).Set("ButtonBackgroundPressed", Theme.Ref("SubtleFillColorTertiaryBrush")).Set("ButtonBorderBrush", Theme.SubtleFill))` |
-| **TextBox** | `TextField(value, placeholder: "Placeholder", onChanged: v => { })` |
-| **CheckBox** | `CheckBox(text, isChecked, (s, e) => { })` |
-| **ToggleSwitch** | `ToggleSwitch(isOn, header: "Label", onToggle: (s, e) => { })` |
-| **RadioButton** | `RadioButton(text, isChecked, onChecked: (s, e) => { })` |
-| **ComboBox** | `ComboBox(items, selectedIndex, onSelectionChanged: (s, e) => { })` |
-| **Slider** | `Slider(value, min: 0, max: 100, onValueChanged: (s, e) => { })` |
-| **ProgressBar** | `ProgressBar(value)` or `ProgressBar()` for indeterminate |
-| **ProgressRing** | `ProgressRing()` |
-| **InfoBar** | `InfoBar(title: "Title", message: "Message", severity: InfoBarSeverity.Informational)` |
-| **Expander** | `Expander(header: TextBlock("Header"), content: expandedContent)` |
+| **Button** (Standard) | `Button("Label", () => { })` |
+| **Button** (Accent) | `Button("Label", () => { }).Set(b => b.Style = (Style)Application.Current.Resources["AccentButtonStyle"])` |
+| **Button** (Subtle) | `Button("Label", () => { }).Resources(r => r.Set("ButtonBackground", Theme.SubtleFill).Set("ButtonBackgroundPointerOver", Theme.Ref("SubtleFillColorSecondaryBrush")).Set("ButtonBackgroundPressed", Theme.Ref("SubtleFillColorTertiaryBrush")).Set("ButtonBorderBrush", Theme.SubtleFill))` |
+| **Button** (with icon) | `Button(HStack(4, TextBlock("\uE710").Set(tb => tb.FontFamily = (FontFamily)Application.Current.Resources["SymbolThemeFontFamily"]), TextBlock("Label")), () => { })` |
+| **HyperlinkButton** | `HyperlinkButton("Link text", navigateUri: new Uri("https://..."))` |
+| **ToggleButton** | `ToggleButton("Label", isChecked, v => setChecked(v))` |
+| **RepeatButton** | `RepeatButton("Label", () => { })` |
+| **DropDownButton** | `DropDownButton("Label", flyout: MenuItems(MenuItem("Option 1"), MenuItem("Option 2")))` |
+| **SplitButton** | `SplitButton("Label", () => { }, flyout: MenuItems(MenuItem("Option")))` |
+| **TextBox** | `TextField(value, onChanged: v => setValue(v), placeholder: "Placeholder", header: "Header")` |
+| **PasswordBox** | `PasswordBox(password, onPasswordChanged: v => setPassword(v), placeholderText: "Password")` |
+| **NumberBox** | `NumberBox(value, onValueChanged: v => setValue(v), header: "Amount")` |
+| **AutoSuggestBox** | `AutoSuggestBox(text, onTextChanged: v => setText(v))` |
+| **CheckBox** | `CheckBox(isChecked, onChanged: v => setChecked(v), label: "Label")` |
+| **RadioButton** | `RadioButton("Option", isChecked, onChecked: v => { }, groupName: "group1")` |
+| **RadioButtons** (group) | `RadioButtons(new[] { "Option 1", "Option 2" }, selectedIndex, i => setIndex(i))` |
+| **ComboBox** | `ComboBox(new[] { "Item 1", "Item 2" }, selectedIndex, i => setIndex(i))` |
+| **Slider** | `Slider(value, min: 0, max: 100, onChanged: v => setValue(v))` |
+| **ToggleSwitch** | `ToggleSwitch(isOn, onChanged: v => setIsOn(v), header: "Label")` |
+| **RatingControl** | `RatingControl(value, onValueChanged: v => setValue(v))` |
+| **ColorPicker** | `ColorPicker(color, onColorChanged: c => setColor(c))` |
+
+#### Date and Time
+
+| Figma Component | Reactor Factory Call |
+|---|---|
+| **DatePicker** | `DatePicker(date, onDateChanged: d => setDate(d))` |
+| **TimePicker** | `TimePicker(time, onTimeChanged: t => setTime(t))` |
+| **CalendarDatePicker** | `CalendarDatePicker(date, onDateChanged: d => setDate(d))` |
+
+#### Status and Info
+
+| Figma Component | Reactor Factory Call |
+|---|---|
+| **ProgressBar** (determinate) | `Progress(value)` |
+| **ProgressBar** (indeterminate) | `ProgressIndeterminate()` |
+| **ProgressRing** (indeterminate) | `ProgressRing()` |
+| **ProgressRing** (determinate) | `ProgressRing(value)` |
+| **InfoBar** | `InfoBar(title: "Title", message: "Message").Set(ib => ib.Severity = InfoBarSeverity.Informational)` |
+| **InfoBadge** | `InfoBadge(42)` or `InfoBadge()` for dot |
+| **Tooltip** | `.ToolTip("Tooltip text")` modifier on any element |
+
+#### Navigation
+
+| Figma Component | Reactor Factory Call |
+|---|---|
+| **NavigationView** | `NavigationView(new[] { NavItem("Home", "\uE80F", "home"), NavItem("Settings", "\uE713", "settings") }, content: pageContent)` |
+| **NavigationViewItem** | `NavItem("Label", "\uE80F", "tag")` — icon is Segoe MDL2 glyph |
+| **NavigationViewItemHeader** | `NavItemHeader("Section")` |
+| **TitleBar** | `TitleBar("App Title")` |
+| **TabView** | `TabView(Tab("Tab 1", content1), Tab("Tab 2", content2))` |
+| **BreadcrumbBar** | `BreadcrumbBar(items, onItemClicked: item => { })` |
+| **Pivot** | `Pivot(PivotItem("Tab 1", content1), PivotItem("Tab 2", content2))` |
+| **SelectorBar** | `SelectorBar(new[] { SelectorBarItem("Tab 1"), SelectorBarItem("Tab 2") }, selectedIndex, i => setIndex(i))` |
+
+#### Layout
+
+| Figma Component / Pattern | Reactor Factory Call |
+|---|---|
+| **Auto-layout VERTICAL** | `VStack(gap, children)` |
+| **Auto-layout HORIZONTAL** | `HStack(gap, children)` |
+| **VStack with spacing** | `VStack(16, child1, child2)` |
+| **HStack with spacing** | `HStack(8, child1, child2)` |
+| **Frame with padding** | `Border(child).Padding(16)` or `.Padding(left, top, right, bottom)` |
+| **Frame with fill** | `Border(child).Background(Theme.CardBackground)` |
+| **Frame with border** | `Border(child).WithBorder(Theme.CardStroke, 1)` |
+| **ScrollView** (vertical) | `ScrollView(VStack(children)).Set(sv => sv.HorizontalContentAlignment = HorizontalAlignment.Stretch)` |
+| **Expander** | `Expander("Header", content, isExpanded: false)` |
+| **SplitView** | `SplitView(pane: sideContent, content: mainContent)` |
+
+#### Collections
+
+| Figma Component | Reactor Factory Call |
+|---|---|
+| **ListView** | `ListView(item1, item2, item3)` |
+| **GridView** | `GridView(item1, item2, item3)` |
+| **TreeView** | `TreeView(nodes)` |
+| **FlipView** | `FlipView(page1, page2)` |
+
+#### Dialogs and Flyouts
+
+| Figma Component | Reactor Factory Call |
+|---|---|
+| **ContentDialog** | `ContentDialog("Title", content, primaryButtonText: "OK")` |
+| **Flyout** | `Flyout(targetElement, flyoutContent)` |
+| **MenuFlyout** | `MenuFlyout(targetElement, MenuItem("Item 1"), MenuItem("Item 2"))` |
+| **TeachingTip** | `TeachingTip("Title", subtitle: "Description")` |
+
+#### Menus and Toolbars
+
+| Figma Component | Reactor Factory Call |
+|---|---|
+| **CommandBar** | `CommandBar(primaryCommands: new[] { AppBarButton("Add", () => { }, "\uE710") })` |
+| **MenuBar** | `MenuBar(Menu("File", MenuItem("New"), MenuItem("Open")), Menu("Edit", MenuItem("Cut")))` |
+
+#### Media
+
+| Figma Component | Reactor Factory Call |
+|---|---|
+| **Image** | `Image("ms-appx:///Assets/photo.png")` |
+| **PersonPicture** | `PersonPicture().Set(pp => pp.DisplayName = "Name")` |
 
 ### Surface Elements
 
@@ -159,7 +252,7 @@ VStack(16, children)
 
 ### Unsupported Components
 
-Any component not in Tier 1 → emit a placeholder:
+Any component not in the tables above → emit a placeholder:
 
 ```csharp
 // TODO [Figma node XXXXX:YYYYY]: Unsupported component "ComponentName"

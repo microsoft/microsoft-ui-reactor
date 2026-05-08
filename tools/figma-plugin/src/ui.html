@@ -192,23 +192,27 @@
       var csproj = getCsprojPath();
       var name = getProjectName();
 
-      // Build the prompt — reference skills for accurate translation
+      var skillRef = 'Read skills/figma.md for Figma-to-Reactor control mapping, theme tokens, typography, and layout rules. Read skills/design.md for WinUI design best practices. Match every dimension, gap, and padding value exactly from the Figma design for pixel-accurate output.';
+      var watchRef = ' Then start watching for Figma changes: run mur figma watch "' + url + '" --interval 10 in the background. When a change is detected, re-fetch the design via get_figma_data and update the code accordingly.';
+
       var prompt;
       if (isNewProject()) {
         prompt = 'Create a new Reactor app called ' + name +
           ' using mur --create ' + name +
           ', then translate this Figma design into it: ' + url +
-          '. Read the skills/figma.md and skills/design.md files in the repo for translation rules, theme tokens, typography, and layout patterns.' +
-          ' After generating the code, run: dotnet watch run --project ' + csproj;
+          '. ' + skillRef +
+          ' After generating the code, run: dotnet watch run --project ' + csproj + '.' +
+          watchRef;
       } else {
         if (!csproj) {
           showToast('Set the project path first');
           return;
         }
-        prompt = 'Translate this Figma design into Reactor code: ' + url +
-          '. Write the output to the project at ' + csproj +
-          '. Read the skills/figma.md and skills/design.md files in the repo for translation rules, theme tokens, typography, and layout patterns.' +
-          ' After generating, run: dotnet watch run --project ' + csproj;
+        prompt = 'I have an existing Reactor app at ' + csproj +
+          '. Watch this Figma design for changes and keep the code in sync: ' + url +
+          '. ' + skillRef +
+          ' Start by fetching the current design via get_figma_data, then update the code.' +
+          watchRef;
       }
 
       var cmd = 'copilot -p "' + prompt.replace(/"/g, '\\"') + '"';
