@@ -193,7 +193,7 @@
       var name = getProjectName();
 
       var skillRef = 'Read skills/figma.md for Figma-to-Reactor control mapping, theme tokens, typography, and layout rules. Read skills/design.md for WinUI design best practices. Match every dimension, gap, and padding value exactly from the Figma design for pixel-accurate output.';
-      var watchRef = ' Then start watching for Figma changes: run mur figma watch "' + url + '" --interval 10 in the background. When a change is detected, re-fetch the design via get_figma_data and update the code accordingly.';
+      var watchRef = ' Then start watching for Figma changes: run mur figma watch ' + url + ' --interval 10 in the background. When a change is detected, re-fetch the design via get_figma_data and update the code accordingly.';
 
       var prompt;
       if (isNewProject()) {
@@ -215,7 +215,8 @@
           watchRef;
       }
 
-      var cmd = 'copilot -p "' + prompt.replace(/"/g, '\\"') + '"';
+      // Use single quotes for PowerShell to avoid escaping issues
+      var cmd = "copilot -p '" + prompt.replace(/'/g, "''") + "'";
       copyToClipboard(cmd);
       showToast('Copied — paste in terminal');
     }
