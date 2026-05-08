@@ -33,13 +33,13 @@ public sealed class TemplatePackageSmokeTests : IDisposable
         var commandEnvironment = CreateCommandEnvironment(dotnetCliHomeDir, nugetHttpCacheDir);
 
         RunDotnet(
-            $"pack \"{Path.Combine(repoRoot, "src", "Reactor", "Reactor.csproj")}\" -c Release -o \"{packageSourceDir}\" -p:Version={packageVersion} -p:Platform={packPlatform}",
+            $"pack \"{Path.Combine(repoRoot, "src", "Reactor", "Reactor.csproj")}\" -c Release -o \"{packageSourceDir}\" -p:Version={packageVersion}",
             repoRoot,
             commandEnvironment,
             timeoutMs: 300_000);
 
         RunDotnet(
-            $"pack \"{Path.Combine(repoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" -c Release -o \"{packageSourceDir}\" -p:Version={packageVersion} -p:MicrosoftUIReactorVersion={packageVersion} -p:Platform=AnyCPU",
+            $"pack \"{Path.Combine(repoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" -c Release -o \"{packageSourceDir}\" -p:Version={packageVersion} -p:MicrosoftUIReactorVersion={packageVersion}",
             repoRoot,
             commandEnvironment,
             timeoutMs: 180_000);
