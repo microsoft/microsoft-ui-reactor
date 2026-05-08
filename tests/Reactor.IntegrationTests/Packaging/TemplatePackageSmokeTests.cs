@@ -220,6 +220,7 @@ public sealed class TemplatePackageSmokeTests : IDisposable
         var stderr = new StringBuilder();
         var outputLock = new object();
         var sawChildProcess = false;
+        string? lastUiDetails = null;
 
         using var process = CreateProcess("dotnet", $"run -a {architecture}", workingDirectory, environmentVariables);
         process.OutputDataReceived += (_, args) =>
@@ -270,39 +271,21 @@ public sealed class TemplatePackageSmokeTests : IDisposable
                 if (launchedProcess != null)
                 {
                     sawChildProcess = true;
-                    var healthyUi = RunProcess(
-                        "winapp.exe",
-                        $"ui wait-for NameInput -a {launchedProcess.Id} -t 5000 -q",
-                        workingDirectory,
-                        environmentVariables,
-                        timeoutMs: 15_000,
-                        throwOnFailure: false);
+                    var uiState = ProbeAppUi(launchedProcess, out var uiDetails);
+                    lastUiDetails = uiDetails;
+                    launchedProcess.Dispose();
 
-                    if (healthyUi.ExitCode == 0)
+                    if (uiState == AppUiState.Healthy)
                     {
-                        launchedProcess.Dispose();
                         return;
                     }
 
-                    var renderErrorUi = RunProcess(
-                        "winapp.exe",
-                        $"ui wait-for \"Render error\" -a {launchedProcess.Id} -t 1000 --contains -q",
-                        workingDirectory,
-                        environmentVariables,
-                        timeoutMs: 5_000,
-                        throwOnFailure: false);
-
-                    launchedProcess.Dispose();
-
-                    if (renderErrorUi.ExitCode == 0)
+                    if (uiState == AppUiState.RenderError)
                     {
                         throw new XunitException(
                             $"Generated app showed Reactor's render-error fallback instead of the expected template UI.{Environment.NewLine}" +
                             $"Working directory: {workingDirectory}{Environment.NewLine}" +
-                            $"--- winapp wait-for NameInput stdout ---{Environment.NewLine}{healthyUi.Stdout}{Environment.NewLine}" +
-                            $"--- winapp wait-for NameInput stderr ---{Environment.NewLine}{healthyUi.Stderr}{Environment.NewLine}" +
-                            $"--- winapp wait-for Render error stdout ---{Environment.NewLine}{renderErrorUi.Stdout}{Environment.NewLine}" +
-                            $"--- winapp wait-for Render error stderr ---{Environment.NewLine}{renderErrorUi.Stderr}{Environment.NewLine}" +
+                            $"UI Automation details: {uiDetails}{Environment.NewLine}" +
                             FormatCommandOutput(stdout.ToString(), stderr.ToString()));
                     }
                 }
@@ -323,6 +306,7 @@ public sealed class TemplatePackageSmokeTests : IDisposable
             throw new XunitException(
                 $"Timed out waiting for '{projectName}.exe' to start from 'dotnet run -a {architecture}'. " +
                 $"Child process observed: {sawChildProcess}.{Environment.NewLine}" +
+                $"UI Automation details: {lastUiDetails ?? "None captured."}{Environment.NewLine}" +
                 $"Working directory: {workingDirectory}{Environment.NewLine}" +
                 FormatCommandOutput(stdout.ToString(), stderr.ToString()));
         }
@@ -452,6 +436,102 @@ public sealed class TemplatePackageSmokeTests : IDisposable
         {
             // Best-effort cleanup for failed child processes.
         }
+    }
+
+    private static AppUiState ProbeAppUi(Process launchedProcess, out string? details)
+    {
+        details = null;
+
+        try
+        {
+            var probe = RunProcess(
+                "powershell.exe",
+                BuildUiaProbeArguments(launchedProcess.Id),
+                Environment.SystemDirectory,
+                environmentVariables: new Dictionary<string, string?>(),
+                timeoutMs: 5_000,
+                throwOnFailure: false);
+
+            details = string.IsNullOrWhiteSpace(probe.Stdout)
+                ? probe.Stderr.Trim()
+                : probe.Stdout.Trim();
+
+            if (probe.ExitCode == 0)
+            {
+                return AppUiState.Healthy;
+            }
+
+            if (probe.ExitCode == 2)
+            {
+                return AppUiState.RenderError;
+            }
+
+            return AppUiState.NotReady;
+        }
+        catch (XunitException ex)
+        {
+            details = $"UI Automation probe failed: {ex.Message}";
+            return AppUiState.NotReady;
+        }
+        catch (InvalidOperationException ex)
+        {
+            details = $"UI Automation probe failed: {ex.Message}";
+            return AppUiState.NotReady;
+        }
+    }
+
+    private static string BuildUiaProbeArguments(int processId)
+    {
+        var script = $$"""
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName UIAutomationClient
+$processId = {{processId}}
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$condition = New-Object System.Windows.Automation.PropertyCondition(
+    [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+    $processId)
+$elements = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+$names = New-Object 'System.Collections.Generic.List[string]'
+
+for ($i = 0; $i -lt $elements.Count; $i++) {
+    $name = [string]$elements.Item($i).GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NameProperty)
+    if (-not [string]::IsNullOrWhiteSpace($name) -and -not $names.Contains($name)) {
+        [void]$names.Add($name)
+        if ($names.Count -ge 20) {
+            break
+        }
+    }
+}
+
+if ($names.Contains('NameInput')) {
+    Write-Output 'Found template NameInput automation name.'
+    exit 0
+}
+
+$renderError = $names | Where-Object { $_ -like '*Render error*' } | Select-Object -First 1
+if ($renderError) {
+    Write-Output $renderError
+    exit 2
+}
+
+if ($names.Count -eq 0) {
+    Write-Output 'No UI Automation names are visible for the launched process yet.'
+    exit 1
+}
+
+Write-Output ('Observed names: ' + [string]::Join(', ', $names))
+exit 1
+""";
+
+        var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+        return $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}";
+    }
+
+    private enum AppUiState
+    {
+        NotReady,
+        Healthy,
+        RenderError,
     }
 
     private readonly record struct ProcessResult(int ExitCode, string Stdout, string Stderr);
