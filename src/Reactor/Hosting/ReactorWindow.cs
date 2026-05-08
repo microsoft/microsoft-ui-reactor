@@ -366,6 +366,8 @@ public sealed class ReactorWindow : IDisposable
 
         if (spec.Icon is { } icon)
             icon.Apply(_appWindow);
+        else if (isInitial)
+            TryApplyExeIconFallback(_appWindow);
 
         // Owner relationship — only meaningful at initial apply time.
         // Subsequent Update calls do not re-parent (changing ownership of a
@@ -410,6 +412,64 @@ public sealed class ReactorWindow : IDisposable
             if (idx < current.Length - 1) Array.Copy(current, idx + 1, next, idx, current.Length - idx - 1);
             Volatile.Write(ref _ownedWindows, next);
         }
+    }
+
+    /// <summary>
+    /// Best-effort: when no explicit <see cref="WindowSpec.Icon"/> was supplied,
+    /// load the first icon embedded in the running executable's PE resources
+    /// (the one the build wired in via <c>&lt;ApplicationIcon&gt;</c>) and
+    /// apply it to the AppWindow so the taskbar / Alt-Tab / Win11 thumbnail
+    /// show the developer's icon instead of the WinUI default.
+    /// </summary>
+    /// <remarks>
+    /// <para>Skipped under MSIX-packaged execution — packaged apps get their
+    /// AppWindow icon from <c>Package.appxmanifest</c>'s
+    /// <c>VisualElements</c> tiles automatically; overriding here would just
+    /// fight the manifest. Unpackaged apps have no manifest to fall back to,
+    /// so the EXE PE resource is the next best source.</para>
+    /// <para>Failures are silent — if there's no embedded icon, the AppWindow
+    /// keeps its default. (spec 036 §4.1 — implementation-time addition)</para>
+    /// </remarks>
+    private static void TryApplyExeIconFallback(AppWindow appWindow)
+    {
+        try
+        {
+            // Packaged apps: the manifest's Square*Logo assets are the
+            // canonical icon source; let the platform resolve them.
+            if (Hosting.Shell.PackageRuntime.IsPackaged) return;
+
+            var exePath = global::System.Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exePath)) return;
+
+            // LR_LOADFROMFILE on a .exe path loads the first icon group
+            // from its PE resources. LR_DEFAULTSIZE picks the system
+            // default size (usually 32x32) — Windows will scale to the
+            // taskbar's needs from there.
+            var hIcon = NativeIcon.LoadImageW(0, exePath, NativeIcon.IMAGE_ICON,
+                0, 0, NativeIcon.LR_LOADFROMFILE | NativeIcon.LR_DEFAULTSIZE);
+            if (hIcon == 0) return;
+
+            // GetIconIdFromIcon adopts the HICON; the AppWindow holds the
+            // reference for its lifetime. We don't DestroyIcon ourselves.
+            var iconId = Microsoft.UI.Win32Interop.GetIconIdFromIcon(hIcon);
+            appWindow.SetIcon(iconId);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor] TryApplyExeIconFallback failed: {ex.Message}");
+        }
+    }
+
+    private static class NativeIcon
+    {
+        public const uint IMAGE_ICON = 1;
+        public const uint LR_LOADFROMFILE = 0x00000010;
+        public const uint LR_DEFAULTSIZE = 0x00000040;
+
+        [global::System.Runtime.InteropServices.DllImport("user32.dll", CharSet = global::System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+        public static extern nint LoadImageW(nint hInst,
+            [global::System.Runtime.InteropServices.MarshalAs(global::System.Runtime.InteropServices.UnmanagedType.LPWStr)] string lpszName,
+            uint uType, int cxDesired, int cyDesired, uint fuLoad);
     }
 
     private static class NativeOwnership
