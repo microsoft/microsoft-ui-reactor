@@ -776,6 +776,15 @@ internal static class SelfTestFixtureRegistry
         // Issue #142 — controls with private static readonly DPs
         "Issue142_CustomControlPrivateDp_Renders",
         "Issue142_ThirdPartyControlPrivateDp_Renders",
+
+        // Spec 036 — Window model live-shell coverage
+        "WindowModel_LifecycleEvents",
+        "WindowModel_ClosingEventCancels",
+        "WindowModel_TaskbarProgressLiveCom",
+        "WindowModel_ThumbnailToolbarLiveCom",
+        "WindowModel_PersistedScopeIsolated",
+        "WindowModel_TrayIconRoundTrip",
+        "WindowModel_UseOpenWindowReusesByKey",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1543,6 +1552,15 @@ internal static class SelfTestFixtureRegistry
 
         "Issue142_CustomControlPrivateDp_Renders" => new Issue142Fixtures.CustomControlPrivateDp_Renders(harness),
         "Issue142_ThirdPartyControlPrivateDp_Renders" => new Issue142Fixtures.ThirdPartyControlPrivateDp_Renders(harness),
+
+        // Spec 036 — Window model live-shell coverage
+        "WindowModel_LifecycleEvents" => new WindowModelFixtures.WindowLifecycleEvents(harness),
+        "WindowModel_ClosingEventCancels" => new WindowModelFixtures.WindowClosingEventCancels(harness),
+        "WindowModel_TaskbarProgressLiveCom" => new WindowModelFixtures.TaskbarProgressLiveCom(harness),
+        "WindowModel_ThumbnailToolbarLiveCom" => new WindowModelFixtures.ThumbnailToolbarLiveCom(harness),
+        "WindowModel_PersistedScopeIsolated" => new WindowModelFixtures.WindowPersistedScopeIsolated(harness),
+        "WindowModel_TrayIconRoundTrip" => new WindowModelFixtures.TrayIconRoundTrip(harness),
+        "WindowModel_UseOpenWindowReusesByKey" => new WindowModelFixtures.UseOpenWindowReusesByKey(harness),
 
         _ => null,
     };

@@ -863,6 +863,46 @@ Behavior change phase. After this lands, `Run<TRoot>(width, height)` and
   the expected text. (Spec §0.6.)
 - [/] Selftest: closing the main window with tray icon present and
   policy `OnLastSurfaceClosed` does **not** exit; closing the tray icon
+  does. (Phase-9 selftest matrix.)
+
+### 8.8 Live-shell selftest fixtures (cross-cutting follow-up)
+
+To unblock the Phase-9 selftest matrix and prove the live shell-COM
+paths from end-to-end, Phase 8 ships seven selftest fixtures in
+`tests/Reactor.AppTests.Host/SelfTest/Fixtures/WindowModelFixtures.cs`:
+
+- [x] `WindowModel_LifecycleEvents` — opens a secondary `ReactorWindow`
+  via `ReactorApp.OpenWindow`, asserts spec round-trip, monotonic id
+  allocation, snapshot membership, and the `Closed` event firing on
+  programmatic close.
+- [x] `WindowModel_ClosingEventCancels` — verifies the `Closing` event
+  surface (subscribe / unsubscribe) and that programmatic `Close()`
+  removes the window. *Note*: the live "subscriber-cancels" assertion
+  is not in this fixture because WinUI's `AppWindow.Closing` does not
+  fire on programmatic close in this harness; the unit-level
+  `WindowHookFallbackTests` + the `OnAppWindowClosing` impl prove the
+  cancellation flow under direct event invocation.
+- [x] `WindowModel_TaskbarProgressLiveCom` — exercises the
+  `ITaskbarList3` shell-COM path on a real HWND (state round-trip,
+  value range, implicit None→Normal promotion, Clear).
+- [x] `WindowModel_ThumbnailToolbarLiveCom` — drives ThumbBarAddButtons
+  / ThumbBarUpdateButtons / clear, plus validation invariants
+  (>7 buttons rejected, duplicate-id rejected) on a real HWND.
+- [x] `WindowModel_PersistedScopeIsolated` — opens two windows, asserts
+  distinct `PersistedScope` instances and ids.
+- [x] `WindowModel_TrayIconRoundTrip` — `Shell_NotifyIcon` NIM_ADD →
+  NIM_MODIFY → NIM_DELETE on a real shell registration; mutate
+  Tooltip / IsVisible; verify FindTrayIcon by `WindowKey`; assert the
+  registry empties on Close.
+- [x] `WindowModel_UseOpenWindowReusesByKey` — opens a child window
+  through `UseOpenWindow`, verifies snapshot membership, FindWindow
+  matches, and re-mounting the parent root keeps the same handle.
+
+The seven fixtures are wired into `SelfTestFixtureRegistry` and pass
+0/33 failures alongside the full selftest matrix. The remaining
+deferred items (tray flyout reconciliation, AppTest E2E for the jump
+list, `OnLastSurfaceClosed` tray-survives) need the multi-window WinUI
+scaffolding that lands in Phase 9.
   does.
 
 ---

@@ -134,6 +134,17 @@ to land under these conventions; subsequent specs follow this shape.
   component. The trailing `UseEffect` cleanup closes the icon on
   unmount; spec changes flow through `Update` via a record-keyed
   `UseEffect`. (spec 036 §11.4)
+- Seven live-shell selftest fixtures under
+  `tests/Reactor.AppTests.Host/SelfTest/Fixtures/WindowModelFixtures.cs`:
+  `WindowModel_LifecycleEvents`, `_ClosingEventCancels`,
+  `_TaskbarProgressLiveCom`, `_ThumbnailToolbarLiveCom`,
+  `_PersistedScopeIsolated`, `_TrayIconRoundTrip`,
+  `_UseOpenWindowReusesByKey`. They exercise the public surface against
+  real HWND / `ITaskbarList3` / `Shell_NotifyIcon` COM, opening
+  secondary `ReactorWindow`s through `ReactorApp.OpenWindow` and
+  cleaning up under `ShutdownPolicy.Explicit` so they don't kill the
+  host harness. 33/33 assertions pass alongside the full 2314-assert
+  selftest matrix. (spec 036 §0.5 / §0.6 / §11)
 - Devtools `windows.list / windows.activate / windows.close /
   windows.open` MCP tools (spec 036 §10). `windows.list` returns id,
   key, title, DIP size, DPI, state, isMain — driven by a new
