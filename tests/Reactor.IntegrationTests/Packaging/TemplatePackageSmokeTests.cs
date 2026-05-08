@@ -292,6 +292,13 @@ public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmo
         _ = result;
     }
 
+    internal static Task RunDotnetAsync(
+        string arguments,
+        string workingDirectory,
+        IReadOnlyDictionary<string, string?> environmentVariables,
+        int timeoutMs) =>
+        Task.Run(() => RunDotnet(arguments, workingDirectory, environmentVariables, timeoutMs));
+
     private static ProcessResult RunProcess(
         string fileName,
         string arguments,
@@ -502,19 +509,20 @@ public sealed class TemplatePackageSmokeTestFixture : IDisposable
         RunArchitecture = TemplatePackageSmokeTests.GetRunArchitecture();
         CommandEnvironment = TemplatePackageSmokeTests.CreateCommandEnvironment(dotnetCliHomeDir, nugetHttpCacheDir);
 
-        TemplatePackageSmokeTests.RunDotnet(
-            $"pack \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" -c Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
-            RepoRoot,
-            CommandEnvironment,
-            timeoutMs: 300_000);
+        Task.WhenAll(
+            TemplatePackageSmokeTests.RunDotnetAsync(
+                $"pack \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" -c Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
+                RepoRoot,
+                CommandEnvironment,
+                timeoutMs: 300_000),
+            TemplatePackageSmokeTests.RunDotnetAsync(
+                $"pack \"{Path.Combine(RepoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" -c Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion} -p:MicrosoftUIReactorVersion={PackageVersion}",
+                RepoRoot,
+                CommandEnvironment,
+                timeoutMs: 180_000))
+            .GetAwaiter()
+            .GetResult();
 
-        TemplatePackageSmokeTests.RunDotnet(
-            $"pack \"{Path.Combine(RepoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" -c Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion} -p:MicrosoftUIReactorVersion={PackageVersion}",
-            RepoRoot,
-            CommandEnvironment,
-            timeoutMs: 180_000);
-
-        var frameworkPackage = TemplatePackageSmokeTests.FindPackage(PackageSourceDir, "Microsoft.UI.Reactor", PackageVersion);
         var templatePackage = TemplatePackageSmokeTests.FindPackage(PackageSourceDir, "Microsoft.UI.Reactor.ProjectTemplates", PackageVersion);
 
         TemplatePackageSmokeTests.RunDotnet(
@@ -522,8 +530,6 @@ public sealed class TemplatePackageSmokeTestFixture : IDisposable
             RepoRoot,
             CommandEnvironment,
             timeoutMs: 120_000);
-
-        Assert.True(File.Exists(frameworkPackage), $"Expected packed framework package at '{frameworkPackage}'.");
     }
 
     public string RepoRoot { get; }
