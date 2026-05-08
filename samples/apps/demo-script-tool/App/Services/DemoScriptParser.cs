@@ -26,7 +26,15 @@ public static class DemoScriptParser
     {
         if (markdown is null) markdown = string.Empty;
 
-        var lines = markdown.Replace("\r\n", "\n").Split('\n');
+        // Normalize all three line-ending conventions to \n. The lone-\r case
+        // matters because WinUI's TextBox uses \r as its in-memory line
+        // separator when AcceptsReturn is true — typing Enter in the prompt
+        // field produces \r-delimited text that flows through OnPromptChanged
+        // straight into the model, and the previous serializer happily wrote
+        // those \r bytes into the file. Without this normalization those
+        // documents reload as one paragraph because Split('\n') doesn't see
+        // the breaks.
+        var lines = NormalizeNewlines(markdown).Split('\n');
         string? title = null;
         var demoPrompt = new StringBuilder();
         var steps = new List<StepModel>();
@@ -189,7 +197,7 @@ public static class DemoScriptParser
         sb.Append("## Demo Prompt\n\n");
         if (!string.IsNullOrEmpty(model.DemoPrompt))
         {
-            sb.Append(model.DemoPrompt.TrimEnd()).Append('\n');
+            sb.Append(NormalizeNewlines(model.DemoPrompt).TrimEnd()).Append('\n');
             sb.Append('\n');
         }
         sb.Append("## Steps\n\n");
@@ -199,8 +207,10 @@ public static class DemoScriptParser
             sb.Append(i + 1).Append(". **").Append(step.Title).Append("**\n");
             if (!string.IsNullOrWhiteSpace(step.Prompt))
             {
-                foreach (var line in step.Prompt.Split('\n'))
-                    sb.Append("   ").Append(line.TrimEnd('\r')).Append('\n');
+                // Normalize before split so WinUI's bare-\r line breaks become
+                // proper indented body lines instead of one literal-\r blob.
+                foreach (var line in NormalizeNewlines(step.Prompt).Split('\n'))
+                    sb.Append("   ").Append(line).Append('\n');
             }
             sb.Append('\n');
         }
@@ -210,6 +220,15 @@ public static class DemoScriptParser
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Collapse all line-ending conventions (CRLF, lone CR, LF) to LF. CR-only
+    /// is the WinUI TextBox in-memory separator — without this normalization,
+    /// content authored in the prompt field round-trips through the file as a
+    /// single paragraph.
+    /// </summary>
+    public static string NormalizeNewlines(string text) =>
+        string.IsNullOrEmpty(text) ? text : text.Replace("\r\n", "\n").Replace('\r', '\n');
 
     static bool Equals(string a, string b) =>
         string.Equals(a, b, System.StringComparison.OrdinalIgnoreCase);
