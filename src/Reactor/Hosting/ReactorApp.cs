@@ -59,6 +59,7 @@ public static class ReactorApp
 
     // ── Spec 036: process-wide window topology ─────────────────────────────
     private static ReactorWindow[] _windows = global::System.Array.Empty<ReactorWindow>();
+    private static ReactorTrayIcon[] _trayIcons = global::System.Array.Empty<ReactorTrayIcon>();
     private static ReactorWindow? _primaryWindow;
     private static int _shutdownPolicy = (int)ShutdownPolicy.OnPrimaryWindowClosed;
     private static Microsoft.UI.Dispatching.DispatcherQueue? _uiDispatcher;
@@ -150,6 +151,18 @@ public static class ReactorApp
 
     /// <summary>Fires on the UI thread when a <see cref="ReactorWindow"/> closes.</summary>
     public static event EventHandler<ReactorWindow>? WindowClosed;
+
+    /// <summary>
+    /// Snapshot of every open <see cref="ReactorTrayIcon"/>. Copy-on-write;
+    /// safe to enumerate from any thread. (spec 036 §11.4)
+    /// </summary>
+    public static IReadOnlyList<ReactorTrayIcon> TrayIcons => Volatile.Read(ref _trayIcons);
+
+    /// <summary>Fires on the UI thread when a <see cref="ReactorTrayIcon"/> opens.</summary>
+    public static event EventHandler<ReactorTrayIcon>? TrayIconOpened;
+
+    /// <summary>Fires on the UI thread when a <see cref="ReactorTrayIcon"/> closes.</summary>
+    public static event EventHandler<ReactorTrayIcon>? TrayIconClosed;
 
     // Process-wide ILogger picked up by ReactorHost / ReactorHostControl when
     // the caller doesn't pass one explicitly. Null by default. Apps that want
@@ -433,6 +446,42 @@ public static class ReactorApp
         return window;
     }
 
+    /// <summary>
+    /// Open a system-tray icon. UI-thread only. The returned handle stays
+    /// alive until <see cref="ReactorTrayIcon.Close"/> / <see cref="ReactorTrayIcon.Dispose"/>
+    /// is called or the process exits. (spec 036 §11.4)
+    /// </summary>
+    public static ReactorTrayIcon OpenTrayIcon(TrayIconSpec spec)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenTrayIcon));
+        var icon = new ReactorTrayIcon(spec);
+        RegisterTrayIcon(icon);
+        try
+        {
+            icon.RegisterWithShell();
+        }
+        catch
+        {
+            UnregisterTrayIcon(icon);
+            try { icon.Dispose(); } catch { /* best effort */ }
+            throw;
+        }
+        return icon;
+    }
+
+    /// <summary>Look up an open tray icon by <see cref="WindowKey"/>.</summary>
+    public static ReactorTrayIcon? FindTrayIcon(WindowKey key)
+    {
+        var snapshot = TrayIcons;
+        for (int i = 0; i < snapshot.Count; i++)
+        {
+            var t = snapshot[i];
+            if (t.Key is { } k && k.Equals(key)) return t;
+        }
+        return null;
+    }
+
     /// <summary>Look up an open window by <see cref="WindowKey"/>.</summary>
     public static ReactorWindow? FindWindow(WindowKey key)
     {
@@ -522,10 +571,47 @@ public static class ReactorApp
         }
     }
 
-    // Phase-8 wires the real tray-icon registry; Phase-4 keeps the hook in
-    // place so OnLastSurfaceClosed can already special-case zero windows
-    // without referencing types that don't exist yet.
-    internal static int TrayIconCount => 0;
+    // Phase-8: real tray-icon registry. Counts the COW snapshot so the
+    // OnLastSurfaceClosed branch agrees with the rest of the surface.
+    internal static int TrayIconCount => Volatile.Read(ref _trayIcons).Length;
+
+    // Copy-on-write add. UI-thread only — reads can happen anywhere. (spec 036 §11.4)
+    internal static void RegisterTrayIcon(ReactorTrayIcon icon)
+    {
+        var current = Volatile.Read(ref _trayIcons);
+        var next = new ReactorTrayIcon[current.Length + 1];
+        Array.Copy(current, next, current.Length);
+        next[^1] = icon;
+        Volatile.Write(ref _trayIcons, next);
+
+        try { TrayIconOpened?.Invoke(null, icon); }
+        catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] TrayIconOpened threw: {ex.Message}"); }
+    }
+
+    // Copy-on-write remove. Idempotent.
+    internal static void UnregisterTrayIcon(ReactorTrayIcon icon)
+    {
+        var current = Volatile.Read(ref _trayIcons);
+        int idx = Array.IndexOf(current, icon);
+        if (idx < 0) return;
+
+        var next = new ReactorTrayIcon[current.Length - 1];
+        if (idx > 0) Array.Copy(current, 0, next, 0, idx);
+        if (idx < current.Length - 1) Array.Copy(current, idx + 1, next, idx, current.Length - idx - 1);
+        Volatile.Write(ref _trayIcons, next);
+
+        try { TrayIconClosed?.Invoke(null, icon); }
+        catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] TrayIconClosed threw: {ex.Message}"); }
+
+        // OnLastSurfaceClosed: closing the final tray icon when no windows
+        // remain should exit just like closing the final window.
+        if (ShutdownPolicy == ShutdownPolicy.OnLastSurfaceClosed
+            && Windows.Count == 0
+            && TrayIconCount == 0)
+        {
+            SafeExit();
+        }
+    }
 
     private static void SafeExit()
     {
@@ -1201,7 +1287,8 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         ReactorApp.UIDispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
         var opts = ReactorApp.Options;
-        var ctx = new ReactorAppContext(LaunchActivation.Normal);
+        var activation = ParseLaunchActivation(args);
+        var ctx = new ReactorAppContext(activation);
         ReactorApp.AppContext = ctx;
 
         // ── Path 1: explicit Run(Action<ReactorAppContext>) startup callback.
@@ -1252,6 +1339,101 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         };
 
         ReactorApp.OpenWindowCore(spec, opts.RootFactory, opts.RootRenderFunc, opts.Configure);
+    }
+
+    /// <summary>
+    /// Maps the WinUI <see cref="LaunchActivatedEventArgs"/> + the richer
+    /// <c>Microsoft.Windows.AppLifecycle.AppInstance.GetActivatedEventArgs</c>
+    /// onto Reactor's <see cref="Microsoft.UI.Reactor.LaunchActivation"/>
+    /// shape. Best-effort — every WinRT failure logs to <c>Debug.WriteLine</c>
+    /// and falls back to <see cref="Microsoft.UI.Reactor.LaunchActivation.Normal"/>
+    /// so a malformed activation never breaks startup. (spec 036 §11.6)
+    /// </summary>
+    private static Microsoft.UI.Reactor.LaunchActivation ParseLaunchActivation(LaunchActivatedEventArgs args)
+    {
+        // SECURITY (spec 036 §0.5): never log Arguments / Files at default
+        // verbosity — they may carry user paths or untrusted shell strings.
+        // Trace-only logging happens in the Reactor.AppLogger sink controlled
+        // by the host app, not here.
+
+        try
+        {
+            // The AppLifecycle activation args are richer than the WinUI Xaml
+            // ones — Protocol / File / Toast surface here. Available for both
+            // packaged and unpackaged starting in WinAppSDK 1.0.
+            global::Microsoft.Windows.AppLifecycle.AppActivationArguments? appArgs = null;
+            try { appArgs = global::Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs(); }
+            catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] AppInstance activation lookup failed: {ex.Message}"); }
+
+            if (appArgs is not null)
+            {
+                switch (appArgs.Kind)
+                {
+                    case global::Microsoft.Windows.AppLifecycle.ExtendedActivationKind.File:
+                        {
+                            var paths = new List<string>();
+                            if (appArgs.Data is global::Windows.ApplicationModel.Activation.IFileActivatedEventArgs fa && fa.Files is not null)
+                            {
+                                foreach (var f in fa.Files)
+                                {
+                                    if (f is global::Windows.Storage.IStorageItem item && !string.IsNullOrEmpty(item.Path))
+                                        paths.Add(item.Path);
+                                }
+                            }
+                            return new Microsoft.UI.Reactor.LaunchActivation(LaunchKind.File, null, paths);
+                        }
+                    case global::Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol:
+                        {
+                            string? uri = null;
+                            if (appArgs.Data is global::Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs pa)
+                                uri = pa.Uri?.ToString();
+                            return new Microsoft.UI.Reactor.LaunchActivation(LaunchKind.Protocol, uri, Array.Empty<string>());
+                        }
+                    case global::Microsoft.Windows.AppLifecycle.ExtendedActivationKind.ToastNotification:
+                        {
+                            string? toastArg = null;
+                            if (appArgs.Data is global::Windows.ApplicationModel.Activation.IToastNotificationActivatedEventArgs ta)
+                                toastArg = ta.Argument;
+                            return new Microsoft.UI.Reactor.LaunchActivation(LaunchKind.Toast, toastArg, Array.Empty<string>());
+                        }
+                }
+            }
+
+            // Default: a Launch-kind activation. WinUI's Microsoft.UI.Xaml
+            // LaunchActivatedEventArgs exposes the argument string directly.
+            string? launchArgs = null;
+            try { launchArgs = args?.Arguments; } catch { }
+            if (string.IsNullOrEmpty(launchArgs))
+                launchArgs = TryReadCommandLineArguments();
+
+            // Heuristic: a non-empty argument string from a regular Launch
+            // arrives here only when the user activated a jump-list entry,
+            // a tray "Open" command, or a thumbnail-toolbar button — all
+            // re-launch the process with the same exe and the entry's args.
+            // We can't tell those three apart from the WinUI surface alone,
+            // so we tag them all as JumpList. Apps that need finer detail
+            // can inspect the argument shape themselves.
+            var kind = string.IsNullOrEmpty(launchArgs) ? LaunchKind.Normal : LaunchKind.JumpList;
+            return new Microsoft.UI.Reactor.LaunchActivation(kind, launchArgs, Array.Empty<string>());
+        }
+        catch (Exception ex)
+        {
+            global::System.Diagnostics.Debug.WriteLine($"[Reactor] ParseLaunchActivation failed: {ex.GetType().Name}: {ex.Message}");
+            return Microsoft.UI.Reactor.LaunchActivation.Normal;
+        }
+    }
+
+    private static string? TryReadCommandLineArguments()
+    {
+        try
+        {
+            var cli = Environment.GetCommandLineArgs();
+            // Skip args[0] (the exe path); join the rest. The convention is
+            // a single deep-link URI per launch.
+            if (cli.Length <= 1) return null;
+            return cli.Length == 2 ? cli[1] : string.Join(' ', cli, 1, cli.Length - 1);
+        }
+        catch { return null; }
     }
 
     // IXamlMetadataProvider — delegate to the library's generated provider (which already

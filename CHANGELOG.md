@@ -100,6 +100,40 @@ to land under these conventions; subsequent specs follow this shape.
   Validation rejects > 7, duplicate Ids, empty Ids, null OnClick. Click
   dispatch hooks WM_COMMAND in `WindowMessageMonitor`. HICONs are
   released on `ReactorWindow.Dispose`. (spec 036 §11.5)
+- `JumpList`, `JumpListItem`, `JumpListItemKind` — process-scoped jump
+  list. Packaged path uses `Windows.UI.StartScreen.JumpList`; unpackaged
+  falls back to a hand-rolled `ICustomDestinationList` wrapper
+  (`JumpListComInterop`) gated by runtime `Package.Current` detection
+  through the new `PackageRuntime` helper. `AppUserModelId`,
+  `ShowRecent`, `ShowFrequent` are settable. `JumpListItem.ForUri(...)`
+  factory is the recommended way to build entries — pairs with
+  `LaunchActivation.TryResolve<TRoute>(map)` for the navigation handoff.
+  (spec 036 §11.3 / §11.6)
+- `LaunchActivation` parsing — `OnLaunched` now reads
+  `Microsoft.Windows.AppLifecycle.AppInstance.GetActivatedEventArgs`
+  for File / Protocol / Toast activations and falls back to the WinUI
+  `LaunchActivatedEventArgs.Arguments` + `Environment.GetCommandLineArgs`
+  for jump-list / tray re-launches. `LaunchActivation.TryResolve<TRoute>`
+  bridges the launch argument string into the existing
+  `DeepLinkMap<TRoute>` so jump-list / tray entries become a one-liner
+  navigation handoff. (spec 036 §11.6, implementation-time addition)
+- `ReactorTrayIcon` + `TrayIconSpec` — system-tray icon as a peer of
+  `ReactorWindow`. `ReactorApp.OpenTrayIcon`, `TrayIcons` snapshot,
+  `FindTrayIcon`, `TrayIconOpened` / `TrayIconClosed` events; mirrored
+  on `ReactorAppContext`. Hidden message-only window
+  (`TrayHiddenWindow`) routes `Shell_NotifyIcon` callbacks back to the
+  UI thread under NOTIFYICON_VERSION_4 semantics. `Click`,
+  `DoubleClick`, `RightClick` events fire on the UI thread.
+  `Update(spec)` diffs icon / tooltip / visibility; `Close` /
+  `Dispose` removes the icon and unregisters from `ReactorApp.TrayIcons`.
+  `OnLastSurfaceClosed` now reads the real `TrayIconCount` and
+  re-evaluates on tray close so a tray-only app exits cleanly when the
+  final icon goes away. (spec 036 §11.4)
+- `RenderContext.UseTrayIcon(TrayIconSpec)` + `Component.UseTrayIcon`
+  mirror — opens (or reuses by key) a tray icon scoped to the calling
+  component. The trailing `UseEffect` cleanup closes the icon on
+  unmount; spec changes flow through `Update` via a record-keyed
+  `UseEffect`. (spec 036 §11.4)
 - Devtools `windows.list / windows.activate / windows.close /
   windows.open` MCP tools (spec 036 §10). `windows.list` returns id,
   key, title, DIP size, DPI, state, isMain — driven by a new

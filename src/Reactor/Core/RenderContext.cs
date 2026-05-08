@@ -1176,6 +1176,84 @@ public sealed class RenderContext
     }
 
     /// <summary>
+    /// Open (or reuse-by-<see cref="Microsoft.UI.Reactor.TrayIconSpec.Key"/>) a
+    /// system-tray icon scoped to the calling component. The icon closes
+    /// automatically on unmount — that's the only difference from
+    /// <see cref="Microsoft.UI.Reactor.ReactorApp.OpenTrayIcon"/>, which is
+    /// app-scoped and keeps the icon alive until explicit
+    /// <see cref="Microsoft.UI.Reactor.ReactorTrayIcon.Close"/>.
+    /// </summary>
+    /// <remarks>
+    /// Returns <c>null</c> when no UI dispatcher has been captured (test
+    /// contexts) or when the spec change cannot be reconciled — callers
+    /// should null-check before subscribing to events. Identity-stable across
+    /// re-renders so the same handle wires through subsequent
+    /// <c>UseEffect</c> dependencies.
+    /// (spec 036 §11.4)
+    /// </remarks>
+    public Microsoft.UI.Reactor.ReactorTrayIcon? UseTrayIcon(Microsoft.UI.Reactor.TrayIconSpec spec)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+
+        var handleRef = UseRef<Microsoft.UI.Reactor.ReactorTrayIcon?>(null);
+
+        // Open on first render; reuse on subsequent renders if a key match
+        // already exists. The hook owns the lifetime — UseEffect cleanup
+        // closes the icon on unmount.
+        if (handleRef.Current is null)
+        {
+            if (spec.Key is { } key)
+            {
+                handleRef.Current = Microsoft.UI.Reactor.ReactorApp.FindTrayIcon(key);
+            }
+
+            if (handleRef.Current is null && Microsoft.UI.Reactor.ReactorApp.UIDispatcher is not null)
+            {
+                try
+                {
+                    handleRef.Current = Microsoft.UI.Reactor.ReactorApp.OpenTrayIcon(spec);
+                }
+                catch (Exception ex) when (ex is InvalidOperationException || ex is global::System.Runtime.InteropServices.COMException)
+                {
+                    // Shell COM unavailable in test/headless contexts.
+                    handleRef.Current = null;
+                }
+            }
+        }
+
+        var icon = handleRef.Current;
+
+        // Spec-change diff: re-apply only when the value-equal record
+        // signature changes. Effect dependency carries the spec record.
+        if (icon is not null)
+        {
+            UseEffect(() =>
+            {
+                try { icon.Update(spec); }
+                catch { /* best effort */ }
+            }, icon, spec);
+        }
+        else
+        {
+            // Keep slot count stable so the hook-order check passes on
+            // subsequent renders even when the open failed.
+            UseEffect(() => { /* no-op */ }, spec);
+        }
+
+        // Component-scoped lifetime — close on unmount. UseEffect with
+        // empty deps runs once.
+        UseEffect(() =>
+        {
+            return () =>
+            {
+                try { icon?.Close(); } catch { /* best effort */ }
+            };
+        });
+
+        return icon;
+    }
+
+    /// <summary>
     /// Returns true when the given window's width is >= minWidth.
     /// Re-renders when the window resizes across the breakpoint.
     /// </summary>

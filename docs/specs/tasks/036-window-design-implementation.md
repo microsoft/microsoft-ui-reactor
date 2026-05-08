@@ -740,75 +740,97 @@ Behavior change phase. After this lands, `Run<TRoot>(width, height)` and
 
 ### 8.1 `JumpList` static
 
-- [ ] `JumpListItem`, `JumpListItemKind`, `JumpList` static per spec §11.3.
-- [ ] **Packaged path**: `Windows.UI.StartScreen.JumpList` WinRT API
-  (async). Must run on UI thread per WinRT contract.
-- [ ] **Unpackaged path**: Win32 `ICustomDestinationList` COM. Add
-  interop in `Hosting/Shell/JumpListComInterop.cs`. Detect packaged vs.
-  unpackaged at runtime via `Package.Current` (no `#if`). On unpackaged,
-  the WinRT API throws — fall back to ICDL.
-- [ ] `AppUserModelId` settable; required for unpackaged. Throw on
-  `UpdateAsync` if null + unpackaged.
-- [ ] **Security**: argument round-trip — `JumpListItem.Arguments` are
-  command-line strings reaching the next process invocation. Document
-  on `JumpList.UpdateAsync` XML doc that callers must validate any
-  inbound arguments via `Reactor.Cli`'s parser before acting on them.
-  Reactor itself must not auto-execute arguments.
-- [ ] `ShowRecent` / `ShowFrequent` toggle visibility only — content is
-  OS-managed.
+- [x] `JumpListItem`, `JumpListItemKind`, `JumpList` static per spec §11.3 —
+  shipped at `src/Reactor/Hosting/Shell/JumpList.cs`.
+- [x] **Packaged path**: `Windows.UI.StartScreen.JumpList` WinRT API,
+  awaited on the UI thread; runtime gated by `PackageRuntime.IsPackaged`.
+- [x] **Unpackaged path**: Win32 `ICustomDestinationList` COM in
+  `Hosting/Shell/JumpListComInterop.cs`. Detection through
+  `Hosting/Shell/PackageRuntime.cs` (no `#if`). Tasks group, custom
+  groups, separators (PKEY_AppUserModel_IsDestListSeparator), and
+  Recent/Frequent known categories all wired.
+- [x] `AppUserModelId` settable; required for unpackaged. The unpackaged
+  helper throws `InvalidOperationException` when AppUserModelId is null.
+- [x] **Security**: XML doc on `JumpList.UpdateAsync` and on
+  `JumpListItem.Arguments` documents the round-trip-and-validate
+  requirement and points to `DeepLinkMap` / `Reactor.Cli`'s parser.
+- [x] `ShowRecent` / `ShowFrequent` toggle visibility only — content is
+  OS-managed. Mapped to `JumpListSystemGroupKind` for the packaged path
+  and `AppendKnownCategory` for unpackaged.
+- [x] **Implementation-time addition (navigation bridge)**:
+  `JumpListItem.ForUri(title, uri, ...)` factory shipped — auto-promotes
+  to `JumpListItemKind.Custom` when `groupCategory` is supplied.
+  (spec 036 §11.3 update)
 
 ### 8.2 `LaunchActivation`
 
-- [ ] `LaunchKind`, `LaunchActivation` types per spec §11.6.
-- [ ] In `OnLaunched`, parse `Microsoft.UI.Xaml.LaunchActivatedEventArgs`
-  and the underlying `IActivatedEventArgs.Kind` (Launch | File | Protocol
-  | Toast | …). Map to `LaunchKind`. Extract `Arguments` (CLI args from
-  jump-list / tray / thumbnail-toolbar action) and `Files` for File
-  activations.
-- [ ] Set `ReactorAppContext.LaunchActivation` before invoking the
+- [x] `LaunchKind`, `LaunchActivation` types per spec §11.6 — shipped in
+  Phase 1 stubs, wired with real parsing in Phase 8.
+- [x] `OnLaunched` now parses both `Microsoft.UI.Xaml.LaunchActivatedEventArgs`
+  and `Microsoft.Windows.AppLifecycle.AppInstance.GetActivatedEventArgs()`
+  (the richer surface that exposes File / Protocol / Toast activations).
+  Falls back to `Environment.GetCommandLineArgs()` when the WinUI surface
+  is empty so jump-list re-launches against unpackaged exes still hand the
+  argument string to the app. Maps to `LaunchKind` and populates
+  `Arguments` / `Files`.
+- [x] Set `ReactorAppContext.LaunchActivation` before invoking the
   startup callback.
-- [ ] **Security**: never log `LaunchActivation.Arguments` or `Files` at
-  default verbosity (PII / file paths). Trace-only.
+- [x] **Security**: parser logs only `Debug.WriteLine` exception messages,
+  never the Arguments / Files content; an explicit comment on the parser
+  flags the §0.5 PII rule for future maintainers.
+- [x] **Implementation-time addition (navigation bridge)**:
+  `LaunchActivation.TryResolve<TRoute>(DeepLinkMap<TRoute>, out
+  DeepLinkResult<TRoute>)` shipped on the record. Returns false on
+  null/empty `Arguments` and on map miss. (spec 036 §11.6 update)
 
 ### 8.3 `ReactorTrayIcon`
 
-- [ ] Create `src/Reactor/Hosting/Shell/TrayIconComInterop.cs` for
-  `Shell_NotifyIcon` (NIM_ADD/NIM_MODIFY/NIM_DELETE) and the message
-  constants (NIN_SELECT, WM_CONTEXTMENU, etc.).
-- [ ] Create `src/Reactor/Hosting/Shell/TrayHiddenWindow.cs` — the
-  hidden message-only window that owns `Shell_NotifyIcon` and routes
-  callbacks. **Internal**, never exposed to app code. One per process,
-  shared among tray icons.
-- [ ] `TrayIconSpec` and `ReactorTrayIcon` types per spec §11.4.
-- [ ] Events: `Click`, `DoubleClick`, `RightClick` — fire on UI thread.
-- [ ] `ShowFlyout(Element flyoutContent)` — reconciles the element into
-  a hidden WinUI popup window (`XamlRoot` from a hidden Microsoft.UI.
-  Xaml.Window owned by the tray subsystem). The popup positions near
-  the tray icon (`Shell_NotifyIcon` `dwInfoFlags` + `Shell_NotifyIconGetRect`
-  for tray rectangle).
-- [ ] `HideFlyout()` — closes the popup. Idempotent.
-- [ ] `Update(TrayIconSpec)` — diff icon / tooltip / visibility.
-- [ ] `Close()` / `Dispose()` — `NIM_DELETE` and remove from
-  `ReactorApp.TrayIcons`.
+- [x] `src/Reactor/Hosting/Shell/TrayIconComInterop.cs` —
+  `Shell_NotifyIcon` PInvoke, the wire-shape `NOTIFYICONDATAW`, and the
+  message constants (NIM_*, NIN_*, NIF_*).
+- [x] `src/Reactor/Hosting/Shell/TrayHiddenWindow.cs` — message-only
+  window with an `[UnmanagedCallersOnly]` static WndProc, GCHandle
+  stored in GWLP_USERDATA via WM_NCCREATE. Internal singleton lazily
+  created on first tray icon registration; tracked per-icon callback
+  table in a copy-on-write array. Marshals to UI thread via the
+  captured `ReactorApp.UIDispatcher`.
+- [x] `TrayIconSpec` (`src/Reactor/Hosting/Shell/TrayIconSpec.cs`) and
+  `ReactorTrayIcon` (`src/Reactor/Hosting/Shell/ReactorTrayIcon.cs`)
+  per spec §11.4.
+- [x] Events: `Click`, `DoubleClick`, `RightClick` fire on the UI
+  thread via the hidden window's `TryEnqueue` route. NOTIFYICON_VERSION_4
+  semantics so the icon-id arrives in the lParam HIWORD slot.
+- [/] `ShowFlyout(Element flyoutContent)` — accepts the element ref
+  but defers the live WinUI Popup / `XamlRoot` reconciliation to the
+  Phase-9 selftest pass that owns the live shell-COM dispatch. The
+  hook surface is in place so apps can write against it; the
+  reconciler-into-popup wiring is the remaining step.
+- [x] `HideFlyout()` — clears the pending element ref. Idempotent.
+- [x] `Update(TrayIconSpec)` — diff icon / tooltip / visibility, reload
+  HICON only when the icon source changed, NIM_MODIFY on the wire.
+- [x] `Close()` / `Dispose()` — NIM_DELETE, DestroyIcon, unregister
+  from `ReactorApp.TrayIcons`. Idempotent.
 
 ### 8.4 `ReactorApp` tray surface
 
-- [ ] `ReactorApp.OpenTrayIcon(TrayIconSpec)`,
-  `ReactorApp.TrayIcons` (snapshot list, COW),
-  `ReactorApp.FindTrayIcon(WindowKey)`,
-  `ReactorApp.TrayIconOpened` / `TrayIconClosed` events.
-- [ ] Mirror methods on `ReactorAppContext`.
-- [ ] **Shutdown policy**: `OnLastSurfaceClosed` now considers tray icons.
-  `Explicit` is the supported tray-only policy.
+- [x] `ReactorApp.OpenTrayIcon(TrayIconSpec)`, `ReactorApp.TrayIcons`
+  (copy-on-write snapshot), `ReactorApp.FindTrayIcon(WindowKey)`,
+  `ReactorApp.TrayIconOpened` / `TrayIconClosed` events all shipped.
+- [x] Mirror methods on `ReactorAppContext` (`OpenTrayIcon`,
+  `FindTrayIcon`).
+- [x] **Shutdown policy**: `OnLastSurfaceClosed` now reads the real
+  `TrayIconCount`. The pre-existing zero-windows / zero-tray exit branch
+  in Phase 4 lights up automatically; tray-icon close now also
+  re-evaluates the policy so closing the final tray icon when no windows
+  remain exits cleanly under `OnLastSurfaceClosed`.
 
 ### 8.5 `UseTrayIcon` hook
 
-- [ ] `RenderContext.UseTrayIcon(TrayIconSpec)` — opens (or reuses by
-  `Key`) a tray icon scoped to the calling component. On unmount, closes
-  the icon. The "scope to component" behavior is the only difference from
-  `ReactorApp.OpenTrayIcon`. Document the difference clearly so apps
-  pick the right one (component-scoped → hook, app-scoped → static).
-- [ ] Component mirror.
+- [x] `RenderContext.UseTrayIcon(TrayIconSpec)` — opens (or reuses by
+  `Key`) a tray icon scoped to the calling component. On unmount,
+  closes the icon via the trailing `UseEffect` cleanup. Spec-change
+  diff via `UseEffect` keyed on the spec record.
+- [x] Component mirror — `Component.UseTrayIcon`.
 
 ### 8.6 Tray flyout `RenderContext` shape
 
@@ -819,22 +841,27 @@ Behavior change phase. After this lands, `Run<TRoot>(width, height)` and
 
 ### 8.7 Tests — Phase 8
 
-- [ ] Selftest fixture `TrayOnlyStartupFixture.cs`: startup callback
-  opens only a tray icon under `ShutdownPolicy.Explicit`. Assert app
-  stays alive with zero windows. Click the tray icon programmatically
-  (via the hidden window's message routing); assert `Click` fires.
-- [ ] Selftest: tray flyout reconciles a Reactor `Element`; verify the
-  flyout's `XamlRoot` content matches the rendered tree.
-- [ ] Selftest: `UseTrayIcon` hook unmounts → tray icon disappears.
-- [ ] Unit: `TrayIconSpec` non-ASCII tooltip round-trip (spec §0.3
-  localization).
-- [ ] AppTest E2E: jump list — `JumpList.UpdateAsync([{Title: "Open
-  recent"}])`, then via `Reactor.Cli` invoke the entry's arguments and
-  verify the app receives the matching `LaunchActivation.Kind ==
-  JumpList`.
-- [ ] Selftest: tray icon's tooltip is exposed to UIA / Narrator with
+- [x] Unit: `JumpListItemTests` (10 facts) covers default record state,
+  value equality, ForUri factory promotion to Custom kind, null
+  validation, and a 4-row CJK / RTL / Cyrillic / emoji round-trip
+  (spec §0.3 localization).
+- [x] Unit: `TrayIconSpecTests` (3 facts + 4-row Theory) covers default
+  state, record value equality, and non-ASCII tooltip round-trip
+  (spec §0.3).
+- [x] Unit: `LaunchActivationTests` (5 facts) covers the `Normal`
+  sentinel, field round-trip, and `TryResolve<TRoute>` happy /
+  empty-args / unmapped-route / null-map cases.
+- [x] Unit: `JumpListStateTests` covers `AppUserModelId` / `ShowRecent` /
+  `ShowFrequent` round-trips.
+- [/] Selftest fixture `TrayOnlyStartupFixture.cs`, tray flyout
+  reconciliation, `UseTrayIcon` unmount selftest, jump-list AppTest
+  E2E, and the `OnLastSurfaceClosed` tray-survives selftest deferred
+  to the Phase-9 selftest matrix where the multi-window / live-shell
+  scaffolding lands. The unit-level surface lands the public types
+  + the navigation bridge end-to-end.
+- [/] Selftest: tray icon's tooltip is exposed to UIA / Narrator with
   the expected text. (Spec §0.6.)
-- [ ] Selftest: closing the main window with tray icon present and
+- [/] Selftest: closing the main window with tray icon present and
   policy `OnLastSurfaceClosed` does **not** exit; closing the tray icon
   does.
 

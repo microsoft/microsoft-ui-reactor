@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Navigation;
 
 namespace Microsoft.UI.Reactor;
 
@@ -32,6 +33,12 @@ public sealed class ReactorAppContext
 
     /// <summary>Look up an open window by <see cref="WindowKey"/>.</summary>
     public ReactorWindow? FindWindow(WindowKey key) => ReactorApp.FindWindow(key);
+
+    /// <summary>Open a system-tray icon. UI-thread only. (spec 036 §11.4)</summary>
+    public ReactorTrayIcon OpenTrayIcon(TrayIconSpec spec) => ReactorApp.OpenTrayIcon(spec);
+
+    /// <summary>Look up an open tray icon by <see cref="WindowKey"/>.</summary>
+    public ReactorTrayIcon? FindTrayIcon(WindowKey key) => ReactorApp.FindTrayIcon(key);
 }
 
 /// <summary>
@@ -70,4 +77,27 @@ public sealed record LaunchActivation(
 {
     /// <summary>Sentinel for Phase 1, when no real activation parsing exists yet.</summary>
     public static LaunchActivation Normal { get; } = new(LaunchKind.Normal, null, Array.Empty<string>());
+
+    /// <summary>
+    /// Resolve <see cref="Arguments"/> as a deep-link URI through the supplied
+    /// <see cref="DeepLinkMap{TRoute}"/>. Returns <c>true</c> only when
+    /// <see cref="Arguments"/> is non-empty <b>and</b> the map matched a
+    /// registered pattern. The shell-launch convention for Reactor is that
+    /// jump-list / tray / thumbnail-toolbar entries carry deep-link URIs in
+    /// their argument strings (see <see cref="JumpListItem.ForUri"/>); this
+    /// helper plumbs that convention into the navigation system. (spec 036
+    /// §11.6)
+    /// </summary>
+    public bool TryResolve<TRoute>(DeepLinkMap<TRoute> map, out DeepLinkResult<TRoute> result)
+        where TRoute : notnull
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        if (string.IsNullOrEmpty(Arguments))
+        {
+            result = default;
+            return false;
+        }
+        result = map.Resolve(Arguments!);
+        return result.Matched;
+    }
 }

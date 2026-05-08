@@ -114,6 +114,14 @@ public abstract class Component
         Func<Component> factory)
         => Context.UseOpenWindow(key, spec, factory);
 
+    /// <summary>
+    /// Component mirror of <see cref="RenderContext.UseTrayIcon"/>. Opens
+    /// (or reuses by key) a system-tray icon scoped to this component;
+    /// closes on unmount. (spec 036 §11.4)
+    /// </summary>
+    protected Microsoft.UI.Reactor.ReactorTrayIcon? UseTrayIcon(Microsoft.UI.Reactor.TrayIconSpec spec)
+        => Context.UseTrayIcon(spec);
+
     protected T UseObservableTree<T>(T source) where T : global::System.ComponentModel.INotifyPropertyChanged
         => Context.UseObservableTree(source);
 
