@@ -36,6 +36,16 @@ internal static class DevtoolsTools
         public required WindowRegistry Windows { get; init; }
 
         /// <summary>
+        /// Optional callback for the <c>windows.open</c> MCP tool (spec 036 §10).
+        /// Receives a <see cref="WindowSpec"/> and a component class name; the
+        /// implementation MUST validate the component name against the same
+        /// allowlist used by <see cref="SwitchComponent"/> before instantiating.
+        /// Returns the opened <see cref="ReactorWindow"/>'s id, or null if the
+        /// component name is rejected.
+        /// </summary>
+        public Func<WindowSpec, string, string?>? OpenWindowByComponentName { get; init; }
+
+        /// <summary>
         /// Optional enriched component descriptor lookup. When present, the
         /// <c>components</c> tool returns structured entries ({ name, fullName,
         /// isNested, isPublic, namespace }); otherwise it falls back to the
@@ -60,6 +70,10 @@ internal static class DevtoolsTools
         Register_Reload(server, ctx);
         Register_Shutdown(server, ctx);
         Register_Windows(server, ctx);
+        Register_WindowsList(server, ctx);
+        Register_WindowsActivate(server, ctx);
+        Register_WindowsClose(server, ctx);
+        Register_WindowsOpen(server, ctx);
     }
 
     // -- version -----------------------------------------------------------------
@@ -256,6 +270,185 @@ internal static class DevtoolsTools
             }));
     }
 
+    // -- windows.list / activate / close / open (spec 036 §10) ------------------
+
+    private static void Register_WindowsList(DevtoolsMcpServer server, ToolHostContext ctx)
+    {
+        server.Tools.Register(
+            new McpToolDescriptor(
+                Name: "windows.list",
+                Description:
+                    "Lists active Reactor windows with id, key, title, DIP size, DPI, " +
+                    "state, and isMain. Use this to discover ids for windows.activate / " +
+                    "windows.close. Spec 036 §10.",
+                InputSchema: new { type = "object", properties = new { }, additionalProperties = false }),
+            _ => server.OnDispatcher(() => new
+            {
+                windows = ctx.Windows.Snapshot().Select(w => new
+                {
+                    id = w.Id,
+                    key = w.Key,
+                    title = w.Title,
+                    width = w.WidthDip,
+                    height = w.HeightDip,
+                    dpi = w.Dpi,
+                    state = w.State,
+                    isMain = w.IsMain,
+                }).ToArray(),
+            }));
+    }
+
+    private static void Register_WindowsActivate(DevtoolsMcpServer server, ToolHostContext ctx)
+    {
+        server.Tools.Register(
+            new McpToolDescriptor(
+                Name: "windows.activate",
+                Description: "Activates (focuses) the window with the given id. Spec 036 §10.",
+                InputSchema: new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        id = new { type = "string", description = "Window id from windows.list." },
+                    },
+                    required = new[] { "id" },
+                    additionalProperties = false,
+                }),
+            @params =>
+            {
+                var id = ReadString(@params, "id")
+                    ?? throw new McpToolException("windows.activate requires an 'id' argument.",
+                        JsonRpcErrorCodes.InvalidParams);
+                return server.OnDispatcher<object>(() =>
+                {
+                    var rw = ctx.Windows.ResolveReactorWindow(id);
+                    if (rw is null)
+                        throw new McpToolException(
+                            $"Window '{id}' not found.",
+                            JsonRpcErrorCodes.ToolExecution,
+                            new { code = "unknown-window" });
+                    rw.Activate();
+                    return new { ok = true, id };
+                });
+            });
+    }
+
+    private static void Register_WindowsClose(DevtoolsMcpServer server, ToolHostContext ctx)
+    {
+        server.Tools.Register(
+            new McpToolDescriptor(
+                Name: "windows.close",
+                Description:
+                    "Closes the window with the given id. Honors UseClosingGuard / Closing " +
+                    "subscribers — returns { ok: false, cancelled: true } when the close was " +
+                    "vetoed. Spec 036 §10.",
+                InputSchema: new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        id = new { type = "string", description = "Window id from windows.list." },
+                    },
+                    required = new[] { "id" },
+                    additionalProperties = false,
+                }),
+            @params =>
+            {
+                var id = ReadString(@params, "id")
+                    ?? throw new McpToolException("windows.close requires an 'id' argument.",
+                        JsonRpcErrorCodes.InvalidParams);
+                return server.OnDispatcher<object>(() =>
+                {
+                    var rw = ctx.Windows.ResolveReactorWindow(id);
+                    if (rw is null)
+                        throw new McpToolException(
+                            $"Window '{id}' not found.",
+                            JsonRpcErrorCodes.ToolExecution,
+                            new { code = "unknown-window" });
+                    rw.Close();
+                    // Close() runs synchronously; if a guard cancelled, the
+                    // window is still in ReactorApp.Windows. Surface that as
+                    // a non-throwing structured result so MCP callers don't
+                    // hang waiting on a close that was vetoed.
+                    var stillOpen = ReactorApp.Windows.Contains(rw);
+                    return new { ok = !stillOpen, cancelled = stillOpen, id };
+                });
+            });
+    }
+
+    private static void Register_WindowsOpen(DevtoolsMcpServer server, ToolHostContext ctx)
+    {
+        server.Tools.Register(
+            new McpToolDescriptor(
+                Name: "windows.open",
+                Description:
+                    "Opens a new top-level window mounting the named Component. The " +
+                    "component name must be in the existing devtools allowlist (same gate " +
+                    "as switchComponent) — loopback callers cannot spawn arbitrary types. " +
+                    "Spec 036 §10. Returns { ok, id } on success.",
+                InputSchema: new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        component = new { type = "string", description = "Component class name (allowlisted)." },
+                        title = new { type = "string" },
+                        width = new { type = "number", description = "Initial DIP width (default 1024)." },
+                        height = new { type = "number", description = "Initial DIP height (default 768)." },
+                        key = new { type = "string", description = "Optional WindowKey for FindWindow lookup." },
+                    },
+                    required = new[] { "component" },
+                    additionalProperties = false,
+                }),
+            @params =>
+            {
+                var component = ReadString(@params, "component")
+                    ?? throw new McpToolException("windows.open requires a 'component' argument.",
+                        JsonRpcErrorCodes.InvalidParams);
+                if (ctx.OpenWindowByComponentName is null)
+                    throw new McpToolException(
+                        "windows.open is not wired in this host.",
+                        JsonRpcErrorCodes.ToolExecution,
+                        new { code = "not-wired" });
+
+                var titleArg = ReadString(@params, "title");
+                var widthArg = ReadDouble(@params, "width");
+                var heightArg = ReadDouble(@params, "height");
+                var keyArg = ReadString(@params, "key");
+
+                var spec = new WindowSpec
+                {
+                    Title = titleArg ?? component,
+                    Width = widthArg ?? 1024,
+                    Height = heightArg ?? 768,
+                    Key = string.IsNullOrEmpty(keyArg) ? (WindowKey?)null : WindowKey.Of(keyArg!),
+                };
+                try { spec.Validate(); }
+                catch (ArgumentException ex)
+                {
+                    throw new McpToolException(
+                        $"Invalid windows.open spec: {ex.Message}",
+                        JsonRpcErrorCodes.InvalidParams,
+                        new { code = "invalid-spec" });
+                }
+
+                return server.OnDispatcher<object>(() =>
+                {
+                    var id = ctx.OpenWindowByComponentName(spec, component);
+                    if (id is null)
+                        throw new McpToolException(
+                            $"Component '{component}' is not in the devtools allowlist.",
+                            JsonRpcErrorCodes.ToolExecution,
+                            new
+                            {
+                                code = "unknown-component",
+                                available = ctx.GetComponents().ToArray(),
+                            });
+                    return new { ok = true, id };
+                });
+            });
+    }
+
     // -- helpers -----------------------------------------------------------------
 
     internal static string? ReadString(JsonElement? args, string name)
@@ -277,6 +470,13 @@ internal static class DevtoolsTools
         if (args is not { } a || a.ValueKind != JsonValueKind.Object) return null;
         if (!a.TryGetProperty(name, out var el)) return null;
         return el.ValueKind == JsonValueKind.Number && el.TryGetInt64(out var v) ? v : null;
+    }
+
+    internal static double? ReadDouble(JsonElement? args, string name)
+    {
+        if (args is not { } a || a.ValueKind != JsonValueKind.Object) return null;
+        if (!a.TryGetProperty(name, out var el)) return null;
+        return el.ValueKind == JsonValueKind.Number && el.TryGetDouble(out var v) ? v : null;
     }
 
     internal static bool? ReadBool(JsonElement? args, string name)

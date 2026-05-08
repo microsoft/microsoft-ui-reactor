@@ -849,8 +849,44 @@ public static class ReactorApp
                 var windows = new WindowRegistry(mcp.BuildTag);
                 var nodes = new NodeRegistry();
                 // Pin the primary devtools window to "main" so the handle
-                // doesn't drift when switchComponent updates the title.
-                windows.Attach(host.Window, isMain: true, stableId: "main");
+                // doesn't drift when switchComponent updates the title;
+                // secondary windows opened via OpenWindow get title-based ids.
+                // Subscribing here picks up the legacy bridge's window because
+                // RegisterWindow fires AFTER configure (this lambda) returns.
+                // (spec 036 §10)
+                EventHandler<ReactorWindow> onOpened = (_, w) =>
+                {
+                    bool isMain = ReferenceEquals(w, ReactorApp.PrimaryWindow);
+                    windows.Attach(w, isMain: isMain, stableId: isMain ? "main" : null);
+                };
+                EventHandler<ReactorWindow> onClosed = (_, w) => windows.Detach(w);
+                ReactorApp.WindowOpened += onOpened;
+                ReactorApp.WindowClosed += onClosed;
+                host.Window.Closed += (_, _) =>
+                {
+                    ReactorApp.WindowOpened -= onOpened;
+                    ReactorApp.WindowClosed -= onClosed;
+                };
+
+                // windows.open factory — same allowlist gate as switchComponent
+                // so loopback callers cannot spawn arbitrary Component subclasses.
+                // (spec 036 §10 / §0.5 security checklist)
+                string? OpenWindowByComponentNameCore(WindowSpec spec, string componentName)
+                {
+                    var allowed = FindAllComponentNames();
+                    bool ok = false;
+                    foreach (var n in allowed)
+                    {
+                        if (string.Equals(n, componentName, StringComparison.OrdinalIgnoreCase)) { ok = true; break; }
+                    }
+                    if (!ok) return null;
+
+                    var type = FindComponentType(componentName);
+                    if (type is null) return null;
+
+                    var opened = ReactorApp.OpenWindow(spec, () => (Core.Component)Activator.CreateInstance(type)!);
+                    return opened.Id;
+                }
 
                 DevtoolsTools.RegisterCore(mcp, new DevtoolsTools.ToolHostContext
                 {
@@ -862,6 +898,7 @@ public static class ReactorApp
                     RequestShutdown = () => RequestDevtoolsShutdown(mcp, host),
                     Windows = windows,
                     Nodes = nodes,
+                    OpenWindowByComponentName = OpenWindowByComponentNameCore,
                 });
                 DevtoolsUiaTools.RegisterUiaTools(mcp, nodes, windows);
                 DevtoolsFireTool.Register(mcp, () => host.RootComponent);

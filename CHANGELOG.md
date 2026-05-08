@@ -88,6 +88,17 @@ to land under these conventions; subsequent specs follow this shape.
   window from the taskbar / Alt-Tab. Owner-close cascades to owned
   children with `WindowCloseReason.OwnerClosed`; if any owned guard
   cancels, the owner-close cancels too. (spec 036 §9)
+- Devtools `windows.list / windows.activate / windows.close /
+  windows.open` MCP tools (spec 036 §10). `windows.list` returns id,
+  key, title, DIP size, DPI, state, isMain — driven by a new
+  `WindowRegistry.Attach(ReactorWindow, ...)` overload that retains the
+  back-reference. `windows.open` is gated by the same component
+  allowlist as `switchComponent` so loopback callers can't spawn
+  arbitrary types; `windows.close` honors `UseClosingGuard` and surfaces
+  `cancelled: true` instead of hanging. The devtools `WindowRegistry` is
+  now driven from `ReactorApp.WindowOpened / WindowClosed` events so
+  secondary windows opened via `OpenWindow` are tracked too. CLI and
+  `skills/devtools.md` plumbed.
 - `Microsoft.UI.Reactor.Hooks.UseMemoCells` /
   `UseMemoCellsByKey` / `UseMemoCellsByIndex` — cell-level memoization
   hooks (extension methods on `RenderContext`, plus matching `Component`

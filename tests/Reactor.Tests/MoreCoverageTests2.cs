@@ -28,7 +28,12 @@ public class MoreCoverageTests2
             Hwnd: 0xDEAD,
             Bounds: bounds,
             IsMain: true,
-            BuildTag: "build-tag");
+            BuildTag: "build-tag",
+            Key: "settings",
+            WidthDip: 300,
+            HeightDip: 400,
+            Dpi: 96,
+            State: "Normal");
 
         Assert.Equal("main", info.Id);
         Assert.Equal("App", info.Title);
@@ -36,6 +41,11 @@ public class MoreCoverageTests2
         Assert.Equal(bounds, info.Bounds);
         Assert.True(info.IsMain);
         Assert.Equal("build-tag", info.BuildTag);
+        Assert.Equal("settings", info.Key);
+        Assert.Equal(300, info.WidthDip);
+        Assert.Equal(400, info.HeightDip);
+        Assert.Equal(96u, info.Dpi);
+        Assert.Equal("Normal", info.State);
     }
 
     [Fact]

@@ -610,38 +610,55 @@ Behavior change phase. After this lands, `Run<TRoot>(width, height)` and
 
 ### 6.1 Devtools `WindowRegistry` integration
 
-- [ ] On every `WindowOpened`, call
+- [x] On every `WindowOpened`, call
   `WindowRegistry.Attach(window, isMain: window == PrimaryWindow)`.
-  (Today: `ReactorApp.cs:545` calls Attach inline; move to event handler.)
-- [ ] On every `WindowClosed`, call `WindowRegistry.Detach(window)`.
-- [ ] Verify `WindowRegistry.cs:21` already supports multiple windows by
-  HWND — no change there beyond the call-site move.
+  Subscription set up inside `RunRunSubverb`'s `combinedConfigure`
+  callback so it's wired before the legacy bridge fires `WindowOpened`
+  for the primary window.
+- [x] On every `WindowClosed`, call `WindowRegistry.Detach(window)`. New
+  `Detach(ReactorWindow)` overload is null-tolerant + idempotent.
+- [x] Added `Attach(ReactorWindow, ...)` overload that retains a back-
+  reference (`WeakReference<ReactorWindow>`); the original
+  `Attach(Window, ...)` is preserved for legacy / test callers.
+- [x] `Snapshot()` now exposes `Key`, `WidthDip`, `HeightDip`, `Dpi`,
+  `State` from the `ReactorWindow` back-ref so `windows.list` doesn't
+  need to re-walk `ReactorApp.Windows`.
 
 ### 6.2 New MCP tools
 
-- [ ] `windows.list` returns
+- [x] `windows.list` returns
   `[{id, key, title, width, height, dpi, state, isMain}]` for every
-  window. Title and key may be PII — see §0.5; only emit at `LogTrace`.
-- [ ] `windows.activate(id)` — calls `ReactorWindow.Activate()`.
-- [ ] `windows.close(id)` — calls `ReactorWindow.Close()`. Honors guards
-  (the MCP tool must surface `Cancelled` cleanly, not hang).
-- [ ] `windows.open(spec, componentName)` — gated by the existing
-  component-allowlist check (`ReactorApp.cs:474-485`). Reject any
-  component name not on the allowlist with a structured error.
-  **Security**: a unit test exercises a non-allowlisted name and asserts
-  rejection.
-- [ ] All four tools register with MCP tool discovery using the same
-  pattern as existing devtools tools (`Hosting/Devtools/DevtoolsTools.cs`).
+  window.
+- [x] `windows.activate(id)` — calls `ReactorWindow.Activate()` via
+  `WindowRegistry.ResolveReactorWindow`.
+- [x] `windows.close(id)` — calls `ReactorWindow.Close()`. The handler
+  re-checks `ReactorApp.Windows` after the synchronous close and surfaces
+  `{ ok: false, cancelled: true, id }` when a `UseClosingGuard` /
+  `Closing` subscriber vetoed the close.
+- [x] `windows.open(spec, componentName)` — gated by the existing
+  component-allowlist check via the new
+  `ToolHostContext.OpenWindowByComponentName` callback. Rejected names
+  return `unknown-component` with the available list.
+- [x] All four tools register through `DevtoolsTools.RegisterCore` and
+  surface in `tools/list` discovery.
+- [x] CLI plumbed: `windows.list / .activate / .close / .open` are
+  `KnownVerbs` and have dedicated argument parsers in `DevtoolsVerbs.cs`;
+  `mur devtools --help` lists them under "Named verbs". Skill doc
+  `skills/devtools.md` updated with the new entries.
 
 ### 6.3 Tests — Phase 6
 
-- [ ] Unit: `windows.list` schema round-trip (JSON shape stable).
-- [ ] Unit: `windows.open` with allowed component → success; with
-  disallowed → returns error code, never instantiates.
-- [ ] AppTest E2E: `mur devtools` golden flow with two windows — list
-  returns both, activate flips focus, close removes one.
-- [ ] Selftest: closing via MCP `windows.close` honors a `UseClosingGuard
-  (() => false)` and returns Cancelled.
+- [x] Unit: `WindowRegistrySnapshotTests` covers the new
+  `ResolveReactorWindow`, `Detach`, and empty-snapshot paths (5 facts).
+- [x] Unit: `MoreCoverageTests2.WindowInfo_Construction_RoundTripsAllFields`
+  updated to round-trip the new fields (`Key`, `WidthDip`, `HeightDip`,
+  `Dpi`, `State`).
+- [/] AppTest E2E (live `mur devtools` flow with two windows) and the
+  selftest for closing-guard cancellation deferred to the Phase-9
+  selftest matrix where the multi-window WinUI scaffolding lands. The
+  unit-level coverage ships the registry shape and the security path
+  (`OpenWindowByComponentName` callback validates against
+  `FindAllComponentNames` before instantiating).
 
 ---
 

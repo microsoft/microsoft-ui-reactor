@@ -256,6 +256,11 @@ internal static class DevtoolsSupervisor
         Console.WriteLine("Named verbs (attach to the running session via lockfile discovery):");
         Console.WriteLine("  version                             App build tag, pid, and MCP port");
         Console.WriteLine("  windows                             List active windows with bounds and mounted component");
+        Console.WriteLine("  windows.list                        List active windows with id, key, DIP size, DPI, state, isMain");
+        Console.WriteLine("  windows.activate <id>               Activate (focus) a window by id");
+        Console.WriteLine("  windows.close <id>                  Close a window by id (honors UseClosingGuard)");
+        Console.WriteLine("  windows.open <Component>            Open a new window mounting an allowlisted Component");
+        Console.WriteLine("              [--title T] [--width W] [--height H] [--key K]");
         Console.WriteLine("  components                          List Component classes; marks which is mounted");
         Console.WriteLine("  switch <component>                  Swap the root component (invalidates node ids)");
         Console.WriteLine("  tree [--selector S] [--window W]    Dump the visual tree as JSON");
