@@ -87,6 +87,9 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Setup WinApp CLI
+        uses: microsoft/setup-WinAppCli@v0.1
+
       - name: Restore
         run: dotnet restore tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj
 
