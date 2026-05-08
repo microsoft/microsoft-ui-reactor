@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 
 namespace Microsoft.UI.Reactor.Core;
@@ -26,17 +25,17 @@ namespace Microsoft.UI.Reactor.Core;
 ///   - Callers should guard with an equality check (only suppress when the new
 ///     value actually differs) so the token is always consumed by a real event.
 ///
-/// Why <see cref="ConditionalWeakTable{TKey,TValue}"/>: controls returned to the
-/// ElementPool or garbage-collected should not leak an entry. Weak keys keep
-/// the map small without any explicit cleanup.
+/// Storage — why <see cref="Reconciler.ReactorAttached.StateProperty"/> instead
+/// of a <c>ConditionalWeakTable&lt;UIElement, …&gt;</c>: WinRT projection can
+/// produce two managed RCWs over the same underlying <c>DependencyObject</c>.
+/// A CWT keyed by RCW would store the BeginSuppress count on one wrapper while
+/// the queued change-event handler runs against a different wrapper, so
+/// ShouldSuppress would miss the token and the echo would fire (issues #86,
+/// #114). The attached DP lives on the native object, so every wrapper sees
+/// the same counter — the same fix shape used for <c>EventHandlerState</c>.
 /// </summary>
 internal static class ChangeEchoSuppressor
 {
-    // Box the counter so we can increment/decrement without repeatedly re-inserting.
-    private sealed class Counter { public int Value; }
-
-    private static readonly ConditionalWeakTable<UIElement, Counter> _counters = new();
-
     /// <summary>
     /// Increment the suppress counter before a programmatic property write that
     /// will raise a change event. Pair exactly one BeginSuppress with exactly
@@ -44,8 +43,8 @@ internal static class ChangeEchoSuppressor
     /// </summary>
     internal static void BeginSuppress(UIElement control)
     {
-        var c = _counters.GetValue(control, static _ => new Counter());
-        c.Value++;
+        if (control is not FrameworkElement fe) return;
+        Reconciler.GetOrCreateReactorState(fe).EchoSuppressCount++;
     }
 
     /// <summary>
@@ -55,9 +54,11 @@ internal static class ChangeEchoSuppressor
     /// </summary>
     internal static bool ShouldSuppress(UIElement control)
     {
-        if (_counters.TryGetValue(control, out var c) && c.Value > 0)
+        if (control is not FrameworkElement fe) return false;
+        if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
+            && state.EchoSuppressCount > 0)
         {
-            c.Value--;
+            state.EchoSuppressCount--;
             return true;
         }
         return false;
