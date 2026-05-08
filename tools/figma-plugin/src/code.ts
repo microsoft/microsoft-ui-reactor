@@ -29,10 +29,13 @@ function sendFrameInfo() {
     const fileKey = figma.fileKey;
     const nodeId = frame.id; // format: "123:456"
     const urlNodeId = nodeId.replace(":", "-"); // URL format: "123-456"
-    const figmaUrl = fileKey
-      ? "https://www.figma.com/design/" + fileKey + "/" +
-        encodeURIComponent(figma.root.name) + "?node-id=" + urlNodeId
-      : null;
+
+    // figma.fileKey can be null in dev mode or for unsaved files
+    var figmaUrl: string | null = null;
+    if (fileKey) {
+      figmaUrl = "https://www.figma.com/design/" + fileKey + "/" +
+        encodeURIComponent(figma.root.name) + "?node-id=" + urlNodeId;
+    }
 
     figma.ui.postMessage({
       type: "frame-selected",
@@ -40,7 +43,7 @@ function sendFrameInfo() {
       frameName: frame.name,
       fileKey: fileKey || "",
       nodeId: urlNodeId,
-      figmaUrl: figmaUrl,
+      figmaUrl: figmaUrl || "",
       width: Math.round(frame.width),
       height: Math.round(frame.height),
     });

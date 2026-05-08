@@ -135,14 +135,17 @@
 
     // ─── Command generation ──────────────────────────────────────────────────
     function updateCommands() {
-      var hasFrame = frameInfo && frameInfo.figmaUrl;
+      var hasFrame = !!frameInfo;
+      var hasUrl = hasFrame && frameInfo.figmaUrl;
       document.getElementById('generate-btn').disabled = !hasFrame;
       document.getElementById('run-btn').disabled = !hasFrame;
 
       var watchEl = document.getElementById('watch-cmd');
-      if (hasFrame) {
+      if (hasUrl) {
         watchEl.innerHTML = '<span class="copy-hint">click to copy</span>' +
           escHtml('mur figma watch "' + frameInfo.figmaUrl + '"');
+      } else if (hasFrame) {
+        watchEl.innerHTML = '<span class="copy-hint"></span><em style="color:#6C7086">File key not available — copy the URL from your browser instead</em>';
       } else {
         watchEl.innerHTML = '<span class="copy-hint"></span><em style="color:#6C7086">Select a frame to see the watch command</em>';
       }
@@ -173,9 +176,9 @@
 
     // ─── Generate ────────────────────────────────────────────────────────────
     function generate() {
-      if (!frameInfo || !frameInfo.figmaUrl) return;
+      if (!frameInfo) return;
 
-      var url = frameInfo.figmaUrl;
+      var url = frameInfo.figmaUrl || '[paste Figma URL here]';
       var csproj = getCsprojPath();
       var name = getProjectName();
 
