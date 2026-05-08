@@ -446,6 +446,7 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
 
     private double _width = 300, _height = 300;
     private double _innerRadius = 0, _padAngle = 0.02;
+    private double _labelRadiusOffset = 0;
     private IReadOnlyList<D3Color>? _colorPalette;
     private Action<PieChartHandle<T>>? _onReady;
 
@@ -468,6 +469,14 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     public PieChartElement<T> Height(double h) { _height = h; return this; }
     public PieChartElement<T> InnerRadius(double r) { _innerRadius = r; return this; }
     public PieChartElement<T> PadAngle(double a) { _padAngle = a; return this; }
+
+    /// <summary>
+    /// Shifts auto-positioned labels along the radial axis from the slice centroid.
+    /// Positive values push labels outward (toward the arc); negative values pull them inward
+    /// (toward the chart center). Units are pixels. Applies to both the built-in text label
+    /// and <see cref="LabelView"/>-rendered elements.
+    /// </summary>
+    public PieChartElement<T> LabelRadiusOffset(double offset) { _labelRadiusOffset = offset; return this; }
     /// <summary>
     /// Override the slice color palette. Colors cycle modulo the palette length when
     /// there are more slices than colors. Calling with an empty argument list clears
@@ -608,6 +617,12 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         return arcs.Select(arc =>
         {
             var (lx, ly) = arcGen.Centroid(arc.StartAngle, arc.EndAngle);
+            if (_labelRadiusOffset != 0)
+            {
+                double midAngle = (arc.StartAngle + arc.EndAngle) / 2 - Math.PI / 2;
+                lx += Math.Cos(midAngle) * _labelRadiusOffset;
+                ly += Math.Sin(midAngle) * _labelRadiusOffset;
+            }
             return (Element)D3Charts.Text(cx + lx - 10, cy + ly - 7, LabelAccessor!(arc.Data), 11, whiteBrush);
         }).ToArray();
     }
@@ -627,6 +642,12 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         return arcs.Select(arc =>
         {
             var (lx, ly) = arcGen.Centroid(arc.StartAngle, arc.EndAngle);
+            if (_labelRadiusOffset != 0)
+            {
+                double midAngle = (arc.StartAngle + arc.EndAngle) / 2 - Math.PI / 2;
+                lx += Math.Cos(midAngle) * _labelRadiusOffset;
+                ly += Math.Sin(midAngle) * _labelRadiusOffset;
+            }
             var layout = new PieSliceLayout(
                 Index: arc.Index,
                 Value: arc.Value,

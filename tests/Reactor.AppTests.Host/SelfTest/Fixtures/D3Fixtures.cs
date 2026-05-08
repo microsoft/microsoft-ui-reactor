@@ -320,4 +320,66 @@ internal static class D3Fixtures
                 labelTexts.Count >= SamplePie.Length);
         }
     }
+
+    internal class PieChartLabelRadiusOffset(Harness h) : SelfTestFixtureBase(h)
+    {
+        // Distinct label sets so we can match each slice across both charts.
+        private static readonly PieSlice[] DefaultData =
+        [
+            new("DA", 30), new("DB", 20), new("DC", 35), new("DD", 15),
+        ];
+        private static readonly PieSlice[] OffsetData =
+        [
+            new("OA", 30), new("OB", 20), new("OC", 35), new("OD", 15),
+        ];
+
+        public override async Task RunAsync()
+        {
+            const double offset = 40;
+
+            var host = H.CreateHost();
+            XamlInterop.Register(host.Reconciler);
+            host.Mount(ctx =>
+                VStack(
+                    Charts.PieChart(DefaultData, d => d.Value, d => d.Label)
+                        .Width(400).Height(400)
+                        .ToElement(),
+                    Charts.PieChart(OffsetData, d => d.Value, d => d.Label)
+                        .Width(400).Height(400)
+                        .LabelRadiusOffset(offset)
+                        .ToElement()
+                )
+            );
+
+            await Harness.Render();
+
+            // Both charts share canvas size, data values, and pad angle, so
+            // matching slices have identical centroid angles. The only
+            // expected per-label position difference is the radial offset:
+            // sqrt(dx² + dy²) ≈ offset. The -10/-7 glyph adjustments cancel
+            // because both labels are positioned through D3Charts.Text.
+            string[] defaultLabels = ["DA", "DB", "DC", "DD"];
+            string[] offsetLabels = ["OA", "OB", "OC", "OD"];
+
+            int matchedSlices = 0;
+            int radiallyShifted = 0;
+            for (int i = 0; i < defaultLabels.Length; i++)
+            {
+                var def = H.FindControl<TextBlock>(tb => tb.Text == defaultLabels[i]);
+                var off = H.FindControl<TextBlock>(tb => tb.Text == offsetLabels[i]);
+                if (def is null || off is null) continue;
+                matchedSlices++;
+
+                double dx = Microsoft.UI.Xaml.Controls.Canvas.GetLeft(off) - Microsoft.UI.Xaml.Controls.Canvas.GetLeft(def);
+                double dy = Microsoft.UI.Xaml.Controls.Canvas.GetTop(off) - Microsoft.UI.Xaml.Controls.Canvas.GetTop(def);
+                double mag = Math.Sqrt(dx * dx + dy * dy);
+                if (Math.Abs(mag - offset) <= 0.5) radiallyShifted++;
+            }
+
+            H.Check("D3_PieChartLabelRadiusOffset_AllSlicesFound",
+                matchedSlices == defaultLabels.Length);
+            H.Check("D3_PieChartLabelRadiusOffset_LabelsShiftedByOffset",
+                radiallyShifted == defaultLabels.Length);
+        }
+    }
 }
