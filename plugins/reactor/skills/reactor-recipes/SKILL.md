@@ -16,7 +16,7 @@ The full recipe content is in `references/<name>.cs`. Read just the recipe(s) th
 | Add / remove / toggle items in a list | `references/list-add-delete.cs` | `UseReducer`, `WithKey`, `Command` |
 | Sidebar navigation between pages | `references/sidebar-nav.cs` | `UseNavigation`, `NavigationView`, `NavigationHost`, `WithNavigation` |
 | Form with validation + submit gating | `references/form-with-validation.cs` | `UseValidationContext`, `FormField`, `Validate.*`, `ShowWhen` |
-| Fetch data with loading / error / data states | `references/async-fetch-list.cs` | `UseResource`, `AsyncValue<T>.Match`, `Pending` |
+| Fetch data with loading / error / data states | `references/async-fetch-list.cs` | `UseResource`, `AsyncValue<T>.Match` |
 | Themed Win11 card surface | `references/themed-card.cs` | `Theme.*` tokens, `Border`, `FlexColumn`, `.Padding`, `.CornerRadius`, `.WithBorder` |
 
 See `references/index.md` for the full index.

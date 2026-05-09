@@ -48,8 +48,14 @@ public static class CheckCommand
         if (arch is not null) psi.ArgumentList.Add($"-p:Platform={arch}");
 
         using var proc = Process.Start(psi)!;
-        var combined = proc.StandardOutput.ReadToEnd() + "\n" + proc.StandardError.ReadToEnd();
+        // Drain both pipes concurrently — `dotnet build` can write enough to
+        // either stream to fill its pipe buffer, so reading them sequentially
+        // (stdout to end, then stderr) deadlocks when the unread one fills up.
+        var stdOutTask = proc.StandardOutput.ReadToEndAsync();
+        var stdErrTask = proc.StandardError.ReadToEndAsync();
+        Task.WaitAll(stdOutTask, stdErrTask);
         proc.WaitForExit();
+        var combined = stdOutTask.Result + "\n" + stdErrTask.Result;
 
         var lines = combined.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         var diagnostics = new List<Diag>();

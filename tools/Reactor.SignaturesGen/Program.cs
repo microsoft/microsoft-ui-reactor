@@ -24,7 +24,16 @@ if (args.Length < 1)
 }
 
 var repoRoot = Path.GetFullPath(args[0]);
-var outputPath = Path.Combine(repoRoot, "skills", "reactor.api.txt");
+
+// Write to both the legacy path (consumed by `mur --api` embedding and the
+// `agentkit/` NuGet layout) and the plugin-format path (consumed by the
+// `reactor-dsl` skill's `references/`). One generation source of truth —
+// keeps the two committed copies from drifting.
+var outputPaths = new[]
+{
+    Path.Combine(repoRoot, "skills", "reactor.api.txt"),
+    Path.Combine(repoRoot, "plugins", "reactor", "skills", "reactor-dsl", "references", "reactor.api.txt"),
+};
 
 var asm = typeof(Microsoft.UI.Reactor.Factories).Assembly;
 var sb = new StringBuilder();
@@ -42,18 +51,22 @@ EmitHooks(asm, sb);
 EmitTheme(asm, sb);
 EmitEnums(asm, sb);
 
-Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 var content = sb.ToString();
 
-// Skip rewriting if unchanged — keeps file mtimes stable for incremental builds.
-if (File.Exists(outputPath) && File.ReadAllText(outputPath) == content)
+foreach (var outputPath in outputPaths)
 {
-    Console.WriteLine($"reactor.api.txt unchanged ({outputPath})");
-    return 0;
-}
+    Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
-File.WriteAllText(outputPath, content);
-Console.WriteLine($"wrote {outputPath} ({content.Length} bytes)");
+    // Skip rewriting if unchanged — keeps file mtimes stable for incremental builds.
+    if (File.Exists(outputPath) && File.ReadAllText(outputPath) == content)
+    {
+        Console.WriteLine($"reactor.api.txt unchanged ({outputPath})");
+        continue;
+    }
+
+    File.WriteAllText(outputPath, content);
+    Console.WriteLine($"wrote {outputPath} ({content.Length} bytes)");
+}
 return 0;
 
 // ---------------------------------------------------------------------------

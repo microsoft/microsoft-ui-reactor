@@ -178,6 +178,15 @@ int RegenApi()
     psi.ArgumentList.Add(Path.Combine("tools", "Reactor.SignaturesGen", "Reactor.SignaturesGen.csproj"));
     psi.ArgumentList.Add("--nologo");
     psi.ArgumentList.Add("-v:m");
+    // WinUI projects require an explicit Platform — match the host arch so
+    // the AfterBuild target can execute the freshly-built apphost.
+    var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture switch
+    {
+        System.Runtime.InteropServices.Architecture.Arm64 => "ARM64",
+        System.Runtime.InteropServices.Architecture.X64 => "x64",
+        _ => null,
+    };
+    if (arch is not null) psi.ArgumentList.Add($"-p:Platform={arch}");
 
     using var proc = System.Diagnostics.Process.Start(psi)!;
     proc.WaitForExit();

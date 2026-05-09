@@ -9,17 +9,18 @@ description: >
 # Reactor Recipes
 
 Each recipe is a self-contained `.cs` file that compiles via `dotnet run`. The
-recipes here use `#:project ../../src/Reactor` so they run in place against
-this clone. **For a NuGet consumer**, replace that line with
-`#:package Microsoft.UI.Reactor@<version>`. Drop the body into any `Program.cs`
-or class component.
+recipes here use `#:package Microsoft.UI.Reactor@0.0.0-local` so they resolve
+through this clone's `local-nupkgs/` feed (run `mur pack-local` once to
+populate it). **For a NuGet consumer**, replace `0.0.0-local` with the
+released version you depend on. Drop the body into any `Program.cs` or class
+component.
 
 | Intent | Recipe | Hooks / APIs used |
 |---|---|---|
 | Add / remove items in a list | [`list-add-delete.cs`](list-add-delete.cs) | `UseReducer`, `WithKey`, `Command` |
 | Sidebar navigation between pages | [`sidebar-nav.cs`](sidebar-nav.cs) | `UseNavigation`, `NavigationView`, `NavigationHost` |
 | Form with validation + submit | [`form-with-validation.cs`](form-with-validation.cs) | `UseValidationContext`, `FormField`, `Validate.*` |
-| Fetch data, show loading / error | [`async-fetch-list.cs`](async-fetch-list.cs) | `UseResource`, `AsyncValue<T>`, `Pending` |
+| Fetch data, show loading / error | [`async-fetch-list.cs`](async-fetch-list.cs) | `UseResource`, `AsyncValue<T>.Match` |
 | Themed card with 4px grid spacing | [`themed-card.cs`](themed-card.cs) | `Theme.*`, `Border`, `FlexColumn`, `.Padding`, `.CornerRadius` |
 
 ## How to use a recipe

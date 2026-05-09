@@ -83,9 +83,13 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         return block.Statements[0] is ReturnStatementSyntax ret ? ret.Expression : null;
     }
 
+    // Layout factories whose children-array overload is the typical receiver
+    // for `Select(...)` row-factories. ScrollView is intentionally excluded —
+    // it takes a single child, not Element[]. WrapGrid (not WrapPanel) is the
+    // correct factory name in Reactor.
     static readonly System.Collections.Generic.HashSet<string> LayoutFactories = new(System.StringComparer.Ordinal)
     {
-        "VStack", "HStack", "FlexRow", "FlexColumn", "Flex", "Grid", "ScrollView", "WrapPanel",
+        "VStack", "HStack", "FlexRow", "FlexColumn", "Flex", "Grid", "WrapGrid",
     };
 
     static bool IsConsumedAsLayoutChildren(InvocationExpressionSyntax selectInv)
