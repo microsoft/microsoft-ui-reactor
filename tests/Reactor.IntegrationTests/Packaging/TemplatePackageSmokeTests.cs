@@ -518,20 +518,41 @@ public sealed class TemplatePackageSmokeTestFixture : IDisposable
         RunArchitecture = TemplatePackageSmokeTests.GetRunArchitecture();
         CommandEnvironment = TemplatePackageSmokeTests.CreateCommandEnvironment(dotnetCliHomeDir, nugetHttpCacheDir);
 
+        TemplatePackageSmokeTests.RunDotnet(
+            "restore Reactor.slnx",
+            RepoRoot,
+            CommandEnvironment,
+            timeoutMs: 600_000);
+
         Task.WhenAll(
             TemplatePackageSmokeTests.RunDotnetAsync(
-                $"pack \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" -c Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
+                $"build \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" --no-restore --configuration Release",
+                RepoRoot,
+                CommandEnvironment,
+                timeoutMs: 1_200_000),
+            TemplatePackageSmokeTests.RunDotnetAsync(
+                $"build \"{Path.Combine(RepoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" --no-restore --configuration Release -p:Platform=AnyCPU",
+                RepoRoot,
+                CommandEnvironment,
+                timeoutMs: 300_000))
+            .GetAwaiter()
+            .GetResult();
+
+        Task.WhenAll(
+            TemplatePackageSmokeTests.RunDotnetAsync(
+                $"pack \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" --no-build --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
                 RepoRoot,
                 CommandEnvironment,
                 timeoutMs: 300_000),
             TemplatePackageSmokeTests.RunDotnetAsync(
-                $"pack \"{Path.Combine(RepoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" -c Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion} -p:MicrosoftUIReactorVersion={PackageVersion}",
+                $"pack \"{Path.Combine(RepoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" --no-build --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion} -p:MicrosoftUIReactorVersion={PackageVersion} -p:Platform=AnyCPU",
                 RepoRoot,
                 CommandEnvironment,
                 timeoutMs: 180_000))
             .GetAwaiter()
             .GetResult();
 
+        _ = TemplatePackageSmokeTests.FindPackage(PackageSourceDir, "Microsoft.UI.Reactor", PackageVersion);
         var templatePackage = TemplatePackageSmokeTests.FindPackage(PackageSourceDir, "Microsoft.UI.Reactor.ProjectTemplates", PackageVersion);
 
         TemplatePackageSmokeTests.RunDotnet(
