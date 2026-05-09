@@ -37,6 +37,17 @@
 
   <ItemGroup>
     <EmbeddedResource Include="..\..\SKILL.md" Link="SKILL.md" LogicalName="SKILL.md" />
+    <EmbeddedResource Include="..\..\skills\reactor.api.txt" Link="reactor.api.txt" LogicalName="reactor.api.txt"
+                      Condition="Exists('..\..\skills\reactor.api.txt')" />
+  </ItemGroup>
+
+  <!-- Build-order only: ensures the signatures generator runs (and writes
+       skills/reactor.api.txt) before this project embeds it. The generator
+       isn't a runtime dependency of mur. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\tools\Reactor.SignaturesGen\Reactor.SignaturesGen.csproj"
+                      ReferenceOutputAssembly="false"
+                      Private="false" />
   </ItemGroup>
 
   <!-- After build, mirror the CLI output to <repo>/bin/<arch>/ so it matches

@@ -1,0 +1,29 @@
+{
+  "name": "reactor",
+  "description": "Agents and skills for building WinUI 3 desktop apps with Microsoft.UI.Reactor — a React-inspired declarative C# projection (no XAML, no data binding, no ViewModels). Use for creating new apps, adding features, fixing bugs, or any Reactor / Microsoft.UI.Reactor / functional WinUI task.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Microsoft",
+    "url": "https://github.com/microsoft/microsoft-ui-reactor"
+  },
+  "homepage": "https://github.com/microsoft/microsoft-ui-reactor",
+  "repository": "https://github.com/microsoft/microsoft-ui-reactor",
+  "license": "MIT",
+  "keywords": [
+    "reactor",
+    "microsoft.ui.reactor",
+    "winui",
+    "winui3",
+    "windows app sdk",
+    "desktop app",
+    "react",
+    "declarative ui",
+    "functional ui",
+    "csharp",
+    "dotnet",
+    "winrt",
+    "hooks",
+    "components",
+    "no xaml"
+  ]
+}

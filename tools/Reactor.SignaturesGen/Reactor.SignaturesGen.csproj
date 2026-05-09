@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <RootNamespace>Microsoft.UI.Reactor.SignaturesGen</RootNamespace>
+    <AssemblyName>Reactor.SignaturesGen</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- Reflect over the freshly-built Reactor surface to emit reactor.api.txt. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
+  </ItemGroup>
+
+  <!-- After build, run the generator with the repo root as argv[0] so the file
+       lands at <repo>/skills/reactor.api.txt. The same file is then packed into
+       the Reactor NuGet (see Reactor.csproj) and embedded into the mur CLI.
+       Invokes the apphost .exe (not `dotnet $(TargetPath).dll`) so the build
+       works on machines whose `dotnet` host arch differs from $(Platform). -->
+  <!-- Skip during publish/pack flows that set a RuntimeIdentifier. A propagated
+       RID may produce a cross-arch exe that the host can't execute (e.g. CI's
+       `dotnet publish` for win-arm64 running on a windows-x64 runner). The
+       committed skills/reactor.api.txt is still picked up by pack; regen
+       happens during the upstream slnx build where no RID is in play. -->
+  <Target Name="EmitReactorApiTxt"
+          AfterTargets="Build"
+          Condition="'$(SkipReactorApiGen)' != 'true' and '$(RuntimeIdentifier)' == ''">
+    <Exec Command="&quot;$(TargetDir)$(AssemblyName).exe&quot; &quot;$(MSBuildThisFileDirectory)..\..&quot;"
+          ConsoleToMSBuild="true"
+          IgnoreExitCode="false" />
+  </Target>
+
+</Project>
