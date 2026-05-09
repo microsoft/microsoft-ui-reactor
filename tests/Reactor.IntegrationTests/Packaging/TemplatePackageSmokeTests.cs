@@ -518,12 +518,6 @@ public sealed class TemplatePackageSmokeTestFixture : IDisposable
         RunArchitecture = TemplatePackageSmokeTests.GetRunArchitecture();
         CommandEnvironment = TemplatePackageSmokeTests.CreateCommandEnvironment(dotnetCliHomeDir, nugetHttpCacheDir);
 
-        TemplatePackageSmokeTests.RunDotnet(
-            "restore Reactor.slnx",
-            RepoRoot,
-            CommandEnvironment,
-            timeoutMs: 600_000);
-
         Task.WhenAll(
             TemplatePackageSmokeTests.RunDotnetAsync(
                 $"build \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" --no-restore --configuration Release",

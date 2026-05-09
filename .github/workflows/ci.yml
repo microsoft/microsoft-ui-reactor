@@ -88,7 +88,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj
+        run: dotnet restore Reactor.slnx
 
       - name: Test
         run: dotnet test tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore --logger "console;verbosity=detailed"
