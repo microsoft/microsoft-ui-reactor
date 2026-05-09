@@ -23,14 +23,28 @@
        the Reactor NuGet (see Reactor.csproj) and embedded into the mur CLI.
        Invokes the apphost .exe (not `dotnet $(TargetPath).dll`) so the build
        works on machines whose `dotnet` host arch differs from $(Platform). -->
-  <!-- Skip during publish/pack flows that set a RuntimeIdentifier. A propagated
-       RID may produce a cross-arch exe that the host can't execute (e.g. CI's
-       `dotnet publish` for win-arm64 running on a windows-x64 runner). The
-       committed skills/reactor.api.txt is still picked up by pack; regen
-       happens during the upstream slnx build where no RID is in play. -->
+  <!-- Skip when the build target arch doesn't match the host arch — otherwise
+       the apphost is foreign and exits with code 216 ("not compatible with the
+       version of Windows you're running"). This happens in two CI paths:
+         (a) `dotnet build Reactor.slnx` on windows-latest (x64 host) where the
+             slnx default Platform is ARM64.
+         (b) `dotnet publish` with a cross-arch RuntimeIdentifier (win-arm64
+             on the x64 runner).
+       The committed skills/reactor.api.txt is still picked up by pack; regen
+       only needs to fire on dev machines where $(Platform) matches the host. -->
+  <PropertyGroup>
+    <!-- $(NETCoreSdkRuntimeIdentifier) is set by the .NET SDK to the host RID
+         (e.g. win-x64, win-arm64). Trim everything before the dash. -->
+    <_ReactorApiHostArch Condition="$(NETCoreSdkRuntimeIdentifier.Contains('-'))">$(NETCoreSdkRuntimeIdentifier.Substring($([MSBuild]::Add($(NETCoreSdkRuntimeIdentifier.IndexOf('-')), 1))).ToLowerInvariant())</_ReactorApiHostArch>
+    <_ReactorApiTargetArch Condition="'$(Platform)' == 'x64'">x64</_ReactorApiTargetArch>
+    <_ReactorApiTargetArch Condition="'$(Platform)' == 'ARM64'">arm64</_ReactorApiTargetArch>
+    <_ReactorApiTargetArch Condition="'$(_ReactorApiTargetArch)' == '' and '$(RuntimeIdentifier)' == 'win-x64'">x64</_ReactorApiTargetArch>
+    <_ReactorApiTargetArch Condition="'$(_ReactorApiTargetArch)' == '' and '$(RuntimeIdentifier)' == 'win-arm64'">arm64</_ReactorApiTargetArch>
+    <_ReactorApiTargetArch Condition="'$(_ReactorApiTargetArch)' == ''">$(_ReactorApiHostArch)</_ReactorApiTargetArch>
+  </PropertyGroup>
   <Target Name="EmitReactorApiTxt"
           AfterTargets="Build"
-          Condition="'$(SkipReactorApiGen)' != 'true' and '$(RuntimeIdentifier)' == ''">
+          Condition="'$(SkipReactorApiGen)' != 'true' and '$(_ReactorApiTargetArch)' == '$(_ReactorApiHostArch)'">
     <Exec Command="&quot;$(TargetDir)$(AssemblyName).exe&quot; &quot;$(MSBuildThisFileDirectory)..\..&quot;"
           ConsoleToMSBuild="true"
           IgnoreExitCode="false" />
