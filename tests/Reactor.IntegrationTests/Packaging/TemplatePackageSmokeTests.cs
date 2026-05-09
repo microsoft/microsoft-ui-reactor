@@ -502,12 +502,12 @@ public sealed class TemplatePackageSmokeTestFixture : IDisposable
         CommandEnvironment = TemplatePackageSmokeTests.CreateCommandEnvironment(dotnetCliHomeDir, nugetHttpCacheDir);
 
         TemplatePackageSmokeTests.RunDotnet(
-            $"pack \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" --no-build --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
+            $"pack \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
             RepoRoot,
             CommandEnvironment,
             timeoutMs: 300_000);
         TemplatePackageSmokeTests.RunDotnet(
-            $"pack \"{Path.Combine(RepoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" --no-build --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion} -p:MicrosoftUIReactorVersion={PackageVersion} -p:Platform=AnyCPU",
+            $"pack \"{Path.Combine(RepoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion} -p:MicrosoftUIReactorVersion={PackageVersion} -p:Platform=AnyCPU",
             RepoRoot,
             CommandEnvironment,
             timeoutMs: 180_000);
