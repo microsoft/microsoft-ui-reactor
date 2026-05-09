@@ -38,14 +38,8 @@
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .btn-primary { background: #0C8CE9; color: #FFF; }
     .btn-primary:hover:not(:disabled) { background: #0A7BD4; }
-    .btn-primary.active-state { background: #059669; }
     .btn-secondary { background: #ECEEF2; color: #030213; }
     .btn-secondary:hover:not(:disabled) { background: #DDDFE5; }
-    .btn-secondary.active-state { background: #D1FAE5; color: #065F46; }
-    .btn .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-    .btn .status-dot.green { background: #12B76A; }
-    .btn .status-dot.pulse { animation: pulse 1.5s ease-in-out infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
     .btn-icon { width: 12px; height: 12px; flex-shrink: 0; }
 
     .hidden { display: none; }
@@ -102,15 +96,13 @@
   <div style="padding: 0 8px 0;">
     <div class="btn-row">
       <button class="btn btn-primary" id="generate-btn" onclick="generate()" disabled>
-        <span id="generate-dot" class="status-dot" style="display:none"></span>
-        <svg class="btn-icon" id="generate-icon" viewBox="0 0 16 16" fill="currentColor">
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="currentColor">
           <path d="M8 0L9.41 5.14L14.15 3.85L10.83 7.99L16 8L10.83 8.01L14.15 12.15L9.41 10.86L8 16L6.59 10.86L1.85 12.15L5.17 8.01L0 8L5.17 7.99L1.85 3.85L6.59 5.14L8 0Z"/>
         </svg>
         <span id="generate-label">Generate</span>
       </button>
       <button class="btn btn-secondary" id="run-btn" onclick="copyRunCmd()" disabled title="Copy dotnet watch command">
-        <span id="run-dot" class="status-dot" style="display:none"></span>
-        <svg class="btn-icon" id="run-icon" viewBox="0 0 16 16" fill="currentColor">
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="currentColor">
           <path d="M4.5 2.5C4.5 2.1 4.72 1.93 5.08 2.14L13.08 7.14C13.44 7.36 13.44 7.64 13.08 7.86L5.08 12.86C4.72 13.07 4.5 12.9 4.5 12.5V2.5Z"/>
         </svg>
         <span id="run-label">Run</span>
@@ -123,8 +115,6 @@
   <script>
     // ─── State ───────────────────────────────────────────────────────────────
     var frameInfo = null;
-    var generatedState = false;
-    var runningState = false;
     var existingMode = false;
 
     // ─── Frame tracking ──────────────────────────────────────────────────────
@@ -161,9 +151,7 @@
       document.getElementById('toggle-existing').className = 'toggle-text' + (existingMode ? ' active' : '');
       document.getElementById('panel-new').className = existingMode ? 'hidden' : '';
       document.getElementById('panel-existing').className = existingMode ? '' : 'hidden';
-      generatedState = false;
-      runningState = false;
-      updateButtonStates();
+      document.getElementById('generate-label').textContent = existingMode ? 'Re-generate' : 'Generate';
       updateCommands();
     }
 
@@ -175,6 +163,7 @@
       document.getElementById('panel-new').className = 'hidden';
       document.getElementById('panel-existing').className = '';
       document.getElementById('project-path').value = csproj;
+      document.getElementById('generate-label').textContent = 'Re-generate';
       updateCommands();
     }
 
@@ -208,44 +197,6 @@
         return name + '\\' + name + '.csproj';
       }
       return getProjectPath();
-    }
-
-    // ─── Button state management ────────────────────────────────────────────
-    function updateButtonStates() {
-      var genBtn = document.getElementById('generate-btn');
-      var genDot = document.getElementById('generate-dot');
-      var genIcon = document.getElementById('generate-icon');
-      var genLabel = document.getElementById('generate-label');
-      var runBtn = document.getElementById('run-btn');
-      var runDot = document.getElementById('run-dot');
-      var runIcon = document.getElementById('run-icon');
-      var runLabel = document.getElementById('run-label');
-
-      if (generatedState) {
-        genDot.style.display = 'inline-block';
-        genDot.className = 'status-dot green pulse';
-        genIcon.style.display = 'none';
-        genLabel.textContent = 'Generating...';
-        genBtn.className = 'btn btn-primary active-state';
-      } else {
-        genDot.style.display = 'none';
-        genIcon.style.display = '';
-        genLabel.textContent = existingMode ? 'Re-generate' : 'Generate';
-        genBtn.className = 'btn btn-primary';
-      }
-
-      if (runningState) {
-        runDot.style.display = 'inline-block';
-        runDot.className = 'status-dot green';
-        runIcon.style.display = 'none';
-        runLabel.textContent = 'Running';
-        runBtn.className = 'btn btn-secondary active-state';
-      } else {
-        runDot.style.display = 'none';
-        runIcon.style.display = '';
-        runLabel.textContent = 'Run';
-        runBtn.className = 'btn btn-secondary';
-      }
     }
 
     // ─── Generate ────────────────────────────────────────────────────────────
@@ -284,14 +235,13 @@
 
       var cmd = "copilot -p '" + prompt.replace(/'/g, "''") + "'";
       copyToClipboard(cmd);
-      generatedState = true;
 
       if (isNewProject()) {
         setExistingMode(csproj);
-        generatedState = true;
       }
 
-      updateButtonStates();
+      // Update button label for existing mode
+      document.getElementById('generate-label').textContent = existingMode ? 'Re-generate' : 'Generate';
       showToast('Copied — paste in terminal');
     }
 
@@ -299,8 +249,6 @@
       var csproj = getCsprojPath();
       if (csproj) {
         copyToClipboard('dotnet watch run --project ' + csproj);
-        runningState = true;
-        updateButtonStates();
         showToast('Copied — paste in terminal');
       }
     }
