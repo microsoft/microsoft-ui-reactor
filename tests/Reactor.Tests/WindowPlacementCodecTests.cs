@@ -95,4 +95,94 @@ public class WindowPlacementCodecTests
         Assert.Equal(a, b);
         Assert.NotEqual(a, c);
     }
+
+    // -- IsPlausiblePlacement (W-5 hardening) ----------------------------------
+
+    private static WindowPlacementCodec.WINDOWPLACEMENT MakePlausible() => new()
+    {
+        length = 44,
+        flags = 0,
+        showCmd = 1, // SW_NORMAL
+        ptMinPosition = new WindowPlacementCodec.POINT { X = -1, Y = -1 },
+        ptMaxPosition = new WindowPlacementCodec.POINT { X = -1, Y = -1 },
+        rcNormalPosition = new WindowPlacementCodec.RECT { Left = 100, Top = 100, Right = 1100, Bottom = 800 },
+    };
+
+    [Fact]
+    public void IsPlausible_Accepts_Reasonable_Placement()
+    {
+        Assert.True(WindowPlacementCodec.IsPlausiblePlacement(MakePlausible()));
+    }
+
+    [Fact]
+    public void IsPlausible_Rejects_Zero_Or_Negative_Width()
+    {
+        var p = MakePlausible();
+        p.rcNormalPosition.Right = p.rcNormalPosition.Left; // width = 0
+        Assert.False(WindowPlacementCodec.IsPlausiblePlacement(p));
+
+        p = MakePlausible();
+        p.rcNormalPosition.Right = p.rcNormalPosition.Left - 50; // width < 0
+        Assert.False(WindowPlacementCodec.IsPlausiblePlacement(p));
+    }
+
+    [Fact]
+    public void IsPlausible_Rejects_Zero_Or_Negative_Height()
+    {
+        var p = MakePlausible();
+        p.rcNormalPosition.Bottom = p.rcNormalPosition.Top;
+        Assert.False(WindowPlacementCodec.IsPlausiblePlacement(p));
+    }
+
+    [Fact]
+    public void IsPlausible_Rejects_Oversized_Rect()
+    {
+        var p = MakePlausible();
+        p.rcNormalPosition.Right = p.rcNormalPosition.Left + WindowPlacementCodec.MaxPlausibleDimensionPx + 1;
+        Assert.False(WindowPlacementCodec.IsPlausiblePlacement(p));
+    }
+
+    [Fact]
+    public void IsPlausible_Accepts_Negative_Coordinates_Within_Sanity_Box()
+    {
+        // Secondary monitor to the left of / above the primary is normal.
+        var p = MakePlausible();
+        p.rcNormalPosition.Left = -1500;
+        p.rcNormalPosition.Top = -200;
+        p.rcNormalPosition.Right = -100;
+        p.rcNormalPosition.Bottom = 600;
+        Assert.True(WindowPlacementCodec.IsPlausiblePlacement(p));
+    }
+
+    [Fact]
+    public void IsPlausible_Rejects_Coordinates_Outside_Sanity_Box()
+    {
+        var p = MakePlausible();
+        p.rcNormalPosition.Left = -(WindowPlacementCodec.MaxPlausibleCoordinateMagnitude + 1);
+        Assert.False(WindowPlacementCodec.IsPlausiblePlacement(p));
+
+        p = MakePlausible();
+        p.rcNormalPosition.Right = WindowPlacementCodec.MaxPlausibleCoordinateMagnitude + 1;
+        Assert.False(WindowPlacementCodec.IsPlausiblePlacement(p));
+    }
+
+    [Fact]
+    public void IsPlausible_Rejects_Bogus_ShowCmd()
+    {
+        var p = MakePlausible();
+        p.showCmd = 7777;
+        Assert.False(WindowPlacementCodec.IsPlausiblePlacement(p));
+    }
+
+    [Fact]
+    public void IsPlausible_Accepts_Documented_ShowCmd_Values()
+    {
+        // SW_NORMAL=1, SW_SHOWMINIMIZED=2, SW_MAXIMIZE=3, SW_SHOW=5, SW_RESTORE=9.
+        foreach (var sw in new[] { 1, 2, 3, 5, 9 })
+        {
+            var p = MakePlausible();
+            p.showCmd = sw;
+            Assert.True(WindowPlacementCodec.IsPlausiblePlacement(p), $"showCmd={sw} should be accepted");
+        }
+    }
 }

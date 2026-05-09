@@ -153,6 +153,24 @@ internal static class WindowPlacementCodec
                 var placement = Marshal.PtrToStructure<WINDOWPLACEMENT>(buffer);
                 placement.length = structSize;
 
+                // W-5 hardening: sanity-bound the decoded placement before we
+                // hand it to SetWindowPlacement. Same-IL adversaries (or just
+                // a corrupted save from an earlier crash) could plant negative
+                // widths, oversized rects, or window-state values outside the
+                // SW_* enum. The shell does some clamping of its own, but
+                // rejecting implausible payloads here means we fall through to
+                // the framework default placement instead of asking the OS to
+                // best-effort-fix our junk.
+                if (!IsPlausiblePlacement(placement))
+                {
+                    Debug.WriteLine(
+                        $"[Reactor] WindowPlacementCodec: rejecting implausible placement " +
+                        $"(rect={placement.rcNormalPosition.Left},{placement.rcNormalPosition.Top}," +
+                        $"{placement.rcNormalPosition.Right},{placement.rcNormalPosition.Bottom} " +
+                        $"showCmd={placement.showCmd}); falling back to default.");
+                    return false;
+                }
+
                 // Match WinUIEx semantics: a window saved minimized that was
                 // previously maximized restores to maximized; otherwise force
                 // SW_NORMAL so we never come back as a stuck minimized icon.
@@ -178,6 +196,67 @@ internal static class WindowPlacementCodec
             return false;
         }
     }
+
+    /// <summary>
+    /// Sanity-bounds for a decoded <see cref="WINDOWPLACEMENT"/>. Reject
+    /// payloads that almost certainly came from corruption or tampering before
+    /// they reach <c>SetWindowPlacement</c>. Specifically:
+    /// <list type="bullet">
+    ///   <item><description><c>showCmd</c> must be one of the SW_* values we
+    ///   know how to round-trip (NORMAL, MINIMIZED, MAXIMIZE).</description></item>
+    ///   <item><description><c>rcNormalPosition</c> must have positive width
+    ///   and height not exceeding <c>MaxPlausibleDimensionPx</c>; the rect
+    ///   itself must lie within the virtual-screen sanity box.</description></item>
+    /// </list>
+    /// Bounds are deliberately loose — we want to accept legitimate setups
+    /// (large multi-monitor rigs, negative coordinates from secondary monitors
+    /// to the left of the primary) and only reject obvious garbage.
+    /// </summary>
+    /// <remarks>W-5 hardening; threat model 2026-05-08.</remarks>
+    internal static bool IsPlausiblePlacement(WINDOWPLACEMENT p)
+    {
+        // Cover the SW_* values Capture writes plus SW_RESTORE / SW_SHOW so a
+        // hand-edited file using documented constants still loads.
+        if (p.showCmd != SW_NORMAL && p.showCmd != SW_SHOWMINIMIZED && p.showCmd != SW_MAXIMIZE
+            && p.showCmd != 5 /* SW_SHOW */ && p.showCmd != 9 /* SW_RESTORE */)
+            return false;
+
+        var r = p.rcNormalPosition;
+        long width = (long)r.Right - r.Left;
+        long height = (long)r.Bottom - r.Top;
+        if (width <= 0 || height <= 0) return false;
+        if (width > MaxPlausibleDimensionPx || height > MaxPlausibleDimensionPx) return false;
+
+        if (!IsPlausibleCoordinate(r.Left) || !IsPlausibleCoordinate(r.Top) ||
+            !IsPlausibleCoordinate(r.Right) || !IsPlausibleCoordinate(r.Bottom))
+            return false;
+
+        // Min/max position points are advisory; only sanity-check ordinate
+        // ranges so a bogus value can't push the window into oblivion.
+        if (!IsPlausibleCoordinate(p.ptMinPosition.X) || !IsPlausibleCoordinate(p.ptMinPosition.Y) ||
+            !IsPlausibleCoordinate(p.ptMaxPosition.X) || !IsPlausibleCoordinate(p.ptMaxPosition.Y))
+            return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Largest single-axis virtual-screen extent we'll accept on restore.
+    /// 32768 covers any plausible multi-monitor setup; values past that almost
+    /// certainly indicate corruption or tampering.
+    /// </summary>
+    internal const int MaxPlausibleDimensionPx = 32768;
+
+    /// <summary>
+    /// Largest absolute coordinate magnitude we'll accept on restore. Negative
+    /// values are legal (monitors to the left of / above the primary), but
+    /// values past 65536 in either direction are not how Windows lays out
+    /// real displays.
+    /// </summary>
+    internal const int MaxPlausibleCoordinateMagnitude = 65536;
+
+    private static bool IsPlausibleCoordinate(int v)
+        => v >= -MaxPlausibleCoordinateMagnitude && v <= MaxPlausibleCoordinateMagnitude;
 }
 
 /// <summary>

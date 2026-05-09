@@ -173,14 +173,36 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
 
     private static uint GetDpiForMonitorSafe(TrayIconComInterop.POINT pt)
     {
+        // W-9: any silent fallback to 96 DPI is a flyout-sizing bug on
+        // hi-DPI displays — Debug.WriteLine the exact branch we took so a
+        // developer chasing a too-small flyout has somewhere to look.
         try
         {
             var mon = MonitorFromPoint(new POINT { x = pt.x, y = pt.y }, MONITOR_DEFAULTTONEAREST);
-            if (mon != 0 && GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, out uint dx, out _) == 0)
-                return dx == 0 ? 96 : dx;
+            if (mon == 0)
+            {
+                Debug.WriteLine($"[Reactor] TrayFlyout: MonitorFromPoint returned 0 at ({pt.x},{pt.y}); falling back to 96 DPI.");
+                return 96;
+            }
+
+            int hr = GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, out uint dx, out _);
+            if (hr != 0)
+            {
+                Debug.WriteLine($"[Reactor] TrayFlyout: GetDpiForMonitor returned hr=0x{hr:X8}; falling back to 96 DPI.");
+                return 96;
+            }
+            if (dx == 0)
+            {
+                Debug.WriteLine("[Reactor] TrayFlyout: GetDpiForMonitor returned dpiX=0; falling back to 96 DPI.");
+                return 96;
+            }
+            return dx;
         }
-        catch (Exception ex) { Debug.WriteLine($"[Reactor] GetDpiForMonitor failed: {ex.Message}"); }
-        return 96;
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Reactor] TrayFlyout: GetDpiForMonitor threw {ex.GetType().Name}: {ex.Message}; falling back to 96 DPI.");
+            return 96;
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]

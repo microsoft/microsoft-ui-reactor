@@ -216,4 +216,142 @@ public class JumpListStateTests
         }
         finally { JumpList.ResetForTests(); }
     }
+
+    // -- EncodeArguments / EncodeArgument (W-2 hardening) -----------------------
+    //
+    // The spec is `CommandLineToArgvW`: the same parser Reactor.Cli (and any other
+    // process the shell re-launches) consumes. Tests assert round-trip — encode
+    // then split via the OS parser, expect the original sequence. On non-Windows
+    // CI the round-trip uses a managed mirror of the same algorithm.
+
+    [Fact]
+    public void EncodeArgument_Plain_Token_Is_Unquoted()
+    {
+        Assert.Equal("simple", JumpListItem.EncodeArgument("simple"));
+    }
+
+    [Fact]
+    public void EncodeArgument_Wraps_Whitespace()
+    {
+        Assert.Equal("\"hello world\"", JumpListItem.EncodeArgument("hello world"));
+    }
+
+    [Fact]
+    public void EncodeArgument_Escapes_Embedded_Quote()
+    {
+        // foo"bar  →  "foo\"bar"
+        Assert.Equal("\"foo\\\"bar\"", JumpListItem.EncodeArgument("foo\"bar"));
+    }
+
+    [Fact]
+    public void EncodeArgument_Plain_Trailing_Backslashes_Need_No_Quoting()
+    {
+        // Trailing backslashes only need the "double them" rule when the value
+        // is already being quoted. A bare `foo\\` round-trips through
+        // CommandLineToArgvW as itself.
+        Assert.Equal("foo\\\\", JumpListItem.EncodeArgument("foo\\\\"));
+    }
+
+    [Fact]
+    public void EncodeArgument_Doubles_Trailing_Backslashes_Before_Closing_Quote()
+    {
+        // When the value already needs quoting (has whitespace), trailing
+        // backslashes must be doubled so the parser does not consume the
+        // closing quote as escaped: input "foo \\"  →  "\"foo \\\\\\\\\""
+        // i.e. 2 trailing backslashes inside the value become 4 backslashes
+        // inside the encoded form.
+        Assert.Equal("\"foo \\\\\\\\\"", JumpListItem.EncodeArgument("foo \\\\"));
+    }
+
+    [Fact]
+    public void EncodeArgument_Preserves_Internal_Backslashes_Without_Quotes()
+    {
+        Assert.Equal("\"a\\b c\"", JumpListItem.EncodeArgument("a\\b c"));
+    }
+
+    [Fact]
+    public void EncodeArguments_Joins_With_Single_Spaces()
+    {
+        var encoded = JumpListItem.EncodeArguments(new[] { "open", "C:\\Users\\Demo File.txt" });
+        Assert.Equal("open \"C:\\Users\\Demo File.txt\"", encoded);
+    }
+
+    [Fact]
+    public void EncodeArguments_RoundTrips_Through_Argv_Parser()
+    {
+        var input = new[] { "open", "C:\\path with spaces\\file.txt", "/flag", "value with \"quotes\"" };
+        var encoded = JumpListItem.EncodeArguments(input);
+        var decoded = SplitCommandLine(encoded);
+        Assert.Equal(input, decoded);
+    }
+
+    [Fact]
+    public void EncodeArguments_Throws_On_Null_Element()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            JumpListItem.EncodeArguments(new string[] { "ok", null! }));
+    }
+
+    [Fact]
+    public void ForCommandLine_Builds_Encoded_Arguments()
+    {
+        var item = JumpListItem.ForCommandLine(
+            "Open Project",
+            new[] { "open", "C:\\Code\\Sample Project" });
+        Assert.Equal("Open Project", item.Title);
+        Assert.Equal("open \"C:\\Code\\Sample Project\"", item.Arguments);
+    }
+
+    /// <summary>
+    /// Managed mirror of <c>CommandLineToArgvW</c>. We don't P/Invoke into the
+    /// real one in tests — keeps the suite cross-platform — but the parsing
+    /// rules below match the documented MSVC behaviour and the actual shell
+    /// parser. (The encoder under test was written to satisfy these rules.)
+    /// </summary>
+    private static string[] SplitCommandLine(string commandLine)
+    {
+        var args = new global::System.Collections.Generic.List<string>();
+        var current = new global::System.Text.StringBuilder();
+        bool inQuotes = false;
+        int i = 0;
+        while (i < commandLine.Length)
+        {
+            var c = commandLine[i];
+            if (c == '\\')
+            {
+                int slashes = 0;
+                while (i < commandLine.Length && commandLine[i] == '\\') { slashes++; i++; }
+                if (i < commandLine.Length && commandLine[i] == '"')
+                {
+                    current.Append('\\', slashes / 2);
+                    if (slashes % 2 == 0) { inQuotes = !inQuotes; }
+                    else { current.Append('"'); }
+                    i++;
+                }
+                else
+                {
+                    current.Append('\\', slashes);
+                }
+            }
+            else if (c == '"')
+            {
+                inQuotes = !inQuotes;
+                i++;
+            }
+            else if (!inQuotes && (c == ' ' || c == '\t'))
+            {
+                args.Add(current.ToString());
+                current.Clear();
+                while (i < commandLine.Length && (commandLine[i] == ' ' || commandLine[i] == '\t')) i++;
+            }
+            else
+            {
+                current.Append(c);
+                i++;
+            }
+        }
+        if (current.Length > 0 || (commandLine.Length > 0 && commandLine[commandLine.Length - 1] != ' ' && args.Count == 0))
+            args.Add(current.ToString());
+        return args.ToArray();
+    }
 }

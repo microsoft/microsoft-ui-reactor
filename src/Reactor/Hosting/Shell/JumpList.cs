@@ -69,6 +69,123 @@ public sealed record JumpListItem(
             Icon: icon,
             GroupCategory: groupCategory);
     }
+
+    /// <summary>
+    /// Build a jump-list entry whose <see cref="Arguments"/> string is
+    /// tokenized: each element of <paramref name="arguments"/> becomes one
+    /// argv slot when the launched process parses its command line via
+    /// <c>CommandLineToArgvW</c>. Values containing whitespace, quotes, or
+    /// backslashes are escaped so a malicious value can't break out into a
+    /// neighbouring argument.
+    /// <para>Use this factory whenever the arguments include data that did
+    /// not originate from a string literal in your source code (deep-link
+    /// payloads, file paths, user-typed identifiers). The raw-string
+    /// <see cref="JumpListItem(string, string, JumpListItemKind, string?, WindowIcon?, string?)"/>
+    /// constructor and <see cref="ForUri(string, string, string?, WindowIcon?, string?)"/>
+    /// are still appropriate when the caller has already produced a
+    /// well-formed deep-link URI. (spec 036 §11.3 security checklist)</para>
+    /// </summary>
+    public static JumpListItem ForCommandLine(
+        string title,
+        IEnumerable<string> arguments,
+        string? description = null,
+        WindowIcon? icon = null,
+        string? groupCategory = null)
+    {
+        ArgumentNullException.ThrowIfNull(title);
+        ArgumentNullException.ThrowIfNull(arguments);
+        return new JumpListItem(
+            Title: title,
+            Arguments: EncodeArguments(arguments),
+            Kind: groupCategory is null ? JumpListItemKind.Task : JumpListItemKind.Custom,
+            Description: description,
+            Icon: icon,
+            GroupCategory: groupCategory);
+    }
+
+    /// <summary>
+    /// Encode a sequence of argv-style argument values as a single command-line
+    /// string compatible with <c>CommandLineToArgvW</c>. Whitespace, quotes,
+    /// and trailing-backslash sequences are quoted/escaped per the documented
+    /// MSVC parsing rules so that round-tripping the result through the OS
+    /// command-line parser yields back the original sequence.
+    /// </summary>
+    /// <remarks>
+    /// Useful directly for jump-list entries (see <see cref="ForCommandLine"/>),
+    /// thumbnail-toolbar buttons, and any other surface where an argument
+    /// string is handed to the shell for re-launch. Reactor's own CLI parser
+    /// (<c>Reactor.Cli</c>) consumes <c>CommandLineToArgvW</c>-encoded input,
+    /// so encoded strings round-trip without further escaping.
+    /// </remarks>
+    public static string EncodeArguments(IEnumerable<string> arguments)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+        var sb = new global::System.Text.StringBuilder();
+        bool first = true;
+        foreach (var arg in arguments)
+        {
+            if (arg is null)
+                throw new ArgumentException("Argument values must be non-null.", nameof(arguments));
+            if (!first) sb.Append(' ');
+            first = false;
+            EncodeOneArgument(sb, arg);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Encode a single argv value per <c>CommandLineToArgvW</c> rules.
+    /// Public so callers building command lines piecewise can reuse the same
+    /// escaper Reactor uses internally for jump-list entries.
+    /// </summary>
+    public static string EncodeArgument(string argument)
+    {
+        ArgumentNullException.ThrowIfNull(argument);
+        var sb = new global::System.Text.StringBuilder(argument.Length + 2);
+        EncodeOneArgument(sb, argument);
+        return sb.ToString();
+    }
+
+    private static void EncodeOneArgument(global::System.Text.StringBuilder sb, string arg)
+    {
+        // CommandLineToArgvW parsing rules:
+        //  - 2n backslashes followed by a `"` produce n backslashes + start/end quote
+        //  - 2n+1 backslashes followed by a `"` produce n backslashes + literal quote
+        //  - Backslashes not followed by `"` are literal
+        // No special chars → emit as-is (saves a pair of quotes in the common case).
+        if (arg.Length > 0 && arg.IndexOfAny(s_argvSpecialChars) < 0)
+        {
+            sb.Append(arg);
+            return;
+        }
+
+        sb.Append('"');
+        int pendingBackslashes = 0;
+        foreach (var c in arg)
+        {
+            if (c == '\\')
+            {
+                pendingBackslashes++;
+            }
+            else if (c == '"')
+            {
+                // Each backslash before a `"` must be doubled, then the `"` itself escaped.
+                sb.Append('\\', pendingBackslashes * 2 + 1);
+                sb.Append('"');
+                pendingBackslashes = 0;
+            }
+            else
+            {
+                if (pendingBackslashes > 0) { sb.Append('\\', pendingBackslashes); pendingBackslashes = 0; }
+                sb.Append(c);
+            }
+        }
+        // Trailing backslashes immediately before the closing quote must be doubled.
+        if (pendingBackslashes > 0) sb.Append('\\', pendingBackslashes * 2);
+        sb.Append('"');
+    }
+
+    private static readonly char[] s_argvSpecialChars = { ' ', '\t', '\n', '\v', '"' };
 }
 
 /// <summary>

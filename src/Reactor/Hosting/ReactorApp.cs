@@ -981,19 +981,12 @@ public static class ReactorApp
                     ReactorApp.WindowClosed -= onClosed;
                 };
 
-                // windows.open factory — same allowlist gate as switchComponent
-                // so loopback callers cannot spawn arbitrary Component subclasses.
-                // (spec 036 §10 / §0.5 security checklist)
-                string? OpenWindowByComponentNameCore(WindowSpec spec, string componentName)
+                // windows.open factory. The allowlist gate is enforced by
+                // DevtoolsTools.Register_WindowsOpen before this fires (W-3
+                // hardening); here we just resolve the type and open the
+                // window. (spec 036 §10 / §0.5 security checklist)
+                string? OpenWindowByAllowlistedComponentCore(WindowSpec spec, string componentName)
                 {
-                    var allowed = FindAllComponentNames();
-                    bool ok = false;
-                    foreach (var n in allowed)
-                    {
-                        if (string.Equals(n, componentName, StringComparison.OrdinalIgnoreCase)) { ok = true; break; }
-                    }
-                    if (!ok) return null;
-
                     var type = FindComponentType(componentName);
                     if (type is null) return null;
 
@@ -1011,7 +1004,7 @@ public static class ReactorApp
                     RequestShutdown = () => RequestDevtoolsShutdown(mcp, host),
                     Windows = windows,
                     Nodes = nodes,
-                    OpenWindowByComponentName = OpenWindowByComponentNameCore,
+                    OpenWindowByAllowlistedComponent = OpenWindowByAllowlistedComponentCore,
                 });
                 DevtoolsUiaTools.RegisterUiaTools(mcp, nodes, windows);
                 DevtoolsFireTool.Register(mcp, () => host.RootComponent);

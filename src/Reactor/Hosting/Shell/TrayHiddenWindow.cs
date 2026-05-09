@@ -17,6 +17,18 @@ namespace Microsoft.UI.Reactor.Hosting.Shell;
 /// on the captured <see cref="ReactorApp.UIDispatcher"/>; tray icon callbacks
 /// arrive in the WndProc thread and are forwarded to the owning
 /// <see cref="ReactorTrayIcon"/> on the UI dispatcher.</para>
+/// <para><b>Security — tray callbacks can be forged:</b> any process running
+/// at the same Integrity Level as this app can enumerate the message-only
+/// HWND and <c>PostMessage</c> a synthetic <c>WM_APP+1</c> with arbitrary
+/// <c>wParam</c>/<c>lParam</c>. The framework dispatches that to the owning
+/// tray icon's click handler on the UI thread without being able to verify
+/// the source. (W-6, threat model 2026-05-08.)</para>
+/// <para>Implication for app code: tray click handlers should perform
+/// reversible UI actions only — open a window, toggle state, show a flyout.
+/// Anything privileged (launching an elevated child, mutating shared state,
+/// invoking a payment / destructive operation) must require a deliberate
+/// in-app confirmation step rather than relying on the click as proof of
+/// user intent.</para>
 /// </remarks>
 internal sealed class TrayHiddenWindow : IDisposable
 {

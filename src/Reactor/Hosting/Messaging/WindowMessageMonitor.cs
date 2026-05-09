@@ -51,6 +51,10 @@ internal sealed class WindowMessageMonitor : IDisposable
 
     // Per-process monotonic subclass id so concurrent monitors on different
     // windows never collide on COMCTL32's (HWND, SubclassProc, idSubclass) key.
+    // Counter is unbounded; >2^31 monitors over a process lifetime would wrap
+    // — implausible for a desktop session, but Debug.Assert below would catch
+    // a regression that creates monitors in a tight loop without disposing.
+    private const nuint SubclassIdMaxBeforeWarn = (nuint)int.MaxValue;
     private static nuint s_nextSubclassId = 1001;
     private static readonly object s_subclassIdLock = new();
 
@@ -64,6 +68,8 @@ internal sealed class WindowMessageMonitor : IDisposable
         lock (s_subclassIdLock)
         {
             _subclassId = s_nextSubclassId++;
+            Debug.Assert(s_nextSubclassId < SubclassIdMaxBeforeWarn,
+                "WindowMessageMonitor subclass-id counter is approaching int.MaxValue; check for monitor leaks.");
         }
     }
 
@@ -104,8 +110,18 @@ internal sealed class WindowMessageMonitor : IDisposable
         if (_subclassed) return;
         if (_disposed) return;
 
+        // Strong handle: COMCTL32's dwRefData slot is the *only* reference
+        // SubclassProcStatic dereferences on every WM_*. A weak handle would
+        // let the runtime recycle the same numeric handle id to an unrelated
+        // object after GC, at which point the static WndProc would resolve
+        // dwRefData to whatever now lives at that slot (the `is WindowMessageMonitor`
+        // cast catches type mismatches but not WMM-to-WMM recycling).
+        // Invariant: the strong handle is freed *only after* RemoveWindowSubclass
+        // returns successfully (see Dispose). The finalizer below relies on
+        // this — a strong root keeps the WMM rooted, so the finalizer can only
+        // run once Dispose has already cleared `_subclassed`.
         if (!_selfHandle.IsAllocated)
-            _selfHandle = GCHandle.Alloc(this, GCHandleType.Weak);
+            _selfHandle = GCHandle.Alloc(this, GCHandleType.Normal);
 
         // SetWindowSubclass takes a function pointer; we publish the static
         // [UnmanagedCallersOnly] WndProc via &SubclassProcStatic.
@@ -113,8 +129,10 @@ internal sealed class WindowMessageMonitor : IDisposable
         if (!ok)
         {
             // Comctl32 missing or HWND no longer valid — leave subclass off,
-            // monitor degrades to a no-op (no events ever fire).
+            // monitor degrades to a no-op (no events ever fire). Free the
+            // strong handle so we don't leak the WMM permanently.
             Debug.WriteLine($"[Reactor] WindowMessageMonitor: SetWindowSubclass failed for HWND {_hwnd:X}.");
+            _selfHandle.Free();
             return;
         }
         _subclassed = true;
@@ -160,6 +178,11 @@ internal sealed class WindowMessageMonitor : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        // Order matters: RemoveWindowSubclass *must* return before we Free the
+        // strong handle, otherwise COMCTL32 could dispatch one more WM_* through
+        // a stale dwRefData. SetWindowSubclass / RemoveWindowSubclass / WndProc
+        // all run on the same UI thread, so as long as Dispose itself is called
+        // on the UI thread, no concurrent dispatch races this teardown.
         unsafe
         {
             if (_subclassed)
@@ -176,21 +199,19 @@ internal sealed class WindowMessageMonitor : IDisposable
 
     ~WindowMessageMonitor()
     {
-        // Finalizer fallback — best effort. The subclass MUST come off before
-        // we free the GCHandle, or COMCTL32 will keep dispatching messages
-        // through SubclassProcStatic with a freed dwRefData and the static
-        // WndProc will dereference a stale handle (use-after-free).
-        unsafe
-        {
-            if (_subclassed)
-            {
-                try { RemoveWindowSubclass(_hwnd, &SubclassProcStatic, _subclassId); }
-                catch { /* best effort — HWND may already be destroyed */ }
-                _subclassed = false;
-            }
-        }
-        if (_selfHandle.IsAllocated)
-            _selfHandle.Free();
+        // With a strong GCHandle, the only way the finalizer can run is when
+        // Dispose has already freed the handle (which clears the strong root).
+        // That means by the time we get here, _subclassed is already false and
+        // the native subclass is gone. We deliberately do NOT call
+        // RemoveWindowSubclass here: the finalizer runs on the GC thread, but
+        // SetWindowSubclass / RemoveWindowSubclass are documented to be called
+        // on the thread that owns the HWND (the UI thread). A cross-thread
+        // RemoveWindowSubclass races against any in-flight WM_* dispatch on
+        // the UI thread.
+        // If you see this assertion fire, somebody constructed a WindowMessageMonitor,
+        // attached a subscriber, and never disposed it — fix that, don't suppress.
+        Debug.Assert(!_subclassed,
+            "WindowMessageMonitor finalized while still subclassed; Dispose() was missed.");
     }
 
     // ── COMCTL32 PInvokes ──────────────────────────────────────────────

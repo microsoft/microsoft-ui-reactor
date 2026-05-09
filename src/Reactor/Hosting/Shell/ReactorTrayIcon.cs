@@ -91,13 +91,29 @@ public sealed class ReactorTrayIcon : IDisposable
         }
     }
 
-    /// <summary>Fires on the UI thread when the user left-clicks the icon.</summary>
+    /// <summary>
+    /// Fires on the UI thread when the user left-clicks the icon.
+    /// <para><b>Security:</b> see <see cref="DoubleClick"/> remarks. Treat
+    /// click handlers as triggers for reversible UI actions only.</para>
+    /// </summary>
     public event EventHandler? Click;
 
-    /// <summary>Fires on the UI thread when the user double-clicks the icon.</summary>
+    /// <summary>
+    /// Fires on the UI thread when the user double-clicks the icon.
+    /// <para><b>Security — clicks are not authenticated:</b> the tray click
+    /// callback arrives as a Win32 <c>WM_APP+1</c> message that any process at
+    /// the same Integrity Level can synthesise via <c>PostMessage</c> to the
+    /// hidden tray window. Use click handlers for reversible UI actions only
+    /// (open a window, toggle state, show a flyout); gate any
+    /// privileged or destructive operation behind a deliberate in-app
+    /// confirmation step. (W-6, threat model 2026-05-08.)</para>
+    /// </summary>
     public event EventHandler? DoubleClick;
 
-    /// <summary>Fires on the UI thread when the user right-clicks the icon.</summary>
+    /// <summary>
+    /// Fires on the UI thread when the user right-clicks the icon.
+    /// <para><b>Security:</b> see <see cref="DoubleClick"/> remarks.</para>
+    /// </summary>
     public event EventHandler? RightClick;
 
     internal ReactorTrayIcon(TrayIconSpec spec)

@@ -37,13 +37,20 @@ internal static class DevtoolsTools
 
         /// <summary>
         /// Optional callback for the <c>windows.open</c> MCP tool (spec 036 §10).
-        /// Receives a <see cref="WindowSpec"/> and a component class name; the
-        /// implementation MUST validate the component name against the same
-        /// allowlist used by <see cref="SwitchComponent"/> before instantiating.
-        /// Returns the opened <see cref="ReactorWindow"/>'s id, or null if the
-        /// component name is rejected.
+        /// The component name has already been validated against
+        /// <see cref="GetComponents"/> by the tool layer before this fires —
+        /// the implementation only needs to resolve the type and open the
+        /// window. Returns the opened <see cref="ReactorWindow"/>'s id, or
+        /// <c>null</c> only on internal failures (e.g. type lookup miss
+        /// despite the name appearing in the allowlist).
         /// </summary>
-        public Func<WindowSpec, string, string?>? OpenWindowByComponentName { get; init; }
+        /// <remarks>
+        /// Allowlist enforcement lives in <see cref="DevtoolsTools.RegisterCore"/>
+        /// (next to the rest of the windows.open argument validation) so that a
+        /// host implementation cannot accidentally bypass the gate by forgetting
+        /// the lookup. (W-3 hardening; threat model 2026-05-08.)
+        /// </remarks>
+        public Func<WindowSpec, string, string?>? OpenWindowByAllowlistedComponent { get; init; }
 
         /// <summary>
         /// Optional enriched component descriptor lookup. When present, the
@@ -240,34 +247,78 @@ internal static class DevtoolsTools
                     "Lists active windows with their ids, titles, bounds, build tag, and the currently " +
                     "mounted Reactor component (per-window). The id is a stable handle — it does NOT " +
                     "reflect the window title, which changes on `switchComponent`. Scope selectors with " +
-                    "`window` when more than one is active.",
-                InputSchema: new { type = "object", properties = new { }, additionalProperties = false }),
-            _ => server.OnDispatcher(() =>
-            {
-                var current = ctx.GetCurrentComponent();
-                return new
+                    "`window` when more than one is active. " +
+                    "Pass `includeHwnd: true` to include raw native window handles; omitted by " +
+                    "default to keep HWNDs out of agent transcripts unless explicitly requested.",
+                InputSchema: new
                 {
-                    windows = ctx.Windows.Snapshot().Select(w => new
+                    type = "object",
+                    properties = new
                     {
-                        id = w.Id,
-                        title = w.Title,
-                        hwnd = w.Hwnd,
-                        bounds = new
+                        includeHwnd = new
                         {
-                            x = w.Bounds.X,
-                            y = w.Bounds.Y,
-                            width = w.Bounds.Width,
-                            height = w.Bounds.Height,
+                            type = "boolean",
+                            description = "Include raw HWND values in the response. Defaults to false (W-7).",
                         },
-                        isMain = w.IsMain,
-                        buildTag = w.BuildTag,
-                        // Only the main window reflects the component switch today;
-                        // secondary windows report null. Agents can cross-check
-                        // components.current against this value.
-                        currentComponent = w.IsMain ? current : null,
-                    }).ToArray(),
-                };
-            }));
+                    },
+                    additionalProperties = false,
+                }),
+            @params =>
+            {
+                // W-7: HWND opt-in. The token-holding caller is already
+                // authorised, but raw HWNDs in agent transcripts are easy to
+                // leak into logs. Default response shape excludes them.
+                var includeHwnd = ReadBool(@params, "includeHwnd") ?? false;
+                return server.OnDispatcher(() =>
+                {
+                    var current = ctx.GetCurrentComponent();
+                    return new
+                    {
+                        windows = ctx.Windows.Snapshot().Select(w =>
+                        {
+                            // Anonymous types can't be conditionally shaped, so
+                            // emit two structurally similar projections gated
+                            // on the opt-in flag. The non-hwnd shape is the
+                            // pre-W-7 shape minus that one field.
+                            return includeHwnd
+                                ? (object)new
+                                {
+                                    id = w.Id,
+                                    title = w.Title,
+                                    hwnd = w.Hwnd,
+                                    bounds = new
+                                    {
+                                        x = w.Bounds.X,
+                                        y = w.Bounds.Y,
+                                        width = w.Bounds.Width,
+                                        height = w.Bounds.Height,
+                                    },
+                                    isMain = w.IsMain,
+                                    buildTag = w.BuildTag,
+                                    // Only the main window reflects the component switch today;
+                                    // secondary windows report null. Agents can cross-check
+                                    // components.current against this value.
+                                    currentComponent = w.IsMain ? current : null,
+                                }
+                                : new
+                                {
+                                    id = w.Id,
+                                    title = w.Title,
+                                    bounds = new
+                                    {
+                                        x = w.Bounds.X,
+                                        y = w.Bounds.Y,
+                                        width = w.Bounds.Width,
+                                        height = w.Bounds.Height,
+                                    },
+                                    isMain = w.IsMain,
+                                    buildTag = w.BuildTag,
+                                    currentComponent = w.IsMain ? current : null,
+                                };
+                        }).ToArray(),
+                    };
+                });
+            });
     }
 
     // -- windows.list / activate / close / open (spec 036 §10) ------------------
@@ -438,11 +489,17 @@ internal static class DevtoolsTools
                 var component = ReadString(@params, "component")
                     ?? throw new McpToolException("windows.open requires a 'component' argument.",
                         JsonRpcErrorCodes.InvalidParams);
-                if (ctx.OpenWindowByComponentName is null)
+                if (ctx.OpenWindowByAllowlistedComponent is null)
                     throw new McpToolException(
                         "windows.open is not wired in this host.",
                         JsonRpcErrorCodes.ToolExecution,
                         new { code = "not-wired" });
+
+                // Allowlist gate (W-3): enforced framework-side, alongside the
+                // rest of the windows.open argument validation, so a host can't
+                // accidentally bypass it by misimplementing the callback. Same
+                // source-of-truth as the `components` and `switchComponent` tools.
+                EnsureComponentAllowlisted(ctx.GetComponents(), component);
 
                 var titleArg = ReadString(@params, "title");
                 var widthArg = ReadDouble(@params, "width");
@@ -467,22 +524,52 @@ internal static class DevtoolsTools
 
                 return server.OnDispatcher<object>(() =>
                 {
-                    var id = ctx.OpenWindowByComponentName(spec, component);
+                    var id = ctx.OpenWindowByAllowlistedComponent(spec, component);
                     if (id is null)
                         throw new McpToolException(
-                            $"Component '{component}' is not in the devtools allowlist.",
+                            $"Component '{component}' could not be resolved.",
                             JsonRpcErrorCodes.ToolExecution,
-                            new
-                            {
-                                code = "unknown-component",
-                                available = ctx.GetComponents().ToArray(),
-                            });
+                            new { code = "open-failed" });
                     return new { ok = true, id };
                 });
             });
     }
 
     // -- helpers -----------------------------------------------------------------
+
+    /// <summary>
+    /// W-3 hardening: enforce the windows.open allowlist using the same
+    /// source-of-truth (<c>GetComponents</c>) that the <c>components</c> and
+    /// <c>switchComponent</c> tools expose. Throws an
+    /// <see cref="McpToolException"/> shaped like the rest of the
+    /// invalid-input errors when <paramref name="component"/> is not in
+    /// <paramref name="allowed"/>.
+    /// </summary>
+    /// <remarks>
+    /// Lives at the framework layer rather than each host's
+    /// <c>OpenWindowByAllowlistedComponent</c> callback so a host cannot
+    /// silently weaken the gate by forgetting the lookup. Comparison is
+    /// ordinal-ignore-case to match the existing <c>switchComponent</c>
+    /// behaviour.
+    /// </remarks>
+    internal static void EnsureComponentAllowlisted(IReadOnlyList<string> allowed, string component)
+    {
+        ArgumentNullException.ThrowIfNull(allowed);
+        ArgumentNullException.ThrowIfNull(component);
+        for (int i = 0; i < allowed.Count; i++)
+        {
+            if (string.Equals(allowed[i], component, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+        throw new McpToolException(
+            $"Component '{component}' is not in the devtools allowlist.",
+            JsonRpcErrorCodes.ToolExecution,
+            new
+            {
+                code = "unknown-component",
+                available = allowed.ToArray(),
+            });
+    }
 
     internal static string? ReadString(JsonElement? args, string name)
     {
