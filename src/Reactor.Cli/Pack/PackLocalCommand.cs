@@ -40,19 +40,11 @@ public static class PackLocalCommand
         {
             try { File.Delete(stale); } catch { /* best effort */ }
         }
-
-        var psi = new ProcessStartInfo("dotnet")
+        foreach (var stale in Directory.EnumerateFiles(feed, $"Microsoft.UI.Reactor.ProjectTemplates.{version}.*nupkg"))
         {
-            WorkingDirectory = repoRoot,
-            UseShellExecute = false,
-        };
-        psi.ArgumentList.Add("pack");
-        psi.ArgumentList.Add(Path.Combine("src", "Reactor", "Reactor.csproj"));
-        psi.ArgumentList.Add("--nologo");
-        psi.ArgumentList.Add("-v:m");
-        psi.ArgumentList.Add($"-c:{configuration}");
-        psi.ArgumentList.Add($"-p:Version={version}");
-        psi.ArgumentList.Add($"-o:{feed}");
+            try { File.Delete(stale); } catch { /* best effort */ }
+        }
+
         // pack honors Platform-specific build outputs; pick host arch.
         var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture switch
         {
@@ -60,15 +52,26 @@ public static class PackLocalCommand
             System.Runtime.InteropServices.Architecture.X64 => "x64",
             _ => null,
         };
-        if (arch is not null) psi.ArgumentList.Add($"-p:Platform={arch}");
 
+        // 1. Framework — Microsoft.UI.Reactor.<version>.nupkg
         Console.WriteLine($"Packing Microsoft.UI.Reactor {version} → {feed}");
-        using var proc = Process.Start(psi)!;
-        proc.WaitForExit();
-        if (proc.ExitCode != 0)
+        var rc = RunPack(repoRoot, Path.Combine("src", "Reactor", "Reactor.csproj"), configuration, version, feed, arch);
+        if (rc != 0)
         {
             Console.Error.WriteLine("pack failed.");
-            return proc.ExitCode;
+            return rc;
+        }
+
+        // 2. Project templates — Microsoft.UI.Reactor.ProjectTemplates.<version>.nupkg.
+        // Powers `dotnet new reactorapp -n MyApp` against this clone. Templates pack
+        // is AnyCPU (no arch needed); the template's <PackageReference> resolves the
+        // matching framework version through this same feed.
+        Console.WriteLine($"Packing Microsoft.UI.Reactor.ProjectTemplates {version} → {feed}");
+        rc = RunPack(repoRoot, Path.Combine("tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj"), configuration, version, feed, arch: null);
+        if (rc != 0)
+        {
+            Console.Error.WriteLine("templates pack failed.");
+            return rc;
         }
 
         // Bust NuGet's HTTP cache for our local source so the new build is picked up
@@ -87,12 +90,42 @@ public static class PackLocalCommand
         }
         catch { /* non-fatal */ }
 
+        var templatesNupkg = Path.Combine(feed, $"Microsoft.UI.Reactor.ProjectTemplates.{version}.nupkg");
+
         Console.WriteLine();
         Console.WriteLine($"Done. Apps in this repo can now reference:");
         Console.WriteLine($"    #:package Microsoft.UI.Reactor@{version}");
         Console.WriteLine($"or in a .csproj:");
         Console.WriteLine($"    <PackageReference Include=\"Microsoft.UI.Reactor\" Version=\"{version}\" />");
+        Console.WriteLine();
+        Console.WriteLine($"To use `dotnet new reactorapp` against this feed:");
+        Console.WriteLine($"    dotnet new install \"{templatesNupkg}\"");
+        Console.WriteLine($"    # then, from anywhere inside this clone (so nuget.config applies):");
+        Console.WriteLine($"    dotnet new reactorapp -n MyApp");
+        Console.WriteLine($"Outside the clone, copy nuget.config to your project parent or add the absolute");
+        Console.WriteLine($"path '{feed}' as a NuGet source on your machine.");
         return 0;
+    }
+
+    static int RunPack(string repoRoot, string projectRelative, string configuration, string version, string feed, string? arch)
+    {
+        var psi = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = repoRoot,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add("pack");
+        psi.ArgumentList.Add(projectRelative);
+        psi.ArgumentList.Add("--nologo");
+        psi.ArgumentList.Add("-v:m");
+        psi.ArgumentList.Add($"-c:{configuration}");
+        psi.ArgumentList.Add($"-p:Version={version}");
+        psi.ArgumentList.Add($"-o:{feed}");
+        if (arch is not null) psi.ArgumentList.Add($"-p:Platform={arch}");
+
+        using var proc = Process.Start(psi)!;
+        proc.WaitForExit();
+        return proc.ExitCode;
     }
 
     static string? ParseFlag(string[] args, string name)
