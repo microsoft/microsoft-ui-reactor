@@ -1,0 +1,29 @@
+<Project>
+
+  <!--
+    Chain to the repo-root Directory.Build.props (centralizes
+    WindowsAppSDK version, etc.) — MSBuild stops walking up after the
+    first match, so we have to import the parent explicitly.
+  -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!--
+    Default <ApplicationIcon> for every sample project — gives File
+    Explorer / taskbar / Alt-Tab a real glyph instead of the generic
+    .NET console icon. Samples that ship their own .ico (chat,
+    demo-script-tool) set <ApplicationIcon> explicitly in their csproj
+    and override this default.
+
+    The path uses $(MSBuildThisFileDirectory) so it's stable regardless
+    of how deep under samples/ a csproj lives. WinUI.ico is the official
+    WinUI logo, copied from microsoft-ui-xaml-lift (MIT-licensed).
+
+    Library csprojs (OutputType=Library) inherit this too; the .NET SDK
+    silently ignores ApplicationIcon for non-executable outputs, so this
+    is harmless.
+  -->
+  <PropertyGroup>
+    <ApplicationIcon Condition="'$(ApplicationIcon)' == ''">$(MSBuildThisFileDirectory)Assets\WinUI.ico</ApplicationIcon>
+  </PropertyGroup>
+
+</Project>

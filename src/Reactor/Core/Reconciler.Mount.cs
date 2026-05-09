@@ -1170,6 +1170,7 @@ public sealed partial class Reconciler
             IsPaneToggleButtonVisible = tb.IsPaneToggleButtonVisible,
         };
         if (tb.Subtitle is not null) titleBar.Subtitle = tb.Subtitle;
+        if (tb.Icon is not null) titleBar.IconSource = ResolveIconSource(tb.Icon);
         if (tb.Content is not null) titleBar.Content = Mount(tb.Content, requestRerender);
         if (tb.RightHeader is not null) titleBar.RightHeader = Mount(tb.RightHeader, requestRerender);
         SetElementTag(titleBar, tb);
@@ -1180,7 +1181,7 @@ public sealed partial class Reconciler
         ApplySetters(tb.Setters, titleBar);
 
         // Register with the window for drag regions and caption buttons
-        if (Microsoft.UI.Reactor.ReactorApp.ActiveHost is { } host)
+        if (Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal is { } host)
         {
             host.Window.ExtendsContentIntoTitleBar = true;
             host.Window.SetTitleBar(titleBar);
@@ -1991,6 +1992,43 @@ public sealed partial class Reconciler
             FontFamily = Microsoft.UI.Xaml.Application.Current?.Resources["SymbolThemeFontFamily"] as Microsoft.UI.Xaml.Media.FontFamily
                          ?? new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons"),
         };
+    }
+
+    /// <summary>
+    /// Strongly-typed <see cref="IconData"/> → <see cref="WinUI.IconSource"/>
+    /// projection. Used by controls that expose an <c>IconSource</c> slot
+    /// (TitleBar, TabView, etc.). Returns null on unknown subtypes so the
+    /// caller can fall through to the string-glyph overload.
+    /// </summary>
+    internal static WinUI.IconSource? ResolveIconSource(IconData? iconData) => iconData switch
+    {
+        null => null,
+        SymbolIconData sym => ResolveIconSource(sym.Symbol),
+        FontIconData fi => new WinUI.FontIconSource
+        {
+            Glyph = fi.Glyph,
+            FontFamily = fi.FontFamily is null ? null! : WinRTCache.GetFontFamily(fi.FontFamily),
+            FontSize = fi.FontSize ?? double.NaN,
+        },
+        BitmapIconData bi => new WinUI.BitmapIconSource { UriSource = bi.Source, ShowAsMonochrome = bi.ShowAsMonochrome },
+        PathIconData pi => CreatePathIconSource(pi),
+        ImageIconData ii => new WinUI.ImageIconSource
+        {
+            ImageSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(ii.Source),
+        },
+        _ => null,
+    };
+
+    private static WinUI.PathIconSource? CreatePathIconSource(PathIconData pi)
+    {
+        var src = new WinUI.PathIconSource();
+        if (Microsoft.UI.Xaml.Markup.XamlReader.Load(
+            $"<Geometry xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>{pi.Data}</Geometry>")
+            is Microsoft.UI.Xaml.Media.Geometry geo)
+        {
+            src.Data = geo;
+        }
+        return src;
     }
 
     private static WinUI.FontIcon CreateFontIcon(FontIconData fi)

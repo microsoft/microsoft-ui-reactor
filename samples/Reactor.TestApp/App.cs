@@ -31,7 +31,7 @@ static class AppFlags
 
 // ─── Root application component ────────────────────────────────────────────────
 
-enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, LayoutCost }
+enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, LayoutCost, Windows }
 
 class DemoApp : Component
 {
@@ -68,6 +68,7 @@ class DemoApp : Component
             Tab.InputGestures => ("Input & Gestures", "counter"),
             Tab.SpecializedEditors => ("Specialized Editors", "propertygrid"),
             Tab.LayoutCost => ("Layout Cost", "perfstress"),
+            Tab.Windows => ("Windows & Tray", "navigation"),
             _ => (tab.ToString(), "counter")
         }).ToArray();
 
@@ -87,9 +88,16 @@ class DemoApp : Component
         var debugUI = UseObservable(AppFlags.DebugUI).Value;
         var outline = UseObservable(AppFlags.OutlineLayout).Value;
 
+        // The shared WinUI logo .ico is bundled at samples/Assets/WinUI.ico
+        // and is also wired into the EXE PE resources via the
+        // samples/Directory.Build.props default <ApplicationIcon>. Surfacing
+        // it through TitleBar.Icon shows the same glyph inside the custom
+        // title bar rather than only on the taskbar / Alt-Tab entry.
         return FlexColumn(
             (TitleBar("TestApp") with
             {
+                Icon = new ImageIconData(new Uri(global::System.IO.Path.Combine(
+                    global::System.AppContext.BaseDirectory, "Assets", "AppIcon.ico"))),
                 Content = HStack(8,
                     ComboBox(TabElements, (int)currentTab, i => setTab((Tab)i)).Width(240),
                     ComboBox(Languages, langIndex, setLangIndex),
@@ -138,6 +146,7 @@ class DemoApp : Component
                     Tab.InputGestures => Component<InputGesturesDemo>(),
                     Tab.SpecializedEditors => Component<SpecializedEditorsDemo>(),
                     Tab.LayoutCost => Component<LayoutCostDemo>(),
+                    Tab.Windows => Component<WindowsDemo>(),
                     _ => TextBlock("Select a tab")
                 }
             )

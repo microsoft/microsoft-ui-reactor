@@ -203,7 +203,7 @@ internal sealed class Harness
     public static async Task Render(int ms = 0)
     {
         // Wait for Reactor's render loop to go idle (all pending + re-renders done)
-        if (ReactorApp.ActiveHost is { } host)
+        if (ReactorApp.PrimaryWindow?.Host is { } host)
         {
             await host.WaitForIdleAsync();
         }

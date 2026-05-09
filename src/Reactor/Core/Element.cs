@@ -2247,6 +2247,15 @@ public record TitleBarElement(
     public Action? OnPaneToggleRequested { get; init; }
     public Element? Content { get; init; }
     public Element? RightHeader { get; init; }
+    /// <summary>
+    /// Icon shown in the title bar's leading slot. Mirrors WinUI 3
+    /// <c>TitleBar.IconSource</c>. Pass a <see cref="SymbolIconData"/> /
+    /// <see cref="FontIconData"/> for built-in glyphs, or
+    /// <see cref="ImageIconData"/> / <see cref="BitmapIconData"/> for a
+    /// bundled <c>.ico</c> / image (e.g. <c>new ImageIconData(new
+    /// Uri("ms-appx:///Assets/AppIcon.ico"))</c>).
+    /// </summary>
+    public IconData? Icon { get; init; }
     internal Action<WinUI.TitleBar>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnBackRequested is not null || OnPaneToggleRequested is not null;
 }

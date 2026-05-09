@@ -29,6 +29,133 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- `WindowSpec`, `ReactorWindow`, `WindowKey`, `WindowStartPosition`,
+  `PresenterKind`, `WindowState`, `WindowIcon`, `WindowDipSizeChangedEventArgs`,
+  `WindowClosingEventArgs`, `ReactorAppContext` — first-class Window primitive
+  promoted out of internal hosting wiring. `ReactorApp.Run(Action<ReactorAppContext>)`
+  is the new multi-window startup surface; the existing `Run<TRoot>` overload is
+  preserved as a thin wrapper. (spec 036 §3, §4)
+- `ReactorApp.OpenWindow`, `Windows`, `PrimaryWindow`, `FindWindow`,
+  `WindowOpened` / `WindowClosed`, `Exit`, `ShutdownPolicy`, `UIDispatcher` —
+  process-wide window topology. (spec 036 §4.3, §6)
+- Per-window DPI awareness — `ReactorWindow.Dpi`, `DipScale`, `DpiChanged`;
+  WindowMessageMonitor (`SetWindowSubclass`) for WM_DPICHANGED and
+  WM_GETMINMAXINFO; DIP→physical conversion in initial size, `SetSize`,
+  `SetPosition`. Min/max constraints flow through WM_GETMINMAXINFO so
+  dragging across a DPI boundary respects spec'd minimums. (spec 036 §5)
+- `RenderContext.UseDpi()`, parameterless `UseWindowSize()`,
+  `UseBreakpoint(double)`. (spec 036 §5.2)
+- `ReactorWindow.Activated`, `Deactivated`, `SizeChanged`, `StateChanged`,
+  `Closing`, `Closed` events with UI-thread synchronous dispatch.
+  `Closing` runs `UseClosingGuard` predicates first then subscribers; any
+  false cancels. (spec 036 §6.3, §7)
+- `RenderContext.UseWindow()`, `UseWindowState()`, `UseIsActive()`,
+  `UseClosingGuard(Func<bool>)`. Tray-flyout fallback semantics match
+  spec §7.1 (null/Normal/true/no-op). (spec 036 §7)
+- `RenderContext.UseOpenWindow(WindowKey, WindowSpec, Func<Component>)`
+  + `Component.UseOpenWindow` mirror — open or reuse a secondary window
+  keyed by `WindowKey`. Identity-stable across re-renders; spec changes
+  flow through `ReactorWindow.Update`; parent unmount does not
+  auto-close the child. (spec 036 §4.3 / §15.6)
+- `ReactorWindow.PersistedScope` — per-window
+  `Core.WindowPersistedScope`, disposed when the window closes.
+  `RenderContext.UsePersisted(_, _, PersistedScope.Window)` now resolves
+  to this per-window store, so two windows of the same component class
+  hold independent persisted state. (spec 036 §3.4 / §4.4 — closes spec
+  033 §7.5.)
+- `ShutdownPolicy.OnPrimaryWindowClosed` exits when the primary window
+  closes (not just when the snapshot empties); `OnLastSurfaceClosed`
+  considers tray icons (Phase 8 fills the registry). The default
+  zero-window startup-callback path now exits under
+  `OnLastSurfaceClosed` too when no tray icons were opened. (spec 036
+  §6.2)
+- `IWindowPersistenceStore`, `PackagedSettingsStore`, `JsonFileStore`,
+  and `ReactorApp.WindowPersistenceStore` — pluggable per-window
+  placement persistence. Default auto-detect picks the WinRT settings
+  store for packaged apps and a hand-rolled, AOT-safe JSON file store
+  (1 MB cap, atomic write-then-rename, base64-per-id) for unpackaged
+  apps. `WindowSpec.PersistenceId` opts in; placement saves on close
+  and restores on first show via `WindowPlacementCodec` with a monitor-
+  layout fingerprint borrowed from `WinUIEx.WindowManager`. (spec 036
+  §8)
+- `WindowSpec.Backdrop` is now seeded as a window-level default through
+  `BackdropApplier.SetWindowDefault`, so the first frame paints the
+  declared material even when the root component tree carries no
+  `BackdropChoice` modifier. Tree-level modifiers still win on
+  subsequent renders. (spec 036 §3.3)
+- Owned-window relationship via `WindowSpec.Owner` — applies the Win32
+  `GWLP_HWNDPARENT` slot at construction time and force-hides the owned
+  window from the taskbar / Alt-Tab. Owner-close cascades to owned
+  children with `WindowCloseReason.OwnerClosed`; if any owned guard
+  cancels, the owner-close cancels too. (spec 036 §9)
+- `ReactorWindow.Progress` (`TaskbarProgress`, with `TaskbarProgressState`
+  enum: None / Indeterminate / Normal / Paused / Error) and
+  `ReactorWindow.Overlay` (`TaskbarOverlay` with `Icon` /
+  `AccessibleDescription`). Both lazy-initialize the
+  `ITaskbarList3` COM wrapper through `TaskbarComSingleton` so apps that
+  never touch the shell surface pay no startup cost. (spec 036 §11.1 / §11.2)
+- `ReactorWindow.SetThumbnailToolbar(IReadOnlyList<ThumbnailToolbarButton>)`
+  / `ClearThumbnailToolbar()` — up to seven buttons; first call uses
+  `ThumbBarAddButtons`, later calls use `ThumbBarUpdateButtons`.
+  Validation rejects > 7, duplicate Ids, empty Ids, null OnClick. Click
+  dispatch hooks WM_COMMAND in `WindowMessageMonitor`. HICONs are
+  released on `ReactorWindow.Dispose`. (spec 036 §11.5)
+- `JumpList`, `JumpListItem`, `JumpListItemKind` — process-scoped jump
+  list. Packaged path uses `Windows.UI.StartScreen.JumpList`; unpackaged
+  falls back to a hand-rolled `ICustomDestinationList` wrapper
+  (`JumpListComInterop`) gated by runtime `Package.Current` detection
+  through the new `PackageRuntime` helper. `AppUserModelId`,
+  `ShowRecent`, `ShowFrequent` are settable. `JumpListItem.ForUri(...)`
+  factory is the recommended way to build entries — pairs with
+  `LaunchActivation.TryResolve<TRoute>(map)` for the navigation handoff.
+  (spec 036 §11.3 / §11.6)
+- `LaunchActivation` parsing — `OnLaunched` now reads
+  `Microsoft.Windows.AppLifecycle.AppInstance.GetActivatedEventArgs`
+  for File / Protocol / Toast activations and falls back to the WinUI
+  `LaunchActivatedEventArgs.Arguments` + `Environment.GetCommandLineArgs`
+  for jump-list / tray re-launches. `LaunchActivation.TryResolve<TRoute>`
+  bridges the launch argument string into the existing
+  `DeepLinkMap<TRoute>` so jump-list / tray entries become a one-liner
+  navigation handoff. (spec 036 §11.6, implementation-time addition)
+- `ReactorTrayIcon` + `TrayIconSpec` — system-tray icon as a peer of
+  `ReactorWindow`. `ReactorApp.OpenTrayIcon`, `TrayIcons` snapshot,
+  `FindTrayIcon`, `TrayIconOpened` / `TrayIconClosed` events; mirrored
+  on `ReactorAppContext`. Hidden message-only window
+  (`TrayHiddenWindow`) routes `Shell_NotifyIcon` callbacks back to the
+  UI thread under NOTIFYICON_VERSION_4 semantics. `Click`,
+  `DoubleClick`, `RightClick` events fire on the UI thread.
+  `Update(spec)` diffs icon / tooltip / visibility; `Close` /
+  `Dispose` removes the icon and unregisters from `ReactorApp.TrayIcons`.
+  `OnLastSurfaceClosed` now reads the real `TrayIconCount` and
+  re-evaluates on tray close so a tray-only app exits cleanly when the
+  final icon goes away. (spec 036 §11.4)
+- `RenderContext.UseTrayIcon(TrayIconSpec)` + `Component.UseTrayIcon`
+  mirror — opens (or reuses by key) a tray icon scoped to the calling
+  component. The trailing `UseEffect` cleanup closes the icon on
+  unmount; spec changes flow through `Update` via a record-keyed
+  `UseEffect`. (spec 036 §11.4)
+- Seven live-shell selftest fixtures under
+  `tests/Reactor.AppTests.Host/SelfTest/Fixtures/WindowModelFixtures.cs`:
+  `WindowModel_LifecycleEvents`, `_ClosingEventCancels`,
+  `_TaskbarProgressLiveCom`, `_ThumbnailToolbarLiveCom`,
+  `_PersistedScopeIsolated`, `_TrayIconRoundTrip`,
+  `_UseOpenWindowReusesByKey`. They exercise the public surface against
+  real HWND / `ITaskbarList3` / `Shell_NotifyIcon` COM, opening
+  secondary `ReactorWindow`s through `ReactorApp.OpenWindow` and
+  cleaning up under `ShutdownPolicy.Explicit` so they don't kill the
+  host harness. 33/33 assertions pass alongside the full 2314-assert
+  selftest matrix. (spec 036 §0.5 / §0.6 / §11)
+- Devtools `windows.list / windows.activate / windows.close /
+  windows.open` MCP tools (spec 036 §10). `windows.list` returns id,
+  key, title, DIP size, DPI, state, isMain — driven by a new
+  `WindowRegistry.Attach(ReactorWindow, ...)` overload that retains the
+  back-reference. `windows.open` is gated by the same component
+  allowlist as `switchComponent` so loopback callers can't spawn
+  arbitrary types; `windows.close` honors `UseClosingGuard` and surfaces
+  `cancelled: true` instead of hanging. The devtools `WindowRegistry` is
+  now driven from `ReactorApp.WindowOpened / WindowClosed` events so
+  secondary windows opened via `OpenWindow` are tracked too. CLI and
+  `skills/devtools.md` plumbed.
 - `Microsoft.UI.Reactor.Hooks.UseMemoCells` /
   `UseMemoCellsByKey` / `UseMemoCellsByIndex` — cell-level memoization
   hooks (extension methods on `RenderContext`, plus matching `Component`
@@ -158,6 +285,13 @@ to land under these conventions; subsequent specs follow this shape.
   removal in the next minor release. (spec 033 §4)
 
 ### Removed
+
+- `ReactorHost.MainDispatcherQueue` (internal static, first-host-wins
+  capture). Cross-thread setState marshalling and AutoSuggest's
+  `RaiseStateChanged` now route through `ReactorApp.UIDispatcher`.
+  `ReactorHost` ctor seeds `UIDispatcher` for embedded
+  `ReactorHostControl` scenarios that bypass `ReactorApp.Run`.
+  (spec 036 §4.3)
 
 ### Fixed
 

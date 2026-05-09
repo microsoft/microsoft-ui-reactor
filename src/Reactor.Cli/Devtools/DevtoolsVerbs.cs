@@ -21,6 +21,8 @@ internal static class DevtoolsVerbs
         "scroll", "expand", "collapse", "wait", "fire", "reload", "shutdown",
         "call", "logs", "properties", "set-property", "resources",
         "set-resource", "styles", "ancestors",
+        // Spec 036 §10 windows.* tools — dotted names match the MCP tool names.
+        "windows.list", "windows.activate", "windows.close", "windows.open",
     };
 
     public static int Run(string verb, string[] args)
@@ -69,6 +71,10 @@ internal static class DevtoolsVerbs
                 "set-resource" => SetResource(client, verbArgs, shared),
                 "styles" => UnarySelector(client, "styles", verbArgs, shared),
                 "ancestors" => UnarySelector(client, "ancestors", verbArgs, shared),
+                "windows.list" => Simple(client, "windows.list", verbArgs, shared),
+                "windows.activate" => WindowsActivate(client, verbArgs, shared),
+                "windows.close" => WindowsClose(client, verbArgs, shared),
+                "windows.open" => WindowsOpen(client, verbArgs, shared),
                 _ => UsageError($"Unknown devtools verb: {verb}"),
             };
         }
@@ -530,6 +536,59 @@ internal static class DevtoolsVerbs
             ? client.InvokeMethod(target, @params)
             : client.InvokeTool(target, @params ?? EmptyArgs());
         return EmitResult(doc, shared);
+    }
+
+    // -- windows.* (spec 036 §10) -------------------------------------------
+
+    private static int WindowsActivate(McpCliClient client, string[] args, SharedFlags shared)
+    {
+        if (args.Length != 1) return UsageError("windows.activate <id>");
+        var fields = new Dictionary<string, object?> { ["id"] = args[0] };
+        return EmitResult(client.InvokeTool("windows.activate", ArgsFromDict(fields)), shared);
+    }
+
+    private static int WindowsClose(McpCliClient client, string[] args, SharedFlags shared)
+    {
+        if (args.Length != 1) return UsageError("windows.close <id>");
+        var fields = new Dictionary<string, object?> { ["id"] = args[0] };
+        return EmitResult(client.InvokeTool("windows.close", ArgsFromDict(fields)), shared);
+    }
+
+    private static int WindowsOpen(McpCliClient client, string[] args, SharedFlags shared)
+    {
+        string? component = null, title = null, key = null;
+        double? width = null, height = null;
+        for (int i = 0; i < args.Length; i++)
+        {
+            var a = args[i];
+            if (a == "--title" && i + 1 < args.Length) title = args[++i];
+            else if (a == "--key" && i + 1 < args.Length) key = args[++i];
+            else if (a == "--width" && i + 1 < args.Length)
+            {
+                if (!double.TryParse(args[++i], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var w))
+                    return UsageError("windows.open: --width must be a number");
+                width = w;
+            }
+            else if (a == "--height" && i + 1 < args.Length)
+            {
+                if (!double.TryParse(args[++i], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var h))
+                    return UsageError("windows.open: --height must be a number");
+                height = h;
+            }
+            else if (component is null && !a.StartsWith("-")) component = a;
+            else return UsageError($"windows.open: unexpected argument '{a}'");
+        }
+        if (component is null)
+            return UsageError("windows.open <Component> [--title T] [--width W] [--height H] [--key K]");
+        var fields = new Dictionary<string, object?>
+        {
+            ["component"] = component,
+            ["title"] = title,
+            ["width"] = width,
+            ["height"] = height,
+            ["key"] = key,
+        };
+        return EmitResult(client.InvokeTool("windows.open", ArgsFromDict(fields)), shared);
     }
 
     // -- Output / error mapping ----------------------------------------------

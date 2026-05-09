@@ -12,7 +12,12 @@ internal sealed record WindowInfo(
     long Hwnd,
     WindowBounds Bounds,
     bool IsMain,
-    string BuildTag);
+    string BuildTag,
+    string? Key,
+    double WidthDip,
+    double HeightDip,
+    uint Dpi,
+    string State);
 
 internal readonly record struct WindowBounds(int X, int Y, int Width, int Height);
 
@@ -40,24 +45,84 @@ internal sealed class WindowRegistry
     /// </summary>
     public void Attach(Window window, bool isMain = false, string? stableId = null)
     {
-        RegisterCore(window, isMain, stableId);
-        window.Activated += (_, _) => RegisterCore(window, isMain, stableId);
+        RegisterCore(window, reactorWindow: null, isMain, stableId);
+        // The Activated re-register subscription that used to live here was
+        // dead code (RegisterCore early-exits when the entry is already
+        // present) and racy on close (after Forget removes the entry, a
+        // late Activated would hit RegisterCore's window.Title getter on
+        // a window mid-teardown and COMException). Drop it.
         window.Closed += (_, _) => Forget(window);
     }
 
-    private void RegisterCore(Window window, bool isMain, string? stableId)
+    /// <summary>
+    /// Variant that retains a back-reference to the owning <see cref="ReactorWindow"/>.
+    /// The MCP <c>windows.*</c> tools (spec 036 §10) use the back-ref to expose
+    /// per-window DPI / state / key without re-walking <see cref="ReactorApp.Windows"/>.
+    /// </summary>
+    public void Attach(ReactorWindow window, bool isMain = false, string? stableId = null)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        RegisterCore(window.NativeWindow, window, isMain, stableId);
+        // Forget on close. Note: we do NOT re-register on Activated. The
+        // initial RegisterCore covers the entry's lifetime, and re-firing
+        // RegisterCore from a late Activated event after Forget already ran
+        // hits a COMException reading window.Title on a window the OS is
+        // tearing down. The early-exit on line 87 of RegisterCore makes a
+        // re-register a no-op anyway, so the Activated subscription was
+        // dead code before this fix and racy after Close.
+        window.NativeWindow.Closed += (_, _) => Forget(window.NativeWindow);
+    }
+
+    /// <summary>
+    /// Explicit detach. Idempotent. The <see cref="Window.Closed"/> subscription
+    /// installed by <see cref="Attach(Window, bool, string?)"/> already calls
+    /// this on close — exposed so callers driving the registry from
+    /// <see cref="ReactorApp.WindowClosed"/> can detach without waiting on the
+    /// native event.
+    /// </summary>
+    public void Detach(ReactorWindow window)
+    {
+        if (window is null) return;
+        Forget(window.NativeWindow);
+    }
+
+    private void RegisterCore(Window window, ReactorWindow? reactorWindow, bool isMain, string? stableId)
     {
         lock (_lock)
         {
-            if (_entries.Any(e => ReferenceEquals(e.Window.Target, window))) return;
+            // Update the back-reference if we already know about this window
+            // and the caller has supplied a fresher one.
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                if (ReferenceEquals(_entries[i].Window.Target, window))
+                {
+                    if (reactorWindow is not null && _entries[i].ReactorWindow?.Target is not ReactorWindow)
+                        _entries[i] = _entries[i] with { ReactorWindow = new WeakReference(reactorWindow) };
+                    return;
+                }
+            }
 
             // The devtools main window pins to "main" so the id survives
             // switchComponent (which updates the window title). Secondary
             // windows fall through to the title-based allocator.
+            // window.Title can throw COMException when the window's native
+            // peer is mid-teardown — fall back to a generic seed so a late
+            // registration doesn't crash the close path.
+            string title;
+            try { title = window.Title ?? string.Empty; }
+            catch (Exception ex)
+            {
+                global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowRegistry.RegisterCore Title getter threw: {ex.Message}");
+                title = "(unknown)";
+            }
             var id = stableId is not null
                 ? _allocator.Reserve(stableId)
-                : _allocator.Allocate(window.Title);
-            _entries.Add(new Entry(id, new WeakReference(window), isMain));
+                : _allocator.Allocate(title);
+            _entries.Add(new Entry(
+                id,
+                new WeakReference(window),
+                reactorWindow is null ? null : new WeakReference(reactorWindow),
+                isMain));
         }
     }
 
@@ -79,16 +144,28 @@ internal sealed class WindowRegistry
             {
                 if (entry.Window.Target is not Window w) continue;
                 var bounds = ReadBounds(w);
+                var rw = entry.ReactorWindow?.Target as ReactorWindow;
                 result.Add(new WindowInfo(
                     Id: entry.Id,
                     Title: w.Title ?? "",
                     Hwnd: TryGetHwnd(w),
                     Bounds: bounds,
                     IsMain: entry.IsMain,
-                    BuildTag: _buildTag));
+                    BuildTag: _buildTag,
+                    Key: rw?.Key?.ToString(),
+                    WidthDip: rw is null ? 0 : ToDip(bounds.Width, rw.Dpi),
+                    HeightDip: rw is null ? 0 : ToDip(bounds.Height, rw.Dpi),
+                    Dpi: rw?.Dpi ?? 96,
+                    State: rw?.State.ToString() ?? "Normal"));
             }
             return result;
         }
+    }
+
+    private static double ToDip(int physical, uint dpi)
+    {
+        var d = dpi == 0 ? 96 : dpi;
+        return physical * 96.0 / d;
     }
 
     /// <summary>Resolves an id to its Window. Returns null if not registered or disposed.</summary>
@@ -100,6 +177,24 @@ internal sealed class WindowRegistry
             {
                 if (entry.Id == id && entry.Window.Target is Window w)
                     return w;
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Resolves an id to its <see cref="ReactorWindow"/> back-reference, or
+    /// null if the entry was attached via the legacy <see cref="Attach(Window, bool, string?)"/>
+    /// overload (devtools-only test paths).
+    /// </summary>
+    public ReactorWindow? ResolveReactorWindow(string id)
+    {
+        lock (_lock)
+        {
+            foreach (var entry in _entries)
+            {
+                if (entry.Id == id && entry.ReactorWindow?.Target is ReactorWindow rw)
+                    return rw;
             }
             return null;
         }
@@ -156,5 +251,5 @@ internal sealed class WindowRegistry
 
     internal WindowIdAllocator AllocatorForTests => _allocator;
 
-    private sealed record Entry(string Id, WeakReference Window, bool IsMain);
+    private sealed record Entry(string Id, WeakReference Window, WeakReference? ReactorWindow, bool IsMain);
 }

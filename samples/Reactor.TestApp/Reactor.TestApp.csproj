@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <Content Include="Assets\Icons\*.svg" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\*.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

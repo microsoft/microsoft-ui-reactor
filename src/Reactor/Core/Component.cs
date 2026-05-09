@@ -57,8 +57,70 @@ public abstract class Component
     protected (double Width, double Height) UseWindowSize(Microsoft.UI.Xaml.Window window)
         => Context.UseWindowSize(window);
 
+    /// <summary>
+    /// Parameterless overload — resolves the host window from the current
+    /// host's owning window. Returns <c>(0, 0)</c> outside a window.
+    /// (spec 036 §5.2)
+    /// </summary>
+    protected (double Width, double Height) UseWindowSize()
+        => Context.UseWindowSize();
+
     protected bool UseBreakpoint(Microsoft.UI.Xaml.Window window, double minWidth)
         => Context.UseBreakpoint(window, minWidth);
+
+    /// <summary>
+    /// Parameterless overload — resolves the host window. Returns
+    /// <c>false</c> outside a window. (spec 036 §5.2)
+    /// </summary>
+    protected bool UseBreakpoint(double minWidth)
+        => Context.UseBreakpoint(minWidth);
+
+    /// <summary>
+    /// Per-monitor DPI of the host window; re-renders on DPI change. Returns
+    /// the system primary-monitor DPI when called outside a window.
+    /// (spec 036 §5.2)
+    /// </summary>
+    protected uint UseDpi()
+        => Context.UseDpi();
+
+    /// <summary>
+    /// Returns the host window or <c>null</c> outside a window. (spec 036 §7)
+    /// </summary>
+    protected Microsoft.UI.Reactor.ReactorWindow? UseWindow()
+        => Context.UseWindow();
+
+    /// <summary>Re-renders on window state changes. (spec 036 §7)</summary>
+    protected Microsoft.UI.Reactor.WindowState UseWindowState()
+        => Context.UseWindowState();
+
+    /// <summary>Re-renders on window activation changes. (spec 036 §7)</summary>
+    protected bool UseIsActive()
+        => Context.UseIsActive();
+
+    /// <summary>
+    /// Register a synchronous "can the window close right now?" predicate.
+    /// (spec 036 §7 / §13.4)
+    /// </summary>
+    protected void UseClosingGuard(Func<bool> canClose)
+        => Context.UseClosingGuard(canClose);
+
+    /// <summary>
+    /// Open or reuse a secondary window keyed by <paramref name="key"/>. Stable
+    /// identity across re-renders. (spec 036 §4.3)
+    /// </summary>
+    protected Microsoft.UI.Reactor.ReactorWindow? UseOpenWindow(
+        Microsoft.UI.Reactor.WindowKey key,
+        Microsoft.UI.Reactor.WindowSpec spec,
+        Func<Component> factory)
+        => Context.UseOpenWindow(key, spec, factory);
+
+    /// <summary>
+    /// Component mirror of <see cref="RenderContext.UseTrayIcon"/>. Opens
+    /// (or reuses by key) a system-tray icon scoped to this component;
+    /// closes on unmount. (spec 036 §11.4)
+    /// </summary>
+    protected Microsoft.UI.Reactor.ReactorTrayIcon? UseTrayIcon(Microsoft.UI.Reactor.TrayIconSpec spec)
+        => Context.UseTrayIcon(spec);
 
     protected T UseObservableTree<T>(T source) where T : global::System.ComponentModel.INotifyPropertyChanged
         => Context.UseObservableTree(source);

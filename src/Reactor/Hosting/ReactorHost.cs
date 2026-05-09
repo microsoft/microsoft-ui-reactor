@@ -22,14 +22,6 @@ public sealed class ReactorHost : IDisposable
     private static readonly int MaxRenderIterations = 50;
 #pragma warning restore CS0414
 
-    /// <summary>
-    /// Process-wide UI DispatcherQueue. Captured by the first
-    /// <see cref="ReactorHost"/> created so that off-thread <c>setState</c>
-    /// callers in the reconciler can marshal back onto the UI thread without
-    /// having to plumb a queue reference through every component. TASK-063.
-    /// </summary>
-    internal static DispatcherQueue? MainDispatcherQueue { get; private set; }
-
     private readonly Window _window;
     private readonly Reconciler _reconciler;
     private readonly DispatcherQueue _dispatcherQueue;
@@ -55,6 +47,13 @@ public sealed class ReactorHost : IDisposable
     // Owned for the host's lifetime; reset on dispose so a non-Reactor
     // window-reuse path returns to a clean slate.
     private readonly BackdropApplier _backdropApplier;
+
+    /// <summary>
+    /// Internal accessor for <see cref="ReactorWindow"/> to seed
+    /// <see cref="WindowSpec.Backdrop"/> as the window-level default before
+    /// mount. (spec 036 §3.3)
+    /// </summary>
+    internal BackdropApplier BackdropApplier => _backdropApplier;
     private readonly global::Windows.Foundation.TypedEventHandler<object, WindowEventArgs> _closedHandler;
 
     // Accessibility: forced-colors and reduced-motion auto-propagation.
@@ -133,6 +132,19 @@ public sealed class ReactorHost : IDisposable
     public Window Window => _window;
 
     /// <summary>
+    /// The <see cref="ReactorWindow"/> that owns this host, when the host was
+    /// constructed by Reactor's window primitive. Null for hosts created
+    /// directly (test harnesses, <see cref="ReactorHostControl"/> embeds).
+    /// (spec 036 §3.4)
+    /// </summary>
+    public ReactorWindow? OwningWindow
+    {
+        get => Volatile.Read(ref _owningWindow);
+        internal set => Volatile.Write(ref _owningWindow, value);
+    }
+    private ReactorWindow? _owningWindow;
+
+    /// <summary>
     /// The currently mounted root Component, if any. Used by MCP devtools to
     /// resolve event handlers on the root for the <c>fire</c> escape-hatch tool.
     /// </summary>
@@ -158,10 +170,14 @@ public sealed class ReactorHost : IDisposable
         _window = window;
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-        // First-host-wins capture so off-thread rerenders can marshal onto
-        // the UI thread without explicit plumbing. TASK-063.
-        MainDispatcherQueue ??= _dispatcherQueue;
-        ReactorApp.ActiveHost = this;
+        // Off-thread rerenders marshal via ReactorApp.UIDispatcher (captured
+        // in OnLaunched). For embedded ReactorHostControl scenarios where
+        // there's no Reactor.Run, fall back to seeding UIDispatcher with this
+        // host's queue if it hasn't been set yet so cross-thread setState
+        // callers still resolve a target. (spec 036 §4.3)
+        if (ReactorApp.UIDispatcher is null)
+            ReactorApp.UIDispatcher = _dispatcherQueue;
+        ReactorApp.ActiveHostInternal = this;
 
         // Route QueryCache.EntryChanged notifications through our dispatcher so subscribers
         // observe cache changes on the UI thread even when Set/Invalidate were called from
@@ -499,6 +515,16 @@ public sealed class ReactorHost : IDisposable
         // ReactorHostControl.Render() for the full rationale.
         bool hotReloadRender = HotReloadService.ConsumeUpdatePending();
 
+        // Multi-window: hooks (UseWindow, UseDpi, UseWindowState, UseIsActive,
+        // UseClosingGuard, parameterless UseWindowSize) resolve "the rendering
+        // host" via ReactorApp.ActiveHostInternal. Without a per-render push,
+        // the ctor-time assignment of the most-recently-constructed host wins
+        // permanently and a second window's components observe the wrong
+        // owning window. Restore the previous value in the finally so
+        // re-entrant renders unwind correctly. (spec 036 §3.4 / §7.1)
+        var prevActiveHost = ReactorApp.ActiveHostInternal;
+        ReactorApp.ActiveHostInternal = this;
+
         void RecoverFromHookOrder(HookOrderException ex, RenderContext ctx, string mode)
         {
             _logger?.LogWarning(ex,
@@ -747,6 +773,7 @@ public sealed class ReactorHost : IDisposable
         finally
         {
             _isRendering = false;
+            ReactorApp.ActiveHostInternal = prevActiveHost;
         }
     }
 
@@ -879,7 +906,7 @@ public sealed class ReactorHost : IDisposable
         _eventPairing = null;
         _eventRing = null;
 
-        ReactorApp.ActiveHost = null;
+        ReactorApp.ActiveHostInternal = null;
     }
 
     private void ShowErrorFallback(Exception ex)

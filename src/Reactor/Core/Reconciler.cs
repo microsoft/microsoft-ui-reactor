@@ -856,7 +856,7 @@ public sealed partial class Reconciler : IDisposable
             // reconciler and ElementPool from a background thread.
             // A non-null GetForCurrentThread() doesn't imply UI affinity —
             // the only authoritative check is HasThreadAccess on the UI DQ.
-            var uiDq = ReactorHost.MainDispatcherQueue;
+            var uiDq = Microsoft.UI.Reactor.ReactorApp.UIDispatcher;
             bool onUiThread = false;
             if (uiDq is not null)
             {

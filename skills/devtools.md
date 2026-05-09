@@ -118,6 +118,10 @@ indented JSON.
 | `reload [--component N]` | Rebuild + relaunch via the supervisor sentinel. Old ids dead. |
 | `shutdown` | Close the app cleanly (supervisor exits 0). Releases the build output file lock. |
 | `windows` | Active window ids, titles, bounds, currently-mounted component. |
+| `windows.list` | Spec 036 §10. Per-window id, key, title, DIP size, DPI, state, isMain. Use this when you care about DPI / DIP size or the `key` column for `UseOpenWindow`-keyed lookups. |
+| `windows.activate <id>` | Activate (focus) a window. Returns `{ ok, id }`. |
+| `windows.close <id>` | Close a window. Honors `UseClosingGuard` / `Closing` subscribers — returns `{ ok: false, cancelled: true, id }` when a guard vetoed the close. |
+| `windows.open <Component> [--title T] [--width W] [--height H] [--key K]` | Open a new top-level window mounting an allowlisted Component. The component name is gated by the same allowlist as `switchComponent`; rejected names return `unknown-component` with the available list. |
 | `tree [--selector S] [--window W] [--view summary\|full]` | Dump the visual tree as JSON. `full` adds layout/automation/visual fields. |
 | `screenshot [--selector S] [--out path]` | PNG of the window (or selector-cropped region). `--out path.png` writes to file; `--out -` streams bytes to stdout. |
 | `click <selector>` | UIA click. Prefers Invoke → Toggle → SelectionItem; returns `via`. |
@@ -353,7 +357,7 @@ else.
 
 ## Spec + source pointers
 
-- Specs: `docs/specs/024-ai-agent-devtools.md`, `docs/specs/025-devtools-cli-parity.md`
+- Specs: `docs/specs/024-ai-agent-devtools.md`, `docs/specs/025-devtools-cli-parity.md`, `docs/specs/036-window-design.md` (multi-window MCP surface §10)
 - Server: `src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs`
 - Tool registration: `DevtoolsTools.cs`, `DevtoolsUiaTools.cs`, `DevtoolsFireTool.cs`, `DevtoolsStateTool.cs`, `DevtoolsLogsTool.cs`, `DevtoolsPropertyTools.cs`
 - Log capture: `LogCaptureBuffer.cs`, `LogCaptureInstall.cs`

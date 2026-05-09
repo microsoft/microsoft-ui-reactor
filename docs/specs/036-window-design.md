@@ -726,7 +726,14 @@ public sealed record JumpListItem(
     JumpListItemKind Kind = JumpListItemKind.Task,
     string? Description = null,
     WindowIcon? Icon = null,
-    string? GroupCategory = null);     // for Custom-category items
+    string? GroupCategory = null)      // for Custom-category items
+{
+    /// Convenience factory for the "Arguments == deep-link URI" convention
+    /// used with <c>LaunchActivation.TryResolve&lt;TRoute&gt;(map)</c>.
+    public static JumpListItem ForUri(string title, string uri,
+        string? description = null, WindowIcon? icon = null,
+        string? groupCategory = null);
+}
 
 public enum JumpListItemKind { Task, Custom, Separator }
 
@@ -886,8 +893,51 @@ a new `ctx.LaunchActivation` property exposes the parsed
 
 ```csharp
 public enum LaunchKind { Normal, JumpList, Toast, Protocol, File, Tray }
-public sealed record LaunchActivation(LaunchKind Kind, string? Arguments, IReadOnlyList<string> Files);
+public sealed record LaunchActivation(LaunchKind Kind, string? Arguments, IReadOnlyList<string> Files)
+{
+    /// <summary>
+    /// Convenience over <see cref="DeepLinkMap{TRoute}.Resolve(string)"/>:
+    /// treats <see cref="Arguments"/> as a deep-link URI and resolves it via
+    /// the supplied map. Returns <c>false</c> when there is no argument or
+    /// no route matches. (spec 036 §11.6)
+    /// </summary>
+    public bool TryResolve<TRoute>(DeepLinkMap<TRoute> map, out DeepLinkResult<TRoute> result)
+        where TRoute : notnull;
+}
 ```
+
+#### Jump list ↔ navigation integration
+
+`JumpListItem.Arguments` is a free-form command-line string by OS
+contract, but Reactor's *recommended convention* is that it carries a
+deep-link URI string for the app's `DeepLinkMap<TRoute>`. The
+`JumpListItem.ForUri(title, uri, ...)` factory makes the convention
+discoverable, and the launch handoff is a one-liner in the startup
+callback:
+
+```csharp
+ReactorApp.Run(ctx =>
+{
+    var map = new DeepLinkMap<MyRoute>()
+        .Map("/", _ => new HomeRoute())
+        .Map("/settings/{id}", a => new SettingsRoute(a.Get<string>("id")));
+
+    var window = ctx.OpenWindow(new WindowSpec(...), () => new MainShell(map));
+
+    if (ctx.LaunchActivation.TryResolve(map, out var dl) && dl.Matched)
+        window.Host.NavigateTo(dl.Routes);   // however the app's nav root consumes routes
+});
+```
+
+The same convention applies to tray-icon "Open" / context-menu entries
+and thumbnail-toolbar buttons that re-launch the process — every shell
+surface that round-trips through the OS arg buffer uses the same
+URI-string convention. Apps can still pass arbitrary strings (legacy
+launchers, batch flags); `TryResolve` simply returns `false` when the
+argument doesn't match a registered pattern. *Implementation-time
+addition (Phase 8): the spec originally listed only the raw record;
+the `TryResolve` helper plus `JumpListItem.ForUri` factory add the
+navigation bridge without expanding the OS-facing surface.*
 
 ### 11.7 Threading and lifetime
 
