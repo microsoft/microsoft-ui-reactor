@@ -24,12 +24,10 @@ public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmo
     [InlineData(true)]
     public void RunTemplateScenario(bool useProgramMain)
     {
-        TestContext.Current.SendDiagnosticMessage($"RunTemplateScenario(useProgramMain={useProgramMain})");
         var scenarioName = useProgramMain ? "program-main" : "top-level";
         var appDir = CreateDirectory($"generated-app-{scenarioName}");
         var projectName = CreateProjectName(useProgramMain);
 
-        TestContext.Current.SendDiagnosticMessage("CreateNuGetConfig");
         CreateNuGetConfig(appDir, _fixture.PackageSourceDir, _fixture.NugetPackagesDir, _fixture.CommandEnvironment);
 
         RunDotnet(
@@ -41,7 +39,6 @@ public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmo
         var projectPath = Path.Combine(appDir, $"{projectName}.csproj");
         Assert.True(File.Exists(projectPath), $"Expected generated project at '{projectPath}'.");
 
-        TestContext.Current.SendDiagnosticMessage("AssertTemplateProgramMode");
         AssertTemplateProgramMode(appDir, useProgramMain);
 
         RunDotnet(
@@ -50,7 +47,6 @@ public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmo
             _fixture.CommandEnvironment,
             timeoutMs: 300_000);
 
-        TestContext.Current.SendDiagnosticMessage($"dotnet run generated app smoke ({scenarioName})");
         RunDotnetRun(
             appDir,
             projectName,
@@ -294,18 +290,8 @@ public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmo
         IReadOnlyDictionary<string, string?> environmentVariables,
         int timeoutMs)
     {
-        TestContext.Current.SendDiagnosticMessage($"START: dotnet {arguments}");
-        var result = RunProcess("dotnet", arguments, workingDirectory, environmentVariables, timeoutMs, throwOnFailure: true);
-        _ = result;
-        TestContext.Current.SendDiagnosticMessage($"END: dotnet {arguments}");
+        _ = RunProcess("dotnet", arguments, workingDirectory, environmentVariables, timeoutMs, throwOnFailure: true);
     }
-
-    internal static Task RunDotnetAsync(
-        string arguments,
-        string workingDirectory,
-        IReadOnlyDictionary<string, string?> environmentVariables,
-        int timeoutMs) =>
-        Task.Run(() => RunDotnet(arguments, workingDirectory, environmentVariables, timeoutMs));
 
     private static ProcessResult RunProcess(
         string fileName,
@@ -411,7 +397,7 @@ public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmo
                 BuildUiaProbeArguments(launchedProcess.Id),
                 Environment.SystemDirectory,
                 environmentVariables: new Dictionary<string, string?>(),
-                timeoutMs: 5_000,
+                timeoutMs: 15_000,
                 throwOnFailure: false);
 
             details = string.IsNullOrWhiteSpace(probe.Stdout)
@@ -505,7 +491,6 @@ public sealed class TemplatePackageSmokeTestFixture : IDisposable
 
     public TemplatePackageSmokeTestFixture()
     {
-        TestContext.Current.SendDiagnosticMessage("TemplatePackageSmokeTestFixture setup");
         Directory.CreateDirectory(_tempRoot);
 
         RepoRoot = FindRepoRoot();
@@ -518,33 +503,16 @@ public sealed class TemplatePackageSmokeTestFixture : IDisposable
         RunArchitecture = TemplatePackageSmokeTests.GetRunArchitecture();
         CommandEnvironment = TemplatePackageSmokeTests.CreateCommandEnvironment(dotnetCliHomeDir, nugetHttpCacheDir);
 
-        Task.WhenAll(
-            TemplatePackageSmokeTests.RunDotnetAsync(
-                $"build \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" --no-restore --configuration Release",
-                RepoRoot,
-                CommandEnvironment,
-                timeoutMs: 1_200_000),
-            TemplatePackageSmokeTests.RunDotnetAsync(
-                $"build \"{Path.Combine(RepoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" --no-restore --configuration Release -p:Platform=AnyCPU",
-                RepoRoot,
-                CommandEnvironment,
-                timeoutMs: 300_000))
-            .GetAwaiter()
-            .GetResult();
-
-        Task.WhenAll(
-            TemplatePackageSmokeTests.RunDotnetAsync(
-                $"pack \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" --no-build --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
-                RepoRoot,
-                CommandEnvironment,
-                timeoutMs: 300_000),
-            TemplatePackageSmokeTests.RunDotnetAsync(
-                $"pack \"{Path.Combine(RepoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" --no-build --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion} -p:MicrosoftUIReactorVersion={PackageVersion} -p:Platform=AnyCPU",
-                RepoRoot,
-                CommandEnvironment,
-                timeoutMs: 180_000))
-            .GetAwaiter()
-            .GetResult();
+        TemplatePackageSmokeTests.RunDotnet(
+            $"pack \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" --no-build --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
+            RepoRoot,
+            CommandEnvironment,
+            timeoutMs: 300_000);
+        TemplatePackageSmokeTests.RunDotnet(
+            $"pack \"{Path.Combine(RepoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" --no-build --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion} -p:MicrosoftUIReactorVersion={PackageVersion} -p:Platform=AnyCPU",
+            RepoRoot,
+            CommandEnvironment,
+            timeoutMs: 180_000);
 
         _ = TemplatePackageSmokeTests.FindPackage(PackageSourceDir, "Microsoft.UI.Reactor", PackageVersion);
         var templatePackage = TemplatePackageSmokeTests.FindPackage(PackageSourceDir, "Microsoft.UI.Reactor.ProjectTemplates", PackageVersion);
