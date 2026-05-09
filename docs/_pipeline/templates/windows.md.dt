@@ -1,0 +1,174 @@
+---
+title: "Windows"
+app: windows
+order: 21
+audience: intermediate
+goal: |
+  Introduce the top-level window model: ReactorApp.Run as the primary
+  window, ReactorApp.OpenWindow / WindowSpec for secondaries, the Windows
+  / PrimaryWindow / FindWindow surface, the UseWindow / UseWindowState /
+  UseOpenWindow hooks, ShutdownPolicy, and a brief mention of tray icons.
+  Concise — not a full tour of every WindowSpec field or every hook.
+---
+
+# Windows
+
+Most Reactor apps start with a single window — the one `ReactorApp.Run` opens
+for you. When you need more (a settings dialog, a multi-document app, a tray
+flyout), the `ReactorApp` static surface and a handful of hooks give you a
+declarative way to manage every top-level window in the process.
+
+## The Primary Window
+
+`ReactorApp.Run<TRoot>(...)` opens one window with `TRoot` mounted as its
+content:
+
+```csharp snippet="windows/run"
+```
+
+That window becomes `ReactorApp.PrimaryWindow`. By default, when the primary
+window closes the process exits — see [Shutdown Policy](#shutdown-policy)
+below if you need different behavior.
+
+## Opening a Secondary Window
+
+Call `ReactorApp.OpenWindow(spec, factory)` from anywhere on the UI thread.
+The `WindowSpec` describes the window's chrome (title, size, icon,
+presenter); the factory builds the root component:
+
+```csharp snippet="windows/shell"
+```
+
+![Top-level windows demo](screenshot://windows/shell)
+
+Each click of "New Notepad window" spawns an independent window. They have
+their own state, their own DPI, their own lifecycle — closing one doesn't
+affect the others.
+
+`WindowSpec` is an immutable record. The fields you'll reach for most often:
+
+| Field | Default | Purpose |
+|-------|---------|---------|
+| `Title` | `"Reactor App"` | Caption text |
+| `Width` / `Height` | `1024` / `768` | Initial size in DIPs |
+| `MinWidth` / `MinHeight` | `null` | Optional resize floor |
+| `Icon` | `null` | `WindowIcon.FromPath(...)` or `WindowIcon.FromResource(...)` |
+| `StartPosition` | `Default` | `CenterOnPrimary`, `CenterOnOwner`, `Manual`, `RestoreFromPersistence` |
+| `PersistenceId` | `null` | Save and restore placement across sessions |
+| `Key` | `null` | Stable identity for `FindWindow` and `UseOpenWindow` |
+| `Owner` | `null` | Owner window for owned-window semantics |
+
+All sizes are DIPs (device-independent pixels). Reactor handles the
+DIP→physical conversion at the destination monitor's DPI.
+
+## Reading the Current Window
+
+Inside any component rendered as a window's content, hooks reach the owning
+`ReactorWindow`:
+
+```csharp snippet="windows/notepad-window"
+```
+
+| Hook | Purpose |
+|------|---------|
+| `UseWindow()` | The owning `ReactorWindow` — `null` outside a window (e.g. tray flyouts) |
+| `UseWindowState()` | `Normal` / `Minimized` / `Maximized` / `FullScreen` / `CompactOverlay`; re-renders on change |
+| `UseIsActive()` | `true` while the window has foreground; re-renders on activation change |
+| `UseDpi()` | Current DPI; re-renders on monitor change |
+| `UseClosingGuard(canClose)` | Register a synchronous predicate that can veto a close |
+
+`ReactorWindow` itself exposes `Close()`, `Activate()`, `SetSize(...)`,
+`SetPosition(...)`, and lifecycle events (`Closing`, `Closed`,
+`SizeChanged`, `StateChanged`).
+
+## Finding and Enumerating Windows
+
+```csharp
+ReactorApp.Windows          // IReadOnlyList<ReactorWindow> snapshot
+ReactorApp.PrimaryWindow    // First window opened, or null after it closes
+ReactorApp.FindWindow(key)  // Look up by WindowKey
+```
+
+`WindowKey` is a string-typed identity stamped onto a `WindowSpec.Key`. Use
+it to dedupe "open the settings window" against an existing one, as the
+button handler in the shell snippet above does.
+
+## Reusing a Window with `UseOpenWindow`
+
+`UseOpenWindow` lets a component declaratively own a window's lifetime:
+while the component is mounted, the window stays open; renders that pass
+the same `WindowKey` reuse the same handle.
+
+```csharp snippet="windows/use-open-window"
+```
+
+`UseOpenWindow` doesn't unmount-close the window — that's deliberate, since
+windows usually outlive the menu item that opened them. To close on
+unmount, return a `UseEffect` cleanup that calls `Close()` on the handle.
+
+(Tray icons go the other way — `UseTrayIcon` *does* close on unmount, since
+a tray icon belongs to the component that declared it.)
+
+## Shutdown Policy
+
+```csharp snippet="windows/shutdown-policy"
+```
+
+| Policy | Process exits when... |
+|--------|-----------------------|
+| `OnPrimaryWindowClosed` *(default)* | The primary window closes |
+| `OnLastSurfaceClosed` | The last window AND the last tray icon both close |
+| `Explicit` | Never automatically — you must call `ReactorApp.Exit()` |
+
+Pick `OnLastSurfaceClosed` for tray-resident apps that should keep running
+while only an icon is visible. Pick `Explicit` when you need a custom
+"quit" gesture (a tray menu item, a `Cmd-Q` accelerator, etc.) and call
+`ReactorApp.Exit(exitCode)` from the handler.
+
+## Tray Icons (in Brief)
+
+A tray icon is a non-window surface registered with the shell's notification
+area. Use `UseTrayIcon` from a component to register one whose lifetime is
+tied to that component:
+
+```csharp snippet="windows/tray-icon"
+```
+
+The hook returns a `ReactorTrayIcon?` exposing `Click`, `DoubleClick`, and
+`RightClick` events plus `ShowFlyout(content)` for in-place flyout UI.
+For app-scoped tray icons that survive component unmount, call
+`ReactorApp.OpenTrayIcon(spec)` directly.
+
+## Tips
+
+**One spec record per window — don't rebuild it in `Render()` if you can
+avoid it.** Wrap the `WindowSpec` (and especially the `WindowIcon`) in a
+`UseMemo` so re-renders don't reallocate them. Identity-stable specs let
+`UseOpenWindow`'s value-equality compare see no change and skip the
+chrome-update pass.
+
+**`Width`/`Height` are doubles, not ints.** All sizes and positions are
+DIPs. Literal call sites bind cleanly (`Width = 480`), but a variable
+typed `int` needs a cast.
+
+**Use `WindowKey` for any window you might want to find again.** The cost
+is one string allocation; the payoff is `FindWindow` lookups,
+`UseOpenWindow` reuse, and shell tools that can address the surface by
+name.
+
+**Closing guards are synchronous.** `UseClosingGuard(() => …)` runs on the
+UI thread and must return immediately. For an async confirmation dialog,
+return `false` from the guard and re-trigger `Close()` from the dialog
+callback.
+
+**The primary window is special only by default.** Once you change
+`ShutdownPolicy`, "primary" is just a name for the first window you opened
+— there's nothing the framework treats differently about it.
+
+## Next Steps
+
+- **[WinForms Interop](winforms-interop.md)** — previous topic: hosting Reactor inside WinForms via XAML Islands
+- **[Reactor](readme.md)** — back to the index: overview of the framework and full topic list
+- **[Navigation](navigation.md)** — in-window routing with `UseNavigation`, `NavigationView`, deep links
+- **[Effects and Lifecycle](effects.md)** — `UseEffect` patterns for the imperative work that pairs with windows
+- **[Commanding](commanding.md)** — wire keyboard accelerators and tray-menu items to commands

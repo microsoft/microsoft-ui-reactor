@@ -320,4 +320,112 @@ internal static class D3Fixtures
                 labelTexts.Count >= SamplePie.Length);
         }
     }
+
+    internal class PieChartLabelRadiusOffset(Harness h) : SelfTestFixtureBase(h)
+    {
+        // Distinct label sets so we can match each slice across both charts.
+        private static readonly PieSlice[] DefaultData =
+        [
+            new("DA", 30), new("DB", 20), new("DC", 35), new("DD", 15),
+        ];
+        private static readonly PieSlice[] OffsetData =
+        [
+            new("OA", 30), new("OB", 20), new("OC", 35), new("OD", 15),
+        ];
+        private static readonly PieSlice[] LabelViewData =
+        [
+            new("LVa", 30), new("LVb", 20), new("LVc", 35), new("LVd", 15),
+        ];
+
+        public override async Task RunAsync()
+        {
+            const double offset = 40;
+
+            // Captured per-slice from the LabelView callback. Lets the test
+            // verify (a) PieSliceLayout still reports the true arc centroid
+            // (not the offset position), and (b) the offset shifts the
+            // rendered element away from that centroid by the configured amount.
+            var capturedLayouts = new Dictionary<string, PieSliceLayout>();
+
+            var host = H.CreateHost();
+            XamlInterop.Register(host.Reconciler);
+            host.Mount(ctx =>
+                VStack(
+                    Charts.PieChart(DefaultData, d => d.Value, d => d.Label)
+                        .Width(400).Height(400)
+                        .ToElement(),
+                    Charts.PieChart(OffsetData, d => d.Value, d => d.Label)
+                        .Width(400).Height(400)
+                        .LabelRadiusOffset(offset)
+                        .ToElement(),
+                    Charts.PieChart(LabelViewData, d => d.Value)
+                        .Width(400).Height(400)
+                        .LabelRadiusOffset(offset)
+                        .LabelView((d, layout) =>
+                        {
+                            capturedLayouts[d.Label] = layout;
+                            return TextBlock(d.Label).FontSize(11);
+                        })
+                        .ToElement()
+                )
+            );
+
+            await Harness.Render();
+
+            // Built-in text label path: matching slices across the two charts
+            // share centroid angles, so the only per-label position difference
+            // is the radial offset. The -10/-7 glyph adjustments cancel because
+            // both labels are positioned through D3Charts.Text.
+            string[] defaultLabels = ["DA", "DB", "DC", "DD"];
+            string[] offsetLabels = ["OA", "OB", "OC", "OD"];
+
+            int matchedSlices = 0;
+            int radiallyShifted = 0;
+            for (int i = 0; i < defaultLabels.Length; i++)
+            {
+                var def = H.FindControl<TextBlock>(tb => tb.Text == defaultLabels[i]);
+                var off = H.FindControl<TextBlock>(tb => tb.Text == offsetLabels[i]);
+                if (def is null || off is null) continue;
+                matchedSlices++;
+
+                double dx = Microsoft.UI.Xaml.Controls.Canvas.GetLeft(off) - Microsoft.UI.Xaml.Controls.Canvas.GetLeft(def);
+                double dy = Microsoft.UI.Xaml.Controls.Canvas.GetTop(off) - Microsoft.UI.Xaml.Controls.Canvas.GetTop(def);
+                double mag = Math.Sqrt(dx * dx + dy * dy);
+                if (Math.Abs(mag - offset) <= 0.5) radiallyShifted++;
+            }
+
+            H.Check("D3_PieChartLabelRadiusOffset_AllSlicesFound",
+                matchedSlices == defaultLabels.Length);
+            H.Check("D3_PieChartLabelRadiusOffset_LabelsShiftedByOffset",
+                radiallyShifted == defaultLabels.Length);
+
+            // LabelView path: PieSliceLayout.CentroidX/Y must remain the true
+            // arc centroid. The chart applies the offset only when positioning
+            // the returned element via CenterAt (anchor 0.5), so the rendered
+            // element's center should be `offset` pixels from the centroid
+            // along the radial axis. If a regression were to bake the offset
+            // into CentroidX/Y, the displacement here would collapse to ~0.
+            int lvMatched = 0;
+            int lvOffsetCorrect = 0;
+            foreach (var slice in LabelViewData)
+            {
+                if (!capturedLayouts.TryGetValue(slice.Label, out var layout)) continue;
+                var tb = H.FindControl<TextBlock>(t => t.Text == slice.Label);
+                if (tb is null) continue;
+                lvMatched++;
+
+                double actualCenterX = Microsoft.UI.Xaml.Controls.Canvas.GetLeft(tb) + tb.ActualWidth / 2;
+                double actualCenterY = Microsoft.UI.Xaml.Controls.Canvas.GetTop(tb) + tb.ActualHeight / 2;
+                double dx = actualCenterX - layout.CentroidX;
+                double dy = actualCenterY - layout.CentroidY;
+                double mag = Math.Sqrt(dx * dx + dy * dy);
+                if (Math.Abs(mag - offset) <= 1.0) lvOffsetCorrect++;
+            }
+
+            H.Check("D3_PieChartLabelRadiusOffset_LabelViewAllFound",
+                lvMatched == LabelViewData.Length);
+            H.Check("D3_PieChartLabelRadiusOffset_LabelViewOffsetFromCentroid",
+                lvOffsetCorrect == LabelViewData.Length);
+        }
+    }
 }

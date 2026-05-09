@@ -1,0 +1,12 @@
+app:
+  title: "Windows Demo"
+  width: 640
+  height: 520
+  startup-delay: 1500
+
+screenshots:
+  - id: shell
+    description: "Main window with buttons that spawn secondaries"
+    component: WindowsApp
+    region: client
+    format: png

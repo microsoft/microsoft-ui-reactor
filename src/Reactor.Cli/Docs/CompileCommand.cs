@@ -237,10 +237,19 @@ internal static partial class CompileCommand
         var csproj = Directory.GetFiles(appDir, "*.csproj").FirstOrDefault();
         if (csproj == null) return 1;
 
+        // WindowsAppSDK self-contained builds reject the AnyCPU default and
+        // require an explicit architecture. Match the host so x64 boxes get
+        // x64 binaries and ARM64 boxes get ARM64 binaries.
+        var platform = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture switch
+        {
+            System.Runtime.InteropServices.Architecture.Arm64 => "ARM64",
+            _ => "x64",
+        };
+
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"build \"{csproj}\" -v q --nologo -nowarn:MSB3277",
+            Arguments = $"build \"{csproj}\" -v q --nologo -nowarn:MSB3277 -p:Platform={platform}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
