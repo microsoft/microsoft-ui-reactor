@@ -4,8 +4,6 @@ using System.Text;
 using Xunit;
 using Xunit.Sdk;
 
-[assembly: CaptureConsole]
-
 namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 
 public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmokeTestFixture>, IDisposable
