@@ -91,7 +91,7 @@ jobs:
         run: dotnet restore tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj
 
       - name: Test
-        run: dotnet test tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore --logger "console;verbosity=normal"
+        run: dotnet test tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore --logger "console;verbosity=detailed"
 
   selftests:
     name: Selftests

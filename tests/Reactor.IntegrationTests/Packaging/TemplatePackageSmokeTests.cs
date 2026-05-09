@@ -4,6 +4,8 @@ using System.Text;
 using Xunit;
 using Xunit.Sdk;
 
+[assembly: CaptureConsole]
+
 namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 
 public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmokeTestFixture>, IDisposable
@@ -22,10 +24,12 @@ public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmo
     [InlineData(true)]
     public void RunTemplateScenario(bool useProgramMain)
     {
+        TestContext.Current.SendDiagnosticMessage($"RunTemplateScenario(useProgramMain={useProgramMain})");
         var scenarioName = useProgramMain ? "program-main" : "top-level";
         var appDir = CreateDirectory($"generated-app-{scenarioName}");
         var projectName = CreateProjectName(useProgramMain);
 
+        TestContext.Current.SendDiagnosticMessage("CreateNuGetConfig");
         CreateNuGetConfig(appDir, _fixture.PackageSourceDir, _fixture.NugetPackagesDir, _fixture.CommandEnvironment);
 
         RunDotnet(
@@ -37,6 +41,7 @@ public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmo
         var projectPath = Path.Combine(appDir, $"{projectName}.csproj");
         Assert.True(File.Exists(projectPath), $"Expected generated project at '{projectPath}'.");
 
+        TestContext.Current.SendDiagnosticMessage("AssertTemplateProgramMode");
         AssertTemplateProgramMode(appDir, useProgramMain);
 
         RunDotnet(
@@ -45,6 +50,7 @@ public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmo
             _fixture.CommandEnvironment,
             timeoutMs: 300_000);
 
+        TestContext.Current.SendDiagnosticMessage($"dotnet run generated app smoke ({scenarioName})");
         RunDotnetRun(
             appDir,
             projectName,
@@ -288,8 +294,10 @@ public sealed class TemplatePackageSmokeTests : IClassFixture<TemplatePackageSmo
         IReadOnlyDictionary<string, string?> environmentVariables,
         int timeoutMs)
     {
+        TestContext.Current.SendDiagnosticMessage($"START: dotnet {arguments}");
         var result = RunProcess("dotnet", arguments, workingDirectory, environmentVariables, timeoutMs, throwOnFailure: true);
         _ = result;
+        TestContext.Current.SendDiagnosticMessage($"END: dotnet {arguments}");
     }
 
     internal static Task RunDotnetAsync(
@@ -497,6 +505,7 @@ public sealed class TemplatePackageSmokeTestFixture : IDisposable
 
     public TemplatePackageSmokeTestFixture()
     {
+        TestContext.Current.SendDiagnosticMessage("TemplatePackageSmokeTestFixture setup");
         Directory.CreateDirectory(_tempRoot);
 
         RepoRoot = FindRepoRoot();
