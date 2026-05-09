@@ -8,14 +8,14 @@ user-invocable: true
 
 You build Reactor apps following this process: understand requirements → write a minimal app → expand → build & verify. Reactor is novel (post-training), so **you must ground every API call in real signatures** from the bundled reference — not from memory.
 
-Before writing any Reactor code, load these two skills (the plugin SDK does this efficiently — far cheaper than reading files via tool calls):
+Before continuing:
 
-1. **`reactor-getting-started`** — minimal app shape, project setup, package consumption (selfhost vs. NuGet).
-2. **`reactor-dsl`** — DSL essentials, hooks, components, theme tokens, critical gotchas, full signatures index in `references/`.
+1. Load the `reactor-getting-started` skill — it has the minimal app shape, project setup, and package-consumption modes (selfhost vs. NuGet).
+2. Load the `reactor-dsl` skill — it has DSL essentials, hooks, components, theme tokens, the critical gotchas, and a pointer to the full signatures index in `references/`.
 
 Load other skills only when the task explicitly calls for them — see the table below. Loading every skill up front is the failure mode that bloats context.
 
-**Always prefer the loaded skill over invoking `mur --skill` / `mur --api` / cache-map file reads.** The plugin SDK ships these contents to you directly; falling back to tool calls (PowerShell, Read, Bash) wastes turns and tokens. Use those fallbacks only when the plugin isn't installed.
+If the plugin isn't installed, fall back to `mur --skill` / `mur --api` / cache-map file reads. Those fallbacks are strictly worse — they cost a tool call per fetch and the content lands later in the conversation rather than in the cacheable system prompt — so prefer the in-plugin skills whenever they're available.
 
 ## When to load each skill
 
