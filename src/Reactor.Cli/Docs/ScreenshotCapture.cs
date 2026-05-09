@@ -25,10 +25,18 @@ internal static class ScreenshotCapture
         var csproj = csprojFiles[0];
         Console.WriteLine($"    Launching {Path.GetFileName(csproj)} for capture...");
 
+        // WindowsAppSDK self-contained run requires an explicit architecture;
+        // match the host so dotnet run picks up the matching build output.
+        var platform = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture switch
+        {
+            System.Runtime.InteropServices.Architecture.Arm64 => "ARM64",
+            _ => "x64",
+        };
+
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"run --project \"{csproj}\" -- --preview --vscode --fps 5",
+            Arguments = $"run --project \"{csproj}\" -p:Platform={platform} -- --preview --vscode --fps 5",
             RedirectStandardOutput = true,
             RedirectStandardError = false,
             UseShellExecute = false,

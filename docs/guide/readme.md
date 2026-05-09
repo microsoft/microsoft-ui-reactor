@@ -125,6 +125,7 @@ to wire up, no dispatcher threading to worry about.
 - **[Advanced Patterns](advanced.md)** — Performance tuning, custom hooks, large-scale architecture
 - **[Data System](data-system.md)** — DataGrid with sort, filter, search, inline editing, paging
 - **[WinForms Interop](winforms-interop.md)** — Host Reactor components inside WinForms apps via XAML Islands
+- **[Windows](windows.md)** — Top-level windows, tray icons, shutdown policy, multi-window apps
 
 ## Minimal Project Setup
 

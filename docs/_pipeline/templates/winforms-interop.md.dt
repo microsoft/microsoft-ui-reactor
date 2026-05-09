@@ -162,8 +162,9 @@ automatically, but complex tab orders may need `.TabIndex()` hints.
 
 ## Next Steps
 
-- **[Reactor](readme.md)** — back to the index: overview of the framework and full topic list
+- **[Windows](windows.md)** — next topic: opening, finding, and managing top-level windows + tray icons
 - **[Data System](data-system.md)** — previous topic: DataGrid with sort, filter, and editing
+- **[Reactor](readme.md)** — back to the index: overview of the framework and full topic list
 - **[Accessibility](accessibility.md)** — accessibility modifiers and screen reader support
 - **[Advanced Patterns](advanced.md)** — error boundaries, Memo, and escape hatches
 - **[Components](components.md)** — building reusable components to host in WinForms
