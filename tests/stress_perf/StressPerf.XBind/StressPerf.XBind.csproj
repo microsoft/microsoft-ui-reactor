@@ -9,7 +9,6 @@
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

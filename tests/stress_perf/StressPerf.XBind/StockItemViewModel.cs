@@ -29,7 +29,7 @@ public sealed class StockItemViewModel : INotifyPropertyChanged
     public void Update(string symbol, double price, bool isUp)
     {
         var newText = $"{symbol} {price:F2}";
-        if (!ReferenceEquals(_displayText, newText) && _displayText != newText)
+        if (_displayText != newText)
         {
             _displayText = newText;
             PropertyChanged?.Invoke(this, DisplayTextArgs);

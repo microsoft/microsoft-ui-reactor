@@ -14,12 +14,15 @@ public sealed partial class MainWindow : Window
     private readonly PerfTracker _perf = new();
     private readonly CliOptions _options;
 
-    // Public so the compile-time x:Bind in MainWindow.xaml can resolve
-    // expressions of the form `ViewModels[N].DisplayText` against this
-    // strongly-typed indexer. Must be assigned before InitializeComponent
-    // runs, since x:Bind reads each ViewModels[N] reference once at
-    // template-instantiation time and then subscribes to that VM's INPC.
-    public StockItemViewModel[] ViewModels { get; }
+    // Internal so the compile-time x:Bind in MainWindow.xaml can resolve
+    // expressions of the form `ViewModels[N].DisplayText` (the generated
+    // partial class lives in the same assembly), without exposing the
+    // StockItemViewModel[] type across the WinRT ABI — which would trip
+    // CsWinRT1030 and require AllowUnsafeBlocks. Must be assigned before
+    // InitializeComponent runs, since x:Bind reads each ViewModels[N]
+    // reference once at template-instantiation time and then subscribes
+    // to that VM's INPC.
+    internal StockItemViewModel[] ViewModels { get; }
 
     // Phase timing
     private readonly Stopwatch _phaseSw = new();
