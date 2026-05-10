@@ -260,7 +260,8 @@ items.Select(i => Component<Card, CardProps>(new CardProps(i)).WithKey(i.Id)).To
 .Flex(grow: 1, basis: 0)        // CSS `flex: 1` equivalent
 .WithKey("id")                  // dynamic list items — see gotcha #6
 .OnTapped((s, e) => ...)        // pointer / tap surfaces (Buttons take a click handler in their ctor)
-.Set(el => el.AutomationProperties.Name = "...")   // native escape hatch
+.AutomationName("Submit")       // a11y — sets AutomationProperties.Name
+.Set(native => native.MaxWidth = 400)   // native escape hatch (lambda receives the WinUI control)
 ```
 
 ## Theme tokens (always)
