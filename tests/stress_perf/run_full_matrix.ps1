@@ -55,6 +55,7 @@ $rnExe = Join-Path $repoRoot 'tests\stress_perf_rn\StocksGrid\windows\ARM64\Rele
 $variants = @(
   [pscustomobject]@{ Name='Direct';           IsRN=$false; Csproj="$stressDir\StressPerf.Direct\StressPerf.Direct.csproj";                     Exe="$stressDir\StressPerf.Direct\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.Direct.exe";                     ReportName='StressPerf.Direct' }
   [pscustomobject]@{ Name='Bound';            IsRN=$false; Csproj="$stressDir\StressPerf.Bound\StressPerf.Bound.csproj";                       Exe="$stressDir\StressPerf.Bound\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.Bound.exe";                       ReportName='StressPerf.Bound' }
+  [pscustomobject]@{ Name='XBind';            IsRN=$false; Csproj="$stressDir\StressPerf.XBind\StressPerf.XBind.csproj";                       Exe="$stressDir\StressPerf.XBind\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.XBind.exe";                       ReportName='StressPerf.XBind' }
   [pscustomobject]@{ Name='Wpf';              IsRN=$false; Csproj="$stressDir\StressPerf.Wpf\StressPerf.Wpf.csproj";                           Exe="$stressDir\StressPerf.Wpf\bin\$Platform\$Configuration\$tfmWpf\StressPerf.Wpf.exe";                             ReportName='StressPerf.Wpf' }
   [pscustomobject]@{ Name='DirectX';          IsRN=$false; Csproj="$stressDir\StressPerf.DirectX\StressPerf.DirectX.csproj";                   Exe="$stressDir\StressPerf.DirectX\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.DirectX.exe";                   ReportName='StressPerf.DirectX' }
   [pscustomobject]@{ Name='Reactor';          IsRN=$false; Csproj="$stressDir\StressPerf.Reactor\StressPerf.Reactor.csproj";                   Exe="$stressDir\StressPerf.Reactor\bin\$Platform\$Configuration\$tfmWinUI\StressPerf.Reactor.exe";                   ReportName='StressPerf.Reactor' }
@@ -65,7 +66,7 @@ $variants = @(
 
 if ($VariantFilter.Count -gt 0) {
   $variants = $variants | Where-Object { $VariantFilter -contains $_.Name }
-  if ($variants.Count -eq 0) { throw "VariantFilter matched no variants. Names: Direct, Bound, Wpf, DirectX, Reactor, ReactorOptimized, ReactorGrid, RN-Fabric" }
+  if ($variants.Count -eq 0) { throw "VariantFilter matched no variants. Names: Direct, Bound, XBind, Wpf, DirectX, Reactor, ReactorOptimized, ReactorGrid, RN-Fabric" }
 }
 
 # ── Pre-flight: admin check (skip allowed for in-app-only mode) ────────────
@@ -174,7 +175,7 @@ RN-Fabric build failed (see $logPath). Common causes on this repo:
   3. node_modules drift after a `react-native-windows` bump — rerun
      with the node_modules dir deleted to force a clean install.
 To bench everything else without RN-Fabric, drop it from the variant set:
-    -VariantFilter @('Direct','Bound','Wpf','DirectX','Reactor','ReactorOptimized','ReactorGrid')
+    -VariantFilter @('Direct','Bound','XBind','Wpf','DirectX','Reactor','ReactorOptimized','ReactorGrid')
 "@
       }
     } finally {
@@ -197,7 +198,7 @@ Build it separately (npm + msbuild — works fine from a non-elevated shell):
     npx '@react-native-community/cli' run-windows --release --arch arm64 --no-launch --no-deploy
 (If only VS 18 is installed, prefix with: `$env:MinimumVisualStudioVersion='18.0'`)
 Then re-run this script. To skip RN-Fabric this session, pass:
-    -VariantFilter @('Direct','Bound','Wpf','DirectX','Reactor','ReactorOptimized','ReactorGrid')
+    -VariantFilter @('Direct','Bound','XBind','Wpf','DirectX','Reactor','ReactorOptimized','ReactorGrid')
 "@
     }
     "  exe missing for $($v.Name) — auto-building $($v.Csproj)" | Tee-Object -FilePath $logPath -Append | Out-Host
