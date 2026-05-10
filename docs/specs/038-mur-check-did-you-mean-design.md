@@ -216,6 +216,47 @@ If the agent reads all of these every turn, two pathologies follow: (a) it spend
 
 The agent-eval prompt for Reactor (#226 §5) directs the agent to use `mur check` (iteration) during the build/fix loop and `mur check --final` once iteration mode is clean. The transition is the explicit "I am done iterating" signal.
 
+### CLI shape and MSBuild passthrough
+
+```
+mur check [<path>] [mur-flags...] [-- <msbuild args>...]
+```
+
+Today's `CheckCommand` accepts only `<path>` and hardcodes `--nologo`, `-v:m`, and `-p:Platform={host arch}` against `dotnet build`. That's the right default but a fragile contract — agents and humans both routinely need to override `Platform`, pick a `Configuration`, skip restore, change verbosity, or pass arbitrary `-p:` properties. Without an escape hatch the only fallback is "drop `mur check` and run `dotnet build` directly," which discards every benefit this spec adds.
+
+The fix is the standard double-dash convention: everything after a literal `--` is forwarded verbatim to `dotnet build`. `mur`-owned flags appear before `--`; MSBuild-owned flags appear after.
+
+```
+# default: ranker on, iteration mode, host-arch platform
+mur check
+
+# build x64 even on an ARM64 host
+mur check -- -p:Platform=x64
+
+# release config + skip restore + final-pass mode
+mur check --final -- -c Release --no-restore
+
+# escalate verbosity for debugging the wrapper
+mur check -- -v:n
+
+# explicit TFM
+mur check -- -f net10.0-windows10.0.22621.0
+
+# multiple properties
+mur check -- -p:Platform=x64 -p:DefineConstants=FOO
+
+# all of the above with a non-default path
+mur check ./MyApp -- -c Release -p:Platform=x64
+```
+
+**Default-merging rules.** `mur` always passes `--nologo` (output stability is non-negotiable for diagnostic parsing). For `-v:` and `-p:Platform=`, `mur` injects its defaults *only if* the user did not supply the same flag in the passthrough section. Detection is by flag name, not value — `-p:Platform=x64` in passthrough wins over the auto-injected host arch; `-v:n` in passthrough wins over the wrapper's `-v:m`.
+
+**Boundary semantics.** A bare `--` is the unambiguous separator. Tokens before it are parsed against `mur`'s own grammar; tokens after are not. Emit a clear error if the user passes an unknown `mur-flag` before `--` rather than silently forwarding (helps catch typos like `mur check --quie -- -c Release`).
+
+**Ranker is unchanged.** Passthrough alters how `dotnet build` runs, not how its diagnostics are scored. The ranker (§8) and the suggesters (Tiers 1–4) operate on the parsed diagnostic stream regardless of which build invocation produced it. The one exception: `--strict` (which the ranker promotes warnings to errors) composes with `-p:TreatWarningsAsErrors=true` from passthrough — both apply, and the more aggressive of the two wins on each diagnostic.
+
+**Tracing.** When `mur check --trace` is on, the trace records the *full* effective command line passed to `dotnet build`, including default-merged flags, so replays are bit-faithful.
+
 ### Ranking policy
 
 Each diagnostic gets a score from 0.0 (suppress) to 1.0 (always emit), computed as:
@@ -368,6 +409,7 @@ Phased so each phase is independently shippable.
 
 - Land §8's hand-authored `base_policy(code)` table covering the top ~30 highest-frequency diagnostic codes from Phase 0's sweep.
 - Add `--strict`, `--final`, `--quiet`, `--emit-threshold` flags to `mur check`.
+- **Land `--` MSBuild passthrough** per §8. Implementation: split `args` on the first bare `--`, validate the left half against `mur`'s flag grammar (error on unknowns), then default-merge the right half with `--nologo` / `-v:m` / `-p:Platform={host arch}` only where the user didn't already specify the same flag. Round-trip the effective command line into `--trace` output so replays are reproducible.
 - Update the eval prompt and the `reactor-build-and-check` skill to direct agents to use iteration mode in the inner loop and `--final` once iteration is clean.
 - Add the suppress→error CI guardrail: every `mur check --final` run on a successful build must surface no diagnostic that, by code alone, the table would have flagged in iteration mode but didn't.
 
