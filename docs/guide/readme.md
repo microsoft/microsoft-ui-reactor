@@ -99,6 +99,7 @@ to wire up, no dispatcher threading to worry about.
 ### Beginner
 
 - **[Getting Started](getting-started.md)** — Create your first app, manage state, build a todo list
+- **[Reactor for XAML Developers](xaml-developers.md)** — Translate XAML, bindings, MVVM, and navigation into Reactor concepts
 - **[Dev Tooling](dev-tooling.md)** — Preview mode, hot reload, development workflow
 - **[Components](components.md)** — Component classes, props, function components, composition
 - **[Hooks](hooks.md)** — UseState, UseReducer, UseEffect, UseMemo, UseRef, UseCallback

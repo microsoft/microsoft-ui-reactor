@@ -1,0 +1,5 @@
+app:
+  title: "Reactor for XAML Developers"
+  width: 720
+  height: 620
+  startup-delay: 1500
