@@ -1,0 +1,648 @@
+# Reactor API — signatures index (generated)
+# Source of truth: Reactor.dll public surface.
+# Regenerate: `mur --regen-api`  (or build tools/Reactor.SignaturesGen — its
+#             AfterBuild target rewrites this file).
+# Format: one symbol per line. No prose. Alphabetized within each section.
+
+## Factories
+# All in `Microsoft.UI.Reactor.Factories` — `using static Microsoft.UI.Reactor.Factories;`
+
+Accelerator(VirtualKey key, VirtualKeyModifiers modifiers = VirtualKeyModifiers.None) → KeyboardAcceleratorData
+AcrylicBrush(Color tintColor, double tintOpacity = 0.8, Color? fallbackColor = null, double? tintLuminosityOpacity = null) → AcrylicBrush
+AnimatedIcon(object source = null, IconSource fallbackIconSource = null) → AnimatedIconElement
+AnimatedVisualPlayer() → AnimatedVisualPlayerElement
+AnnotatedScrollBar() → AnnotatedScrollBarElement
+AppBarButton(Command command) → AppBarButtonData
+AppBarButton(string label, Action onClick = null, string icon = null) → AppBarButtonData
+AppBarSeparator() → AppBarSeparatorData
+AppBarToggleButton(string label, bool isChecked = false, Action<bool> onToggled = null, string icon = null) → AppBarToggleButtonData
+AutoColumns<T>(TypeRegistry registry = null, Func<FieldDescriptor, FieldDescriptor> overrides = null) → IReadOnlyList<FieldDescriptor>
+AutoSuggestBox(string text, Action<string> onTextChanged = null, Action<string> onQuerySubmitted = null) → AutoSuggestBoxElement
+BitmapIcon(Uri source, bool showAsMonochrome = true) → BitmapIconData
+Border(Element child) → BorderElement
+Breadcrumb(string label, object tag = null) → BreadcrumbBarItemData
+BreadcrumbBar(BreadcrumbBarItemData[] items, Action<BreadcrumbBarItemData> onItemClicked = null) → BreadcrumbBarElement
+Button(Command command) → ButtonElement
+Button(Element content, Action onClick = null) → ButtonElement
+Button(string label, Action onClick = null) → ButtonElement
+CalendarDatePicker(DateTimeOffset? date = null, Action<DateTimeOffset?> onDateChanged = null) → CalendarDatePickerElement
+CalendarView() → CalendarViewElement
+Canvas(Element[] children) → CanvasElement
+Caption(string content) → TextBlockElement
+CheckBox(bool isChecked, Action<bool> onChanged = null, string label = null) → CheckBoxElement
+ColorPicker(Color color, Action<Color> onColorChanged = null) → ColorPickerElement
+Column<T>(string name, Func<T, object> accessor, bool editable = false, string displayName = null, string format = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
+ComboBox(Element[] itemElements, int selectedIndex, Action<int> onSelectionChanged) → ComboBoxElement
+ComboBox(string[] items, int selectedIndex = -1, Action<int> onSelectionChanged = null) → ComboBoxElement
+CommandBar(AppBarItemBase[] primaryCommands = null, AppBarItemBase[] secondaryCommands = null) → CommandBarElement
+CommandBarFlyout(Element target, AppBarItemBase[] primaryCommands = null, AppBarItemBase[] secondaryCommands = null) → CommandBarFlyoutElement
+CommandHost(Command[] commands, Element child) → CommandHostElement
+Component<T, TProps>(TProps props) → ComponentElement
+Component<T>() → ComponentElement
+ContentDialog(string title, Element content, string primaryButtonText = "OK") → ContentDialogElement
+ContentFlyout(Element content, FlyoutPlacementMode placement = FlyoutPlacementMode.Auto) → ContentFlyoutElement
+DataGrid<T>(IDataSource<T> source, IReadOnlyList<FieldDescriptor> columns, TypeRegistry registry = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Func<CellContext<T>, Element> cellTemplate = null, Func<RowContext<T>, Element> rowTemplate = null, Func<HeaderContext, Element> headerTemplate = null, Element loadingTemplate = null, Element emptyTemplate = null, bool showSearch = false, Func<T, RowKey, Element> rowDetailTemplate = null, Func<FieldDescriptor, double, Element> placeholderCellTemplate = null) → Element
+DataGrid<T>(IDataSource<T> source, TypeRegistry registry, Func<FieldDescriptor, FieldDescriptor> columnOverrides = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Element loadingTemplate = null, Element emptyTemplate = null) → Element
+DatePicker(DateTimeOffset date, Action<DateTimeOffset> onDateChanged = null) → DatePickerElement
+DevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>> items = null, string glyph = "⚡", string toolTip = "Devtools", string automationId = null) → Element
+DropDownButton(string label, Element flyout = null) → DropDownButtonElement
+Ellipse() → EllipseElement
+Empty() → Element
+ErrorBoundary(Element child, Element fallback) → ErrorBoundaryElement
+ErrorBoundary(Element child, Func<Exception, Element> fallback) → ErrorBoundaryElement
+Expander(string header, Element content, bool isExpanded = false, Action<bool> onExpandedChanged = null) → ExpanderElement
+Expr(Func<Element> render) → Element
+Flex(Element[] children) → FlexElement
+Flex(FlexDirection direction, Element[] children) → FlexElement
+FlexColumn(Element[] children) → FlexElement
+FlexRow(Element[] children) → FlexElement
+FlipView(Element[] items) → FlipViewElement
+FlipView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedFlipViewElement<T>
+Flyout(Element target, Element flyoutContent) → FlyoutElement
+FontIcon(string glyph, string fontFamily = null, double? fontSize = null) → FontIconData
+ForEach<T>(IEnumerable<T> items, Func<T, Element> render) → Element
+ForEach<T>(IEnumerable<T> items, Func<T, int, Element> render) → Element
+Frame(Type sourcePageType = null, object navigationParameter = null) → FrameElement
+Func(Func<RenderContext, Element> render) → FuncElement
+Grid(GridSize[] columns, GridSize[] rows, Element[] children) → GridElement
+Grid(string[] columns, string[] rows, Element[] children) → GridElement
+GridView(Element[] items) → GridViewElement
+GridView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedGridViewElement<T>
+Group(Element[] children) → Element
+HStack(Element[] children) → StackElement
+HStack(double spacing, Element[] children) → StackElement
+Heading(string content) → TextBlockElement
+Hyperlink(string text, Uri navigateUri) → RichTextHyperlink
+HyperlinkButton(Command command) → HyperlinkButtonElement
+HyperlinkButton(string content, Uri navigateUri = null, Action onClick = null) → HyperlinkButtonElement
+If(bool condition, Func<Element> then, Func<Element> otherwise = null) → Element
+Image(string source) → ImageElement
+ImageIcon(Uri source) → ImageIconData
+InfoBadge() → InfoBadgeElement
+InfoBadge(int value) → InfoBadgeElement
+InfoBar(string title = null, string message = null) → InfoBarElement
+InterspersedGrid(Orientation orientation, Element[] items, double[] proportions, double separatorSize, Func<int, Element> separatorFactory) → GridElement
+ItemsView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → ItemsViewElement<T>
+LazyHStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
+LazyVStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyVStackElement<T>
+Line(double x1, double y1, double x2, double y2) → LineElement
+ListBox(string[] items, int selectedIndex = -1, Action<int> onSelectionChanged = null) → ListBoxElement
+ListView(Element[] items) → ListViewElement
+ListView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedListViewElement<T>
+LocaleProvider(string locale, Element child, IStringResourceProvider resourceProvider = null, string defaultLocale = "en-US", bool pseudoLocalize = false) → Element
+MapControl(string mapServiceToken = null, double zoomLevel = 1) → MapControlElement
+Markdown(string markdown) → Element
+Markdown(string markdown, MarkdownOptions options) → Element
+MediaPlayerElement(string source = null) → MediaPlayerElementElement
+Memo(Func<RenderContext, Element> render, object[] dependencies) → MemoElement
+Menu(string title, MenuFlyoutItemBase[] items) → MenuBarItemData
+MenuBar(MenuBarItemData[] items) → MenuBarElement
+MenuFlyout(Element target, MenuFlyoutItemBase[] items) → MenuFlyoutElement
+MenuItem(Command command) → MenuFlyoutItemData
+MenuItem(string text, Action onClick = null, string icon = null) → MenuFlyoutItemData
+MenuItem<T>(Command<T> command, T parameter) → MenuFlyoutItemData
+MenuItems(FlyoutPlacementMode placement, MenuFlyoutItemBase[] items) → MenuFlyoutContentElement
+MenuItems(MenuFlyoutItemBase[] items) → MenuFlyoutContentElement
+MenuSeparator() → MenuFlyoutSeparatorData
+MenuSubItem(string text, MenuFlyoutItemBase[] items) → MenuFlyoutSubItemData
+NavItem(string content, string icon = null, string tag = null) → NavigationViewItemData
+NavItemHeader(string content) → NavigationViewItemData
+NavigationHost<TRoute>(NavigationHandle<TRoute> nav, Func<TRoute, Element> routeMap) → NavigationHostElement
+NavigationView(NavigationViewItemData[] menuItems, Element content = null) → NavigationViewElement
+NumberBox(double value, Action<double> onValueChanged = null, string header = null) → NumberBoxElement
+Paragraph(RichTextInline[] inlines) → RichTextParagraph
+ParallaxView(Element child, double verticalShift = 0, double horizontalShift = 0) → ParallaxViewElement
+PasswordBox(string password, Action<string> onPasswordChanged = null, string placeholderText = null) → PasswordBoxElement
+Path() → PathElement
+PathIcon(string data) → PathIconData
+PersonPicture() → PersonPictureElement
+PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int> onSelectedIndexChanged = null) → PipsPagerElement
+Pivot(PivotItemData[] items) → PivotElement
+PivotItem(string header, Element content) → PivotItemData
+Popup(Element child, bool isOpen = false, Action onClosed = null) → PopupElement
+Progress(double value) → ProgressElement
+ProgressIndeterminate() → ProgressElement
+ProgressRing() → ProgressRingElement
+ProgressRing(double value) → ProgressRingElement
+PropertyGrid(object target, TypeRegistry registry, Action<object> onRootChanged = null) → Element
+RadioButton(string label, bool isChecked = false, Action<bool> onChecked = null, string groupName = null) → RadioButtonElement
+RadioButtons(string[] items, int selectedIndex = -1, Action<int> onSelectionChanged = null) → RadioButtonsElement
+RadioMenuItem(string text, string groupName, bool isChecked = false, Action onClick = null, string icon = null) → RadioMenuFlyoutItemData
+RatingControl(double value = 0, Action<double> onValueChanged = null) → RatingControlElement
+Rectangle() → RectangleElement
+RefreshContainer(Element content, Action onRefreshRequested = null) → RefreshContainerElement
+RelativePanel(Element[] children) → RelativePanelElement
+RenderEachTime(Func<RenderContext, Element> render) → FuncElement
+RepeatButton(Command command) → RepeatButtonElement
+RepeatButton(string label, Action onClick = null) → RepeatButtonElement
+RichEditBox(string text = "", Action<string> onTextChanged = null) → RichEditBoxElement
+RichText(RichTextParagraph[] paragraphs) → RichTextBlockElement
+RichText(string text) → RichTextBlockElement
+Run(string text) → RichTextRun
+ScrollView(Element child) → ScrollViewElement
+SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int> onSelectionChanged = null) → SelectorBarElement
+SelectorBarItem(string text, string icon = null) → SelectorBarItemData
+SemanticZoom(Element zoomedInView, Element zoomedOutView) → SemanticZoomElement
+Slider(double value, double min = 0, double max = 100, Action<double> onChanged = null) → SliderElement
+SplitButton(Command command, Element flyout = null) → SplitButtonElement
+SplitButton(string label, Action onClick = null, Element flyout = null) → SplitButtonElement
+SplitView(Element pane = null, Element content = null) → SplitViewElement
+SubHeading(string content) → TextBlockElement
+SwipeControl(Element content, SwipeItemData[] leftItems = null, SwipeItemData[] rightItems = null) → SwipeControlElement
+SymbolIcon(string symbol) → SymbolIconData
+Tab(string header, Element content) → TabViewItemData
+TabView(TabViewItemData[] tabs) → TabViewElement
+TeachingTip(string title, string subtitle = null) → TeachingTipElement
+TextBlock(string content) → TextBlockElement
+TextField(string value, Action<string> onChanged = null, string placeholder = null, string header = null) → TextFieldElement
+Thick(double horizontal, double vertical) → Thickness
+Thick(double left, double top, double right, double bottom) → Thickness
+Thick(double uniform) → Thickness
+ThreeStateCheckBox(bool? checkedState, Action<bool?> onCheckedStateChanged = null, string label = null) → CheckBoxElement
+TimePicker(TimeSpan time, Action<TimeSpan> onTimeChanged = null) → TimePickerElement
+TitleBar(string title) → TitleBarElement
+ToggleButton(Command command, bool isChecked = false) → ToggleButtonElement
+ToggleButton(string label, bool isChecked = false, Action<bool> onToggled = null) → ToggleButtonElement
+ToggleMenuItem(string text, bool isChecked = false, Action<bool> onToggled = null, string icon = null) → ToggleMenuFlyoutItemData
+ToggleSplitButton(Command command, bool isChecked = false, Element flyout = null) → ToggleSplitButtonElement
+ToggleSplitButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null, Element flyout = null) → ToggleSplitButtonElement
+ToggleSwitch(bool isOn, Action<bool> onChanged = null, string onContent = null, string offContent = null, string header = null) → ToggleSwitchElement
+TreeNode(string content, TreeViewNodeData[] children) → TreeViewNodeData
+TreeView(TreeViewNodeData[] nodes) → TreeViewElement
+UniformGrid(Orientation orientation, Element[] items) → GridElement
+VStack(Element[] children) → StackElement
+VStack(double spacing, Element[] children) → StackElement
+Viewbox(Element child) → ViewboxElement
+VirtualList(int itemCount, Func<int, Element> renderItem, Func<int, string> getItemKey = null, double? itemHeight = null, double estimatedItemHeight = 40, double spacing = 0, Action<VirtualListRef> ref = null, Action<int, int> onVisibleRangeChanged = null) → Element
+WebView2(Uri source = null) → WebView2Element
+When(bool condition, Func<Element> then) → Element
+WrapGrid(Element[] children) → WrapGridElement
+WrapGrid(int maxRowsOrColumns, Element[] children) → WrapGridElement
+
+## Modifiers (extension methods on Element)
+# Fluent — preserves concrete element type. Type-specific sugar (e.g. .Bold()
+# on TextBlockElement) MUST come before generic .Margin/.Padding/etc.
+
+AnimatedIconElement.Set(Action<AnimatedIcon> configure) → AnimatedIconElement
+AnimatedVisualPlayerElement.Set(Action<AnimatedVisualPlayer> configure) → AnimatedVisualPlayerElement
+AnnotatedScrollBarElement.Set(Action<AnnotatedScrollBar> configure) → AnnotatedScrollBarElement
+AutoSuggestBoxElement.Set(Action<AutoSuggestBox> configure) → AutoSuggestBoxElement
+BorderElement.Set(Action<Border> configure) → BorderElement
+BreadcrumbBarElement.Set(Action<BreadcrumbBar> configure) → BreadcrumbBarElement
+ButtonElement.Set(Action<Button> configure) → ButtonElement
+CalendarDatePickerElement.Set(Action<CalendarDatePicker> configure) → CalendarDatePickerElement
+CalendarViewElement.Set(Action<CalendarView> configure) → CalendarViewElement
+CanvasElement.Set(Action<Canvas> configure) → CanvasElement
+CheckBoxElement.Set(Action<CheckBox> configure) → CheckBoxElement
+ColorPickerElement.Set(Action<ColorPicker> configure) → ColorPickerElement
+ComboBoxElement.Editable(bool editable = true) → ComboBoxElement
+ComboBoxElement.Header(string header) → ComboBoxElement
+ComboBoxElement.Placeholder(string text) → ComboBoxElement
+ComboBoxElement.Set(Action<ComboBox> configure) → ComboBoxElement
+CommandBarElement.Set(Action<CommandBar> configure) → CommandBarElement
+CommandBarFlyoutElement.Set(Action<CommandBarFlyout> configure) → CommandBarFlyoutElement
+ContentDialogElement.Set(Action<ContentDialog> configure) → ContentDialogElement
+DatePickerElement.Set(Action<DatePicker> configure) → DatePickerElement
+DropDownButtonElement.Set(Action<DropDownButton> configure) → DropDownButtonElement
+EllipseElement.Fill(Brush brush) → EllipseElement
+EllipseElement.Set(Action<Ellipse> configure) → EllipseElement
+ExpanderElement.Direction(ExpandDirection dir) → ExpanderElement
+ExpanderElement.Set(Action<Expander> configure) → ExpanderElement
+FlexElement.FlexPadding(double horizontal, double vertical) → FlexElement
+FlexElement.FlexPadding(double left, double top, double right, double bottom) → FlexElement
+FlexElement.FlexPadding(double uniform) → FlexElement
+FlexElement.Set(Action<FlexPanel> configure) → FlexElement
+FlipViewElement.Set(Action<FlipView> configure) → FlipViewElement
+FlyoutElement.Set(Action<Flyout> configure) → FlyoutElement
+FrameElement.Set(Action<Frame> configure) → FrameElement
+GridElement.BackgroundTransition(TimeSpan? duration = null) → GridElement
+GridElement.Set(Action<Grid> configure) → GridElement
+GridViewElement.SelectionMode(ListViewSelectionMode mode) → GridViewElement
+GridViewElement.Set(Action<GridView> configure) → GridViewElement
+HyperlinkButtonElement.Set(Action<HyperlinkButton> configure) → HyperlinkButtonElement
+ImageElement.Set(Action<Image> configure) → ImageElement
+InfoBadgeElement.Set(Action<InfoBadge> configure) → InfoBadgeElement
+InfoBarElement.Closable(bool closable = true) → InfoBarElement
+InfoBarElement.Set(Action<InfoBar> configure) → InfoBarElement
+InfoBarElement.Severity(InfoBarSeverity severity) → InfoBarElement
+ItemsViewElement<T>.Set<T>(Action<ItemsView> configure) → ItemsViewElement<T>
+LazyHStackElement<T>.Set<T>(Action<ScrollViewer> configure) → LazyHStackElement<T>
+LazyHStackElement<T>.SetRepeater<T>(Action<ItemsRepeater> configure) → LazyHStackElement<T>
+LazyVStackElement<T>.Set<T>(Action<ScrollViewer> configure) → LazyVStackElement<T>
+LazyVStackElement<T>.SetRepeater<T>(Action<ItemsRepeater> configure) → LazyVStackElement<T>
+LineElement.Set(Action<Line> configure) → LineElement
+LineElement.Stroke(Brush brush) → LineElement
+LineElement.StrokeThickness(double thickness) → LineElement
+ListBoxElement.Set(Action<ListBox> configure) → ListBoxElement
+ListViewElement.SelectionMode(ListViewSelectionMode mode) → ListViewElement
+ListViewElement.Set(Action<ListView> configure) → ListViewElement
+MapControlElement.Set(Action<MapControl> configure) → MapControlElement
+MediaPlayerElementElement.Set(Action<MediaPlayerElement> configure) → MediaPlayerElementElement
+MenuBarElement.Set(Action<MenuBar> configure) → MenuBarElement
+MenuFlyoutElement.Set(Action<MenuFlyout> configure) → MenuFlyoutElement
+NavigationViewElement.PaneDisplayMode(NavigationViewPaneDisplayMode mode) → NavigationViewElement
+NavigationViewElement.PaneTitle(string title) → NavigationViewElement
+NavigationViewElement.Set(Action<NavigationView> configure) → NavigationViewElement
+NavigationViewElement.WithNavigation<TRoute>(NavigationHandle<TRoute> nav, Func<TRoute, string> routeToTag, Func<string, TRoute> tagToRoute) → NavigationViewElement
+NumberBoxElement.Focus(FocusManager fm, string fieldName, bool autoFocus = false) → NumberBoxElement
+NumberBoxElement.Range(double min, double max) → NumberBoxElement
+NumberBoxElement.Set(Action<NumberBox> configure) → NumberBoxElement
+NumberBoxElement.SpinButtons(NumberBoxSpinButtonPlacementMode placement = NumberBoxSpinButtonPlacementMode.Inline) → NumberBoxElement
+ParallaxViewElement.Set(Action<ParallaxView> configure) → ParallaxViewElement
+PasswordBoxElement.Set(Action<PasswordBox> configure) → PasswordBoxElement
+PathElement.Fill(Brush brush) → PathElement
+PathElement.Set(Action<Path> configure) → PathElement
+PathElement.Stroke(Brush brush) → PathElement
+PathElement.StrokeDashArray(double[] dashes) → PathElement
+PathElement.StrokeThickness(double thickness) → PathElement
+PersonPictureElement.DisplayName(string name) → PersonPictureElement
+PersonPictureElement.Initials(string initials) → PersonPictureElement
+PersonPictureElement.Set(Action<PersonPicture> configure) → PersonPictureElement
+PipsPagerElement.Set(Action<PipsPager> configure) → PipsPagerElement
+PivotElement.Set(Action<Pivot> configure) → PivotElement
+PopupElement.LightDismiss(bool enabled = true) → PopupElement
+PopupElement.Offset(double horizontal, double vertical) → PopupElement
+PopupElement.Set(Action<Popup> configure) → PopupElement
+ProgressElement.Set(Action<ProgressBar> configure) → ProgressElement
+ProgressRingElement.Active(bool active = true) → ProgressRingElement
+ProgressRingElement.Set(Action<ProgressRing> configure) → ProgressRingElement
+RadioButtonElement.Set(Action<RadioButton> configure) → RadioButtonElement
+RadioButtonsElement.Set(Action<RadioButtons> configure) → RadioButtonsElement
+RatingControlElement.MaxRating(int max) → RatingControlElement
+RatingControlElement.ReadOnly(bool readOnly = true) → RatingControlElement
+RatingControlElement.Set(Action<RatingControl> configure) → RatingControlElement
+RectangleElement.Fill(Brush brush) → RectangleElement
+RectangleElement.Set(Action<Rectangle> configure) → RectangleElement
+RefreshContainerElement.Set(Action<RefreshContainer> configure) → RefreshContainerElement
+RelativePanelElement.Set(Action<RelativePanel> configure) → RelativePanelElement
+RepeatButtonElement.Delay(int delay) → RepeatButtonElement
+RepeatButtonElement.Interval(int interval) → RepeatButtonElement
+RepeatButtonElement.Set(Action<RepeatButton> configure) → RepeatButtonElement
+RichEditBoxElement.Set(Action<RichEditBox> configure) → RichEditBoxElement
+RichTextBlockElement.Set(Action<RichTextBlock> configure) → RichTextBlockElement
+ScrollViewElement.HorizontalScrollMode(ScrollMode mode) → ScrollViewElement
+ScrollViewElement.Set(Action<ScrollViewer> configure) → ScrollViewElement
+ScrollViewElement.VerticalScrollMode(ScrollMode mode) → ScrollViewElement
+ScrollViewElement.ZoomMode(ZoomMode mode) → ScrollViewElement
+SelectorBarElement.Set(Action<SelectorBar> configure) → SelectorBarElement
+SemanticZoomElement.Set(Action<SemanticZoom> configure) → SemanticZoomElement
+SliderElement.Header(string header) → SliderElement
+SliderElement.Set(Action<Slider> configure) → SliderElement
+SliderElement.StepFrequency(double step) → SliderElement
+SplitButtonElement.Set(Action<SplitButton> configure) → SplitButtonElement
+SplitViewElement.Set(Action<SplitView> configure) → SplitViewElement
+StackElement.BackgroundTransition(TimeSpan? duration = null) → StackElement
+StackElement.Set(Action<StackPanel> configure) → StackElement
+StackElement.Spacing(double spacing) → StackElement
+SwipeControlElement.Set(Action<SwipeControl> configure) → SwipeControlElement
+T.AccessKey<T>(string key) → T
+T.AccessKeyDisplayRequested<T>(Action handler) → T
+T.AccessKeyDisplayRequested<T>(Action<UIElement, AccessKeyDisplayRequestedEventArgs> handler) → T
+T.AccessibilityHidden<T>() → T
+T.AccessibilityView<T>(AccessibilityView view) → T
+T.Animate<T>(Curve curve, AnimateProperty properties = AnimateProperty.All) → T
+T.ApplyStyle<T>(string styleName) → T
+T.AutomationId<T>(string id) → T
+T.AutomationName<T>(string name) → T
+T.Backdrop<T>(BackdropKind kind) → T
+T.Backdrop<T>(Func<SystemBackdrop> factory) → T
+T.Background<T>(Brush brush) → T
+T.Background<T>(ThemeRef theme) → T
+T.Background<T>(string color) → T
+T.BorderInlineStart<T>(Thickness thickness) → T
+T.Canvas<T>(double left = 0, double top = 0) → T
+T.Canvas<T>(double left, double top, double anchorX, double anchorY) → T
+T.Center<T>() → T
+T.CenterAt<T>(double x, double y) → T
+T.CenterPoint<T>(Vector3 center) → T
+T.ConnectedAnimation<T>(string key) → T
+T.CornerRadius<T>(double radius) → T
+T.CornerRadius<T>(double topLeft, double topRight, double bottomRight, double bottomLeft) → T
+T.Disabled<T>(bool disabled = true) → T
+T.DraggableWhen<T>(Func<bool> canDrag) → T
+T.Flex<T>(double grow = 0, double shrink = 1, double? basis = null, FlexAlign? alignSelf = null, FlexPositionType position = FlexPositionType.Relative, double? left = null, double? top = null, double? right = null, double? bottom = null) → T
+T.FocusMeta<T>(FocusManager fm, string fieldName, bool autoFocus = false) → T
+T.FocusTrap<T>(FocusTrapHandle handle) → T
+T.FontFamily<T>(FontFamily family) → T
+T.FontFamily<T>(string family) → T
+T.FontSize<T>(double size) → T
+T.FontWeight<T>(FontWeight weight) → T
+T.Foreground<T>(Brush brush) → T
+T.Foreground<T>(ThemeRef theme) → T
+T.Foreground<T>(string color) → T
+T.FullDescription<T>(string desc) → T
+T.GetFocus<T>() → FocusAttached
+T.GetValidation<T>() → ValidationAttached
+T.Grid<T>(int row = 0, int column = 0, int rowSpan = 1, int columnSpan = 1) → T
+T.HAlign<T>(HorizontalAlignment alignment) → T
+T.HeadingLevel<T>(AutomationHeadingLevel level) → T
+T.Height<T>(double height) → T
+T.HelpText<T>(string text) → T
+T.HierarchyLevel<T>(int level) → T
+T.InteractionStates<T>(Func<InteractionStatesBuilder, InteractionStatesBuilder> configure, Curve curve = null) → T
+T.IsTabStop<T>(bool isTabStop = true) → T
+T.ItemContainerTransitions<T>(Transition[] transitions) → T
+T.ItemStatus<T>(string status) → T
+T.Keyframes<T>(string name, object trigger, Func<KeyframeBuilder, KeyframeBuilder> configure) → T
+T.LabeledBy<T>(string labelAutomationId) → T
+T.Landmark<T>(AutomationLandmarkType type) → T
+T.LayoutAnimation<T>() → T
+T.LayoutAnimation<T>(LayoutAnimationConfig config) → T
+T.LayoutAnimation<T>(TimeSpan duration) → T
+T.LiveRegion<T>(AutomationLiveSetting mode = AutomationLiveSetting.Polite) → T
+T.Margin<T>(double horizontal, double vertical) → T
+T.Margin<T>(double left, double top, double right, double bottom) → T
+T.Margin<T>(double uniform) → T
+T.MarginInlineEnd<T>(double value) → T
+T.MarginInlineStart<T>(double value) → T
+T.MaxHeight<T>(double h) → T
+T.MaxWidth<T>(double w) → T
+T.MinHeight<T>(double h) → T
+T.MinWidth<T>(double w) → T
+T.OnCharacterReceived<T>(Action<UIElement, CharacterReceivedRoutedEventArgs> handler) → T
+T.OnDoubleTap<T>(Action handler) → T
+T.OnDoubleTap<T>(Action<Point> handler) → T
+T.OnDoubleTapped<T>(Action<object, DoubleTappedRoutedEventArgs> handler) → T
+T.OnDragEnter<T>(Action<DragTargetArgs> handler) → T
+T.OnDragLeave<T>(Action<DragTargetArgs> handler) → T
+T.OnDragOver<T>(Action<DragTargetArgs> handler) → T
+T.OnDragStart<T, TPayload>(Func<TPayload> getPayload, DragOperations? allowedOperations = null, Action<DragEndContext> onEnd = null) → T
+T.OnDragStart<T>(Func<DragData> getData, DragOperations? allowedOperations = null, Action<DragEndContext> onEnd = null) → T
+T.OnDrop<T, TPayload>(Action<TPayload> onDrop, DragOperations acceptedOps = DragOperations.All) → T
+T.OnDrop<T>(Action<DragTargetArgs> onDrop, DragOperations acceptedOps = DragOperations.All) → T
+T.OnError<T>(Func<T, T> configure) → T
+T.OnGotFocus<T>(Action<object, RoutedEventArgs> handler) → T
+T.OnHolding<T>(Action<object, HoldingRoutedEventArgs> handler) → T
+T.OnKeyDown<T>(Action<object, KeyRoutedEventArgs> handler) → T
+T.OnKeyUp<T>(Action<object, KeyRoutedEventArgs> handler) → T
+T.OnLongPress<T>(Action onTriggered, TimeSpan? minimumDuration = null, double cancelDistance = 10, bool enableMouseEmulation = false) → T
+T.OnLongPress<T>(Action<LongPressGesture> onTriggered, TimeSpan? minimumDuration = null, double cancelDistance = 10, bool enableMouseEmulation = false) → T
+T.OnLostFocus<T>(Action<object, RoutedEventArgs> handler) → T
+T.OnMount<T>(Action<FrameworkElement> action) → T
+T.OnMountAdd<T>(Action<FrameworkElement> action) → T
+T.OnPan<T>(Action<PanGesture> onChanged, Action<PanGesture> onEnded = null, Action<PanGesture> onBegan = null, Action<PanGesture> onCancelled = null, double minimumDistance = 0, PanAxis axis = PanAxis.Both, bool withInertia = false) → T
+T.OnPinch<T>(Action<PinchGesture> onChanged, Action<PinchGesture> onEnded = null, Action<PinchGesture> onBegan = null, Action<PinchGesture> onCancelled = null, bool withInertia = false) → T
+T.OnPointerCanceled<T>(Action<object, PointerRoutedEventArgs> handler) → T
+T.OnPointerCaptureLost<T>(Action<object, PointerRoutedEventArgs> handler) → T
+T.OnPointerEntered<T>(Action<object, PointerRoutedEventArgs> handler) → T
+T.OnPointerExited<T>(Action<object, PointerRoutedEventArgs> handler) → T
+T.OnPointerMoved<T>(Action<object, PointerRoutedEventArgs> handler) → T
+T.OnPointerPressed<T>(Action<object, PointerRoutedEventArgs> handler) → T
+T.OnPointerReleased<T>(Action<object, PointerRoutedEventArgs> handler) → T
+T.OnPointerWheelChanged<T>(Action<object, PointerRoutedEventArgs> handler) → T
+T.OnPreviewKeyDown<T>(Action<object, KeyRoutedEventArgs> handler) → T
+T.OnPreviewKeyUp<T>(Action<object, KeyRoutedEventArgs> handler) → T
+T.OnRightTapped<T>(Action<object, RightTappedRoutedEventArgs> handler) → T
+T.OnRotate<T>(Action<RotateGesture> onChanged, Action<RotateGesture> onEnded = null, Action<RotateGesture> onBegan = null, Action<RotateGesture> onCancelled = null, bool withInertia = false) → T
+T.OnSizeChanged<T>(Action<object, SizeChangedEventArgs> handler) → T
+T.OnTapped<T>(Action<object, TappedRoutedEventArgs> handler) → T
+T.OnWarning<T>(Func<T, T> configure) → T
+T.Opacity<T>(double opacity) → T
+T.OpacityTransition<T>(TimeSpan? duration = null) → T
+T.Padding<T>(double horizontal, double vertical) → T
+T.Padding<T>(double left, double top, double right, double bottom) → T
+T.Padding<T>(double uniform) → T
+T.PaddingInlineEnd<T>(double value) → T
+T.PaddingInlineStart<T>(double value) → T
+T.PositionInSet<T>(int position, int size) → T
+T.Provide<T, TValue>(Context<TValue> context, TValue value) → T
+T.Ref<T, TElement>(ElementRef<TElement> target) → T
+T.Ref<T>(ElementRef target) → T
+T.RelativePanel<T>(string name, string rightOf = null, string below = null, string leftOf = null, string above = null, string alignLeftWith = null, string alignRightWith = null, string alignTopWith = null, string alignBottomWith = null, string alignHorizontalCenterWith = null, string alignVerticalCenterWith = null, bool alignLeftWithPanel = false, bool alignRightWithPanel = false, bool alignTopWithPanel = false, bool alignBottomWithPanel = false, bool alignHorizontalCenterWithPanel = false, bool alignVerticalCenterWithPanel = false) → T
+T.RequestedTheme<T>(ElementTheme theme) → T
+T.Required<T>() → T
+T.Resources<T>(Action<ResourceBuilder> configure) → T
+T.Rotation<T>(float degrees) → T
+T.RotationTransition<T>(TimeSpan? duration = null) → T
+T.Scale<T>(Vector3 scale) → T
+T.Scale<T>(float uniform) → T
+T.ScaleTransition<T>(Vector3Transition transition = null) → T
+T.ScrollLinked<T>(ScrollViewer scrollViewer, Func<ScrollAnimationBuilder, ScrollAnimationBuilder> configure) → T
+T.Semantics<T>(string role = null, string value = null, double? rangeMin = null, double? rangeMax = null, double? rangeValue = null, bool isReadOnly = true) → SemanticElement
+T.ShowErrors<T>(ShowWhen showWhen = ShowWhen.Always) → ValidationVisualizerElement
+T.Size<T>(double width, double height) → T
+T.SoundMode<T>(ElementSoundMode mode) → T
+T.SpringLayoutAnimation<T>(float dampingRatio = 0.6, float period = 0.08) → T
+T.Stagger<T>(TimeSpan delay, Curve curve = null) → T
+T.TabIndex<T>(int index) → T
+T.TabNavigation<T>(KeyboardNavigationMode mode) → T
+T.ToolTip<T>(string tip) → T
+T.Transition<T>(Transition transition, Curve curve = null) → T
+T.Translation<T>(float x, float y, float z) → T
+T.TranslationTransition<T>(Vector3Transition transition = null) → T
+T.VAlign<T>(VerticalAlignment alignment) → T
+T.Validate<T>(string fieldName, IValidator[] validators) → T
+T.Validate<T>(string fieldName, object value, IValidator[] validators) → T
+T.ValidateAsync<T>(string fieldName, IAsyncValidator[] asyncValidators) → T
+T.ValidateAsync<T>(string fieldName, object value, IAsyncValidator[] asyncValidators) → T
+T.Visible<T>(bool isVisible) → T
+T.Width<T>(double width) → T
+T.WithBorder<T>(Brush brush, double thickness = 1) → T
+T.WithBorder<T>(ThemeRef theme, double thickness = 1) → T
+T.WithBorder<T>(string color, double thickness = 1) → T
+T.WithContextFlyout<T>(Element contextFlyout) → T
+T.WithErrorStyling<T>(ValidationContext ctx, string fieldName, ShowWhen showWhen = ShowWhen.WhenTouched, bool submitAttempted = false) → T
+T.WithFlyout<T>(Element flyout) → T
+T.WithKey<T>(string key) → T
+T.WithToolTip<T>(Element tooltip) → T
+T.WithTransitions<T>(Transition[] transitions) → T
+T.XYFocusKeyboardNavigation<T>(XYFocusKeyboardNavigationMode mode) → T
+TabViewElement.Set(Action<TabView> configure) → TabViewElement
+TabViewElement.ShowAddButton(bool visible = true) → TabViewElement
+TeachingTipElement.Set(Action<TeachingTip> configure) → TeachingTipElement
+TemplatedFlipViewElement<T>.Set<T>(Action<FlipView> configure) → TemplatedFlipViewElement<T>
+TemplatedGridViewElement<T>.Set<T>(Action<GridView> configure) → TemplatedGridViewElement<T>
+TemplatedListViewElement<T>.Set<T>(Action<ListView> configure) → TemplatedListViewElement<T>
+TextBlockElement.Bold() → TextBlockElement
+TextBlockElement.FontFamily(FontFamily family) → TextBlockElement
+TextBlockElement.FontFamily(string family) → TextBlockElement
+TextBlockElement.FontSize(double size) → TextBlockElement
+TextBlockElement.FontStyle(FontStyle style) → TextBlockElement
+TextBlockElement.Selectable(bool selectable = true) → TextBlockElement
+TextBlockElement.SemiBold() → TextBlockElement
+TextBlockElement.Set(Action<TextBlock> configure) → TextBlockElement
+TextBlockElement.TextAlignment(TextAlignment alignment) → TextBlockElement
+TextBlockElement.TextTrimming(TextTrimming trimming) → TextBlockElement
+TextBlockElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextBlockElement
+TextFieldElement.AcceptsReturn(bool accepts = true) → TextFieldElement
+TextFieldElement.Focus(FocusManager fm, string fieldName, bool autoFocus = false) → TextFieldElement
+TextFieldElement.Header(string header) → TextFieldElement
+TextFieldElement.ReadOnly(bool readOnly = true) → TextFieldElement
+TextFieldElement.Set(Action<TextBox> configure) → TextFieldElement
+TextFieldElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextFieldElement
+TimePickerElement.Set(Action<TimePicker> configure) → TimePickerElement
+TitleBarElement.Set(Action<TitleBar> configure) → TitleBarElement
+TitleBarElement.Subtitle(string subtitle) → TitleBarElement
+TitleBarElement.WithNavigation<TRoute>(NavigationHandle<TRoute> nav) → TitleBarElement
+ToggleButtonElement.Set(Action<ToggleButton> configure) → ToggleButtonElement
+ToggleSplitButtonElement.Set(Action<ToggleSplitButton> configure) → ToggleSplitButtonElement
+ToggleSwitchElement.Header(string header) → ToggleSwitchElement
+ToggleSwitchElement.Set(Action<ToggleSwitch> configure) → ToggleSwitchElement
+TreeViewElement.Set(Action<TreeView> configure) → TreeViewElement
+ValidationRuleElement.Evaluate(ValidationContext ctx) → void
+ValidationRuleElement.EvaluateAsync(ValidationContext ctx, CancellationToken cancellationToken = null) → Task
+ViewboxElement.Set(Action<Viewbox> configure) → ViewboxElement
+WebView2Element.Set(Action<WebView2> configure) → WebView2Element
+WrapGridElement.Set(Action<VariableSizedWrapGrid> configure) → WrapGridElement
+
+## Hooks (RenderContext / Component)
+# Call from Render() / function-component body. Same order every render —
+# never inside if/for. Use the result conditionally, not the call.
+
+RenderContext.UseAnnounce() → AnnounceHandle
+RenderContext.UseBreakpoint(Window window, double minWidth) → bool
+RenderContext.UseBreakpoint(double minWidth) → bool
+RenderContext.UseCallback(Action callback, object[] dependencies) → Action
+RenderContext.UseChildValidationContext() → ValueTuple<ValidationContext, ValidationContext>
+RenderContext.UseClosingGuard(Func<bool> canClose) → void
+RenderContext.UseCollection<T>(ObservableCollection<T> collection) → IReadOnlyList<T>
+RenderContext.UseColorScheme() → ColorScheme
+RenderContext.UseCommand(Command command) → Command
+RenderContext.UseCommand<T>(Command<T> command) → Command<T>
+RenderContext.UseContext<T>(Context<T> context) → T
+RenderContext.UseDataSource<T>(IDataSource<T> source, DataRequest request, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null) → InfiniteResource<T>
+RenderContext.UseDataSource<T>(IDataSource<T> source, DataRequest request, QueryCache cache, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null) → InfiniteResource<T>
+RenderContext.UseDevtools() → bool
+RenderContext.UseDpi() → UInt32
+RenderContext.UseEffect(Action effect, object[] dependencies) → void
+RenderContext.UseEffect(Func<Action> effectWithCleanup, object[] dependencies) → void
+RenderContext.UseElementFocus(FocusState state = FocusState.Programmatic) → ValueTuple<ElementRef, Action>
+RenderContext.UseElementRef<T>() → ElementRef<T>
+RenderContext.UseFocus() → FocusManager
+RenderContext.UseFocusTrap(bool isActive) → FocusTrapHandle
+RenderContext.UseHighContrast() → bool
+RenderContext.UseHighContrastScheme() → string
+RenderContext.UseInfiniteResource<TItem, TCursor>(Func<TCursor, CancellationToken, Task<Page<TItem, TCursor>>> fetchPage, QueryCache cache, object[] deps, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null, Func<int, TCursor> cursorFromPageIndex = null) → InfiniteResource<TItem>
+RenderContext.UseInfiniteResource<TItem, TCursor>(Func<TCursor, CancellationToken, Task<Page<TItem, TCursor>>> fetchPage, object[] deps, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null, Func<int, TCursor> cursorFromPageIndex = null) → InfiniteResource<TItem>
+RenderContext.UseIntl() → IntlAccessor
+RenderContext.UseIsActive() → bool
+RenderContext.UseIsDarkTheme() → bool
+RenderContext.UseMemo<T>(Func<T> factory, object[] dependencies) → T
+RenderContext.UseMemoCells<T>(IReadOnlyList<T> items, Func<T, int, Element> builder, object[] dependencies) → Element[]
+RenderContext.UseMemoCellsByIndex<T>(IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, object[] dependencies) → Element[]
+RenderContext.UseMemoCellsByKey<T, TKey>(IReadOnlyList<T> items, Func<T, TKey> keySelector, Func<T, int, Element> builder, object[] dependencies) → Element[]
+RenderContext.UseMutation<TInput, TResult>(Func<TInput, CancellationToken, Task<TResult>> mutator, MutationOptions<TInput, TResult> options = null, IHookDispatcher dispatcher = null) → Mutation<TInput, TResult>
+RenderContext.UseMutation<TInput, TResult>(Func<TInput, CancellationToken, Task<TResult>> mutator, QueryCache cache, MutationOptions<TInput, TResult> options = null, IHookDispatcher dispatcher = null) → Mutation<TInput, TResult>
+RenderContext.UseNavigation<TRoute>() → NavigationHandle<TRoute>
+RenderContext.UseNavigation<TRoute>(TRoute initial) → NavigationHandle<TRoute>
+RenderContext.UseNavigationLifecycle(Action<NavigatingToContext> onNavigatingTo = null, Action<NavigatedToContext> onNavigatedTo = null, Action<NavigatingFromContext> onNavigatingFrom = null, Action<NavigatedFromContext> onNavigatedFrom = null) → void
+RenderContext.UseObservable<T>(T source) → T
+RenderContext.UseObservableProperty<T, TProp>(T source, Func<T, TProp> selector, string propertyName) → TProp
+RenderContext.UseObservableTree<T>(T source) → T
+RenderContext.UseOpenWindow(WindowKey key, WindowSpec spec, Func<Component> factory) → ReactorWindow
+RenderContext.UsePersisted<T>(string key, T initialValue) → ValueTuple<T, Action<T>>
+RenderContext.UsePersisted<T>(string key, T initialValue, PersistedScope scope) → ValueTuple<T, Action<T>>
+RenderContext.UseReducedMotion() → bool
+RenderContext.UseReducer<T>(T initialValue, bool threadSafe = false) → ValueTuple<T, Action<Func<T, T>>>
+RenderContext.UseReducer<TState, TAction>(Func<TState, TAction, TState> reducer, TState initialValue, bool threadSafe = false) → ValueTuple<TState, Action<TAction>>
+RenderContext.UseRef<T>(T initialValue = null) → Ref<T>
+RenderContext.UseResource<T>(Func<CancellationToken, Task<T>> fetcher, QueryCache cache, object[] deps, ResourceOptions options = null, IHookDispatcher dispatcher = null) → AsyncValue<T>
+RenderContext.UseResource<T>(Func<CancellationToken, Task<T>> fetcher, object[] deps, ResourceOptions options = null, IHookDispatcher dispatcher = null) → AsyncValue<T>
+RenderContext.UseState<T>(T initialValue, bool threadSafe = false) → ValueTuple<T, Action<T>>
+RenderContext.UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window window) → void
+RenderContext.UseTrayIcon(TrayIconSpec spec) → ReactorTrayIcon
+RenderContext.UseValidationContext() → ValidationContext
+RenderContext.UseWindow() → ReactorWindow
+RenderContext.UseWindowSize() → ValueTuple<double, double>
+RenderContext.UseWindowSize(Window window) → ValueTuple<double, double>
+RenderContext.UseWindowState() → WindowState
+
+## Theme tokens (Microsoft.UI.Reactor.Core.Theme)
+# Use these for ALL themed colors — never hardcoded hex on themed surfaces.
+# Each token resolves to the WinUI resource key shown in the comment.
+
+Theme.Accent                           → AccentFillColorDefaultBrush
+Theme.AccentDisabled                   → AccentFillColorDisabledBrush
+Theme.AccentSecondary                  → AccentFillColorSecondaryBrush
+Theme.AccentTertiary                   → AccentFillColorTertiaryBrush
+Theme.AccentText                       → AccentTextFillColorPrimaryBrush
+Theme.CardBackground                   → CardBackgroundFillColorDefaultBrush
+Theme.CardStroke                       → CardStrokeColorDefaultBrush
+Theme.ControlFill                      → ControlFillColorDefaultBrush
+Theme.ControlFillDisabled              → ControlFillColorDisabledBrush
+Theme.ControlFillInputActive           → ControlFillColorInputActiveBrush
+Theme.ControlFillSecondary             → ControlFillColorSecondaryBrush
+Theme.ControlFillTertiary              → ControlFillColorTertiaryBrush
+Theme.ControlStroke                    → ControlStrokeColorDefaultBrush
+Theme.ControlStrokeSecondary           → ControlStrokeColorSecondaryBrush
+Theme.DisabledText                     → TextFillColorDisabledBrush
+Theme.DividerStroke                    → DividerStrokeColorDefaultBrush
+Theme.LayerFill                        → LayerFillColorDefaultBrush
+Theme.PrimaryText                      → TextFillColorPrimaryBrush
+Theme.SecondaryText                    → TextFillColorSecondaryBrush
+Theme.SmokeFill                        → SmokeFillColorDefaultBrush
+Theme.SolidBackground                  → SolidBackgroundFillColorBaseBrush
+Theme.SubtleFill                       → SubtleFillColorSecondaryBrush
+Theme.SurfaceStroke                    → SurfaceStrokeColorDefaultBrush
+Theme.SystemAttention                  → SystemFillColorAttentionBrush
+Theme.SystemAttentionBackground        → SystemFillColorAttentionBackgroundBrush
+Theme.SystemCaution                    → SystemFillColorCautionBrush
+Theme.SystemCautionBackground          → SystemFillColorCautionBackgroundBrush
+Theme.SystemCritical                   → SystemFillColorCriticalBrush
+Theme.SystemCriticalBackground         → SystemFillColorCriticalBackgroundBrush
+Theme.SystemNeutral                    → SystemFillColorNeutralBrush
+Theme.SystemNeutralBackground          → SystemFillColorNeutralBackgroundBrush
+Theme.SystemSolidAttention             → SystemFillColorSolidAttentionBackgroundBrush
+Theme.SystemSolidNeutral               → SystemFillColorSolidNeutralBrush
+Theme.SystemSuccess                    → SystemFillColorSuccessBrush
+Theme.SystemSuccessBackground          → SystemFillColorSuccessBackgroundBrush
+Theme.TertiaryText                     → TextFillColorTertiaryBrush
+
+## Enums (public, under Microsoft.UI.Reactor.*)
+
+AnimateProperty { Opacity, Offset, Scale, Rotation, CenterPoint, All }
+Edge { Left, Top, Right, Bottom }
+ChartAxisType { X, Y }
+DashStyle { Solid, Dash4_2, Dash2_2, Dash6_2_2_2, Dash8_4, Dash1_1 }
+MarkerShape { Circle, Square, Triangle, Diamond, Plus, Cross, Star, Hexagon }
+ChartType { Line, Bar, Area }
+LinkOrientation { Horizontal, Vertical }
+SankeyNodeAlign { Left, Right, Center, Justify }
+TreemapTiling { Squarify, Slice, Dice, SliceDice }
+EditMode { Cell, Row }
+EditorTier { Standard, Compact, Full }
+SearchState { Idle, Loading, Results, Empty, Error }
+SelectionMode { None, Single, Multiple }
+Severity { Info, Warning, Error }
+ShowWhen { Always, WhenTouched, WhenDirty, AfterFirstSubmit, Never }
+VisualizerStyle { Inline, Summary, InfoBar, Custom }
+BackdropKind { None, Mica, MicaAlt, DesktopAcrylic, AcrylicThin }
+ColorScheme { Light, Dark, HighContrast }
+ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
+PersistedScope { Window, Application }
+TemplatedControlKind { ListView, GridView, FlipView }
+BlockStatus { Loading, Loaded, Failed }
+DataSourceCapabilities { None, ServerSort, ServerFilter, ServerSearch, ServerCount, ServerSelect, Mutate, Refresh }
+FilterOperator { Equals, NotEquals, Contains, StartsWith, EndsWith, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Between, In, IsNull, IsNotNull }
+PinPosition { None, Left, Right }
+SortDirection { Ascending, Descending }
+DragOperations { None, Copy, Move, Link, All }
+GesturePhase { Began, Changed, Ended, Cancelled }
+PanAxis { Both, Horizontal, Vertical }
+JumpListItemKind { Task, Custom, Separator }
+LaunchKind { Normal, JumpList, Toast, Protocol, File }
+FlexAlign { Auto, FlexStart, Center, FlexEnd, Stretch, Baseline, SpaceBetween, SpaceAround, SpaceEvenly, Start, End }
+FlexDirection { Column, ColumnReverse, Row, RowReverse }
+FlexJustify { Auto, FlexStart, Center, FlexEnd, SpaceBetween, SpaceAround, SpaceEvenly, Stretch, Start, End }
+FlexLayoutDirection { Inherit, LTR, RTL }
+FlexPositionType { Static, Relative, Absolute }
+FlexWrap { NoWrap, Wrap, WrapReverse }
+DateStyle { Default, Short, Long, Full }
+ListFormatType { Conjunction, Disjunction }
+NumberStyle { Default, Currency, Percent }
+MarkdownAlign { Default, Left, Center, Right }
+MarkdownBlockType { Doc, Quote, Ul, Ol, Li, Hr, H, Code, Html, P, Table, Thead, Tbody, Tr, Th, Td }
+HtmlFlags { None, Debug, VerbatimEntities, SkipUtf8Bom, Xhtml, AllowUnsafeUrls, AllowRawHtml }
+MarkdownParserFlags { None, DialectCommonMark, CollapseWhitespace, PermissiveAtxHeaders, PermissiveUrlAutolinks, PermissiveEmailAutolinks, NoIndentedCodeBlocks, NoHtmlBlocks, NoHtmlSpans, NoHtml, Tables, Strikethrough, PermissiveWwwAutolinks, PermissiveAutolinks, TaskLists, DialectGitHub, LatexMathSpans, WikiLinks, Underline, HardSoftBreaks }
+MarkdownSpanType { Em, Strong, A, Img, Code, Del, LatexMath, LatexMathDisplay, WikiLink, U }
+MarkdownTextType { Normal, NullChar, Br, SoftBr, Entity, Code, Html, LatexMath }
+NavigationCacheMode { Disabled, Enabled, Required }
+NavigationMode { Push, Pop, Replace, Reset, Forward }
+SlideDirection { FromRight, FromLeft, FromBottom, FromTop }
+PresenterKind { Overlapped, FullScreen, CompactOverlay }
+ShutdownPolicy { OnPrimaryWindowClosed, OnLastSurfaceClosed, Explicit }
+TaskbarProgressState { None, Indeterminate, Normal, Paused, Error }
+WindowCloseReason { UserClosed, AppClosed, OwnerClosed }
+WindowStartPosition { Default, CenterOnPrimary, CenterOnOwner, RestoreFromPersistence, Manual }
+WindowState { Normal, Minimized, Maximized, FullScreen, CompactOverlay }
+

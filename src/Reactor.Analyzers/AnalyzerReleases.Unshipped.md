@@ -13,3 +13,4 @@ REACTOR_HOOKS_007 | Reactor.Hooks | Warning | UseMemoCellsAnalyzer - Builder clo
 REACTOR_A11Y_001 | Microsoft.UI.Reactor.Accessibility | Warning | AccessibilityAnalyzers - Icon-only button needs an accessible name
 REACTOR_A11Y_002 | Microsoft.UI.Reactor.Accessibility | Warning | AccessibilityAnalyzers - Image needs alt text or AccessibilityHidden
 REACTOR_A11Y_003 | Microsoft.UI.Reactor.Accessibility | Warning | AccessibilityAnalyzers - Form field needs a label
+REACTOR_DSL_001 | Reactor.Dsl | Warning | MissingWithKeyAnalyzer - Dynamic list item missing .WithKey

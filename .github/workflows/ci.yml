@@ -73,6 +73,26 @@ jobs:
       - name: Test
         run: dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal"
 
+  integration-tests:
+    name: Integration Tests
+    needs: changes
+    if: needs.changes.outputs.non-md == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Reactor.slnx
+
+      - name: Test
+        run: dotnet test tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore --logger "console;verbosity=normal"
+
   selftests:
     name: Selftests
     needs: changes

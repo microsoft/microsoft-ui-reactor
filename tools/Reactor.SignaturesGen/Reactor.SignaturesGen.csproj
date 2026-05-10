@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <RootNamespace>Microsoft.UI.Reactor.SignaturesGen</RootNamespace>
+    <AssemblyName>Reactor.SignaturesGen</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- Reflect over the freshly-built Reactor surface to emit reactor.api.txt. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
+  </ItemGroup>
+
+  <!-- After build, run the generator with the repo root as argv[0] so the file
+       lands at <repo>/skills/reactor.api.txt. The same file is then packed into
+       the Reactor NuGet (see Reactor.csproj) and embedded into the mur CLI.
+       Invokes the apphost .exe (not `dotnet $(TargetPath).dll`) so the build
+       works on machines whose `dotnet` host arch differs from $(Platform). -->
+  <!-- Skip when the build target arch doesn't match the host arch — otherwise
+       the apphost is foreign and exits with code 216 ("not compatible with the
+       version of Windows you're running"). This happens in two CI paths:
+         (a) `dotnet build Reactor.slnx` on windows-latest (x64 host) where the
+             slnx default Platform is ARM64.
+         (b) `dotnet publish` with a cross-arch RuntimeIdentifier (win-arm64
+             on the x64 runner).
+       The committed skills/reactor.api.txt is still picked up by pack; regen
+       only needs to fire on dev machines where $(Platform) matches the host. -->
+  <PropertyGroup>
+    <!-- $(NETCoreSdkRuntimeIdentifier) is set by the .NET SDK to the host RID
+         (e.g. win-x64, win-arm64). Trim everything before the dash. -->
+    <_ReactorApiHostArch Condition="$(NETCoreSdkRuntimeIdentifier.Contains('-'))">$(NETCoreSdkRuntimeIdentifier.Substring($([MSBuild]::Add($(NETCoreSdkRuntimeIdentifier.IndexOf('-')), 1))).ToLowerInvariant())</_ReactorApiHostArch>
+    <_ReactorApiTargetArch Condition="'$(Platform)' == 'x64'">x64</_ReactorApiTargetArch>
+    <_ReactorApiTargetArch Condition="'$(Platform)' == 'ARM64'">arm64</_ReactorApiTargetArch>
+    <_ReactorApiTargetArch Condition="'$(_ReactorApiTargetArch)' == '' and '$(RuntimeIdentifier)' == 'win-x64'">x64</_ReactorApiTargetArch>
+    <_ReactorApiTargetArch Condition="'$(_ReactorApiTargetArch)' == '' and '$(RuntimeIdentifier)' == 'win-arm64'">arm64</_ReactorApiTargetArch>
+    <_ReactorApiTargetArch Condition="'$(_ReactorApiTargetArch)' == ''">$(_ReactorApiHostArch)</_ReactorApiTargetArch>
+  </PropertyGroup>
+  <Target Name="EmitReactorApiTxt"
+          AfterTargets="Build"
+          Condition="'$(SkipReactorApiGen)' != 'true' and '$(_ReactorApiTargetArch)' == '$(_ReactorApiHostArch)'">
+    <Exec Command="&quot;$(TargetDir)$(AssemblyName).exe&quot; &quot;$(MSBuildThisFileDirectory)..\..&quot;"
+          ConsoleToMSBuild="true"
+          IgnoreExitCode="false" />
+  </Target>
+
+</Project>

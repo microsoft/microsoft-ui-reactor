@@ -84,6 +84,58 @@
     <None Include="..\Reactor.Localization.Generator\bin\$(Configuration)\netstandard2.0\Reactor.Localization.Generator.dll"
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
+    <!-- Agent kit packed into the NuGet at `agentkit/`: SKILL.md, every
+         skills/*.md sub-skill, the recipes folder, and the generated
+         signatures index. Mirrors the source-tree layout. Discoverable from
+         a consumer machine via the `mur` CLI commands or directly at
+         %USERPROFILE%\.nuget\packages\microsoft.ui.reactor\$version$\agentkit\.
+         See SKILL.md for the layout description. -->
+    <None Include="..\..\SKILL.md"
+          Pack="true" PackagePath="agentkit/" Visible="false"
+          Condition="Exists('..\..\SKILL.md')" />
+    <None Include="..\..\skills\reactor.api.txt"
+          Pack="true" PackagePath="agentkit/" Visible="false"
+          Condition="Exists('..\..\skills\reactor.api.txt')" />
+    <None Include="..\..\skills\*.md"
+          Pack="true" PackagePath="agentkit/skills/" Visible="false" />
+    <None Include="..\..\skills\recipes\*.md;..\..\skills\recipes\*.cs"
+          Pack="true" PackagePath="agentkit/skills/recipes/" Visible="false" />
+    <!-- Plugin format (Copilot CLI / Claude). Preferred path for agent loading.
+         Mirrors the source layout under agentkit/plugins/reactor/. -->
+    <None Include="..\..\plugins\reactor\.claude-plugin\plugin.json"
+          Pack="true" PackagePath="agentkit/plugins/reactor/.claude-plugin/" Visible="false" />
+    <None Include="..\..\plugins\reactor\plugin.json"
+          Pack="true" PackagePath="agentkit/plugins/reactor/" Visible="false" />
+    <None Include="..\..\plugins\reactor\agents\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/agents/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-getting-started\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-getting-started/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-dsl\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-dsl/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-dsl\references\*"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-dsl/references/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-build-and-check\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-build-and-check/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-async\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-async/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-design\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-design/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-forms\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-forms/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-navigation\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-navigation/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-input\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-input/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-charts\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-charts/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-commanding\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-commanding/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-devtools\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-devtools/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-recipes\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-recipes/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-recipes\references\*"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-recipes/references/" Visible="false" />
   </ItemGroup>
 
   <!-- ═══════════════════════════════════════════════════════════════════

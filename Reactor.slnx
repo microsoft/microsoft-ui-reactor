@@ -265,6 +265,7 @@
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
+    <Project Path="tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj" />
     <Project Path="tests/Reactor.SelfTests/Reactor.SelfTests.csproj" />
     <Project Path="tests/Reactor.Tests/Reactor.Tests.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
@@ -304,6 +305,12 @@
     <Project Path="tests/stress_perf/StressPerf.Wpf/StressPerf.Wpf.csproj" />
   </Folder>
   <Folder Name="/tools/" />
+  <Folder Name="/tools/Reactor.SignaturesGen/">
+    <Project Path="tools/Reactor.SignaturesGen/Reactor.SignaturesGen.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
   <Folder Name="/tools/Templates/">
     <Project Path="tools/Templates/Microsoft.UI.Reactor.Templates.csproj" />
   </Folder>

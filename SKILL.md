@@ -3,16 +3,126 @@ name: reactor-app
 description: >
   Create WinUI 3 desktop applications using the Reactor framework — a React-inspired
   declarative C# projection over WinUI 3. No XAML, no data binding, no templates.
-  This root skill teaches the core mental model and common patterns; load a
-  sub-skill from /skills when the task calls for it.
+  This file is the legacy single-file skill — prefer the `reactor` plugin under
+  `plugins/reactor/` (or `agentkit/plugins/reactor/` in the NuGet) for a more
+  efficient skill-loading experience.
 ---
 
 # Reactor — Getting Started
+
+> **Prefer the plugin.** This file is preserved for environments that don't
+> support the Copilot CLI / Claude plugin loading model. If you have a plugin
+> SDK available, install / load the `reactor` plugin (under
+> `plugins/reactor/` in source, or `agentkit/plugins/reactor/` in the NuGet).
+> The plugin splits this content into focused per-skill files and is materially
+> cheaper to load than this monolith.
+
+
 
 Reactor is a **React-inspired functional projection for WinUI 3**. You write
 functions that return lightweight element descriptions; a reconciler diffs
 old vs new trees and patches real WinUI controls. State changes trigger
 re-renders automatically. No XAML. No data binding. No ViewModels.
+
+## Which mode are you in? (read this first)
+
+Reactor ships as a NuGet package — apps reference it as
+`<PackageReference Include="Microsoft.UI.Reactor" Version="…" />` (or
+`#:package Microsoft.UI.Reactor@…` for single-file). The package carries
+the framework, the analyzers, and an **agent kit** (signatures index +
+this SKILL.md). Two paths:
+
+| Mode | How to detect | Bootstrap |
+|---|---|---|
+| **Selfhost** — you're in a Reactor source clone (`src/Reactor/Reactor.csproj` exists) | The repo's `local-nupkgs/` folder is the package source — see `nuget.config` at repo root. | Build `mur` once, then **`mur pack-local`** to populate `local-nupkgs/Microsoft.UI.Reactor.0.0.0-local.nupkg`. Re-run after framework changes. |
+| **Consumer** — you're in an app that depends on Microsoft.UI.Reactor | No `src/Reactor/` next to your project. | Nothing extra — the package already carries the analyzers and agent kit. If `mur` is on PATH, `mur --skill` and `mur --api` print the embedded docs. Otherwise read `<package-cache>/microsoft.ui.reactor/<version>/agentkit/`. |
+
+If you're in selfhost and `local-nupkgs/` is empty, restore will fail with
+"package Microsoft.UI.Reactor 0.0.0-local was not found." Run `mur pack-local`
+to fix it.
+
+### Bootstrap (selfhost, fresh clone)
+
+```powershell
+# Build the CLI; on first build the SignaturesGen project also writes
+# skills/reactor.api.txt as part of its AfterBuild target.
+dotnet build src/Reactor.Cli -p:Platform=ARM64
+
+# `mur` mirrors itself to <repo>/bin/<arch>/. Add that to PATH or invoke directly.
+.\bin\arm64\mur.exe pack-local
+```
+
+After this, any project under the clone resolves
+`Microsoft.UI.Reactor 0.0.0-local` from `local-nupkgs/` automatically (the
+repo-level `nuget.config` configures it). A consumer **outside** the clone
+needs a project-local `nuget.config` pointing at the absolute path of
+`<repo>/local-nupkgs/`.
+
+## Where to find docs (`mur --skill`, `mur --api`)
+
+The `mur` CLI ships these embedded — works from any directory:
+
+| Command | What it prints | Source |
+|---|---|---|
+| `mur --skill` | This SKILL.md | embedded in `mur` |
+| `mur --api`   | The signatures index (≈12K tokens, every factory/modifier/hook/Theme token/enum) | embedded in `mur` |
+| `mur --regen-api` | Rebuilds `skills/reactor.api.txt` from a freshly-built `Reactor.dll` (selfhost only) | rebuilds `tools/Reactor.SignaturesGen` |
+| `mur check <path>` | Runs `dotnet build` and emits one-line diagnostics with skill-file pointers for known REACTOR_* IDs | wraps MSBuild |
+
+A consumer who doesn't have `mur` can read the same files directly from the
+NuGet cache:
+
+```
+%USERPROFILE%\.nuget\packages\microsoft.ui.reactor\<version>\agentkit\
+├─ SKILL.md                  ← this file
+├─ reactor.api.txt           ← signatures index
+└─ skills\
+   ├─ async.md, design.md, commanding.md, navigation.md, forms.md,
+   │  input.md, charts.md, dsl-reference.md, devtools.md, perf-tips.md
+   └─ recipes\
+      ├─ index.md            ← intent → recipe map
+      └─ <name>.cs           ← paste-ready single-file programs
+```
+
+When SKILL.md or a recipe references `skills/foo.md`, a consumer agent
+reads it from `agentkit/skills/foo.md` in the package cache. Selfhost
+agents read it from `<repo>/skills/foo.md`.
+
+## API signatures index — load this before grepping source
+
+[`skills/reactor.api.txt`](skills/reactor.api.txt) is a generated, alphabetized
+flat list of every public Factory, Modifier, Hook, Theme token (with WinUI
+resource key), and enum in Reactor. **Load this when you need to confirm a
+signature.** It replaces grepping `src/Reactor/Elements/*.cs` and walking the
+sub-skills' tables.
+
+- **Local / selfhost:** the file is committed at `skills/reactor.api.txt`.
+  Run `mur --api` to print it. Run `mur --regen-api` after framework changes.
+- **NuGet consumer:** the same file ships in the package at
+  `<package-cache>/microsoft.ui.reactor/<version>/agentkit/reactor.api.txt`
+  (typically `%USERPROFILE%\.nuget\packages\microsoft.ui.reactor\<version>\agentkit\reactor.api.txt`).
+  If `mur` is on PATH, `mur --api` prints the embedded copy.
+
+## Recipes — paste-ready snippets indexed by intent
+
+[`skills/recipes/`](skills/recipes/) holds compilable single-file recipes for
+the most common Reactor patterns. **Load a recipe instead of synthesizing
+from skill prose.** See [`skills/recipes/index.md`](skills/recipes/index.md)
+for the intent → recipe map. Available today: list-add-delete, sidebar-nav,
+form-with-validation, async-fetch-list, themed-card.
+
+## `mur check` — fast feedback with skill pointers
+
+`mur check <path>` builds the target and emits one-line diagnostics with
+pointers into the skill files for known Reactor analyzer IDs:
+
+```
+C:\path\Program.cs:15:23  W  REACTOR_DSL_001  Element produced by Select(...)…   → SKILL.md gotcha #6 (.WithKey on dynamic list items)
+```
+
+`<path>` defaults to `.` and accepts a `.csproj` or directory. Single-file
+`.cs` builds work but **don't load analyzers** — for analyzer coverage,
+use a `.csproj`.
 
 ## Sub-skills — load when the task calls for them
 
@@ -44,11 +154,33 @@ re-renders automatically. No XAML. No data binding. No ViewModels.
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.UI.Reactor" Version="0.0.0-local" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.1" />
-    <ProjectReference Include="..\src\Reactor\Reactor.csproj" />
   </ItemGroup>
 </Project>
 ```
+
+In selfhost the version is `0.0.0-local` (produced by `mur pack-local` —
+see "Which mode are you in?" above). Outside the source clone, replace it
+with whatever Microsoft.UI.Reactor version you depend on.
+
+### nuget.config (selfhost only — sibling of the .csproj)
+
+If your .csproj lives **outside** the Reactor clone, add a `nuget.config`
+next to it pointing at the clone's `local-nupkgs/` (absolute path):
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <add key="reactor-local" value="C:\path\to\reactor2\local-nupkgs" />
+    <add key="nuget.org"     value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+  </packageSources>
+</configuration>
+```
+
+Inside the clone you don't need this — the repo-level `nuget.config`
+already configures the feed.
 
 `WindowsPackageType` MUST be `None` (unpackaged, no App.xaml). `UseWinUI`
 MUST be `true`. No XAML files of any kind.
@@ -309,14 +441,12 @@ dotnet test Reactor.slnx
 For lightweight demos, skip the `.csproj` entirely. Add a file-level header:
 
 ```csharp
-#:project ./src/Reactor
+#:package Microsoft.UI.Reactor@0.0.0-local
 #:package Microsoft.WindowsAppSDK@2.0.1
 #:property OutputType=WinExe
 #:property TargetFramework=net10.0-windows10.0.22621.0
 #:property UseWinUI=true
 #:property WindowsPackageType=None
-#:property WindowsAppSDKSelfContained=true
-#:property RuntimeIdentifier=win-arm64
 
 using Microsoft.UI.Reactor;
 using static Microsoft.UI.Reactor.Factories;
@@ -328,12 +458,15 @@ ReactorApp.Run("Hello", ctx =>
 });
 ```
 
-Run with `dotnet run MyApp.cs`. Adjust `#:project` to your clone's
-`src/Reactor` directory. Use `win-arm64` on ARM, `win-x64` on x64 — check
-with `dotnet --info`.
+Run with `dotnet run MyApp.cs -p:Platform=ARM64` (or `x64`). In selfhost
+the version is `0.0.0-local` — run `mur pack-local` first if the package
+isn't found. Outside the clone, replace the version with the published
+release you depend on.
 
 > **Always capture `dotnet run` output.** Build errors exit with code 1.
 > Read compiler output, fix, retry. Don't assume success without checking.
+> Note: single-file builds **do not load analyzers** — for analyzer
+> coverage (`REACTOR_DSL_001`, `REACTOR_HOOKS_*`, etc.), use a `.csproj`.
 
 ## Comparison to React
 
