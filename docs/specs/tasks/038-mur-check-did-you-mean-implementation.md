@@ -8,12 +8,12 @@ Originating issues: [#226 §5](https://github.com/microsoft/microsoft-ui-reactor
 
 ---
 
-## Status snapshot (2026-05-10)
+## Status snapshot (2026-05-10, late session)
 
 - **Phase 0 (instrumentation):** ✓ landed on `feat/038-mur-check`. `--trace <path>` writes JSONL alongside stdout; folders + READMEs in place.
-- **Phase 1 (Tier 2 Roslyn suggester):** ✓ code complete on `feat/038-mur-check`. `SymbolSuggester` covers CS1061 / CS0103 / CS0117 / CS1503 / CS7036; `CompilationLoader` + `FactoryIndex` + `SuggesterOrchestrator` wired into `CheckCommand`; Tier-1 hints still win ties; `MUR_TELEMETRY=1` opt-in. 66 unit tests + 1 end-to-end smoke integration test, all green. **Not yet merged to `main`** — pending threshold tuning against Data Checkpoint B's 50-run output.
+- **Phase 1 (Tier 2 Roslyn suggester):** ✓ code complete AND ✓ calibrated against the 50-run corpus on `feat/038-mur-check`. `SymbolSuggester` covers CS1061 / CS0103 / CS0117 / CS1503 / CS7036; `CompilationLoader` + `FactoryIndex` + `SuggesterOrchestrator` wired into `CheckCommand`; Tier-1 hints still win ties; `MUR_TELEMETRY=1` opt-in. Per-code thresholds in `src/Reactor.Cli/Check/Suggesters/Thresholds.cs` tuned against the corpus. **Pending Eval Checkpoint EC1** before merging to `main`.
 - **Phase 2 / 3 / 4:** not started. Phase 2 blocks on Phase 1 merge; Phase 3 blocks on Data Checkpoint C; Phase 4 blocks on Data Checkpoint D + the `still_present_at_run_end` harness fix below.
-- **Active state:** Data Checkpoint B 50-run sweep cleared to start (audit pass 2 confirmed Gap #3 fixed). When the corpus lands, follow the "pickup procedure for the next session" under Data Checkpoint B below — that block is self-contained.
+- **Active state:** Data Checkpoint B 50-run output landed and was tuned against (corpus at `C:\Users\andersonch\Code\reactor-tokenusage\mining-out\`; report snapshot in `docs/specs/tasks/038-tuning-reports/2026-05-10-50run.md`). Next gate is EC1.
 - **Deferred follow-ups (cleanly scoped, not blocking next phase):** (a) Reactor-touching integration fixture for the CS1061 Button.OnClick canonical example (needs WindowsAppSDK restore on every test run); (b) wall-time perf trait test against the WinUI fixture; (c) full Hamming-vector overload ranking in CS7036; (d) return-type assignability filter in CS0103.
 - **Tracked harness follow-up (Phase-4 prerequisite, file with harness owner before Data Checkpoint D):** `still_present_at_run_end` always `false` even when the diagnostic IS in the final build — fingerprint-mismatch quirk on adjacent CS8012 emissions whose timing tails differ. Doesn't affect the primary `addressed_by_next_fix` label.
 
@@ -102,7 +102,18 @@ Re-checked the harness output (`fixes.jsonl` 2 unique, `ranker-labels.jsonl` 6 r
 
 ### Data Checkpoint B — calibration (≥ 50 unique pairs, ≥ 50 runs, ≥ 2 agents, all four follow-ups from review-feedback resolved)
 
-**Status: ✓ unblocked. 50-run sweep cleared to start; output expected at `C:\Users\andersonch\Code\TokenCountTest\mining-out\`.**
+**Status: ✓ landed 2026-05-10 at `C:\Users\andersonch\Code\reactor-tokenusage\mining-out\` (path moved from the original `C:\Users\andersonch\Code\TokenCountTest\` location). 51 fixes / 21 patterns / 63 ranker rows.**
+
+**Audit results:**
+- Sample: 51 fixes (≥50 ✓), 21 clusters (10–30 ✓), 63 ranker rows (target ≥200 — undershoot).
+- Gap #1 (`receiver_type` / `member`): ✓ populated for relevant codes; cluster keys carry `receiver_type`.
+- Gap #2 (dedup): ✓ no byte-identical repeats.
+- Gap #3 (ranker negative class): partial — only 2/63 (3%) negative class rows; target was ≥30%. Field varies, but volume undershoots. Phase-4 prerequisite still open.
+- Gap #4 (cosmetic): ✓ acceptable.
+- `still_present_at_run_end`: uniformly false (known limitation, doesn't block Phase 1 — same as audit pass 2).
+- Distribution: 23/51 fixes (45%) are CS1955 (UNHANDLED by Tier 2). Of the 12 fixes hitting our handled codes, most CS1061 cases are *structural* rewrites (`.HorizontalAlignment(...)` → `.Set(b => b.HorizontalAlignment = ...)`), not member renames. These are correctly Tier-3 territory.
+
+**Tuning result:** see `docs/specs/tasks/038-tuning-reports/2026-05-10-50run.md`. Thresholds set in `src/Reactor.Cli/Check/Suggesters/Thresholds.cs`. CS1061 → 0.80 (only firing was at 0.43, well below threshold; no FPs); CS0103 → 0.75 (2/2 firings at conf 1.00 matched); CS0117 / CS1503 / CS7036 → 0.75 (insufficient signal, defer to next drop).
 
 **Blocks:** Phase 1 ship gate (the Tier 2 confidence-threshold tuning).
 
@@ -265,7 +276,7 @@ Goal: for the five highest-frequency CS-prefixed codes that touch Reactor types,
 ### 1.8 Phase 1 exit criterion
 
 - [x] All Phase 1 tasks above checked. (The integration test in 1.6 and the perf-trait test in 1.7 are explicitly deferred follow-ups; everything code-side is implemented and unit-tested.)
-- [ ] **Wait for Data Checkpoint B.** Once it lands, run the Tier 2 suggester offline against the `fixes.jsonl` corpus; for each top-20 CS-pattern, compute (recall@T, precision@T) and tune per-code T so recall ≥ 0.70 at precision ≥ 0.95. Record the chosen thresholds in `src/Reactor.Cli/Check/Suggesters/Thresholds.cs`. — Step-by-step pickup procedure under Data Checkpoint B above.
+- [x] **Data Checkpoint B landed; thresholds calibrated.** `Thresholds.cs` written; `SymbolSuggester` reads per-code T via `Thresholds.For(code)` (gate consolidated to a single source of truth in `Suggest`, redundant duplicate cut removed from the orchestrator). Tuning harness lives under `tests/Reactor.Tests/CheckCommandTests/Tuning/`; report snapshot in `docs/specs/tasks/038-tuning-reports/2026-05-10-50run.md`. The 50-run corpus is small enough that the per-code values are intentionally conservative; revisit at Data Checkpoint C (500+ pairs).
 - [ ] **Run Eval Checkpoint EC1** vs. `main`. Pass criterion: tokens not regressed; ≥ 1 measurable did-you-mean firing per kanban run on average; first-build OK ≥ 5/5.
 - [ ] Merge to `main`.
 

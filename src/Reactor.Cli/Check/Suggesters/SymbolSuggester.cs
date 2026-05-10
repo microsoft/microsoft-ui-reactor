@@ -27,9 +27,28 @@ internal sealed class SymbolSuggester : ISuggester
 {
     public string Name => "SymbolSuggester";
 
+    /// <summary>
+    /// Legacy single-threshold fallback, retained for unit tests that
+    /// pre-date <see cref="Thresholds"/>. New callers should rely on
+    /// <see cref="Thresholds.For"/>.
+    /// </summary>
     public const double DefaultThreshold = 0.75;
 
     public SuggestionResult Suggest(in SuggesterContext ctx)
+    {
+        var raw = SuggestRaw(in ctx);
+        if (raw.Text is null) return SuggestionResult.Silent;
+        var threshold = Thresholds.For(ctx.Diagnostic.Id);
+        return raw.Confidence < threshold ? SuggestionResult.Silent : raw;
+    }
+
+    /// <summary>
+    /// Produce the raw <see cref="SuggestionResult"/> for a context, applying
+    /// the JaroWinkler similarity floor but NOT the per-code emit threshold.
+    /// Used by the Phase-1 ship-gate threshold tuner so it can sweep T
+    /// post-hoc; production callers should use <see cref="Suggest"/>.
+    /// </summary>
+    internal SuggestionResult SuggestRaw(in SuggesterContext ctx)
     {
         return ctx.Diagnostic.Id switch
         {
@@ -77,10 +96,11 @@ internal sealed class SymbolSuggester : ISuggester
         if (ranked.Count == 0) return SuggestionResult.Silent;
 
         var top = ranked[0];
-        if (top.Score < 0.7) return SuggestionResult.Silent;
+        if (top.Score < Thresholds.SimilarityFloor) return SuggestionResult.Silent;
 
         var confidence = ScoreToConfidence(top.Score, ranked, isReactorType: IsReactorType(ctx.Receiver));
-        if (confidence < DefaultThreshold) return SuggestionResult.Silent;
+        // Per-code emit threshold is applied by Suggest(); SuggestRaw exposes
+        // the unfiltered confidence so the tuning harness can sweep T.
 
         var fullName = $"{ctx.Receiver.Name}.{top.Item.Name}";
         return new SuggestionResult(
@@ -106,10 +126,9 @@ internal sealed class SymbolSuggester : ISuggester
         if (ranked.Count == 0) return SuggestionResult.Silent;
 
         var top = ranked[0];
-        if (top.Score < 0.7) return SuggestionResult.Silent;
+        if (top.Score < Thresholds.SimilarityFloor) return SuggestionResult.Silent;
 
         var confidence = ScoreToConfidence(top.Score, ranked, isReactorType: true);
-        if (confidence < DefaultThreshold) return SuggestionResult.Silent;
 
         return new SuggestionResult(
             Text: top.Item,
@@ -132,10 +151,9 @@ internal sealed class SymbolSuggester : ISuggester
         if (ranked.Count == 0) return SuggestionResult.Silent;
 
         var top = ranked[0];
-        if (top.Score < 0.7) return SuggestionResult.Silent;
+        if (top.Score < Thresholds.SimilarityFloor) return SuggestionResult.Silent;
 
         var confidence = ScoreToConfidence(top.Score, ranked, isReactorType: IsReactorType(ctx.Receiver));
-        if (confidence < DefaultThreshold) return SuggestionResult.Silent;
 
         return new SuggestionResult(
             Text: $"{ctx.Receiver.Name}.{top.Item.Name}",
@@ -311,7 +329,7 @@ internal sealed class SymbolSuggester : ISuggester
     /// </summary>
     internal static double ScoreToConfidence<T>(double topScore, IReadOnlyList<Ranked<T>> ranked, bool isReactorType)
     {
-        if (topScore < 0.7) return 0.0;
+        if (topScore < Thresholds.SimilarityFloor) return 0.0;
         double conf = Math.Min(1.0, topScore);
 
         if (ranked.Count >= 2)

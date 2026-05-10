@@ -1,0 +1,195 @@
+{
+  "CorpusPath": "C:\\Users\\andersonch\\Code\\reactor-tokenusage\\mining-out\\fixes.jsonl",
+  "TotalCorpusRows": 51,
+  "HandledCorpusRows": 12,
+  "Entries": [
+    {
+      "RunId": "reactor-public-sweep-7d16630b762c-2026-05-10T14:04:26.571Z",
+      "Code": "CS1061",
+      "ReceiverType": "ButtonElement",
+      "Member": "HorizontalAlignment",
+      "FixKind": "renamed_member",
+      "Outcome": "no-diag",
+      "SuggestionText": null,
+      "Confidence": 0,
+      "Match": false
+    },
+    {
+      "RunId": "reactor-public-sweep-96edeee75492-2026-05-10T14:42:11.885Z",
+      "Code": "CS1061",
+      "ReceiverType": "BorderElement",
+      "Member": "GridRowSpan",
+      "FixKind": "renamed_member",
+      "Outcome": "no-diag",
+      "SuggestionText": null,
+      "Confidence": 0,
+      "Match": false
+    },
+    {
+      "RunId": "reactor-public-sweep-96edeee75492-2026-05-10T14:42:11.885Z",
+      "Code": "CS1061",
+      "ReceiverType": "ButtonElement",
+      "Member": "HorizontalAlignment",
+      "FixKind": "renamed_member",
+      "Outcome": "no-diag",
+      "SuggestionText": null,
+      "Confidence": 0,
+      "Match": false
+    },
+    {
+      "RunId": "reactor-public-sweep-96edeee75492-2026-05-10T14:42:11.885Z",
+      "Code": "CS0117",
+      "ReceiverType": "GridSize",
+      "Member": "Pixel",
+      "FixKind": "other",
+      "Outcome": "silent",
+      "SuggestionText": null,
+      "Confidence": 0,
+      "Match": false
+    },
+    {
+      "RunId": "reactor-public-sweep-96edeee75492-2026-05-10T14:42:11.885Z",
+      "Code": "CS1061",
+      "ReceiverType": "ButtonElement",
+      "Member": "HorizontalAlignment",
+      "FixKind": "renamed_member",
+      "Outcome": "no-diag",
+      "SuggestionText": null,
+      "Confidence": 0,
+      "Match": false
+    },
+    {
+      "RunId": "reactor-public-sweep-ac064754d858-2026-05-10T14:59:58.672Z",
+      "Code": "CS0117",
+      "ReceiverType": "GridSize",
+      "Member": "Pixel",
+      "FixKind": "renamed_member",
+      "Outcome": "silent",
+      "SuggestionText": null,
+      "Confidence": 0,
+      "Match": false
+    },
+    {
+      "RunId": "reactor-public-sweep-b4fcfb667b1b-2026-05-10T15:53:42.796Z",
+      "Code": "CS1503",
+      "ReceiverType": null,
+      "Member": null,
+      "FixKind": "other",
+      "Outcome": "no-diag",
+      "SuggestionText": null,
+      "Confidence": 0,
+      "Match": false
+    },
+    {
+      "RunId": "reactor-public-sweep-b4fcfb667b1b-2026-05-10T15:53:42.796Z",
+      "Code": "CS1503",
+      "ReceiverType": null,
+      "Member": null,
+      "FixKind": "other",
+      "Outcome": "no-diag",
+      "SuggestionText": null,
+      "Confidence": 0,
+      "Match": false
+    },
+    {
+      "RunId": "reactor-public-sweep-b4fcfb667b1b-2026-05-10T15:53:42.796Z",
+      "Code": "CS0103",
+      "ReceiverType": null,
+      "Member": null,
+      "FixKind": "missing_with_key",
+      "Outcome": "silent",
+      "SuggestionText": null,
+      "Confidence": 0,
+      "Match": false
+    },
+    {
+      "RunId": "reactor-public-sweep-b4fcfb667b1b-2026-05-10T15:53:42.796Z",
+      "Code": "CS1061",
+      "ReceiverType": "RadioButtonElement",
+      "Member": "HorizontalAlignment",
+      "FixKind": "renamed_member",
+      "Outcome": "fired",
+      "SuggestionText": ".SetValue",
+      "Confidence": 0.4266666666666666,
+      "Match": false
+    },
+    {
+      "RunId": "reactor-public-sweep-d0a997849c7a-2026-05-10T16:33:25.960Z",
+      "Code": "CS0103",
+      "ReceiverType": null,
+      "Member": null,
+      "FixKind": "other",
+      "Outcome": "fired",
+      "SuggestionText": "TextBlock",
+      "Confidence": 1,
+      "Match": true
+    },
+    {
+      "RunId": "reactor-public-sweep-d0a997849c7a-2026-05-10T16:33:25.960Z",
+      "Code": "CS0103",
+      "ReceiverType": null,
+      "Member": null,
+      "FixKind": "other",
+      "Outcome": "fired",
+      "SuggestionText": "TextBlock",
+      "Confidence": 1,
+      "Match": true
+    }
+  ],
+  "Summaries": [
+    {
+      "Code": "CS1061",
+      "TotalRows": 5,
+      "Fired": 1,
+      "FiredAndMatch": 0,
+      "Silent": 0,
+      "NoDiagnostic": 4,
+      "ConfidencesAll": [
+        0.4266666666666666
+      ],
+      "ConfidencesMatch": [],
+      "ConfidencesNoMatch": [
+        0.4266666666666666
+      ]
+    },
+    {
+      "Code": "CS0103",
+      "TotalRows": 3,
+      "Fired": 2,
+      "FiredAndMatch": 2,
+      "Silent": 1,
+      "NoDiagnostic": 0,
+      "ConfidencesAll": [
+        1,
+        1
+      ],
+      "ConfidencesMatch": [
+        1,
+        1
+      ],
+      "ConfidencesNoMatch": []
+    },
+    {
+      "Code": "CS0117",
+      "TotalRows": 2,
+      "Fired": 0,
+      "FiredAndMatch": 0,
+      "Silent": 2,
+      "NoDiagnostic": 0,
+      "ConfidencesAll": [],
+      "ConfidencesMatch": [],
+      "ConfidencesNoMatch": []
+    },
+    {
+      "Code": "CS1503",
+      "TotalRows": 2,
+      "Fired": 0,
+      "FiredAndMatch": 0,
+      "Silent": 0,
+      "NoDiagnostic": 2,
+      "ConfidencesAll": [],
+      "ConfidencesMatch": [],
+      "ConfidencesNoMatch": []
+    }
+  ]
+}

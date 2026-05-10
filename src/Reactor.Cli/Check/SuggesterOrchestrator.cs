@@ -83,6 +83,9 @@ internal sealed class SuggesterOrchestrator
         var rosDiag = SyntheticDiagnostic(diag);
         var ctx = new SuggesterContext(compilation, rosDiag, node, receiver, factories);
 
+        // ISuggester.Suggest applies the per-code emit threshold from
+        // Thresholds.For(code) internally; a non-silent result here has
+        // already cleared the gate.
         Suggestion? best = null;
         foreach (var s in _suggesters)
         {
@@ -90,7 +93,6 @@ internal sealed class SuggesterOrchestrator
             try { r = s.Suggest(ctx); }
             catch { continue; }
             if (!r.HasSuggestion) continue;
-            if (r.Confidence < SymbolSuggester.DefaultThreshold) continue;
             if (best is null || r.Confidence > best.Confidence)
                 best = new Suggestion(r.Text!, r.Confidence, r.Evidence, s.Name);
         }

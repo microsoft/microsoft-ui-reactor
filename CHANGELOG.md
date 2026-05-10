@@ -39,6 +39,14 @@ to land under these conventions; subsequent specs follow this shape.
   `→ try: <text>  // [<evidence>]` on the diagnostic line above the per-code
   confidence threshold (default 0.75). Tier-1 analyzer-ID hints still win
   ties. (spec 038 §5, §1.1–§1.6)
+- Per-code emit thresholds for the Tier-2 SymbolSuggester
+  (`src/Reactor.Cli/Check/Suggesters/Thresholds.cs`) calibrated against the
+  spec-037 50-run corpus. CS1061 raised to 0.80 (the structural-rewrite
+  fixes in the corpus would otherwise risk false positives); CS0103 / CS0117
+  / CS1503 / CS7036 held at 0.75 default. Tuning harness lives in
+  `tests/Reactor.Tests/CheckCommandTests/Tuning/`; first run snapshot at
+  `docs/specs/tasks/038-tuning-reports/2026-05-10-50run.md`. (spec 038 §1.8,
+  Data Checkpoint B)
 - `MUR_TELEMETRY=1` opt-in: appends `(code, suggester, confidence,
   evidence_short)` per emitted suggestion to
   `~/.mur/telemetry/<yyyy-mm-dd>.jsonl`. Local-first, scoped to the active
