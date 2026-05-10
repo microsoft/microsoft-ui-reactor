@@ -35,28 +35,28 @@ if (-not (Test-Path (Join-Path $archBin 'mur.exe'))) {
     throw "bin\$arch\mur.exe not found in kit. Re-download the matching release."
 }
 
-# mur is framework-dependent — needs the .NET 9 desktop runtime. Detect early
+# mur is framework-dependent - needs the .NET 10 desktop runtime. Detect early
 # and give a useful error rather than letting the consumer hit an opaque
 # "framework not found" at first invocation.
 $dotnet = Get-Command dotnet.exe -CommandType Application -ErrorAction SilentlyContinue
 if (-not $dotnet) {
-    throw ".NET 9 runtime is required but `dotnet.exe` is not on PATH. Install with: winget install Microsoft.DotNet.Runtime.9"
+    throw ".NET 10 runtime is required but `dotnet.exe` is not on PATH. Install with: winget install Microsoft.DotNet.Runtime.10"
 }
-$has9 = (& $dotnet.Source --list-runtimes) | Where-Object { $_ -match '^Microsoft\.NETCore\.App 9\.' }
-if (-not $has9) {
-    Write-Warning "No .NET 9 runtime found. mur will fail to start until you install it:"
-    Write-Warning "  winget install Microsoft.DotNet.Runtime.9"
+$has10 = (& $dotnet.Source --list-runtimes) | Where-Object { $_ -match '^Microsoft\.NETCore\.App 10\.' }
+if (-not $has10) {
+    Write-Warning "No .NET 10 runtime found. mur will fail to start until you install it:"
+    Write-Warning "  winget install Microsoft.DotNet.Runtime.10"
     Write-Warning "Continuing with kit install anyway."
 }
 
-# Safety guards — `Remove-Item -Recurse -Force` is destructive enough that a
+# Safety guards - `Remove-Item -Recurse -Force` is destructive enough that a
 # typo'd -Path could nuke real data. Refuse anything that would obviously be
 # wrong (kit's own dir, a drive root, profile root, system dirs) before we
 # touch anything.
 $absPath = [System.IO.Path]::GetFullPath($Path)
 $absSource = [System.IO.Path]::GetFullPath($source)
 if ($absPath -ieq $absSource -or $absSource.StartsWith($absPath, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Refusing to install into '$absPath' — that's the extracted kit itself or a parent of it. Pass a different -Path."
+    throw "Refusing to install into '$absPath' - that's the extracted kit itself or a parent of it. Pass a different -Path."
 }
 $forbidden = @(
     [System.IO.Path]::GetPathRoot($absPath).TrimEnd('\'),
@@ -71,11 +71,11 @@ $forbidden = @(
 ) | Where-Object { $_ }
 foreach ($f in $forbidden) {
     if ($absPath -ieq $f.TrimEnd('\')) {
-        throw "Refusing to install into '$absPath' — that's a system or user-data root. Pass a more specific -Path (default is ~/.claude/skills/reactor)."
+        throw "Refusing to install into '$absPath' - that's a system or user-data root. Pass a more specific -Path (default is ~/.claude/skills/reactor)."
     }
 }
 if ($absPath.Length -lt 12) {   # e.g. C:\, C:\foo
-    throw "Refusing to install into '$absPath' — path is suspiciously short. Pass a more specific -Path."
+    throw "Refusing to install into '$absPath' - path is suspiciously short. Pass a more specific -Path."
 }
 
 Write-Host "Installing Reactor skill kit to: $absPath"
