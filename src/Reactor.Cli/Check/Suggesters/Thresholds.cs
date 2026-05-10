@@ -31,9 +31,10 @@
 //                  dotnet test tests/Reactor.Tests --filter \\
 //                    FullyQualifiedName~ThresholdTuningTests.EndToEnd_corpus_run
 //
-// Tuner override: Reactor.Tests' ThresholdTuningTests sets `PerCode` to all
-// zero so it can capture the raw confidence distribution. Production
-// behaviour is unchanged.
+// Tuner override: Reactor.Tests' ThresholdTuningTests scopes `PerCode` to
+// its async-local context so concurrent xUnit tests reading thresholds in
+// parallel still see the production defaults. Production behaviour is
+// unchanged.
 
 namespace Microsoft.UI.Reactor.Cli.Check.Suggesters;
 
@@ -50,7 +51,7 @@ internal static class Thresholds
     /// </remarks>
     public const double SimilarityFloor = 0.70;
 
-    static IReadOnlyDictionary<string, double> _perCode = new Dictionary<string, double>(StringComparer.Ordinal)
+    static readonly IReadOnlyDictionary<string, double> _defaultPerCode = new Dictionary<string, double>(StringComparer.Ordinal)
     {
         // CS1061 (member missing). The 50-run corpus shows most CS1061 fixes
         // are structural rewrites (`.HorizontalAlignment(...)` → `.Set(...)`),
@@ -78,17 +79,27 @@ internal static class Thresholds
         ["CS7036"] = 0.75,
     };
 
+    // The override is async-local rather than static-mutable so the threshold
+    // tuning harness can scope a zeroed map to its own logical thread without
+    // racing against other xUnit tests reading `For(code)` in parallel.
+    static readonly AsyncLocal<IReadOnlyDictionary<string, double>?> _override = new();
+
     /// <summary>Threshold for a given diagnostic code, or Default if not listed.</summary>
-    public static double For(string code) => _perCode.TryGetValue(code, out var t) ? t : Default;
+    public static double For(string code)
+    {
+        var map = _override.Value ?? _defaultPerCode;
+        return map.TryGetValue(code, out var t) ? t : Default;
+    }
 
     /// <summary>
     /// Test-only override. Used by the threshold-tuning harness to capture
     /// raw confidences across all codes. Production code paths must not
-    /// call this.
+    /// call this. The override is async-local — it only applies to the
+    /// calling logical thread, so concurrent tests are unaffected.
     /// </summary>
     internal static IReadOnlyDictionary<string, double> PerCode
     {
-        get => _perCode;
-        set => _perCode = value;
+        get => _override.Value ?? _defaultPerCode;
+        set => _override.Value = value;
     }
 }
