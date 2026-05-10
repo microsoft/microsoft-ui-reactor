@@ -283,6 +283,7 @@ public sealed class TemplatePackageTestFixture : IDisposable
     {
         return new(StringComparer.OrdinalIgnoreCase)
         {
+            ["DOTNET_ADD_GLOBAL_TOOLS_TO_PATH"] = "false",
             ["DOTNET_CLI_HOME"] = dotnetCliHomeDir,
             ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1",
             ["DOTNET_NOLOGO"] = "1",
