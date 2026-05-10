@@ -47,6 +47,15 @@ to land under these conventions; subsequent specs follow this shape.
   `tests/Reactor.Tests/CheckCommandTests/Tuning/`; first run snapshot at
   `docs/specs/tasks/038-tuning-reports/2026-05-10-50run.md`. (spec 038 §1.8,
   Data Checkpoint B)
+- EC1 5×N eval (2026-05-10): `reactor-kanban-mur-check` beats baseline on
+  cost mean (−24%), cost median (−33%), and wall-time variance (CV 24% vs
+  81%); paired analysis wins 4 of 5 rounds. `reactor-calc-mur-check`
+  regresses (+21% cost) because the suggester's per-invocation overhead
+  (~5–8s) does not amortize on ~150 LoC projects with no API exploration
+  surface to skip. Finding captured as a new spec 038 §11 risk + §14 open
+  question on a project-size / diagnostic-count gate; merge to `main`
+  pending product decision on path. No code change in this entry — eval
+  result + spec doc updates only.
 - `MUR_TELEMETRY=1` opt-in: appends `(code, suggester, confidence,
   evidence_short)` per emitted suggestion to
   `~/.mur/telemetry/<yyyy-mm-dd>.jsonl`. Local-first, scoped to the active

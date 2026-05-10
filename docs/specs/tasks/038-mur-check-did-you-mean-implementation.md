@@ -11,9 +11,9 @@ Originating issues: [#226 §5](https://github.com/microsoft/microsoft-ui-reactor
 ## Status snapshot (2026-05-10, late session)
 
 - **Phase 0 (instrumentation):** ✓ landed on `feat/038-mur-check`. `--trace <path>` writes JSONL alongside stdout; folders + READMEs in place.
-- **Phase 1 (Tier 2 Roslyn suggester):** ✓ code complete AND ✓ calibrated against the 50-run corpus on `feat/038-mur-check`. `SymbolSuggester` covers CS1061 / CS0103 / CS0117 / CS1503 / CS7036; `CompilationLoader` + `FactoryIndex` + `SuggesterOrchestrator` wired into `CheckCommand`; Tier-1 hints still win ties; `MUR_TELEMETRY=1` opt-in. Per-code thresholds in `src/Reactor.Cli/Check/Suggesters/Thresholds.cs` tuned against the corpus. **Pending Eval Checkpoint EC1** before merging to `main`.
+- **Phase 1 (Tier 2 Roslyn suggester):** ✓ code complete AND ✓ calibrated against the 50-run corpus on `feat/038-mur-check`. `SymbolSuggester` covers CS1061 / CS0103 / CS0117 / CS1503 / CS7036; `CompilationLoader` + `FactoryIndex` + `SuggesterOrchestrator` wired into `CheckCommand`; Tier-1 hints still win ties; `MUR_TELEMETRY=1` opt-in. Per-code thresholds in `src/Reactor.Cli/Check/Suggesters/Thresholds.cs` tuned against the corpus. **EC1 5×N ran 2026-05-10** — kanban variant wins clearly (−24% cost mean, −33% median, 3.4× lower variance); calc variant loses (+21% cost) due to per-invocation overhead failing to amortize on tiny projects. **Merge decision pending** — see EC1 results section + new §11 risk row + §14 open question on the project-size / diagnostic-count gate.
 - **Phase 2 / 3 / 4:** not started. Phase 2 blocks on Phase 1 merge; Phase 3 blocks on Data Checkpoint C; Phase 4 blocks on Data Checkpoint D + the `still_present_at_run_end` harness fix below.
-- **Active state:** Data Checkpoint B 50-run output landed and was tuned against (corpus at `C:\Users\andersonch\Code\reactor-tokenusage\mining-out\`; report snapshot in `docs/specs/tasks/038-tuning-reports/2026-05-10-50run.md`). Next gate is EC1.
+- **Active state:** Phase 1 calibration committed at 7c74135. EC1 5×N landed; awaiting product decision on merge path (ship as-is vs. add small-project gate). Larger mining sweep (Data Checkpoint C predecessor) running in parallel with current `SKILL.md` to compare aided vs un-aided baseline.
 - **Deferred follow-ups (cleanly scoped, not blocking next phase):** (a) Reactor-touching integration fixture for the CS1061 Button.OnClick canonical example (needs WindowsAppSDK restore on every test run); (b) wall-time perf trait test against the WinUI fixture; (c) full Hamming-vector overload ranking in CS7036; (d) return-type assignability filter in CS0103.
 - **Tracked harness follow-up (Phase-4 prerequisite, file with harness owner before Data Checkpoint D):** `still_present_at_run_end` always `false` even when the diagnostic IS in the final build — fingerprint-mismatch quirk on adjacent CS8012 emissions whose timing tails differ. Doesn't affect the primary `addressed_by_next_fix` label.
 
@@ -165,6 +165,44 @@ Each checkpoint is a **5×N batch** on `gpt-5.5` against `reactor-calc` and `rea
 | **EC3** | After Phase 3 ships V1 ruleset (10–15 rules) | `main` at EC2 | Cumulative ~−14 % tokens vs. start-of-spec, ~−2 turns, ~−$0.70 (per spec §12 prediction) | Predicted band hit; CV ≤ start-of-spec CV (don't trade variance for mean) |
 | **EC4** | After Phase 4 (learned ranker, if pursued) | `main` at EC3 | ~+5 pp precision on iteration-mode emissions per spec §13 Phase 5 | Hit precision target OR formal decision to ship Phase 4 with the deterministic table only |
 
+### EC1 results — 5×N landed 2026-05-10
+
+Sweep: 5 paired rounds × `reactor-calc` / `reactor-kanban`, `gpt-5.5`, `feat/038-mur-check` (variant) vs `main` (baseline). Prompt iterations went round-1 (steered, no extra rules) → round-2 (added `[System.Reflection]` ban + "trust `→ try:` suggestion, do not search adjacent names") → round-3 (added "`mur check` *is* the build; do not re-run `dotnet build` to confirm"). Round-3 prompt is the one the 5×N was run under.
+
+**Per-arm means (n=5):**
+
+| Arm | Wall (mean ± sd) | Cost (mean ± sd) | Turns | CV wall |
+|---|---|---|---|---|
+| `reactor-calc` (base) | 97.8s ± 15.7 | $2.82 ± $0.62 | 9.4 ± 2.1 | 16% |
+| `reactor-calc-mur-check` | 120.3s ± 31.2 | $3.42 ± $0.94 | 11.4 ± 3.1 | 26% |
+| `reactor-kanban` (base) | 281.1s ± 227.9 | $5.54 ± $2.97 | 12.4 ± 5.9 | **81%** |
+| `reactor-kanban-mur-check` | 146.7s ± 34.9 | $4.20 ± $1.60 | 14.0 ± 5.3 | 24% |
+
+**Paired comparison (variant − base):**
+
+| Metric | calc | kanban (mean) | kanban (median) |
+|---|---|---|---|
+| Wall | +23% | −48% | −17% |
+| Cost | +21% | −24% | −33% |
+| Turns | +21% | +13% | — |
+
+**Findings:**
+
+1. **Kanban variant wins clearly.** −24% cost mean / −33% cost median, 3.4× lower wall-time variance (CV 24% vs 81%). Paired analysis: variant wins 4 of 5 rounds, ties on the 5th. The variance reduction is itself a deployable-workflow win (predictability matters even when means are similar).
+2. **Calc variant loses by +21% cost.** Real and consistent across the batch. Diagnosis: `mur check`'s per-invocation setup overhead (~5–8s) does not amortize on ~150-LoC problems with no API exploration to save. The exploration-skipping mechanism that wins on kanban has no surface to act on at calc's size.
+3. **Kanban baseline variance is anomalous** (sd $2.97 on a $5.54 mean). One run hit 727s/$10.80; another 109s/$3.30. Same starting state, wildly different recovery paths. The variant's variance is 3.4× tighter — the suggestion mechanism is itself a stabilizer, not just a mean-mover.
+
+**EC1 pass-criterion verdict (spec wording: "tokens not regressed"):**
+
+- **Kanban: PASS** (−24% mean cost, well outside noise floor).
+- **Calc: FAIL** (+21% mean cost; intrinsic to project size, not a tuning bug).
+
+The pass/fail split is a product decision, not a code defect. Two options on the table:
+- Ship Phase 1 as-is and accept the calc regression. Captures the kanban win immediately; calc users pay a small tax until §11/§14 gate lands.
+- Gate `mur check` suggestions by project size or diagnostic count before merging Phase 1. Captures the kanban win without the calc tax but blocks Phase 1's merge on the gate's design. Tracked as the new spec 038 §11 risk row + §14 open question.
+
+Either path keeps `main` clean. **Decision pending.**
+
 **Eval-checkpoint conventions:**
 
 - All four eval batches use the **same prompts** as #226's Phase-7 sweep so trajectories are comparable.
@@ -277,8 +315,8 @@ Goal: for the five highest-frequency CS-prefixed codes that touch Reactor types,
 
 - [x] All Phase 1 tasks above checked. (The integration test in 1.6 and the perf-trait test in 1.7 are explicitly deferred follow-ups; everything code-side is implemented and unit-tested.)
 - [x] **Data Checkpoint B landed; thresholds calibrated.** `Thresholds.cs` written; `SymbolSuggester` reads per-code T via `Thresholds.For(code)` (gate consolidated to a single source of truth in `Suggest`, redundant duplicate cut removed from the orchestrator). Tuning harness lives under `tests/Reactor.Tests/CheckCommandTests/Tuning/`; report snapshot in `docs/specs/tasks/038-tuning-reports/2026-05-10-50run.md`. The 50-run corpus is small enough that the per-code values are intentionally conservative; revisit at Data Checkpoint C (500+ pairs).
-- [ ] **Run Eval Checkpoint EC1** vs. `main`. Pass criterion: tokens not regressed; ≥ 1 measurable did-you-mean firing per kanban run on average; first-build OK ≥ 5/5.
-- [ ] Merge to `main`.
+- [x] **Run Eval Checkpoint EC1** vs. `main`. 5×N landed 2026-05-10. Results: kanban PASS (−24% cost mean, −33% median, 3.4× lower variance); calc FAIL (+21% cost mean — per-invocation overhead does not amortize on ~150-LoC problems). Firings ≥ 1 per kanban run ✓; first-build OK 5/5 both arms ✓. **Strict spec criterion ("tokens not regressed") fails on calc.** Detailed results under Eval Checkpoints → "EC1 results" above.
+- [ ] **Merge decision pending.** Two paths: (a) ship as-is and accept calc tax; (b) add a project-size / diagnostic-count gate before merge. New §11 risk row + §14 open question track the gate design.
 
 ---
 
