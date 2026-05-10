@@ -20,8 +20,19 @@ public static class CheckCommand
 {
     public static int Run(string[] args)
     {
-        var path = args.FirstOrDefault() ?? ".";
+        if (args.Any(a => a == "--help" || a == "-h"))
+        {
+            Console.Write(CheckArgs.HelpText);
+            return 0;
+        }
 
+        if (!CheckArgs.TryParse(args, out var parsed, out var error))
+        {
+            Console.Error.WriteLine($"mur check: {error}");
+            return 2;
+        }
+
+        var path = parsed.Path;
         if (!File.Exists(path) && !Directory.Exists(path))
         {
             Console.Error.WriteLine($"mur check: '{path}' not found.");
@@ -57,30 +68,72 @@ public static class CheckCommand
         proc.WaitForExit();
         var combined = stdOutTask.Result + "\n" + stdErrTask.Result;
 
-        var lines = combined.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var projectRoot = ResolveProjectRoot(path);
+        TraceWriter? trace = null;
+        try
+        {
+            if (parsed.TracePath is not null)
+            {
+                trace = TraceWriter.Open(parsed.TracePath, projectRoot);
+            }
+
+            var diagnostics = ParseDiagnostics(combined);
+            var orchestrator = new SuggesterOrchestrator();
+            EmitDiagnostics(diagnostics, Console.Out, trace, diag => orchestrator.Suggest(diag, path));
+            if (diagnostics.Count == 0 && proc.ExitCode == 0)
+                Console.WriteLine("ok");
+        }
+        finally
+        {
+            trace?.Dispose();
+        }
+
+        return proc.ExitCode;
+    }
+
+    internal static List<Diag> ParseDiagnostics(string combinedOutput)
+    {
+        var lines = combinedOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         var diagnostics = new List<Diag>();
         foreach (var raw in lines)
         {
             var d = Diag.Parse(raw);
             if (d is not null) diagnostics.Add(d);
         }
+        return diagnostics;
+    }
 
+    internal static void EmitDiagnostics(IReadOnlyList<Diag> diagnostics, TextWriter stdout, TraceWriter? trace, Func<Diag, Suggestion?>? suggest = null)
+    {
         // Dedupe — MSBuild often prints the same diagnostic twice (per project).
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var d in diagnostics)
         {
             var key = $"{d.File}:{d.Line}:{d.Col}:{d.Code}";
             if (!seen.Add(key)) continue;
-            Console.WriteLine(d.Format());
+            var suggestion = suggest?.Invoke(d);
+            stdout.WriteLine(d.Format(suggestion));
+            trace?.Write(d);
+            if (suggestion is not null) Telemetry.OnSuggestionEmitted(d.Code, suggestion);
         }
-
-        if (diagnostics.Count == 0 && proc.ExitCode == 0)
-            Console.WriteLine("ok");
-
-        return proc.ExitCode;
     }
 
-    sealed record Diag(string File, int Line, int Col, string Severity, string Code, string Message)
+    static string ResolveProjectRoot(string path)
+    {
+        try
+        {
+            var full = Path.GetFullPath(path);
+            if (File.Exists(full))
+                return Path.GetDirectoryName(full) ?? full;
+            return full;
+        }
+        catch
+        {
+            return Path.GetFullPath(".");
+        }
+    }
+
+    internal sealed record Diag(string File, int Line, int Col, string Severity, string Code, string Message)
     {
         // MSBuild diagnostic line:
         //   path(line,col): error|warning CODE: message [project]
@@ -101,12 +154,25 @@ public static class CheckCommand
                 m.Groups["msg"].Value.Trim());
         }
 
-        public string Format()
+        public string Format(Suggestion? suggestion = null)
         {
             var hint = HintFor(Code);
             var msg = Message.Length > 100 ? Message[..97] + "..." : Message;
-            var hintStr = hint is null ? "" : "  → " + hint;
-            return $"{File}:{Line}:{Col}  {Severity[..1].ToUpperInvariant()}  {Code}  {msg}{hintStr}";
+            string suffix;
+            if (hint is not null)
+            {
+                // Tier 1 (analyzer-ID hint table) wins ties (spec §9).
+                suffix = "  → " + hint;
+            }
+            else if (suggestion is not null)
+            {
+                suffix = $"  → try: {suggestion.Text}  // [{suggestion.Evidence}]";
+            }
+            else
+            {
+                suffix = "";
+            }
+            return $"{File}:{Line}:{Col}  {Severity[..1].ToUpperInvariant()}  {Code}  {msg}{suffix}";
         }
 
         // Known Reactor analyzer IDs → skill-file pointer. Add entries as new

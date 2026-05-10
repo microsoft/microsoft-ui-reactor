@@ -11,6 +11,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Fixture projects under MurCheck/Fixtures/ are deliberately broken so
+         the smoke tests can drive `mur check` against them. They live as
+         standalone csproj files; exclude their .cs from this project's
+         default Compile glob so they don't poison this project's build. -->
+    <Compile Remove="MurCheck\Fixtures\**\*.cs" />
+    <None Include="MurCheck\Fixtures\**\*.cs" />
+    <None Include="MurCheck\Fixtures\**\*.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2" />

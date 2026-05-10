@@ -29,6 +29,21 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- `mur check --trace <path>` — append one JSONL row per parsed diagnostic
+  to `<path>` (in addition to stdout) for offline mining. Schema:
+  `{ts, code, severity, file, line, col, msg, receiver_type?, member?, mode}`.
+  Source code text is never written; absolute paths outside the project
+  root are redacted to `<external>`. (spec 038 §0.3)
+- Tier-2 Roslyn semantic suggester for `mur check`. Covers CS1061, CS0103,
+  CS0117, CS1503, CS7036 against `Microsoft.UI.Reactor.*` symbols; emits
+  `→ try: <text>  // [<evidence>]` on the diagnostic line above the per-code
+  confidence threshold (default 0.75). Tier-1 analyzer-ID hints still win
+  ties. (spec 038 §5, §1.1–§1.6)
+- `MUR_TELEMETRY=1` opt-in: appends `(code, suggester, confidence,
+  evidence_short)` per emitted suggestion to
+  `~/.mur/telemetry/<yyyy-mm-dd>.jsonl`. Local-first, scoped to the active
+  project; no source code, file paths, or machine identifiers logged.
+  (spec 038 §10, §1.7)
 - `WindowSpec`, `ReactorWindow`, `WindowKey`, `WindowStartPosition`,
   `PresenterKind`, `WindowState`, `WindowIcon`, `WindowDipSizeChangedEventArgs`,
   `WindowClosingEventArgs`, `ReactorAppContext` — first-class Window primitive

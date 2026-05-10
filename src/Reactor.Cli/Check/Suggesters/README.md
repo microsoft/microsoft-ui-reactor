@@ -1,0 +1,3 @@
+# Suggesters
+
+Tier 2 of `mur check`'s did-you-mean engine: pure functions of `(CSharpCompilation, Diagnostic, SyntaxNode)` that propose a single-line correction backed by the live Roslyn semantic model. Suggesters MUST NOT call out to the file system, the network, or any process; they are unit-testable by constructing a `CSharpCompilation` in-memory. Each suggester emits `(text, confidence, evidence)`; the `CheckCommand` wiring drops anything below the per-code threshold (default 0.75). See [spec 038 §5](../../../../docs/specs/038-mur-check-did-you-mean-design.md#5-tier-2--roslyn-semantic-suggester) for the diagnostic codes covered (CS1061, CS0103, CS0117, CS1503, CS7036) and the confidence formula.

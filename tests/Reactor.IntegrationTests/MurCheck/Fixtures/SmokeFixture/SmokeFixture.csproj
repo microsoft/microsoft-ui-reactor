@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Phase 1.6 smoke fixture — a pure-C# library that deliberately fails to
+    build with a CS1061 on a non-Reactor receiver. The integration test under
+    tests/Reactor.IntegrationTests/MurCheck/MurCheckSmokeTest.cs runs `mur
+    check` against this project and asserts the diagnostic survives the
+    pipeline unchanged (i.e. no Tier-2 suggestion gets attached, since the
+    receiver is not a Microsoft.UI.Reactor.* symbol).
+
+    Kept deliberately framework-free so the integration test doesn't pay the
+    cost of restoring WindowsAppSDK on every run. A separate Reactor-touching
+    fixture lands as a follow-up under
+    Fixtures/CS1061ButtonOnClick/CS1061ButtonOnClick.csproj.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- NOT part of Reactor.slnx; only built when a test runs `dotnet build` against this csproj. -->
+  </PropertyGroup>
+</Project>

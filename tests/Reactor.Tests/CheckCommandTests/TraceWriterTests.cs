@@ -1,0 +1,157 @@
+// Phase-0 trace-writer tests. Spec 038 §0.3:
+//   • Every row contains the documented schema fields.
+//   • No row exceeds 2 KB (heuristic catch for source-leak regressions).
+//   • Every `file` field is either relative or starts with the project root.
+//   • Trace is written *in addition to* stdout — separate concern, exercised
+//     in the integration test under tests/Reactor.IntegrationTests.
+
+using System.Text.Json;
+using Microsoft.UI.Reactor.Cli.Check;
+using Xunit;
+
+namespace Microsoft.UI.Reactor.Tests.CheckCommandTests;
+
+public class TraceWriterTests
+{
+    [Fact]
+    public void Trace_row_has_full_schema_for_a_typical_diagnostic()
+    {
+        var d = new CheckCommand.Diag(
+            File: "Program.cs",
+            Line: 34, Col: 16,
+            Severity: "error", Code: "CS1061",
+            Message: "'ButtonElement' does not contain a definition for 'OnClick'");
+        var root = Path.GetFullPath(".");
+
+        var row = TraceWriter.ToRow(d, root);
+
+        Assert.NotNull(row.ts);
+        Assert.Equal("CS1061", row.code);
+        Assert.Equal("E", row.severity);
+        Assert.Equal("Program.cs", row.file);
+        Assert.Equal(34, row.line);
+        Assert.Equal(16, row.col);
+        Assert.Contains("OnClick", row.msg);
+        Assert.Equal("iteration", row.mode);
+        Assert.Null(row.receiver_type);
+        Assert.Null(row.member);
+    }
+
+    [Fact]
+    public void Severity_is_short_form_E_W_I()
+    {
+        var root = Path.GetFullPath(".");
+        var e = TraceWriter.ToRow(new CheckCommand.Diag("a.cs", 1, 1, "error",   "CS1", "x"), root);
+        var w = TraceWriter.ToRow(new CheckCommand.Diag("a.cs", 1, 1, "warning", "CS1", "x"), root);
+        var i = TraceWriter.ToRow(new CheckCommand.Diag("a.cs", 1, 1, "info",    "CS1", "x"), root);
+        Assert.Equal("E", e.severity);
+        Assert.Equal("W", w.severity);
+        Assert.Equal("I", i.severity);
+    }
+
+    [Fact]
+    public void Long_messages_are_truncated_under_2KB_per_row()
+    {
+        var huge = new string('x', 8192);
+        var d = new CheckCommand.Diag("a.cs", 1, 1, "error", "CS1061", huge);
+
+        using var tmp = TempFile.Create();
+        using (var w = TraceWriter.Open(tmp.Path, Path.GetFullPath(".")))
+            w.Write(d);
+
+        var line = File.ReadAllLines(tmp.Path).Single();
+        Assert.True(line.Length <= 2048, $"trace row was {line.Length} bytes — exceeds 2 KB cap.");
+    }
+
+    [Fact]
+    public void Absolute_paths_outside_project_root_are_redacted()
+    {
+        var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "reactor-trace-root-" + Guid.NewGuid()));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var inside = Path.Combine(root, "src", "Foo.cs");
+            var outside = Path.Combine(Path.GetTempPath(), "elsewhere-" + Guid.NewGuid(), "Bar.cs");
+
+            Assert.Equal(Path.GetFullPath(inside), TraceWriter.SanitizePath(inside, root));
+            Assert.Equal("<external>", TraceWriter.SanitizePath(outside, root));
+            Assert.Equal("rel/path.cs", TraceWriter.SanitizePath("rel/path.cs", root));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Trace_file_field_is_relative_or_within_project_root_for_every_row()
+    {
+        var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "reactor-trace-root2-" + Guid.NewGuid()));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var d1 = new CheckCommand.Diag("Program.cs", 1, 1, "error", "CS1", "msg");
+            var d2 = new CheckCommand.Diag(Path.Combine(root, "src", "X.cs"), 2, 1, "error", "CS2", "msg");
+            var d3 = new CheckCommand.Diag(Path.Combine(Path.GetTempPath(), "outside-" + Guid.NewGuid() + ".cs"), 3, 1, "error", "CS3", "msg");
+
+            using var tmp = TempFile.Create();
+            using (var w = TraceWriter.Open(tmp.Path, root))
+            {
+                w.Write(d1);
+                w.Write(d2);
+                w.Write(d3);
+            }
+
+            var rootWithSep = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            foreach (var line in File.ReadAllLines(tmp.Path))
+            {
+                using var doc = JsonDocument.Parse(line);
+                var file = doc.RootElement.GetProperty("file").GetString()!;
+                var ok = !Path.IsPathRooted(file)
+                      || file.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase)
+                      || file == "<external>";
+                Assert.True(ok, $"file='{file}' is absolute and outside the project root ('{root}').");
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Trace_writes_one_jsonl_row_per_call_appendable()
+    {
+        var root = Path.GetFullPath(".");
+        var d = new CheckCommand.Diag("a.cs", 1, 1, "error", "CS1061", "x");
+
+        using var tmp = TempFile.Create();
+        using (var w = TraceWriter.Open(tmp.Path, root)) { w.Write(d); w.Write(d); }
+        // re-open and append a third
+        using (var w = TraceWriter.Open(tmp.Path, root)) { w.Write(d); }
+
+        var lines = File.ReadAllLines(tmp.Path);
+        Assert.Equal(3, lines.Length);
+        foreach (var line in lines)
+        {
+            using var doc = JsonDocument.Parse(line);
+            Assert.Equal("CS1061", doc.RootElement.GetProperty("code").GetString());
+            Assert.Equal("iteration", doc.RootElement.GetProperty("mode").GetString());
+        }
+    }
+
+    sealed class TempFile : IDisposable
+    {
+        public string Path { get; }
+        TempFile(string p) { Path = p; }
+        public static TempFile Create()
+        {
+            var p = global::System.IO.Path.Combine(global::System.IO.Path.GetTempPath(), "reactor-trace-" + Guid.NewGuid() + ".jsonl");
+            return new TempFile(p);
+        }
+        public void Dispose()
+        {
+            try { if (File.Exists(Path)) File.Delete(Path); } catch { }
+        }
+    }
+}
