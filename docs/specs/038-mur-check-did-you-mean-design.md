@@ -34,13 +34,14 @@ This spec was filed first as design proposal [#227](https://github.com/microsoft
 - [§5 Tier 2 — Roslyn semantic suggester](#5-tier-2--roslyn-semantic-suggester)
 - [§6 Tier 3 — induced pattern rules](#6-tier-3--induced-pattern-rules)
 - [§7 Tier 4 — confidence ranker](#7-tier-4--confidence-ranker)
-- [§8 Output format](#8-output-format)
-- [§9 Telemetry](#9-telemetry)
-- [§10 Risks](#10-risks)
-- [§11 Predicted impact](#11-predicted-impact)
-- [§12 Implementation phases](#12-implementation-phases)
-- [§13 Open questions](#13-open-questions)
-- [§14 Pointers](#14-pointers)
+- [§8 Warning ranking and noise reduction](#8-warning-ranking-and-noise-reduction)
+- [§9 Output format](#9-output-format)
+- [§10 Telemetry](#10-telemetry)
+- [§11 Risks](#11-risks)
+- [§12 Predicted impact](#12-predicted-impact)
+- [§13 Implementation phases](#13-implementation-phases)
+- [§14 Open questions](#14-open-questions)
+- [§15 Pointers](#15-pointers)
 
 ---
 
@@ -59,6 +60,7 @@ The catch: a *wrong* suggestion is worse than no suggestion. The agent will trus
 - For every C# compiler error (CS-prefixed) whose receiver, type, or member references a `Microsoft.UI.Reactor.*` symbol, emit a single-line suggestion with confidence ≥ T.
 - Stay silent below T. Silent is correct. Wrong is not.
 - Compose with the existing `REACTOR_*` analyzer hint table, not replace it.
+- **Suppress noise.** Most MSBuild and analyzer output an agent sees mid-iteration is boilerplate or low-priority hints that distract from the load-bearing fix. Surface only the diagnostics whose resolution is on the critical path to a clean build; defer the rest to a final-pass mode (§8).
 - Keep the diagnostic format machine-parseable: one line per diagnostic, predictable column structure.
 - Be fast: total `mur check` wall time stays within ~1.2× the underlying `dotnet build` it wraps.
 
@@ -100,13 +102,23 @@ mur check <path>
     │             AST-shape similarity).
     │
     ▼ append "-> try: <suggestion>" only when confidence >= T
+    │
+    ▼ Pre-emit ranker (§8) — transversal across all tiers:
+    │   score every diagnostic against an emission policy.
+    │   - errors:     always emit
+    │   - warnings:   emit only if score >= mode threshold
+    │   - hints/info: suppress in iteration mode; emit in --final mode
+    │   default mode is "iteration" — aggressive suppression so the
+    │   agent sees only diagnostics on the critical path to a clean build.
+    │
+    ▼ format and write one line per surviving diagnostic
 ```
 
-The tier structure is deliberate: **most of the value is deterministic.** ML enters only as a tiebreaker, only after measured data shows where Tier 2 + 3 fall short.
+The tier structure is deliberate: **most of the value is deterministic.** ML enters only as a tiebreaker, only after measured data shows where Tier 2 + 3 fall short. The four tiers decide *what suggestion to attach*; the ranker (§8) is orthogonal — it decides *whether to emit the diagnostic at all*.
 
 ## §4 Tier 1 — analyzer-ID hint table
 
-**Status: shipped.** Today `CheckCommand.HintFor(code)` returns a static skill-file pointer for 12 `REACTOR_*` analyzer codes (see §14). This tier is unchanged by this spec. New analyzer codes added by future analyzers slot into the same table.
+**Status: shipped.** Today `CheckCommand.HintFor(code)` returns a static skill-file pointer for 12 `REACTOR_*` analyzer codes (see §15). This tier is unchanged by this spec. New analyzer codes added by future analyzers slot into the same table.
 
 ## §5 Tier 2 — Roslyn semantic suggester
 
@@ -168,7 +180,7 @@ Rules live in `src/Reactor.Cli/Check/Rules/<Name>Rule.cs`, one rule per file, ea
 
 ## §7 Tier 4 — confidence ranker
 
-**Status: future.** Build only if telemetry (§9) shows Tier 2 + 3 leave a meaningful long tail.
+**Status: future.** Build only if telemetry (§10) shows Tier 2 + 3 leave a meaningful long tail.
 
 If built: a gradient-boosted tree over hand-engineered features — Levenshtein distance, parameter-name overlap, factory-popularity-in-samples (counted from `samples/apps/`), AST-shape similarity, prior agent-accept rate per rule. Inputs: the candidate set produced by Tiers 2 + 3. Output: re-ranked list with a calibrated confidence head.
 
@@ -176,7 +188,85 @@ Inference cost is negligible (microseconds). Training cost is one offline pipeli
 
 We deliberately do **not** propose a small LLM here. Small models hallucinate without huge corpora, and Reactor's training set is fundamentally limited; the deterministic system already has access to the things a small model would have to memorize (the api index, the samples).
 
-## §8 Output format
+## §8 Warning ranking and noise reduction
+
+The four suggestion tiers answer *what hint to attach to a diagnostic*. The pre-emit ranker answers a separate question: *should this diagnostic be sent to the agent at all, right now?* This matters because raw MSBuild output is dominated by diagnostics whose resolution is **not** on the critical path to a clean build — and every one of them costs context, distracts the agent, and reduces the chance of a 1-step fix.
+
+### Why ranking matters
+
+A representative kanban-run `dotnet build` emits ~30–80 diagnostic lines. Of those, typically 1–3 are the actual blockers. The rest are some mix of:
+
+- **NuGet restore noise** — `NU1701`, `NU1605`, package-version downgrades, target-framework fallbacks.
+- **MSBuild reference-resolution chatter** — `MSB3245`, `MSB3277`, `MSB3270` lines that resolve at the next build with no source change.
+- **IDE style hints** — `IDE0xxx` series: prefer expression-bodied member, unused using, etc.
+- **CS warnings on auto-generated or template code** — `CS8602` nullable, `CS0168` unused variable, `CS1591` missing XML doc — almost never the right thing to fix mid-iteration.
+- **Reactor analyzer Info-severity warnings** — e.g. `REACTOR_HOOKS_006` (non-idempotent fetcher heuristic) that are *guidance*, not blockers.
+- **Boilerplate** — `Build succeeded with N Warning(s)`, target hits, paths, timing.
+
+If the agent reads all of these every turn, two pathologies follow: (a) it spends turns "fixing" warnings that didn't need fixing this turn, and (b) the *real* blocker scrolls off attention. The ranker exists to flatten this: in iteration mode, only the critical path; in final mode, everything.
+
+### Modes
+
+| Mode | Flag | Behavior |
+|---|---|---|
+| **iteration** *(default)* | `mur check` | Emit errors always; emit warnings only if rank ≥ iteration threshold; suppress info / style hints. |
+| **strict** | `mur check --strict` | Treat warnings as errors. Useful for one-shot CI gates; not recommended for the inner loop. |
+| **final** | `mur check --final` | Emit every diagnostic, no suppression. Run this once before declaring done. |
+| **quiet** | `mur check --quiet` | Errors only. Maximally aggressive suppression for sub-iteration loops. |
+
+The agent-eval prompt for Reactor (#226 §5) directs the agent to use `mur check` (iteration) during the build/fix loop and `mur check --final` once iteration mode is clean. The transition is the explicit "I am done iterating" signal.
+
+### Ranking policy
+
+Each diagnostic gets a score from 0.0 (suppress) to 1.0 (always emit), computed as:
+
+```
+score = base_policy(code) * code_weight
+      + severity_weight(severity)            // E=1.0, W=0.5, I=0.1
+      + location_weight(file, span)          // user-edited > generated
+      + recency_weight(turns_since_touched)  // freshly written > stale
+      + accept_history(code, rule_name)      // telemetry-driven, optional
+```
+
+`base_policy(code)` is a hand-authored table (§8 of this spec, owned by the Reactor team) covering the ~30 highest-frequency diagnostic codes. Sketch:
+
+| Code prefix / id | Iteration score | Final score | Notes |
+|---|---:|---:|---|
+| Any CS error | 1.0 | 1.0 | Always emit. |
+| `REACTOR_*` Warning | 0.9 | 1.0 | Hooks/A11y/Theme are correctness-adjacent. |
+| `REACTOR_*` Info | 0.2 | 1.0 | Heuristic; suppress mid-iteration. |
+| `CS8600`–`CS8625` (nullable) | 0.3 | 1.0 | Mostly noise unless the agent is fixing a null-deref. |
+| `CS0168` (unused var) | 0.0 | 0.7 | Never blocks a build. |
+| `CS1591` (XML doc) | 0.0 | 0.5 | Cosmetic. |
+| `IDE0xxx` | 0.0 | 0.3 | Style. |
+| `NU1701`, `NU1605` | 0.0 | 0.6 | Transient — usually next build. |
+| `MSB3245`, `MSB3270`, `MSB3277` | 0.0 | 0.4 | Resolution flakiness. |
+| Unknown | 0.5 | 1.0 | Conservative; surface unknown codes by default in iteration too — better to over-emit a novel code than to hide a real bug behind silence. |
+
+Iteration threshold: **≥ 0.6**. Final threshold: **≥ 0.0** (everything). Tunable via `mur check --emit-threshold`.
+
+### Learned ranker (Phase D)
+
+The deterministic table is the v1 baseline. Once spec 037's corpus is producing pairs at scale, train a small classifier:
+
+- **Label:** for each diagnostic that fired in a trace, did the agent's eventual fix touch the line/symbol/file the diagnostic pointed at? Yes → emit-worthy; no → noise.
+- **Features:** diagnostic code, severity, file path category (user / generated / nuget cache), turn index, whether prior `mur check` already surfaced this diagnostic and the agent ignored it, whether other higher-priority diagnostics are in the same emission, file churn rate.
+- **Model:** GBDT or logistic regression. Tiny (<100 KB ONNX). Microseconds to score per diagnostic.
+- **Calibration:** isotonic regression on a held-out fold so the score behaves like a probability of "this diagnostic is emit-worthy."
+
+The learned ranker complements rather than replaces the policy table — the table is the floor (always-emit / never-emit anchors), the model fills the gray middle.
+
+### Why not just trust MSBuild's severity?
+
+MSBuild severity is what the *language* / *analyzer* author chose, not what the *agent's-build-loop* needs. `CS1591` is severity Warning by spec; in the inner loop it is suppress-grade noise. `REACTOR_HOOKS_006` is severity Info; in the inner loop it is borderline because a hook misuse can cause runtime corruption. The ranker overlays a *task-shaped* severity on top of the language-shaped one.
+
+### Failure modes the ranker must not introduce
+
+- **Hiding a load-bearing warning the agent needed to see.** Mitigation: telemetry tracks suppressed diagnostics that later became errors in subsequent builds; auto-promote any code that crosses the suppression-then-error threshold > N times.
+- **Suppressing in iteration but never emitting in final.** Mitigation: the harness asserts `mur check --final` is run on the success build of every spec 037 trace; any diagnostic that the user-mode lint would have flagged but `--final` didn't is a CI failure.
+- **Confusing the agent with mode-dependent output.** Mitigation: include the mode in every emission's metadata (`// mode: iteration`) so the agent can reason about why a diagnostic does or doesn't appear.
+
+## §9 Output format
 
 `mur check` emits one line per diagnostic, format:
 
@@ -195,7 +285,7 @@ If multiple suggestions cross threshold for the same diagnostic, emit the highes
 
 Exit code preserves `dotnet build`'s exit code. `mur check` does not invent its own exit semantics.
 
-## §9 Telemetry
+## §10 Telemetry
 
 Each `mur check` invocation logs (locally; opt-in upload):
 
@@ -214,7 +304,7 @@ If running inside an agent harness, the harness can additionally report whether 
 
 Telemetry is local-first, opt-in, scoped to the active project. No source code, no PII, no machine identifiers.
 
-## §10 Risks
+## §11 Risks
 
 | Risk | Mitigation |
 |---|---|
@@ -225,8 +315,10 @@ Telemetry is local-first, opt-in, scoped to the active project. No source code, 
 | Pattern rules become a maintenance treadmill | Auto-generate the `samples/`-derived validation set; CI fails when a Tier 3 rule change regresses a captured pair. |
 | Tier 2 fuzzy-match emits an embarrassingly wrong rename | Whitelist threshold T. Per-code thresholds, not one global T. |
 | The corpus encodes a model's idiosyncrasies | Spec 037 supports multi-agent rotation. Tier 3 rules ship only when a cluster reproduces across ≥ 2 agents. |
+| Ranker hides a load-bearing warning the agent needed to see | Telemetry on suppress→error transitions; auto-promote codes whose suppression precedes a related error > N times. `mur check --final` is mandatory before "done" — captured in eval prompt and CI. |
+| Over-suppression makes the build/fix loop *worse* by hiding novel diagnostics | Default base score for unknown codes is 0.5 (above iteration threshold) — better to over-emit a novel code than to silence a real bug. Threshold tunable per agent via telemetry. |
 
-## §11 Predicted impact
+## §12 Predicted impact
 
 If the per-kanban-run breakdown in #226 (build + fix cycles ≈ 150 K tokens, 2–4 turns) is right, and Tier 2 + 3 remove ~70 % of those turns:
 
@@ -236,9 +328,9 @@ If the per-kanban-run breakdown in #226 (build + fix cycles ≈ 150 K tokens, 2�
 
 Stacking with #226 §1 (richer template) + §2 (inline cheatsheet): kanban tokens 738 K → ~380 K, putting Reactor decisively under WinUI on cost and within ~2× HTML — at the realistic ceiling identified in #226.
 
-These numbers are estimates; the empirical question is settled by Phase 0 instrumentation (§12).
+These numbers are estimates; the empirical question is settled by Phase 0 instrumentation (§13).
 
-## §12 Implementation phases
+## §13 Implementation phases
 
 Phased so each phase is independently shippable.
 
@@ -272,22 +364,34 @@ Phased so each phase is independently shippable.
 
 **Exit:** Tier 3 catches every cluster with frequency ≥ 5 % in the random-app corpus.
 
-### Phase 4 — telemetry-driven Tier 4 (only if needed)
+### Phase 4 — pre-emit ranker, deterministic table
+
+- Land §8's hand-authored `base_policy(code)` table covering the top ~30 highest-frequency diagnostic codes from Phase 0's sweep.
+- Add `--strict`, `--final`, `--quiet`, `--emit-threshold` flags to `mur check`.
+- Update the eval prompt and the `reactor-build-and-check` skill to direct agents to use iteration mode in the inner loop and `--final` once iteration is clean.
+- Add the suppress→error CI guardrail: every `mur check --final` run on a successful build must surface no diagnostic that, by code alone, the table would have flagged in iteration mode but didn't.
+
+**Exit:** the agent sees ≥ 50 % fewer diagnostic lines per turn in iteration mode without missing any blockers (measured against a 50×N replay of Phase 0 traces).
+
+### Phase 5 — telemetry-driven Tier 4 + learned ranker (only if needed)
 
 - Log `(diagnostic, candidates, picked, accepted-by-agent)` from production `mur check` invocations.
-- If Tier 2 + 3 still leave a meaningful tail, train a small GBDT ranker over hand-engineered features. Defer until data justifies it.
+- If Tier 2 + 3 still leave a meaningful tail of suggestion misses, train a small GBDT confidence ranker over hand-engineered features. Defer until data justifies it.
+- In parallel, train the §8 learned ranker against spec 037's pair corpus using the "did the agent's eventual fix touch this diagnostic's location?" label. Calibrate to behave as an emit-worthiness probability; combine with the policy-table floor.
 
-**Exit:** measured improvement on the long-tail clusters or formal decision to not pursue.
+**Exit:** measured improvement on the long-tail or a formal decision to not pursue. For the learned ranker specifically: ≥ 5-point lift in the precision of "diagnostics emitted in iteration mode that the agent's next fix actually touched," vs. the deterministic table baseline.
 
-## §13 Open questions
+## §14 Open questions
 
 1. **Trace format for the random-app generator (spec 037).** Does its trace produce a transcript rich enough to extract before/after source pairs without re-running the build? See spec 037 §7. Coordinate before either lands.
 2. **Confidence threshold T.** Start strict (≥ 0.85 JaroWinkler-equivalent) and loosen with telemetry, or start loose and tighten? Defaulting to strict preserves "silent is OK" — propose strict.
 3. **Should Tier 2 rewrite the surface form?** Today suggestions are text-only ("try: `Button(label, onClick: x)`"). A future variant could emit a unified-diff hunk; that is a separate scope.
 4. **Roslyn workspaces vs. compilations.** Workspaces give project-graph reasoning but cost more to load. Start with `Compilation` only; revisit if rules need cross-project context.
 5. **Per-agent rule profiles?** If different LLM agents make different mistakes, Tier 3 rule sets could be agent-keyed. Likely premature; cross-agent rules are simpler. Reconsider once telemetry shows agent-specific deltas.
+6. **Iteration-mode emit threshold (§8).** Default proposed at 0.6. Tuning lever: too high silences load-bearing warnings; too low restores the noise. Land conservative (0.5–0.55) and tighten as the policy table covers more codes? Or go aggressive (0.7) and accept that novel codes get surfaced via the unknown-code default? Settle empirically once Phase 0 produces the diagnostic-frequency distribution.
+7. **Should the ranker score Tier 1 hints as well?** Today every `REACTOR_*` analyzer warning carries a static skill pointer and is implicitly emit-worthy. The ranker could in principle suppress low-priority `REACTOR_*` Info diagnostics in iteration mode (e.g. `REACTOR_HOOKS_006`, the non-idempotent fetcher heuristic). Recommendation: yes, treat Tier 1 emissions as just another diagnostic for ranking purposes; the policy table is the single source of truth for emit/suppress decisions.
 
-## §14 Pointers
+## §15 Pointers
 
 - Existing `mur check` implementation: `src/Reactor.Cli/Check/CheckCommand.cs`
 - Existing analyzers (12 `REACTOR_*` IDs): `src/Reactor.Analyzers/{HookRulesAnalyzer,UseMemoCellsAnalyzer,UseThemeRefAnalyzer,RequestedThemeSetAnalyzer,UseLightweightStylingAnalyzer,AccessibilityAnalyzers,MissingWithKeyAnalyzer}.cs`

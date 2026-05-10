@@ -42,6 +42,8 @@ Three sources of truth exist in principle:
 
 This spec implements (3). It is the load-bearing data source for spec 038. (1) takes over once 038 ships and runs at scale; (2) is retained as a validation set, never as training data.
 
+The corpus serves a **second** consumer in spec 038: the **pre-emit warning ranker** (spec 038 §8). The same per-turn trace that lets us extract `(broken, diagnostic, fixed)` pairs also tells us, for every diagnostic that fired, whether the agent's eventual fix actually touched the line / file / symbol the diagnostic pointed at. That binary label — *did this diagnostic correlate with a real fix, or did the agent ignore it?* — is the supervised signal for training a learned ranker that decides which warnings to surface mid-iteration vs. defer to a final-pass mode. The harness emits this label alongside the pair triples so the ranker training pipeline does not need to re-walk the trace.
+
 A second, equally important constraint: **the agent under test must not be able to read the Reactor source code or samples.** If it can, the failures we capture stop reflecting a downstream user's experience and start reflecting a uniquely-privileged author's. The harness enforces this isolation; see §3 and §6.
 
 ## §2 Goals and non-goals
@@ -259,6 +261,26 @@ Each row in `fixes.jsonl`:
 - `missing_with_key` — `.WithKey(...)` appended to elements in a dynamic list.
 - `import_added` — fix was a new `using` statement.
 - `other` — extractor couldn't classify; rule induction treats these as a residual bucket.
+
+### Per-diagnostic ranker labels
+
+In addition to the pair triples, the extractor emits one row per diagnostic that fired during the run (whether it became a "blocker" eventually fixed, or was carried over silently across builds, or never resurfaced). This is the supervised signal for spec 038 §8's learned warning ranker. Schema:
+
+```json
+{
+  "run_id": "p001-r03",
+  "turn": 7,
+  "file": "Program.cs",
+  "diag": { "code": "CS1591", "msg": "...", "line": 12, "col": 1 },
+  "severity": "W",
+  "addressed_by_next_fix": false,
+  "addressed_within_run": false,
+  "still_present_at_run_end": true,
+  "agent_ignored": true
+}
+```
+
+Output to `ranker-labels-<run_id>.jsonl`, aggregated alongside `fixes.jsonl`. The label `addressed_by_next_fix` is the primary supervised signal: a diagnostic the agent's *next* edit touched is emit-worthy in iteration mode; one it didn't is a candidate for suppression. `addressed_within_run` (eventually addressed before run end) and `still_present_at_run_end` (carried over silently) are auxiliary labels useful for distinguishing "deferred but real" warnings from "ignored as noise."
 
 ## §10 Aggregation and rule induction
 
