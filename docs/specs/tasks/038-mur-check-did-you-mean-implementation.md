@@ -11,10 +11,11 @@ Originating issues: [#226 §5](https://github.com/microsoft/microsoft-ui-reactor
 ## Status snapshot (2026-05-10)
 
 - **Phase 0 (instrumentation):** ✓ landed on `feat/038-mur-check`. `--trace <path>` writes JSONL alongside stdout; folders + READMEs in place.
-- **Phase 1 (Tier 2 Roslyn suggester):** ✓ code complete on `feat/038-mur-check`. `SymbolSuggester` covers CS1061 / CS0103 / CS0117 / CS1503 / CS7036; `CompilationLoader` + `FactoryIndex` + `SuggesterOrchestrator` wired into `CheckCommand`; Tier-1 hints still win ties; `MUR_TELEMETRY=1` opt-in. 66 unit tests + 1 end-to-end smoke integration test, all green. **Not yet merged to `main`** — blocked on threshold tuning (needs Data Checkpoint B), which is in turn blocked on harness Gap #3 (ranker negative class).
-- **Phase 2 / 3 / 4:** not started. Phase 2 blocks on Phase 1 merge; Phase 3 blocks on Data Checkpoint C; Phase 4 blocks on Data Checkpoint D.
-- **Active blocker:** harness Gap #3 (one ranker-labels row per diagnostic per build, with the four labels computed forward through the full trace). Plus a `fix_kind` classifier nit (`HorizontalAlignment` → `HAlign` should be `renamed_member`, not `other`). See the Data Checkpoint A re-audit below.
+- **Phase 1 (Tier 2 Roslyn suggester):** ✓ code complete on `feat/038-mur-check`. `SymbolSuggester` covers CS1061 / CS0103 / CS0117 / CS1503 / CS7036; `CompilationLoader` + `FactoryIndex` + `SuggesterOrchestrator` wired into `CheckCommand`; Tier-1 hints still win ties; `MUR_TELEMETRY=1` opt-in. 66 unit tests + 1 end-to-end smoke integration test, all green. **Not yet merged to `main`** — pending threshold tuning against Data Checkpoint B's 50-run output.
+- **Phase 2 / 3 / 4:** not started. Phase 2 blocks on Phase 1 merge; Phase 3 blocks on Data Checkpoint C; Phase 4 blocks on Data Checkpoint D + the `still_present_at_run_end` harness fix below.
+- **Active state:** Data Checkpoint B 50-run sweep cleared to start (audit pass 2 confirmed Gap #3 fixed). When the corpus lands, follow the "pickup procedure for the next session" under Data Checkpoint B below — that block is self-contained.
 - **Deferred follow-ups (cleanly scoped, not blocking next phase):** (a) Reactor-touching integration fixture for the CS1061 Button.OnClick canonical example (needs WindowsAppSDK restore on every test run); (b) wall-time perf trait test against the WinUI fixture; (c) full Hamming-vector overload ranking in CS7036; (d) return-type assignability filter in CS0103.
+- **Tracked harness follow-up (Phase-4 prerequisite, file with harness owner before Data Checkpoint D):** `still_present_at_run_end` always `false` even when the diagnostic IS in the final build — fingerprint-mismatch quirk on adjacent CS8012 emissions whose timing tails differ. Doesn't affect the primary `addressed_by_next_fix` label.
 
 ---
 
@@ -80,21 +81,28 @@ The harness in `C:\Users\andersonch\Code\TokenCountTest\` is the upstream pipeli
 
 **Use:** verifies the JSONL contract well enough to write a parser and design Phase 1 fixture types.
 
-#### Re-audit 2026-05-10 (smaller re-run before scaling to 50)
+#### Re-audit 2026-05-10 (final state before scaling to 50)
 
-Re-checked the harness output (`fixes.jsonl` 2 unique, `ranker-labels.jsonl` 3 rows, `patterns.json` 2 clusters) against the four gaps:
+Re-checked the harness output (`fixes.jsonl` 2 unique, `ranker-labels.jsonl` 6 rows, `patterns.json` 2 clusters) against the four gaps. Two audit passes are recorded here; the second is the current state.
 
-- **Gap #1 (`receiver_type` / `member`): ✓ FIXED.** Both `fixes.jsonl` rows populate `receiver_type`/`member` (`ButtonElement`/`HorizontalAlignment`, `GridElement`/`RowSpacing`). `patterns.json` cluster keys carry `receiver_type`. CS0618 row in `ranker-labels.jsonl` correctly null (no documented regex for it).
+**Audit pass 1 (3-row ranker output):** Gap #1, #2, #4 fixed. Gap #3 not fixed — all 3 ranker rows positive class. Recommendation was to fix Gap #3 before scaling.
+
+**Audit pass 2 (6-row ranker output, current state):**
+- **Gap #1 (`receiver_type` / `member`): ✓ FIXED.** Both `fixes.jsonl` rows populate `receiver_type`/`member` (`ButtonElement`/`HorizontalAlignment`, `GridElement`/`RowSpacing`). `patterns.json` cluster keys carry `receiver_type`. CS0618 / CS8012 rows correctly null (no documented regex for those codes).
 - **Gap #2 (dedup): ✓ FIXED.** No byte-identical repeats. Each unique `(run, file, turn, code, line, col)` appears once.
-- **Gap #3 (ranker negative class): ❌ NOT FIXED.** Blocker. All three rows are positive class (`addressed_by_next_fix: true`, `agent_ignored: false`). For 3 runs the spec expects ~30–80 rows; we have 3. The harness is still emitting one row per *fix-pair* rather than one row per *diagnostic per build*.
-- **Gap #4 (cosmetic): ✓ acceptable.** `package_version` populated; `exemplar_run_ids` retained per §4 recommendation; no in-array duplicates.
-- **New nit (calibration noise, not a gap):** `fix_kind` classifier mis-labels `HorizontalAlignment`→`HAlign` as `"other"` instead of `"renamed_member"` (receiver type unchanged + member name swapped is the textbook `renamed_member` case). Tighten before scaling, since `fix_kind` is part of the cluster key.
+- **Gap #3 (ranker negative class): ✓ FIXED.** Now emitting per-build, per-diagnostic rows. 4 positive (`addressed_by_next_fix: true`) and 2 negative (`addressed_by_next_fix: false`) on the primary supervised label. Three CS8012 emissions in run 5d5fef… (turns 18 / 20 / 23) are recorded as three independent training rows, exactly per the spec 037 §3 "don't dedupe across builds for ranker labels" rule.
+- **Gap #4 (cosmetic): ✓ acceptable.** `package_version` populated; `exemplar_run_ids` retained; no in-array duplicates.
+- **`fix_kind` classifier nit: partially fixed.** Both pairs now classify as `renamed_member` (was `other`). Pair 1 (`HorizontalAlignment` → `HAlign`) is correct. Pair 2 (`.RowSpacing(16)` deletion + per-element `.Margin(...)` rewrite) is debatable — that fix isn't a member rename — but the cluster key is still informative. Acceptable; revisit if the 50-run shows the classifier over-labeling structural rewrites.
+- **New known limitation (logged, not a blocker):** `still_present_at_run_end` is `false` on all 6 rows, including three CS8012s the testing agent confirmed *are* in the run's final build. Cause is a fingerprint-mismatch quirk between adjacent CS8012 emissions whose timing tails differ (`"…in 5.0s"` vs `"in 4.4s"` vs `"in 4.9s"`). Impact:
+    - Primary ranker-training label `addressed_by_next_fix` is unaffected (correctly computes forward from each emission).
+    - Auxiliary label `agent_ignored` (= `still_present_at_run_end AND not addressed_by_next_fix`) is currently uniformly false where it should sometimes be true. This breaks the spec 038 §11 "auto-suppression telemetry" hook (which detects "suppressed-then-resurfaced" patterns).
+    - **Tracked as a Phase-4 prerequisite** (see Data Checkpoint D below). Phase 1 / Phase 3 don't read these fields, so the bug doesn't block this iteration's work.
 
-**Recommendation: do not start the 50-run sweep until Gap #3 lands** — the ranker-labels output from a larger sweep would be just as unusable as today's. Re-run the 3-run smoke after Gap #3 + the `fix_kind` tightening to verify before scaling.
+**Recommendation: kick off the 50-run.** Phase 1 calibration consumes `fixes.jsonl` only; the `still_present_at_run_end` bug is correctly classified as a known limitation, not a blocker.
 
 ### Data Checkpoint B — calibration (≥ 50 unique pairs, ≥ 50 runs, ≥ 2 agents, all four follow-ups from review-feedback resolved)
 
-**Status: ⏸ blocked on Gap #3 (ranker negative class). 50-run sweep not yet started.**
+**Status: ✓ unblocked. 50-run sweep cleared to start; output expected at `C:\Users\andersonch\Code\TokenCountTest\mining-out\`.**
 
 **Blocks:** Phase 1 ship gate (the Tier 2 confidence-threshold tuning).
 
@@ -102,6 +110,15 @@ Re-checked the harness output (`fixes.jsonl` 2 unique, `ranker-labels.jsonl` 3 r
 
 **Owner:** harness team.
 **ETA:** TBD — track in #228 follow-up issue. Estimated ~50 runs at $3–5 each = ~$200 corpus cost.
+
+#### When the 50-run output lands — pickup procedure for the next session
+
+Self-contained instructions so the next agent can run cold:
+
+1. **Verify the corpus.** Re-run the four-gap audit against the 50-run `fixes.jsonl` / `ranker-labels.jsonl` / `patterns.json`. Sample sizes should be roughly: ≥ 50 unique pairs in `fixes.jsonl`, ≥ 200 rows in `ranker-labels.jsonl` (≥ 30 % negative class), 10–30 clusters in `patterns.json`. Flag any regression in the gaps that were marked fixed in the audit pass 2 above. The `still_present_at_run_end` bug is a known limitation — note its post-50-run incidence rate but don't block on it.
+2. **Tune Tier 2 thresholds.** Walk the corpus offline; for each top-20 CS-pattern, run `SymbolSuggester` against the `before` text and compare the top suggestion to the actual fix in the `after` text. Compute (recall@T, precision@T) per diagnostic code. Pick per-code T to land ≥ 0.70 recall at ≤ 0.05 false-positive rate. Write the chosen thresholds to `src/Reactor.Cli/Check/Suggesters/Thresholds.cs` (new file). Wire `SymbolSuggester` to read its threshold from there per diagnostic code instead of the global `DefaultThreshold = 0.75`.
+3. **Run Eval Checkpoint EC1.** 5×N batch on `gpt-5.5` against `reactor-calc` and `reactor-kanban`, comparing `feat/038-mur-check` to `main`. Pass criterion: tokens not regressed; ≥ 1 measurable did-you-mean firing per kanban run on average; first-build OK ≥ 5/5. Methodology mirrors the Phase-7 batch summarized in #226.
+4. **If EC1 passes, merge to `main`.** Then unblock Phase 2 (MSBuild passthrough + deterministic ranker, spec 038 §8).
 
 ### Data Checkpoint C — rule induction (≥ 500 unique pairs, ≥ 200 runs, ≥ 2 agents, ranker negative class present)
 
@@ -122,7 +139,7 @@ Re-checked the harness output (`fixes.jsonl` 2 unique, `ranker-labels.jsonl` 3 r
 
 **Use:** train the §8 learned ranker against `addressed_by_next_fix` as the binary label. Calibrate via isotonic regression on a held-out fold.
 
-**Owner:** harness team. Negative class is the gating constraint — the harness must emit one row per diagnostic per build, not just per fix-pair. (Gap #3 in `C:\temp\eval-trace-mining-followups.md`.)
+**Owner:** harness team. Negative class was the gating constraint — Gap #3 was fixed in audit pass 2 (2026-05-10) and the harness now emits one row per diagnostic per build. **One additional prerequisite before Data Checkpoint D:** fix the `still_present_at_run_end` fingerprint bug (see Status snapshot at top + Data Checkpoint A re-audit). Without it the auxiliary `agent_ignored` label is uniformly false, which breaks the spec 038 §11 auto-suppression-telemetry hook. The primary `addressed_by_next_fix` training label is unaffected.
 
 ---
 
@@ -248,7 +265,7 @@ Goal: for the five highest-frequency CS-prefixed codes that touch Reactor types,
 ### 1.8 Phase 1 exit criterion
 
 - [x] All Phase 1 tasks above checked. (The integration test in 1.6 and the perf-trait test in 1.7 are explicitly deferred follow-ups; everything code-side is implemented and unit-tested.)
-- [ ] **Wait for Data Checkpoint B.** Once it lands, run the Tier 2 suggester offline against the `fixes.jsonl` corpus; for each top-20 CS-pattern, compute (recall@T, precision@T) and tune per-code T so recall ≥ 0.70 at precision ≥ 0.95. Record the chosen thresholds in `src/Reactor.Cli/Check/Suggesters/Thresholds.cs`. — **Blocked on Data Checkpoint B (which is in turn blocked on harness Gap #3, see Data Checkpoint A re-audit above).**
+- [ ] **Wait for Data Checkpoint B.** Once it lands, run the Tier 2 suggester offline against the `fixes.jsonl` corpus; for each top-20 CS-pattern, compute (recall@T, precision@T) and tune per-code T so recall ≥ 0.70 at precision ≥ 0.95. Record the chosen thresholds in `src/Reactor.Cli/Check/Suggesters/Thresholds.cs`. — Step-by-step pickup procedure under Data Checkpoint B above.
 - [ ] **Run Eval Checkpoint EC1** vs. `main`. Pass criterion: tokens not regressed; ≥ 1 measurable did-you-mean firing per kanban run on average; first-build OK ≥ 5/5.
 - [ ] Merge to `main`.
 
