@@ -83,6 +83,7 @@ static void EmitFactories(Assembly asm, StringBuilder sb)
     var methods = factories
         .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
         .Where(m => !m.IsSpecialName)
+        .Where(m => !IsObsolete(m))
         .Select(FormatMethod)
         .Distinct()
         .OrderBy(s => s, StringComparer.Ordinal);
@@ -101,9 +102,11 @@ static void EmitModifiers(Assembly asm, StringBuilder sb)
     var lines = asm
         .GetExportedTypes()
         .Where(t => t.IsClass && t.IsAbstract && t.IsSealed && !t.IsGenericType)  // static class
+        .Where(t => !IsObsolete(t))
         .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
         .Where(m => m.IsDefined(typeof(System.Runtime.CompilerServices.ExtensionAttribute), false))
         .Where(m => IsElementExtension(m))
+        .Where(m => !IsObsolete(m))
         .Select(FormatMethod)
         .Distinct()
         .OrderBy(s => s, StringComparer.Ordinal);
@@ -125,15 +128,18 @@ static void EmitHooks(Assembly asm, StringBuilder sb)
         ? Enumerable.Empty<string>()
         : rc.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
              .Where(m => m.Name.StartsWith("Use", StringComparison.Ordinal))
+             .Where(m => !IsObsolete(m))
              .Select(m => "RenderContext." + FormatMethod(m));
 
     // Extension hooks (UseValidationContext, UseInfiniteResource, UseAnnounce, ...).
     var extHooks = asm
         .GetExportedTypes()
         .Where(t => t.IsClass && t.IsAbstract && t.IsSealed && !t.IsGenericType)
+        .Where(t => !IsObsolete(t))
         .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
         .Where(m => m.IsDefined(typeof(System.Runtime.CompilerServices.ExtensionAttribute), false))
         .Where(IsHookExtension)
+        .Where(m => !IsObsolete(m))
         .Select(FormatMethod);
 
     var lines = instanceHooks.Concat(extHooks)
@@ -157,6 +163,7 @@ static void EmitTheme(Assembly asm, StringBuilder sb)
     var properties = theme
         .GetProperties(BindingFlags.Public | BindingFlags.Static)
         .Where(p => p.PropertyType.Name == "ThemeRef")
+        .Where(p => !IsObsolete(p))
         .OrderBy(p => p.Name, StringComparer.Ordinal);
 
     foreach (var p in properties)
@@ -186,14 +193,30 @@ static void EmitEnums(Assembly asm, StringBuilder sb)
 
     var enums = asm.GetExportedTypes()
         .Where(t => t.IsEnum)
+        .Where(t => !IsObsolete(t))
         .OrderBy(t => t.FullName, StringComparer.Ordinal);
 
     foreach (var t in enums)
     {
-        var values = string.Join(", ", Enum.GetNames(t));
-        sb.AppendLine($"{Short(t)} {{ {values} }}");
+        var values = Enum.GetNames(t)
+            .Where(name => !IsEnumMemberObsolete(t, name));
+        sb.AppendLine($"{Short(t)} {{ {string.Join(", ", values)} }}");
     }
     sb.AppendLine();
+}
+
+// ---------------------------------------------------------------------------
+//  Obsolete filtering — keep deprecated surface out of the index so AI agents
+//  don't paste from it. Mirrors what `using` would surface to a real consumer.
+// ---------------------------------------------------------------------------
+
+static bool IsObsolete(MemberInfo m) =>
+    m.IsDefined(typeof(ObsoleteAttribute), inherit: false);
+
+static bool IsEnumMemberObsolete(Type enumType, string name)
+{
+    var field = enumType.GetField(name, BindingFlags.Public | BindingFlags.Static);
+    return field is not null && IsObsolete(field);
 }
 
 // ---------------------------------------------------------------------------

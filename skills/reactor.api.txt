@@ -63,9 +63,7 @@ FontIcon(string glyph, string fontFamily = null, double? fontSize = null) → Fo
 ForEach<T>(IEnumerable<T> items, Func<T, Element> render) → Element
 ForEach<T>(IEnumerable<T> items, Func<T, int, Element> render) → Element
 Frame(Type sourcePageType = null, object navigationParameter = null) → FrameElement
-Func(Func<RenderContext, Element> render) → FuncElement
 Grid(GridSize[] columns, GridSize[] rows, Element[] children) → GridElement
-Grid(string[] columns, string[] rows, Element[] children) → GridElement
 GridView(Element[] items) → GridViewElement
 GridView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedGridViewElement<T>
 Group(Element[] children) → Element

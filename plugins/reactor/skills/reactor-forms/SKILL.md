@@ -17,7 +17,7 @@ declarative `.Validate()` modifiers.
 | `TextField(value, setValue)` | Controlled text input |
 | `UseValidationContext()` | Track validation messages, touched/dirty state |
 | `.Validate(...)` | Attach built-in validators to an input |
-| `FormField(label, input)` | Wraps input with label, error display, required marker |
+| `FormField(input, label: ...)` | Wraps input with label, error display, required marker |
 | `new MaskEngine(...)` | Masked text input (phone, SSN, etc.) |
 | `InputFormatter.Currency(...)` | Format-as-you-type |
 
@@ -33,7 +33,7 @@ var (agreed, setAgreed) = UseState(false);
 return VStack(12,
     TextField(name, setName, placeholder: "Name"),
     NumberBox(age, setAge),
-    CheckBox("I agree", agreed, setAgreed),
+    CheckBox(agreed, setAgreed, label: "I agree"),
     Button("Submit", onSubmit).Disabled(string.IsNullOrEmpty(name) || !agreed)
 );
 ```
@@ -42,19 +42,23 @@ return VStack(12,
 
 | Factory | Value type | Common modifiers |
 |---------|-----------|------------------|
-| `TextField(text, setText)` | `string` | `.Placeholder()`, `.MaxLength()` |
-| `PasswordBox(text, setText)` | `string` | `.Placeholder()`, `.PasswordRevealMode()` |
-| `NumberBox(value, setValue)` | `double` | `.Min()`, `.Max()`, `.SmallChange()` |
-| `Slider(value, min, max, setValue)` | `double` | `.StepFrequency()` |
-| `ToggleSwitch(isOn, setIsOn)` | `bool` | `.OnContent()`, `.OffContent()` |
-| `CheckBox(label, isChecked, setIsChecked)` | `bool` | — |
-| `RadioButtons(items, selected, setSelected)` | `int` | `.Header()` |
-| `ComboBox(items, selected, setSelected)` | `object` | `.Placeholder()` |
-| `DatePicker(date, setDate)` | `DateTimeOffset` | `.MinYear()`, `.MaxYear()` |
-| `TimePicker(time, setTime)` | `TimeSpan` | `.MinuteIncrement()` |
-| `AutoSuggestBox(text, setText)` | `string` | `.ItemsSource()`, `.OnSuggestionChosen()` |
-| `RichEditBox(doc, setDoc)` | `string` | `.IsReadOnly()` |
-| `CalendarDatePicker(date, setDate)` | `DateTimeOffset?` | `.MinDate()`, `.MaxDate()` |
+| `TextField(value, setValue, placeholder, header)` | `string` | `.Header()`, `.ReadOnly()`, `.AcceptsReturn()`, `.TextWrapping()` |
+| `PasswordBox(value, setValue, placeholder, header)` | `string` | `.Set(pb => ...)` |
+| `NumberBox(value, setValue, placeholder, header)` | `double` | `.Range(min, max)`, `.SpinButtons(...)` |
+| `Slider(value, min, max, setValue)` | `double` | `.Header()`, `.StepFrequency()` |
+| `ToggleSwitch(isOn, setIsOn, header, onContent, offContent)` | `bool` | `.Header()` |
+| `CheckBox(isChecked, setIsChecked, label)` | `bool` | — |
+| `RadioButtons(items, selected, setSelected, header)` | `int` | `.Set(rb => ...)` |
+| `ComboBox(items, selected, setSelected, placeholder)` | `object` | `.Header()`, `.Editable()`, `.Placeholder()` |
+| `DatePicker(date, setDate, header)` | `DateTimeOffset` | `.Set(dp => ...)` |
+| `TimePicker(time, setTime, header)` | `TimeSpan` | `.Set(tp => ...)` |
+| `AutoSuggestBox(text, setText, placeholder, header)` | `string` | `.Set(asb => ...)` |
+| `RichEditBox(doc, setDoc, header)` | `string` | `.Set(reb => ...)` |
+| `CalendarDatePicker(date, setDate, placeholder, header)` | `DateTimeOffset?` | `.Set(cdp => ...)` |
+
+For modifiers that aren't in the typed surface (e.g. `PasswordRevealMode`,
+date min/max), use `.Set(native => ...)` to reach the underlying WinUI control.
+The full catalog is in `references/reactor.api.txt`.
 
 ## 2. Simple validation (derived booleans)
 
@@ -84,32 +88,42 @@ var (email, setEmail) = UseState("");
 
 return VStack(12,
     TextField(name, setName, placeholder: "Name")
-        .Validate(validation, "name",
+        .Validate("name", name,
             Validate.Required("Name is required"),
             Validate.MinLength(2, "Name too short")),
 
     TextField(email, setEmail, placeholder: "Email")
-        .Validate(validation, "email",
+        .Validate("email", email,
             Validate.Required("Email is required"),
             Validate.Email("Invalid email")),
 
     Button("Submit", () =>
     {
-        validation.ValidateAll();
-        if (validation.IsValid)
+        validation.MarkAllTouched();
+        if (validation.IsValid())
             Submit(name, email);
     })
 );
 ```
 
+`.Validate(fieldName, value, ...)` resolves the surrounding `ValidationContext`
+through React-style ambient context — you do not pass `validation` explicitly.
+Passing the current value (the second arg) opts in to auto-validation as the
+component re-renders; the validator-only overload `.Validate(fieldName, ...)`
+is for cases where you trigger validation manually.
+
 ### ValidationContext API
 
 | Member | Purpose |
 |--------|---------|
-| `.IsValid` | `true` when no field has errors |
-| `.IsDirty` | `true` when any field differs from initial value |
-| `.ValidateAll()` | Force validation on all registered fields |
-| `.Reset()` | Clear all messages and touched/dirty flags |
+| `.IsValid()` | `true` when no field has Error-severity messages |
+| `.IsDirty()` | `true` when any registered field differs from initial value |
+| `.IsDirty("field")` | Per-field dirty check |
+| `.MarkAllTouched()` | Mark every registered field touched (typical on submit) |
+| `.MarkTouched("field")` | Mark a single field touched |
+| `.Reset("field")` | Reset one field to initial value, returns the initial |
+| `.ResetAll()` | Reset all fields to initial values |
+| `.ClearAll()` | Clear all messages (preserve touched/initial state) |
 | `.GetMessages("field")` | Get error messages for a specific field |
 | `.IsTouched("field")` | Whether the user has interacted with a field |
 
@@ -139,12 +153,13 @@ text, and error display:
 var validation = UseValidationContext();
 var (name, setName) = UseState("");
 
-return FormField("Full Name",
+return FormField(
     TextField(name, setName, placeholder: "Enter your name")
-        .Validate(validation, "name", Validate.Required("Required")),
+        .Validate("name", name, Validate.Required("Required")),
+    label: "Full Name",
     required: true,
     description: "As it appears on your ID",
-    showWhen: ShowWhen.WhenTouched  // or Always, WhenDirty, AfterFirstSubmit
+    showWhen: ShowWhen.WhenTouched  // or Always, WhenDirty, AfterFirstSubmit, Never
 );
 ```
 
@@ -206,9 +221,11 @@ return TextField(amount,
 
 1. **Always use controlled inputs** — `(value, setter)` pair. There is no
    uncontrolled / two-way binding in Reactor.
-2. **Call `validation.ValidateAll()` before submit** — individual fields
-   validate on blur/change, but you must trigger all-field validation
-   before acting on the form.
+2. **Call `validation.MarkAllTouched()` before submit** — when fields use the
+   `.Validate(name, value, ...)` form, validators run automatically every
+   render, but errors stay hidden until each field is touched. Mark all
+   registered fields touched on submit so error messages reveal at once,
+   then gate on `validation.IsValid()`.
 3. **Use `ShowWhen.WhenTouched`** (default) — showing errors immediately on
    page load is hostile UX.
 4. **MaskEngine and InputFormatter are different** — masks restrict what

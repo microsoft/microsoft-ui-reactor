@@ -34,7 +34,7 @@ description: "Reactor essentials in one place — React-to-Reactor mental model,
 | `className="..."` (style) | `.Background(...)`, `.Padding(...)`, `.Margin(...)`, etc. |
 | `style={{margin: 10}}` | `.Margin(10)` |
 | `display: flex; flex: 1` | `FlexRow(...)` / `.Flex(grow: 1, basis: 0)` |
-| `gap: 8` | `VStack(8, …)`, `FlexRow(...).Gap(8)` |
+| `gap: 8` | `VStack(8, …)`, `FlexRow(...) with { ColumnGap = 8 }` (FlexColumn → `RowGap`) |
 | React Query `useQuery` / `useMutation` | `UseResource` / `UseMutation` (see `reactor-async`) |
 | JSX | C# method calls + `using static Microsoft.UI.Reactor.Factories` |
 
@@ -209,7 +209,11 @@ FlexColumn(children...)                       FlexRow(children...)
 // remain for StackPanel's shrink-wrap behavior.
 Border(child).CornerRadius(8).Background(Theme.CardBackground).Padding(16)
 ScrollView(VStack(...))
-Grid(columns: ["*", "200"], rows: ["Auto", "*"], cells.Grid(row, column))
+Grid(columns: [GridSize.Star(), GridSize.Px(200)],
+     rows:    [GridSize.Auto,   GridSize.Star()],
+    TextBlock("Header").Grid(row: 0, column: 0, columnSpan: 2),
+    ListView(items, ...).Grid(row: 1, column: 0),
+    Sidebar().Grid(row: 1, column: 1))
 TitleBar("App") with { Subtitle = "Home", Content = ..., RightHeader = ... }
 ContentDialog(string title, Element content, string primaryButtonText = "OK")
 Flyout(Element target, Element content)
@@ -255,7 +259,7 @@ items.Select(i => Component<Card, CardProps>(new CardProps(i)).WithKey(i.Id)).To
 .CornerRadius(8)       .WithBorder(Theme.CardStroke, 1)
 .Flex(grow: 1, basis: 0)        // CSS `flex: 1` equivalent
 .WithKey("id")                  // dynamic list items — see gotcha #6
-.OnClick(() => ...)             // pointer / tap surfaces
+.OnTapped((s, e) => ...)        // pointer / tap surfaces (Buttons take a click handler in their ctor)
 .Set(el => el.AutomationProperties.Name = "...")   // native escape hatch
 ```
 

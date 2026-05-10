@@ -226,7 +226,7 @@ Border(TextBlock(item.Name))
 
 // Drop target — typed overload auto-extracts payload
 Border(TextBlock("Drop here"))
-    .OnDrop<Border, Item>(
+    .OnDrop<BorderElement, Item>(
         onDrop: (droppedItem) => HandleDrop(droppedItem))
 ```
 
@@ -238,7 +238,7 @@ For type-safe object transfer within the same app, use the typed
 ```csharp
 // Drag source — typed payload via getPayload factory
 Border(TextBlock(item.Name))
-    .OnDragStart<Border, Item>(
+    .OnDragStart<BorderElement, Item>(
         getPayload: () => item,
         allowedOperations: DragOperations.Move,
         onEnd: (ctx) =>
@@ -249,7 +249,7 @@ Border(TextBlock(item.Name))
 
 // Drop target — typed extraction
 Border(TextBlock("Drop here"))
-    .OnDrop<Border, Item>(
+    .OnDrop<BorderElement, Item>(
         onDrop: (droppedItem) => MoveItem(droppedItem),
         acceptedOps: DragOperations.Move)
 ```

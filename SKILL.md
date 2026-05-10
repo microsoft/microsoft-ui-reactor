@@ -327,7 +327,9 @@ VStack(spacing, children...)    HStack(spacing, children...)
 TextBlock("hi")  Heading("Title")    SubHeading("Section")  Caption("note")
 Border(child).CornerRadius(8).Background(Theme.CardBackground).Padding(16)
 ScrollView(VStack(...))
-Grid(columns: ["*", "200"], rows: ["Auto", "*"], cells.Grid(row, column))
+Grid(columns: [GridSize.Star(), GridSize.Px(200)],
+     rows:    [GridSize.Auto,   GridSize.Star()],
+    childA.Grid(row: 0, column: 0), childB.Grid(row: 1, column: 1))
 TitleBar("App") with { Subtitle = "Home", Content = ..., RightHeader = ... }
 
 // Controls
@@ -395,7 +397,8 @@ class App : Component
         var (page, setPage) = UseState("Home");
 
         return Grid(
-            rows: "Auto,*",
+            columns: [GridSize.Star()],
+            rows: [GridSize.Auto, GridSize.Star()],
             Border(
                 HStack(12,
                     Heading("My App").VAlign(VerticalAlignment.Center),
