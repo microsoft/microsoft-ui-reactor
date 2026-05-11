@@ -86,6 +86,78 @@ public class CheckCommandPipelineTests
     }
 
     [Fact]
+    public void Gate_suppresses_suggestions_when_cs_count_below_threshold()
+    {
+        // Single CS diagnostic, threshold 3 → gate closed.
+        var diags = CheckCommand.ParseDiagnostics(
+            "Program.cs(10,5): error CS1061: 'Foo' does not contain a definition for 'Bar' [Foo.csproj]");
+
+        Assert.False(CheckCommand.ShouldEmitSuggestions(diags, threshold: 3));
+    }
+
+    [Fact]
+    public void Gate_opens_when_cs_count_meets_threshold()
+    {
+        var diags = CheckCommand.ParseDiagnostics("""
+            A.cs(1,1): error CS1061: a [P.csproj]
+            B.cs(2,2): error CS0103: b [P.csproj]
+            C.cs(3,3): error CS0117: c [P.csproj]
+            """);
+
+        Assert.True(CheckCommand.ShouldEmitSuggestions(diags, threshold: 3));
+    }
+
+    [Fact]
+    public void Gate_threshold_zero_always_opens()
+    {
+        var diags = CheckCommand.ParseDiagnostics(
+            "Program.cs(10,5): error CS1061: 'Foo' does not contain a definition for 'Bar' [Foo.csproj]");
+
+        Assert.True(CheckCommand.ShouldEmitSuggestions(diags, threshold: 0));
+        Assert.True(CheckCommand.ShouldEmitSuggestions(Array.Empty<CheckCommand.Diag>(), threshold: 0));
+    }
+
+    [Fact]
+    public void Gate_only_counts_cs_prefixed_codes()
+    {
+        // Two REACTOR_* hits + one CS hit. Threshold 2 should NOT open — the
+        // REACTOR_* diagnostics are Tier-1 territory (static hint table) and
+        // don't pay for Tier-2 setup.
+        var diags = CheckCommand.ParseDiagnostics("""
+            App.cs(1,1): warning REACTOR_HOOKS_001: bad [P.csproj]
+            App.cs(2,1): warning REACTOR_HOOKS_004: bad [P.csproj]
+            App.cs(3,1): error CS1061: 'Foo' has no member [P.csproj]
+            """);
+
+        Assert.False(CheckCommand.ShouldEmitSuggestions(diags, threshold: 2));
+    }
+
+    [Fact]
+    public void Gate_dedupes_repeated_diagnostics_when_counting()
+    {
+        // MSBuild often prints the same diagnostic twice (per project). The
+        // gate uses the same dedup key EmitDiagnostics uses, so a dup pair
+        // does NOT push count over the threshold.
+        var diags = CheckCommand.ParseDiagnostics("""
+            X.cs(1,1): error CS1061: a [P.csproj]
+            X.cs(1,1): error CS1061: a [P.csproj]
+            Y.cs(2,2): error CS0103: b [P.csproj]
+            """);
+
+        Assert.False(CheckCommand.ShouldEmitSuggestions(diags, threshold: 3));
+        Assert.True(CheckCommand.ShouldEmitSuggestions(diags, threshold: 2));
+    }
+
+    [Fact]
+    public void Default_threshold_matches_documented_value()
+    {
+        // Lock the constant into a test so the EC1-tuned default can only
+        // change with an intentional code edit (and a failing test the author
+        // has to update).
+        Assert.Equal(3, CheckCommand.DefaultSuggestThreshold);
+    }
+
+    [Fact]
     public void Trace_row_is_under_2KB_for_realistic_msbuild_output()
     {
         var diags = CheckCommand.ParseDiagnostics(SampleMsBuildOutput);

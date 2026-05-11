@@ -73,4 +73,47 @@ public class CheckArgsTests
     {
         Assert.Contains("--trace", CheckArgs.HelpText);
     }
+
+    [Fact]
+    public void Suggest_threshold_defaults_to_null_so_command_can_apply_its_own_default()
+    {
+        Assert.True(CheckArgs.TryParse(Array.Empty<string>(), out var parsed, out _));
+        Assert.Null(parsed.SuggestThreshold);
+    }
+
+    [Fact]
+    public void Suggest_threshold_parses_non_negative_integer()
+    {
+        Assert.True(CheckArgs.TryParse(new[] { "--suggest-threshold", "5" }, out var parsed, out _));
+        Assert.Equal(5, parsed.SuggestThreshold);
+
+        Assert.True(CheckArgs.TryParse(new[] { "--suggest-threshold", "0" }, out var zero, out _));
+        Assert.Equal(0, zero.SuggestThreshold);
+    }
+
+    [Fact]
+    public void Suggest_threshold_without_value_errors()
+    {
+        Assert.False(CheckArgs.TryParse(new[] { "--suggest-threshold" }, out _, out var err));
+        Assert.NotNull(err);
+        Assert.Contains("--suggest-threshold", err);
+    }
+
+    [Fact]
+    public void Suggest_threshold_rejects_negative_or_garbage()
+    {
+        Assert.False(CheckArgs.TryParse(new[] { "--suggest-threshold", "-1" }, out _, out var err1));
+        Assert.NotNull(err1);
+        Assert.Contains("non-negative", err1);
+
+        Assert.False(CheckArgs.TryParse(new[] { "--suggest-threshold", "many" }, out _, out var err2));
+        Assert.NotNull(err2);
+        Assert.Contains("non-negative", err2);
+    }
+
+    [Fact]
+    public void Help_text_mentions_suggest_threshold_flag()
+    {
+        Assert.Contains("--suggest-threshold", CheckArgs.HelpText);
+    }
 }

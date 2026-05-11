@@ -1,0 +1,1322 @@
+[
+  {
+    "cluster_id": "C0004",
+    "diag_code": "CS1955",
+    "receiver_type": "GridSize",
+    "fix_kind": "other",
+    "frequency": 0.10710808179162609,
+    "count": 110,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-4b61d23b65be-2026-05-10T22:14:17.459Z",
+      "reactor-public-sweep-1af366f53784-2026-05-10T22:29:00.047Z",
+      "reactor-public-sweep-306bc3b6c802-2026-05-10T22:32:53.017Z"
+    ],
+    "proposed_rule": "On CS1955 against GridSize, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0026",
+    "diag_code": "CS1002",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.09639727361246349,
+    "count": 99,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-17a8065e0bf3-2026-05-10T22:42:42.644Z",
+      "reactor-public-sweep-962744ca3581-2026-05-10T22:44:09.907Z",
+      "reactor-public-sweep-d298b8b0cf87-2026-05-10T22:48:22.355Z"
+    ],
+    "proposed_rule": "On CS1002 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0008",
+    "diag_code": "CS7036",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.09055501460564752,
+    "count": 93,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-76edc092ce43-2026-05-10T22:21:09.133Z",
+      "reactor-public-sweep-fbbbae268071-2026-05-10T22:30:45.147Z",
+      "reactor-public-sweep-e3a53bcb128d-2026-05-10T23:54:57.064Z"
+    ],
+    "proposed_rule": "On CS7036 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0007",
+    "diag_code": "CS0428",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.08179162609542356,
+    "count": 84,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-db7ffb9050df-2026-05-10T22:19:09.671Z",
+      "reactor-public-sweep-6cee2b7e1ba3-2026-05-10T22:33:23.132Z",
+      "reactor-public-sweep-2e4feb22333a-2026-05-10T22:53:19.665Z"
+    ],
+    "proposed_rule": "On CS0428 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0025",
+    "diag_code": "CS1513",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.07400194741966894,
+    "count": 76,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-17a8065e0bf3-2026-05-10T22:42:42.644Z",
+      "reactor-public-sweep-962744ca3581-2026-05-10T22:44:09.907Z",
+      "reactor-public-sweep-d298b8b0cf87-2026-05-10T22:48:22.355Z"
+    ],
+    "proposed_rule": "On CS1513 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0010",
+    "diag_code": "CS0103",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.06134371957156767,
+    "count": 63,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-b3562ecef43e-2026-05-10T22:22:29.429Z",
+      "reactor-public-sweep-ddb3aad98cc7-2026-05-10T22:22:38.508Z",
+      "reactor-public-sweep-fbbbae268071-2026-05-10T22:30:45.147Z"
+    ],
+    "proposed_rule": "On CS0103 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0021",
+    "diag_code": "CS0618",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.05647517039922103,
+    "count": 58,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-0dabda2a2427-2026-05-10T22:38:58.920Z",
+      "reactor-public-sweep-58060dc29a65-2026-05-10T22:43:49.672Z",
+      "reactor-public-sweep-6da9125d6f74-2026-05-10T22:44:16.744Z"
+    ],
+    "proposed_rule": "On CS0618 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0029",
+    "diag_code": "CS1003",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.03602726387536514,
+    "count": 37,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-962744ca3581-2026-05-10T22:44:09.907Z",
+      "reactor-public-sweep-2f18cac9f33d-2026-05-10T23:23:46.478Z",
+      "reactor-public-sweep-4c842679b3bb-2026-05-10T23:49:46.428Z"
+    ],
+    "proposed_rule": "On CS1003 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0038",
+    "diag_code": "CS0618",
+    "receiver_type": null,
+    "fix_kind": "import_added",
+    "frequency": 0.028237585199610515,
+    "count": 29,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-252497a306ed-2026-05-10T23:03:32.603Z",
+      "reactor-skilled-sweep-47cb265e6cd3-2026-05-11T04:13:34.811Z",
+      "reactor-skilled-sweep-7d16630b762c-2026-05-11T04:13:34.757Z"
+    ],
+    "proposed_rule": "On CS0618 near (unknown receiver), suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0027",
+    "diag_code": "CS1026",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.027263875365141188,
+    "count": 28,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-17a8065e0bf3-2026-05-10T22:42:42.644Z",
+      "reactor-public-sweep-d298b8b0cf87-2026-05-10T22:48:22.355Z",
+      "reactor-public-sweep-1b70e12b7549-2026-05-10T23:11:08.788Z"
+    ],
+    "proposed_rule": "On CS1026 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0002",
+    "diag_code": "CS1503",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.02044790652385589,
+    "count": 21,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-0e2ae7f81397-2026-05-10T22:14:17.718Z",
+      "reactor-public-sweep-b602c8a22a1c-2026-05-10T22:27:00.157Z",
+      "reactor-public-sweep-17a8065e0bf3-2026-05-10T22:42:42.644Z"
+    ],
+    "proposed_rule": "On CS1503 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0011",
+    "diag_code": "CS1739",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.019474196689386564,
+    "count": 20,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-ddb3aad98cc7-2026-05-10T22:22:38.508Z",
+      "reactor-public-sweep-d298b8b0cf87-2026-05-10T22:48:22.355Z",
+      "reactor-public-sweep-a56d237e8cfb-2026-05-10T23:03:59.082Z"
+    ],
+    "proposed_rule": "On CS1739 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0005",
+    "diag_code": "CS0122",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.018500486854917234,
+    "count": 19,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-47cb265e6cd3-2026-05-10T22:14:17.889Z",
+      "reactor-public-sweep-78c4aff3924a-2026-05-10T22:47:12.892Z",
+      "reactor-public-sweep-d298b8b0cf87-2026-05-10T22:48:22.355Z"
+    ],
+    "proposed_rule": "On CS0122 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0089",
+    "diag_code": "CS7036",
+    "receiver_type": null,
+    "fix_kind": "import_added",
+    "frequency": 0.018500486854917234,
+    "count": 19,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-7d16630b762c-2026-05-11T04:13:34.757Z",
+      "reactor-skilled-sweep-a8fd9e2015ba-2026-05-11T04:15:09.484Z",
+      "reactor-skilled-sweep-ac064754d858-2026-05-11T04:16:50.737Z"
+    ],
+    "proposed_rule": "On CS7036 near (unknown receiver), suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0013",
+    "diag_code": "CS1955",
+    "receiver_type": "GridElement",
+    "fix_kind": "other",
+    "frequency": 0.016553067185978577,
+    "count": 17,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-5b1341381729-2026-05-10T22:28:32.616Z",
+      "reactor-public-sweep-64d59b77d25a-2026-05-10T22:31:46.735Z",
+      "reactor-public-sweep-17a8065e0bf3-2026-05-10T22:42:42.644Z"
+    ],
+    "proposed_rule": "On CS1955 against GridElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0019",
+    "diag_code": "CS0117",
+    "receiver_type": "Theme",
+    "fix_kind": "other",
+    "frequency": 0.01557935735150925,
+    "count": 16,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-8a7a30b86abd-2026-05-10T22:35:27.509Z",
+      "reactor-public-sweep-55d4208fd5fc-2026-05-10T22:39:01.736Z",
+      "reactor-public-sweep-09e228cac453-2026-05-11T00:03:38.952Z"
+    ],
+    "proposed_rule": "On CS0117 against Theme, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0060",
+    "diag_code": "CS1001",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.013631937682570594,
+    "count": 14,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-1de5c2e89824-2026-05-11T00:07:45.524Z",
+      "reactor-public-sweep-fa22da1c5b60-2026-05-11T00:12:28.306Z",
+      "reactor-skilled-sweep-0fda77c64517-2026-05-11T04:40:26.112Z"
+    ],
+    "proposed_rule": "On CS1001 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0017",
+    "diag_code": "CS1061",
+    "receiver_type": "TextBlockElement",
+    "fix_kind": "renamed_member",
+    "frequency": 0.011684518013631937,
+    "count": 12,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-6cee2b7e1ba3-2026-05-10T22:33:23.132Z",
+      "reactor-public-sweep-55d4208fd5fc-2026-05-10T22:39:01.736Z",
+      "reactor-public-sweep-09e228cac453-2026-05-11T00:03:38.952Z"
+    ],
+    "proposed_rule": "On CS1061 against TextBlockElement member, suggest the renamed member used in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0062",
+    "diag_code": "CS1519",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.010710808179162609,
+    "count": 11,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-1de5c2e89824-2026-05-11T00:07:45.524Z",
+      "reactor-public-sweep-fa22da1c5b60-2026-05-11T00:12:28.306Z",
+      "reactor-skilled-sweep-1d26fbd1111e-2026-05-11T04:33:46.370Z"
+    ],
+    "proposed_rule": "On CS1519 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0065",
+    "diag_code": "CS1002",
+    "receiver_type": null,
+    "fix_kind": "missing_with_key",
+    "frequency": 0.009737098344693282,
+    "count": 10,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-5635c5399873-2026-05-11T00:09:23.577Z"
+    ],
+    "proposed_rule": "On CS1002 for elements in a dynamic collection, suggest appending .WithKey(...)."
+  },
+  {
+    "cluster_id": "C0009",
+    "diag_code": "CS0104",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.008763388510223954,
+    "count": 9,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-76edc092ce43-2026-05-10T22:21:09.133Z",
+      "reactor-public-sweep-78c4aff3924a-2026-05-10T22:47:12.892Z",
+      "reactor-public-sweep-dd78a2493ba4-2026-05-10T23:16:29.020Z"
+    ],
+    "proposed_rule": "On CS0104 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0064",
+    "diag_code": "CS1513",
+    "receiver_type": null,
+    "fix_kind": "missing_with_key",
+    "frequency": 0.008763388510223954,
+    "count": 9,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-5635c5399873-2026-05-11T00:09:23.577Z"
+    ],
+    "proposed_rule": "On CS1513 for elements in a dynamic collection, suggest appending .WithKey(...)."
+  },
+  {
+    "cluster_id": "C0037",
+    "diag_code": "CS0103",
+    "receiver_type": null,
+    "fix_kind": "import_added",
+    "frequency": 0.007789678675754625,
+    "count": 8,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-5e094f4f0deb-2026-05-10T23:01:50.803Z",
+      "reactor-public-sweep-1809b55e4158-2026-05-10T23:23:59.311Z",
+      "reactor-public-sweep-c81543c84c84-2026-05-10T23:35:24.786Z"
+    ],
+    "proposed_rule": "On CS0103 near (unknown receiver), suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0032",
+    "diag_code": "CS0103",
+    "receiver_type": null,
+    "fix_kind": "missing_with_key",
+    "frequency": 0.005842259006815969,
+    "count": 6,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-efe672a7f1b3-2026-05-10T22:50:09.061Z",
+      "reactor-public-sweep-36a484036548-2026-05-10T23:59:14.891Z",
+      "reactor-public-sweep-5635c5399873-2026-05-11T00:09:23.577Z"
+    ],
+    "proposed_rule": "On CS0103 for elements in a dynamic collection, suggest appending .WithKey(...)."
+  },
+  {
+    "cluster_id": "C0040",
+    "diag_code": "CS1022",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.005842259006815969,
+    "count": 6,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-58c4d031c7e5-2026-05-10T23:07:54.749Z",
+      "reactor-public-sweep-07e540c36434-2026-05-10T23:49:35.601Z"
+    ],
+    "proposed_rule": "On CS1022 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0054",
+    "diag_code": "CS0117",
+    "receiver_type": "Element",
+    "fix_kind": "other",
+    "frequency": 0.005842259006815969,
+    "count": 6,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-07e540c36434-2026-05-10T23:49:35.601Z",
+      "reactor-public-sweep-09e228cac453-2026-05-11T00:03:38.952Z"
+    ],
+    "proposed_rule": "On CS0117 against Element, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0030",
+    "diag_code": "CS1593",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.004868549172346641,
+    "count": 5,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-6da9125d6f74-2026-05-10T22:44:16.744Z",
+      "reactor-public-sweep-c5c74640c43d-2026-05-10T23:25:33.001Z",
+      "reactor-public-sweep-32d44aef1961-2026-05-10T23:46:53.941Z"
+    ],
+    "proposed_rule": "On CS1593 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0042",
+    "diag_code": "CS1955",
+    "receiver_type": "GridElement",
+    "fix_kind": "fluent_to_named",
+    "frequency": 0.004868549172346641,
+    "count": 5,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-54c2b38a2a0a-2026-05-10T23:23:44.763Z",
+      "reactor-public-sweep-67cb1f4bea1c-2026-05-11T00:16:24.899Z",
+      "reactor-skilled-sweep-ce90b5d157b5-2026-05-11T04:15:30.974Z"
+    ],
+    "proposed_rule": "On CS1955 against GridElement, suggest moving the chained call to a named argument on the parent factory."
+  },
+  {
+    "cluster_id": "C0078",
+    "diag_code": "CS1002",
+    "receiver_type": null,
+    "fix_kind": "import_added",
+    "frequency": 0.004868549172346641,
+    "count": 5,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-b435dae24461-2026-05-11T03:39:26.062Z",
+      "reactor-skilled-sweep-78c4aff3924a-2026-05-11T04:31:02.487Z"
+    ],
+    "proposed_rule": "On CS1002 near (unknown receiver), suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0003",
+    "diag_code": "CS1955",
+    "receiver_type": "GridElement",
+    "fix_kind": "renamed_member",
+    "frequency": 0.0038948393378773127,
+    "count": 4,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-4b61d23b65be-2026-05-10T22:14:17.459Z",
+      "reactor-public-sweep-0ec789dde0ba-2026-05-10T22:28:08.092Z",
+      "reactor-public-sweep-2f7a543559cf-2026-05-11T00:06:09.813Z"
+    ],
+    "proposed_rule": "On CS1955 against GridElement member, suggest the renamed member used in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0012",
+    "diag_code": "CS1061",
+    "receiver_type": "StackElement",
+    "fix_kind": "fluent_to_named",
+    "frequency": 0.0038948393378773127,
+    "count": 4,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-b602c8a22a1c-2026-05-10T22:27:00.157Z",
+      "reactor-public-sweep-54c2b38a2a0a-2026-05-10T23:23:44.763Z",
+      "reactor-public-sweep-2f7a543559cf-2026-05-11T00:06:09.813Z"
+    ],
+    "proposed_rule": "On CS1061 against StackElement, suggest moving the chained call to a named argument on the parent factory."
+  },
+  {
+    "cluster_id": "C0018",
+    "diag_code": "CS0103",
+    "receiver_type": null,
+    "fix_kind": "fluent_to_named",
+    "frequency": 0.0038948393378773127,
+    "count": 4,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-6cee2b7e1ba3-2026-05-10T22:33:23.132Z",
+      "reactor-public-sweep-54c2b38a2a0a-2026-05-10T23:23:44.763Z",
+      "reactor-public-sweep-b88379454877-2026-05-10T23:27:27.487Z"
+    ],
+    "proposed_rule": "On CS0103 against (unknown receiver), suggest moving the chained call to a named argument on the parent factory."
+  },
+  {
+    "cluster_id": "C0061",
+    "diag_code": "CS1031",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.0038948393378773127,
+    "count": 4,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-1de5c2e89824-2026-05-11T00:07:45.524Z"
+    ],
+    "proposed_rule": "On CS1031 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0088",
+    "diag_code": "CS1061",
+    "receiver_type": "GridElement",
+    "fix_kind": "renamed_member",
+    "frequency": 0.0038948393378773127,
+    "count": 4,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-4b61d23b65be-2026-05-11T04:13:34.705Z",
+      "reactor-skilled-sweep-d24caecf6101-2026-05-11T04:25:54.170Z",
+      "reactor-skilled-sweep-c7ddce048c6d-2026-05-11T04:32:58.231Z"
+    ],
+    "proposed_rule": "On CS1061 against GridElement member, suggest the renamed member used in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0001",
+    "diag_code": "CS1660",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.0029211295034079843,
+    "count": 3,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-0e2ae7f81397-2026-05-10T22:14:17.718Z",
+      "reactor-public-sweep-1b353a11c596-2026-05-11T03:39:55.954Z",
+      "reactor-public-sweep-b168002337a0-2026-05-11T04:06:13.958Z"
+    ],
+    "proposed_rule": "On CS1660 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0006",
+    "diag_code": "CS8323",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.0029211295034079843,
+    "count": 3,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-7d16630b762c-2026-05-10T22:14:17.986Z",
+      "reactor-public-sweep-b80483e5043b-2026-05-10T22:43:17.263Z",
+      "reactor-public-sweep-efe672a7f1b3-2026-05-10T22:50:09.061Z"
+    ],
+    "proposed_rule": "On CS8323 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0014",
+    "diag_code": "CS0234",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.0029211295034079843,
+    "count": 3,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-d0a997849c7a-2026-05-10T22:30:19.216Z",
+      "reactor-public-sweep-1809b55e4158-2026-05-10T23:23:59.311Z",
+      "reactor-public-sweep-b018113784f4-2026-05-11T03:28:49.372Z"
+    ],
+    "proposed_rule": "On CS0234 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0023",
+    "diag_code": "CS1929",
+    "receiver_type": "TemplatedListViewElement<string>",
+    "fix_kind": "other",
+    "frequency": 0.0029211295034079843,
+    "count": 3,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-b2d481368d05-2026-05-10T22:40:09.276Z",
+      "reactor-public-sweep-c7358c447e20-2026-05-10T22:45:06.477Z",
+      "reactor-public-sweep-3f8bc4b5c846-2026-05-10T22:49:38.193Z"
+    ],
+    "proposed_rule": "On CS1929 against TemplatedListViewElement<string>, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0036",
+    "diag_code": "CS1061",
+    "receiver_type": "ButtonElement",
+    "fix_kind": "renamed_member",
+    "frequency": 0.0029211295034079843,
+    "count": 3,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-b8b3a5fed7b8-2026-05-10T22:57:35.092Z",
+      "reactor-public-sweep-4d0b05ba2bf0-2026-05-11T03:46:47.313Z"
+    ],
+    "proposed_rule": "On CS1061 against ButtonElement member, suggest the renamed member used in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0050",
+    "diag_code": "CS0117",
+    "receiver_type": "GridSize",
+    "fix_kind": "renamed_member",
+    "frequency": 0.0029211295034079843,
+    "count": 3,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-bdc619552344-2026-05-10T23:47:42.073Z",
+      "reactor-public-sweep-07e540c36434-2026-05-10T23:49:35.601Z",
+      "reactor-public-sweep-8ebc399fe86d-2026-05-11T00:00:46.930Z"
+    ],
+    "proposed_rule": "On CS0117 against GridSize member, suggest the renamed member used in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0055",
+    "diag_code": "CS0117",
+    "receiver_type": "GridElement",
+    "fix_kind": "other",
+    "frequency": 0.0029211295034079843,
+    "count": 3,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-4c842679b3bb-2026-05-10T23:49:46.428Z",
+      "reactor-public-sweep-fda74355120c-2026-05-11T03:19:05.500Z",
+      "reactor-public-sweep-a9697ee4e058-2026-05-11T03:57:04.918Z"
+    ],
+    "proposed_rule": "On CS0117 against GridElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0063",
+    "diag_code": "CS7036",
+    "receiver_type": null,
+    "fix_kind": "missing_with_key",
+    "frequency": 0.0029211295034079843,
+    "count": 3,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-5635c5399873-2026-05-11T00:09:23.577Z"
+    ],
+    "proposed_rule": "On CS7036 for elements in a dynamic collection, suggest appending .WithKey(...)."
+  },
+  {
+    "cluster_id": "C0071",
+    "diag_code": "CS0117",
+    "receiver_type": "ContentDialogElement",
+    "fix_kind": "other",
+    "frequency": 0.0029211295034079843,
+    "count": 3,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-0a912e629780-2026-05-11T03:22:10.093Z",
+      "reactor-public-sweep-3915d16817e9-2026-05-11T03:28:17.772Z",
+      "reactor-public-sweep-744a1bc0d73b-2026-05-11T03:56:33.884Z"
+    ],
+    "proposed_rule": "On CS0117 against ContentDialogElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0077",
+    "diag_code": "CS1513",
+    "receiver_type": null,
+    "fix_kind": "import_added",
+    "frequency": 0.0029211295034079843,
+    "count": 3,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-b435dae24461-2026-05-11T03:39:26.062Z"
+    ],
+    "proposed_rule": "On CS1513 near (unknown receiver), suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0091",
+    "diag_code": "CS0117",
+    "receiver_type": "Theme",
+    "fix_kind": "import_added",
+    "frequency": 0.0029211295034079843,
+    "count": 3,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-db7ffb9050df-2026-05-11T04:15:22.011Z",
+      "reactor-skilled-sweep-ac064754d858-2026-05-11T04:16:50.737Z",
+      "reactor-skilled-sweep-063d9299beda-2026-05-11T04:37:02.655Z"
+    ],
+    "proposed_rule": "On CS0117 near Theme, suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0103",
+    "diag_code": "CS1061",
+    "receiver_type": "GridElement",
+    "fix_kind": "import_added",
+    "frequency": 0.0029211295034079843,
+    "count": 3,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-7d57772205bf-2026-05-11T04:36:50.247Z",
+      "reactor-skilled-sweep-324bce90ec42-2026-05-11T04:37:35.828Z"
+    ],
+    "proposed_rule": "On CS1061 near GridElement, suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0015",
+    "diag_code": "CS8121",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-fbbbae268071-2026-05-10T22:30:45.147Z",
+      "reactor-skilled-sweep-252497a306ed-2026-05-11T04:38:54.444Z"
+    ],
+    "proposed_rule": "On CS8121 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0016",
+    "diag_code": "CS0117",
+    "receiver_type": "ComboBoxElement",
+    "fix_kind": "other",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-fbbbae268071-2026-05-10T22:30:45.147Z"
+    ],
+    "proposed_rule": "On CS0117 against ComboBoxElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0020",
+    "diag_code": "CS1061",
+    "receiver_type": "ButtonElement",
+    "fix_kind": "other",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-d8883d031c33-2026-05-10T22:38:00.359Z",
+      "reactor-public-sweep-38796cb32f2d-2026-05-10T23:30:19.047Z"
+    ],
+    "proposed_rule": "On CS1061 against ButtonElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0031",
+    "diag_code": "CS1955",
+    "receiver_type": "StackElement",
+    "fix_kind": "other",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-d298b8b0cf87-2026-05-10T22:48:22.355Z",
+      "reactor-public-sweep-169a98691c52-2026-05-11T03:21:47.531Z"
+    ],
+    "proposed_rule": "On CS1955 against StackElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0034",
+    "diag_code": "CS1929",
+    "receiver_type": "TemplatedListViewElement<ListItem>",
+    "fix_kind": "missing_with_key",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-1d26fbd1111e-2026-05-10T22:53:46.432Z"
+    ],
+    "proposed_rule": "On CS1929 for elements in a dynamic collection, suggest appending .WithKey(...)."
+  },
+  {
+    "cluster_id": "C0035",
+    "diag_code": "CS1503",
+    "receiver_type": null,
+    "fix_kind": "missing_with_key",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-1d26fbd1111e-2026-05-10T22:53:46.432Z"
+    ],
+    "proposed_rule": "On CS1503 for elements in a dynamic collection, suggest appending .WithKey(...)."
+  },
+  {
+    "cluster_id": "C0039",
+    "diag_code": "CS0122",
+    "receiver_type": null,
+    "fix_kind": "import_added",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-252497a306ed-2026-05-10T23:03:32.603Z",
+      "reactor-public-sweep-0b395316109c-2026-05-10T23:36:49.550Z"
+    ],
+    "proposed_rule": "On CS0122 near (unknown receiver), suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0046",
+    "diag_code": "CS1729",
+    "receiver_type": "Command",
+    "fix_kind": "import_added",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-1809b55e4158-2026-05-10T23:23:59.311Z"
+    ],
+    "proposed_rule": "On CS1729 near Command, suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0048",
+    "diag_code": "CS0117",
+    "receiver_type": "GridSize",
+    "fix_kind": "other",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-c3cfd0052ee0-2026-05-10T23:44:53.566Z",
+      "reactor-public-sweep-b1da88289d25-2026-05-10T23:45:54.310Z"
+    ],
+    "proposed_rule": "On CS0117 against GridSize, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0051",
+    "diag_code": "CS1955",
+    "receiver_type": "StackElement",
+    "fix_kind": "renamed_member",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-95cfaf15373b-2026-05-10T23:48:54.792Z",
+      "reactor-public-sweep-79f9bd6153f5-2026-05-10T23:56:12.052Z"
+    ],
+    "proposed_rule": "On CS1955 against StackElement member, suggest the renamed member used in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0069",
+    "diag_code": "CS1061",
+    "receiver_type": "StackElement",
+    "fix_kind": "other",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-7ea09184638c-2026-05-11T03:20:50.565Z"
+    ],
+    "proposed_rule": "On CS1061 against StackElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0070",
+    "diag_code": "CS0117",
+    "receiver_type": "StackElement",
+    "fix_kind": "fluent_to_named",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-7ea09184638c-2026-05-11T03:20:50.565Z"
+    ],
+    "proposed_rule": "On CS0117 against StackElement, suggest moving the chained call to a named argument on the parent factory."
+  },
+  {
+    "cluster_id": "C0073",
+    "diag_code": "CS1061",
+    "receiver_type": "BorderElement",
+    "fix_kind": "renamed_member",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-3915d16817e9-2026-05-11T03:28:17.772Z",
+      "reactor-skilled-sweep-4c87c0e116ba-2026-05-11T04:31:54.621Z"
+    ],
+    "proposed_rule": "On CS1061 against BorderElement member, suggest the renamed member used in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0074",
+    "diag_code": "CS0029",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-bd909ab5378d-2026-05-11T03:32:23.238Z"
+    ],
+    "proposed_rule": "On CS0029 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0080",
+    "diag_code": "CS0117",
+    "receiver_type": "RadioButtonElement",
+    "fix_kind": "other",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-79c27e34683c-2026-05-11T03:43:34.679Z"
+    ],
+    "proposed_rule": "On CS0117 against RadioButtonElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0082",
+    "diag_code": "CS1061",
+    "receiver_type": "TextBlockElement",
+    "fix_kind": "other",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-d68071539b81-2026-05-11T03:53:15.870Z"
+    ],
+    "proposed_rule": "On CS1061 against TextBlockElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0085",
+    "diag_code": "CS0311",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-0fb53233f579-2026-05-11T04:00:31.882Z"
+    ],
+    "proposed_rule": "On CS0311 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0090",
+    "diag_code": "CS1061",
+    "receiver_type": null,
+    "fix_kind": "fluent_to_named",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-96edeee75492-2026-05-11T04:15:14.270Z"
+    ],
+    "proposed_rule": "On CS1061 against (unknown receiver), suggest moving the chained call to a named argument on the parent factory."
+  },
+  {
+    "cluster_id": "C0100",
+    "diag_code": "CS1929",
+    "receiver_type": "TemplatedListViewElement<string>",
+    "fix_kind": "missing_with_key",
+    "frequency": 0.0019474196689386564,
+    "count": 2,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-3f8bc4b5c846-2026-05-11T04:31:15.712Z"
+    ],
+    "proposed_rule": "On CS1929 for elements in a dynamic collection, suggest appending .WithKey(...)."
+  },
+  {
+    "cluster_id": "C0022",
+    "diag_code": "CS1061",
+    "receiver_type": "StackElement",
+    "fix_kind": "renamed_member",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-0dabda2a2427-2026-05-10T22:38:58.920Z"
+    ],
+    "proposed_rule": "On CS1061 against StackElement member, suggest the renamed member used in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0024",
+    "diag_code": "CS1929",
+    "receiver_type": "TemplatedListViewElement<ListItem>",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-1292fc7680ed-2026-05-10T22:40:21.806Z"
+    ],
+    "proposed_rule": "On CS1929 against TemplatedListViewElement<ListItem>, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0028",
+    "diag_code": "CS1929",
+    "receiver_type": "ListBoxElement",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-409357712e11-2026-05-10T22:42:44.101Z"
+    ],
+    "proposed_rule": "On CS1929 against ListBoxElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0033",
+    "diag_code": "CS1955",
+    "receiver_type": null,
+    "fix_kind": "missing_with_key",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-efe672a7f1b3-2026-05-10T22:50:09.061Z"
+    ],
+    "proposed_rule": "On CS1955 for elements in a dynamic collection, suggest appending .WithKey(...)."
+  },
+  {
+    "cluster_id": "C0041",
+    "diag_code": "CS0173",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-aa5f83460f48-2026-05-10T23:09:35.440Z"
+    ],
+    "proposed_rule": "On CS0173 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0043",
+    "diag_code": "CS1061",
+    "receiver_type": "SliderElement",
+    "fix_kind": "fluent_to_named",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-54c2b38a2a0a-2026-05-10T23:23:44.763Z"
+    ],
+    "proposed_rule": "On CS1061 against SliderElement, suggest moving the chained call to a named argument on the parent factory."
+  },
+  {
+    "cluster_id": "C0044",
+    "diag_code": "CS1503",
+    "receiver_type": null,
+    "fix_kind": "fluent_to_named",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-54c2b38a2a0a-2026-05-10T23:23:44.763Z"
+    ],
+    "proposed_rule": "On CS1503 against (unknown receiver), suggest moving the chained call to a named argument on the parent factory."
+  },
+  {
+    "cluster_id": "C0045",
+    "diag_code": "CS0246",
+    "receiver_type": null,
+    "fix_kind": "import_added",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-1809b55e4158-2026-05-10T23:23:59.311Z"
+    ],
+    "proposed_rule": "On CS0246 near (unknown receiver), suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0047",
+    "diag_code": "CS1955",
+    "receiver_type": "TextBlockElement",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-38796cb32f2d-2026-05-10T23:30:19.047Z"
+    ],
+    "proposed_rule": "On CS1955 against TextBlockElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0049",
+    "diag_code": "CS1955",
+    "receiver_type": "ComboBoxElement",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-32d44aef1961-2026-05-10T23:46:53.941Z"
+    ],
+    "proposed_rule": "On CS1955 against ComboBoxElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0052",
+    "diag_code": "CS8803",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-07e540c36434-2026-05-10T23:49:35.601Z"
+    ],
+    "proposed_rule": "On CS8803 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0053",
+    "diag_code": "CS8605",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-07e540c36434-2026-05-10T23:49:35.601Z"
+    ],
+    "proposed_rule": "On CS8605 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0056",
+    "diag_code": "CS1929",
+    "receiver_type": "TemplatedListViewElement<int>",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-9047760af8ff-2026-05-11T00:00:28.524Z"
+    ],
+    "proposed_rule": "On CS1929 against TemplatedListViewElement<int>, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0057",
+    "diag_code": "CS1061",
+    "receiver_type": "CheckBoxElement",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-8ebc399fe86d-2026-05-11T00:00:46.930Z"
+    ],
+    "proposed_rule": "On CS1061 against CheckBoxElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0058",
+    "diag_code": "CS1955",
+    "receiver_type": "TextBlockElement",
+    "fix_kind": "renamed_member",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-68ec11af8329-2026-05-11T00:05:26.114Z"
+    ],
+    "proposed_rule": "On CS1955 against TextBlockElement member, suggest the renamed member used in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0059",
+    "diag_code": "CS1061",
+    "receiver_type": "Element",
+    "fix_kind": "fluent_to_named",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-2f7a543559cf-2026-05-11T00:06:09.813Z"
+    ],
+    "proposed_rule": "On CS1061 against Element, suggest moving the chained call to a named argument on the parent factory."
+  },
+  {
+    "cluster_id": "C0066",
+    "diag_code": "CS1026",
+    "receiver_type": null,
+    "fix_kind": "missing_with_key",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-5635c5399873-2026-05-11T00:09:23.577Z"
+    ],
+    "proposed_rule": "On CS1026 for elements in a dynamic collection, suggest appending .WithKey(...)."
+  },
+  {
+    "cluster_id": "C0067",
+    "diag_code": "CS1929",
+    "receiver_type": "ColumnBuilder<CounterRecord>",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-69cdb9ba430f-2026-05-11T00:19:38.966Z"
+    ],
+    "proposed_rule": "On CS1929 against ColumnBuilder<CounterRecord>, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0068",
+    "diag_code": "CS1929",
+    "receiver_type": "NumberBoxElement",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-5416eb6bd871-2026-05-11T03:17:22.563Z"
+    ],
+    "proposed_rule": "On CS1929 against NumberBoxElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0072",
+    "diag_code": "CS0023",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-96cdfcc30472-2026-05-11T03:25:35.707Z"
+    ],
+    "proposed_rule": "On CS0023 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0075",
+    "diag_code": "CS0117",
+    "receiver_type": "TabViewElement",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-eb1886628aae-2026-05-11T03:34:48.631Z"
+    ],
+    "proposed_rule": "On CS0117 against TabViewElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0076",
+    "diag_code": "CS1003",
+    "receiver_type": null,
+    "fix_kind": "fluent_to_named",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-324a1bd214e3-2026-05-11T03:37:50.103Z"
+    ],
+    "proposed_rule": "On CS1003 against (unknown receiver), suggest moving the chained call to a named argument on the parent factory."
+  },
+  {
+    "cluster_id": "C0079",
+    "diag_code": "CS1026",
+    "receiver_type": null,
+    "fix_kind": "import_added",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-b435dae24461-2026-05-11T03:39:26.062Z"
+    ],
+    "proposed_rule": "On CS1026 near (unknown receiver), suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0081",
+    "diag_code": "CS1955",
+    "receiver_type": "BorderElement",
+    "fix_kind": "renamed_member",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-da0e1ffec0b5-2026-05-11T03:53:02.944Z"
+    ],
+    "proposed_rule": "On CS1955 against BorderElement member, suggest the renamed member used in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0083",
+    "diag_code": "CS1061",
+    "receiver_type": "Grid",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-744a1bc0d73b-2026-05-11T03:56:33.884Z"
+    ],
+    "proposed_rule": "On CS1061 against Grid, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0084",
+    "diag_code": "CS1061",
+    "receiver_type": "SliderElement",
+    "fix_kind": "renamed_member",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-7ad7afdba272-2026-05-11T03:57:45.441Z"
+    ],
+    "proposed_rule": "On CS1061 against SliderElement member, suggest the renamed member used in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0086",
+    "diag_code": "CS1929",
+    "receiver_type": "TemplatedListViewElement<WorkItem>",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-public-sweep-31dd017ea146-2026-05-11T04:03:33.644Z"
+    ],
+    "proposed_rule": "On CS1929 against TemplatedListViewElement<WorkItem>, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0087",
+    "diag_code": "CS0023",
+    "receiver_type": null,
+    "fix_kind": "import_added",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-47cb265e6cd3-2026-05-11T04:13:34.811Z"
+    ],
+    "proposed_rule": "On CS0023 near (unknown receiver), suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0092",
+    "diag_code": "CS1955",
+    "receiver_type": "ButtonElement",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-76edc092ce43-2026-05-11T04:17:40.323Z"
+    ],
+    "proposed_rule": "On CS1955 against ButtonElement, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0093",
+    "diag_code": "CS1073",
+    "receiver_type": null,
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-7642ad0c6c89-2026-05-11T04:22:37.883Z"
+    ],
+    "proposed_rule": "On CS1073 against (unknown receiver), review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0094",
+    "diag_code": "CS0117",
+    "receiver_type": "Theme",
+    "fix_kind": "fluent_to_named",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-7642ad0c6c89-2026-05-11T04:22:37.883Z"
+    ],
+    "proposed_rule": "On CS0117 against Theme, suggest moving the chained call to a named argument on the parent factory."
+  },
+  {
+    "cluster_id": "C0095",
+    "diag_code": "CS1929",
+    "receiver_type": "TemplatedListViewElement<DemoItem>",
+    "fix_kind": "other",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-6da9125d6f74-2026-05-11T04:29:50.071Z"
+    ],
+    "proposed_rule": "On CS1929 against TemplatedListViewElement<DemoItem>, review exemplar pairs (other) and author a manual rule."
+  },
+  {
+    "cluster_id": "C0096",
+    "diag_code": "CS1061",
+    "receiver_type": "BorderElement",
+    "fix_kind": "import_added",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-6da9125d6f74-2026-05-11T04:29:50.071Z"
+    ],
+    "proposed_rule": "On CS1061 near BorderElement, suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0097",
+    "diag_code": "CS1955",
+    "receiver_type": "GridElement",
+    "fix_kind": "import_added",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-78c4aff3924a-2026-05-11T04:31:02.487Z"
+    ],
+    "proposed_rule": "On CS1955 near GridElement, suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0098",
+    "diag_code": "CS1001",
+    "receiver_type": null,
+    "fix_kind": "import_added",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-78c4aff3924a-2026-05-11T04:31:02.487Z"
+    ],
+    "proposed_rule": "On CS1001 near (unknown receiver), suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0099",
+    "diag_code": "CS1519",
+    "receiver_type": null,
+    "fix_kind": "import_added",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-78c4aff3924a-2026-05-11T04:31:02.487Z"
+    ],
+    "proposed_rule": "On CS1519 near (unknown receiver), suggest adding the missing using directive seen in the fix exemplar."
+  },
+  {
+    "cluster_id": "C0101",
+    "diag_code": "CS0618",
+    "receiver_type": null,
+    "fix_kind": "missing_with_key",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-3f8bc4b5c846-2026-05-11T04:31:15.712Z"
+    ],
+    "proposed_rule": "On CS0618 for elements in a dynamic collection, suggest appending .WithKey(...)."
+  },
+  {
+    "cluster_id": "C0102",
+    "diag_code": "CS1061",
+    "receiver_type": "BorderElement",
+    "fix_kind": "fluent_to_named",
+    "frequency": 0.0009737098344693282,
+    "count": 1,
+    "exemplar_run_ids": [
+      "reactor-skilled-sweep-c7ddce048c6d-2026-05-11T04:32:58.231Z"
+    ],
+    "proposed_rule": "On CS1061 against BorderElement, suggest moving the chained call to a named argument on the parent factory."
+  }
+]

@@ -61,6 +61,23 @@ to land under these conventions; subsequent specs follow this shape.
   `~/.mur/telemetry/<yyyy-mm-dd>.jsonl`. Local-first, scoped to the active
   project; no source code, file paths, or machine identifiers logged.
   (spec 038 §10, §1.7)
+- `mur check --suggest-threshold <N>` — gate Tier-2 suggestions by
+  per-invocation unique CS-prefixed diagnostic count. Default 3, set 0 to
+  always emit. Resolution of the EC1 calc-vs-kanban split: small builds
+  (1–2 errors) skip the ~5–8 s Tier-2 setup the agent doesn't need;
+  larger structural failures still get suggestions. Counts the same dedup
+  key `EmitDiagnostics` uses. (spec 038 §11 risk row, §14 #8)
+- Data Checkpoint C (spec 038 / spec 037): 525-pair mining corpus mirrored
+  into `docs/specs/tasks/038-tuning-reports/2026-05-11-525run-source/`
+  (1,027 fixes / 1,233 ranker rows / 104 clusters from `gpt-5.5`). Analysis
+  in `2026-05-11-525run.md`. Cross-agent reproducibility bar still open —
+  a second-agent drop is required before Phase-3 rule PRs. Top Phase-3
+  targets surfaced: CS0117/Theme `*Background → SolidBackground`,
+  CS1061/`*Element` WinUI-name → Reactor-shortcut family, CS1955/GridSize
+  missing-parens-on-factory. Tier-2 per-code thresholds held at current
+  values; gate threshold (3) empirically defensible at 28.7% emit rate.
+  No code change in this entry — calibration + docs only. (spec 038 §1.8,
+  Data Checkpoint C)
 - `WindowSpec`, `ReactorWindow`, `WindowKey`, `WindowStartPosition`,
   `PresenterKind`, `WindowState`, `WindowIcon`, `WindowDipSizeChangedEventArgs`,
   `WindowClosingEventArgs`, `ReactorAppContext` — first-class Window primitive

@@ -18,6 +18,21 @@ namespace Microsoft.UI.Reactor.Cli.Check;
 
 public static class CheckCommand
 {
+    // Spec 038 §11 risk row + §14 #8 — diagnostic-count gate.
+    //
+    // EC1 5×N (2026-05-10) showed Tier-2 setup overhead (~5–8s per `mur check`)
+    // does not amortize on ~150-LoC projects: calc regressed +21% cost while
+    // kanban won −24%. The gate suppresses Tier-2 suggestions when the
+    // invocation surfaces fewer than this many CS-prefixed diagnostics — a
+    // proxy for "this is a small/simple build the agent can resolve unaided."
+    //
+    // Conservative initial value picked against the EC1 data with a small
+    // observational sample of failing builds per arm. Revisit at Data
+    // Checkpoint C (≥ 500 pairs) when the full diagnostic-count distribution
+    // by project size is known. Override via `--suggest-threshold <N>`; 0 = no
+    // gate.
+    internal const int DefaultSuggestThreshold = 3;
+
     public static int Run(string[] args)
     {
         if (args.Any(a => a == "--help" || a == "-h"))
@@ -78,8 +93,14 @@ public static class CheckCommand
             }
 
             var diagnostics = ParseDiagnostics(combined);
-            var orchestrator = new SuggesterOrchestrator();
-            EmitDiagnostics(diagnostics, Console.Out, trace, diag => orchestrator.Suggest(diag, path));
+            var effectiveThreshold = parsed.SuggestThreshold ?? DefaultSuggestThreshold;
+            Func<Diag, Suggestion?>? suggest = null;
+            if (ShouldEmitSuggestions(diagnostics, effectiveThreshold))
+            {
+                var orchestrator = new SuggesterOrchestrator();
+                suggest = diag => orchestrator.Suggest(diag, path);
+            }
+            EmitDiagnostics(diagnostics, Console.Out, trace, suggest);
             if (diagnostics.Count == 0 && proc.ExitCode == 0)
                 Console.WriteLine("ok");
         }
@@ -89,6 +110,30 @@ public static class CheckCommand
         }
 
         return proc.ExitCode;
+    }
+
+    /// <summary>
+    /// Spec 038 §11 / §14 #8: gate Tier-2 suggestions by per-invocation
+    /// CS-prefixed diagnostic count. Returns true if suggestions should run,
+    /// false to skip the suggester for this invocation. Threshold 0 disables
+    /// the gate. Counts unique (file, line, col, code) tuples — same dedup
+    /// rule EmitDiagnostics applies — so MSBuild's per-project repeats don't
+    /// inflate the count.
+    /// </summary>
+    internal static bool ShouldEmitSuggestions(IReadOnlyList<Diag> diagnostics, int threshold)
+    {
+        if (threshold <= 0) return true;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var count = 0;
+        foreach (var d in diagnostics)
+        {
+            if (!d.Code.StartsWith("CS", StringComparison.Ordinal)) continue;
+            var key = $"{d.File}:{d.Line}:{d.Col}:{d.Code}";
+            if (!seen.Add(key)) continue;
+            count++;
+            if (count >= threshold) return true;
+        }
+        return false;
     }
 
     internal static List<Diag> ParseDiagnostics(string combinedOutput)

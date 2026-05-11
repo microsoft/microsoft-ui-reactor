@@ -8,12 +8,15 @@ Originating issues: [#226 §5](https://github.com/microsoft/microsoft-ui-reactor
 
 ---
 
-## Status snapshot (2026-05-10, late session)
+## Status snapshot (2026-05-11)
 
-- **Phase 0 (instrumentation):** ✓ landed on `feat/038-mur-check`. `--trace <path>` writes JSONL alongside stdout; folders + READMEs in place.
-- **Phase 1 (Tier 2 Roslyn suggester):** ✓ code complete AND ✓ calibrated against the 50-run corpus on `feat/038-mur-check`. `SymbolSuggester` covers CS1061 / CS0103 / CS0117 / CS1503 / CS7036; `CompilationLoader` + `FactoryIndex` + `SuggesterOrchestrator` wired into `CheckCommand`; Tier-1 hints still win ties; `MUR_TELEMETRY=1` opt-in. Per-code thresholds in `src/Reactor.Cli/Check/Suggesters/Thresholds.cs` tuned against the corpus. **EC1 5×N ran 2026-05-10** — kanban variant wins clearly (−24% cost mean, −33% median, 3.4× lower variance); calc variant loses (+21% cost) due to per-invocation overhead failing to amortize on tiny projects. **Merge decision pending** — see EC1 results section + new §11 risk row + §14 open question on the project-size / diagnostic-count gate.
-- **Phase 2 / 3 / 4:** not started. Phase 2 blocks on Phase 1 merge; Phase 3 blocks on Data Checkpoint C; Phase 4 blocks on Data Checkpoint D + the `still_present_at_run_end` harness fix below.
-- **Active state:** Phase 1 calibration committed at 7c74135. EC1 5×N landed; awaiting product decision on merge path (ship as-is vs. add small-project gate). Larger mining sweep (Data Checkpoint C predecessor) running in parallel with current `SKILL.md` to compare aided vs un-aided baseline.
+- **Phase 0 (instrumentation):** ✓ landed on `feat/038-mur-check`.
+- **Phase 1 (Tier 2 Roslyn suggester):** ✓ code complete; ✓ calibrated against 50-run corpus (2026-05-10) and re-validated against 525-run corpus (2026-05-11). All per-code thresholds held at current values (525-run analysis is decisive on direction-of-fix but harness ClassifyMatch is an over-approximation; see report). **Diagnostic-count gate landed**: `CheckCommand.ShouldEmitSuggestions` skips Tier-2 when an invocation surfaces fewer than `--suggest-threshold` unique CS-prefixed diagnostics (default 3; 0 disables). Empirically the gate skips Tier-2 on 71.3% of build failures (1–2 CS diagnostics) and emits on 28.7% (3+ diagnostics) — matches the EC1 calc-vs-kanban shape. **Awaiting EC1 re-run with the gate on** before merging Phase 1 to `main`.
+- **Phase 2 / 3 / 4:** not started.
+    - Phase 2 (MSBuild passthrough + deterministic ranker) blocks on Phase 1 merge.
+    - Phase 3 (Tier-3 rules) blocks on (a) the cross-agent reproducibility bar — current 525-run corpus is `gpt-5.5`-only — and (b) Phase 2 merge. Top three rule targets identified in the 525-run report.
+    - Phase 4 blocks on Data Checkpoint D + the `still_present_at_run_end` harness fix.
+- **Active state:** Data Checkpoint C source mirrored into `docs/specs/tasks/038-tuning-reports/2026-05-11-525run-source/` (8 MB across four files; raw event logs stay in sibling repo). Tuning report at `docs/specs/tasks/038-tuning-reports/2026-05-11-525run.md`. Gate validation in same report.
 - **Deferred follow-ups (cleanly scoped, not blocking next phase):** (a) Reactor-touching integration fixture for the CS1061 Button.OnClick canonical example (needs WindowsAppSDK restore on every test run); (b) wall-time perf trait test against the WinUI fixture; (c) full Hamming-vector overload ranking in CS7036; (d) return-type assignability filter in CS0103.
 - **Tracked harness follow-up (Phase-4 prerequisite, file with harness owner before Data Checkpoint D):** `still_present_at_run_end` always `false` even when the diagnostic IS in the final build — fingerprint-mismatch quirk on adjacent CS8012 emissions whose timing tails differ. Doesn't affect the primary `addressed_by_next_fix` label.
 
@@ -133,7 +136,22 @@ Self-contained instructions so the next agent can run cold:
 
 ### Data Checkpoint C — rule induction (≥ 500 unique pairs, ≥ 200 runs, ≥ 2 agents, ranker negative class present)
 
-**Blocks:** Phase 3 entirely. Tier 3 rule authoring cannot begin without C — every rule's cluster has to clear the Frequency bar (≥ 5 %) of the Validation Gate, and a 50-pair corpus is too small for that math to be meaningful (one pair is 2 %).
+**Status: ✓ landed 2026-05-11 (partial — single-agent only).** Source at `C:\Users\andersonch\Code\reactor-tokenusage\mining-out\`; mirrored into the repo at `docs/specs/tasks/038-tuning-reports/2026-05-11-525run-source/` (≈ 8 MB, four files; the 563 raw event logs stay in the sibling repo, referenced via `source_event_log` per row). Sample size: 1,027 fixes / 1,233 ranker rows / 104 clusters from 525+ runs. **Cross-agent bar (≥ 2 agents) is not met** — all rows come from `gpt-5.5`. A second-agent corpus drop is required before opening Phase-3 rule PRs (Validation Gate bar #2).
+
+**Audit results:**
+- Sample: 1,027 fixes (≥ 500 ✓), 104 clusters (10–30 target was Checkpoint B; this is bigger as expected), 1,233 ranker rows across 513 distinct (run_id, turn) builds (≥ 200 ✓ for rows; below the 200-run bar is moot since we have 525+).
+- Gap #1 / #2 / #4 from spec 037 follow-ups: ✓ carried forward; no regressions versus Checkpoint B.
+- Gap #3 (ranker negative class): partial. Field varies per row; absolute negative-class count not re-audited in detail here — Phase-4 prerequisite, not a Phase-3 blocker.
+- `still_present_at_run_end`: uniformly false (known fingerprint-bug carrying forward from Checkpoints A/B; Phase-4 prerequisite).
+
+**Tuning result (Tier-2):** report at `docs/specs/tasks/038-tuning-reports/2026-05-11-525run.md`. All five per-code thresholds **held at current values** — see report's "Decisions" table for rationale. The 525-run corpus surfaces that the JaroWinkler fuzzy-match approach has near-0% empirical precision on CS1061 / CS0117 against Reactor types: the agent's typical mistake is reaching for a WinUI-style API name (`.VerticalAlignment`, `Theme.AppBackground`) whose correct Reactor replacement is too far in edit-distance for Tier-2 to find, so the fuzzy match picks a wrong sibling. The diagnostic-count gate provides the safety net (skips Tier-2 on 71% of builds); systematic fix is Phase-3 rule authoring.
+
+**Gate-threshold validation:** the EC1-time decision to default `--suggest-threshold` at 3 is empirically defensible — the corpus's CS-diagnostics-per-build distribution shows 43% of builds have 1 diagnostic, 28% have 2, and only 28.7% have ≥ 3. T=3 captures the "big structural failure" shape and skips the "1–2 typo" shape, which matches the EC1 calc-vs-kanban observation. Held at 3 for the EC1 re-run.
+
+**Phase-3 priority targets surfaced (top 3 by cluster frequency where Tier-2 produces wrong-direction suggestions):**
+1. CS0117 / Theme — `*Background → SolidBackground` lookup table (cluster C0019, freq 1.6%, 16 events).
+2. CS1061 / `*Element` — WinUI-name → Reactor-shortcut family (`VerticalAlignment → VAlign`, `HorizontalAlignment → HAlign`, `Style → fluent-helper-family`). Composite across clusters C0017 + others ≈ 22 events.
+3. CS1955 / GridSize — "missing parens on factory" (cluster C0004, freq 10.7%, 110 events — largest single bucket in the corpus). Tier-2 doesn't cover CS1955 today; rule would be the first cross-tier addition.
 
 **Use:** drives the human-review queue. The reviewer walks `patterns.json` top-down by frequency, opens 5–8 PRs per reviewing-week, each PR is one new rule under the Validation Gate.
 
@@ -142,7 +160,7 @@ Self-contained instructions so the next agent can run cold:
 **Quantity bar before declaring V1 done (Eval Checkpoint 3):** **10–15 rules** covering ~80 % of fix events. Past 15, returns diminish — the long tail moves to Tier 4.
 
 **Owner:** harness team.
-**ETA:** TBD. ~200 runs at $3–5 each = ~$1K corpus cost.
+**Remaining gaps for full Checkpoint C status:** second-agent corpus drop (e.g. `claude-sonnet-4-6`) so the cross-agent reproducibility bar is met before Phase-3 rule PRs open.
 
 ### Data Checkpoint D — ranker training (≥ 5K ranker-label rows, ≥ 200 runs, **negative class** ≥ 1K rows)
 
@@ -197,11 +215,7 @@ Sweep: 5 paired rounds × `reactor-calc` / `reactor-kanban`, `gpt-5.5`, `feat/03
 - **Kanban: PASS** (−24% mean cost, well outside noise floor).
 - **Calc: FAIL** (+21% mean cost; intrinsic to project size, not a tuning bug).
 
-The pass/fail split is a product decision, not a code defect. Two options on the table:
-- Ship Phase 1 as-is and accept the calc regression. Captures the kanban win immediately; calc users pay a small tax until §11/§14 gate lands.
-- Gate `mur check` suggestions by project size or diagnostic count before merging Phase 1. Captures the kanban win without the calc tax but blocks Phase 1's merge on the gate's design. Tracked as the new spec 038 §11 risk row + §14 open question.
-
-Either path keeps `main` clean. **Decision pending.**
+The pass/fail split was a product decision, not a code defect. Resolution **2026-05-10**: implemented approach (b) from spec §14 #8 — the diagnostic-count gate. `CheckCommand.ShouldEmitSuggestions(diagnostics, threshold)` skips the suggester for the invocation when fewer than `threshold` unique CS-prefixed diagnostics are present; default `DefaultSuggestThreshold = 3`, overridable via `--suggest-threshold <N>` (0 = always emit). The gate counts the same dedup key `EmitDiagnostics` uses so MSBuild's per-project duplicates don't inflate. Theory: the typical calc failure surfaces 1–2 errors and the agent resolves them without help; the typical kanban failure surfaces 3+ structural errors where the suggestion saves a turn. **EC1 re-run with the gate on is the gating evidence before Phase 1 merges to `main`.**
 
 **Eval-checkpoint conventions:**
 
@@ -316,7 +330,8 @@ Goal: for the five highest-frequency CS-prefixed codes that touch Reactor types,
 - [x] All Phase 1 tasks above checked. (The integration test in 1.6 and the perf-trait test in 1.7 are explicitly deferred follow-ups; everything code-side is implemented and unit-tested.)
 - [x] **Data Checkpoint B landed; thresholds calibrated.** `Thresholds.cs` written; `SymbolSuggester` reads per-code T via `Thresholds.For(code)` (gate consolidated to a single source of truth in `Suggest`, redundant duplicate cut removed from the orchestrator). Tuning harness lives under `tests/Reactor.Tests/CheckCommandTests/Tuning/`; report snapshot in `docs/specs/tasks/038-tuning-reports/2026-05-10-50run.md`. The 50-run corpus is small enough that the per-code values are intentionally conservative; revisit at Data Checkpoint C (500+ pairs).
 - [x] **Run Eval Checkpoint EC1** vs. `main`. 5×N landed 2026-05-10. Results: kanban PASS (−24% cost mean, −33% median, 3.4× lower variance); calc FAIL (+21% cost mean — per-invocation overhead does not amortize on ~150-LoC problems). Firings ≥ 1 per kanban run ✓; first-build OK 5/5 both arms ✓. **Strict spec criterion ("tokens not regressed") fails on calc.** Detailed results under Eval Checkpoints → "EC1 results" above.
-- [ ] **Merge decision pending.** Two paths: (a) ship as-is and accept calc tax; (b) add a project-size / diagnostic-count gate before merge. New §11 risk row + §14 open question track the gate design.
+- [x] **Decision recorded:** approach (b) — diagnostic-count gate. Implementation in `CheckCommand.ShouldEmitSuggestions`; flag `--suggest-threshold <N>` (default 3, 0 = off). Unit tests in `CheckCommandPipelineTests.Gate_*` + `CheckArgsTests.Suggest_threshold_*`.
+- [ ] **EC1 re-run with the gate on** is the final merge gate. Expectation: kanban win preserved (gate doesn't fire on the typical kanban failure shape, count ≥ 3); calc regression neutralized (gate fires on the typical calc failure shape, count ≤ 2). If both confirmed, merge Phase 1 to `main` and unblock Phase 2.
 
 ---
 

@@ -31,6 +31,53 @@
 //                  dotnet test tests/Reactor.Tests --filter \\
 //                    FullyQualifiedName~ThresholdTuningTests.EndToEnd_corpus_run
 //
+//   2026-05-11 — 525-run corpus (1,027 fixes; 308 hitting handled codes).
+//                Single agent (`gpt-5.5`); cross-agent reproducibility bar
+//                from spec 037 §11 not met by this drop. See
+//                docs/specs/tasks/038-tuning-reports/2026-05-11-525run.md.
+//                Findings (harness ClassifyMatch is an over-approximation;
+//                "no match" can mean wrong suggestion OR irrelevant-but-not-
+//                wrong suggestion after a structural rewrite):
+//                  • CS0103: 60 firings, 45 match / 15 no-match (75% match
+//                    rate). Confidence cluster at 1.00 + 0.88. Holding at
+//                    0.75 — the empirical signal is good and the 15 no-match
+//                    cases are plausibly harness under-counts.
+//                  • CS1061: 9 firings, 0 match / 9 no-match. Inspecting the
+//                    six emissions at conf >= 0.80: all propose receiver
+//                    sibling members that don't appear in the human fix.
+//                    Pattern: agent writes WinUI-style `.VerticalAlignment(x)`
+//                    on TextBlockElement; right answer is Reactor's `.VAlign`
+//                    or `.Set(b => b.VerticalAlignment = x)`, but our fuzzy
+//                    match picks `TextAlignment`. Fundamentally a Phase-3
+//                    rule problem — JaroWinkler can't reach `VAlign` from
+//                    `VerticalAlignment` (similarity below the 0.70 floor),
+//                    so it picks a wrong sibling. Holding 0.80 for now; the
+//                    diagnostic-count gate (default T=3, see CheckCommand
+//                    .ShouldEmitSuggestions) shields small/typo-only builds
+//                    where wrong CS1061 suggestions would hurt most.
+//                  • CS0117: 13 firings, 0 match / 13 no-match. Same shape:
+//                    agent writes `Theme.AppBackground` or
+//                    `Theme.DefaultBackground` (non-existent); suggester
+//                    proposes `Theme.Background`; correct is
+//                    `Theme.SolidBackground` (cluster C0019 in patterns.json,
+//                    16 events). Holding at 0.75 with gate protection;
+//                    Phase-3 rule "Theme.<X>Background → Theme.SolidBackground"
+//                    is the high-frequency target.
+//                  • CS1503: 0 firings (the two hand-coded heuristics didn't
+//                    match any corpus row). Hold default.
+//                  • CS7036: 3 firings at conf 0.78, all no-match. Hold
+//                    default — parameter-count distance is a weak signal
+//                    and Hamming over (kind, type) is a deferred follow-up.
+//                Phase-3 priority targets surfaced by this drop (clusters
+//                with frequency >= 1% and a clear transformation):
+//                  • CS0117 / Theme — "*Background → SolidBackground"
+//                    (C0019, 1.6%)
+//                  • CS1061 / TextBlockElement — "VerticalAlignment →
+//                    VAlign" + "Style → fluent shortcuts" (C0017, 1.2%)
+//                  • CS1955 / GridSize — "missing parens on factory call"
+//                    (C0004, 10.7%) — but cross-agent reproducibility bar
+//                    still applies before authoring.
+//
 // Tuner override: Reactor.Tests' ThresholdTuningTests scopes `PerCode` to
 // its async-local context so concurrent xUnit tests reading thresholds in
 // parallel still see the production defaults. Production behaviour is
