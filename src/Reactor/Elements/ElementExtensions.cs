@@ -37,19 +37,35 @@ public static class ElementExtensions
     public static T Margin<T>(this T el, double uniform) where T : Element =>
         Modify(el, new ElementModifiers { Margin = new Thickness(uniform) });
 
-    public static T Margin<T>(this T el, double horizontal, double vertical) where T : Element =>
+    // Parameter order matches CSS shorthand: `padding: 16px 14px;` is
+    // top/bottom=16, left/right=14 — vertical FIRST. Reactor's 2-arg form
+    // mirrors that: `.Margin(16, 14)` → Thickness(14, 16, 14, 16). Use named
+    // args (`.Margin(horizontal: 14, vertical: 16)`) when the call site needs
+    // to be unambiguous to a reader unfamiliar with the convention.
+    public static T Margin<T>(this T el, double vertical, double horizontal) where T : Element =>
         Modify(el, new ElementModifiers { Margin = new Thickness(horizontal, vertical, horizontal, vertical) });
 
-    public static T Margin<T>(this T el, double left, double top, double right, double bottom) where T : Element =>
+    // Default values on the per-side overload let callers name only the sides
+    // they want (`.Margin(top: 10)`, `.Margin(left: 8, right: 8)`). Existing
+    // positional callers are unaffected — overload resolution still binds
+    // `.Margin(10)` to the uniform overload and `.Margin(10, 20)` to the
+    // horizontal/vertical overload because those signatures are more specific
+    // (fewer parameters → preferred match). Mirrors WPF Thickness defaults:
+    // unspecified sides are zero.
+    public static T Margin<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element =>
         Modify(el, new ElementModifiers { Margin = new Thickness(left, top, right, bottom) });
 
     public static T Padding<T>(this T el, double uniform) where T : Element =>
         Modify(el, new ElementModifiers { Padding = new Thickness(uniform) });
 
-    public static T Padding<T>(this T el, double horizontal, double vertical) where T : Element =>
+    // Same CSS-shorthand ordering as Margin above — vertical first.
+    public static T Padding<T>(this T el, double vertical, double horizontal) where T : Element =>
         Modify(el, new ElementModifiers { Padding = new Thickness(horizontal, vertical, horizontal, vertical) });
 
-    public static T Padding<T>(this T el, double left, double top, double right, double bottom) where T : Element =>
+    // Same defaulting story as Margin above — `.Padding(top: 8)` etc. are
+    // valid; existing 1-arg / 2-arg / 4-arg positional call shapes still bind
+    // to the more-specific overloads.
+    public static T Padding<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element =>
         Modify(el, new ElementModifiers { Padding = new Thickness(left, top, right, bottom) });
 
     // ── Logical (BiDi-aware) layout modifiers ───────────────────────

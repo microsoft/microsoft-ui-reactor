@@ -114,7 +114,7 @@ class WrapGapDemo : Component
             FlexRow(
                 tags.Select(tag =>
                     TextBlock(tag)
-                        .Padding(6, 12)
+                        .Padding(horizontal: 6, vertical: 12)
                         .Background("#e8e8e8")
                         .CornerRadius(12)
                 ).ToArray()

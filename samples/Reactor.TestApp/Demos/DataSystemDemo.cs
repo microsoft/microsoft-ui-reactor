@@ -475,9 +475,9 @@ class FormFieldDemo : Microsoft.UI.Reactor.Core.Component
             SubHeading("FormField Auto-Wired from FieldDescriptor"),
             TextBlock("FormField overload resolves editors from TypeRegistry, sets label/description from FieldDescriptor, detects Required from validators.").Foreground(SecondaryText),
 
-            FormField(nameField, name, v => setName((string)v), registry).Margin(0, 8),
-            FormField(ageField, age, v => setAge(v), registry).Margin(0, 8),
-            FormField(deptField, dept, v => setDept((string)v), registry).Margin(0, 8),
+            FormField(nameField, name, v => setName((string)v), registry).Margin(horizontal: 0, vertical: 8),
+            FormField(ageField, age, v => setAge(v), registry).Margin(horizontal: 0, vertical: 8),
+            FormField(deptField, dept, v => setDept((string)v), registry).Margin(horizontal: 0, vertical: 8),
 
             Border(
                 VStack(4,

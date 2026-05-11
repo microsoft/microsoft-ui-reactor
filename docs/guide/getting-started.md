@@ -366,7 +366,7 @@ class CalculatorApp : Component
             TextBlock(display)
                 .FontSize(32).Bold()
                 .HAlign(HorizontalAlignment.Right)
-                .Padding(12, 8),
+                .Padding(horizontal: 12, vertical: 8),
 
             // Button grid
             HStack(4, Button("C", PressClear).Width(60).Height(48),

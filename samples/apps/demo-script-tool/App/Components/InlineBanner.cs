@@ -16,7 +16,7 @@ public static class InlineBanner
                 TextBlock(message)
                     .Foreground(Theme.PrimaryText)
                     .VAlign(VerticalAlignment.Center)))
-        .Padding(16, 12)
+        .Padding(horizontal: 16, vertical: 12)
         .CornerRadius(4)
         .Background(BackgroundFor(kind))
         .WithBorder(BorderFor(kind), 1)

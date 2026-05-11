@@ -27,6 +27,19 @@ to land under these conventions; subsequent specs follow this shape.
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- **`.Margin(double, double)` and `.Padding(double, double)` parameter order
+  swapped to match CSS shorthand convention.** Was `(horizontal, vertical)`;
+  now `(vertical, horizontal)`. This aligns with CSS — `padding: 16px 14px;`
+  means top/bottom = 16, left/right = 14, vertical first. Any existing
+  positional 2-arg call site in the repo has been migrated to the named-arg
+  form (`.Margin(horizontal: 16, vertical: 8)`) which preserves layout
+  regardless of parameter order; recommend the same for external callers.
+  Pre-1.0 breaking change is intentional — the original ordering was a
+  layout-rotation footgun for agents and humans with CSS muscle memory.
+  (spec 038 §3 — feedback from 525-run corpus / WPF-vs-CSS mental model)
+
 ### Added
 
 - `mur check --trace <path>` — append one JSONL row per parsed diagnostic
@@ -132,6 +145,81 @@ to land under these conventions; subsequent specs follow this shape.
   the final workspace state to generate the iter+final trace pair the
   guardrail tool audits). Phase 2 cleared to merge to `main`.
   (spec 038 §1.8 EC2 acceptance, §8, §11)
+- Phase 3.1 / 3.1a — Tier-3 rule infrastructure scaffolded. New surface
+  under `src/Reactor.Cli/Check/Rules/`: `IRulePattern` contract (`Name`,
+  `Provenance`, `DiagnosticCodes`, `DeclaredTargets`, `TryMatch`),
+  `RuleContext` + `RuleSuggestion` records, `RuleRegistry` (reflection
+  discovery of `IRulePattern` implementations in `Reactor.Cli`, `Default`
+  singleton, dedup on Name collisions, `BestMatch` with disable list and
+  self-disable-on-unresolved-target reporting, `Statuses` for `--list-rules`),
+  and `RuleSymbolResolver` (per-`CSharpCompilation` cached symbol lookup
+  via `ConditionalWeakTable` — spec §3.1a's contract that rules never
+  string-match `MemberAccess.Name.ValueText`). New CLI flags
+  `--disable-rule <Name>` (repeatable, warns on unknown names) and
+  `--list-rules` (short-circuits `dotnet build`, prints the
+  name/provenance/status table, exits 0). `SuggesterOrchestrator` runs
+  rules alongside Tier-2; spec §6 "rule wins over Tier-2 fuzzy match"
+  preserved; rules can match diagnostic codes outside Tier-2's
+  `SupportedCodes` so CS1955 / Theme-lookup rules are unblocked.
+  `tests/Reactor.Tests/CheckCommandTests/Rules/RuleTargetResolutionTests.cs`
+  is the §3.1a CI gate — instantiates every registered rule against a
+  live Reactor `Compilation` (full assembly references, the inverse of
+  `TestCompilation.Create`) and asserts every declared target resolves.
+  Passes vacuously today; becomes load-bearing the moment the first
+  rule lands. 35 new unit tests covering contract shape, registry
+  discovery and edge cases (duplicates, throwing rules, self-disable),
+  resolver cache identity, orchestrator rule-vs-Tier-2 precedence, and
+  ArgsParser round-trip. Phase-3 rule PRs themselves remain blocked on
+  the second-agent corpus drop (cross-agent reproducibility bar #2 of
+  the Validation Gate). (spec 038 §3.1 + §3.1a)
+- Spec 038 Phase-3 vocab table at `docs/specs/tasks/038-vocab-table.csv`
+  (§3.0 prerequisite for any Class-B rule PR). 20 rows covering WPF /
+  Silverlight / WinUI 2 / WinUI 3 → Reactor vocabulary translations,
+  seeded from the 525-run report's Phase-3 priority targets plus desk
+  research against `skills/reactor.api.txt`. (spec 038 §3.0)
+- First three Class-B vocabulary-translation rules: `ThemeBackgroundSuffixRule`
+  (CS0117 on `Theme` with member ending in `Background` → `Theme.SolidBackground`,
+  cluster C0019, 16 events); `AlignmentShortcutRule` (CS1061 on Reactor
+  `*Element` receivers for `HorizontalAlignment` / `VerticalAlignment` →
+  `.HAlign(...)` / `.VAlign(...)`, cluster C0017 + adjacent ≈ 22 events); and
+  `ButtonOnClickFactoryMoveRule` (CS1061 on `ButtonElement.OnClick` →
+  `Button(..., onClick: ...)` factory named-arg, explicitly naming `.OnTapped`
+  as the wrong sibling to keep agents from reaching for the gesture event).
+  Both bind target types via `RuleSymbolResolver` (no string matching);
+  the rule-target resolution CI gate is now load-bearing. 10 new unit tests
+  (positive fixtures cite their source `run_id`s from the 525-run corpus;
+  hand-authored extensions are tagged `[Trait("Origin", "VocabHandAuthored")]`).
+  PRs remain blocked on Validation Gate bar #5 (independent reviewer
+  signoff) — the artifacts are "ready for review", not "ready to merge".
+  (spec 038 §3.2, §6 Class B)
+- `.Margin(...)` and `.Padding(...)` per-side overloads now default unspecified
+  sides to `0.0`. Enables agent-intuitive call shapes like `.Margin(top: 12)`,
+  `.Padding(left: 8, right: 8)` that previously failed to compile (CS7036:
+  no matching overload). 525-run corpus shows **198 build failures** from
+  agents writing this exact shape against the prior all-required signature —
+  far and away the highest-frequency failure-driver in the drop. Eliminating
+  it is a single-line code edit per overload but a large agent-productivity
+  unlock. `Reactor.Tests` adds CSS-ordering + per-side + positional-overload
+  regression tests. (spec 038 §3 follow-up — surfaced during Phase-3 rule
+  authoring)
+- Cheatsheet in `plugins/reactor/skills/reactor-getting-started/SKILL.md` now
+  shows the named-arg `Button("Save", onClick: handler)` form alongside the
+  positional one, with an explicit anti-pattern comment naming `.OnClick(...)`
+  and `.OnTapped(...)` as the wrong fixes for click intent. The cheatsheet's
+  `.OnTapped((s, e) => ...)` example is now anchored to non-Button surfaces
+  (Border / Image / ScrollView) with a back-reference to the Controls section
+  — the prior parenthetical Button carve-out was easy to miss mid-build.
+  (spec 038 §3 — agent-facing skill updates)
+- Spec 038 §3.1a residual: trace-channel structured warning hook for
+  self-disabled rules. `TraceWriter.WriteRuleSelfDisabled(rule, target)`
+  emits `{kind: "rule_self_disabled", rule, unresolved_target, mode}`.
+  `SuggesterOrchestrator` threads an optional `onRuleSelfDisabled`
+  callback through to `RuleRegistry.BestMatch`; `CheckCommand.Run` wires
+  it to the active trace writer when `--trace <path>` is set, dedup'd
+  per-invocation per-rule. Stdout stays clean — agents don't read trace
+  files, but maintainers see "rule X disabled because target Y didn't
+  resolve" the moment a Reactor minor release breaks something.
+  (spec 038 §3.1a)
 - EC1 re-run with the diagnostic-count gate (2026-05-11): both arms PASS.
   `reactor-calc-mur-check` cost −4% mean (was +21% in the prior batch);
   `reactor-kanban-mur-check` cost −33% mean / −39% median (was −24% mean

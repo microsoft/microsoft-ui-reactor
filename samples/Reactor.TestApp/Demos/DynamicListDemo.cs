@@ -38,7 +38,7 @@ class DynamicListDemo : Component
                             TextBlock($"Item {i + 1}"),
                             TextBlock($"(created dynamically)").Foreground(TertiaryText)
                         )
-                    ).CornerRadius(4).Background(SubtleFill).Padding(12, 8)
+                    ).CornerRadius(4).Background(SubtleFill).Padding(horizontal: 12, vertical: 8)
                 ).ToArray()
             ),
 

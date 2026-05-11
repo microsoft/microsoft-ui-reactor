@@ -85,7 +85,7 @@ public static partial class Factories
             .Foreground("#F59E0B")
             .Background("#00000000")
             .WithBorder("#00000000", 0)
-            .Padding(8, 4)
+            .Padding(horizontal: 8, vertical: 4)
             .FontSize(16)
             .ToolTip(toolTip)
             .AutomationName(toolTip);

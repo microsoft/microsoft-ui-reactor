@@ -140,7 +140,7 @@ class LayoutAnimationDemo : Component
                     l.Count > 0 ? l.Take(l.Count - 1).ToList() : l))
             ),
             VStack(4, items.Select(item =>
-                TextBlock(item).Padding(8, 12).Background("#f0f0f0")
+                TextBlock(item).Padding(horizontal: 8, vertical: 12).Background("#f0f0f0")
                     .CornerRadius(4).LayoutAnimation()
                     .WithKey($"item-{item}")
             ).ToArray())
@@ -286,7 +286,7 @@ class StaggerDemo : Component
             SubHeading("Staggered Animation"),
             Button("Shuffle", () => setItems(items.OrderBy(_ => Random.Shared.Next()).ToArray())),
             VStack(4, items.Select(item =>
-                TextBlock(item).Padding(8, 12).Background("#f0f0f0")
+                TextBlock(item).Padding(horizontal: 8, vertical: 12).Background("#f0f0f0")
                     .CornerRadius(4).LayoutAnimation()
                     .WithKey(item)
             ).ToArray()).Stagger(TimeSpan.FromMilliseconds(40))

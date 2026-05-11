@@ -669,7 +669,7 @@ public sealed class DemoScriptShell : Component
                 .Background(BackgroundFor(t.Severity))
                 .WithBorder(BorderFor(t.Severity), 1)
                 .CornerRadius(8)
-                .Padding(12, 8)
+                .Padding(horizontal: 12, vertical: 8)
                 .HAlign(HorizontalAlignment.Right)
                 .VAlign(VerticalAlignment.Bottom)
                 .Margin(0, 0, 24, 24)

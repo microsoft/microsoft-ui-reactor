@@ -26,7 +26,7 @@ public class ElementExtensionsCoverageTests
     [Fact]
     public void Margin_HorizontalVertical()
     {
-        var el = TextBlock("x").Margin(8.0, 4.0);
+        var el = TextBlock("x").Margin(horizontal: 8.0, vertical: 4.0);
         Assert.Equal(new Thickness(8, 4, 8, 4), el.Modifiers!.Margin);
     }
 
@@ -41,7 +41,7 @@ public class ElementExtensionsCoverageTests
     public void Padding_Uniform_HorizontalVertical_FourSides()
     {
         var a = TextBlock("x").Padding(5);
-        var b = TextBlock("x").Padding(8.0, 4.0);
+        var b = TextBlock("x").Padding(horizontal: 8.0, vertical: 4.0);
         var c = TextBlock("x").Padding(1, 2, 3, 4);
         Assert.Equal(new Thickness(5), a.Modifiers!.Padding);
         Assert.Equal(new Thickness(8, 4, 8, 4), b.Modifiers!.Padding);

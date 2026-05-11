@@ -263,7 +263,7 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
                         state.SetSearchQuery(q);
                         _ = state.LoadDataAsync();
                     });
-                }).Padding(8, 4).Grid(row: gridRow, column: 0)
+                }).Padding(horizontal: 8, vertical: 4).Grid(row: gridRow, column: 0)
             );
             gridRow++;
         }
@@ -682,7 +682,7 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
                     {
                         state.BeginRowEdit(capturedIdx);
                     });
-                }).VAlign(VerticalAlignment.Center).Padding(2, 4).Grid(row: 0, column: actionsCol);
+                }).VAlign(VerticalAlignment.Center).Padding(horizontal: 2, vertical: 4).Grid(row: 0, column: actionsCol);
             }
         }
 
@@ -754,7 +754,7 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
 
             row = FlexColumn(
                 row,
-                TextBlock(errorSummary).Foreground("#c62828").FontSize(11).Padding(8, 2)
+                TextBlock(errorSummary).Foreground("#c62828").FontSize(11).Padding(horizontal: 8, vertical: 2)
             );
         }
 
@@ -780,7 +780,7 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
                             state.DismissCommitError(capturedKey);
                         });
                     })
-                ).Padding(8, 2)
+                ).Padding(horizontal: 8, vertical: 2)
             );
         }
 
@@ -791,7 +791,7 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
             var isExpanded = !isPlaceholder && state.IsExpanded(rowKey);
             if (isExpanded)
             {
-                var detail = el.RowDetailTemplate(item!, rowKey).Padding(16, 8);
+                var detail = el.RowDetailTemplate(item!, rowKey).Padding(horizontal: 16, vertical: 8);
                 row = FlexColumn(
                     row,
                     detail.Background("#f5f5f5")
@@ -967,7 +967,7 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
         if (hasRowEditActions)
         {
             headerCells.Add(
-                TextBlock("").Padding(4, 6)
+                TextBlock("").Padding(horizontal: 4, vertical: 6)
                     .Grid(row: 0, column: colCount + cellOffset));
         }
 
@@ -1168,7 +1168,7 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
         var hasActiveFilter = state?.GetFilter(col.Name) is not null;
         var filterIcon = showFilter && col.Filterable
             ? TextBlock(hasActiveFilter ? "\u2BC7" : "\u2BC6")
-                .FontSize(10).Opacity(hasActiveFilter ? 1.0 : 0.4).Padding(2, 0)
+                .FontSize(10).Opacity(hasActiveFilter ? 1.0 : 0.4).Padding(horizontal: 2, vertical: 0)
             : null;
 
         if (col.Sortable)
@@ -1195,9 +1195,9 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
         }
 
         if (filterIcon is not null)
-            return FlexRow(TextBlock(label).SemiBold().Flex(grow: 1), filterIcon).Padding(8, 6);
+            return FlexRow(TextBlock(label).SemiBold().Flex(grow: 1), filterIcon).Padding(horizontal: 8, vertical: 6);
 
-        return TextBlock(label).SemiBold().Padding(8, 6);
+        return TextBlock(label).SemiBold().Padding(horizontal: 8, vertical: 6);
     }
 
     // ── Keyboard handling ───────────────────────────────────────────

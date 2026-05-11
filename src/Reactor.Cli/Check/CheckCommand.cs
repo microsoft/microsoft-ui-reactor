@@ -15,6 +15,7 @@
 
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using Microsoft.UI.Reactor.Cli.Check.Rules;
 
 namespace Microsoft.UI.Reactor.Cli.Check;
 
@@ -49,12 +50,29 @@ public static class CheckCommand
             return 2;
         }
 
+        if (parsed.ListRules)
+        {
+            // --list-rules short-circuits before `dotnet build`: this is a
+            // pure introspection of the registered ruleset. We attempt to
+            // resolve targets against the compilation if the path resolves
+            // to a buildable project, but fall through to a no-compilation
+            // listing when it doesn't — `mur check --list-rules` works in any
+            // directory.
+            PrintRuleList(parsed);
+            return 0;
+        }
+
         var path = parsed.Path;
         if (!File.Exists(path) && !Directory.Exists(path))
         {
             Console.Error.WriteLine($"mur check: '{path}' not found.");
             return 1;
         }
+
+        // --disable-rule references that don't match any registered rule are
+        // surfaced as warnings (not errors) so a typo doesn't fail a build,
+        // but the agent / human sees the miss and can correct it.
+        WarnOnUnknownDisabledRules(parsed.DisabledRules);
 
         // EffectiveBuildArgs already has default-merging applied — `--nologo`,
         // `-v:m`, and `-p:Platform={host arch}` are injected by ArgsParser
@@ -129,7 +147,27 @@ public static class CheckCommand
                 catch { /* loader is best-effort; fall through to no-suggest */ }
                 if (compilation is not null && !ReferenceEquals(compilation, CompilationLoader.EmptyCompilation))
                 {
-                    var orchestrator = new SuggesterOrchestrator();
+                    var disabled = ToDisabledSet(parsed.DisabledRules);
+                    // Self-disabled trace hook (spec 038 §3.1a residual).
+                    // Dedup per-invocation: the registry calls back on every
+                    // BestMatch invocation a rule's targets fail to resolve,
+                    // but we only want one row per rule per `mur check` run.
+                    // No trace open = no callback wired; stdout stays clean.
+                    Action<string, string>? onRuleSelfDisabled = null;
+                    if (trace is not null)
+                    {
+                        var traceRef = trace;
+                        var reported = new HashSet<string>(StringComparer.Ordinal);
+                        onRuleSelfDisabled = (name, target) =>
+                        {
+                            if (reported.Add(name))
+                                traceRef.WriteRuleSelfDisabled(name, target);
+                        };
+                    }
+                    var orchestrator = new SuggesterOrchestrator(
+                        rules: RuleRegistry.Default,
+                        disabledRules: disabled,
+                        onRuleSelfDisabled: onRuleSelfDisabled);
                     suggest = diag => orchestrator.SuggestAgainst(diag, compilation);
                 }
             }
@@ -200,6 +238,63 @@ public static class CheckCommand
             var suggestion = suggest?.Invoke(d);
             stdout.WriteLine(d.Format(suggestion));
             if (suggestion is not null) Telemetry.OnSuggestionEmitted(d.Code, suggestion);
+        }
+    }
+
+    static ISet<string>? ToDisabledSet(IReadOnlyList<string> disabledRules)
+    {
+        if (disabledRules.Count == 0) return null;
+        return new HashSet<string>(disabledRules, StringComparer.Ordinal);
+    }
+
+    static void WarnOnUnknownDisabledRules(IReadOnlyList<string> disabledRules)
+    {
+        if (disabledRules.Count == 0) return;
+        var registry = RuleRegistry.Default;
+        foreach (var name in disabledRules)
+        {
+            if (!registry.TryGet(name, out _))
+                Console.Error.WriteLine($"mur check: --disable-rule '{name}' does not match any registered rule (use --list-rules to see available rules).");
+        }
+    }
+
+    static void PrintRuleList(CheckArgs parsed)
+    {
+        var registry = RuleRegistry.Default;
+        // If the path resolves to a buildable project, attempt target
+        // resolution so the listing distinguishes Enabled from
+        // SelfDisabled-due-to-unresolved-target. Otherwise we list the
+        // registered rules with no resolution status — better than nothing.
+        Microsoft.CodeAnalysis.CSharp.CSharpCompilation? compilation = null;
+        try { compilation = CompilationLoader.Instance.Load(parsed.Path); }
+        catch { /* loader best-effort; render without resolution data. */ }
+        if (compilation is not null && ReferenceEquals(compilation, CompilationLoader.EmptyCompilation))
+            compilation = null;
+
+        var disabled = ToDisabledSet(parsed.DisabledRules);
+        var statuses = registry.Statuses(compilation, disabled);
+        if (statuses.Count == 0)
+        {
+            Console.WriteLine("(no rules registered)");
+            return;
+        }
+        // Column widths picked to fit the longest registered Name / Provenance
+        // with a one-char minimum padding. Recomputed per invocation so adding
+        // a long rule name doesn't break alignment.
+        var nameWidth = Math.Max(4, statuses.Max(s => s.Name.Length));
+        var provWidth = Math.Max(10, statuses.Max(s => s.Provenance.Length));
+        Console.WriteLine($"{"Name".PadRight(nameWidth)}  {"Provenance".PadRight(provWidth)}  Status");
+        Console.WriteLine($"{new string('-', nameWidth)}  {new string('-', provWidth)}  ------");
+        foreach (var s in statuses)
+        {
+            var status = s.State switch
+            {
+                RuleState.Enabled => "enabled",
+                RuleState.UserDisabled => "disabled (--disable-rule)",
+                RuleState.SelfDisabled => $"self-disabled (unresolved: {s.UnresolvedTarget})",
+                _ => "?",
+            };
+            Console.WriteLine($"{s.Name.PadRight(nameWidth)}  {s.Provenance.PadRight(provWidth)}  {status}");
         }
     }
 

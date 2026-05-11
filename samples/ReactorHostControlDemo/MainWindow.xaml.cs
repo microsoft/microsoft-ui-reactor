@@ -36,7 +36,7 @@ public sealed partial class MainWindow : Window
                         setItems([.. items, draft.Trim()]);
                         setDraft("");
                     })
-                ).Margin(16, 0),
+                ).Margin(horizontal: 16, vertical: 0),
 
                 VStack(4,
                     items.Select((item, i) =>

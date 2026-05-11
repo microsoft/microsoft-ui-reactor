@@ -461,6 +461,65 @@ public class ElementTests
     }
 
     [Fact]
+    public void Margin_Accepts_Single_Named_Side()
+    {
+        // 525-run corpus showed ~200 build failures from agents writing
+        // `.Margin(top: 12)` etc. against the prior all-required signature.
+        // The per-side overload now defaults missing sides to 0, matching
+        // the WPF Thickness convention and the agent's intuition.
+        var top = TextBlock("Hi").Margin(top: 12);
+        Assert.Equal(new Thickness(0, 12, 0, 0), top.Modifiers!.Margin);
+
+        var left = TextBlock("Hi").Margin(left: 5);
+        Assert.Equal(new Thickness(5, 0, 0, 0), left.Modifiers!.Margin);
+
+        var pair = TextBlock("Hi").Margin(left: 8, right: 8);
+        Assert.Equal(new Thickness(8, 0, 8, 0), pair.Modifiers!.Margin);
+    }
+
+    [Fact]
+    public void Margin_Positional_Calls_Bind_To_More_Specific_Overloads()
+    {
+        // Regression guard for the per-side overload's default-value addition.
+        // C# overload resolution prefers fewer-parameter overloads when they
+        // match — so .Margin(10) must still bind to the uniform overload
+        // (Thickness(10,10,10,10)), not the per-side one (Thickness(10,0,0,0)).
+        Assert.Equal(new Thickness(10), TextBlock("x").Margin(10).Modifiers!.Margin);
+        Assert.Equal(new Thickness(8, 4, 8, 4),
+            TextBlock("x").Margin(horizontal: 8, vertical: 4).Modifiers!.Margin);
+        Assert.Equal(new Thickness(1, 2, 3, 4),
+            TextBlock("x").Margin(1, 2, 3, 4).Modifiers!.Margin);
+    }
+
+    [Fact]
+    public void Margin_Two_Arg_Positional_Follows_CSS_Vertical_First()
+    {
+        // CSS shorthand `margin: 16px 14px;` means top/bottom = 16,
+        // left/right = 14 — vertical first. Reactor's 2-arg overload now
+        // mirrors that: `.Margin(16, 14)` → Thickness(14, 16, 14, 16).
+        // Pre-2026-05-11 the order was inverted (horizontal first); see
+        // CHANGELOG "Changed (breaking)" for the migration story.
+        var el = TextBlock("x").Margin(16, 14);
+        Assert.Equal(new Thickness(14, 16, 14, 16), el.Modifiers!.Margin);
+
+        var pad = TextBlock("x").Padding(16, 14);
+        Assert.Equal(new Thickness(14, 16, 14, 16), pad.Modifiers!.Padding);
+    }
+
+    [Fact]
+    public void Padding_Accepts_Single_Named_Side()
+    {
+        // Same defaulting story as Margin — the symmetry test exists so a
+        // future edit that drops defaults from one of the two stays caught.
+        var top = TextBlock("Hi").Padding(top: 12);
+        Assert.Equal(new Thickness(0, 12, 0, 0), top.Modifiers!.Padding);
+
+        Assert.Equal(new Thickness(16), TextBlock("x").Padding(16).Modifiers!.Padding);
+        Assert.Equal(new Thickness(8, 4, 8, 4),
+            TextBlock("x").Padding(horizontal: 8, vertical: 4).Modifiers!.Padding);
+    }
+
+    [Fact]
     public void Multiple_Modifiers_Merge()
     {
         var el = TextBlock("Hi").Margin(10).Width(200).Opacity(0.5);

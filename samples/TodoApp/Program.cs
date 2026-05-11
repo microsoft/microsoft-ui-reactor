@@ -157,7 +157,7 @@ class TodoApp : Component
                 .Flex(grow: 1),
             Button(addCmd).Flex(shrink: 0)
         ) with { AlignItems = FlexAlign.Center, ColumnGap = 12 })
-            .Padding(16, 14);
+            .Padding(horizontal: 16, vertical: 14);
 
     // ── Todo row ─────────────────────────────────────────────────────
 
@@ -201,7 +201,7 @@ class TodoApp : Component
                     .Set("ButtonForegroundPointerOver", SystemCritical))
                 .Flex(shrink: 0)
          ) with { AlignItems = FlexAlign.Center, ColumnGap = 12 })
-            .Padding(16, 8)
+            .Padding(horizontal: 16, vertical: 8)
             .WithKey(item.Id);
 
     // ── Empty state — shown when filter returns nothing ───────────────
@@ -225,7 +225,7 @@ class TodoApp : Component
             .Foreground(SecondaryText)
             .HAlign(HorizontalAlignment.Center)
         ) with { AlignItems = FlexAlign.Center, RowGap = 12 })
-            .Padding(24, 40);
+            .Padding(horizontal: 24, vertical: 40);
 
     // ── Divider ─────────────────────────────────────────────────────
 
@@ -251,7 +251,7 @@ class TodoApp : Component
                 HyperlinkButton("Clear completed", onClick: () => dispatch(new ClearCompleted()))
                     .Flex(shrink: 0, alignSelf: FlexAlign.Center))
          ) with { AlignItems = FlexAlign.Center, ColumnGap = 6 })
-            .Padding(16, 10);
+            .Padding(horizontal: 16, vertical: 10);
 
     static Element FilterToggle(string label, TodoFilter filter, TodoFilter active, Action<TodoAction> dispatch) =>
         // shrink: 0 — the flex spacer would otherwise clip "Active" → "Ac" and

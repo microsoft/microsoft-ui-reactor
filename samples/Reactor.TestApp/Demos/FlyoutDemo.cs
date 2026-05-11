@@ -54,7 +54,7 @@ class FlyoutDemo : Component
                         TextBlock($"Timer tick: {tick}").FontSize(20),
                         Border(
                             TextBlock($"Elapsed: {tick} seconds")
-                        ).CornerRadius(4).Background(SubtleFill).Padding(12, 8),
+                        ).CornerRadius(4).Background(SubtleFill).Padding(horizontal: 12, vertical: 8),
                         HStack(8,
                             Enumerable.Range(0, Math.Min(tick % 10, 8)).Select(i =>
                                 (Element)Border(Empty())

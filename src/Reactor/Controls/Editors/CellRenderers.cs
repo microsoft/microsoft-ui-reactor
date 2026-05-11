@@ -47,7 +47,7 @@ public static class CellRenderers
                     .FontSize(10))
                 .Background(on ? "#2e7d32" : "#e0e0e0")
                 .CornerRadius(8)
-                .Padding(6, 2)
+                .Padding(horizontal: 6, vertical: 2)
                 .HAlign(Microsoft.UI.Xaml.HorizontalAlignment.Left)
                 .VAlign(Microsoft.UI.Xaml.VerticalAlignment.Center);
         };

@@ -224,7 +224,12 @@ TextBlock("hi")        Heading("Title")        SubHeading("Section")        Capt
 // Strings auto-convert to TextBlockElement: VStack("A", "B") works.
 
 // Controls
-Button("Click", () => ...)               TextField(value, setValue, placeholder: "...")
+Button("Click", () => ...)                                    // positional: (label, onClick)
+Button("Save", onClick: handler).Background(Theme.Accent)     // named-arg form before modifiers
+// `onClick` is a Button ctor parameter — NOT a chained `.OnClick(...)` /
+// `.OnTapped(...)`. `.OnTapped` is a gesture event with different input
+// semantics (long-press, touch, pen) and is the wrong fix for click intent.
+TextField(value, setValue, placeholder: "...")
 CheckBox(isChecked, onChanged: setChecked, label: "label")
 ToggleSwitch(on, setOn)
 Slider(v, 0, 100, setV)
@@ -259,7 +264,8 @@ items.Select(i => Component<Card, CardProps>(new CardProps(i)).WithKey(i.Id)).To
 .CornerRadius(8)       .WithBorder(Theme.CardStroke, 1)
 .Flex(grow: 1, basis: 0)        // CSS `flex: 1` equivalent
 .WithKey("id")                  // dynamic list items — see gotcha #6
-.OnTapped((s, e) => ...)        // pointer / tap surfaces (Buttons take a click handler in their ctor)
+.OnTapped((s, e) => ...)        // tap on non-Button surfaces — Border, Image, ScrollView, …
+                                // (Button click → ctor arg, see Controls section)
 .AutomationName("Submit")       // a11y — sets AutomationProperties.Name
 .Set(native => native.MaxWidth = 400)   // native escape hatch (lambda receives the WinUI control)
 ```

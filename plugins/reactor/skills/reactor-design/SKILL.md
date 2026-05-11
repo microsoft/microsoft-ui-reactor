@@ -365,7 +365,7 @@ Both `.Margin()` and `.Padding()` accept three overloads:
 element.Margin(16)
 
 // Horizontal, Vertical
-element.Margin(24, 8)
+element.Margin(horizontal: 24, vertical: 8)
 
 // Per-side: left, top, right, bottom
 element.Margin(4, 8, 16, 24)

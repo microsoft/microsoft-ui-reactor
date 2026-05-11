@@ -170,7 +170,7 @@ class DemoApp : Component
                 TextBlock("debug").Foreground("#FFAA00"),
                 TextBlock($"tab: {currentTab}"),
                 TextBlock($"@ {DateTime.Now:HH:mm:ss.fff}")
-            ).Padding(8, 4)
+            ).Padding(horizontal: 8, vertical: 4)
         )
         .Background("#2B000000")
         .Flex(shrink: 0);

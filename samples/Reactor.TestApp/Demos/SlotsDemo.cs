@@ -25,7 +25,7 @@ class SlotsDemo : Component
             return Border(VStack(0,
                 Props.Header is not null
                     ? Border(Props.Header)
-                        .Padding(12, 8).Background(SubtleFill)
+                        .Padding(horizontal: 12, vertical: 8).Background(SubtleFill)
                         .WithBorder(ControlStroke)
                     : Empty(),
                 Props.Body is not null
@@ -33,7 +33,7 @@ class SlotsDemo : Component
                     : Empty(),
                 Props.Footer is not null
                     ? Border(Props.Footer)
-                        .Padding(8, 12).Background(LayerFill)
+                        .Padding(horizontal: 8, vertical: 12).Background(LayerFill)
                         .WithBorder(ControlStroke)
                     : Empty()
             )).CornerRadius(8).WithBorder(ControlStroke);

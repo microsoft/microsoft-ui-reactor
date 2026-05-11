@@ -230,10 +230,10 @@ internal static class DataGridScrollFixtures
                         renderItem: index =>
                         {
                             var cells = new Element[4];
-                            cells[0] = TextBlock($"{index}").Padding(8, 4).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 0);
-                            cells[1] = TextBlock($"Emp-{index:D6}").Padding(8, 4).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 1);
-                            cells[2] = TextBlock($"Dept-{index % 12}").Padding(8, 4).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 2);
-                            cells[3] = TextBlock($"Title-{index % 50}").Padding(8, 4).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 3);
+                            cells[0] = TextBlock($"{index}").Padding(horizontal: 8, vertical: 4).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 0);
+                            cells[1] = TextBlock($"Emp-{index:D6}").Padding(horizontal: 8, vertical: 4).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 1);
+                            cells[2] = TextBlock($"Dept-{index % 12}").Padding(horizontal: 8, vertical: 4).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 2);
+                            cells[3] = TextBlock($"Title-{index % 50}").Padding(horizontal: 8, vertical: 4).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 3);
                             var bg = index % 2 == 0 ? "#ffffff" : "#f9f9f9";
                             return Grid(colDefs, rowDef, cells).Background(bg);
                         },

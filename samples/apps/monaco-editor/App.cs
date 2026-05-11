@@ -230,7 +230,7 @@ class EditorApp : Component
             Flex().Flex(grow: 1),
             Caption(status).Foreground(SecondaryText)
         ) with { ColumnGap = 12 })
-        .Padding(8, 4)
+        .Padding(horizontal: 8, vertical: 4)
         .Grid(row: 3, columnSpan: columns.Length);
 
         var editor = (MonacoEditor(text, OnTextChanged, language, theme) with

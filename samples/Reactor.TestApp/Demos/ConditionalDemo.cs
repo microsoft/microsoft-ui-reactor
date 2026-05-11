@@ -104,7 +104,7 @@ class ConditionalDemo : Component
                         Enumerable.Range(1, itemCount),
                         i => Border(
                             TextBlock($"Custom item {i}")
-                        ).CornerRadius(4).Background(SubtleFill).Padding(8, 4)
+                        ).CornerRadius(4).Background(SubtleFill).Padding(horizontal: 8, vertical: 4)
                     )
                 ),
 

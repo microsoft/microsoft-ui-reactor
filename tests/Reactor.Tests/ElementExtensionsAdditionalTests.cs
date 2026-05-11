@@ -21,7 +21,7 @@ public class ElementExtensionsAdditionalTests
     [Fact]
     public void Margin_Horizontal_Vertical_Overload()
     {
-        var el = TextBlock("x").Margin(10.0, 20.0);
+        var el = TextBlock("x").Margin(horizontal: 10.0, vertical: 20.0);
         Assert.Equal(new Thickness(10, 20, 10, 20), el.Modifiers!.Margin);
     }
 

@@ -10,6 +10,12 @@
 //                       spec §8.
 //   EmitThreshold       --emit-threshold <float>; spec §8. Null → ranker
 //                       uses the mode's documented default.
+//   DisabledRules       --disable-rule <Name> (repeatable); spec §6 + tasks §3.1.
+//                       Each occurrence appends one rule Name; matching is
+//                       case-sensitive (rule Names are stable identifiers).
+//   ListRules           --list-rules (boolean); when set, the command prints
+//                       the discovered rule table and exits without running
+//                       dotnet build. tasks §3.1.
 //   Passthrough         everything after the first bare `--`, forwarded
 //                       verbatim to `dotnet build`. spec §8 passthrough.
 //   EffectiveBuildArgs  the materialised `dotnet <args...>` vector after
@@ -25,11 +31,14 @@ internal sealed record CheckArgs(
     int? SuggestThreshold,
     Mode Mode,
     double? EmitThreshold,
+    IReadOnlyList<string> DisabledRules,
+    bool ListRules,
     IReadOnlyList<string> Passthrough,
     IReadOnlyList<string> EffectiveBuildArgs)
 {
     internal static readonly CheckArgs Empty = new(
         ".", null, null, Mode.Iteration, null,
+        Array.Empty<string>(), false,
         Array.Empty<string>(), Array.Empty<string>());
 
     /// <summary>
@@ -54,6 +63,8 @@ internal sealed record CheckArgs(
         "  --quiet                    Errors only. Maximally aggressive suppression.\n" +
         "  --emit-threshold <float>   Override the ranker threshold (0.0–1.0). Default 0.6 in\n" +
         "                             iteration mode, 0.0 in final mode.\n" +
+        "  --disable-rule <Name>      Disable a Tier-3 rule by Name. Repeatable.\n" +
+        "  --list-rules               Print the rule table (Name / Provenance / Status) and exit.\n" +
         "  --                         Boundary: everything after is forwarded verbatim to\n" +
         "                             `dotnet build`. mur injects `--nologo`, `-v:m`, and\n" +
         "                             `-p:Platform={host arch}` only if the same flag is not\n" +

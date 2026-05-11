@@ -77,7 +77,7 @@ public sealed class OrdersDataGrid : Component<OrdersDataGridProps>
             HeaderCell("Placed", accent).Width(180));
 
         var rows = snapshot.Count == 0
-            ? new[] { TextBlock("No orders yet — click Add.").Foreground(subtle ?? new SolidColorBrush(Microsoft.UI.Colors.Gray)).Margin(0, 16) }
+            ? new[] { TextBlock("No orders yet — click Add.").Foreground(subtle ?? new SolidColorBrush(Microsoft.UI.Colors.Gray)).Margin(horizontal: 0, vertical: 16) }
             : snapshot.Select(o => Row(o, isSelected: o.Id == selectedId, subtle, OnRowTap: () =>
                 {
                     setSelectedId(o.Id);
@@ -125,7 +125,7 @@ public sealed class OrdersDataGrid : Component<OrdersDataGridProps>
         // out to the host ViewModel via the OnSelect callback.
         var styled = row
             .OnTapped((_, _) => OnRowTap())
-            .Padding(8, 4);
+            .Padding(horizontal: 8, vertical: 4);
         return isSelected
             ? styled.Background(new SolidColorBrush(Microsoft.UI.Colors.LightBlue))
             : styled;

@@ -163,6 +163,29 @@ public class TraceWriterTests
         }
     }
 
+    [Fact]
+    public void Rule_self_disabled_row_has_expected_schema()
+    {
+        // Spec 038 §3.1a residual: when the registry self-disables a rule
+        // because its declared target stopped resolving, the trace must
+        // capture {rule, unresolved_target} so a maintainer notices the
+        // moment a Reactor minor release breaks something. Stdout stays
+        // clean — agents never read traces, and silent rule disablement is
+        // the only behavioral effect they see.
+        using var tmp = TempFile.Create();
+        using (var w = TraceWriter.Open(tmp.Path, Path.GetFullPath("."), mode: "iteration"))
+            w.WriteRuleSelfDisabled("AlignmentShortcutRule", "Microsoft.UI.Reactor.ElementExtensions");
+
+        var line = File.ReadAllLines(tmp.Path).Single();
+        using var doc = JsonDocument.Parse(line);
+        Assert.Equal("rule_self_disabled", doc.RootElement.GetProperty("kind").GetString());
+        Assert.Equal("AlignmentShortcutRule", doc.RootElement.GetProperty("rule").GetString());
+        Assert.Equal("Microsoft.UI.Reactor.ElementExtensions",
+            doc.RootElement.GetProperty("unresolved_target").GetString());
+        Assert.Equal("iteration", doc.RootElement.GetProperty("mode").GetString());
+        Assert.True(line.Length <= 2048, $"trace row was {line.Length} bytes — exceeds 2 KB cap.");
+    }
+
     sealed class TempFile : IDisposable
     {
         public string Path { get; }

@@ -258,4 +258,65 @@ public class ArgsParserTests
         Assert.Contains("--emit-threshold", help);
         Assert.Contains("-- ", help); // the passthrough boundary marker appears in the synopsis
     }
+
+    // -------- Phase 3 rule flags (spec §3.1) --------
+
+    [Fact]
+    public void Disable_rule_round_trips_through_parser()
+    {
+        Assert.True(ArgsParser.TryParse(new[] { "--disable-rule", "FooRule" }, out var p, out _));
+        Assert.Equal(new[] { "FooRule" }, p.DisabledRules);
+    }
+
+    [Fact]
+    public void Disable_rule_is_repeatable_and_preserves_order()
+    {
+        Assert.True(ArgsParser.TryParse(
+            new[] { "--disable-rule", "FooRule", "--disable-rule", "BarRule" },
+            out var p, out _));
+        Assert.Equal(new[] { "FooRule", "BarRule" }, p.DisabledRules);
+    }
+
+    [Fact]
+    public void Disable_rule_without_name_errors()
+    {
+        Assert.False(ArgsParser.TryParse(new[] { "--disable-rule" }, out _, out var err));
+        Assert.NotNull(err);
+        Assert.Contains("--disable-rule", err);
+    }
+
+    [Fact]
+    public void Disable_rule_rejects_flag_shaped_name()
+    {
+        // A name starting with `-` is almost certainly the next flag, not a
+        // rule name; reject so a typo like `--disable-rule --quiet` doesn't
+        // silently consume the next flag as the rule name.
+        Assert.False(ArgsParser.TryParse(
+            new[] { "--disable-rule", "--quiet" }, out _, out var err));
+        Assert.NotNull(err);
+        Assert.Contains("--disable-rule", err);
+    }
+
+    [Fact]
+    public void List_rules_round_trips_through_parser()
+    {
+        Assert.True(ArgsParser.TryParse(new[] { "--list-rules" }, out var p, out _));
+        Assert.True(p.ListRules);
+    }
+
+    [Fact]
+    public void Default_args_have_no_disabled_rules_and_list_rules_off()
+    {
+        Assert.True(ArgsParser.TryParse(Array.Empty<string>(), out var p, out _));
+        Assert.Empty(p.DisabledRules);
+        Assert.False(p.ListRules);
+    }
+
+    [Fact]
+    public void Help_text_mentions_phase3_rule_flags()
+    {
+        var help = CheckArgs.HelpText;
+        Assert.Contains("--disable-rule", help);
+        Assert.Contains("--list-rules", help);
+    }
 }

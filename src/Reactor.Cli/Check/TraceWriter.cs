@@ -82,6 +82,33 @@ internal sealed class TraceWriter : IDisposable
         writer.WriteLine(json);
     }
 
+    /// <summary>
+    /// Spec 038 §3.1a residual — structured warning when the registry self-
+    /// disables a rule because one of its declared targets did not resolve
+    /// against the live compilation. The signal is for maintainers: a Reactor
+    /// minor release that renames or removes a rule's target should be loud
+    /// in trace logs the first time the agent runs `mur check` against the
+    /// new package, not silent. Schema:
+    ///
+    ///   { ts, kind: "rule_self_disabled", rule, unresolved_target, mode }
+    ///
+    /// Stdout deliberately stays clean — agents don't read trace files, but
+    /// the rule simply not firing is the only behavioral effect they see, so
+    /// adding noise to their channel is counterproductive. Maintainer
+    /// dashboards and post-run mining find this row instead.
+    /// </summary>
+    public void WriteRuleSelfDisabled(string ruleName, string unresolvedTarget)
+    {
+        var row = new RuleSelfDisabledRow(
+            ts: DateTime.UtcNow.ToString("o"),
+            kind: "rule_self_disabled",
+            rule: ruleName,
+            unresolved_target: unresolvedTarget,
+            mode: mode);
+        var json = JsonSerializer.Serialize(row, JsonOpts);
+        writer.WriteLine(json);
+    }
+
     static readonly JsonSerializerOptions JsonOpts = new()
     {
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
@@ -152,5 +179,12 @@ internal sealed class TraceWriter : IDisposable
         string ts,
         string kind,
         IReadOnlyList<string> argv,
+        string mode);
+
+    internal sealed record RuleSelfDisabledRow(
+        string ts,
+        string kind,
+        string rule,
+        string unresolved_target,
         string mode);
 }

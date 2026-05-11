@@ -348,9 +348,9 @@ T.LayoutAnimation<T>() → T
 T.LayoutAnimation<T>(LayoutAnimationConfig config) → T
 T.LayoutAnimation<T>(TimeSpan duration) → T
 T.LiveRegion<T>(AutomationLiveSetting mode = AutomationLiveSetting.Polite) → T
-T.Margin<T>(double horizontal, double vertical) → T
-T.Margin<T>(double left, double top, double right, double bottom) → T
+T.Margin<T>(double left = 0, double top = 0, double right = 0, double bottom = 0) → T
 T.Margin<T>(double uniform) → T
+T.Margin<T>(double vertical, double horizontal) → T
 T.MarginInlineEnd<T>(double value) → T
 T.MarginInlineStart<T>(double value) → T
 T.MaxHeight<T>(double h) → T
@@ -397,9 +397,9 @@ T.OnTapped<T>(Action<object, TappedRoutedEventArgs> handler) → T
 T.OnWarning<T>(Func<T, T> configure) → T
 T.Opacity<T>(double opacity) → T
 T.OpacityTransition<T>(TimeSpan? duration = null) → T
-T.Padding<T>(double horizontal, double vertical) → T
-T.Padding<T>(double left, double top, double right, double bottom) → T
+T.Padding<T>(double left = 0, double top = 0, double right = 0, double bottom = 0) → T
 T.Padding<T>(double uniform) → T
+T.Padding<T>(double vertical, double horizontal) → T
 T.PaddingInlineEnd<T>(double value) → T
 T.PaddingInlineStart<T>(double value) → T
 T.PositionInSet<T>(int position, int size) → T

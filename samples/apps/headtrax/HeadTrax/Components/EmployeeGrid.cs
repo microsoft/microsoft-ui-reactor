@@ -92,7 +92,7 @@ internal class EmployeeGrid : Component<EmployeeGridProps>
                 DetailField("Cost Center", Get("cost_center"))
             ) with { RowGap = 2 }).Flex(grow: 1)
 
-        ) with { ColumnGap = 24 }).Padding(8, 4);
+        ) with { ColumnGap = 24 }).Padding(horizontal: 8, vertical: 4);
     }
 
     private static Element DetailField(string label, string value)

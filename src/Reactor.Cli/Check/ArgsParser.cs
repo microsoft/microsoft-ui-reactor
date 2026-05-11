@@ -34,6 +34,8 @@ internal static class ArgsParser
         Mode mode = Mode.Iteration;
         double? emitThreshold = null;
         bool modeFlagSeen = false;
+        List<string>? disabledRules = null;
+        bool listRules = false;
 
         for (int i = 0; i < left.Length; i++)
         {
@@ -81,6 +83,25 @@ internal static class ArgsParser
                     }
                     emitThreshold = f;
                     break;
+                case "--disable-rule":
+                    if (i + 1 >= left.Length)
+                    {
+                        parsed = CheckArgs.Empty;
+                        error = "--disable-rule requires a rule Name argument.";
+                        return false;
+                    }
+                    var ruleName = left[++i];
+                    if (string.IsNullOrWhiteSpace(ruleName) || ruleName.StartsWith('-'))
+                    {
+                        parsed = CheckArgs.Empty;
+                        error = $"--disable-rule expects a non-empty rule Name, got '{ruleName}'.";
+                        return false;
+                    }
+                    (disabledRules ??= new List<string>()).Add(ruleName);
+                    break;
+                case "--list-rules":
+                    listRules = true;
+                    break;
                 case "--strict":
                 case "--final":
                 case "--quiet":
@@ -127,6 +148,8 @@ internal static class ArgsParser
             suggestThreshold,
             mode,
             emitThreshold,
+            (IReadOnlyList<string>?)disabledRules ?? Array.Empty<string>(),
+            listRules,
             passthrough,
             effective);
         error = null;

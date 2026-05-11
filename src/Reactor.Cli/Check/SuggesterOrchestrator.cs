@@ -17,6 +17,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using Microsoft.UI.Reactor.Cli.Check.Rules;
 using Microsoft.UI.Reactor.Cli.Check.Suggesters;
 
 namespace Microsoft.UI.Reactor.Cli.Check;
@@ -32,11 +33,22 @@ internal sealed class SuggesterOrchestrator
 
     readonly CompilationLoader _loader;
     readonly ISuggester[] _suggesters;
+    readonly RuleRegistry? _rules;
+    readonly ISet<string>? _disabledRules;
+    readonly Action<string, string>? _onRuleSelfDisabled;
 
-    public SuggesterOrchestrator(CompilationLoader? loader = null, ISuggester[]? suggesters = null)
+    public SuggesterOrchestrator(
+        CompilationLoader? loader = null,
+        ISuggester[]? suggesters = null,
+        RuleRegistry? rules = null,
+        ISet<string>? disabledRules = null,
+        Action<string, string>? onRuleSelfDisabled = null)
     {
         _loader = loader ?? CompilationLoader.Instance;
         _suggesters = suggesters ?? new ISuggester[] { new SymbolSuggester() };
+        _rules = rules;
+        _disabledRules = disabledRules;
+        _onRuleSelfDisabled = onRuleSelfDisabled;
     }
 
     /// <summary>
@@ -45,7 +57,7 @@ internal sealed class SuggesterOrchestrator
     /// </summary>
     public Suggestion? Suggest(CheckCommand.Diag diag, string projectPath)
     {
-        if (!SupportedCodes.Contains(diag.Code)) return null;
+        if (!SupportedCodes.Contains(diag.Code) && !RulesCoverCode(diag.Code)) return null;
 
         CSharpCompilation compilation;
         try { compilation = _loader.Load(projectPath); }
@@ -61,7 +73,9 @@ internal sealed class SuggesterOrchestrator
     /// </summary>
     internal Suggestion? SuggestAgainst(CheckCommand.Diag diag, CSharpCompilation compilation)
     {
-        if (!SupportedCodes.Contains(diag.Code)) return null;
+        var tier2Applies = SupportedCodes.Contains(diag.Code);
+        var rulesApply = RulesCoverCode(diag.Code);
+        if (!tier2Applies && !rulesApply) return null;
 
         // Find the syntax tree that matches the diagnostic's file.
         var tree = FindTreeFor(compilation, diag.File);
@@ -77,26 +91,61 @@ internal sealed class SuggesterOrchestrator
         var sm = compilation.GetSemanticModel(tree);
         var receiver = ResolveReceiver(sm, node);
 
-        if (!IsReactorTouching(diag.Code, receiver)) return null;
-
-        var factories = FactoryIndex.Build(compilation);
         var rosDiag = SyntheticDiagnostic(diag);
-        var ctx = new SuggesterContext(compilation, rosDiag, node, receiver, factories);
 
-        // ISuggester.Suggest applies the per-code emit threshold from
-        // Thresholds.For(code) internally; a non-silent result here has
-        // already cleared the gate.
-        Suggestion? best = null;
-        foreach (var s in _suggesters)
+        Suggestion? tier2Best = null;
+        if (tier2Applies && IsReactorTouching(diag.Code, receiver))
         {
-            SuggestionResult r;
-            try { r = s.Suggest(ctx); }
-            catch { continue; }
-            if (!r.HasSuggestion) continue;
-            if (best is null || r.Confidence > best.Confidence)
-                best = new Suggestion(r.Text!, r.Confidence, r.Evidence, s.Name);
+            var factories = FactoryIndex.Build(compilation);
+            var ctx = new SuggesterContext(compilation, rosDiag, node, receiver, factories);
+
+            // ISuggester.Suggest applies the per-code emit threshold from
+            // Thresholds.For(code) internally; a non-silent result here has
+            // already cleared the gate.
+            foreach (var s in _suggesters)
+            {
+                SuggestionResult r;
+                try { r = s.Suggest(ctx); }
+                catch { continue; }
+                if (!r.HasSuggestion) continue;
+                if (tier2Best is null || r.Confidence > tier2Best.Confidence)
+                    tier2Best = new Suggestion(r.Text!, r.Confidence, r.Evidence, s.Name);
+            }
         }
-        return best;
+
+        if (rulesApply && _rules is not null)
+        {
+            var resolver = RuleSymbolResolver.For(compilation);
+            var ruleCtx = new RuleContext(node, rosDiag, receiver, sm, compilation, resolver);
+            var hit = _rules.BestMatch(in ruleCtx, _disabledRules, _onRuleSelfDisabled);
+            if (hit is not null)
+            {
+                // Spec 038 §6: rule wins over Tier-2 fuzzy match. The
+                // suggestion's Evidence is the rule's evidence string suffixed
+                // with the provenance tag so a maintainer can grep
+                // `cluster:C0019` back to its motivating data.
+                var rule = hit.Value.Rule;
+                var s = hit.Value.Suggestion;
+                var evidence = string.IsNullOrEmpty(s.Evidence)
+                    ? rule.Provenance
+                    : $"{s.Evidence} ({rule.Provenance})";
+                return new Suggestion(s.Text!, s.Confidence, evidence, rule.Name);
+            }
+        }
+
+        return tier2Best;
+    }
+
+    bool RulesCoverCode(string code)
+    {
+        if (_rules is null) return false;
+        foreach (var rule in _rules.All)
+        {
+            if (rule.DiagnosticCodes.Count == 0) return true;
+            foreach (var c in rule.DiagnosticCodes)
+                if (string.Equals(c, code, StringComparison.Ordinal)) return true;
+        }
+        return false;
     }
 
     static SyntaxTree? FindTreeFor(CSharpCompilation c, string file)

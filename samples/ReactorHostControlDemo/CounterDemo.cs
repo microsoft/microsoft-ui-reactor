@@ -34,7 +34,7 @@ public class CounterDemo : Component
             TextBlock($"{count}")
                 .FontSize(48).SemiBold()
                 .HAlign(HorizontalAlignment.Center)
-                .Margin(0, 8),
+                .Margin(horizontal: 0, vertical: 8),
 
             HStack(8,
                 Button("-", () => setCount(count - (int)step)).Width(60)
@@ -45,7 +45,7 @@ public class CounterDemo : Component
             ).HAlign(HorizontalAlignment.Center),
 
             Slider(step, min: 1, max: 10, onChanged: setStep)
-                .Margin(16, 8),
+                .Margin(horizontal: 16, vertical: 8),
 
             TextBlock($"Step size: {(int)step}").HAlign(HorizontalAlignment.Center),
 

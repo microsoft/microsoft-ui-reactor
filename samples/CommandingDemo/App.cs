@@ -96,7 +96,7 @@ class StandardCommandsDemo : Component
         });
 
         return VStack(8,
-            SubHeading("Standard Commands — define once, use everywhere").Margin(16, 8),
+            SubHeading("Standard Commands — define once, use everywhere").Margin(horizontal: 16, vertical: 8),
 
             CommandBar(primaryCommands: [
                 AppBarButton(cut),
@@ -129,15 +129,15 @@ class StandardCommandsDemo : Component
                 },
                 SelectionStart = pendingSelection?.Start,
                 SelectionLength = pendingSelection?.Length,
-            }).Margin(16, 8),
+            }).Margin(horizontal: 16, vertical: 8),
 
             // Clear the pending selection once the TextField has had a chance
             // to apply it. Runs after render; no-op when nothing pending.
             PendingSelectionConsumer(pendingSelection, setPendingSelection),
 
-            Caption($"Clipboard: \"{clipboard}\"").Foreground(SecondaryText).Margin(16, 4),
-            Caption($"Selected: \"{selectedText}\"").Foreground(SecondaryText).Margin(16, 4),
-            Caption($"Has selection: {hasSelection}").Foreground(SecondaryText).Margin(16, 4));
+            Caption($"Clipboard: \"{clipboard}\"").Foreground(SecondaryText).Margin(horizontal: 16, vertical: 4),
+            Caption($"Selected: \"{selectedText}\"").Foreground(SecondaryText).Margin(horizontal: 16, vertical: 4),
+            Caption($"Has selection: {hasSelection}").Foreground(SecondaryText).Margin(horizontal: 16, vertical: 4));
     }
 
     static Element PendingSelectionConsumer(
@@ -177,17 +177,17 @@ class AsyncCommandDemo : Component
         }));
 
         return VStack(8,
-            SubHeading("Async Commands — UseCommand auto-tracks IsExecuting").Margin(16, 8),
+            SubHeading("Async Commands — UseCommand auto-tracks IsExecuting").Margin(horizontal: 16, vertical: 8),
 
             HStack(8,
-                Button(saveCmd).Margin(16, 0),
+                Button(saveCmd).Margin(horizontal: 16, vertical: 0),
                 saveCmd.IsExecuting ? ProgressRing().Size(20, 20) : Empty()),
 
-            TextBlock($"Status: {lastStatus}").Margin(16, 4),
-            Caption($"IsExecuting: {saveCmd.IsExecuting}").Foreground(SecondaryText).Margin(16, 4),
-            Caption($"IsEnabled: {saveCmd.IsEnabled}").Foreground(SecondaryText).Margin(16, 4),
+            TextBlock($"Status: {lastStatus}").Margin(horizontal: 16, vertical: 4),
+            Caption($"IsExecuting: {saveCmd.IsExecuting}").Foreground(SecondaryText).Margin(horizontal: 16, vertical: 4),
+            Caption($"IsEnabled: {saveCmd.IsEnabled}").Foreground(SecondaryText).Margin(horizontal: 16, vertical: 4),
             Caption("Try clicking Save — the button auto-disables during the 2-second operation.")
-                .Foreground(SecondaryText).Margin(16, 8));
+                .Foreground(SecondaryText).Margin(horizontal: 16, vertical: 8));
     }
 }
 
@@ -217,7 +217,7 @@ class ParameterizedCommandDemo : Component
         };
 
         return VStack(8,
-            SubHeading("Parameterized Commands — Command<T> with per-item binding").Margin(16, 8),
+            SubHeading("Parameterized Commands — Command<T> with per-item binding").Margin(horizontal: 16, vertical: 8),
             Caption("Right-click each row to open the context menu — MenuItem<T> binds the item as the command parameter.")
                 .Foreground(SecondaryText).Margin(16, 0, 16, 8),
 
@@ -226,11 +226,11 @@ class ParameterizedCommandDemo : Component
                     TextBlock(item.Name).Width(120),
                     Button("Delete", () => deleteCmd.Execute?.Invoke(item))
                         .AutomationName($"Delete {item.Name}")
-                ).Margin(16, 2)
+                ).Margin(horizontal: 16, vertical: 2)
                  .WithContextFlyout(MenuItems(MenuItem(deleteCmd, item)))
                  .WithKey(item.Id)),
 
-            Caption($"Items remaining: {items.Length}").Foreground(SecondaryText).Margin(16, 8));
+            Caption($"Items remaining: {items.Length}").Foreground(SecondaryText).Margin(horizontal: 16, vertical: 8));
     }
 }
 
@@ -247,7 +247,7 @@ class CommandHostDemo : Component
         var redo = StandardCommand.Redo(() => setLog($"[{DateTime.Now:HH:mm:ss}] Redo triggered via Ctrl+Y"));
 
         return VStack(8,
-            SubHeading("CommandHost — keyboard accelerators scoped to a subtree").Margin(16, 8),
+            SubHeading("CommandHost — keyboard accelerators scoped to a subtree").Margin(horizontal: 16, vertical: 8),
 
             CommandHost([save, undo, redo],
                 VStack(8,
@@ -258,13 +258,13 @@ class CommandHostDemo : Component
                 .Padding(16)
                 .Background(SystemAttentionBackground)
                 .CornerRadius(8)
-            ).Margin(16, 0),
+            ).Margin(horizontal: 16, vertical: 0),
 
             VStack(8,
                 TextBlock("OUTSIDE CommandHost scope — accelerators do NOT fire here:")
                     .Set(tb => tb.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold),
                 TextField("", _ => { }, placeholder: "Click here and press Ctrl+S — nothing should happen...")
-            ).Padding(16).Margin(16, 0).Background(SystemCriticalBackground).CornerRadius(8));
+            ).Padding(16).Margin(horizontal: 16, vertical: 0).Background(SystemCriticalBackground).CornerRadius(8));
     }
 }
 
@@ -279,7 +279,7 @@ class PerSiteOverrideDemo : Component
         var deleteCmd = StandardCommand.Delete(() => setLastAction("Deleted!"));
 
         return VStack(8,
-            SubHeading("Per-Site Overrides — same command, different presentation with `with`").Margin(16, 8),
+            SubHeading("Per-Site Overrides — same command, different presentation with `with`").Margin(horizontal: 16, vertical: 8),
 
             HStack(16,
                 VStack(4,
@@ -292,9 +292,9 @@ class PerSiteOverrideDemo : Component
                         Menu("Actions",
                             MenuItem(deleteCmd with { Label = "Remove selected item" }),
                             MenuItem(deleteCmd with { Label = "Erase permanently", Icon = new SymbolIconData("Clear") }))))
-            ).Margin(16, 0),
+            ).Margin(horizontal: 16, vertical: 0),
 
-            TextBlock($"Last action: {lastAction}").Margin(16, 8));
+            TextBlock($"Last action: {lastAction}").Margin(horizontal: 16, vertical: 8));
     }
 }
 
@@ -354,7 +354,7 @@ class ContextSharingDemo : Component
         var commands = new EditorCommands(save, undo, redo);
 
         return VStack(8,
-            SubHeading("Context Sharing — parent provides, children consume").Margin(16, 8),
+            SubHeading("Context Sharing — parent provides, children consume").Margin(horizontal: 16, vertical: 8),
 
             VStack(8,
                 Component<ToolbarComponent>(),
@@ -366,13 +366,13 @@ class ContextSharingDemo : Component
                         updateHistory(h => [.. h, newText]);
                     })),
                 saveStatus.Length > 0
-                    ? Caption(saveStatus).Foreground(SecondaryText).Margin(0, 4)
+                    ? Caption(saveStatus).Foreground(SecondaryText).Margin(horizontal: 0, vertical: 4)
                     : Empty()
-            ).Margin(16, 0).Provide(EditorCommandsContext.Instance, commands),
+            ).Margin(horizontal: 16, vertical: 0).Provide(EditorCommandsContext.Instance, commands),
 
             Caption("The parent component owns the commands and provides them via Context.")
-                .Foreground(SecondaryText).Margin(16, 8),
+                .Foreground(SecondaryText).Margin(horizontal: 16, vertical: 8),
             Caption("The toolbar consumes them via UseContext — no prop drilling.")
-                .Foreground(SecondaryText).Margin(16, 4));
+                .Foreground(SecondaryText).Margin(horizontal: 16, vertical: 4));
     }
 }

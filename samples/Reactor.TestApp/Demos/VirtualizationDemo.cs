@@ -40,7 +40,7 @@ class VirtualizationDemo : Component
                             Caption(item.Subtitle).Foreground(SecondaryText)
                         )
                     )
-                ).Padding(12, 8).Margin(0, 0, 0, 1)
+                ).Padding(horizontal: 12, vertical: 8).Margin(0, 0, 0, 1)
             ),
 
             "ListView" => ListView(
@@ -54,7 +54,7 @@ class VirtualizationDemo : Component
                             Caption(item.Subtitle).Foreground(SecondaryText)
                         )
                     )
-                ).Padding(12, 8)).ToArray()
+                ).Padding(horizontal: 12, vertical: 8)).ToArray()
             )
             .Set(lv => { lv.Height = 500; lv.SelectionMode = Microsoft.UI.Xaml.Controls.ListViewSelectionMode.Single; }),
 

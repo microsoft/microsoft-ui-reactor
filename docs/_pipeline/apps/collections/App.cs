@@ -167,7 +167,7 @@ class ForEachDemo : Component
             HStack(8,
                 ForEach(colors, ((string Name, string Hex) color) =>
                     TextBlock(color.Name)
-                        .Padding(8, 16)
+                        .Padding(horizontal: 8, vertical: 16)
                         .Background(color.Hex)
                         .CornerRadius(4)
                         .WithKey(color.Name)

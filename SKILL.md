@@ -437,7 +437,7 @@ class App : Component
                     Heading("My App").VAlign(VerticalAlignment.Center),
                     NavBtn("Home", page, setPage),
                     NavBtn("Settings", page, setPage))
-            ).Background("#f0f0f0").Padding(24, 12).Grid(row: 0),
+            ).Background("#f0f0f0").Padding(horizontal: 24, vertical: 12).Grid(row: 0),
 
             Border(page switch
             {

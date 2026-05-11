@@ -22,7 +22,7 @@ class ThemeTokensExample : Component
             TextBlock("Accent Text").Foreground(Theme.AccentText).SemiBold(),
             TextBlock("On Accent Background")
                 .Foreground("#FFFFFF")
-                .Padding(8, 4)
+                .Padding(horizontal: 8, vertical: 4)
                 .Background(Theme.Accent)
                 .CornerRadius(4)
         ).Padding(24);
@@ -126,7 +126,7 @@ class SignalColorsExample : Component
         TextBlock(label)
             .FontSize(12).SemiBold()
             .Foreground(color)
-            .Padding(8, 4)
+            .Padding(horizontal: 8, vertical: 4)
             .Background(Theme.SubtleFill)
             .CornerRadius(4);
 }

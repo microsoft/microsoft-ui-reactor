@@ -399,15 +399,15 @@ internal static class DataGridEditFixtures
                 // Middle child flips between Text and TextField based on `editing`.
                 var nameCell = editing
                     ? (Element)TextField("Alice", _ => { }).Padding(2)
-                    : (Element)TextBlock("Alice").Padding(8, 4);
+                    : (Element)TextBlock("Alice").Padding(horizontal: 8, vertical: 4);
 
                 return Grid(
                     new[] { GridSize.Px(60), GridSize.Px(140), GridSize.Px(120), GridSize.Px(100) },
                     new[] { GridSize.Star() },
-                    TextBlock("1").Padding(8, 4).Grid(row: 0, column: 0),
+                    TextBlock("1").Padding(horizontal: 8, vertical: 4).Grid(row: 0, column: 0),
                     nameCell.Grid(row: 0, column: 1),
-                    TextBlock("Widgets").Padding(8, 4).Grid(row: 0, column: 2),
-                    TextBlock("$10.00").Padding(8, 4).Grid(row: 0, column: 3)
+                    TextBlock("Widgets").Padding(horizontal: 8, vertical: 4).Grid(row: 0, column: 2),
+                    TextBlock("$10.00").Padding(horizontal: 8, vertical: 4).Grid(row: 0, column: 3)
                 );
             });
 

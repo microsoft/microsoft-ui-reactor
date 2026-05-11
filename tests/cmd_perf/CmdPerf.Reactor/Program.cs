@@ -121,7 +121,7 @@ class CmdPerfApp : Component
 
             // Control panel
             TextBlock("Enable Flags").Bold().Margin(12, 8, 12, 4),
-            HStack(4, flagCheckboxes).Margin(12, 0),
+            HStack(4, flagCheckboxes).Margin(horizontal: 12, vertical: 0),
 
             // Auto toggle button
             HStack(8,
@@ -150,17 +150,17 @@ class CmdPerfApp : Component
                         timer.Start();
                         autoTimerRef.Current = timer;
                     }
-                }).Margin(12, 8)
+                }).Margin(horizontal: 12, vertical: 8)
             ),
 
             // Status bar
             TextBlock($"Commands: {CommandSet.All.Length} | Enabled: {enabledCount} | " +
                  $"Last Toggle: {perf.LastToggleMs:F2} ms | Mount: {perf.MountTimeMs:F2} ms | " +
                  $"Memory: {memMB:F1} MB")
-                .FontSize(12).Margin(12, 4),
+                .FontSize(12).Margin(horizontal: 12, vertical: 4),
 
             // Last executed command
-            TextBlock($"Last command: {lastCmd}").Margin(12, 4)
+            TextBlock($"Last command: {lastCmd}").Margin(horizontal: 12, vertical: 4)
         );
     }
 

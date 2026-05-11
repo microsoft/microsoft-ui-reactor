@@ -200,7 +200,7 @@ Border(
 element.Margin(16)
 
 // Horizontal, Vertical
-element.Margin(24, 8)
+element.Margin(horizontal: 24, vertical: 8)
 
 // Per-side: left, top, right, bottom
 element.Margin(4, 8, 16, 24)");
@@ -248,7 +248,7 @@ element.Margin(4, 8, 16, 24)");
 Border(child).Padding(16)
 
 // Horizontal, Vertical
-Border(child).Padding(24, 8)
+Border(child).Padding(horizontal: 24, vertical: 8)
 
 // Per-side: left, top, right, bottom
 Border(child).Padding(4, 8, 16, 24)");

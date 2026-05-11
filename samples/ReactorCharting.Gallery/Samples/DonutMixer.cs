@@ -100,7 +100,7 @@ public sealed class DonutMixerSample : GallerySample
                 VStack(10,
                     SubHeading("Adjust Wedges"),
                     VStack(6, sliders),
-                    SubHeading("Inner Radius").Margin(12, 0),
+                    SubHeading("Inner Radius").Margin(horizontal: 12, vertical: 0),
                     HStack(8,
                         Slider(innerR, 0, 130, setInnerR).StepFrequency(5).Width(180),
                         TextBlock($"{innerR:F0}px") with { FontSize = 11 }

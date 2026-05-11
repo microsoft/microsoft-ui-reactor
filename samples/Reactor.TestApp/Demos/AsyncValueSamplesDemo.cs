@@ -69,7 +69,7 @@ class AsyncValueSamplesDemo : Component
                     AsyncValueScenario.DataSourceAdapter => Component<DataSourceAdapterScenario>(),
                     _ => TextBlock("Select a scenario"),
                 }
-            ).Padding(16).CornerRadius(8).Background(SubtleFill).Margin(0, 8)
+            ).Padding(16).CornerRadius(8).Background(SubtleFill).Margin(horizontal: 0, vertical: 8)
         ));
     }
 }
