@@ -320,8 +320,5 @@
     <Platform Solution="*|x64" Project="x64" />
   </Project>
   <Project Path="src/Reactor.Localization.Generator/Reactor.Localization.Generator.csproj" />
-  <Project Path="src/Reactor/Reactor.csproj">
-    <Platform Solution="*|ARM64" Project="ARM64" />
-    <Platform Solution="*|x64" Project="x64" />
-  </Project>
+  <Project Path="src/Reactor/Reactor.csproj" />
 </Solution>
