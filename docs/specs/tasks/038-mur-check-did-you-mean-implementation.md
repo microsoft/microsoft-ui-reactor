@@ -8,6 +8,14 @@ Originating issues: [#226 §5](https://github.com/microsoft/microsoft-ui-reactor
 
 ---
 
+## Framing (read this first)
+
+This work is **load-bearing**, not a stopgap. See spec §1 "Why this is load-bearing, not a stopgap" for the full argument; the short form is (a) Reactor is experimental and will continue to churn faster than base models retrain, and (b) WinUI 3 is weakly represented in training data and confused with WPF / Silverlight / WinUI 1 / WinUI 2, so models produce plausibly-WinUI-shaped code that doesn't compile against Reactor's actual surface. The build-error-correction loop is the dominant feedback channel through which agents reconcile prior-framework priors with Reactor's reality, and that condition holds for an expected 1–3 year horizon. Investment level and rule-shipping cadence in this doc are sized accordingly.
+
+The sunset criterion (spec §13) is explicit so "load-bearing" doesn't drift into "forever": decommission when Reactor's public surface has been stable for ≥ 12 months AND base-model first-build-OK on a held-out Reactor-touching eval exceeds 90 % on ≥ 2 vendor-distinct models without `mur check` assistance.
+
+---
+
 ## Status snapshot (2026-05-11)
 
 - **Phase 0 (instrumentation):** ✓ landed on `feat/038-mur-check`.
@@ -430,54 +438,94 @@ Goal: ship the `--` passthrough, the `--strict` / `--final` / `--quiet` mode fla
 
 ---
 
-## Phase 3: Tier 3 — induced pattern rules
+## Phase 3: Tier 3 — induced and authored pattern rules
 
-Goal: take the human-reviewed `patterns.json` clusters from Data Checkpoint C, author one rule per top cluster, ship in batches of ~3 rules per PR until ~10–15 rules are live.
+Goal: ship a working ruleset across two rule classes (spec §6). Cadence: ~3 rules per PR; ship in batches until ~10–15 rules are live.
 
 **Blocks on:** Data Checkpoint C, Phase 2 merge to `main`. Every PR also blocks on the **Human Validation Gate** at the top of this document.
 
+**Two rule classes** (spec §6 split):
+
+- **Class A — induced.** Sourced from `patterns.json` clusters. Justification bar: cluster `frequency ≥ 0.05` AND `count ≥ 10` AND cross-agent reproducibility.
+- **Class B — vocabulary-translation.** Deliberately authored from a curated WPF / Silverlight / WinUI 1 / WinUI 2 / WinUI 3 → Reactor name table. **Frequency bar is waived** (spec §6); the justification is structural — the prior-framework citation in public docs — not corpus-empirical. Cross-agent / fixtures / reviewer bars (#2–5 of the Validation Gate) still apply.
+
+### 3.0 Pre-Phase-3 prerequisites
+
+Land before any rule PR opens:
+
+- [ ] **Name a corpus-pipeline owner.** Spec §11 row "Data pipeline … lacks an SLA or named owner": for load-bearing operation, "harness team" is not a sufficient owner. Single point-of-contact, documented in this file once decided.
+- [ ] **Corpus refresh cadence pegged to Reactor minor-version releases.** Each Reactor minor cuts a new corpus before Phase-3 rules referencing that minor's APIs can ship.
+- [ ] **Curated `WinUI-to-Reactor.csv` table** (spec §14 #9). Single in-repo artifact at `docs/specs/tasks/038-vocab-table.csv`; columns: `source_framework, source_name, target_reactor_name, source_doc_url, notes`. Owned by Reactor team; reviewed independently of rule PRs. Lands in the first Class-B rule PR.
+
 ### 3.1 Rule infrastructure
 
-- [ ] Create `src/Reactor.Cli/Check/Rules/IRulePattern.cs`. Define `interface IRulePattern { string Name { get; } string SeedClusterId { get; } RuleSuggestion? TryMatch(in RuleContext ctx); }`.
-- [ ] Create `record RuleContext(SyntaxNode Node, Diagnostic Diagnostic, ITypeSymbol? Receiver, SemanticModel SemanticModel)`.
+- [ ] Create `src/Reactor.Cli/Check/Rules/IRulePattern.cs`. Define `interface IRulePattern { string Name { get; } string Provenance { get; } RuleSuggestion? TryMatch(in RuleContext ctx); }`. `Provenance` carries `"cluster:<id>"` for Class A or `"vocab:<framework>"` for Class B.
+- [ ] Create `record RuleContext(SyntaxNode Node, Diagnostic Diagnostic, ITypeSymbol? Receiver, SemanticModel SemanticModel, CSharpCompilation Compilation)`. Compilation must be available so rules can resolve target `ISymbol`s without re-walking the registry.
 - [ ] Create `record RuleSuggestion(string Text, double Confidence, string Evidence)`.
 - [ ] `RuleRegistry` discovers rules by reflection on assembly load and exposes `GetMatches(RuleContext)` returning all candidates above their per-rule confidence threshold.
-- [ ] CLI: `mur check --disable-rule <Name>` round-trips through `--help`; rules listed in `--list-rules` with status (enabled/disabled, accept-rate-if-known).
+- [ ] CLI: `mur check --disable-rule <Name>` round-trips through `--help`; rules listed in `--list-rules` with status (enabled / disabled / self-disabled-due-to-unresolved-target, accept-rate-if-known).
 - [ ] Unit test: registry discovers fixture rules placed under `Rules/`; `--disable-rule` excludes them.
+
+### 3.1a Symbol-binding contract (spec §6, §14 #8 resolved)
+
+Every rule binds target types and members through Roslyn `ISymbol` references resolved against the live `Compilation`, **not** by string-matching `MemberAccessExpressionSyntax.Name.ValueText`.
+
+- [ ] Define a small helper `RuleSymbolResolver` exposing `INamedTypeSymbol? ResolveType(string fullyQualifiedName)` and `IMethodSymbol? ResolveMethod(INamedTypeSymbol type, string name)` against `Compilation`. Cache per-Compilation. All rules go through it.
+- [ ] When a rule's `TryMatch` cannot resolve its target symbol (Reactor renamed it / removed it), the rule short-circuits to `null` and emits a structured warning to the trace channel (not stdout) the first time per invocation. The rule appears as `self-disabled (unresolved: <target>)` in `--list-rules`.
+- [ ] **CI gate: rule-target resolution test.** A test that instantiates every registered rule against a live Reactor `Compilation` and asserts each rule's declared target(s) resolve. Add to `tests/Reactor.Tests/CheckCommandTests/Rules/RuleTargetResolutionTests.cs`. Fails the build when a rule's target symbol evaporates. Lands with the first Class-B rule.
+- [ ] **Performance bound.** Symbol-resolution adds ≤ 0.5 ms median per rule per diagnostic. Captured in the perf-trait suite.
 
 ### 3.2 Rule-batch PRs (ongoing — open one per ~3 rules)
 
-For each rule in a batch, the author **must** complete all six bars of the Human Validation Gate before merge. The list below is a template; clone for each new rule.
+For each rule in a batch, the author **must** complete all six bars of the Human Validation Gate before merge — with one explicit Class-B carve-out on bar #1 (frequency).
 
-#### Rule template (copy per rule)
+#### Rule template — Class A (induced)
 
 - [ ] Author `src/Reactor.Cli/Check/Rules/<Name>Rule.cs`.
+- [ ] Set `Provenance = "cluster:<cluster_id>"`.
+- [ ] Bind all target types/methods through `RuleSymbolResolver` (no string matching).
 - [ ] Author `tests/Reactor.Tests/CheckCommandTests/Rules/<Name>RuleTests.cs` with **≥ 3 positive fixtures** drawn from `fixes.jsonl`, each from a different `run_id`. Each fixture references the source `run_id` in a comment.
 - [ ] Author **≥ 2 negative fixtures** in the same test file.
 - [ ] PR description includes the fixed-format Validation Gate comment template, filled in.
 - [ ] Confirm cluster has `frequency ≥ 0.05` AND `count ≥ 10` AND reproduces across ≥ 2 agents (cite `patterns.json` row).
+- [ ] Confirm corpus age: rule may not merge against a corpus older than the latest Reactor minor release (3.0-prerequisite from §3.0).
 - [ ] Reviewer (not the author) leaves PR comment using the template.
-- [ ] After merge, log the rule's `Name`, `SeedClusterId`, `count`, and merge-date in `docs/specs/tasks/038-rule-history.md` (create that file in the first rule's PR).
+- [ ] After merge, log `Name`, `Provenance`, `count`, merge-date in `docs/specs/tasks/038-rule-history.md`.
+
+#### Rule template — Class B (vocabulary-translation)
+
+- [ ] Add the row to `docs/specs/tasks/038-vocab-table.csv` (or confirm it already exists). One vocab-table row per rule.
+- [ ] Author `src/Reactor.Cli/Check/Rules/<Name>Rule.cs`.
+- [ ] Set `Provenance = "vocab:<framework>"` (e.g. `vocab:WinUI3`).
+- [ ] Bind all target types/methods through `RuleSymbolResolver`.
+- [ ] Author `tests/Reactor.Tests/CheckCommandTests/Rules/<Name>RuleTests.cs` with **≥ 3 positive fixtures**. Fixtures may be hand-authored from the vocab-table row (Class B does not require `fixes.jsonl` provenance) but are tagged `[Trait("Origin", "VocabHandAuthored")]` for audit.
+- [ ] Author **≥ 2 negative fixtures** in the same test file. Negative fixtures specifically include "same diagnostic on a non-Reactor receiver" and "same name on the same receiver in a context where the translation does NOT apply" (e.g. a property access, not a method call).
+- [ ] PR description includes the Validation Gate comment template, **with bar #1 (frequency) marked "waived — Class B"** and bar #2 (cross-agent reproducibility) demonstrated either via the corpus OR via citation of the source-framework docs the prior name lives in.
+- [ ] Reviewer (not the author) leaves PR comment using the template.
+- [ ] After merge, log `Name`, `Provenance`, `source_doc_url`, merge-date in `docs/specs/tasks/038-rule-history.md`.
 
 ### 3.3 Quantity gates
 
 - [ ] **Before EC2 (already passed in Phase 2):** 0 rules required.
-- [ ] **Before EC3:** 5 high-confidence rules covering ≥ 50 % of fix events by frequency. Below this bar, EC3 is delayed until the bar is hit.
-- [ ] **V1 ship:** 10–15 rules covering ≥ 80 % of fix events. Past 15, returns diminish; remaining clusters move to Tier 4 (Phase 4).
+- [ ] **Before EC3:** 5 high-confidence rules covering ≥ 50 % of fix events by frequency (Class A coverage) plus ≥ 1 Class-B rule. Below this bar, EC3 is delayed until the bar is hit.
+- [ ] **V1 ship:** 10–15 rules covering ≥ 80 % of fix events. Mix is at-author's-judgement but expect ~40 % Class A / 60 % Class B given the 525-run corpus's vocabulary-confusion signal. Past 15, returns diminish; remaining clusters move to Tier 4 (Phase 4).
 
 ### 3.4 Phase 3 exit criterion
 
-- [ ] At least 10 rules merged.
-- [ ] Coverage check: cumulative `count` of all merged rules' seed clusters ≥ 0.80 of `fixes.jsonl` row count.
+- [ ] At least 10 rules merged across both classes.
+- [ ] Coverage check: cumulative `count` of all merged Class-A rules' seed clusters ≥ 0.80 of `fixes.jsonl` row count *or* Class-B rules cover ≥ 80 % of the documented prior-framework vocabulary table (whichever target the team picked).
 - [ ] No rule has accept-rate < 50 % over the last 200 invocations (auto-suppression has not had to fire on any merged rule).
+- [ ] No rule is self-disabled due to unresolved target (the CI gate from §3.1a fails the build otherwise — this is a belt-and-suspenders assertion at exit).
 - [ ] **Run Eval Checkpoint EC3** vs. `main` at start of Phase 3. Pass criterion: cumulative ~−14 % tokens vs. start-of-spec, ~−2 turns, ~−$0.70 (per spec §12); CV ≤ start-of-spec CV.
 - [ ] Merge to `main`. V1 of spec 038 is shipped.
 
 ---
 
-## Phase 4: Telemetry & learned ranker (optional)
+## Phase 4: Telemetry & learned ranker (scheduled, deferred)
 
-Goal: only pursue if EC3 leaves a measurable tail of either (a) Tier 2/3 misses, or (b) noise the deterministic ranker doesn't suppress.
+**Status change vs. earlier draft:** was "optional, only if needed." Promoted to **scheduled, deferred until Data Checkpoint D delivers ≥ 1K negative-class ranker rows** (spec §13 Phase 5 update + §1 load-bearing argument). It is not a maybe; it is the work we open when the data is ready. The deterministic floor (Tiers 1–3 + the Phase-2 policy table) carries the experimental phase; the learned ranker is what we ship once the corpus delivers training volume.
+
+The escape hatch — a documented decision to ship Phase 4 with the deterministic table only — remains, but is the *unexpected* outcome and requires its own decision artifact.
 
 **Blocks on:** Data Checkpoint D, EC3 merge.
 
@@ -549,6 +597,34 @@ Captured as `[Trait("Category","Perf")]` integration tests; CI runs nightly, bre
 ### Accessibility / localization
 
 `mur check` output is developer-facing tooling, not user-visible UI. Output is en-US; localization is not in scope. (Same convention as `dotnet build`.)
+
+### Maintenance (load-bearing operation)
+
+This section captures the operational responsibilities a load-bearing system inherits beyond the per-phase work above. Each item is a recurring obligation, not a one-time task.
+
+**API-churn protocol (per Reactor minor release):**
+
+1. Run the rule-target resolution CI gate (§3.1a) against the new Reactor `Compilation`. Any rule whose target evaporates fails the build.
+2. For each failed rule, the owner either (a) updates the rule's target binding via `RuleSymbolResolver`, or (b) retires the rule. No silent string-swap.
+3. Re-run the threshold-tuning harness against the latest corpus *restricted to the new Reactor minor* before re-baselining any threshold. The full historical corpus stays archived but is not used for re-tuning across an API break.
+4. Cut a new corpus drop on the new Reactor minor (Data Checkpoint refresh; same audit checklist as Checkpoints A–D).
+5. Log the churn-handling pass in `docs/specs/tasks/038-rule-history.md` with the Reactor version and the set of rules touched.
+
+**Corpus freshness:**
+
+- A rule may not merge against a corpus older than the latest Reactor minor release. Enforced by the PR template; reviewer checks the corpus timestamp.
+- Stale rows in archived corpora (referencing retired APIs) are marked `historical: true` rather than deleted — they remain valid training signal for the *kind* of mistake and may be useful for future cross-version ablations.
+
+**Per-rule accept-rate monitoring (post-Phase-4):**
+
+- Auto-suppression fires when accept-rate drops below 50 % over the last 200 invocations (spec §11 risk row; Phase 4 telemetry hook).
+- A suppressed rule files a follow-up issue automatically; the rule's author or current owner triages within one sprint.
+- Re-enabling a previously-suppressed rule requires a new PR that explains the regression, with the same six-bar Validation Gate.
+
+**Sunset readiness check (annual):**
+
+- Spec §13 defines two sunset conditions: ≥ 12 months Reactor API stability AND ≥ 90 % first-build-OK on a held-out Reactor eval across ≥ 2 vendor-distinct models without `mur check` assistance.
+- Run the readiness check yearly. When both conditions hold, file the sunset issue, freeze rule additions, and plan graceful removal. The trace/`--final` mode survives; only Tiers 2–4 sunset.
 
 ---
 

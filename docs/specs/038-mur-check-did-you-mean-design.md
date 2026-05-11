@@ -53,6 +53,21 @@ The Phase-7 eval results in #226 show Reactor at 1.00× / 1.11× WinUI XAML on t
 
 The catch: a *wrong* suggestion is worse than no suggestion. The agent will trust it and burn turns chasing a phantom fix. So the bar to emit a suggestion is high confidence, and the bar to ship a new pattern rule is empirical evidence (from spec 037's corpus) that real agents make the mistake the rule covers.
 
+### Why this is load-bearing, not a stopgap
+
+A natural framing of `mur check`'s did-you-mean engine is "token-saving optimization that base-model improvements will erode." That framing is wrong for the next 1–3 years, and the spec is sized accordingly.
+
+Two structural conditions make this load-bearing rather than incremental:
+
+1. **Reactor is experimental and churning.** The API surface will continue to change faster than any base model can be retrained against it. Models *will* keep guessing names that don't exist in the current Reactor, regardless of how good the underlying coding model gets.
+2. **WinUI 3 is weakly represented in training data, and confused with adjacent frameworks.** WPF, Silverlight, WinUI 1, WinUI 2, and WinUI 3 all share enough vocabulary that models trained on the union produce *plausibly-WinUI-shaped* code that doesn't compile against Reactor's actual surface. The 525-run corpus directly evidences this: agents reach for `.VerticalAlignment`, `.Style(...)`, `Theme.AppBackground` — WinUI/WPF muscle-memory names. The Tier-2 fuzzy match can't bridge "VerticalAlignment → VAlign" by edit distance; only deterministic vocabulary-translation rules can (see §6).
+
+The combination of those two — experimental API + structurally weak / cross-framework-confused training data — means the build-error-correction loop is the dominant feedback channel for the foreseeable future. It is the *primary mechanism* by which an agent reconciles its prior-framework priors with Reactor's actual surface, not an optimization on a mechanism that will go away.
+
+**Operational consequence.** Phase 4 (the learned ranker) is scheduled work, not optional. The deterministic floor (Tiers 1–3 + the policy table) is enough for the experimental phase; the learned ranker is what we ship once the corpus delivers the volume to train it properly. The sunset criterion is named explicitly in §13.
+
+**What sunset looks like.** Decommission `mur check`'s suggestion engine when both hold: (a) Reactor's public API surface has been stable for ≥ 12 months (no breaking changes in a release), and (b) base-model accuracy on a held-out Reactor-touching eval set exceeds 90 % first-build-OK without `mur check` assistance. Until both hold, this is infrastructure.
+
 ## §2 Goals and non-goals
 
 ### Goals
@@ -147,7 +162,7 @@ Default threshold T = 0.75. Tunable via `mur check --suggest-threshold`. Below T
 
 `Microsoft.CodeAnalysis.CSharp` 4.8.0 is already a `PackageReference` in `src/Reactor.Cli/Reactor.Cli.csproj`, so no dependency churn.
 
-## §6 Tier 3 — induced pattern rules
+## §6 Tier 3 — induced and authored pattern rules
 
 Tier 3 catches mistakes Tier 2 can't reach because they cross the AST-shape boundary, not just the symbol-name boundary. Examples:
 
@@ -155,26 +170,46 @@ Tier 3 catches mistakes Tier 2 can't reach because they cross the AST-shape boun
 - `.Style(new { Color = "red" })`. Tier 2 sees CS1061; the fix is a `.With(Modifiers.Foreground(Theme.Critical))` chain — entirely different shape.
 - React-attr-style `className=`, `key=`, `ref=`. Tier 2 sees a syntax error on the `=`; the fix is to use the relevant Reactor modifier or the `WithKey` extension.
 
+Rules come in **two classes** with different justification bars but the same shipping bar (the Validation Gate in the task doc):
+
+### Class A — *induced* rules
+
+Sourced from spec 037's mining clusters. Each cluster has `cluster_id`, `diag_code`, `fix_kind`, frequency, and exemplar pairs. A human reviewer walks `patterns.json` top-down by frequency and authors rules against the high-frequency clusters where Tier 2 produces wrong-direction suggestions or stays silent. **Justification bar:** cluster `frequency ≥ 0.05` AND `count ≥ 10` AND cross-agent reproducibility (see Validation Gate bar #2).
+
+This is the data-driven path; it answers "what mistakes are real agents making in practice?"
+
+### Class B — *vocabulary-translation* rules
+
+The 525-run corpus and the §1 load-bearing argument both point at the same structural failure: agents trained on WPF / Silverlight / WinUI 1 / WinUI 2 / WinUI 3 have strong priors that surface as confused Reactor code. `.VerticalAlignment(...)` (WinUI/WPF) → `.VAlign(...)` (Reactor). `Theme.AppBackground` (plausibly-WinUI) → `Theme.SolidBackground` (Reactor). `.Style(BuiltInStyle)` → fluent-modifier family.
+
+These are deliberately authored from a curated vocabulary-translation table (input source: WPF / WinUI public docs + Reactor's own api index), not waited-for-in-the-mining-cluster. **Justification bar:** the source vocabulary is documented (cite the public docs the prior-framework name comes from) and the target Reactor symbol exists in the live `Compilation`. The frequency bar from Class A is **waived** — we know structurally that prior-framework muscle memory will surface; we don't need 5 % cluster evidence to act on it. Cross-agent reproducibility (bar #2), positive/negative fixtures (#3/#4), and reviewer signoff (#5) still apply.
+
+The seam: when the corpus has both volume *and* points at the same vocabulary-translation rule, it counts as Class A and the corpus serves as evidence. When the cluster is small but the prior-framework citation is strong, it counts as Class B. The two classes coexist; one rule belongs to one class.
+
+### Rule infrastructure (both classes)
+
 Each rule is a small class implementing `IRulePattern`:
 
 ```csharp
 interface IRulePattern
 {
-    string Name { get; }          // for telemetry
+    string Name { get; }          // for telemetry / --disable-rule
+    string Provenance { get; }    // "cluster:C0019" (Class A) or "vocab:WinUI" (Class B)
     bool TryMatch(in RuleContext ctx, out RuleSuggestion suggestion);
 }
 ```
 
-Rules live in `src/Reactor.Cli/Check/Rules/<Name>Rule.cs`, one rule per file, each with a unit test against a captured `(broken, fixed)` pair from the spec 037 corpus.
+Rules live in `src/Reactor.Cli/Check/Rules/<Name>Rule.cs`, one rule per file, each with a unit test against ≥ 3 positive fixtures and ≥ 2 negative counter-examples. Each shipped rule carries a per-rule confidence (default 0.85) and a kill-switch (`mur check --disable-rule <Name>`).
 
-**Rule induction process** (the seam to spec 037):
+### Symbol-binding (decided): rules match by Roslyn `ISymbol`, not string
 
-1. Spec 037's harness produces `fixes.jsonl` and the aggregated `patterns.json`. Each cluster has `cluster_id`, `diag_code`, `fix_kind`, frequency, and a set of exemplar pairs.
-2. A human reviewer walks `patterns.json` top-down by frequency. For each cluster they decide:
-   - **Yes** — author an `IRulePattern`. Use the exemplars as test fixtures.
-   - **Tier 2 already covers this** — no rule needed.
-   - **No** — false-positive risk too high, frequency too low, or the cluster reflects a flaw in Reactor's API surface that should be fixed at the framework level instead.
-3. Each shipped rule carries a per-rule confidence (default 0.85) and a kill-switch (`mur check --disable-rule <Name>`).
+For a load-bearing system with 1–3 years of expected Reactor API churn, the implementation choice is to **bind rule targets to Roslyn `INamedTypeSymbol` / `IMethodSymbol` references resolved against the live `Compilation`, not to hardcoded type/method name strings.**
+
+Concretely, a Class-B rule that maps `.VerticalAlignment(...)` → `.VAlign(...)` on `*Element` types does not match by checking `MemberAccessExpressionSyntax.Name.ValueText == "VerticalAlignment"`. It matches by resolving the would-be member's containing type to `Microsoft.UI.Reactor.Core.TextBlockElement` (or its base hierarchy) and checking that the type *does* have a `VAlign` method and *does not* have a `VerticalAlignment` method. Both probes go through `SemanticModel` and the `FactoryIndex`, not string compare.
+
+**Why:** when Reactor renames `VAlign` to (say) `VerticalAlign` in a future release, a string-matched rule silently breaks — it still fires on the old WinUI name but proposes a no-longer-existing target. A symbol-bound rule fails resolution and either (a) self-disables with a warning, or (b) trips the CI gate (see §11). The cost of retrofitting later is rewriting every shipped rule; the cost up-front is one extra resolution call per rule per diagnostic, which is a non-issue at our call volume.
+
+**CI gate.** A test that builds the rule registry against the live Reactor `Compilation` and asserts every rule's target symbol resolves. Any rule whose target evaporates fails the build until the rule is updated or retired. Land alongside the first Class-B rule.
 
 **Why human review and not auto-induction?** Rules are public-facing suggestions to the agent; a bad rule contaminates every downstream session. The cost of one bad rule landing is high; the cost of one cluster waiting another sprint for review is low. The asymmetry justifies the review step.
 
@@ -359,6 +394,8 @@ Telemetry is local-first, opt-in, scoped to the active project. No source code, 
 | Ranker hides a load-bearing warning the agent needed to see | Telemetry on suppress→error transitions; auto-promote codes whose suppression precedes a related error > N times. `mur check --final` is mandatory before "done" — captured in eval prompt and CI. |
 | Over-suppression makes the build/fix loop *worse* by hiding novel diagnostics | Default base score for unknown codes is 0.5 (above iteration threshold) — better to over-emit a novel code than to silence a real bug. Threshold tunable per agent via telemetry. |
 | `mur check` per-invocation overhead (~5–8s) regresses tokens on small projects with little API surface to explore (validated empirically at EC1: ~150 LoC calc app regressed +21% cost mean even with all prompt loopholes closed; kanban won −24% in the same batch). Suggestion mechanism's amortization floor is project-size-dependent. | **Mitigated 2026-05-10:** diagnostic-count gate in `CheckCommand.ShouldEmitSuggestions`. Default skips Tier-2 when an invocation surfaces < 3 unique CS-prefixed diagnostics; `--suggest-threshold <N>` overrides (0 disables). Default N validated at Data Checkpoint C (28.7% emit rate matches calc-vs-kanban shape). **EC1 re-run with gate confirms the mitigation:** calc cost −4% (was +21%), kanban cost −33% (was −24% — preserved and grew); both pass the "tokens not regressed" bar. Residual: kanban CV widened (54% vs prior 24%) — one outlier run hit 0 firings; gate is path-dependent on agent's exploration order. Worth watching in Phase 2. See §14 #8 + spec 038 task doc "EC1 re-run" section. |
+| **Reactor API churn invalidates Tier-3 rules or the mined corpus.** A load-bearing system with 1–3 years of expected lifespan needs to survive Reactor renaming `VAlign` to `VerticalAlign`, retiring a factory, or moving a member up/down the type hierarchy. String-matched rules silently break (still fire on the old name, propose a target that no longer exists). Mined corpus rows referencing retired APIs become misleading training signal. | Two mitigations, both decided in §6: (1) Rules bind to Roslyn `ISymbol` references resolved against the live `Compilation`, not name strings. A rule whose target symbol evaporates fails resolution and self-disables with a warning. (2) A CI gate (lands with the first Class-B rule) compiles the rule registry against Reactor's live surface and fails the build on any unresolved rule target. For the corpus: when an API renames, mark affected `fixes.jsonl` rows as historical (don't delete — they remain valid training signal for the *kind* of mistake) and re-run the tuning harness against the trimmed live-API subset before promoting any threshold changes. |
+| **Data pipeline (spec 037) lacks an SLA or named owner.** Today's task doc lists "harness team is on a separate cadence" as a non-blocking risk because Phase 1 ships with hand-authored fixtures. For load-bearing operation that stance doesn't hold: Phases 3 and 4 are *fully dependent* on corpus refreshes that track API churn, agent rotation, and Reactor-version-pinned eval pairs. A stale corpus produces stale rules. | Before opening Phase 3 rule PRs: name an owner for the corpus pipeline (single point of contact, not a team-shaped responsibility), document a refresh cadence pegged to Reactor minor-version releases (each minor cuts a new corpus), and add a corpus-freshness check to the rule-shipping path (no rule merges against a corpus older than the latest Reactor release). Track as a Phase-3 prerequisite, not a Phase-4-only concern. |
 
 ## §12 Predicted impact
 
@@ -416,13 +453,26 @@ Phased so each phase is independently shippable.
 
 **Exit:** the agent sees ≥ 50 % fewer diagnostic lines per turn in iteration mode without missing any blockers (measured against a 50×N replay of Phase 0 traces).
 
-### Phase 5 — telemetry-driven Tier 4 + learned ranker (only if needed)
+### Phase 5 — telemetry-driven Tier 4 + learned ranker (scheduled, deferred)
+
+**Status change vs. earlier draft:** this was originally framed as "only if needed." The §1 load-bearing argument promotes it to **scheduled, deferred until Data Checkpoint D delivers ≥ 1K negative-class ranker rows.** It is not a maybe; it is the work we open when the data is ready. The deterministic floor (Tiers 1–3 + the Phase-4 policy table) is enough for the experimental phase; the learned ranker is what we ship once the corpus delivers the volume to train it properly.
 
 - Log `(diagnostic, candidates, picked, accepted-by-agent)` from production `mur check` invocations.
-- If Tier 2 + 3 still leave a meaningful tail of suggestion misses, train a small GBDT confidence ranker over hand-engineered features. Defer until data justifies it.
+- Train a small GBDT confidence ranker over hand-engineered features as the Tier-4 re-ranker on Tier 2 + 3 candidates.
 - In parallel, train the §8 learned ranker against spec 037's pair corpus using the "did the agent's eventual fix touch this diagnostic's location?" label. Calibrate to behave as an emit-worthiness probability; combine with the policy-table floor.
 
-**Exit:** measured improvement on the long-tail or a formal decision to not pursue. For the learned ranker specifically: ≥ 5-point lift in the precision of "diagnostics emitted in iteration mode that the agent's next fix actually touched," vs. the deterministic table baseline.
+**Exit:** ≥ 5-point lift in the precision of "diagnostics emitted in iteration mode that the agent's next fix actually touched," vs. the deterministic table baseline, OR a documented decision to ship Phase 4 with the deterministic table only (escape hatch, not the planned outcome).
+
+### Sunset criterion (explicit)
+
+The `mur check` suggestion engine has a finite expected lifespan. Decommission when **both** hold simultaneously:
+
+1. **Reactor API stability.** No breaking changes in the public API surface for ≥ 12 consecutive months across at least two minor releases.
+2. **Base-model accuracy.** A held-out Reactor-touching agent-eval set achieves ≥ 90 % first-build-OK without `mur check` suggestion assistance (Tier 1 hints alone allowed, since those are docs pointers rather than fix text), on at least two distinct models from different vendors.
+
+Until both hold, this is infrastructure and the investment level matches. When both hold, file a sunset issue, freeze rule additions, and plan a graceful removal. (The trace/telemetry/`--final` mode behavior remains useful even after the suggestion engine retires; only Tiers 2–4 sunset.)
+
+Naming this criterion explicitly prevents the alternative failure mode of "load-bearing forever," which would be the wrong commitment given how fast base-model coding ability is advancing.
 
 ## §14 Open questions
 
@@ -433,7 +483,11 @@ Phased so each phase is independently shippable.
 5. **Per-agent rule profiles?** If different LLM agents make different mistakes, Tier 3 rule sets could be agent-keyed. Likely premature; cross-agent rules are simpler. Reconsider once telemetry shows agent-specific deltas.
 6. **Iteration-mode emit threshold (§8).** Default proposed at 0.6. Tuning lever: too high silences load-bearing warnings; too low restores the noise. Land conservative (0.5–0.55) and tighten as the policy table covers more codes? Or go aggressive (0.7) and accept that novel codes get surfaced via the unknown-code default? Settle empirically once Phase 0 produces the diagnostic-frequency distribution.
 7. **Should the ranker score Tier 1 hints as well?** Today every `REACTOR_*` analyzer warning carries a static skill pointer and is implicitly emit-worthy. The ranker could in principle suppress low-priority `REACTOR_*` Info diagnostics in iteration mode (e.g. `REACTOR_HOOKS_006`, the non-idempotent fetcher heuristic). Recommendation: yes, treat Tier 1 emissions as just another diagnostic for ranking purposes; the policy table is the single source of truth for emit/suppress decisions.
-8. **Project-size gate for the suggestion mechanism.** EC1 5×N (see spec 038 task doc) showed `mur check`'s per-invocation overhead regresses small projects (calc, ~150 LoC, +21% cost) even when the prompt closes every explore-around-the-suggestion side door, while medium projects (kanban) win cleanly (−24% cost, −33% median, 3.4× lower variance). The amortization floor is real and structural. Open design question: gate `SymbolSuggester` activation by (a) source-file count / total LoC, (b) per-invocation CS-diagnostic count, (c) `--mode iteration|small` flag the agent sets explicitly, or (d) leave gating to the agent prompt ("don't bother with `mur check` on apps under 200 LoC")? Approach (b) feels strongest — it self-tunes (a project with one error doesn't pay for fuzzy-match overhead) and composes with Phase 2's iteration/`--final` distinction. **Resolved 2026-05-10 with approach (b); validated 2026-05-11.** Implemented in `CheckCommand.ShouldEmitSuggestions` with default threshold N=3 unique CS-prefixed diagnostics per invocation; overridable via `--suggest-threshold <N>` (0 disables). Default cross-validated against the 525-run corpus (Data Checkpoint C, distribution: 71.3% of builds < 3, 28.7% ≥ 3). EC1 re-run with the gate (2026-05-11): calc cost −4% (was +21%), kanban cost −33% (was −24%); both pass. New residual question: kanban CV widened on the re-run because one of five runs hit 0 firings and tracked the long-tail base path — gate behavior is path-dependent on the agent's exploration order, not just the project's static shape. Telemetry at scale (post-Phase-4) will tell us whether this stays a 1-in-5 tail or grows.
+8. **Rule-symbol-binding strategy (resolved 2026-05-11).** Should Tier-3 rules match their targets by name string (`MemberAccess.Name.ValueText == "VerticalAlignment"`) or by Roslyn `ISymbol` references resolved against the live `Compilation`? **Resolved: symbol-binding.** For a load-bearing system with 1–3 years of expected Reactor API churn, string-matched rules silently break when Reactor renames a target (still fire on the old name, propose a no-longer-existing replacement). Symbol-bound rules fail resolution explicitly and either self-disable with a warning or trip the CI gate (see §6 "Symbol-binding" and §11 "Reactor API churn" risk row). Cost up-front: one extra resolution call per rule per diagnostic — non-issue at our call volume. Cost of retrofitting later: rewriting every shipped rule. Lands with the first Class-B rule in Phase 3.
+
+9. **Source of the Class-B vocabulary-translation table.** §6 says rules in Class B cite the public docs the prior-framework name comes from. Open: do we maintain a single in-repo `WinUI-to-Reactor.csv` (or similar) as the curated table feeding all Class-B rules, or does each Class-B rule embed its own one-row citation? Recommendation: single in-repo table, owned by the Reactor team, reviewed independently of any rule PR. The table itself is the artifact under "ship 5–8 vocab translations / sprint" cadence; individual rules wire to rows of it. Land as part of the first Class-B rule PR.
+
+10. **Project-size gate for the suggestion mechanism.** EC1 5×N (see spec 038 task doc) showed `mur check`'s per-invocation overhead regresses small projects (calc, ~150 LoC, +21% cost) even when the prompt closes every explore-around-the-suggestion side door, while medium projects (kanban) win cleanly (−24% cost, −33% median, 3.4× lower variance). The amortization floor is real and structural. Open design question: gate `SymbolSuggester` activation by (a) source-file count / total LoC, (b) per-invocation CS-diagnostic count, (c) `--mode iteration|small` flag the agent sets explicitly, or (d) leave gating to the agent prompt ("don't bother with `mur check` on apps under 200 LoC")? Approach (b) feels strongest — it self-tunes (a project with one error doesn't pay for fuzzy-match overhead) and composes with Phase 2's iteration/`--final` distinction. **Resolved 2026-05-10 with approach (b); validated 2026-05-11.** Implemented in `CheckCommand.ShouldEmitSuggestions` with default threshold N=3 unique CS-prefixed diagnostics per invocation; overridable via `--suggest-threshold <N>` (0 disables). Default cross-validated against the 525-run corpus (Data Checkpoint C, distribution: 71.3% of builds < 3, 28.7% ≥ 3). EC1 re-run with the gate (2026-05-11): calc cost −4% (was +21%), kanban cost −33% (was −24%); both pass. New residual question: kanban CV widened on the re-run because one of five runs hit 0 firings and tracked the long-tail base path — gate behavior is path-dependent on the agent's exploration order, not just the project's static shape. Telemetry at scale (post-Phase-4) will tell us whether this stays a 1-in-5 tail or grows.
 
 ## §15 Pointers
 

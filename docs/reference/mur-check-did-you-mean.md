@@ -49,6 +49,19 @@ The agent reads the suggestion, applies it, and moves on. No second turn spent g
 
 A *wrong* suggestion is worse than no suggestion. The agent trusts it and burns turns chasing a phantom fix. So the bar to emit a hint is **high confidence or stay silent.** "Silent is correct. Wrong is not." Every design choice in this doc — thresholds, gates, validation steps — exists to keep that invariant.
 
+### Why this is load-bearing, not a token-saving optimization
+
+A natural reading of the section above is "nice token-saver that base-model improvements will eventually erode." That reading is wrong on a 1–3 year horizon, and the system is sized for the structural view, not the optimization view.
+
+Two conditions make the build-error-correction loop a *primary* feedback channel rather than an incremental nicety:
+
+1. **Reactor is experimental and will keep churning.** API names, signatures, and shapes will change faster than any base model can be retrained against them. Models will keep proposing names that don't exist in the *current* Reactor, regardless of how strong the underlying coding model gets.
+2. **WinUI 3 is weakly represented in training data and confused with adjacent frameworks.** WPF, Silverlight, WinUI 1, WinUI 2, and WinUI 3 share enough vocabulary that models trained on the union produce *plausibly-WinUI-shaped code* that doesn't compile against Reactor. The 525-run corpus directly evidences this: agents reach for `.VerticalAlignment`, `.Style(...)`, `Theme.AppBackground` — WinUI/WPF muscle-memory names. Tier-2 fuzzy match can't bridge "VerticalAlignment → VAlign" by edit distance; only deterministic vocabulary-translation rules can (see §9, future improvements).
+
+The combination — experimental API + structurally weak / cross-framework-confused training data — means the build-error-correction loop is the dominant feedback mechanism through which agents reconcile their prior-framework priors with Reactor's reality, for the foreseeable future.
+
+**Sunset criterion (explicit, not "forever").** Decommission `mur check`'s suggestion engine when both hold: (a) Reactor's public API has been stable for ≥ 12 months, and (b) a held-out Reactor-touching eval reaches ≥ 90 % first-build-OK without suggestion assistance on ≥ 2 vendor-distinct models. The trace/`--final` mode keeps living; only Tiers 2–4 sunset.
+
 ---
 
 ## 2. What you actually see
@@ -413,6 +426,16 @@ Tests:
 
 Phases 2–4 will land after Phase 1 merges. They unlock independently of each other once their data and code blockers clear.
 
+### The recurring failure mode: WinUI/WPF vocabulary confusion
+
+Before describing the phases, it's worth naming the *shape* of failure the rest of this section is designed against, because it isn't an edge case — it is the central, recurring pattern the 525-run corpus surfaces, and it directly motivates the Class-B rule split in Phase 3.
+
+**The pattern, in plain language.** An agent sits down to write Reactor. The agent has seen a lot of WPF, some Silverlight, and some WinUI (1, 2, 3) in its training data — and very little Reactor. So when it reaches for a property or method on a Reactor type, its muscle memory hands it a WinUI-shaped name: `.VerticalAlignment`, `.Style(BuiltInStyle)`, `Theme.AppBackground`, `.HorizontalAlignment`. The C# compiler rejects these because the Reactor types don't expose those members. CS1061 or CS0117 fires. Then the agent burns a turn (or several) figuring out what Reactor *does* expose. That's the build/fix loop the whole spec is targeting.
+
+**Why Tier 2 alone can't solve it.** Tier-2 fuzzy match tries to find the closest real member name to the typo. JaroWinkler similarity between `VerticalAlignment` and `VAlign` is roughly 0.55 — well below the 0.70 floor. So Tier 2 either stays silent (good but unhelpful) or picks the second-closest real member name (e.g. `TextAlignment`, which is wrong). The 525-run report quantifies this: every empirical CS1061 firing against a Reactor `*Element` type in that corpus was a wrong-direction suggestion driven by exactly this gap.
+
+**Why it's structural, not transient.** The five-framework lineage (WPF, Silverlight, WinUI 1, WinUI 2, WinUI 3) all share vocabulary that is *almost* but not quite Reactor. Better base models don't fix this — they're trained on the same lineage and have the same priors. New Reactor releases don't fix this either — they keep the Reactor API names roughly stable while WinUI muscle memory continues to dominate the prior. The only deterministic way to break the cycle is a *vocabulary-translation layer* that maps prior-framework names to Reactor names: a Class-B rule per pair. This is exactly what spec 038 Phase 3 schedules under the "Class B — vocabulary-translation" bucket described below.
+
 ### Phase 2 — MSBuild passthrough + deterministic pre-emit ranker
 
 The four tiers decide *what hint to attach*. The pre-emit ranker decides *whether a diagnostic should be shown to the agent at all, right now*. This matters because raw MSBuild output is dominated by diagnostics whose resolution is **not** on the critical path to a clean build — NuGet noise, MSBuild reference-resolution chatter, IDE style hints, nullable warnings on template code. If the agent reads all of them every turn it (a) spends turns fixing things that didn't need fixing this turn, and (b) the real blocker scrolls off attention.
@@ -424,31 +447,48 @@ Phase 2 ships:
 - **MSBuild passthrough via `--`**. `mur check [<path>] [mur-flags...] [-- <msbuild args>...]`. Defaults like `--nologo`, `-v:m`, `-p:Platform={host arch}` inject only if the user didn't supply the same flag in the passthrough section. Detection by flag name, not value.
 - **Suppress→error guardrail**. CI checks that every code suppressed in iteration mode does *not* appear as an error in a subsequent `--final` pass. If it does, the policy table is wrong and CI fails.
 
-### Phase 3 — induced pattern rules (Tier 3)
+### Phase 3 — induced and authored pattern rules (Tier 3)
 
-Hand-authored small rewriters seeded from the mining clusters. Top three targets from the 525-run corpus:
+Tier-3 rules come in **two classes** (spec §6 split, motivated by the load-bearing framing in §1):
+
+**Class A — *induced* rules.** Hand-authored small rewriters seeded from the mining clusters. Top three targets from the 525-run corpus:
 
 1. **CS0117 / Theme — `*Background → SolidBackground`** (C0019, 1.6%, 16 events). A small lookup table from common-wrong-name → canonical Reactor token.
-2. **CS1061 / `*Element` — WinUI-name → Reactor-shortcut family** (C0017 et al., ~22 events combined). `.VerticalAlignment(x) → .VAlign(x)`, `.HorizontalAlignment(x) → .HAlign(x)`, `.Style(...) → fluent shortcuts`.
-3. **CS1955 / GridSize — missing parens on factory** (C0004, 10.7%, 110 events; **largest single bucket in the corpus**). `GridSize.Star → GridSize.Star()`. First cross-tier addition — Tier 2 doesn't cover CS1955 today.
+2. **CS1955 / GridSize — missing parens on factory** (C0004, 10.7%, 110 events; **largest single bucket in the corpus**). `GridSize.Star → GridSize.Star()`. First cross-tier addition — Tier 2 doesn't cover CS1955 today.
+3. CS1061 cases that survive Tier 2 — e.g. structural rewrites the fuzzy match can't reach.
 
-Each rule passes the six-bar Validation Gate before merge (frequency ≥ 5% AND count ≥ 10; reproduces across ≥ 2 agents; ≥ 3 positive fixtures; ≥ 2 negative counter-examples; independent reviewer signoff; per-rule kill-switch via `--disable-rule <Name>`).
+Justification bar: cluster `frequency ≥ 0.05` AND `count ≥ 10` AND cross-agent reproducibility.
 
-**Cross-agent reproducibility bar.** The current 525-run corpus is `gpt-5.5`-only. Phase 3 cannot open rule PRs until a second-agent drop lands.
+**Class B — *vocabulary-translation* rules.** Deliberately authored from a curated WPF / Silverlight / WinUI 1 / WinUI 2 / WinUI 3 → Reactor name table. These are the *structurally-justified* rules from the load-bearing argument — we know prior-framework muscle memory will surface as confused Reactor code regardless of what the corpus shows in any given month. Examples:
 
-### Phase 4 — telemetry-driven Tier 4 + learned §8 ranker (optional)
+- `.VerticalAlignment(x)` (WinUI/WPF) → `.VAlign(x)` (Reactor)
+- `.HorizontalAlignment(x)` → `.HAlign(x)`
+- `Theme.AppBackground` (plausibly-WinUI) → `Theme.SolidBackground` (Reactor)
+- `.Style(BuiltInStyle)` → fluent-modifier family
 
-Only built if Phase 3 leaves a measurable tail. Two independent models:
+**Frequency bar is waived for Class B** — the empirical justification is "the prior framework exists and models trained on it have strong priors that surface as confused Reactor code." Cross-agent reproducibility, positive/negative fixtures, reviewer signoff, and the kill-switch all still apply.
+
+**Symbol-binding (decided).** Both classes bind their target types and members to Roslyn `ISymbol` references resolved against the live `Compilation`, **not** by string-matching `MemberAccess.Name.ValueText`. When Reactor renames `VAlign` in a future minor, a string-matched rule silently breaks; a symbol-bound rule fails resolution explicitly, self-disables with a trace warning, and surfaces via the CI gate. This is a one-time up-front cost that avoids rewriting every rule on future API churn.
+
+**Cross-agent reproducibility bar.** The current 525-run corpus is `gpt-5.5`-only. Class A rules cannot open PRs until a second-agent corpus drop lands. Class B rules can — their justification is the documented prior-framework citation, not the corpus.
+
+### Phase 4 — telemetry-driven Tier 4 + learned §8 ranker (scheduled, deferred)
+
+**Status change.** Earlier drafts framed this as "only if needed." The load-bearing framing in §1 promotes it to **scheduled, deferred until Data Checkpoint D delivers ≥ 1K negative-class ranker rows**. It is not a maybe; it is the work we open when the data is ready. The deterministic floor (Tiers 1–3 + the Phase-2 policy table) is sized to carry the experimental phase, and the learned ranker is what we ship once corpus volume justifies it.
+
+Two independent models:
 
 1. **Tier-4 confidence ranker.** GBDT over hand-engineered features (Levenshtein, parameter-name overlap, factory-popularity-in-samples, AST-shape similarity, prior agent-accept rate per rule). Re-ranks the candidate set produced by Tiers 2 + 3. Inference cost: microseconds.
 2. **Learned pre-emit ranker.** Trained against `addressed_by_next_fix` as the binary label. GBDT or logistic regression. <100 KB ONNX. Calibrated via isotonic regression on a held-out fold so the score behaves like an emit-worthiness probability. Complements the Phase-2 policy table — the table is the floor (always-emit / never-emit anchors), the model fills the gray middle.
+
+Escape hatch: a documented decision to ship Phase 4 with the deterministic table only. This remains the *unexpected* outcome and requires its own decision artifact, rather than being the default.
 
 ### Things explicitly out of scope (today and probably forever)
 
 - **Auto-fix / write-back.** `mur check` emits text. The agent edits.
 - **JSON / SARIF output.** One-line text only in v1. Structured emission is a future scope.
 - **Cross-project / workspace-level reasoning.** Single `Compilation` per project.
-- **A small LLM-based generator.** Reactor's training set is fundamentally limited; small models hallucinate without huge corpora. The deterministic system already has access to the things a small model would have to memorize.
+- **A small LLM-based generator.** Reactor's training set is fundamentally limited; small models hallucinate without huge corpora. This is *the same condition* the load-bearing argument in §1 rests on: weak training data is why we need `mur check` in the first place, and it's also why we won't fix that gap by training a smaller model on the same scarce data. The deterministic system already has access to the things a small model would have to memorize (the api index, the sample apps, the live `Compilation`), and the learned components in Phase 4 are *re-rankers* over deterministic candidates, not generators.
 - **Localization of `mur check` output.** Developer-facing tooling; en-US, same convention as `dotnet build`.
 
 ---
@@ -468,8 +508,11 @@ Only built if Phase 3 leaves a measurable tail. Two independent models:
 | **The gate** | `--suggest-threshold <N>` — skip Tier-2 on invocations with fewer than `N` unique CS-diagnostics. Defaults to 3. Mitigates the small-project regression. |
 | **Mining corpus** | The `(broken, fixed)` pairs produced by spec 037's harness. Lives at `docs/specs/tasks/038-tuning-reports/2026-05-11-525run-source/` in this repo (mirrored copy). |
 | **Eval Checkpoint (EC)** | A staged 5×N agent-eval batch run against `reactor-calc` and `reactor-kanban` to verify a phase's predicted cost/turn lift. EC1 has landed; EC2/3/4 are future. |
-| **Validation Gate** | The six-bar pre-merge checklist every Tier-3 rule must pass (Phase 3 only). Exists because a bad rule is worse than no rule. |
+| **Validation Gate** | The six-bar pre-merge checklist every Tier-3 rule must pass (Phase 3 only). Exists because a bad rule is worse than no rule. Bar #1 (frequency ≥ 5 %) is waived for Class-B rules whose justification is the documented prior-framework citation rather than a corpus cluster. |
+| **Class A / Class B rule** | Class A = *induced* — sourced from a `patterns.json` cluster, justified by frequency + count + cross-agent reproducibility. Class B = *vocabulary-translation* — deliberately authored from a curated WPF/WinUI → Reactor table, justified by the structural prior-framework-confusion argument. Both classes share the same shipping infrastructure (`IRulePattern`, symbol-binding, `--disable-rule`); they differ only in justification source. |
+| **Load-bearing** | The framing applied to `mur check` in §1: this is structural infrastructure for the 1–3 year window in which Reactor is experimental and WinUI 3 is weakly represented + cross-confused in training data. Not a stopgap. Phase 4 is scheduled, not optional. |
+| **Sunset criterion** | The explicit conditions under which `mur check`'s suggestion engine retires: (a) Reactor API stable for ≥ 12 months AND (b) ≥ 90 % first-build-OK on a held-out Reactor eval across ≥ 2 vendor-distinct models without `mur check` assistance. Named so "load-bearing" doesn't drift into "forever." |
 
 ---
 
-**Maintenance.** This doc covers the system as of `feat/038-mur-check`. It will be updated as Phases 2–4 land. The canonical source-of-truth for decisions and pending work remains the spec + task docs under `docs/specs/`.
+**Maintenance.** This doc covers the system as of `feat/038-mur-check`. It will be updated as Phases 2–4 land. The canonical source-of-truth for decisions and pending work remains the spec + task docs under `docs/specs/`. For ongoing operational responsibilities (API-churn protocol, corpus freshness, per-rule accept-rate monitoring, annual sunset-readiness check) see the **Maintenance (load-bearing operation)** section of the task doc.
