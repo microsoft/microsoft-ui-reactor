@@ -42,10 +42,14 @@
   </ItemGroup>
 
   <!-- SignaturesGen transitively references WindowsAppSDK, whose targets
-       reject AnyCPU. Pin its build Platform to the host arch so a bare
-       `dotnet build src/Reactor.Cli` (no -p:Platform) succeeds. The
-       generator's AfterBuild step only fires when target arch == host arch,
-       so building with the host arch keeps reactor.api.txt regenerating. -->
+       reject AnyCPU. Pin its build Platform so a bare
+       `dotnet build src/Reactor.Cli` (no -p:Platform) succeeds:
+         - if the outer build set $(Platform) to x64 or ARM64, mirror it so
+           a cross-arch CLI build stays internally consistent;
+         - otherwise (Platform unset / AnyCPU), fall back to host arch.
+       SignaturesGen's own AfterBuild regen step is already gated on
+       target arch == host arch, so the api.txt regen only fires when the
+       freshly-built apphost can actually execute on this machine. -->
   <PropertyGroup>
     <_SignaturesGenPlatform Condition="'$(Platform)' == 'x64' or '$(Platform)' == 'ARM64'">$(Platform)</_SignaturesGenPlatform>
     <_SignaturesGenPlatform Condition="'$(_SignaturesGenPlatform)' == '' and $(NETCoreSdkRuntimeIdentifier.EndsWith('-arm64'))">ARM64</_SignaturesGenPlatform>
