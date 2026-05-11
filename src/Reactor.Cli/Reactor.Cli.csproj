@@ -42,16 +42,20 @@
   </ItemGroup>
 
   <!-- SignaturesGen transitively references WindowsAppSDK, whose targets
-       reject AnyCPU. Pin its build Platform so a bare
-       `dotnet build src/Reactor.Cli` (no -p:Platform) succeeds:
-         - if the outer build set $(Platform) to x64 or ARM64, mirror it so
-           a cross-arch CLI build stays internally consistent;
-         - otherwise (Platform unset / AnyCPU), fall back to host arch.
+       reject AnyCPU. Pick a concrete Platform for the SignaturesGen build
+       so a bare `dotnet build src/Reactor.Cli` (no -p:Platform) succeeds:
+         - if $(Platform) is already x64 or ARM64, mirror it;
+         - else, derive from $(RuntimeIdentifier) when set (so a cross-arch
+           `dotnet publish -r win-arm64` from an x64 runner doesn't hit
+           NETSDK1032 by mixing PlatformTarget=x64 with RID=win-arm64);
+         - else (AnyCPU and no RID), fall back to host arch.
        SignaturesGen's own AfterBuild regen step is already gated on
-       target arch == host arch, so the api.txt regen only fires when the
+       target arch == host arch, so api.txt regen only fires when the
        freshly-built apphost can actually execute on this machine. -->
   <PropertyGroup>
     <_SignaturesGenPlatform Condition="'$(Platform)' == 'x64' or '$(Platform)' == 'ARM64'">$(Platform)</_SignaturesGenPlatform>
+    <_SignaturesGenPlatform Condition="'$(_SignaturesGenPlatform)' == '' and '$(RuntimeIdentifier)' == 'win-arm64'">ARM64</_SignaturesGenPlatform>
+    <_SignaturesGenPlatform Condition="'$(_SignaturesGenPlatform)' == '' and '$(RuntimeIdentifier)' == 'win-x64'">x64</_SignaturesGenPlatform>
     <_SignaturesGenPlatform Condition="'$(_SignaturesGenPlatform)' == '' and $(NETCoreSdkRuntimeIdentifier.EndsWith('-arm64'))">ARM64</_SignaturesGenPlatform>
     <_SignaturesGenPlatform Condition="'$(_SignaturesGenPlatform)' == ''">x64</_SignaturesGenPlatform>
   </PropertyGroup>
