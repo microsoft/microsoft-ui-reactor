@@ -2426,7 +2426,7 @@ public sealed partial class Reconciler
 
     private UIElement? UpdateContentDialog(ContentDialogElement o, ContentDialogElement n, FrameworkElement fe, Action requestRerender)
     {
-        if (n.IsOpen && !o.IsOpen) ShowContentDialog(n, requestRerender);
+        if (n.IsOpen && !o.IsOpen) ShowContentDialog(n, fe, requestRerender);
         SetElementTag(fe, n);
         return null;
     }

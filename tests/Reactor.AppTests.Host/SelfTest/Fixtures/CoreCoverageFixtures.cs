@@ -320,6 +320,91 @@ internal static class CoreCoverageFixtures
         }
     }
 
+    // Regression for #246: declarative IsOpen=true at first mount must actually
+    // show the dialog. Previously the framework tried to read XamlRoot from the
+    // dialog's just-mounted (detached) content, which is always null, so
+    // ShowAsync() threw and the empty catch swallowed it.
+    internal class ContentDialogOpensAtMount(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(
+                TextBlock("anchor"),
+                ContentDialog("AutoOpen", TextBlock("dialog-body"), "OK") with { IsOpen = true }
+            ));
+
+            await Harness.Render(100);
+
+            var dialog = FindOpenContentDialog(H, "AutoOpen");
+            H.Check("ContentDialog_OpensAtMount_#246", dialog is not null);
+
+            dialog?.Hide();
+            await Harness.Render(50);
+        }
+    }
+
+    // Regression for #246: flipping IsOpen false→true via state must show the
+    // dialog without requiring the app to set XamlRoot manually.
+    internal class ContentDialogOpensOnStateFlip(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (open, setOpen) = ctx.UseState(false);
+                return VStack(
+                    Button("Show", () => setOpen(true)),
+                    ContentDialog("Toggled", TextBlock("dialog-body"), "OK") with { IsOpen = open }
+                );
+            });
+
+            await Harness.Render();
+            H.Check("ContentDialog_NotOpenBeforeClick_#246", FindOpenContentDialog(H, "Toggled") is null);
+
+            H.ClickButton("Show");
+            await Harness.Render(50);
+
+            var dialog = FindOpenContentDialog(H, "Toggled");
+            H.Check("ContentDialog_OpensOnStateFlip_#246", dialog is not null);
+
+            dialog?.Hide();
+            await Harness.Render(50);
+        }
+    }
+
+    private static Microsoft.UI.Xaml.Controls.ContentDialog? FindOpenContentDialog(Harness h, string title)
+    {
+        var xamlRoot = (h.Window.Content as UIElement)?.XamlRoot
+                       ?? ReactorApp.PrimaryWindow?.NativeWindow.Content?.XamlRoot;
+        if (xamlRoot is null) return null;
+        foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot))
+        {
+            // Popup.Child is not enumerated by VisualTreeHelper.GetChildrenCount,
+            // so descend into it explicitly before recursing.
+            if (popup.Child is DependencyObject child)
+            {
+                var found = WalkForContentDialog(child, title);
+                if (found is not null) return found;
+            }
+        }
+        return null;
+    }
+
+    private static Microsoft.UI.Xaml.Controls.ContentDialog? WalkForContentDialog(DependencyObject node, string title)
+    {
+        if (node is Microsoft.UI.Xaml.Controls.ContentDialog cd && cd.Title as string == title)
+            return cd;
+        int count = VisualTreeHelper.GetChildrenCount(node);
+        for (int i = 0; i < count; i++)
+        {
+            var hit = WalkForContentDialog(VisualTreeHelper.GetChild(node, i), title);
+            if (hit is not null) return hit;
+        }
+        return null;
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     //  6. CommandBar — mount + update (primary/secondary commands)
     //     Targets: Reconciler.Mount.cs lines 1636+, Reconciler.Update.cs lines 1593+

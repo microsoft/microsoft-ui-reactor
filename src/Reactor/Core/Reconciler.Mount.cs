@@ -1732,26 +1732,49 @@ public sealed partial class Reconciler
     {
         var placeholder = new WinUI.StackPanel { Visibility = Visibility.Collapsed };
         SetElementTag(placeholder, cdEl);
-        if (cdEl.IsOpen) ShowContentDialog(cdEl, requestRerender);
+        if (cdEl.IsOpen) ShowContentDialog(cdEl, placeholder, requestRerender);
         return placeholder;
     }
 
-    private async void ShowContentDialog(ContentDialogElement cdEl, Action requestRerender)
+    internal void ShowContentDialog(ContentDialogElement cdEl, FrameworkElement anchor, Action requestRerender)
+    {
+        // Resolve XamlRoot from the in-tree placeholder, with a fallback to the
+        // primary window's content. At mount-time the placeholder isn't in the
+        // tree yet (XamlRoot is null) — defer via Loaded so we still get a
+        // valid root when IsOpen=true on first render.
+        var xamlRoot = ResolveDialogXamlRoot(anchor);
+        if (xamlRoot is null && anchor.XamlRoot is null)
+        {
+            void OnLoaded(object sender, RoutedEventArgs _)
+            {
+                anchor.Loaded -= OnLoaded;
+                ShowContentDialogCore(cdEl, ResolveDialogXamlRoot(anchor), requestRerender);
+            }
+            anchor.Loaded += OnLoaded;
+            return;
+        }
+        ShowContentDialogCore(cdEl, xamlRoot, requestRerender);
+    }
+
+    private static XamlRoot? ResolveDialogXamlRoot(FrameworkElement anchor)
+        => anchor.XamlRoot
+           ?? ReactorApp.PrimaryWindow?.NativeWindow.Content?.XamlRoot;
+
+    private async void ShowContentDialogCore(ContentDialogElement cdEl, XamlRoot? xamlRoot, Action requestRerender)
     {
         var dialog = new WinUI.ContentDialog
         {
             Title = cdEl.Title, PrimaryButtonText = cdEl.PrimaryButtonText,
             DefaultButton = cdEl.DefaultButton,
-            XamlRoot = null,
         };
         if (cdEl.SecondaryButtonText is not null) dialog.SecondaryButtonText = cdEl.SecondaryButtonText;
         if (cdEl.CloseButtonText is not null) dialog.CloseButtonText = cdEl.CloseButtonText;
         dialog.Content = Mount(cdEl.Content, requestRerender);
+        if (xamlRoot is not null) dialog.XamlRoot = xamlRoot;
+        // ApplySetters last so caller .Set(...) wins (including overriding XamlRoot).
         ApplySetters(cdEl.Setters, dialog);
         try
         {
-            if (dialog.Content is UIElement contentUi && contentUi.XamlRoot is not null)
-                dialog.XamlRoot = contentUi.XamlRoot;
             var winUiResult = await dialog.ShowAsync();
             cdEl.OnClosed?.Invoke(winUiResult);
         }

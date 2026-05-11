@@ -81,8 +81,10 @@ internal static class RareControlFixtures
     //  ContentDialog mount + update (~15 lines each)
     // ════════════════════════════════════════════════════════════════════
 
-    // ContentDialog is rendered as a popup overlay and requires ShowAsync() to appear
-    // in the visual tree — tested via interactive tests instead of self-tests.
+    // ContentDialog mount + open coverage lives in CoreCoverageFixtures
+    // (ContentDialogMount + ContentDialogOpensAtMount + ContentDialogOpensOnStateFlip).
+    // The dialog appears as a popup; ShowAsync() is fire-and-forget here so the
+    // fixtures probe VisualTreeHelper.GetOpenPopupsForXamlRoot() after a render.
 
     // ════════════════════════════════════════════════════════════════════
     //  GridView mount + update
