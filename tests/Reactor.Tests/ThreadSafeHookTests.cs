@@ -413,12 +413,16 @@ public class ThreadSafeHookTests
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  Non-threadsafe hook: DEBUG assertion
+    //  Non-threadsafe hook: cross-thread setter without a captured UI
+    //  dispatcher throws a loud InvalidOperationException. (Issue #212 —
+    //  previously [Conditional("DEBUG")] so the throw was silently
+    //  compiled out in RELEASE.) In production the same call path
+    //  auto-marshals via ReactorApp.UIDispatcher instead — covered by the
+    //  AppTests host fixtures, which actually capture a UI dispatcher.
     // ════════════════════════════════════════════════════════════════
 
-#if DEBUG
     [Fact]
-    public void UseState_NonThreadSafe_Throws_On_Background_Thread_In_Debug()
+    public void UseState_NonThreadSafe_OffThread_NoDispatcher_Throws()
     {
         var ctx = new RenderContext();
         ctx.BeginRender(() => { });
@@ -433,7 +437,7 @@ public class ThreadSafeHookTests
     }
 
     [Fact]
-    public void UseReducer_NonThreadSafe_Throws_On_Background_Thread_In_Debug()
+    public void UseReducer_NonThreadSafe_OffThread_NoDispatcher_Throws()
     {
         var ctx = new RenderContext();
         ctx.BeginRender(() => { });
@@ -448,7 +452,7 @@ public class ThreadSafeHookTests
     }
 
     [Fact]
-    public void UseReducer_Redux_NonThreadSafe_Throws_On_Background_Thread_In_Debug()
+    public void UseReducer_Redux_NonThreadSafe_OffThread_NoDispatcher_Throws()
     {
         var ctx = new RenderContext();
         ctx.BeginRender(() => { });
@@ -463,7 +467,6 @@ public class ThreadSafeHookTests
 
         Assert.Contains("threadSafe: true", ex.Message);
     }
-#endif
 
     // ════════════════════════════════════════════════════════════════
     //  Non-threadsafe hook: UI-thread setter works normally

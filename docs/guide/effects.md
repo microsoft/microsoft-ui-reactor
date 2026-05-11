@@ -113,6 +113,15 @@ The `Func<Action>` overload of `UseEffect` returns a cleanup function. Here
 the cleanup disposes the timer, preventing leaks when the component unmounts
 or when `isRunning` changes.
 
+The timer body runs on a background thread (it's inside `Task.Run`) and calls
+the `updateSeconds` reducer from there. That works out of the box — every
+`UseState` / `UseReducer` setter automatically marshals onto the UI dispatcher
+when called from a non-UI thread, so timers, `PeriodicTimer`, network
+callbacks, and code after `await ... ConfigureAwait(false)` can all call the
+returned setter without any extra opt-in. Pass `threadSafe: true` to the hook
+only when you need many concurrent setters to apply in-place (locked) instead
+of being queued one-by-one onto the UI thread.
+
 ## Async Data Loading
 
 Use `UseEffect` with [`UseState`](hooks.md) to load data asynchronously:

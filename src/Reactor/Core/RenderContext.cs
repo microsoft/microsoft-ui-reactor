@@ -30,13 +30,37 @@ public sealed class RenderContext
         _uiThreadId = Environment.CurrentManagedThreadId;
     }
 
-    [global::System.Diagnostics.Conditional("DEBUG")]
-    private void AssertUIThread(string hookName)
+    /// <summary>
+    /// Auto-marshals <paramref name="work"/> to the captured UI dispatcher when the
+    /// caller is not on the UI thread. Returns <c>true</c> if the work was
+    /// scheduled cross-thread (caller should return without executing inline).
+    /// Returns <c>false</c> when the caller is already on the UI thread (hot path).
+    /// <para>
+    /// When no <see cref="Microsoft.UI.Reactor.ReactorApp.UIDispatcher"/> has been
+    /// captured (unit-test / headless render contexts), a cross-thread call throws
+    /// instead of silently racing: there is no UI dispatcher to marshal onto.
+    /// Production hosts always capture a dispatcher in <c>OnLaunched</c>.
+    /// </para>
+    /// </summary>
+    private bool MarshalIfOffUIThread(string hookName, Action work)
     {
-        if (Environment.CurrentManagedThreadId != _uiThreadId)
+        // Hot path — same thread that ran BeginRender. ~1ns TLS read + cmp + branch.
+        if (Environment.CurrentManagedThreadId == _uiThreadId) return false;
+
+        var dq = Microsoft.UI.Reactor.ReactorApp.UIDispatcher;
+        if (dq is null)
+        {
+            // Test/headless context with no captured UI dispatcher AND off-thread.
+            // The legacy [Conditional("DEBUG")] assert at this spot swallowed silently
+            // in RELEASE; surface loudly in both flavors so the call is visible.
             throw new InvalidOperationException(
                 $"{hookName} setter was called from thread {Environment.CurrentManagedThreadId}, " +
-                $"but the UI thread is {_uiThreadId}. Use threadSafe: true to allow cross-thread calls.");
+                $"but the captured UI thread is {_uiThreadId}, and no UI dispatcher is " +
+                $"available to marshal the call. Run the setter on the UI thread, " +
+                $"or pass threadSafe: true to the hook.");
+        }
+        dq.TryEnqueue(() => work());
+        return true;
     }
 
     /// <summary>
@@ -55,9 +79,18 @@ public sealed class RenderContext
     /// <summary>
     /// Declares a piece of state. Returns (currentValue, setter).
     /// Must be called in the same order every render (just like React hooks).
-    /// When <paramref name="threadSafe"/> is true, the setter can be called from any thread
-    /// and reads/writes are synchronized. When false (default), the setter must be called
-    /// from the UI thread — in DEBUG builds, a cross-thread call throws.
+    /// <para>
+    /// When <paramref name="threadSafe"/> is true, reads and writes are synchronized
+    /// with a per-hook lock so concurrent setter calls from many threads serialize.
+    /// When false (default), cross-thread setter calls are auto-marshaled onto the
+    /// captured UI dispatcher — the write and the rerender both run on the UI thread,
+    /// so background-thread setters from <c>Task.Run</c>, <c>PeriodicTimer</c>, or
+    /// callbacks after <c>await … ConfigureAwait(false)</c> work correctly without
+    /// any extra opt-in. Use <paramref name="threadSafe"/>: <c>true</c> when you need
+    /// many concurrent setters to apply in-place (i.e., without an intervening UI
+    /// thread hop) or when the setter result must be visible to its caller before
+    /// the next UI tick.
+    /// </para>
     /// </summary>
     public (T Value, Action<T> Set) UseState<T>(T initialValue, bool threadSafe = false)
     {
@@ -99,7 +132,7 @@ public sealed class RenderContext
             }
             else
             {
-                AssertUIThread("UseState");
+                if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
                 changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
                 if (changed) h.Value = newValue;
                 if (Diagnostics.ReactorEventSource.Log.IsEnabled(
@@ -116,7 +149,10 @@ public sealed class RenderContext
     /// <summary>
     /// Declares a piece of state with a functional updater variant.
     /// The updater receives the previous value and returns the next.
-    /// When <paramref name="threadSafe"/> is true, the updater can be called from any thread.
+    /// Cross-thread updater calls are auto-marshaled onto the captured UI dispatcher
+    /// (same semantics as <see cref="UseState{T}(T, bool)"/>); pass
+    /// <paramref name="threadSafe"/>: <c>true</c> for locked in-place updates that
+    /// serialize many concurrent writers without an intervening UI tick.
     /// </summary>
     public (T Value, Action<Func<T, T>> Update) UseReducer<T>(T initialValue, bool threadSafe = false)
     {
@@ -160,7 +196,7 @@ public sealed class RenderContext
             }
             else
             {
-                AssertUIThread("UseReducer");
+                if (MarshalIfOffUIThread("UseReducer", () => Updater(reducer))) return;
                 var prev = h.Value;
                 var next = reducer(prev);
                 changed = !EqualityComparer<T>.Default.Equals(prev, next);
@@ -180,7 +216,10 @@ public sealed class RenderContext
     /// Declares a piece of state managed by a reducer function (like Redux).
     /// The reducer takes (currentState, action) and returns the next state.
     /// Returns (currentState, dispatch) where dispatch sends an action through the reducer.
-    /// When <paramref name="threadSafe"/> is true, dispatch can be called from any thread.
+    /// Cross-thread dispatch calls are auto-marshaled onto the captured UI dispatcher
+    /// (same semantics as <see cref="UseState{T}(T, bool)"/>); pass
+    /// <paramref name="threadSafe"/>: <c>true</c> for locked in-place dispatch that
+    /// serializes concurrent writers without an intervening UI tick.
     /// </summary>
     public (TState Value, Action<TAction> Dispatch) UseReducer<TState, TAction>(
         Func<TState, TAction, TState> reducer, TState initialValue, bool threadSafe = false)
@@ -221,7 +260,7 @@ public sealed class RenderContext
             }
             else
             {
-                AssertUIThread("UseReducer");
+                if (MarshalIfOffUIThread("UseReducer", () => Dispatch(action))) return;
                 var prev = h.Value;
                 var next = reducer(prev, action);
                 if (!EqualityComparer<TState>.Default.Equals(prev, next))
@@ -399,6 +438,7 @@ public sealed class RenderContext
 
         void Setter(T newValue)
         {
+            if (MarshalIfOffUIThread("UsePersisted", () => Setter(newValue))) return;
             var h = (PersistedHookState<T>)_hooks[currentIndex];
             if (!EqualityComparer<T>.Default.Equals(h.Value, newValue))
             {

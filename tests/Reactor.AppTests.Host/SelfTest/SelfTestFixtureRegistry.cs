@@ -274,6 +274,7 @@ internal static class SelfTestFixtureRegistry
         "ThreadSafe_HighFrequencyLargeTree",
         "ThreadSafe_RenderCoalescing",
         "ThreadSafe_RenderCoalescingDispatcherBatch",
+        "ThreadSafe_NonThreadSafeAutoMarshal",
         // Animation system — Curve & Easing
         "Curve_RecordEquality",
         "Curve_PresetValues",
@@ -1055,6 +1056,7 @@ internal static class SelfTestFixtureRegistry
         "ThreadSafe_HighFrequencyLargeTree" => new ThreadSafeHookFixtures.HighFrequencyLargeTree(harness),
         "ThreadSafe_RenderCoalescing" => new ThreadSafeHookFixtures.RenderCoalescing(harness),
         "ThreadSafe_RenderCoalescingDispatcherBatch" => new ThreadSafeHookFixtures.RenderCoalescingDispatcherBatch(harness),
+        "ThreadSafe_NonThreadSafeAutoMarshal" => new ThreadSafeHookFixtures.NonThreadSafeAutoMarshal(harness),
         // Animation system — Curve & Easing
         "Curve_RecordEquality" => new CurveTests.RecordEquality(harness),
         "Curve_PresetValues" => new CurveTests.PresetValues(harness),

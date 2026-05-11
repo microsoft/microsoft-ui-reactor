@@ -120,6 +120,57 @@ object every render. `UseCallback` returns the same delegate instance as long
 as the dependencies haven't changed. This matters when passing callbacks to
 memoized [child components](components.md).
 
+## Updating State From Background Work
+
+`UseState` and `UseReducer` setters are safe to call from any thread. When you
+invoke a setter from a background task — inside `Task.Run`, from a
+`PeriodicTimer` loop, from a network callback, or after
+`await ... ConfigureAwait(false)` — the setter automatically marshals the write
+and the resulting re-render onto the UI dispatcher. You write the same code
+you'd write on the UI thread:
+
+<!-- ai:lock -->
+```csharp
+public override Element Render()
+{
+    var (seconds, setSeconds) = UseState(0);
+
+    UseEffect(() =>
+    {
+        var cts = new CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            while (await timer.WaitForNextTickAsync(cts.Token))
+                setSeconds(s => s + 1);   // auto-marshals to the UI thread
+        });
+        return () => cts.Cancel();
+    });
+
+    return TextBlock($"Elapsed: {seconds}s");
+}
+```
+<!-- /ai:lock -->
+
+Each cross-thread setter call costs one `DispatcherQueue.TryEnqueue` —
+microseconds, not free, but vastly cheaper than the bugs you'd hit writing the
+field directly from a worker. If you need many concurrent setters to apply
+in-place rather than serialize through the UI thread (typical for ingest loops
+that hammer the same hook from multiple producers), pass `threadSafe: true` to
+the hook:
+
+<!-- ai:lock -->
+```csharp
+var (count, setCount) = UseState(0, threadSafe: true);
+var (sum, addToSum) = UseReducer(0, threadSafe: true);
+```
+<!-- /ai:lock -->
+
+`threadSafe: true` switches the hook to a per-cell lock: concurrent writers
+serialize on the lock instead of queuing through the UI dispatcher, and reads
+inside the setter (the `prev` argument of a reducer) see the latest committed
+write rather than a snapshot from the last UI tick.
+
 ## Hook Rules
 
 Hooks must be called **in the same order** every render. Reactor tracks hooks by
