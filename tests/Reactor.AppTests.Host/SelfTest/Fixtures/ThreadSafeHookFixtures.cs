@@ -359,21 +359,35 @@ internal static class ThreadSafeHookFixtures
 
             // Fire from background tasks — the failure mode the issue documents.
             // The discard `_ = Task.Run(...)` is intentional: it's the exact shape
-            // that swallows the legacy AssertUIThread throw.
+            // that swallows the legacy AssertUIThread throw. Wrap the body in
+            // try/catch + TrySetException so a regression that throws from the
+            // setter doesn't hang `await done.Task` forever; the outer
+            // Task.WhenAny + Task.Delay is the belt-and-suspenders timeout in
+            // case TrySetException is itself bypassed.
             const int iterations = 25;
             var done = new TaskCompletionSource();
             _ = Task.Run(async () =>
             {
-                for (int i = 1; i <= iterations; i++)
+                try
                 {
-                    setValue!(i);
-                    bumpValue!(prev => prev + 1);
-                    await Task.Delay(1);
+                    for (int i = 1; i <= iterations; i++)
+                    {
+                        setValue!(i);
+                        bumpValue!(prev => prev + 1);
+                        await Task.Delay(1);
+                    }
+                    done.TrySetResult();
                 }
-                done.SetResult();
+                catch (Exception ex)
+                {
+                    done.TrySetException(ex);
+                }
             });
 
-            await done.Task;
+            var timeout = Task.Delay(TimeSpan.FromSeconds(10));
+            var winner = await Task.WhenAny(done.Task, timeout);
+            H.Check("AutoMarshal_LoopCompleted", winner == done.Task);
+            if (winner == done.Task) await done.Task; // surface any captured exception
             // Let the marshaled writes drain and render
             for (int i = 0; i < 4; i++) await Harness.Render();
 

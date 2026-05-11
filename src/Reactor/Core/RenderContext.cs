@@ -37,9 +37,13 @@ public sealed class RenderContext
     /// Returns <c>false</c> when the caller is already on the UI thread (hot path).
     /// <para>
     /// When no <see cref="Microsoft.UI.Reactor.ReactorApp.UIDispatcher"/> has been
-    /// captured (unit-test / headless render contexts), a cross-thread call throws
-    /// instead of silently racing: there is no UI dispatcher to marshal onto.
-    /// Production hosts always capture a dispatcher in <c>OnLaunched</c>.
+    /// captured (unit-test / headless render contexts) or when the dispatcher has
+    /// already begun shutting down, a cross-thread call throws instead of silently
+    /// racing or dropping the update. The dispatcher is captured during host
+    /// bootstrap (<c>ReactorApp</c>'s <c>OnLaunched</c> for packaged apps, or
+    /// <c>ReactorHost</c>/<c>ReactorHostControl</c> initialization for embedded /
+    /// test scenarios), so production code reaches this method only after at
+    /// least one render has happened.
     /// </para>
     /// </summary>
     private bool MarshalIfOffUIThread(string hookName, Action work)
@@ -59,7 +63,19 @@ public sealed class RenderContext
                 $"available to marshal the call. Run the setter on the UI thread, " +
                 $"or pass threadSafe: true to the hook.");
         }
-        dq.TryEnqueue(() => work());
+        // TryEnqueue returns false when the dispatcher has begun shutting down
+        // (queue closed, owning thread exiting). Silently swallowing that case
+        // would lose the state update with no diagnostic; throw so the caller
+        // sees the same loud failure mode as the no-dispatcher path.
+        if (!dq.TryEnqueue(() => work()))
+        {
+            throw new InvalidOperationException(
+                $"{hookName} setter was called from thread {Environment.CurrentManagedThreadId}, " +
+                $"but the UI dispatcher refused the marshaled call (TryEnqueue returned " +
+                $"false — typically because the dispatcher is shutting down). The state " +
+                $"update was dropped. Stop scheduling background setters past window/app " +
+                $"shutdown (cancel the producing task in the effect cleanup).");
+        }
         return true;
     }
 

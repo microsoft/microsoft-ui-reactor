@@ -275,9 +275,9 @@ memoized [child components](components.md).
 
 ## Updating State From Background Work
 
-`UseState` and `UseReducer` setters are safe to call from any thread. When you
-invoke a setter from a background task — inside `Task.Run`, from a
-`PeriodicTimer` loop, from a network callback, or after
+Once the host is bootstrapped, `UseState` and `UseReducer` setters are safe to
+call from any thread. When you invoke a setter from a background task — inside
+`Task.Run`, from a `PeriodicTimer` loop, from a network callback, or after
 `await ... ConfigureAwait(false)` — the setter automatically marshals the write
 and the resulting re-render onto the UI dispatcher. You write the same code
 you'd write on the UI thread:
@@ -323,6 +323,14 @@ var (sum, addToSum) = UseReducer(0, threadSafe: true);
 serialize on the lock instead of queuing through the UI dispatcher, and reads
 inside the setter (the `prev` argument of a reducer) see the latest committed
 write rather than a snapshot from the last UI tick.
+
+> **When auto-marshal can't help.** The setter needs a captured
+> `ReactorApp.UIDispatcher` to marshal onto. In unit-test / headless contexts
+> that drive `RenderContext` directly, or before the first host has been
+> bootstrapped, a cross-thread setter call throws `InvalidOperationException`
+> instead of silently racing. The setter also throws if the dispatcher refuses
+> the marshaled call (e.g., during shutdown). Cancel background producers in
+> your effect cleanup so they stop before the window closes.
 
 ## Hook Rules
 
