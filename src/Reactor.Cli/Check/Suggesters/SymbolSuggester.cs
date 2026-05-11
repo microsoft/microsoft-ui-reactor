@@ -72,12 +72,24 @@ internal sealed class SymbolSuggester : ISuggester
         // 1. Named-argument move: `.OnClick(x)` chained on a factory whose
         //    parameter list includes `onClick`. We probe by lower-camel-casing
         //    the missing name (OnClick → onClick) and asking the factory index.
+        //
+        // Receiver-anchoring caveat: today we confirm only that the receiver's
+        // STATIC TYPE matches the factory's return type. We do not walk the
+        // syntax tree back to prove the receiver expression IS that factory's
+        // invocation — so a local `ButtonElement` from elsewhere could still
+        // trip this path. Full AST-anchored receiver verification moves to the
+        // Phase-3 receiver-anchored rule infrastructure (spec 038 §3.1a),
+        // where rules bind through `RuleSymbolResolver` instead of fuzzy
+        // factory-index probing.
         var camel = ToCamelCase(memberName);
         if (ctx.Factories.TryFindParameter(camel, out var owner, out var parameter))
         {
-            // Confirm the receiver is the kind of element this factory returns.
+            // Confirm the receiver IS-A the factory's return type. We dropped
+            // the reverse direction (`returns IS-A receiver`) because it
+            // accepted factories returning a more specific type than the
+            // receiver, which produces rewrites that don't type-check.
             var returns = owner.Method.ReturnType;
-            if (IsAssignableFrom(returns, ctx.Receiver) || IsAssignableFrom(ctx.Receiver, returns))
+            if (IsAssignableFrom(returns, ctx.Receiver))
             {
                 var factoryName = owner.Method.Name;
                 var paramsList = string.Join(", ", owner.Method.Parameters.Select(p =>
@@ -210,8 +222,10 @@ internal sealed class SymbolSuggester : ISuggester
 
         var providedArgCount = inv.ArgumentList.Arguments.Count;
 
-        // Pick the overload with the smallest |params| - |provided| difference;
-        // tiebreak on max(min(0, params - provided)).
+        // Pick the overload with the smallest |params| - |provided| difference.
+        // Equal-distance overloads keep the first one seen — full Hamming over
+        // the (kind, type)-vector is deferred until Data Checkpoint B+ shows a
+        // case where shape-matters beyond arity (spec 038 §1.5).
         FactoryOverload? best = null;
         int bestDistance = int.MaxValue;
         foreach (var ov in overloads)

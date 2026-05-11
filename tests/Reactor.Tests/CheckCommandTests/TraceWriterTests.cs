@@ -1,7 +1,9 @@
 // Phase-0 trace-writer tests. Spec 038 §0.3:
 //   • Every row contains the documented schema fields.
 //   • No row exceeds 2 KB (heuristic catch for source-leak regressions).
-//   • Every `file` field is either relative or starts with the project root.
+//   • Every `file` field is project-relative, "<external>", or ".".
+//     Absolute paths inside the project root are normalized to relative form
+//     so traces don't carry `C:\Users\<name>\...` prefixes.
 //   • Trace is written *in addition to* stdout — separate concern, exercised
 //     in the integration test under tests/Reactor.IntegrationTests.
 
@@ -73,9 +75,12 @@ public class TraceWriterTests
             var inside = Path.Combine(root, "src", "Foo.cs");
             var outside = Path.Combine(Path.GetTempPath(), "elsewhere-" + Guid.NewGuid(), "Bar.cs");
 
-            Assert.Equal(Path.GetFullPath(inside), TraceWriter.SanitizePath(inside, root));
+            // Inside the project root, absolute paths are normalized to
+            // project-relative form (forward-slash separators).
+            Assert.Equal("src/Foo.cs", TraceWriter.SanitizePath(inside, root));
             Assert.Equal("<external>", TraceWriter.SanitizePath(outside, root));
             Assert.Equal("rel/path.cs", TraceWriter.SanitizePath("rel/path.cs", root));
+            Assert.Equal("rel/path.cs", TraceWriter.SanitizePath(@"rel\path.cs", root));
         }
         finally
         {
@@ -84,8 +89,10 @@ public class TraceWriterTests
     }
 
     [Fact]
-    public void Trace_file_field_is_relative_or_within_project_root_for_every_row()
+    public void Trace_file_field_is_relative_for_every_in_root_row()
     {
+        // Stronger than the prior assertion: file must never be an absolute
+        // path. Either relative (in-root) or "<external>" (out-of-root).
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "reactor-trace-root2-" + Guid.NewGuid()));
         Directory.CreateDirectory(root);
         try
@@ -102,15 +109,12 @@ public class TraceWriterTests
                 w.Write(d3);
             }
 
-            var rootWithSep = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
             foreach (var line in File.ReadAllLines(tmp.Path))
             {
                 using var doc = JsonDocument.Parse(line);
                 var file = doc.RootElement.GetProperty("file").GetString()!;
-                var ok = !Path.IsPathRooted(file)
-                      || file.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase)
-                      || file == "<external>";
-                Assert.True(ok, $"file='{file}' is absolute and outside the project root ('{root}').");
+                var ok = !Path.IsPathRooted(file); // relative, ".", or "<external>"
+                Assert.True(ok, $"file='{file}' is an absolute path — trace must not carry machine layout.");
             }
         }
         finally

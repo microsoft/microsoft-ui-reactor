@@ -12,6 +12,9 @@
 //   the unit test enforces.)
 // - Absolute paths outside the project root are replaced with "<external>"
 //   so traces never carry information about a user's machine layout.
+// - Absolute paths inside the project root are normalized to project-relative
+//   form (forward-slash separators) — same rationale: don't carry the
+//   `C:\Users\<name>\...` prefix into a trace file that ships off-machine.
 // - `mode` is always "iteration" until Phase 2 lands the ranker — present as
 //   a stable schema field so traces written today join cleanly later.
 
@@ -89,16 +92,16 @@ internal sealed class TraceWriter : IDisposable
     internal static string SanitizePath(string raw, string projectRoot)
     {
         if (string.IsNullOrEmpty(raw)) return raw;
-        if (!Path.IsPathRooted(raw)) return raw; // already relative — keep as-is
+        if (!Path.IsPathRooted(raw))
+            return raw.Replace('\\', '/'); // already relative — keep as-is, normalize separators
         string full;
         try { full = Path.GetFullPath(raw); }
         catch { return "<external>"; }
         var rootWithSep = projectRoot + Path.DirectorySeparatorChar;
-        if (full.Equals(projectRoot, StringComparison.OrdinalIgnoreCase) ||
-            full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
-        {
-            return full;
-        }
+        if (full.Equals(projectRoot, StringComparison.OrdinalIgnoreCase))
+            return ".";
+        if (full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
+            return full[rootWithSep.Length..].Replace('\\', '/');
         return "<external>";
     }
 

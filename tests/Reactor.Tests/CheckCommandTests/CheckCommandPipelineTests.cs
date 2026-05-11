@@ -36,6 +36,24 @@ public class CheckCommandPipelineTests
     }
 
     [Fact]
+    public void Parses_msbuild_lines_with_parens_in_file_path()
+    {
+        // Reluctant file capture must still anchor on (line,col): even when
+        // the path itself contains parentheses (agent/temp dirs with labels).
+        const string output = """
+            C:\src\Reactor (test)\Program.cs(10,5): error CS1061: 'X' does not contain a definition for 'Y' [C:\src\Foo.csproj]
+            """;
+
+        var diags = CheckCommand.ParseDiagnostics(output);
+
+        Assert.Single(diags);
+        Assert.Equal(@"C:\src\Reactor (test)\Program.cs", diags[0].File);
+        Assert.Equal(10, diags[0].Line);
+        Assert.Equal(5, diags[0].Col);
+        Assert.Equal("CS1061", diags[0].Code);
+    }
+
+    [Fact]
     public void Emit_dedupes_repeated_diagnostics()
     {
         var diags = CheckCommand.ParseDiagnostics(SampleMsBuildOutput);

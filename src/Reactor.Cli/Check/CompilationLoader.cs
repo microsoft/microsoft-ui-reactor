@@ -48,10 +48,15 @@ internal sealed class CompilationLoader
     /// </summary>
     public static CSharpCompilation EmptyCompilation => _emptyCompilation.Value;
 
-    static readonly Lazy<CSharpCompilation> _emptyCompilation = new(() =>
-        CSharpCompilation.Create("Empty",
-            references: HostRuntimeReferences.Value!,
-            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)));
+    static readonly Lazy<CSharpCompilation> _emptyCompilation = new(BuildEmptyCompilation);
+
+    static CSharpCompilation BuildEmptyCompilation()
+    {
+        var refs = HostRuntimeReferences.Value ?? Array.Empty<MetadataReference>();
+        return CSharpCompilation.Create("Empty",
+            references: refs,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+    }
 
     public CSharpCompilation Load(string projectPath)
     {

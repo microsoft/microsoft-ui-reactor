@@ -195,8 +195,11 @@ public static class CheckCommand
     {
         // MSBuild diagnostic line:
         //   path(line,col): error|warning CODE: message [project]
+        // File capture is reluctant so paths containing parentheses
+        // (e.g. `C:\src\Reactor (test)\Program.cs`) still parse — anchor
+        // is the (line,col): suffix immediately preceding the severity.
         static readonly Regex Pattern = new(
-            @"^(?<file>[^()]+)\((?<line>\d+),(?<col>\d+)\):\s*(?<sev>error|warning|info)\s+(?<code>[A-Z][A-Z0-9_]*\d):\s*(?<msg>.+?)(?:\s*\[[^\]]+\])?\s*$",
+            @"^(?<file>.+?)\((?<line>\d+),(?<col>\d+)\):\s*(?<sev>error|warning|info)\s+(?<code>[A-Z][A-Z0-9_]*\d):\s*(?<msg>.+?)(?:\s*\[[^\]]+\])?\s*$",
             RegexOptions.Compiled);
 
         public static Diag? Parse(string raw)
