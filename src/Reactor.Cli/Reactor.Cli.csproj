@@ -41,13 +41,25 @@
                       Condition="Exists('..\..\skills\reactor.api.txt')" />
   </ItemGroup>
 
+  <!-- SignaturesGen transitively references WindowsAppSDK, whose targets
+       reject AnyCPU. Pin its build Platform to the host arch so a bare
+       `dotnet build src/Reactor.Cli` (no -p:Platform) succeeds. The
+       generator's AfterBuild step only fires when target arch == host arch,
+       so building with the host arch keeps reactor.api.txt regenerating. -->
+  <PropertyGroup>
+    <_SignaturesGenPlatform Condition="'$(Platform)' == 'x64' or '$(Platform)' == 'ARM64'">$(Platform)</_SignaturesGenPlatform>
+    <_SignaturesGenPlatform Condition="'$(_SignaturesGenPlatform)' == '' and $(NETCoreSdkRuntimeIdentifier.EndsWith('-arm64'))">ARM64</_SignaturesGenPlatform>
+    <_SignaturesGenPlatform Condition="'$(_SignaturesGenPlatform)' == ''">x64</_SignaturesGenPlatform>
+  </PropertyGroup>
+
   <!-- Build-order only: ensures the signatures generator runs (and writes
        skills/reactor.api.txt) before this project embeds it. The generator
        isn't a runtime dependency of mur. -->
   <ItemGroup>
     <ProjectReference Include="..\..\tools\Reactor.SignaturesGen\Reactor.SignaturesGen.csproj"
                       ReferenceOutputAssembly="false"
-                      Private="false" />
+                      Private="false"
+                      SetPlatform="Platform=$(_SignaturesGenPlatform)" />
   </ItemGroup>
 
   <!-- After build, mirror the CLI output to <repo>/bin/<arch>/ so it matches
