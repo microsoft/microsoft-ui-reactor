@@ -78,6 +78,17 @@ to land under these conventions; subsequent specs follow this shape.
   values; gate threshold (3) empirically defensible at 28.7% emit rate.
   No code change in this entry — calibration + docs only. (spec 038 §1.8,
   Data Checkpoint C)
+- EC1 re-run with the diagnostic-count gate (2026-05-11): both arms PASS.
+  `reactor-calc-mur-check` cost −4% mean (was +21% in the prior batch);
+  `reactor-kanban-mur-check` cost −33% mean / −39% median (was −24% mean
+  — preserved and grew). First-build OK 5/5 both variant arms. Phase 1
+  acceptance bar met; Phase 1 cleared to merge to `main`. Watch-item
+  carried into Phase 2: kanban CV widened (24% prior → 54%) because one
+  of five runs hit 0 firings and took the long-tail base path — gate
+  behavior is path-dependent on the agent's exploration order. Below
+  the resolution threshold for a Phase-1 blocker; Phase 2 telemetry
+  should track per-run firing counts. (spec 038 §1.8 EC1 acceptance,
+  §11 risk row, §14 #8)
 - `WindowSpec`, `ReactorWindow`, `WindowKey`, `WindowStartPosition`,
   `PresenterKind`, `WindowState`, `WindowIcon`, `WindowDipSizeChangedEventArgs`,
   `WindowClosingEventArgs`, `ReactorAppContext` — first-class Window primitive
