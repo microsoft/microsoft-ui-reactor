@@ -22,7 +22,7 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 
 ## Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - Windows App SDK 2.0 — restored automatically from NuGet, no manual install required
 - Visual Studio 2022 (17.8+) or VS Code with C# Dev Kit
 

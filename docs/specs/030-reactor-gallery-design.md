@@ -483,7 +483,7 @@ No per-feature or per-sample csproj. The head app globs sample content directly 
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
     <RootNamespace>Reactor.Gallery</RootNamespace>
     <UseWindowsAppSDK>true</UseWindowsAppSDK>
   </PropertyGroup>

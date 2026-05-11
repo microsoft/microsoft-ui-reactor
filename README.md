@@ -133,9 +133,9 @@ If you're building line-of-business applications:
 
 ### Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - Windows App SDK 2.0 — pulled automatically on `dotnet restore`
-- Visual Studio 2022 (17.8+) or just the .NET 8 CLI
+- Visual Studio 2022 (17.8+) or just the .NET 10 CLI
 
 > This project uses Windows App SDK 2.0 (`Microsoft.WindowsAppSDK` 2.0.1). The package comes from NuGet — no manual SDK installer is needed.
 
@@ -151,7 +151,7 @@ Or create a `.csproj` manually:
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>

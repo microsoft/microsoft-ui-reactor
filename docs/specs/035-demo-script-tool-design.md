@@ -95,7 +95,7 @@ The tool reads and writes this file. It is human-editable outside the tool.
 
 ## Demo Prompt
 
-This demo shows how to build a real-time chat UI using .NET 9 top-level
+This demo shows how to build a real-time chat UI using .NET 10 top-level
 statements and the Spectre.Console library. Single-file mode. Each step
 should compile and run standalone with `dotnet run`. Use NuGet inline
 references where needed.

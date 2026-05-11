@@ -138,10 +138,10 @@ Shared library consumed by all three apps:
 
 WinUI variants (`Direct`, `Bound`, `DirectX`, `Reactor`,
 `ReactorOptimized`, `ReactorGrid`, `VirtualList.Reactor`) target
-`net9.0-windows10.0.22621.0` and pick up the repo-wide
+`net10.0-windows10.0.22621.0` and pick up the repo-wide
 `WindowsAppSDKVersion` from `Directory.Build.props`. The WPF variant
-targets `net9.0-windows`; `PresentTracer` is plain `net9.0`. The
-shared scaffold (`StressPerf.Shared`) is `net9.0-windows`.
+targets `net10.0-windows`; `PresentTracer` is plain `net10.0`. The
+shared scaffold (`StressPerf.Shared`) is `net10.0-windows`.
 
 ```bash
 # Build all

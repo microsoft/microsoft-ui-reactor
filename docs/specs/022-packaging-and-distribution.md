@@ -138,7 +138,7 @@ The `<EmbeddedResource Include="..\..\SKILL.md">` line stays — `mur --skill` s
 
 ```
 Microsoft.UI.Reactor.1.0.0-preview.42.nupkg
-├── lib/net9.0-windows10.0.22621.0/
+├── lib/net10.0-windows10.0.22621.0/
 │   ├── Reactor.dll
 │   └── Reactor.xml                        # XML doc comments
 ├── analyzers/dotnet/cs/
@@ -195,7 +195,7 @@ Add `Microsoft.SourceLink.GitHub` so consumers can step into Reactor source duri
 
 `mur` is short-lived (will fold into the framework once the dev loop stabilizes) but in the meantime it's a real tool consumers need. It cannot ship cleanly as a `dotnet tool` because:
 
-- `src/Reactor.Cli/Reactor.Cli.csproj:4-5` targets `net9.0-windows10.0.22621.0` with `Platforms>x64;ARM64`.
+- `src/Reactor.Cli/Reactor.Cli.csproj:4-5` targets `net10.0-windows10.0.22621.0` with `Platforms>x64;ARM64`.
 - .NET global tools must be AnyCPU and don't cleanly handle Windows-only TFMs.
 - Even if we got it working, Copilot SDK native dependencies (`GitHub.Copilot.SDK`) and WinUI runtime expectations make a self-contained exe the more reliable path.
 
@@ -206,10 +206,10 @@ On every CI run, publish:
 - `bin/x64/mur.exe` and `bin/arm64/mur.exe` (plus their managed/native dependencies) inside `reactor-skill-kit-<version>.zip`
 - Per RID — `--runtime win-x64` and `--runtime win-arm64` — to pick up the right native bits (Copilot SDK natives, etc.)
 
-**Framework-dependent (`--self-contained false`)** — the consumer's machine supplies the .NET 9 desktop runtime. This saves ~70 MB per RID over self-contained. Tradeoffs:
+**Framework-dependent (`--self-contained false`)** — the consumer's machine supplies the .NET 10 desktop runtime. This saves ~70 MB per RID over self-contained. Tradeoffs:
 
-- Requires `winget install Microsoft.DotNet.Runtime.9` on the consumer's machine. Acceptable for the P0 audience (Microsoft engineers) and for P2/P3 consumers willing to install a runtime.
-- `install-skill-kit.ps1` checks for .NET 9 and warns clearly if it's missing.
+- Requires `winget install Microsoft.DotNet.Runtime.10` on the consumer's machine. Acceptable for the P0 audience (Microsoft engineers) and for P2/P3 consumers willing to install a runtime.
+- `install-skill-kit.ps1` checks for .NET 10 and warns clearly if it's missing.
 
 **Sample apps stay self-contained.** Reactor's sample apps and bench/perf projects continue to use `WindowsAppSDKSelfContained=true` (the Directory.Build.props default). Sample apps are sensitive to the WinUI runtime version — bundling makes it trivial to test against different SDK versions during dev. Tools (`mur`) are not.
 
@@ -402,7 +402,7 @@ Target experience after P1 ships:
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
@@ -454,7 +454,7 @@ Verified locally:
 - `dotnet build Reactor.sln -c Release` → 0 errors.
 - `dotnet test tests/Reactor.Tests` → 6836 passed.
 - `dotnet test tests/Reactor.SelfTests` → 639 passed.
-- `dotnet pack src/Reactor -c Release -p:Platform=x64 -p:Version=0.0.1-smoke` → produces `.nupkg` containing `lib/net9.0-windows10.0.22621/Reactor.dll`, `analyzers/dotnet/cs/Reactor.Analyzers.dll`, `analyzers/dotnet/cs/Reactor.Localization.Generator.dll`, `LICENSE`, `Reactor.xml`.
+- `dotnet pack src/Reactor -c Release -p:Platform=x64 -p:Version=0.0.1-smoke` → produces `.nupkg` containing `lib/net10.0-windows10.0.22621/Reactor.dll`, `analyzers/dotnet/cs/Reactor.Analyzers.dll`, `analyzers/dotnet/cs/Reactor.Localization.Generator.dll`, `LICENSE`, `Reactor.xml`.
 
 Still TODO under P0:
 - **Bootstrap MinVer**: `git tag v0.1.0-experimental.0 && git push --tags` so the first CI run produces `0.1.0-experimental.0.<height>` rather than the pre-bootstrap default.

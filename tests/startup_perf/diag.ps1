@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Continue"
 $root = $PSScriptRoot
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "ARM64" } else { "x64" }
-$tfm = "net9.0-windows10.0.22621.0"
+$tfm = "net10.0-windows10.0.22621.0"
 $rid = if ($arch -eq "ARM64") { "win-arm64" } else { "win-x64" }
 $ProviderGuid = [guid]'FD80D616-E92B-4B2B-9BED-131ADA36A8FD'
 
