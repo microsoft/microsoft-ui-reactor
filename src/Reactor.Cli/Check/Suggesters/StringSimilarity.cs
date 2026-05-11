@@ -1,6 +1,9 @@
-// Jaro–Winkler similarity for fuzzy member-name matching. Pure, allocation-
-// free on the hot path. Spec 038 §5 confidence formula: JW ≥ 0.85 → 1.0;
-// below 0.7 → 0.0; the suggester rescales these into a confidence score.
+// Jaro–Winkler similarity for fuzzy member-name matching. Pure (no I/O, no
+// shared state). Allocates two short bool[]s per Jaro call — fine at our call
+// volume (≤ a few hundred candidates per diagnostic); revisit with stackalloc
+// if perf-trait tests show it on the hot path. Spec 038 §5 confidence formula:
+// JW ≥ 0.85 → 1.0; below 0.7 → 0.0; the suggester rescales these into a
+// confidence score.
 
 namespace Microsoft.UI.Reactor.Cli.Check.Suggesters;
 

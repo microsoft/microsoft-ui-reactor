@@ -75,7 +75,7 @@ internal sealed record CheckArgs(string Path, string? TracePath, int? SuggestThr
 
     public static string HelpText =>
         "mur check [<path>] [--trace <jsonl-path>] [--suggest-threshold <N>]\n" +
-        "  <path>                     Project, .csproj, .cs file, or directory (default: .)\n" +
+        "  <path>                     .csproj file or directory containing one (default: .)\n" +
         "  --trace <path>             Append one JSONL row per parsed diagnostic to <path>\n" +
         "                             (in addition to the normal stdout output)\n" +
         "  --suggest-threshold <N>    Emit Tier-2 did-you-mean suggestions only when at least\n" +

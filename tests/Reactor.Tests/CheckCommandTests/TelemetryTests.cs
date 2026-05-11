@@ -90,8 +90,41 @@ public class TelemetryTests
             {
                 if (prop.Value.ValueKind != JsonValueKind.String) continue;
                 var v = prop.Value.GetString()!;
-                Assert.True(v.Length <= Telemetry.MaxFieldBytes,
-                    $"field '{prop.Name}' length={v.Length} exceeds MaxFieldBytes={Telemetry.MaxFieldBytes}");
+                var bytes = global::System.Text.Encoding.UTF8.GetByteCount(v);
+                Assert.True(bytes <= Telemetry.MaxFieldBytes,
+                    $"field '{prop.Name}' utf8-bytes={bytes} exceeds MaxFieldBytes={Telemetry.MaxFieldBytes}");
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(Telemetry.OptInEnv, prior);
+            if (global::System.IO.Directory.Exists(dir)) global::System.IO.Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Truncate_bounds_non_ASCII_by_byte_count()
+    {
+        // Pure non-ASCII: each glyph is 3 bytes in UTF-8, so a 200-char string
+        // would be 600 bytes — must shrink past the 256-byte cap.
+        var prior = Environment.GetEnvironmentVariable(Telemetry.OptInEnv);
+        var dir = global::System.IO.Path.Combine(global::System.IO.Path.GetTempPath(), "mur-tel-utf8-" + Guid.NewGuid());
+        try
+        {
+            Environment.SetEnvironmentVariable(Telemetry.OptInEnv, "1");
+            var nonAscii = new string('字', 200); // 3 bytes/char × 200 = 600 bytes
+            var s = new Suggestion(nonAscii, 0.9, nonAscii, nonAscii);
+            Telemetry.OnSuggestionEmitted(nonAscii, s, dir);
+
+            var line = global::System.IO.File.ReadAllLines(global::System.IO.Directory.GetFiles(dir).Single()).Single();
+            using var doc = JsonDocument.Parse(line);
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind != JsonValueKind.String) continue;
+                var v = prop.Value.GetString()!;
+                var bytes = global::System.Text.Encoding.UTF8.GetByteCount(v);
+                Assert.True(bytes <= Telemetry.MaxFieldBytes,
+                    $"field '{prop.Name}' utf8-bytes={bytes} exceeds MaxFieldBytes={Telemetry.MaxFieldBytes}");
             }
         }
         finally

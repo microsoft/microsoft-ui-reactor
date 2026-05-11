@@ -8,8 +8,10 @@
 // where `hint` is a skill-file pointer for known Reactor analyzer IDs (so the
 // agent can read 5 lines of guidance instead of grepping the codebase).
 //
-// `<path>` defaults to `.` and accepts a directory, a .csproj, or a single
-// .cs file (uses `dotnet build <file>` against the file-level header).
+// `<path>` defaults to `.` and accepts a .csproj or a directory containing
+// one. (`dotnet build` does not accept a bare .cs file as a target, so we
+// don't either; CompilationLoader's per-file walk-up is for tooling/test
+// seams only.)
 
 using System.Diagnostics;
 using System.Text.RegularExpressions;
@@ -97,8 +99,19 @@ public static class CheckCommand
             Func<Diag, Suggestion?>? suggest = null;
             if (ShouldEmitSuggestions(diagnostics, effectiveThreshold))
             {
-                var orchestrator = new SuggesterOrchestrator();
-                suggest = diag => orchestrator.Suggest(diag, path);
+                // Load the CSharpCompilation once for the whole invocation so
+                // CompilationLoader.Load — which re-enumerates `.cs` files and
+                // recomputes the file-set hash on every call — runs O(1) per
+                // mur check, not O(diagnostics). Cache-hit on the second
+                // invocation still benefits.
+                Microsoft.CodeAnalysis.CSharp.CSharpCompilation? compilation = null;
+                try { compilation = CompilationLoader.Instance.Load(path); }
+                catch { /* loader is best-effort; fall through to no-suggest */ }
+                if (compilation is not null && !ReferenceEquals(compilation, CompilationLoader.EmptyCompilation))
+                {
+                    var orchestrator = new SuggesterOrchestrator();
+                    suggest = diag => orchestrator.SuggestAgainst(diag, compilation);
+                }
             }
             EmitDiagnostics(diagnostics, Console.Out, trace, suggest);
             if (diagnostics.Count == 0 && proc.ExitCode == 0)

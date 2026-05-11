@@ -103,6 +103,13 @@ internal sealed class SuggesterOrchestrator
     {
         if (string.IsNullOrEmpty(file)) return null;
         // Diagnostic file may be relative or absolute; try the obvious match first.
+        // For the fallback suffix match, require a path-separator boundary so a
+        // diagnostic on "Program.cs" doesn't accidentally bind to "MyProgram.cs".
+        // If the diagnostic carries only a bare filename (no separators), we
+        // fall back to GetFileName equality so cross-platform separators work.
+        bool hasSeparator = file.Contains('/') || file.Contains('\\');
+        string fileName = hasSeparator ? string.Empty : file;
+
         SyntaxTree? exact = null;
         SyntaxTree? suffix = null;
         foreach (var t in c.SyntaxTrees)
@@ -112,9 +119,18 @@ internal sealed class SuggesterOrchestrator
                 exact = t;
                 break;
             }
-            // Suffix match: "Program.cs" vs "C:\proj\Program.cs".
-            if (t.FilePath.EndsWith(Path.DirectorySeparatorChar + file, StringComparison.OrdinalIgnoreCase) ||
-                t.FilePath.EndsWith(file, StringComparison.OrdinalIgnoreCase))
+            if (hasSeparator)
+            {
+                // Both possible separators — a Windows-built CSharpCompilation
+                // can host trees with either, depending on how the project
+                // file specified them.
+                if (t.FilePath.EndsWith('/' + file, StringComparison.OrdinalIgnoreCase) ||
+                    t.FilePath.EndsWith('\\' + file, StringComparison.OrdinalIgnoreCase))
+                {
+                    suffix = t;
+                }
+            }
+            else if (string.Equals(Path.GetFileName(t.FilePath), fileName, StringComparison.OrdinalIgnoreCase))
             {
                 suffix = t;
             }

@@ -9,6 +9,7 @@
 //     ever logged. Every field that could plausibly carry user content is
 //     bounded to 256 bytes.
 
+using System.Text;
 using System.Text.Json;
 
 namespace Microsoft.UI.Reactor.Cli.Check;
@@ -57,9 +58,18 @@ internal static class Telemetry
     static string Truncate(string s)
     {
         if (string.IsNullOrEmpty(s)) return s;
-        // Bound by both char count (cheap) and byte count (rule).
-        if (s.Length > MaxFieldBytes) s = s[..MaxFieldBytes];
-        return s;
+        // Bound is byte-count, not char-count: non-ASCII content can push past
+        // MaxFieldBytes in UTF-8 even when char length is under the limit.
+        // Cheap path first — pure-ASCII strings have byte == char count.
+        if (s.Length <= MaxFieldBytes && Encoding.UTF8.GetByteCount(s) <= MaxFieldBytes)
+            return s;
+        // Truncate on a char boundary that fits MaxFieldBytes in UTF-8. Walk
+        // down from the char-length upper bound; each iteration shaves one
+        // char until the byte budget is satisfied.
+        int chars = Math.Min(s.Length, MaxFieldBytes);
+        while (chars > 0 && Encoding.UTF8.GetByteCount(s.AsSpan(0, chars)) > MaxFieldBytes)
+            chars--;
+        return s[..chars];
     }
 
     internal sealed record TelemetryRow(

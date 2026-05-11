@@ -127,6 +127,55 @@ class Test
         Assert.Equal("Program.cs:10:5  E  CS9999  msg", line);
     }
 
+    [Fact]
+    public void FindTreeFor_suffix_match_requires_path_separator_boundary()
+    {
+        // Regression for PR-243 review: a diagnostic on a bare "Program.cs"
+        // must not accidentally bind to a sibling tree like "MyProgram.cs"
+        // just because the longer name ends with the shorter one.
+        // Strategy: put a Reactor CS1061 with a near-Label typo in Program.cs,
+        // and unrelated valid code in MyProgram.cs. Pre-fix, the suffix match
+        // would prefer MyProgram.cs (last-write-wins on the suffix branch) and
+        // the suggestion would go silent because the node at the diag's
+        // (line, col) wouldn't be inside ButtonElement's reach. Post-fix, we
+        // correctly bind to Program.cs and the suggester emits a member hint.
+        const string sibling = @"
+class Sibling
+{
+    public void Run()
+    {
+        // padding so MyProgram.cs is longer than Program.cs — defeats any
+        // length-based tiebreak that might mask the bug.
+        var x = 1; var y = 2; var z = x + y;
+    }
+}";
+        const string main = @"
+using Microsoft.UI.Reactor.Core;
+class Test { void M() { var b = new ButtonElement(); var x = b.Labl; } }
+";
+        var c = TestCompilation.Create(new[]
+        {
+            (Stubs, "Stubs.cs"),
+            (sibling, "MyProgram.cs"),
+            (main, "Program.cs"),
+        });
+
+        var roslynDiag = c.GetDiagnostics().First(d => d.Id == "CS1061");
+        var span = roslynDiag.Location.GetLineSpan();
+        // Diagnostic carries the bare filename only — this is the case the
+        // pre-fix EndsWith logic mishandled.
+        var diag = new CheckCommand.Diag(
+            "Program.cs",
+            span.StartLinePosition.Line + 1,
+            span.StartLinePosition.Character + 1,
+            "error", "CS1061", roslynDiag.GetMessage());
+
+        var orch = new SuggesterOrchestrator();
+        var s = orch.SuggestAgainst(diag, c);
+        Assert.NotNull(s);
+        Assert.Contains("Label", s!.Text);
+    }
+
     static (int line, int col, string file) AsMSBuild(Microsoft.CodeAnalysis.Diagnostic d)
     {
         var span = d.Location.GetLineSpan();

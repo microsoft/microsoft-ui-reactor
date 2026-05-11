@@ -269,6 +269,10 @@ internal sealed class SymbolSuggester : ISuggester
             {
                 if (m.IsStatic) continue;
                 if (m.DeclaredAccessibility != Microsoft.CodeAnalysis.Accessibility.Public) continue;
+                // Skip synthesized accessors (get_X / set_X / add_X / remove_X)
+                // — same hazard as CollectStaticMembers.
+                if (m is IMethodSymbol method && method.MethodKind != MethodKind.Ordinary)
+                    continue;
                 if (m.Kind is SymbolKind.Method or SymbolKind.Property or SymbolKind.Field or SymbolKind.Event)
                     list.Add(m);
             }
@@ -283,6 +287,12 @@ internal sealed class SymbolSuggester : ISuggester
         {
             if (!m.IsStatic) continue;
             if (m.DeclaredAccessibility != Microsoft.CodeAnalysis.Accessibility.Public) continue;
+            // Filter synthesized property accessors (get_X / set_X) so they
+            // don't leak into CS0117 suggestions as user-callable members.
+            // Spec-038 525-run calibration surfaced ~four conf=0.88 emissions
+            // of `Theme.get_Background`; this is the structural fix.
+            if (m is IMethodSymbol method && method.MethodKind != MethodKind.Ordinary)
+                continue;
             if (m.Kind is SymbolKind.Method or SymbolKind.Property or SymbolKind.Field)
                 list.Add(m);
         }
