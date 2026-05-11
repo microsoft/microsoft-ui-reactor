@@ -682,8 +682,8 @@ internal static class SelfTestFixtureRegistry
         "ValueEvt_ColorPicker",
 
         // Validation pit-of-success: NumberBox.Immediate() + Button.DisabledFocusable()
+        // Keystroke-level coverage lives in Reactor.AppTests (Appium tier).
         "Immediate_NumberBoxFiresOnTextChange",
-        "Immediate_NumberBoxWithoutImmediateIgnoresTextChange",
         "DisabledFocusable_ButtonState",
         "DisabledFocusable_ButtonToggleRestoresState",
 
@@ -1468,7 +1468,6 @@ internal static class SelfTestFixtureRegistry
 
         // Validation pit-of-success
         "Immediate_NumberBoxFiresOnTextChange" => new ImmediateAndDisabledFocusableFixtures.NumberBoxImmediateFiresOnTextChange(harness),
-        "Immediate_NumberBoxWithoutImmediateIgnoresTextChange" => new ImmediateAndDisabledFocusableFixtures.NumberBoxWithoutImmediateIgnoresTextChange(harness),
         "DisabledFocusable_ButtonState" => new ImmediateAndDisabledFocusableFixtures.ButtonDisabledFocusableState(harness),
         "DisabledFocusable_ButtonToggleRestoresState" => new ImmediateAndDisabledFocusableFixtures.ButtonDisabledFocusableToggleRestoresState(harness),
 

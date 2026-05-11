@@ -841,6 +841,7 @@ public sealed partial class Reconciler
                 && double.TryParse(nb.Text,
                     global::System.Globalization.NumberStyles.Float,
                     global::System.Globalization.CultureInfo.CurrentCulture, out var typed)
+                && double.IsFinite(typed)   // NaN/Infinity must never defeat the skip and slip through
                 && typed == n.Value;
             if (!skipValueWrite)
             {

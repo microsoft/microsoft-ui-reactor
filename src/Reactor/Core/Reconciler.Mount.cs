@@ -328,17 +328,19 @@ public sealed partial class Reconciler
     /// <summary>
     /// Applies the (Disabled, DisabledFocusable) state to a WinUI Button.
     /// True disable: IsEnabled=false (removes from tab order). Disabled-
-    /// focusable: IsEnabled=true plus visual dim and AT 'unavailable' state.
-    /// The Click trampoline (see EnsureButtonWiring) drops invokes when the
-    /// element is in disabled-focusable mode.
+    /// focusable: IsEnabled=true plus visual dim; UIA still reports the
+    /// button as enabled (full AT "unavailable" reporting is a follow-up
+    /// requiring a custom AutomationPeer override). The Click trampoline
+    /// (see EnsureButtonWiring) drops invokes when the element is in
+    /// disabled-focusable mode.
     /// </summary>
     internal static void ApplyButtonEnabledState(WinUI.Button button, ButtonElement btn)
     {
-        // TODO: full AT 'unavailable' reporting would require a custom
-        // ButtonAutomationPeer overriding IsEnabledCore() — Microsoft.UI.Xaml
-        // doesn't expose an AutomationProperties.IsEnabled attached property
-        // (unlike UIA Win32). For now we rely on visual dim + the Click
-        // trampoline dropping invokes when IsDisabledFocusable is set.
+        // Visual dim + Click trampoline drop. UIA still reports the button as
+        // enabled — a future fix would attach a custom ButtonAutomationPeer
+        // overriding IsEnabledCore() to fully mirror the WinUI Win32 / ARIA
+        // aria-disabled pattern. Tracked as a TODO; not required for the
+        // keyboard-reachability win this method delivers.
         if (btn.IsDisabledFocusable)
         {
             button.IsEnabled = true;
@@ -347,7 +349,11 @@ public sealed partial class Reconciler
         else
         {
             button.IsEnabled = btn.IsEnabled;
-            button.Opacity = 1.0;
+            // ClearValue (not Opacity=1.0) so any opacity coming from a XAML
+            // style, template, or external code path survives. Forcing 1.0
+            // here would silently override a Setters/Resources Opacity binding
+            // every time the button rerenders out of disabled-focusable mode.
+            button.ClearValue(UIElement.OpacityProperty);
         }
     }
 
@@ -564,6 +570,10 @@ public sealed partial class Reconciler
             if (!double.TryParse(box.Text,
                 global::System.Globalization.NumberStyles.Float,
                 global::System.Globalization.CultureInfo.CurrentCulture, out var parsed)) return;
+            // Reject NaN/±Infinity — double.TryParse accepts the literal strings
+            // "NaN"/"Infinity" by default, and NaN comparisons are never equal,
+            // so the sync-guard below would let them through.
+            if (!double.IsFinite(parsed)) return;
             if (parsed < el.Minimum || parsed > el.Maximum) return;
             if (parsed == el.Value) return; // already in sync; suppresses post-programmatic-write callback
             el.OnValueChanged.Invoke(parsed);
