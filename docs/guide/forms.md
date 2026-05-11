@@ -90,7 +90,8 @@ text. Check the API reference for each control's full signature.
 ## Simple Validation
 
 For quick forms, derive validation from state. Compute booleans on every
-render and use them to show error messages and disable submit:
+render, show inline error messages, and re-check the booleans inside the
+submit handler:
 
 ```csharp
 class ValidationDemo : Component
@@ -99,6 +100,7 @@ class ValidationDemo : Component
     {
         var (email, setEmail) = UseState("");
         var (age, setAge) = UseState(0.0);
+        var (showErrors, setShowErrors) = UseState(false);
 
         var emailValid = email.Contains('@') && email.Contains('.');
         var ageValid = age >= 18 && age <= 120;
@@ -113,12 +115,15 @@ class ValidationDemo : Component
                 TextBlock("Enter a valid email address")
                     .Foreground(Theme.SystemCritical).FontSize(12)),
             NumberBox(age, setAge, header: "Age"),
-            When(age > 0 && !ageValid, () =>
+            When((showErrors || age > 0) && !ageValid, () =>
                 TextBlock("Age must be between 18 and 120")
                     .Foreground(Theme.SystemCritical).FontSize(12)),
-            Button("Submit", () => { })
-                .Disabled(!formValid)
-                .Margin(0, 8, 0, 0)
+            Button("Submit", () =>
+            {
+                setShowErrors(true);
+                if (!formValid) return;
+                // submit...
+            }).Margin(0, 8, 0, 0)
         ).Padding(24);
     }
 }
@@ -129,6 +134,79 @@ class ValidationDemo : Component
 This works well for small forms. For larger forms with cross-field rules,
 touched/dirty tracking, and error display policies, use the validation
 framework described next.
+
+## Keeping Submit Reachable
+
+A common form pattern — *disable the Submit button until the form is valid* —
+is a keyboard accessibility trap when combined with controls like `NumberBox`,
+`DatePicker`, and `CalendarDatePicker`, which commit their value on blur
+rather than per keystroke. The user fixes the last invalid field, presses
+Tab to reach Submit, and focus skips the still-disabled button. By the time
+the field commits and Submit becomes enabled, focus has already moved on.
+The user is stranded with no keyboard route to a button they can now press.
+
+Reactor offers two opt-in fixes for this. They compose:
+
+```csharp
+class KeepSubmitReachableDemo : Component
+{
+    public override Element Render()
+    {
+        var (email, setEmail) = UseState("");
+        var (age, setAge) = UseState(0.0);
+
+        var emailValid = email.Contains('@') && email.Contains('.');
+        var ageValid = age >= 18 && age <= 120;
+        var formValid = emailValid && ageValid;
+
+        return VStack(12,
+            SubHeading("Keeping Submit Reachable"),
+            TextField(email, setEmail, header: "Email",
+                placeholder: "user@example.com"),
+
+            // .Immediate() switches NumberBox from commit-on-blur to
+            // commit-on-keystroke, so validation reacts as the user types.
+            NumberBox(age, setAge, header: "Age").Immediate(),
+
+            // .DisabledFocusable() keeps the button tab-reachable and
+            // visually dimmed while preventing invocation. Pattern mirrors
+            // Fluent UI's `disabledFocusable` and ARIA `aria-disabled`.
+            Button("Submit", () => { /* submit */ })
+                .DisabledFocusable(!formValid)
+                .Margin(0, 8, 0, 0)
+        ).Padding(24);
+    }
+}
+```
+
+![Keep submit reachable](images/forms/keep-submit-reachable.png)
+
+**`.DisabledFocusable(bool)` on Button** keeps the button keyboard-focusable
+and tab-reachable while presenting it as disabled (dimmed; the click is
+suppressed). Mirrors Fluent UI React's `disabledFocusable` and ARIA's
+`aria-disabled`. Use it for any Submit gated on validation, busy state, or
+other derived conditions.
+
+**`.Immediate()` on NumberBox** (in `Microsoft.UI.Reactor.Controls.Validation`)
+switches the control from commit-on-blur to commit-on-keystroke, so
+validation reacts to every parseable digit instead of waiting for focus to
+leave the field. Opt-in by design — commit-on-blur is the WinUI default and
+the right choice when an intermediate value would be expensive or surprising
+(snapping `2.50` to `2.5` mid-edit). Apply when validation gates UI state
+and you want it to feel live.
+
+Use `.DisabledFocusable()` whenever a button is conditionally disabled in a
+form — even if you've also applied `.Immediate()` to every commit-on-blur
+input. The two cover different failure modes: `.Immediate()` keeps validity
+in sync with typing; `.DisabledFocusable()` keeps the button discoverable
+when validity is gated on async checks, required-but-untouched fields,
+cross-field rules, or any derived condition that can't be made instantaneous.
+
+> **Where not to use `.DisabledFocusable()`:** only buttons. For data-entry
+> controls (`TextField`, `NumberBox`, `CheckBox`, etc.), `IsEnabled=false`
+> usually means "this field isn't part of your current task" (cascading
+> from another input), and tab-skipping is the correct UX. Use
+> `IsReadOnly` if you need a visible-but-non-editable text control.
 
 ## Validation Context
 

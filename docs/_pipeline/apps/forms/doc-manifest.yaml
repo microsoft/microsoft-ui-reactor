@@ -20,6 +20,11 @@ screenshots:
     component: ValidationDemo
     region: client
     format: png
+  - id: keep-submit-reachable
+    description: "Form using .Immediate() on NumberBox and .DisabledFocusable() on Submit so keyboard users can always reach the button"
+    component: KeepSubmitReachableDemo
+    region: client
+    format: png
   - id: validation-context
     description: "Validation context with email and password fields"
     component: ValidationContextDemo

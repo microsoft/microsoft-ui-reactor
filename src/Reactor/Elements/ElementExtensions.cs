@@ -568,6 +568,18 @@ public static class ElementExtensions
     public static T Disabled<T>(this T el, bool disabled = true) where T : Element =>
         Modify(el, new ElementModifiers { IsEnabled = !disabled });
 
+    /// <summary>
+    /// Keeps the button keyboard-focusable while presenting it as disabled
+    /// (dimmed, no invoke, assistive-tech reports unavailable). Use for submit
+    /// buttons gated on validation: a true <c>.Disabled(true)</c> removes the
+    /// button from tab order, which combined with commit-on-blur inputs like
+    /// NumberBox/DatePicker produces a focus trap where Tab skips a Submit
+    /// that is *about* to become valid. The Fluent UI React equivalent is
+    /// <c>disabledFocusable</c>; ARIA's equivalent is <c>aria-disabled</c>.
+    /// </summary>
+    public static ButtonElement DisabledFocusable(this ButtonElement el, bool disabled = true) =>
+        el with { IsDisabledFocusable = disabled };
+
     // ── Background (Panel, Control, Border) ────────────────────────
 
     /// <summary>

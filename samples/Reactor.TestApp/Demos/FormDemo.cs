@@ -63,7 +63,7 @@ class FormDemo : Component
             When(!isValid, () =>
                 TextBlock("Please fill all fields and agree to terms").Foreground(TertiaryText)),
 
-            Button("Submit", () => setSubmitted(true)).Disabled(!isValid)
+            Button("Submit", () => setSubmitted(true)).DisabledFocusable(!isValid)
         );
     }
 }

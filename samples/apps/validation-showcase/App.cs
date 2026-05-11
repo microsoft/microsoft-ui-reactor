@@ -90,6 +90,7 @@ class BasicValidationDemo : Component
                     NumberBox(age, v => { setAge(v); ctx.MarkTouched("age"); setInfoDismissed(false); })
                         .Validate("age", age,
                             Validate.Range(18, 120, "Age must be between 18 and 120"))
+                        .Immediate()  // validate per keystroke, not on blur
                         .Focus(fm, "age"),
                     label: "Age", required: true,
                     description: "Must be 18 or older",

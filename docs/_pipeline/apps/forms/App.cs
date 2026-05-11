@@ -70,6 +70,7 @@ class ValidationDemo : Component
     {
         var (email, setEmail) = UseState("");
         var (age, setAge) = UseState(0.0);
+        var (showErrors, setShowErrors) = UseState(false);
 
         var emailValid = email.Contains('@') && email.Contains('.');
         var ageValid = age >= 18 && age <= 120;
@@ -84,16 +85,51 @@ class ValidationDemo : Component
                 TextBlock("Enter a valid email address")
                     .Foreground(Theme.SystemCritical).FontSize(12)),
             NumberBox(age, setAge, header: "Age"),
-            When(age > 0 && !ageValid, () =>
+            When((showErrors || age > 0) && !ageValid, () =>
                 TextBlock("Age must be between 18 and 120")
                     .Foreground(Theme.SystemCritical).FontSize(12)),
-            Button("Submit", () => { })
-                .Disabled(!formValid)
-                .Margin(0, 8, 0, 0)
+            Button("Submit", () =>
+            {
+                setShowErrors(true);
+                if (!formValid) return;
+                // submit...
+            }).Margin(0, 8, 0, 0)
         ).Padding(24);
     }
 }
 // </snippet:validation>
+
+// <snippet:keep-submit-reachable>
+class KeepSubmitReachableDemo : Component
+{
+    public override Element Render()
+    {
+        var (email, setEmail) = UseState("");
+        var (age, setAge) = UseState(0.0);
+
+        var emailValid = email.Contains('@') && email.Contains('.');
+        var ageValid = age >= 18 && age <= 120;
+        var formValid = emailValid && ageValid;
+
+        return VStack(12,
+            SubHeading("Keeping Submit Reachable"),
+            TextField(email, setEmail, header: "Email",
+                placeholder: "user@example.com"),
+
+            // .Immediate() switches NumberBox from commit-on-blur to
+            // commit-on-keystroke, so validation reacts as the user types.
+            NumberBox(age, setAge, header: "Age").Immediate(),
+
+            // .DisabledFocusable() keeps the button tab-reachable and
+            // visually dimmed while preventing invocation. Pattern mirrors
+            // Fluent UI's `disabledFocusable` and ARIA `aria-disabled`.
+            Button("Submit", () => { /* submit */ })
+                .DisabledFocusable(!formValid)
+                .Margin(0, 8, 0, 0)
+        ).Padding(24);
+    }
+}
+// </snippet:keep-submit-reachable>
 
 // <snippet:validation-context>
 class ValidationContextDemo : Component
@@ -221,6 +257,7 @@ class FormsApp : Component
                 Component<ControlledInputDemo>(),
                 Component<InputTypesDemo>(),
                 Component<ValidationDemo>(),
+                Component<KeepSubmitReachableDemo>(),
                 Component<ValidationContextDemo>(),
                 Component<FormFieldDemo>(),
                 Component<MaskedInputDemo>(),
