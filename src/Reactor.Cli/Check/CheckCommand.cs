@@ -43,7 +43,7 @@ public static class CheckCommand
             return 0;
         }
 
-        if (!CheckArgs.TryParse(args, out var parsed, out var error))
+        if (!ArgsParser.TryParse(args, out var parsed, out var error))
         {
             Console.Error.WriteLine($"mur check: {error}");
             return 2;
@@ -56,24 +56,17 @@ public static class CheckCommand
             return 1;
         }
 
+        // EffectiveBuildArgs already has default-merging applied — `--nologo`,
+        // `-v:m`, and `-p:Platform={host arch}` are injected by ArgsParser
+        // only if the user didn't supply the same flag in passthrough. See
+        // spec 038 §8.
         var psi = new ProcessStartInfo("dotnet")
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        psi.ArgumentList.Add("build");
-        psi.ArgumentList.Add(path);
-        psi.ArgumentList.Add("--nologo");
-        psi.ArgumentList.Add("-v:m");  // -v:q hides warnings
-        // WinUI projects require an explicit Platform — match the host arch.
-        var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture switch
-        {
-            System.Runtime.InteropServices.Architecture.Arm64 => "ARM64",
-            System.Runtime.InteropServices.Architecture.X64 => "x64",
-            _ => null,
-        };
-        if (arch is not null) psi.ArgumentList.Add($"-p:Platform={arch}");
+        foreach (var arg in parsed.EffectiveBuildArgs) psi.ArgumentList.Add(arg);
 
         using var proc = Process.Start(psi)!;
         // Drain both pipes concurrently — `dotnet build` can write enough to
@@ -91,10 +84,37 @@ public static class CheckCommand
         {
             if (parsed.TracePath is not null)
             {
-                trace = TraceWriter.Open(parsed.TracePath, projectRoot);
+                var modeTag = parsed.Mode.ToString().ToLowerInvariant();
+                trace = TraceWriter.Open(parsed.TracePath, projectRoot, modeTag);
+                // Spec 038 §8 "Tracing": write the effective dotnet build
+                // command line first so replays can reproduce the invocation
+                // even if default-merging changes between mur versions.
+                trace.WriteCommand(parsed.EffectiveBuildArgs, modeTag);
             }
 
             var diagnostics = ParseDiagnostics(combined);
+
+            // Spec 038 §8 — pre-emit ranker. Drop diagnostics that score
+            // below the active threshold for the current mode (iteration:
+            // 0.6, final: 0.0, etc., overridable via --emit-threshold). The
+            // filter wraps stdout emission only; trace output is unaffected
+            // — every parsed diagnostic is recorded so replays / mining /
+            // suppressed-then-resurfaced telemetry (spec §8 "failure modes")
+            // can see what was suppressed.
+            var rankerCtx = new Ranker.RankerContext(parsed.Mode, parsed.EmitThreshold);
+            Func<Diag, bool> stdoutFilter = d => Ranker.Ranker.ShouldEmit(d, rankerCtx);
+
+            // Suggest-gate counts the FULL parsed list — not the post-ranker
+            // emittable list. The gate's question (per spec §14 #8) is "is
+            // this build complex enough to benefit from Tier-2 help"; that's
+            // a property of what the compiler emitted, not of what stdout
+            // shows. Counting against `emittable` over-suppresses: a build
+            // surfacing 2 CS errors + 3 CS8602 nullable warnings has 5
+            // unique CS codes — Tier-2 territory — but the ranker filters
+            // CS8602 out of emittable, dropping the count to 2 and closing
+            // the gate. EC2 (n=3) measured exactly this: kanban-variant
+            // Tier-2 firing went from 80% under EC1 to 0% under the bugged
+            // gate, costing the agent ~4 turns of manual name resolution.
             var effectiveThreshold = parsed.SuggestThreshold ?? DefaultSuggestThreshold;
             Func<Diag, Suggestion?>? suggest = null;
             if (ShouldEmitSuggestions(diagnostics, effectiveThreshold))
@@ -113,7 +133,7 @@ public static class CheckCommand
                     suggest = diag => orchestrator.SuggestAgainst(diag, compilation);
                 }
             }
-            EmitDiagnostics(diagnostics, Console.Out, trace, suggest);
+            EmitDiagnostics(diagnostics, Console.Out, trace, suggest, stdoutFilter);
             if (diagnostics.Count == 0 && proc.ExitCode == 0)
                 Console.WriteLine("ok");
         }
@@ -161,17 +181,24 @@ public static class CheckCommand
         return diagnostics;
     }
 
-    internal static void EmitDiagnostics(IReadOnlyList<Diag> diagnostics, TextWriter stdout, TraceWriter? trace, Func<Diag, Suggestion?>? suggest = null)
+    internal static void EmitDiagnostics(IReadOnlyList<Diag> diagnostics, TextWriter stdout, TraceWriter? trace, Func<Diag, Suggestion?>? suggest = null, Func<Diag, bool>? stdoutFilter = null)
     {
         // Dedupe — MSBuild often prints the same diagnostic twice (per project).
+        // The dedup pass is shared between stdout and trace, so the trace
+        // never carries a duplicate row even when the ranker suppresses one
+        // copy of a duplicate pair (the second copy hits the seen-set first).
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var d in diagnostics)
         {
             var key = $"{d.File}:{d.Line}:{d.Col}:{d.Code}";
             if (!seen.Add(key)) continue;
+            // Trace gets every unique parsed diagnostic, regardless of the
+            // ranker (spec §0.3 + §8 "Failure modes the ranker must not
+            // introduce" — suppressed-but-real diagnostics must be mineable).
+            trace?.Write(d);
+            if (stdoutFilter is not null && !stdoutFilter(d)) continue;
             var suggestion = suggest?.Invoke(d);
             stdout.WriteLine(d.Format(suggestion));
-            trace?.Write(d);
             if (suggestion is not null) Telemetry.OnSuggestionEmitted(d.Code, suggestion);
         }
     }

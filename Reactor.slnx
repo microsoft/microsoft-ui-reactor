@@ -305,6 +305,9 @@
     <Project Path="tests/stress_perf/StressPerf.Wpf/StressPerf.Wpf.csproj" />
   </Folder>
   <Folder Name="/tools/" />
+  <Folder Name="/tools/Reactor.MurCheckGuardrail/">
+    <Project Path="tools/Reactor.MurCheckGuardrail/Reactor.MurCheckGuardrail.csproj" />
+  </Folder>
   <Folder Name="/tools/Reactor.SignaturesGen/">
     <Project Path="tools/Reactor.SignaturesGen/Reactor.SignaturesGen.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />

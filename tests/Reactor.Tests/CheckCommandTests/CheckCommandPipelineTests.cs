@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using Microsoft.UI.Reactor.Cli.Check;
+using Microsoft.UI.Reactor.Cli.Check.Ranker;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.CheckCommandTests;
@@ -173,6 +174,86 @@ public class CheckCommandPipelineTests
         // change with an intentional code edit (and a failing test the author
         // has to update).
         Assert.Equal(3, CheckCommand.DefaultSuggestThreshold);
+    }
+
+    [Fact]
+    public void Ranker_filter_suppresses_stdout_but_trace_still_records_every_row()
+    {
+        // Spec 038 §8: ranker filters stdout; trace receives every parsed
+        // diagnostic so the suppressed-then-resurfaced telemetry hook
+        // (failure-mode mitigation) can mine the full stream.
+        var diags = CheckCommand.ParseDiagnostics("""
+            X.cs(1,1): error CS1061: missing member [P.csproj]
+            X.cs(2,2): warning CS1591: missing xml doc [P.csproj]
+            X.cs(3,3): warning IDE0001: simplify [P.csproj]
+            """);
+
+        var iterCtx = new RankerContext(Mode.Iteration, null);
+        var stdout = new StringWriter();
+        var tracePath = Path.Combine(Path.GetTempPath(), "mur-check-ranker-" + Guid.NewGuid() + ".jsonl");
+        try
+        {
+            using (var trace = TraceWriter.Open(tracePath, Path.GetFullPath(".")))
+            {
+                CheckCommand.EmitDiagnostics(diags, stdout, trace,
+                    suggest: null,
+                    stdoutFilter: d => Ranker.ShouldEmit(d, iterCtx));
+            }
+
+            // stdout: only the CS1061 error (CS1591 + IDE0001 are 0.0 score).
+            var stdoutLines = stdout.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            Assert.Single(stdoutLines);
+            Assert.Contains("CS1061", stdoutLines[0]);
+
+            // trace: all three deduped rows.
+            var traceLines = File.ReadAllLines(tracePath);
+            Assert.Equal(3, traceLines.Length);
+        }
+        finally { try { File.Delete(tracePath); } catch { } }
+    }
+
+    [Fact]
+    public void Ranker_final_mode_emits_everything_to_stdout()
+    {
+        var diags = CheckCommand.ParseDiagnostics("""
+            X.cs(1,1): error CS1061: missing member [P.csproj]
+            X.cs(2,2): warning CS1591: missing xml doc [P.csproj]
+            X.cs(3,3): warning IDE0001: simplify [P.csproj]
+            """);
+
+        var finalCtx = new RankerContext(Mode.Final, null);
+        var stdout = new StringWriter();
+        CheckCommand.EmitDiagnostics(diags, stdout, trace: null,
+            suggest: null,
+            stdoutFilter: d => Ranker.ShouldEmit(d, finalCtx));
+
+        var lines = stdout.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(3, lines.Length);
+    }
+
+    [Fact]
+    public void Trace_command_row_records_full_effective_dotnet_build_args()
+    {
+        // Spec §8 "Tracing": replays need the exact effective command line.
+        var tracePath = Path.Combine(Path.GetTempPath(), "mur-check-cmd-" + Guid.NewGuid() + ".jsonl");
+        try
+        {
+            using (var trace = TraceWriter.Open(tracePath, Path.GetFullPath(".")))
+            {
+                trace.WriteCommand(new[] { "build", "./app", "--nologo", "-v:m", "-p:Platform=x64" }, "iteration");
+            }
+
+            var line = File.ReadAllLines(tracePath).Single();
+            using var doc = JsonDocument.Parse(line);
+            Assert.Equal("command", doc.RootElement.GetProperty("kind").GetString());
+            var argv = doc.RootElement.GetProperty("argv").EnumerateArray()
+                .Select(e => e.GetString()!).ToArray();
+            Assert.Equal("dotnet", argv[0]);
+            Assert.Contains("build", argv);
+            Assert.Contains("-p:Platform=x64", argv);
+            Assert.Equal("iteration", doc.RootElement.GetProperty("mode").GetString());
+        }
+        finally { try { File.Delete(tracePath); } catch { } }
     }
 
     [Fact]

@@ -67,7 +67,7 @@ The `mur` CLI ships these embedded — works from any directory:
 | `mur --skill` | This SKILL.md | embedded in `mur` |
 | `mur --api`   | The signatures index (≈12K tokens, every factory/modifier/hook/Theme token/enum) | embedded in `mur` |
 | `mur --regen-api` | Rebuilds `skills/reactor.api.txt` from a freshly-built `Reactor.dll` (selfhost only) | rebuilds `tools/Reactor.SignaturesGen` |
-| `mur check <path>` | Runs `dotnet build` and emits one-line diagnostics with skill-file pointers for known REACTOR_* IDs | wraps MSBuild |
+| `mur check <path>` | **Is** the build (same exit code as `dotnet build`); adds one-line diagnostics with skill pointers for known REACTOR_* IDs and `→ try:` did-you-mean suggestions | wraps MSBuild |
 
 A consumer who doesn't have `mur` can read the same files directly from the
 NuGet cache:
@@ -113,16 +113,49 @@ form-with-validation, async-fetch-list, themed-card.
 
 ## `mur check` — fast feedback with skill pointers
 
-`mur check <path>` builds the target and emits one-line diagnostics with
-pointers into the skill files for known Reactor analyzer IDs:
+**`mur check` is the build, not a separate check step.** It runs `dotnet build`
+under the hood and returns the same exit code. When `mur check` exits 0, the
+build is green — **do not re-run `dotnet build` to confirm**. They're the same
+compilation; a redundant `dotnet build` afterwards is wasted work.
+
+Two enrichments over raw `dotnet build`:
+
+1. **Skill pointers** for known `REACTOR_*` IDs.
+2. **Did-you-mean `→ try:` suggestions** for unknown identifiers, computed against
+   the live Reactor surface for the exact diagnostic.
 
 ```
 C:\path\Program.cs:15:23  W  REACTOR_DSL_001  Element produced by Select(...)…   → SKILL.md gotcha #6 (.WithKey on dynamic list items)
+C:\path\Program.cs:34:16  E  CS1061  'ButtonElement' does not contain a definition for 'OnClick'   → try: Button(label, onClick: ...)  // [factory has Action onClick parameter]
 ```
 
 `<path>` defaults to `.` and accepts a `.csproj` or directory. Single-file
 `.cs` builds work but **don't load analyzers** — for analyzer coverage,
 use a `.csproj`.
+
+**Trust `→ try:` suggestions directly.** Use the suggested name verbatim in your
+next edit; don't grep adjacent or sibling names to second-guess it. The
+suggestion has been computed against the actual Reactor surface for this exact
+diagnostic. If wrong, the next `mur check` will tell you — that self-correcting
+loop is cheaper than manual verification.
+
+**Don't introspect via `[System.Reflection]`** to enumerate Reactor types or
+members — the skill files plus `mur check`'s did-you-mean suggestions plus
+`skills/reactor.api.txt` cover the surface.
+
+Workflow modes (Phase-2 ranker):
+
+- `mur check` — iteration mode (default). A ranker suppresses cosmetic noise
+  (CS1591 XML doc, CS0168 unused-var, IDE0xxx style, NuGet restore chatter)
+  mid-iteration so the real blocker doesn't scroll off attention. **When this
+  exits 0, you are done** — the build is green.
+- `mur check --final` — optional pre-merge sweep. Emits the cosmetic
+  diagnostics suppressed during iteration (XML doc, unused locals, style
+  hints, nullable warnings, transient restore noise). For human code review
+  or a CI ship-readiness gate; **not** a task-completion requirement and
+  skipping it is fine.
+- `mur check -- <msbuild args>` — anything after a bare `--` is forwarded
+  verbatim to `dotnet build` (override platform, config, restore, verbosity).
 
 ## Sub-skills — load when the task calls for them
 

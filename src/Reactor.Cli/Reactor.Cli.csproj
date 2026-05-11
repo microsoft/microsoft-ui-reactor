@@ -26,6 +26,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Reactor.Tests" />
+    <!-- Spec 038 §8 guardrail tool re-uses PolicyTable so the two sources
+         can never drift. The guardrail is offline / CI-only; no runtime
+         dependency on it from the CLI itself. -->
+    <InternalsVisibleTo Include="Reactor.MurCheckGuardrail" />
   </ItemGroup>
 
   <ItemGroup>

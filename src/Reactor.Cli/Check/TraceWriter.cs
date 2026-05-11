@@ -26,29 +26,58 @@ internal sealed class TraceWriter : IDisposable
 {
     readonly StreamWriter writer;
     readonly string projectRoot;
+    readonly string mode;
 
     public const int MaxMessageChars = 1024;
-    public const string Mode = "iteration";
+    /// <summary>Default mode tag when the writer is opened without an explicit
+    /// mode. Phase-0 traces and unit tests that don't care about mode use this.</summary>
+    public const string DefaultMode = "iteration";
 
-    TraceWriter(StreamWriter writer, string projectRoot)
+    TraceWriter(StreamWriter writer, string projectRoot, string mode)
     {
         this.writer = writer;
         this.projectRoot = projectRoot;
+        this.mode = mode;
     }
 
-    public static TraceWriter Open(string path, string projectRoot)
+    public static TraceWriter Open(string path, string projectRoot, string mode = DefaultMode)
     {
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
         var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
         var sw = new StreamWriter(stream) { AutoFlush = true };
-        return new TraceWriter(sw, NormalizeRoot(projectRoot));
+        return new TraceWriter(sw, NormalizeRoot(projectRoot), mode);
     }
 
     public void Write(CheckCommand.Diag d)
     {
-        var row = ToRow(d, projectRoot);
+        var row = ToRow(d, projectRoot, mode);
+        var json = JsonSerializer.Serialize(row, JsonOpts);
+        writer.WriteLine(json);
+    }
+
+    /// <summary>
+    /// Spec 038 §8 "Tracing": record the *full* effective `dotnet build`
+    /// command line — including any defaults mur injected — at the head of
+    /// the trace, so replays are bit-faithful even when default-merging
+    /// changes between mur versions. Schema:
+    ///
+    ///   { ts, kind: "command", argv: ["dotnet", "build", ...], mode }
+    ///
+    /// Each value in `argv` is at most 256 chars (defensive truncation) to
+    /// keep the row under the 2 KB cap the writer enforces on diag rows.
+    /// </summary>
+    public void WriteCommand(IReadOnlyList<string> effectiveBuildArgs, string mode)
+    {
+        var argv = new List<string>(effectiveBuildArgs.Count + 1) { "dotnet" };
+        foreach (var a in effectiveBuildArgs)
+            argv.Add(a.Length > 256 ? a[..256] : a);
+        var row = new CommandRow(
+            ts: DateTime.UtcNow.ToString("o"),
+            kind: "command",
+            argv: argv,
+            mode: mode);
         var json = JsonSerializer.Serialize(row, JsonOpts);
         writer.WriteLine(json);
     }
@@ -58,7 +87,7 @@ internal sealed class TraceWriter : IDisposable
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
-    internal static TraceRow ToRow(CheckCommand.Diag d, string projectRoot)
+    internal static TraceRow ToRow(CheckCommand.Diag d, string projectRoot, string mode = DefaultMode)
     {
         var msg = d.Message;
         if (msg.Length > MaxMessageChars) msg = msg[..MaxMessageChars];
@@ -72,7 +101,7 @@ internal sealed class TraceWriter : IDisposable
             msg: msg,
             receiver_type: null,
             member: null,
-            mode: Mode);
+            mode: mode);
     }
 
     static string SeverityShort(string sev) => sev switch
@@ -117,5 +146,11 @@ internal sealed class TraceWriter : IDisposable
         string msg,
         string? receiver_type,
         string? member,
+        string mode);
+
+    internal sealed record CommandRow(
+        string ts,
+        string kind,
+        IReadOnlyList<string> argv,
         string mode);
 }

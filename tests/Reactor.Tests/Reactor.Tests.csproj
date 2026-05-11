@@ -34,6 +34,7 @@
     <ProjectReference Include="..\..\src\Reactor.Localization.Generator\Reactor.Localization.Generator.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Cli\Reactor.Cli.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Analyzers\Reactor.Analyzers.csproj" />
+    <ProjectReference Include="..\..\tools\Reactor.MurCheckGuardrail\Reactor.MurCheckGuardrail.csproj" />
   </ItemGroup>
 
 </Project>

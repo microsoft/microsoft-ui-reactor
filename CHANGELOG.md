@@ -78,6 +78,60 @@ to land under these conventions; subsequent specs follow this shape.
   values; gate threshold (3) empirically defensible at 28.7% emit rate.
   No code change in this entry — calibration + docs only. (spec 038 §1.8,
   Data Checkpoint C)
+- `mur check` Phase 2 — MSBuild passthrough + deterministic pre-emit ranker.
+  `mur check [<path>] [mur-flags] [-- <msbuild-args>]` — anything after a
+  bare `--` is forwarded verbatim to `dotnet build`. `mur` injects `--nologo`,
+  `-v:m`, and `-p:Platform={host arch}` only if the same flag is not named
+  in the passthrough section (detection by flag name, not value). When
+  `--trace` is on, the trace records the effective `dotnet build` argv as
+  a `kind: "command"` header row so replays are bit-faithful. New mode
+  flags: `--strict` (promote warnings to errors), `--final` (emit every
+  diagnostic — pre-merge sweep), `--quiet` (errors only). `--emit-threshold
+  <float>` overrides the per-mode ranker default (0.6 iteration / 0.0 final).
+  Pre-emit ranker (`src/Reactor.Cli/Check/Ranker/PolicyTable.cs`) suppresses
+  noise mid-iteration (CS1591, CS0168, IDE0xxx, NU1701/NU1605,
+  MSB3245/MSB3270/MSB3277, CS8600–CS8625 nullable warnings) while always
+  emitting errors. (spec 038 §8, Phase 2.1–2.3)
+- `tools/Reactor.MurCheckGuardrail` — offline guardrail that audits a pair
+  of `--trace` files (one iteration, one `--final`) against PolicyTable's
+  universal-error floor invariant. Fails CI if a future policy-table edit
+  would let a real build error get suppressed mid-iteration. The "universal
+  floor" rule (Error severity always scores 1.0 regardless of code family)
+  makes the invariant hold by construction today; the guardrail is the
+  regression test that catches accidental violations. (spec 038 §8 Phase 2.4)
+- `plugins/reactor/skills/reactor-build-and-check/SKILL.md` updated for
+  the iteration / `--final` workflow. EC2 measured 0/10 production value
+  on the strong "explicit done gate" framing across 6 variant runs, so
+  the framing was softened post-batch: `--final` is now documented as an
+  optional pre-merge sweep (for human review / CI ship-readiness gates),
+  explicitly NOT a task-completion requirement. SKILL anchor wording:
+  "When `mur check` exits 0, you are done." Same wording in the legacy
+  root `SKILL.md`. (spec 038 §8 Phase 2.5)
+- Phase-2.x — gate-input regression fix in `CheckCommand.ShouldEmitSuggestions`.
+  The initial Phase-2 implementation counted the post-ranker `emittable`
+  list when deciding whether to run the Tier-2 suggester. EC2 (3-round
+  preview) measured Tier-2 firing collapse from EC1's 80% to 0% on
+  kanban-mur because nullable warnings (CS8602/etc) were filtered out
+  of the emittable list before the gate-count, closing the gate on
+  builds EC1 had left open. Fixed by counting the full parsed
+  `diagnostics` list — the gate measures build complexity, not stdout
+  visibility. Regression test
+  `RankerTests.Suggest_gate_counts_full_parsed_list_not_post_ranker_emittable`
+  locks the behavior; fails the build if the bug is reintroduced.
+  (spec 038 §14 #8)
+- Phase-2.x — EC2 5×N PASS by median (2026-05-11). `reactor-calc-mur-check`
+  beats base on every metric (cost −5.1%, tokens −5.8%, turns −5.1%,
+  wall −7.9%; variance 1.9× tighter). `reactor-kanban-mur-check` at cost
+  median parity ($3.30 = $3.30); mean dragged to +5.7% by R2 outlier
+  (n=5, R2-excluded mean is −3.3%). First-build OK 5/5 on both variant
+  arms. `--final` invocation 0/10 across both projects (SKILL framing
+  doing its job). Tier-2 firing 0/10 — gate correctly inhibits on
+  small-batch iteration patterns; closing the kanban token gap is
+  Phase-3's scope (rules > fuzzy match). Criterion-2 guardrail audit
+  deferred to a harness retrofit (post-run `mur check --final` against
+  the final workspace state to generate the iter+final trace pair the
+  guardrail tool audits). Phase 2 cleared to merge to `main`.
+  (spec 038 §1.8 EC2 acceptance, §8, §11)
 - EC1 re-run with the diagnostic-count gate (2026-05-11): both arms PASS.
   `reactor-calc-mur-check` cost −4% mean (was +21% in the prior batch);
   `reactor-kanban-mur-check` cost −33% mean / −39% median (was −24% mean

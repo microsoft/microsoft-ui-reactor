@@ -124,6 +124,25 @@ public class TraceWriterTests
     }
 
     [Fact]
+    public void Diag_row_mode_matches_writer_invocation_mode()
+    {
+        // Regression test: TraceWriter used to hardcode mode="iteration" on
+        // every diag row, even when opened with --final. The Phase-2 fix
+        // pipes the mode through Open(...). Without this test, a future edit
+        // could reintroduce the bug undetected because the unit pipeline
+        // tests don't go through the CLI's mode-resolution path.
+        var d = new CheckCommand.Diag("a.cs", 1, 1, "error", "CS1061", "x");
+
+        using var tmp = TempFile.Create();
+        using (var w = TraceWriter.Open(tmp.Path, Path.GetFullPath("."), mode: "final"))
+            w.Write(d);
+
+        var line = File.ReadAllLines(tmp.Path).Single();
+        using var doc = JsonDocument.Parse(line);
+        Assert.Equal("final", doc.RootElement.GetProperty("mode").GetString());
+    }
+
+    [Fact]
     public void Trace_writes_one_jsonl_row_per_call_appendable()
     {
         var root = Path.GetFullPath(".");

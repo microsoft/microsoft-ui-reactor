@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <RootNamespace>Microsoft.UI.Reactor.MurCheckGuardrail</RootNamespace>
+    <AssemblyName>Reactor.MurCheckGuardrail</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- The guardrail re-uses PolicyTable from the CLI so the two never drift.
+         Pull the CLI in as a project ref; InternalsVisibleTo on Reactor.Cli
+         lets us read the internal table directly. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Reactor.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Reactor.Cli\Reactor.Cli.csproj" />
+  </ItemGroup>
+
+</Project>
