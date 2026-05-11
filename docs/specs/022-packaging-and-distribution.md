@@ -454,7 +454,7 @@ Verified locally:
 - `dotnet build Reactor.sln -c Release` → 0 errors.
 - `dotnet test tests/Reactor.Tests` → 6836 passed.
 - `dotnet test tests/Reactor.SelfTests` → 639 passed.
-- `dotnet pack src/Reactor -c Release -p:Platform=x64 -p:Version=0.0.1-smoke` → produces `.nupkg` containing `lib/net10.0-windows10.0.22621/Reactor.dll`, `analyzers/dotnet/cs/Reactor.Analyzers.dll`, `analyzers/dotnet/cs/Reactor.Localization.Generator.dll`, `LICENSE`, `Reactor.xml`.
+- `dotnet pack src/Reactor -c Release -p:Platform=x64 -p:Version=0.0.1-smoke` → produces `.nupkg` containing `lib/net10.0-windows10.0.22621.0/Reactor.dll`, `analyzers/dotnet/cs/Reactor.Analyzers.dll`, `analyzers/dotnet/cs/Reactor.Localization.Generator.dll`, `LICENSE`, `Reactor.xml`.
 
 Still TODO under P0:
 - **Bootstrap MinVer**: `git tag v0.1.0-experimental.0 && git push --tags` so the first CI run produces `0.1.0-experimental.0.<height>` rather than the pre-bootstrap default.
