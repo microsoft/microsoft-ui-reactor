@@ -11,12 +11,13 @@ on:
       target:
         description: "Which test suite(s) to stress"
         required: true
-        default: "both"
+        default: "all"
         type: choice
         options:
           - unit
           - selftests
-          - both
+          - integration
+          - all
       shards:
         description: "Number of parallel runners (iterations are divided across shards)"
         required: true
@@ -60,7 +61,7 @@ jobs:
   unit-tests:
     name: Unit (shard ${{ matrix.shard }})
     needs: plan
-    if: ${{ inputs.target == 'unit' || inputs.target == 'both' }}
+    if: ${{ inputs.target == 'unit' || inputs.target == 'all' }}
     runs-on: windows-latest
     timeout-minutes: 350
     strategy:
@@ -113,7 +114,7 @@ jobs:
   selftests:
     name: Selftests (shard ${{ matrix.shard }})
     needs: plan
-    if: ${{ inputs.target == 'selftests' || inputs.target == 'both' }}
+    if: ${{ inputs.target == 'selftests' || inputs.target == 'all' }}
     runs-on: windows-latest
     timeout-minutes: 350
     strategy:
@@ -163,9 +164,62 @@ jobs:
           }
           Write-Host "Shard ${idx}: $count iterations passed."
 
+  integration-tests:
+    name: Integration (shard ${{ matrix.shard }})
+    needs: plan
+    if: ${{ inputs.target == 'integration' || inputs.target == 'all' }}
+    runs-on: windows-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shard-list) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Reactor.slnx
+
+      - name: Build (once)
+        run: dotnet build tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore --configuration Debug
+
+      - name: Stress loop
+        shell: pwsh
+        env:
+          PER_SHARD: ${{ needs.plan.outputs.per-shard }}
+          REMAINDER: ${{ needs.plan.outputs.remainder }}
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          $per = [int]$env:PER_SHARD
+          $rem = [int]$env:REMAINDER
+          $idx = [int]$env:SHARD_INDEX
+          $count = if ($idx -le $rem) { $per + 1 } else { $per }
+          if ($count -lt 1) { Write-Host "Shard $idx has no work."; exit 0 }
+          $failures = New-Object System.Collections.Generic.List[int]
+          for ($i = 1; $i -le $count; $i++) {
+            Write-Host "::group::Integration iteration $i / $count (shard $idx)"
+            dotnet test tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore --no-build --logger "console;verbosity=normal"
+            $code = $LASTEXITCODE
+            Write-Host "::endgroup::"
+            if ($code -ne 0) {
+              Write-Host "::warning::Integration iteration $i (shard $idx) failed with exit $code"
+              $failures.Add($i) | Out-Null
+            }
+          }
+          if ($failures.Count -gt 0) {
+            Write-Host "::error::Shard $idx had $($failures.Count) failed iteration(s): $($failures -join ', ')"
+            exit 1
+          }
+          Write-Host "Shard ${idx}: $count iterations passed."
+
   summary:
     name: Stress summary
-    needs: [plan, unit-tests, selftests]
+    needs: [plan, unit-tests, selftests, integration-tests]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -173,12 +227,14 @@ jobs:
         env:
           UNIT_RESULT: ${{ needs.unit-tests.result }}
           SELFTESTS_RESULT: ${{ needs.selftests.result }}
+          INTEGRATION_RESULT: ${{ needs.integration-tests.result }}
         run: |
-          echo "Unit shards:      $UNIT_RESULT"
-          echo "Selftest shards:  $SELFTESTS_RESULT"
+          echo "Unit shards:         $UNIT_RESULT"
+          echo "Selftest shards:     $SELFTESTS_RESULT"
+          echo "Integration shards:  $INTEGRATION_RESULT"
           fail=0
           # 'skipped' is OK (target filter); 'success' is OK; anything else is a fail.
-          for r in "$UNIT_RESULT" "$SELFTESTS_RESULT"; do
+          for r in "$UNIT_RESULT" "$SELFTESTS_RESULT" "$INTEGRATION_RESULT"; do
             case "$r" in
               success|skipped|"") ;;
               *) fail=1 ;;
