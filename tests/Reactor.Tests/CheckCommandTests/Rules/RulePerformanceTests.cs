@@ -26,13 +26,21 @@ namespace Microsoft.UI.Reactor.Tests.CheckCommandTests.Rules;
 
 public class RulePerformanceTests
 {
-    // Combined stub: every DeclaredTarget across the three Phase-3 Class-B
-    // rules (Theme, ElementExtensions, ButtonElement, Factories) so all three
-    // rules pass RuleRegistry.TargetsResolve and reach TryMatch. The diagnostic
-    // is shaped so exactly one rule (ButtonOnClickFactoryMoveRule) matches —
-    // the other two short-circuit early inside TryMatch. That mix is the
-    // representative cost shape: every rule pays the symbol-resolution gate,
-    // most rules then bail before doing rule-specific work.
+    // Combined stub: every DeclaredTarget across ALL six rules in
+    // RuleRegistry.Default — three Class-B (ThemeBackgroundSuffixRule,
+    // AlignmentShortcutRule, ButtonOnClickFactoryMoveRule) plus three
+    // Class-A (GridSizeFactoryParensRule, GridSizePxRenameRule,
+    // TextBlockStyleHintRule). All six must pass RuleRegistry.TargetsResolve
+    // and reach TryMatch; if any self-disables, the perf budget assertion
+    // measures a smaller set than RuleRegistry.Default.All.Length and the
+    // scaling becomes misleading (Copilot CR feedback on this file).
+    //
+    // The diagnostic is shaped so exactly one rule
+    // (ButtonOnClickFactoryMoveRule) matches — the other five short-circuit
+    // early inside TryMatch (different code, different receiver, different
+    // missing-member name). That mix is the representative cost shape:
+    // every rule pays the symbol-resolution gate, most rules then bail
+    // before doing rule-specific work.
     const string CombinedStub = @"
 namespace Microsoft.UI.Reactor.Core
 {
@@ -42,11 +50,18 @@ namespace Microsoft.UI.Reactor.Core
     }
     public abstract record Element {}
     public sealed record ButtonElement(string Label = """") : Element;
+    public sealed record TextBlockElement(string Text = """") : Element;
 }
 namespace Microsoft.UI.Reactor
 {
     using System;
     using Microsoft.UI.Reactor.Core;
+    public readonly record struct GridSize(double Value, int Type)
+    {
+        public static GridSize Auto { get; } = new(1, 0);
+        public static GridSize Star(double weight = 1) => new(weight, 1);
+        public static GridSize Px(double pixels) => new(pixels, 2);
+    }
     public static class ElementExtensions
     {
         public static T HAlign<T>(this T el, int alignment) where T : Element => el;
@@ -72,6 +87,23 @@ class Test {
     public void BestMatch_median_under_per_rule_budget()
     {
         var (registry, context) = BuildHotContext();
+
+        // Stub-coverage guard: every rule in the production registry must
+        // resolve its declared targets against CombinedStub. Without this
+        // check the perf budget silently degrades when someone adds a new
+        // rule whose targets the stub doesn't carry — the rule self-
+        // disables, the loop iterates over a smaller effective set than
+        // `registry.All.Length`, and the budget scaling lies.
+        // (Copilot CR feedback on this file, addressed.)
+        foreach (var rule in registry.All)
+        {
+            foreach (var target in rule.DeclaredTargets)
+            {
+                Assert.True(context.Resolver.ResolveType(target) is not null,
+                    $"Stub missing target '{target}' for rule {rule.Name}. " +
+                    $"Add the type to CombinedStub so the perf budget covers all rules.");
+            }
+        }
 
         // Warm: prime the RuleSymbolResolver caches and the JIT. Without the
         // warm-up the first BestMatch eats the cold-cache cost on every

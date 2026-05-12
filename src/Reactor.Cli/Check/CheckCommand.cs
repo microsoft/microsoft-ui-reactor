@@ -147,14 +147,27 @@ public static class CheckCommand
             var effectiveThreshold = parsed.SuggestThreshold ?? DefaultSuggestThreshold;
             var tier2Enabled = ShouldEmitSuggestions(diagnostics, effectiveThreshold);
             Func<Diag, Suggestion?>? suggest = null;
-            // Load the CSharpCompilation once for the whole invocation so
-            // CompilationLoader.Load — which re-enumerates `.cs` files and
-            // recomputes the file-set hash on every call — runs O(1) per
-            // mur check, not O(diagnostics). Cache-hit on the second
-            // invocation still benefits.
+            // Pre-check: skip the compilation load entirely on clean builds
+            // and on builds where no parsed diagnostic could plausibly produce
+            // a suggestion (Tier-2-applicable + tier2Enabled, or covered by
+            // some rule). The compilation load — `.cs` enumeration, file-set
+            // hash, reference resolution including the ProjectReference walk
+            // — is 50–500 ms cold on a typical Reactor app; paying it on
+            // every clean `mur check` is wall-time we can give back. The
+            // pre-check itself is a flat scan over the (small) diagnostic
+            // list against the union of Tier-2's SupportedCodes and every
+            // rule's DiagnosticCodes — O(diagnostics × rules), microseconds.
             Microsoft.CodeAnalysis.CSharp.CSharpCompilation? compilation = null;
-            try { compilation = CompilationLoader.Instance.Load(path); }
-            catch { /* loader is best-effort; fall through to no-suggest */ }
+            if (SuggesterOrchestrator.AnyDiagnosticIsSuggestable(diagnostics, tier2Enabled, RuleRegistry.Default))
+            {
+                // Load the CSharpCompilation once for the whole invocation so
+                // CompilationLoader.Load — which re-enumerates `.cs` files
+                // and recomputes the file-set hash on every call — runs O(1)
+                // per mur check, not O(diagnostics). Cache-hit on the second
+                // invocation still benefits.
+                try { compilation = CompilationLoader.Instance.Load(path); }
+                catch { /* loader is best-effort; fall through to no-suggest */ }
+            }
             if (compilation is not null && !ReferenceEquals(compilation, CompilationLoader.EmptyCompilation))
             {
                 var disabled = ToDisabledSet(parsed.DisabledRules);
