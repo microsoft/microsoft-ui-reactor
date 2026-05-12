@@ -378,6 +378,107 @@ Without R2: kanban-mur mean cost $3.075 (−3.3% vs base); mean tokens 380K (+4.
 - A failed eval checkpoint (regression in tokens or first-build OK) does not block the next phase from starting in *isolation*, but blocks merging that phase's work to `main`. We can branch off and continue developing in parallel; only merge when the gate is met.
 - Eval cost: ~$25–40 per 5×N batch. Budget for 2 batches per checkpoint (run, fix, re-run) = ~$200 across all four checkpoints. Track in PR description.
 
+### EC3 results — 5×N landed 2026-05-11
+
+Paired batch, gpt-5.5, both arms on `reactor-calc-mur-check` and `reactor-kanban-mur-check`:
+
+- **Variant arm:** `eval/spec-038-ec3-2026-05-11` @ `2b7090f` — six rules in `RuleRegistry.Default` (`ThemeBackgroundSuffixRule`, `AlignmentShortcutRule`, `ButtonOnClickFactoryMoveRule` Class-B; `GridSizeFactoryParensRule`, `GridSizePxRenameRule`, `TextBlockStyleHintRule` Class-A) plus the two correctness fixes (`CompilationLoader.EnumerateProjectReferenceCompilePaths` + Tier-3 gate carve-out in `SuggesterOrchestrator`).
+- **Base arm:** `main` @ `2bec028` — same three Class-B rules registered, but `mur check --list-rules` here shows them only because the registry returns them; in practice the `CompilationLoader` bug makes them all self-disable at runtime against a real Reactor app. EC2's 0/10 Tier-2 firing line was the same root cause.
+
+Pre-flight against the variant (verified locally): `mur --version` returns `1.0.0+2b7090f9b3caa69687e48eb5568170f8cb399ef4`, `mur check --list-rules` shows all six rules `enabled` with zero self-disables, wordpuzzle smoke fires both `GridSize.Pixel→Px` and `GridSize.Auto()→.Auto` suggestions under the default gate. `mur pack-local` refreshed `Microsoft.UI.Reactor.0.0.0-local.nupkg` against the variant SHA at 18:51 PST; base arm refreshed against `2bec028` at 19:20 PST before its first round.
+
+**Methodology note on base comparability:** the base arm here is the same SHA EC2's base used (`2bec028`), so EC3 → EC2 base comparison is reasonable. The EC3 *variant* base, by contrast, is structurally different from EC2's variant — EC2 measured a `mur` with all rules silently inert; EC3 measures a `mur` where rules can finally run. Read the cumulative-tokens criterion against the EC3 *base* (this batch), not EC2's variant.
+
+**Per-arm means + medians (n=5 each, USD = preq × $0.04):**
+
+| Arm | Wall (mean, CV) | Cost (mean, CV) | Cost median | Tokens (mean) | Tokens (median) | Turns | First-build OK | Rules fired |
+|---|---|---|---|---|---|---|---|---|
+| `reactor-calc-mur-check` (base) | 118.2s, CV 11% | $2.58, CV 11% | $2.70 | 295,048 | 286,373 | 8.6 | 5/5 | **0/5** (self-disabled) |
+| `reactor-calc-mur-check` (variant) | 102.9s, CV 20% | $2.52, CV 27% | $2.40 | 279,692 | 249,224 | 8.4 | 5/5 | 1/5 (Theme) |
+| `reactor-kanban-mur-check` (base) | 205.2s, CV 64% | $4.20, CV 64% | $2.70 | 491,479 | 303,966 | 10.4 | 5/5 | **0/5** (self-disabled) |
+| `reactor-kanban-mur-check` (variant) | 178.3s, CV 22% | $4.26, CV 31% | $4.20 | 564,954 | 488,560 | 13.6 | 5/5 | 2/5 (Theme, Align) |
+
+**Paired comparison (variant − base):**
+
+| Metric | calc (mean) | calc (median) | kanban (mean) | kanban (median) |
+|---|---|---|---|---|
+| Tokens | **−5.2%** | **−13.0%** | +14.9% | +60.7% |
+| Cost | −2.3% | **−11.1%** | +1.4% | +55.6% |
+| Turns | −0.20 (8.6 → 8.4) | −1 (9 → 8) | +3.20 (10.4 → 13.6) | +5 (9 → 14) |
+| Wall | **−12.9%** | −7.9% | **−13.1%** | +14.8% |
+| CV tokens | 35% → looser (10.8 → 35.3) | — | **38% — much tighter than base 74%** | — |
+
+**Per-run kanban-variant detail (the high-variance arm per handoff §7):**
+
+| Run | Wall | Cost | Turns | Tokens | Rules fired |
+|---|---|---|---|---|---|
+| R1 | 157.4s | $4.20 | 14 | 488,560 | Theme |
+| R2 | 130.7s | $2.70 | 9 | 334,351 | — |
+| R3 | 228.9s | $5.10 | 14 | 657,728 | — |
+| R4 | 166.8s | $3.30 | 11 | 455,202 | Align |
+| **R5** | **207.5s** | **$6.00** | **20** | **888,931** | — ← cost outlier (1.43× median) |
+
+**Per-run kanban-base detail (R1 is the cost-mean driver — same shape as EC2's R2 outlier):**
+
+| Run | Wall | Cost | Turns | Tokens | Rules fired |
+|---|---|---|---|---|---|
+| **R1** | **449.2s** | **$9.30** | **13** | **1,118,599** | — ← cost outlier (3.4× median) |
+| R2 | 145.3s | $2.70 | 9 | 303,966 | — |
+| R3 | 124.1s | $2.40 | 8 | 265,593 | — |
+| R4 | 120.5s | $2.40 | 8 | 262,627 | — |
+| R5 | 187.1s | $4.20 | 14 | 506,612 | — |
+
+Without R1: kanban-base mean tokens 334,700 (variant +69%); mean cost $2.93 (variant +45%). With R1 included, the base-r1 blowout absorbs much of the apparent variant regression — kanban tokens read +14.9% mean but +60.7% median.
+
+**Tool-call profile diff (kanban arm, per-run means):**
+
+| Tool | variant/run | base/run | Δ |
+|---|---|---|---|
+| `apply_patch` | 3.4 | 2.6 | **+0.8** |
+| `view` (file read) | 2.2 | 1.4 | **+0.8** |
+| `skill` (load skill content) | 1.8 | 0.8 | **+1.0** |
+| `rg` | 2.4 | 0.2 | +2.2 |
+| `grep` | 0.0 | 2.2 | −2.2 |
+| `powershell` | 5.4 | 5.6 | −0.2 |
+| `report_intent` | 5.2 | 5.0 | +0.2 |
+
+`rg`/`grep` is a single tool family with naming variance — net search count is flat. Real delta is concentrated in three signals: more **skill loads** (+1.0), more **file reads** (+0.8), more **patches** (+0.8). The base arm's single biggest outlier (R1, 41 tool calls vs ~13 for the other base runs) is dominated by 11 `grep` + 12 `powershell` calls — the agent went into deep-search mode without a rule suggestion to anchor on. Strip R1 and base's per-run tool count drops to ~14.5; variant stays at ~22.
+
+**Hypothesis on the +3.2 turn delta:** rule suggestions create a per-suggestion verification loop. The agent sees `→ try: Theme.SolidBackground (vocab:WinUI3)` in mur's stdout, then (1) loads the relevant skill to confirm the API exists in the surface, (2) opens a nearby file to check usage, (3) applies the patch. On the base arm with no suggestion attached to the CS0117, the agent skips the verify-before-edit cycle and patches from the raw error message. The rules are pulling in extra surface area per fix — exactly the UX-risk pattern handoff §7 flagged ("agent-confusion on builds where the suggestion arrives without supporting context"). Mitigation candidates: terser suggestion output (drop the `// […]` rationale tail), or a one-line "this is high-confidence — apply directly" marker on Class-A/B rule fires above some threshold.
+
+**Findings:**
+
+1. **Calc-variant is a small but consistent win across mean and median.** Tokens −5.2% / −13.0%, cost −2.3% / −11.1%, wall −12.9% / −7.9%, turns roughly flat. First-build OK 5/5 — first time since EC1-RR that calc has cleared the +5% criterion bar on the EC3 base. The win is small; CV widened on the variant (35% vs base 11%) because of one fast outlier (calc-r3: 5 turns, 147K tokens, 71s wall), not because of regression noise.
+2. **Kanban-variant regresses on mean tokens (+14.9%) and median tokens (+60.7%).** This contradicts the spec-table prediction of cumulative ~−14% tokens. The base mean is dragged up by R1 (1.12M tokens, $9.30, 449s — 3.4× the base-kanban median); a comparable but smaller outlier sits on the variant side (R5: 889K tokens). With each arm's outlier excluded, the variant remains the heavier arm. **The Phase-3 rule set is not delivering the predicted token reduction on kanban in this batch.**
+3. **The three Class-A rules — the substantive EC3 delta — fired zero times across all 10 variant runs.** Only Class-B rules surfaced: `ThemeBackgroundSuffixRule` once on calc + once on kanban, `AlignmentShortcutRule` once on kanban. `GridSizeFactoryParensRule` (predicted top-frequency rule, 146 events evidence), `GridSizePxRenameRule`, and `TextBlockStyleHintRule` got no exercise. The agent didn't type `GridSize.Auto()`, `GridSize.Pixel(...)`, or `TextBlock(...).Style` patterns on either calc or kanban in these five rounds. **This is the load-bearing risk for the verdict** — the calc improvement is plausibly driven by the CompilationLoader + gate-carve-out fixes letting *any* rules run, not by the new Class-A rules. The variant base on which those fixes had no effect (because the rules they'd unblock don't fire on calc anyway) shifted minimally; the apparent calc win is small enough to be within run-to-run noise.
+4. **CompilationLoader fix verified live, zero self-disables.** Across 10 variant runs × all `mur check` invocations, zero `rule_self_disabled` events. The fix is doing its job; the rules just don't have the diagnostic patterns to engage on these prompts.
+5. **Gate carve-out verified by wordpuzzle smoke pre-batch.** Both rules fire on a 2-diagnostic build (below the default `--suggest-threshold` of 3). The mechanism is correct; this batch doesn't exercise it because the agent's first builds usually surface ≥3 diagnostics.
+6. **First-build OK 5/5 on both variant arms.** Criterion 2 met cleanly.
+7. **No false-positive fires.** All 3 rule fires (Theme×2, Align×1) occurred in runs that ended with first-build OK. Sample is small enough that this is more "no evidence of false-positives" than "verified absence." The §11 risk-row guardrail retrofit would let us assert this with confidence — surfaced as deferred validation, same posture as EC2.
+
+**EC3 pass-criterion verdict:**
+
+| # | Criterion | Result |
+|---|---|---|
+| 1 | Cumulative tokens improve ≥ 5% on at least one arm vs. EC2 base | **calc passes (−5.2% mean, −13.0% median)** — barely on the mean, more solidly on the median; **kanban fails** by mean (+14.9%) and median (+60.7%) |
+| 2 | First-build OK ≥ 5/5 on both variant arms | **Pass** (5/5 both) |
+| 3 | No false-positive rule fires | **Pass with low confidence** — 3 fires across 10 runs, all in first-build-OK runs; deferred to §11 guardrail retrofit for high-confidence audit |
+| 4 | CV ≤ EC1-re-run's CV | **Pass on kanban** (variant 38% vs EC1-RR 54%); calc widened (35% vs EC1-RR ~17%) but absolute SD is small ($0.17 USD), driven by one fast run |
+
+**Verdict: PASS-with-caveats.** Calc clears the bar; kanban regresses; the new Class-A rules — the change the batch was supposed to validate — did not fire. The structural fixes (CompilationLoader + gate carve-out) are live and safe (zero self-disables, zero false-positives observed), but their effect on token cost is small enough that the criterion 1 calc result could be noise rather than signal.
+
+**Recommend:** **do not declare Phase 3 cleared to ship V1 on this batch alone.** Two follow-ups are load-bearing:
+
+1. **A second 5×N batch with prompts targeted at the Class-A rules.** Inject `GridSize.Auto()`, `GridSize.Pixel(n)`, or `TextBlock(...).Style` patterns into the agent's starting state — current calc + kanban prompts do not surface these. Without rule fires on Class-A, the EC3 batch can't measure what the rules are worth.
+2. **Investigate the kanban-base R1 outlier** before reading the kanban regression as decisive. A 3.4× cost blowout in n=5 dominates the base mean; if R1 is a freak draw, the regression is even worse than it looks (+45–69% depending on exclusion). If R1 is representative of a real long-tail trajectory, base kanban is genuinely more expensive than these numbers suggest and the variant's regression shrinks.
+
+**Watch-items carried into Phase 4 / V1 ship review:**
+
+- **Class-A rule exercise.** Author or curate prompts that surface CS1955/`GridSize.Auto`, CS0117/`GridSize.Pixel|Pixels|Fixed`, and CS1061/CS0117 on `TextBlockElement.Style`. The 525-run mining corpora show 146/9/5 cross-agent events on these clusters; the eval prompts haven't replicated those conditions. Highest-frequency rule getting 0 fires is a calibration gap, not a rule defect.
+- **Kanban outlier mechanism.** Both arms' kanban runs produced one ≥888K-token outlier in n=5. EC2 saw the same on its R2. This is the third paired batch with that pattern. Worth a guardrail tool that flags runs ≥1.5× median for human review before they roll into the mean.
+- **`--final` and `--trace` infrastructure.** Trace files captured fine on all 10 variant runs; the wrapper's iter/final partitioning is correct. The trace event vocabulary doesn't include rule-fire events though — rule fires only appear in the `mur check` stdout that the agent reads. Adding `{"kind":"rule_fired", "rule": "...", ...}` to the trace JSONL would make the firing-rate audit a 1-line grep instead of a multi-step content scan against `events.jsonl` tool outputs.
+- **Skill-text drift.** The `Micrsoft.UI.Reactor.CSharp` template-not-found warning surfaced in at least one variant kanban run (a typo on the agent's part hitting `dotnet new` template resolution after a prior install left a duplicate entry in the templates registry). Didn't block the build; worth a one-line cache cleanup in eval setup or a more aggressive `dotnet new uninstall` before re-install.
+
 ---
 
 ## Phase 0: Cross-cutting setup & instrumentation
