@@ -1,5 +1,8 @@
 ﻿using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Layout;   // FlexDirection, FlexJustify, FlexAlign
+using Microsoft.UI.Xaml;             // Thickness, HorizontalAlignment, VerticalAlignment
+using Microsoft.UI.Xaml.Controls;    // Orientation, InfoBarSeverity, etc.
 using static Microsoft.UI.Reactor.Factories;
 
 #if (csharpFeature_TopLevelProgram)
