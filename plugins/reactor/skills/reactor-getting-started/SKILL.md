@@ -101,7 +101,9 @@ Run with `dotnet run App.cs -p:Platform=ARM64` (or `x64`). On a fresh source clo
 
 `WindowsPackageType` MUST be `None` (unpackaged, no App.xaml). `UseWinUI` MUST be `true`. **No XAML files of any kind.**
 
-**After `dotnet new reactorapp`, trust the scaffolded `.csproj`.** The template generates exactly this shape. Read the `.csproj` back only if you need to add a `PackageReference` or change a property — the scaffold's stdout already shows the file listing and `Restore succeeded.`, so the post-scaffold inspection costs a turn for zero new information. (Reading `App.cs` *is* necessary — that's the file you're about to `apply_patch`.)
+**After `dotnet new reactorapp -n <Name>`, the workspace contains exactly two source files: `App.cs` (entry point + initial component) and `<Name>.csproj`.** There is no `Program.cs` and no `GlobalUsings.cs` — modify `App.cs` in place. The `.csproj` does **not** enable implicit usings; `App.cs` has its own `using` directives at the top, which is the only place you add new namespaces (e.g. `using Microsoft.UI.Xaml;` when you need `HorizontalAlignment`). Don't probe the `.csproj` after scaffolding unless you're adding a `PackageReference` or changing a property — `Restore succeeded.` in the scaffold stdout is the only confirmation you need.
+
+**Verify your edits with `mur check`** before declaring done. From the project directory: `mur check` (no arguments) runs `dotnet build` and emits one compressed line per diagnostic with a `→ try:` suggestion when the engine recognizes the mistake; `mur check --final` is the explicit "I am done iterating" sweep that emits the full diagnostic set including suppressed iteration-mode warnings. For anything more involved than the build/fix loop — strict-mode failures, custom diagnostic gating, MSBuild passthrough flags — load the `reactor-build-and-check` skill.
 
 ## Required imports
 

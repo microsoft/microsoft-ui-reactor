@@ -1,4 +1,8 @@
-﻿#if (csharpFeature_TopLevelProgram)
+﻿using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using static Microsoft.UI.Reactor.Factories;
+
+#if (csharpFeature_TopLevelProgram)
 ReactorApp.Run<App>("Company.ReactorApp1", width: 900, height: 600);
 
 #else
