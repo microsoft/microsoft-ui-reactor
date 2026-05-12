@@ -108,6 +108,7 @@ Run with `dotnet run App.cs -p:Platform=ARM64` (or `x64`). On a fresh source clo
 ## Required imports
 
 ```csharp
+using System;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Layout;   // FlexDirection, FlexJustify, FlexAlign

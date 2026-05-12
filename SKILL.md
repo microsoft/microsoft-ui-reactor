@@ -202,9 +202,9 @@ exactly two source files: `App.cs` (entry point + initial component)
 and `<Name>.csproj`.** There is no `Program.cs` and no
 `GlobalUsings.cs` — modify `App.cs` in place. The `.csproj` does
 **not** enable implicit usings; `App.cs` has its own `using`
-directives at the top — the canonical set (Reactor + Reactor.Core +
-Reactor.Layout + Xaml + Xaml.Controls + static Factories) — which is
-the only place you add new namespaces (e.g. `using System.Linq;` when
+directives at the top — the canonical set (System + Reactor +
+Reactor.Core + Reactor.Layout + Xaml + Xaml.Controls + static
+Factories) — which is the only place you add new namespaces (e.g. `using System.Linq;` when
 you reach for `.Select(...)`). Don't probe the `.csproj` after
 scaffolding unless you're adding a `PackageReference` or changing a
 property — `Restore succeeded.` in the scaffold stdout is the only

@@ -1,4 +1,5 @@
-﻿using Microsoft.UI.Reactor;
+﻿using System;
+using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Layout;   // FlexDirection, FlexJustify, FlexAlign
 using Microsoft.UI.Xaml;             // Thickness, HorizontalAlignment, VerticalAlignment
