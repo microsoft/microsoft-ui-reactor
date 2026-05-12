@@ -36,19 +36,30 @@ internal sealed class SuggesterOrchestrator
     readonly RuleRegistry? _rules;
     readonly ISet<string>? _disabledRules;
     readonly Action<string, string>? _onRuleSelfDisabled;
+    readonly bool _tier2Enabled;
 
     public SuggesterOrchestrator(
         CompilationLoader? loader = null,
         ISuggester[]? suggesters = null,
         RuleRegistry? rules = null,
         ISet<string>? disabledRules = null,
-        Action<string, string>? onRuleSelfDisabled = null)
+        Action<string, string>? onRuleSelfDisabled = null,
+        bool tier2Enabled = true)
     {
         _loader = loader ?? CompilationLoader.Instance;
         _suggesters = suggesters ?? new ISuggester[] { new SymbolSuggester() };
         _rules = rules;
         _disabledRules = disabledRules;
         _onRuleSelfDisabled = onRuleSelfDisabled;
+        // Tier-3 rules always run when they cover a diagnostic code — they
+        // bind via Roslyn symbols, not fuzzy text match, so the suggest-gate
+        // (which guards low-precision Tier-2 fuzzy match on small builds) does
+        // not apply to them. Spec 038 EC2 watch-item: "Phase-3 rules are the
+        // right lever — not Phase-2.x gate tuning." Without this carve-out,
+        // a kanban-shape build with 1–2 CS diagnostics never runs any rule,
+        // which silently nullifies the entire rule registry on iteration-mode
+        // workflows.
+        _tier2Enabled = tier2Enabled;
     }
 
     /// <summary>
@@ -57,7 +68,9 @@ internal sealed class SuggesterOrchestrator
     /// </summary>
     public Suggestion? Suggest(CheckCommand.Diag diag, string projectPath)
     {
-        if (!SupportedCodes.Contains(diag.Code) && !RulesCoverCode(diag.Code)) return null;
+        var tier2Applies = _tier2Enabled && SupportedCodes.Contains(diag.Code);
+        var rulesApply = RulesCoverCode(diag.Code);
+        if (!tier2Applies && !rulesApply) return null;
 
         CSharpCompilation compilation;
         try { compilation = _loader.Load(projectPath); }
@@ -73,7 +86,7 @@ internal sealed class SuggesterOrchestrator
     /// </summary>
     internal Suggestion? SuggestAgainst(CheckCommand.Diag diag, CSharpCompilation compilation)
     {
-        var tier2Applies = SupportedCodes.Contains(diag.Code);
+        var tier2Applies = _tier2Enabled && SupportedCodes.Contains(diag.Code);
         var rulesApply = RulesCoverCode(diag.Code);
         if (!tier2Applies && !rulesApply) return null;
 

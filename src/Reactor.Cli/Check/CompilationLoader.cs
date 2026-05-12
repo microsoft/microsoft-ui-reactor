@@ -221,8 +221,121 @@ internal sealed class CompilationLoader
                 try { refs.Add(MetadataReference.CreateFromFile(path)); }
                 catch { }
             }
+            foreach (var path in EnumerateProjectReferenceCompilePaths(assets, csproj))
+            {
+                if (!seen.Add(path)) continue;
+                try { refs.Add(MetadataReference.CreateFromFile(path)); }
+                catch { }
+            }
         }
         return refs;
+    }
+
+    /// <summary>
+    /// Resolves ProjectReference outputs (project.assets.json `libraries`
+    /// entries with `type=project`) to their built .dll on disk. The
+    /// `libraries.&lt;id&gt;.path` field gives the .csproj path relative to
+    /// the consumer; the dll lives somewhere under that project's `bin/`
+    /// tree. We pick the most-recently-built dll whose filename matches
+    /// either the csproj's `&lt;AssemblyName&gt;` (when present) or the
+    /// csproj's basename — that's how MSBuild names the output by default.
+    ///
+    /// Without this path, Reactor itself is invisible to the rule registry:
+    /// every Tier-3 rule's DeclaredTargets fails to resolve and the entire
+    /// rule set self-disables on any real `mur check` invocation against a
+    /// Reactor app, even though unit tests pass. Spec 038 §6 + the §3.1a
+    /// rule-target resolution CI gate are load-bearing for the rule
+    /// authoring contract; this method makes the contract operate on
+    /// actual on-disk Reactor too.
+    /// </summary>
+    static IEnumerable<string> EnumerateProjectReferenceCompilePaths(JsonDocument assets, string consumerCsproj)
+    {
+        var root = assets.RootElement;
+        var consumerDir = Path.GetDirectoryName(consumerCsproj);
+        if (string.IsNullOrEmpty(consumerDir)) yield break;
+
+        if (!root.TryGetProperty("libraries", out var libraries) || libraries.ValueKind != JsonValueKind.Object)
+            yield break;
+
+        foreach (var libProp in libraries.EnumerateObject())
+        {
+            if (libProp.Value.ValueKind != JsonValueKind.Object) continue;
+            if (!libProp.Value.TryGetProperty("type", out var type)) continue;
+            if (type.ValueKind != JsonValueKind.String) continue;
+            if (!string.Equals(type.GetString(), "project", StringComparison.OrdinalIgnoreCase)) continue;
+
+            if (!libProp.Value.TryGetProperty("path", out var pathProp)) continue;
+            if (pathProp.ValueKind != JsonValueKind.String) continue;
+            var relPath = pathProp.GetString();
+            if (string.IsNullOrEmpty(relPath)) continue;
+
+            string refProjPath;
+            try { refProjPath = Path.GetFullPath(Path.Combine(consumerDir, relPath)); }
+            catch { continue; }
+
+            var refProjDir = Path.GetDirectoryName(refProjPath);
+            if (string.IsNullOrEmpty(refProjDir)) continue;
+
+            var dll = FindBuiltDll(refProjDir, refProjPath);
+            if (dll is not null) yield return dll;
+        }
+    }
+
+    /// <summary>
+    /// Finds the most-recently-built .dll for a referenced project. Tries
+    /// the csproj's &lt;AssemblyName&gt; element first; falls back to the
+    /// csproj basename if the override isn't present. Walks the entire
+    /// `bin/` subtree because the actual configuration / TFM / platform
+    /// directory layout depends on the project's MSBuild properties and
+    /// we don't have a reliable way to predict it.
+    /// </summary>
+    static string? FindBuiltDll(string refProjDir, string refProjPath)
+    {
+        var binDir = Path.Combine(refProjDir, "bin");
+        if (!Directory.Exists(binDir)) return null;
+
+        var asmName = ReadAssemblyName(refProjPath) ?? Path.GetFileNameWithoutExtension(refProjPath);
+
+        string? best = null;
+        DateTime bestMtime = DateTime.MinValue;
+        try
+        {
+            foreach (var dll in Directory.EnumerateFiles(binDir, "*.dll", SearchOption.AllDirectories))
+            {
+                if (!string.Equals(Path.GetFileNameWithoutExtension(dll), asmName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                DateTime mt;
+                try { mt = File.GetLastWriteTimeUtc(dll); }
+                catch { continue; }
+                if (mt > bestMtime) { bestMtime = mt; best = dll; }
+            }
+        }
+        catch { return null; }
+        return best;
+    }
+
+    /// <summary>
+    /// Reads the AssemblyName MSBuild property from a csproj XML, if any.
+    /// Best-effort string match — full MSBuild evaluation would handle
+    /// imports / conditions / property expansion but is out of scope here.
+    /// Returns null when the property isn't directly set.
+    /// </summary>
+    static string? ReadAssemblyName(string csproj)
+    {
+        string text;
+        try { text = File.ReadAllText(csproj); }
+        catch { return null; }
+
+        // Permissive scan: <AssemblyName>X</AssemblyName>. Avoids loading
+        // System.Xml just for one tag.
+        const string Open = "<AssemblyName>";
+        const string Close = "</AssemblyName>";
+        var i = text.IndexOf(Open, StringComparison.OrdinalIgnoreCase);
+        if (i < 0) return null;
+        var j = text.IndexOf(Close, i + Open.Length, StringComparison.OrdinalIgnoreCase);
+        if (j < 0) return null;
+        var name = text.Substring(i + Open.Length, j - i - Open.Length).Trim();
+        return string.IsNullOrEmpty(name) ? null : name;
     }
 
     static JsonDocument? TryLoadAssetsJson(string csproj)

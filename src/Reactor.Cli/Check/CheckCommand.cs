@@ -133,43 +133,53 @@ public static class CheckCommand
             // the gate. EC2 (n=3) measured exactly this: kanban-variant
             // Tier-2 firing went from 80% under EC1 to 0% under the bugged
             // gate, costing the agent ~4 turns of manual name resolution.
+            // The suggest-gate is Tier-2-only. Spec 038 EC2 watch-item:
+            // "Phase-3 rules are the right lever — not Phase-2.x gate
+            // tuning." Tier-2 fuzzy match has near-0% precision on CS1061
+            // against Reactor's *Element receivers at small build sizes
+            // (525-run calibration), so gating it on diagnostic count
+            // remains correct. Tier-3 rules bind via Roslyn symbols (the
+            // §3.1a contract), so they should always run when a covered
+            // diagnostic surfaces — even on a 1-diagnostic build where the
+            // Tier-2 gate is closed. We always build the orchestrator now
+            // (load the compilation, wire trace, etc.) and pass the gate
+            // result in as `tier2Enabled`.
             var effectiveThreshold = parsed.SuggestThreshold ?? DefaultSuggestThreshold;
+            var tier2Enabled = ShouldEmitSuggestions(diagnostics, effectiveThreshold);
             Func<Diag, Suggestion?>? suggest = null;
-            if (ShouldEmitSuggestions(diagnostics, effectiveThreshold))
+            // Load the CSharpCompilation once for the whole invocation so
+            // CompilationLoader.Load — which re-enumerates `.cs` files and
+            // recomputes the file-set hash on every call — runs O(1) per
+            // mur check, not O(diagnostics). Cache-hit on the second
+            // invocation still benefits.
+            Microsoft.CodeAnalysis.CSharp.CSharpCompilation? compilation = null;
+            try { compilation = CompilationLoader.Instance.Load(path); }
+            catch { /* loader is best-effort; fall through to no-suggest */ }
+            if (compilation is not null && !ReferenceEquals(compilation, CompilationLoader.EmptyCompilation))
             {
-                // Load the CSharpCompilation once for the whole invocation so
-                // CompilationLoader.Load — which re-enumerates `.cs` files and
-                // recomputes the file-set hash on every call — runs O(1) per
-                // mur check, not O(diagnostics). Cache-hit on the second
-                // invocation still benefits.
-                Microsoft.CodeAnalysis.CSharp.CSharpCompilation? compilation = null;
-                try { compilation = CompilationLoader.Instance.Load(path); }
-                catch { /* loader is best-effort; fall through to no-suggest */ }
-                if (compilation is not null && !ReferenceEquals(compilation, CompilationLoader.EmptyCompilation))
+                var disabled = ToDisabledSet(parsed.DisabledRules);
+                // Self-disabled trace hook (spec 038 §3.1a residual).
+                // Dedup per-invocation: the registry calls back on every
+                // BestMatch invocation a rule's targets fail to resolve,
+                // but we only want one row per rule per `mur check` run.
+                // No trace open = no callback wired; stdout stays clean.
+                Action<string, string>? onRuleSelfDisabled = null;
+                if (trace is not null)
                 {
-                    var disabled = ToDisabledSet(parsed.DisabledRules);
-                    // Self-disabled trace hook (spec 038 §3.1a residual).
-                    // Dedup per-invocation: the registry calls back on every
-                    // BestMatch invocation a rule's targets fail to resolve,
-                    // but we only want one row per rule per `mur check` run.
-                    // No trace open = no callback wired; stdout stays clean.
-                    Action<string, string>? onRuleSelfDisabled = null;
-                    if (trace is not null)
+                    var traceRef = trace;
+                    var reported = new HashSet<string>(StringComparer.Ordinal);
+                    onRuleSelfDisabled = (name, target) =>
                     {
-                        var traceRef = trace;
-                        var reported = new HashSet<string>(StringComparer.Ordinal);
-                        onRuleSelfDisabled = (name, target) =>
-                        {
-                            if (reported.Add(name))
-                                traceRef.WriteRuleSelfDisabled(name, target);
-                        };
-                    }
-                    var orchestrator = new SuggesterOrchestrator(
-                        rules: RuleRegistry.Default,
-                        disabledRules: disabled,
-                        onRuleSelfDisabled: onRuleSelfDisabled);
-                    suggest = diag => orchestrator.SuggestAgainst(diag, compilation);
+                        if (reported.Add(name))
+                            traceRef.WriteRuleSelfDisabled(name, target);
+                    };
                 }
+                var orchestrator = new SuggesterOrchestrator(
+                    rules: RuleRegistry.Default,
+                    disabledRules: disabled,
+                    onRuleSelfDisabled: onRuleSelfDisabled,
+                    tier2Enabled: tier2Enabled);
+                suggest = diag => orchestrator.SuggestAgainst(diag, compilation);
             }
             EmitDiagnostics(diagnostics, Console.Out, trace, suggest, stdoutFilter);
             if (diagnostics.Count == 0 && proc.ExitCode == 0)

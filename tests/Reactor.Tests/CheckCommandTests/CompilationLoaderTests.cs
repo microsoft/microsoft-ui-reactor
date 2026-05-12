@@ -83,6 +83,90 @@ public class CompilationLoaderTests
     }
 
     [Fact]
+    public void Resolves_ProjectReference_built_dll_from_project_assets_json()
+    {
+        // Regression: without this path the rule registry self-disables every
+        // Tier-3 rule whose DeclaredTargets point at a Reactor type, because
+        // ResolveType returns null against a compilation built from
+        // CompilationLoader output. Real project.assets.json carries project
+        // references in `libraries.<id>` with type="project" and a `path`
+        // pointing at the referenced .csproj; the built dll lives under that
+        // project's bin/ tree. This test mirrors that shape end-to-end:
+        //  - referenced project: a temp dir with FakeLib.csproj + a built
+        //    FakeLib.dll under bin/Debug/net10.0/.
+        //  - consumer project: a temp dir with a project.assets.json that
+        //    points at FakeLib.csproj via `libraries.FakeLib/0.0.0.path`.
+        //  - assertion: ResolveReferences includes the built dll.
+        using var refProj = TempProject.CreateMinimal();
+        var refProjDir = refProj.Root;
+        // Move the csproj to a known-name file so the AssemblyName fallback
+        // (csproj basename) finds the dll under bin/.
+        var fakeLibCsproj = global::System.IO.Path.Combine(refProjDir, "FakeLib.csproj");
+        global::System.IO.File.Move(refProj.Csproj, fakeLibCsproj);
+        // Plant a bin tree with a dll whose name matches AssemblyName fallback.
+        var binDir = global::System.IO.Path.Combine(refProjDir, "bin", "Debug", "net10.0");
+        global::System.IO.Directory.CreateDirectory(binDir);
+        var fakeDll = global::System.IO.Path.Combine(binDir, "FakeLib.dll");
+        global::System.IO.File.WriteAllBytes(fakeDll, MinimalEmptyDll());
+
+        // Build the consumer project + an assets.json that references FakeLib.
+        using var consumer = TempProject.CreateMinimal();
+        var consumerObj = global::System.IO.Path.Combine(consumer.Root, "obj");
+        global::System.IO.Directory.CreateDirectory(consumerObj);
+        // The path in assets.json is relative to the consumer csproj's directory.
+        var rel = global::System.IO.Path.GetRelativePath(consumer.Root, fakeLibCsproj).Replace('\\', '/');
+        var assetsJson = $@"{{
+  ""packageFolders"": {{}},
+  ""targets"": {{ ""net10.0"": {{}} }},
+  ""libraries"": {{
+    ""FakeLib/0.0.0"": {{
+      ""type"": ""project"",
+      ""path"": ""{rel}"",
+      ""msbuildProject"": ""{rel}""
+    }}
+  }}
+}}";
+        global::System.IO.File.WriteAllText(global::System.IO.Path.Combine(consumerObj, "project.assets.json"), assetsJson);
+
+        var refs = CompilationLoader.ResolveReferences(consumer.Csproj);
+        var hit = refs.OfType<Microsoft.CodeAnalysis.PortableExecutableReference>()
+            .Any(r => string.Equals(global::System.IO.Path.GetFileName(r.FilePath), "FakeLib.dll", StringComparison.OrdinalIgnoreCase));
+        Assert.True(hit, "ProjectReference's built dll must be resolvable from project.assets.json");
+    }
+
+    /// <summary>
+    /// Returns the bytes of a minimal valid .NET assembly. Used by the
+    /// ProjectReference resolution test — we need a real PE+CLI header so
+    /// `MetadataReference.CreateFromFile` succeeds, but the assembly's
+    /// contents don't matter (the test only checks that a reference was
+    /// added, not that any specific type resolved).
+    /// </summary>
+    static byte[] MinimalEmptyDll()
+    {
+        // Compile an empty assembly in-memory and return its bytes.
+        var src = "namespace FakeLib { internal class _Probe {} }";
+        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(src);
+        // Pull a minimal system reference set from the host so the empty
+        // compilation can resolve `object` etc.
+        var systemRefs = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(a => !a.IsDynamic)
+            .Select(a => { try { return a.Location; } catch { return null; } })
+            .Where(p => !string.IsNullOrEmpty(p))
+            .Select(p => Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(p!))
+            .Cast<Microsoft.CodeAnalysis.MetadataReference>()
+            .ToArray();
+        var c = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
+            "FakeLib",
+            new[] { tree },
+            systemRefs,
+            new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(Microsoft.CodeAnalysis.OutputKind.DynamicallyLinkedLibrary));
+        using var ms = new global::System.IO.MemoryStream();
+        var emit = c.Emit(ms);
+        Assert.True(emit.Success, "minimal empty dll must emit cleanly for test setup");
+        return ms.ToArray();
+    }
+
+    [Fact]
     [Trait("Category", "Perf")]
     public void Cold_load_under_500ms_warm_under_50ms_for_minimal_project()
     {

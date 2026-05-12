@@ -1,6 +1,8 @@
-// Class B vocabulary-translation rule. Spec 038 §6, vocab table row
-// "Theme.AppBackground / Theme.DefaultBackground / Theme.WindowBackground /
-// Theme.PageBackground → Theme.SolidBackground".
+// Class A (induced) rule — originally authored as Class B and promoted to
+// Class A on 2026-05-11 after the claude-sonnet-4.6 525-run corpus drop
+// cleared the Validation Gate's cross-agent reproducibility bar (#2).
+// Spec 038 §6, vocab table row "Theme.AppBackground / Theme.DefaultBackground
+// / Theme.WindowBackground / Theme.PageBackground → Theme.SolidBackground".
 //
 // CS0117 on `Microsoft.UI.Reactor.Core.Theme` with a missing static member
 // whose name ends in "Background". The agent reaches for an English-plausible
@@ -8,14 +10,21 @@
 // surface-background token is `Theme.SolidBackground` (which resolves to
 // `SolidBackgroundFillColorBaseBrush`).
 //
-// Class B authorship — Tier-2 fuzzy match can't bridge this: the closest
-// real Theme member by JaroWinkler is `CardBackground`/`AccentBackground`,
-// which is plausible but wrong; corpus cluster C0019 shows the agent
-// invariably reaches for SolidBackground in the eventual fix. (Tuning report
-// `docs/specs/tasks/038-tuning-reports/2026-05-11-525run.md` §"CS0117 — no
-// static member on type".) Frequency bar is waived per Class B; structural
-// justification is the citation to the XAML theme-resources doc in the vocab
-// table.
+// Tier-2 fuzzy match can't bridge this: the closest real Theme member by
+// JaroWinkler is `CardBackground`/`AccentBackground`, which is plausible
+// but wrong; both corpora show the agent invariably reaches for
+// SolidBackground in the eventual fix.
+//
+// Cross-agent reproducibility (Validation Gate bar #2): STRONG. 16+11 = 27
+// events across the gpt-5.5 525-run and claude-sonnet-4.6 525-run corpora
+// on the same (CS0117, Theme, other) key. Provenance is kept as
+// `vocab:WinUI3` because the structural justification (XAML theme-resources
+// doc citation in `docs/specs/tasks/038-vocab-table.csv`) still holds and
+// is in many ways the more durable evidence than corpus frequency alone —
+// the rule was authored from the vocab table first and the corpus later
+// confirmed it. The Class-A → Class-B distinction is about evidence type,
+// not rule shape; the rule itself is unchanged. Cross-agent audit recorded
+// at `docs/specs/tasks/038-tuning-reports/2026-05-11-cross-agent-audit.md`.
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;

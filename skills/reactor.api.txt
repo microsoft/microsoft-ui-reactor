@@ -187,6 +187,7 @@ AnnotatedScrollBarElement.Set(Action<AnnotatedScrollBar> configure) → Annotate
 AutoSuggestBoxElement.Set(Action<AutoSuggestBox> configure) → AutoSuggestBoxElement
 BorderElement.Set(Action<Border> configure) → BorderElement
 BreadcrumbBarElement.Set(Action<BreadcrumbBar> configure) → BreadcrumbBarElement
+ButtonElement.DisabledFocusable(bool disabled = true) → ButtonElement
 ButtonElement.Set(Action<Button> configure) → ButtonElement
 CalendarDatePickerElement.Set(Action<CalendarDatePicker> configure) → CalendarDatePickerElement
 CalendarViewElement.Set(Action<CalendarView> configure) → CalendarViewElement
@@ -337,6 +338,7 @@ T.HeadingLevel<T>(AutomationHeadingLevel level) → T
 T.Height<T>(double height) → T
 T.HelpText<T>(string text) → T
 T.HierarchyLevel<T>(int level) → T
+T.Immediate<T>() → T
 T.InteractionStates<T>(Func<InteractionStatesBuilder, InteractionStatesBuilder> configure, Curve curve = null) → T
 T.IsTabStop<T>(bool isTabStop = true) → T
 T.ItemContainerTransitions<T>(Transition[] transitions) → T

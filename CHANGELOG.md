@@ -177,6 +177,93 @@ to land under these conventions; subsequent specs follow this shape.
   Silverlight / WinUI 2 / WinUI 3 → Reactor vocabulary translations,
   seeded from the 525-run report's Phase-3 priority targets plus desk
   research against `skills/reactor.api.txt`. (spec 038 §3.0)
+- `GridSizePxRenameRule` (Class-A induced): CS0117 on
+  `Microsoft.UI.Reactor.GridSize` where the missing member is `Pixel`,
+  `Pixels`, or `Fixed` — the WPF / WinUI / legacy-XAML names — suggests
+  `GridSize.Px(...)` with the same numeric argument. Cross-agent
+  reproducibility STRONG: 5 events in gpt-5.5 + 4 events in sonnet-4.6 =
+  9 events combined, 100% rewrite target is `Px(...)` on every row. 5
+  unit tests (3 positive covering all three legacy names, 2 negative).
+  Bar #5 (independent reviewer signoff) pending.
+  (spec 038 §3.2, §6 Class A, Validation Gate bar #2)
+- `TextBlockStyleHintRule` (Class-A induced): CS1061 or CS0117 on
+  `Microsoft.UI.Reactor.Core.TextBlockElement` where the missing-member
+  name is `Style` — suggests Reactor's fluent text helpers (.FontSize,
+  .Bold, .SemiBold, .Italic, .Foreground) directly on the element.
+  Reactor doesn't expose a Style member; the WPF/WinUI mental model
+  reaches for `TextBlock.Style = SomeTitleStyle` style-resource
+  attachment. Cross-agent reproducibility STRONG-after-collapse: 2
+  events gpt-5.5 (fluent `.Style(...)` shape) + 3 events sonnet-4.6
+  (record `with { Style = ... }` shape) = 5 events combined; the rule
+  covers BOTH syntactic shapes in one rewrite. 5 unit tests.
+  (spec 038 §3.2, §6 Class A)
+- `ThemeBackgroundSuffixRule` (previously Class-B, **promoted to Class-A**
+  by the cross-agent audit). Rule shape unchanged; the file-header
+  comment now records the audit's bar #2 evidence (16+11=27 events
+  across both corpora on the (CS0117, Theme, other) key) alongside the
+  original vocab-table-citation justification. The Class-A / Class-B
+  distinction is about evidence type, not rule shape; this rule was
+  authored from the vocab table first and the corpus later confirmed it.
+  (spec 038 §6 Class A re-classification)
+- **Critical fix — `CompilationLoader` now resolves `ProjectReference`
+  outputs.** Without this, every Tier-3 rule self-disabled on real `mur
+  check` invocations against Reactor apps: the loader only parsed
+  `project.assets.json`'s `targets` section (NuGet packages), so Reactor
+  itself (a project reference for every sample app) was invisible. New
+  code walks `libraries.<id>` entries with `type=project`, reads the
+  referenced csproj's `<AssemblyName>` (or falls back to the basename),
+  and locates the most-recently-built matching `.dll` under that
+  project's `bin/` subtree. Regression locked by
+  `CompilationLoaderTests.Resolves_ProjectReference_built_dll_from_project_assets_json`.
+  Unit tests passed before this fix because they use synthetic in-memory
+  compilations; end-to-end smoke against `samples/apps/wordpuzzle` was
+  what surfaced the silent failure mode. (spec 038 §5 + §6 + §3.1a)
+- **Suggest-gate carve-out for Tier-3 rules.** The gate
+  (`--suggest-threshold`, default 3 unique CS-prefixed diagnostics) was
+  wrapping the entire suggester block — when closed, neither Tier-2 nor
+  rules ran. The gate exists to suppress Tier-2 fuzzy match's noise on
+  small builds; rules are precision-anchored (Roslyn ISymbol binding)
+  and shouldn't be subject to that calibration. `SuggesterOrchestrator`
+  now takes a `tier2Enabled` bool; `CheckCommand.Run` always builds the
+  orchestrator (when the compilation loads) and passes the gate result
+  in. Tier-3 rules always run when their diagnostic code surfaces;
+  Tier-2 stays gated. Two new tests lock this down. This is the EC2
+  watch-item ("Phase-3 rules are the right lever — not Phase-2.x gate
+  tuning") finally addressed in code. (spec 038 §11 + §14 #8, EC2
+  watch-item)
+- First Class-A induced rule: `GridSizeFactoryParensRule` (CS1955 on
+  `Microsoft.UI.Reactor.GridSize.Auto()` → suggest `GridSize.Auto` —
+  i.e. drop the parens, since `Auto` is a static property and only
+  `Star(double)` / `Px(double)` are methods). Cross-agent reproducibility
+  STRONG: 146 events combined across the gpt-5.5 525-run (110 events) and
+  claude-sonnet-4.6 525-run (36 events) corpora, top-frequency cluster in
+  both at 10.7% / 9.8% of fixes respectively. Both corpora are unanimously
+  about `Auto` — every captured row's `diag.member` field is exactly
+  "Auto". **First cross-tier rule**: CS1955 is outside Tier-2's
+  `SupportedCodes`, so the orchestrator's `RulesCoverCode` path is now
+  load-bearing for at least one diagnostic code. 5 unit tests (3 positive
+  fixtures from distinct cross-corpus `run_id`s, 2 negative — lookalike
+  `Acme.GridSize` in a user namespace plus a synthetic non-CS1955 diag
+  gate test). Validation Gate cleared on bars #1–#4 + #6; bar #5
+  (independent reviewer signoff) pending. Cross-agent audit recorded at
+  `docs/specs/tasks/038-tuning-reports/2026-05-11-cross-agent-audit.md`.
+  (spec 038 §3.2, §6 Class A, Validation Gate bar #2)
+- §3.1a per-rule performance bound test: `RulePerformanceTests.BestMatch_median_under_per_rule_budget`
+  (`[Trait("Category","Perf")]`) asserts `RuleRegistry.Default.BestMatch`
+  median across 1000 iters on the canonical CS1061-on-`ButtonElement.OnClick`
+  fixture stays under `0.5 × rule_count × 4` ms (4× CI slack matches
+  `CompilationLoaderTests` convention). Was deferred until the first rule
+  landed; now load-bearing for the rule set. (spec 038 §3.1a)
+- Cross-agent reproducibility audit at
+  `docs/specs/tasks/038-tuning-reports/2026-05-11-cross-agent-audit.md`
+  comparing gpt-5.5 and claude-sonnet-4.6 525-run corpora on receiver-typed
+  clusters. Verdicts: three Class-A targets STRONG (CS1955/GridSize/other
+  146 events; CS0117/Theme/other 27; CS0117/GridSize/renamed_member 7);
+  two more strong after rule-design collapse (TextBlockElement member rename
+  + TemplatedListViewElement<T> generalized over `<T>`); one striking
+  gpt-5.5-only signal (CS1955/GridElement, 29 events, zero in sonnet —
+  deferred to a third corpus drop). Closes Data Checkpoint C's
+  cross-agent-reproducibility gap. (spec 038 §3.0, Validation Gate bar #2)
 - First three Class-B vocabulary-translation rules: `ThemeBackgroundSuffixRule`
   (CS0117 on `Theme` with member ending in `Background` → `Theme.SolidBackground`,
   cluster C0019, 16 events); `AlignmentShortcutRule` (CS1061 on Reactor
