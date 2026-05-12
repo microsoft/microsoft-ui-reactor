@@ -2,7 +2,7 @@
 
 This is a guided tour of the "did-you-mean" engine built into `mur check`. It is written so any reader can follow along: every section starts in plain language, then drills into the implementation for engineers, ML practitioners, and compiler folks who want the full picture.
 
-The doc covers what landed on `feat/038-mur-check` (Phase 0 and Phase 1, plus the `--suggest-threshold` gate). Future-improvement sections sketch Phases 2–4. The doc will be updated as those land.
+The doc covers what's shipped through **Phase 0 (instrumentation)**, **Phase 1 (Tier-2 Roslyn suggester + diagnostic-count gate)**, **Phase 2 (MSBuild passthrough + deterministic pre-emit ranker)**, and the Phase-3 work currently in flight on `eval/spec-038-ec3-2026-05-11`: six Tier-3 rules + two critical correctness fixes + the cross-agent corpus drop (`claude-sonnet-4.6` × 525 runs) that closes Data Checkpoint C's reproducibility bar. Future-improvement sections sketch the remainder of Phase 3 (additional rules pending a third agent corpus) and Phase 4 (telemetry + learned ranker). The doc will be updated as those land.
 
 **Source-of-truth specs** (for the canonical version and decision history):
 - Design: [`docs/specs/038-mur-check-did-you-mean-design.md`](../specs/038-mur-check-did-you-mean-design.md)
@@ -20,7 +20,7 @@ The doc covers what landed on `feat/038-mur-check` (Phase 0 and Phase 1, plus th
 - [5. How data tunes the model](#5-how-data-tunes-the-model)
 - [6. How a recommendation is picked](#6-how-a-recommendation-is-picked)
 - [7. The "small project" gate](#7-the-small-project-gate)
-- [8. What's shipped in this PR](#8-whats-shipped-in-this-pr)
+- [8. What's shipped so far](#8-whats-shipped-so-far)
 - [9. Future improvements](#9-future-improvements)
 - [10. Glossary](#10-glossary)
 
@@ -91,24 +91,35 @@ mur check <path>
    │
    ▼ run `dotnet build`, parse each diagnostic line
    │
-   ▼ for each parsed diagnostic that touches a Microsoft.UI.Reactor.* symbol:
+   ▼ pre-emit ranker (Phase 2): drop diagnostics below the active threshold
+   │   for this mode (iteration/strict/final/quiet). Trace records the full
+   │   parsed list either way; stdout only sees the survivors.
+   │
+   ▼ diagnostic-count gate (Phase 1): on small builds (<3 unique CS errors)
+   │   skip Tier-2 fuzzy match. Tier-3 rules still run — they're precision-
+   │   anchored and don't share Tier-2's noise concern.
+   │
+   ▼ for each surviving diagnostic:
    │
    │   Tier 1 — analyzer-ID hint table       (SHIPPED, pre-existing)
    │             A static lookup: 12 REACTOR_* codes → SKILL.md anchor.
    │
-   │   Tier 2 — Roslyn semantic suggester    (SHIPPED in this PR)
+   │   Tier 2 — Roslyn semantic suggester    (SHIPPED, Phase 1)
    │             Load the project, resolve the symbol at the error site,
    │             fuzzy-match against the real Reactor API surface.
    │
-   │   Tier 3 — induced pattern rules        (FUTURE, Phase 3)
-   │             Small hand-authored rewriters seeded from the mining corpus.
+   │   Tier 3 — induced + vocabulary rules   (SHIPPED in part, Phase 3)
+   │             Small symbol-bound rewriters. Six rules live today
+   │             (three Class-A induced + three Class-B vocabulary).
+   │             Rules can cover diagnostic codes Tier-2 doesn't
+   │             (e.g. CS1955). Rules WIN over Tier-2 when both match.
    │
-   │   Tier 4 — learned confidence ranker    (FUTURE, only if needed)
-   │             GBDT over hand-engineered features. Built only if Tier 2 +
-   │             Tier 3 leave a meaningful tail.
+   │   Tier 4 — learned confidence ranker    (FUTURE, scheduled, Phase 4)
+   │             GBDT over hand-engineered features. Blocked on Data
+   │             Checkpoint D's 5K labeled rows with negative class.
    │
-   ▼ attach the highest-confidence hint above threshold
-   ▼ (future) pre-emit ranker decides whether the diagnostic is even worth showing
+   ▼ attach the highest-confidence hint above threshold (Tier-3 wins ties
+   ▼   over Tier-2; Tier-1 wins ties over Tier-2 at the format layer)
    ▼ write one line per surviving diagnostic
 ```
 
@@ -146,19 +157,47 @@ The output is always either a single suggestion above the threshold, or silence.
 - Suggesters are **pure functions** of `(Compilation, Diagnostic, SyntaxNode, ITypeSymbol receiver, FactoryIndex)`. No I/O. No mutable state. Unit-tested by constructing `CSharpCompilation`s in-memory.
 - Roslyn `Microsoft.CodeAnalysis.CSharp` 4.8.0 was already a `PackageReference` in `src/Reactor.Cli/Reactor.Cli.csproj`; no dependency churn.
 
-### Tier 3 — induced pattern rules (future, Phase 3)
+### Tier 3 — induced + vocabulary rules (shipped, Phase 3, ongoing)
 
-Tier 3 will handle mistakes Tier 2 can't reach because they cross an **AST-shape boundary**, not just a name boundary. The canonical example: an agent writes `.OnClick(lambda)` *chained* on `Button(...)`. Tier 2 sees CS1061 on `OnClick`. The actual fix isn't a rename — it's moving the lambda *into the parent factory's argument list* as `onClick: lambda`. That's a tree rewrite.
+Tier 3 handles mistakes Tier 2 can't reach because they cross either an **AST-shape boundary** (the fix isn't a name change — it's a structural rewrite) or a **vocabulary-distance boundary** (the right answer is too far from the wrong answer for fuzzy match to find it). Two examples make the boundary concrete:
 
-Tier 3 will be a small set of hand-authored rules (one per file under `src/Reactor.Cli/Check/Rules/`), each tied to a frequent cluster found by the mining harness in spec 037. Each rule passes a six-bar **Validation Gate** before merge (frequency, cross-agent reproducibility, positive fixtures, negative counter-examples, independent reviewer signoff, kill-switch). The gate exists because a bad rule is worse than no rule — it contaminates every downstream agent session.
+- **AST-shape.** Agent writes `Button("Save").OnClick(handler)` — chained on the factory. Tier 2 sees CS1061 on `.OnClick`. The actual fix isn't a rename; it's moving the lambda *into the parent factory's argument list* as `onClick: handler`. Tier 3's `ButtonOnClickFactoryMoveRule` knows that shape and emits exactly the right rewrite.
+- **Vocabulary-distance.** Agent writes `GridSize.Auto()` (extra parens). The fix is `GridSize.Auto` (no parens, because `Auto` is a property, not a method). JaroWinkler can't help here — there's no edit-distance gradient; the typo is *structural*. Tier 3's `GridSizeFactoryParensRule` matches the exact symbol shape and proposes the parens-removal rewrite. 146 events in the cross-corpus mining data, top single bucket.
 
-The infrastructure for Tier 3 (the `IRulePattern` interface, the registry, the `--disable-rule` flag) is not in this PR — it ships in Phase 3.
+Each rule is a small file under `src/Reactor.Cli/Check/Rules/`, registered into `RuleRegistry.Default` by reflection on assembly load. Rules MUST bind their target types and members through `RuleSymbolResolver` — Roslyn `ISymbol` lookup against the live `Compilation`, never raw string-matching against `MemberAccess.Name.ValueText`. When Reactor renames an API in a future minor release, a string-matched rule silently breaks; a symbol-bound rule fails resolution explicitly, self-disables, and surfaces in `--list-rules` as `self-disabled (unresolved: <target>)`. The CI gate at `RuleTargetResolutionTests` runs every registered rule's `DeclaredTargets` through the live Reactor compilation on every build, so a missed rename breaks CI loudly.
 
-### Tier 4 — learned confidence ranker (future, only if needed)
+Each rule passes a six-bar **Validation Gate** before merge (frequency, cross-agent reproducibility, positive fixtures, negative counter-examples, independent reviewer signoff, kill-switch). The gate exists because a bad rule is worse than no rule — it contaminates every downstream agent session. Class-B (vocabulary-translation) rules waive bar #1 (frequency) — their justification is the documented prior-framework citation rather than a corpus cluster. The audit at `docs/specs/tasks/038-tuning-reports/2026-05-11-cross-agent-audit.md` is where bar #2 (cross-agent) gets formally cleared per cluster.
 
-Only built if telemetry shows Tier 2 + 3 leave a meaningful tail. Plan: a GBDT over hand-engineered features (Levenshtein, parameter-name overlap, factory-popularity-in-samples, AST-shape similarity, prior agent-accept rate per rule). Inputs: the candidate set produced by Tiers 2 + 3. Output: a re-ranked list with a calibrated confidence head.
+**Six rules shipped to date** (three Class-A induced + three Class-B vocabulary):
 
-We **deliberately do not propose a small LLM here.** Small models hallucinate without huge corpora, and Reactor's corpus is fundamentally limited. The deterministic system already has access to everything a small model would have to memorize (the api index, the sample apps). Tier 4 is a re-ranker, not a generator.
+| Rule | Class | Code(s) | Receiver | What it suggests | Cross-agent events |
+|---|---|---|---|---|---|
+| `ThemeBackgroundSuffixRule` | B (also clears A) | CS0117 | `Theme` | `Theme.SolidBackground` for any `Theme.<X>Background` miss | 27 |
+| `AlignmentShortcutRule` | B | CS1061 | Reactor `*Element` | `.HAlign(...)` / `.VAlign(...)` for the WinUI alignment property names | 22 |
+| `ButtonOnClickFactoryMoveRule` | B | CS1061 | `ButtonElement` | `Button(..., onClick: ...)` factory move, with explicit anti-pattern call-out on `.OnTapped` | gpt-5.5 only; vocab-justified |
+| `GridSizeFactoryParensRule` | A | CS1955 | `GridSize` | drop the parens (`GridSize.Auto`); **first cross-tier rule** (CS1955 outside Tier-2 codes) | **146** |
+| `GridSizePxRenameRule` | A | CS0117 | `GridSize` | `GridSize.Px(...)` for `Pixel`/`Pixels`/`Fixed` legacy names | 9 |
+| `TextBlockStyleHintRule` | A | CS1061 / CS0117 | `TextBlockElement` | fluent text helpers (`.FontSize`, `.SemiBold`, …); Reactor has no `Style` member | 5 across both `.Style(...)` and `with { Style = ... }` shapes |
+
+### Suggest-gate carve-out for Tier-3 rules
+
+The `--suggest-threshold` gate from §7 (default 3 unique CS errors) was originally a single bar gating the whole suggester block. That calibration is correct for Tier-2 fuzzy match — JaroWinkler against Reactor's `*Element` receivers has near-0 % empirical precision below 3 diagnostics. It's wrong for Tier-3 rules, which are symbol-bound and high-precision by design. **Rules now run regardless of the gate.** Concretely: the orchestrator takes a `tier2Enabled: bool` constructor flag; `CheckCommand.Run` always builds the orchestrator (when the compilation loads) and passes the gate result in. Tier-2 stays gated; Tier-3 always runs when its diagnostic code surfaces.
+
+This is the EC2 watch-item ("Phase-3 rules are the right lever — not Phase-2.x gate tuning") finally addressed in code. Without the carve-out, a 1–2-diagnostic build never runs any rule even when a rule would have nailed the fix. Locked down by `SuggesterOrchestratorRuleTests.Rule_fires_even_when_tier2_is_disabled_by_the_suggest_gate` + `Tier2_only_code_returns_null_when_tier2_is_disabled_and_no_rule_covers`.
+
+### `CompilationLoader` ProjectReference fix (the silent-failure mode)
+
+End-to-end smoke testing against `samples/apps/wordpuzzle` during Phase 3 surfaced a critical bug that hadn't been caught by unit tests: **every rule self-disabled on every real invocation against a Reactor app.** The unit tests use synthetic in-memory `CSharpCompilation`s built with stubs, so target resolution worked there. But `CompilationLoader.Load` produces a compilation from on-disk `project.assets.json`, and that loader only parsed the `targets` section (NuGet packages) — missing the `libraries.<id>` entries with `type=project`. Reactor itself is a *project reference* for every sample app, so its types were invisible to `RuleSymbolResolver.ResolveType`, every rule's `DeclaredTargets` failed, and the entire rule registry self-disabled silently.
+
+The fix walks `libraries.<id>` entries with `type=project`, reads the referenced csproj's `<AssemblyName>` (or falls back to the basename), and locates the most-recently-built matching `.dll` under that project's `bin/` subtree. Regression locked by `CompilationLoaderTests.Resolves_ProjectReference_built_dll_from_project_assets_json` — a self-contained test that constructs a synthetic refproj + a real `MetadataReference.CreateFromFile`-loadable empty assembly + an assets.json that points at it, and asserts the dll is in the returned reference set.
+
+The class of bug is worth naming: a unit-test suite that doesn't exercise the on-disk loader path can pass while every production invocation silently no-ops. The lesson generalized is that **rule infrastructure needs an end-to-end smoke test against a real Reactor app**, not just against synthetic compilations. The wordpuzzle smoke pattern in §9 of the EC3 eval handoff doc is the new floor for any rule-touching PR.
+
+### Tier 4 — learned confidence ranker (future, scheduled)
+
+Scheduled, deferred until Data Checkpoint D delivers ≥ 1K negative-class ranker rows. Plan: a GBDT over hand-engineered features (Levenshtein, parameter-name overlap, factory-popularity-in-samples, AST-shape similarity, prior agent-accept rate per rule). Inputs: the candidate set produced by Tiers 2 + 3. Output: a re-ranked list with a calibrated confidence head.
+
+We **deliberately do not propose a small LLM here.** Small models hallucinate without huge corpora, and Reactor's corpus is fundamentally limited — that's the same condition the load-bearing argument in §1 rests on. The deterministic system already has access to everything a small model would have to memorize (the api index, the sample apps, the live `Compilation`). Tier 4 is a re-ranker over deterministic candidates, not a generator.
 
 ---
 
@@ -186,14 +225,28 @@ The harness produces four files per run-batch:
 
 We staged the harness handoffs into four named checkpoints:
 
-| Checkpoint | What it produces | Blocks what | Status as of this PR |
+| Checkpoint | What it produces | Blocks what | Status |
 |---|---|---|---|
 | **A — pipeline smoke** | ≥ 3 unique pairs, schema verified | Phase 0 fixture types | ✓ landed 2026-05-10 |
 | **B — calibration** | ≥ 50 unique pairs across ≥ 2 agents | Phase 1 threshold tuning | ✓ landed 2026-05-10 (51 fixes / 21 patterns / 63 ranker rows, single agent) |
-| **C — rule induction** | ≥ 500 unique pairs across ≥ 2 agents | Phase 3 rule authoring | ⚠ partial — landed 2026-05-11 with 1,027 fixes / 104 clusters but **single agent only** (`gpt-5.5`). Cross-agent bar unmet; needs a second-agent drop before Phase-3 rule PRs open. |
+| **C — rule induction** | ≥ 500 unique pairs across ≥ 2 agents | Phase 3 rule authoring | ✓ **closed 2026-05-11** by the cross-agent audit. First drop (gpt-5.5 × 525): 1,027 fixes / 104 clusters. Second drop (claude-sonnet-4.6 × 525): 368 fixes / 564 ranker rows / 41 clusters. Audit at `docs/specs/tasks/038-tuning-reports/2026-05-11-cross-agent-audit.md`. |
 | **D — ranker training** | ≥ 5K ranker-label rows, ≥ 1K negative class | Phase 4 learned ranker | not started |
 
-The mining corpus mirrored into this repo lives at `docs/specs/tasks/038-tuning-reports/2026-05-11-525run-source/` (≈ 8 MB, four files). The raw event logs stay in the sibling repo.
+The gpt-5.5 mining corpus mirrored into this repo lives at `docs/specs/tasks/038-tuning-reports/2026-05-11-525run-source/` (≈ 8 MB, four files); the sonnet-4.6 corpus is in the sibling repo's `mining-out/`. The raw event logs stay in the sibling repo on both sides.
+
+### Cross-agent mining: comparing models to surface what's *structural* vs. *idiosyncratic*
+
+A single model's failure distribution is suggestive but not definitive. A pattern that only one model produces might just reflect that model's quirks rather than a real Reactor authoring pitfall. The **cross-agent reproducibility bar** (Validation Gate bar #2) makes the distinction explicit: before we author a Tier-3 rule for a cluster, we want to see the same `(diag_code, receiver_type, fix_kind)` key produced by at least two distinct agents at non-trivial frequency.
+
+The 2026-05-11 expansion drop captured that: **claude-sonnet-4.6 × 525 runs** alongside the existing **gpt-5.5 × 525 runs** at the same prompt set. The cross-corpus audit then compares cluster keys side-by-side and assigns one of three verdicts to each candidate:
+
+- **STRONG** — the same key appears with `count ≥ 3` in both corpora. Class-A rule is unblocked.
+- **WEAK** — both agents represented but one or both at `count < 3`. Author the rule with a WEAK tag in the Validation Gate template; the rule may still ship, but the bar #2 line cites the weaker evidence.
+- **SINGLE** — present in only one corpus. Class-A is blocked until a third corpus surfaces the key. Class-B may still apply if a documented prior-framework citation justifies it structurally.
+
+The same audit also surfaces interesting *anti-signals*: clusters that are heavy in one corpus and zero in the other. The 525-run audit flagged `CS1955` on `GridElement` (29 events in gpt-5.5, **0 in sonnet**) and `CS1061` on `ButtonElement.OnClick` (5 events gpt-5.5, **0 in sonnet**) as exactly this shape. Two hypotheses fit the data: (a) sonnet's skill-context steered it away from those mistakes, or (b) gpt-5.5 has a specific WinUI confusion that sonnet doesn't share. Either way, those rules are deferred to a third-agent corpus drop. The `ButtonOnClickFactoryMoveRule` is the carve-out — it ships as **Class B** because the WinUI 3 docs justify it structurally even though the empirical evidence is single-corpus.
+
+The skilled-vs-unaided split in the sonnet corpus deserves its own note. The skilled half (125 of the 525 runs) deliberately tells the agent **not** to call `mur`, so it only sees `dotnet build` for diagnostics — but the agent is *still* reading the Reactor skill API guidance in its context. That corner surfaces errors agents make *while following* the skill, not while being rescued by `mur check`. The 160 ranker rows from the skilled flavor over-represent in clusters about skill-following, which is precisely the population we want for vocabulary-translation rules. The methodology note is in the handoff at `C:\temp\mur-handoff-sonnet-525.md` — including how the corpus owner ran extract+aggregate with the gpt-5.5 event logs temporarily moved aside, then restored, verifying zero leakage (every fixes.jsonl row carries `agent="claude-sonnet-4.6"`).
 
 ### ML-practitioner detail (negative class, fingerprinting, labels)
 
@@ -244,11 +297,25 @@ Per-code thresholds live in `Thresholds.cs`:
 
 ### ML-practitioner detail — calibration history
 
-The 525-run report (`docs/specs/tasks/038-tuning-reports/2026-05-11-525run.md`) walks through every per-code firing in the corpus. Two findings drive the current configuration:
+The 525-run report (`docs/specs/tasks/038-tuning-reports/2026-05-11-525run.md`) walks through every per-code firing in the corpus. Two findings drove the original Phase-1 configuration, and both have now had Phase-3 rules authored against them:
 
-1. **JaroWinkler can't bridge "WinUI name → Reactor shortcut" pairs.** The agent's typical CS1061 mistake against Reactor types isn't a typo — it's a WinUI-style API name (`.VerticalAlignment`, `.Style`) whose correct Reactor replacement (`.VAlign`, fluent helpers) is too far in edit-distance for JaroWinkler to find. Similarity for `VerticalAlignment` ↔ `VAlign` is ~0.55, well below the 0.70 floor. The suggester then picks the second-closest member (`TextAlignment`) and emits a wrong answer at high confidence. **Diagnosis: this is Tier-3 rule territory, not a threshold-tuning problem.** Solution: ship the diagnostic-count gate (§7 below) as the safety net for now; author Tier-3 rules in Phase 3.
+1. **JaroWinkler can't bridge "WinUI name → Reactor shortcut" pairs.** The agent's typical CS1061 mistake against Reactor types isn't a typo — it's a WinUI-style API name (`.VerticalAlignment`, `.Style`) whose correct Reactor replacement (`.VAlign`, fluent helpers) is too far in edit-distance for JaroWinkler to find. Similarity for `VerticalAlignment` ↔ `VAlign` is ~0.55, well below the 0.70 floor. The suggester then picks the second-closest member (`TextAlignment`) and emits a wrong answer at high confidence. **Diagnosis: this is Tier-3 rule territory, not a threshold-tuning problem.** Now addressed by `AlignmentShortcutRule` (Class-B, vocab-justified) and `TextBlockStyleHintRule` (Class-A, cross-agent STRONG after fix_kind collapse).
 
-2. **CS0117 / `Theme.<X>Background` shows the same shape.** Agents write `Theme.AppBackground` (non-existent); suggester picks `Theme.Background` (closest real); correct answer is `Theme.SolidBackground` (sibling with different stem). Cluster C0019, frequency 1.6%, 16 events. Top Phase-3 rule target.
+2. **CS0117 / `Theme.<X>Background` shows the same shape.** Agents write `Theme.AppBackground` (non-existent); Tier-2 picks `Theme.Background` or `Theme.CardBackground` (closest real); correct answer is `Theme.SolidBackground` (sibling with different stem). Now addressed by `ThemeBackgroundSuffixRule` (originally Class-B, promoted to Class-A by the cross-agent audit: 27 events combined across both corpora).
+
+The cross-agent audit also surfaced a third shape neither of the above touches:
+
+3. **CS1955 / `GridSize.Auto()` — extra parens on a static property.** Tier-2 doesn't cover CS1955 at all (it's outside `SupportedCodes`). The mistake isn't fuzzy — it's structural. Top single bucket in both corpora at 146 combined events; now addressed by `GridSizeFactoryParensRule`, the first cross-tier rule. Tier-3 unlocked the entire CS1955 code surface for `mur check` suggestions.
+
+### ML-practitioner detail — what changed when the second-agent corpus landed
+
+Before the sonnet-4.6 drop, Phase-1 calibration used a single-agent corpus and the 525-run report carried the disclaimer that "cluster reproducibility is suggestive, not definitive." After the drop, the cross-agent audit produced explicit STRONG/WEAK/SINGLE verdicts per cluster. The verdicts changed three things:
+
+- **Rules that were going to ship as Class-B (vocab) for lack of better evidence** got promoted to Class-A where bar #2 (cross-agent reproducibility) cleared with `count ≥ 3` in both corpora. `ThemeBackgroundSuffixRule` is the canonical example — same rule, stronger evidence shelf.
+- **Rules that LOOKED reproducible in single-agent data** got deferred when sonnet didn't reproduce them. `CS1955` against `GridElement` was 29 events in gpt-5.5 and zero in sonnet — a clean single-corpus signal that needs a third agent before becoming rule-eligible. This is a kind of evidence that wasn't accessible in a single-agent world.
+- **Rules emerged that wouldn't have been visible at all without sonnet.** `TextBlockStyleHintRule` is the case in point: gpt-5.5 hits `.Style(...)` (fluent shape), sonnet hits `with { Style = ... }` (record-update shape) — the *same conceptual mistake* expressed in different syntax. Collapsing the two corpora's fix_kind classification produced a STRONG verdict that neither corpus could have produced alone.
+
+The skilled-vs-unaided split in the sonnet corpus is also load-bearing for future calibration. Skilled rows (125 of 525) see the Reactor skill API guidance but no `mur check` — that's the corner of the corpus where errors-while-following-the-skill surface. Vocabulary-translation rules over-represent here because the agent is actively trying to *follow* Reactor's vocabulary; what surfaces is the cases where the skill's coverage was thin or the WinUI muscle memory dominated anyway.
 
 The calibration runs through a test harness at `tests/Reactor.Tests/CheckCommandTests/Tuning/`:
 
@@ -271,39 +338,47 @@ This is the step-by-step path a single diagnostic takes through the engine.
 1. The user runs `mur check`. It shells out to `dotnet build` and reads stdout/stderr.
 2. Each MSBuild diagnostic line is parsed into a `Diag` (`file`, `line`, `col`, `severity`, `code`, `message`).
 3. We dedupe — MSBuild often prints the same diagnostic twice (once per project that references the file).
-4. If the **diagnostic-count gate** says "skip suggestions for this invocation" (§7), we emit each diagnostic with only the Tier-1 hint (if any) and stop.
-5. Otherwise, for each diagnostic in one of the five supported `CS*` codes:
-   - Load the project's `CSharpCompilation` (cached).
-   - Walk from the diagnostic's `(file, line, col)` to the relevant `SyntaxNode`.
-   - Resolve the receiver type (for CS1061 / CS0117, the type whose member is missing).
-   - **Reactor-touching check.** For CS1061 / CS0117 we only proceed if the receiver is in the `Microsoft.UI.Reactor.*` namespace. The other three codes self-filter inside the suggester.
-   - Run `SymbolSuggester.Suggest`. It returns either a `SuggestionResult` with text + confidence + evidence, or `Silent`.
-   - If the result is non-silent and clears the per-code threshold, the diagnostic line gets a `→ try: <text>  // [<evidence>]` suffix.
-6. **Tier-1 wins ties.** If the diagnostic also matched the analyzer-ID hint table, the Tier-1 pointer is emitted instead of the Tier-2 suggestion.
+4. The **pre-emit ranker** (Phase 2) drops diagnostics whose score is below the active mode's threshold. The trace file records every parsed diagnostic regardless; only stdout is filtered.
+5. The **diagnostic-count gate** (Phase 1) checks whether the surviving CS-prefixed diagnostic count meets the threshold. If not, we mark Tier-2 disabled for this invocation. **Tier-3 rules still run** — they're precision-anchored, not subject to the same noise calibration.
+6. For each surviving diagnostic, the orchestrator:
+   - Loads the project's `CSharpCompilation` (cached). The loader walks both NuGet package compile assets *and* ProjectReference build outputs from `project.assets.json`. Without the ProjectReference path, Reactor itself is invisible and every rule self-disables — see §3 "`CompilationLoader` ProjectReference fix" for the bug story.
+   - Walks from the diagnostic's `(file, line, col)` to the relevant `SyntaxNode` (`MemberAccessExpressionSyntax`, `InvocationExpressionSyntax`, `IdentifierNameSyntax`, or `ArgumentSyntax` — picked by `PickRelevantNode`).
+   - Resolves the receiver type (for CS1061 / CS0117, the type whose member is missing).
+   - **Tier-2 path (gated by diagnostic count + Reactor-touching check):** if the code is in `SupportedCodes` AND the Tier-2 gate is open AND the receiver namespace check passes, run `SymbolSuggester.Suggest`. Per-code threshold applies.
+   - **Tier-3 path (always runs when a rule covers the code):** `RuleRegistry.BestMatch` iterates every enabled rule whose `DiagnosticCodes` contains this diag's code. Each rule first runs `TargetsResolve` (cheap, cached) — if any declared target fails to resolve, the rule self-skips and (if a trace is open) emits a `rule_self_disabled` event. Surviving rules call `TryMatch` and return either a non-silent `RuleSuggestion` or `Silent`. The highest-confidence match across rules wins.
+   - **Tier-3 wins over Tier-2 when both match.** The rule's `Provenance` (`cluster:<id>` or `vocab:<framework>`) is appended to the evidence string so a maintainer can grep back to the motivating data.
+7. **Tier-1 still wins format-level ties.** If the diagnostic also matched the analyzer-ID hint table, the Tier-1 pointer is emitted instead of the Tier-2/Tier-3 suggestion (`Diag.HintFor` at the format layer).
 
 ### Engineer detail — control flow
 
 ```
-CheckCommand.Run               (CheckCommand.cs:36)
+CheckCommand.Run               (CheckCommand.cs)
  ├─ CheckArgs.TryParse          (CheckArgs.cs)
  ├─ shell out: dotnet build … (drains stdout+stderr concurrently to avoid deadlock)
  ├─ ParseDiagnostics            (regex against MSBuild's "(line,col): error CODE: msg [project]")
- ├─ ShouldEmitSuggestions       (CheckCommand.cs:123 — the gate)
- ├─ EmitDiagnostics             (CheckCommand.cs:151)
+ ├─ Ranker.PreEmit              (Phase 2 policy table; drops below-threshold diagnostics)
+ ├─ ShouldEmitSuggestions       (the diag-count gate — controls Tier-2 only)
+ ├─ CompilationLoader.Load      (cached; resolves NuGet + ProjectReference deps)
+ ├─ build orchestrator with tier2Enabled = gate-result
+ ├─ EmitDiagnostics
  │   └─ for each unique diagnostic key (file, line, col, code):
- │       └─ orchestrator.Suggest(diag, path)
- │           ├─ SupportedCodes filter         (CS1061/0103/0117/1503/7036)
- │           ├─ CompilationLoader.Load        (cached)
- │           ├─ FindTreeFor + ResolveSpan
- │           ├─ PickRelevantNode              (walk up to MemberAccess/Invocation/Identifier/Argument)
- │           ├─ ResolveReceiver
- │           ├─ IsReactorTouching             (CS1061/CS0117 gate)
- │           ├─ FactoryIndex.Build
- │           └─ SymbolSuggester.Suggest       (applies Thresholds.For(code))
- └─ trace.Write (optional, --trace)
+ │       └─ orchestrator.SuggestAgainst(diag, compilation)
+ │           ├─ tier2Applies = tier2Enabled AND SupportedCodes.Contains(code)
+ │           ├─ rulesApply    = any rule's DiagnosticCodes contains code
+ │           ├─ if neither: return null (Tier-1 hint may still apply at format layer)
+ │           ├─ FindTreeFor + ResolveSpan + PickRelevantNode + ResolveReceiver
+ │           ├─ if tier2Applies AND IsReactorTouching(code, receiver):
+ │           │     FactoryIndex.Build + SymbolSuggester.Suggest  → tier2Best
+ │           └─ if rulesApply:
+ │                 RuleSymbolResolver.For(compilation) (cached)
+ │                 RuleRegistry.BestMatch(ctx, disabledRules, onRuleSelfDisabled)
+ │                     ├─ for each rule: TargetsResolve (else self-disable callback)
+ │                     └─ TryMatch; pick highest confidence
+ │                 RULE WINS over tier2Best (spec §6)
+ └─ trace.Write (optional, --trace; records all parsed diagnostics + rule self-disables)
 ```
 
-The `Suggestion` (highest-confidence above threshold) is attached to the `Diag` for line formatting in `Diag.Format` (`CheckCommand.cs:202`).
+The `Suggestion` (highest-confidence above threshold, rule preferred over Tier-2) is attached to the `Diag` for line formatting in `Diag.Format`.
 
 ### A worked example: CS1061 on `Button("hi").OnClick(...)`
 
@@ -361,23 +436,31 @@ Paired deltas vs base: **calc −4% cost** (was +21% without the gate), **kanban
 
 ### Engineer detail
 
-The gate lives at `CheckCommand.ShouldEmitSuggestions` (`src/Reactor.Cli/Check/CheckCommand.cs:123`). It counts unique `(file, line, col, code)` tuples for `CS*` diagnostics — the same dedup key `EmitDiagnostics` uses, so MSBuild's per-project repeats don't inflate the count. Threshold `0` short-circuits to "always emit."
+The gate lives at `CheckCommand.ShouldEmitSuggestions`. It counts unique `(file, line, col, code)` tuples for `CS*` diagnostics — the same dedup key `EmitDiagnostics` uses, so MSBuild's per-project repeats don't inflate the count. Threshold `0` short-circuits to "always emit."
 
-Open watch-item carried forward to Phase 2: in the EC1 re-run, one of five kanban-variant runs hit 0 firings and tracked the long-tail base path. The gate's "fewer than 3 unique CS" condition appears to interact with the agent's path through the problem, not just the project's static shape. CV widened from 24% to 54% on the kanban variant. Not enough to block Phase 1 merge, but Phase 2 telemetry should track per-run firing counts so we can characterize this tail.
+### Tier-3 carve-out (Phase 3)
+
+The gate originally wrapped the **entire** suggester block. Phase 3 demoted it to Tier-2-only: rules always run when their diagnostic code surfaces, regardless of how many CS errors are in the build. The orchestrator takes a `tier2Enabled: bool` constructor flag; `CheckCommand.Run` always builds the orchestrator (when the compilation loads) and passes the gate result in. Why: Tier-2 fuzzy match has near-0 % empirical precision on small builds (per the 525-run calibration on CS1061 against `*Element` receivers); rules are symbol-bound and don't share that noise profile. The EC2 watch-item phrased it as "Phase-3 rules are the right lever — not Phase-2.x gate tuning." This is that lever, in code. Locked down by two `SuggesterOrchestratorRuleTests` cases.
+
+A consequence worth knowing: on iteration-mode builds with 1–2 diagnostics, the agent now sees rule suggestions where it previously saw none. This is the desired behavior, but it does introduce a new UX shape worth watching in EC3 — rules firing repeatedly across consecutive builds on the same unfixed line. Per-rule per-invocation dedup may need to land if traces show that pattern in practice.
+
+### EC1 watch-item, retrospective
+
+Open watch-item from Phase 1: in the EC1 re-run, one of five kanban-variant runs hit 0 firings and tracked the long-tail base path. The gate's "fewer than 3 unique CS" condition appeared to interact with the agent's path through the problem, not just the project's static shape. CV widened from 24 % to 54 % on the kanban variant. **The Phase-3 rule carve-out addresses this directly**: even on a 1-firing run, the agent now gets rule suggestions when the diagnostic matches a rule's code. EC3 will measure whether the long-tail tightens.
 
 ---
 
-## 8. What's shipped in this PR
+## 8. What's shipped so far
 
-The feature branch `feat/038-mur-check` lands **Phase 0 (instrumentation)** and **Phase 1 (Tier 2 Roslyn semantic suggester)**, including the gate.
+Phases 0–2 are merged to `main`. Phase 3 is in flight on `eval/spec-038-ec3-2026-05-11` with six rules + two critical correctness fixes; EC3 eval pending.
 
-### Phase 0 — instrumentation
+### Phase 0 — instrumentation (merged)
 
 - `--trace <path>` flag on `mur check`. Writes a JSONL stream of every parsed diagnostic, one row per diagnostic. Schema: `{ts, code, severity, file, line, col, msg, receiver_type?, member?, mode}`. Trace is opt-in, never written by default, never includes source code text, never includes absolute paths outside the project root.
 - Folder structure: `src/Reactor.Cli/Check/{Suggesters,Rules}/` with README pointers; mirrored test folders.
 - A smoke fixture (`tests/Reactor.IntegrationTests/MurCheck/Fixtures/SmokeFixture/`) plus a smoke test that drives the end-to-end pipeline.
 
-### Phase 1 — Tier 2 Roslyn suggester
+### Phase 1 — Tier-2 Roslyn suggester + diagnostic-count gate (merged)
 
 New files in `src/Reactor.Cli/Check/`:
 
@@ -385,28 +468,50 @@ New files in `src/Reactor.Cli/Check/`:
 - `Suggesters/SymbolSuggester.cs` — the five CS-code paths described in §3.
 - `Suggesters/StringSimilarity.cs` — JaroWinkler implementation.
 - `Suggesters/Thresholds.cs` — per-code thresholds + similarity floor; async-local override for parallel-test safety.
-- `CompilationLoader.cs` — load + cache `CSharpCompilation` per `(csproj, file-set-hash)`.
+- `CompilationLoader.cs` — load + cache `CSharpCompilation` per `(csproj, file-set-hash)`. (Extended in Phase 3 to resolve ProjectReferences — see below.)
 - `FactoryIndex.cs` — pre-filter over `Microsoft.UI.Reactor.Factories.*`.
 - `SuggesterOrchestrator.cs` — wiring; orchestrates Roslyn resolution and applies the Reactor-touching gate.
 - `Telemetry.cs` — opt-in (`MUR_TELEMETRY=1`) local-only JSONL at `~/.mur/telemetry/<yyyy-mm-dd>.jsonl`. Codes, suggester names, confidences only; **no source code, no absolute paths**.
 - `TraceWriter.cs` — the `--trace` JSONL writer.
 
-Changes:
+**EC1 re-run with the gate (2026-05-10):** calc cost −4 % (mean), kanban cost −33 % (median −39 %). First-build OK 5/5 on both variant arms. Phase 1 merge-bar cleared.
 
-- `CheckCommand.cs` — wires suggester into the existing pipeline; adds `ShouldEmitSuggestions` gate; preserves Tier-1's win-ties behavior.
-- `CheckArgs.cs` — parser + `--help` for `--trace`, `--suggest-threshold`, etc.
+### Phase 2 — MSBuild passthrough + deterministic pre-emit ranker + mode flags (merged)
 
-Tests:
+The deterministic ranker decides *whether each diagnostic should be shown to the agent at all*, separately from "what hint should attach to it." This is where suppression of XML-doc warnings, MSBuild reference-resolution chatter, and nullable noise lives.
 
-- `tests/Reactor.Tests/CheckCommandTests/` — unit suite covering: args parsing, pipeline (gate on/off, dedup, suggestion attachment), `CompilationLoader` cold/warm timings + invalid project handling, `FactoryIndex`, each suggester code path (positive + negative), trace + telemetry payload validation.
-- `tests/Reactor.Tests/CheckCommandTests/Tuning/` — the corpus-driven threshold tuner.
-- `tests/Reactor.IntegrationTests/MurCheck/` — end-to-end smoke test against a fixture.
+- **`Ranker/PolicyTable.cs`** — hand-authored score table for ~30 codes. CS errors → 1.0/1.0. `REACTOR_*` Warning → 0.9/1.0. `CS1591` (XML doc) → 0.0/0.5. A universal-error floor ensures any Error severity scores 1.0 regardless of code (the table can't accidentally hide a real build break).
+- **`Ranker/Ranker.cs`** — pure `Score(in Diag, in RankerContext) → double` plus `ShouldEmit` gate. Phase-2 implementation is the PolicyTable lookup; recency, location, and accept-history terms wait for Phase-4 signals.
+- **Mode flags** in `ArgsParser`/`CheckArgs`: `--strict` (promotes warnings to errors), `--final` (emits everything, the "I am done iterating" gate), `--quiet` (severity E only), `--emit-threshold <float>` overrides the active mode's threshold.
+- **MSBuild passthrough via `--`**: `mur check [path] [mur-flags] [-- <msbuild args>]`. `mur` injects `--nologo`, `-v:m`, `-p:Platform={host arch}` only if the user didn't supply the same flag (detection by flag name, not value). When `--trace` is on, the effective `dotnet build` command line is recorded as a `kind: "command"` header row.
+- **Suppress→error guardrail** at `tools/Reactor.MurCheckGuardrail/`. CI tool reads two trace files (iteration + final) and asserts every code suppressed in iteration mode does **not** appear as an error in `--final`. The tool re-uses `PolicyTable` directly via `InternalsVisibleTo`, so audit and runtime can never drift.
 
-### Calibration + eval
+**EC2 PASS by median (2026-05-11):** calc-mur clean win on every metric (cost −5.1 %, tokens −5.8 %, turns −5.1 %, wall −7.9 %, variance 1.9× tighter); kanban-mur at exact cost median parity. First-build OK 5/5 both arms. SKILL framing softened so `--final` is described as an optional pre-merge sweep, not a task-completion requirement.
 
-- Thresholds calibrated against the **50-run corpus** (Data Checkpoint B) on 2026-05-10. Per-code values landed in `Thresholds.cs`.
-- Re-validated against the **525-run corpus** (Data Checkpoint C, single-agent) on 2026-05-11. All thresholds held at current values. Two top Phase-3 rule targets surfaced: CS0117/Theme `*Background → SolidBackground`, and CS1061/`*Element` WinUI-name → Reactor-shortcut family.
-- **EC1 re-run with the gate passes both arms** (2026-05-10): calc cost −4%, kanban cost −33%. Phase 1 merge-bar cleared.
+### Phase 3 — Tier-3 induced + vocabulary rules + symbol-binding contract (in flight)
+
+Branch: `eval/spec-038-ec3-2026-05-11` at commit `2b7090f`. Six rules + the two critical correctness fixes + new tests. EC3 eval pending (handoff doc at `C:\temp\mur-ec3-handoff.md`).
+
+**Infrastructure** in `src/Reactor.Cli/Check/Rules/`:
+
+- `IRulePattern.cs` — interface: `Name`, `Provenance`, `DiagnosticCodes`, `DeclaredTargets`, `TryMatch(in RuleContext) → RuleSuggestion`. `RuleContext` bundles the `SyntaxNode`, `Diagnostic`, `ITypeSymbol? Receiver`, `SemanticModel`, `CSharpCompilation`, and `RuleSymbolResolver` so rules never re-discover the per-compilation cache.
+- `RuleRegistry.cs` — reflection-based discovery on assembly load (Reactor.Cli only; no plugin loading from disk). Duplicate `Name`s throw at registry construction. `BestMatch` returns the highest-confidence match across enabled rules; pre-flight `TargetsResolve` short-circuits rules whose targets don't exist in the current compilation (self-skip via `onSelfDisabled` callback).
+- `RuleSymbolResolver.cs` — `ResolveType(string)`, `ResolveMethod(INamedTypeSymbol, string)`, `ResolveMember(INamedTypeSymbol, string)`. Cached via `ConditionalWeakTable<CSharpCompilation, _>` so two callers with the same compilation reference share caches; per-compilation resolver identity is test-locked.
+- CLI: `--disable-rule <Name>` (repeatable), `--list-rules` (prints name/provenance/status table; short-circuits before `dotnet build` runs). Unknown `--disable-rule` names warn instead of error.
+
+**The six rules** — see the table in §3 for the full inventory. Three Class-A (induced from the cross-corpus audit) + three Class-B (vocabulary-translation, structurally justified). All six bind through `RuleSymbolResolver`; no string-matching.
+
+**Two critical correctness fixes** (both blocked any real-world rule firing prior; surfaced by end-to-end smoke testing during Phase 3):
+
+1. **`CompilationLoader` ProjectReference resolution.** The loader previously only handled NuGet packages from `project.assets.json`'s `targets` section. Reactor itself is a *project reference* for every sample app, so its types were invisible to `RuleSymbolResolver.ResolveType`. Every rule's `DeclaredTargets` failed to resolve and the entire registry self-disabled on every real `mur check` invocation — even though all unit tests passed (those use synthetic in-memory compilations). New code walks `libraries.<id>` entries with `type=project`, reads the referenced csproj's `<AssemblyName>` (falls back to the basename), and locates the most-recently-built matching `.dll` under that project's `bin/` subtree. Regression locked by `CompilationLoaderTests.Resolves_ProjectReference_built_dll_from_project_assets_json`, which constructs a synthetic refproj + a real `MetadataReference.CreateFromFile`-loadable empty assembly + an assets.json that references it.
+
+2. **Suggest-gate carve-out for Tier-3 rules.** The gate wrapped the entire suggester block — when closed, neither Tier-2 nor rules ran. `SuggesterOrchestrator` now takes `tier2Enabled: bool`; `CheckCommand.Run` always builds the orchestrator and passes the gate result in. Tier-3 rules always run; Tier-2 stays gated on small builds where its fuzzy match has near-0 % precision. The EC2 watch-item ("Phase-3 rules are the right lever — not Phase-2.x gate tuning") finally in code. Locked down by `SuggesterOrchestratorRuleTests.Rule_fires_even_when_tier2_is_disabled_by_the_suggest_gate` + `Tier2_only_code_returns_null_when_tier2_is_disabled_and_no_rule_covers`.
+
+**The `§3.1a` perf bound** is captured by `RulePerformanceTests.BestMatch_median_under_per_rule_budget` (`[Trait("Category","Perf")]`). Asserts median over 1000 iters stays under `0.5 ms × rule_count × 4× CI slack` on the canonical CS1061-on-`ButtonElement.OnClick` fixture. The factor scales automatically as the rule set grows.
+
+**Cross-agent reproducibility audit** at `docs/specs/tasks/038-tuning-reports/2026-05-11-cross-agent-audit.md` — three STRONG Class-A targets (`GridSizeFactoryParensRule`, `ThemeBackgroundSuffixRule`'s reclassification, `GridSizePxRenameRule`); two more STRONG-after-collapse (`TextBlockStyleHintRule`'s two shapes, the `TemplatedListView` family generalized over `<T>`); one striking gpt-5.5-only signal (`CS1955` against `GridElement`, 29 events, zero in sonnet) deferred to a third-corpus drop.
+
+**Test counts:** 7175 passing / 46 expected skips on the eval branch. CheckCommand subset: 217 (52 rules tests + 165 supporting).
 
 ### Deferred follow-ups (cleanly scoped, not blocking next phase)
 
@@ -415,73 +520,68 @@ Tests:
 - Full Hamming-vector overload ranking in CS7036.
 - Return-type assignability filter in CS0103.
 - Property-accessor filter in `CollectStaticMembers` (`get_*` / `set_*` synthesized methods leak into CS0117 suggestions).
+- Per-rule per-invocation dedup if EC3 traces show rules firing repeatedly across consecutive unfixed-line builds (introduced by the gate carve-out).
 
 ### Tracked harness-side prerequisite
 
-- `still_present_at_run_end` is uniformly `false` because of a fingerprint quirk on adjacent CS8012 emissions with different timing tails. Doesn't affect the primary `addressed_by_next_fix` label, but breaks the auxiliary `agent_ignored` label that the future auto-suppression telemetry hook depends on. Phase-4 prerequisite, not a Phase-1 blocker.
+- `still_present_at_run_end` is uniformly `false` because of a fingerprint quirk on adjacent CS8012 emissions with different timing tails. Doesn't affect the primary `addressed_by_next_fix` label, but breaks the auxiliary `agent_ignored` label that the future auto-suppression telemetry hook depends on. Phase-4 prerequisite, not a Phase-3 blocker.
 
 ---
 
 ## 9. Future improvements
 
-Phases 2–4 will land after Phase 1 merges. They unlock independently of each other once their data and code blockers clear.
+Phase 2 has merged; Phase 3 is in flight on `eval/spec-038-ec3-2026-05-11`. What's left below is the remainder of Phase 3 (more rules pending a third-agent corpus) and all of Phase 4 (telemetry-driven Tier-4 ranker + learned §8 emit ranker). Each unlocks independently once its data and code blockers clear.
 
 ### The recurring failure mode: WinUI/WPF vocabulary confusion
 
-Before describing the phases, it's worth naming the *shape* of failure the rest of this section is designed against, because it isn't an edge case — it is the central, recurring pattern the 525-run corpus surfaces, and it directly motivates the Class-B rule split in Phase 3.
+Before describing what's left, it's worth re-naming the *shape* of failure the rest of this section is designed against, because it isn't an edge case — it is the central, recurring pattern both the gpt-5.5 and sonnet-4.6 525-run corpora surface, and it directly motivates the Class-B rule split in Phase 3.
 
-**The pattern, in plain language.** An agent sits down to write Reactor. The agent has seen a lot of WPF, some Silverlight, and some WinUI (1, 2, 3) in its training data — and very little Reactor. So when it reaches for a property or method on a Reactor type, its muscle memory hands it a WinUI-shaped name: `.VerticalAlignment`, `.Style(BuiltInStyle)`, `Theme.AppBackground`, `.HorizontalAlignment`. The C# compiler rejects these because the Reactor types don't expose those members. CS1061 or CS0117 fires. Then the agent burns a turn (or several) figuring out what Reactor *does* expose. That's the build/fix loop the whole spec is targeting.
+**The pattern, in plain language.** An agent sits down to write Reactor. The agent has seen a lot of WPF, some Silverlight, and some WinUI (1, 2, 3) in its training data — and very little Reactor. So when it reaches for a property or method on a Reactor type, its muscle memory hands it a WinUI-shaped name: `.VerticalAlignment`, `.Style(BuiltInStyle)`, `Theme.AppBackground`, `GridSize.Pixel(x)`. The C# compiler rejects these because the Reactor types don't expose those members. CS1061 or CS0117 fires. Then the agent burns a turn (or several) figuring out what Reactor *does* expose. That's the build/fix loop the whole spec is targeting.
 
 **Why Tier 2 alone can't solve it.** Tier-2 fuzzy match tries to find the closest real member name to the typo. JaroWinkler similarity between `VerticalAlignment` and `VAlign` is roughly 0.55 — well below the 0.70 floor. So Tier 2 either stays silent (good but unhelpful) or picks the second-closest real member name (e.g. `TextAlignment`, which is wrong). The 525-run report quantifies this: every empirical CS1061 firing against a Reactor `*Element` type in that corpus was a wrong-direction suggestion driven by exactly this gap.
 
-**Why it's structural, not transient.** The five-framework lineage (WPF, Silverlight, WinUI 1, WinUI 2, WinUI 3) all share vocabulary that is *almost* but not quite Reactor. Better base models don't fix this — they're trained on the same lineage and have the same priors. New Reactor releases don't fix this either — they keep the Reactor API names roughly stable while WinUI muscle memory continues to dominate the prior. The only deterministic way to break the cycle is a *vocabulary-translation layer* that maps prior-framework names to Reactor names: a Class-B rule per pair. This is exactly what spec 038 Phase 3 schedules under the "Class B — vocabulary-translation" bucket described below.
+**Why it's structural, not transient.** The five-framework lineage (WPF, Silverlight, WinUI 1, WinUI 2, WinUI 3) all share vocabulary that is *almost* but not quite Reactor. Better base models don't fix this — they're trained on the same lineage and have the same priors. New Reactor releases don't fix this either — they keep the Reactor API names roughly stable while WinUI muscle memory continues to dominate the prior. The only deterministic way to break the cycle is a *vocabulary-translation layer* that maps prior-framework names to Reactor names — Class-B rules. The cross-agent audit's "STRONG" verdicts confirm exactly this: the rules with the strongest evidence (`GridSize.Auto` parens, `Theme.*Background → SolidBackground`, `*Element.{H,V}orizontalAlignment → .{H,V}Align`) all describe vocabulary translations, not edit-distance typos.
 
-### Phase 2 — MSBuild passthrough + deterministic pre-emit ranker
+### Remainder of Phase 3 — more rules, pending corpus and review
 
-The four tiers decide *what hint to attach*. The pre-emit ranker decides *whether a diagnostic should be shown to the agent at all, right now*. This matters because raw MSBuild output is dominated by diagnostics whose resolution is **not** on the critical path to a clean build — NuGet noise, MSBuild reference-resolution chatter, IDE style hints, nullable warnings on template code. If the agent reads all of them every turn it (a) spends turns fixing things that didn't need fixing this turn, and (b) the real blocker scrolls off attention.
+The six shipped rules cover the top frequency targets cleared by bar #2 of the Validation Gate. The audit identifies follow-on work in three buckets:
 
-Phase 2 ships:
+**Bucket A — STRONG-after-design-decision.** The `TemplatedListViewElement<T>` `missing_with_key` family appears in both corpora (gpt-5.5 7 events across `<string>`, `<ListItem>`, `<int>`, `<WorkItem>`, `<DemoItem>`; sonnet 1 event on `<Product>`). Rule must match the open generic type, not a closed-generic literal. Authoring blocker is rule-design (how to express "any `TemplatedListViewElement<_>`" in `DeclaredTargets`), not data. Likely the next rule to author.
 
-- A **policy table** (hand-authored, ~30 codes) mapping `(code, mode)` to a score. CS errors → 1.0/1.0. `REACTOR_*` Warning → 0.9/1.0. `CS1591` (XML doc) → 0.0/0.5. Etc.
-- **Mode flags** — `--strict`, `--final`, `--quiet`, `--emit-threshold <N>`. The default mode (no flag) is *iteration*: aggressive suppression for the inner build/fix loop. `--final` emits everything and is the explicit "I am done iterating" gate.
-- **MSBuild passthrough via `--`**. `mur check [<path>] [mur-flags...] [-- <msbuild args>...]`. Defaults like `--nologo`, `-v:m`, `-p:Platform={host arch}` inject only if the user didn't supply the same flag in the passthrough section. Detection by flag name, not value.
-- **Suppress→error guardrail**. CI checks that every code suppressed in iteration mode does *not* appear as an error in a subsequent `--final` pass. If it does, the policy table is wrong and CI fails.
+**Bucket B — single-corpus STRONG, deferred to a third-agent drop.** Two notable signals:
 
-### Phase 3 — induced and authored pattern rules (Tier 3)
+- `CS1955` against `GridElement`, 29 events combined across `other`/`fluent_to_named`/`renamed_member`/`import_added` fix_kinds — gpt-5.5 only. Striking gap.
+- `CS1061` against `ButtonElement` (renamed_member + other), 5 events gpt-5.5, 0 sonnet. Already covered structurally by Class-B `ButtonOnClickFactoryMoveRule` for the `.OnClick` shape; non-`OnClick` `*Element` member renames remain single-corpus.
 
-Tier-3 rules come in **two classes** (spec §6 split, motivated by the load-bearing framing in §1):
+Authoring these as Class-A is blocked until a third agent (e.g. `claude-opus-*` or `gemini-*`) mines a corroborating corpus. Authoring them as Class-B is possible *if* a documented prior-framework citation justifies each one structurally.
 
-**Class A — *induced* rules.** Hand-authored small rewriters seeded from the mining clusters. Top three targets from the 525-run corpus:
+**Bucket C — Class-B vocabulary catalog expansion.** The vocab table at `docs/specs/tasks/038-vocab-table.csv` has 21 rows seeded from the 525-run report; it's the curated WPF/Silverlight/WinUI → Reactor name lookup. Each row that doesn't yet have a corresponding rule is a Class-B candidate. The rule-per-row authoring cost is small; the review cost dominates. The §3.2 "≥3 rules per PR" cadence is the throttle.
 
-1. **CS0117 / Theme — `*Background → SolidBackground`** (C0019, 1.6%, 16 events). A small lookup table from common-wrong-name → canonical Reactor token.
-2. **CS1955 / GridSize — missing parens on factory** (C0004, 10.7%, 110 events; **largest single bucket in the corpus**). `GridSize.Star → GridSize.Star()`. First cross-tier addition — Tier 2 doesn't cover CS1955 today.
-3. CS1061 cases that survive Tier 2 — e.g. structural rewrites the fuzzy match can't reach.
-
-Justification bar: cluster `frequency ≥ 0.05` AND `count ≥ 10` AND cross-agent reproducibility.
-
-**Class B — *vocabulary-translation* rules.** Deliberately authored from a curated WPF / Silverlight / WinUI 1 / WinUI 2 / WinUI 3 → Reactor name table. These are the *structurally-justified* rules from the load-bearing argument — we know prior-framework muscle memory will surface as confused Reactor code regardless of what the corpus shows in any given month. Examples:
-
-- `.VerticalAlignment(x)` (WinUI/WPF) → `.VAlign(x)` (Reactor)
-- `.HorizontalAlignment(x)` → `.HAlign(x)`
-- `Theme.AppBackground` (plausibly-WinUI) → `Theme.SolidBackground` (Reactor)
-- `.Style(BuiltInStyle)` → fluent-modifier family
-
-**Frequency bar is waived for Class B** — the empirical justification is "the prior framework exists and models trained on it have strong priors that surface as confused Reactor code." Cross-agent reproducibility, positive/negative fixtures, reviewer signoff, and the kill-switch all still apply.
-
-**Symbol-binding (decided).** Both classes bind their target types and members to Roslyn `ISymbol` references resolved against the live `Compilation`, **not** by string-matching `MemberAccess.Name.ValueText`. When Reactor renames `VAlign` in a future minor, a string-matched rule silently breaks; a symbol-bound rule fails resolution explicitly, self-disables with a trace warning, and surfaces via the CI gate. This is a one-time up-front cost that avoids rewriting every rule on future API churn.
-
-**Cross-agent reproducibility bar.** The current 525-run corpus is `gpt-5.5`-only. Class A rules cannot open PRs until a second-agent corpus drop lands. Class B rules can — their justification is the documented prior-framework citation, not the corpus.
+**Validation Gate bar #5 (independent reviewer signoff)** is still the open bar on every authored rule. The six shipped on `eval/spec-038-ec3-2026-05-11` need that signoff before they can land on `main`.
 
 ### Phase 4 — telemetry-driven Tier 4 + learned §8 ranker (scheduled, deferred)
 
-**Status change.** Earlier drafts framed this as "only if needed." The load-bearing framing in §1 promotes it to **scheduled, deferred until Data Checkpoint D delivers ≥ 1K negative-class ranker rows**. It is not a maybe; it is the work we open when the data is ready. The deterministic floor (Tiers 1–3 + the Phase-2 policy table) is sized to carry the experimental phase, and the learned ranker is what we ship once corpus volume justifies it.
+Promoted to **scheduled, deferred until Data Checkpoint D delivers ≥ 1K negative-class ranker rows** (per the load-bearing framing in §1). It is not a maybe; it is the work we open when the data is ready. The deterministic floor (Tiers 1–3 + the Phase-2 policy table) is sized to carry the experimental phase, and the learned ranker is what we ship once corpus volume justifies it.
 
-Two independent models:
+**Two independent models, one telemetry pipeline:**
 
-1. **Tier-4 confidence ranker.** GBDT over hand-engineered features (Levenshtein, parameter-name overlap, factory-popularity-in-samples, AST-shape similarity, prior agent-accept rate per rule). Re-ranks the candidate set produced by Tiers 2 + 3. Inference cost: microseconds.
-2. **Learned pre-emit ranker.** Trained against `addressed_by_next_fix` as the binary label. GBDT or logistic regression. <100 KB ONNX. Calibrated via isotonic regression on a held-out fold so the score behaves like an emit-worthiness probability. Complements the Phase-2 policy table — the table is the floor (always-emit / never-emit anchors), the model fills the gray middle.
+1. **Tier-4 confidence ranker.** GBDT over hand-engineered features (Levenshtein, parameter-name overlap, factory-popularity-in-samples, AST-shape similarity, prior agent-accept rate per rule). Re-ranks the candidate set produced by Tiers 2 + 3. Inference cost: microseconds. Inputs to its training set come from the `~/.mur/telemetry/<date>.jsonl` agent-accept logs once those reach volume.
+2. **Learned pre-emit ranker.** Trained against `addressed_by_next_fix` as the binary label, complementing the Phase-2 policy table. GBDT or logistic regression. <100 KB ONNX. Calibrated via isotonic regression on a held-out fold so the score behaves like an emit-worthiness probability. The table provides the floor (always-emit / never-emit anchors); the model fills the gray middle.
 
-Escape hatch: a documented decision to ship Phase 4 with the deterministic table only. This remains the *unexpected* outcome and requires its own decision artifact, rather than being the default.
+**Telemetry pipeline** (the §11 auto-suppression hook). Local-first JSONL aggregation reads `~/.mur/telemetry/` and computes per-code, per-rule accept rates. A rule whose accept-rate drops below 50 % over the last 200 invocations is auto-disabled at runtime with a warning logged on every subsequent `mur check`. A follow-up issue is auto-filed with the rule's exemplar pairs and the agent edits that diverged from the suggestion. Re-enabling requires a new PR with the same six-bar Validation Gate.
+
+**Blocked on:**
+
+- Data Checkpoint D from the harness team (≥ 5K ranker-label rows, ≥ 1K negative class). The negative class is now emitting per-build per-diagnostic — gap #3 was fixed in the audit pass 2 — but volume still has to accumulate.
+- The `still_present_at_run_end` fingerprint bug (Phase-4 prerequisite). The auxiliary `agent_ignored` label is uniformly false right now because adjacent CS8012 emissions with different timing tails fingerprint distinctly; needs fixed before the auto-suppression hook can detect "suppressed-then-resurfaced" patterns.
+
+**Escape hatch.** A documented decision to ship Phase 4 with the deterministic table only. This remains the *unexpected* outcome and requires its own decision artifact, rather than being the default.
+
+### What EC3 will tell us
+
+EC3 is the 5×N paired eval batch on `gpt-5.5` against `reactor-calc` and `reactor-kanban`, run from the `eval/spec-038-ec3-2026-05-11` branch. Handoff is at `C:\temp\mur-ec3-handoff.md`. The pass criterion is cumulative ~−14 % tokens vs. start-of-spec / ~−2 turns / CV ≤ start-of-spec CV.
+
+**What the eval is actually testing.** Phase 2 measured the deterministic ranker's effect on small builds (calc) and big builds (kanban) — calc-mur won every metric, kanban-mur held cost parity by median but regressed by mean on a single outlier. Phase 3's bet is that the six shipped rules close that kanban-mean gap by catching the WinUI/WPF vocabulary-confusion misses that Tier-2 couldn't reach. Notably the EC2 batch measured **0/10 Tier-2 firings on both arms** — that result reflected the CompilationLoader silent failure plus the suggest-gate's pre-carve-out coverage, not the absence of useful suggestions. EC3 is the first eval where rules can actually fire end-to-end. Whatever the verdict, it isn't an incremental delta on EC2; it's a fresh measurement.
 
 ### Things explicitly out of scope (today and probably forever)
 
@@ -505,14 +605,20 @@ Escape hatch: a documented decision to ship Phase 4 with the deterministic table
 | **JaroWinkler** | A string-similarity metric weighted toward prefix agreement. Outputs a score in `[0, 1]`. Used as Tier 2's fuzzy-match base signal. |
 | **Confidence** | A score in `[0, 1]` derived from JaroWinkler + margin + receiver-Reactor-ness. Compared against a per-code threshold to gate emission. |
 | **Threshold** | The per-code minimum confidence required to emit a suggestion. Tuned against the mining corpus. Held in `Thresholds.cs`. |
-| **The gate** | `--suggest-threshold <N>` — skip Tier-2 on invocations with fewer than `N` unique CS-diagnostics. Defaults to 3. Mitigates the small-project regression. |
-| **Mining corpus** | The `(broken, fixed)` pairs produced by spec 037's harness. Lives at `docs/specs/tasks/038-tuning-reports/2026-05-11-525run-source/` in this repo (mirrored copy). |
-| **Eval Checkpoint (EC)** | A staged 5×N agent-eval batch run against `reactor-calc` and `reactor-kanban` to verify a phase's predicted cost/turn lift. EC1 has landed; EC2/3/4 are future. |
+| **The gate (suggest-threshold)** | `--suggest-threshold <N>` — skip Tier-2 on invocations with fewer than `N` unique CS-diagnostics. Defaults to 3. Mitigates the small-project regression. **Tier-3 rules are NOT gated** — see "rule carve-out". |
+| **Rule carve-out** | Phase-3 change: rules always run when their diagnostic code surfaces, regardless of the suggest-gate's state. The orchestrator takes `tier2Enabled: bool` and passes through the gate result; Tier-2 stays gated, Tier-3 doesn't. Lets rule suggestions appear on 1–2-diagnostic builds where the gate previously suppressed everything. |
+| **Pre-emit ranker** | The Phase-2 deterministic policy table (`Ranker/PolicyTable.cs`) plus its `Ranker.cs` driver. Decides whether each diagnostic is shown at all, separately from "what hint should attach to it." Mode flags (`--strict` / `--final` / `--quiet`) change ranker thresholds, not suggester behavior. |
+| **Symbol-binding contract (§3.1a)** | Every Tier-3 rule resolves its target types and members through `RuleSymbolResolver` (Roslyn `ISymbol` lookup against the live `Compilation`), never by string-matching `MemberAccess.Name.ValueText`. When Reactor renames an API, a string-matched rule silently breaks; a symbol-bound rule fails resolution explicitly, self-disables, and surfaces in `--list-rules`. CI gate: `RuleTargetResolutionTests`. |
+| **ProjectReference resolution** | Phase-3 fix to `CompilationLoader` that walks `project.assets.json`'s `libraries.<id>` entries with `type=project` and locates the most-recently-built matching `.dll` under that project's `bin/` tree. Without it, Reactor (a project reference for every sample app) is invisible to `RuleSymbolResolver` and every rule self-disables — silently, since unit tests use synthetic compilations. |
+| **Mining corpus** | The `(broken, fixed)` pairs produced by spec 037's harness. gpt-5.5 525-run mirror at `docs/specs/tasks/038-tuning-reports/2026-05-11-525run-source/` in this repo; sonnet-4.6 525-run lives in the sibling `reactor-tokenusage` repo. |
+| **Cross-agent audit** | The verdict table at `docs/specs/tasks/038-tuning-reports/2026-05-11-cross-agent-audit.md` comparing cluster keys `(diag_code, receiver_type, fix_kind)` across the gpt-5.5 and claude-sonnet-4.6 corpora. Assigns STRONG / WEAK / SINGLE to each candidate cluster; this is how Validation Gate bar #2 gets formally cleared per rule. |
+| **Eval Checkpoint (EC)** | A staged 5×N agent-eval batch run against `reactor-calc` and `reactor-kanban` to verify a phase's predicted cost/turn lift. EC1 + EC2 have landed; EC3 is pending on the eval branch; EC4 is the Phase-4 gate. |
 | **Validation Gate** | The six-bar pre-merge checklist every Tier-3 rule must pass (Phase 3 only). Exists because a bad rule is worse than no rule. Bar #1 (frequency ≥ 5 %) is waived for Class-B rules whose justification is the documented prior-framework citation rather than a corpus cluster. |
 | **Class A / Class B rule** | Class A = *induced* — sourced from a `patterns.json` cluster, justified by frequency + count + cross-agent reproducibility. Class B = *vocabulary-translation* — deliberately authored from a curated WPF/WinUI → Reactor table, justified by the structural prior-framework-confusion argument. Both classes share the same shipping infrastructure (`IRulePattern`, symbol-binding, `--disable-rule`); they differ only in justification source. |
+| **Provenance** | A short string on every `IRulePattern` (`cluster:<id>` for Class A or `vocab:<framework>` for Class B) recorded with every fired suggestion. Lets a future maintainer grep `cluster:C0019` back to the motivating cluster, or `vocab:WinUI3` back to the doc-citation row in `docs/specs/tasks/038-vocab-table.csv`. |
 | **Load-bearing** | The framing applied to `mur check` in §1: this is structural infrastructure for the 1–3 year window in which Reactor is experimental and WinUI 3 is weakly represented + cross-confused in training data. Not a stopgap. Phase 4 is scheduled, not optional. |
 | **Sunset criterion** | The explicit conditions under which `mur check`'s suggestion engine retires: (a) Reactor API stable for ≥ 12 months AND (b) ≥ 90 % first-build-OK on a held-out Reactor eval across ≥ 2 vendor-distinct models without `mur check` assistance. Named so "load-bearing" doesn't drift into "forever." |
 
 ---
 
-**Maintenance.** This doc covers the system as of `feat/038-mur-check`. It will be updated as Phases 2–4 land. The canonical source-of-truth for decisions and pending work remains the spec + task docs under `docs/specs/`. For ongoing operational responsibilities (API-churn protocol, corpus freshness, per-rule accept-rate monitoring, annual sunset-readiness check) see the **Maintenance (load-bearing operation)** section of the task doc.
+**Maintenance.** This doc covers the system through `main` at Phase 2 plus the in-flight Phase-3 work on `eval/spec-038-ec3-2026-05-11`. It will be updated as the rest of Phase 3 + Phase 4 land. The canonical source-of-truth for decisions and pending work remains the spec + task docs under `docs/specs/`. For ongoing operational responsibilities (API-churn protocol, corpus freshness, per-rule accept-rate monitoring, annual sunset-readiness check) see the **Maintenance (load-bearing operation)** section of the task doc.
