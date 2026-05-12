@@ -101,6 +101,8 @@ Run with `dotnet run App.cs -p:Platform=ARM64` (or `x64`). On a fresh source clo
 
 `WindowsPackageType` MUST be `None` (unpackaged, no App.xaml). `UseWinUI` MUST be `true`. **No XAML files of any kind.**
 
+**After `dotnet new reactorapp`, trust the scaffolded `.csproj`.** The template generates exactly this shape. Read the `.csproj` back only if you need to add a `PackageReference` or change a property — the scaffold's stdout already shows the file listing and `Restore succeeded.`, so the post-scaffold inspection costs a turn for zero new information. (Reading `App.cs` *is* necessary — that's the file you're about to `apply_patch`.)
+
 ## Required imports
 
 ```csharp

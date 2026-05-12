@@ -197,6 +197,14 @@ In selfhost the version is `0.0.0-local` (produced by `mur pack-local` —
 see "Which mode are you in?" above). Outside the source clone, replace it
 with whatever Microsoft.UI.Reactor version you depend on.
 
+**After `dotnet new reactorapp`, trust the scaffolded `.csproj`.** The
+template generates exactly this shape. Read the `.csproj` back only if
+you need to add a `PackageReference` or change a property — the
+scaffold's stdout already shows the file listing and `Restore
+succeeded.`, so the post-scaffold inspection costs a turn for zero new
+information. (Reading `App.cs` *is* necessary — that's the file you're
+about to modify.)
+
 ### nuget.config (selfhost only — sibling of the .csproj)
 
 If your .csproj lives **outside** the Reactor clone, add a `nuget.config`
