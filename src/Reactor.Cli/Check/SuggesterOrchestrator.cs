@@ -22,7 +22,7 @@ using Microsoft.UI.Reactor.Cli.Check.Suggesters;
 
 namespace Microsoft.UI.Reactor.Cli.Check;
 
-internal sealed record Suggestion(string Text, double Confidence, string Evidence, string SuggesterName);
+internal sealed record Suggestion(string Text, double Confidence, string Evidence, string SuggesterName, bool IsRule = false);
 
 internal sealed class SuggesterOrchestrator
 {
@@ -180,7 +180,7 @@ internal sealed class SuggesterOrchestrator
                 var evidence = string.IsNullOrEmpty(s.Evidence)
                     ? rule.Provenance
                     : $"{s.Evidence} ({rule.Provenance})";
-                return new Suggestion(s.Text!, s.Confidence, evidence, rule.Name);
+                return new Suggestion(s.Text!, s.Confidence, evidence, rule.Name, IsRule: true);
             }
         }
 

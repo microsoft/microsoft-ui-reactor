@@ -186,6 +186,77 @@ public class TraceWriterTests
         Assert.True(line.Length <= 2048, $"trace row was {line.Length} bytes — exceeds 2 KB cap.");
     }
 
+    [Fact]
+    public void Rule_fired_row_has_expected_schema()
+    {
+        // Spec 038 EC3-final watch-item: per-rule firing-rate audits should
+        // be a 1-line grep over the trace file. The row carries enough info
+        // to identify the rule, the diagnostic it fired on, the confidence,
+        // and the location — so a maintainer can `jq` for `.kind=="rule_fired"`
+        // and reconstruct firing rates without rejoining against the diag rows.
+        using var tmp = TempFile.Create();
+        using (var w = TraceWriter.Open(tmp.Path, Path.GetFullPath("."), mode: "iteration"))
+        {
+            w.WriteRuleFired(
+                ruleName: "GridSizeFactoryParensRule",
+                code: "CS1955",
+                confidence: 0.95,
+                evidence: "GridSize.Auto is a property, not a method (cluster:C0004)",
+                file: "Program.cs",
+                line: 42);
+        }
+
+        var line = File.ReadAllLines(tmp.Path).Single();
+        using var doc = JsonDocument.Parse(line);
+        Assert.Equal("rule_fired", doc.RootElement.GetProperty("kind").GetString());
+        Assert.Equal("GridSizeFactoryParensRule", doc.RootElement.GetProperty("rule").GetString());
+        Assert.Equal("CS1955", doc.RootElement.GetProperty("code").GetString());
+        Assert.Equal(0.95, doc.RootElement.GetProperty("confidence").GetDouble());
+        Assert.Contains("GridSize.Auto", doc.RootElement.GetProperty("evidence").GetString());
+        Assert.Equal("Program.cs", doc.RootElement.GetProperty("file").GetString());
+        Assert.Equal(42, doc.RootElement.GetProperty("line").GetInt32());
+        Assert.Equal("iteration", doc.RootElement.GetProperty("mode").GetString());
+        Assert.True(line.Length <= 2048, $"trace row was {line.Length} bytes — exceeds 2 KB cap.");
+    }
+
+    [Fact]
+    public void Rule_fired_evidence_is_truncated_under_2KB_cap()
+    {
+        // Same defensive truncation we apply to diag.msg: a runaway evidence
+        // string should never blow the 2 KB row budget.
+        var huge = new string('e', 8192);
+        using var tmp = TempFile.Create();
+        using (var w = TraceWriter.Open(tmp.Path, Path.GetFullPath(".")))
+            w.WriteRuleFired("R", "CS1061", 0.9, huge, "a.cs", 1);
+
+        var line = File.ReadAllLines(tmp.Path).Single();
+        Assert.True(line.Length <= 2048, $"trace row was {line.Length} bytes — exceeds 2 KB cap.");
+    }
+
+    [Fact]
+    public void Rule_fired_file_is_sanitized_like_diag_rows()
+    {
+        // Same path-leak protection that applies to diag rows: a rule fire
+        // outside the project root must not leak the absolute file path.
+        var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "reactor-trace-rf-" + Guid.NewGuid()));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outside = Path.Combine(Path.GetTempPath(), "elsewhere-" + Guid.NewGuid(), "Bar.cs");
+            using var tmp = TempFile.Create();
+            using (var w = TraceWriter.Open(tmp.Path, root))
+                w.WriteRuleFired("R", "CS1061", 0.9, "ev", outside, 1);
+
+            var line = File.ReadAllLines(tmp.Path).Single();
+            using var doc = JsonDocument.Parse(line);
+            Assert.Equal("<external>", doc.RootElement.GetProperty("file").GetString());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     sealed class TempFile : IDisposable
     {
         public string Path { get; }

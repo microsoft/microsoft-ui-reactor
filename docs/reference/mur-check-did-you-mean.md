@@ -375,7 +375,7 @@ CheckCommand.Run               (CheckCommand.cs)
  │                     ├─ for each rule: TargetsResolve (else self-disable callback)
  │                     └─ TryMatch; pick highest confidence
  │                 RULE WINS over tier2Best (spec §6)
- └─ trace.Write (optional, --trace; records all parsed diagnostics + rule self-disables)
+ └─ trace.Write (optional, --trace; records all parsed diagnostics + rule self-disables + rule fires)
 ```
 
 The `Suggestion` (highest-confidence above threshold, rule preferred over Tier-2) is attached to the `Diag` for line formatting in `Diag.Format`.
@@ -456,7 +456,11 @@ Phases 0–2 are merged to `main`. Phase 3 is in flight on `eval/spec-038-ec3-20
 
 ### Phase 0 — instrumentation (merged)
 
-- `--trace <path>` flag on `mur check`. Writes a JSONL stream of every parsed diagnostic, one row per diagnostic. Schema: `{ts, code, severity, file, line, col, msg, receiver_type?, member?, mode}`. Trace is opt-in, never written by default, never includes source code text, never includes absolute paths outside the project root.
+- `--trace <path>` flag on `mur check`. Writes a JSONL stream, one row per parsed diagnostic (plus auxiliary structured events). Trace is opt-in, never written by default, never includes source code text, never includes absolute paths outside the project root. Row kinds:
+  - **diagnostic row** (default, no `kind` field): `{ts, code, severity, file, line, col, msg, receiver_type?, member?, mode}`.
+  - **command header** (`kind: "command"`): `{ts, kind, argv, mode}` — full effective `dotnet build` argv at the head of the trace.
+  - **rule self-disabled** (`kind: "rule_self_disabled"`): `{ts, kind, rule, unresolved_target, mode}` — emitted when a Tier-3 rule's declared target fails to resolve against the live compilation. Dedup'd per-invocation per-rule.
+  - **rule fired** (`kind: "rule_fired"`): `{ts, kind, rule, code, confidence, evidence, file, line, mode}` — emitted whenever a Tier-3 rule attaches a suggestion to a diagnostic. Tier-2 hits do not emit this row; their firing rate is visible via the opt-in `MUR_TELEMETRY=1` channel.
 - Folder structure: `src/Reactor.Cli/Check/{Suggesters,Rules}/` with README pointers; mirrored test folders.
 - A smoke fixture (`tests/Reactor.IntegrationTests/MurCheck/Fixtures/SmokeFixture/`) plus a smoke test that drives the end-to-end pipeline.
 

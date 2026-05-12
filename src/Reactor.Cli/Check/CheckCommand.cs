@@ -260,7 +260,24 @@ public static class CheckCommand
             if (stdoutFilter is not null && !stdoutFilter(d)) continue;
             var suggestion = suggest?.Invoke(d);
             stdout.WriteLine(d.Format(suggestion));
-            if (suggestion is not null) Telemetry.OnSuggestionEmitted(d.Code, suggestion);
+            if (suggestion is not null)
+            {
+                Telemetry.OnSuggestionEmitted(d.Code, suggestion);
+                // Spec 038 EC3-final watch-item: structured rule-fire events
+                // make per-rule firing-rate audits a 1-line grep over the
+                // trace file. Only emitted for Tier-3 rule hits; Tier-2 fires
+                // are visible via the opt-in telemetry channel instead.
+                if (suggestion.IsRule)
+                {
+                    trace?.WriteRuleFired(
+                        ruleName: suggestion.SuggesterName,
+                        code: d.Code,
+                        confidence: suggestion.Confidence,
+                        evidence: suggestion.Evidence,
+                        file: d.File,
+                        line: d.Line);
+                }
+            }
         }
     }
 

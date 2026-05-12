@@ -297,6 +297,15 @@ to land under these conventions; subsequent specs follow this shape.
   (Border / Image / ScrollView) with a back-reference to the Controls section
   — the prior parenthetical Button carve-out was easy to miss mid-build.
   (spec 038 §3 — agent-facing skill updates)
+- Spec 038 EC3-final watch-item: `rule_fired` trace event. When a Tier-3
+  rule attaches a suggestion to a diagnostic, `mur check --trace` now writes
+  one structured row per fire:
+  `{kind: "rule_fired", rule, code, confidence, evidence, file, line, mode}`.
+  Per-rule firing-rate audits collapse from multi-step content scans against
+  `events.jsonl` agent tool outputs to a 1-line `jq` over the trace file.
+  Tier-2 suggestions deliberately do not emit this row — Tier-2 firing rates
+  are visible via the opt-in `MUR_TELEMETRY=1` channel. (spec 038 §0.3,
+  EC3-final watch-item)
 - Spec 038 §3.1a residual: trace-channel structured warning hook for
   self-disabled rules. `TraceWriter.WriteRuleSelfDisabled(rule, target)`
   emits `{kind: "rule_self_disabled", rule, unresolved_target, mode}`.

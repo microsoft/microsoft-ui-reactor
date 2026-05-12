@@ -213,6 +213,86 @@ public class CheckCommandPipelineTests
     }
 
     [Fact]
+    public void Emit_writes_rule_fired_trace_event_when_rule_suggestion_attached()
+    {
+        // Spec 038 EC3-final watch-item: rule fires must show up in the trace
+        // as a structured `rule_fired` row so per-rule firing-rate audits are
+        // a 1-line grep. End-to-end through EmitDiagnostics: when the suggest
+        // callback returns a rule-flagged Suggestion, the trace file gains a
+        // rule_fired row alongside the diagnostic row.
+        var diags = CheckCommand.ParseDiagnostics("""
+            X.cs(1,1): error CS1955: Non-invocable member [P.csproj]
+            """);
+        var stdout = new StringWriter();
+        var tracePath = Path.Combine(Path.GetTempPath(), "mur-check-rulefire-" + Guid.NewGuid() + ".jsonl");
+        try
+        {
+            using (var trace = TraceWriter.Open(tracePath, Path.GetFullPath(".")))
+            {
+                CheckCommand.EmitDiagnostics(diags, stdout, trace,
+                    suggest: _ => new Suggestion(
+                        Text: ".Auto (drop parens)",
+                        Confidence: 0.95,
+                        Evidence: "GridSize.Auto is a property (cluster:C0004)",
+                        SuggesterName: "GridSizeFactoryParensRule",
+                        IsRule: true));
+            }
+
+            var lines = File.ReadAllLines(tracePath);
+            Assert.Equal(2, lines.Length); // 1 diag row + 1 rule_fired row
+
+            var ruleFired = lines
+                .Select(l => JsonDocument.Parse(l))
+                .Single(d => d.RootElement.TryGetProperty("kind", out var k) &&
+                             k.GetString() == "rule_fired");
+            Assert.Equal("GridSizeFactoryParensRule", ruleFired.RootElement.GetProperty("rule").GetString());
+            Assert.Equal("CS1955", ruleFired.RootElement.GetProperty("code").GetString());
+            Assert.Equal(0.95, ruleFired.RootElement.GetProperty("confidence").GetDouble());
+            Assert.Equal("X.cs", ruleFired.RootElement.GetProperty("file").GetString());
+            Assert.Equal(1, ruleFired.RootElement.GetProperty("line").GetInt32());
+
+            // The stdout line still carries the → try: suffix — trace event
+            // is in addition to, not in place of.
+            Assert.Contains(".Auto (drop parens)", stdout.ToString());
+        }
+        finally { try { File.Delete(tracePath); } catch { } }
+    }
+
+    [Fact]
+    public void Emit_does_not_write_rule_fired_for_tier2_suggestions()
+    {
+        // Tier-2 firing rates are visible via the opt-in telemetry channel;
+        // the trace's rule_fired row is Tier-3-only by design. A Tier-2 hit
+        // here must leave no rule_fired marker in the trace.
+        var diags = CheckCommand.ParseDiagnostics("""
+            X.cs(1,1): error CS1061: missing member [P.csproj]
+            """);
+        var stdout = new StringWriter();
+        var tracePath = Path.Combine(Path.GetTempPath(), "mur-check-tier2-" + Guid.NewGuid() + ".jsonl");
+        try
+        {
+            using (var trace = TraceWriter.Open(tracePath, Path.GetFullPath(".")))
+            {
+                CheckCommand.EmitDiagnostics(diags, stdout, trace,
+                    suggest: _ => new Suggestion(
+                        Text: "Button(label, onClick: x)",
+                        Confidence: 0.91,
+                        Evidence: "factory has Action onClick parameter",
+                        SuggesterName: "SymbolSuggester")); // IsRule default = false
+            }
+
+            var lines = File.ReadAllLines(tracePath);
+            // Exactly one row — the diagnostic — and it is NOT a rule_fired row.
+            Assert.Single(lines);
+            using var doc = JsonDocument.Parse(lines[0]);
+            var hasKind = doc.RootElement.TryGetProperty("kind", out var k);
+            if (hasKind)
+                Assert.NotEqual("rule_fired", k.GetString());
+        }
+        finally { try { File.Delete(tracePath); } catch { } }
+    }
+
+    [Fact]
     public void Ranker_final_mode_emits_everything_to_stdout()
     {
         var diags = CheckCommand.ParseDiagnostics("""

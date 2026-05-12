@@ -109,6 +109,44 @@ internal sealed class TraceWriter : IDisposable
         writer.WriteLine(json);
     }
 
+    /// <summary>
+    /// Spec 038 EC3-final watch-item: emit one structured row per Tier-3 rule
+    /// fire so per-rule firing-rate audits are a 1-line grep against the trace
+    /// JSONL instead of a multi-step content scan against agent tool outputs.
+    /// Schema:
+    ///
+    ///   { ts, kind: "rule_fired", rule, code, confidence, evidence, file, line, mode }
+    ///
+    /// `evidence` is truncated to <see cref="MaxMessageChars"/> to keep the row
+    /// under the 2 KB cap the writer enforces. Tier-2 suggestions deliberately
+    /// do not emit this row — Tier-2 firing rates are derivable from telemetry
+    /// (~/.mur/telemetry/*.jsonl); the trace event exists specifically to make
+    /// Tier-3 rule firings discoverable without telemetry opt-in.
+    /// </summary>
+    public void WriteRuleFired(
+        string ruleName,
+        string code,
+        double confidence,
+        string evidence,
+        string file,
+        int line)
+    {
+        var ev = evidence;
+        if (ev.Length > MaxMessageChars) ev = ev[..MaxMessageChars];
+        var row = new RuleFiredRow(
+            ts: DateTime.UtcNow.ToString("o"),
+            kind: "rule_fired",
+            rule: ruleName,
+            code: code,
+            confidence: confidence,
+            evidence: ev,
+            file: SanitizePath(file, projectRoot),
+            line: line,
+            mode: mode);
+        var json = JsonSerializer.Serialize(row, JsonOpts);
+        writer.WriteLine(json);
+    }
+
     static readonly JsonSerializerOptions JsonOpts = new()
     {
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
@@ -186,5 +224,16 @@ internal sealed class TraceWriter : IDisposable
         string kind,
         string rule,
         string unresolved_target,
+        string mode);
+
+    internal sealed record RuleFiredRow(
+        string ts,
+        string kind,
+        string rule,
+        string code,
+        double confidence,
+        string evidence,
+        string file,
+        int line,
         string mode);
 }
