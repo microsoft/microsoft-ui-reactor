@@ -208,7 +208,12 @@
       var name = getProjectName();
 
       var skillRef = 'Read skills/figma.md for Figma-to-Reactor control mapping, theme tokens, typography, and layout rules. Read skills/design.md for WinUI design best practices. Match every dimension, gap, and padding value exactly from the Figma design for pixel-accurate output.';
-      var watchSuffix = ' Then start watching for Figma changes: run mur figma watch "' + url + '" --interval 10 in the background. When a change is detected, re-fetch the design via get_figma_data and update the code accordingly.';
+      var watchCmd = 'dotnet run --project src/Reactor.Cli -- figma watch "' + url + '" --interval 10';
+      var watchLoop = ' After the initial sync, start a live watch loop: run `' + watchCmd +
+        '` in a background shell. It emits JSON events to stdout when the Figma file changes.' +
+        ' When you see an event with "event":"changed", re-fetch the design via get_figma_data MCP tool for file key ' + (frameInfo.fileKey || '') + ' node ' + (frameInfo.nodeId || '') +
+        ', diff it against the current code, and apply only the changes needed.' +
+        ' Keep this loop running — do NOT exit after the first sync. You are a live sync agent.';
 
       var prompt;
       if (isNewProject()) {
@@ -217,23 +222,23 @@
           ', then translate this Figma design into it: ' + url +
           '. ' + skillRef +
           ' After generating the code, run: dotnet watch run --project ' + csproj + '.' +
-          watchSuffix;
+          watchLoop;
       } else {
         if (!csproj) {
           showToast('Set the project path first');
           return;
         }
-        prompt = 'I have an existing Reactor app at ' + csproj +
-          '. Fetch this Figma design via get_figma_data: ' + url +
-          '. Then read the current Program.cs in the project and diff it against the Figma frame.' +
+        prompt = 'You are a live Figma-to-code sync agent for the Reactor app at ' + csproj + '.' +
+          ' First, fetch this Figma design via get_figma_data: ' + url +
+          '. Read the current Program.cs in the project and diff it against the Figma frame.' +
           ' Apply only the changes needed to bring the code in sync with the design — update text, spacing, sizing, colors, and layout to match.' +
           ' Do not regenerate from scratch unless the structure has fundamentally changed.' +
           ' ' + skillRef +
-          ' After updating the code, run: dotnet watch run --project ' + csproj + '.' +
-          watchSuffix;
+          ' Make sure dotnet watch run --project ' + csproj + ' is running.' +
+          watchLoop;
       }
 
-      var cmd = "copilot -p '" + prompt.replace(/'/g, "''") + "'";
+      var cmd = "copilot --yolo -p '" + prompt.replace(/'/g, "''") + "'";
       copyToClipboard(cmd);
 
       if (isNewProject()) {

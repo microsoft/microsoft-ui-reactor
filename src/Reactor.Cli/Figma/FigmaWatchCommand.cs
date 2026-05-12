@@ -136,7 +136,13 @@ internal static class FigmaWatchCommand
                         Console.Error.WriteLine("[mur figma watch] Too many consecutive errors. Stopping.");
                         return 1;
                     }
-                    Console.Error.WriteLine("[mur figma watch] Failed to fetch — retrying...");
+
+                    // Back off: use Retry-After from the API, or exponential fallback
+                    var backoff = client.RetryAfterSeconds
+                        ?? Math.Min(120, intervalSeconds * (1 << consecutiveErrors));
+                    Console.Error.WriteLine($"[mur figma watch] Failed to fetch — retrying in {backoff}s...");
+                    try { await Task.Delay(TimeSpan.FromSeconds(backoff), cts.Token); }
+                    catch (OperationCanceledException) { break; }
                     continue;
                 }
 

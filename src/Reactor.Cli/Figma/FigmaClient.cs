@@ -25,16 +25,29 @@ internal sealed class FigmaClient : IDisposable
     /// <summary>
     /// Returns the <c>lastModified</c> timestamp and file name for a Figma file,
     /// using a lightweight metadata-only request (no document tree).
+    /// On a 429, <see cref="RetryAfterSeconds"/> is set from the Retry-After header.
     /// </summary>
+    public int? RetryAfterSeconds { get; private set; }
+
     public async Task<FigmaFileInfo?> GetFileInfoAsync(string fileKey, CancellationToken ct = default)
     {
+        RetryAfterSeconds = null;
+
         // depth=1 returns only top-level metadata without traversing the full tree
         var response = await _http.GetAsync($"v1/files/{fileKey}?depth=1", ct);
         if (!response.IsSuccessStatusCode)
         {
             var status = (int)response.StatusCode;
             if (status == 429)
-                Console.Error.WriteLine("[mur figma] Figma API rate limit exceeded (429). Wait a minute and retry.");
+            {
+                // Respect Retry-After header if present, otherwise default to 60s
+                RetryAfterSeconds = 60;
+                if (response.Headers.RetryAfter?.Delta is { } delta)
+                    RetryAfterSeconds = Math.Max(1, (int)Math.Ceiling(delta.TotalSeconds));
+                else if (response.Headers.RetryAfter?.Date is { } date)
+                    RetryAfterSeconds = Math.Max(1, (int)Math.Ceiling((date - DateTimeOffset.UtcNow).TotalSeconds));
+                Console.Error.WriteLine($"[mur figma] Rate limited (429). Waiting {RetryAfterSeconds}s before next poll.");
+            }
             else if (status == 403)
                 Console.Error.WriteLine("[mur figma] Figma API key is invalid or expired (403).");
             else
