@@ -57,6 +57,14 @@ public class RuleTargetResolutionTests
     /// </summary>
     static CSharpCompilation BuildLiveReactorCompilation()
     {
+        // Force Reactor.dll into the AppDomain BEFORE enumerating loaded
+        // assemblies — otherwise xunit's lazy assembly loading can leave
+        // Reactor absent from the enumeration on a cold run, producing
+        // false target-resolution failures. Any public type from Reactor's
+        // main assembly works as the load anchor; AsyncValue is small,
+        // dependency-free, and unlikely to be retired.
+        _ = typeof(Microsoft.UI.Reactor.Core.AsyncValue<int>).Assembly;
+
         var refs = new List<MetadataReference>();
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
@@ -67,11 +75,6 @@ public class RuleTargetResolutionTests
             try { refs.Add(MetadataReference.CreateFromFile(loc)); }
             catch { /* skip unreadable */ }
         }
-        // Force Reactor.dll to be loaded into the AppDomain in case xunit
-        // hasn't already touched it on the current run. Any public type from
-        // Reactor's main assembly works for this — AsyncValue is small,
-        // dependency-free, and unlikely to be retired.
-        _ = typeof(Microsoft.UI.Reactor.Core.AsyncValue<int>).Assembly;
 
         return CSharpCompilation.Create(
             "RuleTargetResolutionProbe",
