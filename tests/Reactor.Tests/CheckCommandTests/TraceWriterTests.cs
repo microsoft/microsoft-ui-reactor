@@ -192,7 +192,7 @@ public class TraceWriterTests
         // Spec 038 EC3-final watch-item: per-rule firing-rate audits should
         // be a 1-line grep over the trace file. The row carries enough info
         // to identify the rule, the diagnostic it fired on, the confidence,
-        // and the location — so a maintainer can `jq` for `.kind=="rule_fired"`
+        // and the location — so a maintainer can `jq 'select(.kind=="rule_fired")'`
         // and reconstruct firing rates without rejoining against the diag rows.
         using var tmp = TempFile.Create();
         using (var w = TraceWriter.Open(tmp.Path, Path.GetFullPath("."), mode: "iteration"))

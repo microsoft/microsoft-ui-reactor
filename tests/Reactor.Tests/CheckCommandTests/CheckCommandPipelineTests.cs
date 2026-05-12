@@ -241,15 +241,28 @@ public class CheckCommandPipelineTests
             var lines = File.ReadAllLines(tracePath);
             Assert.Equal(2, lines.Length); // 1 diag row + 1 rule_fired row
 
-            var ruleFired = lines
-                .Select(l => JsonDocument.Parse(l))
-                .Single(d => d.RootElement.TryGetProperty("kind", out var k) &&
-                             k.GetString() == "rule_fired");
-            Assert.Equal("GridSizeFactoryParensRule", ruleFired.RootElement.GetProperty("rule").GetString());
-            Assert.Equal("CS1955", ruleFired.RootElement.GetProperty("code").GetString());
-            Assert.Equal(0.95, ruleFired.RootElement.GetProperty("confidence").GetDouble());
-            Assert.Equal("X.cs", ruleFired.RootElement.GetProperty("file").GetString());
-            Assert.Equal(1, ruleFired.RootElement.GetProperty("line").GetInt32());
+            // Find the rule_fired row and detach its element so the parsed
+            // JsonDocument can be disposed inside the loop (Copilot CR: avoid
+            // leaking pooled buffers across the assertion block).
+            JsonElement ruleFired = default;
+            var found = false;
+            foreach (var line in lines)
+            {
+                using var doc = JsonDocument.Parse(line);
+                if (doc.RootElement.TryGetProperty("kind", out var k) &&
+                    k.GetString() == "rule_fired")
+                {
+                    ruleFired = doc.RootElement.Clone();
+                    found = true;
+                    break;
+                }
+            }
+            Assert.True(found, "trace did not contain a rule_fired row.");
+            Assert.Equal("GridSizeFactoryParensRule", ruleFired.GetProperty("rule").GetString());
+            Assert.Equal("CS1955", ruleFired.GetProperty("code").GetString());
+            Assert.Equal(0.95, ruleFired.GetProperty("confidence").GetDouble());
+            Assert.Equal("X.cs", ruleFired.GetProperty("file").GetString());
+            Assert.Equal(1, ruleFired.GetProperty("line").GetInt32());
 
             // The stdout line still carries the → try: suffix — trace event
             // is in addition to, not in place of.
