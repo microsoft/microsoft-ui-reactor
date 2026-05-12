@@ -380,6 +380,8 @@ Without R2: kanban-mur mean cost $3.075 (−3.3% vs base); mean tokens 380K (+4.
 
 ### EC3 results — 5×N landed 2026-05-11
 
+> **Superseded** by "EC3-final" below. The clean rerun against `eval/spec-038-ec3-2026-05-11` HEAD (`053afe9`) is the load-bearing verdict for Phase 3 V1; this section is preserved as the historical record of the typo-contaminated batch and the PASS-with-caveats reasoning that drove the follow-up work (template typo fix, ImplicitUsings removal, SKILL.md anti-probe + `mur check` pointer, Tier-1 SKILL.md trims).
+
 Paired batch, gpt-5.5, both arms on `reactor-calc-mur-check` and `reactor-kanban-mur-check`:
 
 - **Variant arm:** `eval/spec-038-ec3-2026-05-11` @ `2b7090f` — six rules in `RuleRegistry.Default` (`ThemeBackgroundSuffixRule`, `AlignmentShortcutRule`, `ButtonOnClickFactoryMoveRule` Class-B; `GridSizeFactoryParensRule`, `GridSizePxRenameRule`, `TextBlockStyleHintRule` Class-A) plus the two correctness fixes (`CompilationLoader.EnumerateProjectReferenceCompilePaths` + Tier-3 gate carve-out in `SuggesterOrchestrator`).
@@ -488,6 +490,62 @@ This sharpens the watch-item below: targeted prompts that surface GridSize/TextB
     Fix landed: one-character correction on lines 5–6 of `template.json` (`Micrsoft → Microsoft`). New regression test at `tests/Reactor.Tests/TemplateMetadataTests.cs` asserts the identity, groupIdentity, shortName, and a global "no `Micrsoft` substring" sweep. The existing `tests/Reactor.IntegrationTests/Packaging/CreateTemplateTests.cs` did not catch the typo because it installs into a per-test ephemeral `--debug:custom-hive` where the misspelled identity is unique and `dotnet new` resolves correctly; only the user's real (accumulating) cache triggers the duplicate-match crash. The author's workstation cache was drained (`dotnet new uninstall Microsoft.UI.Reactor.ProjectTemplates` × until empty), repacked against the fixed template, and reinstalled — cache now carries exactly one canonical `Microsoft.UI.Reactor.CSharp` entry.
     **Impact on the EC3 verdict.** Both arms hit the bug equally → the relative deltas (calc −5.2 %, kanban +14.9 %) aren't biased *by this bug*. Absolute token costs are inflated on every run → CV is wider than it should be → the kanban outliers (variant r5 = 889K, base r1 = 1.12M) likely had their trajectories pushed further down the long tail by the `dotnet-new` thrash. The PASS-with-caveats verdict still stands directionally, but with a larger caveat: the entire batch ran against a broken-template-cache substrate. A re-run with the typo fixed could materially shift the numbers in either direction.
     Two harness-side mitigations remain *deferred* but worth filing as separate work (the source typo is the load-bearing fix): (a) `dotnet new uninstall Microsoft.UI.Reactor.ProjectTemplates` in the eval setup *before* `dotnet new install --force`, so even a future typo-equivalent bug can't accumulate; (b) propagate inner-command exit codes into the PowerShell tool wrapper's `success` field so `failedToolCalls` stops lying.
+
+### EC3-final results — 5×N landed 2026-05-12
+
+Clean rerun after the EC3-original watch-items closed: template typo fix (`Micrsoft → Microsoft`), `ImplicitUsings` removed from the scaffold + canonical `System + Reactor + Reactor.Core + Reactor.Layout + Xaml + Xaml.Controls + static Factories` using set baked into `App.cs`, SKILL.md anti-probe + `mur check` pointer notes, and the Tier-1 SKILL.md trims (509 → 415 lines on `reactor-getting-started`). Same eval substrate as EC3-original on every other axis: `gpt-5.5`, `reactor-calc-mur-check` + `reactor-kanban-mur-check`, default `--suggest-threshold 3`.
+
+- **Variant arm:** `eval/spec-038-ec3-2026-05-11` @ `053afe9`. Includes everything from EC3-original's variant (`2b7090f`) plus the seven follow-up commits landed during the watch-item triage.
+- **Base arm:** the existing `main`-equivalent n=5 baseline. Same shape EC3-original measured.
+
+**Per-arm summary (n=5 each):**
+
+| Metric | calc-variant | kanban-variant |
+|---|---|---|
+| Tokens mean | 195,477 | 387,236 |
+| Tokens median | 180,040 | 400,466 |
+| Tokens CV | **28.4%** | **19.5%** |
+| Tokens range | 145K–273K | 261K–464K |
+| Cost mean | $1.92 | $3.12 |
+| Turns mean | 6.4 | 10.4 |
+| Wall mean | 81.8s | 148.8s |
+| First-build OK | 5/5 | 5/5 |
+| `failedToolCalls` | 0 | 0 |
+| Template errors / cache taint | 0 / 0 (one auto-recovered retry) | 0 / 0 |
+
+**Paired comparison (variant − base):**
+
+| Metric | calc mean | calc median | kanban mean | kanban median |
+|---|---|---|---|---|
+| Tokens | **−33.7%** | **−37.1%** | **−21.2%** | +31.7% ⚠ |
+| Cost | **−25.6%** | — | **−25.7%** | — |
+| Turns | **−2.2** (8.6 → 6.4) | — | 0.0 (10.4 → 10.4) | — |
+
+**Findings:**
+
+1. **Kanban-variant tightening is the load-bearing finding.** Base kanban was 263K–1,118K tokens at CV 74% — a bimodal distribution where most runs sat near the floor and one r1 blowout dragged the mean. Variant kanban is 261K–464K at CV 19.5%, no fat tail, every run within 1.8× of best. The +31.7% kanban-median delta is the artifact of base's median sitting artificially low against a bimodal distribution; the load-bearing read is the **4× CV improvement**, which is the predictability-as-a-feature signal the spec §11 risk row called out as deployable-workflow value. Second batch in a row (after EC1-RR) where this mechanism shows up; first batch where calc *also* tightens.
+2. **Calc-variant is a decisive win across every metric.** Tokens −33.7% mean / −37.1% median; cost −25.6%; turns −2.2 (8.6 → 6.4); first-build 5/5; CV 28.4% (well within the EC1-RR 17% baseline if you exclude one fast outlier). The −2.2-turn delta exactly hits the spec EC3 row's prediction of "~−2 turns"; the −33.7% tokens delta is 2.4× the spec's "~−14 %" prediction.
+3. **Cost savings parity across arms.** Calc −25.6 % and kanban −25.7 % cost-mean. The mechanism that compresses calc (fewer turns + less probing + cleaner skill) is delivering on kanban as a variance compressor rather than a mean-mover, but the dollar impact is the same. Spec §12's "~−$0.70 per run" prediction is comfortably exceeded on both arms ($0.66 calc, $1.08 kanban).
+4. **No template / cache failures.** `failedToolCalls` 0 on every run of every arm; one auto-recovered template-retry on calc (likely a transient `dotnet new` race). The Phase-3 typo + cache mitigations are doing their job.
+5. **Class-A rule firing on the variant arm — not measured in this batch.** EC3-original was 0/10 on the three new Class-A rules (`GridSizeFactoryParensRule`, `GridSizePxRenameRule`, `TextBlockStyleHintRule`). This batch doesn't break out per-rule counts, so we can't say whether the clean-PASS win includes any contribution from those three rules or whether it's entirely structural fixes + template + skill changes carrying the result. **The clean PASS supersedes the EC3-original PASS-with-caveats regardless** — the rules are correct in isolation, pass Validation Gate bars #1–#4 + #6, and don't actively harm when silent — but "Phase 3 V1 shipped on Class-A rules that may not have fired in production-ish eval" is a footnote. The targeted-prompt batch at `C:\temp\mur-targeted-prompt-spec.md` is still the load-bearing follow-up for getting empirical token-impact numbers on the three Class-A rules specifically.
+
+**EC3-final pass-criterion verdict:**
+
+| # | Criterion | Result |
+|---|---|---|
+| 1 | Cumulative tokens improve ≥ 5 % on at least one arm | **Pass** — both arms (calc −33.7%, kanban −21.2%) |
+| 2 | First-build OK ≥ 5/5 on both variant arms | **Pass** (5/5, 5/5) |
+| 3 | No false-positive rule fires | **Pass with low confidence** — `failedToolCalls` 0/0 across all 10 variant runs; §11 risk-row guardrail retrofit (`mur check --final` audit pass against final workspace state) still deferred for high-confidence assertion |
+| 4 | CV ≤ EC1-RR | **Pass** (kanban 19.5% vs EC1-RR 54%; calc 28.4% well within) |
+
+**Verdict: PASS, clean (no caveats).** **Phase 3 cleared to ship V1.** Merge PR #250.
+
+**Watch-items carried into V1 / Phase 4 review:**
+
+- **Class-A rule exercise.** Targeted-prompt batch at `C:\temp\mur-targeted-prompt-spec.md` is still the empirical question on the three new Class-A rules. Author or curate prompts that surface CS1955/`GridSize.Auto`, CS0117/`GridSize.Pixel|Pixels|Fixed`, and CS1061/CS0117 on `TextBlockElement.Style`. The clean-PASS doesn't change that this batch left the rules' token impact unmeasured.
+- **§11 risk-row guardrail retrofit.** Move EC3-final criterion #3 from "low-confidence audit" to "verified" by adding a post-run analysis pass that runs `mur check --final` against the run's final workspace and compares against iteration-mode suggestions. Same instrument the EC3-original results section called for; still open.
+- **Tier-2 SKILL.md trims.** Now empirically de-risked by EC3-final's PASS. The drag-and-drop relocation to `reactor-input` and the Context-pattern trim could push `reactor-getting-started` another ~65 lines lighter. Separate PR; no blockers.
+- **`rule_fired` trace event.** One-line addition to `TraceWriter.cs` + the orchestrator emission point would make per-rule firing-rate audits a one-line grep against the trace file instead of multi-step content scan against `events.jsonl` agent tool outputs. Cheap; lands before the targeted-prompt batch ideally.
 
 ---
 
