@@ -1736,29 +1736,32 @@ public sealed partial class Reconciler
         return placeholder;
     }
 
-    internal void ShowContentDialog(ContentDialogElement cdEl, FrameworkElement anchor, Action requestRerender)
+    private void ShowContentDialog(ContentDialogElement cdEl, FrameworkElement anchor, Action requestRerender)
     {
-        // Resolve XamlRoot from the in-tree placeholder, with a fallback to the
-        // primary window's content. At mount-time the placeholder isn't in the
-        // tree yet (XamlRoot is null) — defer via Loaded so we still get a
-        // valid root when IsOpen=true on first render.
-        var xamlRoot = ResolveDialogXamlRoot(anchor);
-        if (xamlRoot is null && anchor.XamlRoot is null)
+        // Source XamlRoot from the placeholder so the dialog routes to the
+        // window that owns the anchor. If the anchor isn't attached yet
+        // (mount-time IsOpen=true) defer via Loaded — falling back to
+        // PrimaryWindow here would misroute the dialog when the anchor lives
+        // in a secondary window.
+        if (anchor.XamlRoot is null)
         {
             void OnLoaded(object sender, RoutedEventArgs _)
             {
                 anchor.Loaded -= OnLoaded;
-                ShowContentDialogCore(cdEl, ResolveDialogXamlRoot(anchor), requestRerender);
+                // Re-read the current element from the anchor's Tag in case
+                // IsOpen was toggled back to false (or the element was
+                // replaced) before Loaded fired.
+                if (GetElementTag(anchor) is not ContentDialogElement current || !current.IsOpen)
+                    return;
+                var deferredRoot = anchor.XamlRoot
+                    ?? ReactorApp.PrimaryWindow?.NativeWindow.Content?.XamlRoot;
+                ShowContentDialogCore(current, deferredRoot, requestRerender);
             }
             anchor.Loaded += OnLoaded;
             return;
         }
-        ShowContentDialogCore(cdEl, xamlRoot, requestRerender);
+        ShowContentDialogCore(cdEl, anchor.XamlRoot, requestRerender);
     }
-
-    private static XamlRoot? ResolveDialogXamlRoot(FrameworkElement anchor)
-        => anchor.XamlRoot
-           ?? ReactorApp.PrimaryWindow?.NativeWindow.Content?.XamlRoot;
 
     private async void ShowContentDialogCore(ContentDialogElement cdEl, XamlRoot? xamlRoot, Action requestRerender)
     {
@@ -1778,7 +1781,11 @@ public sealed partial class Reconciler
             var winUiResult = await dialog.ShowAsync();
             cdEl.OnClosed?.Invoke(winUiResult);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[Reactor.ContentDialog] ShowAsync failed: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private UIElement? MountFlyout(FlyoutElement flyEl, Action requestRerender)
