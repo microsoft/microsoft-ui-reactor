@@ -238,15 +238,15 @@ public sealed class DragData
         return false;
     }
 
-    public Task<string?> GetTextAsync(CancellationToken ct = default) => GetAsAsync<string>(StandardDataFormats.Text, ct);
-    public Task<Uri?> GetUriAsync(CancellationToken ct = default) => GetAsAsync<Uri>(StandardDataFormats.WebLink, ct);
-    public Task<string?> GetHtmlAsync(CancellationToken ct = default) => GetAsAsync<string>(StandardDataFormats.Html, ct);
-    public Task<string?> GetRtfAsync(CancellationToken ct = default) => GetAsAsync<string>(StandardDataFormats.Rtf, ct);
-    public async Task<IReadOnlyList<IStorageItem>> GetFilesAsync(CancellationToken ct = default)
+    public Task<string?> GetTextAsync(CancellationToken cancellationToken = default) => GetAsAsync<string>(StandardDataFormats.Text, cancellationToken);
+    public Task<Uri?> GetUriAsync(CancellationToken cancellationToken = default) => GetAsAsync<Uri>(StandardDataFormats.WebLink, cancellationToken);
+    public Task<string?> GetHtmlAsync(CancellationToken cancellationToken = default) => GetAsAsync<string>(StandardDataFormats.Html, cancellationToken);
+    public Task<string?> GetRtfAsync(CancellationToken cancellationToken = default) => GetAsAsync<string>(StandardDataFormats.Rtf, cancellationToken);
+    public async Task<IReadOnlyList<IStorageItem>> GetFilesAsync(CancellationToken cancellationToken = default)
     {
         if (!_formatEntries.TryGetValue(StandardDataFormats.StorageItems, out var entry))
             return Array.Empty<IStorageItem>();
-        var resolved = await entry.ResolveAsync(ct).ConfigureAwait(false);
+        var resolved = await entry.ResolveAsync(cancellationToken).ConfigureAwait(false);
         return resolved switch
         {
             IStorageItem[] arr => arr,
@@ -255,12 +255,12 @@ public sealed class DragData
             _ => Array.Empty<IStorageItem>(),
         };
     }
-    public Task<RandomAccessStreamReference?> GetBitmapAsync(CancellationToken ct = default) =>
-        GetAsAsync<RandomAccessStreamReference>(StandardDataFormats.Bitmap, ct);
-    public async Task<T?> GetCustomFormatAsync<T>(string formatId, CancellationToken ct = default)
+    public Task<RandomAccessStreamReference?> GetBitmapAsync(CancellationToken cancellationToken = default) =>
+        GetAsAsync<RandomAccessStreamReference>(StandardDataFormats.Bitmap, cancellationToken);
+    public async Task<T?> GetCustomFormatAsync<T>(string formatId, CancellationToken cancellationToken = default)
     {
         if (!_formatEntries.TryGetValue(formatId, out var entry)) return default;
-        var v = await entry.ResolveAsync(ct).ConfigureAwait(false);
+        var v = await entry.ResolveAsync(cancellationToken).ConfigureAwait(false);
         return v is T cast ? cast : default;
     }
 
