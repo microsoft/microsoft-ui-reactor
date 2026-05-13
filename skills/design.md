@@ -15,25 +15,126 @@ Reactor is a functional UI framework for WinUI 3 that builds UI entirely in C# �
 
 This skill translates the Windows 11 design language into Reactor's C# projection so that apps built with Reactor look, feel, and behave like first-class Windows 11 applications.
 
-## Workflow
+## Canonical Window Shell
 
-1. Author new Reactor UI using the rules below.
-2. Review a PR using the checklist at the end of this file.
-3. Fix feedback by mapping issues to the specific rule and applying the correct pattern.
-4. Verify changes using the testing guidance.
+**Every Reactor desktop app starts here.** This is the minimal shape that gives you a real Windows 11 caption, Mica material, and a content body sized to the window. Add features inside `body` — do not move the shell.
 
-## Quick Scan Checklist
+```csharp
+ReactorApp.Run<App>("MyApp", width: 900, height: 600);
 
-Check these areas early in every review:
-- Theme tokens used for all colors — no hardcoded hex strings for themed surfaces.
-- High Contrast works — no opacity, no accent colors, only system color brushes.
-- Typography uses `Heading()`, `SubHeading()`, `Caption()`, or WinUI style tokens — not raw `FontSize`/`FontWeight`.
-- Layout values use the 4px grid.
-- Text scaling and localization are safe — no fixed heights on text containers.
-- Shadows have elevation (`Translation(0, 0, 32)`).
-- Acrylic surfaces use correct background + border pairings.
-- `AutomationName()` set on icon-only controls.
-- Keys set on list items for stable reconciliation.
+class App : Component
+{
+    public override Element Render()
+    {
+        var titleBar = TitleBar("MyApp").Flex(shrink: 0);
+
+        var body = Border(
+            FlexColumn(/* page content */) with { RowGap = 16 }
+        ).Padding(24).Flex(grow: 1, basis: 0);
+
+        return FlexColumn(titleBar, body)
+            .Backdrop(BackdropKind.Mica);
+    }
+}
+```
+
+Why each line is load-bearing:
+- `TitleBar(...)` — integrates with the Windows caption (drag region, system menu, min/max/close). Avoids the double-header trap of stacking a custom header row below the system chrome.
+- `.Flex(shrink: 0)` on the title bar — title bar keeps its natural height; only `body` absorbs vertical resizing.
+- `Border(...).Padding(24)` — `FlexColumn` doesn't support `.Padding()`, so wrap. 24px is "Section" page padding from the 4px grid; bump to 36px for hero pages.
+- `.Flex(grow: 1, basis: 0)` on body — body fills the window below the title bar.
+- `RowGap = 16` — sibling spacing on the 4px grid; the default is 0.
+- `.Backdrop(BackdropKind.Mica)` on the root — Win11 signature material. The root must not paint an opaque background (no `Theme.SolidBackground`) or Mica won't show through.
+
+Use `BackdropKind.MicaAlt` for secondary windows. `BackdropKind.DesktopAcrylic` is for transient surfaces (flyouts, dialogs), not the main window.
+
+For TitleBar features beyond the bare title, use `with`:
+
+```csharp
+TitleBar("MyApp") with
+{
+    Subtitle = currentDoc,           // document name to the right of the app title
+    Content = ModeSwitcher(...),     // inline content centered in the caption
+    RightHeader = StatusBadge(...),  // right-aligned inline content
+}
+```
+
+## Building a New App: Workflow
+
+When authoring a new app, page, or feature, follow these steps **in order**. Pick controls before writing layout; write layout before applying theme tokens; apply theme tokens before adding animation. Interleaving is the source of most rework.
+
+### Step 1 — Identify the app type and anchor control
+
+The anchor control is the top-level structural pattern. Picking the right one up front is the single biggest determinant of whether the app feels like Windows 11 or like a generic web page.
+
+| App type | Anchor pattern | Reactor factories |
+|----------|--------|----------|
+| Settings / config tool | Left-pane navigation with grouped sections | `NavigationView(navItems, content)` + `SubHeading`s per section |
+| Document / session editor | Tabs over full-width content | `TabView(Tab(...), Tab(...))` |
+| Hierarchical browser (Explorer-shaped) | Tree + list + breadcrumb | `TreeView` + `ListView` + `BreadcrumbBar` |
+| Developer tool / dashboard | Left nav + card grid | `NavigationView` + `Border` cards |
+| 2–3 mode utility | Mode switcher over compact body | `SelectorBar(...)` over body |
+| Single-purpose utility | One screen, no navigation | Just the canonical shell with content in `body` |
+| Wizard / multi-step | Linear steps with progress | `Pivot(...)` or `BreadcrumbBar` |
+
+### Step 2 — Map requirements to factories
+
+Pick each control by what it does, not by what looks similar. Defaults match the Win11 design system.
+
+**Navigation:** 2–7 sections → `NavigationView` (Left). Document-like tabs → `TabView`. Breadcrumb trail → `BreadcrumbBar`. 2–3 mutually-exclusive modes → `SelectorBar`. Long flat list of pages → `NavigationView` Top.
+
+**Data display:** Vertical list → `ListView`. Tiles / image grid → `GridView`. Hierarchy → `TreeView`. Tabular → `ListView` with `Grid` rows. Master–detail → `ListView` + detail panel. Carousel → `FlipView`.
+
+**Input:** Text → `TextField`. Number → `NumberBox`. Search → `AutoSuggestBox`. Date → `CalendarDatePicker`. Time → `TimePicker`. Boolean → `ToggleSwitch`. Pick 1 of 2–3 → `RadioButtons`. Pick 1 of 4+ → `ComboBox`. Continuous value → `Slider`. Password → `PasswordBox`.
+
+**Feedback:** Blocking decision → `ContentDialog`. Contextual action → `Flyout` / `MenuFlyout`. Onboarding callout → `TeachingTip`. Inline status banner → `InfoBar`. Non-blocking screen-reader announcement → `UseAnnounce()`.
+
+**Validation:** Form fields → `FormField(content, label: "…")` — wires label + required indicator + error display + automation name to the inner control.
+
+If you reach for a `Border` + `Button` to fake a control that exists, stop and use the real control.
+
+### Step 3 — Commit to the canonical window shell
+
+Use the shell verbatim. Don't customize the shell until the feature is wired up — early customization is where good defaults get lost.
+
+### Step 4 — Lay out the body
+
+- **Content fills the window.** No centered cards floating on empty backgrounds. Page padding is 24px (sections) or 36px (hero); the canonical shell uses 24px.
+- **4px grid** for every margin, padding, gap, and size — see §5.
+- **Prefer `FlexColumn` / `FlexRow`** as the default linear layout. Use `VStack`/`HStack` only when porting StackPanel code or when StackPanel's shrink-wrap cross-axis behavior is specifically wanted.
+- **Use `Grid` with `GridSize.Star()`** for any row containing text that needs `TextTrimming`. `FlexRow` and `HStack` give children unbounded main-axis width, so trimming never fires.
+- **Sidebar layouts:** fixed 300–360px sidebar + flexible main with `.Flex(grow: 1)`. No equal-width 50/50 splits.
+
+Then layer in, in order: theme tokens (§1) → typography (§4) → accessibility (§7) → animation (§9). The numbered rules below are the reference for each.
+
+### Step 5 — Review
+
+Run through the [Code Review Checklist](#code-review-checklist) at the bottom of this file. If you're an agent reviewing your own work, this is the final pass before reporting done.
+
+## Design Anti-Patterns
+
+These are the specific mistakes that make a Reactor app look like a port from another framework. Each row maps a common failure mode to the right pattern.
+
+| ❌ Don't | ✅ Do Instead | Rule |
+|----------|--------------|------|
+| Centered card floating on an empty background | Content fills window, page padding 24–36px on a `Border` wrapping the body | §5 Layout |
+| Custom title row stacked above the system chrome | `TitleBar(...)` with `Subtitle` / `Content` / `RightHeader` for inline content | §5 Window Title Bar |
+| No `Backdrop(...)` on the main window root | `.Backdrop(BackdropKind.Mica)` on the root element | §8 Window Backdrops |
+| Root paints `Theme.SolidBackground` *and* sets a backdrop | Drop the background — Mica needs to show through | §8 Window Backdrops |
+| `HStack` / `FlexRow` containing text with `TextTrimming` | `Grid` with `GridSize.Star()` column for the trimmed text | §5 Container Choice |
+| `Height(N)` on a text-containing element | `MinHeight(N)` — fixed height clips at larger text scales | §5 Sizing |
+| Hardcoded hex (`"#FFFFFF"`, `"#000000"`) on a themed surface | `Theme.*` token (`Theme.CardBackground`, `Theme.PrimaryText`, ...) | §1 Theming |
+| Raw `FontSize(28).FontWeight(...)` on `TextBlock` | `Heading()` / `SubHeading()` / `Caption()` factories, or `.ApplyStyle("TitleTextBlockStyle")` | §4 Typography |
+| Setting `Background` directly on `Button` (loses hover / pressed / disabled) | `.Resources(r => r.Set("ButtonBackground", ...).Set("ButtonBackgroundPointerOver", ...) ...)` | §2 Lightweight Styling |
+| Equal-width 50/50 column split | Fixed sidebar 300–360px + flexible main with `.Flex(grow: 1)` | §5 Layout |
+| Custom toggle-button row for "Light / Dark / Auto" mode | `SelectorBar(...)` or `RadioButtons(...)` | Step 2 |
+| Clickable `Border` or `TextBlock` for primary actions | Real `Button` / `HyperlinkButton` — needed for AT, keyboard, focus | §7 Accessibility |
+| Icon-only `Button` without `.AutomationName("...")` | Always set `.AutomationName()` on icon-only buttons — required by `REACTOR_A11Y_001` | §7 Accessibility |
+| `TextField` without a label (relying on `placeholder` alone) | `FormField(TextField(...), label: "Name")` — wires label and automation name | Step 2 |
+| Spacer `Border` element used for layout gaps | `VStack(spacing, ...)` / `HStack(spacing, ...)` / `FlexColumn(...) with { RowGap = n }` | §5 Spacing |
+| Unkeyed children in a dynamic list | `.WithKey(item.Id)` on every list item | §10 Reconciliation |
+| `ScrollView` wrapping a `ListView` | `ListView` already scrolls — wrap content, not list controls | §5 ScrollView |
+| Missing `using Microsoft.UI.Reactor.Core` | Required for `BackdropKind`, `Theme`, hooks, `Component`, `Element` | — |
 
 ## Core Rules (Always Apply)
 
