@@ -33,7 +33,7 @@ class App : Component
             FlexColumn(
                 Heading($"Hello, {name}!"),
                 TextField(name, setName, placeholder: "Your name")
-                    .AutomationName("Name")
+                    .AutomationName("NameInput")
             ) with { RowGap = 16 }
         ).Padding(24).Flex(grow: 1, basis: 0);
 
