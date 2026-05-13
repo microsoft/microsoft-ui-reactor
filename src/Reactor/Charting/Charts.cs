@@ -102,7 +102,7 @@ public sealed class ChartElement<T> : IChartAccessibilityData
 
     public ChartElement<T> Width(double w) { _width = w; return this; }
     public ChartElement<T> Height(double h) { _height = h; return this; }
-    public ChartElement<T> Margin(double top, double right, double bottom, double left) { _marginTop = top; _marginRight = right; _marginBottom = bottom; _marginLeft = left; return this; }
+    public ChartElement<T> Margin(double left, double top, double right, double bottom) { _marginLeft = left; _marginTop = top; _marginRight = right; _marginBottom = bottom; return this; }
     public ChartElement<T> Stroke(string color) { _stroke = color; return this; }
     public ChartElement<T> Fill(string color) { _fill = color; return this; }
     public ChartElement<T> StrokeWidth(double w) { _strokeWidth = w; return this; }

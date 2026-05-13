@@ -37,12 +37,11 @@ public static class ElementExtensions
     public static T Margin<T>(this T el, double uniform) where T : Element =>
         Modify(el, new ElementModifiers { Margin = new Thickness(uniform) });
 
-    // Parameter order matches CSS shorthand: `padding: 16px 14px;` is
-    // top/bottom=16, left/right=14 — vertical FIRST. Reactor's 2-arg form
-    // mirrors that: `.Margin(16, 14)` → Thickness(14, 16, 14, 16). Use named
-    // args (`.Margin(horizontal: 14, vertical: 16)`) when the call site needs
-    // to be unambiguous to a reader unfamiliar with the convention.
-    public static T Margin<T>(this T el, double vertical, double horizontal) where T : Element =>
+    // Two-argument spacing follows the same order everywhere in Reactor:
+    // horizontal FIRST, then vertical. This keeps `.Margin(...)`,
+    // `.Padding(...)`, and `.FlexPadding(...)` aligned and matches the mental
+    // model of Thickness(left/right, top/bottom).
+    public static T Margin<T>(this T el, double horizontal, double vertical) where T : Element =>
         Modify(el, new ElementModifiers { Margin = new Thickness(horizontal, vertical, horizontal, vertical) });
 
     // Default values on the per-side overload let callers name only the sides
@@ -58,8 +57,8 @@ public static class ElementExtensions
     public static T Padding<T>(this T el, double uniform) where T : Element =>
         Modify(el, new ElementModifiers { Padding = new Thickness(uniform) });
 
-    // Same CSS-shorthand ordering as Margin above — vertical first.
-    public static T Padding<T>(this T el, double vertical, double horizontal) where T : Element =>
+    // Same ordering as Margin above — horizontal first, then vertical.
+    public static T Padding<T>(this T el, double horizontal, double vertical) where T : Element =>
         Modify(el, new ElementModifiers { Padding = new Thickness(horizontal, vertical, horizontal, vertical) });
 
     // Same defaulting story as Margin above — `.Padding(top: 8)` etc. are

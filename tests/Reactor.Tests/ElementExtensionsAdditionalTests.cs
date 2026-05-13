@@ -26,6 +26,27 @@ public class ElementExtensionsAdditionalTests
     }
 
     [Fact]
+    public void Margin_TwoArgument_Positional_Order_Is_Horizontal_Then_Vertical()
+    {
+        var el = TextBlock("x").Margin(10.0, 20.0);
+        Assert.Equal(new Thickness(10, 20, 10, 20), el.Modifiers!.Margin);
+    }
+
+    [Fact]
+    public void Padding_TwoArgument_Positional_Order_Is_Horizontal_Then_Vertical()
+    {
+        var el = TextBlock("x").Padding(10.0, 20.0);
+        Assert.Equal(new Thickness(10, 20, 10, 20), el.Modifiers!.Padding);
+    }
+
+    [Fact]
+    public void FlexPadding_TwoArgument_Positional_Order_Is_Horizontal_Then_Vertical()
+    {
+        var el = FlexRow().FlexPadding(10.0, 20.0);
+        Assert.Equal(new Thickness(10, 20, 10, 20), el.FlexPadding);
+    }
+
+    [Fact]
     public void Center_Sets_Both_Alignments()
     {
         var el = TextBlock("x").Center();
