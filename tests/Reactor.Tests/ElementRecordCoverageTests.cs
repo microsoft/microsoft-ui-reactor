@@ -28,6 +28,41 @@ public class ElementRecordCoverageTests
     }
 
     [Fact]
+    public void IconElement_Wraps_IconData()
+    {
+        var sym = new SymbolIconData("Home");
+        var el = new IconElement(sym);
+        Assert.Same(sym, el.Data);
+        Assert.Empty(el.Setters);
+    }
+
+    [Fact]
+    public void IconElement_With_Expression_Preserves_Data()
+    {
+        var el = new IconElement(new FontIconData("\uE700", "Segoe Fluent Icons", 16));
+        var copy = el with { Setters = [_ => { }] };
+        Assert.Same(el.Data, copy.Data);
+        Assert.Single(copy.Setters);
+    }
+
+    [Fact]
+    public void Icon_Factory_From_IconData()
+    {
+        var data = new PathIconData("M 0,0 L 10,10");
+        var el = Factories.Icon(data);
+        Assert.IsType<PathIconData>(el.Data);
+        Assert.Equal("M 0,0 L 10,10", ((PathIconData)el.Data).Data);
+    }
+
+    [Fact]
+    public void Icon_Factory_From_String_Creates_SymbolIconData()
+    {
+        var el = Factories.Icon("Home");
+        Assert.IsType<SymbolIconData>(el.Data);
+        Assert.Equal("Home", ((SymbolIconData)el.Data).Symbol);
+    }
+
+    [Fact]
     public void AppBar_Data_Variants_Construct()
     {
         var btn = new AppBarButtonData("Open", () => { }, "Open");

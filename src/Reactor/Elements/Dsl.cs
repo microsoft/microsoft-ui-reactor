@@ -1192,6 +1192,12 @@ public static partial class Factories
 
     public static ImageIconData ImageIcon(global::System.Uri source) => new(source);
 
+    /// <summary>Creates a standalone icon element from an <see cref="IconData"/> instance.</summary>
+    public static Core.IconElement Icon(IconData data) => new(data);
+
+    /// <summary>Creates a standalone symbol icon element (e.g. <c>Icon("Home")</c>).</summary>
+    public static Core.IconElement Icon(string symbol) => new(new SymbolIconData(symbol));
+
     // ── Keyboard Accelerators ───────────────────────────────────────
 
     public static KeyboardAcceleratorData Accelerator(global::Windows.System.VirtualKey key, global::Windows.System.VirtualKeyModifiers modifiers = global::Windows.System.VirtualKeyModifiers.None) =>

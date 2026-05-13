@@ -145,6 +145,7 @@ public sealed partial class Reconciler
             CalendarViewElement cv => MountCalendarView(cv),
             SwipeControlElement swipe => MountSwipeControl(swipe, requestRerender),
             AnimatedIconElement ai => MountAnimatedIcon(ai),
+            IconElement ie => MountIcon(ie),
             ParallaxViewElement pv => MountParallaxView(pv, requestRerender),
             MapControlElement mc => MountMapControl(mc),
             FrameElement frame => MountFrame(frame),
@@ -3452,6 +3453,15 @@ public sealed partial class Reconciler
             icon.Source = src;
         if (ai.FallbackIconSource is not null) icon.FallbackIconSource = ai.FallbackIconSource;
         ApplySetters(ai.Setters, icon);
+        return icon;
+    }
+
+    // ── Icon ─────────────────────────────────────────────────────────
+
+    private WinUI.IconElement? MountIcon(IconElement ie)
+    {
+        var icon = ResolveIcon(ie.Data, null);
+        if (icon is not null) ApplySetters(ie.Setters, icon);
         return icon;
     }
 

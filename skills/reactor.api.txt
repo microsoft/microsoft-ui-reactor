@@ -81,6 +81,9 @@ HyperlinkButton(Command command) → HyperlinkButtonElement
 HyperlinkButton(string content, Uri navigateUri = null, Action onClick = null) → HyperlinkButtonElement
 If(bool condition, Func<Element> then, Func<Element> otherwise = null) → Element
 Image(string source) → ImageElement
+Icon(IconData data) → IconElement
+Icon(Symbol symbol) → IconElement
+Icon(string symbol) → IconElement
 ImageIcon(Uri source) → ImageIconData
 InfoBadge() → InfoBadgeElement
 InfoBadge(int value) → InfoBadgeElement
@@ -308,6 +311,7 @@ HyperlinkButtonElement.TextLink() → HyperlinkButtonElement
 ImageElement.ImageFailed(Action<string> handler) → ImageElement
 ImageElement.ImageOpened(Action handler) → ImageElement
 ImageElement.NineGrid(Thickness nineGrid) → ImageElement
+IconElement.Set(Action<IconElement> configure) → IconElement
 ImageElement.Set(Action<Image> configure) → ImageElement
 InfoBadgeElement.Set(Action<InfoBadge> configure) → InfoBadgeElement
 InfoBarElement.ActionButtonClick(Action handler) → InfoBarElement

@@ -274,6 +274,8 @@ public sealed partial class Reconciler
                 => UpdateSwipeControl(o, n, swipe, requestRerender),
             (AnimatedIconElement, AnimatedIconElement n, WinUI.AnimatedIcon ai)
                 => UpdateAnimatedIcon(n, ai),
+            (IconElement, IconElement n, WinUI.IconElement icon)
+                => UpdateIcon(n, icon),
             (ParallaxViewElement o, ParallaxViewElement n, WinUI.ParallaxView pv)
                 => UpdateParallaxView(o, n, pv, requestRerender),
             (MapControlElement, MapControlElement n, WinUI.MapControl mc)
@@ -3829,6 +3831,49 @@ public sealed partial class Reconciler
             ai.Source = src;
         if (n.FallbackIconSource is not null) ai.FallbackIconSource = n.FallbackIconSource;
         ApplySetters(n.Setters, ai);
+        return null;
+    }
+
+    private UIElement? UpdateIcon(IconElement n, WinUI.IconElement icon)
+    {
+        // If the IconData subtype changed, replace the entire native control.
+        var fresh = Reconciler.ResolveIcon(n.Data, null);
+        if (fresh is null) return null;
+
+        if (fresh.GetType() != icon.GetType())
+        {
+            ApplySetters(n.Setters, fresh);
+            return fresh; // signals reconciler to swap the control
+        }
+
+        // Same native type — patch in place.
+        switch (n.Data)
+        {
+            case SymbolIconData sym when icon is WinUI.SymbolIcon si:
+                if (Enum.TryParse<Symbol>(sym.Symbol, ignoreCase: true, out var s)) si.Symbol = s;
+                break;
+            case FontIconData fi when icon is WinUI.FontIcon fontIcon:
+                fontIcon.Glyph = fi.Glyph;
+                if (fi.FontFamily is not null)
+                    fontIcon.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(fi.FontFamily);
+                if (fi.FontSize is not null) fontIcon.FontSize = fi.FontSize.Value;
+                break;
+            case BitmapIconData bi when icon is WinUI.BitmapIcon bitmapIcon:
+                bitmapIcon.UriSource = bi.Source;
+                bitmapIcon.ShowAsMonochrome = bi.ShowAsMonochrome;
+                break;
+            case PathIconData pi when icon is WinUI.PathIcon pathIcon:
+                if (Microsoft.UI.Xaml.Markup.XamlReader.Load(
+                    $"<Geometry xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>{pi.Data}</Geometry>")
+                    is Microsoft.UI.Xaml.Media.Geometry geo)
+                    pathIcon.Data = geo;
+                break;
+            case ImageIconData ii when icon is WinUI.ImageIcon imageIcon:
+                imageIcon.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(ii.Source);
+                break;
+        }
+
+        ApplySetters(n.Setters, icon);
         return null;
     }
 

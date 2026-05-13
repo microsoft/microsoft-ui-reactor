@@ -1730,6 +1730,10 @@ public static partial class ElementExtensions
     public static AnimatedIconElement Set(this AnimatedIconElement el, Action<WinUI.AnimatedIcon> configure) =>
         el with { Setters = [.. el.Setters, configure] };
 
+    // Icon
+    public static Core.IconElement Set(this Core.IconElement el, Action<WinUI.IconElement> configure) =>
+        el with { Setters = [.. el.Setters, configure] };
+
     // ParallaxView
     public static ParallaxViewElement Set(this ParallaxViewElement el, Action<WinUI.ParallaxView> configure) =>
         el with { Setters = [.. el.Setters, configure] };

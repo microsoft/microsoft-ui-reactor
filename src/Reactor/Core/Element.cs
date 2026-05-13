@@ -1650,6 +1650,16 @@ public record BitmapIconData(global::System.Uri Source, bool ShowAsMonochrome = 
 public record PathIconData(string Data) : IconData;
 public record ImageIconData(global::System.Uri Source) : IconData;
 
+/// <summary>
+/// Standalone icon element that can be placed in the element tree.
+/// Wraps an <see cref="IconData"/> and mounts to the corresponding
+/// native <see cref="WinUI.IconElement"/> subtype.
+/// </summary>
+public record IconElement(IconData Data) : Element
+{
+    internal Action<WinUI.IconElement>[] Setters { get; init; } = [];
+}
+
 public abstract record AppBarItemBase;
 public record AppBarButtonData(string Label, Action? OnClick = null, string? Icon = null) : AppBarItemBase
 {
