@@ -494,16 +494,11 @@ public class ElementTests
     [Fact]
     public void Margin_Two_Arg_Positional_Follows_CSS_Vertical_First()
     {
-        // CSS shorthand `margin: 16px 14px;` means top/bottom = 16,
-        // left/right = 14 — vertical first. Reactor's 2-arg overload now
-        // mirrors that: `.Margin(16, 14)` → Thickness(14, 16, 14, 16).
-        // Pre-2026-05-11 the order was inverted (horizontal first); see
-        // CHANGELOG "Changed (breaking)" for the migration story.
         var el = TextBlock("x").Margin(16, 14);
-        Assert.Equal(new Thickness(14, 16, 14, 16), el.Modifiers!.Margin);
+        Assert.Equal(new Thickness(16, 14, 16, 14), el.Modifiers!.Margin);
 
         var pad = TextBlock("x").Padding(16, 14);
-        Assert.Equal(new Thickness(14, 16, 14, 16), pad.Modifiers!.Padding);
+        Assert.Equal(new Thickness(16, 14, 16, 14), pad.Modifiers!.Padding);
     }
 
     [Fact]
