@@ -79,6 +79,11 @@ if (arg == "pack-local")
     return Microsoft.UI.Reactor.Cli.Pack.PackLocalCommand.Run(args.Skip(1).ToArray());
 }
 
+if (arg == "clean-local")
+{
+    return Microsoft.UI.Reactor.Cli.Pack.CleanLocalCommand.Run(args.Skip(1).ToArray());
+}
+
 Console.Error.WriteLine($"Unknown option: {args[0]}");
 Console.Error.WriteLine();
 ShowHelp();
@@ -112,6 +117,7 @@ void ShowHelp()
     Console.WriteLine("  devtools         Launch project with --devtools run and supervise reloads");
     Console.WriteLine("  check [path]     Build and emit one-line diagnostics with skill-file pointers");
     Console.WriteLine("  pack-local       Pack the in-source framework to <repo>/local-nupkgs/ as 0.0.0-local");
+    Console.WriteLine("  clean-local      Remove local packages, NuGet cache entries, and templates");
 }
 
 int ShowSkill()

@@ -135,16 +135,5 @@ public static class PackLocalCommand
         return null;
     }
 
-    static string? FindRepoRoot()
-    {
-        for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
-        {
-            if (Directory.Exists(Path.Combine(d.FullName, "src", "Reactor"))
-                && File.Exists(Path.Combine(d.FullName, "src", "Reactor", "Reactor.csproj")))
-            {
-                return d.FullName;
-            }
-        }
-        return null;
-    }
+    static string? FindRepoRoot() => RepoRootFinder.FindRepoRoot();
 }
