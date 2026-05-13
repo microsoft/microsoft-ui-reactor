@@ -46,7 +46,7 @@ Why each line is load-bearing:
 - `RowGap = 16` — sibling spacing on the 4px grid; the default is 0.
 - `.Backdrop(BackdropKind.Mica)` on the root — Win11 signature material. The root must not paint an opaque background (no `Theme.SolidBackground`) or Mica won't show through.
 
-Use `BackdropKind.MicaAlt` for secondary windows. `BackdropKind.DesktopAcrylic` is for transient surfaces (flyouts, dialogs), not the main window.
+Use `BackdropKind.MicaAlt` for secondary app windows. `BackdropKind.DesktopAcrylic` fits short-lived secondary windows (e.g., a popped-out picker window). `BackdropKind` only applies to a hosting `Window.SystemBackdrop` — flyouts and `ContentDialog`s aren't separate windows, so they take their styling from theme resources, not from `.Backdrop(...)`.
 
 For TitleBar features beyond the bare title, use `with`:
 
@@ -87,7 +87,7 @@ Pick each control by what it does, not by what looks similar. Defaults match the
 
 **Input:** Text → `TextField`. Number → `NumberBox`. Search → `AutoSuggestBox`. Date → `CalendarDatePicker`. Time → `TimePicker`. Boolean → `ToggleSwitch`. Pick 1 of 2–3 → `RadioButtons`. Pick 1 of 4+ → `ComboBox`. Continuous value → `Slider`. Password → `PasswordBox`.
 
-**Feedback:** Blocking decision → `ContentDialog`. Contextual action → `Flyout` / `MenuFlyout`. Onboarding callout → `TeachingTip`. Inline status banner → `InfoBar`. Non-blocking screen-reader announcement → `UseAnnounce()`.
+**Feedback:** Blocking decision → `ContentDialog`. Contextual action → `Flyout` / `MenuFlyout`. Onboarding callout → `TeachingTip`. Inline status banner → `InfoBar`. Non-blocking screen-reader announcement → `UseAnnounce()` — the returned handle exposes a `Region` element that must be rendered somewhere in the component tree, or announcements no-op.
 
 **Validation:** Form fields → `FormField(content, label: "…")` — wires label + required indicator + error display + automation name to the inner control.
 
@@ -102,7 +102,7 @@ Use the shell verbatim. Don't customize the shell until the feature is wired up 
 - **Content fills the window.** No centered cards floating on empty backgrounds. Page padding is 24px (sections) or 36px (hero); the canonical shell uses 24px.
 - **4px grid** for every margin, padding, gap, and size — see §5.
 - **Prefer `FlexColumn` / `FlexRow`** as the default linear layout. Use `VStack`/`HStack` only when porting StackPanel code or when StackPanel's shrink-wrap cross-axis behavior is specifically wanted.
-- **Use `Grid` with `GridSize.Star()`** for any row containing text that needs `TextTrimming`. `FlexRow` and `HStack` give children unbounded main-axis width, so trimming never fires.
+- **Use `Grid` with `GridSize.Star()`** for any row containing text that needs `TextTrimming`. `HStack` measures children with unbounded main-axis width, so trimming never fires inside it. `FlexRow` does pass a finite main-axis constraint to flex children — so trimming works there *as long as* the text participates in flex sizing (default `shrink: 1`); if you've pinned the text with `.Flex(shrink: 0)` or wrapped it in a non-flex child, fall back to `Grid`.
 - **Sidebar layouts:** fixed 300–360px sidebar + flexible main with `.Flex(grow: 1)`. No equal-width 50/50 splits.
 
 Then layer in, in order: theme tokens (§1) → typography (§4) → accessibility (§7) → animation (§9). The numbered rules below are the reference for each.
@@ -121,7 +121,7 @@ These are the specific mistakes that make a Reactor app look like a port from an
 | Custom title row stacked above the system chrome | `TitleBar(...)` with `Subtitle` / `Content` / `RightHeader` for inline content | §5 Window Title Bar |
 | No `Backdrop(...)` on the main window root | `.Backdrop(BackdropKind.Mica)` on the root element | §8 Window Backdrops |
 | Root paints `Theme.SolidBackground` *and* sets a backdrop | Drop the background — Mica needs to show through | §8 Window Backdrops |
-| `HStack` / `FlexRow` containing text with `TextTrimming` | `Grid` with `GridSize.Star()` column for the trimmed text | §5 Container Choice |
+| `HStack` containing text with `TextTrimming` (or `FlexRow` where the text isn't a flex child) | `Grid` with `GridSize.Star()` column for the trimmed text | §5 Container Choice |
 | `Height(N)` on a text-containing element | `MinHeight(N)` — fixed height clips at larger text scales | §5 Sizing |
 | Hardcoded hex (`"#FFFFFF"`, `"#000000"`) on a themed surface | `Theme.*` token (`Theme.CardBackground`, `Theme.PrimaryText`, ...) | §1 Theming |
 | Raw `FontSize(28).FontWeight(...)` on `TextBlock` | `Heading()` / `SubHeading()` / `Caption()` factories, or `.ApplyStyle("TitleTextBlockStyle")` | §4 Typography |
