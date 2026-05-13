@@ -570,6 +570,7 @@ public sealed class ReactorHost : IDisposable
                 }
                 catch (Exception ex)
                 {
+                    Debugger.BreakForUserUnhandledException(ex);
                     _logger?.LogError(ex, "Component Render() threw");
                     ShowErrorFallback(ex);
                     return;
