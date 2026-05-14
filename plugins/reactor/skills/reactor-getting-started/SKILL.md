@@ -119,7 +119,7 @@ Memo(ctx => TextBlock($"Hi, {name}"), name)    // re-render when deps change
 | `UseEffect(action, deps)` | — | Side effects + cleanup |
 | `UseMemo<T>(factory, deps)` | `T` | Memoized computation |
 | `UseCallback(action, deps)` | `Action` | Stable callback reference |
-| `UseRef<T>(initial)` | `Ref<T>` | Mutable ref across renders |
+| `UseRef<T>(initial)` | `Ref<T>` | Mutable ref across renders (access via `.Current`) |
 | `UseObservable<T>(source)` | `T` | Track `INotifyPropertyChanged` |
 | `UseCollection<T>(coll)` | `IReadOnlyList<T>` | Track `ObservableCollection` |
 | `UseContext<T>(ctx)` | `T` | Read tree-scoped ambient state |
@@ -152,6 +152,11 @@ UseEffect(() =>
 public static readonly Context<string> ThemeCtx = new("light");
 VStack(...).Provide(ThemeCtx, "dark")                  // provide
 var theme = UseContext(ThemeCtx);                      // consume
+
+// UseRef — mutable value that persists across renders without triggering re-render
+var timerRef = UseRef<DispatcherTimer?>(null);
+timerRef.Current = new DispatcherTimer();              // .Current is the property (NOT .Value)
+timerRef.Current.Start();
 ```
 
 ## Common factories — the 90% cases
