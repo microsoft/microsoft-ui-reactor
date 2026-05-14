@@ -63,6 +63,14 @@ public class ElementRecordCoverageTests
     }
 
     [Fact]
+    public void Icon_Factory_From_Symbol_Enum_Creates_SymbolIconData()
+    {
+        var el = Factories.Icon(Microsoft.UI.Xaml.Controls.Symbol.Home);
+        Assert.IsType<SymbolIconData>(el.Data);
+        Assert.Equal("Home", ((SymbolIconData)el.Data).Symbol);
+    }
+
+    [Fact]
     public void AppBar_Data_Variants_Construct()
     {
         var btn = new AppBarButtonData("Open", () => { }, "Open");
