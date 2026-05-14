@@ -1417,7 +1417,10 @@ public static partial class ElementExtensions
 
     // ── TabView sugar ───────────────────────────────────────────────
 
-    public static TabViewElement ShowAddButton(this TabViewElement el, bool visible = true) =>
+    /// <summary>
+    /// Controls visibility of the "add tab" button in a TabView.
+    /// </summary>
+    public static TabViewElement IsAddButtonVisible(this TabViewElement el, bool visible = true) =>
         el with { IsAddTabButtonVisible = visible };
 
     /// <summary>Controls how tab widths are sized (Equal, SizeToContent, Compact).</summary>
@@ -1448,6 +1451,10 @@ public static partial class ElementExtensions
     public static TabViewElement TabStripFooter(this TabViewElement el, Element footer) =>
         el with { TabStripFooter = footer };
 
+    /// <inheritdoc cref="IsAddButtonVisible"/>
+    [Obsolete("Use IsAddButtonVisible() — imperative 'Show*' naming is deprecated (see #268).")]
+    public static TabViewElement ShowAddButton(this TabViewElement el, bool visible = true) =>
+        el.IsAddButtonVisible(visible);
     // ── Key ─────────────────────────────────────────────────────────
 
     public static T WithKey<T>(this T el, string key) where T : Element =>

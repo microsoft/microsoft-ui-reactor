@@ -378,7 +378,15 @@ public class ElementExtensionsCoverageTests
     }
 
     [Fact]
-    public void TabView_ShowAddButton_Sugar()
+    public void TabView_IsAddButtonVisible_Sugar()
+    {
+        var el = TabView([]).IsAddButtonVisible(false);
+        Assert.False(el.IsAddTabButtonVisible);
+    }
+
+    [Fact]
+    [Obsolete("Tests the deprecated ShowAddButton shim")]
+    public void TabView_ShowAddButton_Sugar_Obsolete_Shim()
     {
         var el = TabView([]).ShowAddButton(false);
         Assert.False(el.IsAddTabButtonVisible);

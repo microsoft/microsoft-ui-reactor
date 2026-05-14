@@ -209,7 +209,7 @@ BreadcrumbBarElement.ItemClicked(Action<BreadcrumbBarItemData> handler) → Brea
 BreadcrumbBarElement.Set(Action<BreadcrumbBar> configure) → BreadcrumbBarElement
 ButtonElement.AccentButton() → ButtonElement
 ButtonElement.Click(Action handler) → ButtonElement
-ButtonElement.DisabledFocusable(bool disabled = true) → ButtonElement
+ButtonElement.IsDisabledFocusable(bool disabled = true) → ButtonElement
 ButtonElement.Set(Action<Button> configure) → ButtonElement
 ButtonElement.SubtleButton() → ButtonElement
 ButtonElement.TextLink() → ButtonElement
@@ -246,7 +246,7 @@ ColorPickerElement.ValueRange(int minValue, int maxValue) → ColorPickerElement
 ComboBoxElement.Description(string description) → ComboBoxElement
 ComboBoxElement.DropDownClosed(Action handler) → ComboBoxElement
 ComboBoxElement.DropDownOpened(Action handler) → ComboBoxElement
-ComboBoxElement.Editable(bool editable = true) → ComboBoxElement
+ComboBoxElement.IsEditable(bool editable = true) → ComboBoxElement
 ComboBoxElement.Header(string header) → ComboBoxElement
 ComboBoxElement.MaxDropDownHeight(double height) → ComboBoxElement
 ComboBoxElement.Placeholder(string text) → ComboBoxElement
@@ -311,7 +311,7 @@ ImageElement.NineGrid(Thickness nineGrid) → ImageElement
 ImageElement.Set(Action<Image> configure) → ImageElement
 InfoBadgeElement.Set(Action<InfoBadge> configure) → InfoBadgeElement
 InfoBarElement.ActionButtonClick(Action handler) → InfoBarElement
-InfoBarElement.Closable(bool closable = true) → InfoBarElement
+InfoBarElement.IsClosable(bool closable = true) → InfoBarElement
 InfoBarElement.Closed(Action handler) → InfoBarElement
 InfoBarElement.Content(Element content) → InfoBarElement
 InfoBarElement.Error() → InfoBarElement
@@ -404,12 +404,12 @@ PipsPagerElement.WrapMode(PipsPagerWrapMode mode) → PipsPagerElement
 PivotElement.SelectedIndexChanged(Action<int> handler) → PivotElement
 PivotElement.Set(Action<Pivot> configure) → PivotElement
 PopupElement.Closed(Action handler) → PopupElement
-PopupElement.LightDismiss(bool enabled = true) → PopupElement
+PopupElement.IsLightDismissEnabled(bool enabled = true) → PopupElement
 PopupElement.Offset(double horizontal, double vertical) → PopupElement
 PopupElement.Opened(Action handler) → PopupElement
 PopupElement.Set(Action<Popup> configure) → PopupElement
 ProgressElement.Set(Action<ProgressBar> configure) → ProgressElement
-ProgressRingElement.Active(bool active = true) → ProgressRingElement
+ProgressRingElement.IsActive(bool active = true) → ProgressRingElement
 ProgressRingElement.Set(Action<ProgressRing> configure) → ProgressRingElement
 PropertyGridElement.RootChanged(Action<object> handler) → PropertyGridElement
 RadioButtonElement.IsCheckedChanged(Action<bool> handler) → RadioButtonElement
@@ -420,7 +420,7 @@ RatingControlElement.Caption(string caption) → RatingControlElement
 RatingControlElement.InitialSetValue(int value) → RatingControlElement
 RatingControlElement.MaxRating(int max) → RatingControlElement
 RatingControlElement.PlaceholderValue(double value) → RatingControlElement
-RatingControlElement.ReadOnly(bool readOnly = true) → RatingControlElement
+RatingControlElement.IsReadOnly(bool readOnly = true) → RatingControlElement
 RatingControlElement.Set(Action<RatingControl> configure) → RatingControlElement
 RatingControlElement.ValueChanged(Action<double> handler) → RatingControlElement
 RectangleElement.Fill(Brush brush) → RectangleElement
@@ -499,7 +499,7 @@ T.CenterPoint<T>(Vector3 center) → T
 T.ConnectedAnimation<T>(string key) → T
 T.CornerRadius<T>(double radius) → T
 T.CornerRadius<T>(double topLeft, double topRight, double bottomRight, double bottomLeft) → T
-T.Disabled<T>(bool disabled = true) → T
+T.IsEnabled<T>(bool enabled = true) → T
 T.DraggableWhen<T>(Func<bool> canDrag) → T
 T.Flex<T>(double grow = 0, double shrink = 1, double? basis = null, FlexAlign? alignSelf = null, FlexPositionType position = FlexPositionType.Relative, double? left = null, double? top = null, double? right = null, double? bottom = null) → T
 T.FocusMeta<T>(FocusManager fm, string fieldName, bool autoFocus = false) → T
@@ -619,7 +619,7 @@ T.Validate<T>(string fieldName, object value, IValidator[] validators) → T
 T.ValidateAsync<T>(string fieldName, IAsyncValidator[] asyncValidators) → T
 T.ValidateAsync<T>(string fieldName, object value, IAsyncValidator[] asyncValidators) → T
 T.VerticalAlignment<T>(VerticalAlignment alignment) → T
-T.Visible<T>(bool isVisible) → T
+T.IsVisible<T>(bool isVisible) → T
 T.Width<T>(double width) → T
 T.WithBorder<T>(Brush brush, double thickness = 1) → T
 T.WithBorder<T>(ThemeRef theme, double thickness = 1) → T
@@ -641,7 +641,7 @@ TabViewElement.CanReorderTabs(bool canReorder = true) → TabViewElement
 TabViewElement.CloseButtonOverlayMode(TabViewCloseButtonOverlayMode mode) → TabViewElement
 TabViewElement.SelectedIndexChanged(Action<int> handler) → TabViewElement
 TabViewElement.Set(Action<TabView> configure) → TabViewElement
-TabViewElement.ShowAddButton(bool visible = true) → TabViewElement
+TabViewElement.IsAddTabButtonVisible(bool visible = true) → TabViewElement
 TabViewElement.TabCloseRequested(Action<int> handler) → TabViewElement
 TabViewElement.TabStripFooter(Element footer) → TabViewElement
 TabViewElement.TabStripHeader(Element header) → TabViewElement
@@ -671,7 +671,7 @@ TextBlockElement.FontSize(double size) → TextBlockElement
 TextBlockElement.FontStyle(FontStyle style) → TextBlockElement
 TextBlockElement.LineHeight(double height) → TextBlockElement
 TextBlockElement.MaxLines(int maxLines) → TextBlockElement
-TextBlockElement.Selectable(bool selectable = true) → TextBlockElement
+TextBlockElement.IsTextSelectionEnabled(bool enabled = true) → TextBlockElement
 TextBlockElement.SemiBold() → TextBlockElement
 TextBlockElement.Set(Action<TextBlock> configure) → TextBlockElement
 TextBlockElement.TextAlignment(TextAlignment alignment) → TextBlockElement
@@ -690,7 +690,7 @@ TextFieldElement.IsSpellCheckEnabled(bool enabled = true) → TextFieldElement
 TextFieldElement.MaxLength(int maxLength) → TextFieldElement
 TextFieldElement.NumericInput() → TextFieldElement
 TextFieldElement.PhoneInput() → TextFieldElement
-TextFieldElement.ReadOnly(bool readOnly = true) → TextFieldElement
+TextFieldElement.IsReadOnly(bool readOnly = true) → TextFieldElement
 TextFieldElement.SearchInput() → TextFieldElement
 TextFieldElement.SelectionChanged(Action<string, int, int> handler) → TextFieldElement
 TextFieldElement.Set(Action<TextBox> configure) → TextFieldElement
