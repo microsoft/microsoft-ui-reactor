@@ -398,6 +398,42 @@ class ChildView : Component
 
 Nested `.Provide()` overrides the outer for its subtree only. If no provider is present, `UseContext` returns the `Context<T>` default.
 
+### NavigationView (sidebar/top nav with page switching)
+
+```csharp
+var (selectedTag, setSelectedTag) = UseState("home");
+
+var navItems = new[]
+{
+    NavItem("Home",     icon: "Home",     tag: "home"),
+    NavItem("Settings", icon: "Setting",  tag: "settings"),
+    NavItem("About",    icon: "Info",     tag: "about"),
+};
+
+// Content switches based on selectedTag
+Element content = selectedTag switch
+{
+    "home"     => TextBlock("Welcome home"),
+    "settings" => TextBlock("Settings page"),
+    _          => TextBlock("About page"),
+};
+
+return (NavigationView(navItems, content: content) with
+{
+    SelectedTag = selectedTag,
+    OnSelectionChanged = tag => { if (tag != null) setSelectedTag(tag); },
+    PaneTitle = "My App",
+    IsSettingsVisible = false,
+}).Height(400);
+```
+
+**Key points:**
+- `SelectedTag` (string) and `OnSelectionChanged` (Action<string?>) are record properties — use `with { }`.
+- `IsPaneOpen` is also a record property for programmatic pane control.
+- `NavItem(label, icon, tag)` — the `tag` string is what `SelectedTag`/`OnSelectionChanged` traffic in.
+- For settings item: set `IsSettingsVisible = true` and check `args.IsSettingsSelected` (not via tag).
+- Use `.Set(nv => nv.PaneDisplayMode = NavigationViewPaneDisplayMode.Top)` for non-record properties.
+
 ## Bootstrap
 
 `mur pack-local` (selfhost) and `nuget.config` (consumer outside the source clone) — see the top-level `SKILL.md`'s "Which mode are you in?" section. If selfhost restore fails with "package Microsoft.UI.Reactor 0.0.0-local was not found", run `mur pack-local`.
