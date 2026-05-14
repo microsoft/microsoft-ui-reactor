@@ -402,6 +402,11 @@ Nested `.Provide()` overrides the outer for its subtree only. If no provider is 
 
 `mur pack-local` (selfhost) and `nuget.config` (consumer outside the source clone) — see the top-level `SKILL.md`'s "Which mode are you in?" section. If selfhost restore fails with "package Microsoft.UI.Reactor 0.0.0-local was not found", run `mur pack-local`.
 
+> ⚠️ **Platform flag required**: Always build with an explicit platform:
+> `dotnet build -p:Platform=x64` (or `ARM64`). Omitting `-p:Platform=...`
+> causes `WindowsAppSDKSelfContained` errors. This applies to `dotnet build`,
+> `dotnet run`, and `mur check` invocations alike.
+
 ## Where the skill content comes from (and the api index)
 
 You're reading this through the **`reactor` plugin** — the most efficient channel. The plugin SDK preloads `reactor-getting-started`; topical skills (`reactor-async`, `reactor-design`, `reactor-forms`, `reactor-navigation`, `reactor-input`, `reactor-recipes`, etc.) load only when the task explicitly needs them.
@@ -413,3 +418,5 @@ Full API index (every factory, modifier, hook, theme token, with parameter lists
 ## Build output
 
 `dotnet run` exits with code 1 on build failure. **Always read the output** — don't assume success. After non-trivial edits, run `mur check <path>` for one-line diagnostics with skill-file pointers (see `reactor-build-and-check`).
+
+> Remember: always pass `-p:Platform=x64` (or `ARM64`). Without it, the first build always fails.
