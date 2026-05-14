@@ -2947,8 +2947,17 @@ public sealed partial class Reconciler : IDisposable
             fe.Tapped += state.TappedTrampoline;
             Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("Tapped", fe.GetType().Name);
         }
-        if (handler is not null) fe.IsTapEnabled = true;
-        else if (oldHandler is not null) fe.IsTapEnabled = false;
+        if (handler is not null)
+        {
+            fe.IsTapEnabled = true;
+            // Make tappable elements keyboard-accessible and visible in UIA tree
+            if (fe is Microsoft.UI.Xaml.Controls.Control ctrl && !ctrl.IsTabStop)
+                ctrl.IsTabStop = true;
+        }
+        else if (oldHandler is not null)
+        {
+            fe.IsTapEnabled = false;
+        }
     }
 
     private static void EnsureDoubleTappedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? oldHandler)

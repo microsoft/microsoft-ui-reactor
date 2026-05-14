@@ -224,6 +224,7 @@ items.Select(i => Component<Card, CardProps>(new CardProps(i)).WithKey(i.Id)).To
 .WithKey("id")                  // dynamic list items — see gotcha #6
 .OnTapped((s, e) => ...)        // tap on non-Button surfaces — Border, Image, ScrollView, …
                                 // (Button click → ctor arg, see Controls section)
+                                // ⚠️ For UIA/automation: always pair with .AutomationName("...")
 .AutomationName("Submit")       // a11y — sets AutomationProperties.Name
 .Set(native => native.MaxWidth = 400)   // native escape hatch (lambda receives the WinUI control)
 ```
