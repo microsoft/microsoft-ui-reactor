@@ -2119,7 +2119,7 @@ public record ScrollViewElement(Element Child) : Element
     internal Action<WinUI.ScrollViewer>[] Setters { get; init; } = [];
 }
 
-public record BorderElement(Element Child) : Element
+public record BorderElement(Element? Child) : Element
 {
     public double? CornerRadius { get; init; }
     public Thickness? Padding { get; init; }

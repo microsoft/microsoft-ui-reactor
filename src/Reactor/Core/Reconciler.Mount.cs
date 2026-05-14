@@ -1027,7 +1027,7 @@ public sealed partial class Reconciler
         if (border.BorderThickness.HasValue) bdr.BorderThickness = new Microsoft.UI.Xaml.Thickness(border.BorderThickness.Value);
         // Apply RequestedTheme before mounting children so that child ThemeRef
         // bindings resolve against the correct theme variant from the start.
-        bdr.Child = Mount(border.Child, requestRerender);
+        bdr.Child = border.Child is not null ? Mount(border.Child, requestRerender) : null;
         SetElementTag(bdr, border);
         ApplySetters(border.Setters, bdr);
         return bdr;

@@ -241,7 +241,7 @@ public static partial class Factories
 
     public static ScrollViewElement ScrollView(Element child) => new(child);
 
-    public static BorderElement Border(Element child) => new(child);
+    public static BorderElement Border(Element? child) => new(child!);
 
     public static ExpanderElement Expander(string header, Element content, bool isExpanded = false, Action<bool>? onExpandedChanged = null) =>
         new(header, content, isExpanded, onExpandedChanged);

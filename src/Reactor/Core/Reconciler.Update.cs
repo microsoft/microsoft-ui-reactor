@@ -1252,7 +1252,22 @@ public sealed partial class Reconciler
 
     private UIElement? UpdateBorder(BorderElement o, BorderElement n, WinUI.Border b, Element newEl, Action requestRerender)
     {
-        if (CanUpdate(o.Child, n.Child))
+        if (o.Child is null && n.Child is null)
+        {
+            // Both null — nothing to reconcile for child
+        }
+        else if (n.Child is null)
+        {
+            // Child removed
+            if (b.Child is not null) UnmountRecursive(b.Child);
+            b.Child = null;
+        }
+        else if (o.Child is null)
+        {
+            // Child added
+            b.Child = Mount(n.Child, requestRerender);
+        }
+        else if (CanUpdate(o.Child, n.Child))
         {
             if (b.Child is not null)
             {
