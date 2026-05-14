@@ -213,6 +213,9 @@ tests/stress_perf/publish_log*.txt
 coverage/
 *.cobertura.xml
 
+# Eval / scratch run output — local artifacts from eval drivers, never tracked.
+runs/
+
 # Stress-perf benchmark run artifacts (local measurement data).
 tests/stress_perf/bench-results/
 tests/stress_perf/baseline-*.csv
