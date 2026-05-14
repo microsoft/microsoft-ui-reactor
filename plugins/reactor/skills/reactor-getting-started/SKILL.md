@@ -398,6 +398,28 @@ class ChildView : Component
 
 Nested `.Provide()` overrides the outer for its subtree only. If no provider is present, `UseContext` returns the `Context<T>` default.
 
+### Canvas (absolute positioning — drawing, diagrams, games)
+
+> ⚠️ `using static Factories` brings a `Canvas()` factory that shadows `Microsoft.UI.Xaml.Controls.Canvas`.
+> **Do NOT call `Canvas.SetLeft()`/`Canvas.SetTop()`** — use the fluent `.Canvas(left, top)` modifier instead.
+
+```csharp
+Canvas(
+    // Position children with the .Canvas(left, top) extension method
+    Border(TextBlock("A")).Canvas(left: 50, top: 30),
+    Border(TextBlock("B")).Canvas(left: 200, top: 100),
+
+    // Center on a point (anchor 0.5, 0.5)
+    Ellipse().Width(20).Height(20).CenterAt(x: 150, y: 75)
+) with { Width = 400, Height = 300, Background = Theme.CardBackground }
+```
+
+**Key points:**
+- `.Canvas(left, top)` sets attached Canvas.Left / Canvas.Top — works on any child element.
+- `.CenterAt(x, y)` centers the element at (x,y) — adjusts for element size after layout.
+- Canvas itself has record properties: `Width`, `Height`, `Background`.
+- For shapes: use `Rectangle()`, `Ellipse()`, `Line(x1, y1, x2, y2)`, `Path(data)`.
+
 ## Bootstrap
 
 `mur pack-local` (selfhost) and `nuget.config` (consumer outside the source clone) — see the top-level `SKILL.md`'s "Which mode are you in?" section. If selfhost restore fails with "package Microsoft.UI.Reactor 0.0.0-local was not found", run `mur pack-local`.
