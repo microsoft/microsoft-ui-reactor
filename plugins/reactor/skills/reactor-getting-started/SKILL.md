@@ -250,7 +250,7 @@ Button("Action").Background(Theme.Accent)
 6. **`.WithKey("id")` on dynamic list items.** Without keys, the reconciler matches by position and re-mounts everything on insert/reorder — losing focus, animation state, ElementRef identity. The `REACTOR_DSL_001` analyzer catches this in `.csproj` builds.
 7. **Memoize expensive computations.** `UseMemo(() => items.OrderBy(...).ToList(), items)`.
 8. **`.Flex(grow: 1)` is `flex-grow`, not the CSS `flex: 1` shorthand.** Default basis is `auto` (content size), so a growing child with large intrinsic content overflows the container. Pass `.Flex(grow: 1, basis: 0)` (matches CSS `flex: 1`) or add `.Flex(shrink: 0)` to each fixed-size sibling.
-9. **Don't pass freshly-allocated objects/arrays/lambdas as hook deps.** They compare unequal every render → hook never hits its stable path. The `REACTOR_HOOKS_004` analyzer catches this.
+9. **Don't pass freshly-allocated objects/arrays/lambdas as hook deps.** They compare unequal every render → hook never hits its stable path. The `REACTOR_HOOKS_004` analyzer catches this. **Tuples also trigger this** — `(x, y)` allocates a new `ValueTuple` each render. Instead, use a string key: `$"{x}|{y}"`, or pass individual values as separate deps: `UseEffect(fn, x, y)`.
 10. **`UseResource` is reads-only.** Never call `Post*`/`Create*`/`Delete*`/`Save*` from a `UseResource` fetcher — it can re-run on deps change, retry, and focus revalidation. Use `UseMutation` for writes.
 
 ## Common patterns (paste-ready)
