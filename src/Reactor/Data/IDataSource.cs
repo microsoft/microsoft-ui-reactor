@@ -47,7 +47,7 @@ public interface IMutableDataSource<T> : IDataSource<T>
 /// </summary>
 public interface IObservableDataSource<T> : IDataSource<T>
 {
-    event Action? DataChanged;
+    event EventHandler? DataChanged;
 }
 
 /// <summary>

@@ -231,7 +231,7 @@ class StockGridSource : IDataSource<StockRow>, IObservableDataSource<StockRow>
         }
     }
 
-    public event Action? DataChanged;
+    public event EventHandler? DataChanged;
 
     public DataSourceCapabilities Capabilities => DataSourceCapabilities.ServerCount;
 
@@ -277,6 +277,6 @@ class StockGridSource : IDataSource<StockRow>, IObservableDataSource<StockRow>
             cells[col] = new StockItem(item.Symbol, item.CurrentPrice, newPrice, newPrice >= item.CurrentPrice);
         }
 
-        DataChanged?.Invoke();
+        DataChanged?.Invoke(this, EventArgs.Empty);
     }
 }
