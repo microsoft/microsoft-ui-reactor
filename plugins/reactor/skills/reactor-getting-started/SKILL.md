@@ -170,10 +170,6 @@ FlexColumn(children...)                       FlexRow(children...)
 // Prefer FlexRow/FlexColumn for linear layout — CSS Flexbox semantics
 // (grow/shrink/gap/wrap, justify-content, align-items). VStack/HStack
 // remain for StackPanel's shrink-wrap behavior.
-// FlexElement record properties (use `with { ... }`):
-//   Direction, JustifyContent, AlignItems, AlignContent, Wrap, ColumnGap, RowGap
-//   ⚠️ It's `JustifyContent` — NOT `Justify`
-// Example: FlexRow(a, b, c) with { JustifyContent = FlexJustify.SpaceBetween, ColumnGap = 8 }
 Border(child).CornerRadius(8).Background(Theme.CardBackground).Padding(16)
 ScrollView(VStack(...))
 Grid(columns: [GridSize.Star(), GridSize.Px(200)],

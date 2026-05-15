@@ -28,3 +28,10 @@ Load this skill **only** when:
 Read the file **once**, scan for what you need, then keep working from memory. **Do not re-page through it** — the file is large and re-reading injects ~12K tokens per call. Per-pattern lookups are far cheaper than full re-reads.
 
 If you only need to confirm whether a single name exists, use a `grep` for the symbol against the file rather than viewing it whole.
+
+## Common naming gotchas
+
+- **`FlexElement` record properties** (set via `with { ... }`):
+  `Direction`, `JustifyContent`, `AlignItems`, `AlignContent`, `Wrap`, `ColumnGap`, `RowGap`
+  ⚠️ It's `JustifyContent` — NOT `Justify`.
+  Example: `FlexRow(a, b, c) with { JustifyContent = FlexJustify.SpaceBetween, ColumnGap = 8 }`
