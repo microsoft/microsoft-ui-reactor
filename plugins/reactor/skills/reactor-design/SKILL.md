@@ -54,6 +54,9 @@ Hardcoded colors are acceptable only for:
 
 #### Theme Token Reference
 
+> ⚠️ **`Theme.Error`, `Theme.Success`, `Theme.Warning`, `Theme.ErrorText` do NOT exist.**
+> Use `Theme.SystemCritical` (red/error), `Theme.SystemSuccess` (green), `Theme.SystemCaution` (yellow).
+
 **Text:**
 
 | Token | WinUI Resource | Purpose |

@@ -230,33 +230,10 @@ items.Select(i => Component<Card, CardProps>(new CardProps(i)).WithKey(i.Id)).To
 
 ## Theme tokens (always)
 
-Use `Theme.*` for all themed colors — never hardcoded hex on themed surfaces.
+Use `Theme.*` for all themed colors — never hardcoded hex on themed surfaces. The full token list with WinUI keys is in the `reactor-design` skill.
 
 > ⚠️ **`Theme.Error`, `Theme.Success`, `Theme.Warning`, `Theme.ErrorText` do NOT exist.**
 > Use `Theme.SystemCritical` (red/error), `Theme.SystemSuccess` (green), `Theme.SystemCaution` (yellow).
-
-**Available tokens:**
-
-| Category | Token | Use for |
-|---|---|---|
-| Accent | `Theme.Accent` | Primary action buttons, links |
-| Accent | `Theme.AccentSecondary`, `.AccentTertiary` | Hover/pressed states |
-| Text | `Theme.PrimaryText` | Body text |
-| Text | `Theme.SecondaryText`, `.TertiaryText` | Subtitles, captions |
-| Text | `Theme.AccentText` | Colored/linked text |
-| Surface | `Theme.SolidBackground` | Page/window background |
-| Surface | `Theme.CardBackground` | Card/panel fill |
-| Surface | `Theme.SubtleFill`, `.LayerFill` | Hover/surface layers |
-| Stroke | `Theme.CardStroke`, `.SurfaceStroke` | Card/panel borders |
-| Stroke | `Theme.DividerStroke` | Separators |
-| Signal | `Theme.SystemCritical` | Error/danger (red) |
-| Signal | `Theme.SystemSuccess` | Success (green) |
-| Signal | `Theme.SystemCaution` | Warning (yellow/orange) |
-| Signal | `Theme.SystemAttention` | Info/attention (blue) |
-| Signal | `Theme.SystemCriticalBackground` | Error background |
-| Signal | `Theme.SystemSuccessBackground` | Success background |
-
-For any WinUI resource not listed: `Theme.Ref("YourResourceKeyBrush")`
 
 ```csharp
 TextBlock("Hi").Foreground(Theme.PrimaryText)
