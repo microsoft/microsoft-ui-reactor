@@ -100,13 +100,13 @@ public sealed class ChartElement<T> : IChartAccessibilityData
     private global::Windows.UI.Color? _customFocusColor;
     private bool _announceEveryFrame;
 
-    public ChartElement<T> Width(double w) { _width = w; return this; }
-    public ChartElement<T> Height(double h) { _height = h; return this; }
+    public ChartElement<T> Width(double width) { _width = width; return this; }
+    public ChartElement<T> Height(double height) { _height = height; return this; }
     public ChartElement<T> Margin(double left, double top, double right, double bottom) { _marginLeft = left; _marginTop = top; _marginRight = right; _marginBottom = bottom; return this; }
     public ChartElement<T> Stroke(string color) { _stroke = color; return this; }
     public ChartElement<T> Fill(string color) { _fill = color; return this; }
-    public ChartElement<T> StrokeWidth(double w) { _strokeWidth = w; return this; }
-    public ChartElement<T> FillOpacity(double o) { _fillOpacity = o; return this; }
+    public ChartElement<T> StrokeWidth(double width) { _strokeWidth = width; return this; }
+    public ChartElement<T> FillOpacity(double opacity) { _fillOpacity = opacity; return this; }
     public ChartElement<T> ShowAxes(bool show) { _showAxes = show; return this; }
     public ChartElement<T> ShowGrid(bool show) { _showGrid = show; return this; }
 
@@ -465,10 +465,10 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     // for accessibility (slice descriptors), so screen-reader summaries keep working.
     private Func<T, PieSliceLayout, Element>? _labelView;
 
-    public PieChartElement<T> Width(double w) { _width = w; return this; }
-    public PieChartElement<T> Height(double h) { _height = h; return this; }
-    public PieChartElement<T> InnerRadius(double r) { _innerRadius = r; return this; }
-    public PieChartElement<T> PadAngle(double a) { _padAngle = a; return this; }
+    public PieChartElement<T> Width(double width) { _width = width; return this; }
+    public PieChartElement<T> Height(double height) { _height = height; return this; }
+    public PieChartElement<T> InnerRadius(double radius) { _innerRadius = radius; return this; }
+    public PieChartElement<T> PadAngle(double angle) { _padAngle = angle; return this; }
 
     /// <summary>
     /// Shifts auto-positioned labels along the radial axis from the slice centroid.
