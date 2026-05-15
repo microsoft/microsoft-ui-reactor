@@ -295,8 +295,6 @@ StackElement.Set(Action<StackPanel> configure) → StackElement
 StackElement.Spacing(double spacing) → StackElement
 SwipeControlElement.Set(Action<SwipeControl> configure) → SwipeControlElement
 T.AccessKey<T>(string key) → T
-T.AccessKeyDisplayRequested<T>(Action handler) → T
-T.AccessKeyDisplayRequested<T>(Action<UIElement, AccessKeyDisplayRequestedEventArgs> handler) → T
 T.AccessibilityHidden<T>() → T
 T.AccessibilityView<T>(AccessibilityView view) → T
 T.Animate<T>(Curve curve, AnimateProperty properties = AnimateProperty.All) → T
@@ -359,6 +357,8 @@ T.MaxHeight<T>(double h) → T
 T.MaxWidth<T>(double w) → T
 T.MinHeight<T>(double h) → T
 T.MinWidth<T>(double w) → T
+T.OnAccessKeyDisplayRequested<T>(Action handler) → T
+T.OnAccessKeyDisplayRequested<T>(Action<UIElement, AccessKeyDisplayRequestedEventArgs> handler) → T
 T.OnCharacterReceived<T>(Action<UIElement, CharacterReceivedRoutedEventArgs> handler) → T
 T.OnDoubleTap<T>(Action handler) → T
 T.OnDoubleTap<T>(Action<Point> handler) → T

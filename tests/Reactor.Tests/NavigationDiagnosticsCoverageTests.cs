@@ -25,9 +25,8 @@ public class NavigationDiagnosticsCoverageTests
     {
         var (from, to) = UniqueKeys();
         NavigationDiagnosticEvent? captured = null;
-        Action<NavigationDiagnosticEvent> handler = e =>
+        EventHandler<NavigationDiagnosticEvent> handler = (_, e) =>
         {
-            // From/To are typed `object`; compare via Equals to avoid CS0252.
             if (Equals(e.From, from) && Equals(e.To, to)) captured = e;
         };
         NavigationDiagnostics.NavigationRequested += handler;
@@ -50,9 +49,8 @@ public class NavigationDiagnosticsCoverageTests
     {
         var (from, to) = UniqueKeys();
         NavigationDiagnosticEvent? captured = null;
-        Action<NavigationDiagnosticEvent> handler = e =>
+        EventHandler<NavigationDiagnosticEvent> handler = (_, e) =>
         {
-            // From/To are typed `object`; compare via Equals to avoid CS0252.
             if (Equals(e.From, from) && Equals(e.To, to)) captured = e;
         };
         NavigationDiagnostics.NavigationCompleted += handler;
@@ -73,9 +71,8 @@ public class NavigationDiagnosticsCoverageTests
     {
         var (from, to) = UniqueKeys();
         NavigationDiagnosticEvent? captured = null;
-        Action<NavigationDiagnosticEvent> handler = e =>
+        EventHandler<NavigationDiagnosticEvent> handler = (_, e) =>
         {
-            // From/To are typed `object`; compare via Equals to avoid CS0252.
             if (Equals(e.From, from) && Equals(e.To, to)) captured = e;
         };
         NavigationDiagnostics.NavigationCancelled += handler;
@@ -101,11 +98,9 @@ public class NavigationDiagnosticsCoverageTests
         var hits = new List<CacheDiagnosticEvent>();
         var misses = new List<CacheDiagnosticEvent>();
         var evicts = new List<CacheDiagnosticEvent>();
-        // CacheDiagnosticEvent.Route is typed as object; compare via Equals to
-        // avoid the reference-comparison footgun (CS0252).
-        Action<CacheDiagnosticEvent> hh = e => { if (Equals(e.Route, rHit)) hits.Add(e); };
-        Action<CacheDiagnosticEvent> mh = e => { if (Equals(e.Route, rMiss)) misses.Add(e); };
-        Action<CacheDiagnosticEvent> eh = e => { if (Equals(e.Route, rEvict)) evicts.Add(e); };
+        EventHandler<CacheDiagnosticEvent> hh = (_, e) => { if (Equals(e.Route, rHit)) hits.Add(e); };
+        EventHandler<CacheDiagnosticEvent> mh = (_, e) => { if (Equals(e.Route, rMiss)) misses.Add(e); };
+        EventHandler<CacheDiagnosticEvent> eh = (_, e) => { if (Equals(e.Route, rEvict)) evicts.Add(e); };
 
         NavigationDiagnostics.CacheHit += hh;
         NavigationDiagnostics.CacheMiss += mh;
@@ -130,13 +125,11 @@ public class NavigationDiagnosticsCoverageTests
     [Fact]
     public void OnTransitionStarted_OnTransitionCompleted_Fire()
     {
-        // Filter by transition instance identity — concurrent navigation tests fire
-        // their own transitions through the same global event.
         var transition = new SlideTransition();
         TransitionDiagnosticEvent? start = null;
         TransitionDiagnosticEvent? end = null;
-        Action<TransitionDiagnosticEvent> sh = e => { if (ReferenceEquals(e.Transition, transition)) start = e; };
-        Action<TransitionDiagnosticEvent> eh = e => { if (ReferenceEquals(e.Transition, transition)) end = e; };
+        EventHandler<TransitionDiagnosticEvent> sh = (_, e) => { if (ReferenceEquals(e.Transition, transition)) start = e; };
+        EventHandler<TransitionDiagnosticEvent> eh = (_, e) => { if (ReferenceEquals(e.Transition, transition)) end = e; };
         NavigationDiagnostics.TransitionStarted += sh;
         NavigationDiagnostics.TransitionCompleted += eh;
         try
@@ -160,7 +153,7 @@ public class NavigationDiagnosticsCoverageTests
     {
         var pathHit = $"/home-{Guid.NewGuid():N}";
         DeepLinkDiagnosticEvent? captured = null;
-        Action<DeepLinkDiagnosticEvent> handler = e => { if (e.Path == pathHit) captured = e; };
+        EventHandler<DeepLinkDiagnosticEvent> handler = (_, e) => { if (e.Path == pathHit) captured = e; };
         NavigationDiagnostics.DeepLinkResolved += handler;
         try
         {
@@ -175,10 +168,9 @@ public class NavigationDiagnosticsCoverageTests
         Assert.True(captured.Matched);
         Assert.Equal(2, captured.RouteCount);
 
-        // Re-fire for the miss branch (matched=false formats differently)
         var pathMiss = $"/missing-{Guid.NewGuid():N}";
         DeepLinkDiagnosticEvent? miss = null;
-        Action<DeepLinkDiagnosticEvent> handler2 = e => { if (e.Path == pathMiss) miss = e; };
+        EventHandler<DeepLinkDiagnosticEvent> handler2 = (_, e) => { if (e.Path == pathMiss) miss = e; };
         NavigationDiagnostics.DeepLinkResolved += handler2;
         try
         {

@@ -1436,14 +1436,24 @@ public static class ElementExtensions
     /// Handler for UIElement.AccessKeyDisplayRequested — fires when the access-key
     /// bubble should appear (e.g., user pressed Alt). Use to customize the visual.
     /// </summary>
-    public static T AccessKeyDisplayRequested<T>(this T el, Action handler) where T : Element =>
+    public static T OnAccessKeyDisplayRequested<T>(this T el, Action handler) where T : Element =>
         Modify(el, new ElementModifiers { OnAccessKeyDisplayRequested = (_, _) => handler() });
 
     /// <summary>
     /// Handler for UIElement.AccessKeyDisplayRequested with full event args.
     /// </summary>
-    public static T AccessKeyDisplayRequested<T>(this T el, Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs> handler) where T : Element =>
+    public static T OnAccessKeyDisplayRequested<T>(this T el, Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs> handler) where T : Element =>
         Modify(el, new ElementModifiers { OnAccessKeyDisplayRequested = handler });
+
+    /// <inheritdoc cref="OnAccessKeyDisplayRequested{T}(T, Action)"/>
+    [Obsolete("Use OnAccessKeyDisplayRequested. See #260.")]
+    public static T AccessKeyDisplayRequested<T>(this T el, Action handler) where T : Element =>
+        OnAccessKeyDisplayRequested(el, handler);
+
+    /// <inheritdoc cref="OnAccessKeyDisplayRequested{T}(T, Action{UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs})"/>
+    [Obsolete("Use OnAccessKeyDisplayRequested. See #260.")]
+    public static T AccessKeyDisplayRequested<T>(this T el, Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs> handler) where T : Element =>
+        OnAccessKeyDisplayRequested(el, handler);
 
     /// <summary>
     /// Binds this element to an imperative <see cref="Microsoft.UI.Reactor.Input.ElementRef"/>.
