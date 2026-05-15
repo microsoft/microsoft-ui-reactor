@@ -41,8 +41,8 @@ Component<T, TProps>(TProps props) → ComponentElement
 Component<T>() → ComponentElement
 ContentDialog(string title, Element content, string primaryButtonText = "OK") → ContentDialogElement
 ContentFlyout(Element content, FlyoutPlacementMode placement = FlyoutPlacementMode.Auto) → ContentFlyoutElement
-DataGrid<T>(IDataSource<T> source, IReadOnlyList<FieldDescriptor> columns, TypeRegistry registry = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Func<CellContext<T>, Element> cellTemplate = null, Func<RowContext<T>, Element> rowTemplate = null, Func<HeaderContext, Element> headerTemplate = null, Element loadingTemplate = null, Element emptyTemplate = null, bool showSearch = false, Func<T, RowKey, Element> rowDetailTemplate = null, Func<FieldDescriptor, double, Element> placeholderCellTemplate = null) → Element
-DataGrid<T>(IDataSource<T> source, TypeRegistry registry, Func<FieldDescriptor, FieldDescriptor> columnOverrides = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Element loadingTemplate = null, Element emptyTemplate = null) → Element
+DataGrid<T>(IDataSource<T> source, IReadOnlyList<FieldDescriptor> columns, TypeRegistry registry = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Func<CellContext<T>, Element> cellTemplate = null, Func<RowContext<T>, Element> rowTemplate = null, Func<HeaderContext, Element> headerTemplate = null, Element loadingTemplate = null, Element emptyTemplate = null, bool showSearch = false, Func<T, RowKey, Element> rowDetailTemplate = null, Func<FieldDescriptor, double, Element> placeholderCellTemplate = null) → ComponentElement
+DataGrid<T>(IDataSource<T> source, TypeRegistry registry, Func<FieldDescriptor, FieldDescriptor> columnOverrides = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Element loadingTemplate = null, Element emptyTemplate = null) → ComponentElement
 DatePicker(DateTimeOffset date, Action<DateTimeOffset> onDateChanged = null) → DatePickerElement
 DevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>> items = null, string glyph = "⚡", string toolTip = "Devtools", string automationId = null) → Element
 DropDownButton(string label, Element flyout = null) → DropDownButtonElement
@@ -122,7 +122,7 @@ Progress(double value) → ProgressElement
 ProgressIndeterminate() → ProgressElement
 ProgressRing() → ProgressRingElement
 ProgressRing(double value) → ProgressRingElement
-PropertyGrid(object target, TypeRegistry registry, Action<object> onRootChanged = null) → Element
+PropertyGrid(object target, TypeRegistry registry, Action<object> onRootChanged = null) → ComponentElement
 RadioButton(string label, bool isChecked = false, Action<bool> onChecked = null, string groupName = null) → RadioButtonElement
 RadioButtons(string[] items, int selectedIndex = -1, Action<int> onSelectionChanged = null) → RadioButtonsElement
 RadioMenuItem(string text, string groupName, bool isChecked = false, Action onClick = null, string icon = null) → RadioMenuFlyoutItemData
@@ -171,7 +171,7 @@ UniformGrid(Orientation orientation, Element[] items) → GridElement
 VStack(Element[] children) → StackElement
 VStack(double spacing, Element[] children) → StackElement
 Viewbox(Element child) → ViewboxElement
-VirtualList(int itemCount, Func<int, Element> renderItem, Func<int, string> getItemKey = null, double? itemHeight = null, double estimatedItemHeight = 40, double spacing = 0, Action<VirtualListRef> ref = null, Action<int, int> onVisibleRangeChanged = null) → Element
+VirtualList(int itemCount, Func<int, Element> renderItem, Func<int, string> getItemKey = null, double? itemHeight = null, double estimatedItemHeight = 40, double spacing = 0, Action<VirtualListRef> ref = null, Action<int, int> onVisibleRangeChanged = null) → ComponentElement
 WebView2(Uri source = null) → WebView2Element
 When(bool condition, Func<Element> then) → Element
 WrapGrid(Element[] children) → WrapGridElement

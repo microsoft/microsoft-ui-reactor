@@ -9,7 +9,7 @@ public static partial class Factories
     /// <summary>
     /// Creates a DataGrid with explicit column definitions.
     /// </summary>
-    public static Element DataGrid<T>(
+    public static ComponentElement DataGrid<T>(
         IDataSource<T> source,
         IReadOnlyList<FieldDescriptor> columns,
         TypeRegistry? registry = null,
@@ -56,7 +56,7 @@ public static partial class Factories
     /// <summary>
     /// Creates a DataGrid with auto-generated columns from TypeRegistry + reflection.
     /// </summary>
-    public static Element DataGrid<T>(
+    public static ComponentElement DataGrid<T>(
         IDataSource<T> source,
         TypeRegistry registry,
         Func<FieldDescriptor, FieldDescriptor>? columnOverrides = null,
