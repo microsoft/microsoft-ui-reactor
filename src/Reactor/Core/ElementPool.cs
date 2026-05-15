@@ -266,6 +266,8 @@ public sealed class ElementPool : IDisposable
                 break;
             case WinUI.Viewbox vb:
                 vb.Child = null;
+                vb.ClearValue(WinUI.Viewbox.StretchProperty);
+                vb.ClearValue(WinUI.Viewbox.StretchDirectionProperty);
                 break;
             case TextBlock tb:
                 tb.Text = "";
