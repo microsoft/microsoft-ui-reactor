@@ -523,7 +523,7 @@ internal static class NavigationCoverageFixtures
         public override async Task RunAsync()
         {
             var completedEvents = new List<NavigationDiagnosticEvent>();
-            void handler(NavigationDiagnosticEvent e) => completedEvents.Add(e);
+            void handler(object? sender, NavigationDiagnosticEvent e) => completedEvents.Add(e);
             NavigationDiagnostics.NavigationCompleted += handler;
 
             try

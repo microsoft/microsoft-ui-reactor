@@ -141,13 +141,13 @@ class AppShell : Component
         // Subscribe to navigation diagnostics for the log panel
         UseEffect(() =>
         {
-            void onCompleted(NavigationDiagnosticEvent e) =>
+            void onCompleted(object? sender, NavigationDiagnosticEvent e) =>
                 updateDiagLog(log => [.. log.TakeLast(19), $"[{DateTime.Now:HH:mm:ss}] {e.Mode}: {e.From} -> {e.To}"]);
-            void onCancelled(NavigationDiagnosticEvent e) =>
+            void onCancelled(object? sender, NavigationDiagnosticEvent e) =>
                 updateDiagLog(log => [.. log.TakeLast(19), $"[{DateTime.Now:HH:mm:ss}] BLOCKED: {e.Mode} {e.From} -> {e.To} ({e.Reason})"]);
-            void onCacheHit(CacheDiagnosticEvent e) =>
+            void onCacheHit(object? sender, CacheDiagnosticEvent e) =>
                 updateDiagLog(log => [.. log.TakeLast(19), $"[{DateTime.Now:HH:mm:ss}] Cache HIT: {e.Route}"]);
-            void onCacheMiss(CacheDiagnosticEvent e) =>
+            void onCacheMiss(object? sender, CacheDiagnosticEvent e) =>
                 updateDiagLog(log => [.. log.TakeLast(19), $"[{DateTime.Now:HH:mm:ss}] Cache MISS: {e.Route}"]);
 
             NavigationDiagnostics.NavigationCompleted += onCompleted;
