@@ -57,7 +57,7 @@ class StockGridApp : Component
             perfRef.Current = new PerfTracker();
             var perf = perfRef.Current;
             var pending = benchmarkUpdatePending;
-            ReactorApp.ActiveHost!.OnRenderComplete = (treeMs, reconcileMs, effectsMs) =>
+            ReactorApp.PrimaryWindow!.Host.OnRenderComplete = (treeMs, reconcileMs, effectsMs) =>
             {
                 if (pending.Current)
                 {

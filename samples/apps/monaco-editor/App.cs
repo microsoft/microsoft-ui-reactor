@@ -267,7 +267,7 @@ class EditorApp : Component
 
     static void InitPicker(object picker)
     {
-        var window = ReactorApp.ActiveHost?.Window;
+        var window = ReactorApp.PrimaryWindow?.Host.Window;
         if (window is null) return;
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
         WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);

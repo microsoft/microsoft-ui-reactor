@@ -27,6 +27,9 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
+    <!-- Pin the transitive Nerdbank.MessagePack (via Reactor.Cli → GitHub.Copilot.SDK)
+         to a version that includes the GHSA-2cwq-pwfr-wcw3 / CVE-2026-44375 fix. -->
+    <PackageReference Include="Nerdbank.MessagePack" Version="1.1.62" />
   </ItemGroup>
 
   <ItemGroup>

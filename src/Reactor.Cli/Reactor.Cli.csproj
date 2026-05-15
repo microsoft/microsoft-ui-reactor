@@ -37,6 +37,9 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
     <PackageReference Include="System.Drawing.Common" Version="9.0.4" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
+    <!-- Pin the transitive Nerdbank.MessagePack (via GitHub.Copilot.SDK → StreamJsonRpc)
+         to a version that includes the GHSA-2cwq-pwfr-wcw3 / CVE-2026-44375 fix. -->
+    <PackageReference Include="Nerdbank.MessagePack" Version="1.1.62" />
   </ItemGroup>
 
   <ItemGroup>
