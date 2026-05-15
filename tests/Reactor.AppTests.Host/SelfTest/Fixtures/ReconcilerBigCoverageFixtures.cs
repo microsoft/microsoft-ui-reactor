@@ -128,16 +128,16 @@ internal static class ReconcilerBigCoverageFixtures
                 var (phase, set) = ctx.UseState(0);
                 Element cb = phase == 0
                     ? CheckBox(false, label: "wire-cb")
-                    : CheckBox(false, onChanged: v => cbHits++, label: "wire-cb");
+                    : CheckBox(false, onIsCheckedChanged: v => cbHits++, label: "wire-cb");
                 Element rb = phase == 0
                     ? RadioButton("wire-rb", isChecked: false)
-                    : RadioButton("wire-rb", isChecked: false, onChecked: v => rbHits++);
+                    : RadioButton("wire-rb", isChecked: false, onIsCheckedChanged: v => rbHits++);
                 Element sl = phase == 0
                     ? Slider(20, 0, 100)
-                    : Slider(20, 0, 100, onChanged: v => sliderHits++);
+                    : Slider(20, 0, 100, onValueChanged: v => sliderHits++);
                 Element ts = phase == 0
                     ? ToggleSwitch(false, header: "wire-ts")
-                    : ToggleSwitch(false, onChanged: v => tsHits++, header: "wire-ts");
+                    : ToggleSwitch(false, onIsOnChanged: v => tsHits++, header: "wire-ts");
                 Element nb = phase == 0
                     ? NumberBox(5, header: "wire-nb")
                     : NumberBox(5, onValueChanged: v => nbHits++, header: "wire-nb");
@@ -343,7 +343,7 @@ internal static class ReconcilerBigCoverageFixtures
                     Button("NVPhase", () => set((phase + 1) % 3)),
                     new NavigationViewElement([NavItem("Home", icon: "Home")], content)
                     {
-                        OnSelectionChanged = _ => { },
+                        OnSelectedTagChanged = _ => { },
                         OnBackRequested = () => { },
                         IsPaneOpen = phase != 0,
                         IsBackEnabled = phase == 1,
@@ -1168,12 +1168,12 @@ internal static class ReconcilerBigCoverageFixtures
 
             var host = H.CreateHost();
             host.Mount(ctx => VStack(
-                CheckBox(false, onChanged: v => cb1Hits++, label: "fire-cb"),
+                CheckBox(false, onIsCheckedChanged: v => cb1Hits++, label: "fire-cb"),
                 new CheckBoxElement(false, Label: "fire-tri")
                     { IsThreeState = true, OnCheckedStateChanged = _ => cb3Hits++ },
-                RadioButton("fire-rb", isChecked: false, onChecked: _ => rbHits++),
-                Slider(20, 0, 100, onChanged: _ => sliderHits++),
-                ToggleSwitch(false, onChanged: _ => tsHits++, header: "fire-ts"),
+                RadioButton("fire-rb", isChecked: false, onIsCheckedChanged: _ => rbHits++),
+                Slider(20, 0, 100, onValueChanged: _ => sliderHits++),
+                ToggleSwitch(false, onIsOnChanged: _ => tsHits++, header: "fire-ts"),
                 NumberBox(5, onValueChanged: _ => nbHits++, header: "fire-nb")
             ));
 
@@ -1210,7 +1210,7 @@ internal static class ReconcilerBigCoverageFixtures
     // ════════════════════════════════════════════════════════════════════
     //  25i. Many controls receive handlers on second render via a state
     //       flip. Exercises Update.cs handler-wiring blocks for a wider
-    //       set of controls (TabView OnSelectionChanged, Pivot, ListView,
+    //       set of controls (TabView OnSelectedIndexChanged, Pivot, ListView,
     //       NumberBox, SearchBox, AutoSuggestBox, ComboBox, etc).
     // ════════════════════════════════════════════════════════════════════
     internal class ManyControlsHandlerWiring(Harness h) : SelfTestFixtureBase(h)
@@ -1225,7 +1225,7 @@ internal static class ReconcilerBigCoverageFixtures
                     ? new TabViewElement([Tab("T1", TextBlock("t1"))])
                     : new TabViewElement([Tab("T1", TextBlock("t1")), Tab("T2", TextBlock("t2"))])
                       {
-                          OnSelectionChanged = _ => { },
+                          OnSelectedIndexChanged = _ => { },
                           OnTabCloseRequested = _ => { },
                           OnAddTabButtonClick = () => { },
                           IsAddTabButtonVisible = true,
@@ -1234,7 +1234,7 @@ internal static class ReconcilerBigCoverageFixtures
                     ? new PivotElement([new PivotItemData("P1", TextBlock("p1"))])
                     : new PivotElement([new PivotItemData("P1", TextBlock("p1")),
                                          new PivotItemData("P2", TextBlock("p2"))])
-                      { OnSelectionChanged = _ => { } };
+                      { OnSelectedIndexChanged = _ => { } };
                 Element bb = phase == 0
                     ? new BreadcrumbBarElement(
                         [new BreadcrumbBarItemData("crumb1")])
@@ -1374,11 +1374,11 @@ internal static class ReconcilerBigCoverageFixtures
                 Element cb = phase == 0
                     ? ComboBox(["x", "y"], selectedIndex: 0)
                     : new ComboBoxElement(["x", "y", "z"], 0)
-                      { OnSelectionChanged = _ => { } };
+                      { OnSelectedIndexChanged = _ => { } };
                 Element lv = phase == 0
                     ? ListView(TextBlock("li-1"), TextBlock("li-2"))
                     : new ListViewElement([TextBlock("li-1"), TextBlock("li-2"), TextBlock("li-3")])
-                      { OnItemClick = _ => { }, OnSelectionChanged = _ => { },
+                      { OnItemClick = _ => { }, OnSelectedIndexChanged = _ => { },
                         SelectionMode = ListViewSelectionMode.Single };
                 return VStack(
                     Button("CollWire", () => set(1)),

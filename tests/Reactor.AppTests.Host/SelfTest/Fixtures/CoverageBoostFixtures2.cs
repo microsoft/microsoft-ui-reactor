@@ -496,7 +496,7 @@ internal static class CoverageBoostFixtures2
                         TextField("text1", _ => { }),
                         ToggleSwitch(true, _ => { }, header: "Toggle1"),
                         CheckBox(true, _ => { }, label: "Check1"),
-                        Slider(50, onChanged: _ => { }),
+                        Slider(50, onValueChanged: _ => { }),
                         NumberBox(42, onValueChanged: _ => { }),
                         Button("PoolCycle", () => set(1))
                     ),
@@ -509,7 +509,7 @@ internal static class CoverageBoostFixtures2
                         TextField("text2", _ => { }),
                         ToggleSwitch(false, _ => { }),
                         CheckBox(false, _ => { }, label: "Check2"),
-                        Slider(75, onChanged: _ => { }),
+                        Slider(75, onValueChanged: _ => { }),
                         NumberBox(99, onValueChanged: _ => { }),
                         TextBlock("PoolInteractive_Restored")
                     ),

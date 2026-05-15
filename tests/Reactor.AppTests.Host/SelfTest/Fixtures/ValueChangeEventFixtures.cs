@@ -27,7 +27,7 @@ internal static class ValueChangeEventFixtures
 
             var host = H.CreateHost();
             host.Mount(ctx => VStack(
-                CheckBox(false, onChanged: v => { count++; lastValue = v; }, label: "chkEvt")
+                CheckBox(false, onIsCheckedChanged: v => { count++; lastValue = v; }, label: "chkEvt")
                     .Set(c => c.Name = "chkEvt")
             ));
             await Harness.Render();
@@ -54,7 +54,7 @@ internal static class ValueChangeEventFixtures
             var host = H.CreateHost();
             host.Mount(ctx => VStack(
                 RadioButton("rbEvt", isChecked: false,
-                    onChecked: v => { count++; lastValue = v; })
+                    onIsCheckedChanged: v => { count++; lastValue = v; })
                     .Set(r => r.Name = "rbEvt")
             ));
             await Harness.Render();
@@ -80,7 +80,7 @@ internal static class ValueChangeEventFixtures
 
             var host = H.CreateHost();
             host.Mount(ctx => VStack(
-                ToggleSwitch(false, onChanged: v => { count++; lastValue = v; },
+                ToggleSwitch(false, onIsOnChanged: v => { count++; lastValue = v; },
                     header: "tsEvtHdr")
                     .Set(t => t.Name = "tsEvt")
             ));
@@ -107,7 +107,7 @@ internal static class ValueChangeEventFixtures
 
             var host = H.CreateHost();
             host.Mount(ctx => VStack(
-                Slider(10, 0, 100, onChanged: v => { count++; lastValue = v; })
+                Slider(10, 0, 100, onValueChanged: v => { count++; lastValue = v; })
                     .Set(s => s.Name = "slEvt")
             ));
             await Harness.Render();

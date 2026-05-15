@@ -273,7 +273,7 @@ internal static class ControlUpdateFixtures2
                         phase == 0 ? "ExpanderHdr1" : "ExpanderHdr2",
                         phase == 0 ? TextBlock("ExpContent1") : VStack(TextBlock("ExpContent2a"), TextBlock("ExpContent2b")),
                         isExpanded: true,
-                        onExpandedChanged: _ => { })
+                        onIsExpandedChanged: _ => { })
                 );
             });
 
