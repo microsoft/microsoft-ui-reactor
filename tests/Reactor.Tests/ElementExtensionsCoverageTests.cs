@@ -295,7 +295,7 @@ public class ElementExtensionsCoverageTests
     [Fact]
     public void Slider_Sugar()
     {
-        var el = Slider(0, onChanged: _ => { }).StepFrequency(0.5).Header("Vol");
+        var el = Slider(0, onValueChanged: _ => { }).StepFrequency(0.5).Header("Vol");
         Assert.Equal(0.5, el.StepFrequency);
         Assert.Equal("Vol", el.Header);
     }

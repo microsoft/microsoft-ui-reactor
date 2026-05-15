@@ -24,11 +24,11 @@ public class ThreeStateCheckBoxTests
     }
 
     [Fact]
-    public void CheckBox_TwoState_OnChanged_Fires()
+    public void CheckBox_TwoState_OnIsCheckedChanged_Fires()
     {
         bool? result = null;
         var el = CheckBox(false, v => result = v);
-        el.OnChanged!.Invoke(true);
+        el.OnIsCheckedChanged!.Invoke(true);
         Assert.True(result);
     }
 

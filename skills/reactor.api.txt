@@ -15,7 +15,7 @@ AnnotatedScrollBar() → AnnotatedScrollBarElement
 AppBarButton(Command command) → AppBarButtonData
 AppBarButton(string label, Action onClick = null, string icon = null) → AppBarButtonData
 AppBarSeparator() → AppBarSeparatorData
-AppBarToggleButton(string label, bool isChecked = false, Action<bool> onToggled = null, string icon = null) → AppBarToggleButtonData
+AppBarToggleButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string icon = null) → AppBarToggleButtonData
 AutoColumns<T>(TypeRegistry registry = null, Func<FieldDescriptor, FieldDescriptor> overrides = null) → IReadOnlyList<FieldDescriptor>
 AutoSuggestBox(string text, Action<string> onTextChanged = null, Action<string> onQuerySubmitted = null) → AutoSuggestBoxElement
 BitmapIcon(Uri source, bool showAsMonochrome = true) → BitmapIconData
@@ -29,11 +29,11 @@ CalendarDatePicker(DateTimeOffset? date = null, Action<DateTimeOffset?> onDateCh
 CalendarView() → CalendarViewElement
 Canvas(Element[] children) → CanvasElement
 Caption(string content) → TextBlockElement
-CheckBox(bool isChecked, Action<bool> onChanged = null, string label = null) → CheckBoxElement
+CheckBox(bool isChecked, Action<bool> onIsCheckedChanged = null, string label = null) → CheckBoxElement
 ColorPicker(Color color, Action<Color> onColorChanged = null) → ColorPickerElement
 Column<T>(string name, Func<T, object> accessor, bool editable = false, string displayName = null, string format = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
-ComboBox(Element[] itemElements, int selectedIndex, Action<int> onSelectionChanged) → ComboBoxElement
-ComboBox(string[] items, int selectedIndex = -1, Action<int> onSelectionChanged = null) → ComboBoxElement
+ComboBox(Element[] itemElements, int selectedIndex, Action<int> onSelectedIndexChanged) → ComboBoxElement
+ComboBox(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChanged = null) → ComboBoxElement
 CommandBar(AppBarItemBase[] primaryCommands = null, AppBarItemBase[] secondaryCommands = null) → CommandBarElement
 CommandBarFlyout(Element target, AppBarItemBase[] primaryCommands = null, AppBarItemBase[] secondaryCommands = null) → CommandBarFlyoutElement
 CommandHost(Command[] commands, Element child) → CommandHostElement
@@ -50,7 +50,7 @@ Ellipse() → EllipseElement
 Empty() → Element
 ErrorBoundary(Element child, Element fallback) → ErrorBoundaryElement
 ErrorBoundary(Element child, Func<Exception, Element> fallback) → ErrorBoundaryElement
-Expander(string header, Element content, bool isExpanded = false, Action<bool> onExpandedChanged = null) → ExpanderElement
+Expander(string header, Element content, bool isExpanded = false, Action<bool> onIsExpandedChanged = null) → ExpanderElement
 Expr(Func<Element> render) → Element
 Flex(Element[] children) → FlexElement
 Flex(FlexDirection direction, Element[] children) → FlexElement
@@ -84,7 +84,7 @@ ItemsView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, E
 LazyHStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
 LazyVStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyVStackElement<T>
 Line(double x1, double y1, double x2, double y2) → LineElement
-ListBox(string[] items, int selectedIndex = -1, Action<int> onSelectionChanged = null) → ListBoxElement
+ListBox(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChanged = null) → ListBoxElement
 ListView(Element[] items) → ListViewElement
 ListView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedListViewElement<T>
 LocaleProvider(string locale, Element child, IStringResourceProvider resourceProvider = null, string defaultLocale = "en-US", bool pseudoLocalize = false) → Element
@@ -114,7 +114,7 @@ PasswordBox(string password, Action<string> onPasswordChanged = null, string pla
 Path() → PathElement
 PathIcon(string data) → PathIconData
 PersonPicture() → PersonPictureElement
-PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int> onSelectedIndexChanged = null) → PipsPagerElement
+PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int> onSelectedPageIndexChanged = null) → PipsPagerElement
 Pivot(PivotItemData[] items) → PivotElement
 PivotItem(string header, Element content) → PivotItemData
 Popup(Element child, bool isOpen = false, Action onClosed = null) → PopupElement
@@ -123,8 +123,8 @@ ProgressIndeterminate() → ProgressElement
 ProgressRing() → ProgressRingElement
 ProgressRing(double value) → ProgressRingElement
 PropertyGrid(object target, TypeRegistry registry, Action<object> onRootChanged = null) → Element
-RadioButton(string label, bool isChecked = false, Action<bool> onChecked = null, string groupName = null) → RadioButtonElement
-RadioButtons(string[] items, int selectedIndex = -1, Action<int> onSelectionChanged = null) → RadioButtonsElement
+RadioButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string groupName = null) → RadioButtonElement
+RadioButtons(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChanged = null) → RadioButtonsElement
 RadioMenuItem(string text, string groupName, bool isChecked = false, Action onClick = null, string icon = null) → RadioMenuFlyoutItemData
 RatingControl(double value = 0, Action<double> onValueChanged = null) → RatingControlElement
 Rectangle() → RectangleElement
@@ -138,10 +138,10 @@ RichText(RichTextParagraph[] paragraphs) → RichTextBlockElement
 RichText(string text) → RichTextBlockElement
 Run(string text) → RichTextRun
 ScrollView(Element child) → ScrollViewElement
-SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int> onSelectionChanged = null) → SelectorBarElement
+SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int> onSelectedIndexChanged = null) → SelectorBarElement
 SelectorBarItem(string text, string icon = null) → SelectorBarItemData
 SemanticZoom(Element zoomedInView, Element zoomedOutView) → SemanticZoomElement
-Slider(double value, double min = 0, double max = 100, Action<double> onChanged = null) → SliderElement
+Slider(double value, double min = 0, double max = 100, Action<double> onValueChanged = null) → SliderElement
 SplitButton(Command command, Element flyout = null) → SplitButtonElement
 SplitButton(string label, Action onClick = null, Element flyout = null) → SplitButtonElement
 SplitView(Element pane = null, Element content = null) → SplitViewElement
@@ -160,11 +160,11 @@ ThreeStateCheckBox(bool? checkedState, Action<bool?> onCheckedStateChanged = nul
 TimePicker(TimeSpan time, Action<TimeSpan> onTimeChanged = null) → TimePickerElement
 TitleBar(string title) → TitleBarElement
 ToggleButton(Command command, bool isChecked = false) → ToggleButtonElement
-ToggleButton(string label, bool isChecked = false, Action<bool> onToggled = null) → ToggleButtonElement
-ToggleMenuItem(string text, bool isChecked = false, Action<bool> onToggled = null, string icon = null) → ToggleMenuFlyoutItemData
+ToggleButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null) → ToggleButtonElement
+ToggleMenuItem(string text, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string icon = null) → ToggleMenuFlyoutItemData
 ToggleSplitButton(Command command, bool isChecked = false, Element flyout = null) → ToggleSplitButtonElement
 ToggleSplitButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null, Element flyout = null) → ToggleSplitButtonElement
-ToggleSwitch(bool isOn, Action<bool> onChanged = null, string onContent = null, string offContent = null, string header = null) → ToggleSwitchElement
+ToggleSwitch(bool isOn, Action<bool> onIsOnChanged = null, string onContent = null, string offContent = null, string header = null) → ToggleSwitchElement
 TreeNode(string content, TreeViewNodeData[] children) → TreeViewNodeData
 TreeView(TreeViewNodeData[] nodes) → TreeViewElement
 UniformGrid(Orientation orientation, Element[] items) → GridElement

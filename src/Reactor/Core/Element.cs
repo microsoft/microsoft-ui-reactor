@@ -1595,7 +1595,7 @@ public record MenuFlyoutSubItemData(string Text, MenuFlyoutItemBase[] Items, str
 {
     public IconData? IconElement { get; init; }
 }
-public record ToggleMenuFlyoutItemData(string Text, bool IsChecked = false, Action<bool>? OnToggled = null, string? Icon = null) : MenuFlyoutItemBase
+public record ToggleMenuFlyoutItemData(string Text, bool IsChecked = false, Action<bool>? OnIsCheckedChanged = null, string? Icon = null) : MenuFlyoutItemBase
 {
     public IconData? IconElement { get; init; }
 }
@@ -1624,7 +1624,7 @@ public record AppBarButtonData(string Label, Action? OnClick = null, string? Ico
     public string? AccessKey { get; init; }
     public string? Description { get; init; }
 }
-public record AppBarToggleButtonData(string Label, bool IsChecked = false, Action<bool>? OnToggled = null, string? Icon = null) : AppBarItemBase
+public record AppBarToggleButtonData(string Label, bool IsChecked = false, Action<bool>? OnIsCheckedChanged = null, string? Icon = null) : AppBarItemBase
 {
     public IconData? IconElement { get; init; }
 }
@@ -1759,10 +1759,10 @@ public record RepeatButtonElement(string Label, Action? OnClick = null) : Elemen
     internal override bool HasCallbacks => OnClick is not null;
 }
 
-public record ToggleButtonElement(string Label, bool IsChecked = false, Action<bool>? OnToggled = null) : Element
+public record ToggleButtonElement(string Label, bool IsChecked = false, Action<bool>? OnIsCheckedChanged = null) : Element
 {
     internal Action<WinPrim.ToggleButton>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnToggled is not null;
+    internal override bool HasCallbacks => OnIsCheckedChanged is not null;
 }
 
 public record DropDownButtonElement(string Label, Element? Flyout = null) : Element
@@ -1847,7 +1847,7 @@ public record AutoSuggestBoxElement(
 
 public record CheckBoxElement(
     bool IsChecked,
-    Action<bool>? OnChanged = null,
+    Action<bool>? OnIsCheckedChanged = null,
     string? Label = null
 ) : Element
 {
@@ -1855,35 +1855,35 @@ public record CheckBoxElement(
     public bool? CheckedState { get; init; }
     public Action<bool?>? OnCheckedStateChanged { get; init; }
     internal Action<WinUI.CheckBox>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnChanged is not null || OnCheckedStateChanged is not null;
+    internal override bool HasCallbacks => OnIsCheckedChanged is not null || OnCheckedStateChanged is not null;
 }
 
 public record RadioButtonElement(
     string Label,
     bool IsChecked = false,
-    Action<bool>? OnChecked = null,
+    Action<bool>? OnIsCheckedChanged = null,
     string? GroupName = null
 ) : Element
 {
     internal Action<WinUI.RadioButton>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnChecked is not null;
+    internal override bool HasCallbacks => OnIsCheckedChanged is not null;
 }
 
 public record RadioButtonsElement(
     string[] Items,
     int SelectedIndex = -1,
-    Action<int>? OnSelectionChanged = null
+    Action<int>? OnSelectedIndexChanged = null
 ) : Element
 {
     public string? Header { get; init; }
     internal Action<WinUI.RadioButtons>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectionChanged is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
 }
 
 public record ComboBoxElement(
     string[] Items,
     int SelectedIndex = -1,
-    Action<int>? OnSelectionChanged = null
+    Action<int>? OnSelectedIndexChanged = null
 ) : Element
 {
     public string? PlaceholderText { get; init; }
@@ -1891,32 +1891,32 @@ public record ComboBoxElement(
     public bool IsEditable { get; init; }
     public Element[]? ItemElements { get; init; }
     internal Action<WinUI.ComboBox>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectionChanged is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
 }
 
 public record SliderElement(
     double Value,
     double Min = 0,
     double Max = 100,
-    Action<double>? OnChanged = null
+    Action<double>? OnValueChanged = null
 ) : Element
 {
     public double StepFrequency { get; init; } = 1;
     public string? Header { get; init; }
     internal Action<WinUI.Slider>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnChanged is not null;
+    internal override bool HasCallbacks => OnValueChanged is not null;
 }
 
 public record ToggleSwitchElement(
     bool IsOn,
-    Action<bool>? OnChanged = null,
+    Action<bool>? OnIsOnChanged = null,
     string? OnContent = null,
     string? OffContent = null
 ) : Element
 {
     public string? Header { get; init; }
     internal Action<WinUI.ToggleSwitch>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnChanged is not null;
+    internal override bool HasCallbacks => OnIsOnChanged is not null;
 }
 
 public record RatingControlElement(
@@ -2133,12 +2133,12 @@ public record ExpanderElement(
     string Header,
     Element Content,
     bool IsExpanded = false,
-    Action<bool>? OnExpandedChanged = null
+    Action<bool>? OnIsExpandedChanged = null
 ) : Element
 {
     public ExpandDirection ExpandDirection { get; init; } = ExpandDirection.Down;
     internal Action<WinUI.Expander>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnExpandedChanged is not null;
+    internal override bool HasCallbacks => OnIsExpandedChanged is not null;
 }
 
 public record SplitViewElement(
@@ -2235,7 +2235,7 @@ public record NavigationViewElement(
 ) : Element
 {
     public string? SelectedTag { get; init; }
-    public Action<string?>? OnSelectionChanged { get; init; }
+    public Action<string?>? OnSelectedTagChanged { get; init; }
     public bool IsPaneOpen { get; init; } = true;
     public NavigationViewPaneDisplayMode PaneDisplayMode { get; init; } = NavigationViewPaneDisplayMode.Auto;
     public bool IsBackEnabled { get; init; }
@@ -2244,7 +2244,7 @@ public record NavigationViewElement(
     public bool IsSettingsVisible { get; init; } = true;
     public string? PaneTitle { get; init; }
     internal Action<WinUI.NavigationView>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectionChanged is not null || OnBackRequested is not null;
+    internal override bool HasCallbacks => OnSelectedTagChanged is not null || OnBackRequested is not null;
 }
 
 public record TitleBarElement(
@@ -2277,12 +2277,12 @@ public record TabViewElement(
 ) : Element
 {
     public int SelectedIndex { get; init; } = 0;
-    public Action<int>? OnSelectionChanged { get; init; }
+    public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<int>? OnTabCloseRequested { get; init; }
     public Action? OnAddTabButtonClick { get; init; }
     public bool IsAddTabButtonVisible { get; init; }
     internal Action<WinUI.TabView>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectionChanged is not null || OnTabCloseRequested is not null || OnAddTabButtonClick is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnTabCloseRequested is not null || OnAddTabButtonClick is not null;
 }
 
 public record BreadcrumbBarElement(
@@ -2299,10 +2299,10 @@ public record PivotElement(
 ) : Element
 {
     public int SelectedIndex { get; init; } = 0;
-    public Action<int>? OnSelectionChanged { get; init; }
+    public Action<int>? OnSelectedIndexChanged { get; init; }
     public string? Title { get; init; }
     internal Action<WinUI.Pivot>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectionChanged is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -2314,12 +2314,12 @@ public record ListViewElement(
 ) : Element
 {
     public int SelectedIndex { get; init; } = -1;
-    public Action<int>? OnSelectionChanged { get; init; }
+    public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<int>? OnItemClick { get; init; }
     public ListViewSelectionMode SelectionMode { get; init; } = ListViewSelectionMode.Single;
     public string? Header { get; init; }
     internal Action<WinUI.ListView>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectionChanged is not null || OnItemClick is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnItemClick is not null;
 }
 
 public record GridViewElement(
@@ -2327,12 +2327,12 @@ public record GridViewElement(
 ) : Element
 {
     public int SelectedIndex { get; init; } = -1;
-    public Action<int>? OnSelectionChanged { get; init; }
+    public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<int>? OnItemClick { get; init; }
     public ListViewSelectionMode SelectionMode { get; init; } = ListViewSelectionMode.Single;
     public string? Header { get; init; }
     internal Action<WinUI.GridView>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectionChanged is not null || OnItemClick is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnItemClick is not null;
 }
 
 public record TreeViewElement(
@@ -2354,9 +2354,9 @@ public record FlipViewElement(
 ) : Element
 {
     public int SelectedIndex { get; init; } = 0;
-    public Action<int>? OnSelectionChanged { get; init; }
+    public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.FlipView>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectionChanged is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -2529,7 +2529,7 @@ public record TemplatedListViewElement<T>(
 ) : TemplatedListElementBase
 {
     public int SelectedIndex { get; init; } = -1;
-    public Action<int>? OnSelectionChanged { get; init; }
+    public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<T>? OnItemClick { get; init; }
     public ListViewSelectionMode SelectionMode { get; init; } = ListViewSelectionMode.Single;
     public string? Header { get; init; }
@@ -2542,12 +2542,12 @@ public record TemplatedListViewElement<T>(
     public override string? GetHeader() => Header;
     public override bool GetIsItemClickEnabled() => OnItemClick is not null;
     public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
-    public override void InvokeSelectionChanged(int index) => OnSelectionChanged?.Invoke(index);
+    public override void InvokeSelectionChanged(int index) => OnSelectedIndexChanged?.Invoke(index);
     public override void InvokeItemClick(int index) =>
         OnItemClick?.Invoke(index >= 0 && index < Items.Count ? Items[index] : default!);
     public override void ApplyControlSetters(object control) =>
         Reconciler.ApplySetters(Setters, (WinUI.ListView)control);
-    internal override bool HasCallbacks => OnSelectionChanged is not null || OnItemClick is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnItemClick is not null;
     internal override bool HasSetters => Setters.Length > 0;
 }
 
@@ -2558,7 +2558,7 @@ public record TemplatedGridViewElement<T>(
 ) : TemplatedListElementBase
 {
     public int SelectedIndex { get; init; } = -1;
-    public Action<int>? OnSelectionChanged { get; init; }
+    public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<T>? OnItemClick { get; init; }
     public ListViewSelectionMode SelectionMode { get; init; } = ListViewSelectionMode.Single;
     public string? Header { get; init; }
@@ -2571,12 +2571,12 @@ public record TemplatedGridViewElement<T>(
     public override string? GetHeader() => Header;
     public override bool GetIsItemClickEnabled() => OnItemClick is not null;
     public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
-    public override void InvokeSelectionChanged(int index) => OnSelectionChanged?.Invoke(index);
+    public override void InvokeSelectionChanged(int index) => OnSelectedIndexChanged?.Invoke(index);
     public override void InvokeItemClick(int index) =>
         OnItemClick?.Invoke(index >= 0 && index < Items.Count ? Items[index] : default!);
     public override void ApplyControlSetters(object control) =>
         Reconciler.ApplySetters(Setters, (WinUI.GridView)control);
-    internal override bool HasCallbacks => OnSelectionChanged is not null || OnItemClick is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnItemClick is not null;
     internal override bool HasSetters => Setters.Length > 0;
 }
 
@@ -2587,7 +2587,7 @@ public record TemplatedFlipViewElement<T>(
 ) : TemplatedListElementBase
 {
     public int SelectedIndex { get; init; } = 0;
-    public Action<int>? OnSelectionChanged { get; init; }
+    public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.FlipView>[] Setters { get; init; } = [];
 
     public override TemplatedControlKind ControlKind => TemplatedControlKind.FlipView;
@@ -2597,11 +2597,11 @@ public record TemplatedFlipViewElement<T>(
     public override string? GetHeader() => null;
     public override bool GetIsItemClickEnabled() => false;
     public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
-    public override void InvokeSelectionChanged(int index) => OnSelectionChanged?.Invoke(index);
+    public override void InvokeSelectionChanged(int index) => OnSelectedIndexChanged?.Invoke(index);
     public override void InvokeItemClick(int index) { }
     public override void ApplyControlSetters(object control) =>
         Reconciler.ApplySetters(Setters, (WinUI.FlipView)control);
-    internal override bool HasCallbacks => OnSelectionChanged is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
     internal override bool HasSetters => Setters.Length > 0;
 }
 
@@ -2782,9 +2782,9 @@ public record SemanticZoomElement(Element ZoomedInView, Element ZoomedOutView) :
 public record ListBoxElement(string[] Items) : Element
 {
     public int SelectedIndex { get; init; } = -1;
-    public Action<int>? OnSelectionChanged { get; init; }
+    public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.ListBox>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectionChanged is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -2794,9 +2794,9 @@ public record ListBoxElement(string[] Items) : Element
 public record SelectorBarElement(SelectorBarItemData[] Items) : Element
 {
     public int SelectedIndex { get; init; } = 0;
-    public Action<int>? OnSelectionChanged { get; init; }
+    public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.SelectorBar>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectionChanged is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
 }
 
 public record SelectorBarItemData(string Text, string? Icon = null);
@@ -2804,9 +2804,9 @@ public record SelectorBarItemData(string Text, string? Icon = null);
 public record PipsPagerElement(int NumberOfPages) : Element
 {
     public int SelectedPageIndex { get; init; }
-    public Action<int>? OnSelectedIndexChanged { get; init; }
+    public Action<int>? OnSelectedPageIndexChanged { get; init; }
     internal Action<WinUI.PipsPager>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
+    internal override bool HasCallbacks => OnSelectedPageIndexChanged is not null;
 }
 
 public record AnnotatedScrollBarElement() : Element

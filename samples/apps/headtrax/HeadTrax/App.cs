@@ -48,10 +48,10 @@ internal class App : Component
         {
             Content = HStack(6,
                 ToggleButton("SQLite Direct", isChecked: mode == "sqlite",
-                    onToggled: on => { if (on) setMode("sqlite"); })
+                    onIsCheckedChanged: on => { if (on) setMode("sqlite"); })
                     .AutomationName("SQLite Direct data source"),
                 ToggleButton("GraphQL API", isChecked: mode == "graphql",
-                    onToggled: on => { if (on) setMode("graphql"); })
+                    onIsCheckedChanged: on => { if (on) setMode("graphql"); })
                     .AutomationName("GraphQL API data source")
             ),
 

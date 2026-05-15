@@ -51,7 +51,7 @@ class SampleReactorComponent : Component
                 .Margin(0, 0, 0, 16),
 
             // ── Slider ─────────────────────────────────────
-            Slider(sliderValue, onChanged: setSliderValue)
+            Slider(sliderValue, onValueChanged: setSliderValue)
                 .Width(300)
                 .Margin(0, 0, 0, 4),
 

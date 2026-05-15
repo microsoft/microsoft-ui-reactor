@@ -102,11 +102,11 @@ public class NavigationViewSyncTests
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  NavigationView.WithNavigation — OnSelectionChanged
+    //  NavigationView.WithNavigation — OnSelectedTagChanged
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void WithNavigation_OnSelectionChanged_Navigates_To_Route()
+    public void WithNavigation_OnSelectedTagChanged_Navigates_To_Route()
     {
         var stack = new NavigationStack<Route>(new Home());
         var nav = new NavigationHandle<Route>(stack);
@@ -114,14 +114,14 @@ public class NavigationViewSyncTests
         var el = NavigationView([NavItem("Home", tag: "home"), NavItem("Settings", tag: "settings")])
             .WithNavigation(nav, RouteToTag, TagToRoute);
 
-        el.OnSelectionChanged!("settings");
+        el.OnSelectedTagChanged!("settings");
 
         Assert.IsType<Settings>(nav.CurrentRoute);
         Assert.True(nav.CanGoBack);
     }
 
     [Fact]
-    public void WithNavigation_OnSelectionChanged_Ignores_Null_Tag()
+    public void WithNavigation_OnSelectedTagChanged_Ignores_Null_Tag()
     {
         var stack = new NavigationStack<Route>(new Home());
         var nav = new NavigationHandle<Route>(stack);
@@ -129,14 +129,14 @@ public class NavigationViewSyncTests
         var el = NavigationView([NavItem("Home", tag: "home")])
             .WithNavigation(nav, RouteToTag, TagToRoute);
 
-        el.OnSelectionChanged!(null);
+        el.OnSelectedTagChanged!(null);
 
         Assert.IsType<Home>(nav.CurrentRoute);
         Assert.False(nav.CanGoBack);
     }
 
     [Fact]
-    public void WithNavigation_OnSelectionChanged_Skips_Navigation_When_Route_Unchanged()
+    public void WithNavigation_OnSelectedTagChanged_Skips_Navigation_When_Route_Unchanged()
     {
         var stack = new NavigationStack<Route>(new Home());
         var nav = new NavigationHandle<Route>(stack);
@@ -148,7 +148,7 @@ public class NavigationViewSyncTests
             .WithNavigation(nav, RouteToTag, TagToRoute);
 
         // Selecting the already-active route should not trigger navigation
-        el.OnSelectionChanged!("home");
+        el.OnSelectedTagChanged!("home");
 
         Assert.Equal(0, navigatedCount);
         Assert.IsType<Home>(nav.CurrentRoute);

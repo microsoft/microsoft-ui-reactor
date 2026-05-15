@@ -109,8 +109,8 @@ public static partial class Factories
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
 
-    public static ToggleButtonElement ToggleButton(string label, bool isChecked = false, Action<bool>? onToggled = null) =>
-        new(label, isChecked, onToggled);
+    public static ToggleButtonElement ToggleButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null) =>
+        new(label, isChecked, onIsCheckedChanged);
 
     /// <summary>
     /// Creates a ToggleButton driven by a Command. The command fires on each toggle
@@ -163,29 +163,29 @@ public static partial class Factories
     public static AutoSuggestBoxElement AutoSuggestBox(string text, Action<string>? onTextChanged = null, Action<string>? onQuerySubmitted = null) =>
         new(text, onTextChanged, onQuerySubmitted);
 
-    public static CheckBoxElement CheckBox(bool isChecked, Action<bool>? onChanged = null, string? label = null) =>
-        new(isChecked, onChanged, label);
+    public static CheckBoxElement CheckBox(bool isChecked, Action<bool>? onIsCheckedChanged = null, string? label = null) =>
+        new(isChecked, onIsCheckedChanged, label);
 
     public static CheckBoxElement ThreeStateCheckBox(bool? checkedState, Action<bool?>? onCheckedStateChanged = null, string? label = null) =>
         new(checkedState == true, Label: label) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
 
-    public static RadioButtonElement RadioButton(string label, bool isChecked = false, Action<bool>? onChecked = null, string? groupName = null) =>
-        new(label, isChecked, onChecked, groupName);
+    public static RadioButtonElement RadioButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, string? groupName = null) =>
+        new(label, isChecked, onIsCheckedChanged, groupName);
 
-    public static RadioButtonsElement RadioButtons(string[] items, int selectedIndex = -1, Action<int>? onSelectionChanged = null) =>
-        new(items, selectedIndex, onSelectionChanged);
+    public static RadioButtonsElement RadioButtons(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
+        new(items, selectedIndex, onSelectedIndexChanged);
 
-    public static ComboBoxElement ComboBox(string[] items, int selectedIndex = -1, Action<int>? onSelectionChanged = null) =>
-        new(items, selectedIndex, onSelectionChanged);
+    public static ComboBoxElement ComboBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
+        new(items, selectedIndex, onSelectedIndexChanged);
 
-    public static ComboBoxElement ComboBox(Element[] itemElements, int selectedIndex, Action<int>? onSelectionChanged) =>
-        new([], selectedIndex, onSelectionChanged) { ItemElements = itemElements };
+    public static ComboBoxElement ComboBox(Element[] itemElements, int selectedIndex, Action<int>? onSelectedIndexChanged) =>
+        new([], selectedIndex, onSelectedIndexChanged) { ItemElements = itemElements };
 
-    public static SliderElement Slider(double value, double min = 0, double max = 100, Action<double>? onChanged = null) =>
-        new(value, min, max, onChanged);
+    public static SliderElement Slider(double value, double min = 0, double max = 100, Action<double>? onValueChanged = null) =>
+        new(value, min, max, onValueChanged);
 
-    public static ToggleSwitchElement ToggleSwitch(bool isOn, Action<bool>? onChanged = null, string? onContent = null, string? offContent = null, string? header = null) =>
-        new(isOn, onChanged, onContent, offContent) { Header = header };
+    public static ToggleSwitchElement ToggleSwitch(bool isOn, Action<bool>? onIsOnChanged = null, string? onContent = null, string? offContent = null, string? header = null) =>
+        new(isOn, onIsOnChanged, onContent, offContent) { Header = header };
 
     public static RatingControlElement RatingControl(double value = 0, Action<double>? onValueChanged = null) =>
         new(value, onValueChanged);
@@ -243,8 +243,8 @@ public static partial class Factories
 
     public static BorderElement Border(Element? child) => new(child!);
 
-    public static ExpanderElement Expander(string header, Element content, bool isExpanded = false, Action<bool>? onExpandedChanged = null) =>
-        new(header, content, isExpanded, onExpandedChanged);
+    public static ExpanderElement Expander(string header, Element content, bool isExpanded = false, Action<bool>? onIsExpandedChanged = null) =>
+        new(header, content, isExpanded, onIsExpandedChanged);
 
     public static SplitViewElement SplitView(Element? pane = null, Element? content = null) =>
         new(pane, content);
@@ -493,7 +493,7 @@ public static partial class Factories
             Description = command.Description,
         };
 
-    public static ToggleMenuFlyoutItemData ToggleMenuItem(string text, bool isChecked = false, Action<bool>? onToggled = null, string? icon = null) => new(text, isChecked, onToggled, icon);
+    public static ToggleMenuFlyoutItemData ToggleMenuItem(string text, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, string? icon = null) => new(text, isChecked, onIsCheckedChanged, icon);
 
     public static RadioMenuFlyoutItemData RadioMenuItem(string text, string groupName, bool isChecked = false, Action? onClick = null, string? icon = null) => new(text, groupName, isChecked, onClick, icon);
 
@@ -522,8 +522,8 @@ public static partial class Factories
             Description = command.Description,
         };
 
-    public static AppBarToggleButtonData AppBarToggleButton(string label, bool isChecked = false, Action<bool>? onToggled = null, string? icon = null) =>
-        new(label, isChecked, onToggled, icon);
+    public static AppBarToggleButtonData AppBarToggleButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, string? icon = null) =>
+        new(label, isChecked, onIsCheckedChanged, icon);
 
     public static AppBarSeparatorData AppBarSeparator() => new();
 
@@ -770,18 +770,18 @@ public static partial class Factories
     public static SemanticZoomElement SemanticZoom(Element zoomedInView, Element zoomedOutView) =>
         new(zoomedInView, zoomedOutView);
 
-    public static ListBoxElement ListBox(string[] items, int selectedIndex = -1, Action<int>? onSelectionChanged = null) =>
-        new(items) { SelectedIndex = selectedIndex, OnSelectionChanged = onSelectionChanged };
+    public static ListBoxElement ListBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
+        new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
 
     // ── Additional navigation ───────────────────────────────────────
 
-    public static SelectorBarElement SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int>? onSelectionChanged = null) =>
-        new(items) { SelectedIndex = selectedIndex, OnSelectionChanged = onSelectionChanged };
+    public static SelectorBarElement SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int>? onSelectedIndexChanged = null) =>
+        new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
 
     public static SelectorBarItemData SelectorBarItem(string text, string? icon = null) => new(text, icon);
 
-    public static PipsPagerElement PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int>? onSelectedIndexChanged = null) =>
-        new(numberOfPages) { SelectedPageIndex = selectedPageIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    public static PipsPagerElement PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int>? onSelectedPageIndexChanged = null) =>
+        new(numberOfPages) { SelectedPageIndex = selectedPageIndex, OnSelectedPageIndexChanged = onSelectedPageIndexChanged };
 
     public static AnnotatedScrollBarElement AnnotatedScrollBar() => new();
 

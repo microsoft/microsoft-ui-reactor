@@ -258,6 +258,6 @@ class TodoApp : Component
         // "Completed" → "Comp" in narrower windows.
         ToggleButton(label,
             isChecked: filter == active,
-            onToggled: _ => dispatch(new SetFilter(filter)))
+            onIsCheckedChanged: _ => dispatch(new SetFilter(filter)))
             .Flex(shrink: 0);
 }

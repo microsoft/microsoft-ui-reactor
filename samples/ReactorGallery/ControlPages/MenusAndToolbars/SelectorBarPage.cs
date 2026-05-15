@@ -39,7 +39,7 @@ class SelectorBarPage : Component
         SelectorBarItem(""Favorites"", icon: ""Favorite""),
     },
     selectedIndex: idx,
-    onSelectionChanged: i => setIdx(i))"),
+    onSelectedIndexChanged: i => setIdx(i))"),
 
                 SampleCard("SelectorBar without Icons",
                     SelectorBar(

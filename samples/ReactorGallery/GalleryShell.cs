@@ -153,7 +153,7 @@ class GalleryShell : Component
             {
                 SelectedTag = selectedTag,
                 IsPaneOpen = isPaneOpen,
-                OnSelectionChanged = tag =>
+                OnSelectedTagChanged = tag =>
                 {
                     setSearchQuery("");
                     if (tag != null)

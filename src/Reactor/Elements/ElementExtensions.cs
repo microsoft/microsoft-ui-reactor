@@ -776,13 +776,13 @@ public static class ElementExtensions
 
     /// <summary>
     /// Auto-syncs this NavigationView with a NavigationHandle: sets <c>SelectedTag</c>
-    /// from the current route, wires <c>OnSelectionChanged</c> to navigate,
+    /// from the current route, wires <c>OnSelectedTagChanged</c> to navigate,
     /// <c>OnBackRequested</c> to <c>GoBack</c>, and <c>IsBackEnabled</c> to <c>CanGoBack</c>.
     /// </summary>
     /// <param name="el">The NavigationView element to configure.</param>
     /// <param name="nav">The navigation handle obtained from <c>UseNavigation</c>.</param>
     /// <param name="routeToTag">Maps a route to its NavigationViewItem tag. Return null for routes without a corresponding menu item.</param>
-    /// <param name="tagToRoute">Maps a NavigationViewItem tag back to a route for <c>OnSelectionChanged</c>.</param>
+    /// <param name="tagToRoute">Maps a NavigationViewItem tag back to a route for <c>OnSelectedTagChanged</c>.</param>
     public static NavigationViewElement WithNavigation<TRoute>(
         this NavigationViewElement el,
         Navigation.NavigationHandle<TRoute> nav,
@@ -792,7 +792,7 @@ public static class ElementExtensions
     {
         SelectedTag = routeToTag(nav.CurrentRoute),
         IsBackEnabled = nav.CanGoBack,
-        OnSelectionChanged = tag =>
+        OnSelectedTagChanged = tag =>
         {
             if (tag is not null)
             {

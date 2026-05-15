@@ -44,12 +44,12 @@ public class CounterDemo : Component
                     .AutomationName("Increment")
             ).HAlign(HorizontalAlignment.Center),
 
-            Slider(step, min: 1, max: 10, onChanged: setStep)
+            Slider(step, min: 1, max: 10, onValueChanged: setStep)
                 .Margin(horizontal: 16, vertical: 8),
 
             TextBlock($"Step size: {(int)step}").HAlign(HorizontalAlignment.Center),
 
-            ToggleSwitch(auto, onChanged: setAuto,
+            ToggleSwitch(auto, onIsOnChanged: setAuto,
                 onContent: "Auto ON", offContent: "Auto OFF",
                 header: "Auto-increment")
                 .Margin(16, 8, 16, 16)

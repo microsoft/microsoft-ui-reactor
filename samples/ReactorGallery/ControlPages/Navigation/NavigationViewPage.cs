@@ -41,14 +41,14 @@ class NavigationViewPage : Component
                     with
                     {
                         SelectedTag = selectedTag,
-                        OnSelectionChanged = tag => { if (tag != null) setSelectedTag(tag); },
+                        OnSelectedTagChanged = tag => { if (tag != null) setSelectedTag(tag); },
                         PaneTitle = "Nav Demo",
                         IsSettingsVisible = false,
                     }).Height(300),
                     @"NavigationView(items, content: TextBlock(""Selected: ...""))
 with {
     SelectedTag = tag,
-    OnSelectionChanged = t => setTag(t),
+    OnSelectedTagChanged = t => setTag(t),
     PaneTitle = ""Nav Demo"",
 }",
                     options: OptionPanel(
@@ -62,7 +62,7 @@ with {
                     with
                     {
                         SelectedTag = selectedTag,
-                        OnSelectionChanged = tag => { if (tag != null) setSelectedTag(tag); },
+                        OnSelectedTagChanged = tag => { if (tag != null) setSelectedTag(tag); },
                         PaneDisplayMode = NavigationViewPaneDisplayMode.Top,
                         IsSettingsVisible = false,
                     }).Height(200),
