@@ -131,8 +131,8 @@ sealed class App : Component
             // straight to the list with a navigation shortcut.
             ScrollView(
                 VStack(4,
-                    filtered.Select((task, i) =>
-                        TaskRow(task, i, updateTasks, setStatusMsg).WithKey(task.Id)
+                    filtered.Select(task =>
+                        TaskRow(task, updateTasks, setStatusMsg).WithKey(task.Id)
                     ).ToArray()
                 ).Padding(16, 4, 16, 16)
             ).Landmark(AutomationLandmarkType.Main),
@@ -176,7 +176,6 @@ sealed class App : Component
     // ── Task row ────────────────────────────────────────────────────
     static Element TaskRow(
         TaskItem task,
-        int index,
         Action<Func<List<TaskItem>, List<TaskItem>>> updateTasks,
         Action<string> setStatusMsg)
     {
