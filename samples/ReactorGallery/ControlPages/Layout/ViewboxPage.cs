@@ -51,7 +51,32 @@ class ViewboxPage : Component
                                 .Size(60, 150).Background(Theme.SubtleFill).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft)
                         )
                     ),
-                    @"// Same content at different sizes:\nBorder(Viewbox(TextBlock(""ABC""))).Size(100, 100)\nBorder(Viewbox(TextBlock(""ABC""))).Size(150, 80)")
+                    @"// Same content at different sizes:\nBorder(Viewbox(TextBlock(""ABC""))).Size(100, 100)\nBorder(Viewbox(TextBlock(""ABC""))).Size(150, 80)"),
+
+                SampleCard("Stretch Modes",
+                    HStack(16,
+                        VStack(4,
+                            TextBlock("Uniform (default)").ApplyStyle("CaptionTextBlockStyle"),
+                            Border(Viewbox(TextBlock("ABC").Bold()).Stretch(Microsoft.UI.Xaml.Media.Stretch.Uniform))
+                                .Size(160, 80).Background(Theme.SubtleFill).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft)
+                        ),
+                        VStack(4,
+                            TextBlock("Fill").ApplyStyle("CaptionTextBlockStyle"),
+                            Border(Viewbox(TextBlock("ABC").Bold()).Stretch(Microsoft.UI.Xaml.Media.Stretch.Fill))
+                                .Size(160, 80).Background(Theme.SubtleFill).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft)
+                        ),
+                        VStack(4,
+                            TextBlock("UniformToFill").ApplyStyle("CaptionTextBlockStyle"),
+                            Border(Viewbox(TextBlock("ABC").Bold()).Stretch(Microsoft.UI.Xaml.Media.Stretch.UniformToFill))
+                                .Size(160, 80).Background(Theme.SubtleFill).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft)
+                        ),
+                        VStack(4,
+                            TextBlock("None").ApplyStyle("CaptionTextBlockStyle"),
+                            Border(Viewbox(TextBlock("ABC").Bold()).Stretch(Microsoft.UI.Xaml.Media.Stretch.None))
+                                .Size(160, 80).Background(Theme.SubtleFill).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft)
+                        )
+                    ),
+                    @"Viewbox(TextBlock(""ABC"")).Stretch(Stretch.Uniform)\nViewbox(TextBlock(""ABC"")).Stretch(Stretch.Fill)\nViewbox(TextBlock(""ABC"")).Stretch(Stretch.UniformToFill)\nViewbox(TextBlock(""ABC"")).Stretch(Stretch.None)")
             ).Margin(36, 24, 36, 36)
         );
     }

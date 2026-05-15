@@ -482,6 +482,8 @@ TreeViewElement.Set(Action<TreeView> configure) → TreeViewElement
 ValidationRuleElement.Evaluate(ValidationContext ctx) → void
 ValidationRuleElement.EvaluateAsync(ValidationContext ctx, CancellationToken cancellationToken = null) → Task
 ViewboxElement.Set(Action<Viewbox> configure) → ViewboxElement
+ViewboxElement.Stretch(Stretch stretch) → ViewboxElement
+ViewboxElement.StretchDirection(StretchDirection direction) → ViewboxElement
 WebView2Element.Set(Action<WebView2> configure) → WebView2Element
 WrapGridElement.Set(Action<VariableSizedWrapGrid> configure) → WrapGridElement
 

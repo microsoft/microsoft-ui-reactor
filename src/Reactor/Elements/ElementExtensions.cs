@@ -1007,6 +1007,12 @@ public static class ElementExtensions
     public static ViewboxElement Set(this ViewboxElement el, Action<WinUI.Viewbox> configure) =>
         el with { Setters = [.. el.Setters, configure] };
 
+    public static ViewboxElement Stretch(this ViewboxElement el, Stretch stretch) =>
+        el with { Stretch = stretch };
+
+    public static ViewboxElement StretchDirection(this ViewboxElement el, StretchDirection direction) =>
+        el with { StretchDirection = direction };
+
     public static CanvasElement Set(this CanvasElement el, Action<WinUI.Canvas> configure) =>
         el with { Setters = [.. el.Setters, configure] };
 

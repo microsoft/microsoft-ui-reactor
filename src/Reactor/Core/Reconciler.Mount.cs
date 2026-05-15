@@ -1074,6 +1074,8 @@ public sealed partial class Reconciler
     {
         var viewbox = _pool.TryRent(typeof(WinUI.Viewbox)) as WinUI.Viewbox ?? new WinUI.Viewbox();
         viewbox.Child = Mount(vb.Child, requestRerender) as UIElement;
+        if (vb.Stretch.HasValue) viewbox.Stretch = vb.Stretch.Value;
+        if (vb.StretchDirection.HasValue) viewbox.StretchDirection = vb.StretchDirection.Value;
         ApplySetters(vb.Setters, viewbox);
         return viewbox;
     }

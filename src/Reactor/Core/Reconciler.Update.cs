@@ -2325,6 +2325,10 @@ public sealed partial class Reconciler
             if (vb.Child is UIElement stale) Unmount(stale);
             vb.Child = Mount(n.Child, requestRerender) as UIElement;
         }
+        if (o.Stretch != n.Stretch)
+            vb.Stretch = n.Stretch ?? Microsoft.UI.Xaml.Media.Stretch.Uniform;
+        if (o.StretchDirection != n.StretchDirection)
+            vb.StretchDirection = n.StretchDirection ?? Microsoft.UI.Xaml.Controls.StretchDirection.Both;
         ApplySetters(n.Setters, vb);
         return null;
     }

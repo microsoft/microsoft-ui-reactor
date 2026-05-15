@@ -2157,7 +2157,8 @@ public record SplitViewElement(
 
 public record ViewboxElement(Element Child) : Element
 {
-    public string? Stretch { get; init; }
+    public Stretch? Stretch { get; init; }
+    public StretchDirection? StretchDirection { get; init; }
     internal Action<WinUI.Viewbox>[] Setters { get; init; } = [];
 }
 
