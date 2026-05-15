@@ -22,6 +22,7 @@ component.
 | Form with validation + submit | [`form-with-validation.cs`](form-with-validation.cs) | `UseValidationContext`, `FormField`, `Validate.*` |
 | Fetch data, show loading / error | [`async-fetch-list.cs`](async-fetch-list.cs) | `UseResource`, `AsyncValue<T>.Match` |
 | Themed card with 4px grid spacing | [`themed-card.cs`](themed-card.cs) | `Theme.*`, `Border`, `FlexColumn`, `.Padding`, `.CornerRadius` |
+| Absolute positioning with Canvas | [`canvas-positioning.cs`](canvas-positioning.cs) | `Canvas`, `.Canvas(left, top)`, `.CenterAt`, shapes |
 
 ## How to use a recipe
 

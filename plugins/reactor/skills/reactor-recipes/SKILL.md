@@ -18,6 +18,7 @@ The full recipe content is in `references/<name>.cs`. Read just the recipe(s) th
 | Form with validation + submit gating | `references/form-with-validation.cs` | `UseValidationContext`, `FormField`, `Validate.*`, `ShowWhen` |
 | Fetch data with loading / error / data states | `references/async-fetch-list.cs` | `UseResource`, `AsyncValue<T>.Match` |
 | Themed Win11 card surface | `references/themed-card.cs` | `Theme.*` tokens, `Border`, `FlexColumn`, `.Padding`, `.CornerRadius`, `.WithBorder` |
+| Absolute positioning with Canvas | `references/canvas-positioning.cs` | `Canvas`, `.Canvas(left, top)`, `.CenterAt`, shapes |
 
 See `references/index.md` for the full index.
 
