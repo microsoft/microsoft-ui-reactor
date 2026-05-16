@@ -457,11 +457,11 @@ existing init properties.
 
 ### 5.4 Date/time
 
-- [ ] `CalendarDatePicker`: `DateFormat`, `IsTodayHighlighted`,
+- [x] `CalendarDatePicker`: `DateFormat`, `IsTodayHighlighted`,
       `IsCalendarOpen`, `IsGroupLabelVisible` (spec §4.1).
-- [ ] `DatePicker`: `DayFormat`, `MonthFormat`, `YearFormat`,
+- [x] `DatePicker`: `DayFormat`, `MonthFormat`, `YearFormat`,
       `Orientation` (spec §4.1).
-- [ ] `CalendarView`: `MinDate`, `MaxDate`, `FirstDayOfWeek`,
+- [x] `CalendarView`: `MinDate`, `MaxDate`, `FirstDayOfWeek`,
       `NumberOfWeeksInView`, `DisplayMode` (spec §4.1; `SelectedDates*`
       handled in Phase 3.1).
 

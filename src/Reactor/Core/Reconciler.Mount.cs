@@ -868,6 +868,10 @@ public sealed partial class Reconciler
         if (cdp.Header is not null) cal.Header = cdp.Header;
         if (cdp.MinDate.HasValue) cal.MinDate = cdp.MinDate.Value;
         if (cdp.MaxDate.HasValue) cal.MaxDate = cdp.MaxDate.Value;
+        if (cdp.DateFormat is not null) cal.DateFormat = cdp.DateFormat;
+        cal.IsTodayHighlighted = cdp.IsTodayHighlighted;
+        cal.IsGroupLabelVisible = cdp.IsGroupLabelVisible;
+        if (cdp.IsCalendarOpen) cal.IsCalendarOpen = true;
         SetElementTag(cal, cdp);
         if (cdp.OnDateChanged is not null)
             cal.DateChanged += (s, _) =>
@@ -882,10 +886,20 @@ public sealed partial class Reconciler
 
     private WinUI.DatePicker MountDatePicker(DatePickerElement dp)
     {
-        var picker = new WinUI.DatePicker { Date = dp.Date, DayVisible = dp.DayVisible, MonthVisible = dp.MonthVisible, YearVisible = dp.YearVisible };
+        var picker = new WinUI.DatePicker
+        {
+            Date = dp.Date,
+            DayVisible = dp.DayVisible,
+            MonthVisible = dp.MonthVisible,
+            YearVisible = dp.YearVisible,
+            Orientation = dp.Orientation,
+        };
         if (dp.Header is not null) picker.Header = dp.Header;
         if (dp.MinYear.HasValue) picker.MinYear = dp.MinYear.Value;
         if (dp.MaxYear.HasValue) picker.MaxYear = dp.MaxYear.Value;
+        if (dp.DayFormat is not null) picker.DayFormat = dp.DayFormat;
+        if (dp.MonthFormat is not null) picker.MonthFormat = dp.MonthFormat;
+        if (dp.YearFormat is not null) picker.YearFormat = dp.YearFormat;
         SetElementTag(picker, dp);
         if (dp.OnDateChanged is not null)
             picker.DateChanged += (s, args) =>
@@ -3088,10 +3102,15 @@ public sealed partial class Reconciler
             SelectionMode = cv.SelectionMode,
             IsGroupLabelVisible = cv.IsGroupLabelVisible,
             IsOutOfScopeEnabled = cv.IsOutOfScopeEnabled,
+            NumberOfWeeksInView = cv.NumberOfWeeksInView,
+            DisplayMode = cv.DisplayMode,
         };
         if (cv.CalendarIdentifier is not null) calendarView.CalendarIdentifier = cv.CalendarIdentifier;
         if (cv.Language is not null && global::Windows.Globalization.Language.IsWellFormed(cv.Language))
             calendarView.Language = cv.Language;
+        if (cv.MinDate.HasValue) calendarView.MinDate = cv.MinDate.Value;
+        if (cv.MaxDate.HasValue) calendarView.MaxDate = cv.MaxDate.Value;
+        if (cv.FirstDayOfWeek.HasValue) calendarView.FirstDayOfWeek = cv.FirstDayOfWeek.Value;
 
         SetElementTag(calendarView, cv);
 

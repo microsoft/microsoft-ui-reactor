@@ -2067,6 +2067,14 @@ public record CalendarDatePickerElement(
     public string? Header { get; init; }
     public DateTimeOffset? MinDate { get; init; }
     public DateTimeOffset? MaxDate { get; init; }
+    /// <summary>Display format string for the picker's text (see WinUI <c>DateFormat</c> reference).</summary>
+    public string? DateFormat { get; init; }
+    /// <summary>Highlight today's date in the popup. Defaults to <c>true</c> (matches WinUI).</summary>
+    public bool IsTodayHighlighted { get; init; } = true;
+    /// <summary>Programmatically open or close the calendar popup.</summary>
+    public bool IsCalendarOpen { get; init; }
+    /// <summary>Show month/year group label headers in the popup. Defaults to <c>true</c>.</summary>
+    public bool IsGroupLabelVisible { get; init; } = true;
     internal Action<WinUI.CalendarDatePicker>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnDateChanged is not null;
 }
@@ -2082,6 +2090,14 @@ public record DatePickerElement(
     public bool DayVisible { get; init; } = true;
     public bool MonthVisible { get; init; } = true;
     public bool YearVisible { get; init; } = true;
+    /// <summary>Display format string for the day column. <c>null</c> uses the WinUI default.</summary>
+    public string? DayFormat { get; init; }
+    /// <summary>Display format string for the month column. <c>null</c> uses the WinUI default.</summary>
+    public string? MonthFormat { get; init; }
+    /// <summary>Display format string for the year column. <c>null</c> uses the WinUI default.</summary>
+    public string? YearFormat { get; init; }
+    /// <summary>Layout direction of the picker. Defaults to <c>Horizontal</c>.</summary>
+    public Orientation Orientation { get; init; } = Orientation.Horizontal;
     internal Action<WinUI.DatePicker>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnDateChanged is not null;
 }
@@ -3053,6 +3069,16 @@ public record CalendarViewElement() : Element
     public bool IsOutOfScopeEnabled { get; init; } = true;
     public string? CalendarIdentifier { get; init; }
     public string? Language { get; init; }
+    /// <summary>Earliest selectable date. <c>null</c> = WinUI default (~100 years back).</summary>
+    public DateTimeOffset? MinDate { get; init; }
+    /// <summary>Latest selectable date. <c>null</c> = WinUI default (~100 years ahead).</summary>
+    public DateTimeOffset? MaxDate { get; init; }
+    /// <summary>Day of the week that starts each row. <c>null</c> = locale default.</summary>
+    public global::Windows.Globalization.DayOfWeek? FirstDayOfWeek { get; init; }
+    /// <summary>How many week rows to display in month mode (2–8). Defaults to 6.</summary>
+    public int NumberOfWeeksInView { get; init; } = 6;
+    /// <summary>Initial display mode (Month / Year / Decade). Defaults to <c>Month</c>.</summary>
+    public CalendarViewDisplayMode DisplayMode { get; init; } = CalendarViewDisplayMode.Month;
 
     /// <summary>
     /// Initial selection. Bind for declarative selection on mount; subsequent

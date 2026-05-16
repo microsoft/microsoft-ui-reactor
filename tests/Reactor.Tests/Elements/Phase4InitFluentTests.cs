@@ -655,4 +655,99 @@ public class Phase4InitFluentTests
         Assert.Equal(10, el.MinValue);
         Assert.Equal(90, el.MaxValue);
     }
+
+    // ── 5.4 Date / time ──────────────────────────────────────────────
+
+    [Fact]
+    public void CalendarDatePicker_DateFormat_Sets()
+    {
+        var el = CalendarDatePicker().DateFormat("{day.integer}/{month.integer}/{year.full}");
+        Assert.Equal("{day.integer}/{month.integer}/{year.full}", el.DateFormat);
+    }
+
+    [Fact]
+    public void CalendarDatePicker_IsTodayHighlighted_Sets()
+    {
+        var el = CalendarDatePicker().IsTodayHighlighted(false);
+        Assert.False(el.IsTodayHighlighted);
+    }
+
+    [Fact]
+    public void CalendarDatePicker_IsCalendarOpen_Sets()
+    {
+        var el = CalendarDatePicker().IsCalendarOpen();
+        Assert.True(el.IsCalendarOpen);
+    }
+
+    [Fact]
+    public void CalendarDatePicker_IsGroupLabelVisible_Sets()
+    {
+        var el = CalendarDatePicker().IsGroupLabelVisible(false);
+        Assert.False(el.IsGroupLabelVisible);
+    }
+
+    [Fact]
+    public void DatePicker_DayFormat_Sets()
+    {
+        var el = DatePicker(DateTimeOffset.Now).DayFormat("{day.integer(2)}");
+        Assert.Equal("{day.integer(2)}", el.DayFormat);
+    }
+
+    [Fact]
+    public void DatePicker_MonthFormat_Sets()
+    {
+        var el = DatePicker(DateTimeOffset.Now).MonthFormat("{month.abbreviated(3)}");
+        Assert.Equal("{month.abbreviated(3)}", el.MonthFormat);
+    }
+
+    [Fact]
+    public void DatePicker_YearFormat_Sets()
+    {
+        var el = DatePicker(DateTimeOffset.Now).YearFormat("{year.full}");
+        Assert.Equal("{year.full}", el.YearFormat);
+    }
+
+    [Fact]
+    public void DatePicker_Orientation_Sets()
+    {
+        var el = DatePicker(DateTimeOffset.Now).Orientation(Microsoft.UI.Xaml.Controls.Orientation.Vertical);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.Orientation.Vertical, el.Orientation);
+    }
+
+    [Fact]
+    public void CalendarView_MinDate_Sets()
+    {
+        var d = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var el = new CalendarViewElement().MinDate(d);
+        Assert.Equal(d, el.MinDate);
+    }
+
+    [Fact]
+    public void CalendarView_MaxDate_Sets()
+    {
+        var d = new DateTimeOffset(2030, 12, 31, 0, 0, 0, TimeSpan.Zero);
+        var el = new CalendarViewElement().MaxDate(d);
+        Assert.Equal(d, el.MaxDate);
+    }
+
+    [Fact]
+    public void CalendarView_FirstDayOfWeek_Sets()
+    {
+        var el = new CalendarViewElement().FirstDayOfWeek(global::Windows.Globalization.DayOfWeek.Monday);
+        Assert.Equal(global::Windows.Globalization.DayOfWeek.Monday, el.FirstDayOfWeek);
+    }
+
+    [Fact]
+    public void CalendarView_NumberOfWeeksInView_Sets()
+    {
+        var el = new CalendarViewElement().NumberOfWeeksInView(4);
+        Assert.Equal(4, el.NumberOfWeeksInView);
+    }
+
+    [Fact]
+    public void CalendarView_DisplayMode_Sets()
+    {
+        var el = new CalendarViewElement().DisplayMode(Microsoft.UI.Xaml.Controls.CalendarViewDisplayMode.Year);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.CalendarViewDisplayMode.Year, el.DisplayMode);
+    }
 }

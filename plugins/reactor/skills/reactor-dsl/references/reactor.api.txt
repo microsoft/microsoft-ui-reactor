@@ -209,7 +209,16 @@ ButtonElement.Set(Action<Button> configure) → ButtonElement
 ButtonElement.SubtleButton() → ButtonElement
 ButtonElement.TextLink() → ButtonElement
 CalendarDatePickerElement.DateChanged(Action<DateTimeOffset?> handler) → CalendarDatePickerElement
+CalendarDatePickerElement.DateFormat(string format) → CalendarDatePickerElement
+CalendarDatePickerElement.IsCalendarOpen(bool open = true) → CalendarDatePickerElement
+CalendarDatePickerElement.IsGroupLabelVisible(bool visible = true) → CalendarDatePickerElement
+CalendarDatePickerElement.IsTodayHighlighted(bool highlighted = true) → CalendarDatePickerElement
 CalendarDatePickerElement.Set(Action<CalendarDatePicker> configure) → CalendarDatePickerElement
+CalendarViewElement.DisplayMode(CalendarViewDisplayMode mode) → CalendarViewElement
+CalendarViewElement.FirstDayOfWeek(DayOfWeek day) → CalendarViewElement
+CalendarViewElement.MaxDate(DateTimeOffset date) → CalendarViewElement
+CalendarViewElement.MinDate(DateTimeOffset date) → CalendarViewElement
+CalendarViewElement.NumberOfWeeksInView(int weeks) → CalendarViewElement
 CalendarViewElement.SelectedDates(IReadOnlyList<DateTimeOffset> dates) → CalendarViewElement
 CalendarViewElement.SelectedDatesChanged(Action<IReadOnlyList<DateTimeOffset>> handler) → CalendarViewElement
 CalendarViewElement.Set(Action<CalendarView> configure) → CalendarViewElement
@@ -243,7 +252,11 @@ CommandBarFlyoutElement.Set(Action<CommandBarFlyout> configure) → CommandBarFl
 ContentDialogElement.Closed(Action<ContentDialogResult> handler) → ContentDialogElement
 ContentDialogElement.Set(Action<ContentDialog> configure) → ContentDialogElement
 DatePickerElement.DateChanged(Action<DateTimeOffset> handler) → DatePickerElement
+DatePickerElement.DayFormat(string format) → DatePickerElement
+DatePickerElement.MonthFormat(string format) → DatePickerElement
+DatePickerElement.Orientation(Orientation orientation) → DatePickerElement
 DatePickerElement.Set(Action<DatePicker> configure) → DatePickerElement
+DatePickerElement.YearFormat(string format) → DatePickerElement
 DropDownButtonElement.AccentButton() → DropDownButtonElement
 DropDownButtonElement.Set(Action<DropDownButton> configure) → DropDownButtonElement
 DropDownButtonElement.SubtleButton() → DropDownButtonElement

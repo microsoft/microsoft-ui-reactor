@@ -1139,6 +1139,10 @@ public sealed partial class Reconciler
             ChangeEchoSuppressor.BeginSuppress(cdp);
             cdp.Date = n.Date;
         }
+        if (n.DateFormat is not null && cdp.DateFormat != n.DateFormat) cdp.DateFormat = n.DateFormat;
+        if (cdp.IsTodayHighlighted != n.IsTodayHighlighted) cdp.IsTodayHighlighted = n.IsTodayHighlighted;
+        if (cdp.IsGroupLabelVisible != n.IsGroupLabelVisible) cdp.IsGroupLabelVisible = n.IsGroupLabelVisible;
+        if (cdp.IsCalendarOpen != n.IsCalendarOpen) cdp.IsCalendarOpen = n.IsCalendarOpen;
         ApplySetters(n.Setters, cdp);
         return null;
     }
@@ -1158,6 +1162,10 @@ public sealed partial class Reconciler
             ChangeEchoSuppressor.BeginSuppress(dp);
             dp.Date = n.Date;
         }
+        if (n.DayFormat is not null && dp.DayFormat != n.DayFormat) dp.DayFormat = n.DayFormat;
+        if (n.MonthFormat is not null && dp.MonthFormat != n.MonthFormat) dp.MonthFormat = n.MonthFormat;
+        if (n.YearFormat is not null && dp.YearFormat != n.YearFormat) dp.YearFormat = n.YearFormat;
+        if (dp.Orientation != n.Orientation) dp.Orientation = n.Orientation;
         ApplySetters(n.Setters, dp);
         return null;
     }
@@ -3461,6 +3469,12 @@ public sealed partial class Reconciler
         if (n.CalendarIdentifier is not null) cv.CalendarIdentifier = n.CalendarIdentifier;
         if (n.Language is not null && global::Windows.Globalization.Language.IsWellFormed(n.Language))
             cv.Language = n.Language;
+        if (n.MinDate.HasValue && cv.MinDate != n.MinDate.Value) cv.MinDate = n.MinDate.Value;
+        if (n.MaxDate.HasValue && cv.MaxDate != n.MaxDate.Value) cv.MaxDate = n.MaxDate.Value;
+        if (n.FirstDayOfWeek.HasValue && cv.FirstDayOfWeek != n.FirstDayOfWeek.Value)
+            cv.FirstDayOfWeek = n.FirstDayOfWeek.Value;
+        if (cv.NumberOfWeeksInView != n.NumberOfWeeksInView) cv.NumberOfWeeksInView = n.NumberOfWeeksInView;
+        if (cv.DisplayMode != n.DisplayMode) cv.DisplayMode = n.DisplayMode;
         SetElementTag(cv, n);
         SyncSelectedDates(cv, n.SelectedDates);
         ApplySetters(n.Setters, cv);

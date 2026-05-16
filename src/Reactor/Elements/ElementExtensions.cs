@@ -974,6 +974,64 @@ public static partial class ElementExtensions
     public static RatingControlElement InitialSetValue(this RatingControlElement el, int value) =>
         el with { InitialSetValue = value };
 
+    // ── CalendarDatePicker sugar (spec §4.1) ────────────────────────
+
+    /// <summary>Display format string for the picker's text. See WinUI's <c>DateFormat</c> reference.</summary>
+    public static CalendarDatePickerElement DateFormat(this CalendarDatePickerElement el, string format) =>
+        el with { DateFormat = format };
+
+    /// <summary>Highlight today's date in the popup.</summary>
+    public static CalendarDatePickerElement IsTodayHighlighted(this CalendarDatePickerElement el, bool highlighted = true) =>
+        el with { IsTodayHighlighted = highlighted };
+
+    /// <summary>Programmatically open or close the calendar popup.</summary>
+    public static CalendarDatePickerElement IsCalendarOpen(this CalendarDatePickerElement el, bool open = true) =>
+        el with { IsCalendarOpen = open };
+
+    /// <summary>Show month/year group label headers in the popup.</summary>
+    public static CalendarDatePickerElement IsGroupLabelVisible(this CalendarDatePickerElement el, bool visible = true) =>
+        el with { IsGroupLabelVisible = visible };
+
+    // ── DatePicker sugar (spec §4.1) ────────────────────────────────
+
+    /// <summary>Display format string for the day column.</summary>
+    public static DatePickerElement DayFormat(this DatePickerElement el, string format) =>
+        el with { DayFormat = format };
+
+    /// <summary>Display format string for the month column.</summary>
+    public static DatePickerElement MonthFormat(this DatePickerElement el, string format) =>
+        el with { MonthFormat = format };
+
+    /// <summary>Display format string for the year column.</summary>
+    public static DatePickerElement YearFormat(this DatePickerElement el, string format) =>
+        el with { YearFormat = format };
+
+    /// <summary>Layout direction of the picker.</summary>
+    public static DatePickerElement Orientation(this DatePickerElement el, Orientation orientation) =>
+        el with { Orientation = orientation };
+
+    // ── CalendarView sugar (spec §4.1) ──────────────────────────────
+
+    /// <summary>Earliest selectable date.</summary>
+    public static CalendarViewElement MinDate(this CalendarViewElement el, DateTimeOffset date) =>
+        el with { MinDate = date };
+
+    /// <summary>Latest selectable date.</summary>
+    public static CalendarViewElement MaxDate(this CalendarViewElement el, DateTimeOffset date) =>
+        el with { MaxDate = date };
+
+    /// <summary>Day of the week that starts each row.</summary>
+    public static CalendarViewElement FirstDayOfWeek(this CalendarViewElement el, global::Windows.Globalization.DayOfWeek day) =>
+        el with { FirstDayOfWeek = day };
+
+    /// <summary>How many week rows to display in month mode (2–8).</summary>
+    public static CalendarViewElement NumberOfWeeksInView(this CalendarViewElement el, int weeks) =>
+        el with { NumberOfWeeksInView = weeks };
+
+    /// <summary>Initial display mode (Month / Year / Decade).</summary>
+    public static CalendarViewElement DisplayMode(this CalendarViewElement el, CalendarViewDisplayMode mode) =>
+        el with { DisplayMode = mode };
+
     // ── ColorPicker (spec §3.11 spectrum + bounds) ──────────────────
 
     /// <summary>Shape of the 2D color spectrum (Box or Ring).</summary>
