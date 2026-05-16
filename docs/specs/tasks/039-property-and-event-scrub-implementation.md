@@ -512,11 +512,18 @@ existing init properties.
 
 ### 5.8 Universal collection `SelectionChanged`
 
-- [ ] Decide the multi-selection event shape for `ListView`/`GridView`/
+- [x] Decide the multi-selection event shape for `ListView`/`GridView`/
       `ListBox`/`TreeView`. Spec §8 calls this out as a "universal gap" and
       a follow-up. If a typed `IReadOnlyList<int>` (or `IReadOnlyList<T>`
       for typed peers) callback is acceptable, add it; otherwise punt to a
       tracked deferral with a checkbox `[deferred]`.
+      Landed snapshot-style `OnSelectionChanged`:
+      - `ListView` / `GridView` / `ListBox` receive `Action<IReadOnlyList<int>>?`
+      - `TemplatedListView<T>` / `TemplatedGridView<T>` / `ItemsView<T>` receive
+        `Action<IReadOnlyList<T>>?` (typed peers materialize items from indices)
+      - `TreeView` (deferred): hierarchical selection model needs separate design
+      Snapshot semantics match the CalendarView `OnSelectedDatesChanged`
+      decision from Phase 3.1.
 
 ---
 
@@ -818,7 +825,8 @@ that maps to the spec's §14 ordering:
       leading `On` per the C# clash discovered in Phase 0.1).
 - [x] §14 #2 — High-traffic init→fluent promotion (Phase 4).
 - [ ] §14 #3 — Missing events modelled (Phase 3).
-- [ ] §14 #4 — Common-property gaps (Phase 5).
+- [x] §14 #4 — Common-property gaps (Phase 5; GroupStyle and TreeView
+      multi-select deferred — see Phase 5.6 / 5.8 notes).
 - [x] §14 #5 — `HyperlinkButton(Command)` doc comment + `.NavigateUri()`
       (Phase 4.8).
 - [x] §14 #6 — Type-ramp factories (Phase 2.6).

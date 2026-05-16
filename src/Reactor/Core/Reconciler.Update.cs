@@ -2057,12 +2057,9 @@ public sealed partial class Reconciler
     private UIElement? UpdateListBox(ListBoxElement o, ListBoxElement n, WinUI.ListBox lb)
     {
         SetElementTag(lb, n);
-        if (o.OnSelectedIndexChanged is null && n.OnSelectedIndexChanged is not null)
-            lb.SelectionChanged += (s, _) =>
-            {
-                var l = (WinUI.ListBox)s!;
-                (GetElementTag(l) as ListBoxElement)?.OnSelectedIndexChanged?.Invoke(l.SelectedIndex);
-            };
+        // SelectionChanged wired unconditionally in MountListBox; tag refresh
+        // suffices to pick up newly-attached OnSelectedIndexChanged /
+        // OnSelectionChanged handlers.
         if (!StringArrayEquals(o.Items, n.Items))
         {
             lb.Items.Clear();
@@ -2686,12 +2683,10 @@ public sealed partial class Reconciler
 
         SetElementTag(lv, n);
 
-        if (o.OnSelectedIndexChanged is null && n.OnSelectedIndexChanged is not null)
-            lv.SelectionChanged += (s, _) =>
-            {
-                var l = (WinUI.ListView)s!;
-                (GetElementTag(l) as ListViewElement)?.OnSelectedIndexChanged?.Invoke(l.SelectedIndex);
-            };
+        // Mount subscribes SelectionChanged unconditionally and reads handlers
+        // via GetElementTag, so no lazy wire here — the tag refresh above
+        // makes a newly-attached OnSelectedIndexChanged / OnSelectionChanged
+        // pick up on the very next selection.
         if (o.OnItemClick is null && n.OnItemClick is not null)
             lv.ItemClick += (s, args) =>
             {
@@ -2720,12 +2715,9 @@ public sealed partial class Reconciler
 
         SetElementTag(gv, n);
 
-        if (o.OnSelectedIndexChanged is null && n.OnSelectedIndexChanged is not null)
-            gv.SelectionChanged += (s, _) =>
-            {
-                var g = (WinUI.GridView)s!;
-                (GetElementTag(g) as GridViewElement)?.OnSelectedIndexChanged?.Invoke(g.SelectedIndex);
-            };
+        // SelectionChanged is wired unconditionally in Mount (see comment in
+        // UpdateListView). Tag refresh suffices to pick up a later-attached
+        // OnSelectedIndexChanged / OnSelectionChanged.
         if (o.OnItemClick is null && n.OnItemClick is not null)
             gv.ItemClick += (s, args) =>
             {

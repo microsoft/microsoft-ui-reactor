@@ -109,6 +109,35 @@ public class EventFluentNullClearTests
         Assert.Null(el.ImageFailed(null).OnImageFailed);
     }
 
+    // ── 5.8 Universal collection multi-select snapshot ───────────────
+
+    [Fact]
+    public void ListView_SelectionChanged_NullClears()
+    {
+        global::System.Action<global::System.Collections.Generic.IReadOnlyList<int>> h = _ => { };
+        var el = new ListViewElement(Array.Empty<global::Microsoft.UI.Reactor.Core.Element>()).SelectionChanged(h);
+        Assert.Same(h, el.OnSelectionChanged);
+        Assert.Null(el.SelectionChanged(null).OnSelectionChanged);
+    }
+
+    [Fact]
+    public void GridView_SelectionChanged_NullClears()
+    {
+        global::System.Action<global::System.Collections.Generic.IReadOnlyList<int>> h = _ => { };
+        var el = new GridViewElement(Array.Empty<global::Microsoft.UI.Reactor.Core.Element>()).SelectionChanged(h);
+        Assert.Same(h, el.OnSelectionChanged);
+        Assert.Null(el.SelectionChanged(null).OnSelectionChanged);
+    }
+
+    [Fact]
+    public void ListBox_SelectionChanged_NullClears()
+    {
+        global::System.Action<global::System.Collections.Generic.IReadOnlyList<int>> h = _ => { };
+        var el = ListBox(Array.Empty<string>()).SelectionChanged(h);
+        Assert.Same(h, el.OnSelectionChanged);
+        Assert.Null(el.SelectionChanged(null).OnSelectionChanged);
+    }
+
     [Fact]
     public void SplitButton_Click_NullClears()
     {

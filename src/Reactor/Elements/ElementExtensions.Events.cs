@@ -253,6 +253,15 @@ public static partial class ElementExtensions
     public static ListViewElement ItemClick(this ListViewElement el, Action<int>? handler) =>
         el with { OnItemClick = handler };
 
+    /// <summary>
+    /// Wires the multi-select snapshot handler. Receives the FULL list of
+    /// selected indices on every change (not added/removed deltas). Snapshot
+    /// semantics match <c>CalendarView.SelectedDatesChanged</c>. Passing
+    /// <c>null</c> clears.
+    /// </summary>
+    public static ListViewElement SelectionChanged(this ListViewElement el, Action<IReadOnlyList<int>>? handler) =>
+        el with { OnSelectionChanged = handler };
+
     /// <summary>Wires the selected-index-changed handler. Passing <c>null</c> clears.</summary>
     public static GridViewElement SelectedIndexChanged(this GridViewElement el, Action<int>? handler) =>
         el with { OnSelectedIndexChanged = handler };
@@ -260,6 +269,10 @@ public static partial class ElementExtensions
     /// <summary>Wires the item-click handler (requires <c>IsItemClickEnabled</c>). Passing <c>null</c> clears.</summary>
     public static GridViewElement ItemClick(this GridViewElement el, Action<int>? handler) =>
         el with { OnItemClick = handler };
+
+    /// <summary>Wires the multi-select snapshot handler (see <see cref="SelectionChanged(ListViewElement, Action{IReadOnlyList{int}}?)"/>).</summary>
+    public static GridViewElement SelectionChanged(this GridViewElement el, Action<IReadOnlyList<int>>? handler) =>
+        el with { OnSelectionChanged = handler };
 
     /// <summary>Wires the item-invoked handler. Passing <c>null</c> clears.</summary>
     public static TreeViewElement ItemInvoked(this TreeViewElement el, Action<TreeViewNodeData>? handler) =>
@@ -277,9 +290,20 @@ public static partial class ElementExtensions
     public static ListBoxElement SelectedIndexChanged(this ListBoxElement el, Action<int>? handler) =>
         el with { OnSelectedIndexChanged = handler };
 
+    /// <summary>Wires the multi-select snapshot handler. Passing <c>null</c> clears.</summary>
+    public static ListBoxElement SelectionChanged(this ListBoxElement el, Action<IReadOnlyList<int>>? handler) =>
+        el with { OnSelectionChanged = handler };
+
     /// <summary>Wires the item-invoked handler. Passing <c>null</c> clears.</summary>
     public static ItemsViewElement<T> ItemInvoked<T>(this ItemsViewElement<T> el, Action<T>? handler) =>
         el with { OnItemInvoked = handler };
+
+    /// <summary>
+    /// Wires the multi-select snapshot handler. Receives the full list of
+    /// currently selected items (not indices). Passing <c>null</c> clears.
+    /// </summary>
+    public static ItemsViewElement<T> SelectionChanged<T>(this ItemsViewElement<T> el, Action<IReadOnlyList<T>>? handler) =>
+        el with { OnSelectionChanged = handler };
 
     /// <summary>Wires the selected-index-changed handler. Passing <c>null</c> clears.</summary>
     public static TemplatedListViewElement<T> SelectedIndexChanged<T>(this TemplatedListViewElement<T> el, Action<int>? handler) =>
@@ -289,6 +313,13 @@ public static partial class ElementExtensions
     public static TemplatedListViewElement<T> ItemClick<T>(this TemplatedListViewElement<T> el, Action<T>? handler) =>
         el with { OnItemClick = handler };
 
+    /// <summary>
+    /// Wires the multi-select snapshot handler for the typed peer. Receives
+    /// the full list of currently selected items. Passing <c>null</c> clears.
+    /// </summary>
+    public static TemplatedListViewElement<T> SelectionChanged<T>(this TemplatedListViewElement<T> el, Action<IReadOnlyList<T>>? handler) =>
+        el with { OnSelectionChanged = handler };
+
     /// <summary>Wires the selected-index-changed handler. Passing <c>null</c> clears.</summary>
     public static TemplatedGridViewElement<T> SelectedIndexChanged<T>(this TemplatedGridViewElement<T> el, Action<int>? handler) =>
         el with { OnSelectedIndexChanged = handler };
@@ -296,6 +327,10 @@ public static partial class ElementExtensions
     /// <summary>Wires the item-click handler. Passing <c>null</c> clears.</summary>
     public static TemplatedGridViewElement<T> ItemClick<T>(this TemplatedGridViewElement<T> el, Action<T>? handler) =>
         el with { OnItemClick = handler };
+
+    /// <summary>Wires the multi-select snapshot handler for the typed peer. Passing <c>null</c> clears.</summary>
+    public static TemplatedGridViewElement<T> SelectionChanged<T>(this TemplatedGridViewElement<T> el, Action<IReadOnlyList<T>>? handler) =>
+        el with { OnSelectionChanged = handler };
 
     /// <summary>Wires the selected-index-changed handler. Passing <c>null</c> clears.</summary>
     public static TemplatedFlipViewElement<T> SelectedIndexChanged<T>(this TemplatedFlipViewElement<T> el, Action<int>? handler) =>

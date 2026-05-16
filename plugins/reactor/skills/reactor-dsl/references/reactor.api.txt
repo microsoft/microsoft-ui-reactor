@@ -292,6 +292,7 @@ GridViewElement.IncrementalLoadingTrigger(IncrementalLoadingTrigger trigger) →
 GridViewElement.ItemClick(Action<int> handler) → GridViewElement
 GridViewElement.ItemContainerStyle(Style style) → GridViewElement
 GridViewElement.SelectedIndexChanged(Action<int> handler) → GridViewElement
+GridViewElement.SelectionChanged(Action<IReadOnlyList<int>> handler) → GridViewElement
 GridViewElement.SelectionMode(ListViewSelectionMode mode) → GridViewElement
 GridViewElement.Set(Action<GridView> configure) → GridViewElement
 HyperlinkButtonElement.Click(Action handler) → HyperlinkButtonElement
@@ -315,6 +316,7 @@ InfoBarElement.Severity(InfoBarSeverity severity) → InfoBarElement
 InfoBarElement.Success() → InfoBarElement
 InfoBarElement.Warning() → InfoBarElement
 ItemsViewElement<T>.ItemInvoked<T>(Action<T> handler) → ItemsViewElement<T>
+ItemsViewElement<T>.SelectionChanged<T>(Action<IReadOnlyList<T>> handler) → ItemsViewElement<T>
 ItemsViewElement<T>.Set<T>(Action<ItemsView> configure) → ItemsViewElement<T>
 LazyHStackElement<T>.Set<T>(Action<ScrollViewer> configure) → LazyHStackElement<T>
 LazyHStackElement<T>.SetRepeater<T>(Action<ItemsRepeater> configure) → LazyHStackElement<T>
@@ -324,11 +326,13 @@ LineElement.Set(Action<Line> configure) → LineElement
 LineElement.Stroke(Brush brush) → LineElement
 LineElement.StrokeThickness(double thickness) → LineElement
 ListBoxElement.SelectedIndexChanged(Action<int> handler) → ListBoxElement
+ListBoxElement.SelectionChanged(Action<IReadOnlyList<int>> handler) → ListBoxElement
 ListBoxElement.Set(Action<ListBox> configure) → ListBoxElement
 ListViewElement.IncrementalLoadingTrigger(IncrementalLoadingTrigger trigger) → ListViewElement
 ListViewElement.ItemClick(Action<int> handler) → ListViewElement
 ListViewElement.ItemContainerStyle(Style style) → ListViewElement
 ListViewElement.SelectedIndexChanged(Action<int> handler) → ListViewElement
+ListViewElement.SelectionChanged(Action<IReadOnlyList<int>> handler) → ListViewElement
 ListViewElement.SelectionMode(ListViewSelectionMode mode) → ListViewElement
 ListViewElement.Set(Action<ListView> configure) → ListViewElement
 MapControlElement.Set(Action<MapControl> configure) → MapControlElement
@@ -644,9 +648,11 @@ TemplatedFlipViewElement<T>.SelectedIndexChanged<T>(Action<int> handler) → Tem
 TemplatedFlipViewElement<T>.Set<T>(Action<FlipView> configure) → TemplatedFlipViewElement<T>
 TemplatedGridViewElement<T>.ItemClick<T>(Action<T> handler) → TemplatedGridViewElement<T>
 TemplatedGridViewElement<T>.SelectedIndexChanged<T>(Action<int> handler) → TemplatedGridViewElement<T>
+TemplatedGridViewElement<T>.SelectionChanged<T>(Action<IReadOnlyList<T>> handler) → TemplatedGridViewElement<T>
 TemplatedGridViewElement<T>.Set<T>(Action<GridView> configure) → TemplatedGridViewElement<T>
 TemplatedListViewElement<T>.ItemClick<T>(Action<T> handler) → TemplatedListViewElement<T>
 TemplatedListViewElement<T>.SelectedIndexChanged<T>(Action<int> handler) → TemplatedListViewElement<T>
+TemplatedListViewElement<T>.SelectionChanged<T>(Action<IReadOnlyList<T>> handler) → TemplatedListViewElement<T>
 TemplatedListViewElement<T>.Set<T>(Action<ListView> configure) → TemplatedListViewElement<T>
 TextBlockElement.Bold() → TextBlockElement
 TextBlockElement.CharacterSpacing(int spacing) → TextBlockElement

@@ -1549,12 +1549,23 @@ public sealed partial class Reconciler
             }
         };
 
-        if (lv.OnSelectedIndexChanged is not null)
-            listView.SelectionChanged += (s, _) =>
+        // Subscribe unconditionally so OnSelectionChanged (multi-select snapshot)
+        // and OnSelectedIndexChanged (single focused index) both pick up
+        // handlers attached on a later record-with without re-subscribing.
+        listView.SelectionChanged += (s, _) =>
+        {
+            var l = (WinUI.ListView)s!;
+            if (GetElementTag(l) is not ListViewElement el) return;
+            el.OnSelectedIndexChanged?.Invoke(l.SelectedIndex);
+            if (el.OnSelectionChanged is { } h)
             {
-                var l = (WinUI.ListView)s!;
-                (GetElementTag(l) as ListViewElement)?.OnSelectedIndexChanged?.Invoke(l.SelectedIndex);
-            };
+                // SelectedItems is List<object> of int — copy into a typed snapshot.
+                var snapshot = new List<int>(l.SelectedItems.Count);
+                foreach (var item in l.SelectedItems)
+                    if (item is int i) snapshot.Add(i);
+                h(snapshot);
+            }
+        };
         if (lv.OnItemClick is not null)
             listView.ItemClick += (s, args) =>
             {
@@ -1609,12 +1620,19 @@ public sealed partial class Reconciler
             }
         };
 
-        if (gv.OnSelectedIndexChanged is not null)
-            gridView.SelectionChanged += (s, _) =>
+        gridView.SelectionChanged += (s, _) =>
+        {
+            var g = (WinUI.GridView)s!;
+            if (GetElementTag(g) is not GridViewElement el) return;
+            el.OnSelectedIndexChanged?.Invoke(g.SelectedIndex);
+            if (el.OnSelectionChanged is { } h)
             {
-                var g = (WinUI.GridView)s!;
-                (GetElementTag(g) as GridViewElement)?.OnSelectedIndexChanged?.Invoke(g.SelectedIndex);
-            };
+                var snapshot = new List<int>(g.SelectedItems.Count);
+                foreach (var item in g.SelectedItems)
+                    if (item is int i) snapshot.Add(i);
+                h(snapshot);
+            }
+        };
         if (gv.OnItemClick is not null)
             gridView.ItemClick += (s, args) =>
             {
@@ -1808,7 +1826,15 @@ public sealed partial class Reconciler
         listView.SelectionChanged += (s, _) =>
         {
             var l = (WinUI.ListView)s!;
-            (GetElementTag(l) as TemplatedListElementBase)?.InvokeSelectionChanged(l.SelectedIndex);
+            if (GetElementTag(l) is not TemplatedListElementBase tel) return;
+            tel.InvokeSelectionChanged(l.SelectedIndex);
+            if (tel.HasMultiSelectionCallback)
+            {
+                var snapshot = new List<int>(l.SelectedItems.Count);
+                foreach (var item in l.SelectedItems)
+                    if (item is int i) snapshot.Add(i);
+                tel.InvokeMultiSelectionChanged(snapshot);
+            }
         };
         listView.ItemClick += (s, args) =>
         {
@@ -1844,7 +1870,15 @@ public sealed partial class Reconciler
         gridView.SelectionChanged += (s, _) =>
         {
             var g = (WinUI.GridView)s!;
-            (GetElementTag(g) as TemplatedListElementBase)?.InvokeSelectionChanged(g.SelectedIndex);
+            if (GetElementTag(g) is not TemplatedListElementBase tel) return;
+            tel.InvokeSelectionChanged(g.SelectedIndex);
+            if (tel.HasMultiSelectionCallback)
+            {
+                var snapshot = new List<int>(g.SelectedItems.Count);
+                foreach (var item in g.SelectedItems)
+                    if (item is int i) snapshot.Add(i);
+                tel.InvokeMultiSelectionChanged(snapshot);
+            }
         };
         gridView.ItemClick += (s, args) =>
         {
@@ -3054,12 +3088,24 @@ public sealed partial class Reconciler
         var listBox = new WinUI.ListBox { SelectedIndex = lb.SelectedIndex };
         foreach (var item in lb.Items) listBox.Items.Add(item);
         SetElementTag(listBox, lb);
-        if (lb.OnSelectedIndexChanged is not null)
-            listBox.SelectionChanged += (s, _) =>
+        // Subscribe unconditionally so handlers attached on a later record-with
+        // are picked up via GetElementTag — see MountListView for the rationale.
+        listBox.SelectionChanged += (s, _) =>
+        {
+            var l = (WinUI.ListBox)s!;
+            if (GetElementTag(l) is not ListBoxElement el) return;
+            el.OnSelectedIndexChanged?.Invoke(l.SelectedIndex);
+            if (el.OnSelectionChanged is { } h)
             {
-                var l = (WinUI.ListBox)s!;
-                (GetElementTag(l) as ListBoxElement)?.OnSelectedIndexChanged?.Invoke(l.SelectedIndex);
-            };
+                var snapshot = new List<int>(l.SelectedItems.Count);
+                for (int i = 0; i < l.SelectedItems.Count; i++)
+                {
+                    var idx = l.Items.IndexOf(l.SelectedItems[i]);
+                    if (idx >= 0) snapshot.Add(idx);
+                }
+                h(snapshot);
+            }
+        };
         ApplySetters(lb.Setters, listBox);
         return listBox;
     }

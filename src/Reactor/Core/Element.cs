@@ -2535,8 +2535,18 @@ public record ListViewElement(
     public Style? ItemContainerStyle { get; init; }
     /// <summary>Controls when incremental data sources fetch the next page. Defaults to <c>Edge</c>.</summary>
     public IncrementalLoadingTrigger IncrementalLoadingTrigger { get; init; } = IncrementalLoadingTrigger.Edge;
+    /// <summary>
+    /// Multi-select snapshot callback. Receives the FULL list of currently
+    /// selected indices (snapshot semantics, matching <see cref="CalendarViewElement.OnSelectedDatesChanged"/>).
+    /// Use this in Multiple / Extended selection modes — <see cref="OnSelectedIndexChanged"/>
+    /// only carries the focused single index. Not raised on initial mount.
+    /// </summary>
+    public Action<IReadOnlyList<int>>? OnSelectionChanged { get; init; }
     internal Action<WinUI.ListView>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnItemClick is not null;
+    internal override bool HasCallbacks =>
+        OnSelectedIndexChanged is not null
+        || OnItemClick is not null
+        || OnSelectionChanged is not null;
 }
 
 public record GridViewElement(
@@ -2552,8 +2562,15 @@ public record GridViewElement(
     public Style? ItemContainerStyle { get; init; }
     /// <summary>Controls when incremental data sources fetch the next page. Defaults to <c>Edge</c>.</summary>
     public IncrementalLoadingTrigger IncrementalLoadingTrigger { get; init; } = IncrementalLoadingTrigger.Edge;
+    /// <summary>
+    /// Multi-select snapshot callback. See <see cref="ListViewElement.OnSelectionChanged"/>.
+    /// </summary>
+    public Action<IReadOnlyList<int>>? OnSelectionChanged { get; init; }
     internal Action<WinUI.GridView>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnItemClick is not null;
+    internal override bool HasCallbacks =>
+        OnSelectedIndexChanged is not null
+        || OnItemClick is not null
+        || OnSelectionChanged is not null;
 }
 
 public record TreeViewElement(
@@ -2766,6 +2783,16 @@ public abstract record TemplatedListElementBase : Element
     /// expose Setters need to override.
     /// </summary>
     internal virtual bool HasSetters => false;
+
+    /// <summary>
+    /// Snapshot-style multi-select callback. Default no-op; typed peers
+    /// (TemplatedListView/TemplatedGridView) override to materialize and
+    /// invoke <c>OnSelectionChanged</c> with the typed items.
+    /// </summary>
+    internal virtual void InvokeMultiSelectionChanged(IReadOnlyList<int> indices) { }
+
+    /// <summary>True when the derived peer has wired a typed multi-select callback.</summary>
+    internal virtual bool HasMultiSelectionCallback => false;
 }
 
 public record TemplatedListViewElement<T>(
@@ -2779,6 +2806,12 @@ public record TemplatedListViewElement<T>(
     public Action<T>? OnItemClick { get; init; }
     public ListViewSelectionMode SelectionMode { get; init; } = ListViewSelectionMode.Single;
     public string? Header { get; init; }
+    /// <summary>
+    /// Multi-select snapshot callback for the typed peer. Receives the full list
+    /// of currently selected items (not just indices). Snapshot semantics — not
+    /// raised on initial mount.
+    /// </summary>
+    public Action<IReadOnlyList<T>>? OnSelectionChanged { get; init; }
     internal Action<WinUI.ListView>[] Setters { get; init; } = [];
 
     public override TemplatedControlKind ControlKind => TemplatedControlKind.ListView;
@@ -2793,7 +2826,18 @@ public record TemplatedListViewElement<T>(
         OnItemClick?.Invoke(index >= 0 && index < Items.Count ? Items[index] : default!);
     public override void ApplyControlSetters(object control) =>
         Reconciler.ApplySetters(Setters, (WinUI.ListView)control);
-    internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnItemClick is not null;
+    /// <summary>Snapshot-style multi-select callback. Materializes the typed items from the given indices.</summary>
+    internal override void InvokeMultiSelectionChanged(IReadOnlyList<int> indices)
+    {
+        if (OnSelectionChanged is null) return;
+        var selected = new List<T>(indices.Count);
+        foreach (var i in indices)
+            if (i >= 0 && i < Items.Count) selected.Add(Items[i]);
+        OnSelectionChanged(selected);
+    }
+    internal override bool HasMultiSelectionCallback => OnSelectionChanged is not null;
+    internal override bool HasCallbacks =>
+        OnSelectedIndexChanged is not null || OnItemClick is not null || OnSelectionChanged is not null;
     internal override bool HasSetters => Setters.Length > 0;
 }
 
@@ -2808,6 +2852,11 @@ public record TemplatedGridViewElement<T>(
     public Action<T>? OnItemClick { get; init; }
     public ListViewSelectionMode SelectionMode { get; init; } = ListViewSelectionMode.Single;
     public string? Header { get; init; }
+    /// <summary>
+    /// Multi-select snapshot callback for the typed peer (see
+    /// <see cref="TemplatedListViewElement{T}.OnSelectionChanged"/>).
+    /// </summary>
+    public Action<IReadOnlyList<T>>? OnSelectionChanged { get; init; }
     internal Action<WinUI.GridView>[] Setters { get; init; } = [];
 
     public override TemplatedControlKind ControlKind => TemplatedControlKind.GridView;
@@ -2822,7 +2871,18 @@ public record TemplatedGridViewElement<T>(
         OnItemClick?.Invoke(index >= 0 && index < Items.Count ? Items[index] : default!);
     public override void ApplyControlSetters(object control) =>
         Reconciler.ApplySetters(Setters, (WinUI.GridView)control);
-    internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnItemClick is not null;
+    /// <summary>Snapshot-style multi-select callback. Materializes the typed items from the given indices.</summary>
+    internal override void InvokeMultiSelectionChanged(IReadOnlyList<int> indices)
+    {
+        if (OnSelectionChanged is null) return;
+        var selected = new List<T>(indices.Count);
+        foreach (var i in indices)
+            if (i >= 0 && i < Items.Count) selected.Add(Items[i]);
+        OnSelectionChanged(selected);
+    }
+    internal override bool HasMultiSelectionCallback => OnSelectionChanged is not null;
+    internal override bool HasCallbacks =>
+        OnSelectedIndexChanged is not null || OnItemClick is not null || OnSelectionChanged is not null;
     internal override bool HasSetters => Setters.Length > 0;
 }
 
@@ -3064,8 +3124,13 @@ public record ListBoxElement(string[] Items) : Element
 {
     public int SelectedIndex { get; init; } = -1;
     public Action<int>? OnSelectedIndexChanged { get; init; }
+    /// <summary>
+    /// Multi-select snapshot callback. Receives the FULL list of currently
+    /// selected indices. Use this in multi-select selection modes.
+    /// </summary>
+    public Action<IReadOnlyList<int>>? OnSelectionChanged { get; init; }
     internal Action<WinUI.ListBox>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
+    internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnSelectionChanged is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -3280,5 +3345,13 @@ public record ItemsViewElement<T>(
     public ItemsViewSelectionMode SelectionMode { get; init; } = ItemsViewSelectionMode.Single;
     public bool IsItemInvokedEnabled { get; init; }
     public Action<T>? OnItemInvoked { get; init; }
+    /// <summary>
+    /// Multi-select snapshot callback. Receives the full list of currently
+    /// selected items. Use this when <see cref="SelectionMode"/> is Multiple
+    /// or Extended.
+    /// </summary>
+    public Action<IReadOnlyList<T>>? OnSelectionChanged { get; init; }
     internal Action<WinUI.ItemsView>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks =>
+        OnItemInvoked is not null || OnSelectionChanged is not null;
 }
