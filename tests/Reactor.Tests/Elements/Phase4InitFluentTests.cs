@@ -377,4 +377,27 @@ public class Phase4InitFluentTests
         var el = TextField("").Description("enter your name");
         Assert.Equal("enter your name", el.Description);
     }
+
+    // ── 4.8 HyperlinkButton.NavigateUri + Command-factory doc fulfillment ──
+
+    [Fact]
+    public void HyperlinkButton_NavigateUri_Sets()
+    {
+        var uri = new Uri("https://example.com");
+        var el = HyperlinkButton("Click").NavigateUri(uri);
+        Assert.Equal(uri, el.NavigateUri);
+    }
+
+    [Fact]
+    public void HyperlinkButton_Command_NavigateUri_Fulfils_DocPromise()
+    {
+        // Spec 039 §14 #5: the HyperlinkButton(Command) doc comment used to
+        // tell callers to combine .NavigateUri(...) — but no such fluent
+        // existed. This smoke test pins that the promise is now real.
+        var cmd = new global::Microsoft.UI.Reactor.Core.Command { Label = "Visit", Execute = () => { } };
+        var uri = new Uri("https://example.com");
+        var el = HyperlinkButton(cmd).NavigateUri(uri);
+        Assert.Equal(uri, el.NavigateUri);
+        Assert.Equal("Visit", el.Content);
+    }
 }

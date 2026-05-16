@@ -728,6 +728,16 @@ public static partial class ElementExtensions
     public static FlexElement FlexPadding(this FlexElement el, double left, double top, double right, double bottom) =>
         el with { FlexPadding = new Thickness(left, top, right, bottom) };
 
+    // ── HyperlinkButton sugar ───────────────────────────────────────
+
+    /// <summary>
+    /// Sets the navigation target for the hyperlink. Pairs naturally with
+    /// the <c>HyperlinkButton(Command)</c> factory when a command-driven
+    /// hyperlink also needs an external URI.
+    /// </summary>
+    public static HyperlinkButtonElement NavigateUri(this HyperlinkButtonElement el, Uri uri) =>
+        el with { NavigateUri = uri };
+
     // ── Stack sugar ─────────────────────────────────────────────────
 
     public static StackElement Spacing(this StackElement el, double spacing) =>

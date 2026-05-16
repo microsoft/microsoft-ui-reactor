@@ -76,7 +76,9 @@ public static partial class Factories
     /// <summary>
     /// Creates a Button driven by a Command. Maps Label → Content, Execute → Click,
     /// IsEnabled → IsEnabled. Description / Accelerator / AccessKey are wired via
-    /// a Setter so per-site overrides win via the normal modifier ordering.
+    /// a Setter so per-site overrides win via the normal modifier ordering — e.g.
+    /// <c>Button(saveCommand).IsEnabled(canSave)</c> or
+    /// <c>.Set(b =&gt; b.FlowDirection = FlowDirection.RightToLeft)</c>.
     /// </summary>
     public static ButtonElement Button(Core.Command command) =>
         new ButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
@@ -90,8 +92,8 @@ public static partial class Factories
 
     /// <summary>
     /// Creates a HyperlinkButton driven by a Command. Maps Label → Content, Execute →
-    /// Click. For external navigation combine with <c>.NavigateUri(...)</c> via
-    /// <c>.Set()</c>.
+    /// Click. For external navigation, chain <see cref="ElementExtensions.NavigateUri(HyperlinkButtonElement, Uri)"/>:
+    /// <c>HyperlinkButton(cmd).NavigateUri(new Uri("https://..."))</c>.
     /// </summary>
     public static HyperlinkButtonElement HyperlinkButton(Core.Command command) =>
         new HyperlinkButtonElement(command.Label, null, () => Core.CommandBindings.Invoke(command))

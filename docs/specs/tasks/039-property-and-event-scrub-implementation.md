@@ -407,9 +407,9 @@ etc. Property names are unchanged.
 
 ### 4.8 Doc-comment fix for `HyperlinkButton(Command)` (spec §14 #5 + Q5)
 
-- [ ] Implement `.NavigateUri(Uri)` fluent on `HyperlinkButtonElement` — Q5
+- [x] Implement `.NavigateUri(Uri)` fluent on `HyperlinkButtonElement` — Q5
       decided to add the API, not just rewrite the doc.
-- [ ] Update the XML doc on `Button(Command)` / `HyperlinkButton(Command)`
+- [x] Update the XML doc on `Button(Command)` / `HyperlinkButton(Command)`
       that promised `.NavigateUri(...)`. The promise is now real; just
       verify the wording matches actual behavior.
 
@@ -806,10 +806,10 @@ that maps to the spec's §14 ordering:
 
 - [x] §14 #1 — Fluent for every callback (Phase 1 — extensions drop the
       leading `On` per the C# clash discovered in Phase 0.1).
-- [ ] §14 #2 — High-traffic init→fluent promotion (Phase 4).
+- [x] §14 #2 — High-traffic init→fluent promotion (Phase 4).
 - [ ] §14 #3 — Missing events modelled (Phase 3).
 - [ ] §14 #4 — Common-property gaps (Phase 5).
-- [ ] §14 #5 — `HyperlinkButton(Command)` doc comment + `.NavigateUri()`
+- [x] §14 #5 — `HyperlinkButton(Command)` doc comment + `.NavigateUri()`
       (Phase 4.8).
 - [x] §14 #6 — Type-ramp factories (Phase 2.6).
 - [ ] §14 #7 — Spec 040 scheduled for specialized controls (Phase 7.1).

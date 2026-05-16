@@ -260,6 +260,7 @@ GridViewElement.SelectedIndexChanged(Action<int> handler) → GridViewElement
 GridViewElement.SelectionMode(ListViewSelectionMode mode) → GridViewElement
 GridViewElement.Set(Action<GridView> configure) → GridViewElement
 HyperlinkButtonElement.Click(Action handler) → HyperlinkButtonElement
+HyperlinkButtonElement.NavigateUri(Uri uri) → HyperlinkButtonElement
 HyperlinkButtonElement.Set(Action<HyperlinkButton> configure) → HyperlinkButtonElement
 HyperlinkButtonElement.TextLink() → HyperlinkButtonElement
 ImageElement.Set(Action<Image> configure) → ImageElement
