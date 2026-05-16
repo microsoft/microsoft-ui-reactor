@@ -1097,6 +1097,66 @@ public static partial class ElementExtensions
     public static SplitViewElement LightDismissOverlayMode(this SplitViewElement el, LightDismissOverlayMode mode) =>
         el with { LightDismissOverlayMode = mode };
 
+    // ── ListView / GridView (spec §8 — incremental loading + container style) ──
+
+    /// <summary>Style applied to each generated <c>ListViewItem</c> container.</summary>
+    public static ListViewElement ItemContainerStyle(this ListViewElement el, Style style) =>
+        el with { ItemContainerStyle = style };
+
+    /// <summary>Controls when incremental data sources fetch the next page.</summary>
+    public static ListViewElement IncrementalLoadingTrigger(this ListViewElement el, IncrementalLoadingTrigger trigger) =>
+        el with { IncrementalLoadingTrigger = trigger };
+
+    /// <summary>Style applied to each generated <c>GridViewItem</c> container.</summary>
+    public static GridViewElement ItemContainerStyle(this GridViewElement el, Style style) =>
+        el with { ItemContainerStyle = style };
+
+    /// <summary>Controls when incremental data sources fetch the next page.</summary>
+    public static GridViewElement IncrementalLoadingTrigger(this GridViewElement el, IncrementalLoadingTrigger trigger) =>
+        el with { IncrementalLoadingTrigger = trigger };
+
+    // ── ContentDialog (spec §9 button-enabled + opening lifecycle) ──
+
+    /// <summary>Enables/disables the primary button while the dialog is open.</summary>
+    public static ContentDialogElement IsPrimaryButtonEnabled(this ContentDialogElement el, bool enabled = true) =>
+        el with { IsPrimaryButtonEnabled = enabled };
+
+    /// <summary>Enables/disables the secondary button while the dialog is open.</summary>
+    public static ContentDialogElement IsSecondaryButtonEnabled(this ContentDialogElement el, bool enabled = true) =>
+        el with { IsSecondaryButtonEnabled = enabled };
+
+    // ── Flyout (spec §9 show-mode + animations + pass-through) ──────
+
+    /// <summary>How the flyout reacts to outside clicks (Auto / Standard / Transient / TransientWithDismissOnPointerMoveAway).</summary>
+    public static FlyoutElement ShowMode(this FlyoutElement el, FlyoutShowMode mode) =>
+        el with { ShowMode = mode };
+
+    /// <summary>Whether the flyout animates on open/close.</summary>
+    public static FlyoutElement AreOpenCloseAnimationsEnabled(this FlyoutElement el, bool enabled = true) =>
+        el with { AreOpenCloseAnimationsEnabled = enabled };
+
+    /// <summary>Element whose input passes through the light-dismiss overlay.</summary>
+    public static FlyoutElement OverlayInputPassThroughElement(this FlyoutElement el, Element passThrough) =>
+        el with { OverlayInputPassThroughElement = passThrough };
+
+    // ── TeachingTip (spec §9 icon + hero + placement) ───────────────
+
+    /// <summary>Custom icon source rendered in the tip's leading slot.</summary>
+    public static TeachingTipElement IconSource(this TeachingTipElement el, IconData icon) =>
+        el with { IconSource = icon };
+
+    /// <summary>Optional "hero" Element (image / banner) rendered above the title.</summary>
+    public static TeachingTipElement HeroContent(this TeachingTipElement el, Element hero) =>
+        el with { HeroContent = hero };
+
+    /// <summary>Extra margin around the tip when placed relative to its target.</summary>
+    public static TeachingTipElement PlacementMargin(this TeachingTipElement el, Thickness margin) =>
+        el with { PlacementMargin = margin };
+
+    /// <summary>Preferred placement edge.</summary>
+    public static TeachingTipElement PreferredPlacement(this TeachingTipElement el, TeachingTipPlacementMode placement) =>
+        el with { PreferredPlacement = placement };
+
     // ── WrapGrid attached-prop fluents ──────────────────────────────
 
     /// <summary>

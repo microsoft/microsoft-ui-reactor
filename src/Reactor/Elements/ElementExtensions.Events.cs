@@ -307,6 +307,10 @@ public static partial class ElementExtensions
     public static ContentDialogElement Closed(this ContentDialogElement el, Action<ContentDialogResult>? handler) =>
         el with { OnClosed = handler };
 
+    /// <summary>Wires the opened handler (fires after the dialog finishes opening). Passing <c>null</c> clears.</summary>
+    public static ContentDialogElement Opened(this ContentDialogElement el, Action? handler) =>
+        el with { OnOpened = handler };
+
     /// <summary>Wires the opened handler. Passing <c>null</c> clears.</summary>
     public static FlyoutElement Opened(this FlyoutElement el, Action? handler) =>
         el with { OnOpened = handler };

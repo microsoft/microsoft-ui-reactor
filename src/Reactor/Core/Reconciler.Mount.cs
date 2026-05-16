@@ -1491,8 +1491,10 @@ public sealed partial class Reconciler
         {
             SelectionMode = lv.SelectionMode,
             IsItemClickEnabled = lv.OnItemClick is not null,
+            IncrementalLoadingTrigger = lv.IncrementalLoadingTrigger,
         };
         if (lv.Header is not null) listView.Header = lv.Header;
+        if (lv.ItemContainerStyle is not null) listView.ItemContainerStyle = lv.ItemContainerStyle;
 
         SetElementTag(listView, lv);
 
@@ -1550,8 +1552,10 @@ public sealed partial class Reconciler
         {
             SelectionMode = gv.SelectionMode,
             IsItemClickEnabled = gv.OnItemClick is not null,
+            IncrementalLoadingTrigger = gv.IncrementalLoadingTrigger,
         };
         if (gv.Header is not null) gridView.Header = gv.Header;
+        if (gv.ItemContainerStyle is not null) gridView.ItemContainerStyle = gv.ItemContainerStyle;
 
         SetElementTag(gridView, gv);
 
@@ -1935,11 +1939,14 @@ public sealed partial class Reconciler
         {
             Title = cdEl.Title, PrimaryButtonText = cdEl.PrimaryButtonText,
             DefaultButton = cdEl.DefaultButton,
+            IsPrimaryButtonEnabled = cdEl.IsPrimaryButtonEnabled,
+            IsSecondaryButtonEnabled = cdEl.IsSecondaryButtonEnabled,
         };
         if (cdEl.SecondaryButtonText is not null) dialog.SecondaryButtonText = cdEl.SecondaryButtonText;
         if (cdEl.CloseButtonText is not null) dialog.CloseButtonText = cdEl.CloseButtonText;
         dialog.Content = Mount(cdEl.Content, requestRerender);
         if (xamlRoot is not null) dialog.XamlRoot = xamlRoot;
+        if (cdEl.OnOpened is not null) dialog.Opened += (_, _) => cdEl.OnOpened?.Invoke();
         // ApplySetters last so caller .Set(...) wins (including overriding XamlRoot).
         ApplySetters(cdEl.Setters, dialog);
         try
@@ -1960,7 +1967,16 @@ public sealed partial class Reconciler
         if (target is FrameworkElement targetFe)
         {
             var flyoutContent = Mount(flyEl.FlyoutContent, requestRerender);
-            var flyout = new WinUI.Flyout { Content = flyoutContent, Placement = flyEl.Placement };
+            var flyout = new WinUI.Flyout
+            {
+                Content = flyoutContent,
+                Placement = flyEl.Placement,
+                ShowMode = flyEl.ShowMode,
+                AreOpenCloseAnimationsEnabled = flyEl.AreOpenCloseAnimationsEnabled,
+            };
+            if (flyEl.OverlayInputPassThroughElement is not null
+                && Mount(flyEl.OverlayInputPassThroughElement, requestRerender) is DependencyObject pt)
+                flyout.OverlayInputPassThroughElement = pt;
             SetElementTag(targetFe, flyEl);
             // Route handlers through the target's Tag so Update() refreshing the tag to the
             // new FlyoutElement causes subsequent Opened/Closed to fire the current delegates —
@@ -1981,10 +1997,19 @@ public sealed partial class Reconciler
 
     private WinUI.TeachingTip MountTeachingTip(TeachingTipElement ttEl, Action requestRerender)
     {
-        var tip = new WinUI.TeachingTip { Title = ttEl.Title, Subtitle = ttEl.Subtitle ?? "", IsOpen = ttEl.IsOpen };
+        var tip = new WinUI.TeachingTip
+        {
+            Title = ttEl.Title,
+            Subtitle = ttEl.Subtitle ?? "",
+            IsOpen = ttEl.IsOpen,
+            PlacementMargin = ttEl.PlacementMargin,
+            PreferredPlacement = ttEl.PreferredPlacement,
+        };
         if (ttEl.Content is not null) tip.Content = Mount(ttEl.Content, requestRerender);
         if (ttEl.ActionButtonContent is not null) tip.ActionButtonContent = ttEl.ActionButtonContent;
         if (ttEl.CloseButtonContent is not null) tip.CloseButtonContent = ttEl.CloseButtonContent;
+        if (ttEl.IconSource is not null) tip.IconSource = ResolveIconSource(ttEl.IconSource);
+        if (ttEl.HeroContent is not null) tip.HeroContent = Mount(ttEl.HeroContent, requestRerender);
         // Tag BEFORE wires so trampolines see the current element from the first tick.
         SetElementTag(tip, ttEl);
         // Route through the Tag trampoline (not a captured local) so skip-path

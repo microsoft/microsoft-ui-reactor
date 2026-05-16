@@ -250,6 +250,9 @@ ComboBoxElement.Set(Action<ComboBox> configure) → ComboBoxElement
 CommandBarElement.Set(Action<CommandBar> configure) → CommandBarElement
 CommandBarFlyoutElement.Set(Action<CommandBarFlyout> configure) → CommandBarFlyoutElement
 ContentDialogElement.Closed(Action<ContentDialogResult> handler) → ContentDialogElement
+ContentDialogElement.IsPrimaryButtonEnabled(bool enabled = true) → ContentDialogElement
+ContentDialogElement.IsSecondaryButtonEnabled(bool enabled = true) → ContentDialogElement
+ContentDialogElement.Opened(Action handler) → ContentDialogElement
 ContentDialogElement.Set(Action<ContentDialog> configure) → ContentDialogElement
 DatePickerElement.DateChanged(Action<DateTimeOffset> handler) → DatePickerElement
 DatePickerElement.DayFormat(string format) → DatePickerElement
@@ -273,16 +276,21 @@ FlexElement.FlexPadding(double uniform) → FlexElement
 FlexElement.Set(Action<FlexPanel> configure) → FlexElement
 FlipViewElement.SelectedIndexChanged(Action<int> handler) → FlipViewElement
 FlipViewElement.Set(Action<FlipView> configure) → FlipViewElement
+FlyoutElement.AreOpenCloseAnimationsEnabled(bool enabled = true) → FlyoutElement
 FlyoutElement.Closed(Action handler) → FlyoutElement
 FlyoutElement.Opened(Action handler) → FlyoutElement
+FlyoutElement.OverlayInputPassThroughElement(Element passThrough) → FlyoutElement
 FlyoutElement.Set(Action<Flyout> configure) → FlyoutElement
+FlyoutElement.ShowMode(FlyoutShowMode mode) → FlyoutElement
 FrameElement.Navigated(Action<Type> handler) → FrameElement
 FrameElement.Navigating(Action<Type> handler) → FrameElement
 FrameElement.NavigationFailed(Action<Type, Exception> handler) → FrameElement
 FrameElement.Set(Action<Frame> configure) → FrameElement
 GridElement.BackgroundTransition(TimeSpan? duration = null) → GridElement
 GridElement.Set(Action<Grid> configure) → GridElement
+GridViewElement.IncrementalLoadingTrigger(IncrementalLoadingTrigger trigger) → GridViewElement
 GridViewElement.ItemClick(Action<int> handler) → GridViewElement
+GridViewElement.ItemContainerStyle(Style style) → GridViewElement
 GridViewElement.SelectedIndexChanged(Action<int> handler) → GridViewElement
 GridViewElement.SelectionMode(ListViewSelectionMode mode) → GridViewElement
 GridViewElement.Set(Action<GridView> configure) → GridViewElement
@@ -314,7 +322,9 @@ LineElement.Stroke(Brush brush) → LineElement
 LineElement.StrokeThickness(double thickness) → LineElement
 ListBoxElement.SelectedIndexChanged(Action<int> handler) → ListBoxElement
 ListBoxElement.Set(Action<ListBox> configure) → ListBoxElement
+ListViewElement.IncrementalLoadingTrigger(IncrementalLoadingTrigger trigger) → ListViewElement
 ListViewElement.ItemClick(Action<int> handler) → ListViewElement
+ListViewElement.ItemContainerStyle(Style style) → ListViewElement
 ListViewElement.SelectedIndexChanged(Action<int> handler) → ListViewElement
 ListViewElement.SelectionMode(ListViewSelectionMode mode) → ListViewElement
 ListViewElement.Set(Action<ListView> configure) → ListViewElement
@@ -607,6 +617,10 @@ TabViewElement.TabStripHeader(Element header) → TabViewElement
 TabViewElement.TabWidthMode(TabViewWidthMode mode) → TabViewElement
 TeachingTipElement.ActionButtonClick(Action handler) → TeachingTipElement
 TeachingTipElement.Closed(Action handler) → TeachingTipElement
+TeachingTipElement.HeroContent(Element hero) → TeachingTipElement
+TeachingTipElement.IconSource(IconData icon) → TeachingTipElement
+TeachingTipElement.PlacementMargin(Thickness margin) → TeachingTipElement
+TeachingTipElement.PreferredPlacement(TeachingTipPlacementMode placement) → TeachingTipElement
 TeachingTipElement.Set(Action<TeachingTip> configure) → TeachingTipElement
 TemplatedFlipViewElement<T>.SelectedIndexChanged<T>(Action<int> handler) → TemplatedFlipViewElement<T>
 TemplatedFlipViewElement<T>.Set<T>(Action<FlipView> configure) → TemplatedFlipViewElement<T>

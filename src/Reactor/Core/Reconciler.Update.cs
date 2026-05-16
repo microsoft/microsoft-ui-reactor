@@ -2447,6 +2447,9 @@ public sealed partial class Reconciler
                     flyout.Content = Mount(n.FlyoutContent, requestRerender);
                 }
                 flyout.Placement = n.Placement;
+                if (flyout.ShowMode != n.ShowMode) flyout.ShowMode = n.ShowMode;
+                if (flyout.AreOpenCloseAnimationsEnabled != n.AreOpenCloseAnimationsEnabled)
+                    flyout.AreOpenCloseAnimationsEnabled = n.AreOpenCloseAnimationsEnabled;
                 if (o.OnOpened is null && n.OnOpened is not null)
                 {
                     var openedTarget = targetFe;
@@ -2463,7 +2466,13 @@ public sealed partial class Reconciler
             {
                 // No existing flyout or type mismatch — create fresh.
                 var flyoutContent = Mount(n.FlyoutContent, requestRerender);
-                var newFlyout = new WinUI.Flyout { Content = flyoutContent, Placement = n.Placement };
+                var newFlyout = new WinUI.Flyout
+                {
+                    Content = flyoutContent,
+                    Placement = n.Placement,
+                    ShowMode = n.ShowMode,
+                    AreOpenCloseAnimationsEnabled = n.AreOpenCloseAnimationsEnabled,
+                };
                 // Route handlers through the target's Tag (already set to n above) so future
                 // Update() calls that refresh the tag keep Opened/Closed pointing at the
                 // current FlyoutElement's delegates.
@@ -2628,6 +2637,17 @@ public sealed partial class Reconciler
     private UIElement? UpdateTeachingTip(TeachingTipElement o, TeachingTipElement n, WinUI.TeachingTip tip)
     {
         tip.Title = n.Title; tip.Subtitle = n.Subtitle ?? ""; tip.IsOpen = n.IsOpen;
+        if (tip.PlacementMargin != n.PlacementMargin) tip.PlacementMargin = n.PlacementMargin;
+        if (tip.PreferredPlacement != n.PreferredPlacement) tip.PreferredPlacement = n.PreferredPlacement;
+        if (!ReferenceEquals(o.IconSource, n.IconSource) && n.IconSource is not null)
+            tip.IconSource = ResolveIconSource(n.IconSource);
+        // HeroContent is reconciled with a full re-mount on swap — TeachingTip
+        // hero content isn't part of a typical hot path, so simple is better.
+        if (!ReferenceEquals(o.HeroContent, n.HeroContent))
+        {
+            if (tip.HeroContent is UIElement stale) Unmount(stale);
+            tip.HeroContent = n.HeroContent is not null ? Mount(n.HeroContent, () => { }) : null;
+        }
         SetElementTag(tip, n);
         if (o.OnClosed is null && n.OnClosed is not null)
             tip.Closed += (s, _) => (GetElementTag((UIElement)s!) as TeachingTipElement)?.OnClosed?.Invoke();
@@ -2647,6 +2667,10 @@ public sealed partial class Reconciler
         lv.SelectionMode = n.SelectionMode;
         lv.IsItemClickEnabled = n.OnItemClick is not null;
         if (n.Header is not null) lv.Header = n.Header;
+        if (lv.IncrementalLoadingTrigger != n.IncrementalLoadingTrigger)
+            lv.IncrementalLoadingTrigger = n.IncrementalLoadingTrigger;
+        if (!ReferenceEquals(o.ItemContainerStyle, n.ItemContainerStyle) && n.ItemContainerStyle is not null)
+            lv.ItemContainerStyle = n.ItemContainerStyle;
 
         // Update ItemsSource — ContainerContentChanging re-mounts visible items via Tag.
         // Always set a new list when items differ (even same count) so WinUI re-realizes containers.
@@ -2679,6 +2703,10 @@ public sealed partial class Reconciler
         gv.SelectionMode = n.SelectionMode;
         gv.IsItemClickEnabled = n.OnItemClick is not null;
         if (n.Header is not null) gv.Header = n.Header;
+        if (gv.IncrementalLoadingTrigger != n.IncrementalLoadingTrigger)
+            gv.IncrementalLoadingTrigger = n.IncrementalLoadingTrigger;
+        if (!ReferenceEquals(o.ItemContainerStyle, n.ItemContainerStyle) && n.ItemContainerStyle is not null)
+            gv.ItemContainerStyle = n.ItemContainerStyle;
 
         if (!ReferenceEquals(o.Items, n.Items))
             gv.ItemsSource = Enumerable.Range(0, n.Items.Length).ToList();

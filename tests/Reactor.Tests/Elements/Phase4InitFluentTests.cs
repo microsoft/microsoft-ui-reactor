@@ -802,6 +802,90 @@ public class Phase4InitFluentTests
         Assert.Equal(2, wga!.ColumnSpan);
         Assert.Equal(3, wga.RowSpan);
     }
+
+    // ── 5.6 Collections / Dialogs ─────────────────────────────────────
+
+    [Fact]
+    public void ListView_IncrementalLoadingTrigger_Sets()
+    {
+        var el = new ListViewElement(Array.Empty<Element>()).IncrementalLoadingTrigger(
+            Microsoft.UI.Xaml.Controls.IncrementalLoadingTrigger.None);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.IncrementalLoadingTrigger.None, el.IncrementalLoadingTrigger);
+    }
+
+    [Fact]
+    public void GridView_IncrementalLoadingTrigger_Sets()
+    {
+        var el = new GridViewElement(Array.Empty<Element>()).IncrementalLoadingTrigger(
+            Microsoft.UI.Xaml.Controls.IncrementalLoadingTrigger.None);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.IncrementalLoadingTrigger.None, el.IncrementalLoadingTrigger);
+    }
+
+    [Fact]
+    public void ContentDialog_IsPrimaryButtonEnabled_Sets()
+    {
+        var el = new ContentDialogElement("t", TextBlock("c")).IsPrimaryButtonEnabled(false);
+        Assert.False(el.IsPrimaryButtonEnabled);
+    }
+
+    [Fact]
+    public void ContentDialog_IsSecondaryButtonEnabled_Sets()
+    {
+        var el = new ContentDialogElement("t", TextBlock("c")).IsSecondaryButtonEnabled(false);
+        Assert.False(el.IsSecondaryButtonEnabled);
+    }
+
+    [Fact]
+    public void Flyout_ShowMode_Sets()
+    {
+        var el = new FlyoutElement(TextBlock("t"), TextBlock("c")).ShowMode(Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowMode.Transient);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowMode.Transient, el.ShowMode);
+    }
+
+    [Fact]
+    public void Flyout_AreOpenCloseAnimationsEnabled_Sets()
+    {
+        var el = new FlyoutElement(TextBlock("t"), TextBlock("c")).AreOpenCloseAnimationsEnabled(false);
+        Assert.False(el.AreOpenCloseAnimationsEnabled);
+    }
+
+    [Fact]
+    public void Flyout_OverlayInputPassThroughElement_Sets()
+    {
+        var pt = TextBlock("pass");
+        var el = new FlyoutElement(TextBlock("t"), TextBlock("c")).OverlayInputPassThroughElement(pt);
+        Assert.Same(pt, el.OverlayInputPassThroughElement);
+    }
+
+    [Fact]
+    public void TeachingTip_IconSource_Sets()
+    {
+        var icon = new SymbolIconData("Like");
+        var el = TeachingTip("t").IconSource(icon);
+        Assert.Same(icon, el.IconSource);
+    }
+
+    [Fact]
+    public void TeachingTip_HeroContent_Sets()
+    {
+        var hero = TextBlock("hero");
+        var el = TeachingTip("t").HeroContent(hero);
+        Assert.Same(hero, el.HeroContent);
+    }
+
+    [Fact]
+    public void TeachingTip_PlacementMargin_Sets()
+    {
+        var el = TeachingTip("t").PlacementMargin(new Microsoft.UI.Xaml.Thickness(12));
+        Assert.Equal(new Microsoft.UI.Xaml.Thickness(12), el.PlacementMargin);
+    }
+
+    [Fact]
+    public void TeachingTip_PreferredPlacement_Sets()
+    {
+        var el = TeachingTip("t").PreferredPlacement(Microsoft.UI.Xaml.Controls.TeachingTipPlacementMode.RightTop);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.TeachingTipPlacementMode.RightTop, el.PreferredPlacement);
+    }
 }
 
 // Internal probe so tests can read attached data without needing

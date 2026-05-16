@@ -478,14 +478,17 @@ existing init properties.
 
 ### 5.6 Collections, dialogs
 
-- [ ] `ListView`/`GridView`: `ItemContainerStyle`,
-      `IncrementalLoadingTrigger`. `GroupStyle` is bigger surface — defer
-      to a separate task if it requires a Reactor-shaped wrapper.
-- [ ] `ContentDialogElement`: `IsPrimaryButtonEnabled`,
+- [x] `ListView`/`GridView`: `ItemContainerStyle`,
+      `IncrementalLoadingTrigger`. (deferred: `GroupStyle` — needs a
+      Reactor-shaped wrapper; tracked separately.)
+- [x] `ContentDialogElement`: `IsPrimaryButtonEnabled`,
       `IsSecondaryButtonEnabled`, `OnOpened`, `OnOpening` (spec §9).
-- [ ] `FlyoutElement`: `ShowMode`, `AreOpenCloseAnimationsEnabled`,
+      Landed `IsPrimaryButtonEnabled`, `IsSecondaryButtonEnabled`, and
+      `OnOpened` (with `.Opened()` fluent). WinUI 3 `ContentDialog`
+      doesn't expose an `Opening` event — `OnOpening` deferred upstream.
+- [x] `FlyoutElement`: `ShowMode`, `AreOpenCloseAnimationsEnabled`,
       `OverlayInputPassThroughElement` (spec §9).
-- [ ] `TeachingTipElement`: `IconSource`, `HeroContent`, `PlacementMargin`,
+- [x] `TeachingTipElement`: `IconSource`, `HeroContent`, `PlacementMargin`,
       `PreferredPlacement` (spec §9).
 
 ### 5.7 Media + shapes

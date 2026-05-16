@@ -2524,6 +2524,10 @@ public record ListViewElement(
     public Action<int>? OnItemClick { get; init; }
     public ListViewSelectionMode SelectionMode { get; init; } = ListViewSelectionMode.Single;
     public string? Header { get; init; }
+    /// <summary>Style applied to each generated <c>ListViewItem</c> container (e.g. for padding, hover background).</summary>
+    public Style? ItemContainerStyle { get; init; }
+    /// <summary>Controls when incremental data sources fetch the next page. Defaults to <c>Edge</c>.</summary>
+    public IncrementalLoadingTrigger IncrementalLoadingTrigger { get; init; } = IncrementalLoadingTrigger.Edge;
     internal Action<WinUI.ListView>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnItemClick is not null;
 }
@@ -2537,6 +2541,10 @@ public record GridViewElement(
     public Action<int>? OnItemClick { get; init; }
     public ListViewSelectionMode SelectionMode { get; init; } = ListViewSelectionMode.Single;
     public string? Header { get; init; }
+    /// <summary>Style applied to each generated <c>GridViewItem</c> container.</summary>
+    public Style? ItemContainerStyle { get; init; }
+    /// <summary>Controls when incremental data sources fetch the next page. Defaults to <c>Edge</c>.</summary>
+    public IncrementalLoadingTrigger IncrementalLoadingTrigger { get; init; } = IncrementalLoadingTrigger.Edge;
     internal Action<WinUI.GridView>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnItemClick is not null;
 }
@@ -2584,8 +2592,15 @@ public record ContentDialogElement(
     public string? CloseButtonText { get; init; }
     public ContentDialogButton DefaultButton { get; init; } = ContentDialogButton.Primary;
     public Action<ContentDialogResult>? OnClosed { get; init; }
+    /// <summary>Enables/disables the primary button while the dialog is open. Defaults to <c>true</c>.</summary>
+    public bool IsPrimaryButtonEnabled { get; init; } = true;
+    /// <summary>Enables/disables the secondary button while the dialog is open. Defaults to <c>true</c>.</summary>
+    public bool IsSecondaryButtonEnabled { get; init; } = true;
+    /// <summary>Raised after the dialog finishes opening.</summary>
+    public Action? OnOpened { get; init; }
     internal Action<WinUI.ContentDialog>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnClosed is not null;
+    internal override bool HasCallbacks =>
+        OnClosed is not null || OnOpened is not null;
 }
 
 /// <summary>
@@ -2600,6 +2615,12 @@ public record FlyoutElement(
     public FlyoutPlacementMode Placement { get; init; } = FlyoutPlacementMode.Auto;
     public Action? OnOpened { get; init; }
     public Action? OnClosed { get; init; }
+    /// <summary>How the flyout reacts to clicks outside its bounds (Auto / Standard / Transient / TransientWithDismissOnPointerMoveAway).</summary>
+    public FlyoutShowMode ShowMode { get; init; } = FlyoutShowMode.Auto;
+    /// <summary>Whether the flyout animates on open/close. Defaults to <c>true</c>.</summary>
+    public bool AreOpenCloseAnimationsEnabled { get; init; } = true;
+    /// <summary>Element whose input is passed through the light-dismiss overlay (lets the user interact with one element behind the flyout).</summary>
+    public Element? OverlayInputPassThroughElement { get; init; }
     internal Action<WinUI.Flyout>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnOpened is not null || OnClosed is not null;
 }
@@ -2633,6 +2654,14 @@ public record TeachingTipElement(
     public Action? OnActionButtonClick { get; init; }
     public string? CloseButtonContent { get; init; }
     public Action? OnClosed { get; init; }
+    /// <summary>Custom icon source rendered in the tip's leading slot.</summary>
+    public IconData? IconSource { get; init; }
+    /// <summary>Optional "hero" Element (image / banner) rendered above the title.</summary>
+    public Element? HeroContent { get; init; }
+    /// <summary>Extra margin around the tip when placed relative to its target.</summary>
+    public Thickness PlacementMargin { get; init; }
+    /// <summary>Preferred placement edge. Defaults to <c>Auto</c>.</summary>
+    public TeachingTipPlacementMode PreferredPlacement { get; init; } = TeachingTipPlacementMode.Auto;
     internal Action<WinUI.TeachingTip>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnActionButtonClick is not null || OnClosed is not null;
 }

@@ -86,6 +86,14 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
+    public void ContentDialog_Opened_NullClears()
+    {
+        var el = new ContentDialogElement("t", new TextBlockElement("c")).Opened(Sentinel);
+        Assert.Same(Sentinel, el.OnOpened);
+        Assert.Null(el.Opened(null).OnOpened);
+    }
+
+    [Fact]
     public void SplitButton_Click_NullClears()
     {
         var el = new SplitButtonElement("x").Click(Sentinel);
