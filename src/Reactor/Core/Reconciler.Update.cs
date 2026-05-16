@@ -836,6 +836,10 @@ public sealed partial class Reconciler
             pb.Password = n.Password;
         }
         pb.PlaceholderText = n.PlaceholderText ?? "";
+        if (n.Header is not null) pb.Header = n.Header;
+        if (pb.MaxLength != n.MaxLength) pb.MaxLength = n.MaxLength;
+        if (pb.PasswordRevealMode != n.PasswordRevealMode) pb.PasswordRevealMode = n.PasswordRevealMode;
+        if (n.PasswordChar is not null && pb.PasswordChar != n.PasswordChar) pb.PasswordChar = n.PasswordChar;
         ApplySetters(n.Setters, pb);
         return null;
     }
@@ -922,6 +926,10 @@ public sealed partial class Reconciler
         }
         asb.PlaceholderText = n.PlaceholderText ?? "";
         if (n.Suggestions.Length > 0) asb.ItemsSource = n.Suggestions;
+        if (n.Header is not null) asb.Header = n.Header;
+        if (!ReferenceEquals(o.QueryIcon, n.QueryIcon) && n.QueryIcon is not null)
+            asb.QueryIcon = ResolveIcon(n.QueryIcon, null);
+        if (asb.IsSuggestionListOpen != n.IsSuggestionListOpen) asb.IsSuggestionListOpen = n.IsSuggestionListOpen;
         ApplySetters(n.Setters, asb);
         return null;
     }
@@ -1073,6 +1081,8 @@ public sealed partial class Reconciler
         }
         r.IsReadOnly = n.IsReadOnly;
         r.Caption = n.Caption ?? "";
+        if (r.PlaceholderValue != n.PlaceholderValue) r.PlaceholderValue = n.PlaceholderValue;
+        if (r.InitialSetValue != n.InitialSetValue) r.InitialSetValue = n.InitialSetValue;
         ApplySetters(n.Setters, r);
         return null;
     }
@@ -1103,6 +1113,13 @@ public sealed partial class Reconciler
         if (cp.IsColorSliderVisible != n.IsColorSliderVisible) cp.IsColorSliderVisible = n.IsColorSliderVisible;
         if (cp.IsColorChannelTextInputVisible != n.IsColorChannelTextInputVisible) cp.IsColorChannelTextInputVisible = n.IsColorChannelTextInputVisible;
         if (cp.IsHexInputVisible != n.IsHexInputVisible) cp.IsHexInputVisible = n.IsHexInputVisible;
+        if (cp.ColorSpectrumShape != n.ColorSpectrumShape) cp.ColorSpectrumShape = n.ColorSpectrumShape;
+        if (cp.MinHue != n.MinHue) cp.MinHue = n.MinHue;
+        if (cp.MaxHue != n.MaxHue) cp.MaxHue = n.MaxHue;
+        if (cp.MinSaturation != n.MinSaturation) cp.MinSaturation = n.MinSaturation;
+        if (cp.MaxSaturation != n.MaxSaturation) cp.MaxSaturation = n.MaxSaturation;
+        if (cp.MinValue != n.MinValue) cp.MinValue = n.MinValue;
+        if (cp.MaxValue != n.MaxValue) cp.MaxValue = n.MaxValue;
         ApplySetters(n.Setters, cp);
         return null;
     }
@@ -1921,6 +1938,13 @@ public sealed partial class Reconciler
                 if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
                 (GetElementTag(c) as ComboBoxElement)?.OnSelectedIndexChanged?.Invoke(c.SelectedIndex);
             };
+        if (o.OnDropDownOpened is null && n.OnDropDownOpened is not null)
+            cb.DropDownOpened += (s, _) => (GetElementTag((UIElement)s!) as ComboBoxElement)?.OnDropDownOpened?.Invoke();
+        if (o.OnDropDownClosed is null && n.OnDropDownClosed is not null)
+            cb.DropDownClosed += (s, _) => (GetElementTag((UIElement)s!) as ComboBoxElement)?.OnDropDownClosed?.Invoke();
+        if (!double.IsNaN(n.MaxDropDownHeight) && cb.MaxDropDownHeight != n.MaxDropDownHeight)
+            cb.MaxDropDownHeight = n.MaxDropDownHeight;
+        if (n.Description is not null) cb.Description = n.Description;
 
         bool oldIsElements = o.ItemElements is not null;
         bool newIsElements = n.ItemElements is not null;

@@ -1859,6 +1859,14 @@ public record PasswordBoxElement(
     string? PlaceholderText = null
 ) : Element
 {
+    /// <summary>Maximum number of characters allowed. <c>0</c> (default) = no limit.</summary>
+    public int MaxLength { get; init; }
+    /// <summary>Optional label rendered above the box.</summary>
+    public string? Header { get; init; }
+    /// <summary>How the reveal button behaves. Defaults to <c>Peek</c> (matches WinUI).</summary>
+    public PasswordRevealMode PasswordRevealMode { get; init; } = PasswordRevealMode.Peek;
+    /// <summary>Character displayed in place of the entered password (default '●' bullet).</summary>
+    public string? PasswordChar { get; init; }
     internal Action<WinUI.PasswordBox>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnPasswordChanged is not null;
 }
@@ -1896,6 +1904,12 @@ public record AutoSuggestBoxElement(
 {
     public string[] Suggestions { get; init; } = [];
     public string? PlaceholderText { get; init; }
+    /// <summary>Optional label rendered above the box.</summary>
+    public string? Header { get; init; }
+    /// <summary>Icon rendered in the trailing query slot (e.g. a Search symbol).</summary>
+    public IconData? QueryIcon { get; init; }
+    /// <summary>Programmatically open or close the suggestion list. Defaults to <c>false</c>.</summary>
+    public bool IsSuggestionListOpen { get; init; }
     internal Action<WinUI.AutoSuggestBox>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnTextChanged is not null || OnQuerySubmitted is not null || OnSuggestionChosen is not null;
 }
@@ -1945,8 +1959,19 @@ public record ComboBoxElement(
     public string? Header { get; init; }
     public bool IsEditable { get; init; }
     public Element[]? ItemElements { get; init; }
+    /// <summary>Maximum pixel height of the open drop-down. <c>NaN</c> (default) uses the WinUI default.</summary>
+    public double MaxDropDownHeight { get; init; } = double.NaN;
+    /// <summary>Help text rendered below the box. WinUI 3 1.2+ feature.</summary>
+    public string? Description { get; init; }
+    /// <summary>Raised when the user opens the drop-down list.</summary>
+    public Action? OnDropDownOpened { get; init; }
+    /// <summary>Raised when the drop-down list closes (either by selection or dismissal).</summary>
+    public Action? OnDropDownClosed { get; init; }
     internal Action<WinUI.ComboBox>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
+    internal override bool HasCallbacks =>
+        OnSelectedIndexChanged is not null
+        || OnDropDownOpened is not null
+        || OnDropDownClosed is not null;
 }
 
 public record SliderElement(
@@ -1992,6 +2017,10 @@ public record RatingControlElement(
     public int MaxRating { get; init; } = 5;
     public bool IsReadOnly { get; init; }
     public string? Caption { get; init; }
+    /// <summary>Star value shown when the rating is unset. Defaults to -1 (no placeholder).</summary>
+    public double PlaceholderValue { get; init; } = -1;
+    /// <summary>Integer rating to assume when the user first interacts. Defaults to 1. (WinUI's <c>InitialSetValue</c> is int.)</summary>
+    public int InitialSetValue { get; init; } = 1;
     internal Action<WinUI.RatingControl>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnValueChanged is not null;
 }
@@ -2007,6 +2036,20 @@ public record ColorPickerElement(
     public bool IsColorSliderVisible { get; init; } = true;
     public bool IsColorChannelTextInputVisible { get; init; } = true;
     public bool IsHexInputVisible { get; init; } = true;
+    /// <summary>Shape of the 2D color spectrum (Box or Ring). Defaults to <c>Box</c>.</summary>
+    public ColorSpectrumShape ColorSpectrumShape { get; init; } = ColorSpectrumShape.Box;
+    /// <summary>Minimum hue (0–359). Defaults to 0.</summary>
+    public int MinHue { get; init; }
+    /// <summary>Maximum hue (0–359). Defaults to 359.</summary>
+    public int MaxHue { get; init; } = 359;
+    /// <summary>Minimum saturation (0–100). Defaults to 0.</summary>
+    public int MinSaturation { get; init; }
+    /// <summary>Maximum saturation (0–100). Defaults to 100.</summary>
+    public int MaxSaturation { get; init; } = 100;
+    /// <summary>Minimum value/brightness (0–100). Defaults to 0.</summary>
+    public int MinValue { get; init; }
+    /// <summary>Maximum value/brightness (0–100). Defaults to 100.</summary>
+    public int MaxValue { get; init; } = 100;
     internal Action<WinUI.ColorPicker>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnColorChanged is not null;
 }

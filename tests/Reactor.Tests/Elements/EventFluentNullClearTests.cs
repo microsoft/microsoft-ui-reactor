@@ -70,6 +70,22 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
+    public void ComboBox_DropDownOpened_NullClears()
+    {
+        var el = ComboBox(Array.Empty<string>()).DropDownOpened(Sentinel);
+        Assert.Same(Sentinel, el.OnDropDownOpened);
+        Assert.Null(el.DropDownOpened(null).OnDropDownOpened);
+    }
+
+    [Fact]
+    public void ComboBox_DropDownClosed_NullClears()
+    {
+        var el = ComboBox(Array.Empty<string>()).DropDownClosed(Sentinel);
+        Assert.Same(Sentinel, el.OnDropDownClosed);
+        Assert.Null(el.DropDownClosed(null).OnDropDownClosed);
+    }
+
+    [Fact]
     public void SplitButton_Click_NullClears()
     {
         var el = new SplitButtonElement("x").Click(Sentinel);

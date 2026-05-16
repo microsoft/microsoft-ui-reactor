@@ -545,7 +545,15 @@ public sealed partial class Reconciler
 
     private WinUI.PasswordBox MountPasswordBox(PasswordBoxElement pw)
     {
-        var pb = new WinUI.PasswordBox { Password = pw.Password, PlaceholderText = pw.PlaceholderText ?? "" };
+        var pb = new WinUI.PasswordBox
+        {
+            Password = pw.Password,
+            PlaceholderText = pw.PlaceholderText ?? "",
+            PasswordRevealMode = pw.PasswordRevealMode,
+        };
+        if (pw.Header is not null) pb.Header = pw.Header;
+        if (pw.MaxLength != 0) pb.MaxLength = pw.MaxLength;
+        if (pw.PasswordChar is not null) pb.PasswordChar = pw.PasswordChar;
         SetElementTag(pb, pw);
         if (pw.OnPasswordChanged is not null)
             pb.PasswordChanged += (s, _) =>
@@ -612,6 +620,9 @@ public sealed partial class Reconciler
     {
         var box = new WinUI.AutoSuggestBox { Text = asb.Text, PlaceholderText = asb.PlaceholderText ?? "" };
         if (asb.Suggestions.Length > 0) box.ItemsSource = asb.Suggestions;
+        if (asb.Header is not null) box.Header = asb.Header;
+        if (asb.QueryIcon is not null) box.QueryIcon = ResolveIcon(asb.QueryIcon, null);
+        if (asb.IsSuggestionListOpen) box.IsSuggestionListOpen = true;
         SetElementTag(box, asb);
         if (asb.OnTextChanged is not null)
             box.TextChanged += (s, args) =>
@@ -722,6 +733,8 @@ public sealed partial class Reconciler
             IsEditable = combo.IsEditable,
         };
         if (combo.Header is not null) cb.Header = combo.Header;
+        if (!double.IsNaN(combo.MaxDropDownHeight)) cb.MaxDropDownHeight = combo.MaxDropDownHeight;
+        if (combo.Description is not null) cb.Description = combo.Description;
         if (combo.ItemElements is { } elements)
             foreach (var el in elements) cb.Items.Add(Mount(el, requestRerender));
         else
@@ -734,6 +747,10 @@ public sealed partial class Reconciler
                 if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
                 (GetElementTag(c) as ComboBoxElement)?.OnSelectedIndexChanged?.Invoke(c.SelectedIndex);
             };
+        if (combo.OnDropDownOpened is not null)
+            cb.DropDownOpened += (s, _) => (GetElementTag((UIElement)s!) as ComboBoxElement)?.OnDropDownOpened?.Invoke();
+        if (combo.OnDropDownClosed is not null)
+            cb.DropDownClosed += (s, _) => (GetElementTag((UIElement)s!) as ComboBoxElement)?.OnDropDownClosed?.Invoke();
         ApplySetters(combo.Setters, cb);
         return cb;
     }
@@ -800,7 +817,15 @@ public sealed partial class Reconciler
 
     private WinUI.RatingControl MountRatingControl(RatingControlElement rc)
     {
-        var rating = new WinUI.RatingControl { Value = rc.Value, MaxRating = rc.MaxRating, IsReadOnly = rc.IsReadOnly, Caption = rc.Caption ?? "" };
+        var rating = new WinUI.RatingControl
+        {
+            Value = rc.Value,
+            MaxRating = rc.MaxRating,
+            IsReadOnly = rc.IsReadOnly,
+            Caption = rc.Caption ?? "",
+            PlaceholderValue = rc.PlaceholderValue,
+            InitialSetValue = rc.InitialSetValue,
+        };
         SetElementTag(rating, rc);
         if (rc.OnValueChanged is not null)
             rating.ValueChanged += (s, _) =>
@@ -820,6 +845,10 @@ public sealed partial class Reconciler
             Color = cp.Color, IsAlphaEnabled = cp.IsAlphaEnabled, IsMoreButtonVisible = cp.IsMoreButtonVisible,
             IsColorSpectrumVisible = cp.IsColorSpectrumVisible, IsColorSliderVisible = cp.IsColorSliderVisible,
             IsColorChannelTextInputVisible = cp.IsColorChannelTextInputVisible, IsHexInputVisible = cp.IsHexInputVisible,
+            ColorSpectrumShape = cp.ColorSpectrumShape,
+            MinHue = cp.MinHue, MaxHue = cp.MaxHue,
+            MinSaturation = cp.MinSaturation, MaxSaturation = cp.MaxSaturation,
+            MinValue = cp.MinValue, MaxValue = cp.MaxValue,
         };
         SetElementTag(picker, cp);
         if (cp.OnColorChanged is not null)

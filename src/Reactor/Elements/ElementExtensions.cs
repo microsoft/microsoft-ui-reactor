@@ -912,6 +912,48 @@ public static partial class ElementExtensions
     public static ToggleButtonElement CheckedState(this ToggleButtonElement el, bool? state) =>
         el with { CheckedState = state, IsThreeState = true };
 
+    // ── PasswordBox sugar ───────────────────────────────────────────
+
+    /// <summary>Maximum number of characters allowed. <c>0</c> = no limit.</summary>
+    public static PasswordBoxElement MaxLength(this PasswordBoxElement el, int maxLength) =>
+        el with { MaxLength = maxLength };
+
+    /// <summary>Optional label rendered above the box.</summary>
+    public static PasswordBoxElement Header(this PasswordBoxElement el, string header) =>
+        el with { Header = header };
+
+    /// <summary>Controls how the reveal button behaves.</summary>
+    public static PasswordBoxElement PasswordRevealMode(this PasswordBoxElement el, PasswordRevealMode mode) =>
+        el with { PasswordRevealMode = mode };
+
+    /// <summary>Character displayed in place of the entered password.</summary>
+    public static PasswordBoxElement PasswordChar(this PasswordBoxElement el, string passwordChar) =>
+        el with { PasswordChar = passwordChar };
+
+    // ── AutoSuggestBox sugar ────────────────────────────────────────
+
+    /// <summary>Optional label rendered above the box.</summary>
+    public static AutoSuggestBoxElement Header(this AutoSuggestBoxElement el, string header) =>
+        el with { Header = header };
+
+    /// <summary>Icon rendered in the trailing query slot.</summary>
+    public static AutoSuggestBoxElement QueryIcon(this AutoSuggestBoxElement el, IconData icon) =>
+        el with { QueryIcon = icon };
+
+    /// <summary>Programmatically open or close the suggestion list.</summary>
+    public static AutoSuggestBoxElement IsSuggestionListOpen(this AutoSuggestBoxElement el, bool open = true) =>
+        el with { IsSuggestionListOpen = open };
+
+    // ── ComboBox additional sugar (spec §3.7) ───────────────────────
+
+    /// <summary>Maximum pixel height of the open drop-down.</summary>
+    public static ComboBoxElement MaxDropDownHeight(this ComboBoxElement el, double height) =>
+        el with { MaxDropDownHeight = height };
+
+    /// <summary>Help text rendered below the box.</summary>
+    public static ComboBoxElement Description(this ComboBoxElement el, string description) =>
+        el with { Description = description };
+
     // ── RatingControl sugar ─────────────────────────────────────────
 
     public static RatingControlElement MaxRating(this RatingControlElement el, int max) =>
@@ -919,6 +961,36 @@ public static partial class ElementExtensions
 
     public static RatingControlElement ReadOnly(this RatingControlElement el, bool readOnly = true) =>
         el with { IsReadOnly = readOnly };
+
+    /// <summary>Promotes the existing <c>Caption</c> init property to a fluent.</summary>
+    public static RatingControlElement Caption(this RatingControlElement el, string caption) =>
+        el with { Caption = caption };
+
+    /// <summary>Star value shown when the rating is unset. Use a negative number to disable the placeholder.</summary>
+    public static RatingControlElement PlaceholderValue(this RatingControlElement el, double value) =>
+        el with { PlaceholderValue = value };
+
+    /// <summary>Integer rating to assume when the user first interacts.</summary>
+    public static RatingControlElement InitialSetValue(this RatingControlElement el, int value) =>
+        el with { InitialSetValue = value };
+
+    // ── ColorPicker (spec §3.11 spectrum + bounds) ──────────────────
+
+    /// <summary>Shape of the 2D color spectrum (Box or Ring).</summary>
+    public static ColorPickerElement ColorSpectrumShape(this ColorPickerElement el, ColorSpectrumShape shape) =>
+        el with { ColorSpectrumShape = shape };
+
+    /// <summary>Inclusive hue bounds (0–359).</summary>
+    public static ColorPickerElement HueRange(this ColorPickerElement el, int minHue, int maxHue) =>
+        el with { MinHue = minHue, MaxHue = maxHue };
+
+    /// <summary>Inclusive saturation bounds (0–100).</summary>
+    public static ColorPickerElement SaturationRange(this ColorPickerElement el, int minSaturation, int maxSaturation) =>
+        el with { MinSaturation = minSaturation, MaxSaturation = maxSaturation };
+
+    /// <summary>Inclusive value/brightness bounds (0–100).</summary>
+    public static ColorPickerElement ValueRange(this ColorPickerElement el, int minValue, int maxValue) =>
+        el with { MinValue = minValue, MaxValue = maxValue };
 
     // ── InfoBar sugar ───────────────────────────────────────────────
 

@@ -191,6 +191,9 @@ WrapGrid(int maxRowsOrColumns, Element[] children) → WrapGridElement
 AnimatedIconElement.Set(Action<AnimatedIcon> configure) → AnimatedIconElement
 AnimatedVisualPlayerElement.Set(Action<AnimatedVisualPlayer> configure) → AnimatedVisualPlayerElement
 AnnotatedScrollBarElement.Set(Action<AnnotatedScrollBar> configure) → AnnotatedScrollBarElement
+AutoSuggestBoxElement.Header(string header) → AutoSuggestBoxElement
+AutoSuggestBoxElement.IsSuggestionListOpen(bool open = true) → AutoSuggestBoxElement
+AutoSuggestBoxElement.QueryIcon(IconData icon) → AutoSuggestBoxElement
 AutoSuggestBoxElement.QuerySubmitted(Action<string> handler) → AutoSuggestBoxElement
 AutoSuggestBoxElement.Set(Action<AutoSuggestBox> configure) → AutoSuggestBoxElement
 AutoSuggestBoxElement.SuggestionChosen(Action<string> handler) → AutoSuggestBoxElement
@@ -218,12 +221,20 @@ ColorPickerElement.AlphaEnabled(bool enabled = true) → ColorPickerElement
 ColorPickerElement.ColorChanged(Action<Color> handler) → ColorPickerElement
 ColorPickerElement.ColorChannelTextInputVisible(bool visible) → ColorPickerElement
 ColorPickerElement.ColorSliderVisible(bool visible) → ColorPickerElement
+ColorPickerElement.ColorSpectrumShape(ColorSpectrumShape shape) → ColorPickerElement
 ColorPickerElement.ColorSpectrumVisible(bool visible = true) → ColorPickerElement
 ColorPickerElement.HexInputVisible(bool visible) → ColorPickerElement
+ColorPickerElement.HueRange(int minHue, int maxHue) → ColorPickerElement
 ColorPickerElement.MoreButtonVisible(bool visible = true) → ColorPickerElement
+ColorPickerElement.SaturationRange(int minSaturation, int maxSaturation) → ColorPickerElement
 ColorPickerElement.Set(Action<ColorPicker> configure) → ColorPickerElement
+ColorPickerElement.ValueRange(int minValue, int maxValue) → ColorPickerElement
+ComboBoxElement.Description(string description) → ComboBoxElement
+ComboBoxElement.DropDownClosed(Action handler) → ComboBoxElement
+ComboBoxElement.DropDownOpened(Action handler) → ComboBoxElement
 ComboBoxElement.Editable(bool editable = true) → ComboBoxElement
 ComboBoxElement.Header(string header) → ComboBoxElement
+ComboBoxElement.MaxDropDownHeight(double height) → ComboBoxElement
 ComboBoxElement.Placeholder(string text) → ComboBoxElement
 ComboBoxElement.SelectedIndexChanged(Action<int> handler) → ComboBoxElement
 ComboBoxElement.Set(Action<ComboBox> configure) → ComboBoxElement
@@ -320,7 +331,11 @@ NumberBoxElement.SpinButtons(NumberBoxSpinButtonPlacementMode placement = Number
 NumberBoxElement.ValidationMode(NumberBoxValidationMode mode) → NumberBoxElement
 NumberBoxElement.ValueChanged(Action<double> handler) → NumberBoxElement
 ParallaxViewElement.Set(Action<ParallaxView> configure) → ParallaxViewElement
+PasswordBoxElement.Header(string header) → PasswordBoxElement
+PasswordBoxElement.MaxLength(int maxLength) → PasswordBoxElement
 PasswordBoxElement.PasswordChanged(Action<string> handler) → PasswordBoxElement
+PasswordBoxElement.PasswordChar(string passwordChar) → PasswordBoxElement
+PasswordBoxElement.PasswordRevealMode(PasswordRevealMode mode) → PasswordBoxElement
 PasswordBoxElement.Set(Action<PasswordBox> configure) → PasswordBoxElement
 PathElement.Fill(Brush brush) → PathElement
 PathElement.Set(Action<Path> configure) → PathElement
@@ -347,7 +362,10 @@ RadioButtonElement.IsCheckedChanged(Action<bool> handler) → RadioButtonElement
 RadioButtonElement.Set(Action<RadioButton> configure) → RadioButtonElement
 RadioButtonsElement.SelectedIndexChanged(Action<int> handler) → RadioButtonsElement
 RadioButtonsElement.Set(Action<RadioButtons> configure) → RadioButtonsElement
+RatingControlElement.Caption(string caption) → RatingControlElement
+RatingControlElement.InitialSetValue(int value) → RatingControlElement
 RatingControlElement.MaxRating(int max) → RatingControlElement
+RatingControlElement.PlaceholderValue(double value) → RatingControlElement
 RatingControlElement.ReadOnly(bool readOnly = true) → RatingControlElement
 RatingControlElement.Set(Action<RatingControl> configure) → RatingControlElement
 RatingControlElement.ValueChanged(Action<double> handler) → RatingControlElement

@@ -111,6 +111,14 @@ public static partial class ElementExtensions
     public static ComboBoxElement SelectedIndexChanged(this ComboBoxElement el, Action<int>? handler) =>
         el with { OnSelectedIndexChanged = handler };
 
+    /// <summary>Wires the drop-down-opened handler. Passing <c>null</c> clears.</summary>
+    public static ComboBoxElement DropDownOpened(this ComboBoxElement el, Action? handler) =>
+        el with { OnDropDownOpened = handler };
+
+    /// <summary>Wires the drop-down-closed handler (fires on dismissal or selection). Passing <c>null</c> clears.</summary>
+    public static ComboBoxElement DropDownClosed(this ComboBoxElement el, Action? handler) =>
+        el with { OnDropDownClosed = handler };
+
     /// <summary>Wires the value-changed handler. Passing <c>null</c> clears.</summary>
     public static SliderElement ValueChanged(this SliderElement el, Action<double>? handler) =>
         el with { OnValueChanged = handler };

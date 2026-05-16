@@ -444,15 +444,15 @@ existing init properties.
 
 ### 5.3 Input controls
 
-- [ ] `PasswordBoxElement`: `MaxLength`, `Header`, `PasswordRevealMode`,
+- [x] `PasswordBoxElement`: `MaxLength`, `Header`, `PasswordRevealMode`,
       `PasswordChar` (spec §3.2).
-- [ ] `AutoSuggestBoxElement`: `Header`, `QueryIcon`,
+- [x] `AutoSuggestBoxElement`: `Header`, `QueryIcon`,
       `IsSuggestionListOpen` (spec §3.4).
-- [ ] `ComboBoxElement`: `MaxDropDownHeight`, `Description`,
+- [x] `ComboBoxElement`: `MaxDropDownHeight`, `Description`,
       `OnDropDownOpened`, `OnDropDownClosed` (spec §3.7).
-- [ ] `RatingControlElement`: `PlaceholderValue`, `InitialSetValue`;
+- [x] `RatingControlElement`: `PlaceholderValue`, `InitialSetValue`;
       promote `Caption` to a fluent (spec §3.10).
-- [ ] `ColorPickerElement`: `ColorSpectrumShape`, `MinHue/MaxHue`,
+- [x] `ColorPickerElement`: `ColorSpectrumShape`, `MinHue/MaxHue`,
       `MinSaturation/MaxSaturation`, `MinValue/MaxValue` (spec §3.11).
 
 ### 5.4 Date/time

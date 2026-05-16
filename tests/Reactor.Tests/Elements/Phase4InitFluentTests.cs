@@ -535,4 +535,124 @@ public class Phase4InitFluentTests
         Assert.Null(el.CheckedState);
         Assert.False(el.IsChecked); // primary stays false in null mode
     }
+
+    // ── 5.3 Input controls ───────────────────────────────────────────
+
+    [Fact]
+    public void PasswordBox_MaxLength_Sets()
+    {
+        var el = PasswordBox("").MaxLength(16);
+        Assert.Equal(16, el.MaxLength);
+    }
+
+    [Fact]
+    public void PasswordBox_Header_Sets()
+    {
+        var el = PasswordBox("").Header("Password");
+        Assert.Equal("Password", el.Header);
+    }
+
+    [Fact]
+    public void PasswordBox_PasswordRevealMode_Sets()
+    {
+        var el = PasswordBox("").PasswordRevealMode(Microsoft.UI.Xaml.Controls.PasswordRevealMode.Hidden);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.PasswordRevealMode.Hidden, el.PasswordRevealMode);
+    }
+
+    [Fact]
+    public void PasswordBox_PasswordChar_Sets()
+    {
+        var el = PasswordBox("").PasswordChar("*");
+        Assert.Equal("*", el.PasswordChar);
+    }
+
+    [Fact]
+    public void AutoSuggestBox_Header_Sets()
+    {
+        var el = AutoSuggestBox("").Header("Search");
+        Assert.Equal("Search", el.Header);
+    }
+
+    [Fact]
+    public void AutoSuggestBox_QueryIcon_Sets()
+    {
+        var icon = new SymbolIconData("Find");
+        var el = AutoSuggestBox("").QueryIcon(icon);
+        Assert.Same(icon, el.QueryIcon);
+    }
+
+    [Fact]
+    public void AutoSuggestBox_IsSuggestionListOpen_Sets()
+    {
+        var el = AutoSuggestBox("").IsSuggestionListOpen();
+        Assert.True(el.IsSuggestionListOpen);
+        Assert.False(AutoSuggestBox("").IsSuggestionListOpen(false).IsSuggestionListOpen);
+    }
+
+    [Fact]
+    public void ComboBox_MaxDropDownHeight_Sets()
+    {
+        var el = ComboBox(new[] { "a" }).MaxDropDownHeight(240);
+        Assert.Equal(240, el.MaxDropDownHeight);
+    }
+
+    [Fact]
+    public void ComboBox_Description_Sets()
+    {
+        var el = ComboBox(new[] { "a" }).Description("pick one");
+        Assert.Equal("pick one", el.Description);
+    }
+
+    [Fact]
+    public void RatingControl_Caption_Sets()
+    {
+        var el = new RatingControlElement().Caption("How was it?");
+        Assert.Equal("How was it?", el.Caption);
+    }
+
+    [Fact]
+    public void RatingControl_PlaceholderValue_Sets()
+    {
+        var el = new RatingControlElement().PlaceholderValue(3);
+        Assert.Equal(3, el.PlaceholderValue);
+    }
+
+    [Fact]
+    public void RatingControl_InitialSetValue_Sets()
+    {
+        var el = new RatingControlElement().InitialSetValue(2);
+        Assert.Equal(2, el.InitialSetValue);
+    }
+
+    [Fact]
+    public void ColorPicker_ColorSpectrumShape_Sets()
+    {
+        var el = new ColorPickerElement(global::Windows.UI.Color.FromArgb(255, 0, 0, 0))
+            .ColorSpectrumShape(Microsoft.UI.Xaml.Controls.ColorSpectrumShape.Ring);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.ColorSpectrumShape.Ring, el.ColorSpectrumShape);
+    }
+
+    [Fact]
+    public void ColorPicker_HueRange_Sets()
+    {
+        var el = new ColorPickerElement(global::Windows.UI.Color.FromArgb(255, 0, 0, 0)).HueRange(30, 270);
+        Assert.Equal(30, el.MinHue);
+        Assert.Equal(270, el.MaxHue);
+    }
+
+    [Fact]
+    public void ColorPicker_SaturationRange_Sets()
+    {
+        var el = new ColorPickerElement(global::Windows.UI.Color.FromArgb(255, 0, 0, 0)).SaturationRange(20, 80);
+        Assert.Equal(20, el.MinSaturation);
+        Assert.Equal(80, el.MaxSaturation);
+    }
+
+    [Fact]
+    public void ColorPicker_ValueRange_Sets()
+    {
+        var el = new ColorPickerElement(global::Windows.UI.Color.FromArgb(255, 0, 0, 0)).ValueRange(10, 90);
+        Assert.Equal(10, el.MinValue);
+        Assert.Equal(90, el.MaxValue);
+    }
 }
