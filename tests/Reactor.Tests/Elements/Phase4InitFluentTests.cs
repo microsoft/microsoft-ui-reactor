@@ -117,4 +117,69 @@ public class Phase4InitFluentTests
         Assert.Equal(NumberBoxValidationMode.Disabled, el.ValidationMode);
         Assert.Equal("desc", el.Description);
     }
+
+    // ── 4.3 ColorPicker ───────────────────────────────────────────────
+
+    private static readonly global::Windows.UI.Color Black = global::Microsoft.UI.Colors.Black;
+
+    [Fact]
+    public void ColorPicker_AlphaEnabled_Sets()
+    {
+        var el = ColorPicker(Black).AlphaEnabled();
+        Assert.True(el.IsAlphaEnabled);
+        Assert.False(ColorPicker(Black).AlphaEnabled(false).IsAlphaEnabled);
+    }
+
+    [Fact]
+    public void ColorPicker_MoreButtonVisible_Sets()
+    {
+        var el = ColorPicker(Black).MoreButtonVisible();
+        Assert.True(el.IsMoreButtonVisible);
+    }
+
+    [Fact]
+    public void ColorPicker_ColorSpectrumVisible_Sets()
+    {
+        var el = ColorPicker(Black).ColorSpectrumVisible(false);
+        Assert.False(el.IsColorSpectrumVisible);
+    }
+
+    [Fact]
+    public void ColorPicker_ColorSliderVisible_Sets()
+    {
+        var el = ColorPicker(Black).ColorSliderVisible(false);
+        Assert.False(el.IsColorSliderVisible);
+    }
+
+    [Fact]
+    public void ColorPicker_ColorChannelTextInputVisible_Sets()
+    {
+        var el = ColorPicker(Black).ColorChannelTextInputVisible(false);
+        Assert.False(el.IsColorChannelTextInputVisible);
+    }
+
+    [Fact]
+    public void ColorPicker_HexInputVisible_Sets()
+    {
+        var el = ColorPicker(Black).HexInputVisible(false);
+        Assert.False(el.IsHexInputVisible);
+    }
+
+    [Fact]
+    public void ColorPicker_Chaining_Preserves_Prior_Settings()
+    {
+        var el = ColorPicker(Black)
+            .AlphaEnabled()
+            .MoreButtonVisible()
+            .ColorSpectrumVisible(false)
+            .ColorSliderVisible(false)
+            .ColorChannelTextInputVisible(false)
+            .HexInputVisible(false);
+        Assert.True(el.IsAlphaEnabled);
+        Assert.True(el.IsMoreButtonVisible);
+        Assert.False(el.IsColorSpectrumVisible);
+        Assert.False(el.IsColorSliderVisible);
+        Assert.False(el.IsColorChannelTextInputVisible);
+        Assert.False(el.IsHexInputVisible);
+    }
 }

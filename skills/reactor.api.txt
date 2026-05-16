@@ -213,7 +213,13 @@ CanvasElement.Set(Action<Canvas> configure) → CanvasElement
 CheckBoxElement.CheckedStateChanged(Action<bool?> handler) → CheckBoxElement
 CheckBoxElement.IsCheckedChanged(Action<bool> handler) → CheckBoxElement
 CheckBoxElement.Set(Action<CheckBox> configure) → CheckBoxElement
+ColorPickerElement.AlphaEnabled(bool enabled = true) → ColorPickerElement
 ColorPickerElement.ColorChanged(Action<Color> handler) → ColorPickerElement
+ColorPickerElement.ColorChannelTextInputVisible(bool visible) → ColorPickerElement
+ColorPickerElement.ColorSliderVisible(bool visible) → ColorPickerElement
+ColorPickerElement.ColorSpectrumVisible(bool visible = true) → ColorPickerElement
+ColorPickerElement.HexInputVisible(bool visible) → ColorPickerElement
+ColorPickerElement.MoreButtonVisible(bool visible = true) → ColorPickerElement
 ColorPickerElement.Set(Action<ColorPicker> configure) → ColorPickerElement
 ComboBoxElement.Editable(bool editable = true) → ComboBoxElement
 ComboBoxElement.Header(string header) → ComboBoxElement

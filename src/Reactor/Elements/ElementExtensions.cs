@@ -786,6 +786,32 @@ public static partial class ElementExtensions
     public static ToggleSwitchElement Header(this ToggleSwitchElement el, string header) =>
         el with { Header = header };
 
+    // ── ColorPicker sugar ───────────────────────────────────────────
+
+    /// <summary>Whether the alpha (transparency) channel is editable.</summary>
+    public static ColorPickerElement AlphaEnabled(this ColorPickerElement el, bool enabled = true) =>
+        el with { IsAlphaEnabled = enabled };
+
+    /// <summary>Whether the "More" disclosure button is shown to expand additional inputs.</summary>
+    public static ColorPickerElement MoreButtonVisible(this ColorPickerElement el, bool visible = true) =>
+        el with { IsMoreButtonVisible = visible };
+
+    /// <summary>Whether the 2D hue/saturation spectrum is shown.</summary>
+    public static ColorPickerElement ColorSpectrumVisible(this ColorPickerElement el, bool visible = true) =>
+        el with { IsColorSpectrumVisible = visible };
+
+    /// <summary>Whether the lightness/value slider is shown.</summary>
+    public static ColorPickerElement ColorSliderVisible(this ColorPickerElement el, bool visible) =>
+        el with { IsColorSliderVisible = visible };
+
+    /// <summary>Whether the per-channel numeric text inputs (RGB / HSV) are shown.</summary>
+    public static ColorPickerElement ColorChannelTextInputVisible(this ColorPickerElement el, bool visible) =>
+        el with { IsColorChannelTextInputVisible = visible };
+
+    /// <summary>Whether the hex code text input is shown.</summary>
+    public static ColorPickerElement HexInputVisible(this ColorPickerElement el, bool visible) =>
+        el with { IsHexInputVisible = visible };
+
     // ── RatingControl sugar ─────────────────────────────────────────
 
     public static RatingControlElement MaxRating(this RatingControlElement el, int max) =>

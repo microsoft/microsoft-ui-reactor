@@ -1065,6 +1065,11 @@ public sealed partial class Reconciler
             cp.Color = n.Color;
         }
         cp.IsAlphaEnabled = n.IsAlphaEnabled;
+        if (cp.IsMoreButtonVisible != n.IsMoreButtonVisible) cp.IsMoreButtonVisible = n.IsMoreButtonVisible;
+        if (cp.IsColorSpectrumVisible != n.IsColorSpectrumVisible) cp.IsColorSpectrumVisible = n.IsColorSpectrumVisible;
+        if (cp.IsColorSliderVisible != n.IsColorSliderVisible) cp.IsColorSliderVisible = n.IsColorSliderVisible;
+        if (cp.IsColorChannelTextInputVisible != n.IsColorChannelTextInputVisible) cp.IsColorChannelTextInputVisible = n.IsColorChannelTextInputVisible;
+        if (cp.IsHexInputVisible != n.IsHexInputVisible) cp.IsHexInputVisible = n.IsHexInputVisible;
         ApplySetters(n.Setters, cp);
         return null;
     }

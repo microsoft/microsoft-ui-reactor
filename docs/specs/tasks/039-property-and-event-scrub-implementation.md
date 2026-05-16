@@ -370,7 +370,7 @@ etc. Property names are unchanged.
 
 ### 4.3 `ColorPicker`
 
-- [ ] `.AlphaEnabled(bool = true)`, `.MoreButtonVisible(bool = true)`,
+- [x] `.AlphaEnabled(bool = true)`, `.MoreButtonVisible(bool = true)`,
       `.ColorSpectrumVisible(bool = true)`, `.ColorSliderVisible(bool)`,
       `.ColorChannelTextInputVisible(bool)`, `.HexInputVisible(bool)`
       (spec §3.11). One fluent per init property — all six.
