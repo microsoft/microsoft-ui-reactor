@@ -909,12 +909,35 @@ public sealed partial class Reconciler
         var webView = new WinUI.WebView2();
         if (wv.Source is not null) webView.Source = wv.Source;
         SetElementTag(webView, wv);
+
+        // Subscribe unconditionally; the trampoline reads the live element via
+        // GetElementTag so a later record-with that attaches a handler picks up
+        // without re-wiring. NavigationStarting/Completed retain the existing
+        // null-checked subscribe-only-on-handler pattern for backwards compat.
         if (wv.OnNavigationStarting is not null)
             webView.NavigationStarting += (s, args) =>
                 (GetElementTag((UIElement)s!) as WebView2Element)?.OnNavigationStarting?.Invoke(new Uri(args.Uri));
         if (wv.OnNavigationCompleted is not null)
             webView.NavigationCompleted += (s, _) =>
                 (GetElementTag((UIElement)s!) as WebView2Element)?.OnNavigationCompleted?.Invoke(((WinUI.WebView2)s!).Source);
+
+        webView.WebMessageReceived += (s, args) =>
+        {
+            if (GetElementTag((UIElement)s!) is WebView2Element el && el.OnWebMessageReceived is { } h)
+            {
+                // TryGetWebMessageAsString throws if the underlying message
+                // isn't a string (e.g. structured-clone JSON). Fall back to
+                // WebMessageAsJson so handlers always see a string payload.
+                string payload;
+                try { payload = args.TryGetWebMessageAsString(); }
+                catch { payload = args.WebMessageAsJson; }
+                h(payload);
+            }
+        };
+
+        webView.CoreWebView2Initialized += (s, _) =>
+            (GetElementTag((UIElement)s!) as WebView2Element)?.OnCoreWebView2Initialized?.Invoke();
+
         ApplySetters(wv.Setters, webView);
         return webView;
     }

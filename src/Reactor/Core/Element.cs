@@ -2039,8 +2039,31 @@ public record WebView2Element(Uri? Source = null) : Element
 {
     public Action<Uri>? OnNavigationStarting { get; init; }
     public Action<Uri>? OnNavigationCompleted { get; init; }
+
+    /// <summary>
+    /// Raised when the hosted page posts a message via
+    /// <c>window.chrome.webview.postMessage(...)</c>. The callback receives the
+    /// JSON payload as a string.
+    ///
+    /// Threading: messages dispatch on the UI thread (the WinUI WebView2 raises
+    /// <c>WebMessageReceived</c> via the control's dispatcher), so the handler
+    /// is safe to mutate component state from directly.
+    /// </summary>
+    public Action<string>? OnWebMessageReceived { get; init; }
+
+    /// <summary>
+    /// Raised once <c>CoreWebView2</c> initialization completes — the earliest
+    /// point at which features like <c>AddScriptToExecuteOnDocumentCreatedAsync</c>
+    /// or <c>AddHostObjectToScript</c> become available. Fires on the UI thread.
+    /// </summary>
+    public Action? OnCoreWebView2Initialized { get; init; }
+
     internal Action<WinUI.WebView2>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnNavigationStarting is not null || OnNavigationCompleted is not null;
+    internal override bool HasCallbacks =>
+        OnNavigationStarting is not null
+        || OnNavigationCompleted is not null
+        || OnWebMessageReceived is not null
+        || OnCoreWebView2Initialized is not null;
 }
 
 // ════════════════════════════════════════════════════════════════════════

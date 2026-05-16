@@ -329,6 +329,23 @@ public static partial class ElementExtensions
     public static WebView2Element NavigationCompleted(this WebView2Element el, Action<Uri>? handler) =>
         el with { OnNavigationCompleted = handler };
 
+    /// <summary>
+    /// Wires the host-bound <c>WebMessageReceived</c> handler. The callback runs
+    /// on the UI thread and receives the message payload as a string (JSON when
+    /// the page sends structured data via <c>postMessage(...)</c>). Passing
+    /// <c>null</c> clears.
+    /// </summary>
+    public static WebView2Element WebMessageReceived(this WebView2Element el, Action<string>? handler) =>
+        el with { OnWebMessageReceived = handler };
+
+    /// <summary>
+    /// Wires the <c>CoreWebView2Initialized</c> handler. Fires once on the UI
+    /// thread when the underlying <c>CoreWebView2</c> is available. Passing
+    /// <c>null</c> clears.
+    /// </summary>
+    public static WebView2Element CoreWebView2Initialized(this WebView2Element el, Action? handler) =>
+        el with { OnCoreWebView2Initialized = handler };
+
     // ── §12 Niche / less-common ────────────────────────────────────────
 
     /// <summary>Wires the selected-index-changed handler. Passing <c>null</c> clears.</summary>

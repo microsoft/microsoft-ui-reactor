@@ -315,10 +315,15 @@ etc. Property names are unchanged.
 
 ### 3.5 `WebView2.WebMessageReceived` / `CoreWebView2Initialized`
 
-- [ ] Add `OnWebMessageReceived(Action<string>?)` (or whichever payload
-      shape Reactor exposes already) and
+- [x] Add `OnWebMessageReceived(Action<string>?)` and
       `OnCoreWebView2Initialized(Action?)` to `WebView2Element`. Fluents
-      + tests. Document the threading contract in XML doc comments.
+      `.WebMessageReceived(...)` / `.CoreWebView2Initialized(...)` +
+      null-clear tests. Threading contract documented in XML doc
+      comments (both fire on UI thread).
+- [x] `OnWebMessageReceived` handler falls back from
+      `TryGetWebMessageAsString()` to `WebMessageAsJson` so callers always
+      receive a string payload even when the page sends a structured
+      message via `postMessage(...)`.
 
 ### 3.6 `MediaPlayerElement.MediaOpened/.MediaEnded/.MediaFailed`
 

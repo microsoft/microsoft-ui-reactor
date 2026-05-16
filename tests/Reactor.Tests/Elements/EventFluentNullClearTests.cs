@@ -295,6 +295,24 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
+    public void WebView2_WebMessageReceived_NullClears()
+    {
+        Action<string> h = _ => { };
+        var el = WebView2().WebMessageReceived(h);
+        Assert.Same(h, el.OnWebMessageReceived);
+        Assert.Null(el.WebMessageReceived(null).OnWebMessageReceived);
+    }
+
+    [Fact]
+    public void WebView2_CoreWebView2Initialized_NullClears()
+    {
+        Action h = () => { };
+        var el = WebView2().CoreWebView2Initialized(h);
+        Assert.Same(h, el.OnCoreWebView2Initialized);
+        Assert.Null(el.CoreWebView2Initialized(null).OnCoreWebView2Initialized);
+    }
+
+    [Fact]
     public void TimePicker_TimeChanged_NullClears()
     {
         Action<TimeSpan> h = _ => { };
