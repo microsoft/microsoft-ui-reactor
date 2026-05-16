@@ -154,6 +154,28 @@ To be filled out once §1–§5 are audited. Likely to mirror spec 039 §14:
 3. Naming-alignment decisions (the `MaskedTextField` vs `MaskedTextBox`
    question carries forward from spec 039 §16.3).
 
+## §6.1 Spec 039 Phase 3.7 carry-overs (niche WinUI events)
+
+Spec 039 Phase 3.7 deferred five niche WinUI event surfaces to this spec.
+None require a new Reactor element record beyond what already exists, so
+they slot in as follow-ons to the §1–§5 audit above. Per-item rationale
+lives in the 039 implementation task list; what's recorded here is the
+ownership transfer.
+
+- [ ] `MenuFlyout.Opening` / `MenuFlyout.Closing` — needs a Reactor-shaped
+      cancellation pattern. Open question: how do we model cancellable
+      args without leaking `CancelEventArgs` into user callbacks?
+- [ ] `CommandBar.IsOpenChanged` — no existing consumer; bundle with any
+      future `CommandBar`-using sample.
+- [ ] `SemanticZoom.ViewChangeStarted` / `SemanticZoom.ViewChangeCompleted`
+      — `SemanticZoom` is not currently modelled as a Reactor element;
+      modelling the control is a prerequisite.
+- [ ] `AnnotatedScrollBar.DetailLabelRequested` — `AnnotatedScrollBar`
+      (WinUI 3 1.5+) is not yet exposed as a Reactor element.
+- [ ] `MapControl.ViewChanged` — depends on the Windows Maps SDK which is
+      not currently a Reactor dependency. Likely stays deferred until a
+      consumer pulls the SDK in.
+
 ## §7 Open questions
 
 To be filled out during audit. Likely candidates:

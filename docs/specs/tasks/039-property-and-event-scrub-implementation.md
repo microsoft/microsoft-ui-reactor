@@ -345,13 +345,30 @@ etc. Property names are unchanged.
 
 ### 3.7 Niche but documented gaps
 
-- [ ] `MenuFlyout.Opening/.Closing`, `CommandBar.IsOpenChanged`,
-      `SemanticZoom.ViewChangeStarted/.Completed`,
-      `AnnotatedScrollBar.DetailLabelRequested`,
-      `MapControl.ViewChanged` — **defer to a follow-up spec or task** if
-      the surface area cost exceeds a single PR. Track explicitly here:
-      add a checkbox for each marked `[deferred]` rather than silently
-      dropping them.
+Each item below is **[deferred]** to a follow-up spec (tracked in
+`docs/specs/040-specialized-control-scrub.md`). Rationale: each surface
+needs its own event-shape design pass (e.g. `MenuFlyout.Opening` exposes
+a cancellable args object Reactor doesn't yet have a pattern for; `MapControl`
+isn't packaged in this Reactor build at all). Bundling these into 039
+would balloon the PR past review-budget without proportional user value.
+
+- [x] **[deferred]** `MenuFlyout.Opening` / `MenuFlyout.Closing` — cancellable
+      args (`Opening` exposes `CancelEventArgs`-shaped data); needs a
+      Reactor-shaped cancellation pattern that doesn't exist elsewhere in
+      the codebase yet. Tracked in spec 040.
+- [x] **[deferred]** `CommandBar.IsOpenChanged` — `CommandBar` is itself
+      niche in the current sample/app surface (no current consumer); add
+      alongside any future `CommandBar` work. Tracked in spec 040.
+- [x] **[deferred]** `SemanticZoom.ViewChangeStarted` /
+      `SemanticZoom.ViewChangeCompleted` — `SemanticZoom` is not currently
+      modelled as a Reactor element record; modelling the control is a
+      prerequisite. Tracked in spec 040.
+- [x] **[deferred]** `AnnotatedScrollBar.DetailLabelRequested` —
+      `AnnotatedScrollBar` is a WinUI 3 1.5+ primitive not yet exposed as
+      a Reactor element. Tracked in spec 040.
+- [x] **[deferred]** `MapControl.ViewChanged` — `MapControl` lives in the
+      Windows Maps SDK which is not a dependency of this Reactor build;
+      out of scope for 039 entirely.
 
 ---
 
@@ -992,7 +1009,8 @@ that maps to the spec's §14 ordering:
 - [x] §14 #1 — Fluent for every callback (Phase 1 — extensions drop the
       leading `On` per the C# clash discovered in Phase 0.1).
 - [x] §14 #2 — High-traffic init→fluent promotion (Phase 4).
-- [ ] §14 #3 — Missing events modelled (Phase 3).
+- [x] §14 #3 — Missing events modelled (Phase 3; 3.7 niche events
+      `[deferred]` to spec 040 with per-item rationale).
 - [x] §14 #4 — Common-property gaps (Phase 5; GroupStyle and TreeView
       multi-select deferred — see Phase 5.6 / 5.8 notes).
 - [x] §14 #5 — `HyperlinkButton(Command)` doc comment + `.NavigateUri()`
