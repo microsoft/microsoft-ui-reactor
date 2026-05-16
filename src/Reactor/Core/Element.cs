@@ -2293,6 +2293,18 @@ public record NavigationViewElement(
     public Element? Header { get; init; }
     public bool IsSettingsVisible { get; init; } = true;
     public string? PaneTitle { get; init; }
+    /// <summary>AutoSuggestBox rendered at the top of the pane. Mirrors <c>NavigationView.AutoSuggestBox</c>.</summary>
+    public AutoSuggestBoxElement? AutoSuggestBox { get; init; }
+    /// <summary>Element rendered at the bottom of the pane, below all menu items.</summary>
+    public Element? PaneFooter { get; init; }
+    /// <summary>Custom element rendered between the AutoSuggestBox and the menu items.</summary>
+    public Element? PaneCustomContent { get; init; }
+    /// <summary>Width of the pane when expanded. <c>NaN</c> uses the WinUI default (320).</summary>
+    public double OpenPaneLength { get; init; } = double.NaN;
+    /// <summary>Window width below which the pane collapses to compact mode. <c>NaN</c> uses the WinUI default (640).</summary>
+    public double CompactModeThresholdWidth { get; init; } = double.NaN;
+    /// <summary>Window width at which the pane auto-expands. <c>NaN</c> uses the WinUI default (1008).</summary>
+    public double ExpandedModeThresholdWidth { get; init; } = double.NaN;
     internal Action<WinUI.NavigationView>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnSelectedTagChanged is not null || OnBackRequested is not null;
 }

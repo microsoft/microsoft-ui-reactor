@@ -385,7 +385,7 @@ etc. Property names are unchanged.
 
 ### 4.5 `NavigationView`
 
-- [ ] `.AutoSuggestBox(AutoSuggestBoxElement)`,
+- [x] `.AutoSuggestBox(AutoSuggestBoxElement)`,
       `.PaneFooter(Element)`, `.PaneCustomContent(Element)`,
       `.OpenPaneLength(double)`,
       `.CompactModeThresholdWidth(double)`,

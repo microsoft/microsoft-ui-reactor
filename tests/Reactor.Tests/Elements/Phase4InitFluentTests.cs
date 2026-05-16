@@ -235,4 +235,53 @@ public class Phase4InitFluentTests
         var el = EmptyTabView().TabStripFooter(footer);
         Assert.Same(footer, el.TabStripFooter);
     }
+
+    // ── 4.5 NavigationView ────────────────────────────────────────────
+
+    private static NavigationViewElement EmptyNav() => NavigationView(Array.Empty<NavigationViewItemData>());
+
+    [Fact]
+    public void NavigationView_AutoSuggestBox_Sets()
+    {
+        var box = AutoSuggestBox("query");
+        var el = EmptyNav().AutoSuggestBox(box);
+        Assert.Same(box, el.AutoSuggestBox);
+    }
+
+    [Fact]
+    public void NavigationView_PaneFooter_Sets()
+    {
+        var footer = TextBlock("Footer");
+        var el = EmptyNav().PaneFooter(footer);
+        Assert.Same(footer, el.PaneFooter);
+    }
+
+    [Fact]
+    public void NavigationView_PaneCustomContent_Sets()
+    {
+        var content = TextBlock("Custom");
+        var el = EmptyNav().PaneCustomContent(content);
+        Assert.Same(content, el.PaneCustomContent);
+    }
+
+    [Fact]
+    public void NavigationView_OpenPaneLength_Sets()
+    {
+        var el = EmptyNav().OpenPaneLength(280);
+        Assert.Equal(280, el.OpenPaneLength);
+    }
+
+    [Fact]
+    public void NavigationView_CompactModeThresholdWidth_Sets()
+    {
+        var el = EmptyNav().CompactModeThresholdWidth(500);
+        Assert.Equal(500, el.CompactModeThresholdWidth);
+    }
+
+    [Fact]
+    public void NavigationView_ExpandedModeThresholdWidth_Sets()
+    {
+        var el = EmptyNav().ExpandedModeThresholdWidth(1200);
+        Assert.Equal(1200, el.ExpandedModeThresholdWidth);
+    }
 }

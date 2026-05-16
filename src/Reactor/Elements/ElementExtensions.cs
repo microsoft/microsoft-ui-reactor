@@ -836,6 +836,30 @@ public static partial class ElementExtensions
     public static NavigationViewElement PaneTitle(this NavigationViewElement el, string title) =>
         el with { PaneTitle = title };
 
+    /// <summary>Sets the AutoSuggestBox rendered at the top of the pane.</summary>
+    public static NavigationViewElement AutoSuggestBox(this NavigationViewElement el, AutoSuggestBoxElement box) =>
+        el with { AutoSuggestBox = box };
+
+    /// <summary>Sets the element rendered at the bottom of the pane (below menu items).</summary>
+    public static NavigationViewElement PaneFooter(this NavigationViewElement el, Element footer) =>
+        el with { PaneFooter = footer };
+
+    /// <summary>Sets the custom element rendered between the AutoSuggestBox and the menu items.</summary>
+    public static NavigationViewElement PaneCustomContent(this NavigationViewElement el, Element content) =>
+        el with { PaneCustomContent = content };
+
+    /// <summary>Sets the width of the pane when expanded.</summary>
+    public static NavigationViewElement OpenPaneLength(this NavigationViewElement el, double length) =>
+        el with { OpenPaneLength = length };
+
+    /// <summary>Sets the window width below which the pane collapses to compact mode.</summary>
+    public static NavigationViewElement CompactModeThresholdWidth(this NavigationViewElement el, double width) =>
+        el with { CompactModeThresholdWidth = width };
+
+    /// <summary>Sets the window width at which the pane auto-expands.</summary>
+    public static NavigationViewElement ExpandedModeThresholdWidth(this NavigationViewElement el, double width) =>
+        el with { ExpandedModeThresholdWidth = width };
+
     /// <summary>
     /// Auto-syncs this NavigationView with a NavigationHandle: sets <c>SelectedTag</c>
     /// from the current route, wires <c>OnSelectedTagChanged</c> to navigate,

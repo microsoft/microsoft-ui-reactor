@@ -1240,6 +1240,13 @@ public sealed partial class Reconciler
         };
         if (nav.PaneTitle is not null) nv.PaneTitle = nav.PaneTitle;
         if (nav.Header is not null) nv.Header = Mount(nav.Header, requestRerender);
+        if (nav.AutoSuggestBox is not null && Mount(nav.AutoSuggestBox, requestRerender) is WinUI.AutoSuggestBox asb)
+            nv.AutoSuggestBox = asb;
+        if (nav.PaneFooter is not null) nv.PaneFooter = Mount(nav.PaneFooter, requestRerender);
+        if (nav.PaneCustomContent is not null) nv.PaneCustomContent = Mount(nav.PaneCustomContent, requestRerender);
+        if (!double.IsNaN(nav.OpenPaneLength)) nv.OpenPaneLength = nav.OpenPaneLength;
+        if (!double.IsNaN(nav.CompactModeThresholdWidth)) nv.CompactModeThresholdWidth = nav.CompactModeThresholdWidth;
+        if (!double.IsNaN(nav.ExpandedModeThresholdWidth)) nv.ExpandedModeThresholdWidth = nav.ExpandedModeThresholdWidth;
         foreach (var item in nav.MenuItems)
         {
             if (item.IsHeader)

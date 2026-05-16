@@ -296,8 +296,14 @@ MediaPlayerElementElement.MediaOpened(Action handler) → MediaPlayerElementElem
 MediaPlayerElementElement.Set(Action<MediaPlayerElement> configure) → MediaPlayerElementElement
 MenuBarElement.Set(Action<MenuBar> configure) → MenuBarElement
 MenuFlyoutElement.Set(Action<MenuFlyout> configure) → MenuFlyoutElement
+NavigationViewElement.AutoSuggestBox(AutoSuggestBoxElement box) → NavigationViewElement
 NavigationViewElement.BackRequested(Action handler) → NavigationViewElement
+NavigationViewElement.CompactModeThresholdWidth(double width) → NavigationViewElement
+NavigationViewElement.ExpandedModeThresholdWidth(double width) → NavigationViewElement
+NavigationViewElement.OpenPaneLength(double length) → NavigationViewElement
+NavigationViewElement.PaneCustomContent(Element content) → NavigationViewElement
 NavigationViewElement.PaneDisplayMode(NavigationViewPaneDisplayMode mode) → NavigationViewElement
+NavigationViewElement.PaneFooter(Element footer) → NavigationViewElement
 NavigationViewElement.PaneTitle(string title) → NavigationViewElement
 NavigationViewElement.SelectedTagChanged(Action<string> handler) → NavigationViewElement
 NavigationViewElement.Set(Action<NavigationView> configure) → NavigationViewElement

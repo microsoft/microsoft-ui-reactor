@@ -1567,6 +1567,27 @@ public sealed partial class Reconciler
     private UIElement? UpdateNavigationView(NavigationViewElement o, NavigationViewElement n, WinUI.NavigationView nv, Action requestRerender)
     {
         nv.IsPaneOpen = n.IsPaneOpen; nv.IsBackEnabled = n.IsBackEnabled;
+        if (!double.IsNaN(n.OpenPaneLength) && nv.OpenPaneLength != n.OpenPaneLength) nv.OpenPaneLength = n.OpenPaneLength;
+        if (!double.IsNaN(n.CompactModeThresholdWidth) && nv.CompactModeThresholdWidth != n.CompactModeThresholdWidth) nv.CompactModeThresholdWidth = n.CompactModeThresholdWidth;
+        if (!double.IsNaN(n.ExpandedModeThresholdWidth) && nv.ExpandedModeThresholdWidth != n.ExpandedModeThresholdWidth) nv.ExpandedModeThresholdWidth = n.ExpandedModeThresholdWidth;
+
+        // AutoSuggestBox / PaneFooter / PaneCustomContent reconcile in place
+        // when possible so the controls keep focus / scroll state across re-renders.
+        ReconcileChild(o.AutoSuggestBox, n.AutoSuggestBox,
+            () => nv.AutoSuggestBox,
+            c => { if (c is WinUI.AutoSuggestBox asb) nv.AutoSuggestBox = asb; },
+            () => nv.AutoSuggestBox = null,
+            requestRerender);
+        ReconcileChild(o.PaneFooter, n.PaneFooter,
+            () => nv.PaneFooter as UIElement,
+            c => nv.PaneFooter = c,
+            () => nv.PaneFooter = null,
+            requestRerender);
+        ReconcileChild(o.PaneCustomContent, n.PaneCustomContent,
+            () => nv.PaneCustomContent as UIElement,
+            c => nv.PaneCustomContent = c,
+            () => nv.PaneCustomContent = null,
+            requestRerender);
 
         // Reconcile content child instead of always remounting
         if (n.Content is not null && o.Content is not null
