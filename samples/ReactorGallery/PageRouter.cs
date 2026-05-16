@@ -52,6 +52,7 @@ static class PageRouter
 
         // Layout
         "border" => Component<BorderPage>(),
+        "card" => Component<ControlPages.Layout.CardPage>(),
         "canvas" => Component<CanvasPage>(),
         "expander" => Component<ExpanderPage>(),
         "flex" => Component<FlexPage>(),
@@ -91,6 +92,7 @@ static class PageRouter
         "auto-suggest-box" => Component<AutoSuggestBoxPage>(),
         "rich-edit-box" => Component<RichEditBoxPage>(),
         "rich-text-block" => Component<RichTextBlockPage>(),
+        "type-ramp" => Component<ControlPages.Text.TypeRampPage>(),
 
         // Styles
         "acrylic" => Component<ControlPages.Styles.AcrylicPage>(),
