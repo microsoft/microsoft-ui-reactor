@@ -848,7 +848,7 @@ cross-cutting test surface.
 
 ### 11.1 Public-API surface test
 
-- [ ] Add a self-test under `tests/Reactor.SelfTests/` that walks every
+- [x] Add a self-test under `tests/Reactor.SelfTests/` that walks every
       `Element` record reflectively and asserts:
       (a) every `Action`/`Action<T>` property has a matching public
       extension method whose name equals the property name and whose
@@ -856,6 +856,14 @@ cross-cutting test surface.
       (b) the extension exists in `ElementExtensions.Events.cs` or is
       source-generated. This guards against future records adding a
       callback without a fluent.
+      (Landed as xUnit `PublicApiSurfaceGuardTests.EveryCallbackPropertyHasMatchingFluent`
+      under `tests/Reactor.Tests/Elements/` — Reactor.SelfTests is a
+      Host-launcher MSTest harness, so the reflective surface test lives
+      with the rest of the element-record unit suites. Two intentional
+      property-name exceptions documented inline: `VirtualListElement.Ref`
+      (ref-capture clashes with the generic `.Ref<T>` modifier) and
+      `XamlHostElement.Updater` (constructor-time interop hook, not an
+      event). All other `OnX` callbacks resolve to a matching fluent.)
 
 ### 11.2 Naming-alignment guard test
 
