@@ -892,8 +892,22 @@ cross-cutting test surface.
 
 ### 11.4 Theme-resource resolution test for `Card` and named-style buttons
 
-- [ ] Switch theme between Light / Dark / HighContrast and confirm the
+- [x] Switch theme between Light / Dark / HighContrast and confirm the
       `Card` background, stroke, and `.AccentButton()` brush re-resolve.
+      (Unit-level smoke landed as `CardThemeResolutionSmokeTests` under
+      `tests/Reactor.Tests/Elements/` — asserts `Card(child)` wires the
+      `CardBackgroundFillColorDefaultBrush` / `CardStrokeColorDefaultBrush`
+      keys into `ThemeBindings`, cross-checks against `Theme.CardBackground`
+      / `Theme.CardStroke`, and asserts `.AccentButton()` stores an OnMount
+      action whose captured closure references `AccentButtonStyle`. The
+      full Light/Dark/HighContrast flip-and-verify-brush test requires a
+      theme-flip primitive on `Reactor.AppTests`, which doesn't exist
+      today — **deferred** as Reactor.AppTests follow-up.)
+- [ ] **Deferred — Reactor.AppTests follow-up**: real theme-flip test that
+      mounts a Card under each of Light / Dark / HighContrast and asserts
+      the resolved `Background` / `BorderBrush` `SolidColorBrush.Color`
+      values differ across the three themes. Blocked on adding a theme-flip
+      primitive to the AppTests harness.
 
 ### 11.5 Snapshot tests for generated fluents (if Phase 0.4 went source-gen)
 
