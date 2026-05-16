@@ -76,6 +76,7 @@ static class PageRouter
 
         // Navigation
         "breadcrumb-bar" => Component<ControlPages.Navigation.BreadcrumbBarPage>(),
+        "frame" => Component<ControlPages.Navigation.FrameNavigationPage>(),
         "navigation-view" => Component<ControlPages.Navigation.NavigationViewPage>(),
         "pivot" => Component<ControlPages.Navigation.PivotPage>(),
         "tab-view" => Component<ControlPages.Navigation.TabViewPage>(),

@@ -78,6 +78,7 @@ public static class ControlRegistry
 
         // Navigation
         new("BreadcrumbBar", "A trail of links showing the user's navigation path.", "Navigation", "\uE8B0", "breadcrumb-bar", "BreadcrumbBar.png"),
+        new("Frame", "A container that hosts Page navigation, raising .Navigated / .Navigating / .NavigationFailed.", "Navigation", "\uE8B0", "frame", "Placeholder.png"),
         new("NavigationView", "A side or top navigation pane for app-level navigation.", "Navigation", "\uE8B0", "navigation-view", "NavigationView.png"),
         new("Pivot", "A tabbed interface for switching between content sections.", "Navigation", "\uE8B0", "pivot", "Pivot.png"),
         new("TabView", "A control that displays a set of closable, rearrangeable tabs.", "Navigation", "\uE8B0", "tab-view", "TabView.png"),
