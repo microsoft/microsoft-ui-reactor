@@ -1,6 +1,8 @@
 using System;
 using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Data;
+using Microsoft.UI.Reactor.Data.Providers;
 using Microsoft.UI.Xaml.Controls;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
@@ -751,5 +753,19 @@ public class EventFluentNullClearTests
             .VisibleRangeChanged(h);
         Assert.Same(h, el.OnVisibleRangeChanged);
         Assert.Null(el.VisibleRangeChanged(null).OnVisibleRangeChanged);
+    }
+
+    private record DataGridTestItem(int Id);
+
+    [Fact]
+    public void DataGrid_SelectionChanged_NullClears()
+    {
+        Action<global::System.Collections.Generic.IReadOnlySet<RowKey>> h = _ => { };
+        var source = new ListDataSource<DataGridTestItem>(
+            new[] { new DataGridTestItem(1) }, t => (RowKey)t.Id);
+        var el = new DataGridElement<DataGridTestItem> { Source = source }
+            .SelectionChanged(h);
+        Assert.Same(h, el.OnSelectionChanged);
+        Assert.Null(el.SelectionChanged(null).OnSelectionChanged);
     }
 }

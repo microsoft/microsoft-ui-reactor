@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Controls;
+using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor;
@@ -448,4 +449,12 @@ public static partial class ElementExtensions
     /// <summary>Wires the visible-range-changed handler (receives <c>firstVisibleIndex</c> and <c>lastVisibleIndex</c>). Passing <c>null</c> clears.</summary>
     public static VirtualListElement VisibleRangeChanged(this VirtualListElement el, Action<int, int>? handler) =>
         el with { OnVisibleRangeChanged = handler };
+
+    /// <summary>
+    /// Wires the multi-select snapshot handler for <see cref="DataGridElement{T}"/>.
+    /// Receives the full set of currently-selected <c>RowKey</c>s on every
+    /// change (not added/removed deltas). Passing <c>null</c> clears.
+    /// </summary>
+    public static DataGridElement<T> SelectionChanged<T>(this DataGridElement<T> el, Action<IReadOnlySet<RowKey>>? handler) =>
+        el with { OnSelectionChanged = handler };
 }

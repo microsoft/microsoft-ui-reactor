@@ -599,11 +599,22 @@ This phase is intentionally scoped — the spec defers full coverage to
 
 ### 7.2 Quick-win events for specialized controls
 
-- [ ] Inventory specialized controls' callback properties using the same
+- [x] Inventory specialized controls' callback properties using the same
       script from 0.3 (extend it to cover `src/Reactor/Controls/**`).
-- [ ] Land `OnX` fluents for any callback the generator from Phase 0.4
-      doesn't already cover (records under `Controls/` may need an extra
-      glob in the generator config).
+      (The script already globs `src/Reactor/Controls/**`. Re-ran and
+      regenerated `tests/Reactor.SelfTests/Fixtures/event-fluent-inventory.csv`.
+      Also broadened the delegate-type regex to capture one level of
+      nested generics so `Action<IReadOnlySet<RowKey>>?` on
+      `DataGridElement<T>` is now picked up.)
+- [x] Land fluent extensions for any callback that does not already have
+      one. Phase 0.4 (source generator) was struck (hand-written chosen),
+      so this is purely a hand-written sweep.
+      - `AutoSuggestElement<T>.OnSelected` — covered (Phase 1).
+      - `MaskedTextFieldElement.OnChanged` — covered (Phase 1).
+      - `PropertyGridElement.OnRootChanged` — covered (Phase 1).
+      - `VirtualListElement.OnVisibleRangeChanged` — covered (Phase 1).
+      - `DataGridElement<T>.OnSelectionChanged` — **new** fluent
+        `.SelectionChanged(...)` added; null-clear test added.
 
 ---
 

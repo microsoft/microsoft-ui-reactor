@@ -254,6 +254,7 @@ ContentDialogElement.IsPrimaryButtonEnabled(bool enabled = true) → ContentDial
 ContentDialogElement.IsSecondaryButtonEnabled(bool enabled = true) → ContentDialogElement
 ContentDialogElement.Opened(Action handler) → ContentDialogElement
 ContentDialogElement.Set(Action<ContentDialog> configure) → ContentDialogElement
+DataGridElement<T>.SelectionChanged<T>(Action<IReadOnlySet<RowKey>> handler) → DataGridElement<T>
 DatePickerElement.DateChanged(Action<DateTimeOffset> handler) → DatePickerElement
 DatePickerElement.DayFormat(string format) → DatePickerElement
 DatePickerElement.MonthFormat(string format) → DatePickerElement

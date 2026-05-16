@@ -62,7 +62,9 @@ function Parse-File {
         $body = $m.Groups[2].Value
 
         # Find Action / Action<T...> / EventHandler<...> init properties.
-        $propPattern = '(?m)^\s*public\s+(Action(?:<[^>]+>)?\??|EventHandler(?:<[^>]+>)?\??)\s+(\w+)\s*\{\s*get;\s*init;\s*\}'
+        # The delegate-type subgroup supports one level of nested generics
+        # (e.g. Action<IReadOnlySet<RowKey>>) via a balancing alternation.
+        $propPattern = '(?m)^\s*public\s+(Action(?:<(?:[^<>]|<[^<>]*>)+>)?\??|EventHandler(?:<(?:[^<>]|<[^<>]*>)+>)?\??)\s+(\w+)\s*\{\s*get;\s*init;\s*\}'
         foreach ($pm in [regex]::Matches($body, $propPattern)) {
             $delegateType = $pm.Groups[1].Value
             $propName = $pm.Groups[2].Value
@@ -83,7 +85,8 @@ function Parse-File {
         $elementName = $m.Groups[1].Value
         $paramList = $m.Groups[2].Value
         # Match each parameter: TYPE NAME [= DEFAULT]
-        $paramPattern = '(Action(?:<[^>]+>)?\??|EventHandler(?:<[^>]+>)?\??)\s+(\w+)'
+        # Allow one level of nested generics in the delegate type argument.
+        $paramPattern = '(Action(?:<(?:[^<>]|<[^<>]*>)+>)?\??|EventHandler(?:<(?:[^<>]|<[^<>]*>)+>)?\??)\s+(\w+)'
         foreach ($pm in [regex]::Matches($paramList, $paramPattern)) {
             $delegateType = $pm.Groups[1].Value
             $propName = $pm.Groups[2].Value
