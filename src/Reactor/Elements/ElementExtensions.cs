@@ -737,6 +737,22 @@ public static partial class ElementExtensions
     public static NumberBoxElement SpinButtons(this NumberBoxElement el, NumberBoxSpinButtonPlacementMode placement = NumberBoxSpinButtonPlacementMode.Inline) =>
         el with { SpinButtonPlacement = placement };
 
+    /// <summary>Sets a custom number formatter (currency, percent, scientific, etc.).</summary>
+    public static NumberBoxElement NumberFormatter(this NumberBoxElement el, global::Windows.Globalization.NumberFormatting.INumberFormatter2 formatter) =>
+        el with { NumberFormatter = formatter };
+
+    /// <summary>Whether the user can type arithmetic expressions (e.g. <c>2*3+1</c>) that resolve on commit.</summary>
+    public static NumberBoxElement AcceptsExpression(this NumberBoxElement el, bool accepts = true) =>
+        el with { AcceptsExpression = accepts };
+
+    /// <summary>Controls how invalid input is handled on commit.</summary>
+    public static NumberBoxElement ValidationMode(this NumberBoxElement el, NumberBoxValidationMode mode) =>
+        el with { ValidationMode = mode };
+
+    /// <summary>Sets the help/description text rendered below the box.</summary>
+    public static NumberBoxElement Description(this NumberBoxElement el, string description) =>
+        el with { Description = description };
+
     // ── Slider sugar ────────────────────────────────────────────────
 
     public static SliderElement StepFrequency(this SliderElement el, double step) =>

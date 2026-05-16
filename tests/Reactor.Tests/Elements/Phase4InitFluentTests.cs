@@ -70,4 +70,51 @@ public class Phase4InitFluentTests
         Assert.Equal(SliderSnapsTo.Ticks, el.SnapsTo);
         Assert.False(el.IsThumbToolTipEnabled);
     }
+
+    // ── 4.2 NumberBox ─────────────────────────────────────────────────
+
+    [Fact]
+    public void NumberBox_NumberFormatter_Sets()
+    {
+        var formatter = new global::Windows.Globalization.NumberFormatting.DecimalFormatter();
+        var el = NumberBox(0).NumberFormatter(formatter);
+        Assert.Same(formatter, el.NumberFormatter);
+    }
+
+    [Fact]
+    public void NumberBox_AcceptsExpression_Sets()
+    {
+        var el = NumberBox(0).AcceptsExpression();
+        Assert.True(el.AcceptsExpression);
+        Assert.False(NumberBox(0).AcceptsExpression(false).AcceptsExpression);
+    }
+
+    [Fact]
+    public void NumberBox_ValidationMode_Sets()
+    {
+        var el = NumberBox(0).ValidationMode(NumberBoxValidationMode.Disabled);
+        Assert.Equal(NumberBoxValidationMode.Disabled, el.ValidationMode);
+    }
+
+    [Fact]
+    public void NumberBox_Description_Sets()
+    {
+        var el = NumberBox(0).Description("enter a price");
+        Assert.Equal("enter a price", el.Description);
+    }
+
+    [Fact]
+    public void NumberBox_Chaining_Preserves_Prior_Settings()
+    {
+        var formatter = new global::Windows.Globalization.NumberFormatting.DecimalFormatter();
+        var el = NumberBox(0)
+            .NumberFormatter(formatter)
+            .AcceptsExpression()
+            .ValidationMode(NumberBoxValidationMode.Disabled)
+            .Description("desc");
+        Assert.Same(formatter, el.NumberFormatter);
+        Assert.True(el.AcceptsExpression);
+        Assert.Equal(NumberBoxValidationMode.Disabled, el.ValidationMode);
+        Assert.Equal("desc", el.Description);
+    }
 }

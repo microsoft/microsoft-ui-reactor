@@ -1828,6 +1828,14 @@ public record NumberBoxElement(
     public NumberBoxSpinButtonPlacementMode SpinButtonPlacement { get; init; } = NumberBoxSpinButtonPlacementMode.Hidden;
     public double SmallChange { get; init; } = 1;
     public double LargeChange { get; init; } = 10;
+    /// <summary>Custom number formatter (e.g. currency, percent). Null uses WinUI's default DecimalFormatter.</summary>
+    public global::Windows.Globalization.NumberFormatting.INumberFormatter2? NumberFormatter { get; init; }
+    /// <summary>Whether the user can type arithmetic expressions (e.g. <c>2*3+1</c>) that resolve on commit.</summary>
+    public bool AcceptsExpression { get; init; }
+    /// <summary>How invalid input is treated. Defaults to <c>InvalidInputOverwritten</c> (matches WinUI default).</summary>
+    public NumberBoxValidationMode ValidationMode { get; init; } = NumberBoxValidationMode.InvalidInputOverwritten;
+    /// <summary>Help text rendered below the box. WinUI 3 1.2+ feature.</summary>
+    public string? Description { get; init; }
     internal Action<WinUI.NumberBox>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnValueChanged is not null;
 }

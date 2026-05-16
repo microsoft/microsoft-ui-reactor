@@ -363,7 +363,7 @@ etc. Property names are unchanged.
 
 ### 4.2 `NumberBox`
 
-- [ ] `.NumberFormatter(INumberFormatter2)`,
+- [x] `.NumberFormatter(INumberFormatter2)`,
       `.AcceptsExpression(bool = true)`,
       `.ValidationMode(NumberBoxValidationMode)`,
       `.Description(string)` (spec §3.3).

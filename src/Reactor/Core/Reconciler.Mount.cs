@@ -541,7 +541,11 @@ public sealed partial class Reconciler
             SmallChange = nb.SmallChange, LargeChange = nb.LargeChange,
             PlaceholderText = nb.PlaceholderText ?? "",
             SpinButtonPlacementMode = nb.SpinButtonPlacement,
+            AcceptsExpression = nb.AcceptsExpression,
+            ValidationMode = nb.ValidationMode,
         };
+        if (nb.NumberFormatter is not null) numBox.NumberFormatter = nb.NumberFormatter;
+        if (nb.Description is not null) numBox.Description = nb.Description;
         if (nb.Header is not null) numBox.Header = nb.Header;
         SetElementTag(numBox, nb);
         if (nb.OnValueChanged is not null)

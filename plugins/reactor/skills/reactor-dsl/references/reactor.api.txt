@@ -296,10 +296,14 @@ NavigationViewElement.PaneTitle(string title) → NavigationViewElement
 NavigationViewElement.SelectedTagChanged(Action<string> handler) → NavigationViewElement
 NavigationViewElement.Set(Action<NavigationView> configure) → NavigationViewElement
 NavigationViewElement.WithNavigation<TRoute>(NavigationHandle<TRoute> nav, Func<TRoute, string> routeToTag, Func<string, TRoute> tagToRoute) → NavigationViewElement
+NumberBoxElement.AcceptsExpression(bool accepts = true) → NumberBoxElement
+NumberBoxElement.Description(string description) → NumberBoxElement
 NumberBoxElement.Focus(FocusManager fm, string fieldName, bool autoFocus = false) → NumberBoxElement
+NumberBoxElement.NumberFormatter(INumberFormatter2 formatter) → NumberBoxElement
 NumberBoxElement.Range(double min, double max) → NumberBoxElement
 NumberBoxElement.Set(Action<NumberBox> configure) → NumberBoxElement
 NumberBoxElement.SpinButtons(NumberBoxSpinButtonPlacementMode placement = NumberBoxSpinButtonPlacementMode.Inline) → NumberBoxElement
+NumberBoxElement.ValidationMode(NumberBoxValidationMode mode) → NumberBoxElement
 NumberBoxElement.ValueChanged(Action<double> handler) → NumberBoxElement
 ParallaxViewElement.Set(Action<ParallaxView> configure) → ParallaxViewElement
 PasswordBoxElement.PasswordChanged(Action<string> handler) → PasswordBoxElement

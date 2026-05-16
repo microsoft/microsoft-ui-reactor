@@ -851,6 +851,14 @@ public sealed partial class Reconciler
         }
         nb.SmallChange = n.SmallChange; nb.LargeChange = n.LargeChange;
         nb.SpinButtonPlacementMode = n.SpinButtonPlacement;
+        if (nb.AcceptsExpression != n.AcceptsExpression) nb.AcceptsExpression = n.AcceptsExpression;
+        if (nb.ValidationMode != n.ValidationMode) nb.ValidationMode = n.ValidationMode;
+        // NumberFormatter is reference-equality — only re-assign when the
+        // record swap actually changed the formatter, so a same-formatter
+        // re-render doesn't reformat the text (and break in-progress edits).
+        if (!ReferenceEquals(o.NumberFormatter, n.NumberFormatter) && n.NumberFormatter is not null)
+            nb.NumberFormatter = n.NumberFormatter;
+        if (n.Description is not null) nb.Description = n.Description;
         if (n.Header is not null) nb.Header = n.Header;
         ApplySetters(n.Setters, nb);
         return null;
