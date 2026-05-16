@@ -584,13 +584,21 @@ existing init properties.
 
 ### 6.5 `ScrollView` vs `ScrollViewer` (spec §6 naming notes)
 
-- [x] Decision: **keep `ScrollView`, add `[Obsolete]` `ScrollViewer` alias.**
+- [x] Decision: **keep `ScrollView`. No `ScrollViewer` factory alias.**
       Reactor's `ScrollViewElement` reconciles to WinUI's legacy `ScrollViewer`,
       but WinUI 3 also ships the newer `Microsoft.UI.Xaml.Controls.ScrollView`
       — the shorter, modern name. Reactor's `ScrollView` is already
-      consistent with that preferred WinUI name, so the alias direction
-      lets agents reaching for the legacy `ScrollViewer` discover the
-      modern spelling without breaking existing code.
+      consistent with that preferred WinUI name.
+      **Originally added an `[Obsolete]` `ScrollViewer` forwarding alias
+      for discoverability, but the PR #314 review (Copilot) flagged that
+      the alias is *not* purely additive: under `using static
+      Microsoft.UI.Reactor.Factories;` alongside `using
+      Microsoft.UI.Xaml.Controls;`, the bare name `ScrollViewer` then
+      shadows the WinUI type, so any existing code calling its attached
+      properties (`ScrollViewer.SetVerticalScrollMode(...)` etc.) has to
+      fully-qualify with `global::Microsoft.UI.Xaml.Controls.ScrollViewer.`
+      The discoverability win didn't justify the imposed disambiguation
+      cost on existing consumers — alias removed.**
 
 ### 6.6 `Progress` vs `ProgressBar` (spec §5)
 

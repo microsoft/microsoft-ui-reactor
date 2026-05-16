@@ -201,14 +201,31 @@ public class PublicApiSurfaceGuardTests
 
     private static bool DelegateShapeMatches(Type extensionHandler, Type propertyDelegate)
     {
+        // Generic-parameter wildcards (the T from the extension's receiver
+        // type or the property's owning record) match anything — those are
+        // the open positions that the receiver-match resolves separately.
+        if (extensionHandler.IsGenericParameter || propertyDelegate.IsGenericParameter)
+            return true;
+
         if (extensionHandler == propertyDelegate) return true;
+
+        // Both must be generic types for a structural comparison; otherwise
+        // a plain `Action` (non-generic) compared to `Action<T>` is a mismatch.
         if (!extensionHandler.IsGenericType || !propertyDelegate.IsGenericType) return false;
-        // Same shape (Action<T>, Action<T1,T2>) — accept if arity matches.
-        // The element/extension's generic arguments may differ (T on the receiver),
-        // and that's the intent: the open-generic extension matches the open-generic
-        // property by construction once the receiver matches.
-        return extensionHandler.GetGenericTypeDefinition() == propertyDelegate.GetGenericTypeDefinition()
-            && extensionHandler.GetGenericArguments().Length == propertyDelegate.GetGenericArguments().Length;
+
+        if (extensionHandler.GetGenericTypeDefinition() != propertyDelegate.GetGenericTypeDefinition()) return false;
+
+        var lhs = extensionHandler.GetGenericArguments();
+        var rhs = propertyDelegate.GetGenericArguments();
+        if (lhs.Length != rhs.Length) return false;
+
+        // Recursively compare each generic argument so a delegate with the
+        // wrong payload (Action<IReadOnlySet<RowKey>> vs
+        // Action<IReadOnlyList<int>>) is rejected even though both are
+        // Action<> with arity 1.
+        for (int i = 0; i < lhs.Length; i++)
+            if (!DelegateShapeMatches(lhs[i], rhs[i])) return false;
+        return true;
     }
 
     private static string SimpleName(Type t)

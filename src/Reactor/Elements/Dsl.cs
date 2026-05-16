@@ -392,20 +392,17 @@ public static partial class Factories
     /// The element reconciles to a WinUI <c>ScrollViewer</c>. The Reactor name
     /// <c>ScrollView</c> matches the newer <c>Microsoft.UI.Xaml.Controls.ScrollView</c>
     /// type WinUI 3 ships alongside the legacy <c>ScrollViewer</c>; the shorter,
-    /// more modern name is preferred. The <c>ScrollViewer</c> alias is preserved
-    /// for callers reaching for the WPF/WinUI-legacy spelling. (spec 039 §6 / §16)
+    /// more modern name is preferred. (spec 039 §6 / §16)
+    /// </remarks>
+    /// <remarks>
+    /// No <c>ScrollViewer</c> factory alias is exposed — that name would
+    /// shadow <c>Microsoft.UI.Xaml.Controls.ScrollViewer</c>'s attached
+    /// properties (e.g. <c>ScrollViewer.SetVerticalScrollMode(...)</c>) for
+    /// any caller using <c>using static Microsoft.UI.Reactor.Factories;</c>
+    /// alongside <c>using Microsoft.UI.Xaml.Controls;</c>. Reach for
+    /// <c>ScrollView</c> directly.
     /// </remarks>
     public static ScrollViewElement ScrollView(Element child) => new(child);
-
-    /// <summary>
-    /// Deprecated forwarding alias for <see cref="ScrollView(Element)"/>.
-    /// </summary>
-    [global::System.Obsolete(
-        "Use ScrollView for parity with the newer Microsoft.UI.Xaml.Controls.ScrollView " +
-        "(WinUI 3 ships both — ScrollView is the modern/preferred name). " +
-        "ScrollViewer will be removed in the next minor release. (spec 039 §6 / §16)",
-        error: false)]
-    public static ScrollViewElement ScrollViewer(Element child) => ScrollView(child);
 
     public static BorderElement Border(Element? child) => new(child!);
 

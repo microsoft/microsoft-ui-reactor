@@ -3,9 +3,13 @@
 // Pattern: UseReducer for the whole list (UseState + List<T>.Add won't trigger
 // a re-render because the reference is unchanged). One reducer, immutable
 // updates with `with` and collection expressions. The templated
-// `ListView<T>(items, key, builder)` factory handles per-row keying for the
-// reconciler — no manual `.WithKey` needed. `.ItemClick(handler)` is the
-// fluent for ListView's primary item-tap event.
+// `ListView<T>(items, key, builder)` factory carries the keySelector through
+// to the element record, but the current reconciler reconciles realized
+// containers by index (ItemsSource is a 0..N range, RefreshRealizedContainers
+// matches by container position), so on reorder/delete-from-middle, focus
+// and per-row state can stick to the wrong row unless each row carries an
+// explicit `.WithKey(item.Id)` on its outer element.
+// `.ItemClick(handler)` is the fluent for ListView's primary item-tap event.
 
 // In this clone, run `mur pack-local` once. Bump the version below to match
 // whatever `mur pack-local` printed (default: 0.0.0-local). For a real NuGet
@@ -73,6 +77,7 @@ class App : Component
                         CheckBox(item.Done, _ => dispatch(new Toggle(item.Id))),
                         TextBlock(item.Text).Flex(grow: 1, alignSelf: FlexAlign.Center),
                         Button("✕", () => dispatch(new Delete(item.Id))))
+                        .WithKey(item.Id)
                 ).ItemClick(item => dispatch(new Toggle(item.Id)))
                  .Flex(grow: 1))
             .Padding(16));

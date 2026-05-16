@@ -2,9 +2,9 @@
 //
 // Pattern: named-style fluents are zero-arg modifiers that apply the
 // matching WinUI theme resource (AccentButtonStyle, SubtleButtonStyle,
-// HyperlinkButtonStyle on a regular Button, InfoBarSeverity.*). They
-// re-theme on light / dark / contrast switches and stack with other
-// fluents (.Padding, .Click, etc.).
+// TextBlockButtonStyle for .TextLink() on Button / HyperlinkButton,
+// InfoBarSeverity.*). They re-theme on light / dark / contrast switches
+// and stack with other fluents (.Padding, .Click, etc.).
 
 // In this clone, run `mur pack-local` once. Bump the version below to match
 // whatever `mur pack-local` printed (default: 0.0.0-local). For a real NuGet

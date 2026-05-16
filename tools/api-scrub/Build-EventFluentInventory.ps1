@@ -2,7 +2,7 @@
 # Scans Reactor element records for Action/Action<T>/EventHandler callback
 # properties and emits a CSV inventory for spec 039 Phase 0.3.
 #
-# Output columns: Element, PropertyName, DelegateType, Source(spec §)
+# Output columns: Element, PropertyName, DelegateType, Source(spec §), File
 #
 # Source attribution is best-effort — it grep-matches the property name to
 # the spec section text. Unmatched rows ship with "?" and should be

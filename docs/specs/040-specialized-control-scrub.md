@@ -6,9 +6,9 @@
 [spec 039](039-property-and-event-scrub.md) against the Reactor-original
 controls under `src/Reactor/Controls/**`. Spec 039 deliberately scoped
 these out (see 039 §13) and scheduled this follow-up; spec 039 Phase 7.1
-created this draft. Outline only — no answers yet. Implementation will
-be sequenced in `docs/specs/tasks/040-specialized-control-scrub-implementation.md`
-once the audit is filled in.
+created this draft. Outline only — no answers yet. A companion task list
+(`docs/specs/tasks/040-specialized-control-scrub-implementation.md`) will
+be created once the audit below is filled in; it does not yet exist.
 
 ## Goals
 

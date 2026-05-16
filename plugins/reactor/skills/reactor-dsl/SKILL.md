@@ -37,7 +37,7 @@ and is named after the event:
 
 ```csharp
 // Record property is OnClick — the fluent is .Click(...)
-Button("Save").Click(_ => Save());
+Button("Save").Click(() => Save());
 
 // Record property is OnSelectedTagChanged — the fluent is .SelectedTagChanged(...)
 NavigationView(...).SelectedTagChanged(tag => Navigate(tag));

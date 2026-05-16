@@ -17,8 +17,9 @@ namespace WinUIGalleryReactor.ControlPages.Layout;
 /// </summary>
 class CardPage : Component
 {
-    // Segoe Fluent Icons "Mail" glyph. Kept as a constant so the embedded
-    // file remains pure-ASCII.
+    // Segoe Fluent Icons "Mail" glyph (U+E715). Kept as a constant for
+    // readability — call sites reference MailGlyph instead of embedding
+    // the literal character inline.
     const string MailGlyph = "";
 
     public override Element Render()

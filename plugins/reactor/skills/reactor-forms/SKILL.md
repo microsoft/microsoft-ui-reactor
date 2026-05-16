@@ -43,7 +43,7 @@ return VStack(12,
 | Factory | Value type | Common modifiers |
 |---------|-----------|------------------|
 | `TextField(value, setValue, placeholder, header)` | `string` | `.Header()`, `.ReadOnly()`, `.AcceptsReturn()`, `.TextWrapping()`, `.MaxLength(n)`, `.NumericInput()`, `.EmailInput()`, `.Changed(handler)` |
-| `PasswordBox(value, setValue, placeholder, header)` | `string` | `.MaxLength(n)`, `.PasswordChanged(handler)` |
+| `PasswordBox(password, setPassword, placeholder)` | `string` | `.Header(text)`, `.MaxLength(n)`, `.PasswordChanged(handler)` |
 | `NumberBox(value, setValue, placeholder, header)` | `double` | `.Range(min, max)`, `.SpinButtons(...)` |
 | `Slider(value, min, max, setValue)` | `double` | `.Header()`, `.StepFrequency()` |
 | `ToggleSwitch(isOn, setIsOn, header, onContent, offContent)` | `bool` | `.Header()` |
@@ -56,7 +56,7 @@ return VStack(12,
 | `RichEditBox(doc, setDoc, header)` | `string` | `.Set(reb => ...)` |
 | `CalendarDatePicker(date, setDate, placeholder, header)` | `DateTimeOffset?` | `.Set(cdp => ...)` |
 
-**Named-input shapes** (Spec 039 §17.4): `.NumericInput()` / `.EmailInput()`
+**Named-input shapes** (Spec 039 §17.3): `.NumericInput()` / `.EmailInput()`
 preconfigure `InputScope` and IME hints so on-screen / soft keyboards open
 in the right mode. Stack them with validators:
 
