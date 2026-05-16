@@ -553,9 +553,8 @@ existing init properties.
 
 ### 6.3 Document the `StackElement.Spacing` default-8 deviation (spec §0.4)
 
-- [ ] Add an XML doc remark on `StackElement.Spacing` calling out the
-      default-8 vs WinUI's default-0. Don't change the default — spec is
-      explicit on this.
+- [x] Add an XML doc remark on `StackElement.Spacing` calling out the
+      default-8 vs WinUI's default-0. Doc-only — default unchanged.
 
 ### 6.4 `TextField` rename — NOT in scope
 

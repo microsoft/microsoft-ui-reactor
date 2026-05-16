@@ -2249,6 +2249,17 @@ public record StackElement(
     Element[] Children
 ) : Element
 {
+    /// <summary>
+    /// Spacing between children, in DIPs.
+    /// </summary>
+    /// <remarks>
+    /// Reactor default is <c>8</c> — a deliberate deviation from WinUI's
+    /// <c>StackPanel.Spacing</c> default of <c>0</c>. Reactor's call shape
+    /// (<c>VStack(a, b, c)</c>) almost always wants whitespace between siblings;
+    /// the 8 DIP default produces visually correct output for the
+    /// zero-argument call. Set to <c>0</c> explicitly for legacy WinUI
+    /// behavior. (spec 039 §0.4 / §16)
+    /// </remarks>
     public double Spacing { get; init; } = 8;
     public HorizontalAlignment? HorizontalAlignment { get; init; }
     public VerticalAlignment? VerticalAlignment { get; init; }
