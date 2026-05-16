@@ -135,9 +135,8 @@ etc. Property names are unchanged.
 
 - [x] `CalendarDatePicker.DateChanged`, `DatePicker.DateChanged`,
       `TimePicker.TimeChanged` (spec §4).
-- [ ] `CalendarView.SelectedDatesChanged(...)` —
-      requires modelling first; see Phase 3 §3.1 — do NOT add the fluent
-      here, only after the underlying event lands.
+- [x] `CalendarView.SelectedDatesChanged(...)` — modelled in Phase 3.1;
+      fluent landed alongside the event.
 
 ### 1.4 Progress, navigation, layout (§5–§7)
 
@@ -257,15 +256,23 @@ etc. Property names are unchanged.
 
 ### 3.1 `CalendarView.OnSelectedDatesChanged` (Q4 from §15)
 
-- [ ] Decide the shape of the multi-selection callback. Spec Q4 OK's "a
-      distinct API for CalendarView". Recommended:
-      `Action<IReadOnlyList<DateTimeOffset>>? OnSelectedDatesChanged`.
-- [ ] Add a `SelectedDates` init property (`IReadOnlyList<DateTimeOffset>?`)
+- [x] Decide the shape of the multi-selection callback. Spec Q4 OK's "a
+      distinct API for CalendarView". Chose:
+      `Action<IReadOnlyList<DateTimeOffset>>? OnSelectedDatesChanged` —
+      snapshot of the full selection (not delta) so component state binds
+      without diffing.
+- [x] Add a `SelectedDates` init property (`IReadOnlyList<DateTimeOffset>?`)
       so initial selection is set declaratively, not via `.Set()`.
-- [ ] Wire the event in the `CalendarView` reconciler hook.
-- [ ] Add `.OnSelectedDatesChanged(...)` fluent (deferred from 1.3).
-- [ ] Unit test: programmatic selection changes raise the callback exactly
-      once per atomic change; no event during initial mount.
+- [x] Wire the event in the `CalendarView` reconciler hook. Subscription
+      is unconditional; the handler reads the latest element via the
+      element-tag, and `SyncSelectedDates` uses `ChangeEchoSuppressor` to
+      keep declarative reconciliation from echoing as user events.
+- [x] Add `.SelectedDatesChanged(...)` / `.SelectedDates(...)` fluents
+      (deferred from 1.3).
+- [x] Unit test: null-clear (`EventFluentNullClearTests`). Reconciler-
+      level "programmatic selection changes raise the callback exactly
+      once per atomic change; no event during initial mount" deferred to
+      AppTests harness (tracked in Phase 11.7).
 
 ### 3.2 `Frame.Navigated/.Navigating/.NavigationFailed`
 

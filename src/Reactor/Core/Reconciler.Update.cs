@@ -3341,8 +3341,42 @@ public sealed partial class Reconciler
         if (n.CalendarIdentifier is not null) cv.CalendarIdentifier = n.CalendarIdentifier;
         if (n.Language is not null && global::Windows.Globalization.Language.IsWellFormed(n.Language))
             cv.Language = n.Language;
+        SetElementTag(cv, n);
+        SyncSelectedDates(cv, n.SelectedDates);
         ApplySetters(n.Setters, cv);
         return null;
+    }
+
+    private static void SyncSelectedDates(WinUI.CalendarView cv, IReadOnlyList<DateTimeOffset>? desired)
+    {
+        // Diff current vs desired and apply the delta. Each Add/Remove on the
+        // SelectedDates collection raises SelectedDatesChanged, so suppress one
+        // token per mutation to keep OnSelectedDatesChanged free of echoes.
+        var current = cv.SelectedDates;
+        var desiredSet = desired is null
+            ? new HashSet<DateTimeOffset>()
+            : new HashSet<DateTimeOffset>(desired);
+
+        for (int i = current.Count - 1; i >= 0; i--)
+        {
+            if (!desiredSet.Contains(current[i]))
+            {
+                ChangeEchoSuppressor.BeginSuppress(cv);
+                current.RemoveAt(i);
+            }
+        }
+
+        if (desired is null) return;
+
+        var currentSet = new HashSet<DateTimeOffset>(current);
+        foreach (var d in desired)
+        {
+            if (currentSet.Add(d))
+            {
+                ChangeEchoSuppressor.BeginSuppress(cv);
+                current.Add(d);
+            }
+        }
     }
 
     private UIElement? UpdateAnimatedIcon(AnimatedIconElement n, WinUI.AnimatedIcon ai)

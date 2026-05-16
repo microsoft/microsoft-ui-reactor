@@ -2932,6 +2932,26 @@ public sealed partial class Reconciler
         if (cv.CalendarIdentifier is not null) calendarView.CalendarIdentifier = cv.CalendarIdentifier;
         if (cv.Language is not null && global::Windows.Globalization.Language.IsWellFormed(cv.Language))
             calendarView.Language = cv.Language;
+
+        SetElementTag(calendarView, cv);
+
+        // Initial selection set BEFORE subscribing so the declarative state
+        // doesn't echo back into OnSelectedDatesChanged.
+        if (cv.SelectedDates is { Count: > 0 })
+        {
+            foreach (var d in cv.SelectedDates) calendarView.SelectedDates.Add(d);
+        }
+
+        // Subscribe unconditionally so the handler picks up a later-attached
+        // OnSelectedDatesChanged via GetElementTag without re-wiring.
+        calendarView.SelectedDatesChanged += (s, _) =>
+        {
+            var c = (WinUI.CalendarView)s!;
+            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
+            if (GetElementTag(c) is CalendarViewElement el && el.OnSelectedDatesChanged is { } h)
+                h(c.SelectedDates.ToArray());
+        };
+
         ApplySetters(cv.Setters, calendarView);
         return calendarView;
     }

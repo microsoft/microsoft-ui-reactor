@@ -241,6 +241,15 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
+    public void CalendarView_SelectedDatesChanged_NullClears()
+    {
+        Action<global::System.Collections.Generic.IReadOnlyList<DateTimeOffset>> h = _ => { };
+        var el = CalendarView().SelectedDatesChanged(h);
+        Assert.Same(h, el.OnSelectedDatesChanged);
+        Assert.Null(el.SelectedDatesChanged(null).OnSelectedDatesChanged);
+    }
+
+    [Fact]
     public void TimePicker_TimeChanged_NullClears()
     {
         Action<TimeSpan> h = _ => { };

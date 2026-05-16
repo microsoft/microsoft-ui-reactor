@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Xaml.Controls;
@@ -127,7 +128,22 @@ public static partial class ElementExtensions
         el with { OnTextChanged = handler };
 
     // ── §4 Date & Time ─────────────────────────────────────────────────
-    // (CalendarView.OnSelectedDatesChanged lives in Phase 3.1 — modelled separately.)
+
+    /// <summary>
+    /// Wires the multi-date selection-changed handler. The callback receives a
+    /// snapshot of the full selection (not just added/removed dates). Not raised
+    /// on the initial declarative selection applied at mount. Passing <c>null</c>
+    /// clears.
+    /// </summary>
+    public static CalendarViewElement SelectedDatesChanged(this CalendarViewElement el, Action<IReadOnlyList<DateTimeOffset>>? handler) =>
+        el with { OnSelectedDatesChanged = handler };
+
+    /// <summary>
+    /// Sets the initial multi-date selection. Re-renders with a different list
+    /// reconcile the underlying selection via diff (echo events are suppressed).
+    /// </summary>
+    public static CalendarViewElement SelectedDates(this CalendarViewElement el, IReadOnlyList<DateTimeOffset>? dates) =>
+        el with { SelectedDates = dates };
 
     /// <summary>Wires the date-changed handler. Receives null when the user clears the selection. Passing <c>null</c> as the handler clears it.</summary>
     public static CalendarDatePickerElement DateChanged(this CalendarDatePickerElement el, Action<DateTimeOffset?>? handler) =>

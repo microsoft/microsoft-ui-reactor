@@ -2856,6 +2856,23 @@ public record CalendarViewElement() : Element
     public bool IsOutOfScopeEnabled { get; init; } = true;
     public string? CalendarIdentifier { get; init; }
     public string? Language { get; init; }
+
+    /// <summary>
+    /// Initial selection. Bind for declarative selection on mount; subsequent
+    /// programmatic updates re-apply only when the list reference differs.
+    /// Combine with <see cref="OnSelectedDatesChanged"/> for two-way binding
+    /// in multi-select mode.
+    /// </summary>
+    public IReadOnlyList<DateTimeOffset>? SelectedDates { get; init; }
+
+    /// <summary>
+    /// Raised when the user changes the selection. Receives a snapshot of the
+    /// full selection (not just added/removed dates) — easier to bind into
+    /// component state without diffing. Not raised on the initial declarative
+    /// selection applied at mount.
+    /// </summary>
+    public Action<IReadOnlyList<DateTimeOffset>>? OnSelectedDatesChanged { get; init; }
+
     internal Action<WinUI.CalendarView>[] Setters { get; init; } = [];
 }
 
