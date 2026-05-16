@@ -1013,8 +1013,24 @@ public sealed partial class Reconciler
         sv.ZoomMode = (WinUI.ZoomMode)scroll.ZoomMode;
         sv.Content = Mount(scroll.Child, requestRerender);
         SetElementTag(sv, scroll);
+        EnsureScrollViewerViewChangedWired(sv);
         ApplySetters(scroll.Setters, sv);
         return sv;
+    }
+
+    private static void EnsureScrollViewerViewChangedWired(WinUI.ScrollViewer sv)
+    {
+        // Pooled control: wire the trampoline exactly once. The handler reads
+        // the live element via GetElementTag so a later record-with that
+        // attaches OnViewChanged picks up without re-subscribing.
+        var flags = GetPoolableWireFlags(sv);
+        if (flags.ScrollViewerViewChanged) return;
+        flags.ScrollViewerViewChanged = true;
+        sv.ViewChanged += (s, e) =>
+        {
+            if (GetElementTag((WinUI.ScrollViewer)s!) is ScrollViewElement el && el.OnViewChanged is { } h)
+                h(e);
+        };
     }
 
     private WinUI.Border MountBorder(BorderElement border, Action requestRerender)

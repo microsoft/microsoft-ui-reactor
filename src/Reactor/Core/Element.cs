@@ -2116,6 +2116,14 @@ public record ScrollViewElement(Element Child) : Element
     public WinUI.ScrollMode HorizontalScrollMode { get; init; } = WinUI.ScrollMode.Auto;
     public WinUI.ScrollMode VerticalScrollMode { get; init; } = WinUI.ScrollMode.Auto;
     public WinUI.ZoomMode ZoomMode { get; init; } = WinUI.ZoomMode.Disabled;
+
+    /// <summary>
+    /// Raised when the scroll view's offset or zoom factor changes. The args
+    /// expose <c>IsIntermediate</c> for callers who want to debounce until the
+    /// scroll settles.
+    /// </summary>
+    public Action<WinUI.ScrollViewerViewChangedEventArgs>? OnViewChanged { get; init; }
+
     internal Action<WinUI.ScrollViewer>[] Setters { get; init; } = [];
 }
 

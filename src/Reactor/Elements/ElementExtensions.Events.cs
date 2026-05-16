@@ -177,6 +177,10 @@ public static partial class ElementExtensions
     public static SplitViewElement PaneOpenChanged(this SplitViewElement el, Action<bool>? handler) =>
         el with { OnPaneOpenChanged = handler };
 
+    /// <summary>Wires the view-changed handler. Inspect <c>args.IsIntermediate</c> to debounce until the scroll settles. Passing <c>null</c> clears.</summary>
+    public static ScrollViewElement ViewChanged(this ScrollViewElement el, Action<Microsoft.UI.Xaml.Controls.ScrollViewerViewChangedEventArgs>? handler) =>
+        el with { OnViewChanged = handler };
+
     // ── §7 Navigation ──────────────────────────────────────────────────
 
     /// <summary>Wires the selected-tag-changed handler. Passing <c>null</c> clears.</summary>

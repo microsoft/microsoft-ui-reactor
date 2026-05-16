@@ -292,11 +292,19 @@ etc. Property names are unchanged.
 
 ### 3.3 `ScrollView.ViewChanged`
 
-- [ ] Add `OnViewChanged(Action<ScrollViewerViewChangedEventArgs>?)` to
-      `ScrollViewElement`. Mirror the existing generic `.OnSizeChanged()`
-      precedent for arg shape.
-- [ ] Unit test: triggering a scroll fires the callback with monotonic
-      offsets.
+- [x] Add `OnViewChanged(Action<ScrollViewerViewChangedEventArgs>?)` to
+      `ScrollViewElement`. Used the literal spec-shaped signature
+      (`Action<EventArgs>?`, no sender) — `OnSizeChanged` does pass
+      sender but Reactor users rarely need it; the args carry
+      `IsIntermediate` which is the more useful debouncing hook.
+- [x] Fluent `.ViewChanged(...)` + null-clear unit test.
+- [x] Pooled-control wiring: subscribe-once via
+      `PoolableWireFlags.ScrollViewerViewChanged`; the handler reads
+      the live element via `GetElementTag` so a later
+      record-with that attaches `OnViewChanged` picks up without
+      re-wiring.
+- [ ] AppTest: "triggering a scroll fires the callback with monotonic
+      offsets" — deferred to Phase 11.7 (requires a WinUI runtime).
 
 ### 3.4 `Popup.Opened`
 

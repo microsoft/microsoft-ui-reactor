@@ -277,6 +277,15 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
+    public void ScrollView_ViewChanged_NullClears()
+    {
+        Action<Microsoft.UI.Xaml.Controls.ScrollViewerViewChangedEventArgs> h = _ => { };
+        var el = ScrollView(TextBlock("x")).ViewChanged(h);
+        Assert.Same(h, el.OnViewChanged);
+        Assert.Null(el.ViewChanged(null).OnViewChanged);
+    }
+
+    [Fact]
     public void TimePicker_TimeChanged_NullClears()
     {
         Action<TimeSpan> h = _ => { };

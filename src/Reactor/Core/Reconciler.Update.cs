@@ -1246,6 +1246,7 @@ public sealed partial class Reconciler
         sv.HorizontalScrollMode = (WinUI.ScrollMode)n.HorizontalScrollMode;
         sv.VerticalScrollMode = (WinUI.ScrollMode)n.VerticalScrollMode;
         sv.ZoomMode = (WinUI.ZoomMode)n.ZoomMode;
+        SetElementTag(sv, n);
         ApplySetters(n.Setters, sv);
         return null;
     }
