@@ -1747,6 +1747,22 @@ public sealed partial class Reconciler
 
         if (tabView.IsAddTabButtonVisible != n.IsAddTabButtonVisible)
             tabView.IsAddTabButtonVisible = n.IsAddTabButtonVisible;
+        if (tabView.TabWidthMode != n.TabWidthMode) tabView.TabWidthMode = n.TabWidthMode;
+        if (tabView.CloseButtonOverlayMode != n.CloseButtonOverlayMode) tabView.CloseButtonOverlayMode = n.CloseButtonOverlayMode;
+        if (tabView.CanDragTabs != n.CanDragTabs) tabView.CanDragTabs = n.CanDragTabs;
+        if (tabView.CanReorderTabs != n.CanReorderTabs) tabView.CanReorderTabs = n.CanReorderTabs;
+        if (tabView.AllowDropTabs != n.AllowDropTabs) tabView.AllowDropTabs = n.AllowDropTabs;
+
+        ReconcileChild(o.TabStripHeader, n.TabStripHeader,
+            () => tabView.TabStripHeader as UIElement,
+            c => tabView.TabStripHeader = c,
+            () => tabView.TabStripHeader = null,
+            requestRerender);
+        ReconcileChild(o.TabStripFooter, n.TabStripFooter,
+            () => tabView.TabStripFooter as UIElement,
+            c => tabView.TabStripFooter = c,
+            () => tabView.TabStripFooter = null,
+            requestRerender);
 
         ApplySetters(n.Setters, tabView);
         return null;

@@ -930,6 +930,34 @@ public static partial class ElementExtensions
     public static TabViewElement ShowAddButton(this TabViewElement el, bool visible = true) =>
         el with { IsAddTabButtonVisible = visible };
 
+    /// <summary>Controls how tab widths are sized (Equal, SizeToContent, Compact).</summary>
+    public static TabViewElement TabWidthMode(this TabViewElement el, TabViewWidthMode mode) =>
+        el with { TabWidthMode = mode };
+
+    /// <summary>Controls when the per-tab close button is visible (Auto, OnPointerOver, Always).</summary>
+    public static TabViewElement CloseButtonOverlayMode(this TabViewElement el, TabViewCloseButtonOverlayMode mode) =>
+        el with { CloseButtonOverlayMode = mode };
+
+    /// <summary>Whether tabs can be dragged out (e.g. to detach into a new window).</summary>
+    public static TabViewElement CanDragTabs(this TabViewElement el, bool canDrag = true) =>
+        el with { CanDragTabs = canDrag };
+
+    /// <summary>Whether tabs can be reordered within the strip via drag.</summary>
+    public static TabViewElement CanReorderTabs(this TabViewElement el, bool canReorder = true) =>
+        el with { CanReorderTabs = canReorder };
+
+    /// <summary>Whether tabs from another TabView can be dropped onto this one.</summary>
+    public static TabViewElement AllowDropTabs(this TabViewElement el, bool allow = true) =>
+        el with { AllowDropTabs = allow };
+
+    /// <summary>Sets the element rendered at the leading edge of the tab strip.</summary>
+    public static TabViewElement TabStripHeader(this TabViewElement el, Element header) =>
+        el with { TabStripHeader = header };
+
+    /// <summary>Sets the element rendered at the trailing edge of the tab strip.</summary>
+    public static TabViewElement TabStripFooter(this TabViewElement el, Element footer) =>
+        el with { TabStripFooter = footer };
+
     // ── Key ─────────────────────────────────────────────────────────
 
     public static T WithKey<T>(this T el, string key) where T : Element =>

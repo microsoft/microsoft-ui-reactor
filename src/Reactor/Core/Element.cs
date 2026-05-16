@@ -2331,6 +2331,20 @@ public record TabViewElement(
     public Action<int>? OnTabCloseRequested { get; init; }
     public Action? OnAddTabButtonClick { get; init; }
     public bool IsAddTabButtonVisible { get; init; }
+    /// <summary>How tab widths are sized. Defaults to <c>Equal</c> (matches WinUI default).</summary>
+    public TabViewWidthMode TabWidthMode { get; init; } = TabViewWidthMode.Equal;
+    /// <summary>Controls when the per-tab close button is visible. Defaults to <c>Auto</c>.</summary>
+    public TabViewCloseButtonOverlayMode CloseButtonOverlayMode { get; init; } = TabViewCloseButtonOverlayMode.Auto;
+    /// <summary>Whether tabs can be dragged out (to a window).</summary>
+    public bool CanDragTabs { get; init; }
+    /// <summary>Whether tabs can be reordered within the strip.</summary>
+    public bool CanReorderTabs { get; init; }
+    /// <summary>Whether tabs from another TabView can be dropped onto this one.</summary>
+    public bool AllowDropTabs { get; init; }
+    /// <summary>Element rendered at the leading edge of the tab strip.</summary>
+    public Element? TabStripHeader { get; init; }
+    /// <summary>Element rendered at the trailing edge of the tab strip.</summary>
+    public Element? TabStripFooter { get; init; }
     internal Action<WinUI.TabView>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnSelectedIndexChanged is not null || OnTabCloseRequested is not null || OnAddTabButtonClick is not null;
 }

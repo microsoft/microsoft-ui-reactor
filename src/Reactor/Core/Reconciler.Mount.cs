@@ -1308,7 +1308,18 @@ public sealed partial class Reconciler
 
     private WinUI.TabView MountTabView(TabViewElement tab, Action requestRerender)
     {
-        var tv = new WinUI.TabView { SelectedIndex = tab.SelectedIndex, IsAddTabButtonVisible = tab.IsAddTabButtonVisible };
+        var tv = new WinUI.TabView
+        {
+            SelectedIndex = tab.SelectedIndex,
+            IsAddTabButtonVisible = tab.IsAddTabButtonVisible,
+            TabWidthMode = tab.TabWidthMode,
+            CloseButtonOverlayMode = tab.CloseButtonOverlayMode,
+            CanDragTabs = tab.CanDragTabs,
+            CanReorderTabs = tab.CanReorderTabs,
+            AllowDropTabs = tab.AllowDropTabs,
+        };
+        if (tab.TabStripHeader is not null) tv.TabStripHeader = Mount(tab.TabStripHeader, requestRerender);
+        if (tab.TabStripFooter is not null) tv.TabStripFooter = Mount(tab.TabStripFooter, requestRerender);
         foreach (var tabItem in tab.Tabs)
         {
             var tvi = new WinUI.TabViewItem

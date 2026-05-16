@@ -182,4 +182,57 @@ public class Phase4InitFluentTests
         Assert.False(el.IsColorChannelTextInputVisible);
         Assert.False(el.IsHexInputVisible);
     }
+
+    // ── 4.4 TabView ───────────────────────────────────────────────────
+
+    private static TabViewElement EmptyTabView() => TabView();
+
+    [Fact]
+    public void TabView_TabWidthMode_Sets()
+    {
+        var el = EmptyTabView().TabWidthMode(TabViewWidthMode.Compact);
+        Assert.Equal(TabViewWidthMode.Compact, el.TabWidthMode);
+    }
+
+    [Fact]
+    public void TabView_CloseButtonOverlayMode_Sets()
+    {
+        var el = EmptyTabView().CloseButtonOverlayMode(TabViewCloseButtonOverlayMode.Always);
+        Assert.Equal(TabViewCloseButtonOverlayMode.Always, el.CloseButtonOverlayMode);
+    }
+
+    [Fact]
+    public void TabView_CanDragTabs_Sets()
+    {
+        Assert.True(EmptyTabView().CanDragTabs().CanDragTabs);
+        Assert.False(EmptyTabView().CanDragTabs(false).CanDragTabs);
+    }
+
+    [Fact]
+    public void TabView_CanReorderTabs_Sets()
+    {
+        Assert.True(EmptyTabView().CanReorderTabs().CanReorderTabs);
+    }
+
+    [Fact]
+    public void TabView_AllowDropTabs_Sets()
+    {
+        Assert.True(EmptyTabView().AllowDropTabs().AllowDropTabs);
+    }
+
+    [Fact]
+    public void TabView_TabStripHeader_Sets()
+    {
+        var header = TextBlock("Header");
+        var el = EmptyTabView().TabStripHeader(header);
+        Assert.Same(header, el.TabStripHeader);
+    }
+
+    [Fact]
+    public void TabView_TabStripFooter_Sets()
+    {
+        var footer = TextBlock("Footer");
+        var el = EmptyTabView().TabStripFooter(footer);
+        Assert.Same(footer, el.TabStripFooter);
+    }
 }

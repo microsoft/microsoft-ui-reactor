@@ -536,10 +536,17 @@ T.WithToolTip<T>(Element tooltip) → T
 T.WithTransitions<T>(Transition[] transitions) → T
 T.XYFocusKeyboardNavigation<T>(XYFocusKeyboardNavigationMode mode) → T
 TabViewElement.AddTabButtonClick(Action handler) → TabViewElement
+TabViewElement.AllowDropTabs(bool allow = true) → TabViewElement
+TabViewElement.CanDragTabs(bool canDrag = true) → TabViewElement
+TabViewElement.CanReorderTabs(bool canReorder = true) → TabViewElement
+TabViewElement.CloseButtonOverlayMode(TabViewCloseButtonOverlayMode mode) → TabViewElement
 TabViewElement.SelectedIndexChanged(Action<int> handler) → TabViewElement
 TabViewElement.Set(Action<TabView> configure) → TabViewElement
 TabViewElement.ShowAddButton(bool visible = true) → TabViewElement
 TabViewElement.TabCloseRequested(Action<int> handler) → TabViewElement
+TabViewElement.TabStripFooter(Element footer) → TabViewElement
+TabViewElement.TabStripHeader(Element header) → TabViewElement
+TabViewElement.TabWidthMode(TabViewWidthMode mode) → TabViewElement
 TeachingTipElement.ActionButtonClick(Action handler) → TeachingTipElement
 TeachingTipElement.Closed(Action handler) → TeachingTipElement
 TeachingTipElement.Set(Action<TeachingTip> configure) → TeachingTipElement

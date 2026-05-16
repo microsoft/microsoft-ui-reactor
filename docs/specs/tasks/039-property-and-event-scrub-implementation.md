@@ -377,7 +377,7 @@ etc. Property names are unchanged.
 
 ### 4.4 `TabView`
 
-- [ ] `.TabWidthMode(TabViewWidthMode)`,
+- [x] `.TabWidthMode(TabViewWidthMode)`,
       `.CloseButtonOverlayMode(TabViewCloseButtonOverlayMode)`,
       `.CanDragTabs(bool = true)`, `.CanReorderTabs(bool = true)`,
       `.AllowDropTabs(bool = true)`, `.TabStripHeader(Element)`,
