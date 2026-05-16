@@ -1,10 +1,16 @@
 # Property & Event API Scrub — Control-by-Control Audit
 
-## Status
+## Status: Implemented
 
-**In Implementation.** This spec catalogs every control Reactor currently exposes
-through `Microsoft.UI.Reactor.Factories` and audits each against three criteria.
-Remediation is sequenced in `docs/specs/tasks/039-property-and-event-scrub-implementation.md`.
+Phases 0–8 of the implementation landed on branch
+`feat/039-property-event-scrub`; Phase 9 (docs) is landing in the same
+branch. The task list with the per-section breakdown and tracker lives at
+[`docs/specs/tasks/039-property-and-event-scrub-implementation.md`](tasks/039-property-and-event-scrub-implementation.md).
+
+Phase 0–8 commit history: `git log feat/039-property-event-scrub --grep='Phase '`.
+
+This spec catalogs every control Reactor currently exposes through
+`Microsoft.UI.Reactor.Factories` and audits each against three criteria.
 
 ### Decisions locked (from §15 open questions — final, will not change mid-implementation)
 
