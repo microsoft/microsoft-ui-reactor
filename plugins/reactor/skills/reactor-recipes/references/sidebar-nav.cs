@@ -5,6 +5,11 @@
 // the matched page → .WithNavigation(nav, routeToTag, tagToRoute) wires it up
 // so clicking a sidebar item calls nav.Navigate(route). Pages can pull the
 // shared handle via UseNavigation<Route>().
+//
+// `.SelectedTagChanged(handler)` is the low-level NavigationView fluent — it
+// fires with the new tag string on every selection change. `.WithNavigation`
+// is the typed wrapper that maps tag↔route and dispatches into your
+// `UseNavigation` handle for you; prefer it unless you need raw tag access.
 
 // In this clone, run `mur pack-local` once. Bump the version below to match
 // whatever `mur pack-local` printed (default: 0.0.0-local). For a real NuGet
@@ -47,7 +52,12 @@ class Shell : Component
                 Route.Settings => Component<SettingsPage>(),
                 _ => TextBlock("Not found")
             })
-        ).WithNavigation(nav, ToTag, ToRoute);
+        )
+        // .WithNavigation internally sets OnSelectedTagChanged to bridge
+        // tag→route. For a hand-rolled equivalent (or to add a diagnostic
+        // hook), use the .SelectedTagChanged(tag => ...) fluent directly —
+        // but note it REPLACES the slot, so pick one or the other.
+        .WithNavigation(nav, ToTag, ToRoute);
     }
 }
 

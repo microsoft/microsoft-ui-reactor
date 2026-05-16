@@ -757,22 +757,34 @@ fluent must surface here or it doesn't exist for agents.
 
 ### 10.2 `reactor-recipes` skill
 
-- [ ] Update existing recipes to use the new fluents where they currently
+- [x] Update existing recipes to use the new fluents where they currently
       use `.Set(c => c.OnX = ...)`:
-      - `themed-card.cs` — demonstrate `Card(...)` factory.
-      - `form-with-validation.cs` — `.OnChanged()` fluent + `.NumericInput()`
-        / `.EmailInput()`.
-      - `list-add-delete.cs` — `.OnItemClick()` fluent.
-      - `sidebar-nav.cs` — `.OnSelectedTagChanged()`.
-- [ ] Add new recipe `plugins/reactor/skills/reactor-recipes/references/named-styles.cs`
+      - `themed-card.cs` — now uses the `Card(child)` factory + type-ramp
+        `Subtitle`/`Caption` for headings.
+      - `form-with-validation.cs` — adds an Age field demonstrating
+        `.NumericInput()` + `.MaxLength(3)`, applies `.EmailInput()` to
+        the email field, header note covers the `.Changed(...)` fluent
+        and its replace-vs-append semantic.
+      - `list-add-delete.cs` — converted from manual VStack to templated
+        `ListView<T>(items, key, builder).ItemClick(...)`; per-row keying
+        is now factory-supplied.
+      - `sidebar-nav.cs` — header note + inline comment explain the
+        `.SelectedTagChanged(...)` fluent and why `.WithNavigation` and
+        `.SelectedTagChanged` are mutually exclusive on the same element.
+- [x] Add new recipe `plugins/reactor/skills/reactor-recipes/references/named-styles.cs`
       showing `AccentButton`/`SubtleButton`/`TextLink`/severity fluents
       side-by-side.
-- [ ] Add new recipe `plugins/reactor/skills/reactor-recipes/references/calendar-multiselect.cs`
+- [x] Add new recipe `plugins/reactor/skills/reactor-recipes/references/calendar-multiselect.cs`
       demonstrating `OnSelectedDatesChanged`.
-- [ ] Update `plugins/reactor/skills/reactor-recipes/references/index.md`
+- [x] Update `plugins/reactor/skills/reactor-recipes/references/index.md`
       to reference the new recipes.
-- [ ] Mirror the changes in the legacy `skills/recipes/` folder if it's
-      still consumed (grep references; deprecate if not).
+- [x] Mirror the changes in the legacy `skills/recipes/` folder if it's
+      still consumed (grep references; deprecate if not). (Legacy folder
+      IS still consumed — `src/Reactor/Reactor.csproj` lines 99–102 pack
+      `skills/*.md` and `skills/recipes/*.{md,cs}` to `agentkit/skills/`
+      in the NuGet. All four updated recipes + both new recipes copied
+      across; legacy `index.md` updated. Phase 12 should reconcile the
+      duplicate-layout source-of-truth question.)
 
 ### 10.3 `reactor-design` skill
 

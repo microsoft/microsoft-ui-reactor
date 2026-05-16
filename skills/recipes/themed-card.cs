@@ -1,9 +1,11 @@
 // Recipe: themed card surface following Win11 design rules.
 //
-// Pattern: Border + Theme.CardBackground for fill, Theme.CardStroke for the
-// 1px hairline, .CornerRadius(8), .Padding aligned to the 4px grid. Headings
-// via Heading()/SubHeading() not raw FontSize. Never hardcode hex on themed
-// surfaces — agents/reviewers will reject it.
+// Pattern: the `Card(child)` factory bakes in Theme.CardBackground,
+// Theme.CardStroke (1px), 8px corner radius, and 16px padding — re-themes
+// on light/dark/contrast switches. Headings via Subtitle()/Body()/Caption()
+// from the WinUI 3 type ramp, not raw FontSize. Override any preset by
+// chaining a fluent on the returned border (e.g. .Padding(24)).
+// Never hardcode hex on themed surfaces — agents/reviewers will reject it.
 
 // In this clone, run `mur pack-local` once. Bump the version below to match
 // whatever `mur pack-local` printed (default: 0.0.0-local). For a real NuGet
@@ -30,22 +32,20 @@ class App : Component
             (TitleBar("Cards") with { Subtitle = "Win11 design tokens" }).Flex(shrink: 0),
             ScrollView(
                 FlexColumn(
-                    Card("Storage",   "12% used",        "View details"),
-                    Card("Updates",   "Up to date",      "Check now"),
-                    Card("Bluetooth", "2 devices paired", "Manage")
+                    Tile("Storage",   "12% used",         "View details"),
+                    Tile("Updates",   "Up to date",       "Check now"),
+                    Tile("Bluetooth", "2 devices paired", "Manage")
                 ).FlexPadding(16, 16)
             ).Flex(grow: 1)
         ).Backdrop(BackdropKind.Mica);
 
-    static Element Card(string title, string status, string action) =>
-        Border(
+    // Card(...) factory bakes in background, stroke, corner radius, padding.
+    // Bottom margin separates stacked cards — chain any fluent to override.
+    static Element Tile(string title, string status, string action) =>
+        Card(
             FlexColumn(
-                SubHeading(title),
+                Subtitle(title),
                 Caption(status).Foreground(SecondaryText),
-                HyperlinkButton(action).Margin(0, 8, 0, 0)
-            ).FlexPadding(16))
-        .Background(CardBackground)
-        .WithBorder(CardStroke, 1)
-        .CornerRadius(8)
+                HyperlinkButton(action).Margin(0, 8, 0, 0)))
         .Margin(0, 0, 0, 12);
 }
