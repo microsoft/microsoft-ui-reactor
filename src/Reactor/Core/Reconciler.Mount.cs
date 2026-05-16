@@ -480,6 +480,11 @@ public sealed partial class Reconciler
         if (tf.IsReadOnly == true) textBox.IsReadOnly = true;
         if (tf.SelectionStart.HasValue) textBox.SelectionStart = tf.SelectionStart.Value;
         if (tf.SelectionLength.HasValue) textBox.SelectionLength = tf.SelectionLength.Value;
+        if (tf.MaxLength != 0) textBox.MaxLength = tf.MaxLength;
+        if (tf.IsSpellCheckEnabled.HasValue) textBox.IsSpellCheckEnabled = tf.IsSpellCheckEnabled.Value;
+        if (tf.CharacterCasing != CharacterCasing.Normal) textBox.CharacterCasing = tf.CharacterCasing;
+        if (tf.TextAlignment != TextAlignment.Left) textBox.TextAlignment = tf.TextAlignment;
+        if (tf.Description is not null) textBox.Description = tf.Description;
         EnsureTextFieldWiring(textBox, tf, requestRerender);
         ApplySetters(tf.Setters, textBox);
         return textBox;

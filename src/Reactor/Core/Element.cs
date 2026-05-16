@@ -1802,6 +1802,16 @@ public record TextFieldElement(
     public int? SelectionStart { get; init; }
     /// <summary>Selection length. Set alongside SelectionStart to control the selection range.</summary>
     public int? SelectionLength { get; init; }
+    /// <summary>Maximum number of characters allowed. <c>0</c> (default) means no limit.</summary>
+    public int MaxLength { get; init; }
+    /// <summary>Whether built-in spell-check is enabled. Defaults to the WinUI default (true).</summary>
+    public bool? IsSpellCheckEnabled { get; init; }
+    /// <summary>Forces input to upper/lower-case as the user types. Defaults to <c>Normal</c> (no transform).</summary>
+    public CharacterCasing CharacterCasing { get; init; } = CharacterCasing.Normal;
+    /// <summary>Horizontal text alignment within the box. Defaults to <c>Left</c>.</summary>
+    public TextAlignment TextAlignment { get; init; } = TextAlignment.Left;
+    /// <summary>Help text rendered below the box. WinUI 3 1.2+ feature.</summary>
+    public string? Description { get; init; }
     internal Action<WinUI.TextBox>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnChanged is not null || OnSelectionChanged is not null;
 }

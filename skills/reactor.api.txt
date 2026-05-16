@@ -577,16 +577,21 @@ TextBlockElement.TextTrimming(TextTrimming trimming) → TextBlockElement
 TextBlockElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextBlockElement
 TextFieldElement.AcceptsReturn(bool accepts = true) → TextFieldElement
 TextFieldElement.Changed(Action<string> handler) → TextFieldElement
+TextFieldElement.CharacterCasing(CharacterCasing casing) → TextFieldElement
+TextFieldElement.Description(string description) → TextFieldElement
 TextFieldElement.EmailInput() → TextFieldElement
 TextFieldElement.Focus(FocusManager fm, string fieldName, bool autoFocus = false) → TextFieldElement
 TextFieldElement.Header(string header) → TextFieldElement
 TextFieldElement.InputScope(InputScopeNameValue scope) → TextFieldElement
+TextFieldElement.IsSpellCheckEnabled(bool enabled = true) → TextFieldElement
+TextFieldElement.MaxLength(int maxLength) → TextFieldElement
 TextFieldElement.NumericInput() → TextFieldElement
 TextFieldElement.PhoneInput() → TextFieldElement
 TextFieldElement.ReadOnly(bool readOnly = true) → TextFieldElement
 TextFieldElement.SearchInput() → TextFieldElement
 TextFieldElement.SelectionChanged(Action<string, int, int> handler) → TextFieldElement
 TextFieldElement.Set(Action<TextBox> configure) → TextFieldElement
+TextFieldElement.TextAlignment(TextAlignment alignment) → TextFieldElement
 TextFieldElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextFieldElement
 TextFieldElement.UrlInput() → TextFieldElement
 TimePickerElement.Set(Action<TimePicker> configure) → TimePickerElement

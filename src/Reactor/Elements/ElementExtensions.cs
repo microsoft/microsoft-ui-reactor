@@ -569,6 +569,26 @@ public static partial class ElementExtensions
     public static TextFieldElement TextWrapping(this TextFieldElement el, TextWrapping wrapping = Microsoft.UI.Xaml.TextWrapping.Wrap) =>
         el with { TextWrapping = wrapping };
 
+    /// <summary>Maximum number of characters allowed in the box. Use <c>0</c> for no limit.</summary>
+    public static TextFieldElement MaxLength(this TextFieldElement el, int maxLength) =>
+        el with { MaxLength = maxLength };
+
+    /// <summary>Enable or disable built-in spell-check.</summary>
+    public static TextFieldElement IsSpellCheckEnabled(this TextFieldElement el, bool enabled = true) =>
+        el with { IsSpellCheckEnabled = enabled };
+
+    /// <summary>Forces input to upper/lower-case as the user types.</summary>
+    public static TextFieldElement CharacterCasing(this TextFieldElement el, CharacterCasing casing) =>
+        el with { CharacterCasing = casing };
+
+    /// <summary>Sets horizontal text alignment within the box.</summary>
+    public static TextFieldElement TextAlignment(this TextFieldElement el, TextAlignment alignment) =>
+        el with { TextAlignment = alignment };
+
+    /// <summary>Sets the help/description text rendered below the box.</summary>
+    public static TextFieldElement Description(this TextFieldElement el, string description) =>
+        el with { Description = description };
+
     // ── Path sugar ─────────────────────────────────────────────────────
 
     public static PathElement StrokeDashArray(this PathElement el, params double[] dashes)

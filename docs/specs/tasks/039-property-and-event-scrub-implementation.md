@@ -400,7 +400,7 @@ etc. Property names are unchanged.
 
 ### 4.7 `TextField`
 
-- [ ] `.MaxLength(int)`, `.IsSpellCheckEnabled(bool = true)`,
+- [x] `.MaxLength(int)`, `.IsSpellCheckEnabled(bool = true)`,
       `.CharacterCasing(CharacterCasing)`,
       `.TextAlignment(TextAlignment)`, `.Description(string)`
       (spec §3.1). `InputScope` lives in Phase 2.3.
