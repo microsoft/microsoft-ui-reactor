@@ -867,10 +867,18 @@ cross-cutting test surface.
 
 ### 11.2 Naming-alignment guard test
 
-- [ ] Self-test that asserts factories with names diverging from their
+- [x] Self-test that asserts factories with names diverging from their
       WinUI target (the §0.3 list) carry an XML doc remark explaining the
       deviation. Use the existing doc-comment extraction tooling (grep
       under `tests/Reactor.SelfTests/` for `// doc` precedent).
+      (Landed as `NamingAlignmentGuardTests.DivergentFactoriesHaveRemarks`
+      under `tests/Reactor.Tests/Elements/` — loads `Reactor.xml` (emitted
+      next to `Reactor.dll` by `GenerateDocumentationFile`) and asserts
+      each of `VStack`/`HStack`/`Heading`/`SubHeading`/`Caption`/`Flex`/
+      `FlexRow`/`FlexColumn`/`LazyVStack`/`LazyHStack`/`ListView<T>` has at
+      least one overload with a non-empty `<remarks>`. The generic
+      `ListView<T>` overload-only match captures the typed-vs-untyped
+      divergence without flagging the WinUI-spelling untyped `ListView`.)
 
 ### 11.3 Null-clear contract test
 
