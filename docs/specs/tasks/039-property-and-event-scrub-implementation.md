@@ -544,10 +544,12 @@ existing init properties.
 
 ### 6.2 Document Reactor-original wrappers (spec §0.3)
 
-- [ ] Add XML doc comments to `VStack`/`HStack`/`Heading`/`SubHeading`/
+- [x] Add XML doc comments to `VStack`/`HStack`/`Heading`/`SubHeading`/
       `Caption`/`Flex`/`FlexRow`/`FlexColumn`/`LazyVStack<T>`/
       `LazyHStack<T>`/`TemplatedListView<T>` explaining why the name
-      diverges from WinUI. Spec recommends this for discoverability.
+      diverges from WinUI. Also covered the sibling templated peers
+      `GridView<T>` and `FlipView<T>` and the second `Flex(direction, ...)`
+      overload. (`<summary>` + `<remarks>` per factory in `Dsl.cs`.)
 
 ### 6.3 Document the `StackElement.Spacing` default-8 deviation (spec §0.4)
 

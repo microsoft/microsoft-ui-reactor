@@ -43,6 +43,17 @@ public static partial class Factories
 
     public static TextBlockElement TextBlock(string content) => new(content);
 
+    /// <summary>
+    /// Creates a heading-styled <see cref="TextBlockElement"/> (28px, bold,
+    /// automation heading level 1).
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience wrapper — there is no WinUI control named
+    /// <c>Heading</c>. Sized for the WinUI Title type-ramp slot, with the
+    /// accessibility heading level set so screen readers announce it as a
+    /// landmark. Prefer this over hand-styled <see cref="TextBlock(string)"/>
+    /// for page / section titles. (spec 039 §0.3)
+    /// </remarks>
     public static TextBlockElement Heading(string content) =>
         new(content) { FontSize = 28, Weight = new global::Windows.UI.Text.FontWeight(700),
             Modifiers = new Core.ElementModifiers
@@ -50,6 +61,16 @@ public static partial class Factories
                 HeadingLevel = Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1
             } };
 
+    /// <summary>
+    /// Creates a sub-heading styled <see cref="TextBlockElement"/> (20px,
+    /// semi-bold, automation heading level 2).
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience wrapper — there is no WinUI control named
+    /// <c>SubHeading</c>. Pairs with <see cref="Heading(string)"/> for the
+    /// secondary section level; sized for the WinUI Subtitle type-ramp slot.
+    /// (spec 039 §0.3)
+    /// </remarks>
     public static TextBlockElement SubHeading(string content) =>
         new(content) { FontSize = 20, Weight = new global::Windows.UI.Text.FontWeight(600),
             Modifiers = new Core.ElementModifiers
@@ -57,6 +78,15 @@ public static partial class Factories
                 HeadingLevel = Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2
             } };
 
+    /// <summary>
+    /// Creates a caption-styled <see cref="TextBlockElement"/> (12px).
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience wrapper — there is no WinUI control named
+    /// <c>Caption</c>. Sized for the WinUI Caption type-ramp slot; use for
+    /// secondary metadata (timestamps, helper text, hints) below primary copy.
+    /// (spec 039 §0.3)
+    /// </remarks>
     public static TextBlockElement Caption(string content) =>
         new(content) { FontSize = 12 };
 
@@ -248,15 +278,53 @@ public static partial class Factories
 
     // ── Layout ──────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Creates a vertical <see cref="StackElement"/> (WinUI <c>StackPanel</c>
+    /// with <see cref="Orientation.Vertical"/>). Default <c>Spacing</c> is 8 —
+    /// see <see cref="StackElement.Spacing"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original name — WinUI exposes one <c>StackPanel</c> control
+    /// keyed by <c>Orientation</c>; Reactor splits it into two factories
+    /// (<see cref="VStack(Element?[])"/> / <see cref="HStack(Element?[])"/>)
+    /// because the orientation is almost always known at the call site and the
+    /// shorter names reduce DSL noise. The SwiftUI / React Native names are
+    /// load-bearing for cross-platform agent familiarity. (spec 039 §0.3)
+    /// </remarks>
     public static StackElement VStack(params Element?[] children) =>
         new(Orientation.Vertical, FilterChildren(children));
 
+    /// <summary>
+    /// Creates a vertical <see cref="StackElement"/> with an explicit
+    /// <c>Spacing</c> override (the first positional argument).
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience overload — see <see cref="VStack(Element?[])"/>
+    /// for the naming rationale.
+    /// </remarks>
     public static StackElement VStack(double spacing, params Element?[] children) =>
         new(Orientation.Vertical, FilterChildren(children)) { Spacing = spacing };
 
+    /// <summary>
+    /// Creates a horizontal <see cref="StackElement"/> (WinUI <c>StackPanel</c>
+    /// with <see cref="Orientation.Horizontal"/>). Default <c>Spacing</c> is 8 —
+    /// see <see cref="StackElement.Spacing"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original name — see <see cref="VStack(Element?[])"/> for the
+    /// naming rationale. (spec 039 §0.3)
+    /// </remarks>
     public static StackElement HStack(params Element?[] children) =>
         new(Orientation.Horizontal, FilterChildren(children));
 
+    /// <summary>
+    /// Creates a horizontal <see cref="StackElement"/> with an explicit
+    /// <c>Spacing</c> override (the first positional argument).
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience overload — see <see cref="VStack(Element?[])"/>
+    /// for the naming rationale.
+    /// </remarks>
     public static StackElement HStack(double spacing, params Element?[] children) =>
         new(Orientation.Horizontal, FilterChildren(children)) { Spacing = spacing };
 
@@ -282,15 +350,50 @@ public static partial class Factories
 
     // ── Flex ────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Creates a Yoga-based flexbox container (<see cref="FlexElement"/>).
+    /// Default direction is <see cref="Microsoft.UI.Reactor.Layout.FlexDirection.Row"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original — there is no WinUI <c>Flex</c> control. This is a
+    /// custom panel backed by Yoga (Facebook's flexbox engine, see
+    /// <see cref="Microsoft.UI.Reactor.Layout.FlexPanel"/>) for full CSS-flexbox
+    /// semantics inside a WinUI tree. Prefer <see cref="VStack(Element?[])"/> /
+    /// <see cref="HStack(Element?[])"/> for simple stacks; reach for Flex when
+    /// you need wrap, justify-content / align-items, or per-child grow/shrink.
+    /// (spec 039 §0.3)
+    /// </remarks>
     public static FlexElement Flex(params Element?[] children) =>
         new(FilterChildren(children));
 
+    /// <summary>
+    /// Creates a Yoga flexbox container with an explicit direction.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original — see <see cref="Flex(Element?[])"/> for the rationale.
+    /// </remarks>
     public static FlexElement Flex(Microsoft.UI.Reactor.Layout.FlexDirection direction, params Element?[] children) =>
         new(FilterChildren(children)) { Direction = direction };
 
+    /// <summary>
+    /// Creates a Yoga flexbox container with
+    /// <see cref="Microsoft.UI.Reactor.Layout.FlexDirection.Row"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience for the row-direction flex case — see
+    /// <see cref="Flex(Element?[])"/> for the rationale. (spec 039 §0.3)
+    /// </remarks>
     public static FlexElement FlexRow(params Element?[] children) =>
         new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Row };
 
+    /// <summary>
+    /// Creates a Yoga flexbox container with
+    /// <see cref="Microsoft.UI.Reactor.Layout.FlexDirection.Column"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience for the column-direction flex case — see
+    /// <see cref="Flex(Element?[])"/> for the rationale. (spec 039 §0.3)
+    /// </remarks>
     public static FlexElement FlexColumn(params Element?[] children) =>
         new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Column };
 
@@ -744,16 +847,44 @@ public static partial class Factories
 
     // ── Typed (data-driven) collections ───────────────────────────
 
+    /// <summary>
+    /// Creates a typed, data-driven <see cref="TemplatedListViewElement{T}"/>.
+    /// The reconciler builds a WinUI <c>ListView</c> bound to <paramref name="items"/>
+    /// and instantiates one view per item via <paramref name="viewBuilder"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original generic peer of WinUI's untyped <c>ListView</c>. The
+    /// element record name is <c>TemplatedListViewElement&lt;T&gt;</c> (templated +
+    /// typed) but the factory is the short <c>ListView</c>; the type parameter
+    /// disambiguates from the existing untyped factory at the call site.
+    /// (spec 039 §0.3)
+    /// </remarks>
     public static TemplatedListViewElement<T> ListView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
 
+    /// <summary>
+    /// Creates a typed, data-driven <see cref="TemplatedGridViewElement{T}"/>
+    /// — the templated peer of WinUI's untyped <c>GridView</c>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original — see <see cref="ListView{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>
+    /// for the templated-peer naming rationale. (spec 039 §0.3)
+    /// </remarks>
     public static TemplatedGridViewElement<T> GridView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
 
+    /// <summary>
+    /// Creates a typed, data-driven <see cref="TemplatedFlipViewElement{T}"/>
+    /// — the templated peer of WinUI's untyped <c>FlipView</c>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original — see <see cref="ListView{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>
+    /// for the templated-peer naming rationale. (spec 039 §0.3)
+    /// </remarks>
     public static TemplatedFlipViewElement<T> FlipView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
@@ -761,11 +892,30 @@ public static partial class Factories
 
     // ── Virtualized collections ───────────────────────────────────
 
+    /// <summary>
+    /// Creates a virtualized vertical stack of templated items. Backed by a
+    /// WinUI <c>ItemsRepeater</c> inside a <c>ScrollViewer</c> — children are
+    /// materialized on demand, so this scales to large item counts.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original — there is no WinUI <c>LazyVStack</c>; the name is borrowed
+    /// from SwiftUI for the "vertical stack, lazy materialization" semantics.
+    /// Prefer this over <see cref="VStack(Element?[])"/> when the child count is
+    /// large or the children are expensive to instantiate. (spec 039 §0.3)
+    /// </remarks>
     public static LazyVStackElement<T> LazyVStack<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
 
+    /// <summary>
+    /// Creates a virtualized horizontal stack of templated items — the horizontal
+    /// peer of <see cref="LazyVStack{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original — see <see cref="LazyVStack{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>
+    /// for the naming rationale. (spec 039 §0.3)
+    /// </remarks>
     public static LazyHStackElement<T> LazyHStack<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
