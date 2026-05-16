@@ -467,13 +467,13 @@ existing init properties.
 
 ### 5.5 Progress, layout, navigation
 
-- [ ] `InfoBarElement`: `IconSource`, `Content` (Element child)
+- [x] `InfoBarElement`: `IconSource`, `Content` (Element child)
       (spec §5).
-- [ ] `WrapGridElement`: attached-prop fluents
+- [x] `WrapGridElement`: attached-prop fluents
       `.WrapGridColumnSpan(int)` / `.WrapGridRowSpan(int)` (spec §6).
-- [ ] `ExpanderElement`: `HeaderTemplate` (Element-typed slot),
+- [x] `ExpanderElement`: `HeaderTemplate` (Element-typed slot),
       `ContentTransitions` (spec §6).
-- [ ] `SplitViewElement`: `PaneBackground` (Brush or theme-resource key),
+- [x] `SplitViewElement`: `PaneBackground` (Brush or theme-resource key),
       `LightDismissOverlayMode` (spec §6).
 
 ### 5.6 Collections, dialogs

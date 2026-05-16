@@ -206,7 +206,7 @@ public sealed partial class Reconciler
             (FlipViewElement o, FlipViewElement n, WinUI.FlipView fv)
                 => UpdateFlipView(o, n, fv, requestRerender),
             (InfoBarElement o, InfoBarElement n, WinUI.InfoBar ib)
-                => UpdateInfoBar(o, n, ib),
+                => UpdateInfoBar(o, n, ib, requestRerender),
             (InfoBadgeElement, InfoBadgeElement n, WinUI.InfoBadge badge)
                 => UpdateInfoBadge(n, badge),
             (ContentDialogElement o, ContentDialogElement n, FrameworkElement cdFe)
@@ -1275,6 +1275,24 @@ public sealed partial class Reconciler
         if (!double.IsNaN(n.ItemWidth)) wg.ItemWidth = n.ItemWidth;
         if (!double.IsNaN(n.ItemHeight)) wg.ItemHeight = n.ItemHeight;
         ReconcileChildren(o.Children, n.Children, wg, requestRerender);
+
+        // Re-apply VariableSizedWrapGrid attached properties — children may have
+        // changed their .WrapGridColumnSpan(...) / .WrapGridRowSpan(...) between
+        // renders. ReconcileChildren filters nulls/EmptyElements like Canvas so
+        // walk the panel children in parallel with the filtered new-children list.
+        int panelIdx = 0;
+        for (int i = 0; i < n.Children.Length && panelIdx < wg.Children.Count; i++)
+        {
+            if (n.Children[i] is null or EmptyElement) continue;
+            var wga = n.Children[i].GetAttached<WrapGridAttached>();
+            if (wga is not null && wg.Children[panelIdx] is FrameworkElement fe)
+            {
+                WinUI.VariableSizedWrapGrid.SetRowSpan(fe, wga.RowSpan);
+                WinUI.VariableSizedWrapGrid.SetColumnSpan(fe, wga.ColumnSpan);
+            }
+            panelIdx++;
+        }
+
         SetElementTag(wg, n);
         ApplySetters(n.Setters, wg);
         return null;
@@ -1373,8 +1391,27 @@ public sealed partial class Reconciler
 
     private UIElement? UpdateExpander(ExpanderElement o, ExpanderElement n, WinUI.Expander exp, Action requestRerender)
     {
-        exp.Header = n.Header; exp.IsExpanded = n.IsExpanded;
+        exp.IsExpanded = n.IsExpanded;
         exp.ExpandDirection = n.ExpandDirection;
+
+        // Element header wins over the string slot. Reconcile via ReconcileChild
+        // when both old and new use HeaderTemplate; otherwise swap modes.
+        if (n.HeaderTemplate is not null)
+        {
+            ReconcileChild(o.HeaderTemplate, n.HeaderTemplate,
+                () => exp.Header as UIElement,
+                c => exp.Header = c,
+                () => exp.Header = n.Header,
+                requestRerender);
+        }
+        else
+        {
+            if (exp.Header is UIElement headerCtrl) Unmount(headerCtrl);
+            exp.Header = n.Header;
+        }
+
+        if (!ReferenceEquals(o.ContentTransitions, n.ContentTransitions))
+            exp.ContentTransitions = n.ContentTransitions;
 
         // Reconcile content child
         if (exp.Content is UIElement existingContent && CanUpdate(o.Content, n.Content))
@@ -2088,6 +2125,9 @@ public sealed partial class Reconciler
         if (sv.OpenPaneLength != n.OpenPaneLength) sv.OpenPaneLength = n.OpenPaneLength;
         if (sv.CompactPaneLength != n.CompactPaneLength) sv.CompactPaneLength = n.CompactPaneLength;
         if (sv.DisplayMode != n.DisplayMode) sv.DisplayMode = n.DisplayMode;
+        if (sv.LightDismissOverlayMode != n.LightDismissOverlayMode) sv.LightDismissOverlayMode = n.LightDismissOverlayMode;
+        if (!ReferenceEquals(o.PaneBackground, n.PaneBackground) && n.PaneBackground is not null)
+            sv.PaneBackground = n.PaneBackground;
 
         ReconcileChild(o.Pane, n.Pane,
             () => sv.Pane as UIElement,
@@ -2543,10 +2583,17 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateInfoBar(InfoBarElement o, InfoBarElement n, WinUI.InfoBar ib)
+    private UIElement? UpdateInfoBar(InfoBarElement o, InfoBarElement n, WinUI.InfoBar ib, Action requestRerender)
     {
         ib.Title = n.Title ?? ""; ib.Message = n.Message ?? "";
         ib.Severity = n.Severity; ib.IsOpen = n.IsOpen; ib.IsClosable = n.IsClosable;
+        if (!ReferenceEquals(o.IconSource, n.IconSource) && n.IconSource is not null)
+            ib.IconSource = ResolveIconSource(n.IconSource);
+        ReconcileChild(o.Content, n.Content,
+            () => ib.Content as UIElement,
+            c => ib.Content = c,
+            () => ib.Content = null,
+            requestRerender);
         SetElementTag(ib, n);
         if (o.OnClosed is null && n.OnClosed is not null)
             ib.Closed += (s, _) => (GetElementTag((UIElement)s!) as InfoBarElement)?.OnClosed?.Invoke();

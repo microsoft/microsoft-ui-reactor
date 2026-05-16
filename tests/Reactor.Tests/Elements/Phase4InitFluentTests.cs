@@ -750,4 +750,67 @@ public class Phase4InitFluentTests
         var el = new CalendarViewElement().DisplayMode(Microsoft.UI.Xaml.Controls.CalendarViewDisplayMode.Year);
         Assert.Equal(Microsoft.UI.Xaml.Controls.CalendarViewDisplayMode.Year, el.DisplayMode);
     }
+
+    // ── 5.5 Progress / Layout / Navigation ────────────────────────────
+
+    [Fact]
+    public void InfoBar_IconSource_Sets()
+    {
+        var icon = new SymbolIconData("Accept");
+        var el = InfoBar("title").IconSource(icon);
+        Assert.Same(icon, el.IconSource);
+    }
+
+    [Fact]
+    public void InfoBar_Content_Sets()
+    {
+        var inner = TextBlock("details");
+        var el = InfoBar("title").Content(inner);
+        Assert.Same(inner, el.Content);
+    }
+
+    [Fact]
+    public void Expander_HeaderTemplate_Sets()
+    {
+        var header = TextBlock("Custom header");
+        var el = Expander("string header", TextBlock("body")).HeaderTemplate(header);
+        Assert.Same(header, el.HeaderTemplate);
+    }
+
+    [Fact]
+    public void SplitView_LightDismissOverlayMode_Sets()
+    {
+        var el = new SplitViewElement().LightDismissOverlayMode(Microsoft.UI.Xaml.Controls.LightDismissOverlayMode.On);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.LightDismissOverlayMode.On, el.LightDismissOverlayMode);
+    }
+
+    [Fact]
+    public void SplitView_PaneBackground_ThemeRef_Wires_ThemeBindings()
+    {
+        var el = new SplitViewElement().PaneBackground(Theme.LayerFill);
+        Assert.NotNull(el.ThemeBindings);
+        Assert.True(el.ThemeBindings!.ContainsKey("PaneBackground"));
+    }
+
+    [Fact]
+    public void WrapGrid_AttachedProps_RowSpan_ColumnSpan()
+    {
+        // Apply both spans and confirm the attached data is stored on the element.
+        var child = TextBlock("x").WrapGridColumnSpan(2).WrapGridRowSpan(3);
+        var wga = AttachedProbe.Get<WrapGridAttached>(child);
+        Assert.NotNull(wga);
+        Assert.Equal(2, wga!.ColumnSpan);
+        Assert.Equal(3, wga.RowSpan);
+    }
+}
+
+// Internal probe so tests can read attached data without needing
+// InternalsVisibleTo on the property itself.
+internal static class AttachedProbe
+{
+    public static T? Get<T>(Element el) where T : class
+    {
+        if (el.Attached is null) return null;
+        return el.Attached.TryGetValue(typeof(T), out var v) ? (T)v : null;
+    }
 }

@@ -262,7 +262,9 @@ DropDownButtonElement.Set(Action<DropDownButton> configure) → DropDownButtonEl
 DropDownButtonElement.SubtleButton() → DropDownButtonElement
 EllipseElement.Fill(Brush brush) → EllipseElement
 EllipseElement.Set(Action<Ellipse> configure) → EllipseElement
+ExpanderElement.ContentTransitions(TransitionCollection transitions) → ExpanderElement
 ExpanderElement.Direction(ExpandDirection dir) → ExpanderElement
+ExpanderElement.HeaderTemplate(Element header) → ExpanderElement
 ExpanderElement.IsExpandedChanged(Action<bool> handler) → ExpanderElement
 ExpanderElement.Set(Action<Expander> configure) → ExpanderElement
 FlexElement.FlexPadding(double horizontal, double vertical) → FlexElement
@@ -293,7 +295,9 @@ InfoBadgeElement.Set(Action<InfoBadge> configure) → InfoBadgeElement
 InfoBarElement.ActionButtonClick(Action handler) → InfoBarElement
 InfoBarElement.Closable(bool closable = true) → InfoBarElement
 InfoBarElement.Closed(Action handler) → InfoBarElement
+InfoBarElement.Content(Element content) → InfoBarElement
 InfoBarElement.Error() → InfoBarElement
+InfoBarElement.IconSource(IconData icon) → InfoBarElement
 InfoBarElement.Informational() → InfoBarElement
 InfoBarElement.Set(Action<InfoBar> configure) → InfoBarElement
 InfoBarElement.Severity(InfoBarSeverity severity) → InfoBarElement
@@ -425,6 +429,9 @@ SplitButtonElement.AccentButton() → SplitButtonElement
 SplitButtonElement.Click(Action handler) → SplitButtonElement
 SplitButtonElement.Set(Action<SplitButton> configure) → SplitButtonElement
 SplitButtonElement.SubtleButton() → SplitButtonElement
+SplitViewElement.LightDismissOverlayMode(LightDismissOverlayMode mode) → SplitViewElement
+SplitViewElement.PaneBackground(Brush brush) → SplitViewElement
+SplitViewElement.PaneBackground(ThemeRef theme) → SplitViewElement
 SplitViewElement.PaneOpenChanged(Action<bool> handler) → SplitViewElement
 SplitViewElement.Set(Action<SplitView> configure) → SplitViewElement
 StackElement.BackgroundTransition(TimeSpan? duration = null) → StackElement
@@ -583,6 +590,8 @@ T.WithFlyout<T>(Element flyout) → T
 T.WithKey<T>(string key) → T
 T.WithToolTip<T>(Element tooltip) → T
 T.WithTransitions<T>(Transition[] transitions) → T
+T.WrapGridColumnSpan<T>(int columnSpan) → T
+T.WrapGridRowSpan<T>(int rowSpan) → T
 T.XYFocusKeyboardNavigation<T>(XYFocusKeyboardNavigationMode mode) → T
 TabViewElement.AddTabButtonClick(Action handler) → TabViewElement
 TabViewElement.AllowDropTabs(bool allow = true) → TabViewElement

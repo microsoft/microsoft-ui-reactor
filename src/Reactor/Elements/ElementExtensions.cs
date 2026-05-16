@@ -1058,6 +1058,71 @@ public static partial class ElementExtensions
     public static InfoBarElement Closable(this InfoBarElement el, bool closable = true) =>
         el with { IsClosable = closable };
 
+    /// <summary>Custom icon source (overrides the severity-default icon).</summary>
+    public static InfoBarElement IconSource(this InfoBarElement el, IconData icon) =>
+        el with { IconSource = icon };
+
+    /// <summary>Custom rich content rendered below the message (overload to the message string).</summary>
+    public static InfoBarElement Content(this InfoBarElement el, Element content) =>
+        el with { Content = content };
+
+    // ── Expander extra sugar (HeaderTemplate, ContentTransitions) ───
+
+    /// <summary>
+    /// Sets an Element header (overrides the string <c>Header</c> from the
+    /// factory). Mirrors WinUI's <c>HeaderTemplate</c> slot.
+    /// </summary>
+    public static ExpanderElement HeaderTemplate(this ExpanderElement el, Element header) =>
+        el with { HeaderTemplate = header };
+
+    /// <summary>Custom <c>TransitionCollection</c> applied to the expanding content area.</summary>
+    public static ExpanderElement ContentTransitions(this ExpanderElement el, Microsoft.UI.Xaml.Media.Animation.TransitionCollection transitions) =>
+        el with { ContentTransitions = transitions };
+
+    // ── SplitView extra sugar (PaneBackground, LightDismissOverlayMode) ──
+
+    /// <summary>Pane background brush.</summary>
+    public static SplitViewElement PaneBackground(this SplitViewElement el, Brush brush) =>
+        el with { PaneBackground = brush };
+
+    /// <summary>
+    /// Pane background bound to a WinUI theme resource (light/dark adaptive).
+    /// Resolves via the same ThemeBindings pipeline that powers
+    /// <c>Background(ThemeRef)</c>.
+    /// </summary>
+    public static SplitViewElement PaneBackground(this SplitViewElement el, ThemeRef theme) =>
+        ModifyTheme(el, "PaneBackground", theme);
+
+    /// <summary>How the light-dismiss overlay reacts to taps in Overlay mode.</summary>
+    public static SplitViewElement LightDismissOverlayMode(this SplitViewElement el, LightDismissOverlayMode mode) =>
+        el with { LightDismissOverlayMode = mode };
+
+    // ── WrapGrid attached-prop fluents ──────────────────────────────
+
+    /// <summary>
+    /// Sets <c>VariableSizedWrapGrid.ColumnSpan</c> on this child. Only
+    /// meaningful when the element is a child of a <see cref="WrapGridElement"/>.
+    /// </summary>
+    public static T WrapGridColumnSpan<T>(this T el, int columnSpan) where T : Element
+    {
+        var existing = el.GetAttached<WrapGridAttached>();
+        return (T)el.SetAttached(new WrapGridAttached(
+            RowSpan: existing?.RowSpan ?? 1,
+            ColumnSpan: columnSpan));
+    }
+
+    /// <summary>
+    /// Sets <c>VariableSizedWrapGrid.RowSpan</c> on this child. Only meaningful
+    /// when the element is a child of a <see cref="WrapGridElement"/>.
+    /// </summary>
+    public static T WrapGridRowSpan<T>(this T el, int rowSpan) where T : Element
+    {
+        var existing = el.GetAttached<WrapGridAttached>();
+        return (T)el.SetAttached(new WrapGridAttached(
+            RowSpan: rowSpan,
+            ColumnSpan: existing?.ColumnSpan ?? 1));
+    }
+
     // ── NavigationView sugar ────────────────────────────────────────
 
     public static NavigationViewElement PaneDisplayMode(this NavigationViewElement el, NavigationViewPaneDisplayMode mode) =>

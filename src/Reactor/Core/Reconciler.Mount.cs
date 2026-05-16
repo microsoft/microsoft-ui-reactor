@@ -114,7 +114,7 @@ public sealed partial class Reconciler
             GridViewElement gv => MountGridView(gv, requestRerender),
             TreeViewElement tv => MountTreeView(tv, requestRerender),
             FlipViewElement fv => MountFlipView(fv, requestRerender),
-            InfoBarElement ib => MountInfoBar(ib),
+            InfoBarElement ib => MountInfoBar(ib, requestRerender),
             InfoBadgeElement badge => MountInfoBadge(badge),
             ContentDialogElement cdEl => MountContentDialog(cdEl, requestRerender),
             FlyoutElement flyEl => MountFlyout(flyEl, requestRerender),
@@ -1059,7 +1059,14 @@ public sealed partial class Reconciler
         {
             if (child is null or EmptyElement) continue;
             var childControl = Mount(child, requestRerender);
-            if (childControl is not null) grid.Children.Add(childControl);
+            if (childControl is null) continue;
+            var wga = child.GetAttached<WrapGridAttached>();
+            if (wga is not null && childControl is FrameworkElement fe)
+            {
+                if (wga.RowSpan > 1) WinUI.VariableSizedWrapGrid.SetRowSpan(fe, wga.RowSpan);
+                if (wga.ColumnSpan > 1) WinUI.VariableSizedWrapGrid.SetColumnSpan(fe, wga.ColumnSpan);
+            }
+            grid.Children.Add(childControl);
         }
         SetElementTag(grid, wg);
         ApplySetters(wg.Setters, grid);
@@ -1164,9 +1171,17 @@ public sealed partial class Reconciler
     {
         var expander = new WinUI.Expander
         {
-            Header = exp.Header, IsExpanded = exp.IsExpanded,
+            IsExpanded = exp.IsExpanded,
             ExpandDirection = exp.ExpandDirection,
         };
+        // Element header wins over the string slot (matches the spec
+        // "HeaderTemplate" slot semantics — strings are still supported as
+        // the default header content).
+        if (exp.HeaderTemplate is not null)
+            expander.Header = Mount(exp.HeaderTemplate, requestRerender);
+        else
+            expander.Header = exp.Header;
+        if (exp.ContentTransitions is not null) expander.ContentTransitions = exp.ContentTransitions;
         expander.Content = Mount(exp.Content, requestRerender);
         SetElementTag(expander, exp);
         if (exp.OnIsExpandedChanged is not null)
@@ -1184,7 +1199,9 @@ public sealed partial class Reconciler
         {
             IsPaneOpen = svEl.IsPaneOpen, OpenPaneLength = svEl.OpenPaneLength,
             CompactPaneLength = svEl.CompactPaneLength, DisplayMode = svEl.DisplayMode,
+            LightDismissOverlayMode = svEl.LightDismissOverlayMode,
         };
+        if (svEl.PaneBackground is not null) splitView.PaneBackground = svEl.PaneBackground;
         if (svEl.Pane is not null) splitView.Pane = Mount(svEl.Pane, requestRerender);
         if (svEl.Content is not null) splitView.Content = Mount(svEl.Content, requestRerender);
         SetElementTag(splitView, svEl);
@@ -1842,13 +1859,15 @@ public sealed partial class Reconciler
         return flipView;
     }
 
-    private WinUI.InfoBar MountInfoBar(InfoBarElement ib)
+    private WinUI.InfoBar MountInfoBar(InfoBarElement ib, Action requestRerender)
     {
         var infoBar = new WinUI.InfoBar
         {
             Title = ib.Title ?? "", Message = ib.Message ?? "",
             Severity = ib.Severity, IsOpen = ib.IsOpen, IsClosable = ib.IsClosable,
         };
+        if (ib.IconSource is not null) infoBar.IconSource = ResolveIconSource(ib.IconSource);
+        if (ib.Content is not null) infoBar.Content = Mount(ib.Content, requestRerender);
         // Tag the parent InfoBar first so both the Closed handler (wired on
         // infoBar) and the ActionButton handler (captures infoBar in its
         // closure, reads Tag from there) dispatch through a Tag that the

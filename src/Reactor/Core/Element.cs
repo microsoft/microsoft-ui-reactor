@@ -1499,6 +1499,12 @@ public record GridDefinition(string[] Columns, string[] Rows)
 /// <summary>Attached property data for Grid children. Set via .Grid(row:, column:) extension.</summary>
 public record GridAttached(int Row = 0, int Column = 0, int RowSpan = 1, int ColumnSpan = 1);
 
+/// <summary>
+/// Attached property data for VariableSizedWrapGrid children. Set via
+/// <c>.WrapGridColumnSpan(int)</c> / <c>.WrapGridRowSpan(int)</c> extensions.
+/// </summary>
+public record WrapGridAttached(int RowSpan = 1, int ColumnSpan = 1);
+
 /// <summary>Attached property data for Canvas children. Set via .Canvas(left:, top:) extension.</summary>
 /// <remarks>
 /// <see cref="AnchorX"/> / <see cref="AnchorY"/> are 0..1 fractions of the element's
@@ -2302,6 +2308,10 @@ public record ExpanderElement(
 ) : Element
 {
     public ExpandDirection ExpandDirection { get; init; } = ExpandDirection.Down;
+    /// <summary>Custom Element header (overrides the string <see cref="Header"/>).</summary>
+    public Element? HeaderTemplate { get; init; }
+    /// <summary>Custom <c>TransitionCollection</c> applied to the expanding content area.</summary>
+    public Microsoft.UI.Xaml.Media.Animation.TransitionCollection? ContentTransitions { get; init; }
     internal Action<WinUI.Expander>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnIsExpandedChanged is not null;
 }
@@ -2316,6 +2326,10 @@ public record SplitViewElement(
     public double CompactPaneLength { get; init; } = 48;
     public SplitViewDisplayMode DisplayMode { get; init; } = SplitViewDisplayMode.Overlay;
     public Action<bool>? OnPaneOpenChanged { get; init; }
+    /// <summary>Brush behind the pane. Pair with the <c>.PaneBackground(ThemeRef)</c> overload for theme-aware backgrounds.</summary>
+    public Brush? PaneBackground { get; init; }
+    /// <summary>How the light-dismiss overlay reacts to taps in Overlay mode. Defaults to <c>Auto</c>.</summary>
+    public LightDismissOverlayMode LightDismissOverlayMode { get; init; } = LightDismissOverlayMode.Auto;
     internal Action<WinUI.SplitView>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnPaneOpenChanged is not null;
 }
@@ -2638,6 +2652,10 @@ public record InfoBarElement(
     public string? ActionButtonContent { get; init; }
     public Action? OnActionButtonClick { get; init; }
     public Action? OnClosed { get; init; }
+    /// <summary>Custom icon source. When set, overrides the severity-based icon.</summary>
+    public IconData? IconSource { get; init; }
+    /// <summary>Custom rich content rendered below the message (e.g. links, buttons, an embedded form).</summary>
+    public Element? Content { get; init; }
     internal override bool HasCallbacks => OnActionButtonClick is not null || OnClosed is not null;
     internal Action<WinUI.InfoBar>[] Setters { get; init; } = [];
 }
