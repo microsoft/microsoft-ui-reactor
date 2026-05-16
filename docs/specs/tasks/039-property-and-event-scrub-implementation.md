@@ -591,10 +591,11 @@ This phase is intentionally scoped — the spec defers full coverage to
 
 ### 7.1 Schedule spec 040
 
-- [ ] Create `docs/specs/040-specialized-control-scrub.md` as a draft with
+- [x] Create `docs/specs/040-specialized-control-scrub.md` as a draft with
       the same three-checks-per-control structure as 039, applied to
       `AutoSuggestElement<T>`, `DataGridElement<T>`, `MaskedTextFieldElement`,
-      `PropertyGridElement`, `VirtualListElement`.
+      `PropertyGridElement`, `VirtualListElement`. (Draft scaffold only —
+      Status: Draft — does not pre-audit the controls.)
 
 ### 7.2 Quick-win events for specialized controls
 
@@ -842,7 +843,7 @@ that maps to the spec's §14 ordering:
 - [x] §14 #5 — `HyperlinkButton(Command)` doc comment + `.NavigateUri()`
       (Phase 4.8).
 - [x] §14 #6 — Type-ramp factories (Phase 2.6).
-- [ ] §14 #7 — Spec 040 scheduled for specialized controls (Phase 7.1).
+- [x] §14 #7 — Spec 040 scheduled for specialized controls (Phase 7.1).
 - [x] §14 #8 — `RichText` → `RichTextBlock` rename (Phase 6.1).
 - [x] §17 — Named-style fluents and `Card` factory (Phase 2).
 - [ ] Samples updated (Phase 8).
