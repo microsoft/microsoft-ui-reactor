@@ -745,6 +745,26 @@ public static partial class ElementExtensions
     public static SliderElement Header(this SliderElement el, string header) =>
         el with { Header = header };
 
+    /// <summary>Sets the slider orientation (horizontal or vertical).</summary>
+    public static SliderElement Orientation(this SliderElement el, Orientation orientation) =>
+        el with { Orientation = orientation };
+
+    /// <summary>Sets the interval between tick marks. Pair with <c>.TickPlacement</c> to make ticks visible.</summary>
+    public static SliderElement TickFrequency(this SliderElement el, double frequency) =>
+        el with { TickFrequency = frequency };
+
+    /// <summary>Controls where tick marks render relative to the slider track.</summary>
+    public static SliderElement TickPlacement(this SliderElement el, TickPlacement placement) =>
+        el with { TickPlacement = placement };
+
+    /// <summary>Whether the thumb snaps to ticks or step values during drag.</summary>
+    public static SliderElement SnapsTo(this SliderElement el, SliderSnapsTo snapsTo) =>
+        el with { SnapsTo = snapsTo };
+
+    /// <summary>Whether the floating value tooltip appears while dragging the thumb.</summary>
+    public static SliderElement ThumbToolTip(this SliderElement el, bool enabled = true) =>
+        el with { IsThumbToolTipEnabled = enabled };
+
     // ── ToggleSwitch sugar ──────────────────────────────────────────
 
     public static ToggleSwitchElement Header(this ToggleSwitchElement el, string header) =>

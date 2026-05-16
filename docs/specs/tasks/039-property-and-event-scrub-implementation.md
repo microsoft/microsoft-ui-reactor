@@ -357,7 +357,7 @@ etc. Property names are unchanged.
 
 ### 4.1 `Slider`
 
-- [ ] `.Orientation(Orientation)`, `.TickFrequency(double)`,
+- [x] `.Orientation(Orientation)`, `.TickFrequency(double)`,
       `.TickPlacement(TickPlacement)`, `.SnapsTo(SliderSnapsTo)`,
       `.ThumbToolTip(bool enabled)` (spec §3.8).
 

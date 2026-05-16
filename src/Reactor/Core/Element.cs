@@ -1903,6 +1903,16 @@ public record SliderElement(
 {
     public double StepFrequency { get; init; } = 1;
     public string? Header { get; init; }
+    /// <summary>Slider orientation. Defaults to <c>Orientation.Horizontal</c>.</summary>
+    public Orientation Orientation { get; init; } = Orientation.Horizontal;
+    /// <summary>Interval between tick marks on the slider's track. Defaults to <c>0</c> (no ticks).</summary>
+    public double TickFrequency { get; init; }
+    /// <summary>Where tick marks render relative to the track. Defaults to <c>TickPlacement.Inline</c>.</summary>
+    public TickPlacement TickPlacement { get; init; } = TickPlacement.Inline;
+    /// <summary>Whether the thumb snaps to ticks or step values during drag.</summary>
+    public SliderSnapsTo SnapsTo { get; init; } = SliderSnapsTo.StepValues;
+    /// <summary>Whether the floating value tooltip appears while dragging the thumb. Defaults to <c>true</c>.</summary>
+    public bool IsThumbToolTipEnabled { get; init; } = true;
     internal Action<WinUI.Slider>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnValueChanged is not null;
 }

@@ -989,6 +989,11 @@ public sealed partial class Reconciler
             s.Value = n.Value;
         }
         s.StepFrequency = n.StepFrequency;
+        if (s.Orientation != n.Orientation) s.Orientation = n.Orientation;
+        if (s.TickFrequency != n.TickFrequency) s.TickFrequency = n.TickFrequency;
+        if (s.TickPlacement != n.TickPlacement) s.TickPlacement = n.TickPlacement;
+        if (s.SnapsTo != n.SnapsTo) s.SnapsTo = n.SnapsTo;
+        if (s.IsThumbToolTipEnabled != n.IsThumbToolTipEnabled) s.IsThumbToolTipEnabled = n.IsThumbToolTipEnabled;
         if (n.Header is not null) s.Header = n.Header;
         ApplySetters(n.Setters, s);
         return null;

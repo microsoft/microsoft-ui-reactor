@@ -711,7 +711,15 @@ public sealed partial class Reconciler
 
     private WinUI.Slider MountSlider(SliderElement sl)
     {
-        var slider = new WinUI.Slider { Value = sl.Value, Minimum = sl.Min, Maximum = sl.Max, StepFrequency = sl.StepFrequency };
+        var slider = new WinUI.Slider
+        {
+            Value = sl.Value, Minimum = sl.Min, Maximum = sl.Max, StepFrequency = sl.StepFrequency,
+            Orientation = sl.Orientation,
+            TickFrequency = sl.TickFrequency,
+            TickPlacement = sl.TickPlacement,
+            SnapsTo = sl.SnapsTo,
+            IsThumbToolTipEnabled = sl.IsThumbToolTipEnabled,
+        };
         if (sl.Header is not null) slider.Header = sl.Header;
         SetElementTag(slider, sl);
         if (sl.OnValueChanged is not null)

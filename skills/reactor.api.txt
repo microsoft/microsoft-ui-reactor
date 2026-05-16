@@ -284,6 +284,9 @@ ListViewElement.SelectionMode(ListViewSelectionMode mode) → ListViewElement
 ListViewElement.Set(Action<ListView> configure) → ListViewElement
 MapControlElement.Set(Action<MapControl> configure) → MapControlElement
 MaskedTextFieldElement.Changed(Action<string> handler) → MaskedTextFieldElement
+MediaPlayerElementElement.MediaEnded(Action handler) → MediaPlayerElementElement
+MediaPlayerElementElement.MediaFailed(Action<string> handler) → MediaPlayerElementElement
+MediaPlayerElementElement.MediaOpened(Action handler) → MediaPlayerElementElement
 MediaPlayerElementElement.Set(Action<MediaPlayerElement> configure) → MediaPlayerElementElement
 MenuBarElement.Set(Action<MenuBar> configure) → MenuBarElement
 MenuFlyoutElement.Set(Action<MenuFlyout> configure) → MenuFlyoutElement
@@ -316,6 +319,7 @@ PivotElement.Set(Action<Pivot> configure) → PivotElement
 PopupElement.Closed(Action handler) → PopupElement
 PopupElement.LightDismiss(bool enabled = true) → PopupElement
 PopupElement.Offset(double horizontal, double vertical) → PopupElement
+PopupElement.Opened(Action handler) → PopupElement
 PopupElement.Set(Action<Popup> configure) → PopupElement
 ProgressElement.Set(Action<ProgressBar> configure) → ProgressElement
 ProgressRingElement.Active(bool active = true) → ProgressRingElement
@@ -344,13 +348,19 @@ RichTextBlockElement.Set(Action<RichTextBlock> configure) → RichTextBlockEleme
 ScrollViewElement.HorizontalScrollMode(ScrollMode mode) → ScrollViewElement
 ScrollViewElement.Set(Action<ScrollViewer> configure) → ScrollViewElement
 ScrollViewElement.VerticalScrollMode(ScrollMode mode) → ScrollViewElement
+ScrollViewElement.ViewChanged(Action<ScrollViewerViewChangedEventArgs> handler) → ScrollViewElement
 ScrollViewElement.ZoomMode(ZoomMode mode) → ScrollViewElement
 SelectorBarElement.SelectedIndexChanged(Action<int> handler) → SelectorBarElement
 SelectorBarElement.Set(Action<SelectorBar> configure) → SelectorBarElement
 SemanticZoomElement.Set(Action<SemanticZoom> configure) → SemanticZoomElement
 SliderElement.Header(string header) → SliderElement
+SliderElement.Orientation(Orientation orientation) → SliderElement
 SliderElement.Set(Action<Slider> configure) → SliderElement
+SliderElement.SnapsTo(SliderSnapsTo snapsTo) → SliderElement
 SliderElement.StepFrequency(double step) → SliderElement
+SliderElement.ThumbToolTip(bool enabled = true) → SliderElement
+SliderElement.TickFrequency(double frequency) → SliderElement
+SliderElement.TickPlacement(TickPlacement placement) → SliderElement
 SliderElement.ValueChanged(Action<double> handler) → SliderElement
 SplitButtonElement.AccentButton() → SplitButtonElement
 SplitButtonElement.Click(Action handler) → SplitButtonElement
@@ -579,9 +589,11 @@ ValidationRuleElement.Evaluate(ValidationContext ctx) → void
 ValidationRuleElement.EvaluateAsync(ValidationContext ctx, CancellationToken cancellationToken = null) → Task
 ViewboxElement.Set(Action<Viewbox> configure) → ViewboxElement
 VirtualListElement.VisibleRangeChanged(Action<int, int> handler) → VirtualListElement
+WebView2Element.CoreWebView2Initialized(Action handler) → WebView2Element
 WebView2Element.NavigationCompleted(Action<Uri> handler) → WebView2Element
 WebView2Element.NavigationStarting(Action<Uri> handler) → WebView2Element
 WebView2Element.Set(Action<WebView2> configure) → WebView2Element
+WebView2Element.WebMessageReceived(Action<string> handler) → WebView2Element
 WrapGridElement.Set(Action<VariableSizedWrapGrid> configure) → WrapGridElement
 
 ## Hooks (RenderContext / Component)
