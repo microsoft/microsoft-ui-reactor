@@ -256,6 +256,58 @@ class ForEachDemo : Component
 directly inside element trees. Use it when you want to inline a small list
 of items inside a larger [layout](layout.md).
 
+## Multi-Select with SelectionChanged
+
+`ListView`, `GridView`, `ListBox`, and the typed peers (`ItemsView<T>`,
+`TemplatedListView<T>`, `TemplatedGridView<T>`) all expose a universal
+`SelectionChanged` fluent for multi-select scenarios. Set
+`SelectionMode = Multiple` (or `Extended`) and the handler fires with a
+snapshot of the full selection on every change — not added/removed deltas:
+
+```csharp
+class MultiSelectDemo : Component
+{
+    public override Element Render()
+    {
+        var contacts = SampleData.Contacts.Take(10).ToList();
+        var (selectedIds, setSelectedIds) = UseState(new List<string>());
+
+        return VStack(12,
+            SubHeading($"{selectedIds.Count} selected"),
+            ListView<Contact>(
+                contacts,
+                c => c.Id,
+                (contact, index) =>
+                    HStack(12,
+                        TextBlock(contact.Name).Bold(),
+                        TextBlock(contact.Email).Opacity(0.6)
+                    ).Padding(8)
+            )
+            .Set(lv => lv.SelectionMode =
+                Microsoft.UI.Xaml.Controls.ListViewSelectionMode.Multiple)
+            .SelectionChanged(indices =>
+                setSelectedIds(indices.Select(i => contacts[i].Id).ToList()))
+            .Height(300)
+        ).Padding(24);
+    }
+}
+```
+
+The handler signature varies by element type:
+
+| Element | Handler |
+|---------|---------|
+| `ListView`, `GridView`, `ListBox` | `Action<IReadOnlyList<int>>` (selected indices) |
+| `ItemsView<T>`, `TemplatedListView<T>`, `TemplatedGridView<T>` | `Action<IReadOnlyList<T>>` (selected items) |
+
+Snapshot semantics match `CalendarView.SelectedDatesChanged` — the list you
+receive is the full current selection, not the change since the last call.
+Passing `null` to the fluent clears any previously-set handler.
+
+> `TreeView` multi-select is intentionally deferred — see
+> [spec 039](../specs/039-property-and-event-scrub.md) §5.8 for the
+> rationale. Use single-select `OnItemInvoked` until then.
+
 ## Stable Identity with WithKey
 
 When rendering dynamic lists, always give each item a stable key with

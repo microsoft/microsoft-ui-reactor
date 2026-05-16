@@ -87,6 +87,64 @@ class InputTypesDemo : Component
 All controls accept optional parameters for labels, headers, and placeholder
 text. Check the API reference for each control's full signature.
 
+## Configuring TextField
+
+`TextField` covers the common WinUI `TextBox` knobs through dedicated fluents
+so you rarely need `.Set(...)`. The named-input shapes set the appropriate
+`InputScope` for soft-keyboard and IME hinting:
+
+```csharp
+class TextFieldConfigDemo : Component
+{
+    public override Element Render()
+    {
+        var (qty, setQty) = UseState("");
+        var (email, setEmail) = UseState("");
+        var (url, setUrl) = UseState("");
+        var (phone, setPhone) = UseState("");
+        var (search, setSearch) = UseState("");
+        var (note, setNote) = UseState("");
+
+        return VStack(12,
+            TextField(qty, setQty, header: "Quantity")
+                .NumericInput(),
+            TextField(email, setEmail, header: "Email")
+                .EmailInput(),
+            TextField(url, setUrl, header: "URL")
+                .UrlInput(),
+            TextField(phone, setPhone, header: "Phone")
+                .PhoneInput(),
+            TextField(search, setSearch, placeholder: "Search…")
+                .SearchInput(),
+            TextField(note, setNote, header: "Reference code")
+                .MaxLength(8)
+                .CharacterCasing(CharacterCasing.Upper)
+                .TextAlignment(TextAlignment.Center)
+                .IsSpellCheckEnabled(false)
+                .Description("Eight characters, automatically uppercased.")
+        ).Padding(24);
+    }
+}
+```
+
+| Fluent | Effect |
+|--------|--------|
+| `.NumericInput()` | InputScope = Number — numeric soft keyboard |
+| `.EmailInput()` | InputScope = EmailSmtpAddress |
+| `.UrlInput()` | InputScope = Url |
+| `.PhoneInput()` | InputScope = TelephoneNumber |
+| `.SearchInput()` | InputScope = Search |
+| `.MaxLength(n)` | Caps input length at `n` characters |
+| `.IsSpellCheckEnabled(bool)` | Toggles the squiggle underline |
+| `.CharacterCasing(casing)` | `Normal` / `Upper` / `Lower` |
+| `.TextAlignment(alignment)` | Aligns text within the field |
+| `.Description(text)` | Helper text rendered below the field |
+
+These fluents chain freely; the named-input shapes are the canonical way to
+hint mobile / touch keyboards instead of reaching for `.Set(c => c.InputScope = ...)`.
+See [spec 039](../specs/039-property-and-event-scrub.md) §2.3 and §4.7 for the
+rationale.
+
 ## Simple Validation
 
 For quick forms, derive validation from state. Compute booleans on every

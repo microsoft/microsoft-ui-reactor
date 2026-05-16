@@ -207,6 +207,53 @@ class ColorSchemeHookExample : Component
 these hooks when you need to branch logic — not just colors — based on the
 theme (e.g., choosing different icon sets or layouts).
 
+## Named-Style Fluents
+
+Reactor exposes the canonical WinUI named styles as fluent shortcuts, so the
+common cases never need a `.Resources(...)` block. Each one resolves to the
+WinUI resource by name, so theme switches re-skin the control automatically.
+
+```csharp
+class NamedStylesExample : Component
+{
+    public override Element Render()
+    {
+        return VStack(12,
+            HStack(8,
+                Button("Save", () => { }).AccentButton(),
+                Button("Cancel", () => { }).SubtleButton(),
+                HyperlinkButton("Learn more", new Uri("https://example.com"))
+                    .TextLink()
+            ),
+            InfoBar(title: "Heads up", message: "Backups run nightly.")
+                .Informational(),
+            InfoBar(title: "Saved", message: "All changes are persisted.")
+                .Success(),
+            InfoBar(title: "Almost full", message: "75% of quota used.")
+                .Warning(),
+            InfoBar(title: "Sync failed", message: "Check your network.")
+                .Error()
+        ).Padding(24);
+    }
+}
+```
+
+| Fluent | Maps to |
+|--------|---------|
+| `.AccentButton()` | `AccentButtonStyle` — filled accent color |
+| `.SubtleButton()` | `SubtleButtonStyle` — text-only until hovered |
+| `.TextLink()` | Hyperlink-style button (no chrome) |
+| `.Informational()` | `InfoBarSeverity.Informational` |
+| `.Success()` | `InfoBarSeverity.Success` |
+| `.Warning()` | `InfoBarSeverity.Warning` |
+| `.Error()` | `InfoBarSeverity.Error` |
+
+The button fluents also overload `DropDownButton`, `SplitButton`, and
+`ToggleSplitButton`. Reach for these before `.Resources(...)` — they avoid the
+six-key hover/pressed/disabled dance and stay in sync with system theme
+updates. See [spec 039](../specs/039-property-and-event-scrub.md) §2.1, §2.2,
+and §2.4 for the full inventory.
+
 ## Lightweight Styling
 
 `.Resources()` overrides WinUI control resource keys without replacing the

@@ -478,6 +478,70 @@ class StateSerializationDemo : Component
 and fires `Navigated` with `Reset` mode. Pass `JsonSerializerOptions` if
 your route type needs custom serialization.
 
+## Frame Events
+
+When you embed a raw WinUI `Frame` for interop with XAML pages (instead of
+using `NavigationHost`), the navigation lifecycle is exposed through fluent
+event extensions:
+
+```csharp
+class FrameEventsDemo : Component
+{
+    public override Element Render()
+    {
+        var (log, updateLog) = UseReducer(new List<string>());
+
+        return VStack(8,
+            SubHeading("Frame events"),
+            Frame(sourcePageType: typeof(MyXamlPage))
+                .Navigating(target =>
+                    updateLog(l => [.. l, $"Navigating to {target.Name}"]))
+                .Navigated(target =>
+                    updateLog(l => [.. l, $"Arrived at {target.Name}"]))
+                .NavigationFailed((target, ex) =>
+                    updateLog(l => [.. l, $"Failed {target.Name}: {ex.Message}"]))
+                .Height(300),
+            VStack(4, log.TakeLast(6).Select(
+                entry => TextBlock(entry).FontSize(11).Opacity(0.6)
+            ).ToArray())
+        ).Padding(24);
+    }
+}
+```
+
+| Fluent | Fires |
+|--------|-------|
+| `.Navigating(handler)` | Before navigating away from the current page |
+| `.Navigated(handler)` | After the new page has been shown |
+| `.NavigationFailed(handler)` | If page construction throws — receives the target type and the exception |
+
+The underlying init properties (`OnNavigating`, `OnNavigated`,
+`OnNavigationFailed`) are still available for record-construction syntax.
+The fluent extensions drop the leading `On` — see
+[spec 039](../specs/039-property-and-event-scrub.md) §0.1 for the C# naming
+constraint that drove that convention.
+
+## NavigationView.SelectedTagChanged
+
+`NavigationView` has a matching fluent for the tag-changed callback, which
+fires whenever the user picks a different `NavItem`:
+
+```csharp
+NavigationView(
+    [
+        NavItem("Home", icon: "Home", tag: "Home"),
+        NavItem("Settings", icon: "Setting", tag: "Settings")
+    ],
+    content: bodyElement
+).SelectedTagChanged(tag =>
+{
+    if (tag == "Settings") nav.Navigate(Route.Settings);
+});
+```
+
+`SelectedTagChanged` receives the tag string (or `null` if no item is
+selected). Passing `null` to the fluent clears any previously-set handler.
+
 ## Navigation Diagnostics
 
 `NavigationDiagnostics` exposes static events for debugging and telemetry.

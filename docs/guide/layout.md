@@ -86,6 +86,70 @@ Place children with `.Grid(row: 0, column: 1)`. Use `columnSpan` or
 > works but is soft-deprecated (`CS0618`). Prefer the typed helpers — they
 > catch typos at compile time.
 
+## Card
+
+`Card(child)` wraps any element in the canonical WinUI card chrome — 8px corner
+radius, 16px padding, theme-aware background and 1px stroke. Use it instead of
+hand-rolling a `Border(...).Background(Theme.CardBackground).WithBorder(...)`
+pipeline:
+
+```csharp
+class CardDemo : Component
+{
+    public override Element Render()
+    {
+        return VStack(12,
+            SubHeading("Card"),
+            Card(
+                VStack(8,
+                    TextBlock("Recent activity").SemiBold(),
+                    TextBlock("3 new messages, 2 mentions")
+                        .Foreground(Theme.SecondaryText)
+                )
+            ).Width(240)
+        );
+    }
+}
+```
+
+Override any preset by chaining further fluents: `Card(child).Padding(24).CornerRadius(16)`.
+The background and stroke resolve through `ThemeRef`, so light/dark/contrast
+switches re-paint without code changes.
+
+## Type-Ramp Factories
+
+For headings and body copy that match the WinUI 3 type ramp, use the named
+factories instead of repeating `.FontSize(...).Bold()` chains:
+
+```csharp
+class TypeRampDemo : Component
+{
+    public override Element Render()
+    {
+        return VStack(8,
+            Title("Quarterly results"),
+            Subtitle("Q3 2026 highlights"),
+            BodyLarge("Revenue grew 18% year over year."),
+            BodyStrong("Net income reached an all-time high."),
+            Body("Full breakdown on the following pages.")
+        ).Padding(24);
+    }
+}
+```
+
+| Factory | WinUI style |
+|---------|-------------|
+| `Title(text)` | `TitleTextBlockStyle` — 28px Semibold |
+| `Subtitle(text)` | `SubtitleTextBlockStyle` — 20px Semibold |
+| `BodyLarge(text)` | `BodyLargeTextBlockStyle` — 18px regular |
+| `BodyStrong(text)` | `BodyStrongTextBlockStyle` — 14px Semibold |
+| `Body(text)` | `BodyTextBlockStyle` — 14px regular |
+
+These are factories (not fluents) by design — see
+[spec 039](../specs/039-property-and-event-scrub.md) §17.6. Layer further
+modifiers on the result (`Title("…").Foreground(Theme.Accent)`) when you need
+to deviate.
+
 ## ScrollView and Border
 
 `ScrollView` wraps content that might overflow. `Border` adds a visual
