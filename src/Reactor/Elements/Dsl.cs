@@ -125,6 +125,13 @@ public static partial class Factories
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
 
+    /// <summary>
+    /// Three-state toggle button (true → false → null → ...). Matches the
+    /// established <c>ThreeStateCheckBox</c> factory pattern from spec 039 §2.4.
+    /// </summary>
+    public static ToggleButtonElement ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?>? onCheckedStateChanged = null) =>
+        new(label, checkedState == true) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
+
     public static DropDownButtonElement DropDownButton(string label, Element? flyout = null) =>
         new(label, flyout);
 

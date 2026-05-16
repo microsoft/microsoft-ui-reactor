@@ -61,6 +61,15 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
+    public void ToggleButton_CheckedStateChanged_NullClears()
+    {
+        Action<bool?> h = _ => { };
+        var el = ToggleButton("x").CheckedStateChanged(h);
+        Assert.Same(h, el.OnCheckedStateChanged);
+        Assert.Null(el.CheckedStateChanged(null).OnCheckedStateChanged);
+    }
+
+    [Fact]
     public void SplitButton_Click_NullClears()
     {
         var el = new SplitButtonElement("x").Click(Sentinel);

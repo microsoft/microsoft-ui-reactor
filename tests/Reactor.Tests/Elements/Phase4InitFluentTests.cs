@@ -505,4 +505,34 @@ public class Phase4InitFluentTests
         // Round-trip: a "set null" via record-with is observable.
         Assert.Null(el.SelectionHighlightColor);
     }
+
+    // ── 5.2 ToggleButton (two-state + three-state in one record) ─────
+
+    [Fact]
+    public void ToggleButton_IsThreeState_Sets()
+    {
+        var el = ToggleButton("x").IsThreeState();
+        Assert.True(el.IsThreeState);
+        Assert.False(ToggleButton("x").IsThreeState(false).IsThreeState);
+    }
+
+    [Fact]
+    public void ToggleButton_CheckedState_Sets_And_Implies_ThreeState()
+    {
+        var el = ToggleButton("x").CheckedState(null);
+        Assert.True(el.IsThreeState);
+        Assert.Null(el.CheckedState);
+
+        var elTrue = ToggleButton("x").CheckedState(true);
+        Assert.True(elTrue.CheckedState);
+    }
+
+    [Fact]
+    public void ThreeStateToggleButton_Factory_Produces_ThreeState_Record()
+    {
+        var el = ThreeStateToggleButton("x", checkedState: null);
+        Assert.True(el.IsThreeState);
+        Assert.Null(el.CheckedState);
+        Assert.False(el.IsChecked); // primary stays false in null mode
+    }
 }

@@ -902,6 +902,16 @@ public static partial class ElementExtensions
     public static ColorPickerElement HexInputVisible(this ColorPickerElement el, bool visible) =>
         el with { IsHexInputVisible = visible };
 
+    // ── ToggleButton sugar ──────────────────────────────────────────
+
+    /// <summary>Enable the three-state cycle. Pair with <c>.CheckedState(...)</c> and the <c>.CheckedStateChanged(...)</c> event fluent.</summary>
+    public static ToggleButtonElement IsThreeState(this ToggleButtonElement el, bool isThreeState = true) =>
+        el with { IsThreeState = isThreeState };
+
+    /// <summary>Sets the three-state value (<c>null</c> = indeterminate). Active only when <c>IsThreeState</c> is true.</summary>
+    public static ToggleButtonElement CheckedState(this ToggleButtonElement el, bool? state) =>
+        el with { CheckedState = state, IsThreeState = true };
+
     // ── RatingControl sugar ─────────────────────────────────────────
 
     public static RatingControlElement MaxRating(this RatingControlElement el, int max) =>

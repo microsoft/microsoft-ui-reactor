@@ -49,6 +49,10 @@ public static partial class ElementExtensions
     public static ToggleButtonElement IsCheckedChanged(this ToggleButtonElement el, Action<bool>? handler) =>
         el with { OnIsCheckedChanged = handler };
 
+    /// <summary>Wires the three-state checked-changed handler (<c>null</c> = indeterminate). Passing <c>null</c> as the handler clears it.</summary>
+    public static ToggleButtonElement CheckedStateChanged(this ToggleButtonElement el, Action<bool?>? handler) =>
+        el with { OnCheckedStateChanged = handler };
+
     /// <summary>Wires the primary-button click handler. Passing <c>null</c> clears.</summary>
     public static SplitButtonElement Click(this SplitButtonElement el, Action? handler) =>
         el with { OnClick = handler };

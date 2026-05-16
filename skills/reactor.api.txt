@@ -162,6 +162,7 @@ Thick(double horizontal, double vertical) → Thickness
 Thick(double left, double top, double right, double bottom) → Thickness
 Thick(double uniform) → Thickness
 ThreeStateCheckBox(bool? checkedState, Action<bool?> onCheckedStateChanged = null, string label = null) → CheckBoxElement
+ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?> onCheckedStateChanged = null) → ToggleButtonElement
 TimePicker(TimeSpan time, Action<TimeSpan> onTimeChanged = null) → TimePickerElement
 Title(string content) → TextBlockElement
 TitleBar(string title) → TitleBarElement
@@ -623,7 +624,10 @@ TitleBarElement.RightHeader(Element rightHeader) → TitleBarElement
 TitleBarElement.Set(Action<TitleBar> configure) → TitleBarElement
 TitleBarElement.Subtitle(string subtitle) → TitleBarElement
 TitleBarElement.WithNavigation<TRoute>(NavigationHandle<TRoute> nav) → TitleBarElement
+ToggleButtonElement.CheckedState(bool? state) → ToggleButtonElement
+ToggleButtonElement.CheckedStateChanged(Action<bool?> handler) → ToggleButtonElement
 ToggleButtonElement.IsCheckedChanged(Action<bool> handler) → ToggleButtonElement
+ToggleButtonElement.IsThreeState(bool isThreeState = true) → ToggleButtonElement
 ToggleButtonElement.Set(Action<ToggleButton> configure) → ToggleButtonElement
 ToggleSplitButtonElement.AccentButton() → ToggleSplitButtonElement
 ToggleSplitButtonElement.IsCheckedChanged(Action<bool> handler) → ToggleSplitButtonElement

@@ -706,13 +706,26 @@ public sealed partial class Reconciler
     private UIElement? UpdateToggleButton(ToggleButtonElement o, ToggleButtonElement n, WinPrim.ToggleButton tb)
     {
         tb.Content = n.Label;
-        if ((tb.IsChecked ?? false) != n.IsChecked) tb.IsChecked = n.IsChecked;
+        if (n.IsThreeState)
+        {
+            if (!tb.IsThreeState) tb.IsThreeState = true;
+            if (tb.IsChecked != n.CheckedState) tb.IsChecked = n.CheckedState;
+        }
+        else
+        {
+            if (tb.IsThreeState) tb.IsThreeState = false;
+            if ((tb.IsChecked ?? false) != n.IsChecked) tb.IsChecked = n.IsChecked;
+        }
         SetElementTag(tb, n);
-        if (o.OnIsCheckedChanged is null && n.OnIsCheckedChanged is not null)
+        bool oldWired = o.OnIsCheckedChanged is not null || o.OnCheckedStateChanged is not null;
+        bool newWired = n.OnIsCheckedChanged is not null || n.OnCheckedStateChanged is not null;
+        if (!oldWired && newWired)
             tb.Click += (s, _) =>
             {
                 var t = (WinPrim.ToggleButton)s!;
-                (GetElementTag(t) as ToggleButtonElement)?.OnIsCheckedChanged?.Invoke(t.IsChecked ?? false);
+                if (GetElementTag(t) is not ToggleButtonElement live) return;
+                live.OnIsCheckedChanged?.Invoke(t.IsChecked ?? false);
+                live.OnCheckedStateChanged?.Invoke(t.IsChecked);
             };
         ApplySetters(n.Setters, tb);
         return null;

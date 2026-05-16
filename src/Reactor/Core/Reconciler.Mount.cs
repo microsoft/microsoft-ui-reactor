@@ -411,16 +411,27 @@ public sealed partial class Reconciler
 
     private WinPrim.ToggleButton MountToggleButton(ToggleButtonElement togBtn)
     {
-        var tb = new WinPrim.ToggleButton { Content = togBtn.Label, IsChecked = togBtn.IsChecked };
+        var tb = new WinPrim.ToggleButton { Content = togBtn.Label };
+        if (togBtn.IsThreeState)
+        {
+            tb.IsThreeState = true;
+            tb.IsChecked = togBtn.CheckedState;
+        }
+        else
+        {
+            tb.IsChecked = togBtn.IsChecked;
+        }
         SetElementTag(tb, togBtn);
         // Bind to Click — fires only for real user toggles. Checked/Unchecked
         // would also fire when UpdateToggleButton rewrites IsChecked during a
         // state-driven rerender, which would re-enter the callback and loop.
-        if (togBtn.OnIsCheckedChanged is not null)
+        if (togBtn.OnIsCheckedChanged is not null || togBtn.OnCheckedStateChanged is not null)
             tb.Click += (s, _) =>
             {
                 var t = (WinPrim.ToggleButton)s!;
-                (GetElementTag(t) as ToggleButtonElement)?.OnIsCheckedChanged?.Invoke(t.IsChecked ?? false);
+                if (GetElementTag(t) is not ToggleButtonElement live) return;
+                live.OnIsCheckedChanged?.Invoke(t.IsChecked ?? false);
+                live.OnCheckedStateChanged?.Invoke(t.IsChecked);
             };
         ApplySetters(togBtn.Setters, tb);
         return tb;

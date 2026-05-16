@@ -434,10 +434,13 @@ existing init properties.
 
 ### 5.2 Buttons (spec §2 leftovers)
 
-- [ ] `ToggleButton`: nullable `IsChecked` + `IsThreeState` so a single
+- [x] `ToggleButton`: nullable `IsChecked` + `IsThreeState` so a single
       record covers two/three-state, matching WinUI (spec §2.4). Verify the
       existing `ThreeStateCheckBox` precedent — does it split or unify?
       Match whichever pattern the rest of Reactor uses.
+      Implemented as: added `IsThreeState`/`CheckedState`/`OnCheckedStateChanged`
+      on `ToggleButtonElement` + `ThreeStateToggleButton(...)` factory,
+      matching the existing `CheckBoxElement` / `ThreeStateCheckBox` precedent.
 
 ### 5.3 Input controls
 

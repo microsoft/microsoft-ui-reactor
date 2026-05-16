@@ -1787,8 +1787,19 @@ public record RepeatButtonElement(string Label, Action? OnClick = null) : Elemen
 
 public record ToggleButtonElement(string Label, bool IsChecked = false, Action<bool>? OnIsCheckedChanged = null) : Element
 {
+    /// <summary>
+    /// Enable the three-state cycle (true → false → null → true). Pair with
+    /// <see cref="CheckedState"/> and <see cref="OnCheckedStateChanged"/>; the
+    /// non-nullable <see cref="IsChecked"/> primary is ignored in this mode.
+    /// Mirrors the established <c>CheckBoxElement</c> precedent.
+    /// </summary>
+    public bool IsThreeState { get; init; }
+    /// <summary>Three-state value (<c>null</c> = indeterminate). Active only when <see cref="IsThreeState"/> is true.</summary>
+    public bool? CheckedState { get; init; }
+    /// <summary>Three-state change handler. Receives <c>null</c> for indeterminate.</summary>
+    public Action<bool?>? OnCheckedStateChanged { get; init; }
     internal Action<WinPrim.ToggleButton>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnIsCheckedChanged is not null;
+    internal override bool HasCallbacks => OnIsCheckedChanged is not null || OnCheckedStateChanged is not null;
 }
 
 public record DropDownButtonElement(string Label, Element? Flyout = null) : Element
