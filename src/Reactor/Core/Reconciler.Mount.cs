@@ -956,6 +956,10 @@ public sealed partial class Reconciler
     private WinUI.Image MountImage(ImageElement img)
     {
         var image = _pool.TryRent(typeof(WinUI.Image)) as WinUI.Image ?? new WinUI.Image();
+        // Tag + wire BEFORE assigning Source — small/cached images can fire
+        // ImageOpened/ImageFailed synchronously during Source assignment.
+        SetElementTag(image, img);
+        EnsureImageWiring(image);
         try
         {
             var uri = new Uri(img.Source, UriKind.RelativeOrAbsolute);
@@ -970,8 +974,6 @@ public sealed partial class Reconciler
         if (img.Width.HasValue) image.Width = img.Width.Value;
         if (img.Height.HasValue) image.Height = img.Height.Value;
         if (img.NineGrid.HasValue) image.NineGrid = img.NineGrid.Value;
-        SetElementTag(image, img);
-        EnsureImageWiring(image);
         ApplySetters(img.Setters, image);
         return image;
     }
@@ -1012,7 +1014,9 @@ public sealed partial class Reconciler
     private WinUI.WebView2 MountWebView2(WebView2Element wv)
     {
         var webView = new WinUI.WebView2();
-        if (wv.Source is not null) webView.Source = wv.Source;
+        // Tag + subscribe BEFORE assigning Source — setting Source kicks off
+        // CoreWebView2 initialization and navigation, and a fast init can fire
+        // before subscriptions land otherwise.
         SetElementTag(webView, wv);
 
         // Subscribe unconditionally; the trampoline reads the live element via
@@ -1042,6 +1046,8 @@ public sealed partial class Reconciler
 
         webView.CoreWebView2Initialized += (s, _) =>
             (GetElementTag((UIElement)s!) as WebView2Element)?.OnCoreWebView2Initialized?.Invoke();
+
+        if (wv.Source is not null) webView.Source = wv.Source;
 
         ApplySetters(wv.Setters, webView);
         return webView;
@@ -3022,14 +3028,15 @@ public sealed partial class Reconciler
             AreTransportControlsEnabled = mpe.AreTransportControlsEnabled,
             AutoPlay = mpe.AutoPlay,
         };
-        if (mpe.Source is not null)
-            player.Source = global::Windows.Media.Core.MediaSource.CreateFromUri(new Uri(mpe.Source, UriKind.RelativeOrAbsolute));
-        SetElementTag(player, mpe);
-
+        // Tag + subscribe BEFORE assigning Source — setting Source starts the
+        // pipeline immediately; a cached / fast-failing URI can raise
+        // MediaOpened / MediaFailed before subscriptions would otherwise land.
         // MediaPlayer events fire on the player's worker thread; marshal back
         // to the element's dispatcher so handlers can mutate component state
         // safely. May fire after unmount — GetElementTag returns null then so
         // the handler invocation is a no-op.
+        SetElementTag(player, mpe);
+
         var mp = player.MediaPlayer;
         if (mp is not null)
         {
@@ -3041,6 +3048,9 @@ public sealed partial class Reconciler
                 DispatchToElement<MediaPlayerElementElement>(player, el => el.OnMediaFailed?.Invoke(msg));
             };
         }
+
+        if (mpe.Source is not null)
+            player.Source = global::Windows.Media.Core.MediaSource.CreateFromUri(new Uri(mpe.Source, UriKind.RelativeOrAbsolute));
 
         ApplySetters(mpe.Setters, player);
         return player;

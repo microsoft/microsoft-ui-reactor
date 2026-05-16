@@ -3563,20 +3563,22 @@ public sealed partial class Reconciler
         if (cv.NumberOfWeeksInView != n.NumberOfWeeksInView) cv.NumberOfWeeksInView = n.NumberOfWeeksInView;
         if (cv.DisplayMode != n.DisplayMode) cv.DisplayMode = n.DisplayMode;
         SetElementTag(cv, n);
-        SyncSelectedDates(cv, n.SelectedDates);
+        // Only reconcile selection when the caller explicitly provided
+        // SelectedDates — null means "uncontrolled, let the user drive". A
+        // null sync would otherwise clear any user-picked dates on the next
+        // render even when the caller only wires .SelectedDatesChanged(...).
+        if (n.SelectedDates is not null) SyncSelectedDates(cv, n.SelectedDates);
         ApplySetters(n.Setters, cv);
         return null;
     }
 
-    private static void SyncSelectedDates(WinUI.CalendarView cv, IReadOnlyList<DateTimeOffset>? desired)
+    private static void SyncSelectedDates(WinUI.CalendarView cv, IReadOnlyList<DateTimeOffset> desired)
     {
         // Diff current vs desired and apply the delta. Each Add/Remove on the
         // SelectedDates collection raises SelectedDatesChanged, so suppress one
         // token per mutation to keep OnSelectedDatesChanged free of echoes.
         var current = cv.SelectedDates;
-        var desiredSet = desired is null
-            ? new HashSet<DateTimeOffset>()
-            : new HashSet<DateTimeOffset>(desired);
+        var desiredSet = new HashSet<DateTimeOffset>(desired);
 
         for (int i = current.Count - 1; i >= 0; i--)
         {
@@ -3586,8 +3588,6 @@ public sealed partial class Reconciler
                 current.RemoveAt(i);
             }
         }
-
-        if (desired is null) return;
 
         var currentSet = new HashSet<DateTimeOffset>(current);
         foreach (var d in desired)
