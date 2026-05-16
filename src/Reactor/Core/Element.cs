@@ -2793,6 +2793,27 @@ public record MediaPlayerElementElement(string? Source = null) : Element
 {
     public bool AreTransportControlsEnabled { get; init; } = true;
     public bool AutoPlay { get; init; }
+
+    /// <summary>
+    /// Raised when the underlying <c>MediaPlayer</c> finishes opening the
+    /// source. Marshalled to the element's UI thread; may fire after the
+    /// element has unmounted (the handler is safe to ignore in that case).
+    /// </summary>
+    public Action? OnMediaOpened { get; init; }
+
+    /// <summary>
+    /// Raised when playback reaches the end of the source. Marshalled to the
+    /// UI thread.
+    /// </summary>
+    public Action? OnMediaEnded { get; init; }
+
+    /// <summary>
+    /// Raised when the underlying <c>MediaPlayer</c> fails to open or play.
+    /// Receives the failure error message as a string. Marshalled to the UI
+    /// thread.
+    /// </summary>
+    public Action<string>? OnMediaFailed { get; init; }
+
     internal Action<WinUI.MediaPlayerElement>[] Setters { get; init; } = [];
 }
 

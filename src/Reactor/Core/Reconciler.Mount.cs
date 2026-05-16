@@ -2805,8 +2805,36 @@ public sealed partial class Reconciler
         if (mpe.Source is not null)
             player.Source = global::Windows.Media.Core.MediaSource.CreateFromUri(new Uri(mpe.Source, UriKind.RelativeOrAbsolute));
         SetElementTag(player, mpe);
+
+        // MediaPlayer events fire on the player's worker thread; marshal back
+        // to the element's dispatcher so handlers can mutate component state
+        // safely. May fire after unmount — GetElementTag returns null then so
+        // the handler invocation is a no-op.
+        var mp = player.MediaPlayer;
+        if (mp is not null)
+        {
+            mp.MediaOpened += (s, _) => DispatchToElement<MediaPlayerElementElement>(player, el => el.OnMediaOpened?.Invoke());
+            mp.MediaEnded += (s, _) => DispatchToElement<MediaPlayerElementElement>(player, el => el.OnMediaEnded?.Invoke());
+            mp.MediaFailed += (s, args) =>
+            {
+                var msg = args.ErrorMessage ?? args.Error.ToString();
+                DispatchToElement<MediaPlayerElementElement>(player, el => el.OnMediaFailed?.Invoke(msg));
+            };
+        }
+
         ApplySetters(mpe.Setters, player);
         return player;
+    }
+
+    private static void DispatchToElement<TElement>(FrameworkElement fe, Action<TElement> body)
+        where TElement : Element
+    {
+        var dispatcher = fe.DispatcherQueue;
+        if (dispatcher is null) return;
+        dispatcher.TryEnqueue(() =>
+        {
+            if (GetElementTag(fe) is TElement el) body(el);
+        });
     }
 
     // ── AnimatedVisualPlayer ────────────────────────────────────────────

@@ -346,6 +346,18 @@ public static partial class ElementExtensions
     public static WebView2Element CoreWebView2Initialized(this WebView2Element el, Action? handler) =>
         el with { OnCoreWebView2Initialized = handler };
 
+    /// <summary>Wires the media-opened handler. Marshalled to UI thread. Passing <c>null</c> clears.</summary>
+    public static MediaPlayerElementElement MediaOpened(this MediaPlayerElementElement el, Action? handler) =>
+        el with { OnMediaOpened = handler };
+
+    /// <summary>Wires the media-ended handler. Marshalled to UI thread. Passing <c>null</c> clears.</summary>
+    public static MediaPlayerElementElement MediaEnded(this MediaPlayerElementElement el, Action? handler) =>
+        el with { OnMediaEnded = handler };
+
+    /// <summary>Wires the media-failed handler. Receives the failure error message. Marshalled to UI thread. Passing <c>null</c> clears.</summary>
+    public static MediaPlayerElementElement MediaFailed(this MediaPlayerElementElement el, Action<string>? handler) =>
+        el with { OnMediaFailed = handler };
+
     // ── §12 Niche / less-common ────────────────────────────────────────
 
     /// <summary>Wires the selected-index-changed handler. Passing <c>null</c> clears.</summary>

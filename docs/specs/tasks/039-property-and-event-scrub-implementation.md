@@ -327,11 +327,19 @@ etc. Property names are unchanged.
 
 ### 3.6 `MediaPlayerElement.MediaOpened/.MediaEnded/.MediaFailed`
 
-- [ ] Wire the three events from the inner `MediaPlayer` to the element
-      record. Document that these are async and may fire after the element
-      is unmounted; the Reactor handler dispatches on the UI thread.
-- [ ] Fluents + tests (mock `MediaPlayer` if needed; otherwise integration
-      test under `tests/Reactor.AppTests/`).
+- [x] Wire the three events from the inner `MediaPlayer` to the element
+      record. The MediaPlayer raises these on a worker thread; new
+      helper `DispatchToElement<TElement>` marshals via the element's
+      `DispatcherQueue.TryEnqueue` and resolves the live element via
+      `GetElementTag` (handler is a no-op if the element is unmounted
+      between fire and dispatch). Documented in XML doc comments.
+- [x] `OnMediaFailed` receives the error message string
+      (`args.ErrorMessage ?? args.Error.ToString()`) — keeps the
+      callback signature simple while still preserving the most-useful
+      failure detail.
+- [x] Fluents `.MediaOpened(...)` / `.MediaEnded(...)` /
+      `.MediaFailed(...)` + null-clear tests. Integration test
+      ("fires-on-real-media") deferred to Phase 11.7 (AppTests harness).
 
 ### 3.7 Niche but documented gaps
 

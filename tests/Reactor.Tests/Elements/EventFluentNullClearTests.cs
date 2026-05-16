@@ -313,6 +313,33 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
+    public void MediaPlayer_MediaOpened_NullClears()
+    {
+        Action h = () => { };
+        var el = MediaPlayerElement().MediaOpened(h);
+        Assert.Same(h, el.OnMediaOpened);
+        Assert.Null(el.MediaOpened(null).OnMediaOpened);
+    }
+
+    [Fact]
+    public void MediaPlayer_MediaEnded_NullClears()
+    {
+        Action h = () => { };
+        var el = MediaPlayerElement().MediaEnded(h);
+        Assert.Same(h, el.OnMediaEnded);
+        Assert.Null(el.MediaEnded(null).OnMediaEnded);
+    }
+
+    [Fact]
+    public void MediaPlayer_MediaFailed_NullClears()
+    {
+        Action<string> h = _ => { };
+        var el = MediaPlayerElement().MediaFailed(h);
+        Assert.Same(h, el.OnMediaFailed);
+        Assert.Null(el.MediaFailed(null).OnMediaFailed);
+    }
+
+    [Fact]
     public void TimePicker_TimeChanged_NullClears()
     {
         Action<TimeSpan> h = _ => { };
