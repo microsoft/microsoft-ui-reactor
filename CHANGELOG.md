@@ -27,6 +27,42 @@ to land under these conventions; subsequent specs follow this shape.
 
 ## [Unreleased]
 
+### Added
+
+- **Spec 039 — Property & event API scrub.**
+  - **New fluent extensions.** Every callback property in the inventory has a
+    matching fluent on its element record — ~60 callbacks across §1–§9 of the
+    spec. Fluents drop the leading `On` (so `OnClick` → `.Click(handler)`)
+    because C# binds delegate-property invocation in preference to extension
+    methods. Property names are unchanged; existing
+    `new ButtonElement(…) { OnClick = … }` syntax still compiles. Passing
+    `null` clears any previously-set handler. (spec 039 §0.1, §14 #1)
+  - **Named-style helpers.** `.AccentButton()`, `.SubtleButton()`,
+    `.TextLink()` (overloaded across `ButtonElement`, `DropDownButtonElement`,
+    `SplitButtonElement`, `ToggleSplitButtonElement`, and
+    `HyperlinkButtonElement` where applicable); InfoBar severity helpers
+    `.Informational()` / `.Success()` / `.Warning()` / `.Error()`;
+    `Card(child)` factory with theme-aware background and stroke; type-ramp
+    factories `Title` / `Subtitle` / `Body` / `BodyStrong` / `BodyLarge`
+    mapping to the WinUI 3 `*TextBlockStyle` resources. (spec 039 §2, §17)
+  - **New events exposed.** `CalendarView.OnSelectedDatesChanged`;
+    `Frame.OnNavigated` / `OnNavigating` / `OnNavigationFailed`;
+    `ScrollView.OnViewChanged`; `Popup.OnOpened`;
+    `WebView2.OnWebMessageReceived` / `OnCoreWebView2Initialized`;
+    `MediaPlayerElement.OnMediaOpened` / `OnMediaEnded` / `OnMediaFailed`;
+    `ContentDialog.OnOpened`; `Image.OnImageOpened` / `OnImageFailed`;
+    `ComboBox.OnDropDownOpened` / `OnDropDownClosed`;
+    `DataGrid.OnSelectionChanged`; universal multi-select
+    `OnSelectionChanged` on `ListView` / `GridView` / `ListBox` (with
+    `IReadOnlyList<int>` snapshot) and the typed peers `ItemsView<T>` /
+    `TemplatedListView<T>` / `TemplatedGridView<T>` (with `IReadOnlyList<T>`
+    snapshot). TreeView multi-select is intentionally deferred. (spec 039 §3,
+    §5.8, §14 #3)
+  - **New init properties.** Common-property gaps closed across the text,
+    input, date/time, progress/layout/navigation, collection/dialog, and
+    media/shape families (Phase 4 / Phase 5 of the implementation task list).
+    See spec 039 §14 #4 for the inventory.
+
 ### Changed (breaking)
 
 - **`.Margin(double, double)` and `.Padding(double, double)` parameter order

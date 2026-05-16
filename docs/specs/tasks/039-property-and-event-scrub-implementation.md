@@ -675,36 +675,62 @@ Samples document the new surface in-tree and double as smoke tests.
 
 ### 9.1 Guide updates
 
-- [ ] `docs/guide/getting-started.md`: replace any `.Set(c => c.OnClick = ...)`
-      examples with the new fluent.
-- [ ] `docs/guide/forms.md`: cover `.NumericInput()` / `.EmailInput()` /
+- [x] `docs/guide/getting-started.md`: replace any `.Set(c => c.OnClick = ...)`
+      examples with the new fluent. (No-op — the guide already uses the
+      `Button("…", onClick)` factory shape throughout; grep confirmed zero
+      `.Set(c => c.OnX = ...)` and zero `with { OnX = ... }` patterns.)
+- [x] `docs/guide/forms.md`: cover `.NumericInput()` / `.EmailInput()` /
       `.MaxLength` etc. as the canonical TextField configuration story.
-- [ ] `docs/guide/styling.md`: add a section on named-style fluents
+      (New "Configuring TextField" section with worked example + lookup
+      table covering Phase 2.3 named-input shapes + Phase 4.7 properties.)
+- [x] `docs/guide/styling.md`: add a section on named-style fluents
       (`AccentButton`, `SubtleButton`, `TextLink`, severity helpers).
-- [ ] `docs/guide/layout.md`: add a `Card(child)` example and the
-      type-ramp factories.
-- [ ] `docs/guide/navigation.md`: cover `Frame` events,
-      `NavigationView.OnSelectedTagChanged` fluent.
-- [ ] `docs/guide/collections.md`: cover any new collection events from
-      Phase 5.8.
+      (New "Named-Style Fluents" section sits before the existing
+      "Lightweight Styling" block.)
+- [x] `docs/guide/layout.md`: add a `Card(child)` example and the
+      type-ramp factories. (Two new sections: "Card" and "Type-Ramp
+      Factories", landed before "ScrollView and Border".)
+- [x] `docs/guide/navigation.md`: cover `Frame` events,
+      `NavigationView.OnSelectedTagChanged` fluent. (New sections
+      "Frame Events" and "NavigationView.SelectedTagChanged" land just
+      before "Navigation Diagnostics".)
+- [x] `docs/guide/collections.md`: cover any new collection events from
+      Phase 5.8. (New "Multi-Select with SelectionChanged" section
+      covers ListView / GridView / ListBox + typed peers; calls out the
+      `IReadOnlyList<int>` vs `IReadOnlyList<T>` signature split and the
+      intentional TreeView deferral.)
 
 ### 9.2 Reference docs
 
-- [ ] If `docs/reference/` contains an auto-generated API surface, regenerate.
-- [ ] `docs/guide/xaml-developers.md`: explicitly contrast `OnClick`
+- [x] If `docs/reference/` contains an auto-generated API surface, regenerate.
+      (No auto-gen system found under `docs/reference/` — the only
+      machine-derived API surface is `skills/reactor.api.txt` and its
+      mirror at `plugins/reactor/skills/reactor-dsl/references/reactor.api.txt`,
+      both regenerated on every Reactor build. No manual action needed
+      here; agent-kit regen is Phase 10.1's scope.)
+- [x] `docs/guide/xaml-developers.md`: explicitly contrast `OnClick`
       attribute (XAML) → `.OnClick(handler)` (Reactor fluent) so XAML
-      developers find the bridge.
+      developers find the bridge. (New "Events: XAML Attributes Become
+      Fluents" section with the canonical mapping table for `Click`,
+      `TextChanged`, `SelectionChanged`, `SelectedIndexChanged`,
+      `IsCheckedChanged` + the property-vs-fluent naming note.)
 
 ### 9.3 Spec backlinks
 
-- [ ] In `docs/specs/039-property-and-event-scrub.md`, append a "Status:
+- [x] In `docs/specs/039-property-and-event-scrub.md`, append a "Status:
       Implemented" header pointing at this task list and the merge PR(s).
+      (Header replaced; backlinks to this task list and the per-phase
+      commit history via `git log feat/039-property-event-scrub --grep='Phase '`.)
 
 ### 9.4 CHANGELOG
 
-- [ ] Add entries to `CHANGELOG.md` grouped: "New fluent extensions" (one
+- [x] Add entries to `CHANGELOG.md` grouped: "New fluent extensions" (one
       bullet listing the ~60), "Named-style helpers", "New events
       exposed", "Naming aliases (`RichText` → `RichTextBlock`)".
+      (Single nested bullet block under a new `### Added` heading in
+      `[Unreleased]` covering all four buckets — Naming aliases stayed
+      in the existing `Breaking changes (deferred)` block where Phase
+      6.1 originally landed them.)
 
 ---
 
@@ -875,7 +901,7 @@ that maps to the spec's §14 ordering:
 - [x] §14 #8 — `RichText` → `RichTextBlock` rename (Phase 6.1).
 - [x] §17 — Named-style fluents and `Card` factory (Phase 2).
 - [x] Samples updated (Phase 8).
-- [ ] Docs updated (Phase 9).
+- [x] Docs updated (Phase 9).
 - [ ] Agent-kit updated (Phase 10).
 - [ ] Tests landed (Phase 11).
 - [ ] Ship gates green (Phase 12).
