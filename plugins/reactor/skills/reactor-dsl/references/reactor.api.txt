@@ -721,6 +721,8 @@ TreeViewElement.Set(Action<TreeView> configure) → TreeViewElement
 ValidationRuleElement.Evaluate(ValidationContext ctx) → void
 ValidationRuleElement.EvaluateAsync(ValidationContext ctx, CancellationToken cancellationToken = null) → Task
 ViewboxElement.Set(Action<Viewbox> configure) → ViewboxElement
+ViewboxElement.Stretch(Stretch stretch) → ViewboxElement
+ViewboxElement.StretchDirection(StretchDirection direction) → ViewboxElement
 VirtualListElement.VisibleRangeChanged(Action<int, int> handler) → VirtualListElement
 WebView2Element.CoreWebView2Initialized(Action handler) → WebView2Element
 WebView2Element.NavigationCompleted(Action<Uri> handler) → WebView2Element
