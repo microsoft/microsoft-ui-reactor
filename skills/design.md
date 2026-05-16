@@ -332,8 +332,18 @@ Use the predefined text factories or WinUI style tokens. Never set `FontSize` an
 |---------|------|--------|----------|
 | `Caption("text")` | 12px | Regular | Small labels, timestamps |
 | `TextBlock("text")` | 14px | Regular | Default body text |
-| `SubHeading("text")` | 20px | 600 | Section headers, card titles |
-| `Heading("text")` | 28px | 700 | Page titles |
+| `Body("text")` | 14px | Regular | WinUI `BodyTextBlockStyle` body text |
+| `BodyStrong("text")` | 14px | Semibold | Emphasized inline labels |
+| `BodyLarge("text")` | 18px | Regular | Prominent body text |
+| `Subtitle("text")` | 20px | Semibold | WinUI `SubtitleTextBlockStyle` — section headings |
+| `SubHeading("text")` | 20px | 600 | Section headers, card titles (Reactor preset) |
+| `Title("text")` | 28px | Semibold | WinUI `TitleTextBlockStyle` — page titles |
+| `Heading("text")` | 28px | 700 | Page titles (Reactor preset, slightly heavier) |
+
+The `Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge` factories map 1:1 to
+WinUI's named TextBlock styles (Spec 039 §17.6). Prefer them when matching
+WinUI design specs; the `Heading`/`SubHeading` factories are the older
+Reactor presets and remain valid.
 
 **Font weight helpers:**
 
@@ -1081,6 +1091,10 @@ Flatten visual tree depth where possible. Use `Border` instead of single-child `
 ```csharp
 // Correct: flat
 Border(TextBlock("Hello")).Background(Theme.CardBackground).Padding(16)
+
+// Even better: the Card(child) factory bakes in CardBackground +
+// CardStroke 1px hairline + 8px corner radius + 16px padding.
+Card(TextBlock("Hello"))
 
 // Wrong: unnecessary nesting
 VStack(

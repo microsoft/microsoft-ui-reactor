@@ -45,8 +45,8 @@ return VStack(12,
 
 | Factory | Value type | Common modifiers |
 |---------|-----------|------------------|
-| `TextField(text, setText)` | `string` | `.Placeholder()`, `.MaxLength()` |
-| `PasswordBox(text, setText)` | `string` | `.Placeholder()`, `.PasswordRevealMode()` |
+| `TextField(text, setText)` | `string` | `.Placeholder()`, `.MaxLength(n)`, `.NumericInput()`, `.EmailInput()`, `.Changed(handler)` |
+| `PasswordBox(text, setText)` | `string` | `.Placeholder()`, `.MaxLength(n)`, `.PasswordRevealMode()`, `.PasswordChanged(handler)` |
 | `NumberBox(value, setValue)` | `double` | `.Min()`, `.Max()`, `.SmallChange()` |
 | `Slider(value, min, max, setValue)` | `double` | `.StepFrequency()` |
 | `ToggleSwitch(isOn, setIsOn)` | `bool` | `.OnContent()`, `.OffContent()` |

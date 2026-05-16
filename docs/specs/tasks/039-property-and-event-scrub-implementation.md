@@ -788,30 +788,56 @@ fluent must surface here or it doesn't exist for agents.
 
 ### 10.3 `reactor-design` skill
 
-- [ ] If `reactor-design` references the typography ramp or card pattern,
+- [x] If `reactor-design` references the typography ramp or card pattern,
       update it to point at `Title`/`Subtitle`/`Body`/`Card(...)` instead
-      of `.Set()` recipes.
+      of `.Set()` recipes. (Typography table extended with the WinUI 3
+      ramp factories `Title`/`Subtitle`/`Body`/`BodyStrong`/`BodyLarge`
+      with note disambiguating from the older `Heading`/`SubHeading`
+      Reactor presets; the "Avoid Deep Nesting" example gains a `Card(...)`
+      one-liner. Mirror update applied to legacy `skills/design.md`.)
 
 ### 10.4 `reactor-getting-started` skill
 
-- [ ] Audit the SKILL.md for any `.Set(c => c.OnClick = ...)` usage; swap
-      for fluent.
+- [x] Audit the SKILL.md for any `.Set(c => c.OnClick = ...)` usage; swap
+      for fluent. (No-op: grep showed zero `.Set(c => c.On*)` or
+      `with { On* = ... }` patterns in
+      `plugins/reactor/skills/reactor-getting-started/SKILL.md`.)
 
 ### 10.5 `reactor-forms` skill
 
-- [ ] Audit for `TextField` / `NumberBox` / `PasswordBox` examples; swap
-      for `.NumericInput()`/`.EmailInput()`/`.MaxLength()` etc.
+- [x] Audit for `TextField` / `NumberBox` / `PasswordBox` examples; swap
+      for `.NumericInput()`/`.EmailInput()`/`.MaxLength()` etc. (Available
+      modifiers table extended for `TextField` and `PasswordBox`; new
+      "Named-input shapes" callout with a worked `.EmailInput()` +
+      `.MaxLength()` + `.Validate()` chain.)
 
 ### 10.6 `reactor-commanding`, `reactor-navigation`, `reactor-input` skills
 
-- [ ] Audit for newly-fluent events (`.OnClick`, `.OnSelectedTagChanged`,
+- [x] Audit for newly-fluent events (`.OnClick`, `.OnSelectedTagChanged`,
       `.OnRefreshRequested`); swap from the property-init pattern.
+      (No-op for all three: grep showed zero `.Set(c => c.On*)`,
+      `with { On* = ... }`, or property-init callback patterns in any of
+      `reactor-commanding`, `reactor-navigation`, `reactor-input` SKILL.md
+      files. The reactor-navigation skill talks about `UseNavigationLifecycle`
+      hook callbacks, not raw NavigationView events.)
 
 ### 10.7 Top-level `SKILL.md` and `skills/dsl-reference.md`
 
-- [ ] Update if it lists factories — add type-ramp factories and `Card`.
-- [ ] Update `skills/forms.md` / `skills/input.md` / `skills/navigation.md`
-      mirrors of the items in 10.5 / 10.6.
+- [x] Update if it lists factories — add type-ramp factories and `Card`.
+      (Root `SKILL.md` cheatsheet: type-ramp `Title`/`Subtitle`/`Body`/
+      `BodyStrong`/`BodyLarge` line added next to the existing
+      `Heading`/`SubHeading`, plus a `Card(child)` line above the manual
+      `Border(child).Background(Theme.CardBackground)...` example.
+      Recipe roll-call now lists `canvas-positioning`, `named-styles`,
+      `calendar-multiselect`. `skills/dsl-reference.md` typography table
+      gains the five WinUI ramp factories; layout-containers table gains
+      a `Card(child)` row.)
+- [x] Update `skills/forms.md` / `skills/input.md` / `skills/navigation.md`
+      mirrors of the items in 10.5 / 10.6. (`skills/forms.md` available-
+      input-types table extended for `TextField` and `PasswordBox` to
+      match the `reactor-forms` update. `skills/input.md` /
+      `skills/navigation.md` / `skills/commanding.md`: no-op — same
+      grep-clean result as 10.6.)
 
 ---
 
@@ -919,6 +945,6 @@ that maps to the spec's §14 ordering:
 - [x] §17 — Named-style fluents and `Card` factory (Phase 2).
 - [x] Samples updated (Phase 8).
 - [x] Docs updated (Phase 9).
-- [ ] Agent-kit updated (Phase 10).
+- [x] Agent-kit updated (Phase 10).
 - [ ] Tests landed (Phase 11).
 - [ ] Ship gates green (Phase 12).
