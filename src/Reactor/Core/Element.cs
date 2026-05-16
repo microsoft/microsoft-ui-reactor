@@ -2938,6 +2938,16 @@ public record FrameElement() : Element
 {
     public Type? SourcePageType { get; init; }
     public object? NavigationParameter { get; init; }
+
+    /// <summary>Raised after a successful navigation. Receives the new <c>SourcePageType</c>.</summary>
+    public Action<Type>? OnNavigated { get; init; }
+
+    /// <summary>Raised before navigation begins. Receives the target <c>SourcePageType</c>. Cancellation is not supported via this fluent — use <c>.Set(...)</c> to wire the raw <c>Navigating</c> event for that.</summary>
+    public Action<Type>? OnNavigating { get; init; }
+
+    /// <summary>Raised when a navigation fails. Receives the target <c>SourcePageType</c> and the failure exception.</summary>
+    public Action<Type, Exception>? OnNavigationFailed { get; init; }
+
     internal Action<WinUI.Frame>[] Setters { get; init; } = [];
 }
 

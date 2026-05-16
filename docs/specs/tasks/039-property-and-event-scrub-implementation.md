@@ -276,14 +276,19 @@ etc. Property names are unchanged.
 
 ### 3.2 `Frame.Navigated/.Navigating/.NavigationFailed`
 
-- [ ] Model the three events on `FrameElement` as
-      `Action<NavigationEventArgs>?` / `Action<NavigatingCancelEventArgs>?` /
-      `Action<NavigationFailedEventArgs>?` (or Reactor-shaped substitutes
-      if the existing pattern wraps args — check `NavigationView` modelling
-      for precedent).
-- [ ] Fluent extensions per Phase 1 conventions.
-- [ ] Sample exercising `Frame.OnNavigated` for a navigation log under
-      `samples/ReactorGallery/ControlPages/Navigation/`.
+- [x] Model the three events on `FrameElement` as Reactor-shaped
+      substitutes (matching the rest of the codebase, which doesn't
+      surface raw WinUI EventArgs in user-facing callbacks):
+      `Action<Type>? OnNavigated`, `Action<Type>? OnNavigating`,
+      `Action<Type, Exception>? OnNavigationFailed`. Users who need
+      `NavigationMode` / `NavigationParameter` / cancellation can wire
+      the raw event via `.Set(...)`.
+- [x] Fluent extensions: `.Navigated(...)`, `.Navigating(...)`,
+      `.NavigationFailed(...)`.
+- [ ] Sample exercising `Frame.Navigated` for a navigation log under
+      `samples/ReactorGallery/ControlPages/Navigation/`. **Deferred to
+      Phase 8.3** (sample requires XAML Page-derived types to navigate
+      to; better authored alongside the rest of the sample sweep).
 
 ### 3.3 `ScrollView.ViewChanged`
 

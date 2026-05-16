@@ -3398,7 +3398,10 @@ public sealed partial class Reconciler
 
     private UIElement? UpdateFrame(FrameElement n, WinUI.Frame f)
     {
-        // Frame navigation is inherently imperative — only apply setters on update
+        // Frame navigation is inherently imperative — only refresh the
+        // element tag so event trampolines see the latest handlers, then
+        // apply setters.
+        SetElementTag(f, n);
         ApplySetters(n.Setters, f);
         return null;
     }

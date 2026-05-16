@@ -243,6 +243,9 @@ FlipViewElement.Set(Action<FlipView> configure) → FlipViewElement
 FlyoutElement.Closed(Action handler) → FlyoutElement
 FlyoutElement.Opened(Action handler) → FlyoutElement
 FlyoutElement.Set(Action<Flyout> configure) → FlyoutElement
+FrameElement.Navigated(Action<Type> handler) → FrameElement
+FrameElement.Navigating(Action<Type> handler) → FrameElement
+FrameElement.NavigationFailed(Action<Type, Exception> handler) → FrameElement
 FrameElement.Set(Action<Frame> configure) → FrameElement
 GridElement.BackgroundTransition(TimeSpan? duration = null) → GridElement
 GridElement.Set(Action<Grid> configure) → GridElement

@@ -195,6 +195,18 @@ public static partial class ElementExtensions
     public static TitleBarElement PaneToggleRequested(this TitleBarElement el, Action? handler) =>
         el with { OnPaneToggleRequested = handler };
 
+    /// <summary>Wires the navigated-completed handler. Receives the new <c>SourcePageType</c>. Passing <c>null</c> clears.</summary>
+    public static FrameElement Navigated(this FrameElement el, Action<Type>? handler) =>
+        el with { OnNavigated = handler };
+
+    /// <summary>Wires the navigating-started handler. Receives the target <c>SourcePageType</c>. Passing <c>null</c> clears.</summary>
+    public static FrameElement Navigating(this FrameElement el, Action<Type>? handler) =>
+        el with { OnNavigating = handler };
+
+    /// <summary>Wires the navigation-failed handler. Receives target type and exception. Passing <c>null</c> clears.</summary>
+    public static FrameElement NavigationFailed(this FrameElement el, Action<Type, Exception>? handler) =>
+        el with { OnNavigationFailed = handler };
+
     /// <summary>Wires the selected-index-changed handler. Passing <c>null</c> clears.</summary>
     public static TabViewElement SelectedIndexChanged(this TabViewElement el, Action<int>? handler) =>
         el with { OnSelectedIndexChanged = handler };

@@ -250,6 +250,33 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
+    public void Frame_Navigated_NullClears()
+    {
+        Action<Type> h = _ => { };
+        var el = Frame().Navigated(h);
+        Assert.Same(h, el.OnNavigated);
+        Assert.Null(el.Navigated(null).OnNavigated);
+    }
+
+    [Fact]
+    public void Frame_Navigating_NullClears()
+    {
+        Action<Type> h = _ => { };
+        var el = Frame().Navigating(h);
+        Assert.Same(h, el.OnNavigating);
+        Assert.Null(el.Navigating(null).OnNavigating);
+    }
+
+    [Fact]
+    public void Frame_NavigationFailed_NullClears()
+    {
+        Action<Type, Exception> h = (_, _) => { };
+        var el = Frame().NavigationFailed(h);
+        Assert.Same(h, el.OnNavigationFailed);
+        Assert.Null(el.NavigationFailed(null).OnNavigationFailed);
+    }
+
+    [Fact]
     public void TimePicker_TimeChanged_NullClears()
     {
         Action<TimeSpan> h = _ => { };

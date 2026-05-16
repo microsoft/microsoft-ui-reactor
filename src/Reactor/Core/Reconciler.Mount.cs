@@ -3040,6 +3040,27 @@ public sealed partial class Reconciler
     private WinUI.Frame MountFrame(FrameElement frame)
     {
         var f = new WinUI.Frame();
+        SetElementTag(f, frame);
+
+        // Subscribe unconditionally — the trampoline reads the latest element
+        // via GetElementTag so a later record-with that attaches a handler
+        // picks up without re-wiring.
+        f.Navigated += (s, e) =>
+        {
+            if (GetElementTag((WinUI.Frame)s!) is FrameElement el && el.OnNavigated is { } h)
+                h(e.SourcePageType);
+        };
+        f.Navigating += (s, e) =>
+        {
+            if (GetElementTag((WinUI.Frame)s!) is FrameElement el && el.OnNavigating is { } h)
+                h(e.SourcePageType);
+        };
+        f.NavigationFailed += (s, e) =>
+        {
+            if (GetElementTag((WinUI.Frame)s!) is FrameElement el && el.OnNavigationFailed is { } h)
+                h(e.SourcePageType, e.Exception);
+        };
+
         if (frame.SourcePageType is not null)
             f.Navigate(frame.SourcePageType, frame.NavigationParameter);
         ApplySetters(frame.Setters, f);
