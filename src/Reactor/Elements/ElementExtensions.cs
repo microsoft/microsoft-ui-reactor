@@ -658,6 +658,78 @@ public static partial class ElementExtensions
         return el with { StrokeDashArray = dc };
     }
 
+    /// <summary>Cap rendered at the start of an open stroke.</summary>
+    public static PathElement StrokeStartLineCap(this PathElement el, PenLineCap cap) =>
+        el with { StrokeStartLineCap = cap };
+
+    /// <summary>Cap rendered at the end of an open stroke.</summary>
+    public static PathElement StrokeEndLineCap(this PathElement el, PenLineCap cap) =>
+        el with { StrokeEndLineCap = cap };
+
+    /// <summary>Join style between two connected stroke segments.</summary>
+    public static PathElement StrokeLineJoin(this PathElement el, PenLineJoin join) =>
+        el with { StrokeLineJoin = join };
+
+    /// <summary>Maximum extent of a miter join relative to half the stroke thickness.</summary>
+    public static PathElement StrokeMiterLimit(this PathElement el, double limit) =>
+        el with { StrokeMiterLimit = limit };
+
+    /// <summary>Cap rendered on dashes when <c>StrokeDashArray</c> is set.</summary>
+    public static PathElement StrokeDashCap(this PathElement el, PenLineCap cap) =>
+        el with { StrokeDashCap = cap };
+
+    /// <summary>Distance into the dash pattern at which to begin drawing.</summary>
+    public static PathElement StrokeDashOffset(this PathElement el, double offset) =>
+        el with { StrokeDashOffset = offset };
+
+    /// <summary>How interior regions are determined for fills.</summary>
+    public static PathElement FillRule(this PathElement el, FillRule rule) =>
+        el with { FillRule = rule };
+
+    // ── Image extras (spec §10) ─────────────────────────────────────
+
+    /// <summary>Nine-grid (slice) values for resolution-independent corner stretching.</summary>
+    public static ImageElement NineGrid(this ImageElement el, Thickness nineGrid) =>
+        el with { NineGrid = nineGrid };
+
+    // ── PipsPager extras (spec §12) ─────────────────────────────────
+
+    /// <summary>Whether the selected index wraps around the ends.</summary>
+    public static PipsPagerElement WrapMode(this PipsPagerElement el, PipsPagerWrapMode mode) =>
+        el with { WrapMode = mode };
+
+    /// <summary>Maximum number of visible pips.</summary>
+    public static PipsPagerElement MaxVisiblePips(this PipsPagerElement el, int max) =>
+        el with { MaxVisiblePips = max };
+
+    /// <summary>When the previous button shows.</summary>
+    public static PipsPagerElement PreviousButtonVisibility(this PipsPagerElement el, PipsPagerButtonVisibility visibility) =>
+        el with { PreviousButtonVisibility = visibility };
+
+    /// <summary>When the next button shows.</summary>
+    public static PipsPagerElement NextButtonVisibility(this PipsPagerElement el, PipsPagerButtonVisibility visibility) =>
+        el with { NextButtonVisibility = visibility };
+
+    // ── RefreshContainer extras (spec §12) ──────────────────────────
+
+    /// <summary>Direction the user pulls to trigger refresh.</summary>
+    public static RefreshContainerElement PullDirection(this RefreshContainerElement el, RefreshPullDirection direction) =>
+        el with { PullDirection = direction };
+
+    // ── ParallaxView extras (spec §12) ──────────────────────────────
+
+    /// <summary>Source UIElement that drives the parallax (typically a ScrollViewer / ListView).</summary>
+    public static ParallaxViewElement Source(this ParallaxViewElement el, UIElement source) =>
+        el with { Source = source };
+
+    /// <summary>Vertical-axis source offset (in pixels) at which parallax begins.</summary>
+    public static ParallaxViewElement VerticalSourceStartOffset(this ParallaxViewElement el, double offset) =>
+        el with { VerticalSourceStartOffset = offset };
+
+    /// <summary>Vertical-axis source offset (in pixels) at which parallax ends.</summary>
+    public static ParallaxViewElement VerticalSourceEndOffset(this ParallaxViewElement el, double offset) =>
+        el with { VerticalSourceEndOffset = offset };
+
     // ── IsEnabled (on Control — works on buttons, inputs, etc.) ────
 
     public static T Disabled<T>(this T el, bool disabled = true) where T : Element =>

@@ -298,6 +298,9 @@ HyperlinkButtonElement.Click(Action handler) → HyperlinkButtonElement
 HyperlinkButtonElement.NavigateUri(Uri uri) → HyperlinkButtonElement
 HyperlinkButtonElement.Set(Action<HyperlinkButton> configure) → HyperlinkButtonElement
 HyperlinkButtonElement.TextLink() → HyperlinkButtonElement
+ImageElement.ImageFailed(Action<string> handler) → ImageElement
+ImageElement.ImageOpened(Action handler) → ImageElement
+ImageElement.NineGrid(Thickness nineGrid) → ImageElement
 ImageElement.Set(Action<Image> configure) → ImageElement
 InfoBadgeElement.Set(Action<InfoBadge> configure) → InfoBadgeElement
 InfoBarElement.ActionButtonClick(Action handler) → InfoBarElement
@@ -358,6 +361,9 @@ NumberBoxElement.SpinButtons(NumberBoxSpinButtonPlacementMode placement = Number
 NumberBoxElement.ValidationMode(NumberBoxValidationMode mode) → NumberBoxElement
 NumberBoxElement.ValueChanged(Action<double> handler) → NumberBoxElement
 ParallaxViewElement.Set(Action<ParallaxView> configure) → ParallaxViewElement
+ParallaxViewElement.Source(UIElement source) → ParallaxViewElement
+ParallaxViewElement.VerticalSourceEndOffset(double offset) → ParallaxViewElement
+ParallaxViewElement.VerticalSourceStartOffset(double offset) → ParallaxViewElement
 PasswordBoxElement.Header(string header) → PasswordBoxElement
 PasswordBoxElement.MaxLength(int maxLength) → PasswordBoxElement
 PasswordBoxElement.PasswordChanged(Action<string> handler) → PasswordBoxElement
@@ -365,15 +371,26 @@ PasswordBoxElement.PasswordChar(string passwordChar) → PasswordBoxElement
 PasswordBoxElement.PasswordRevealMode(PasswordRevealMode mode) → PasswordBoxElement
 PasswordBoxElement.Set(Action<PasswordBox> configure) → PasswordBoxElement
 PathElement.Fill(Brush brush) → PathElement
+PathElement.FillRule(FillRule rule) → PathElement
 PathElement.Set(Action<Path> configure) → PathElement
 PathElement.Stroke(Brush brush) → PathElement
 PathElement.StrokeDashArray(double[] dashes) → PathElement
+PathElement.StrokeDashCap(PenLineCap cap) → PathElement
+PathElement.StrokeDashOffset(double offset) → PathElement
+PathElement.StrokeEndLineCap(PenLineCap cap) → PathElement
+PathElement.StrokeLineJoin(PenLineJoin join) → PathElement
+PathElement.StrokeMiterLimit(double limit) → PathElement
+PathElement.StrokeStartLineCap(PenLineCap cap) → PathElement
 PathElement.StrokeThickness(double thickness) → PathElement
 PersonPictureElement.DisplayName(string name) → PersonPictureElement
 PersonPictureElement.Initials(string initials) → PersonPictureElement
 PersonPictureElement.Set(Action<PersonPicture> configure) → PersonPictureElement
+PipsPagerElement.MaxVisiblePips(int max) → PipsPagerElement
+PipsPagerElement.NextButtonVisibility(PipsPagerButtonVisibility visibility) → PipsPagerElement
+PipsPagerElement.PreviousButtonVisibility(PipsPagerButtonVisibility visibility) → PipsPagerElement
 PipsPagerElement.SelectedPageIndexChanged(Action<int> handler) → PipsPagerElement
 PipsPagerElement.Set(Action<PipsPager> configure) → PipsPagerElement
+PipsPagerElement.WrapMode(PipsPagerWrapMode mode) → PipsPagerElement
 PivotElement.SelectedIndexChanged(Action<int> handler) → PivotElement
 PivotElement.Set(Action<Pivot> configure) → PivotElement
 PopupElement.Closed(Action handler) → PopupElement
@@ -398,6 +415,7 @@ RatingControlElement.Set(Action<RatingControl> configure) → RatingControlEleme
 RatingControlElement.ValueChanged(Action<double> handler) → RatingControlElement
 RectangleElement.Fill(Brush brush) → RectangleElement
 RectangleElement.Set(Action<Rectangle> configure) → RectangleElement
+RefreshContainerElement.PullDirection(RefreshPullDirection direction) → RefreshContainerElement
 RefreshContainerElement.RefreshRequested(Action handler) → RefreshContainerElement
 RefreshContainerElement.Set(Action<RefreshContainer> configure) → RefreshContainerElement
 RelativePanelElement.Set(Action<RelativePanel> configure) → RelativePanelElement

@@ -2152,7 +2152,14 @@ public record ImageElement(string Source) : Element
     public double? Width { get; init; }
     public double? Height { get; init; }
     public string? Stretch { get; init; }
+    /// <summary>Raised after the image source loads successfully (marshalled to UI thread).</summary>
+    public Action? OnImageOpened { get; init; }
+    /// <summary>Raised when the image fails to load. Receives the failure message.</summary>
+    public Action<string>? OnImageFailed { get; init; }
+    /// <summary>Nine-grid (slice) values for resolution-independent corner stretching.</summary>
+    public Thickness? NineGrid { get; init; }
     internal Action<WinUI.Image>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnImageOpened is not null || OnImageFailed is not null;
 }
 
 public record PersonPictureElement() : Element
@@ -2980,6 +2987,20 @@ public record PathElement() : Element
     public double StrokeThickness { get; init; } = 1;
     public Microsoft.UI.Xaml.Media.DoubleCollection? StrokeDashArray { get; init; }
     public Transform? RenderTransform { get; init; }
+    /// <summary>Cap rendered at the start of an open stroke. Defaults to <c>Flat</c>.</summary>
+    public PenLineCap StrokeStartLineCap { get; init; } = PenLineCap.Flat;
+    /// <summary>Cap rendered at the end of an open stroke. Defaults to <c>Flat</c>.</summary>
+    public PenLineCap StrokeEndLineCap { get; init; } = PenLineCap.Flat;
+    /// <summary>Join style between two connected stroke segments. Defaults to <c>Miter</c>.</summary>
+    public PenLineJoin StrokeLineJoin { get; init; } = PenLineJoin.Miter;
+    /// <summary>Maximum extent of a miter join relative to half the stroke thickness. Defaults to 10.</summary>
+    public double StrokeMiterLimit { get; init; } = 10;
+    /// <summary>Cap rendered on dashes when <see cref="StrokeDashArray"/> is set. Defaults to <c>Flat</c>.</summary>
+    public PenLineCap StrokeDashCap { get; init; } = PenLineCap.Flat;
+    /// <summary>Distance into the dash pattern at which to begin drawing. Defaults to 0.</summary>
+    public double StrokeDashOffset { get; init; }
+    /// <summary>How interior regions are determined for fills. Defaults to <c>EvenOdd</c>.</summary>
+    public FillRule FillRule { get; init; } = FillRule.EvenOdd;
     internal Action<WinShapes.Path>[] Setters { get; init; } = [];
 }
 
@@ -3065,6 +3086,14 @@ public record PipsPagerElement(int NumberOfPages) : Element
 {
     public int SelectedPageIndex { get; init; }
     public Action<int>? OnSelectedPageIndexChanged { get; init; }
+    /// <summary>Whether the selected index wraps around the ends. Defaults to <c>None</c>.</summary>
+    public PipsPagerWrapMode WrapMode { get; init; } = PipsPagerWrapMode.None;
+    /// <summary>Maximum number of visible pips. Defaults to 5 (matches WinUI).</summary>
+    public int MaxVisiblePips { get; init; } = 5;
+    /// <summary>When the previous button shows. Defaults to <c>Collapsed</c>.</summary>
+    public PipsPagerButtonVisibility PreviousButtonVisibility { get; init; } = PipsPagerButtonVisibility.Collapsed;
+    /// <summary>When the next button shows. Defaults to <c>Collapsed</c>.</summary>
+    public PipsPagerButtonVisibility NextButtonVisibility { get; init; } = PipsPagerButtonVisibility.Collapsed;
     internal Action<WinUI.PipsPager>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnSelectedPageIndexChanged is not null;
 }
@@ -3092,7 +3121,10 @@ public record PopupElement(Element Child) : Element
 public record RefreshContainerElement(Element Content) : Element
 {
     public Action? OnRefreshRequested { get; init; }
+    /// <summary>Direction the user pulls to trigger refresh. Defaults to <c>TopToBottom</c>.</summary>
+    public RefreshPullDirection PullDirection { get; init; } = RefreshPullDirection.TopToBottom;
     internal Action<WinUI.RefreshContainer>[] Setters { get; init; } = [];
+    internal override bool HasCallbacks => OnRefreshRequested is not null;
 }
 
 public record CommandBarFlyoutElement(
@@ -3186,6 +3218,12 @@ public record ParallaxViewElement(Element Child) : Element
 {
     public double VerticalShift { get; init; }
     public double HorizontalShift { get; init; }
+    /// <summary>Source UIElement that drives the parallax (typically a ScrollViewer / ListView). <c>null</c> uses the nearest scroller.</summary>
+    public UIElement? Source { get; init; }
+    /// <summary>Vertical-axis source offset (in pixels) at which parallax begins. Defaults to 0.</summary>
+    public double VerticalSourceStartOffset { get; init; }
+    /// <summary>Vertical-axis source offset (in pixels) at which parallax ends. Defaults to 0 (auto).</summary>
+    public double VerticalSourceEndOffset { get; init; }
     internal Action<WinUI.ParallaxView>[] Setters { get; init; } = [];
 }
 

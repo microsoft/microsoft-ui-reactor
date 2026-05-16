@@ -337,6 +337,14 @@ public static partial class ElementExtensions
 
     // ── §10 Media ──────────────────────────────────────────────────────
 
+    /// <summary>Wires the image-opened handler (fires after the source loads successfully). Passing <c>null</c> clears.</summary>
+    public static ImageElement ImageOpened(this ImageElement el, Action? handler) =>
+        el with { OnImageOpened = handler };
+
+    /// <summary>Wires the image-failed handler. Receives the failure message. Passing <c>null</c> clears.</summary>
+    public static ImageElement ImageFailed(this ImageElement el, Action<string>? handler) =>
+        el with { OnImageFailed = handler };
+
     /// <summary>Wires the navigation-starting handler. Passing <c>null</c> clears.</summary>
     public static WebView2Element NavigationStarting(this WebView2Element el, Action<Uri>? handler) =>
         el with { OnNavigationStarting = handler };

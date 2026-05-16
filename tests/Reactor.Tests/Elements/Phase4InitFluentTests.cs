@@ -886,6 +886,110 @@ public class Phase4InitFluentTests
         var el = TeachingTip("t").PreferredPlacement(Microsoft.UI.Xaml.Controls.TeachingTipPlacementMode.RightTop);
         Assert.Equal(Microsoft.UI.Xaml.Controls.TeachingTipPlacementMode.RightTop, el.PreferredPlacement);
     }
+
+    // ── 5.7 Media + shapes ───────────────────────────────────────────
+
+    [Fact]
+    public void Image_NineGrid_Sets()
+    {
+        var nine = new Microsoft.UI.Xaml.Thickness(4);
+        var el = Image("foo.png").NineGrid(nine);
+        Assert.Equal(nine, el.NineGrid);
+    }
+
+    [Fact]
+    public void Path_StrokeStartLineCap_Sets()
+    {
+        var el = new PathElement().StrokeStartLineCap(Microsoft.UI.Xaml.Media.PenLineCap.Round);
+        Assert.Equal(Microsoft.UI.Xaml.Media.PenLineCap.Round, el.StrokeStartLineCap);
+    }
+
+    [Fact]
+    public void Path_StrokeEndLineCap_Sets()
+    {
+        var el = new PathElement().StrokeEndLineCap(Microsoft.UI.Xaml.Media.PenLineCap.Triangle);
+        Assert.Equal(Microsoft.UI.Xaml.Media.PenLineCap.Triangle, el.StrokeEndLineCap);
+    }
+
+    [Fact]
+    public void Path_StrokeLineJoin_Sets()
+    {
+        var el = new PathElement().StrokeLineJoin(Microsoft.UI.Xaml.Media.PenLineJoin.Bevel);
+        Assert.Equal(Microsoft.UI.Xaml.Media.PenLineJoin.Bevel, el.StrokeLineJoin);
+    }
+
+    [Fact]
+    public void Path_StrokeMiterLimit_Sets()
+    {
+        var el = new PathElement().StrokeMiterLimit(4);
+        Assert.Equal(4, el.StrokeMiterLimit);
+    }
+
+    [Fact]
+    public void Path_StrokeDashCap_Sets()
+    {
+        var el = new PathElement().StrokeDashCap(Microsoft.UI.Xaml.Media.PenLineCap.Round);
+        Assert.Equal(Microsoft.UI.Xaml.Media.PenLineCap.Round, el.StrokeDashCap);
+    }
+
+    [Fact]
+    public void Path_StrokeDashOffset_Sets()
+    {
+        var el = new PathElement().StrokeDashOffset(2.5);
+        Assert.Equal(2.5, el.StrokeDashOffset);
+    }
+
+    [Fact]
+    public void Path_FillRule_Sets()
+    {
+        var el = new PathElement().FillRule(Microsoft.UI.Xaml.Media.FillRule.Nonzero);
+        Assert.Equal(Microsoft.UI.Xaml.Media.FillRule.Nonzero, el.FillRule);
+    }
+
+    [Fact]
+    public void PipsPager_WrapMode_Sets()
+    {
+        var el = PipsPager(10).WrapMode(Microsoft.UI.Xaml.Controls.PipsPagerWrapMode.Wrap);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.PipsPagerWrapMode.Wrap, el.WrapMode);
+    }
+
+    [Fact]
+    public void PipsPager_MaxVisiblePips_Sets()
+    {
+        var el = PipsPager(10).MaxVisiblePips(7);
+        Assert.Equal(7, el.MaxVisiblePips);
+    }
+
+    [Fact]
+    public void PipsPager_PreviousButtonVisibility_Sets()
+    {
+        var el = PipsPager(10).PreviousButtonVisibility(Microsoft.UI.Xaml.Controls.PipsPagerButtonVisibility.Visible);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.PipsPagerButtonVisibility.Visible, el.PreviousButtonVisibility);
+    }
+
+    [Fact]
+    public void PipsPager_NextButtonVisibility_Sets()
+    {
+        var el = PipsPager(10).NextButtonVisibility(Microsoft.UI.Xaml.Controls.PipsPagerButtonVisibility.VisibleOnPointerOver);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.PipsPagerButtonVisibility.VisibleOnPointerOver, el.NextButtonVisibility);
+    }
+
+    [Fact]
+    public void RefreshContainer_PullDirection_Sets()
+    {
+        var el = RefreshContainer(TextBlock("x")).PullDirection(Microsoft.UI.Xaml.Controls.RefreshPullDirection.BottomToTop);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.RefreshPullDirection.BottomToTop, el.PullDirection);
+    }
+
+    [Fact]
+    public void ParallaxView_VerticalSourceOffsets_Set()
+    {
+        var el = new ParallaxViewElement(TextBlock("x"))
+            .VerticalSourceStartOffset(100)
+            .VerticalSourceEndOffset(500);
+        Assert.Equal(100, el.VerticalSourceStartOffset);
+        Assert.Equal(500, el.VerticalSourceEndOffset);
+    }
 }
 
 // Internal probe so tests can read attached data without needing

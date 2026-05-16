@@ -969,8 +969,33 @@ public sealed partial class Reconciler
         }
         if (img.Width.HasValue) image.Width = img.Width.Value;
         if (img.Height.HasValue) image.Height = img.Height.Value;
+        if (img.NineGrid.HasValue) image.NineGrid = img.NineGrid.Value;
+        SetElementTag(image, img);
+        EnsureImageWiring(image);
         ApplySetters(img.Setters, image);
         return image;
+    }
+
+    /// <summary>
+    /// Wires ImageOpened/ImageFailed trampolines once per pooled Image. The
+    /// handler resolves the live element via GetElementTag so a later
+    /// record-with that attaches a handler picks up without re-subscribing.
+    /// </summary>
+    internal static void EnsureImageWiring(WinUI.Image image)
+    {
+        var flags = GetPoolableWireFlags(image);
+        if (!flags.ImageOpened)
+        {
+            flags.ImageOpened = true;
+            image.ImageOpened += (s, _) =>
+                (GetElementTag((UIElement)s!) as ImageElement)?.OnImageOpened?.Invoke();
+        }
+        if (!flags.ImageFailed)
+        {
+            flags.ImageFailed = true;
+            image.ImageFailed += (s, args) =>
+                (GetElementTag((UIElement)s!) as ImageElement)?.OnImageFailed?.Invoke(args.ErrorMessage);
+        }
     }
 
     private WinUI.PersonPicture MountPersonPicture(PersonPictureElement pp)
@@ -2880,6 +2905,17 @@ public sealed partial class Reconciler
         if (pa.StrokeThickness > 0) p.StrokeThickness = pa.StrokeThickness;
         if (pa.StrokeDashArray is not null) p.StrokeDashArray = pa.StrokeDashArray;
         if (pa.RenderTransform is not null) p.RenderTransform = pa.RenderTransform;
+        if (pa.StrokeStartLineCap != Microsoft.UI.Xaml.Media.PenLineCap.Flat) p.StrokeStartLineCap = pa.StrokeStartLineCap;
+        if (pa.StrokeEndLineCap != Microsoft.UI.Xaml.Media.PenLineCap.Flat) p.StrokeEndLineCap = pa.StrokeEndLineCap;
+        if (pa.StrokeLineJoin != Microsoft.UI.Xaml.Media.PenLineJoin.Miter) p.StrokeLineJoin = pa.StrokeLineJoin;
+        if (pa.StrokeMiterLimit != 10) p.StrokeMiterLimit = pa.StrokeMiterLimit;
+        if (pa.StrokeDashCap != Microsoft.UI.Xaml.Media.PenLineCap.Flat) p.StrokeDashCap = pa.StrokeDashCap;
+        if (pa.StrokeDashOffset != 0) p.StrokeDashOffset = pa.StrokeDashOffset;
+        // WinUI's Shapes.Path doesn't expose FillRule directly — it lives on
+        // the PathGeometry. Cast and set when we own a writable PathGeometry.
+        if (pa.FillRule != Microsoft.UI.Xaml.Media.FillRule.EvenOdd
+            && p.Data is Microsoft.UI.Xaml.Media.PathGeometry pg)
+            pg.FillRule = pa.FillRule;
         ApplySetters(pa.Setters, p);
         return p;
     }
@@ -3061,6 +3097,10 @@ public sealed partial class Reconciler
         {
             NumberOfPages = pp.NumberOfPages,
             SelectedPageIndex = pp.SelectedPageIndex,
+            WrapMode = pp.WrapMode,
+            MaxVisiblePips = pp.MaxVisiblePips,
+            PreviousButtonVisibility = pp.PreviousButtonVisibility,
+            NextButtonVisibility = pp.NextButtonVisibility,
         };
         SetElementTag(pager, pp);
         if (pp.OnSelectedPageIndexChanged is not null)
@@ -3109,7 +3149,10 @@ public sealed partial class Reconciler
 
     private WinUI.RefreshContainer MountRefreshContainer(RefreshContainerElement rc, Action requestRerender)
     {
-        var container = new WinUI.RefreshContainer();
+        var container = new WinUI.RefreshContainer
+        {
+            PullDirection = rc.PullDirection,
+        };
         container.Content = Mount(rc.Content, requestRerender);
         SetElementTag(container, rc);
         container.RefreshRequested += (s, _) =>
@@ -3239,7 +3282,10 @@ public sealed partial class Reconciler
         {
             VerticalShift = pv.VerticalShift,
             HorizontalShift = pv.HorizontalShift,
+            VerticalSourceStartOffset = pv.VerticalSourceStartOffset,
+            VerticalSourceEndOffset = pv.VerticalSourceEndOffset,
         };
+        if (pv.Source is not null) parallax.Source = pv.Source;
         parallax.Child = Mount(pv.Child, requestRerender) as UIElement;
         ApplySetters(pv.Setters, parallax);
         return parallax;

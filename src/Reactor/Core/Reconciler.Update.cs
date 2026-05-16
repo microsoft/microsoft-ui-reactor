@@ -1208,6 +1208,8 @@ public sealed partial class Reconciler
 
     private UIElement? UpdateImage(ImageElement o, ImageElement n, WinUI.Image img)
     {
+        SetElementTag(img, n);
+        EnsureImageWiring(img);
         if (o.Source != n.Source)
         {
             var uri = new Uri(n.Source, UriKind.RelativeOrAbsolute);
@@ -1217,6 +1219,7 @@ public sealed partial class Reconciler
         }
         if (n.Width.HasValue) img.Width = n.Width.Value;
         if (n.Height.HasValue) img.Height = n.Height.Value;
+        if (n.NineGrid.HasValue && img.NineGrid != n.NineGrid.Value) img.NineGrid = n.NineGrid.Value;
         ApplySetters(n.Setters, img);
         return null;
     }
@@ -2311,6 +2314,7 @@ public sealed partial class Reconciler
             if (rc.Content is UIElement stale) Unmount(stale);
             rc.Content = Mount(n.Content, requestRerender);
         }
+        if (rc.PullDirection != n.PullDirection) rc.PullDirection = n.PullDirection;
         SetElementTag(rc, n);
         ApplySetters(n.Setters, rc);
         return null;
@@ -2555,6 +2559,9 @@ public sealed partial class Reconciler
     {
         if (pv.VerticalShift != n.VerticalShift) pv.VerticalShift = n.VerticalShift;
         if (pv.HorizontalShift != n.HorizontalShift) pv.HorizontalShift = n.HorizontalShift;
+        if (pv.VerticalSourceStartOffset != n.VerticalSourceStartOffset) pv.VerticalSourceStartOffset = n.VerticalSourceStartOffset;
+        if (pv.VerticalSourceEndOffset != n.VerticalSourceEndOffset) pv.VerticalSourceEndOffset = n.VerticalSourceEndOffset;
+        if (!ReferenceEquals(o.Source, n.Source) && n.Source is not null) pv.Source = n.Source;
         if (pv.Child is UIElement existing && CanUpdate(o.Child, n.Child))
         {
             var replacement = Update(o.Child, n.Child, existing, requestRerender);
@@ -3494,6 +3501,15 @@ public sealed partial class Reconciler
         p.StrokeThickness = n.StrokeThickness;
         if (n.StrokeDashArray is not null) p.StrokeDashArray = n.StrokeDashArray;
         if (n.RenderTransform is not null) p.RenderTransform = n.RenderTransform;
+        if (p.StrokeStartLineCap != n.StrokeStartLineCap) p.StrokeStartLineCap = n.StrokeStartLineCap;
+        if (p.StrokeEndLineCap != n.StrokeEndLineCap) p.StrokeEndLineCap = n.StrokeEndLineCap;
+        if (p.StrokeLineJoin != n.StrokeLineJoin) p.StrokeLineJoin = n.StrokeLineJoin;
+        if (p.StrokeMiterLimit != n.StrokeMiterLimit) p.StrokeMiterLimit = n.StrokeMiterLimit;
+        if (p.StrokeDashCap != n.StrokeDashCap) p.StrokeDashCap = n.StrokeDashCap;
+        if (p.StrokeDashOffset != n.StrokeDashOffset) p.StrokeDashOffset = n.StrokeDashOffset;
+        // FillRule lives on the PathGeometry, not Shapes.Path — propagate when we own one.
+        if (p.Data is Microsoft.UI.Xaml.Media.PathGeometry npg && npg.FillRule != n.FillRule)
+            npg.FillRule = n.FillRule;
         ApplySetters(n.Setters, p);
         return null;
     }
@@ -3519,6 +3535,10 @@ public sealed partial class Reconciler
     {
         pp.NumberOfPages = n.NumberOfPages;
         pp.SelectedPageIndex = n.SelectedPageIndex;
+        if (pp.WrapMode != n.WrapMode) pp.WrapMode = n.WrapMode;
+        if (pp.MaxVisiblePips != n.MaxVisiblePips) pp.MaxVisiblePips = n.MaxVisiblePips;
+        if (pp.PreviousButtonVisibility != n.PreviousButtonVisibility) pp.PreviousButtonVisibility = n.PreviousButtonVisibility;
+        if (pp.NextButtonVisibility != n.NextButtonVisibility) pp.NextButtonVisibility = n.NextButtonVisibility;
         SetElementTag(pp, n);
         if (o.OnSelectedPageIndexChanged is null && n.OnSelectedPageIndexChanged is not null)
             pp.SelectedIndexChanged += (s, _) =>

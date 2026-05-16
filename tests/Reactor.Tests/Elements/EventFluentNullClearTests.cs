@@ -94,6 +94,22 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
+    public void Image_ImageOpened_NullClears()
+    {
+        var el = Image("x.png").ImageOpened(Sentinel);
+        Assert.Same(Sentinel, el.OnImageOpened);
+        Assert.Null(el.ImageOpened(null).OnImageOpened);
+    }
+
+    [Fact]
+    public void Image_ImageFailed_NullClears()
+    {
+        var el = Image("x.png").ImageFailed(SentinelStr);
+        Assert.Same(SentinelStr, el.OnImageFailed);
+        Assert.Null(el.ImageFailed(null).OnImageFailed);
+    }
+
+    [Fact]
     public void SplitButton_Click_NullClears()
     {
         var el = new SplitButtonElement("x").Click(Sentinel);

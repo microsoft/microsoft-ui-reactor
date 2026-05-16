@@ -493,17 +493,21 @@ existing init properties.
 
 ### 5.7 Media + shapes
 
-- [ ] `ImageElement`: `OnImageOpened`, `OnImageFailed`, `NineGrid`
+- [x] `ImageElement`: `OnImageOpened`, `OnImageFailed`, `NineGrid`
       (spec §10).
-- [ ] `WebView2Element`: surface `Source` as a non-init-only init
+- [x] `WebView2Element`: surface `Source` as a non-init-only init
       property (re-init via record-`with`) (spec §10).
-- [ ] `PathElement`: `StrokeStartLineCap`, `StrokeEndLineCap`,
+      Already covered: `Source` is the record's positional parameter
+      and `UpdateWebView2` reconciles it across renders.
+- [x] `PathElement`: `StrokeStartLineCap`, `StrokeEndLineCap`,
       `StrokeLineJoin`, `StrokeMiterLimit`, `StrokeDashCap`,
-      `StrokeDashOffset`, `FillRule` (spec §11).
-- [ ] `PipsPagerElement`: `WrapMode`, `MaxVisiblePips`,
+      `StrokeDashOffset`, `FillRule` (spec §11). `FillRule` lives on
+      `PathGeometry`, not `Shapes.Path`, so the reconciler propagates
+      it through `p.Data as PathGeometry`.
+- [x] `PipsPagerElement`: `WrapMode`, `MaxVisiblePips`,
       `PreviousButtonVisibility`, `NextButtonVisibility` (spec §12).
-- [ ] `RefreshContainerElement`: `PullDirection` (spec §12).
-- [ ] `ParallaxViewElement`: `Source`, `VerticalSourceStartOffset`/
+- [x] `RefreshContainerElement`: `PullDirection` (spec §12).
+- [x] `ParallaxViewElement`: `Source`, `VerticalSourceStartOffset`/
       `EndOffset` (spec §12).
 
 ### 5.8 Universal collection `SelectionChanged`
