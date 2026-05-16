@@ -882,8 +882,13 @@ cross-cutting test surface.
 
 ### 11.3 Null-clear contract test
 
-- [ ] Combined with 1.6 — confirm every new `OnX(...)` fluent treats `null`
+- [x] Combined with 1.6 — confirm every new `OnX(...)` fluent treats `null`
       as a clear-handler operation.
+      (Audited `EventFluentNullClearTests.cs` against the CSV inventory;
+      added 8 missing facts: `ItemsView.ItemInvoked`, `ItemsView.SelectionChanged`,
+      `TemplatedGridView.ItemClick/SelectedIndexChanged/SelectionChanged`,
+      `TemplatedFlipView.SelectedIndexChanged`, `TemplatedListView.SelectionChanged`,
+      and `PropertyGrid.RootChanged`. Total now 92 facts.)
 
 ### 11.4 Theme-resource resolution test for `Card` and named-style buttons
 

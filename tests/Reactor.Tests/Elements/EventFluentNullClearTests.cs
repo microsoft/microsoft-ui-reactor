@@ -768,4 +768,116 @@ public class EventFluentNullClearTests
         Assert.Same(h, el.OnSelectionChanged);
         Assert.Null(el.SelectionChanged(null).OnSelectionChanged);
     }
+
+    // ── Phase 11.3 audit — gaps revealed by cross-referencing CSV inventory ──
+    // The reflective surface guard (PublicApiSurfaceGuardTests) ensures every
+    // callback property has a fluent. This block ensures every fluent added
+    // since Phase 1.6 carries the null-clear fact too. Discovered missing
+    // during Phase 11.3 audit: the typed views (TemplatedGridView<T>,
+    // TemplatedFlipView<T>, ItemsView<T>), TemplatedListView<T>.SelectionChanged,
+    // and PropertyGrid.RootChanged.
+
+    private record NullClearItem(string Key);
+
+    [Fact]
+    public void ItemsView_ItemInvoked_NullClears()
+    {
+        Action<NullClearItem> h = _ => { };
+        var el = ItemsView(
+                new[] { new NullClearItem("a") },
+                it => it.Key,
+                (it, _) => TextBlock(it.Key))
+            .ItemInvoked(h);
+        Assert.Same(h, el.OnItemInvoked);
+        Assert.Null(el.ItemInvoked(null).OnItemInvoked);
+    }
+
+    [Fact]
+    public void ItemsView_SelectionChanged_NullClears()
+    {
+        Action<global::System.Collections.Generic.IReadOnlyList<NullClearItem>> h = _ => { };
+        var el = ItemsView(
+                new[] { new NullClearItem("a") },
+                it => it.Key,
+                (it, _) => TextBlock(it.Key))
+            .SelectionChanged(h);
+        Assert.Same(h, el.OnSelectionChanged);
+        Assert.Null(el.SelectionChanged(null).OnSelectionChanged);
+    }
+
+    [Fact]
+    public void TemplatedGridView_ItemClick_NullClears()
+    {
+        Action<NullClearItem> h = _ => { };
+        var el = GridView(
+                new[] { new NullClearItem("a") },
+                it => it.Key,
+                (it, _) => TextBlock(it.Key))
+            .ItemClick(h);
+        Assert.Same(h, el.OnItemClick);
+        Assert.Null(el.ItemClick(null).OnItemClick);
+    }
+
+    [Fact]
+    public void TemplatedGridView_SelectedIndexChanged_NullClears()
+    {
+        var el = GridView(
+                new[] { new NullClearItem("a") },
+                it => it.Key,
+                (it, _) => TextBlock(it.Key))
+            .SelectedIndexChanged(SentinelInt);
+        Assert.Same(SentinelInt, el.OnSelectedIndexChanged);
+        Assert.Null(el.SelectedIndexChanged(null).OnSelectedIndexChanged);
+    }
+
+    [Fact]
+    public void TemplatedGridView_SelectionChanged_NullClears()
+    {
+        Action<global::System.Collections.Generic.IReadOnlyList<NullClearItem>> h = _ => { };
+        var el = GridView(
+                new[] { new NullClearItem("a") },
+                it => it.Key,
+                (it, _) => TextBlock(it.Key))
+            .SelectionChanged(h);
+        Assert.Same(h, el.OnSelectionChanged);
+        Assert.Null(el.SelectionChanged(null).OnSelectionChanged);
+    }
+
+    [Fact]
+    public void TemplatedFlipView_SelectedIndexChanged_NullClears()
+    {
+        var el = FlipView(
+                new[] { new NullClearItem("a") },
+                it => it.Key,
+                (it, _) => TextBlock(it.Key))
+            .SelectedIndexChanged(SentinelInt);
+        Assert.Same(SentinelInt, el.OnSelectedIndexChanged);
+        Assert.Null(el.SelectedIndexChanged(null).OnSelectedIndexChanged);
+    }
+
+    [Fact]
+    public void TemplatedListView_SelectionChanged_NullClears()
+    {
+        Action<global::System.Collections.Generic.IReadOnlyList<NullClearItem>> h = _ => { };
+        var el = ListView(
+                new[] { new NullClearItem("a") },
+                it => it.Key,
+                (it, _) => TextBlock(it.Key))
+            .SelectionChanged(h);
+        Assert.Same(h, el.OnSelectionChanged);
+        Assert.Null(el.SelectionChanged(null).OnSelectionChanged);
+    }
+
+    [Fact]
+    public void PropertyGrid_RootChanged_NullClears()
+    {
+        Action<object> h = _ => { };
+        var el = new PropertyGridElement
+        {
+            Target = new { x = 1 },
+            Registry = new TypeRegistry(),
+        }.RootChanged(h);
+        Assert.Same(h, el.OnRootChanged);
+        Assert.Null(el.RootChanged(null).OnRootChanged);
+    }
 }
