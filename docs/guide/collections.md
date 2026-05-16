@@ -285,8 +285,8 @@ class MultiSelectDemo : Component
             )
             .Set(lv => lv.SelectionMode =
                 Microsoft.UI.Xaml.Controls.ListViewSelectionMode.Multiple)
-            .SelectionChanged(indices =>
-                setSelectedIds(indices.Select(i => contacts[i].Id).ToList()))
+            .SelectionChanged(selected =>
+                setSelectedIds(selected.Select(c => c.Id).ToList()))
             .Height(300)
         ).Padding(24);
     }

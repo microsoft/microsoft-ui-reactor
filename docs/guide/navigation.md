@@ -493,7 +493,7 @@ class FrameEventsDemo : Component
 
         return VStack(8,
             SubHeading("Frame events"),
-            Frame(sourcePageType: typeof(MyXamlPage))
+            Frame(sourcePageType: typeof(DocsFrameDemoPage))
                 .Navigating(target =>
                     updateLog(l => [.. l, $"Navigating to {target.Name}"]))
                 .Navigated(target =>
@@ -527,16 +527,30 @@ constraint that drove that convention.
 fires whenever the user picks a different `NavItem`:
 
 ```csharp
-NavigationView(
-    [
-        NavItem("Home", icon: "Home", tag: "Home"),
-        NavItem("Settings", icon: "Setting", tag: "Settings")
-    ],
-    content: bodyElement
-).SelectedTagChanged(tag =>
+class SelectedTagChangedDemo : Component
 {
-    if (tag == "Settings") nav.Navigate(Route.Settings);
-});
+    public override Element Render()
+    {
+        var nav = UseNavigation(Route.Home);
+        var (lastTag, setLastTag) = UseState<string?>(null);
+
+        return NavigationView(
+            [
+                NavItem("Home", icon: "Home", tag: "Home"),
+                NavItem("Settings", icon: "Setting", tag: "Settings")
+            ],
+            content: VStack(12,
+                Heading(lastTag ?? "Home"),
+                TextBlock("Last selected tag: " + (lastTag ?? "(none)"))
+                    .Opacity(0.6)
+            ).Padding(24)
+        ).SelectedTagChanged(tag =>
+        {
+            setLastTag(tag);
+            if (tag == "Settings") nav.Navigate(Route.Settings);
+        });
+    }
+}
 ```
 
 `SelectedTagChanged` receives the tag string (or `null` if no item is

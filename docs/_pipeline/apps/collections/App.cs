@@ -178,6 +178,35 @@ class ForEachDemo : Component
 }
 // </snippet:foreach>
 
+// <snippet:multi-select>
+class MultiSelectDemo : Component
+{
+    public override Element Render()
+    {
+        var contacts = SampleData.Contacts.Take(10).ToList();
+        var (selectedIds, setSelectedIds) = UseState(new List<string>());
+
+        return VStack(12,
+            SubHeading($"{selectedIds.Count} selected"),
+            ListView<Contact>(
+                contacts,
+                c => c.Id,
+                (contact, index) =>
+                    HStack(12,
+                        TextBlock(contact.Name).Bold(),
+                        TextBlock(contact.Email).Opacity(0.6)
+                    ).Padding(8)
+            )
+            .Set(lv => lv.SelectionMode =
+                Microsoft.UI.Xaml.Controls.ListViewSelectionMode.Multiple)
+            .SelectionChanged(selected =>
+                setSelectedIds(selected.Select(c => c.Id).ToList()))
+            .Height(300)
+        ).Padding(24);
+    }
+}
+// </snippet:multi-select>
+
 // <snippet:withkey>
 class WithKeyDemo : Component
 {
@@ -221,6 +250,7 @@ class CollectionsApp : Component
                 Component<LazyVStackDemo>(),
                 Component<GridViewDemo>(),
                 Component<ForEachDemo>(),
+                Component<MultiSelectDemo>(),
                 Component<WithKeyDemo>()
             ).Padding(24)
         );

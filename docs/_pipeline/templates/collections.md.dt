@@ -120,6 +120,32 @@ to elements without creating a scrollable container:
 directly inside element trees. Use it when you want to inline a small list
 of items inside a larger [layout](layout.md).
 
+## Multi-Select with SelectionChanged
+
+`ListView`, `GridView`, `ListBox`, and the typed peers (`ItemsView<T>`,
+`TemplatedListView<T>`, `TemplatedGridView<T>`) all expose a universal
+`SelectionChanged` fluent for multi-select scenarios. Set
+`SelectionMode = Multiple` (or `Extended`) and the handler fires with a
+snapshot of the full selection on every change — not added/removed deltas:
+
+```csharp snippet="collections/multi-select"
+```
+
+The handler signature varies by element type:
+
+| Element | Handler |
+|---------|---------|
+| `ListView`, `GridView`, `ListBox` | `Action<IReadOnlyList<int>>` (selected indices) |
+| `ItemsView<T>`, `TemplatedListView<T>`, `TemplatedGridView<T>` | `Action<IReadOnlyList<T>>` (selected items) |
+
+Snapshot semantics match `CalendarView.SelectedDatesChanged` — the list you
+receive is the full current selection, not the change since the last call.
+Passing `null` to the fluent clears any previously-set handler.
+
+> `TreeView` multi-select is intentionally deferred — see
+> [spec 039](../specs/039-property-and-event-scrub.md) §5.8 for the
+> rationale. Use single-select `OnItemInvoked` until then.
+
 ## Stable Identity with WithKey
 
 When rendering dynamic lists, always give each item a stable key with

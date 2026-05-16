@@ -26,7 +26,8 @@ class XamlDevelopersShowcase : Component
                 Caption("Small showcase app used by the docs pipeline."),
                 Component<TutorialFormPage>(),
                 Component<GridTranslationPage>(),
-                Component<TutorialNavigationPage>()
+                Component<TutorialNavigationPage>(),
+                Component<EventsFluentExample>()
             ).Padding(24)
         );
     }
@@ -115,3 +116,20 @@ class TutorialNavigationPage : Component
     }
 }
 // </snippet:nav-shell>
+
+// <snippet:events-fluent>
+class EventsFluentExample : Component
+{
+    public override Element Render()
+    {
+        Action handler = () => { /* clicked */ };
+
+        return VStack(8,
+            // Property-init still works:
+            new ButtonElement("Save") { OnClick = handler },
+            // Preferred fluent:
+            Button("Save").Click(handler)
+        );
+    }
+}
+// </snippet:events-fluent>

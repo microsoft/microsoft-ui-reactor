@@ -181,6 +181,31 @@ class CustomResourceExample : Component
 }
 // </snippet:custom-resource>
 
+// <snippet:named-styles>
+class NamedStylesExample : Component
+{
+    public override Element Render()
+    {
+        return VStack(12,
+            HStack(8,
+                Button("Save", () => { }).AccentButton(),
+                Button("Cancel", () => { }).SubtleButton(),
+                HyperlinkButton("Learn more", new Uri("https://example.com"))
+                    .TextLink()
+            ),
+            InfoBar(title: "Heads up", message: "Backups run nightly.")
+                .Informational(),
+            InfoBar(title: "Saved", message: "All changes are persisted.")
+                .Success(),
+            InfoBar(title: "Almost full", message: "75% of quota used.")
+                .Warning(),
+            InfoBar(title: "Sync failed", message: "Check your network.")
+                .Error()
+        ).Padding(24);
+    }
+}
+// </snippet:named-styles>
+
 // Main app showing all examples
 class StylingApp : Component
 {
@@ -194,6 +219,7 @@ class StylingApp : Component
                 Component<SignalColorsExample>(),
                 Component<DarkLightToggleExample>(),
                 Component<ColorSchemeHookExample>(),
+                Component<NamedStylesExample>(),
                 Component<LightweightStylingExample>()
             ).Padding(24)
         );

@@ -52,6 +52,41 @@ class GridDemo : Component
 }
 // </snippet:grid-layout>
 
+// <snippet:card>
+class CardDemo : Component
+{
+    public override Element Render()
+    {
+        return VStack(12,
+            SubHeading("Card"),
+            Card(
+                VStack(8,
+                    TextBlock("Recent activity").SemiBold(),
+                    TextBlock("3 new messages, 2 mentions")
+                        .Foreground(Theme.SecondaryText)
+                )
+            ).Width(240)
+        );
+    }
+}
+// </snippet:card>
+
+// <snippet:type-ramp>
+class TypeRampDemo : Component
+{
+    public override Element Render()
+    {
+        return VStack(8,
+            Title("Quarterly results"),
+            Subtitle("Q3 2026 highlights"),
+            BodyLarge("Revenue grew 18% year over year."),
+            BodyStrong("Net income reached an all-time high."),
+            Body("Full breakdown on the following pages.")
+        ).Padding(24);
+    }
+}
+// </snippet:type-ramp>
+
 // <snippet:scrollview-border>
 class ScrollBorderDemo : Component
 {
@@ -142,6 +177,8 @@ class LayoutApp : Component
                 Heading("Layout Primitives"),
                 Component<StackDemo>(),
                 Component<GridDemo>(),
+                Component<CardDemo>(),
+                Component<TypeRampDemo>(),
                 Component<ScrollBorderDemo>(),
                 Component<ExpanderCanvasDemo>(),
                 Component<ResponsiveDemo>()

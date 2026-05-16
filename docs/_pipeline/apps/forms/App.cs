@@ -7,6 +7,7 @@ using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 ReactorApp.Run<FormsApp>("Forms", width: 600, height: 900
 #if DEBUG
@@ -247,6 +248,40 @@ class InputFormattersDemo : Component
 }
 // </snippet:input-formatters>
 
+// <snippet:textfield-config>
+class TextFieldConfigDemo : Component
+{
+    public override Element Render()
+    {
+        var (qty, setQty) = UseState("");
+        var (email, setEmail) = UseState("");
+        var (url, setUrl) = UseState("");
+        var (phone, setPhone) = UseState("");
+        var (search, setSearch) = UseState("");
+        var (note, setNote) = UseState("");
+
+        return VStack(12,
+            TextField(qty, setQty, header: "Quantity")
+                .NumericInput(),
+            TextField(email, setEmail, header: "Email")
+                .EmailInput(),
+            TextField(url, setUrl, header: "URL")
+                .UrlInput(),
+            TextField(phone, setPhone, header: "Phone")
+                .PhoneInput(),
+            TextField(search, setSearch, placeholder: "Search…")
+                .SearchInput(),
+            TextField(note, setNote, header: "Reference code")
+                .MaxLength(8)
+                .CharacterCasing(CharacterCasing.Upper)
+                .TextAlignment(TextAlignment.Center)
+                .IsSpellCheckEnabled(false)
+                .Description("Eight characters, automatically uppercased.")
+        ).Padding(24);
+    }
+}
+// </snippet:textfield-config>
+
 class FormsApp : Component
 {
     public override Element Render()
@@ -256,6 +291,7 @@ class FormsApp : Component
                 Heading("Forms and Input"),
                 Component<ControlledInputDemo>(),
                 Component<InputTypesDemo>(),
+                Component<TextFieldConfigDemo>(),
                 Component<ValidationDemo>(),
                 Component<KeepSubmitReachableDemo>(),
                 Component<ValidationContextDemo>(),

@@ -193,8 +193,20 @@ The underlying init property keeps the `On` prefix, so existing
 property-init code continues to compile:
 
 ```csharp
-new ButtonElement("Save") { OnClick = handler }   // still works
-Button("Save").Click(handler)                     // preferred fluent
+class EventsFluentExample : Component
+{
+    public override Element Render()
+    {
+        Action handler = () => { /* clicked */ };
+
+        return VStack(8,
+            // Property-init still works:
+            new ButtonElement("Save") { OnClick = handler },
+            // Preferred fluent:
+            Button("Save").Click(handler)
+        );
+    }
+}
 ```
 
 The fluent drops the `On` because C# binds `el.OnClick(arg)` to
