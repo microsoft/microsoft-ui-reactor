@@ -591,8 +591,15 @@ TextFieldElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → Tex
 TextFieldElement.UrlInput() → TextFieldElement
 TimePickerElement.Set(Action<TimePicker> configure) → TimePickerElement
 TimePickerElement.TimeChanged(Action<TimeSpan> handler) → TimePickerElement
+TitleBarElement.BackButtonEnabled(bool enabled) → TitleBarElement
+TitleBarElement.BackButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.BackRequested(Action handler) → TitleBarElement
+TitleBarElement.Content(Element content) → TitleBarElement
+TitleBarElement.Icon(IconData icon) → TitleBarElement
+TitleBarElement.Icon(string imageUri) → TitleBarElement
+TitleBarElement.PaneToggleButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.PaneToggleRequested(Action handler) → TitleBarElement
+TitleBarElement.RightHeader(Element rightHeader) → TitleBarElement
 TitleBarElement.Set(Action<TitleBar> configure) → TitleBarElement
 TitleBarElement.Subtitle(string subtitle) → TitleBarElement
 TitleBarElement.WithNavigation<TRoute>(NavigationHandle<TRoute> nav) → TitleBarElement

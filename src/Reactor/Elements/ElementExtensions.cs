@@ -895,6 +895,34 @@ public static partial class ElementExtensions
     public static TitleBarElement Subtitle(this TitleBarElement el, string subtitle) =>
         el with { Subtitle = subtitle };
 
+    /// <summary>Shows or hides the back button on the title bar.</summary>
+    public static TitleBarElement BackButtonVisible(this TitleBarElement el, bool visible) =>
+        el with { IsBackButtonVisible = visible };
+
+    /// <summary>Enables or disables the back button (when visible).</summary>
+    public static TitleBarElement BackButtonEnabled(this TitleBarElement el, bool enabled) =>
+        el with { IsBackButtonEnabled = enabled };
+
+    /// <summary>Shows or hides the pane toggle (hamburger) button on the title bar.</summary>
+    public static TitleBarElement PaneToggleButtonVisible(this TitleBarElement el, bool visible) =>
+        el with { IsPaneToggleButtonVisible = visible };
+
+    /// <summary>Sets the centered content slot of the title bar (typically a search box).</summary>
+    public static TitleBarElement Content(this TitleBarElement el, Element content) =>
+        el with { Content = content };
+
+    /// <summary>Sets the trailing-edge content slot (typically a profile / settings element).</summary>
+    public static TitleBarElement RightHeader(this TitleBarElement el, Element rightHeader) =>
+        el with { RightHeader = rightHeader };
+
+    /// <summary>Sets the icon shown in the leading slot. Pass a <see cref="SymbolIconData"/>, <see cref="FontIconData"/>, <see cref="ImageIconData"/>, or <see cref="BitmapIconData"/>.</summary>
+    public static TitleBarElement Icon(this TitleBarElement el, IconData icon) =>
+        el with { Icon = icon };
+
+    /// <summary>Convenience overload — sets the icon to a bundled image / .ico via a Uri string (e.g. <c>"ms-appx:///Assets/AppIcon.ico"</c>).</summary>
+    public static TitleBarElement Icon(this TitleBarElement el, string imageUri) =>
+        el with { Icon = new ImageIconData(new Uri(imageUri)) };
+
     /// <summary>
     /// Auto-syncs this TitleBar's back button with a NavigationHandle: sets
     /// <c>IsBackButtonVisible</c> and <c>IsBackButtonEnabled</c> from <c>CanGoBack</c>,

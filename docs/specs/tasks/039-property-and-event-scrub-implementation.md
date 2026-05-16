@@ -393,7 +393,7 @@ etc. Property names are unchanged.
 
 ### 4.6 `TitleBar`
 
-- [ ] `.BackButtonVisible(bool)`, `.BackButtonEnabled(bool)`,
+- [x] `.BackButtonVisible(bool)`, `.BackButtonEnabled(bool)`,
       `.PaneToggleButtonVisible(bool)`, `.Content(Element)`,
       `.RightHeader(Element)`, `.Icon(IconSource | string)`
       (spec §7.3).

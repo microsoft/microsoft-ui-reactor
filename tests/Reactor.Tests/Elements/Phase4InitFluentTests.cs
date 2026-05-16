@@ -284,4 +284,59 @@ public class Phase4InitFluentTests
         var el = EmptyNav().ExpandedModeThresholdWidth(1200);
         Assert.Equal(1200, el.ExpandedModeThresholdWidth);
     }
+
+    // ── 4.6 TitleBar ──────────────────────────────────────────────────
+
+    [Fact]
+    public void TitleBar_BackButtonVisible_Sets()
+    {
+        var el = TitleBar("App").BackButtonVisible(true);
+        Assert.True(el.IsBackButtonVisible);
+    }
+
+    [Fact]
+    public void TitleBar_BackButtonEnabled_Sets()
+    {
+        var el = TitleBar("App").BackButtonEnabled(true);
+        Assert.True(el.IsBackButtonEnabled);
+    }
+
+    [Fact]
+    public void TitleBar_PaneToggleButtonVisible_Sets()
+    {
+        var el = TitleBar("App").PaneToggleButtonVisible(true);
+        Assert.True(el.IsPaneToggleButtonVisible);
+    }
+
+    [Fact]
+    public void TitleBar_Content_Sets()
+    {
+        var content = TextBlock("Search");
+        var el = TitleBar("App").Content(content);
+        Assert.Same(content, el.Content);
+    }
+
+    [Fact]
+    public void TitleBar_RightHeader_Sets()
+    {
+        var header = TextBlock("Profile");
+        var el = TitleBar("App").RightHeader(header);
+        Assert.Same(header, el.RightHeader);
+    }
+
+    [Fact]
+    public void TitleBar_Icon_IconData_Sets()
+    {
+        var icon = new SymbolIconData("Home");
+        var el = TitleBar("App").Icon(icon);
+        Assert.Same(icon, el.Icon);
+    }
+
+    [Fact]
+    public void TitleBar_Icon_UriString_Sets()
+    {
+        var el = TitleBar("App").Icon("ms-appx:///Assets/Logo.ico");
+        var icon = Assert.IsType<ImageIconData>(el.Icon);
+        Assert.Equal(new Uri("ms-appx:///Assets/Logo.ico"), icon.Source);
+    }
 }
