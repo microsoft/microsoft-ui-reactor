@@ -29,6 +29,26 @@ Read the file **once**, scan for what you need, then keep working from memory. *
 
 If you only need to confirm whether a single name exists, use a `grep` for the symbol against the file rather than viewing it whole.
 
+## Fluent naming convention (callbacks)
+
+Callback properties are named `OnX` on the record (e.g. `OnClick`, `OnChanged`,
+`OnSelectedTagChanged`). The matching fluent extension drops the leading `On`
+and is named after the event:
+
+```csharp
+// Record property is OnClick — the fluent is .Click(...)
+Button("Save").Click(_ => Save());
+
+// Record property is OnSelectedTagChanged — the fluent is .SelectedTagChanged(...)
+NavigationView(...).SelectedTagChanged(tag => Navigate(tag));
+```
+
+This is intentional — C# doesn't allow an extension method to share a name
+with an instance property, so the `On` prefix lives on the property and the
+event-style name lives on the fluent. The two surfaces are equivalent;
+prefer the fluent for new code. Passing `null` to any `OnX` fluent clears
+the handler.
+
 ## Common naming gotchas
 
 - **`FlexElement` record properties** (set via `with { ... }`):
