@@ -2833,6 +2833,7 @@ public record PopupElement(Element Child) : Element
     public bool IsLightDismissEnabled { get; init; } = true;
     public double HorizontalOffset { get; init; }
     public double VerticalOffset { get; init; }
+    public Action? OnOpened { get; init; }
     public Action? OnClosed { get; init; }
     internal Action<WinPrim.Popup>[] Setters { get; init; } = [];
 }

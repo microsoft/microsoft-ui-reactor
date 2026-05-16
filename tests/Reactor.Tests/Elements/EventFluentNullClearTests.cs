@@ -286,6 +286,15 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
+    public void Popup_Opened_NullClears()
+    {
+        Action h = () => { };
+        var el = Popup(TextBlock("x")).Opened(h);
+        Assert.Same(h, el.OnOpened);
+        Assert.Null(el.Opened(null).OnOpened);
+    }
+
+    [Fact]
     public void TimePicker_TimeChanged_NullClears()
     {
         Action<TimeSpan> h = _ => { };

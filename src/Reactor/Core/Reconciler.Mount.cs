@@ -2897,6 +2897,7 @@ public sealed partial class Reconciler
         var child = Mount(popup.Child, requestRerender);
         p.Child = child as UIElement;
         SetElementTag(wrapper, popup);
+        p.Opened += (s, _) => (GetElementTag(wrapper) as PopupElement)?.OnOpened?.Invoke();
         p.Closed += (s, _) => (GetElementTag(wrapper) as PopupElement)?.OnClosed?.Invoke();
         ApplySetters(popup.Setters, p);
         wrapper.Children.Add(p);

@@ -311,6 +311,10 @@ public static partial class ElementExtensions
     public static TeachingTipElement Closed(this TeachingTipElement el, Action? handler) =>
         el with { OnClosed = handler };
 
+    /// <summary>Wires the opened handler. Passing <c>null</c> clears.</summary>
+    public static PopupElement Opened(this PopupElement el, Action? handler) =>
+        el with { OnOpened = handler };
+
     /// <summary>Wires the closed handler. Passing <c>null</c> clears.</summary>
     public static PopupElement Closed(this PopupElement el, Action? handler) =>
         el with { OnClosed = handler };

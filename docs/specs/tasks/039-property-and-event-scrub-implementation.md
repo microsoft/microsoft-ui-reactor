@@ -308,7 +308,10 @@ etc. Property names are unchanged.
 
 ### 3.4 `Popup.Opened`
 
-- [ ] Add `OnOpened` to `PopupElement`; already has `OnClosed`. Fluent + test.
+- [x] Add `OnOpened` to `PopupElement`; already has `OnClosed`. Fluent
+      `.Opened(handler)` + null-clear test. Trampoline reads live
+      element via the wrapper StackPanel's tag, matching the existing
+      `OnClosed` pattern.
 
 ### 3.5 `WebView2.WebMessageReceived` / `CoreWebView2Initialized`
 
