@@ -973,18 +973,39 @@ cross-cutting test surface.
 
 ### 12.1 Build & analyzer clean
 
-- [ ] `dotnet build Reactor.slnx -warnaserror` clean on a fresh clone.
-- [ ] `REACTOR_A11Y_001..003` clean across all touched files.
-- [ ] `CS1591` clean — every new public surface has XML doc comments.
+- [x] `dotnet build Reactor.slnx -warnaserror` clean on a fresh clone.
+      (Verified after rebase onto `origin/main` — picks up the
+      "make solution warning-free" upstream fix (#311) which cleared a
+      pre-existing `NU1903` Nerdbank.MessagePack vulnerability warning
+      that was independent of the 039 surface.)
+- [x] `REACTOR_A11Y_001..003` clean across all touched files. (Implied by
+      `-warnaserror` clean — the analyzers run during build.)
+- [x] `CS1591` clean — every new public surface has XML doc comments.
+      (Implied by `-warnaserror` clean.)
 
 ### 12.2 Perf neutrality
 
-- [ ] Run `tests/startup_perf/` baseline; assert no regression vs main
-      beyond the existing noise floor. The change is API-additive so this
-      should be a no-op; record the result regardless.
-- [ ] Run `tests/stress_perf/` once (foregrounded — per the memory
+- [x] Run `tests/startup_perf/` baseline; assert no regression vs main
+      beyond the existing noise floor.
+      **Result (5-run median, ARM64 Release, foregrounded, AC):**
+      Reactor TTFP 238.1 ms / TTI 244.0 ms / PeakWS 118.1 MB.
+      Calibrated pre-039 baseline (same machine, May 6): TTFP 230.2 ms /
+      TTI 234.6 ms / PeakWS 113.1 MB. ~3% absolute drift, well within the
+      run-to-run noise floor (WinUI3 baseline moved 178 → 147 ms TTFP in
+      the *opposite* direction over the same window, confirming
+      system-level variance dominates). Output:
+      `tests/startup_perf/out_039_after/`.
+- [x] Run `tests/stress_perf/` once (foregrounded — per the memory
       [[reference_stress_perf_window_throttling]] — and on AC power per
       [[reference_stress_perf_drr_battery]]) to confirm no regression.
+      **Result (Reactor + ReactorOptimized @ 50% / 100%, ARM64 Release,
+      foregrounded, AC, `-SkipETW`):** Reactor reconcile times are
+      essentially identical to the May-10 baseline (Reactor 50%: 46.3 ms
+      → 46.7 ms; Reactor 100%: 56.9 ms → 56.8 ms). The ~9% FPS delta
+      tracks framework-overhead noise outside Reactor's hot path —
+      consistent with the API-additive nature of 039 (no reconciler /
+      diff / mount-path code touched). Output:
+      `tests/stress_perf/baselines/full-matrix-2026-05-16-071025/`.
 
 ### 12.3 PR description checklist
 
