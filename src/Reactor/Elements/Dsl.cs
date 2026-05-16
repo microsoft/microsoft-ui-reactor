@@ -208,6 +208,17 @@ public static partial class Factories
 
     // ── Input controls ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Creates a <see cref="TextFieldElement"/> — the Reactor name for WinUI's
+    /// <c>Microsoft.UI.Xaml.Controls.TextBox</c>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor uses <c>TextField</c> (HTML / iOS / Android / SwiftUI vocabulary)
+    /// rather than WinUI's legacy WinForms-era <c>TextBox</c>. The deviation
+    /// is deliberate — see spec 039 §3.1 / §16 for the impact analysis and
+    /// §16.5 for the decision (keep as-is). The reconciler still maps this to
+    /// a real WinUI <c>TextBox</c> internally. (spec 039 §3.1 / §16)
+    /// </remarks>
     public static TextFieldElement TextField(string value, Action<string>? onChanged = null, string? placeholder = null, string? header = null) =>
         new(value, onChanged, placeholder) { Header = header };
 

@@ -45,8 +45,17 @@ public sealed record MaskedTextFieldElement(
 public static class MaskedTextFieldDsl
 {
     /// <summary>
-    /// Creates a masked text field element.
+    /// Creates a <see cref="MaskedTextFieldElement"/> — a Reactor-original
+    /// masked input control (cf. WinForms <c>MaskedTextBox</c>; WinUI ships
+    /// no first-party equivalent).
     /// </summary>
+    /// <remarks>
+    /// Named for parity with the sibling <c>TextField</c> rather than
+    /// <c>MaskedTextBox</c>; the deviation is deliberate and matches the
+    /// <c>TextField</c> naming choice (see spec 039 §13 / §16.3). If
+    /// <c>TextField</c> is ever renamed to <c>TextBox</c>, this is bundled
+    /// in the same change.
+    /// </remarks>
     public static MaskedTextFieldElement MaskedTextField(
         string value,
         Action<string>? onChanged = null,

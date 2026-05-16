@@ -558,10 +558,10 @@ existing init properties.
 
 ### 6.4 `TextField` rename — NOT in scope
 
-- [ ] Confirm spec §16.5 decision (don't rename) is reflected in code by
+- [x] Confirm spec §16.5 decision (don't rename) is reflected in code by
       adding a one-line XML doc on the `TextField` factory pointing readers
       to §3.1 / §16 in the spec for naming rationale.
-- [ ] Same for `MaskedTextField` (spec §13 / §16.3).
+- [x] Same for `MaskedTextField` (spec §13 / §16.3).
 
 ### 6.5 `ScrollView` vs `ScrollViewer` (spec §6 naming notes)
 
