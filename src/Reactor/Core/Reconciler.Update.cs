@@ -398,6 +398,10 @@ public sealed partial class Reconciler
         if (n.TextTrimming.HasValue && tb.TextTrimming != n.TextTrimming.Value) tb.TextTrimming = n.TextTrimming.Value;
         if (n.IsTextSelectionEnabled.HasValue && tb.IsTextSelectionEnabled != n.IsTextSelectionEnabled.Value) tb.IsTextSelectionEnabled = n.IsTextSelectionEnabled.Value;
         if (n.FontFamily is not null && tb.FontFamily != n.FontFamily) tb.FontFamily = n.FontFamily;
+        if (n.LineHeight.HasValue && tb.LineHeight != n.LineHeight.Value) tb.LineHeight = n.LineHeight.Value;
+        if (tb.MaxLines != n.MaxLines) tb.MaxLines = n.MaxLines;
+        if (tb.CharacterSpacing != n.CharacterSpacing) tb.CharacterSpacing = n.CharacterSpacing;
+        if (tb.TextDecorations != n.TextDecorations) tb.TextDecorations = n.TextDecorations;
         ApplySetters(n.Setters, tb);
         return null;
     }
@@ -422,6 +426,10 @@ public sealed partial class Reconciler
         if ((diff & TextPropChanged.TextTrimming) != 0 && n.TextTrimming.HasValue) tb.TextTrimming = n.TextTrimming.Value;
         if ((diff & TextPropChanged.IsTextSelectionEnabled) != 0 && n.IsTextSelectionEnabled.HasValue) tb.IsTextSelectionEnabled = n.IsTextSelectionEnabled.Value;
         if ((diff & TextPropChanged.FontFamily) != 0 && n.FontFamily is not null) tb.FontFamily = n.FontFamily;
+        if ((diff & TextPropChanged.LineHeight) != 0 && n.LineHeight.HasValue) tb.LineHeight = n.LineHeight.Value;
+        if ((diff & TextPropChanged.MaxLines) != 0) tb.MaxLines = n.MaxLines;
+        if ((diff & TextPropChanged.CharacterSpacing) != 0) tb.CharacterSpacing = n.CharacterSpacing;
+        if ((diff & TextPropChanged.TextDecorations) != 0) tb.TextDecorations = n.TextDecorations;
         if ((diff & TextPropChanged.Setters) != 0) ApplySetters(n.Setters, tb);
         return null;
     }
@@ -430,6 +438,12 @@ public sealed partial class Reconciler
     {
         rtb.IsTextSelectionEnabled = n.IsTextSelectionEnabled;
         if (n.FontSize.HasValue) rtb.FontSize = n.FontSize.Value;
+        if (n.TextWrapping.HasValue && rtb.TextWrapping != n.TextWrapping.Value) rtb.TextWrapping = n.TextWrapping.Value;
+        if (rtb.MaxLines != n.MaxLines) rtb.MaxLines = n.MaxLines;
+        if (n.LineHeight.HasValue && rtb.LineHeight != n.LineHeight.Value) rtb.LineHeight = n.LineHeight.Value;
+        if (n.TextAlignment.HasValue && rtb.TextAlignment != n.TextAlignment.Value) rtb.TextAlignment = n.TextAlignment.Value;
+        if (n.TextTrimming.HasValue && rtb.TextTrimming != n.TextTrimming.Value) rtb.TextTrimming = n.TextTrimming.Value;
+        if (rtb.CharacterSpacing != n.CharacterSpacing) rtb.CharacterSpacing = n.CharacterSpacing;
 
         var oldParas = o.Paragraphs;
         var newParas = n.Paragraphs;
@@ -1197,6 +1211,13 @@ public sealed partial class Reconciler
         reb.IsReadOnly = n.IsReadOnly;
         if (n.Header is not null) reb.Header = n.Header;
         if (n.PlaceholderText is not null) reb.PlaceholderText = n.PlaceholderText;
+        if (n.IsSpellCheckEnabled.HasValue && reb.IsSpellCheckEnabled != n.IsSpellCheckEnabled.Value)
+            reb.IsSpellCheckEnabled = n.IsSpellCheckEnabled.Value;
+        if (reb.MaxLength != n.MaxLength) reb.MaxLength = n.MaxLength;
+        if (reb.TextWrapping != n.TextWrapping) reb.TextWrapping = n.TextWrapping;
+        if (reb.AcceptsReturn != n.AcceptsReturn) reb.AcceptsReturn = n.AcceptsReturn;
+        if (n.SelectionHighlightColor is not null && !ReferenceEquals(reb.SelectionHighlightColor, n.SelectionHighlightColor))
+            reb.SelectionHighlightColor = n.SelectionHighlightColor;
         SetElementTag(reb, n);
         if (o.OnTextChanged is null && n.OnTextChanged is not null)
             reb.TextChanged += (s, _) =>

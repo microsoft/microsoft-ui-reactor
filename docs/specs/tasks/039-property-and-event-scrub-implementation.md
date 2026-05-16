@@ -424,11 +424,11 @@ existing init properties.
 
 ### 5.1 Text family
 
-- [ ] `TextBlockElement`: `LineHeight`, `MaxLines`, `CharacterSpacing`,
+- [x] `TextBlockElement`: `LineHeight`, `MaxLines`, `CharacterSpacing`,
       `TextDecorations` as init properties + fluents (spec §1.1).
-- [ ] `RichTextBlockElement`: `MaxLines`, `LineHeight`, `TextAlignment`,
+- [x] `RichTextBlockElement`: `MaxLines`, `LineHeight`, `TextAlignment`,
       `TextTrimming`, `CharacterSpacing` (spec §1.3).
-- [ ] `RichEditBoxElement`: `IsSpellCheckEnabled`, `MaxLength`,
+- [x] `RichEditBoxElement`: `IsSpellCheckEnabled`, `MaxLength`,
       `TextWrapping`, `AcceptsReturn`, `SelectionHighlightColor` init
       + fluents (spec §1.4).
 

@@ -359,9 +359,19 @@ RepeatButtonElement.Click(Action handler) → RepeatButtonElement
 RepeatButtonElement.Delay(int delay) → RepeatButtonElement
 RepeatButtonElement.Interval(int interval) → RepeatButtonElement
 RepeatButtonElement.Set(Action<RepeatButton> configure) → RepeatButtonElement
+RichEditBoxElement.AcceptsReturn(bool accepts = true) → RichEditBoxElement
+RichEditBoxElement.IsSpellCheckEnabled(bool enabled = true) → RichEditBoxElement
+RichEditBoxElement.MaxLength(int maxLength) → RichEditBoxElement
+RichEditBoxElement.SelectionHighlightColor(SolidColorBrush brush) → RichEditBoxElement
 RichEditBoxElement.Set(Action<RichEditBox> configure) → RichEditBoxElement
 RichEditBoxElement.TextChanged(Action<string> handler) → RichEditBoxElement
+RichEditBoxElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → RichEditBoxElement
+RichTextBlockElement.CharacterSpacing(int spacing) → RichTextBlockElement
+RichTextBlockElement.LineHeight(double height) → RichTextBlockElement
+RichTextBlockElement.MaxLines(int maxLines) → RichTextBlockElement
 RichTextBlockElement.Set(Action<RichTextBlock> configure) → RichTextBlockElement
+RichTextBlockElement.TextAlignment(TextAlignment alignment) → RichTextBlockElement
+RichTextBlockElement.TextTrimming(TextTrimming trimming) → RichTextBlockElement
 ScrollViewElement.HorizontalScrollMode(ScrollMode mode) → ScrollViewElement
 ScrollViewElement.Set(Action<ScrollViewer> configure) → ScrollViewElement
 ScrollViewElement.VerticalScrollMode(ScrollMode mode) → ScrollViewElement
@@ -566,14 +576,18 @@ TemplatedListViewElement<T>.ItemClick<T>(Action<T> handler) → TemplatedListVie
 TemplatedListViewElement<T>.SelectedIndexChanged<T>(Action<int> handler) → TemplatedListViewElement<T>
 TemplatedListViewElement<T>.Set<T>(Action<ListView> configure) → TemplatedListViewElement<T>
 TextBlockElement.Bold() → TextBlockElement
+TextBlockElement.CharacterSpacing(int spacing) → TextBlockElement
 TextBlockElement.FontFamily(FontFamily family) → TextBlockElement
 TextBlockElement.FontFamily(string family) → TextBlockElement
 TextBlockElement.FontSize(double size) → TextBlockElement
 TextBlockElement.FontStyle(FontStyle style) → TextBlockElement
+TextBlockElement.LineHeight(double height) → TextBlockElement
+TextBlockElement.MaxLines(int maxLines) → TextBlockElement
 TextBlockElement.Selectable(bool selectable = true) → TextBlockElement
 TextBlockElement.SemiBold() → TextBlockElement
 TextBlockElement.Set(Action<TextBlock> configure) → TextBlockElement
 TextBlockElement.TextAlignment(TextAlignment alignment) → TextBlockElement
+TextBlockElement.TextDecorations(TextDecorations decorations) → TextBlockElement
 TextBlockElement.TextTrimming(TextTrimming trimming) → TextBlockElement
 TextBlockElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextBlockElement
 TextFieldElement.AcceptsReturn(bool accepts = true) → TextFieldElement

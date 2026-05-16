@@ -256,6 +256,10 @@ public sealed partial class Reconciler
         if (text.TextTrimming.HasValue) tb.TextTrimming = text.TextTrimming.Value;
         if (text.IsTextSelectionEnabled.HasValue) tb.IsTextSelectionEnabled = text.IsTextSelectionEnabled.Value;
         if (text.FontFamily is not null) tb.FontFamily = text.FontFamily;
+        if (text.LineHeight.HasValue) tb.LineHeight = text.LineHeight.Value;
+        if (text.MaxLines > 0) tb.MaxLines = text.MaxLines;
+        if (text.CharacterSpacing != 0) tb.CharacterSpacing = text.CharacterSpacing;
+        if (text.TextDecorations != global::Windows.UI.Text.TextDecorations.None) tb.TextDecorations = text.TextDecorations;
         ApplySetters(text.Setters, tb);
         return tb;
     }
@@ -306,6 +310,11 @@ public sealed partial class Reconciler
             rtb.Blocks.Add(paragraph);
         }
         if (richText.FontSize.HasValue) rtb.FontSize = richText.FontSize.Value;
+        if (richText.MaxLines > 0) rtb.MaxLines = richText.MaxLines;
+        if (richText.LineHeight.HasValue) rtb.LineHeight = richText.LineHeight.Value;
+        if (richText.TextAlignment.HasValue) rtb.TextAlignment = richText.TextAlignment.Value;
+        if (richText.TextTrimming.HasValue) rtb.TextTrimming = richText.TextTrimming.Value;
+        if (richText.CharacterSpacing != 0) rtb.CharacterSpacing = richText.CharacterSpacing;
         ApplySetters(richText.Setters, rtb);
         return rtb;
     }
@@ -961,9 +970,17 @@ public sealed partial class Reconciler
 
     private WinUI.RichEditBox MountRichEditBox(RichEditBoxElement reb)
     {
-        var box = new WinUI.RichEditBox { IsReadOnly = reb.IsReadOnly };
+        var box = new WinUI.RichEditBox
+        {
+            IsReadOnly = reb.IsReadOnly,
+            TextWrapping = reb.TextWrapping,
+            AcceptsReturn = reb.AcceptsReturn,
+        };
         if (reb.Header is not null) box.Header = reb.Header;
         if (reb.PlaceholderText is not null) box.PlaceholderText = reb.PlaceholderText;
+        if (reb.IsSpellCheckEnabled.HasValue) box.IsSpellCheckEnabled = reb.IsSpellCheckEnabled.Value;
+        if (reb.MaxLength != 0) box.MaxLength = reb.MaxLength;
+        if (reb.SelectionHighlightColor is not null) box.SelectionHighlightColor = reb.SelectionHighlightColor;
         if (!string.IsNullOrEmpty(reb.Text))
             box.Document.SetText(Microsoft.UI.Text.TextSetOptions.None, reb.Text);
         SetElementTag(box, reb);

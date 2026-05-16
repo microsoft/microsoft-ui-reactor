@@ -1651,6 +1651,14 @@ public record TextBlockElement(string Content) : Element
     public TextTrimming? TextTrimming { get; init; }
     public bool? IsTextSelectionEnabled { get; init; }
     public Microsoft.UI.Xaml.Media.FontFamily? FontFamily { get; init; }
+    /// <summary>Line height in pixels. <c>null</c> uses the WinUI default (proportional to FontSize).</summary>
+    public double? LineHeight { get; init; }
+    /// <summary>Maximum number of lines to render before truncating per <see cref="TextTrimming"/>. <c>0</c> (default) = no limit.</summary>
+    public int MaxLines { get; init; }
+    /// <summary>Extra spacing between characters, in units of 1/1000em. Defaults to <c>0</c> (no extra spacing).</summary>
+    public int CharacterSpacing { get; init; }
+    /// <summary>Bitmask of underline / strikethrough decorations. Default <c>None</c>.</summary>
+    public global::Windows.UI.Text.TextDecorations TextDecorations { get; init; } = global::Windows.UI.Text.TextDecorations.None;
     internal Action<WinUI.TextBlock>[] Setters { get; init; } = [];
 
     /// <summary>
@@ -1670,6 +1678,10 @@ public record TextBlockElement(string Content) : Element
         if (old.TextTrimming != cur.TextTrimming) diff |= TextPropChanged.TextTrimming;
         if (old.IsTextSelectionEnabled != cur.IsTextSelectionEnabled) diff |= TextPropChanged.IsTextSelectionEnabled;
         if (old.FontFamily != cur.FontFamily) diff |= TextPropChanged.FontFamily;
+        if (old.LineHeight != cur.LineHeight) diff |= TextPropChanged.LineHeight;
+        if (old.MaxLines != cur.MaxLines) diff |= TextPropChanged.MaxLines;
+        if (old.CharacterSpacing != cur.CharacterSpacing) diff |= TextPropChanged.CharacterSpacing;
+        if (old.TextDecorations != cur.TextDecorations) diff |= TextPropChanged.TextDecorations;
         if (old.Setters.Length != cur.Setters.Length) diff |= TextPropChanged.Setters;
         else if (cur.Setters.Length > 0) diff |= TextPropChanged.Setters; // can't compare delegates
         return diff;
@@ -1691,6 +1703,10 @@ internal enum TextPropChanged : ushort
     IsTextSelectionEnabled = 1 << 8,
     FontFamily          = 1 << 9,
     Setters             = 1 << 10,
+    LineHeight          = 1 << 11,
+    MaxLines            = 1 << 12,
+    CharacterSpacing    = 1 << 13,
+    TextDecorations     = 1 << 14,
 }
 
 public record RichTextBlockElement(string Text) : Element
@@ -1699,6 +1715,16 @@ public record RichTextBlockElement(string Text) : Element
     public RichTextParagraph[]? Paragraphs { get; init; }
     public bool IsTextSelectionEnabled { get; init; }
     public TextWrapping? TextWrapping { get; init; }
+    /// <summary>Maximum number of lines before trimming per <see cref="TextTrimming"/>. <c>0</c> (default) = no limit.</summary>
+    public int MaxLines { get; init; }
+    /// <summary>Line height in pixels. <c>null</c> uses the WinUI default (proportional to FontSize).</summary>
+    public double? LineHeight { get; init; }
+    /// <summary>Horizontal alignment of text within the block. <c>null</c> uses the WinUI default (Left).</summary>
+    public TextAlignment? TextAlignment { get; init; }
+    /// <summary>How overflowing text is truncated. <c>null</c> uses the WinUI default (None).</summary>
+    public TextTrimming? TextTrimming { get; init; }
+    /// <summary>Extra spacing between characters, in units of 1/1000em. Defaults to <c>0</c>.</summary>
+    public int CharacterSpacing { get; init; }
     internal Action<WinUI.RichTextBlock>[] Setters { get; init; } = [];
 }
 
@@ -2106,6 +2132,16 @@ public record RichEditBoxElement(
     public string? Header { get; init; }
     public string? PlaceholderText { get; init; }
     public Action<string>? OnTextChanged { get; init; }
+    /// <summary>Whether built-in spell-check is enabled. Defaults to the WinUI default (true).</summary>
+    public bool? IsSpellCheckEnabled { get; init; }
+    /// <summary>Maximum number of characters allowed. <c>0</c> (default) = no limit.</summary>
+    public int MaxLength { get; init; }
+    /// <summary>How text wraps within the box. Defaults to <c>Wrap</c>.</summary>
+    public TextWrapping TextWrapping { get; init; } = TextWrapping.Wrap;
+    /// <summary>Whether Enter inserts a newline (vs committing). Defaults to <c>true</c>.</summary>
+    public bool AcceptsReturn { get; init; } = true;
+    /// <summary>Brush used to render the selection highlight. <c>null</c> = WinUI default (accent).</summary>
+    public Microsoft.UI.Xaml.Media.SolidColorBrush? SelectionHighlightColor { get; init; }
     internal Action<WinUI.RichEditBox>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnTextChanged is not null;
 }

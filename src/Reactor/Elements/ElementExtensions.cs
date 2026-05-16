@@ -558,6 +558,66 @@ public static partial class ElementExtensions
     public static TextBlockElement FontFamily(this TextBlockElement el, Microsoft.UI.Xaml.Media.FontFamily family) =>
         el with { FontFamily = family };
 
+    /// <summary>Sets the line height in pixels (overrides the proportional WinUI default).</summary>
+    public static TextBlockElement LineHeight(this TextBlockElement el, double height) =>
+        el with { LineHeight = height };
+
+    /// <summary>Maximum number of lines to render before truncating per <c>TextTrimming</c>. <c>0</c> = no limit.</summary>
+    public static TextBlockElement MaxLines(this TextBlockElement el, int maxLines) =>
+        el with { MaxLines = maxLines };
+
+    /// <summary>Extra spacing between characters, in units of 1/1000em.</summary>
+    public static TextBlockElement CharacterSpacing(this TextBlockElement el, int spacing) =>
+        el with { CharacterSpacing = spacing };
+
+    /// <summary>Underline / strikethrough decorations. Combine with bitwise OR.</summary>
+    public static TextBlockElement TextDecorations(this TextBlockElement el, global::Windows.UI.Text.TextDecorations decorations) =>
+        el with { TextDecorations = decorations };
+
+    // ── RichTextBlock sugar ────────────────────────────────────────────
+
+    /// <summary>Maximum number of lines before trimming. <c>0</c> = no limit.</summary>
+    public static RichTextBlockElement MaxLines(this RichTextBlockElement el, int maxLines) =>
+        el with { MaxLines = maxLines };
+
+    /// <summary>Line height in pixels (overrides the WinUI proportional default).</summary>
+    public static RichTextBlockElement LineHeight(this RichTextBlockElement el, double height) =>
+        el with { LineHeight = height };
+
+    /// <summary>Horizontal alignment of text within the block.</summary>
+    public static RichTextBlockElement TextAlignment(this RichTextBlockElement el, TextAlignment alignment) =>
+        el with { TextAlignment = alignment };
+
+    /// <summary>How overflowing text is truncated.</summary>
+    public static RichTextBlockElement TextTrimming(this RichTextBlockElement el, TextTrimming trimming) =>
+        el with { TextTrimming = trimming };
+
+    /// <summary>Extra spacing between characters, in units of 1/1000em.</summary>
+    public static RichTextBlockElement CharacterSpacing(this RichTextBlockElement el, int spacing) =>
+        el with { CharacterSpacing = spacing };
+
+    // ── RichEditBox sugar ───────────────────────────────────────────────
+
+    /// <summary>Enable or disable built-in spell-check.</summary>
+    public static RichEditBoxElement IsSpellCheckEnabled(this RichEditBoxElement el, bool enabled = true) =>
+        el with { IsSpellCheckEnabled = enabled };
+
+    /// <summary>Maximum number of characters allowed. <c>0</c> = no limit.</summary>
+    public static RichEditBoxElement MaxLength(this RichEditBoxElement el, int maxLength) =>
+        el with { MaxLength = maxLength };
+
+    /// <summary>How text wraps within the editor.</summary>
+    public static RichEditBoxElement TextWrapping(this RichEditBoxElement el, TextWrapping wrapping = Microsoft.UI.Xaml.TextWrapping.Wrap) =>
+        el with { TextWrapping = wrapping };
+
+    /// <summary>Whether Enter inserts a newline (vs committing input).</summary>
+    public static RichEditBoxElement AcceptsReturn(this RichEditBoxElement el, bool accepts = true) =>
+        el with { AcceptsReturn = accepts };
+
+    /// <summary>Brush used to render the selection highlight.</summary>
+    public static RichEditBoxElement SelectionHighlightColor(this RichEditBoxElement el, Microsoft.UI.Xaml.Media.SolidColorBrush brush) =>
+        el with { SelectionHighlightColor = brush };
+
     // ── TextField sugar ────────────────────────────────────────────────
 
     public static TextFieldElement ReadOnly(this TextFieldElement el, bool readOnly = true) =>
