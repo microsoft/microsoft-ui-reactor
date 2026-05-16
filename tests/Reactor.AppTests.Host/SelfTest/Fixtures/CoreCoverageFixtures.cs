@@ -60,7 +60,7 @@ internal static class CoreCoverageFixtures
                 };
                 return VStack(
                     Button("Next", () => set(phase + 1)),
-                    RichText(paragraphs)
+                    RichTextBlock(paragraphs)
                 );
             });
 
@@ -125,7 +125,7 @@ internal static class CoreCoverageFixtures
                 };
                 return VStack(
                     Button("Advance", () => set(phase + 1)),
-                    RichText(paragraphs)
+                    RichTextBlock(paragraphs)
                 );
             });
 

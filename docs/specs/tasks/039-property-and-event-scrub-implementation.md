@@ -531,12 +531,16 @@ existing init properties.
 
 ### 6.1 `RichText` → `RichTextBlock` (spec §14 #8)
 
-- [ ] Rename `RichText` factory + `RichTextBlockElement` references so
+- [x] Rename `RichText` factory + `RichTextBlockElement` references so
       factory + record + WinUI name align. Keep `RichText` as an
       `[Obsolete]` forwarding alias for one release per the §16.4 (B)
-      pattern.
-- [ ] Update the ~ten sample / doc / test call sites to the new name.
-- [ ] Add a CHANGELOG entry under the breaking-change-deferred section.
+      pattern. (Record was already `RichTextBlockElement`; rename was
+      factory-only: both `RichText(string)` and `RichText(RichTextParagraph[])`
+      now live as `RichTextBlock(...)` with thin `[Obsolete]` forwarders.)
+- [x] Update the ~ten sample / doc / test call sites to the new name.
+- [x] Add a CHANGELOG entry under the breaking-change-deferred section.
+      (Created new `### Breaking changes (deferred)` section under
+      `## [Unreleased]` in `CHANGELOG.md`.)
 
 ### 6.2 Document Reactor-original wrappers (spec §0.3)
 
@@ -831,7 +835,7 @@ that maps to the spec's §14 ordering:
       (Phase 4.8).
 - [x] §14 #6 — Type-ramp factories (Phase 2.6).
 - [ ] §14 #7 — Spec 040 scheduled for specialized controls (Phase 7.1).
-- [ ] §14 #8 — `RichText` → `RichTextBlock` rename (Phase 6.1).
+- [x] §14 #8 — `RichText` → `RichTextBlock` rename (Phase 6.1).
 - [x] §17 — Named-style fluents and `Card` factory (Phase 2).
 - [ ] Samples updated (Phase 8).
 - [ ] Docs updated (Phase 9).

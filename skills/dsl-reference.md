@@ -21,7 +21,7 @@ All factories live on `Microsoft.UI.Reactor.Factories` — use
 | `Heading(content)` | 28px bold | `string → TextBlockElement` |
 | `SubHeading(content)` | 20px semi-bold | `string → TextBlockElement` |
 | `Caption(content)` | 12px | `string → TextBlockElement` |
-| `RichText(text)` | Rich text block | `string → RichTextBlockElement` |
+| `RichTextBlock(text)` | Rich text block | `string → RichTextBlockElement` |
 
 **Implicit conversion:** `string` implicitly converts to `TextBlockElement`, so
 `VStack("Hello", "World")` works.
@@ -269,7 +269,7 @@ signatures.
 
 | Factory | Signature |
 |---------|-----------|
-| `RichText(paragraphs)` | `RichTextParagraph[]` |
+| `RichTextBlock(paragraphs)` | `RichTextParagraph[]` |
 | `Paragraph(inlines...)` | `params RichTextInline[]` |
 | `Run(text)` | `string` |
 | `Hyperlink(text, navigateUri)` | `(string, Uri)` |

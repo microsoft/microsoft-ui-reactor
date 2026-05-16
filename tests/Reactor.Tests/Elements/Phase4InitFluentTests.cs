@@ -434,35 +434,35 @@ public class Phase4InitFluentTests
     [Fact]
     public void RichTextBlock_MaxLines_Sets()
     {
-        var el = RichText("x").MaxLines(2);
+        var el = RichTextBlock("x").MaxLines(2);
         Assert.Equal(2, el.MaxLines);
     }
 
     [Fact]
     public void RichTextBlock_LineHeight_Sets()
     {
-        var el = RichText("x").LineHeight(20.0);
+        var el = RichTextBlock("x").LineHeight(20.0);
         Assert.Equal(20.0, el.LineHeight);
     }
 
     [Fact]
     public void RichTextBlock_TextAlignment_Sets()
     {
-        var el = RichText("x").TextAlignment(Microsoft.UI.Xaml.TextAlignment.Center);
+        var el = RichTextBlock("x").TextAlignment(Microsoft.UI.Xaml.TextAlignment.Center);
         Assert.Equal(Microsoft.UI.Xaml.TextAlignment.Center, el.TextAlignment);
     }
 
     [Fact]
     public void RichTextBlock_TextTrimming_Sets()
     {
-        var el = RichText("x").TextTrimming(Microsoft.UI.Xaml.TextTrimming.CharacterEllipsis);
+        var el = RichTextBlock("x").TextTrimming(Microsoft.UI.Xaml.TextTrimming.CharacterEllipsis);
         Assert.Equal(Microsoft.UI.Xaml.TextTrimming.CharacterEllipsis, el.TextTrimming);
     }
 
     [Fact]
     public void RichTextBlock_CharacterSpacing_Sets()
     {
-        var el = RichText("x").CharacterSpacing(75);
+        var el = RichTextBlock("x").CharacterSpacing(75);
         Assert.Equal(75, el.CharacterSpacing);
     }
 

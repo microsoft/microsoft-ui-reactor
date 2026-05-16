@@ -60,7 +60,25 @@ public static partial class Factories
     public static TextBlockElement Caption(string content) =>
         new(content) { FontSize = 12 };
 
-    public static RichTextBlockElement RichText(string text) => new(text);
+    /// <summary>
+    /// Creates a <see cref="RichTextBlockElement"/> wrapping a single string of
+    /// plain text. Use the <see cref="RichTextBlock(RichTextParagraph[])"/>
+    /// overload to compose runs, hyperlinks, and inline formatting.
+    /// </summary>
+    /// <remarks>
+    /// Named for parity with WinUI's <c>Microsoft.UI.Xaml.Controls.RichTextBlock</c>.
+    /// (spec 039 §1.3 / §14 #8)
+    /// </remarks>
+    public static RichTextBlockElement RichTextBlock(string text) => new(text);
+
+    /// <summary>
+    /// Deprecated forwarding alias for <see cref="RichTextBlock(string)"/>.
+    /// </summary>
+    [global::System.Obsolete(
+        "Renamed to RichTextBlock for parity with WinUI's Microsoft.UI.Xaml.Controls.RichTextBlock. " +
+        "RichText will be removed in the next minor release. (spec 039 §1.3 / §14 #8)",
+        error: false)]
+    public static RichTextBlockElement RichText(string text) => RichTextBlock(text);
 
     public static RichEditBoxElement RichEditBox(string text = "", Action<string>? onTextChanged = null) =>
         new(text) { OnTextChanged = onTextChanged };
@@ -844,8 +862,28 @@ public static partial class Factories
 
     // ── Rich text helpers ───────────────────────────────────────────
 
-    public static RichTextBlockElement RichText(RichTextParagraph[] paragraphs) =>
+    /// <summary>
+    /// Creates a <see cref="RichTextBlockElement"/> from an array of typed
+    /// paragraphs. Each paragraph contains a sequence of inline runs / hyperlinks
+    /// / line breaks built with <see cref="Paragraph(RichTextInline[])"/>,
+    /// <see cref="Run(string)"/>, and <see cref="Hyperlink(string, Uri)"/>.
+    /// </summary>
+    /// <remarks>
+    /// Named for parity with WinUI's <c>Microsoft.UI.Xaml.Controls.RichTextBlock</c>.
+    /// (spec 039 §1.3 / §14 #8)
+    /// </remarks>
+    public static RichTextBlockElement RichTextBlock(RichTextParagraph[] paragraphs) =>
         new("") { Paragraphs = paragraphs };
+
+    /// <summary>
+    /// Deprecated forwarding alias for <see cref="RichTextBlock(RichTextParagraph[])"/>.
+    /// </summary>
+    [global::System.Obsolete(
+        "Renamed to RichTextBlock for parity with WinUI's Microsoft.UI.Xaml.Controls.RichTextBlock. " +
+        "RichText will be removed in the next minor release. (spec 039 §1.3 / §14 #8)",
+        error: false)]
+    public static RichTextBlockElement RichText(RichTextParagraph[] paragraphs) =>
+        RichTextBlock(paragraphs);
 
     public static RichTextParagraph Paragraph(params RichTextInline[] inlines) => new(inlines);
 

@@ -229,7 +229,7 @@ public class ElementExtensionsAdditionalTests
     [Fact]
     public void Set_RichTextBlock_Appends_Setter()
     {
-        var el = RichText("sample")
+        var el = RichTextBlock("sample")
             .Set(rtb => rtb.IsTextSelectionEnabled = true);
         Assert.Single(el.Setters);
     }

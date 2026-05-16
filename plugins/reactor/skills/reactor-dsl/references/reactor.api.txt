@@ -138,8 +138,8 @@ RenderEachTime(Func<RenderContext, Element> render) → FuncElement
 RepeatButton(Command command) → RepeatButtonElement
 RepeatButton(string label, Action onClick = null) → RepeatButtonElement
 RichEditBox(string text = "", Action<string> onTextChanged = null) → RichEditBoxElement
-RichText(RichTextParagraph[] paragraphs) → RichTextBlockElement
-RichText(string text) → RichTextBlockElement
+RichTextBlock(RichTextParagraph[] paragraphs) → RichTextBlockElement
+RichTextBlock(string text) → RichTextBlockElement
 Run(string text) → RichTextRun
 ScrollView(Element child) → ScrollViewElement
 SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int> onSelectedIndexChanged = null) → SelectorBarElement

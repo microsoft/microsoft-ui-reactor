@@ -582,6 +582,30 @@ to land under these conventions; subsequent specs follow this shape.
   changes) or `RenderEachTime(ctx => …)` (always re-render). Slated for
   removal in the next minor release. (spec 033 §4)
 
+### Breaking changes (deferred)
+
+Naming-alignment renames that introduce an `[Obsolete]` forwarding alias today
+and remove the old name in the next minor release.
+
+- `Microsoft.UI.Reactor.Factories.RichText(string)` and
+  `RichText(RichTextParagraph[])` renamed to `RichTextBlock(...)` for parity
+  with WinUI's `Microsoft.UI.Xaml.Controls.RichTextBlock` (record was already
+  `RichTextBlockElement`). The old `RichText` factory is preserved as a
+  thin `[Obsolete]` forwarding alias for one release; slated for removal in
+  the next minor release. (spec 039 §1.3 / §14 #8)
+- `Microsoft.UI.Reactor.Factories.ScrollViewer(Element)` added as an
+  `[Obsolete]` alias for the existing `ScrollView(Element)` factory.
+  Reactor's `ScrollView` reconciles to WinUI's `Microsoft.UI.Xaml.Controls.ScrollViewer`;
+  WinUI 3 also ships a newer `Microsoft.UI.Xaml.Controls.ScrollView`. Keeping
+  Reactor's `ScrollView` name is consistent with the newer/preferred WinUI
+  type; the alias lets agents reaching for the WPF/WinUI-legacy `ScrollViewer`
+  name discover it. (spec 039 §6 / §16)
+- `Microsoft.UI.Reactor.Factories.ProgressBar(double)` and `ProgressBar()`
+  added as `[Obsolete]` aliases for the existing `Progress(double)` /
+  `ProgressIndeterminate()` factories. Reactor's `Progress` reconciles to
+  WinUI's `ProgressBar`; the alias lets agents reaching for the WinUI name
+  discover it. (spec 039 §5 / §16)
+
 ### Removed
 
 - `ReactorHost.MainDispatcherQueue` (internal static, first-host-wins

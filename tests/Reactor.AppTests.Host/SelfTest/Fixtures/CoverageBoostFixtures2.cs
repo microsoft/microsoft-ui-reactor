@@ -455,7 +455,7 @@ internal static class CoverageBoostFixtures2
                     _ => new[] { Paragraph(Run("Back to one")) },
                 };
                 return VStack(
-                    RichText(paragraphs),
+                    RichTextBlock(paragraphs),
                     Button("ChangeParas", () => set(phase + 1))
                 );
             });

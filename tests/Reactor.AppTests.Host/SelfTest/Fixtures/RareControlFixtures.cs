@@ -239,7 +239,7 @@ internal static class RareControlFixtures
                 var (phase, set) = ctx.UseState(0);
                 return VStack(
                     Button("UpdRTB", () => set(1)),
-                    RichText(phase == 0 ? "Rich text before" : "Rich text after updated")
+                    RichTextBlock(phase == 0 ? "Rich text before" : "Rich text after updated")
                 );
             });
 
