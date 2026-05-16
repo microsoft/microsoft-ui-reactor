@@ -274,8 +274,47 @@ public static partial class Factories
 
     // ── Progress ────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Creates a determinate <see cref="ProgressElement"/> at the given value.
+    /// </summary>
+    /// <remarks>
+    /// The element reconciles to a WinUI <c>ProgressBar</c>. The Reactor name
+    /// <c>Progress</c> is the short, intent-naming spelling — the WinUI name
+    /// includes the visual shape (<c>Bar</c>) the way agents reach for a
+    /// rendering primitive; Reactor calls it by what it does. The
+    /// <c>ProgressBar</c> alias is preserved for callers reaching for the
+    /// WinUI name. <see cref="ProgressRing(double)"/> is the circular variant.
+    /// (spec 039 §5 / §16)
+    /// </remarks>
     public static ProgressElement Progress(double value) => new(value);
+
+    /// <summary>
+    /// Creates an indeterminate <see cref="ProgressElement"/> (animated bar with
+    /// no value). The reconciler maps this to <c>ProgressBar.IsIndeterminate</c>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience for the indeterminate-bar case; see
+    /// <see cref="Progress(double)"/> for the naming rationale. (spec 039 §5 / §16)
+    /// </remarks>
     public static ProgressElement ProgressIndeterminate() => new(null);
+
+    /// <summary>
+    /// Deprecated forwarding alias for <see cref="Progress(double)"/>.
+    /// </summary>
+    [global::System.Obsolete(
+        "Use Progress(double) for parity with Reactor's intent-naming convention. " +
+        "ProgressBar(double) will be removed in the next minor release. (spec 039 §5 / §16)",
+        error: false)]
+    public static ProgressElement ProgressBar(double value) => Progress(value);
+
+    /// <summary>
+    /// Deprecated forwarding alias for <see cref="ProgressIndeterminate"/>.
+    /// </summary>
+    [global::System.Obsolete(
+        "Use ProgressIndeterminate() for parity with Reactor's intent-naming convention. " +
+        "ProgressBar() will be removed in the next minor release. (spec 039 §5 / §16)",
+        error: false)]
+    public static ProgressElement ProgressBar() => ProgressIndeterminate();
 
     public static ProgressRingElement ProgressRing() => new(null);
     public static ProgressRingElement ProgressRing(double value) => new(value);

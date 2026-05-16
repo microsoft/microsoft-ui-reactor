@@ -575,8 +575,12 @@ existing init properties.
 
 ### 6.6 `Progress` vs `ProgressBar` (spec §5)
 
-- [ ] Same as 6.5 — pick rename direction OR add an alias. Note: spec
-      describes the deviation as "minor" so an alias may be the right call.
+- [x] Decision: **keep `Progress` / `ProgressIndeterminate`, add
+      `[Obsolete]` `ProgressBar` / `ProgressBar()` aliases.** Reactor
+      names by intent (`Progress`) rather than by rendering shape
+      (`ProgressBar` includes the visual primitive in the name).
+      Aliases let WinUI muscle-memory callers discover the Reactor
+      spelling without breaking code.
 
 ---
 
