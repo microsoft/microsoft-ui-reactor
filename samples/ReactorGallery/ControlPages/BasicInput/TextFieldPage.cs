@@ -14,6 +14,9 @@ class TextFieldPage: Component
         var (text, setText) = UseState("");
         var (multiline, setMultiline) = UseState("");
         var (headerText, setHeaderText) = UseState("");
+        var (numericText, setNumericText) = UseState("");
+        var (emailText, setEmailText) = UseState("");
+        var (urlText, setUrlText) = UseState("");
 
         return ScrollView(VStack(16,
             PageHeader("TextField", "A single-line or multi-line plain text input field."),
@@ -40,6 +43,43 @@ TextField(multiline, v => setMultiline(v), ""Enter multiple lines..."")
                 TextField(headerText, v => setHeaderText(v), "user@example.com").Header("Email"),
                 sourceCode: @"
 TextField(headerText, v => setHeaderText(v), ""user@example.com"").Header(""Email"")
+"),
+
+            // Phase 8.1 — InputScope fluents (spec 039 §17.3) + .Description() (§5).
+            SampleCard("Numeric input — .NumericInput()",
+                TextField(numericText, v => setNumericText(v), "0")
+                    .Header("Quantity")
+                    .NumericInput()
+                    .Description("Soft keyboards show a number pad."),
+                sourceCode: @"
+TextField(numericText, v => setNumericText(v), ""0"")
+    .Header(""Quantity"")
+    .NumericInput()
+    .Description(""Soft keyboards show a number pad."")
+"),
+
+            SampleCard("Email input — .EmailInput()",
+                TextField(emailText, v => setEmailText(v), "name@contoso.com")
+                    .Header("Email address")
+                    .EmailInput()
+                    .Description("Hints the IME to surface '@' and '.com'."),
+                sourceCode: @"
+TextField(emailText, v => setEmailText(v), ""name@contoso.com"")
+    .Header(""Email address"")
+    .EmailInput()
+    .Description(""Hints the IME to surface '@' and '.com'."")
+"),
+
+            SampleCard("URL input — .UrlInput()",
+                TextField(urlText, v => setUrlText(v), "https://example.com")
+                    .Header("Homepage")
+                    .UrlInput()
+                    .Description("Hints the IME to surface '/' and '.com'."),
+                sourceCode: @"
+TextField(urlText, v => setUrlText(v), ""https://example.com"")
+    .Header(""Homepage"")
+    .UrlInput()
+    .Description(""Hints the IME to surface '/' and '.com'."")
 ")
         ).Margin(36, 24, 36, 36));
     }
