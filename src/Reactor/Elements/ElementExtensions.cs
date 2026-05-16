@@ -28,7 +28,7 @@ namespace Microsoft.UI.Reactor;
 ///   Button("Click", onClick)
 ///       .Set(b => b.FlowDirection = FlowDirection.RightToLeft)
 /// </summary>
-public static class ElementExtensions
+public static partial class ElementExtensions
 {
     // ════════════════════════════════════════════════════════════════
     //  Layout modifiers (stored inline on Element.Modifiers)
