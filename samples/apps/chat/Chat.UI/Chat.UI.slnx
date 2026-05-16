@@ -1,7 +1,0 @@
-<Solution>
-  <Project Path="Chat.UI.csproj" DefaultStartup="true" />
-  <Project Path="../Chat.Model/Chat.Model.csproj" />
-  <Project Path="../../../../src/Reactor/Reactor.csproj" />
-  <Project Path="../../../../src/Reactor.Localization.Generator/Reactor.Localization.Generator.csproj" />
-  <Project Path="../../../../src/Reactor.Analyzers/Reactor.Analyzers.csproj" />
-</Solution>
