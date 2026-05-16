@@ -193,9 +193,9 @@ etc. Property names are unchanged.
 
 - [x] `.TextLink()` on `HyperlinkButtonElement` and `ButtonElement` using
       `TextBlockButtonStyle`.
-- [ ] Sample: replace one inline `"Learn more"` `.ApplyStyle(...)` call in
+- [x] Sample: replace one inline `"Learn more"` `.ApplyStyle(...)` call in
       `samples/ReactorGallery/` with `.TextLink()` and confirm visual parity.
-      (Deferred to Phase 8.)
+      (Landed in Phase 8.1 — `Learn more` button on `BasicInput/ButtonPage`.)
 
 ### 2.3 `InputScope` fluents (§17.3)
 
@@ -285,10 +285,12 @@ etc. Property names are unchanged.
       the raw event via `.Set(...)`.
 - [x] Fluent extensions: `.Navigated(...)`, `.Navigating(...)`,
       `.NavigationFailed(...)`.
-- [ ] Sample exercising `Frame.Navigated` for a navigation log under
-      `samples/ReactorGallery/ControlPages/Navigation/`. **Deferred to
-      Phase 8.3** (sample requires XAML Page-derived types to navigate
-      to; better authored alongside the rest of the sample sweep).
+- [x] Sample exercising `Frame.Navigated` for a navigation log under
+      `samples/ReactorGallery/ControlPages/Navigation/`. (Landed in
+      Phase 8.3 — `FrameNavigationPage` + three trivial Page-derived
+      targets in `FrameSamplePages.cs`. All three fluents
+      `.Navigating` / `.Navigated` / `.NavigationFailed` are wired
+      into a 20-entry rolling log.)
 
 ### 3.3 `ScrollView.ViewChanged`
 
@@ -624,33 +626,48 @@ Samples document the new surface in-tree and double as smoke tests.
 
 ### 8.1 ReactorGallery — fluent showcases
 
-- [ ] In `samples/ReactorGallery/ControlPages/BasicInput/`, add a sample
-      page or update an existing one to use `Button("Save").OnClick(...)`
-      / `.AccentButton()` / `.SubtleButton()` / `.TextLink()`.
-- [ ] In `BasicInput/TextField`, demo `.NumericInput()`/`.EmailInput()`/
+- [x] In `samples/ReactorGallery/ControlPages/BasicInput/`, add a sample
+      page or update an existing one to use `Button("Save").Click(...)`
+      / `.AccentButton()` / `.SubtleButton()` / `.TextLink()`. (Phase 1
+      renamed the fluent to drop the leading `On` — `.Click`, not
+      `.OnClick`. The underlying property remains `OnClick`.)
+- [x] In `BasicInput/TextField`, demo `.NumericInput()`/`.EmailInput()`/
       `.UrlInput()` next to a `Description("...")` fluent.
-- [ ] In `StatusAndInfo/InfoBar`, demo all four severity fluents.
-- [ ] In `Text`, add a "Type ramp" page using `Title`/`Subtitle`/`Body`/
-      `BodyStrong`/`BodyLarge`.
-- [ ] In `Layout`, add a `Card(child)` example with three nested children
+- [x] In `StatusAndInfo/InfoBar`, demo all four severity fluents.
+- [x] In `Text`, add a "Type ramp" page using `Title`/`Subtitle`/`Body`/
+      `BodyStrong`/`BodyLarge`. (New page `Text/TypeRampPage.cs`
+      registered in `ControlRegistry` / `PageRouter`.)
+- [x] In `Layout`, add a `Card(child)` example with three nested children
       (icon, heading, body) so the theme-aware resolution is visible.
-- [ ] In `DateAndTime/CalendarView`, demo
-      `.OnSelectedDatesChanged(...)` + multi-select.
+      (New page `Layout/CardPage.cs` registered.)
+- [x] In `DateAndTime/CalendarView`, demo
+      `.SelectedDatesChanged(...)` + multi-select. (Fluent drops the
+      leading `On`; property remains `OnSelectedDatesChanged`.)
 
 ### 8.2 Apps that already exhibit gaps
 
-- [ ] `samples/apps/chat`: replace any `.Set(c => c.OnClick = ...)` with
-      the new `.OnClick(...)` fluent. Grep first; no-op if none found.
-- [ ] `samples/apps/demo-script-tool`: same sweep; replace `.Set()`
+- [x] `samples/apps/chat`: replace any `.Set(c => c.OnClick = ...)` with
+      the new `.Click(...)` fluent. Grep first; no-op if none found.
+      (No-op — grep showed zero matches. The chat app's `.Set(...)`
+      calls are all theme-resource templating (`.Set("ButtonBackground", ...)`)
+      or style-only WinUI knobs (`Padding`, `TextWrapping`, etc.),
+      none of them callback properties.)
+- [x] `samples/apps/demo-script-tool`: same sweep; replace `.Set()`
       escape-hatches that are now expressible with fluents.
-- [ ] `samples/apps/regedit` / `wordpuzzle` / `validation-showcase` /
-      `a11y-showcase`: same sweep.
+      (No-op — only `.Set("ButtonForeground...", ThemeRef(...))` hits.)
+- [x] `samples/apps/regedit` / `wordpuzzle` / `validation-showcase` /
+      `a11y-showcase`: same sweep. (All four: no-op. Property-init
+      `OnClosed = ...` / `OnItemInvoked = ...` patterns in regedit are
+      already in `with { ... }` record-construction blocks, not inside
+      `.Set(...)` escape-hatches, so the fluent swap doesn't apply.)
 
 ### 8.3 New micro-sample for `Frame` navigation events
 
-- [ ] Under `samples/ReactorGallery/ControlPages/Navigation/`, demonstrate
-      `Frame.OnNavigated`/`.OnNavigating`/`.OnNavigationFailed` with a log
-      panel showing each event.
+- [x] Under `samples/ReactorGallery/ControlPages/Navigation/`, demonstrate
+      `Frame.Navigated`/`.Navigating`/`.NavigationFailed` with a log
+      panel showing each event. (Fluents drop the leading `On`; the
+      underlying properties remain `OnNavigated` etc.) Landed as
+      `Navigation/FrameNavigationPage.cs` + `Navigation/FrameSamplePages.cs`.
 
 ---
 
@@ -857,7 +874,7 @@ that maps to the spec's §14 ordering:
 - [x] §14 #7 — Spec 040 scheduled for specialized controls (Phase 7.1).
 - [x] §14 #8 — `RichText` → `RichTextBlock` rename (Phase 6.1).
 - [x] §17 — Named-style fluents and `Card` factory (Phase 2).
-- [ ] Samples updated (Phase 8).
+- [x] Samples updated (Phase 8).
 - [ ] Docs updated (Phase 9).
 - [ ] Agent-kit updated (Phase 10).
 - [ ] Tests landed (Phase 11).
