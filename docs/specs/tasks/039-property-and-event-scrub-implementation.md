@@ -565,10 +565,13 @@ existing init properties.
 
 ### 6.5 `ScrollView` vs `ScrollViewer` (spec §6 naming notes)
 
-- [ ] Add `[Obsolete]` `ScrollViewer` alias factory pointing at
-      `ScrollView` — or, conversely, deprecate `ScrollView` and align with
-      WinUI. **Decision needed** before checking off; capture the choice
-      in a one-line PR description and update spec §6 with the resolution.
+- [x] Decision: **keep `ScrollView`, add `[Obsolete]` `ScrollViewer` alias.**
+      Reactor's `ScrollViewElement` reconciles to WinUI's legacy `ScrollViewer`,
+      but WinUI 3 also ships the newer `Microsoft.UI.Xaml.Controls.ScrollView`
+      — the shorter, modern name. Reactor's `ScrollView` is already
+      consistent with that preferred WinUI name, so the alias direction
+      lets agents reaching for the legacy `ScrollViewer` discover the
+      modern spelling without breaking existing code.
 
 ### 6.6 `Progress` vs `ProgressBar` (spec §5)
 

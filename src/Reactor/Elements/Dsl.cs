@@ -345,7 +345,28 @@ public static partial class Factories
     public static WrapGridElement WrapGrid(int maxRowsOrColumns, params Element?[] children) =>
         new(FilterChildren(children)) { MaximumRowsOrColumns = maxRowsOrColumns };
 
+    /// <summary>
+    /// Creates a <see cref="ScrollViewElement"/> wrapping <paramref name="child"/>
+    /// in a scroll container.
+    /// </summary>
+    /// <remarks>
+    /// The element reconciles to a WinUI <c>ScrollViewer</c>. The Reactor name
+    /// <c>ScrollView</c> matches the newer <c>Microsoft.UI.Xaml.Controls.ScrollView</c>
+    /// type WinUI 3 ships alongside the legacy <c>ScrollViewer</c>; the shorter,
+    /// more modern name is preferred. The <c>ScrollViewer</c> alias is preserved
+    /// for callers reaching for the WPF/WinUI-legacy spelling. (spec 039 §6 / §16)
+    /// </remarks>
     public static ScrollViewElement ScrollView(Element child) => new(child);
+
+    /// <summary>
+    /// Deprecated forwarding alias for <see cref="ScrollView(Element)"/>.
+    /// </summary>
+    [global::System.Obsolete(
+        "Use ScrollView for parity with the newer Microsoft.UI.Xaml.Controls.ScrollView " +
+        "(WinUI 3 ships both — ScrollView is the modern/preferred name). " +
+        "ScrollViewer will be removed in the next minor release. (spec 039 §6 / §16)",
+        error: false)]
+    public static ScrollViewElement ScrollViewer(Element child) => ScrollView(child);
 
     public static BorderElement Border(Element? child) => new(child!);
 
