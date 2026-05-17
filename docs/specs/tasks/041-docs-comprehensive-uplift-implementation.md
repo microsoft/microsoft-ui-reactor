@@ -1059,6 +1059,7 @@ source snippets, "Read the source" callout, tier-lint clean.)
   - Wave-1 promotions tracked here:
     - `hooks.md.dt` → comprehensive (4.6 wave-1).
     - `effects.md.dt` → comprehensive (4.6 wave-1).
+    - `components.md.dt` → comprehensive (4.6 wave-1).
   - Wave-2 promotions tracked here:
     - `commanding.md.dt` → comprehensive (4.6 wave-2).
     - `context.md.dt` → comprehensive (4.6 wave-2).
