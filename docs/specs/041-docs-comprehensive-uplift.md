@@ -708,7 +708,8 @@ WinUI doesn't?" without reading the source.
 5. Cross-link sweep — every prose mention of a concept becomes an
    inline link (React-style). Run the analyzer in §11.
 
-Exit: tier audit shows 0 Stub, ≤4 Solid, ≥36 Comprehensive.
+Exit: tier audit shows 0 Stub, ≤24 Solid, ≥36 Comprehensive. (See §13
+for the rationale behind the Solid cap.)
 
 ### Phase 5 — Continuous quality
 
@@ -1062,8 +1063,17 @@ Captured here as decisions; left in numbered form for traceability.
 - **Discoverability:** New user can answer "does Reactor support X?"
   (where X is any WinUI control or capability category) in ≤30 seconds
   starting from `readme.md`.
-- **Tier distribution:** ≥36 pages Comprehensive, ≤4 Solid, 0 Stub at
-  end of Phase 4.
+- **Tier distribution:** ≥36 pages Comprehensive, ≤24 Solid, 0 Stub
+  at end of Phase 4. The Solid cap accounts for ~10 recipes (each
+  intentionally short), ~4 internals pages declared Solid per §7.1.1,
+  ~5 meta / index / index-like pages, and ~5 cross-cutting Solid pages
+  per §9 Phase 2-4. Comprehensive remains the target for top-traffic
+  narrative pages; Solid is the right tier for recipes, cross-cutting,
+  and intentionally-narrow surfaces. (Amended 2026-05-17 from the
+  original `≤4 Solid` after the Phase 4 retro found the original
+  target reflected a ~26-page audit, while the actual docset
+  stratified to 63 templates — see `docs/specs/041/phase-4-retro.md`
+  surprise #1.)
 - **Cross-linking:** zero pages where a concept is mentioned in prose
   without a link to its topic page (run the lint).
 - **Sequential traversal:** Previous/Next links form a complete chain
