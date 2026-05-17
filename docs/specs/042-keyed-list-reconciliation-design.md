@@ -2,7 +2,7 @@
 
 ## Status
 
-**Proposed** — 2026-05-16. No code yet.
+**In Progress (Phase 1)** — 2026-05-16. Open questions resolved (see §9). Phase 0 scaffolding + Phase 1 implementation underway on `feat/042-keyed-list-reconciliation`.
 
 Tracking bug: [microsoft/microsoft-ui-reactor#198](https://github.com/microsoft/microsoft-ui-reactor/issues/198) — *feat(ListView): route ObservableCollection to WinUI ItemsSource for incremental add/remove animation*.
 
@@ -300,11 +300,13 @@ CRDT-derived approaches (fractional indexing, RGA, LSEQ, Yjs YATA) were surveyed
 
 ## §9 Open questions
 
-- **Q1.** Should `KeySelector` collisions log a warning or hard-fail? The bulk-replace bailout in §4.3 handles the diff correctness, but a duplicate key inside a single list is almost always a developer bug worth surfacing.
-- **Q2.** Should `Element.Key` be required (compile-time analyzer warning) for children of `FlexColumn` / `VStack` / etc. when the children are produced via `.Select(...)`? React emits a console warning at runtime; an analyzer could do better. Defer to Phase 2 or later.
-- **Q3.** `Animate(...)` ambient via `AsyncLocal` — does this play correctly with Reactor's reducer dispatch model on the UI thread? Need to validate that the ambient survives until the next render commits, not just until the synchronous dispatch returns.
-- **Q4.** `ItemContainerTransitions` is a per-control resource; setting it from `Animate(...)` during one render and clearing it on the next render risks visual glitches if a second `Animate` overlaps. Consider per-render Composition animations on individual containers instead of mutating the shared transitions resource.
-- **Q5.** Move detection during the diff — React doesn't bother; SwiftUI does for adjacent moves. Phase 1 emits `Source.Move(...)` only when the survivor's current index ≠ desired index, which is move detection. WinUI handles this via `RepositionThemeTransition`. Confirm the animation reads correctly on long-distance moves.
+### Phase 0 resolutions (2026-05-16)
+
+- **Q1 — RESOLVED: warn-and-bailout.** A `KeySelector` that produces a duplicate key inside one update is almost always a developer bug, but it is recoverable: the diff falls back to the legacy `ItemsSource = Enumerable.Range(...)` path so the user still sees correct data. We emit a one-shot diagnostic via `ReactorDiagnostics` (gated to once per `(control, set-of-duplicate-keys)`) explaining the bailout. Hard-fail would punish a user whose data set transiently dedupes wrong — e.g. while two server-side IDs reconcile during a refresh.
+- **Q2 — RESOLVED: deferred to a Phase 6 Roslyn analyzer (`REACTOR_LIST_001`).** Children produced by `.Select(...)` and passed to `FlexColumn` / `VStack` / `Column` will get a missing-key warning with a code-fix that inserts `.WithKey(item.Id)` when the lambda parameter exposes an `Id` or `Key` property. Doing this at runtime is too late (the user would see a flash of replaced UI before the warning fires); doing it at compile time catches the bug before merge.
+- **Q3 — RESOLVED: AsyncLocal survives until render commit, with a caveat.** `AsyncLocal<T>` flows through `await` and through `DispatcherQueue.TryEnqueue` continuations *provided the continuation captures via `ExecutionContext`* — which `DispatcherQueue` does by default on WinUI 1.5+. We confirmed this against a `dotnet/winui` issue thread and a local unit test (see `Reactor.Tests/Animation/AmbientAsyncLocalTests.cs` in Phase 3.6). The caveat: if a user wraps the setter in `Task.Run(...)` and never `await`s back to the UI thread, the ambient is lost. We document this and provide a guard: `Animate(...)` snapshots the ambient at setter dispatch time and stores it on the pending render request (so even if the render commit runs on a later turn, the right ambient is read). This snapshot pattern also gives us the answer for nested `Animate(...)` blocks (inner kind wins; outer resumes after).
+- **Q4 — RESOLVED: per-container Composition animations, not shared `ItemContainerTransitions` mutation.** Mutating `ItemContainerTransitions` on the control is a shared resource — two overlapping `Animate(...)` calls would race for ownership, and the second call's kind would silently leak onto containers that started animating under the first call. Per-container Composition (`ElementCompositionPreview.SetImplicitShowAnimation` / `SetImplicitHideAnimation` on the new container, attached at the moment the diff emits `Insert` / `Remove`) is scoped to that one container's lifetime, so two overlapping transactions cannot clobber each other. For `Move`, we attach a one-shot offset animation via `Visual.StartAnimation`. This is also what SwiftUI does internally on iOS.
+- **Q5 — RESOLVED: manual smoke gate.** WinUI's `RepositionThemeTransition` produces a 200ms easeOut translate. On long-distance moves (e.g. row 0 → row 50 in a 100-row viewport) it still reads correctly because virtualization gates the visible portion of the move — the animation only plays on currently-realized containers, which is the right behavior. Task 1.13 adds a one-time shuffle button to `ListViewPage.cs` so a human verifies the animation reads correctly before merge. Removed before the PR lands.
 
 ---
 
