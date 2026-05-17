@@ -152,7 +152,7 @@ class TextAndMediaGroup : Component
 | `Image` | Bitmap source. |
 | `MediaPlayerElement` | Video / audio playback. |
 | `WebView2` | Embedded Chromium surface. |
-| `InkCanvas` | Pen input. |
+| `InkCanvas` | Pen input. **Not yet wrapped — track in spec TBD.** |
 
 Detail page: [Text & Media](text-and-media.md).
 

@@ -791,15 +791,34 @@ catalog page follows the per-control template from spec §6.3.
 
 ### 3.6 Phase 3 review
 
-- [ ] Tier-lint clean.
-- [ ] Doc review: control-by-control, confirm every entry in
-      `ai-author-skill.md` resolves from the catalog index.
-- [ ] Add explicit "not yet wrapped — track in spec NNN" entries for
-      any control listed in `ai-author-skill.md` that doesn't have
-      a Reactor wrapper yet.
-- [ ] Phase 3 exit: Controls Catalog index has zero unlinked
-      controls.
-- [ ] GitHub preview render check (verify thumbnail images render).
+- [x] Tier-lint clean across all 5 Phase 3 templates at their
+      declared tiers. `mur docs compile --validate-only` reports
+      "validation passed".
+- [x] Doc review: walked every Phase 3 page end-to-end against the
+      AI Author Skill's controls catalog table. Five controls touched
+      in Phase 3.4 (AutoSuggestBox / DatePicker / TimePicker /
+      CalendarView / ColorPicker) are now documented; three new pages
+      cover their remaining categories.
+- [x] Add explicit "not yet wrapped" entries for any control in
+      `ai-author-skill.md` without a Reactor wrapper.
+      `InkCanvas` is the only such control in the Phase 3 surface —
+      it has no `InkCanvasElement` and no factory in `Dsl.cs`. Marked
+      in `controls.md.dt` as "Not yet wrapped — track in spec TBD".
+- [x] Phase 3 exit: Controls Catalog index has zero unlinked
+      controls. Every row links either to its detail page
+      (forms / collections / text-and-media / status-and-info /
+      dialogs-and-flyouts / data-system / charting) or — for the
+      single deferred control — to the explicit "not yet wrapped"
+      annotation.
+- [ ] GitHub preview render check. *Deferred to PR-open against
+      `main`, mirroring the Phase 1.14 / Phase 2.8 deferral.
+      Local-side checklist captured in
+      `docs/specs/041/phase-3-render-report.md`.*
+- [x] Phase 3 retro committed: `docs/specs/041/phase-3-retro.md`.
+- [x] Phase 3 render-report skeleton committed:
+      `docs/specs/041/phase-3-render-report.md`.
+- [x] `docs/specs/041/RESUME-HERE.md` updated — Phase 3 complete,
+      Phase 3.5 next.
 
 ---
 

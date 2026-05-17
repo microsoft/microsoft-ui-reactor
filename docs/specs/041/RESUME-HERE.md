@@ -1,8 +1,8 @@
 # Resume here — spec 041 implementation handoff
 
 **Last touched:** 2026-05-17
-**Branch:** `docs/041-uplift` (25 commits ahead of `main`; not pushed)
-**Active task:** Phase 3 — Controls catalog (3 new + 2 expansions)
+**Branch:** `docs/041-uplift` (31 commits ahead of `main`; not pushed)
+**Active task:** Phase 3.5 — Under-the-hood deep dive (14 pages)
 
 ---
 
@@ -13,8 +13,8 @@
 | 0. Scaffolding | ✅ Complete | Companion files, audit, source map, branching strategy |
 | 1. Foundation (pipeline + tooling) | ✅ Complete | 14 commits; pipeline supports tiers, lint, source snippets, SVG/Mermaid, ref-gen, link injection, analyzers |
 | 2. Reactor-unique gaps | ✅ Complete (5 of 9 recipes shipped) | 10 commits; 4 recipes deferred to Phase 2.5 follow-up |
-| 3. Controls catalog | ⏳ Pending | 3 new pages + 2 expansions; spawn next |
-| 3.5. Under-the-hood | ⏳ Pending | 14 pages; can run in parallel with Phase 3 (different author skillset) |
+| 3. Controls catalog | ✅ Complete | 5 commits + review (text-and-media / status-and-info / dialogs-and-flyouts / forms expand / collections expand). InkCanvas flagged as not wrapped. |
+| 3.5. Under-the-hood | ⏳ Pending | 14 pages; spawn next (different author skillset) |
 | 4. Polish & process | ⏳ Pending | 7 promotions + 3 new pages + cross-link sweep |
 | 5. Continuous quality | ⏳ Pending | check-tier subcommand + tier-drift CI |
 
@@ -22,12 +22,13 @@
 
 ## Where to resume
 
-**Open the task list:** `docs/specs/tasks/041-docs-comprehensive-uplift-implementation.md`. Phase 3 starts at `### 3.1`.
+**Open the task list:** `docs/specs/tasks/041-docs-comprehensive-uplift-implementation.md`. Phase 3.5 starts at `### 3.5.1`.
 
 **Read before spawning the next agent:**
 - `docs/specs/041/phase-1-retro.md` — Phase 1 decisions and surprises.
 - `docs/specs/041/phase-1-render-report.md` — Phase 1 publish-test results.
 - `docs/specs/041/phase-2-review.md` and `phase-2-retro.md` — Phase 2 findings.
+- `docs/specs/041/phase-3-retro.md` and `phase-3-render-report.md` — Phase 3 findings (InkCanvas not wrapped; deprecated `ProgressBar` factory swept; grouping + drag-reorder are recipe-only today).
 
 **Pipeline state worth knowing:**
 - `mur docs compile --validate-only` runs clean across all 64 templates.
@@ -51,20 +52,37 @@
 
 ## How to spawn the next agent
 
-Phase 3 (controls catalog) is content-heavy. Follow the same pattern as the Phase 2 spawn:
-1. Mark the Phase 3 task in-progress.
+Phase 3.5 (under-the-hood) is the next track. It is a different
+author skillset — these 14 pages require renderer/hook internals
+knowledge, and the spec calls for review by someone who has shipped
+renderer/hook internals. Brief the agent with:
+1. Mark the Phase 3.5 task in-progress.
 2. Spawn a `general-purpose` Agent.
-3. Briefing must include: **research comparable docs (WinUI, SwiftUI, React Aria, Compose) before authoring, avoid AI slop patterns, match the Reactor voice from `docs/guide/hooks.md` / `navigation.md`**.
-4. Each new page = its own commit on `docs/041-uplift`. Update task-list checkboxes.
+3. Briefing must include: **read the source areas listed in
+   `docs/specs/041/under-the-hood-source-map.md` before drafting each
+   page; pull `snippet="source:..."` from at least 3 source areas per
+   Comprehensive page; diagrams via `.mmd` under
+   `docs/_pipeline/diagrams/<topic>/` (the pipeline renders to SVG);
+   avoid AI slop patterns; match the Reactor voice from
+   `docs/guide/hooks.md` / `dev-tooling.md` / `theming-tokens.md`**.
+4. Each new page = its own commit on `docs/041-uplift`. Update
+   task-list checkboxes as you go.
 5. Do NOT push. Local commits only until a phase exits review.
 
-Phase 3.5 (under-the-hood) can run in parallel with Phase 3 since the two phases edit disjoint templates and source areas; the only shared resource is `src/Reactor/Reactor.csproj`, which can't be built concurrently — but the agents author content first and build at commit time, so brief them to commit serially even if they research in parallel. (Or just run them sequentially.)
+Phase 3.5 can run in parallel with Phase 4 cross-link sweep once
+enough Phase 3.5 pages have landed to make the cross-link surface
+worth scanning; otherwise serial.
 
 ---
 
 ## Commit chain (most recent first)
 
 ```
+80f07db docs(041): collections expanded to Comprehensive tier (3.5)
+cf117ba docs(041): forms expanded to Comprehensive tier (3.4)
+98418f6 docs(041): dialogs-and-flyouts at Comprehensive tier (3.3)
+c769322 docs(041): status-and-info at Solid tier (3.2)
+beb881c docs(041): text-and-media at Comprehensive tier (3.1)
 cea7210 docs(041): regenerate UseElementFocus / UseElementRef reference pages
 f09d572 docs(041): Phase 2 review + recipe tier-lint fixes (2.8)
 01ba175 docs(041): rules-of-reactor at Solid tier (2.7)
