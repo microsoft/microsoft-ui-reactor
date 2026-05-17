@@ -40,3 +40,13 @@ screenshots:
     component: LightweightStylingExample
     region: client
     format: png
+  - id: brand-override
+    description: "Brand-color override cascading from a single Resources call at the root"
+    component: BrandOverrideExample
+    region: client
+    format: png
+  - id: scoped-theme-override
+    description: "Light app with one panel scoped to Dark via RequestedTheme on a region root"
+    component: ScopedThemeOverrideExample
+    region: client
+    format: png

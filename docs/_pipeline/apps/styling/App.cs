@@ -206,6 +206,61 @@ class NamedStylesExample : Component
 }
 // </snippet:named-styles>
 
+// <snippet:brand-override>
+// Brand color override at app root — every descendant that resolves
+// AccentFillColorDefaultBrush picks up the brand color in both themes.
+class BrandOverrideExample : Component
+{
+    public override Element Render()
+    {
+        return VStack(12,
+            SubHeading("Brand color cascades through descendants"),
+            Button("Save", () => { }).AccentButton(),
+            TextBlock("Accented text").Foreground(Theme.AccentText).SemiBold()
+        ).Padding(24)
+         // One Resources override at the root re-skins every descendant.
+         // Cross-theme: set in both ThemeDictionaries if light vs. dark
+         // should pick different brand hues.
+         .Resources(r => r
+            .Set("AccentFillColorDefaultBrush", "#7B61FF")
+            .Set("AccentTextFillColorPrimaryBrush", "#7B61FF"));
+    }
+}
+// </snippet:brand-override>
+
+// <snippet:scoped-theme-override>
+// Per-element theme override scope — a single panel forced to Dark
+// inside an otherwise Light app, without app-wide RequestedTheme.
+class ScopedThemeOverrideExample : Component
+{
+    public override Element Render()
+    {
+        return VStack(16,
+            SubHeading("Default scheme"),
+            Border(VStack(8,
+                TextBlock("Default scheme — follows the app theme.")
+                    .Foreground(Theme.PrimaryText),
+                TextBlock("Card stroke and background also follow.")
+                    .Foreground(Theme.SecondaryText)
+            ).Padding(16)).Background(Theme.CardBackground)
+             .WithBorder(Theme.CardStroke, 1).CornerRadius(8),
+
+            SubHeading("Dark scope — bound to a region root"),
+            Border(VStack(8,
+                TextBlock("This subtree is always dark.")
+                    .Foreground(Theme.PrimaryText),
+                TextBlock("ThemeRef descendants resolve against the override.")
+                    .Foreground(Theme.SecondaryText)
+            ).Padding(16)).Background(Theme.CardBackground)
+             .WithBorder(Theme.CardStroke, 1).CornerRadius(8)
+             // Region root carries the override — leaf-level overrides
+             // are the anti-pattern called out in Common Mistakes.
+             .RequestedTheme(ElementTheme.Dark)
+        ).Padding(24);
+    }
+}
+// </snippet:scoped-theme-override>
+
 // Main app showing all examples
 class StylingApp : Component
 {
@@ -220,7 +275,9 @@ class StylingApp : Component
                 Component<DarkLightToggleExample>(),
                 Component<ColorSchemeHookExample>(),
                 Component<NamedStylesExample>(),
-                Component<LightweightStylingExample>()
+                Component<LightweightStylingExample>(),
+                Component<BrandOverrideExample>(),
+                Component<ScopedThemeOverrideExample>()
             ).Padding(24)
         );
     }
