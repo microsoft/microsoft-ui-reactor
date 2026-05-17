@@ -9,6 +9,7 @@ goal: |
   / PrimaryWindow / FindWindow surface, the UseWindow / UseWindowState /
   UseOpenWindow hooks, ShutdownPolicy, and a brief mention of tray icons.
   Concise — not a full tour of every WindowSpec field or every hook.
+tier: solid
 ---
 
 # Windows

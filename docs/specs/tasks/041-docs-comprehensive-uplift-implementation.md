@@ -1068,6 +1068,19 @@ source snippets, "Read the source" callout, tier-lint clean.)
     - `flex-layout.md.dt` → comprehensive (4.6 wave-3).
     - `advanced.md.dt` → comprehensive (4.6 wave-3).
     - `styling.md.dt` → comprehensive (4.6 wave-3).
+  - Wave-D tier declarations (intentionally Solid — not promoted):
+    - `readme.md.dt` → `tier: solid` declared (4.6 wave-D); added a
+      "Where to start" reference table in the first half and a
+      `## Next Steps` section with 4 links to satisfy TIER_005 /
+      TIER_007. Stays the narrative index page per audit row.
+    - `localization.md.dt` → `tier: solid` declared (4.6 wave-D);
+      added a 5-row API "at a glance" table after the lead paragraph
+      to satisfy TIER_005.
+    - `async-resources.md.dt` → `tier: solid` declared (4.6 wave-D);
+      added a 4-row hook "use it for" table after the lead paragraph
+      to satisfy TIER_005.
+    - `windows.md.dt` → `tier: solid` declared (4.6 wave-D); page
+      already met Solid structural bar — no further edits needed.
 - [ ] Final doc review pass — read the docset end-to-end as a new
       user (start at readme, walk Previous/Next).
 - [ ] Comparison alignment check: each of the 19 categories in

@@ -7,11 +7,7 @@ goal: |
   Landing page. Frame what Reactor is, the four reasons to reach for it,
   the three-step model, and the full 10-section docset index. Concise
   and inviting — not a tutorial.
-# The readme intentionally does NOT declare a tier — its shape is
-# "landing page + 10-section index", not a topic page, so the §11
-# tier-lint structural checklist (reference table, ## Tips, ## Next
-# Steps) doesn't apply. Without a declared tier the validator drops to
-# info severity per the Phase 1A retro decision.
+tier: solid
 ---
 
 # Reactor
@@ -19,6 +15,14 @@ goal: |
 Reactor is a declarative UI framework for building native Windows desktop apps in
 pure C#. No XAML. No data binding. No view models. You describe your UI as a
 function of state, and Reactor keeps the screen in sync.
+
+| If you want to... | Start here |
+|-------------------|------------|
+| Build your first Reactor app | [Getting Started](getting-started.md) |
+| Understand the mental model | [Thinking in Reactor](thinking-in-reactor.md) |
+| Port a XAML/WinUI/WPF app | [Reactor for XAML Developers](xaml-developers.md) |
+| Look up a hook or modifier | [API Reference](reference/hooks/index.md) |
+| Read how the runtime works | [Architecture Overview](architecture-overview.md) |
 
 ## Why Reactor?
 
@@ -209,3 +213,10 @@ and `UseEffect` unlocks everything else.
 
 **Keep components small.** Extract pieces into their own components early.
 Composition is always easier to reason about than a single giant `Render()`.
+
+## Next Steps
+
+- **[Getting Started](getting-started.md)** — Build your first app, manage state, ship a todo list.
+- **[Hooks](hooks.md)** — `UseState`, `UseEffect`, `UseMemo`, and the rest of the core state primitives.
+- **[Components](components.md)** — Component classes, props, and function components in detail.
+- **[Reactor for XAML Developers](xaml-developers.md)** — Migration cookbook for XAML, bindings, MVVM, and navigation.
