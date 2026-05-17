@@ -23,6 +23,7 @@ internal static class ThreadAffinity
     /// pre-Application.Start configuration phase all run before there is a UI
     /// thread to gate against.
     /// </summary>
+    // <snippet:dispatcher-trampoline>
     public static void ThrowIfNotOnUIThread(string memberName)
     {
         var dispatcher = ReactorApp.UIDispatcher;
@@ -32,4 +33,5 @@ internal static class ThreadAffinity
             $"{memberName} must be called on the UI thread. " +
             "Use ReactorApp.UIDispatcher.TryEnqueue(...) to marshal the call. (spec 036 §0.4)");
     }
+    // </snippet:dispatcher-trampoline>
 }

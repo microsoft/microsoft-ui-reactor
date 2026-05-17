@@ -1,0 +1,14 @@
+%% Phase 3.5 scaffold — XAML pull-based binding versus Reactor
+%% push-from-state. Author should add DependencyProperty,
+%% INotifyPropertyChanged, and the BindingExpression update side
+%% as concrete contrast points.
+flowchart TB
+    subgraph XAML[XAML pull binding]
+        VM[ViewModel property] -->|INPC raises| BX[BindingExpression]
+        BX -->|reads getter| Ctrl1[Control DP]
+    end
+    subgraph Reactor[Reactor render from state]
+        Hook[Hook state] -->|setState| Render[Render]
+        Render --> Diff[Reconciler diff]
+        Diff -->|property writes| Ctrl2[WinUI control]
+    end

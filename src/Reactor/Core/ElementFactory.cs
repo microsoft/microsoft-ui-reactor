@@ -83,6 +83,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
         }
     }
 
+    // <snippet:factory-shape>
     public UIElement GetElement(ElementFactoryGetArgs args)
     {
         var index = args.Data is int i ? i : 0;
@@ -95,6 +96,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
         var control = _reconciler.Mount(element, _requestRerender);
         return control ?? new TextBlock { Text = "" };
     }
+    // </snippet:factory-shape>
 
     public void RecycleElement(ElementFactoryRecycleArgs args)
     {

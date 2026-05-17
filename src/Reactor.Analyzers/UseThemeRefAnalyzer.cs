@@ -58,6 +58,7 @@ public sealed class UseThemeRefAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
     }
 
+    // <snippet:theme-ref-rule>
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
@@ -81,6 +82,7 @@ public sealed class UseThemeRefAnalyzer : DiagnosticAnalyzer
             return;
 
         var colorValue = literal.Token.ValueText;
+        // </snippet:theme-ref-rule>
 
         // Suggest a specific theme token if we have a mapping, otherwise generic
         var suggestion = ColorToThemeToken.TryGetValue(colorValue, out var token)

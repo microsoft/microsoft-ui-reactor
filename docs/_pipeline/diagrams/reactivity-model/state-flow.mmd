@@ -1,0 +1,9 @@
+%% Phase 3.5 scaffold — state-setter to re-render flow. Author should
+%% expand with the change-detection short-circuit (EqualityComparer),
+%% the MarshalIfOffUIThread hop, and the FlushEffects step.
+flowchart LR
+    Setter[Setter call] -->|equality check| Slot[Hook slot]
+    Slot -->|changed?| Trigger[_requestRerender]
+    Trigger --> Render[Component.Render]
+    Render --> Reconciler[Reconciler.Reconcile]
+    Reconciler --> Frame[Next frame]

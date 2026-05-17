@@ -1,0 +1,10 @@
+%% Phase 3.5 scaffold — positional hook slot table held by RenderContext.
+%% Author should show how _hookIndex advances, how slot types are
+%% checked (HookOrderException on mismatch), and why "same order every
+%% render" is mandatory.
+flowchart LR
+    Begin[BeginRender resets _hookIndex] --> H0[Slot 0: UseState]
+    H0 --> H1[Slot 1: UseEffect]
+    H1 --> H2[Slot 2: UseMemo]
+    H2 --> H3[Slot 3: UseRef]
+    H3 --> End[Render returns Element]

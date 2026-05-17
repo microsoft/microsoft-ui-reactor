@@ -1,0 +1,15 @@
+%% Phase 3.5 scaffold — the four animation systems. Author should expand
+%% each with concrete examples: WithAnimation scope routing,
+%% .Animate() compositor implicit anims, KeyframeBuilder fluent shape,
+%% and the Transition enter/exit lifecycle.
+flowchart TB
+    Author[Component author intent] --> Pick{Which system?}
+    Pick -->|state change → property| Implicit[Implicit / WithAnimation scope]
+    Pick -->|continuous compositor| CompAnim[.Animate compositor implicit]
+    Pick -->|named keyframes| KF[KeyframeBuilder]
+    Pick -->|mount / unmount| Trans[Transition enter/exit]
+    Implicit --> Comp[Composition layer]
+    CompAnim --> Comp
+    KF --> Comp
+    Trans --> Comp
+    Comp --> Frame[Next frame]

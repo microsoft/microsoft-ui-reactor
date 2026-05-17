@@ -46,10 +46,12 @@ public sealed class RenderContext
     /// least one render has happened.
     /// </para>
     /// </summary>
+    // <snippet:ui-thread-invariant>
     private bool MarshalIfOffUIThread(string hookName, Action work)
     {
         // Hot path — same thread that ran BeginRender. ~1ns TLS read + cmp + branch.
         if (Environment.CurrentManagedThreadId == _uiThreadId) return false;
+        // </snippet:ui-thread-invariant>
 
         var dq = Microsoft.UI.Reactor.ReactorApp.UIDispatcher;
         if (dq is null)
@@ -108,6 +110,7 @@ public sealed class RenderContext
     /// the next UI tick.
     /// </para>
     /// </summary>
+    // <snippet:use-state-slot>
     public (T Value, Action<T> Set) UseState<T>(T initialValue, bool threadSafe = false)
     {
         if (_hookIndex >= _hooks.Count)
@@ -122,6 +125,7 @@ public sealed class RenderContext
             throw new HookOrderException(
                 $"Hook at index {currentIndex} is {_hooks[currentIndex].GetType().Name}, expected ValueHookState<{typeof(T).Name}> (UseState). " +
                 "Hooks must be called in the same order every render.");
+        // </snippet:use-state-slot>
 
         T current;
         if (hook.ThreadSafe)
@@ -129,6 +133,7 @@ public sealed class RenderContext
         else
             current = hook.Value;
 
+        // <snippet:set-state>
         void Setter(T newValue)
         {
             var h = (ValueHookState<T>)_hooks[currentIndex];
@@ -158,6 +163,7 @@ public sealed class RenderContext
                 if (changed) _requestRerender?.Invoke();
             }
         }
+        // </snippet:set-state>
 
         return (current, Setter);
     }
@@ -295,6 +301,7 @@ public sealed class RenderContext
     /// Pass an empty array for "run once on mount" semantics.
     /// Returns a cleanup action that runs before the next effect or on unmount.
     /// </summary>
+    // <snippet:effect-schedule>
     public void UseEffect(Action effect, params object[] dependencies)
     {
         if (_hookIndex >= _hooks.Count)
@@ -317,6 +324,7 @@ public sealed class RenderContext
             hook.Pending = true;
         }
     }
+    // </snippet:effect-schedule>
 
     /// <summary>
     /// Like UseEffect but the effect returns a cleanup function.

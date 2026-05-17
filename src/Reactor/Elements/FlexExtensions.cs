@@ -8,6 +8,7 @@ namespace Microsoft.UI.Reactor;
 /// </summary>
 public static class FlexExtensions
 {
+    // <snippet:flex-modifier>
     public static T Flex<T>(this T el,
         double grow = 0,
         double shrink = 1,
@@ -28,4 +29,5 @@ public static class FlexExtensions
 
         return (T)el.SetAttached(new FlexAttached(grow, shrink, basis, alignSelf, position, left, top, right, bottom));
     }
+    // </snippet:flex-modifier>
 }

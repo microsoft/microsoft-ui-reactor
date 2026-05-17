@@ -1,0 +1,11 @@
+%% Phase 3.5 scaffold — focus and input flow. Author should expand
+%% with the UseFocusTrap LosingFocus interception, the
+%% FocusRevalidationService cache enrollment, and the gesture-phase
+%% state machine.
+flowchart LR
+    Pointer[Pointer / Key event] --> Hit[WinUI hit test]
+    Hit --> Routed[Routed event handler]
+    Routed --> ReactorEl[Element callback]
+    Trap[UseFocusTrap] -.->|intercepts LosingFocus| Hit
+    Focus[UseFocus / FocusManager] -->|programmatic| Hit
+    Announce[UseAnnounce] -->|raises| AT[AT / Narrator]

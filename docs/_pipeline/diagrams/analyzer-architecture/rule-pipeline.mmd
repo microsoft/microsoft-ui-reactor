@@ -1,0 +1,12 @@
+%% Phase 3.5 scaffold — analyzer rule pipeline. Author should expand
+%% with the SyntaxKind filtering, the symbol-vs-syntax fast path
+%% (LooksLikeHook check before semantic model), and the fix-provider
+%% link.
+flowchart LR
+    Syntax[SyntaxNode] --> Filter{InvocationExpression?}
+    Filter -->|yes| Name[GetInvokedMethodName]
+    Name --> Heur[LooksLikeHook? Use* prefix]
+    Heur -->|matches| Semantic[SemanticModel.GetSymbolInfo]
+    Semantic --> Check[Run rule body]
+    Check -->|violation| Report[ReportDiagnostic]
+    Report --> Fix[CodeFixProvider optional]

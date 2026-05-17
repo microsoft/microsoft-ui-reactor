@@ -124,6 +124,7 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
             "Register",
             "Upsert");
 
+    // <snippet:hook-rules-shape>
     public override void Initialize(AnalysisContext context)
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
@@ -138,6 +139,7 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
         if (methodName is null) return;
         if (!LooksLikeHook(methodName)) return;
         if (!IsLikelyReactorHook(context, invocation)) return;
+        // </snippet:hook-rules-shape>
 
         // REACTOR_HOOKS_005: must be called from a Render() override or a Use* method.
         var enclosing = FindEnclosingMethod(invocation);

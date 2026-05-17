@@ -5,6 +5,7 @@ namespace Microsoft.UI.Reactor.Animation;
 /// Transitions are composable: Fade + Slide(Bottom) plays both in parallel.
 /// Asymmetric: MakeEnter(Fade) | MakeExit(Scale) uses different animations for enter/exit.
 /// </summary>
+// <snippet:transition-composition>
 public abstract record Transition
 {
     // -- Presets --
@@ -24,6 +25,7 @@ public abstract record Transition
     public static Transition operator |(Transition enter, Transition exit)
         => new AsymmetricTransition(enter, exit);
 }
+// </snippet:transition-composition>
 
 public sealed record FadeTransition : Transition;
 public sealed record SlideTransition(Edge Edge) : Transition;

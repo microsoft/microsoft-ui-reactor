@@ -41,6 +41,7 @@ public sealed class AnnounceHandle
     /// If true, interrupts current speech immediately.
     /// If false (default), queued after current speech finishes.
     /// </param>
+    // <snippet:announce-live-region>
     public void Announce(string message, bool assertive)
     {
         if (_textBlock is null) return;
@@ -63,6 +64,7 @@ public sealed class AnnounceHandle
         // monitor LiveSetting changes will pick this up.
         _textBlock.Text = message;
     }
+    // </snippet:announce-live-region>
 }
 
 /// <summary>

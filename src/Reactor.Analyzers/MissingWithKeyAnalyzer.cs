@@ -46,6 +46,7 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(Analyze, SyntaxKind.InvocationExpression);
     }
 
+    // <snippet:with-key-rule>
     static void Analyze(SyntaxNodeAnalysisContext ctx)
     {
         var inv = (InvocationExpressionSyntax)ctx.Node;
@@ -65,6 +66,7 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         // If the lambda body mentions ".WithKey(" anywhere, assume it's keyed.
         var bodyText = body.ToString();
         if (bodyText.Contains(".WithKey(")) return;
+        // </snippet:with-key-rule>
 
         // Only flag when the result is consumed as children of a layout factory
         // (VStack / HStack / FlexRow / FlexColumn / Grid / ScrollView). This

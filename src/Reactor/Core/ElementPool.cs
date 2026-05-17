@@ -101,6 +101,7 @@ public sealed class ElementPool : IDisposable
     /// Try to rent an element of the given type from the pool.
     /// Returns null if the pool is empty or the type is not poolable.
     /// </summary>
+    // <snippet:pool-rent>
     public FrameworkElement? TryRent(Type type)
     {
         if (!Enabled) return null;
@@ -109,11 +110,13 @@ public sealed class ElementPool : IDisposable
         var item = stack.Pop();
         return item;
     }
+    // </snippet:pool-rent>
 
     /// <summary>
     /// Return an element to the pool after unmount. Cleans it first.
     /// Silently drops if the type is not poolable or the pool is full.
     /// </summary>
+    // <snippet:pool-return>
     public void Return(FrameworkElement element)
     {
         if (!Enabled) return;
@@ -131,6 +134,7 @@ public sealed class ElementPool : IDisposable
         }
 
         if (stack.Count >= MaxPerType) return;
+        // </snippet:pool-return>
 
         // Detach from parent before pooling — WinUI doesn't allow an element in two parents.
         // Use FrameworkElement.Parent (works even for detached trees, unlike VisualTreeHelper).

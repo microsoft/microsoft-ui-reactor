@@ -541,6 +541,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    // <snippet:reconciler-entry>
     public UIElement? Reconcile(
         Element? oldElement,
         Element? newElement,
@@ -590,6 +591,7 @@ public sealed partial class Reconciler : IDisposable
                 return Mount(newElement, requestRerender);
 
             return ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
+            // </snippet:reconciler-entry>
         }
         finally
         {

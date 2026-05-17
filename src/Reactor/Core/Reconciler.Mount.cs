@@ -25,6 +25,7 @@ public sealed partial class Reconciler
     /// <summary>
     /// Creates a WinUI control tree from an Element tree. Returns null for EmptyElement.
     /// </summary>
+    // <snippet:mount-phase>
     public UIElement? Mount(Element element, Action requestRerender)
     {
         // Unwrap legacy ModifiedElement (backward compat)
@@ -36,6 +37,7 @@ public sealed partial class Reconciler
                 modifiers = modifiers.Merge(mod.Inner.Modifiers);
             element = mod.Inner;
         }
+        // </snippet:mount-phase>
 
         // Push context values onto scope before processing children
         var ctxValues = element.ContextValues;

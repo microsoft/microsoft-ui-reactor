@@ -1,0 +1,9 @@
+%% Phase 3.5 scaffold — fluent modifier chain folds into Element.Modifiers
+%% via ElementModifiers.Merge. Author should add the typed-element
+%% preservation (Set() works after .Margin) and the Theme/Attached
+%% sidebands.
+flowchart LR
+    Text[Text element] -->|.Margin| M1[el with Modifiers]
+    M1 -->|.Padding| M2[Merged modifiers]
+    M2 -->|.Width| M3[Final ElementModifiers]
+    M3 --> Reconcile[Reconciler reads on commit]

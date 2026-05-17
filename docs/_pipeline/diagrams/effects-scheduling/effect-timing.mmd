@@ -1,0 +1,13 @@
+%% Phase 3.5 scaffold — render-vs-effect timing. Author should expand
+%% with the FlushEffects call after commit, the cleanup-before-effect
+%% ordering, and the Pending bubble-up signal flow.
+sequenceDiagram
+    participant C as Component.Render
+    participant R as Reconciler
+    participant E as Effects queue
+    participant U as WinUI
+    C->>R: returns Element tree
+    R->>U: mount / update controls
+    R->>E: FlushEffects (after commit)
+    E->>E: cleanup prior effect
+    E->>E: run new effect body

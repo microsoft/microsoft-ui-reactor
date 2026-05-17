@@ -72,6 +72,7 @@ public sealed class FocusRevalidationService
     /// Short-circuits if the last call fired within <see cref="ThrottleWindow"/> —
     /// returns an empty list without touching the cache.
     /// </remarks>
+    // <snippet:focus-revalidation>
     public IReadOnlyList<string> RevalidateNow()
     {
         var now = UtcNow();
@@ -81,6 +82,7 @@ public sealed class FocusRevalidationService
                 return Array.Empty<string>();
             _lastSweepUtc = now;
         }
+        // </snippet:focus-revalidation>
 
         // Copy the enrolled set out of the lock — Invalidate callbacks can fire
         // EntryChanged handlers that re-enter the service (e.g. unenroll on

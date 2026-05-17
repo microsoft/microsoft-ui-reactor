@@ -34,6 +34,7 @@ public static partial class ElementExtensions
 {
     // ── §2 Buttons ─────────────────────────────────────────────────────
 
+    // <snippet:event-modifier>
     /// <summary>Wires a click handler (sets <see cref="ButtonElement.OnClick"/>). Passing <c>null</c> clears any existing handler.</summary>
     public static ButtonElement Click(this ButtonElement el, Action? handler) =>
         el with { OnClick = handler };
@@ -41,6 +42,7 @@ public static partial class ElementExtensions
     /// <summary>Wires a click handler (sets <see cref="HyperlinkButtonElement.OnClick"/>). Passing <c>null</c> clears.</summary>
     public static HyperlinkButtonElement Click(this HyperlinkButtonElement el, Action? handler) =>
         el with { OnClick = handler };
+    // </snippet:event-modifier>
 
     /// <summary>Wires a click handler that fires repeatedly while held. Passing <c>null</c> clears.</summary>
     public static RepeatButtonElement Click(this RepeatButtonElement el, Action? handler) =>

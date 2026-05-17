@@ -6,6 +6,7 @@ namespace Microsoft.UI.Reactor.Core;
 /// Base class for stateful components (like React class components, but using hooks).
 /// Components hold a RenderContext that tracks their hook state across re-renders.
 /// </summary>
+// <snippet:render-loop>
 public abstract class Component
 {
     internal RenderContext Context { get; } = new();
@@ -22,6 +23,7 @@ public abstract class Component
     /// Override and return true to always re-render when the parent re-renders.
     /// </summary>
     protected internal virtual bool ShouldUpdate() => false;
+// </snippet:render-loop>
 
     // ── Hook convenience methods (delegate to Context) ─────────────
 

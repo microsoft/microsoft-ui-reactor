@@ -65,6 +65,7 @@ public sealed class UseMemoCellsAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
     }
 
+    // <snippet:memo-cells-rule>
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
@@ -78,6 +79,7 @@ public sealed class UseMemoCellsAnalyzer : DiagnosticAnalyzer
         // Match by symbol so user-defined methods named UseMemoCells in
         // unrelated namespaces don't trip the analyzer.
         if (!IsReactorMemoCellsHook(symbol)) return;
+        // </snippet:memo-cells-rule>
 
         // Find the `builder` parameter index — it's named `builder` in all three overloads.
         var parameters = symbol.Parameters;

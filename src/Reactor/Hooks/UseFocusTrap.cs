@@ -49,6 +49,7 @@ public sealed class FocusTrapHandle
         _container.LosingFocus -= OnLosingFocus;
     }
 
+    // <snippet:focus-trap>
     private void OnLosingFocus(UIElement sender, LosingFocusEventArgs args)
     {
         if (!_isActive || _container is null) return;
@@ -64,6 +65,7 @@ public sealed class FocusTrapHandle
             if (fe.Visibility != Visibility.Visible) return;
         }
         if (!_container.IsHitTestVisible) return;
+        // </snippet:focus-trap>
 
         // Check if the new focus target is outside our container
         var newFocus = args.NewFocusedElement as DependencyObject;

@@ -1,0 +1,12 @@
+%% Phase 3.5 scaffold — devtools MCP loop. Author should expand with
+%% the per-process lockfile endpoint discovery, the IDE protocol
+%% surface (overlay, query-tree, set-state), and the security gate
+%% (--devtools opt-in plus session token).
+sequenceDiagram
+    participant CLI as mur devtools CLI
+    participant LF as Lockfile
+    participant App as Running Reactor app
+    CLI->>LF: read endpoint + token
+    CLI->>App: JSON-RPC InvokeTool
+    App-->>CLI: tool result (JSON)
+    App->>App: optional UI overlay update

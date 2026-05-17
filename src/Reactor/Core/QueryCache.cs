@@ -46,6 +46,7 @@ public sealed record CacheEntry<T>(
 /// <c>SubscriberCount == 0</c> for longer than their <c>CacheTime</c> are evicted.
 /// Using one timer keeps the entry count's impact on system timers O(1).</para>
 /// </remarks>
+// <snippet:query-cache>
 public sealed class QueryCache : IDisposable
 {
     /// <summary>How often the eviction timer checks every slot for expiry. Default 1s.</summary>
@@ -64,6 +65,7 @@ public sealed class QueryCache : IDisposable
 
     /// <summary>Fires when an entry is added, replaced, invalidated, or evicted.</summary>
     public event Action<string>? EntryChanged;
+// </snippet:query-cache>
 
     /// <summary>
     /// Retrieves the current entry for <paramref name="key"/> if present and typed as

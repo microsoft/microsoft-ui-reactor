@@ -1,9 +1,22 @@
-%% Phase 1 placeholder — Phase 3.5 (under-the-hood deep dive) will
-%% replace this with a richer diagram (element pool, async system,
-%% composition handoff). The shape and direction stay the same so
-%% authored docs keep working through the swap.
+%% Reactor render loop. State change → component re-render → element
+%% record tree → reconciler diff → element pool reuse → WinUI control
+%% tree → composition → frame. Light/dark legible (default Mermaid
+%% palette satisfies both GitHub themes).
 flowchart LR
-    A[Component] --> B[Reconciler]
-    B --> C[Element pool]
-    C --> D[WinUI tree]
-    D --> E[Composition]
+    State[State / hook setter]
+    Component[Component.Render]
+    Elements[Element record tree]
+    Reconciler[Reconciler<br/>diff &amp; commit]
+    Pool[ElementPool<br/>rent / return]
+    WinUI[WinUI control tree]
+    Comp[Composition layer]
+    Frame[Frame to screen]
+
+    State -->|setState| Component
+    Component -->|describe UI| Elements
+    Elements -->|old vs new| Reconciler
+    Reconciler -->|rent reused control| Pool
+    Pool --> WinUI
+    Reconciler -->|property writes| WinUI
+    WinUI --> Comp
+    Comp --> Frame

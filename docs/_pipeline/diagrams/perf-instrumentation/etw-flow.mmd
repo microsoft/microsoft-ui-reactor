@@ -1,0 +1,10 @@
+%% Phase 3.5 scaffold — ETW / EventPipe emission. Author should expand
+%% with the per-keyword gating (IsEnabled fast path), the consumer
+%% tools (dotnet-trace / PerfView / xperf), and the optional Reactor +
+%% Microsoft-Windows-XAML correlation.
+flowchart LR
+    Hot[Reconciler / Render hot path] -->|IsEnabled?| Gate{Keyword on?}
+    Gate -->|no| Skip[Skip payload alloc]
+    Gate -->|yes| Emit[WriteEvent]
+    Emit --> Pipe[EventPipe / ETW session]
+    Pipe --> Tool[dotnet-trace / PerfView]

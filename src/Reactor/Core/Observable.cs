@@ -22,6 +22,7 @@ namespace Microsoft.UI.Reactor.Core;
 /// path — <see cref="Observable{T}"/> is deliberately minimal and is not a
 /// replacement for that.
 /// </summary>
+// <snippet:observable-bridge>
 public sealed class Observable<T> : INotifyPropertyChanged
 {
     private T _value;
@@ -42,6 +43,7 @@ public sealed class Observable<T> : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+// </snippet:observable-bridge>
 
     public override string ToString() => _value?.ToString() ?? string.Empty;
 

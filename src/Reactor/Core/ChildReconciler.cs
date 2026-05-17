@@ -23,6 +23,7 @@ internal static class ChildReconciler
     /// <summary>
     /// Reconciles old and new child element arrays against a Panel's Children collection.
     /// </summary>
+    // <snippet:child-diff>
     internal static void Reconcile(
         Element[] oldChildren,
         Element[] newChildren,
@@ -41,6 +42,7 @@ internal static class ChildReconciler
         else
             ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender);
     }
+    // </snippet:child-diff>
 
     /// <summary>
     /// Positional reconciliation: match children by index.

@@ -19,6 +19,7 @@ namespace Microsoft.UI.Reactor.Core;
 /// A lightweight, immutable description of a UI node (the "virtual DOM").
 /// Elements are cheap to create and diff — they never touch real controls directly.
 /// </summary>
+// <snippet:element-record>
 public abstract record Element
 {
     /// <summary>
@@ -33,6 +34,7 @@ public abstract record Element
     /// Modifiers are stored inline so the concrete element type is preserved through chaining.
     /// </summary>
     public ElementModifiers? Modifiers { get; init; }
+// </snippet:element-record>
 
     /// <summary>
     /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).

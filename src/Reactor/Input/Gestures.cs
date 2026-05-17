@@ -9,6 +9,7 @@ namespace Microsoft.UI.Reactor.Input;
 /// then either <see cref="Ended"/> (normal completion) or <see cref="Cancelled"/>
 /// (system aborted, pointer lost, escape key, …) fires exactly once.
 /// </summary>
+// <snippet:gesture-phases>
 public enum GesturePhase
 {
     /// <summary>Gesture has just become recognized and its parameters are stable.</summary>
@@ -20,6 +21,7 @@ public enum GesturePhase
     /// <summary>Gesture was cancelled (pointer capture lost, window focus lost, …).</summary>
     Cancelled,
 }
+// </snippet:gesture-phases>
 
 /// <summary>
 /// Axis constraint for <c>.OnPan</c>. Controls which translation axes are tracked
