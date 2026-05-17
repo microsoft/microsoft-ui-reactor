@@ -141,6 +141,15 @@ public abstract class Component
     protected bool UseIsDarkTheme()
         => Context.UseIsDarkTheme();
 
+    /// <summary>
+    /// Re-renders when the user's OS reduced-motion preference changes; returns
+    /// the current value. Pair with <c>Animations.Animate(...)</c> to opt out
+    /// of structural transitions when accessibility settings request it
+    /// (WCAG 2.3.3 — spec 042 §6).
+    /// </summary>
+    protected bool UseReducedMotion()
+        => Context.UseReducedMotion();
+
     protected Localization.IntlAccessor UseIntl()
         => Context.UseIntl();
 
