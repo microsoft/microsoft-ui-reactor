@@ -359,6 +359,154 @@ public class DevtoolsPropertyToolTests
         Assert.Equal("3.14", result);
     }
 
+    // ─── Additional edge-case coverage (coverage-uplift-85) ─────────────
+    //
+    // These tests exercise behaviors of FormatValue / ParseValue /
+    // TryParseColor that weren't previously hit, chosen because each
+    // assertion ties to a real product contract (a regression in the
+    // associated branch would cause the test to fail).
+
+    [Fact]
+    public void FormatValue_IFormattable_UsesInvariantCulture()
+    {
+        // decimal implements IFormattable. The contract is that we format
+        // with InvariantCulture so cross-machine round-trips don't depend
+        // on the system locale (e.g. "1,5" vs "1.5"). A regression that
+        // dropped the IFormattable arm and fell to value.ToString() would
+        // pick up the *current* culture and break this assertion on a
+        // German-locale machine.
+        var formatted = DevtoolsPropertyTools.FormatValue(1.5m);
+        Assert.Equal("1.5", formatted);
+    }
+
+    // FormatValue's non-SolidColorBrush arm and ParseValue's hex-to-
+    // SolidColorBrush construction both need a WinUI activation context
+    // (Brush subclass activation fails headlessly). Both are tracked in
+    // the worklist as "needs selftest fixture" rather than added here.
+
+    [Fact]
+    public void ParseValue_Thickness_TwoValues_ByTargetType()
+    {
+        // "4,8" with target Thickness must produce Thickness(left=right=4,
+        // top=bottom=8). The 2-value form was not previously covered by
+        // ParseValue() callers — only by TryParseThickness directly.
+        var result = DevtoolsPropertyTools.ParseValue("4,8", typeof(Thickness));
+        Assert.IsType<Thickness>(result);
+        var t = (Thickness)result!;
+        Assert.Equal(4, t.Left);
+        Assert.Equal(8, t.Top);
+        Assert.Equal(4, t.Right);
+        Assert.Equal(8, t.Bottom);
+    }
+
+    [Fact]
+    public void ParseValue_Thickness_CommaInRaw_ImpliesThicknessEvenWithoutTargetType()
+    {
+        // When raw contains ',' and TryParseThickness succeeds, ParseValue
+        // returns a Thickness even with targetType=null. (See the
+        // `raw.Contains(',') && TryParseThickness(...)` guard.) This branch
+        // is what lets `setProperty Margin "1,2,3,4"` work without knowing
+        // the DP's CLR type up front.
+        var result = DevtoolsPropertyTools.ParseValue("1,2,3,4", null);
+        Assert.IsType<Thickness>(result);
+        var t = (Thickness)result!;
+        Assert.Equal(1, t.Left);
+        Assert.Equal(4, t.Bottom);
+    }
+
+    [Fact]
+    public void ParseValue_EnumByGenericTargetType()
+    {
+        // Generic enum path (targetType.IsEnum), distinct from the
+        // well-known Visibility/HorizontalAlignment/VerticalAlignment arms.
+        // FlowDirection is a small WinUI enum that exercises only the
+        // generic enum path.
+        var result = DevtoolsPropertyTools.ParseValue("rightToLeft", typeof(FlowDirection));
+        Assert.IsType<FlowDirection>(result);
+        Assert.Equal(FlowDirection.RightToLeft, result);
+    }
+
+    [Fact]
+    public void ParseValue_Bool_Mixed_Case_HasPrecedence_Over_String_Fallback()
+    {
+        // "True" parses to bool true rather than falling to string. A
+        // regression that moved the bool arm below the string fallback
+        // would silently return "True" as a string and break setProperty
+        // for any IsEnabled-like DP.
+        Assert.Equal(true, DevtoolsPropertyTools.ParseValue("True", null));
+        Assert.Equal(false, DevtoolsPropertyTools.ParseValue("fAlSe", null));
+    }
+
+    [Fact]
+    public void TryParseColor_EightDigit_PreservesAlpha()
+    {
+        // Distinct from the existing 8-digit test which uses A=0x80; here
+        // we verify that A=0x00 (fully transparent) is preserved rather
+        // than coerced to 0xFF. The current code path: A is read from the
+        // first byte without any default-FF fallback.
+        Assert.True(DevtoolsPropertyTools.TryParseColor("#00112233", out var c));
+        Assert.Equal(0x00, c.A);
+        Assert.Equal(0x11, c.R);
+        Assert.Equal(0x22, c.G);
+        Assert.Equal(0x33, c.B);
+    }
+
+    [Fact]
+    public void TryParseColor_LowerCaseHex_IsAccepted()
+    {
+        // byte.Parse(NumberStyles.HexNumber) accepts both cases; the
+        // assertion here is that no upper-casing is required at the call
+        // site (i.e. nobody added a `.ToUpper()` that broke "tan-style"
+        // shorthand).
+        Assert.True(DevtoolsPropertyTools.TryParseColor("#abcdef", out var c));
+        Assert.Equal(0xAB, c.R);
+        Assert.Equal(0xCD, c.G);
+        Assert.Equal(0xEF, c.B);
+    }
+
+    [Fact]
+    public void TryParseColor_FiveDigit_ReturnsFalse()
+    {
+        // 5 chars is neither #RGB nor #RRGGBB nor #AARRGGBB. The default
+        // arm of the length switch must reject it.
+        Assert.False(DevtoolsPropertyTools.TryParseColor("#ABCDE", out var c));
+        Assert.Equal(default, c);
+    }
+
+    [Fact]
+    public void TryParseColor_Empty_ReturnsFalse()
+    {
+        // Hex string of length 0 after TrimStart('#') hits the default
+        // arm — no exception, no garbage Color, just false.
+        Assert.False(DevtoolsPropertyTools.TryParseColor("#", out var c));
+        Assert.Equal(default, c);
+        Assert.False(DevtoolsPropertyTools.TryParseColor("", out _));
+    }
+
+    [Fact]
+    public void TryParseThickness_NegativeValues_AreAccepted()
+    {
+        // Margin/Padding accept negative values (e.g. negative margin to
+        // overlap siblings). A regression that added a `>= 0` guard would
+        // break this.
+        Assert.True(DevtoolsPropertyTools.TryParseThickness("-4,-8,-12,-16", out var t));
+        Assert.Equal(-4, t.Left);
+        Assert.Equal(-16, t.Bottom);
+    }
+
+    [Fact]
+    public void TryParseCornerRadius_Negative_PropagatesArgumentException()
+    {
+        // Discovery 2026-05-17: WinUI's CornerRadius struct validates in its
+        // ctor and throws ArgumentException for negative components.
+        // TryParseCornerRadius doesn't catch this — it propagates out of a
+        // TryParse-named method, which is surprising. Pin the current
+        // behavior so a future contract change (return false on
+        // validation failure, matching Try* convention) is intentional.
+        Assert.Throws<ArgumentException>(() =>
+            DevtoolsPropertyTools.TryParseCornerRadius("-1,-2,-3,-4", out _));
+    }
+
     // ─── KnownVerbs registry ────────────────────────────────────────────
 
     [Theory]

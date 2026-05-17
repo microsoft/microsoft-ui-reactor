@@ -348,3 +348,37 @@ Append-only. Newest at the bottom. Date format `YYYY-MM-DD`.
   the highest-confidence wins. Devtools because it's reflection over
   records (pure C#, mockable); Mount.cs because it's only 5 points from
   the per-file goal and the selftest infrastructure is already there.
+
+### 2026-05-17 — worked-example batch: DevtoolsPropertyTools pure helpers
+
+- Added 11 new tests to `tests/Reactor.Tests/Devtools/DevtoolsPropertyToolTests.cs`
+  targeting previously-uncovered branches of `FormatValue`, `ParseValue`,
+  `TryParseColor`, `TryParseThickness`, `TryParseCornerRadius`. New tests
+  exercise:
+  - IFormattable invariant-culture formatting (decimal)
+  - 2-value `Thickness` path through `ParseValue` (not just direct `TryParseThickness`)
+  - Comma-implies-Thickness branch when targetType is null
+  - Generic enum path via `FlowDirection` (distinct from the well-known Visibility/HA/VA arms)
+  - Mixed-case bool parsing
+  - 8-digit color with A=0x00 (alpha preservation)
+  - Lowercase hex color
+  - 5-digit and empty hex color rejection
+  - Negative Thickness acceptance
+  - Discovered behavior: **`TryParseCornerRadius` propagates `ArgumentException`
+    when components are negative** (because WinUI's `CornerRadius` ctor
+    validates). The new test pins this *as the current contract*; the
+    method's `TryParse*` name is misleading and a future fix to catch +
+    return false would be an intentional API change.
+- All 60 tests in the file pass.
+- This batch is intentionally small — a demonstration of the audit-first /
+  pin-real-behavior workflow rather than a coverage sprint.
+- **Did not re-measure coverage in this session** — the second
+  `run-coverage.ps1` invocation would take another 5-10 minutes. The next
+  session should re-baseline before claiming a delta. Expectation: marginal
+  improvement (these are 11 tests covering ~10-20 lines of branch coverage
+  each), but the real value is the worked example.
+- **Lesson for next session:** before adding any negative-value test for
+  WinUI structs, check whether the struct validates in its ctor. The
+  parser swallowing exceptions vs. propagating them is a real product
+  decision — make the test pin what you find, then file a follow-up if the
+  current behavior is wrong.
