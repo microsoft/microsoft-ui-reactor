@@ -846,10 +846,11 @@ Parallel to Phase 3, different author skillset (per spec §9 Phase
 
 ### 3.5.3 `reactor-vs-xaml.md` — Comprehensive
 
-- [ ] Side-by-side mapping per spec §7.1.1.
-- [ ] DOUBLE INDEX: lives in Section 1 (Get Started) AND Section 9
-      (Under the hood). Same file, two index entries.
-- [ ] Diagram: pull-based binding vs push-based render-from-state.
+- [x] Side-by-side mapping per spec §7.1.1.
+- [x] DOUBLE INDEX: lives in Section 1 (Get Started) AND Section 9
+      (Under the hood). Same file, two index entries. *order: 1.7 in
+      front-matter; readme indexes it under both sections.*
+- [x] Diagram: pull-based binding vs push-based render-from-state.
 
 ### 3.5.4 `reconciliation.md` — Comprehensive (promotes
       `docs/reference/reconciliation.md`)
