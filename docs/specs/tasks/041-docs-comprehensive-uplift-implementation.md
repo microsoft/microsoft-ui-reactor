@@ -1068,6 +1068,15 @@ source snippets, "Read the source" callout, tier-lint clean.)
     - `flex-layout.md.dt` → comprehensive (4.6 wave-3).
     - `advanced.md.dt` → comprehensive (4.6 wave-3).
     - `styling.md.dt` → comprehensive (4.6 wave-3).
+  - Wave-C promotions tracked here (final Comprehensive wave; lands the ≥36 spec §13 exit count):
+    - `getting-started.md.dt` → comprehensive (4.6 wave-C). Added
+      mental-model lead, ai:caveat on the local-NuGet template flow
+      (the `mur pack-local` precondition for `dotnet new reactorapp`),
+      `## Patterns` (hot reload, first event, devtools),
+      `## Common Mistakes` (editing `bin/`, mounting inside a WinUI
+      `Page`, reaching for INPC out of habit), renamed
+      "Tips for New Reactor Developers" → `## Tips`. No `winui-ref:`
+      (meta page).
   - Wave-D tier declarations (intentionally Solid — not promoted):
     - `readme.md.dt` → `tier: solid` declared (4.6 wave-D); added a
       "Where to start" reference table in the first half and a
