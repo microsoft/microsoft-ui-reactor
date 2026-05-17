@@ -1,0 +1,20 @@
+%% threading-and-dispatch: how a background-thread setter reaches the
+%% reconciler. RenderContext checks the captured UI thread id, posts via
+%% UIDispatcher.TryEnqueue, the marshalled lambda re-enters the setter
+%% on the UI thread, the change-echo suppressor guards round-trip events,
+%% and the reconciler does the rest on the dispatcher.
+sequenceDiagram
+    autonumber
+    participant BG as Background task
+    participant Set as setX(value)
+    participant UI as UI dispatcher
+    participant RC as RenderContext
+    participant R as Reconciler
+    BG->>Set: setSeconds(s =&gt; s + 1)
+    Set->>Set: MarshalIfOffUIThread checks _uiThreadId
+    Set->>UI: TryEnqueue(() =&gt; Setter(value))
+    Note over UI: queued
+    UI->>Set: invokes lambda on UI thread
+    Set->>RC: write hook slot
+    RC->>R: requestRerender()
+    R->>R: reconcile + flush effects
