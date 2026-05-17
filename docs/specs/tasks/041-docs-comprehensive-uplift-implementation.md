@@ -1102,6 +1102,27 @@ source snippets, "Read the source" callout, tier-lint clean.)
       island under `DoubleBuffered = true`, ignoring host-chrome a11y),
       added cross-link to `wpf-interop.md` in Next Steps,
       `winui-ref` set to the XAML Islands Microsoft Learn hub.
+    - `input-and-gestures.md.dt` → comprehensive (4.6 wave-C). Was
+      previously zero snippet refs + zero screenshots (the doc app
+      under `docs/_pipeline/apps/input-and-gestures/` already shipped
+      five `<snippet:id>` markers + matching screenshots — the
+      template just hadn't been wired). Replaced five inline code
+      blocks with `snippet="input-and-gestures/{pointer-modifiers,
+      pan-gesture, long-press, use-element-focus, kanban-dnd}"`,
+      added matching `screenshot://` refs. Added mental-model lead,
+      new `## Reference` table (modifier + hook surface),
+      ai:caveat on the pointer-event routing model (no preview pair
+      for pointer events — relying on tunneling for capture
+      silently fails; the handled-too overload is the right shape),
+      `## Patterns` (drag-reorder via kanban shape, pinch-to-zoom
+      compositor pattern, focus-trap modal), `## Common Mistakes`
+      (tunneling for pointer capture, using `.OnKeyDown` for
+      app-wide accelerators instead of `Command` + `AccessKey` —
+      caught by `REACTOR_INPUT_001`, forgetting `.IsTabStop()` on
+      a clickable `Border`), `## Tips` (5 bullets), new `## Next
+      Steps` with 6 links including `focus-and-input-internals.md`
+      (Phase 3.5 cross-link from the audit row),
+      `winui-ref` set to Microsoft Learn input docs hub.
   - Wave-D tier declarations (intentionally Solid — not promoted):
     - `readme.md.dt` → `tier: solid` declared (4.6 wave-D); added a
       "Where to start" reference table in the first half and a
