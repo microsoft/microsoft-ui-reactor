@@ -11,11 +11,26 @@ internal static partial class CompileCommand
     public static int Run(string[] args)
     {
         var topic = GetOption(args, "--topic");
-        var noScreenshots = HasFlag(args, "--no-screenshots");
+        // --no-screenshots is the legacy name; --skip-screenshots is the spec-§10.3
+        // name. Both map to the same behavior so authors can use whichever the
+        // help / docs they consulted shows.
+        var noScreenshots = HasFlag(args, "--no-screenshots") || HasFlag(args, "--skip-screenshots");
         var noAi = HasFlag(args, "--no-ai");
         var noBuild = HasFlag(args, "--no-build");
+        var skipDiagrams = HasFlag(args, "--skip-diagrams");
         var validateOnly = HasFlag(args, "--validate-only");
         var ci = HasFlag(args, "--ci");
+        var tierFilterRaw = GetOption(args, "--tier");
+        DocTier? tierFilter = null;
+        if (tierFilterRaw is not null)
+        {
+            try { tierFilter = TemplateParser.ParseTier(tierFilterRaw); }
+            catch (DocPipelineException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 1;
+            }
+        }
 
         var repoRoot = FindRepoRoot();
         if (repoRoot == null)
@@ -38,10 +53,31 @@ internal static partial class CompileCommand
         foreach (var (id, dir) in apps)
             Console.WriteLine($"    • {id} → {Path.GetRelativePath(repoRoot, dir)}");
 
-        var templates = DiscoverTemplates(templatesDir, topic);
+        List<(string topicId, DocTemplate template)> templates;
+        try
+        {
+            templates = DiscoverTemplates(templatesDir, topic);
+        }
+        catch (DocPipelineException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+
+        // --tier <stub|solid|comprehensive> subsets templates to those that
+        // explicitly declared the matching tier — for fast iteration on one
+        // band without re-linting the full set.
+        if (tierFilter is { } filter)
+        {
+            var before = templates.Count;
+            templates = templates
+                .Where(t => t.template.TierDeclared && t.template.Tier == filter)
+                .ToList();
+            Console.WriteLine($"  --tier={filter.ToString().ToLowerInvariant()} filter: {templates.Count}/{before} template(s)");
+        }
         Console.WriteLine($"  Found {templates.Count} template(s)");
         foreach (var (id, t) in templates)
-            Console.WriteLine($"    • {id} → {Path.GetRelativePath(repoRoot, t.FilePath)}");
+            Console.WriteLine($"    • {id} → {Path.GetRelativePath(repoRoot, t.FilePath)} [tier={t.Tier.ToString().ToLowerInvariant()}{(t.TierDeclared ? "" : " default")}]");
 
         if (apps.Count == 0 && templates.Count == 0)
         {
@@ -113,11 +149,48 @@ internal static partial class CompileCommand
             return 1;
         }
 
+        // ── Tier-lint (spec §11) ──────────────────────────────────────────
+        // Run per-tier structural checks against the assembled body so the
+        // lint sees the same shape readers will see on GitHub. We assemble
+        // here even in --validate-only mode (no file write).
+        Console.WriteLine();
+        Console.WriteLine("═══ Tier Lint ═══");
+        var tierHasErrors = false;
+        foreach (var (topicId, template) in templates)
+        {
+            var (assembled, snipRes, ssRes) = AssembleForLint(template, allSnippets, allScreenshots);
+            var findings = TierLint.Lint(template, assembled, snipRes, ssRes);
+            foreach (var f in findings)
+            {
+                if (f.Severity == TierLintSeverity.Error)
+                {
+                    Console.Error.WriteLine(f.Format());
+                    tierHasErrors = true;
+                }
+                else if (f.Severity == TierLintSeverity.Warning)
+                {
+                    Console.WriteLine($"  ⚠ {f.Format()}");
+                }
+                else
+                {
+                    // Info-level: no declared tier, so the violation is informational.
+                    Console.WriteLine($"  ℹ {f.Format()}");
+                }
+            }
+        }
+
         if (validateOnly)
         {
             Console.WriteLine();
-            Console.WriteLine(hasErrors ? "Validation finished with errors." : "Validation passed.");
-            return hasErrors ? 1 : 0;
+            var combined = hasErrors || tierHasErrors;
+            Console.WriteLine(combined ? "Validation finished with errors." : "Validation passed.");
+            return combined ? 1 : 0;
+        }
+
+        if (tierHasErrors && ci)
+        {
+            Console.Error.WriteLine("Tier lint failed in --ci mode.");
+            return 1;
         }
 
         // ── Phase 2: Build ────────────────────────────────────────────────
@@ -270,6 +343,25 @@ internal static partial class CompileCommand
         }
 
         return process.ExitCode;
+    }
+
+    /// <summary>
+    /// Assemble a template's body for tier-lint inspection. Same call as the
+    /// emit-time DocAssembler but discards errors/warnings (lint reports its
+    /// own findings) and returns the counts of *resolved* snippet/screenshot
+    /// references so the tier checklist can enforce the §11 minimums.
+    /// </summary>
+    private static (string body, int resolvedSnippets, int resolvedScreenshots) AssembleForLint(
+        DocTemplate template,
+        Dictionary<string, SnippetExtractor.Snippet> allSnippets,
+        Dictionary<string, ScreenshotInfo> allScreenshots)
+    {
+        var snippetRefs = ExtractSnippetRefs(template.Body);
+        var resolvedSnippets = snippetRefs.Count(r => allSnippets.ContainsKey(r));
+        var screenshotRefs = ExtractScreenshotRefs(template.Body);
+        var resolvedScreenshots = screenshotRefs.Count(r => allScreenshots.ContainsKey(r));
+        var assembled = DocAssembler.Assemble(template.Body, allSnippets, allScreenshots, out _, out _);
+        return (assembled, resolvedSnippets, resolvedScreenshots);
     }
 
     // ── Reference extraction (for validation) ─────────────────────────────

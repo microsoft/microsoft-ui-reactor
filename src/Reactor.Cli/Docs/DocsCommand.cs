@@ -40,12 +40,14 @@ internal static class DocsCommand
         Console.WriteLine("  compile    Compile documentation from templates and doc apps");
         Console.WriteLine();
         Console.WriteLine("Compile options:");
-        Console.WriteLine("  --topic <name>      Compile only a specific topic");
-        Console.WriteLine("  --no-screenshots    Skip screenshot capture");
-        Console.WriteLine("  --no-ai             Skip AI authoring");
-        Console.WriteLine("  --no-build          Skip building doc apps");
-        Console.WriteLine("  --validate-only     Check references without building");
-        Console.WriteLine("  --ci                Strict mode: fail on warnings");
+        Console.WriteLine("  --topic <name>          Compile only a specific topic");
+        Console.WriteLine("  --no-screenshots        Skip screenshot capture (alias: --skip-screenshots)");
+        Console.WriteLine("  --skip-diagrams         Skip diagram processing (SVG passthrough + Mermaid)");
+        Console.WriteLine("  --no-ai                 Skip AI authoring");
+        Console.WriteLine("  --no-build              Skip building doc apps");
+        Console.WriteLine("  --validate-only         Check references + run tier lint without emitting");
+        Console.WriteLine("  --tier <stub|solid|comprehensive>  Restrict validation to templates declaring this tier");
+        Console.WriteLine("  --ci                    Strict mode: fail on warnings");
     }
 
     private static int Unknown(string cmd)

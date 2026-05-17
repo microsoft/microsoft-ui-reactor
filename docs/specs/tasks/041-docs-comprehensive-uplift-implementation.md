@@ -145,27 +145,34 @@ infrastructure to unblock content phases.
 
 ### 1.3 Tier-lint validator (spec §11)
 
-- [ ] Implement `mur docs compile --validate-only` if not already
+- [x] Implement `mur docs compile --validate-only` if not already
       present; refactor existing compile path so validate and emit
-      share parsing.
-- [ ] Implement per-tier checklist:
-  - [ ] **stub:** front-matter present, title, ≥1 paragraph.
-  - [ ] **solid:** + ≥3 `snippet=` references resolved; ≥1
+      share parsing. *Shared via `AssembleForLint` helper inside
+      `CompileCommand`.*
+- [x] Implement per-tier checklist:
+  - [x] **stub:** front-matter present, title, ≥1 paragraph.
+  - [x] **solid:** + ≥3 `snippet=` references resolved; ≥1
         `screenshot://` reference resolved; ≥1 reference table
         (heuristic: a markdown table within first half of page); a
         `## Tips` heading; a `## Next Steps` heading with ≥3 inline
         links.
-  - [ ] **comprehensive:** all solid checks + ≥1 mental-model lead
+  - [x] **comprehensive:** all solid checks + ≥1 mental-model lead
         paragraph (heuristic: ≥80 words above first heading); ≥1
         `<!-- ai:caveat -->` block; a `## Patterns` heading; a `##
         Common Mistakes` heading; if `winui-ref:` is unset the lint
         warns (does not fail) for transparent-wrapper pages;
         inline-cross-link count ≥5.
-- [ ] Failing checks emit `REACTOR_DOC_TIER_*` codes; exit nonzero.
-- [ ] `mur docs compile --validate-only --tier=solid` should re-lint
+- [x] Failing checks emit `REACTOR_DOC_TIER_*` codes; exit nonzero.
+      *Pages without a declared `tier:` emit findings at info severity
+      only so the existing 26 pages don't break the build —
+      documented in `docs/specs/041/phase-1-retro.md`.*
+- [x] `mur docs compile --validate-only --tier=solid` should re-lint
       only pages declaring that tier (subset filter for fast iteration).
-- [ ] Unit tests: golden-file fixtures of pass/fail pages per tier,
-      one per failure code.
+- [x] Unit tests: golden-file fixtures of pass/fail pages per tier,
+      one per failure code. *17 lint tests in `TierLintTests.cs` —
+      one per `REACTOR_DOC_TIER_001..012` + `_W001` + the
+      undeclared-tier info-only fallback. All 29 tests in the project
+      pass.*
 
 ### 1.4 Snippet source-tree extension (spec §10.2)
 
