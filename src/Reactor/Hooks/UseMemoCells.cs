@@ -249,6 +249,10 @@ public static class UseMemoCellsExtensions
 
     // ── Helpers ─────────────────────────────────────────────────────────
 
+    // <snippet:demo>
+    // Memo snapshot: copy the caller's items into a private buffer so a
+    // subsequent mutation by the caller can't corrupt the memo's view of
+    // "what we showed last time".
     private static T[] SnapshotItems<T>(IReadOnlyList<T> items)
     {
         var snapshot = new T[items.Count];
@@ -256,6 +260,7 @@ public static class UseMemoCellsExtensions
             snapshot[i] = items[i];
         return snapshot;
     }
+    // </snippet:demo>
 
     private static object[] SnapshotDeps(object[] deps)
     {

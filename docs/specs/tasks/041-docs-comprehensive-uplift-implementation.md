@@ -176,19 +176,28 @@ infrastructure to unblock content phases.
 
 ### 1.4 Snippet source-tree extension (spec §10.2)
 
-- [ ] Implement `snippet="source:<path>#<region>"` parser.
-- [ ] Snippet extractor walks `src/` for the `source:` prefix;
+- [x] Implement `snippet="source:<path>#<region>"` parser.
+      *`SnippetExtractor.TryParseSourceReference`.*
+- [x] Snippet extractor walks `src/` for the `source:` prefix;
       retains existing `<topic>/<id>` behavior for non-prefixed
-      snippets.
-- [ ] Region markers: extract content between
+      snippets. *Compile validation path dispatches on the
+      `source:` prefix; legacy refs continue unchanged.*
+- [x] Region markers: extract content between
       `// <snippet:<region>>` and `// </snippet:<region>>` comments
       (any line-comment style — `//`, `<!-- -->`, `'`).
-- [ ] Failure modes: file not found, region missing, mismatched
+      *`OpenMarkerPattern` / `CloseMarkerPattern` regex accepts
+      all three.*
+- [x] Failure modes: file not found, region missing, mismatched
       open/close — each fails compile with a distinct error code.
-- [ ] Unit tests for: happy path, file-not-found, region-not-found,
+      *`REACTOR_DOC_SNIPPET_001..004`.*
+- [x] Unit tests for: happy path, file-not-found, region-not-found,
       nested-region (should error), unterminated region.
-- [ ] Sanity test against one real `src/Reactor/Hooks/UseState.cs`
-      block to ensure C# braces don't break extraction.
+      *12 tests in `SourceSnippetTests.cs`.*
+- [x] Sanity test against one real `src/Reactor/Hooks/UseState.cs`
+      block to ensure C# braces don't break extraction. *Used
+      `src/Reactor/Hooks/UseMemoCells.cs` (small + stable). Test in
+      `SourceSnippetSanityTests.cs`; markers around
+      `SnapshotItems<T>` helper.*
 
 ### 1.5 SVG / Mermaid pipeline (spec §10.3)
 

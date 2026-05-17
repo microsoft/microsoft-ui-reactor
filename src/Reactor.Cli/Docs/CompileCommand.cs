@@ -123,6 +123,24 @@ internal static partial class CompileCommand
         {
             foreach (var snippetRef in ExtractSnippetRefs(template.Body))
             {
+                // Spec §10.2: source:<path>#<region> reads directly from the
+                // repository tree rather than the doc-app's captured snippets.
+                if (SnippetExtractor.TryParseSourceReference(snippetRef, out var srcPath, out var region))
+                {
+                    try
+                    {
+                        var snip = SnippetExtractor.ExtractFromSource(repoRoot, srcPath, region);
+                        allSnippets[snippetRef] = snip;
+                        Console.WriteLine($"  ✓ snippet \"{snippetRef}\" resolved ({snip.Code.Split('\n').Length} lines)");
+                    }
+                    catch (DocPipelineException ex)
+                    {
+                        Console.Error.WriteLine($"  ✗ Template '{topicId}': {ex.Code}: {ex.Message}");
+                        hasErrors = true;
+                    }
+                    continue;
+                }
+
                 if (!allSnippets.ContainsKey(snippetRef))
                 {
                     Console.Error.WriteLine($"  ✗ Template '{topicId}': missing snippet '{snippetRef}'");
