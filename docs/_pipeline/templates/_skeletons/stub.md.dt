@@ -1,0 +1,36 @@
+---
+# Skeleton: stub tier (spec 041 §6.1).
+#
+# This file is a scaffold — copy it to docs/_pipeline/templates/<topic>.md.dt
+# and replace every {{REPLACE_ME}} token with real content. The compile
+# pipeline excludes everything under _skeletons/ from template discovery, so
+# this file does not produce a guide page even though its tier-lint would
+# fail (placeholders are not real content).
+#
+# Required structural elements for the stub tier:
+#   - front-matter (title, app, order, audience, goal, tier)
+#   - one `#` title heading
+#   - at least one paragraph
+#   - a link to the AI author skill so the surface area stays discoverable
+#
+# Anything beyond this is optional. Stubs are placeholders, not content;
+# keep them honest — no fake examples, no padding prose.
+title: "{{REPLACE_ME: human-readable title}}"
+app: {{REPLACE_ME: topic-id, matches the file basename}}
+order: {{REPLACE_ME: numeric or .5 slot per spec §7.2}}
+audience: {{REPLACE_ME: beginner|intermediate|advanced}}
+goal: |
+  {{REPLACE_ME: one-sentence "Coming soon — this page documents X."
+  description; the AI Author Skill expands this into the full page when
+  the stub is promoted.}}
+tier: stub
+---
+
+# {{REPLACE_ME: human-readable title}}
+
+Coming soon — this page documents {{REPLACE_ME: feature or topic}}. See
+[the AI Author Skill](../../_pipeline/ai-author-skill.md) for the planned
+surface area and the spec-041 §7.1 layout it slots into.
+
+In the meantime, the closest existing coverage is
+[{{REPLACE_ME: nearest existing topic title}}]({{REPLACE_ME: nearest-existing-topic.md}}).

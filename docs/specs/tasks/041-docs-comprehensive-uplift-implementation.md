@@ -365,15 +365,23 @@ infrastructure to unblock content phases.
 
 ### 1.11 Page-template skeletons (spec §9 Phase 1)
 
-- [ ] Create `docs/_pipeline/templates/_skeletons/stub.md.dt`.
-- [ ] Create `docs/_pipeline/templates/_skeletons/solid.md.dt`.
-- [ ] Create `docs/_pipeline/templates/_skeletons/comprehensive.md.dt`.
-- [ ] Each skeleton must pass `mur docs compile --validate-only`
+- [x] Create `docs/_pipeline/templates/_skeletons/stub.md.dt`.
+- [x] Create `docs/_pipeline/templates/_skeletons/solid.md.dt`.
+- [x] Create `docs/_pipeline/templates/_skeletons/comprehensive.md.dt`.
+- [x] Each skeleton must pass `mur docs compile --validate-only`
       when its placeholder text is filled in. The skeleton itself
       is allowed to fail (templates aren't compiled in skeleton form).
-- [ ] Skeleton headings exactly match the tier-lint expectations
+      *`CompileCommand.EnumerateTemplateFiles` excludes anything under
+      `_skeletons/` so the scaffolds never reach the tier-lint or
+      DocAssembler. Verified via `mur docs compile --validate-only` —
+      26 templates discovered, the 3 skeletons skipped.*
+- [x] Skeleton headings exactly match the tier-lint expectations
       from §11 (so authors can't accidentally drop a required
-      section).
+      section). *Stub = front-matter + title + ≥1 paragraph. Solid
+      adds `## Tips` and `## Next Steps`. Comprehensive adds the
+      mental-model lead, `<!-- ai:caveat -->`, `## Patterns`, and
+      `## Common Mistakes` — exactly the codes
+      `REACTOR_DOC_TIER_006..012` lint for.*
 
 ### 1.12 Readme rewrite to 10-section index (spec §7.1)
 

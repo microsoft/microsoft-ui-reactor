@@ -1,0 +1,131 @@
+---
+# Skeleton: comprehensive tier (spec 041 §6.3).
+#
+# This file is a scaffold — copy it to docs/_pipeline/templates/<topic>.md.dt
+# and replace every {{REPLACE_ME}} token with real content. The compile
+# pipeline excludes everything under _skeletons/ from template discovery, so
+# this skeleton does not produce a guide page even though its tier-lint
+# would fail until the placeholders are filled in.
+#
+# Required structural elements (everything from solid plus):
+#   - ≥80-word mental-model lead paragraph above the first heading
+#   - ≥1 `<!-- ai:caveat -->...<!-- /ai:caveat -->` block
+#   - `## Patterns` section with at least one real-world recipe
+#   - `## Common Mistakes` section with anti-pattern + correction
+#   - ≥5 inline cross-links in prose (not just in Next Steps)
+#   - `winui-ref:` set when the page wraps a transparent WinUI control
+#     (Reactor-original controls leave it unset)
+title: "{{REPLACE_ME: human-readable title}}"
+app: {{REPLACE_ME: topic-id, matches docs/_pipeline/apps/<id>/}}
+order: {{REPLACE_ME: numeric or .5 slot per spec §7.2}}
+audience: {{REPLACE_ME: beginner|intermediate|advanced}}
+goal: |
+  {{REPLACE_ME: 2-4 sentence directive to the AI author describing the
+  full scope this page must cover, including mental-model, patterns,
+  and common-mistake material.}}
+tier: comprehensive
+# Uncomment and fill in for transparent-wrapper pages (DatePicker, ColorPicker,
+# AutoSuggestBox, etc.). Leave commented out for Reactor-original surfaces
+# (DataGrid, VirtualList, MarkdownTextBlock, ErrorBoundary).
+# winui-ref: https://learn.microsoft.com/en-us/windows/apps/design/controls/{{REPLACE_ME: control-slug}}
+---
+
+{{REPLACE_ME: mental-model lead paragraph. ≥80 words. Explain why this
+concept exists, when to reach for it, and what it replaces in classic
+WinUI / WPF / React. This is the SwiftUI "Discussion" treatment —
+philosophy and orientation, not API rehearsal. Land a sentence on the
+trade-off that picks this primitive over the alternatives, and a
+sentence on the most common mistake a reader will make if they skim.
+The lint heuristic counts at least eighty words above the first
+heading, so do not skimp on this paragraph; it is what separates a
+solid page from a comprehensive one. Cross-link two or three related
+concepts inline so the reader can branch out without scrolling.}}
+
+# {{REPLACE_ME: human-readable title}}
+
+{{REPLACE_ME: a sentence or two restating the topic in concrete terms now
+that the mental-model paragraph has framed the abstraction. Include at
+least one inline link to a related page, e.g.
+[hooks](hooks.md).}}
+
+## {{REPLACE_ME: first concept heading}}
+
+```csharp snippet="{{REPLACE_ME: topic-id}}/{{REPLACE_ME: snippet-id-1}}"
+```
+
+![{{REPLACE_ME: alt text}}](screenshot://{{REPLACE_ME: topic-id}}/{{REPLACE_ME: screenshot-id}})
+
+{{REPLACE_ME: explanation, with inline links to related topics where the
+reader might naturally branch — e.g. [components](components.md) when
+talking about composition, [effects](effects.md) when talking about
+side effects.}}
+
+<!-- ai:caveat -->
+{{REPLACE_ME: one non-obvious gotcha. Lifecycle order, threading,
+performance, accessibility side-effect, surprising interaction with
+another hook. Concrete and concise — no vague "be careful".}}
+<!-- /ai:caveat -->
+
+## {{REPLACE_ME: second concept heading}}
+
+```csharp snippet="{{REPLACE_ME: topic-id}}/{{REPLACE_ME: snippet-id-2}}"
+```
+
+{{REPLACE_ME: explanation. Cross-link inline to
+[styling](styling.md) or another related topic.}}
+
+## {{REPLACE_ME: third concept heading}}
+
+```csharp snippet="{{REPLACE_ME: topic-id}}/{{REPLACE_ME: snippet-id-3}}"
+```
+
+{{REPLACE_ME: explanation.}}
+
+## Reference
+
+| {{REPLACE_ME: column 1}} | {{REPLACE_ME: column 2}} | {{REPLACE_ME: column 3}} |
+|---|---|---|
+| {{REPLACE_ME: row 1 cell 1}} | {{REPLACE_ME: row 1 cell 2}} | {{REPLACE_ME: row 1 cell 3}} |
+| {{REPLACE_ME: row 2 cell 1}} | {{REPLACE_ME: row 2 cell 2}} | {{REPLACE_ME: row 2 cell 3}} |
+| {{REPLACE_ME: row 3 cell 1}} | {{REPLACE_ME: row 3 cell 2}} | {{REPLACE_ME: row 3 cell 3}} |
+
+## Patterns
+
+### {{REPLACE_ME: pattern name — login form, paginated list, settings page, etc.}}
+
+```csharp snippet="{{REPLACE_ME: topic-id}}/{{REPLACE_ME: pattern-snippet-id}}"
+```
+
+{{REPLACE_ME: walkthrough of the real-world recipe. Tie back to a recipe
+page if one exists (e.g. [recipes/login](recipes/login.md)).}}
+
+## Common Mistakes
+
+### {{REPLACE_ME: mistake 1 name}}
+
+```csharp
+// Don't:
+{{REPLACE_ME: the anti-pattern, ≤6 lines, inline (not a snippet — the
+anti-pattern would fail compile in a doc app).}}
+```
+
+```csharp snippet="{{REPLACE_ME: topic-id}}/{{REPLACE_ME: corrected-snippet-id}}"
+```
+
+{{REPLACE_ME: one sentence explaining why the first form breaks and the
+second form is correct.}}
+
+## Tips
+
+**{{REPLACE_ME: tip 1 bold lead}}.** {{REPLACE_ME: tip 1 body sentence.}}
+
+**{{REPLACE_ME: tip 2 bold lead}}.** {{REPLACE_ME: tip 2 body sentence.}}
+
+**{{REPLACE_ME: tip 3 bold lead}}.** {{REPLACE_ME: tip 3 body sentence.}}
+
+## Next Steps
+
+- **[{{REPLACE_ME: previous topic}}]({{REPLACE_ME: prev.md}})** — Previous in the learning path.
+- **[{{REPLACE_ME: next topic}}]({{REPLACE_ME: next.md}})** — Next: {{REPLACE_ME: 1-line description}}.
+- **[{{REPLACE_ME: related topic A}}]({{REPLACE_ME: related-a.md}})** — {{REPLACE_ME: 1-line}}.
+- **[{{REPLACE_ME: related topic B}}]({{REPLACE_ME: related-b.md}})** — {{REPLACE_ME: 1-line}}.
