@@ -353,30 +353,34 @@ public sealed partial class MainWindow : Window
     //  cost. Recycled containers are repopulated in PrepareElementForItem.
     // ────────────────────────────────────────────────────────────────────
 
+    // Vanilla recycling pool. ItemsRepeater calls RecycleElement when an
+    // item scrolls out of view; we push the realized RowControl onto a
+    // stack so the next GetElement reuses it instead of allocating. This
+    // mirrors what Reactor's LazyVStack factory does internally (keyed
+    // dict by ReactorRow.Key); the WinUI cost of "find element by index"
+    // doesn't apply because RecyclingElementFactory's standard pattern
+    // is index-agnostic.
     private sealed partial class RowFactory : IElementFactory
     {
+        private readonly Stack<RowControl> _pool = new();
+
         public UIElement GetElement(ElementFactoryGetArgs args)
         {
-            if (args.Parent is ItemsRepeater repeater)
+            var item = (ListItemSource.ListItem)args.Data;
+            if (_pool.TryPop(out var recycled))
             {
-                var recycled = (UIElement?)repeater.TryGetElement(args.Data is ListItemSource.ListItem itm ? itm.Id : -1);
-                if (recycled is RowControl rr)
-                {
-                    rr.SetData((ListItemSource.ListItem)args.Data);
-                    return rr;
-                }
+                recycled.SetData(item);
+                return recycled;
             }
             var row = new RowControl();
-            row.SetData((ListItemSource.ListItem)args.Data);
+            row.SetData(item);
             return row;
         }
 
         public void RecycleElement(ElementFactoryRecycleArgs args)
         {
-            // No teardown — keep the visual tree intact so we re-use on
-            // the next realization. Matches the Reactor LazyVStack
-            // factory's recycle path (it keeps elements in a key→Element
-            // map keyed by ReactorRow.Key).
+            if (args.Element is RowControl rc)
+                _pool.Push(rc);
         }
     }
 

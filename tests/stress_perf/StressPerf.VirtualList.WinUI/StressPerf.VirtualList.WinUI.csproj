@@ -9,7 +9,12 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-    <PublishAot>true</PublishAot>
+    <!-- PublishAot intentionally OFF for this variant: the spec 042 perf
+         gate compares the JIT'd Reactor variant against a JIT'd WinUI
+         vanilla baseline, so neither side has the AOT linker as a
+         confound. (StressPerf.VirtualList.Reactor is also JIT'd at
+         dotnet build time — PublishAot only matters at publish.) -->
+    <PublishAot>false</PublishAot>
     <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
