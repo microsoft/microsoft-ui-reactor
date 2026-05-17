@@ -682,15 +682,29 @@ catalog page follows the per-control template from spec §6.3.
 
 ### 3.1 `text-and-media.md` — NEW, Comprehensive
 
-- [ ] Doc app under `docs/_pipeline/apps/text-and-media/`.
-- [ ] Controls: TextBlock variants, RichTextBlock, RichEditBox,
-      MarkdownTextBlock, Image, MediaPlayerElement, WebView2,
-      InkCanvas, MapControl.
-- [ ] Per-control: factory signature, modifier table, ≥1 default
-      screenshot, ≥1 customized screenshot, ≥1 "Don't" example,
-      WinUI link (where applicable; MarkdownTextBlock has no
-      WinUI parallel).
-- [ ] Template at Comprehensive tier.
+- [x] Doc app under `docs/_pipeline/apps/text-and-media/`. *Nine
+      snippet markers (text-variants, textblock-modifiers, rich-text,
+      rich-edit, markdown, image, media-player, webview, map-control)
+      driving the same nine doc-manifest screenshots. Builds clean
+      against Reactor.csproj on x64.*
+- [x] Controls: TextBlock variants, RichTextBlock, RichEditBox,
+      Markdown (Reactor-original; `Markdown(string)` not a
+      `MarkdownTextBlock` factory), Image, MediaPlayerElement,
+      WebView2, MapControl. **InkCanvas is not yet wrapped** —
+      recorded in the Reference table as "Not yet wrapped". Spec
+      number for the InkCanvas wrapper is TBD.
+- [x] Per-control: factory signature, modifier table, screenshot, and
+      a "Don't" anti-pattern for the four with concrete failure modes
+      (Image — decode on UI thread; MediaPlayerElement — remount thrash;
+      WebView2 — indeterminate sizing; MapControl — silent tile-fetch
+      failure). WinUI Learn link on each non-Reactor-original section.
+- [x] Template at Comprehensive tier. *Zero findings for
+      `text-and-media.md.dt` under `mur docs compile --validate-only
+      --tier=comprehensive`. Mental-model lead is 240 words; one
+      `<!-- ai:caveat -->` block (fast-path renderer); `## Patterns`
+      (Markdown long-form + RichTextBlock inline-data) and `## Common
+      Mistakes` (TextBlock-for-everything + Markdown-without-memo)
+      both populated. 12 inline cross-links across the page.*
 
 ### 3.2 `status-and-info.md` — NEW, Solid
 

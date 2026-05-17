@@ -1,0 +1,52 @@
+app:
+  title: "Text and Media"
+  width: 720
+  height: 1200
+  startup-delay: 1500
+
+screenshots:
+  - id: text-variants
+    description: "Heading, SubHeading, body TextBlock, Caption variants stacked."
+    component: TextVariantsDemo
+    region: client
+    format: png
+  - id: textblock-modifiers
+    description: "TextBlock with Bold/FontSize, Selectable, and TextWrapping + MaxLines + TextTrimming."
+    component: TextBlockModifiersDemo
+    region: client
+    format: png
+  - id: rich-text
+    description: "RichTextBlock with inline Hyperlink and Run elements across paragraphs."
+    component: RichTextDemo
+    region: client
+    format: png
+  - id: rich-edit
+    description: "RichEditBox with spell-check and AcceptsReturn, sized for paragraph editing."
+    component: RichEditDemo
+    region: client
+    format: png
+  - id: markdown
+    description: "Markdown rendering — heading, bullet list, inline link, blockquote."
+    component: MarkdownDemo
+    region: client
+    format: png
+  - id: image
+    description: "Image control showing a packaged ms-appx asset at 96x96."
+    component: ImageDemo
+    region: client
+    format: png
+  - id: media-player
+    description: "MediaPlayerElement with transport controls enabled."
+    component: MediaPlayerDemo
+    region: client
+    format: png
+  - id: webview
+    description: "WebView2 rendering about:blank with a Loaded indicator."
+    component: WebViewDemo
+    region: client
+    format: png
+  - id: map-control
+    description: "MapControl at zoom level 4 with no service token configured."
+    component: MapControlDemo
+    region: client
+    format: png
