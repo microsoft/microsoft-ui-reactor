@@ -920,7 +920,12 @@ source snippets, "Read the source" callout, tier-lint clean.)
 - [ ] `forms.md` — already Comprehensive after Phase 3.5 expand;
       verify.
 - [ ] `collections.md` — verify.
-- [ ] `navigation.md` — promote to Comprehensive.
+- [x] `navigation.md` — promote to Comprehensive. *Added 80+ word
+      mental-model lead, reference table in first half, ai:caveat on
+      the `SetState` guard-bypass, Patterns (guarded leave, scroll
+      restore, deep-link back stack), Common Mistakes (string routes,
+      singleton handle, missing UseSystemBackButton), winui-ref →
+      navigation-basics.*
 - [ ] `animation.md` — promote to Comprehensive.
 - [ ] `accessibility.md` — promote to Comprehensive.
 - [ ] `data-system.md` — promote to Comprehensive.
