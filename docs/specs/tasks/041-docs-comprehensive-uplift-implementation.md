@@ -478,20 +478,36 @@ by traffic impact (per spec §9 Phase 2).
 
 ### 2.1 `controls.md` — catalog index
 
-- [ ] Author template `docs/_pipeline/templates/controls.md.dt` at
+- [x] Author template `docs/_pipeline/templates/controls.md.dt` at
       Solid tier (becomes Comprehensive once individual catalog pages
-      land in Phase 3).
-- [ ] Doc app `docs/_pipeline/apps/controls/` with one canvas per
+      land in Phase 3). *Solid tier passes; thumbnail-index table with
+      one row per category, lead snippet + 7 group snippets, full
+      Reference / Tips / Next Steps.*
+- [x] Doc app `docs/_pipeline/apps/controls/` with one canvas per
       control group (forms / collections / text-and-media /
       status-and-info / dialogs-and-flyouts / data-system / charting)
-      for thumbnail screenshots.
-- [ ] Thumbnail-strategy: per spec §12 Q7 (resolved option b),
+      for thumbnail screenshots. *One `FormsGroup` / `CollectionsGroup`
+      / etc. component per category. Builds clean against Reactor.csproj.*
+- [x] Thumbnail-strategy: per spec §12 Q7 (resolved option b),
       `doc-manifest.yaml` declares a `catalog-thumb` capture per
-      control.
-- [ ] Implement `catalog-thumb` capture support in the doc-app
+      control. *7 catalog-thumb entries in `controls/doc-manifest.yaml`.*
+- [x] Implement `catalog-thumb` capture support in the doc-app
       harness if not already present. **Unit test + golden image.**
-- [ ] Thumbnail-index table renders with image + one-line + link.
-- [ ] Confirm no unlinked controls remain in the catalog stub set.
+      *Implemented in Phase 2.0 commit — `kind`, `thumb-width`,
+      `thumb-height` on `ScreenshotConfig`; `ImageProcessor.ProcessThumb`
+      letterboxes to 320×240; `ScreenshotCapture` routes on Kind; the
+      `DocAssembler` emits `<id>-thumb.<format>` URLs for catalog-thumb
+      entries. 7 new tests pass (4 image, 3 manifest).*
+- [x] Thumbnail-index table renders with image + one-line + link.
+      *Verified in generated `docs/guide/controls.md` — each category
+      section has an image + reference table + per-category detail
+      link. Placeholder 320×240 gray PNGs committed for the seven
+      categories until the harness runs end-to-end (deferred per
+      Phase 2.5 follow-up).*
+- [x] Confirm no unlinked controls remain in the catalog stub set.
+      *Every catalog row links to either an existing detail page
+      (forms / collections / data-system / charting) or a Phase 3
+      stub (text-and-media / status-and-info / dialogs-and-flyouts).*
 
 ### 2.2 `testing.md` — Solid
 

@@ -1,0 +1,54 @@
+app:
+  title: "Controls Catalog"
+  width: 480
+  height: 320
+  startup-delay: 1200
+
+# Catalog-thumb captures for the controls-index page (spec 041 §2.1 + §6.3).
+# Each entry uses `kind: catalog-thumb` so the harness downscales the captured
+# frame to 320x240 with a letterboxed background. Output lands at
+# `<id>-thumb.png` so a future per-category page can still claim the plain
+# `<id>.png` slot for a full-size screenshot.
+screenshots:
+  - id: forms
+    kind: catalog-thumb
+    component: FormsGroup
+    description: "Forms category — TextField, CheckBox, Slider, Button."
+    region: client
+    format: png
+  - id: collections
+    kind: catalog-thumb
+    component: CollectionsGroup
+    description: "Collections category — ListView / VirtualList shape."
+    region: client
+    format: png
+  - id: text-and-media
+    kind: catalog-thumb
+    component: TextAndMediaGroup
+    description: "Text and media category — TextBlock, Heading, RichTextBlock."
+    region: client
+    format: png
+  - id: status-and-info
+    kind: catalog-thumb
+    component: StatusGroup
+    description: "Status and info category — ProgressRing, InfoBar, InfoBadge."
+    region: client
+    format: png
+  - id: dialogs-and-flyouts
+    kind: catalog-thumb
+    component: DialogsGroup
+    description: "Dialogs and flyouts category — ContentDialog, MenuFlyout."
+    region: client
+    format: png
+  - id: data-system
+    kind: catalog-thumb
+    component: DataSystemGroup
+    description: "Data system category — DataGrid, columns, data sources."
+    region: client
+    format: png
+  - id: charting
+    kind: catalog-thumb
+    component: ChartingGroup
+    description: "Charting category — Line, Bar, Area, Pie, ForceGraph."
+    region: client
+    format: png

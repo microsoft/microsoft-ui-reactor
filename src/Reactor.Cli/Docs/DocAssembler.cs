@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace Microsoft.UI.Reactor.Cli.Docs;
 
-internal record ScreenshotInfo(string Id, string TopicId, string Description, string Format);
+internal record ScreenshotInfo(string Id, string TopicId, string Description, string Format, string Kind = "screenshot");
 
 /// <summary>
 /// Replaces <c>snippet=</c> and <c>screenshot://</c> directives in compiled doc output.
@@ -68,8 +68,14 @@ internal static partial class DocAssembler
             var topic = parts[0];
             var id = parts.Length > 1 ? parts[1] : parts[0];
             var format = screenshots.TryGetValue(screenshotId, out var info) ? info.Format : "png";
+            // Catalog-thumb captures land at `<id>-thumb.<format>` so the
+            // generated URL must match (spec 041 §6.3, §12 Q7).
+            var fileBase = info != null
+                && string.Equals(info.Kind, "catalog-thumb", StringComparison.OrdinalIgnoreCase)
+                ? $"{id}-thumb"
+                : id;
 
-            return $"![{altText}](images/{topic}/{id}.{format})";
+            return $"![{altText}](images/{topic}/{fileBase}.{format})";
         });
 
         errors = errs;

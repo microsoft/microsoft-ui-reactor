@@ -123,7 +123,7 @@ internal static partial class CompileCommand
             foreach (var ss in manifest.Screenshots)
             {
                 var fullId = $"{topicId}/{ss.Id}";
-                allScreenshots[fullId] = new ScreenshotInfo(ss.Id, topicId, ss.Description, ss.Format);
+                allScreenshots[fullId] = new ScreenshotInfo(ss.Id, topicId, ss.Description, ss.Format, ss.Kind);
             }
         }
         Console.WriteLine($"  Screenshot definitions: {allScreenshots.Count}");
