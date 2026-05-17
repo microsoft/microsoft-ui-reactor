@@ -382,3 +382,95 @@ Append-only. Newest at the bottom. Date format `YYYY-MM-DD`.
   parser swallowing exceptions vs. propagating them is a real product
   decision — make the test pin what you find, then file a follow-up if the
   current behavior is wrong.
+
+### 2026-05-17 — LogCaptureInstall (machine B)
+
+- Re-baselined the branch: **79.50% line / 67.23% branch** (essentially
+  unchanged from 79.52% / 67.25% in the bootstrap entry — the 11 devtools
+  tests added in the prior session moved the global metric by less than
+  the rounding noise). Confirms the heuristic in the doc: small-batch
+  pure-helper tests inside a file that already has coverage barely
+  budge the global percentage.
+- Area picked: **`Hosting/Devtools/LogCaptureInstall.cs`** (was 58.8% / 38% /
+  98 missed / 238 total). Mid-list candidate from the gap report, chosen
+  for three reasons: (a) pure C# — no WinUI activation, (b) the file's
+  three types had only 2 shallow tests against ~20 distinct branches, (c)
+  the `Install` method itself (~50 lines mutating process-wide
+  Console.Out / Console.Error / Trace.Listeners) was **entirely
+  untested**, despite being the only public entry point and the source of
+  every stdio-MCP corruption incident this file was written to prevent.
+- Audited the two pre-existing tests
+  (`TeeTextWriter_AppendsLineOnNewline`, `BufferTraceListener_CapturesDebugWriteLine`):
+  both are real (assert behavior, not just non-null), so left in place
+  and added new coverage *alongside* them rather than replacing.
+- Added **20 new tests** in
+  `tests/Reactor.Tests/Devtools/LogCaptureBufferTests.cs`:
+  - **TeeTextWriter (11 new tests)** — Write(char) with embedded newline,
+    Write(char[], int, int) slice respect, Write(char[]) with embedded
+    newline (separate path from Write(string)), CR stripping, multi-newline
+    splits, null-string no-op, Flush() emits pending partial line,
+    Flush() no-pending does NOT emit a phantom blank entry,
+    WriteLine() no-arg flushes pending, forwarding works (writes to both
+    sink and buffer), Encoding follows forward writer when present,
+    Encoding falls back to UTF-8 when forward is null.
+  - **BufferTraceListener (4 new tests)** — Write(null) / Write("")
+    no-op, Flush emits pending partial line, Write strips CR + splits on
+    LF, WriteLine(null) doesn't drop the pending payload or NRE.
+  - **`LogCaptureInstall.Install` (6 new tests)** in a new
+    `[Collection("ConsoleTests")]` class — idempotency (returns same
+    buffer, adds at most one BufferTraceListener), captures
+    Console.Write / Console.Error.Write into the right LogSource,
+    forwardConsole=false does NOT corrupt the original stream (the
+    stdio-MCP-transport contract that motivated the entire file),
+    forwardConsole=true DOES forward, Trace.WriteLine captured as
+    LogSource.Debug, ResetForTests clears the static reference.
+- Every test names the product bug it would catch — kept the bar above
+  vanity per the doc's quality rule. No `Setters.Count == 1`-style asserts.
+- **Branch-coverage emphasis honored**: every test was written to drive a
+  previously-untouched if/switch arm — char vs char[] vs string overload
+  paths in AppendChar/AppendString, the `forward != null` vs null branches
+  in Encoding + Write, the `_lineBuf.Length > 0` branch in
+  FlushLineBuffer, the idempotent-return branch in Install.
+- **Surprises / non-obvious findings:**
+  - The two pre-existing tests use `[InternalsVisibleTo]` and reach
+    `internal sealed` types directly via `new TeeTextWriter(...)`. So
+    LogCaptureInstall.Install can be invoked from xUnit despite its
+    `internal` visibility — confirmed by the new Install tests.
+  - `Install` permanently mutates Console.Out / Console.Error /
+    Trace.Listeners. Every Install test must save and restore them in a
+    `finally`, otherwise other tests in the assembly observe a tee'd
+    Console. The doc had not flagged this — adding a note here so the
+    next session doesn't get bitten.
+  - The build of `tests/Reactor.Tests` fails when `Platform` is unset
+    (Minesweeper sample needs an explicit ARM64/x64). The exact build
+    command that works (and matches `run-coverage.ps1`) is:
+    `dotnet build tests/Reactor.Tests -c Debug -p:Platform=x64 -p:Optimize=false -p:DebugType=portable`.
+    Likewise `dotnet test ... --no-build -p:Platform=x64`. Without the
+    `-p:Platform=` argument, MSBuild evaluates against ARM64 (or whatever
+    `Platforms` lists first), which trips the Minesweeper guard. Noted
+    here in case a fresh agent burns 5 minutes on the same path.
+- **Test results:** 33/33 `LogCapture*` tests pass.
+- **Per-file delta** (from `coverage/unit.cobertura.xml`):
+  - `TeeTextWriter`: line 100%, branch 88.2% (was inferred ~70% / ~50%)
+  - `BufferTraceListener`: line 100%, branch 100%
+  - `LogCaptureInstall`: line 100%, branch 100%
+  - Combined file (LogCaptureInstall.cs): essentially fully covered. The
+    one remaining TeeTextWriter branch arm is likely the rarely-hit
+    `c != '\r' && c != '\n'` else branch in `AppendChar` on a code path
+    that's not interesting for product behavior.
+- **Merged delta** (full unit + selftest run): **79.50% → 79.57% line**
+  (+0.07), **67.23% → 67.29% branch** (+0.06). Honest, modest gain
+  consistent with a single ~240-line file: ~95 newly-covered lines on a
+  denominator of ~101,473 is ~0.09% by arithmetic; the residual
+  difference is the few selftests that hit the same lines.
+- **Lesson for next session — pacing:** a single focused file even at the
+  *easy* end of the worklist moves the global metric by less than 0.1%.
+  To close 5.5 points we need ~60 of these, or a few large
+  selftest-driven Tier-1 sweeps (Reconciler.Update / Mount each carry
+  >900 missed lines). The unit-test runway is short — the next agent
+  should consider whether the cheapest path to 85% is actually a couple
+  of new selftest fixtures rather than a long tail of pure-helper tests.
+  Document any [ExcludeFromCodeCoverage] proposals against the
+  honest-deferrals list (PreviewCaptureServer, JumpListComInterop,
+  TrayFlyoutHostWindow, TaskbarOverlay, ChartAutomationPeer) for user
+  approval — together they're worth ~1.6 points without a single test.
