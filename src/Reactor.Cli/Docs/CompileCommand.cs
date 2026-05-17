@@ -304,6 +304,7 @@ internal static partial class CompileCommand
         }
 
         // ── Phase 5.7: Reference generation (spec §10.4) ──────────────────
+        ReferenceGen.ReferenceGenResult? phaseRefResult = null;
         Console.WriteLine();
         if (skipReference)
         {
@@ -312,10 +313,10 @@ internal static partial class CompileCommand
         else
         {
             Console.WriteLine("═══ Phase 5.7: Reference ═══");
-            var refResult = RunReferenceGeneration(repoRoot, outputDir);
-            if (refResult is not null)
+            phaseRefResult = RunReferenceGeneration(repoRoot, outputDir);
+            if (phaseRefResult is not null)
             {
-                foreach (var f in refResult.Findings)
+                foreach (var f in phaseRefResult.Findings)
                 {
                     if (f.Severity == TierLintSeverity.Error)
                     {
@@ -327,7 +328,7 @@ internal static partial class CompileCommand
                         Console.WriteLine($"  ⚠ {f.Format()}");
                     }
                 }
-                Console.WriteLine($"  Generated: {refResult.Pages.Count} page(s)");
+                Console.WriteLine($"  Generated: {phaseRefResult.Pages.Count} page(s)");
             }
             if (hasErrors && ci)
             {
@@ -348,6 +349,16 @@ internal static partial class CompileCommand
             var assembled = DocAssembler.Assemble(
                 template.Body, allSnippets, allScreenshots,
                 out var errors, out var warnings);
+
+            // Expand <!-- ref:Member --> markers in the assembled body so
+            // hand-authored guide pages can cross-link into the generated
+            // reference (spec §10.4.1).
+            if (phaseRefResult is not null)
+            {
+                var markerFindings = new List<ReferenceGen.RefGenFinding>();
+                assembled = ReferenceLinkInjector.ExpandMarkers(assembled, topicId, phaseRefResult, markerFindings);
+                foreach (var f in markerFindings) Console.WriteLine($"  ⚠ {f.Format()}");
+            }
 
             foreach (var e in errors) Console.Error.WriteLine($"\n    ✗ {e}");
             foreach (var w in warnings) Console.WriteLine($"\n    ⚠ {w}");
@@ -519,9 +530,49 @@ internal static partial class CompileCommand
             referenceRoot: outputDir,
             categoryAllowList: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "hooks" });
 
+        // ── Spec §10.4.1 — conceptual-guide link injection ────────────────
+        // Scan every template for <!-- ref:Member --> markers so each
+        // generated reference page can grow a "Featured in" backlink. The
+        // template bodies are already parsed by DiscoverTemplates higher
+        // up, but ref-gen runs in its own helper and doesn't yet take the
+        // template list as input — re-scan here from disk. Cheap enough
+        // (small file count) for Phase 1B.
+        var templateBodies = new List<(string topicId, string body)>();
+        var templatesDir = Path.Combine(repoRoot, "docs", "_pipeline", "templates");
+        if (Directory.Exists(templatesDir))
+        {
+            foreach (var f in Directory.GetFiles(templatesDir, "*.md.dt"))
+            {
+                var id = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(f));
+                templateBodies.Add((id, File.ReadAllText(f)));
+            }
+        }
+        var reverseIndex = ReferenceLinkInjector.BuildReverseIndex(templateBodies);
+
+        var injectionFindings = new List<ReferenceGen.RefGenFinding>();
+        var injectedPages = new List<ReferenceGen.GeneratedPage>(result.Pages.Count);
+        foreach (var page in result.Pages)
+        {
+            var newBody = ReferenceLinkInjector.Inject(page, result, reverseIndex, injectionFindings);
+            injectedPages.Add(page with { Body = newBody });
+        }
+
+        // Lint W002: orphaned guide pages. Build the union of every
+        // guide-page declared by either an override or a default rule, then
+        // check which of those have no inbound marker.
+        var declaredGuidePages = result.Pages.SelectMany(p => p.Route.GuidePages).ToList();
+        var templateIds = templateBodies.Select(t => t.topicId).ToList();
+        injectionFindings.AddRange(ReferenceLinkInjector.LintOrphanedGuidePages(
+            declaredGuidePages, templateIds, reverseIndex));
+
+        // Merge findings; the injector findings join the generator's.
+        var combined = new ReferenceGen.ReferenceGenResult(
+            injectedPages,
+            result.Findings.Concat(injectionFindings).ToList());
+
         // Write pages to disk so authors and lints can see the output.
-        generator.WriteToDisk(result, outputDir);
-        return result;
+        generator.WriteToDisk(combined, outputDir);
+        return combined;
     }
 
     private static string? FindReactorXml(string repoRoot)

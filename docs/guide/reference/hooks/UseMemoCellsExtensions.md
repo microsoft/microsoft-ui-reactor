@@ -3,6 +3,8 @@
 `type`  
 _cref_: `T:Microsoft.UI.Reactor.Hooks.UseMemoCellsExtensions`
 
+> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+
 ## Summary
 
 Cell-level memoization hook for high-frequency list / grid bodies.
@@ -31,4 +33,5 @@ drag / selection / hover state that you aren't capturing in deps.
 longer-lived gen1/gen2 retention. Many memoized lists across an app
 can compound gen2 pressure. Profile before deciding.
 </para>
+
 

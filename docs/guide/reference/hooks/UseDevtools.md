@@ -3,6 +3,8 @@
 `method`  
 _cref_: `M:Microsoft.UI.Reactor.Hooks.UseDevtoolsExtensions.UseDevtools(Microsoft.UI.Reactor.Core.RenderContext)`
 
+> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+
 ## Summary
 
 Returns <c>true</c> when the current process is running with the in-app
@@ -18,4 +20,5 @@ UX so the subtree is never constructed in retail sessions:
 var dev = ctx.UseDevtools();
 return VStack(Content(), dev ? DebugOverlay() : null);
 </code>
+
 

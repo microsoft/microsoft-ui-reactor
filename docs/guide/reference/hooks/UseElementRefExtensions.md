@@ -3,6 +3,8 @@
 `type`  
 _cref_: `T:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions`
 
+> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+
 ## Summary
 
 Hook that returns a strongly-typed `ElementRef`1` for binding to a
@@ -22,4 +24,5 @@ var btn = ctx.UseElementRef&lt;Button&gt;();
 ctx.UseEffect(() =&gt; btn.Current?.Focus(FocusState.Programmatic), Array.Empty&lt;object&gt;());
 return Button("Press me", onPress).Ref(btn);
 </code>
+
 

@@ -3,6 +3,8 @@
 `method`  
 _cref_: `M:Microsoft.UI.Reactor.Hooks.UseMemoCellsExtensions.UseMemoCells``1(Microsoft.UI.Reactor.Core.RenderContext,System.Collections.Generic.IReadOnlyList{``0},System.Func{``0,System.Int32,Microsoft.UI.Reactor.Core.Element},System.Object[])`
 
+> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+
 ## Summary
 
 Memoize cell construction for <paramref name="items" />. On the first
@@ -37,4 +39,5 @@ stocks,
 (item, i) =&gt; Cell(item, theme),
 theme);   // ← deps; framework invalidates on change
 </code>
+
 

@@ -3,6 +3,8 @@
 `method`  
 _cref_: `M:Microsoft.UI.Reactor.Hooks.UseMemoCellsExtensions.UseMemoCellsByKey``2(Microsoft.UI.Reactor.Core.RenderContext,System.Collections.Generic.IReadOnlyList{``0},System.Func{``0,``1},System.Func{``0,System.Int32,Microsoft.UI.Reactor.Core.Element},System.Object[])`
 
+> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+
 ## Summary
 
 Memoize cell construction keyed by <paramref name="keySelector" />.
@@ -19,10 +21,11 @@ children path keeps the underlying control without unmount/remount).
 keys collapse to last-write-wins (later items overwrite earlier
 items in the lookup table).
 - **builder** — Cell builder; same contract as
-[UseMemoCells](UseMemoCells.md).
+[UseMemoCells](UseMemoCells.md) ([guide](../../hooks.md)).
 - **dependencies** — Trailing-<c>params</c> deps.
 
 ## Discussion
 
 Spec 034 §C.
+
 

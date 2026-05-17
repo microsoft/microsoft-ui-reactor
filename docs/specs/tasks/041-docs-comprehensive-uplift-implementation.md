@@ -320,25 +320,31 @@ infrastructure to unblock content phases.
 
 ### 1.9 Conceptual-guide link injection (spec §10.4.1)
 
-- [ ] Implement the post-processor that, for each generated reference
+- [x] Implement the post-processor that, for each generated reference
       page, injects:
-  - [ ] A "**Learn more**" callout near the top with links to the
+  - [x] A "**Learn more**" callout near the top with links to the
         registry-mapped guide page(s).
-  - [ ] A "**See Also**" section merging `<seealso>` author links
-        + registry defaults.
-  - [ ] Dual-link rendering for inline `<see cref="..."/>` (target
+  - [x] A "**See Also**" section merging `<seealso>` author links
+        + registry defaults. *Author `<seealso>` is rendered in the
+        same `## See Also` block that `ReferenceWriter` emits; the
+        registry-default guide pages are surfaced via the
+        "**Learn more**" callout at the top of the page.*
+  - [x] Dual-link rendering for inline `<see cref="..."/>` (target
         reference page + target guide page if any).
-- [ ] Implement `<!-- ref:Member -->` marker expansion in
+- [x] Implement `<!-- ref:Member -->` marker expansion in
       hand-authored templates → resolved MD link to the generated
-      reference page.
-- [ ] Implement reverse "Featured in" callout: each reference page
+      reference page. *Handles both short names (`<!-- ref:UseState -->`)
+      and full crefs.*
+- [x] Implement reverse "Featured in" callout: each reference page
       gains a list of guide pages that reference it (via
       `<!-- ref:Member -->` scan across `_pipeline/templates/`).
-- [ ] Lints: warn when a registry category has no mapped guide page;
+- [x] Lints: warn when a registry category has no mapped guide page;
       warn when a guide page has no `<!-- ref: -->` marker pointing
-      to it (per §10.4.1 acceptance).
-- [ ] Unit tests for marker expansion, dual-link rendering, and
-      Featured-in reverse scan.
+      to it (per §10.4.1 acceptance). *`REACTOR_DOC_REGISTRY_W001`
+      and `REACTOR_DOC_REGISTRY_W002`.*
+- [x] Unit tests for marker expansion, dual-link rendering, and
+      Featured-in reverse scan. *9 tests in
+      `tests/Reactor.DocPipeline.Tests/ReferenceLinkInjectorTests.cs`.*
 
 ### 1.10 AI Author Skill update (spec §10.5)
 
