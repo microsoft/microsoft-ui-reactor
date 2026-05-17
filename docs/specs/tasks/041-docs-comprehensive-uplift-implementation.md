@@ -940,7 +940,18 @@ source snippets, "Read the source" callout, tier-lint clean.)
       inside WithAnimation, retriggering keyframes on every render),
       ai:caveat on `[ThreadStatic]` scope loss across await boundaries,
       winui-ref → motion hub.*
-- [ ] `accessibility.md` — promote to Comprehensive.
+- [x] `accessibility.md` — promote to Comprehensive. *Added mental-
+      model lead framing the three-layer surface (modifiers / hooks /
+      analyzers), reference table in first half, Patterns (modal +
+      trap + announce, app-wide announce hoisted via context, custom-
+      control semantics with `SemanticPanel`), Common Mistakes
+      (disabled Submit losing keyboard route, `.AccessibilityHidden()`
+      on focusable elements, skipped heading levels), ai:caveat on
+      `UseFocusTrap` "container unmounted before isActive=false"
+      ordering bug, plus a callout on `UseAnnounce` no-op before
+      `Region` is mounted. `winui-ref` deliberately not set —
+      accessibility isn't a single WinUI control wrapper (W001 is
+      acceptable per spec §11).*
 - [x] `data-system.md` — promote to Comprehensive. *Lead mental-model
       paragraph framing `IDataSource<T>` as the load-bearing contract,
       ai:caveat on inline `ListDataSource` construction churning
