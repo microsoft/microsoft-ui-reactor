@@ -855,12 +855,13 @@ Parallel to Phase 3, different author skillset (per spec §9 Phase
 ### 3.5.4 `reconciliation.md` — Comprehensive (promotes
       `docs/reference/reconciliation.md`)
 
-- [ ] Migrate content from `docs/reference/reconciliation.md` into
+- [x] Migrate content from `docs/reference/reconciliation.md` into
       template form.
-- [ ] Add diagrams, source snippets, Patterns, Caveats per
+- [x] Add diagrams, source snippets, Patterns, Caveats per
       Comprehensive tier.
-- [ ] Delete `docs/reference/reconciliation.md` after promotion lands.
-- [ ] Update any inbound links to point at the new guide location.
+- [x] Delete `docs/reference/reconciliation.md` after promotion lands.
+- [x] Update any inbound links to point at the new guide location.
+      *async-system.md §13 updated to point at docs/guide/reconciliation.md.*
 
 ### 3.5.5 `hooks-internals.md` — Comprehensive (promotes
       `docs/reference/state-and-hooks.md`)

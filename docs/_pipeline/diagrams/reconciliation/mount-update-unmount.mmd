@@ -1,14 +1,39 @@
-%% Phase 3.5 scaffold — the three reconciler phases. Author should
-%% expand each branch: Mount creates and rents from ElementPool;
-%% Update does CanUpdate / replace-or-patch; Unmount returns to pool
-%% and runs effect cleanups in reverse hook order.
+%% Reconciler tri-state dispatch — Mount / Update / Unmount. Default
+%% Mermaid palette renders legibly on both light and dark GitHub
+%% themes.
 flowchart TB
-    Entry[Reconciler.Reconcile] -->|new is null| Unmount[Unmount path]
-    Entry -->|existing is null| Mount[Mount path]
-    Entry -->|both present| Update[Update path]
-    Mount --> Pool1[ElementPool.TryRent]
-    Update --> CanUpdate{CanUpdate?}
-    CanUpdate -->|yes| Patch[UpdateXxx property writes]
-    CanUpdate -->|no| Remount[Unmount then Mount]
-    Unmount --> Cleanup[FlushEffectCleanups]
-    Cleanup --> Pool2[ElementPool.Return]
+    Entry["Reconciler.Reconcile<br/>(oldEl, newEl, existingControl)"]
+    NullNew{"newEl is null<br/>or EmptyElement?"}
+    NullOld{"oldEl is null<br/>or no existing control?"}
+    Unmount["Unmount path"]
+    Mount["Mount path"]
+    PoolRent["ElementPool.TryRent<br/>(poolable types only)"]
+    Alloc["new TControl(…)"]
+    MountSwitch["MountXxx switch<br/>(40+ handlers)"]
+    Update["Update path"]
+    CanUpdate{"CanUpdate(old, new)?"}
+    UpdateSwitch["UpdateXxx switch<br/>property writes only"]
+    Children["ChildReconciler<br/>keyed (prefix/suffix + LIS)<br/>or positional"]
+    Replace["Unmount-then-Mount<br/>(type changed)"]
+    Cleanup["FlushEffectCleanups"]
+    PoolReturn["ElementPool.Return"]
+    Done["Return UIElement"]
+
+    Entry --> NullNew
+    NullNew -- yes --> Unmount
+    NullNew -- no --> NullOld
+    NullOld -- yes --> Mount
+    NullOld -- no --> Update
+    Mount --> PoolRent
+    PoolRent -- hit --> MountSwitch
+    PoolRent -- miss --> Alloc
+    Alloc --> MountSwitch
+    MountSwitch --> Done
+    Update --> CanUpdate
+    CanUpdate -- true --> UpdateSwitch
+    UpdateSwitch --> Children
+    Children --> Done
+    CanUpdate -- false --> Replace
+    Replace --> Mount
+    Unmount --> Cleanup
+    Cleanup --> PoolReturn
