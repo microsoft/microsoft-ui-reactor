@@ -70,6 +70,21 @@ to land under these conventions; subsequent specs follow this shape.
   `plugins/reactor/skills/reactor-recipes/references/animated-list.md` for
   the paste-ready `Animate` recipe + five common-mistakes sections.
   (spec 042 Phase 4 + 5)
+- **Spec 042 perf gate — paired Reactor vs WinUI vanilla baseline.**
+  New `StressPerf.VirtualList.WinUI` is a hand-authored WinUI 3 twin
+  to `StressPerf.VirtualList.Reactor` — `ItemsRepeater` +
+  `ObservableCollection<ListItem>` with a recycling `IElementFactory`,
+  same row visual tree, same scroll tween, same edit policy
+  (deterministic seed). `tests/stress_perf/run_keyed_list_vs_winui.ps1`
+  drives a paired N-rep matrix that interleaves the two apps within
+  each rep to neutralize DRR / thermal drift, computes per-cell
+  medians, and writes a markdown verdict alongside per-rep frames CSVs
+  for forensic re-analysis. First baseline at
+  `tests/stress_perf/baselines/keyed-list-vs-winui-2026-05-17-104102/`
+  pins Reactor inside 0.3 % P50 of WinUI at production-realistic list
+  sizes; the 10k-item P50 spread is unrelated to the diff path (gap
+  doesn't move with edit pressure; Reactor's P95 / P99 tail is
+  tighter than WinUI's). (spec 042 §10 perf gate)
 - **Spec 042 Phase 6.3 — 10k virtualized scroll + edit stress scenario.**
   `StressPerf.VirtualList.Reactor` gained `--with-edits` /
   `--edits-per-second N` flags that interleave deterministic insert / remove
