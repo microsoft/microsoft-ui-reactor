@@ -1077,6 +1077,18 @@ source snippets, "Read the source" callout, tier-lint clean.)
       `Page`, reaching for INPC out of habit), renamed
       "Tips for New Reactor Developers" → `## Tips`. No `winui-ref:`
       (meta page).
+    - `xaml-developers.md.dt` → comprehensive (4.6 wave-C). Added
+      mental-model lead, new Mermaid diagram
+      `diagrams/xaml-developers/mental-model-shift.mmd` referenced as
+      `images/xaml-developers/mental-model-shift.svg` (satisfies
+      TIER_004 via wave-A diagram-relaxation), ai:caveat on the
+      "no `Mode=TwoWay`" pitfall (state IS the binding), `## Patterns`
+      (DependencyProperty → hook, UserControl → component,
+      DataTemplate → render function), `## Common Mistakes`
+      (computing layout via DP, using INPC for local state, writing
+      XAML at all), renamed "Tips for XAML Developers" → `## Tips`,
+      added cross-link to `reactor-vs-xaml.md` in Next Steps. No
+      `winui-ref:` (meta page).
   - Wave-D tier declarations (intentionally Solid — not promoted):
     - `readme.md.dt` → `tier: solid` declared (4.6 wave-D); added a
       "Where to start" reference table in the first half and a
