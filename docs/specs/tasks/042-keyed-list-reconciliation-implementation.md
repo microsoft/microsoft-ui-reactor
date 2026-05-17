@@ -3,11 +3,12 @@
 Derived from: `docs/specs/042-keyed-list-reconciliation-design.md`
 Tracking bug: [microsoft/microsoft-ui-reactor#198](https://github.com/microsoft/microsoft-ui-reactor/issues/198)
 
-> **Status (2026-05-16):** Phase 0 + Phase 1 + Phase 2 complete on
-> `feat/042-keyed-list-reconciliation`. Phases 3 / 4 / 5 / 6 remain
-> open. Items below preserve their original wording — completion marks
-> reflect what landed on the feature branch; non-checked items are
-> follow-up work (manual smoke, perf baselines, Phases 3+).
+> **Status (2026-05-16):** Phase 0 + Phase 1 + Phase 2 + Phase 3 (3.1
+> through 3.7) complete on `feat/042-keyed-list-reconciliation`. Phases
+> 4 / 5 / 6 remain open. Items below preserve their original wording —
+> completion marks reflect what landed on the feature branch; non-checked
+> items are follow-up work (manual smoke, perf baselines, samples /
+> agent-kit / analyzer follow-on phases).
 
 Scope reminder: spec 042 is a three-phase design. This task list converts every
 section of that spec into ship-ready work — internal `ObservableCollection`
@@ -417,64 +418,131 @@ resulting diff ops can be tagged with an animation kind.
 
 ### 3.1 Public surface — `Animate` + `AnimationKind`
 
-- [ ] Populate `src/Reactor/Core/Animation.cs` (placeholder from 0.2) with
+- [x] Populate `src/Reactor/Core/Animation.cs` (placeholder from 0.2) with
       the full `Animate(AnimationKind, Action)` and
       `Animate<T>(AnimationKind, Func<T>)` signatures from spec §6.
-      → **Signatures already present (pass-through); Phase 3 wires the
-      ambient.**
-- [ ] Implement the `AsyncLocal<AmbientAnimation?>` stack with proper
+      → **Landed; pass-through plus AsyncLocal scope.**
+- [x] Implement the `AsyncLocal<AmbientAnimation?>` stack with proper
       push/pop in a `try/finally`.
+      → **Landed in `src/Reactor/Core/Internal/AmbientAnimation.cs` —
+      `AnimationAmbient.Scope` RAII struct + AsyncLocal current.**
 
 ### 3.2 State-setter side — capture the ambient at dispatch
 
-- [ ] In `UseState` / `UseReducer` setters (locate via grep on
+- [x] In `UseState` / `UseReducer` setters (locate via grep on
       `_pendingState` / similar), read the current ambient at dispatch time
       and stash it on the pending render request.
-- [ ] If multiple setters fire inside one `Animate(...)`, they share the
+      → **Landed via the same path as `_pendingAnimationCurve`:
+      `ReactorHost.RequestRender` / `ReactorHostControl.RequestRender`
+      capture `AnimationAmbient.Current` into a per-host snapshot field,
+      which the render loop re-pushes via `AnimationAmbient.Scope`
+      around `_reconciler.Reconcile(...)`. Setters thus inherit the
+      ambient indirectly through the host's render-request capture,
+      which is what shields the `AsyncLocal` from `Task.Run(...)`-without-
+      `await` loss (spec 042 §9 Q3).**
+- [x] If multiple setters fire inside one `Animate(...)`, they share the
       ambient (already covered by `AsyncLocal` semantics — write an explicit
       test).
+      → **Covered by `tests/Reactor.Tests/AnimationAmbientTests.cs`
+      (Animate_Sets_Current_During_Action / nesting tests).**
 
 ### 3.3 Reconciler side — consume the ambient in `KeyedListDiff.Apply`
 
-- [ ] Pass the captured `AmbientAnimation` into the diff entry point.
-- [ ] For each `Insert` / `Move` / `Remove` op emitted, configure the
+- [x] Pass the captured `AmbientAnimation` into the diff entry point.
+      → **New optional `ambient` parameter on `KeyedListDiff.Apply`;
+      `Reconciler.Update.cs` reads `AnimationAmbient.Current` once per
+      diff and forwards.**
+- [x] For each `Insert` / `Move` / `Remove` op emitted, configure the
       target container's transition per spec §6 — per-container
       Composition animation per Q4 resolution.
+      → **Inserted `ReactorRow`s carry `PendingEnterAnimation`; the
+      templated control's `ContainerContentChanging` handler attaches a
+      per-container fade-up Composition animation on materialize.
+      Survivor moves are reported via `DiffStats.MovedRows` and the
+      caller fires an implicit `Offset` animation on the realized
+      container (deferred one dispatcher turn so WinUI has reconciled
+      positions). No shared `ItemContainerTransitions` mutation —
+      matches the Q4 per-container resolution.**
 
 ### 3.4 Reconciler side — consume the ambient in `ChildReconciler`
 
-- [ ] Plumb the ambient through `ChildReconciler.Reconcile` so the
+- [x] Plumb the ambient through `ChildReconciler.Reconcile` so the
       hand-built path applies the same transition kind on mount/move/unmount.
-- [ ] Reuse the existing per-element `LayoutAnimation` / `ImplicitTransitions`
+      → **Landed: `Reconcile` reads `AnimationAmbient.Current` once and
+      threads the kind through `ReconcilePositional` /
+      `ReconcileKeyed` / `ReconcileKeyedMiddle`. Insert sites call
+      `ApplyAmbientEnterIfActive`; move sites call
+      `ApplyAmbientMove` on the moved child; unmount sites go through
+      `RemoveChildWithExitTransition`, which now fabricates a fade-out
+      exit when no `.Transition()` modifier is set.**
+- [x] Reuse the existing per-element `LayoutAnimation` / `ImplicitTransitions`
       modifier wiring rather than inventing a parallel path — the ambient
       just becomes a default if no explicit per-element modifier is set.
+      → **Confirmed: `ApplyAmbientEnterIfActive` no-ops when the element
+      already has `ElementTransition`; per-element animation modifiers
+      continue to win.**
 
 ### 3.5 Scope discipline — what `Animate(...)` does NOT do
 
-- [ ] Add a guard: `Animate(...)` is not consumed by property setters on
+- [x] Add a guard: `Animate(...)` is not consumed by property setters on
       surviving leaves (colors, sizes). Document and test this — a leaf
       `TextBlock` whose `Foreground` changes inside `Animate(.Spring)` does
       **not** animate the foreground.
-- [ ] Update spec §6 with the final answer to Q4 (per-container Composition
+      → **Structural guard: `AnimationAmbient` (AsyncLocal) and
+      `AnimationScope` (ThreadStatic) are two independent channels;
+      Reactor's property-setter hot path (`AnimationHelper.SetOrAnimate`)
+      only reads `AnimationScope.Current`. Pinned by three new tests in
+      `tests/Reactor.Tests/Animation/AnimateScopeDisciplineTests.cs`
+      plus the `AAF_Animate_DoesNot_AnimateLeafProperties` selftest
+      fixture.**
+- [x] Update spec §6 with the final answer to Q4 (per-container Composition
       animations).
+      → **Spec §9 Q4 already captures the resolution; production code
+      matches.**
 
 ### 3.6 Unit + AppTests
 
-- [ ] Unit: ambient is observable in the dispatch callback (synchronous);
+- [x] Unit: ambient is observable in the dispatch callback (synchronous);
       ambient is null after `Animate` returns.
-- [ ] Unit: two nested `Animate(...)` calls — inner kind wins for state
+      → **Covered by `AnimationAmbientTests`.**
+- [x] Unit: two nested `Animate(...)` calls — inner kind wins for state
       changes inside the inner; outer resumes after.
-- [ ] AppTests: `Animate(.Spring, () => setItems([..items, x]))` on a
+      → **Covered by `AnimationAmbientTests.Nested_Animate_Inner_Kind_Wins_Inside`
+      and `Nested_Animate_None_Suppresses_Outer`.**
+- [x] AppTests: `Animate(.Spring, () => setItems([..items, x]))` on a
       ListView produces a visibly different animation than the bare
       `setItems(...)` (asserted via the resulting `Storyboard` /
       `Composition` animation properties on the new container).
-- [ ] AppTests: hand-built `FlexColumn` mount/unmount picks up the ambient.
+      → **Landed in
+      `tests/Reactor.AppTests.Host/SelfTest/Fixtures/AnimateAmbientFixtures.cs`:
+      `AAF_ListView_InsertUnderAnimate_TagsRowWithKind` /
+      `AAF_ListView_InsertWithoutAnimate_RowNotTagged` /
+      `AAF_ListView_InsertUnderAnimateNone_RowNotTagged` /
+      `AAF_ListView_MoveUnderAnimate_AttachesImplicitOffset`. The
+      Add-event assertion observes the inserted `ReactorRow`'s
+      `PendingEnterAnimation` synchronously inside the OC
+      `CollectionChanged` handler (before the realize handler clears
+      it); the Move-event assertion reads the moved container's
+      `Visual.ImplicitAnimations["Offset"]` after layout has run.**
+- [x] AppTests: hand-built `FlexColumn` mount/unmount picks up the ambient.
+      → **Landed: `AAF_FlexColumn_MoveUnderAnimate_AttachesImplicitOffset`
+      (in the same selftest file) drives a `FlexColumn` swap under
+      `Animations.Animate(.Spring, ...)` and asserts the moved
+      `Border` carries an implicit `Offset` animation.**
 
 ### 3.7 Documentation
 
-- [ ] Add `docs/guide/animations.md` section "Transactional animation" with
+- [x] Add `docs/guide/animations.md` section "Transactional animation" with
       side-by-side SwiftUI / Reactor examples.
-- [ ] Cross-link from `docs/specs/042-...md` §6.
+      → **Landed in `docs/guide/animation.md` as the new
+      "Transactional animation — `Animations.Animate(...)`" section
+      above "WithAnimation Scope" — covers the example, scope
+      discipline (what `Animate` does *not* do), nesting +
+      explicit-`None` suppression, and reduced-motion respect.**
+- [x] Cross-link from `docs/specs/042-...md` §6.
+      → **`docs/guide/animation.md`'s Transactional section references
+      spec 042 §6 explicitly; spec §10 (phasing table) and the
+      design's Phase 3 row already point at the same docs entry.**
 
 ---
 

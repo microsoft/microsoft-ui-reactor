@@ -258,6 +258,89 @@ animation runs automatically when the reconciler detects the transition.
 Use connected animations for list-to-detail [navigation](navigation.md)
 where an element "flies" from the list into the detail view.
 
+## Transactional animation — `Animations.Animate(...)`
+
+`Animations.Animate(kind, action)` is Reactor's SwiftUI-style transactional
+animation primitive. Wrap a state mutation, and any **structural** change to
+a keyed list (insert, move, remove) that comes out of that mutation picks up
+the kind — without a per-element modifier in sight.
+
+```csharp
+class TodoList : Component
+{
+    public override Element Render()
+    {
+        var (items, setItems) = UseState<IReadOnlyList<Todo>>(_seed);
+
+        return VStack(12,
+            Button("Add", () =>
+                Animations.Animate(AnimationKind.Spring, () =>
+                    setItems([.. items, new Todo(Guid.NewGuid().ToString(), "New")]))),
+            ListView<Todo>(items, (t, _) => TextBlock(t.Title).Padding(8))
+                .Height(400)
+        );
+    }
+}
+```
+
+`AnimationKind` is the declarative knob — `Spring`, `EaseIn`, `EaseOut`,
+`EaseInOut`, `Default`, or `None`. The kind flows through an `AsyncLocal`
+ambient: a setter invoked inside `Animate` snapshots the ambient before
+queuing the render, and the reconciler re-pushes the snapshot around the
+diff pass so `ListView`, `GridView`, `LazyVStack` (and hand-built
+`FlexColumn(items.Select(...).WithKey(...))` children) all animate the
+resulting insert / move / remove. (See spec 042 §6.)
+
+### What `Animate` does *not* do
+
+`Animate` is **scoped to structural changes**. A leaf `TextBlock` whose
+`Foreground` changes inside `Animate(.Spring)` does **not** animate the
+foreground — that remains the job of per-element modifiers like
+`.WithImplicitTransition(...)` or
+[`AnimationScope.WithAnimation(...)`](#withanimation-scope). The two
+channels are deliberately independent so the SwiftUI "`withAnimation` only
+animates layout-shape ops" contract holds; conflating them would surprise
+users coming from that mental model.
+
+Per-element animation modifiers continue to win when set: declaring
+`.Transition(Fade)` on a row makes that row's enter / exit use Fade
+regardless of the ambient. The ambient is a default for the transactional
+case, not a hammer for every change.
+
+### Nesting and explicit suppression
+
+Nested `Animate` calls stack like `using` blocks — the inner kind wins for
+state changes inside its scope, and the outer kind resumes after:
+
+```csharp
+Animations.Animate(AnimationKind.Spring, () =>
+{
+    // Insert: animates with Spring.
+    setItems([.. items, x]);
+
+    Animations.Animate(AnimationKind.None, () =>
+    {
+        // Insert inside None: no animation, even though we're still inside
+        // an outer Spring transaction. Useful when a child component needs
+        // to opt out of the caller's implicit animation intent.
+        setOtherItems([.. others, y]);
+    });
+});
+```
+
+### Reduced motion
+
+`Animate` respects the system's reduced-motion preference *at the call
+site*. Read `UseReducedMotion()` and skip the wrapper when the user has
+opted out:
+
+```csharp
+var reduceMotion = UseReducedMotion();
+Action commit = () => setItems([.. items, x]);
+if (reduceMotion) commit();
+else              Animations.Animate(AnimationKind.Spring, commit);
+```
+
 ## WithAnimation Scope
 
 `AnimationScope.WithAnimation()` wraps a state change so that every

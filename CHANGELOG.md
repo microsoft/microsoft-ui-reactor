@@ -55,6 +55,34 @@ to land under these conventions; subsequent specs follow this shape.
   `keySelector` and `WithKey(string)` are unchanged for interop /
   third-party POCOs. The `samples/TodoApp/` `TodoItem` model adopts
   the convention as a worked example. (spec 042 §5)
+- **Spec 042 Phase 3 — ambient `Animations.Animate(...)` transaction.**
+  Wrapping a state mutation in `Animations.Animate(AnimationKind.Spring,
+  () => setItems(...))` propagates animation intent through an
+  `AsyncLocal` ambient so the resulting structural diff — insert / move /
+  remove on `ListView<T>` / `GridView<T>` / `LazyVStack<T>` /
+  `LazyHStack<T>` and on hand-built keyed children inside `FlexColumn`
+  etc. — picks up the kind without per-element modifiers. Setters snapshot
+  the ambient synchronously at dispatch time so the eventual render observes
+  the same intent even if the rerender hops a dispatcher; `ReactorHost` /
+  `ReactorHostControl` re-push the snapshot around the reconcile pass.
+  `KeyedListDiff.Apply` tags inserted `ReactorRow`s with the kind so the
+  `ContainerContentChanging` realize path can attach a per-container
+  fade-up Composition animation; survivor moves drive an implicit
+  `Offset` animation on the realized container (deferred one dispatcher
+  turn so WinUI has reconciled positions before lookup).
+  `ChildReconciler` consumes the same ambient — insert sites apply the
+  same default enter, move sites attach an implicit `Offset` animation,
+  and `RemoveChildWithExitTransition` fabricates a fade-out exit when no
+  per-element `.Transition(...)` is set. Per-element animation modifiers
+  continue to win when declared; the ambient is purely a default for the
+  transactional case. The two channels (transactional ambient on
+  `AsyncLocal`, per-element curve scope on `ThreadStatic`) remain
+  independent — a leaf `TextBlock`'s `Foreground` change inside
+  `Animate(.Spring)` does *not* animate the foreground. New types:
+  `AnimationKind` (public enum), `Animations.Animate(...)` (public),
+  `AmbientAnimation` / `AnimationAmbient` / `AnimationKindMap` (internal
+  glue). (spec 042 §6; matches Phase 3.2 / 3.3 / 3.4 / 3.5 of the task
+  list, including the §9 Q3 / Q4 resolutions.)
 
 ### Fixed
 

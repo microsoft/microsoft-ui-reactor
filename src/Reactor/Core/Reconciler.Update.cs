@@ -3077,19 +3077,34 @@ public sealed partial class Reconciler
     {
         var curve = AnimationKindMap.ToCurve(kind);
         if (curve is null) return;
-        for (int i = 0; i < moved.Count; i++)
+
+        // WinUI's container realignment for OC.Move events runs on the
+        // next layout pass — calling ContainerFromIndex synchronously
+        // here returns null even for items whose containers are realized,
+        // because the lookup is keyed on the pre-move position the
+        // ListView hasn't reconciled yet. Defer to the next dispatcher
+        // turn so the lookup runs after layout. Implicit-Offset attached
+        // *after* the position change still animates subsequent layout
+        // shifts on the same container, which is the right shape for
+        // continued reordering inside one Animate block.
+        var dq = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        Action attach = () =>
         {
-            var row = moved[i];
-            // ContainerFromItem can throw if the underlying ItemsPanel is
-            // mid-rebuild (rare but observed on bulk-replace bailout
-            // recovery). Animation is non-critical; swallow and continue.
-            try
+            for (int i = 0; i < moved.Count; i++)
             {
-                if (lvb.ContainerFromItem(row) is UIElement container)
-                    StartMoveOffsetAnimation(container, curve);
+                var row = moved[i];
+                try
+                {
+                    var container = lvb.ContainerFromIndex(row.Index) as UIElement
+                                  ?? lvb.ContainerFromItem(row) as UIElement;
+                    if (container is not null)
+                        StartMoveOffsetAnimation(container, curve);
+                }
+                catch { /* best-effort */ }
             }
-            catch { /* best-effort */ }
-        }
+        };
+        if (dq is not null) dq.TryEnqueue(global::Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => attach());
+        else attach();
     }
 
     /// <summary>
