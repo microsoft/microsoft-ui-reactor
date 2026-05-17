@@ -863,6 +863,7 @@ VisualizerStyle { Inline, Summary, InfoBar, Custom }
 AnimationKind { None, Default, Spring, EaseIn, EaseOut, EaseInOut }
 BackdropKind { None, Mica, MicaAlt, DesktopAcrylic, AcrylicThin }
 ColorScheme { Light, Dark, HighContrast }
+KeyedListDiagnosticKind { NullKey, DuplicateKey }
 ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
 PersistedScope { Window, Application }
 TemplatedControlKind { ListView, GridView, FlipView }
