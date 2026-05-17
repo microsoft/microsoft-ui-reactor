@@ -416,15 +416,29 @@ infrastructure to unblock content phases.
 
 ### 1.13 dev-tooling.md promotion + devtools-ux merge (spec §9 Phase 1)
 
-- [ ] Merge content from `docs/_pipeline/templates/devtools-ux.md.dt`
+- [x] Merge content from `docs/_pipeline/templates/devtools-ux.md.dt`
       into `dev-tooling.md.dt`. Cover: `mur` CLI subcommands, MCP
       server, VS Code panel, dotnet watch integration, in-app dev
-      menu.
-- [ ] Delete `devtools-ux.md.dt` and its
-      `docs/_pipeline/apps/` companion if any.
-- [ ] Promote `dev-tooling.md` to Comprehensive tier (lint must pass).
-- [ ] Update any pages that linked to `devtools-ux.md` to point at
-      the merged page.
+      menu. *Single Comprehensive-tier page now covers the full
+      surface: preview mode, `mur` CLI sub-table, MCP server, VS
+      Code panel, in-app dev menu (UseDevtools / DevtoolsMenu /
+      Observable<T> primitives merged in from devtools-ux),
+      reconcile-highlight + layout-cost overlays, iteration cycle.*
+- [x] Delete `devtools-ux.md.dt` and its
+      `docs/_pipeline/apps/` companion if any. *No
+      `docs/_pipeline/apps/devtools-ux/` ever existed (the original
+      page used inline-only code blocks). Template + generated
+      `docs/guide/devtools-ux.md` removed via `git rm`.*
+- [x] Promote `dev-tooling.md` to Comprehensive tier (lint must pass).
+      *`tier: comprehensive` set; `mur docs compile --validate-only
+      --tier=comprehensive` reports zero errors for this page (only
+      the `REACTOR_DOC_TIER_W001` winui-ref warning, which is
+      non-fatal and inapplicable to dev-tooling since it is not a
+      WinUI-wrapper page).*
+- [x] Update any pages that linked to `devtools-ux.md` to point at
+      the merged page. *Grep over `_pipeline/templates/` and
+      `docs/guide/` returned zero inbound links to fix — the only
+      reference was the self-reference in the old front-matter.*
 
 ### 1.14 Phase 1 validation & publish-test
 
