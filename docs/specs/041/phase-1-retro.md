@@ -112,6 +112,29 @@ Two finding severities are softer in Phase 1B than the spec's
   Phase 1B drops standalone `#ctor` pages and a later phase will
   surface them as overload subsections on the parent type page.
 
+### Task 1.8 — Analyzer severity stays Warning in Phase 1B
+
+The spec language in §10.4 says missing-summary is a "build error".
+Phase 1B starts both REACTOR_DOC_001 and REACTOR_DOC_002 at Warning
+severity. Two reasons:
+
+1. The analyzer is **not currently wired into `src/Reactor/`** —
+   `Reactor.csproj` deliberately doesn't list `Reactor.Analyzers` as
+   `OutputItemType="Analyzer"` (see the comment in the csproj), so
+   the rules only run on consumer code (samples, third-party). When
+   we wire the analyzer into the framework in Phase 4, severity
+   elevates to Error then. Until then, Warning at the rule level is
+   the right default for consumer-facing diagnostics.
+2. The backlog scan over `Reactor.xml` found **35 missing summaries
+   across 3,445 public members** (~1.0%). Fixing those is tractable
+   but not a Phase-1B priority; the 5 Hooks-namespace gaps were
+   fixed in this commit to unblock the ref-gen prototype, and the
+   remaining 30 (recorded in `xmldoc-backlog.md`) move to Phase 4.
+
+The .editorconfig at the repo root suppresses both rules under
+`samples/`, `tests/`, and `tools/` so consumer-facing public API is
+the only thing the rules can fail.
+
 ## Open questions
 
 None — all of §12.1's Phase-1 questions were resolved during the

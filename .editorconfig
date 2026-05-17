@@ -280,3 +280,21 @@ trim_trailing_whitespace = unset
 [docs/guide/**.md]
 trim_trailing_whitespace = false
 insert_final_newline = unset
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Reactor documentation analyzers (spec 041 §10.4)
+# REACTOR_DOC_001 / _002 only police `src/Reactor*` projects. Samples and
+# tests pull the analyzers transitively via the Reactor package but do not
+# need to carry public-API XML doc; silence the rules outside src/.
+# ─────────────────────────────────────────────────────────────────────────────
+[samples/**.cs]
+dotnet_diagnostic.REACTOR_DOC_001.severity = none
+dotnet_diagnostic.REACTOR_DOC_002.severity = none
+
+[tests/**.cs]
+dotnet_diagnostic.REACTOR_DOC_001.severity = none
+dotnet_diagnostic.REACTOR_DOC_002.severity = none
+
+[tools/**.cs]
+dotnet_diagnostic.REACTOR_DOC_001.severity = none
+dotnet_diagnostic.REACTOR_DOC_002.severity = none

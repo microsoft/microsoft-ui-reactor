@@ -288,19 +288,35 @@ infrastructure to unblock content phases.
 
 ### 1.8 REACTOR_DOC_001 + REACTOR_DOC_002 analyzers
 
-- [ ] `REACTOR_DOC_001`: public type or member lacks `<summary>` →
-      build error. Lives in `src/Reactor.Analyzers/`.
-- [ ] `REACTOR_DOC_002`: `cref` in any XML doc fails to resolve →
-      build error.
-- [ ] Configure severity in `Directory.Build.props` so the rules
-      light up across `src/Reactor*` projects only (not samples or
-      tests).
-- [ ] Run analyzer once across current `src/Reactor/`; capture the
+- [x] `REACTOR_DOC_001`: public type or member lacks `<summary>`.
+      *`src/Reactor.Analyzers/XmlDocSummaryAnalyzer.cs`. Severity
+      starts at Warning so the Phase-1B backlog doesn't block CI;
+      Phase 4 elevates to Error per the retro entry. Overrides,
+      explicit-interface impls, accessors, and `[GeneratedCode]`
+      members are skipped.*
+- [x] `REACTOR_DOC_002`: `cref` in any XML doc fails to resolve.
+      *`src/Reactor.Analyzers/XmlDocCrefAnalyzer.cs`. Hooks
+      Roslyn's `GetSymbolInfo` on `CrefSyntax` nodes; emits at
+      Warning severity. Mirrors CS1574 under a Reactor code so
+      doc PRs can elevate independently.*
+- [x] Configure severity in `.editorconfig` so the rules light up
+      across `src/Reactor*` projects only (not samples / tests /
+      tools). *Repo-root `.editorconfig` sets `severity = none`
+      under `samples/`, `tests/`, and `tools/`.*
+- [x] Run analyzer once across current `src/Reactor/`; capture the
       backlog of `<summary>`-missing public members in
-      `docs/specs/041/xmldoc-backlog.md`. Decide which to fix now
-      vs. defer.
-- [ ] Unit tests in `tests/Reactor.Analyzers.Tests/` for both
-      diagnostics.
+      `docs/specs/041/xmldoc-backlog.md`. *Parsed Reactor.xml
+      directly (analyzer is not wired into Reactor.csproj per the
+      existing "don't run on framework" convention). 35 missing
+      summaries out of 3,445 public members — 5 in Hooks were
+      fixed in this commit; the remaining 30 (JsonContext partials,
+      modifier-overload shims, ToString/Dispose) are recorded for
+      Phase 4 elevation.*
+- [x] Unit tests for both diagnostics. *Added to existing
+      `tests/Reactor.Tests/AnalyzerTests/` (matches repo convention
+      of co-locating analyzer tests with the rest of the test
+      surface). 9 tests across `XmlDocSummaryAnalyzerTests.cs`
+      and `XmlDocCrefAnalyzerTests.cs`.*
 
 ### 1.9 Conceptual-guide link injection (spec §10.4.1)
 
