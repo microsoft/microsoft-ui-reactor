@@ -1,3 +1,4 @@
+using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -7,6 +8,14 @@ namespace Microsoft.UI.Reactor.Core;
 /// Bridges WinUI's ItemsRepeater/IElementFactory to Reactor's Reconciler.
 /// GetElement calls the view builder then mounts; RecycleElement unmounts.
 /// </summary>
+/// <remarks>
+/// Spec 042 Phase 1: <see cref="_mountedElements"/> is keyed by the
+/// stable identity string from <see cref="ReactorRow"/>, not by realized
+/// index. Insert-at-0 used to shift every entry's effective index by one
+/// — that broke <see cref="RefreshRealizedItems"/>'s lookup contract
+/// because the dictionary's int keys no longer matched the repeater's
+/// new positions. Keying by string makes the mapping reorder-stable.
+/// </remarks>
 public sealed partial class ElementFactory<T> : IElementFactory
 {
     private IReadOnlyList<T> _items;
@@ -14,10 +23,15 @@ public sealed partial class ElementFactory<T> : IElementFactory
     private readonly Reconciler _reconciler;
     private readonly Action _requestRerender;
     private readonly ElementPool? _pool;
+    // Optional state used when ItemsSource is the OC<ReactorRow> path
+    // (spec 042). Lets GetElement translate an ItemsRepeater realized
+    // index → stable key for _mountedElements lookup. Null when running
+    // against the legacy Enumerable.Range path.
+    private ReactorListState? _listState;
 
-    // Track the full element (including ModifiedElement wrappers) per realized index
-    // so RefreshRealizedItems can reconcile correctly.
-    private readonly Dictionary<int, Element> _mountedElements = new();
+    // Reorder-stable element tracker keyed by ReactorRow.Key. See class doc.
+    private readonly Dictionary<string, Element> _mountedElements =
+        new(global::System.StringComparer.Ordinal);
 
     public ElementFactory(
         IReadOnlyList<T> items,
@@ -47,6 +61,14 @@ public sealed partial class ElementFactory<T> : IElementFactory
     }
 
     /// <summary>
+    /// Spec 042 Phase 1: bind this factory to the <see cref="ReactorListState"/>
+    /// owned by the parent <see cref="ItemsRepeater"/>'s host so
+    /// GetElement can resolve a realized index → ReactorRow.Key for the
+    /// reorder-stable <see cref="_mountedElements"/> lookup.
+    /// </summary>
+    internal void AttachListState(ReactorListState listState) => _listState = listState;
+
+    /// <summary>
     /// After updating the factory in place, reconcile all currently realized
     /// items with the new viewBuilder output. This updates existing WinUI
     /// controls via property changes (no add/remove on the ItemsRepeater's
@@ -65,19 +87,45 @@ public sealed partial class ElementFactory<T> : IElementFactory
         if (ShouldSkipRefresh?.Invoke() == true)
             return;
 
-        // Only iterate tracked indices (realized items), not all items.
-        // Use a snapshot to avoid modifying the dictionary during iteration.
-        var indices = _mountedElements.Keys.ToArray();
-        foreach (var i in indices)
+        // Snapshot the keys we currently believe are realized. The actual
+        // realized set may have changed since the last GetElement, but the
+        // ItemsRepeater authoritatively tells us per-key via TryGetElement
+        // on the row's current index.
+        var keys = _mountedElements.Keys.ToArray();
+        foreach (var key in keys)
         {
-            var child = repeater.TryGetElement(i);
-            if (child is null) { _mountedElements.Remove(i); continue; }
+            // Resolve key → current realized index via the host's list state
+            // (or, when running on the legacy int path, treat the key as an
+            // integer index for backwards compatibility).
+            int currentIndex;
+            if (_listState is not null)
+            {
+                if (!_listState.ByKey.TryGetValue(key, out var row))
+                {
+                    // Row was removed — drop tracking entry.
+                    _mountedElements.Remove(key);
+                    continue;
+                }
+                currentIndex = row.Index;
+            }
+            else
+            {
+                // Legacy int-key path: parse if possible, otherwise skip.
+                if (!int.TryParse(key, out currentIndex))
+                {
+                    _mountedElements.Remove(key);
+                    continue;
+                }
+            }
 
-            if (!_mountedElements.TryGetValue(i, out var oldElement)) continue;
-            if (i < 0 || i >= _items.Count) continue;
+            var child = repeater.TryGetElement(currentIndex);
+            if (child is null) { _mountedElements.Remove(key); continue; }
 
-            var newElement = _viewBuilder(_items[i], i);
-            _mountedElements[i] = newElement;
+            if (!_mountedElements.TryGetValue(key, out var oldElement)) continue;
+            if (currentIndex < 0 || currentIndex >= _items.Count) continue;
+
+            var newElement = _viewBuilder(_items[currentIndex], currentIndex);
+            _mountedElements[key] = newElement;
 
             _reconciler.Reconcile(oldElement, newElement, child, _requestRerender);
         }
@@ -85,13 +133,34 @@ public sealed partial class ElementFactory<T> : IElementFactory
 
     public UIElement GetElement(ElementFactoryGetArgs args)
     {
-        var index = args.Data is int i ? i : 0;
+        // Resolve the realized data → (key, dataIndex). Three paths:
+        //   1. Spec 042: args.Data is ReactorRow — read both off the row.
+        //   2. Legacy: args.Data is int — index directly, synthetic key.
+        //   3. Fallback: unknown shape, treat as index 0.
+        string key;
+        int index;
+        switch (args.Data)
+        {
+            case ReactorRow row:
+                key = row.Key;
+                index = row.Index;
+                break;
+            case int i:
+                index = i;
+                key = i.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
+                break;
+            default:
+                index = 0;
+                key = "0";
+                break;
+        }
+
         if (index < 0 || index >= _items.Count)
             return new TextBlock { Text = "" };
 
         var item = _items[index];
         var element = _viewBuilder(item, index);
-        _mountedElements[index] = element;
+        _mountedElements[key] = element;
         var control = _reconciler.Mount(element, _requestRerender);
         return control ?? new TextBlock { Text = "" };
     }

@@ -2966,25 +2966,25 @@ public sealed partial class Reconciler
             // uses the updated viewBuilder to produce new content.
             if (repeater.ItemTemplate is IElementFactory existingFactory && n.TryUpdateFactory(existingFactory))
             {
-                // Item count may have changed — update the source
-                var newSource = n.GetItemsSource();
-                if (newSource is IReadOnlyList<int> newList
-                    && repeater.ItemsSource is IList<int> oldList
-                    && newList.Count != oldList.Count)
-                {
-                    repeater.ItemsSource = newSource;
-                }
-
-                // Reconcile realized items with the new viewBuilder output.
-                // This updates existing controls via property diffs — no
-                // collection modifications on the ItemsRepeater.
+                // Spec 042 Phase 1: route Items changes through the keyed
+                // diff into the internally-owned OC<ReactorRow>. WinUI
+                // sees incremental Insert/Move/RemoveAt events and only
+                // animates affected containers; the steady-state
+                // RefreshRealizedItems below still runs for per-row
+                // content updates.
+                ApplyLazyKeyedDiffOrFallback(repeater, n, existingFactory);
                 n.RefreshRealizedItems(existingFactory, repeater);
             }
             else
             {
-                // First mount or type mismatch — full replacement
-                repeater.ItemsSource = n.GetItemsSource();
-                repeater.ItemTemplate = n.CreateFactory(this, requestRerender, _pool);
+                // First mount or type mismatch — full replacement using the
+                // Phase 1 OC<ReactorRow> binding shape.
+                var fresh = BuildListStateFromLazy(n);
+                SetListState(repeater, fresh);
+                repeater.ItemsSource = fresh.Source;
+                var factory = n.CreateFactory(this, requestRerender, _pool);
+                n.AttachListStateToFactory(factory, fresh);
+                repeater.ItemTemplate = factory;
             }
             if (repeater.Layout is WinUI.StackLayout layout)
                 layout.Spacing = n.Spacing;
@@ -2994,6 +2994,53 @@ public sealed partial class Reconciler
         SetElementTag(sv, n);
         ApplySetters(n.ScrollViewerSetters, sv);
         return null;
+    }
+
+    private void ApplyLazyKeyedDiffOrFallback(WinUI.ItemsRepeater repeater, LazyStackElementBase n, IElementFactory factory)
+    {
+        var state = GetListState(repeater);
+        if (state is null || !ReferenceEquals(repeater.ItemsSource, state.Source))
+        {
+            var fresh = BuildListStateFromLazy(n);
+            SetListState(repeater, fresh);
+            repeater.ItemsSource = fresh.Source;
+            n.AttachListStateToFactory(factory, fresh);
+            return;
+        }
+
+        KeyedListDiff.Apply(
+            state,
+            new LazyKeyAdapter(n),
+            static (item, _) => item.Key,
+            _logger,
+            repeater.GetType().Name);
+        // Bailout reset still mutates state.Source in place, so the
+        // existing ItemsSource binding remains valid.
+    }
+
+    private readonly struct LazyKeyAdapter : IReadOnlyList<LazyKeyAdapter.KeyOnly>
+    {
+        private readonly LazyStackElementBase _el;
+        public LazyKeyAdapter(LazyStackElementBase el) => _el = el;
+        public KeyOnly this[int index] => new(_el.GetKeyAt(index) ?? $"__null_{index}");
+        public int Count => _el.ItemCount;
+        public IEnumerator<KeyOnly> GetEnumerator()
+        {
+            for (int i = 0; i < _el.ItemCount; i++) yield return this[i];
+        }
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        public readonly record struct KeyOnly(string Key);
+    }
+
+    private static ReactorListState BuildListStateFromLazy(LazyStackElementBase lazy)
+    {
+        var state = new ReactorListState();
+        int n = lazy.ItemCount;
+        var seeded = new (int Index, string Key)[n];
+        for (int i = 0; i < n; i++)
+            seeded[i] = (i, lazy.GetKeyAt(i) ?? $"__null_{i}");
+        state.Reset(seeded);
+        return state;
     }
 
     private UIElement? UpdateMenuBar(MenuBarElement o, MenuBarElement n, WinUI.MenuBar mb)

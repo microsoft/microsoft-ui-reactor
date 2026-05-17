@@ -2994,6 +2994,14 @@ public abstract record LazyStackElementBase : Element
     /// </summary>
     public abstract bool TryUpdateFactory(IElementFactory existingFactory);
     /// <summary>
+    /// Spec 042 Phase 1: hand the factory the host's <see cref="Internal.ReactorListState"/>
+    /// so its element-tracking dictionary can be keyed by stable
+    /// <see cref="Internal.ReactorRow.Key"/> instead of by realized index.
+    /// Insertions at non-tail positions used to shift every entry's effective
+    /// index — keying by string makes the mapping reorder-stable.
+    /// </summary>
+    internal abstract void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState);
+    /// <summary>
     /// After updating the factory in place, reconcile all realized items
     /// with the new viewBuilder output (property diffs only, no collection changes).
     /// </summary>
@@ -3030,6 +3038,11 @@ public record LazyVStackElement<T>(
     {
         if (factory is ElementFactory<T> f) f.RefreshRealizedItems(repeater);
     }
+
+    internal override void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState)
+    {
+        if (factory is ElementFactory<T> f) f.AttachListState(listState);
+    }
 }
 
 public record LazyHStackElement<T>(
@@ -3059,6 +3072,11 @@ public record LazyHStackElement<T>(
     public override void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater)
     {
         if (factory is ElementFactory<T> f) f.RefreshRealizedItems(repeater);
+    }
+
+    internal override void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState)
+    {
+        if (factory is ElementFactory<T> f) f.AttachListState(listState);
     }
 }
 

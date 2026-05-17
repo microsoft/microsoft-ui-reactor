@@ -1896,6 +1896,17 @@ public sealed partial class Reconciler
         return state;
     }
 
+    private static ReactorListState BuildListStateForLazy(LazyStackElementBase lazy)
+    {
+        var state = new ReactorListState();
+        int n = lazy.ItemCount;
+        var seeded = new (int Index, string Key)[n];
+        for (int i = 0; i < n; i++)
+            seeded[i] = (i, lazy.GetKeyAt(i) ?? $"__null_{i}");
+        state.Reset(seeded);
+        return state;
+    }
+
     private WinUI.GridView MountTemplatedGridView(TemplatedListElementBase el, Action requestRerender)
     {
         var gridView = new WinUI.GridView
@@ -2871,8 +2882,19 @@ public sealed partial class Reconciler
             Spacing = lazy.Spacing,
         };
 
-        repeater.ItemsSource = lazy.GetItemsSource();
-        repeater.ItemTemplate = lazy.CreateFactory(this, requestRerender, _pool);
+        // Spec 042 Phase 1: bind the repeater to an internally-owned
+        // ObservableCollection<ReactorRow>. Without this, every Items.Count
+        // change replaced the int-range source wholesale and the
+        // ItemsRepeater re-realized every visible child.
+        var listState = BuildListStateForLazy(lazy);
+        SetListState(repeater, listState);
+        repeater.ItemsSource = listState.Source;
+        var factory = lazy.CreateFactory(this, requestRerender, _pool);
+        // Plumb the list state into the factory so its _mountedElements
+        // dictionary is keyed by ReactorRow.Key (reorder-stable) instead
+        // of by realized index.
+        lazy.AttachListStateToFactory(factory, listState);
+        repeater.ItemTemplate = factory;
         SetElementTag(repeater, lazy);
         ApplySetters(lazy.RepeaterSetters, repeater);
 
