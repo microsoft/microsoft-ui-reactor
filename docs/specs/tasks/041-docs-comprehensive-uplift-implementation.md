@@ -928,7 +928,16 @@ source snippets, "Read the source" callout, tier-lint clean.)
       navigation-basics.*
 - [ ] `animation.md` — promote to Comprehensive.
 - [ ] `accessibility.md` — promote to Comprehensive.
-- [ ] `data-system.md` — promote to Comprehensive.
+- [x] `data-system.md` — promote to Comprehensive. *Lead mental-model
+      paragraph framing `IDataSource<T>` as the load-bearing contract,
+      ai:caveat on inline `ListDataSource` construction churning
+      identity (selection clears, cache empties), Patterns for
+      master-detail / observable / server-driven paging, Common
+      Mistakes for source recreation, in-grid selection, and
+      AutoColumns in production. `winui-ref` intentionally omitted —
+      `DataGrid<T>` is Reactor-original (no WinUI parallel; WinUI ships
+      DataGrid only via Community Toolkit). REACTOR_DOC_TIER_W001
+      acknowledged.*
 - [ ] `charting.md` — promote to Comprehensive.
 
 ### 4.2 New `wpf-interop.md` — Solid
