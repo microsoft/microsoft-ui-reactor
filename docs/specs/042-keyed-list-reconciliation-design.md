@@ -315,7 +315,7 @@ CRDT-derived approaches (fractional indexing, RGA, LSEQ, Yjs YATA) were surveyed
 | Phase | Work | Unblocks | Estimated scope |
 |---|---|---|---|
 | **0** | Spec review, decisions on §9 open questions | Phase 1 | — |
-| **1** | Internal `ObservableCollection<ReactorRow>` + React-style keyed diff for `ListView<T>`, `GridView<T>`, `LazyVStack<T>`, `LazyHStack<T>`. Fast paths + bulk-replace bailout. Re-key `ElementFactory<T>._mountedElements` by string. New tests covering single insert/remove/move animation behavior and bulk-replace fallback. | Fixes #198 | ~200 LOC + ~6 tests |
+| **1** | Internal `ObservableCollection<ReactorRow>` + React-style keyed diff for `ListView<T>`, `GridView<T>`, `LazyVStack<T>`, `LazyHStack<T>`. Fast paths + bulk-replace bailout. Re-key `ElementFactory<T>._mountedElements` by string. New tests covering single insert/remove/move animation behavior and bulk-replace fallback. **Landed on `feat/042-keyed-list-reconciliation` 2026-05-16**: 41 new unit tests in `tests/Reactor.Tests/Internal/` + 11 selftest fixtures (45 assertions) in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/KeyedListReconciliationFixtures.cs`; all green. | Fixes #198 | ~200 LOC + ~6 tests |
 | **2** | `IReactorKeyed` marker interface. Defaulting on `ListView<T>` / `GridView<T>` / `LazyVStack<T>` / `LazyHStack<T>` / `.WithKey<T>(item)`. Update sample apps and docs. | Ergonomics | ~50 LOC + doc updates |
 | **3** | Ambient `Animate(...)` transaction. AsyncLocal stack, reader in state-setter dispatch, consumer in `ApplyKeyedDiff` and `ChildReconciler`. Per-render WinUI transitions. | SwiftUI-style ergonomics | ~150 LOC, design needs revisit after Phase 1 |
 

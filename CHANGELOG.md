@@ -29,6 +29,42 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 042 Phase 1 — keyed-list reconciliation & ListView animation
+  groundwork.** New internal `Microsoft.UI.Reactor.Core.Internal.ReactorRow`
+  /  `ReactorListState` carry reference-typed identity rows inside an
+  internally-owned `ObservableCollection<ReactorRow>` per mounted templated
+  items control. The new `KeyedListDiff.Apply` helper produces the
+  React-style structural delta from the user's immutable list — lockstep
+  prefix + suffix walks, single-op fast paths (append / prepend /
+  remove-front / remove-back / insert-in-middle / remove-from-middle), and
+  a bulk-replace bailout (>25% churn with ≥8 absolute ops) that returns
+  to the legacy `ItemsSource` swap for correctness. (spec 042 §4)
+- **Spec 042 placeholder public surface.** `IReactorKeyed` interface and
+  the `Animations.Animate(AnimationKind, …)` ambient transaction API
+  shells are present so callers can stage adoption before Phase 2 / 3
+  implements the semantics. Today `Animate(...)` is a no-op pass-through.
+  (spec 042 §5, §6)
+
+### Fixed
+
+- **ListView / GridView / LazyVStack / LazyHStack now surface incremental
+  WinUI deltas for keyed updates.** Previously, any `ItemCount` change
+  rebuilt `ItemsSource` from `Enumerable.Range(...)`, which caused WinUI
+  to tear down every realized container and replay the entrance theme
+  transition for every visible row — the symptom captured in
+  microsoft-ui-reactor#198. Phase 1 routes structural changes through a
+  per-control `ObservableCollection<ReactorRow>` delta channel so only
+  the affected containers animate. Hand-built `FlexColumn(items.Select(...
+  .WithKey(item.Id)))` already worked correctly and is now pinned by
+  regression tests. (spec 042 §1, §4; closes microsoft-ui-reactor#198)
+- **`ItemsRepeater` `ElementFactory<T>._mountedElements` is now keyed by
+  the stable `ReactorRow.Key` instead of by realized index.** Insert-at-0
+  used to shift every realized entry's effective index by one, so
+  `RefreshRealizedItems` looked up the wrong element after every prepend.
+  Keying by string makes the mapping reorder-stable. (spec 042 §4.4)
+
+### Added
+
 - **Spec 039 — Property & event API scrub.**
   - **New fluent extensions.** Every callback property in the inventory has a
     matching fluent on its element record — ~60 callbacks across §1–§9 of the
