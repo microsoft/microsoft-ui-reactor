@@ -1185,10 +1185,10 @@ source snippets, "Read the source" callout, tier-lint clean.)
 
 ### 5.1 `mur docs check-tier` standalone command
 
-- [ ] Subcommand that asserts the tier declared in front-matter
+- [x] Subcommand that asserts the tier declared in front-matter
       matches the structural checklist (factors out the §11 lint
       so authors can run it without full compile).
-- [ ] Unit tests.
+- [x] Unit tests.
 
 ### 5.2 Tier-drift CI check
 

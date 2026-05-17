@@ -115,6 +115,13 @@ mur docs compile --validate-only
 # Lint a single tier (e.g. while authoring Comprehensive pages)
 mur docs compile --validate-only --tier=comprehensive
 
+# Tier-lint only — narrower than --validate-only (no cross-link
+# analyzer, no reference discovery). Best inner loop while iterating
+# on a tier upgrade.
+mur docs check-tier
+mur docs check-tier --topic hooks
+mur docs check-tier --tier solid --ci
+
 # Skip costly phases for inner-loop iteration
 mur docs compile --skip-screenshots --skip-diagrams
 
@@ -128,8 +135,11 @@ mur docs new-diagram architecture-overview overview
 ## 5. Tier-lint diagnostic codes
 
 The validator emits diagnostics from `mur docs compile --validate-only`
-to stderr. Each is `<file>:<line> <CODE>: <message>` so editors can
-parse them as build errors.
+(and the narrower `mur docs check-tier`) to stderr. Each is
+`<file>:<line> <CODE>: <message>` so editors can parse them as build
+errors. `check-tier` runs only the §11 codes in the table below; it
+does not run the cross-link analyzer (`REACTOR_DOC_XLINK_001`) or
+reference-generation codes.
 
 | Code                  | Meaning                                                | Severity |
 |-----------------------|--------------------------------------------------------|----------|

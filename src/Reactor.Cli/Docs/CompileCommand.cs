@@ -422,7 +422,7 @@ internal static partial class CompileCommand
 
     // ── Discovery ─────────────────────────────────────────────────────────
 
-    private static List<(string topicId, string dir)> DiscoverApps(string appsDir, string? topic)
+    internal static List<(string topicId, string dir)> DiscoverApps(string appsDir, string? topic)
     {
         var result = new List<(string, string)>();
         if (!Directory.Exists(appsDir)) return result;
@@ -448,7 +448,7 @@ internal static partial class CompileCommand
     /// <c>recipes/login.md.dt</c> has id <c>recipes/login</c> and emits to
     /// <c>docs/guide/recipes/login.md</c>.
     /// </summary>
-    private static List<(string topicId, DocTemplate template)> DiscoverTemplates(string templatesDir, string? topic)
+    internal static List<(string topicId, DocTemplate template)> DiscoverTemplates(string templatesDir, string? topic)
     {
         var result = new List<(string, DocTemplate)>();
         if (!Directory.Exists(templatesDir)) return result;
@@ -570,7 +570,7 @@ internal static partial class CompileCommand
     /// own findings) and returns the counts of *resolved* snippet/screenshot
     /// references so the tier checklist can enforce the §11 minimums.
     /// </summary>
-    private static (string body, int resolvedSnippets, int resolvedScreenshots) AssembleForLint(
+    internal static (string body, int resolvedSnippets, int resolvedScreenshots) AssembleForLint(
         DocTemplate template,
         Dictionary<string, SnippetExtractor.Snippet> allSnippets,
         Dictionary<string, ScreenshotInfo> allScreenshots)
@@ -718,15 +718,15 @@ internal static partial class CompileCommand
     [GeneratedRegex("""screenshot://([^)]+)""")]
     private static partial Regex ScreenshotRefPattern();
 
-    private static List<string> ExtractSnippetRefs(string body) =>
+    internal static List<string> ExtractSnippetRefs(string body) =>
         SnippetRefPattern().Matches(body).Select(m => m.Groups[1].Value).ToList();
 
-    private static List<string> ExtractScreenshotRefs(string body) =>
+    internal static List<string> ExtractScreenshotRefs(string body) =>
         ScreenshotRefPattern().Matches(body).Select(m => m.Groups[1].Value).ToList();
 
     // ── Arg parsing ───────────────────────────────────────────────────────
 
-    private static string? FindRepoRoot()
+    internal static string? FindRepoRoot()
     {
         var dir = Directory.GetCurrentDirectory();
         while (dir != null)
@@ -738,12 +738,12 @@ internal static partial class CompileCommand
         return null;
     }
 
-    private static string? GetOption(string[] args, string name)
+    internal static string? GetOption(string[] args, string name)
     {
         var idx = Array.IndexOf(args, name);
         return idx >= 0 && idx + 1 < args.Length ? args[idx + 1] : null;
     }
 
-    private static bool HasFlag(string[] args, string name) =>
+    internal static bool HasFlag(string[] args, string name) =>
         args.Contains(name, StringComparer.OrdinalIgnoreCase);
 }

@@ -19,6 +19,7 @@ internal static class DocsCommand
         return subcommand switch
         {
             "compile" => CompileCommand.Run(subArgs),
+            "check-tier" => CheckTierCommand.Run(subArgs),
             "render-diagrams" => RenderDiagramsCommand.Run(subArgs),
             "new-diagram" => NewDiagramCommand.Run(subArgs),
             "--help" or "-h" => ShowHelpAndReturn(),
@@ -40,6 +41,7 @@ internal static class DocsCommand
         Console.WriteLine();
         Console.WriteLine("Commands:");
         Console.WriteLine("  compile           Compile documentation from templates and doc apps");
+        Console.WriteLine("  check-tier        Run only §11 tier-lint (no cross-link / reference / emit)");
         Console.WriteLine("  render-diagrams   Re-render only the diagrams under docs/_pipeline/diagrams/");
         Console.WriteLine("  new-diagram       Scaffold a new Mermaid diagram (.mmd)");
         Console.WriteLine();
@@ -52,6 +54,12 @@ internal static class DocsCommand
         Console.WriteLine("  --validate-only         Check references + run tier lint without emitting");
         Console.WriteLine("  --tier <stub|solid|comprehensive>  Restrict validation to templates declaring this tier");
         Console.WriteLine("  --ci                    Strict mode: fail on warnings");
+        Console.WriteLine();
+        Console.WriteLine("Check-tier options:");
+        Console.WriteLine("  --topic <name>          Lint only a specific topic");
+        Console.WriteLine("  --tier <stub|solid|comprehensive>  Restrict to templates declaring this tier");
+        Console.WriteLine("  --ci                    Strict mode: non-zero exit on warnings");
+        Console.WriteLine("  --quiet                 Suppress info-level findings and the summary line");
     }
 
     private static int Unknown(string cmd)
