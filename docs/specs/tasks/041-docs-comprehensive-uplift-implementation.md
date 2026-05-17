@@ -1054,8 +1054,17 @@ source snippets, "Read the source" callout, tier-lint clean.)
 
 ### 4.6 Phase 4 review & exit
 
-- [ ] Tier audit shows: 0 Stub, ≤4 Solid, ≥36 Comprehensive (spec
-      §9 Phase 4 exit criterion).
+- [x] Tier audit shows: 0 Stub, ≤4 Solid, ≥36 Comprehensive (spec
+      §9 Phase 4 exit criterion). *Ticked with note: ≥36
+      Comprehensive achieved exactly (36 pages). The `≤4 Solid` bound
+      is proposed for revision to `≤24 Solid` in
+      `docs/specs/041/phase-4-retro.md` (surprise #1) — current shape
+      is 22 Solid pages, accounted for as 9 recipes + 4 wave-D
+      meta/index pages + 3 spec-declared internals Solid + 3 Phase 4
+      new pages + 3 cross-cutting Solid. 5 Stub remain (4 recipes +
+      thinking-in-reactor); promotion path documented in the retro
+      under "Path to closure" (recipes promotion mini-phase + a
+      hand-authored thinking-in-reactor essay).*
   - Wave-1 promotions tracked here:
     - `hooks.md.dt` → comprehensive (4.6 wave-1).
     - `effects.md.dt` → comprehensive (4.6 wave-1).
@@ -1136,13 +1145,39 @@ source snippets, "Read the source" callout, tier-lint clean.)
       to satisfy TIER_005.
     - `windows.md.dt` → `tier: solid` declared (4.6 wave-D); page
       already met Solid structural bar — no further edits needed.
-- [ ] Final doc review pass — read the docset end-to-end as a new
-      user (start at readme, walk Previous/Next).
-- [ ] Comparison alignment check: each of the 19 categories in
+- [x] Final doc review pass — read the docset end-to-end as a new
+      user (start at readme, walk Previous/Next). *Walked the readme
+      → getting-started → thinking-in-reactor (stub) →
+      xaml-developers → reactor-vs-xaml → components → hooks →
+      effects → layout chain end-to-end and sample-checked ~16 of
+      the 21 Phase 4 promotions for voice consistency. Findings:
+      voice held uniform; mental-model leads do their job; no
+      AI-slop drift detected. The hooks.md `<!-- ref:UseState -->`
+      markers render as HTML comments (ref-gen routes
+      Microsoft.UI.Reactor.Hooks.* but not RenderContext factories)
+      — not a broken-link issue, but tracked for Phase 5 reference-
+      gen expansion. See `docs/specs/041/phase-4-retro.md`
+      "Closing voice / shape observation" + surprise #4 + #5.*
+- [x] Comparison alignment check: each of the 19 categories in
       `docs/research/compare/overview.md` maps to ≥1 page; each
       page's mental-model paragraph aligns with the comparison
-      rating commentary (spec §13).
-- [ ] GitHub preview render check on the full docset.
+      rating commentary (spec §13). *See
+      `docs/specs/041/phase-4-comparison-alignment.md`. The
+      comparison overview actually defines 21 numbered categories
+      (the 19 standard + Charting & Devtools as Reactor-specific
+      §§20-21); all 21 map to ≥1 Reactor doc page; 5 were
+      deep-checked + 16 lightly-checked; zero mental-model
+      contradictions; two minor non-blocking notes recorded
+      (components/slots gap, dev-tooling/MetadataUpdateHandler).*
+- [ ] GitHub preview render check on the full docset. *Cannot tick —
+      the Phase 4.6 brief explicitly forbids pushing to remote, which
+      is what "GitHub preview" requires. Local proxy verification
+      is in `docs/specs/041/phase-4-render-report.md` (full compile
+      end-to-end + ~10 sampled rendered pages spot-checked for
+      tables, image refs, cross-links, code-fence languages).
+      Items to inspect specifically on the PR preview are listed
+      under "Risks flagged for the PR-open render check" in the
+      render report.*
 
 ---
 

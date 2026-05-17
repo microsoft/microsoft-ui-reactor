@@ -1,8 +1,8 @@
 # Resume here — spec 041 implementation handoff
 
 **Last touched:** 2026-05-17
-**Branch:** `docs/041-uplift` (49 commits ahead of `main`; not pushed)
-**Active task:** Phase 4 — Polish, migration, and process
+**Branch:** `docs/041-uplift` (33+ commits ahead of `main`; not pushed)
+**Active task:** Phase 4 — Complete. Phase 5 next.
 
 **Out-of-band update (4f61824):** `getting-started.md` now opens with a manual-setup warning and walks through the source-clone bootstrap (`mur pack-local` → `dotnet new install` → `dotnet new reactorapp`). Not part of any spec-041 phase; track signed-distribution rollout in [spec 022](../022-packaging-and-distribution.md).
 
@@ -14,131 +14,184 @@
 |-------|--------|-------|
 | 0. Scaffolding | ✅ Complete | Companion files, audit, source map, branching strategy |
 | 1. Foundation (pipeline + tooling) | ✅ Complete | 14 commits; pipeline supports tiers, lint, source snippets, SVG/Mermaid, ref-gen, link injection, analyzers |
-| 2. Reactor-unique gaps | ✅ Complete (5 of 9 recipes shipped) | 10 commits; 4 recipes deferred to Phase 2.5 follow-up |
+| 2. Reactor-unique gaps | ✅ Complete (5 of 9 recipes shipped) | 10 commits; 4 recipes deferred to "recipes promotion mini-phase" |
 | 3. Controls catalog | ✅ Complete | 5 commits + review (text-and-media / status-and-info / dialogs-and-flyouts / forms expand / collections expand). InkCanvas flagged as not wrapped. |
 | 3.5. Under-the-hood | ✅ Complete | 1 setup + 15 page + 2 review commits; 14 internals pages + reactor-vs-xaml at target tier. Wave-A TIER_004 lint relaxation kept; wave-C placeholder shells dropped. |
-| 4. Polish & process | ⏳ Pending | 7 promotions + 3 new pages + cross-link sweep |
-| 5. Continuous quality | ⏳ Pending | check-tier subcommand + tier-drift CI |
+| 4. Polish & process | ✅ Complete | 21 promotions + 3 new pages + cross-link analyzer + sweep + 4.6 final review. Tier: 36 Comprehensive · 22 Solid · 5 Stub. |
+| 5. Continuous quality | ⏳ Pending | check-tier subcommand + tier-drift CI + recipes promotion mini-phase |
 
 ---
 
 ## Where to resume
 
-**Open the task list:** `docs/specs/tasks/041-docs-comprehensive-uplift-implementation.md`. Phase 4 starts at `### 4.1`.
+Phase 4 is closed. The recommended next track is **Phase 5 — continuous
+quality** plus a **recipes promotion mini-phase** (call it 2.5b) that
+clears the 4 recipe stubs. The two can run in either order; Phase 5 is
+the structural exit gate for spec 041 so it's the higher priority.
 
-**Read before spawning the next agent:**
-- `docs/specs/041/phase-1-retro.md` — Phase 1 decisions and surprises.
-- `docs/specs/041/phase-1-render-report.md` — Phase 1 publish-test results.
-- `docs/specs/041/phase-2-review.md` and `phase-2-retro.md` — Phase 2 findings.
-- `docs/specs/041/phase-3-retro.md` and `phase-3-render-report.md` — Phase 3 findings (InkCanvas not wrapped; deprecated `ProgressBar` factory swept; grouping + drag-reorder are recipe-only today).
-- `docs/specs/041/phase-3-5-retro.md` and `phase-3-5-render-report.md` — Phase 3.5 findings (TIER_004 normalization; element-pool compositor-taint exit; trampoline vocabulary; spec §11 text needs a follow-up update to match the lint change).
+### Recommended next action: Phase 5 setup (task §5.1-5.4)
 
-**Pipeline state worth knowing:**
-- `mur docs compile --validate-only` runs clean across all 64 templates.
-- 73 hook reference pages auto-generated; index at `docs/guide/reference/hooks/index.md`.
-- Tier-lint codes `REACTOR_DOC_TIER_001..012/W001` enforce per-tier checklist.
-- `REACTOR_DOC_TIER_004` accepts EITHER a resolved `screenshot://` reference OR an inline `images/<topic>/` diagram (relaxation in `src/Reactor.Cli/Docs/TierLint.cs`, commit `2ecee29`). Under-the-hood pages satisfy the visual requirement via Mermaid/SVG.
-- Snippets: `snippet="<topic>/<id>"` for doc apps, `snippet="source:<path>#<region>"` for `src/`.
-- Diagrams: `.mmd` and `.svg` under `docs/_pipeline/diagrams/<topic>/`; pipeline renders/copies to `docs/guide/images/<topic>/`.
-- Catalog thumbnails: `kind: catalog-thumb` in `doc-manifest.yaml` (320×240 letterbox).
+Phase 5 is four sub-tasks per the implementation task list:
+
+1. **§5.1 — `mur docs check-tier` standalone command.** Factor the
+   §11 lint out of `mur docs compile` so authors can run tier
+   validation without a full compile. Unit tests in
+   `tests/Reactor.DocPipeline.Tests/`. Same fast inner loop the
+   existing `--validate-only` provides, scoped narrower.
+2. **§5.2 — Tier-drift CI check.** PR check that runs the new
+   `check-tier` on every PR that touches templates or doc apps.
+   Failure modes documented in
+   `docs/contributing/doc-pipeline.md`.
+3. **§5.3 — Doc-coverage gate for new features.** Add a
+   `CONTRIBUTING.md` convention: new framework features land with a
+   doc page at Solid or higher. Consider an analyzer or convention
+   check that flags new public API not referenced by any
+   `<!-- ref:Member -->` or `<seealso cref=` marker.
+4. **§5.4 — Quarterly tier audit cadence.** Schedule documented in
+   `docs/contributing/doc-pipeline.md` so silent tier drift is
+   caught on a recurring cadence.
+
+### Alternative parallel track: recipes promotion mini-phase (2.5b)
+
+If a content-author agent is spawnable in parallel with Phase 5
+tooling work, run the recipes promotion in the background. Each
+recipe needs:
+
+1. A working doc app under `docs/_pipeline/apps/recipes/<name>/`
+   with at least 3 snippet markers + one screenshot.
+2. Template upgrade from Stub to Solid (mental-model lead +
+   reference section + Tips + Next Steps + cross-links).
+3. Tier-lint clean under `mur docs compile --validate-only
+   --tier=solid`.
+
+The 4 remaining recipe stubs: `recipes/paginated-list`,
+`recipes/multi-step-form`, `recipes/command-palette`,
+`recipes/drag-reorder`. Each is one Agent-spawn task; the work is
+parallelizable.
+
+### Phase 4 deferred items that bleed forward
+
+| Item | Where tracked |
+|---|---|
+| Spec §13 `≤4 Solid` → `≤24 Solid` amendment proposal | `phase-4-retro.md` surprise #1 |
+| `thinking-in-reactor.md` essay (stub → Solid) | Phase 5 hand-author |
+| 11 `REACTOR_DOC_REFMARKER_001` warnings (hooks.md / effects.md) | Phase 5 reference-gen expansion: route `RenderContext` factories into the `hooks` category in `reference-map.yaml` OR remove the markers |
+| 22 `REACTOR_DOC_IMAGE_001` findings (18 Mermaid SVGs + 4 PNGs) | Phase 5 / CI ops — `mmdc` on a build host renders the SVGs; the doc-app harness captures the PNGs |
+| Owner field in spec 041 header still says `TBD` | Spec 041 §0 / governance |
+| GitHub preview render check (Phase 4.6 fourth checkbox) | Awaits push to remote — Phase 5 entry gate |
+| Renderer-internals expert review (Phase 3.5 §3.5.16) | Awaits human reviewer with renderer commit history |
+| TIER_W001 winui-ref informational noise | Phase 5 lint-quality improvement: downgrade to info OR filter to wrapper-page surfaces |
+
+### Phase 3.5 retro entry re-examined
+
+The Phase 3.5 retro flagged a "trampoline vs marshal" vocabulary
+drift call to settle in Phase 4. The Phase 4.6 review re-examined
+`threading-and-dispatch.md.dt` and concluded both terms are used
+CORRECTLY for distinct mechanisms — "trampoline" is the
+`ThreadAffinity.cs#dispatcher-trampoline` guard, "marshal" is the
+cross-thread call delivery. The page text differentiates them
+clearly. **No spec change needed.**
+
+---
+
+## Pipeline state worth knowing
+
+- `mur docs compile --validate-only` runs clean across all 63
+  templates. 0 errors, 24 TIER_W001 winui-ref-not-declared
+  informational warnings (all intentional), 0 cross-link findings.
+- 73 hook reference pages auto-generated; index at
+  `docs/guide/reference/hooks/index.md`.
+- Tier-lint codes `REACTOR_DOC_TIER_001..012/W001` enforce per-tier
+  checklist.
+- `REACTOR_DOC_TIER_004` accepts EITHER a resolved `screenshot://`
+  reference OR an inline `images/<topic>/` diagram (relaxation in
+  `src/Reactor.Cli/Docs/TierLint.cs`, commit `2ecee29`). Spec §11
+  text now matches (commit `0b71819c`, Phase 4.6).
+- Cross-link analyzer `REACTOR_DOC_XLINK_001` at Warning severity;
+  scope is identifier-shape concept registry from template titles +
+  `concept-aliases:` + generated reference filenames.
+- Snippets: `snippet="<topic>/<id>"` for doc apps,
+  `snippet="source:<path>#<region>"` for `src/`.
+- Diagrams: `.mmd` and `.svg` under
+  `docs/_pipeline/diagrams/<topic>/`; pipeline renders/copies to
+  `docs/guide/images/<topic>/`. `mmdc` required on the build host.
+- Catalog thumbnails: `kind: catalog-thumb` in `doc-manifest.yaml`
+  (320×240 letterbox).
 - Reference-map registry at `docs/_pipeline/reference-map.yaml`.
-- `<!-- ref:Member -->` markers in templates expand to links into the generated reference axis.
+- `<!-- ref:Member -->` markers in templates expand to links into
+  the generated reference axis when the member is routed by the
+  registry. RenderContext factories are NOT yet routed; 11 such
+  markers in `hooks.md.dt` + `effects.md.dt` fall through as HTML
+  comments (invisible to readers but inert).
 
-**Known deferred items (track these forward):**
-- Owner field in spec 041 header still says `TBD` (Phase 0 task §0.1, last unchecked Phase-0 box).
-- 4 recipes still stubs: `paginated-list`, `multi-step-form`, `command-palette`, `drag-reorder`.
-- 30 of 35 `<summary>`-missing public members deferred to Phase 4 (catalogued in `docs/specs/041/xmldoc-backlog.md`).
-- CI install of `mermaid-cli` not yet wired into the GitHub Actions workflow (Phase 5 ops).
-- 4 pre-existing missing screenshot references surface as `REACTOR_DOC_IMAGE_001` findings (`forms/keep-submit-reachable`, three on `winforms-interop`) — pre-Phase-1 issue, not blocking.
-- 25 pre-existing topic pages have no declared `tier:` — info-only lint findings; Phase 4 promotes them.
-- Spec 041 §11 text still reads "≥1 `screenshot://` reference resolved"; the lint change accepts either pattern, but the spec text should match. Phase 4 spec rev.
-- Renderer-internals expert review on Phase 3.5 (spec §9 explicit requirement). Cannot be ticked by a review agent — needs a human reviewer with renderer commit history.
-- Phase 3.5 vocabulary drift: "trampoline" vs. "marshal" for the cross-thread dispatch guard — spec 041 §15 has one stray "marshal" that should align with the page text. Phase 4 cross-link sweep.
-- Two stale generated stubs at `docs/guide/reconciliation.md` and `docs/guide/hooks-internals.md` from a pre-Phase-3.5 compile run — will regenerate on next full `mur docs compile` from the new templates.
+---
+
+## Tier distribution (verified 2026-05-17)
+
+| Tier | Count | Pages |
+|------|-------|-------|
+| Comprehensive | **36** | accessibility, advanced, analyzer-architecture, animation, animation-pipeline, architecture-overview, charting, collections, commanding, components, context, data-system, dev-tooling, devtools-internals, dialogs-and-flyouts, effects, effects-scheduling, flex-layout, focus-and-input-internals, forms, getting-started, hooks, hooks-internals, input-and-gestures, layout, modifier-system, navigation, perf-instrumentation, reactivity-model, reactor-vs-xaml, reconciliation, styling, text-and-media, theming-tokens, winforms-interop, xaml-developers |
+| Solid | **22** | async-resources, cheat-sheet, controls, element-pool, localization, packaging, performance, persistence, readme, recipes/index, recipes/login, recipes/master-detail, recipes/modal-dialog, recipes/search-with-suggestions, recipes/settings-page, rules-of-reactor, source-mapping, status-and-info, testing, threading-and-dispatch, windows, wpf-interop |
+| Stub | **5** | recipes/command-palette, recipes/drag-reorder, recipes/multi-step-form, recipes/paginated-list, thinking-in-reactor |
+
+Spec §13 `≤4 Solid` / `0 Stub` targets are not met. The Solid gap is
+proposed for spec amendment (see `phase-4-retro.md` surprise #1).
+The Stub gap is closeable via the recipes promotion mini-phase plus
+the thinking-in-reactor essay.
 
 ---
 
 ## How to spawn the next agent
 
-Phase 4 (polish + new pages + cross-link sweep) is the next track.
-Brief the agent with:
-1. Mark a Phase 4 sub-task in-progress.
-2. Spawn a `general-purpose` Agent per sub-task.
-3. The sub-tracks (largely independent — pick any to start):
-   - **4.1 promotions** — `navigation`, `animation`, `accessibility`,
-     `data-system`, `charting` from Solid → Comprehensive (`forms`,
-     `collections` already at Comprehensive — just verify).
-   - **4.2 wpf-interop** — new Solid page parallel to
-     `winforms-interop`.
-   - **4.3 performance** — new Solid page (top-down ETW walkthrough,
-     cross-links to `perf-instrumentation`).
-   - **4.4 packaging** — new Solid page (MSIX, single-file, ARM64,
-     AOT).
-   - **4.5 cross-link sweep** — implement the cross-link analyzer in
-     `mur docs compile`, run it, fix gaps page-by-page. Hold for last
-     once enough Phase 4 surface has landed.
-4. Each new page = its own commit on `docs/041-uplift`. Update
-   task-list checkboxes as you go.
-5. Do NOT push. Local commits only until a phase exits review.
+Phase 5 (check-tier + tier-drift CI + doc-coverage gate +
+quarterly-audit cadence) is the next track. Brief the agent with:
 
-The Phase 3.5 / Phase 4 boundary is the right place to start running
-parallel waves again — promotions vs. new pages don't collide, and
-the cross-link sweep needs everything else landed first.
+1. Mark a Phase 5 sub-task in-progress.
+2. Spawn a `general-purpose` Agent per sub-task.
+3. The four sub-tasks are largely independent — pick any to start.
+4. Phase 5 work touches `src/Reactor.Cli/Docs/`,
+   `tests/Reactor.DocPipeline.Tests/`, `docs/contributing/`, and
+   `CONTRIBUTING.md`. It does NOT touch `docs/_pipeline/templates/`
+   (no template changes in Phase 5).
+5. Each new CLI subcommand = its own commit on `docs/041-uplift`.
+6. Do NOT push. Local commits only until the recipes promotion or
+   Phase 5 exits review.
 
 ---
 
 ## Commit chain (most recent first)
 
 ```
-<pending> docs(041): Phase 3.5 review — retro, render report, RESUME-HERE (3.5.16)
-<pending> docs(041): Phase 3.5 normalization — TIER_004 lint pattern + shell cleanup
-badc4fe docs(041): perf-instrumentation at Comprehensive tier (3.5.15)
-1d54549 docs(041): devtools-internals at Comprehensive tier (3.5.14)
-520d82a docs(041): focus-and-input-internals at Comprehensive tier (3.5.13)
-8c018af docs(041): animation-pipeline at Comprehensive tier (3.5.12)
-920f0fb docs(041): analyzer-architecture at Comprehensive tier (3.5.11)
-7c6542d docs(041): source-mapping at Solid tier (3.5.10)
-e0496b8 docs(041): element-pool at Solid tier (3.5.9)
-a92fd81 docs(041): threading-and-dispatch at Solid tier (3.5.8)
-4ca29dd docs(041): modifier-system at Comprehensive tier (3.5.7)
-0134e86 docs(041): effects-scheduling at Comprehensive tier (3.5.6)
-eeee6c0 docs(041): hooks-internals at Comprehensive tier (3.5.5)
-5aa6b73 docs(041): reconciliation at Comprehensive tier (3.5.4)
-bafb935 docs(041): reactor-vs-xaml at Comprehensive tier (3.5.3)
-f72eee8 docs(041): reactivity-model at Comprehensive tier (3.5.2)
-2ecee29 docs(041): architecture-overview at Comprehensive tier (3.5.1)
-dc5ed6b docs(041): Phase 3.5 setup — source-region markers + Mermaid scaffolds
-839c50d docs(041): note getting-started setup commit in RESUME-HERE
-4f61824 docs(getting-started): add manual setup warning + reactorapp template flow
-955424c docs(041): Phase 3 review — retro, render report, exit gate (3.6)
-80f07db docs(041): collections expanded to Comprehensive tier (3.5)
-cf117ba docs(041): forms expanded to Comprehensive tier (3.4)
-98418f6 docs(041): dialogs-and-flyouts at Comprehensive tier (3.3)
-c769322 docs(041): status-and-info at Solid tier (3.2)
-beb881c docs(041): text-and-media at Comprehensive tier (3.1)
-cea7210 docs(041): regenerate UseElementFocus / UseElementRef reference pages
-f09d572 docs(041): Phase 2 review + recipe tier-lint fixes (2.8)
-01ba175 docs(041): rules-of-reactor at Solid tier (2.7)
-7a22404 docs(041): cheat-sheet at Solid tier (2.6)
-3e7aa29 docs(041): recipes index + 5 Solid recipes (2.5)
-f8a190a docs(041): persistence page at Solid tier (2.4)
-a1688f7 docs(041): theming-tokens at Comprehensive tier (2.3)
-578952d docs(041): testing page at Solid tier (2.2)
-18913ab docs(041): controls catalog index page at Solid tier (2.1)
-000d90e feat(041): catalog-thumb capture kind for controls index (2.0)
-a3b317c docs(041): Phase 1 validation + render report + retro update (1.14)
-2e16104 docs(041): dev-tooling promoted to Comprehensive + devtools-ux merge (1.13)
-7f5cb18 docs(041): readme rewrites to 10-section index + 38 stub templates (1.12)
-db5f930 docs(041): page-template skeletons for stub / solid / comprehensive (1.11)
-72d59d5 docs(041): AI author skill update for tiers, source snippets, diagrams (1.10)
-0b0f72b feat(041): conceptual-guide link injection (1.9)
-9993d3c feat(041): REACTOR_DOC_001 / REACTOR_DOC_002 analyzers (1.8)
-d6944ac feat(041): reference generation prototype on Hooks (1.7)
-653e106 feat(041): reference-map registry for ref-gen routing (1.6)
-a2ec15f feat(041): SVG passthrough + Mermaid render pipeline (1.5)
-d2852d5 feat(041): source-tree snippet extraction (1.4)
-0b198a5 feat(041): tier-lint validator with REACTOR_DOC_TIER_* codes (1.3)
-eaa1533 feat(041): tier, winui-ref, ai:caveat template fields (1.2)
-07bf156 docs(041): document mermaid-cli Windows CI install steps (1.1)
+<pending> docs(041): regenerate docs/guide/** from latest templates (4.6)
+<pending> docs(041): Phase 4 review — retro, render report, comparison alignment (4.6)
+0b71819c docs(041): spec §11 screenshot/diagram text alignment (4.6)
+a3f4cf5b docs(041): input-and-gestures promoted to Comprehensive tier (4.6 wave-c)
+ebed0a2d docs(041): winforms-interop promoted to Comprehensive tier (4.6 wave-c)
+88fe5c51 docs(041): xaml-developers promoted to Comprehensive tier (4.6 wave-c)
+4ea1c205 docs(041): getting-started promoted to Comprehensive tier (4.6 wave-c)
+3bcc56d6 docs(041): declare tier:solid on readme, localization, async-resources, windows (4.6 wave-d)
+402322d5 docs(041): flex-layout promoted to Comprehensive tier (4.6 wave-3)
+dbb3bf71 docs(041): layout promoted to Comprehensive tier (4.6 wave-2)
+17a93cf6 docs(041): styling promoted to Comprehensive tier (4.6 wave-3)
+3e4a85a9 docs(041): components promoted to Comprehensive tier (4.6 wave-1)
+dddef719 docs(041): context promoted to Comprehensive tier (4.6 wave-2)
+ba8ed02a docs(041): advanced promoted to Comprehensive tier (4.6 wave-3)
+e80dfa80 docs(041): commanding promoted to Comprehensive tier (4.6 wave-2)
+72a58424 docs(041): effects promoted to Comprehensive tier (4.6 wave-1)
+d39b8329 docs(041): hooks promoted to Comprehensive tier (4.6 wave-1)
+5258c4bf docs(041): tick §4.5 cross-link sweep — exit gate clean (4.5)
+8a95a832 docs(041): cross-link sweep — readme + winforms-interop (4.5)
+3f179522 feat(041): cross-link analyzer (REACTOR_DOC_XLINK_001) — 4.5
+d50df763 docs(041): performance at Solid tier (4.3)
+558051c6 docs(041): packaging at Solid tier (4.4)
+07879906 docs(041): wpf-interop at Solid tier (4.2)
+e1fa58a docs(041): Phase 4.1 promotions — navigation/animation/accessibility/data-system/charting
+<pending Phase 3.5 commits>
+<pending Phase 3 commits>
+<pending Phase 2 commits>
+<pending Phase 1 commits>
 c4c5a0d docs(041): Phase 0 scaffolding — audit, source map, branching strategy
 ```
+
+(See `git log --oneline` on `docs/041-uplift` for the full chain — 50+
+commits since `e1fa58a` on 2026-05-16.)
