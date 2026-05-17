@@ -61,6 +61,7 @@ Flex(FlexDirection direction, Element[] children) → FlexElement
 FlexColumn(Element[] children) → FlexElement
 FlexRow(Element[] children) → FlexElement
 FlipView(Element[] items) → FlipViewElement
+FlipView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedFlipViewElement<T>
 FlipView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedFlipViewElement<T>
 Flyout(Element target, Element flyoutContent) → FlyoutElement
 FontIcon(string glyph, string fontFamily = null, double? fontSize = null) → FontIconData
@@ -69,6 +70,7 @@ ForEach<T>(IEnumerable<T> items, Func<T, int, Element> render) → Element
 Frame(Type sourcePageType = null, object navigationParameter = null) → FrameElement
 Grid(GridSize[] columns, GridSize[] rows, Element[] children) → GridElement
 GridView(Element[] items) → GridViewElement
+GridView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedGridViewElement<T>
 GridView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedGridViewElement<T>
 Group(Element[] children) → Element
 HStack(Element[] children) → StackElement
@@ -85,11 +87,14 @@ InfoBadge(int value) → InfoBadgeElement
 InfoBar(string title = null, string message = null) → InfoBarElement
 InterspersedGrid(Orientation orientation, Element[] items, double[] proportions, double separatorSize, Func<int, Element> separatorFactory) → GridElement
 ItemsView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → ItemsViewElement<T>
+LazyHStack<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
 LazyHStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
+LazyVStack<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → LazyVStackElement<T>
 LazyVStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyVStackElement<T>
 Line(double x1, double y1, double x2, double y2) → LineElement
 ListBox(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChanged = null) → ListBoxElement
 ListView(Element[] items) → ListViewElement
+ListView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedListViewElement<T>
 ListView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedListViewElement<T>
 LocaleProvider(string locale, Element child, IStringResourceProvider resourceProvider = null, string defaultLocale = "en-US", bool pseudoLocalize = false) → Element
 MapControl(string mapServiceToken = null, double zoomLevel = 1) → MapControlElement
@@ -622,6 +627,7 @@ T.WithBorder<T>(string color, double thickness = 1) → T
 T.WithContextFlyout<T>(Element contextFlyout) → T
 T.WithErrorStyling<T>(ValidationContext ctx, string fieldName, ShowWhen showWhen = ShowWhen.WhenTouched, bool submitAttempted = false) → T
 T.WithFlyout<T>(Element flyout) → T
+T.WithKey<T, TKey>(TKey item) → T
 T.WithKey<T>(string key) → T
 T.WithToolTip<T>(Element tooltip) → T
 T.WithTransitions<T>(Transition[] transitions) → T

@@ -1453,6 +1453,25 @@ public static partial class ElementExtensions
     public static T WithKey<T>(this T el, string key) where T : Element =>
         el with { Key = key };
 
+    /// <summary>
+    /// Assigns the stable identity from an <see cref="IReactorKeyed"/> data
+    /// item directly to a hand-built element — equivalent to
+    /// <c>el.WithKey(item.Key)</c> but lets call sites avoid hoisting the
+    /// item to read <c>.Key</c>. (spec 042 §5)
+    /// </summary>
+    /// <remarks>
+    /// Typical use: <c>FlexColumn(items.Select(item =&gt; TextBlock(item.Name).WithKey(item)))</c>.
+    /// The <c>TKey</c> parameter is independent of the element type so the
+    /// usual fluent inference (return the element type) is preserved.
+    /// </remarks>
+    public static T WithKey<T, TKey>(this T el, TKey item)
+        where T : Element
+        where TKey : IReactorKeyed
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return el with { Key = item.Key };
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  Set() — strongly-typed native property access per element type
     //

@@ -933,6 +933,17 @@ public static partial class Factories
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
 
     /// <summary>
+    /// Creates a typed, data-driven <see cref="TemplatedListViewElement{T}"/>
+    /// for items that implement <see cref="IReactorKeyed"/>. The
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c> so call sites can
+    /// omit it. (spec 042 §5)
+    /// </summary>
+    public static TemplatedListViewElement<T> ListView<T>(
+        IReadOnlyList<T> items,
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
+        new(items, static t => t.Key, viewBuilder);
+
+    /// <summary>
     /// Creates a typed, data-driven <see cref="TemplatedGridViewElement{T}"/>
     /// — the templated peer of WinUI's untyped <c>GridView</c>.
     /// </summary>
@@ -946,6 +957,16 @@ public static partial class Factories
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
 
     /// <summary>
+    /// <see cref="IReactorKeyed"/>-typed overload of
+    /// <see cref="GridView{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>;
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c>. (spec 042 §5)
+    /// </summary>
+    public static TemplatedGridViewElement<T> GridView<T>(
+        IReadOnlyList<T> items,
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
+        new(items, static t => t.Key, viewBuilder);
+
+    /// <summary>
     /// Creates a typed, data-driven <see cref="TemplatedFlipViewElement{T}"/>
     /// — the templated peer of WinUI's untyped <c>FlipView</c>.
     /// </summary>
@@ -957,6 +978,16 @@ public static partial class Factories
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+
+    /// <summary>
+    /// <see cref="IReactorKeyed"/>-typed overload of
+    /// <see cref="FlipView{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>;
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c>. (spec 042 §5)
+    /// </summary>
+    public static TemplatedFlipViewElement<T> FlipView<T>(
+        IReadOnlyList<T> items,
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
+        new(items, static t => t.Key, viewBuilder);
 
     // ── Virtualized collections ───────────────────────────────────
 
@@ -977,6 +1008,16 @@ public static partial class Factories
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
 
     /// <summary>
+    /// <see cref="IReactorKeyed"/>-typed overload of
+    /// <see cref="LazyVStack{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>;
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c>. (spec 042 §5)
+    /// </summary>
+    public static LazyVStackElement<T> LazyVStack<T>(
+        IReadOnlyList<T> items,
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
+        new(items, static t => t.Key, viewBuilder);
+
+    /// <summary>
     /// Creates a virtualized horizontal stack of templated items — the horizontal
     /// peer of <see cref="LazyVStack{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>.
     /// </summary>
@@ -988,6 +1029,16 @@ public static partial class Factories
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+
+    /// <summary>
+    /// <see cref="IReactorKeyed"/>-typed overload of
+    /// <see cref="LazyHStack{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>;
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c>. (spec 042 §5)
+    /// </summary>
+    public static LazyHStackElement<T> LazyHStack<T>(
+        IReadOnlyList<T> items,
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
+        new(items, static t => t.Key, viewBuilder);
 
     // ── Shapes ───────────────────────────────────────────────────────
 
