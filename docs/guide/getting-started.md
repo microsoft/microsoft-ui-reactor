@@ -5,41 +5,103 @@
 > **Prerequisites:** .NET 10+ and the Windows App SDK.
 <!-- /ai:lock -->
 
+> **Heads up — manual setup required today.** Reactor does not yet ship a
+> signed NuGet package or a one-click installer. Until those land you build the
+> framework, the `mur` CLI, and the project template from source. The steps
+> below take ~3 minutes and only need to be run once per machine. The signed
+> distribution is tracked in [spec 022](../specs/022-packaging-and-distribution.md).
+
 Reactor is a declarative UI framework for building native Windows apps in pure C#.
 No XAML, no data binding, no view models. You describe your UI as a function of
 state and Reactor keeps the screen in sync.
 
+## Setup (one-time)
+
+Clone the framework, build the CLI, pack the local NuGets, and install the
+project template. From an admin or regular PowerShell:
+
+```powershell
+# 1. Clone the framework
+git clone https://github.com/microsoft/microsoft-ui-reactor.git
+cd microsoft-ui-reactor
+
+# 2. Build mur — the build auto-mirrors mur.exe to bin/<arch>/
+dotnet build src/Reactor.Cli/Reactor.Cli.csproj -c Release
+
+# 3. Put mur on your user PATH (one-time; takes effect in new shells)
+$arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
+$murBin = (Resolve-Path "bin/$arch").Path
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (($userPath -split ';') -notcontains $murBin) {
+    [Environment]::SetEnvironmentVariable('Path', "$murBin;$userPath", 'User')
+}
+
+# 4. Open a new shell so `mur` resolves, then pack the local NuGets
+mur pack-local
+# Produces local-nupkgs/Microsoft.UI.Reactor.0.0.0-local.nupkg
+# and       local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg
+
+# 5. Install the project template so `dotnet new reactorapp` works anywhere
+dotnet new install local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg
+```
+
+Then install the agent kit so Claude / Copilot can author Reactor code with
+the right factories, hooks, and patterns:
+
+```powershell
+# 6. Install the Reactor agent skills
+#    Source clone — point your agent at the in-repo plugin folder:
+$pluginDir = (Resolve-Path "plugins/reactor").Path
+# Claude Code: copy or symlink to ~/.claude/plugins/reactor
+New-Item -ItemType SymbolicLink `
+    -Path "$env:USERPROFILE\.claude\plugins\reactor" `
+    -Target $pluginDir -Force | Out-Null
+#    (For Copilot CLI / other agents, follow your tool's plugin-install path
+#     and point it at <repo>/plugins/reactor.)
+```
+
+> **What this gets you.** `mur` builds local-NuGet snapshots of the framework
+> so apps in any folder can `<PackageReference Include="Microsoft.UI.Reactor"
+> Version="0.0.0-local" />` against your clone. The agent skills give AI
+> assistants the up-to-date API surface (`mur --skill` / `mur --api` print the
+> same content) so generated code targets the real factories rather than
+> hallucinated XAML-shaped APIs. Re-run `mur pack-local` whenever you pull new
+> framework changes.
+
+> **Already have a signed package?** Skip steps 1–4. Reference the published
+> `Microsoft.UI.Reactor` package directly and run the consumer-side
+> `install-skill-kit.ps1` shipped in the release archive (covered in [spec
+> 022](../specs/022-packaging-and-distribution.md) §4.4). Until that release
+> ships, the steps above are the supported path.
+
 ## Creating a Project
 
-Create a new console project and convert it to a WinUI desktop app:
+With the template installed, scaffold a new app from anywhere on disk:
 
-```
-dotnet new console -n MyApp
+```powershell
+dotnet new reactorapp -n MyApp
 cd MyApp
+dotnet run
 ```
 
-Edit your `.csproj` to target WinUI:
+The template wires up the `Microsoft.UI.Reactor` package reference, the
+WinUI 3 target framework, and a working `App.cs` that mounts a single
+Reactor component. No `App.xaml`, no `MainWindow.xaml.cs` — just one C#
+file.
 
-<!-- ai:lock -->
-```xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
-    <UseWinUI>true</UseWinUI>
-    <WindowsPackageType>None</WindowsPackageType>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.*" />
-    <ProjectReference Include="..\Reactor\Reactor.csproj" />
-  </ItemGroup>
-</Project>
-```
-<!-- /ai:lock -->
+> **Why a custom template?** A `dotnet new console` does not produce a WinUI
+> app — it builds a console target with no UI thread, no `OutputType=WinExe`,
+> no WindowsAppSDK reference, and no `[STAThread]` entry point. `reactorapp`
+> sets all of those plus the Reactor package reference and a backdrop-aware
+> root component, so you get a window on first `dotnet run` instead of a
+> console-host stub.
 
 ## Your First App
 
-Replace the contents of `App.cs` with this:
+The template's `App.cs` is the canonical hello-world. Replace its contents
+with the snippet below to match the rest of this guide (the template
+defaults to a slightly richer starter; the simpler form is easier to walk
+through):
 
 ```csharp
 class GettingStartedApp : Component
