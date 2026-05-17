@@ -6,6 +6,17 @@ preference is its own `UsePersisted` call with its own key — there's
 no central settings object that needs migration when one preference
 moves. The row layout is a single helper.
 
+## Primitives
+
+| Concern | API |
+|---|---|
+| Per-pref storage | `UsePersisted<T>(key, initial, scope)` |
+| Scope | `PersistedScope.Window` / `Application` |
+| Toggle | `ToggleSwitch(isOn, setOn)` |
+| Choice | `ComboBox(items, index, setIndex)` |
+| Range | `Slider(value, min, max, setValue)` |
+| Row layout helper | `static Element SettingsRow(...)` |
+
 ### Persisted state
 
 ```csharp
@@ -63,17 +74,6 @@ private static Element SettingsRow(string label, Element control) =>
 A fixed-width label keeps the controls aligned across rows. The helper
 is a private static method, not a `Component` — it has no state, so a
 function returning an `Element` is the right shape.
-
-## Reference
-
-| Concern | API |
-|---|---|
-| Per-pref storage | `UsePersisted<T>(key, initial, scope)` |
-| Scope | `PersistedScope.Window` (default) / `Application` |
-| Toggle | `ToggleSwitch(isOn, setOn)` |
-| Choice | `ComboBox(items, index, setIndex)` |
-| Range | `Slider(value, min, max, setValue)` |
-| Row layout helper | `static Element SettingsRow(...)` |
 
 ## Tips
 

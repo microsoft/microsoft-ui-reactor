@@ -6,6 +6,16 @@ submit-gated state, an async call, and an error-display surface. The
 recipe below wires them with three `UseState` hooks and a `Task` —
 no view model, no event handler classes.
 
+## Primitives
+
+| Concern | API |
+|---|---|
+| Per-field state | `UseState<string>` / `UseState<bool>` |
+| Submit-disabled gating | `.Disabled(!canSubmit)` |
+| Async submit | `async Task` + `Task.Delay` |
+| Error display | Conditional `Empty()` vs `TextBlock` |
+| Password input | [`PasswordBox`](../forms.md) |
+
 ### State
 
 ```csharp
@@ -79,16 +89,6 @@ disabling the button is enough; an analyzer-flagged guard inside
 `Submit()` would double-fire on a re-render race. The `submitting`
 state owns both the spinner label ("Signing in…") and the disabled
 state, so an in-flight submit can't be re-triggered by an Enter press.
-
-## Reference
-
-| Concern | API |
-|---|---|
-| Per-keystroke validation | Plain C# expression on state |
-| Submit-disabled gating | `.Disabled(!canSubmit)` |
-| Async submit | `async Task` + `Task.Delay` |
-| Error display | Conditional `Empty()` vs `TextBlock` |
-| Inline error color | Hex literal (analyzer-clean inside hex range) |
 
 ## Tips
 

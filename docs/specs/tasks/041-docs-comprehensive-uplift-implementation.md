@@ -643,14 +643,35 @@ to keep the surface area visible. Tracker for the follow-up:
 
 ### 2.8 Phase 2 review
 
-- [ ] Tier-lint clean across all 7 new pages.
-- [ ] Doc review: read each page end-to-end as a new user; flag
+- [x] Tier-lint clean across all 7 new pages. *`mur docs compile
+      --validate-only` reports "validation passed". One Comprehensive
+      (theming-tokens) + 11 Solid pages (controls, testing,
+      persistence, cheat-sheet, rules-of-reactor, recipes/index + 5
+      recipes). All remaining lint findings are info-level on the
+      26 pre-existing pages without declared tiers.*
+- [x] Doc review: read each page end-to-end as a new user; flag
       sections that don't answer "when would I use this?"
-- [ ] Cross-link audit: every concept named in prose links to a
-      page (run the §11 cross-link lint).
-- [ ] GitHub preview-branch render check.
-- [ ] Phase 2 exit gate: every Reactor-original concept that lives
+      *Walked all 12 new pages. No "Let's dive in!" intros; every
+      page leads with mental-model or a real snippet. Caveats name
+      specific failure modes. Tips are 3 bold-lead bullets each.
+      Captured in `docs/specs/041/phase-2-review.md`.*
+- [x] Cross-link audit: every concept named in prose links to a
+      page (run the §11 cross-link lint). *No
+      `REACTOR_DOC_REGISTRY_W002` warnings flagged on Phase 2
+      templates. `<!-- ref:Member -->` markers from existing pages
+      back into the new pages happen during the Phase 4 cross-link
+      sweep — flagged in the review doc.*
+- [ ] GitHub preview-branch render check. *Deferred to PR-open time
+      against `main`; tracked alongside the Phase 1.14 deferred
+      render check.*
+- [x] Phase 2 exit gate: every Reactor-original concept that lives
       only in `ai-author-skill.md` also has a user-facing page.
+      *Verified by walking the AI Author Skill's API reference table
+      against the docset — captured in `phase-2-review.md`. The
+      four Phase 2 pages that closed gaps: persistence (UsePersisted),
+      theming-tokens (Theme.* tokens), controls (catalog index),
+      testing (renderer fixtures + scanner). Recipes / cheat-sheet /
+      rules-of-reactor cover the cross-cutting surfaces.*
 
 ---
 

@@ -20,6 +20,16 @@ that didn't touch the query is free — important for the keyboard-up-
 arrow-down-arrow loop where the suggestion index changes but the
 query doesn't.
 
+## Primitives
+
+| Concern | API |
+|---|---|
+| Query state | `UseState<string>` |
+| Filter caching | `UseMemo<T[]>` keyed on the query |
+| Dropdown render | `Border` wrapping `VStack` |
+| Production wrapper | [`AutoSuggestBox`](../forms.md) |
+| Async source | [`async-resources`](../async-resources.md) |
+
 ### Catalog
 
 ```csharp snippet="recipe-search-with-suggestions/catalog"
@@ -55,16 +65,6 @@ For a production search box, swap the manual dropdown for
 [`AutoSuggestBox`](../forms.md) — it wires keyboard navigation,
 selection events, and the screen-reader contract. The recipe shows
 the primitives so the composition is visible.
-
-## Reference
-
-| Concern | API |
-|---|---|
-| Query state | `UseState<string>` |
-| Filter caching | `UseMemo<T[]>` keyed on the query |
-| Dropdown render | `Border` wrapping `VStack` |
-| Production wrapper | [`AutoSuggestBox`](../forms.md) |
-| Async source | [`async-resources`](../async-resources.md) |
 
 ## Tips
 

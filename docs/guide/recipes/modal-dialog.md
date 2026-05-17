@@ -6,6 +6,16 @@ The modal is an element you return conditionally. There is no special
 panel layered over the page; when it's false the modal element is
 absent and the page renders alone.
 
+## Primitives
+
+| Concern | API |
+|---|---|
+| Open/closed state | `UseState<bool>` |
+| Conditional layer | `open ? Group(page, modal) : page` |
+| Scrim | Outer `Border` with semi-transparent fill |
+| Buttons | `Button(label, onClick)` |
+| Production wrapper | [`ContentDialog`](../dialogs-and-flyouts.md) |
+
 ### State
 
 ```csharp
@@ -61,16 +71,6 @@ For a real app, swap the `Border` for a `ContentDialog` from
 escape-to-cancel, and screen-reader semantics come for free; the
 recipe above is the same shape with explicit primitives so the
 composition is visible.
-
-## Reference
-
-| Concern | API |
-|---|---|
-| Open/closed state | `UseState<bool>` |
-| Conditional layer | `open ? Group(page, modal) : page` |
-| Scrim | Outer `Border` with semi-transparent fill |
-| Buttons | `Button(label, onClick)` |
-| Production wrapper | [`ContentDialog`](../dialogs-and-flyouts.md) |
 
 ## Tips
 
