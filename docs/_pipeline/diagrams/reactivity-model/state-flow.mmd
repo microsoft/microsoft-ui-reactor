@@ -1,9 +1,33 @@
-%% Phase 3.5 scaffold — state-setter to re-render flow. Author should
-%% expand with the change-detection short-circuit (EqualityComparer),
-%% the MarshalIfOffUIThread hop, and the FlushEffects step.
+%% Reactor reactivity model — the path from a state-setter call back to
+%% the next frame. Default Mermaid palette renders legibly on both
+%% light and dark GitHub themes.
 flowchart LR
-    Setter[Setter call] -->|equality check| Slot[Hook slot]
-    Slot -->|changed?| Trigger[_requestRerender]
-    Trigger --> Render[Component.Render]
-    Render --> Reconciler[Reconciler.Reconcile]
-    Reconciler --> Frame[Next frame]
+    Setter["Setter call<br/>setX(newValue)"]
+    Marshal{"Caller on<br/>UI thread?"}
+    Hop["DispatcherQueue.TryEnqueue<br/>(marshal to UI thread)"]
+    Equality{"EqualityComparer.Default<br/>same as previous?"}
+    Slot["Write slot<br/>ValueHookState.Value"]
+    Bail["Drop — no re-render"]
+    Trigger["_requestRerender()"]
+    Coalesce["DispatcherQueue<br/>coalesce / batch"]
+    Render["Component.Render()"]
+    Should{"ShouldUpdate()?"}
+    Skip["Skip subtree"]
+    Reconcile["Reconciler.Reconcile"]
+    Effects["FlushEffects<br/>cleanups → bodies"]
+    Frame["Frame to screen"]
+
+    Setter --> Marshal
+    Marshal -- no --> Hop
+    Hop --> Marshal
+    Marshal -- yes --> Equality
+    Equality -- equal --> Bail
+    Equality -- different --> Slot
+    Slot --> Trigger
+    Trigger --> Coalesce
+    Coalesce --> Render
+    Render --> Should
+    Should -- false --> Skip
+    Should -- true --> Reconcile
+    Reconcile --> Effects
+    Effects --> Frame

@@ -840,8 +840,8 @@ Parallel to Phase 3, different author skillset (per spec §9 Phase
 
 ### 3.5.2 `reactivity-model.md` — Comprehensive
 
-- [ ] Diagram: state-setter → re-render flow.
-- [ ] Cover: why hooks not INotifyPropertyChanged, ShouldUpdate,
+- [x] Diagram: state-setter → re-render flow.
+- [x] Cover: why hooks not INotifyPropertyChanged, ShouldUpdate,
       Memo, comparison vs MVVM observable property change.
 
 ### 3.5.3 `reactor-vs-xaml.md` — Comprehensive
