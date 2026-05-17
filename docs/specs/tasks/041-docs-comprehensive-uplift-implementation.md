@@ -708,11 +708,19 @@ catalog page follows the per-control template from spec §6.3.
 
 ### 3.2 `status-and-info.md` — NEW, Solid
 
-- [ ] Doc app under `docs/_pipeline/apps/status-and-info/`.
-- [ ] Controls: InfoBar, InfoBadge, ProgressBar, ProgressRing,
+- [x] Doc app under `docs/_pipeline/apps/status-and-info/`. *Nine
+      snippet markers; uses `Progress`/`ProgressIndeterminate` rather
+      than the deprecated `ProgressBar(double)`/`ProgressBar()` (spec
+      039 §5). Builds clean against Reactor.csproj.*
+- [x] Controls: InfoBar (with 4 severity fluents), InfoBadge (dot +
+      count), Progress / ProgressIndeterminate / ProgressRing,
       TeachingTip, PipsPager, PersonPicture, RatingControl.
-- [ ] Per-control essentials per §6.3.
-- [ ] Template at Solid tier.
+- [x] Per-control essentials per §6.3: factory signature, modifier
+      table, screenshot, WinUI Learn link.
+- [x] Template at Solid tier. *Zero findings under `mur docs compile
+      --validate-only --tier=solid`. Reference table in first half;
+      ≥3 snippets (9 actually); ≥1 screenshot; `## Tips` + `## Next
+      Steps` populated.*
 
 ### 3.3 `dialogs-and-flyouts.md` — NEW, Comprehensive
 

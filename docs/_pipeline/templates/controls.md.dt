@@ -148,7 +148,7 @@ you want [Dialogs & Flyouts](dialogs-and-flyouts.md) instead.
 | `PersonPicture` | Contact avatar. |
 | `RatingControl` | 1–5 star rating. |
 
-Detail page (Phase 3): [Status & Info](status-and-info.md).
+Detail page: [Status & Info](status-and-info.md).
 
 ## Dialogs & Flyouts
 

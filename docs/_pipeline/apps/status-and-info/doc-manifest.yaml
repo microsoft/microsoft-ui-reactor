@@ -1,0 +1,52 @@
+app:
+  title: "Status and Info"
+  width: 640
+  height: 1000
+  startup-delay: 1500
+
+screenshots:
+  - id: infobar-severities
+    description: "Four InfoBar instances showing Informational/Success/Warning/Error severities stacked."
+    component: InfoBarSeveritiesDemo
+    region: client
+    format: png
+  - id: infobar-dismiss
+    description: "InfoBar controlled by an IsOpen state with a re-open button."
+    component: InfoBarDismissDemo
+    region: client
+    format: png
+  - id: infobadge
+    description: "Dot, numeric, and large-count InfoBadge variants."
+    component: InfoBadgeDemo
+    region: client
+    format: png
+  - id: progress-bar
+    description: "Determinate ProgressBar with stepper buttons and an indeterminate companion."
+    component: ProgressBarDemo
+    region: client
+    format: png
+  - id: progress-ring
+    description: "Determinate and indeterminate ProgressRing variants."
+    component: ProgressRingDemo
+    region: client
+    format: png
+  - id: teaching-tip
+    description: "TeachingTip anchored to a button."
+    component: TeachingTipDemo
+    region: client
+    format: png
+  - id: pips-pager
+    description: "PipsPager at page 2 of 5."
+    component: PipsPagerDemo
+    region: client
+    format: png
+  - id: person-picture
+    description: "PersonPicture variants — display name, initials, and fallback glyph."
+    component: PersonPictureDemo
+    region: client
+    format: png
+  - id: rating
+    description: "RatingControl bound to state showing 3 of 5 stars."
+    component: RatingDemo
+    region: client
+    format: png

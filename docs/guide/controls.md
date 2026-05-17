@@ -154,7 +154,7 @@ class TextAndMediaGroup : Component
 | `WebView2` | Embedded Chromium surface. |
 | `InkCanvas` | Pen input. |
 
-Detail page (Phase 3): [Text & Media](text-and-media.md).
+Detail page: [Text & Media](text-and-media.md).
 
 ## Status & Info
 
