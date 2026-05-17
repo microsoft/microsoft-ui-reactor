@@ -44,7 +44,7 @@ what the runtime emits today.
 
 ## The emission pipeline
 
-![ETW / EventPipe emission — hot paths through IsEnabled keyword gate to EventPipe + ETW, consumed by dotnet-trace or PerfView with optional Microsoft-Windows-XAML correlation](screenshot://perf-instrumentation/etw-flow)
+![ETW / EventPipe emission — hot paths through IsEnabled keyword gate to EventPipe + ETW, consumed by dotnet-trace or PerfView with optional Microsoft-Windows-XAML correlation](images/perf-instrumentation/etw-flow.svg)
 
 A managed `EventSource` is a façade over two transports the .NET
 runtime maintains in parallel: EventPipe is the in-process, AOT-safe

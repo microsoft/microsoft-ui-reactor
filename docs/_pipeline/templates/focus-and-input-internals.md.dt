@@ -42,7 +42,7 @@ through the Reactor hooks that observe it. User-facing API is on
 
 ## The event flow
 
-![Focus and input flow — pointer events through WinUI hit-test, routed-event delivery to element callbacks, focus-trap interception, programmatic FocusManager, and the UseAnnounce automation peer path](screenshot://focus-and-input-internals/focus-flow)
+![Focus and input flow — pointer events through WinUI hit-test, routed-event delivery to element callbacks, focus-trap interception, programmatic FocusManager, and the UseAnnounce automation peer path](images/focus-and-input-internals/focus-flow.svg)
 
 WinUI owns the early stages: hit-testing under the pointer, the
 tunneling preview events, the bubbling action events. By the time a

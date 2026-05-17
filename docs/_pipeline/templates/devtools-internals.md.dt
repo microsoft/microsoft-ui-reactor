@@ -43,7 +43,7 @@ the internals view.
 
 ## The MCP loop
 
-![DevTools MCP loop — CLI reads lockfile, POSTs JSON-RPC tools/call, server dispatches to McpDispatcher, hops to UI thread, tool runs against live tree, returns JSON-RPC response. In-app DevtoolsMenu observes the same UseDevtools gate](screenshot://devtools-internals/mcp-loop)
+![DevTools MCP loop — CLI reads lockfile, POSTs JSON-RPC tools/call, server dispatches to McpDispatcher, hops to UI thread, tool runs against live tree, returns JSON-RPC response. In-app DevtoolsMenu observes the same UseDevtools gate](images/devtools-internals/mcp-loop.svg)
 
 The MCP server is a loopback `HttpListener` (or a stdio reader/writer
 loop) running inside the host process. On startup it picks a free

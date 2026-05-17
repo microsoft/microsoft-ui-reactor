@@ -40,7 +40,7 @@ another. The user-facing API is on the
 
 ## The four systems
 
-![Reactor animation pipeline — implicit Animate, WithAnimation scope, KeyframeBuilder, and Transition enter/exit converging on Windows Composition](screenshot://animation-pipeline/four-systems)
+![Reactor animation pipeline — implicit Animate, WithAnimation scope, KeyframeBuilder, and Transition enter/exit converging on Windows Composition](images/animation-pipeline/four-systems.svg)
 
 Each system answers a different question. `.Animate(properties)` says
 "any time these properties change on this element, smooth between old

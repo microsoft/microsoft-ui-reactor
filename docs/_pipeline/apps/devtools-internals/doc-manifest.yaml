@@ -1,9 +1,0 @@
-app:
-  title: "DevTools Internals"
-  # Source-only under-the-hood page. The manifest registers the MCP
-  # protocol diagram as a screenshot:// reference for tier-lint.
-
-screenshots:
-  - id: mcp-loop
-    description: "MCP loop — endpoint discovery via lockfile, JSON-RPC tools/call dispatch, in-process UI dispatcher hop, optional overlay update"
-    format: svg

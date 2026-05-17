@@ -1,9 +1,0 @@
-app:
-  title: "Perf Instrumentation"
-  # Source-only under-the-hood page. The manifest registers the ETW
-  # emission diagram as a screenshot:// reference for tier-lint.
-
-screenshots:
-  - id: etw-flow
-    description: "ETW / EventPipe emission — hot path checks IsEnabled per keyword, emits structured events to EventPipe (dotnet-trace) and ETW (PerfView / xperf), with optional correlation against Microsoft-Windows-XAML"
-    format: svg
