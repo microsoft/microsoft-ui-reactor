@@ -28,6 +28,20 @@ internal class ScreenshotConfig
     public string? Component { get; set; }
     public string? Theme { get; set; }
     public BoundsConfig? Bounds { get; set; }
+
+    /// <summary>
+    /// Capture kind. Defaults to <c>screenshot</c> (full-size, border + drop shadow).
+    /// <c>catalog-thumb</c> downscales the captured frame to 320×240 with high-quality
+    /// interpolation and writes <c>&lt;id&gt;-thumb.png</c> instead of <c>&lt;id&gt;.png</c>.
+    /// Used by the controls-catalog index page (spec 041 §6.3 + §12 Q7).
+    /// </summary>
+    public string Kind { get; set; } = "screenshot";
+
+    /// <summary>Target width in pixels for <c>kind: catalog-thumb</c>. Defaults to 320.</summary>
+    public int ThumbWidth { get; set; } = 320;
+
+    /// <summary>Target height in pixels for <c>kind: catalog-thumb</c>. Defaults to 240.</summary>
+    public int ThumbHeight { get; set; } = 240;
 }
 
 internal class BoundsConfig

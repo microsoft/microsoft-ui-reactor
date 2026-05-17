@@ -275,6 +275,18 @@ screenshots:
     description: "Detailed view after interaction"
     region: client
     format: png
+  # Controls-catalog index thumbnails (spec 041 §6.3, §12 Q7).
+  # kind: catalog-thumb downscales the captured frame to 320x240 with
+  # high-quality interpolation and writes <id>-thumb.png (rather than
+  # <id>.png) so a topic can declare both a full-size screenshot and a
+  # thumbnail under the same logical id.
+  - id: forms-group
+    kind: catalog-thumb
+    description: "Forms category thumbnail for the controls catalog index."
+    region: client
+    format: png
+    # thumb-width / thumb-height default to 320 x 240 — override only if a
+    # catalog category benefits from a non-default aspect.
 ```
 
 ### App Code Guidelines

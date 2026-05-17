@@ -22,6 +22,56 @@ internal static class ImageProcessor
     public const int MaxImageDimension = 16384;
 
     /// <summary>
+    /// Crops whitespace then downscales to <paramref name="targetW"/>×<paramref name="targetH"/>
+    /// preserving aspect (letterboxed with white). Used by <c>kind: catalog-thumb</c>
+    /// in <c>doc-manifest.yaml</c> for the controls-catalog index thumbnails (spec 041 §6.3 + §12 Q7).
+    /// No border / drop shadow — the thumbnail itself is the visual; the catalog page
+    /// renders it inside a table cell where additional chrome would be noise.
+    /// </summary>
+    public static byte[] ProcessThumb(byte[] frameBytes, int targetW = 320, int targetH = 240)
+    {
+        if (frameBytes is null || frameBytes.Length == 0)
+            throw new ArgumentException("Empty image bytes.", nameof(frameBytes));
+        if (frameBytes.Length > MaxImageBytes)
+            throw new ArgumentException($"Image exceeds {MaxImageBytes / (1024 * 1024)} MiB cap.", nameof(frameBytes));
+        if (!HasKnownImageMagic(frameBytes))
+            throw new ArgumentException("Image bytes are neither PNG nor JPEG.", nameof(frameBytes));
+        if (targetW <= 0 || targetH <= 0)
+            throw new ArgumentException("Target dimensions must be positive.", nameof(targetW));
+
+        using var ms = new MemoryStream(frameBytes);
+        using var source = new Bitmap(ms);
+        if (source.Width > MaxImageDimension || source.Height > MaxImageDimension)
+            throw new ArgumentException($"Image dimensions exceed {MaxImageDimension}px cap.", nameof(frameBytes));
+
+        // Trim whitespace to focus the thumb on real content.
+        var bounds = FindContentBounds(source, threshold: 248);
+        bounds = InflateClamp(bounds, ContentPadding, source.Width, source.Height);
+        using var cropped = source.Clone(bounds, PixelFormat.Format32bppArgb);
+
+        // Compute letterbox to preserve aspect.
+        double scale = Math.Min((double)targetW / cropped.Width, (double)targetH / cropped.Height);
+        int drawW = Math.Max(1, (int)Math.Round(cropped.Width * scale));
+        int drawH = Math.Max(1, (int)Math.Round(cropped.Height * scale));
+        int offX = (targetW - drawW) / 2;
+        int offY = (targetH - drawH) / 2;
+
+        using var result = new Bitmap(targetW, targetH, PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(result))
+        {
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.Clear(Color.White);
+            g.DrawImage(cropped, new Rectangle(offX, offY, drawW, drawH));
+        }
+
+        using var output = new MemoryStream();
+        result.Save(output, ImageFormat.Png);
+        return output.ToArray();
+    }
+
+    /// <summary>
     /// Auto-crops whitespace from a captured frame, adds border + drop shadow,
     /// and returns PNG bytes.
     /// </summary>
