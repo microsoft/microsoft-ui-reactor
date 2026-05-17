@@ -109,9 +109,9 @@ public class ReactorDiagnosticsTests
         var ctx = $"FirstOcc_{NewId()}";
         var keys = Sample("fo", "z");
 
-        Assert.True(ReactorDiagnostics.IsFirstOccurrence(control, KeyedListDiagnosticKind.DuplicateKey, keys));
+        Assert.True(ReactorDiagnostics.IsFirstOccurrence(control, KeyedListDiagnosticKind.DuplicateKey, keys, ctx));
         ReactorDiagnostics.Record(control, ctx, KeyedListDiagnosticKind.DuplicateKey, keys);
-        Assert.False(ReactorDiagnostics.IsFirstOccurrence(control, KeyedListDiagnosticKind.DuplicateKey, keys));
+        Assert.False(ReactorDiagnostics.IsFirstOccurrence(control, KeyedListDiagnosticKind.DuplicateKey, keys, ctx));
     }
 
     [Fact]
@@ -129,6 +129,31 @@ public class ReactorDiagnosticsTests
 
         Assert.Equal(ReactorDiagnostics.MaxSampleKeys + 1, entry.SampleKeys.Count);
         Assert.StartsWith("…and", entry.SampleKeys[^1]);
+    }
+
+    [Fact]
+    public void Global_Ledger_Dedupes_By_Context_When_ControlInstance_Is_Null()
+    {
+        // Regression: when controlInstance is null, the dedup key must
+        // include controlContext. Without it, two different contexts
+        // sharing the same (kind, sample-set) collided in the global
+        // _seenContextual ledger and the second Record incremented the
+        // first context's Count instead of starting its own.
+        var ctxA = $"NullCtl_A_{NewId()}";
+        var ctxB = $"NullCtl_B_{NewId()}";
+        var keys = Sample("nc", "shared");
+
+        Assert.True(ReactorDiagnostics.IsFirstOccurrence(null, KeyedListDiagnosticKind.DuplicateKey, keys, ctxA));
+        Assert.True(ReactorDiagnostics.IsFirstOccurrence(null, KeyedListDiagnosticKind.DuplicateKey, keys, ctxB));
+
+        var a = ReactorDiagnostics.Record(null, ctxA, KeyedListDiagnosticKind.DuplicateKey, keys);
+        var b = ReactorDiagnostics.Record(null, ctxB, KeyedListDiagnosticKind.DuplicateKey, keys);
+
+        Assert.Equal(1, a.Count);
+        Assert.Equal(1, b.Count);
+        // After A is recorded, B is still a first-occurrence for its own context.
+        Assert.False(ReactorDiagnostics.IsFirstOccurrence(null, KeyedListDiagnosticKind.DuplicateKey, keys, ctxA));
+        Assert.False(ReactorDiagnostics.IsFirstOccurrence(null, KeyedListDiagnosticKind.DuplicateKey, keys, ctxB));
     }
 
     [Fact]

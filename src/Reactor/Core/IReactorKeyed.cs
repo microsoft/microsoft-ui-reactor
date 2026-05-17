@@ -10,8 +10,9 @@ namespace Microsoft.UI.Reactor.Core;
 /// <para>
 /// When a data type implements <see cref="IReactorKeyed"/>, collection
 /// elements default their <c>KeySelector</c> to <c>t =&gt; t.Key</c> and a
-/// <c>WithKey&lt;T&gt;(this Element el, T item) where T : IReactorKeyed</c>
-/// overload becomes available. Explicit <c>KeySelector</c> and
+/// <c>WithKey&lt;T, TKey&gt;(this T el, TKey item) where T : Element where TKey : IReactorKeyed</c>
+/// overload becomes available (the open <c>T</c> preserves the element's
+/// concrete type through the fluent chain). Explicit <c>KeySelector</c> and
 /// <c>WithKey(string)</c> continue to work for types you do not own.
 /// </para>
 /// <para>

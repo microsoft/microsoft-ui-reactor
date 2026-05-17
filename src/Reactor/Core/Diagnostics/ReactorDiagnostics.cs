@@ -153,14 +153,9 @@ public static class ReactorDiagnostics
         KeyedListDiagnosticKind kind,
         IReadOnlyList<string> sampleKeys)
     {
-        // Hash the sample-set so the dedup key is stable across calls.
-        // Ordinal hash is fine: producers always pass keys in the same
-        // observation order for a given diff.
-        long samplesHash = HashSampleKeys(sampleKeys);
-        long dedupKey = unchecked(((long)(int)kind * 397) ^ samplesHash);
-
         var truncated = TruncateSamples(sampleKeys);
         var label = controlContext ?? "<unknown>";
+        long dedupKey = ComputeDedupKey(kind, sampleKeys, label);
 
         lock (_gate)
         {
@@ -204,23 +199,40 @@ public static class ReactorDiagnostics
     }
 
     /// <summary>
-    /// True if at least one of the (controlInstance, kind, sample-set)
-    /// triple has been recorded before. Used by producers to gate
+    /// True if the (controlInstance, controlContext, kind, sample-set)
+    /// triple has not yet been recorded. Used by producers to gate
     /// expensive logging side effects on the first occurrence only.
+    /// <paramref name="controlContext"/> only contributes to the dedup key
+    /// in the global ledger (<paramref name="controlInstance"/> is
+    /// <see langword="null"/>); for live control instances, the per-control
+    /// ledger already isolates by instance.
     /// </summary>
     internal static bool IsFirstOccurrence(
         object? controlInstance,
         KeyedListDiagnosticKind kind,
-        IReadOnlyList<string> sampleKeys)
+        IReadOnlyList<string> sampleKeys,
+        string? controlContext = null)
     {
-        long samplesHash = HashSampleKeys(sampleKeys);
-        long dedupKey = unchecked(((long)(int)kind * 397) ^ samplesHash);
+        var label = controlContext ?? "<unknown>";
+        long dedupKey = ComputeDedupKey(kind, sampleKeys, label);
 
         ConcurrentDictionary<long, int> ledger = controlInstance is not null
             ? _seenPerControl.GetValue(controlInstance, static _ => new ConcurrentDictionary<long, int>())
             : _seenContextual;
 
         return !ledger.ContainsKey(dedupKey);
+    }
+
+    // Dedup key = kind ⊕ samples-hash ⊕ context-label hash. Folding the
+    // label in is what makes the global `_seenContextual` ledger distinguish
+    // two different controlContext values that happen to share the same
+    // (kind, sample-set). For per-control callers the label is redundant
+    // (the ledger choice already isolates by instance) but harmless.
+    private static long ComputeDedupKey(KeyedListDiagnosticKind kind, IReadOnlyList<string> sampleKeys, string label)
+    {
+        long samplesHash = HashSampleKeys(sampleKeys);
+        long labelHash = global::System.StringComparer.Ordinal.GetHashCode(label);
+        return unchecked(((long)(int)kind * 397) ^ samplesHash ^ (labelHash * 31));
     }
 
     private static void AppendBounded(KeyedListDiagnostic entry)

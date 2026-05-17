@@ -39,11 +39,6 @@ to land under these conventions; subsequent specs follow this shape.
   remove-front / remove-back / insert-in-middle / remove-from-middle), and
   a bulk-replace bailout (>25% churn with ≥8 absolute ops) that returns
   to the legacy `ItemsSource` swap for correctness. (spec 042 §4)
-- **Spec 042 placeholder public surface.** `IReactorKeyed` interface and
-  the `Animations.Animate(AnimationKind, …)` ambient transaction API
-  shells are present so callers can stage adoption before Phase 2 / 3
-  implements the semantics. Today `Animate(...)` is a no-op pass-through.
-  (spec 042 §5, §6)
 - **Spec 042 Phase 2 — `IReactorKeyed` identity-on-data convention.**
   2-argument `where T : IReactorKeyed` factory overloads land for
   `ListView<T>` / `GridView<T>` / `FlipView<T>` / `LazyVStack<T>` /

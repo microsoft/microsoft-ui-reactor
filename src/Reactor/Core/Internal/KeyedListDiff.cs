@@ -499,7 +499,7 @@ internal static class KeyedListDiff
         int? indexHint)
     {
         bool isFirst = Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
-            .IsFirstOccurrence(controlInstance, kind, sampleKeys);
+            .IsFirstOccurrence(controlInstance, kind, sampleKeys, diagnosticContext);
 
         Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
             .Record(controlInstance, diagnosticContext, kind, sampleKeys);

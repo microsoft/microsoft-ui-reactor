@@ -89,7 +89,7 @@ A task is "done" only when:
 - [x] Confirm **Q2** (missing-key analyzer for `.Select(...)` children):
       defer to a later phase (Phase 2 or Phase 6 analyzer pass). Record
       "deferred" in the spec.
-      → **Resolved: deferred to Phase 6 (`REACTOR_LIST_001`). Spec §9 updated.**
+      → **Resolved: deferred to Phase 6 (`REACTOR_DSL_001`). Spec §9 updated.**
 - [x] Confirm **Q3** (`AsyncLocal` ambient survives until commit): write a
       short investigation note before Phase 3 starts. Capture findings as a
       sub-section under spec §6 ("Dispatch model validation").
@@ -699,7 +699,7 @@ box.
 
 ### 6.1 Missing-key analyzer (deferred from Q2 in 0.1)
 
-- [x] Roslyn analyzer rule `REACTOR_LIST_001`: warn when a `.Select(...)`
+- [x] Roslyn analyzer rule `REACTOR_DSL_001`: warn when a `.Select(...)`
       expression produces `Element` children passed to a panel-like factory
       (`FlexColumn`, `VStack`, `Column`, etc.) without any child calling
       `.WithKey(...)`. Codefix offers `.WithKey(item.Id)` when the lambda
