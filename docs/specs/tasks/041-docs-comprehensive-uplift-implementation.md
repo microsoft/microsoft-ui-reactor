@@ -124,17 +124,24 @@ infrastructure to unblock content phases.
 
 ### 1.2 Template format additions (spec §10.1)
 
-- [ ] Add `tier:` front-matter field parsing in the template
+- [x] Add `tier:` front-matter field parsing in the template
       compiler (`stub | solid | comprehensive`, default `solid`).
-      Unknown values fail compile.
-- [ ] Add `winui-ref:` front-matter field parsing (optional URL).
-- [ ] Implement `<!-- ai:caveat -->...<!-- /ai:caveat -->` block —
+      Unknown values fail compile. *Implemented in
+      `TemplateParser.ParseTier`; raises `DocPipelineException`.*
+- [x] Add `winui-ref:` front-matter field parsing (optional URL).
+      *Compiler emits a styled "WinUI reference" blockquote at the top
+      of the generated body when present.*
+- [x] Implement `<!-- ai:caveat -->...<!-- /ai:caveat -->` block —
       same mechanism as `<!-- ai:lock -->`. Renders as a styled
-      blockquote with a "Caveat" label.
-- [ ] Update template parser to round-trip these fields through to
-      generated `.md` output without leaking front-matter.
-- [ ] Unit tests in `tests/Reactor.DocPipeline.Tests/` covering each
-      new field — present, missing, malformed.
+      blockquote with a "Caveat" label. *Mirrors the `ai:lock`
+      extraction shape; missing close tag → `REACTOR_DOC_CAVEAT_001`.*
+- [x] Update template parser to round-trip these fields through to
+      generated `.md` output without leaking front-matter. *Front-matter
+      is stripped as before; `winui-ref` becomes a body callout.*
+- [x] Unit tests in `tests/Reactor.DocPipeline.Tests/` covering each
+      new field — present, missing, malformed. *14 tests across
+      `TierFrontMatterTests`, `WinUiRefFrontMatterTests`,
+      `CaveatBlockTests`. Test project added to `Reactor.slnx`.*
 
 ### 1.3 Tier-lint validator (spec §11)
 

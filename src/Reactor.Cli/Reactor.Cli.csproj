@@ -26,6 +26,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Reactor.Tests" />
+    <!-- Spec 041 Phase 1: doc-pipeline test project consumes the compiler's
+         internal TemplateParser / SnippetExtractor / TierLint / DiagramProcessor
+         surface directly. -->
+    <InternalsVisibleTo Include="Reactor.DocPipeline.Tests" />
     <!-- Spec 038 §8 guardrail tool re-uses PolicyTable so the two sources
          can never drift. The guardrail is offline / CI-only; no runtime
          dependency on it from the CLI itself. -->
