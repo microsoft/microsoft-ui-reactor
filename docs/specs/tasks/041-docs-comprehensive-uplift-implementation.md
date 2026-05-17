@@ -559,10 +559,16 @@ by traffic impact (per spec §9 Phase 2).
 
 ### 2.4 `persistence.md` — Solid
 
-- [ ] Doc app `docs/_pipeline/apps/persistence/`.
-- [ ] Cover: `UsePersisted` with both scopes (window / app),
-      migration story, JSON shape, conflict resolution.
-- [ ] Template at Solid tier.
+- [x] Doc app `docs/_pipeline/apps/persistence/`. *Notes-editor + versioned-shape + disk-bridge sample. Builds clean.*
+- [x] Cover: `UsePersisted` with both scopes (window / app),
+      migration story, JSON shape, conflict resolution. *Page covers
+      all four explicitly. Migration story uses a versioned key
+      (`notes/state-v1` → `v2`) with one-shot migrator; JSON shape is
+      the disk-bridge `UseEffect` pattern (UsePersisted itself is
+      in-memory only); conflict resolution clarifies last-writer-wins
+      and points to context.md for the lift-state-up alternative.*
+- [x] Template at Solid tier. *Zero findings under
+      `mur docs compile --validate-only --tier=solid`.*
 
 ### 2.5 `recipes/` folder + index (spec §7.1 Section 6, §12 Q3)
 
