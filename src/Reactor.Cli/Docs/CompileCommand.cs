@@ -208,10 +208,42 @@ internal static partial class CompileCommand
             }
         }
 
+        // ── Cross-link analyzer (spec §4.5) ───────────────────────────────
+        // Walk every template body checking that any prose mention of a
+        // page-owned concept is linked to that page. Findings default to
+        // Warning severity — false positives on first roll-out should not
+        // break the docset. Elevate to Error once Phase 4.5 lands clean.
+        Console.WriteLine();
+        Console.WriteLine("═══ Cross-Link Lint ═══");
+        var xlinkTemplates = templates
+            .Select(t => new CrossLinkTemplate(
+                t.topicId,
+                t.template.FilePath,
+                AssembleForLint(t.template, allSnippets, allScreenshots).body,
+                t.template.Title,
+                t.template.ConceptAliases))
+            .ToList();
+        var refConcepts = DiscoverReferenceConcepts(outputDir);
+        var xlinkFindings = CrossLinkLint.Run(xlinkTemplates, refConcepts);
+        var xlinkErrors = 0;
+        foreach (var f in xlinkFindings)
+        {
+            if (f.Severity == TierLintSeverity.Error)
+            {
+                Console.Error.WriteLine(f.Format());
+                xlinkErrors++;
+            }
+            else
+            {
+                Console.WriteLine($"  ⚠ {f.Format()}");
+            }
+        }
+        Console.WriteLine($"  Cross-link findings: {xlinkFindings.Count} ({xlinkErrors} error, {xlinkFindings.Count - xlinkErrors} warning).");
+
         if (validateOnly)
         {
             Console.WriteLine();
-            var combined = hasErrors || tierHasErrors;
+            var combined = hasErrors || tierHasErrors || xlinkErrors > 0;
             Console.WriteLine(combined ? "Validation finished with errors." : "Validation passed.");
             return combined ? 1 : 0;
         }
@@ -497,6 +529,39 @@ internal static partial class CompileCommand
         }
 
         return process.ExitCode;
+    }
+
+    /// <summary>
+    /// Build the cross-link concept registry from generated reference pages
+    /// already on disk under <c>docs/guide/reference/&lt;category&gt;/</c>.
+    /// Each reference filename (e.g. <c>UseFocusTrap.md</c>) becomes a
+    /// concept whose href is the reference-relative path. The mapping lets
+    /// guide prose like "…wraps the focus root via UseFocusTrap…" trip
+    /// XLINK_001 unless the page actually links to the reference. Missing
+    /// reference directories (early-phase compiles) just produce an empty
+    /// list — the analyzer still runs against title-derived concepts.
+    /// </summary>
+    private static List<CrossLinkConcept> DiscoverReferenceConcepts(string outputDir)
+    {
+        var result = new List<CrossLinkConcept>();
+        var refRoot = Path.Combine(outputDir, "reference");
+        if (!Directory.Exists(refRoot)) return result;
+        foreach (var file in Directory.EnumerateFiles(refRoot, "*.md", SearchOption.AllDirectories))
+        {
+            var name = Path.GetFileNameWithoutExtension(file);
+            if (string.IsNullOrEmpty(name) || name.Equals("index", StringComparison.OrdinalIgnoreCase))
+                continue;
+            // Skip extension classes — their `…Extensions` suffix isn't a
+            // natural-prose concept name (authors write "UseFocus" not
+            // "UseFocusExtensions"). The base type carries the concept.
+            if (name.EndsWith("Extensions", StringComparison.Ordinal)) continue;
+            var rel = Path.GetRelativePath(outputDir, file).Replace('\\', '/');
+            // The topic id for a reference page is its rel path (used only
+            // for self-ref exclusion; reference pages aren't templates so
+            // this never collides).
+            result.Add(new CrossLinkConcept(name, rel, rel));
+        }
+        return result;
     }
 
     /// <summary>

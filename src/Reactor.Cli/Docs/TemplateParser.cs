@@ -38,6 +38,15 @@ internal class DocTemplate
     /// <summary>Optional <c>winui-ref:</c> URL; empty if not declared.</summary>
     public string WinUiRef { get; set; } = "";
 
+    /// <summary>
+    /// Extra concept names this page owns beyond its title. Spec 041 §4.5
+    /// cross-link analyzer (<c>REACTOR_DOC_XLINK_001</c>) uses the union of
+    /// <see cref="Title"/> + this list when scanning prose for missed links.
+    /// Declared in front-matter as comma- or list-separated values, e.g.
+    /// <c>concept-aliases: "Trampoline, Cross-thread dispatch"</c>.
+    /// </summary>
+    public List<string> ConceptAliases { get; set; } = [];
+
     public string Body { get; set; } = "";
     public List<LockedSection> LockedSections { get; set; } = [];
     public List<CaveatSection> Caveats { get; set; } = [];
@@ -217,7 +226,26 @@ internal static class TemplateParser
                 template.TierDeclared = true;
                 break;
             case "winui-ref": template.WinUiRef = value; break;
+            case "concept-aliases":
+                template.ConceptAliases = ParseAliasList(value);
+                break;
         }
+    }
+
+    /// <summary>
+    /// Parse a comma- or YAML-flow-list-shaped aliases value into a trimmed
+    /// non-empty list. Accepts <c>"A, B, C"</c>, <c>[A, B, C]</c>, or a
+    /// single token. Spec 041 §4.5.
+    /// </summary>
+    internal static List<string> ParseAliasList(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return [];
+        var s = raw.Trim();
+        if (s.StartsWith('[') && s.EndsWith(']')) s = s[1..^1];
+        return s.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(p => p.Trim('"').Trim('\'').Trim())
+            .Where(p => p.Length > 0)
+            .ToList();
     }
 
     /// <summary>

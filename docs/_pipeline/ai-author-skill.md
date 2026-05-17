@@ -161,6 +161,43 @@ inline in prose — it is the only Reactor-specific syntax for cross-axis
 linking; everything else is standard XML doc `<see cref="..."/>` /
 `<seealso cref="..."/>` in the source.
 
+**Cross-link analyzer (`REACTOR_DOC_XLINK_001`)** — `mur docs compile`
+walks every prose paragraph and flags any mention of a concept that has
+its own page when that mention is not already a link. The concept
+registry is built from (a) template titles, (b) optional
+`concept-aliases:` declared in front-matter, and (c) reference-page
+filenames (`UseFocusTrap`, `DataGrid`, …). Single-word common-noun
+titles (`Hooks`, `Focus`, `Reactor`) are filtered out by default to
+avoid English-usage false positives — opt them in via
+`concept-aliases:` if the page truly owns that exact word as a concept.
+
+Single-page exemptions use a paragraph-scoped marker:
+
+```markdown
+<!-- xlink:skip -->
+This paragraph mentions UseState and UseEffect on purpose without
+linking; the rule resumes at the next blank line.
+```
+
+A finer-grained form silences just one concept:
+
+```markdown
+<!-- xlink:skip "UseFocusTrap" -->
+UseFocusTrap appears here unlinked; other concepts are still enforced.
+```
+
+Use sparingly. The right fix for most findings is to add the link —
+inline the concept name as the link text. **Do not** insert "see also
+X" sentences or "click here for more on X" — link the noun in the
+existing prose. The opt-out exists for comparison pages and other
+contexts where linking every mention hurts flow.
+
+Optional front-matter for opting single-word concepts in:
+
+```yaml
+concept-aliases: "Trampoline, Cross-thread dispatch"
+```
+
 ---
 
 ## Doc App Structure
