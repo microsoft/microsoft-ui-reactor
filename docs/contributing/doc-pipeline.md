@@ -170,6 +170,59 @@ reference-generation codes.
 
 ## 7. Tier audit cadence
 
-Run a manual `mur docs compile --validate-only` audit every quarter
-to catch silent tier drift. Owners: see CODEOWNERS for
-`docs/_pipeline/`.
+Run a manual `mur docs check-tier` (or the broader
+`mur docs compile --validate-only`) audit every quarter to catch silent
+tier drift. Owners: see CODEOWNERS for `docs/_pipeline/`.
+
+## 8. Tier-drift CI gate (spec 041 §5.2)
+
+The `docs-check-tier` job in `.github/workflows/ci.yml` runs `mur docs
+check-tier` on every PR that changes a file under any of:
+
+- `docs/_pipeline/templates/` — page templates
+- `docs/_pipeline/apps/` — doc apps backing snippets / screenshots
+- `src/Reactor.Cli/Docs/` — the doc-pipeline CLI itself
+
+It is intentionally narrower than the `docs-compile` job: no doc-app
+build, no screenshot capture, no diagram rendering, no reference
+generation, no cross-link analyzer. The job runs in seconds and exists
+to fail PRs that knock a template's declared tier out of compliance
+with its §11 structural checklist.
+
+### Failure modes
+
+- **`REACTOR_DOC_TIER_001..012` errors** fail the job. The fix is
+  almost always to bring the template's body back into shape (add the
+  missing heading, mental-model lead, snippet count, reference table,
+  caveat block, etc.). See §5 above for the per-code meanings.
+- **Tier-inflation attempt.** The lint blocks a `tier: comprehensive`
+  declaration on a page that does not meet the Comprehensive bar. If
+  the page is genuinely at Solid quality, lower the declared tier
+  rather than disabling the lint.
+- **Discovery error** (`REACTOR_DOC_TEMPLATE_001` or similar from
+  `TemplateParser.Parse`). The front-matter is malformed; look at the
+  file path in the error message and validate the YAML block at the
+  top of the template.
+- **`REACTOR_DOC_TIER_W001` warnings** (winui-ref not declared) do
+  **not** fail the job today. They are intentional informational noise
+  on internals / meta pages. The `--ci` flag would elevate them; that
+  flag is held off pending the Phase 5 lint-quality cleanup that
+  filters W001 to transparent-wrapper-page surfaces.
+- **Job did not run** when expected. Confirm the PR actually changed
+  a file under one of the watched paths above; the `changes` job emits
+  `docs-templates=false` for branches that only touched unrelated files
+  and the tier-drift job skips in that case.
+
+### Running the same check locally
+
+```powershell
+# Same flags as CI:
+mur docs check-tier
+
+# Author iteration loop while fixing a finding:
+mur docs check-tier --topic <name>
+
+# Tier-targeted lint pass (e.g. while shepherding several Solid pages
+# toward Comprehensive):
+mur docs check-tier --tier solid
+```

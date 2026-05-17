@@ -1192,9 +1192,9 @@ source snippets, "Read the source" callout, tier-lint clean.)
 
 ### 5.2 Tier-drift CI check
 
-- [ ] PR check that runs `mur docs check-tier` on every PR touching
+- [x] PR check that runs `mur docs check-tier` on every PR touching
       templates or apps.
-- [ ] Failure modes documented in `docs/contributing/doc-pipeline.md`.
+- [x] Failure modes documented in `docs/contributing/doc-pipeline.md`.
 
 ### 5.3 Doc-coverage gate for new features
 
