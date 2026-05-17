@@ -1,10 +1,11 @@
+using Microsoft.UI.Reactor.Core.Internal;
+
 namespace Microsoft.UI.Reactor.Core;
 
 /// <summary>
 /// Animation kinds that an ambient <c>Animations.Animate(...)</c>
 /// transaction can carry through a state-setter into the resulting diff.
-/// See spec 042 §6. Phase 3 will consume these in the reconciler; Phase 1
-/// only ships the API shells so callers can stage adoption.
+/// See spec 042 §6.
 /// </summary>
 public enum AnimationKind
 {
@@ -33,13 +34,22 @@ public enum AnimationKind
 /// </summary>
 /// <remarks>
 /// <para>
-/// Phase 3 will plumb an <c>AsyncLocal&lt;AmbientAnimation?&gt;</c> stack
-/// through the state-setter dispatch and into <c>KeyedListDiff.Apply</c> /
-/// <c>ChildReconciler.Reconcile</c>, so a single state mutation can tag
-/// all of its resulting container ops with one animation kind. This file
-/// is the Phase 0 placeholder: the methods exist with their final
-/// signatures but currently just invoke the action — <b>callers can adopt
-/// the syntax now without behavior changing.</b>
+/// <c>Animate(...)</c> pushes an <c>AmbientAnimation</c> onto an
+/// <see cref="global::System.Threading.AsyncLocal{T}"/> stack for the duration of the
+/// supplied action. State setters from <c>UseState</c> / <c>UseReducer</c>
+/// invoked inside the block snapshot the ambient synchronously so the
+/// resulting render observes the same intent even when the rerender hops
+/// a dispatcher. The reconciler consumes the snapshot when applying
+/// <c>KeyedListDiff</c> ops and <c>ChildReconciler</c> mount / move /
+/// unmount, configuring per-container animations to match.
+/// </para>
+/// <para>
+/// <c>Animate</c> does <b>not</b> animate arbitrary property changes
+/// (color, size) on surviving leaves — that remains the job of
+/// per-element modifiers such as <c>WithImplicitTransition</c>. Scoping
+/// the transaction to keyed structural changes keeps the SwiftUI
+/// "withAnimation only animates layout-shape ops" contract intact.
+/// (spec 042 §6, scope discipline)
 /// </para>
 /// <para>
 /// Named <c>Animations</c> (plural) instead of <c>Animation</c> to avoid
@@ -54,7 +64,10 @@ public static class Animations
     /// </summary>
     /// <param name="kind">The animation kind that should apply to any
     /// container insert / move / remove ops produced by state setters
-    /// invoked from <paramref name="action"/>.</param>
+    /// invoked from <paramref name="action"/>. Passing
+    /// <see cref="AnimationKind.None"/> is meaningful: it explicitly
+    /// suppresses any *outer* <c>Animate</c> for the scope of the inner
+    /// block (nested calls stack like <c>using</c>).</param>
     /// <param name="action">State mutation. Typically calls
     /// <c>setItems(...)</c> from a hook.</param>
     /// <example>
@@ -65,7 +78,7 @@ public static class Animations
     public static void Animate(AnimationKind kind, Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
-        // Phase 3 will push/pop an AsyncLocal here. Today: no-op pass-through.
+        using var _ = new AnimationAmbient.Scope(new AmbientAnimation(kind));
         action();
     }
 
@@ -76,7 +89,7 @@ public static class Animations
     public static T Animate<T>(AnimationKind kind, Func<T> func)
     {
         ArgumentNullException.ThrowIfNull(func);
-        // Phase 3 will push/pop an AsyncLocal here. Today: no-op pass-through.
+        using var _ = new AnimationAmbient.Scope(new AmbientAnimation(kind));
         return func();
     }
 }
