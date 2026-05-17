@@ -982,8 +982,16 @@ A new validator step in `mur docs compile --validate-only`:
 | Tier | Required elements |
 |------|------------------|
 | stub | front-matter, title, one paragraph |
-| solid | + 3 snippets, 1 screenshot, reference table, Tips, Next Steps |
+| solid | + 3 snippets, ≥1 visual asset (resolved `screenshot://` reference OR inline `images/<topic>/` diagram), reference table, Tips, Next Steps |
 | comprehensive | + Discussion paragraph, ≥1 Caveats block, Patterns section, Common mistakes section, WinUI link (if applicable), inline cross-links |
+
+The "visual asset" relaxation (Phase 3.5 wave-A, `REACTOR_DOC_TIER_004`):
+either a resolved `screenshot://` reference (the original Phase 1 contract,
+used by every doc-app-backed page) OR an inline `images/<topic>/<id>.{svg,png}`
+reference satisfies the requirement. Under-the-hood pages without a doc app
+satisfy it via Mermaid-rendered SVG; user-facing pages continue to use the
+doc-app screenshot capture path. See `src/Reactor.Cli/Docs/TierLint.cs` and
+the `phase-3-5-retro.md` companion file for the rationale.
 
 Pages claim a tier and the lint enforces it. Failing CI > silently shipping
 a "comprehensive" page that's actually a stub.
