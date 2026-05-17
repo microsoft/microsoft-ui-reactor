@@ -1,0 +1,32 @@
+# Reference map for spec 041 §10.4.1 — XML-doc → MD reference generation.
+#
+# Maps each canonical cref (T:, M:, P:, F:, E: prefix) to (category,
+# guide-pages). Two ordered passes:
+#
+#   1. overrides — exact cref match wins, then prefix match (most-specific
+#      prefix wins). Use this to pin individual members to a non-default
+#      category or to redirect a member to a specific conceptual page.
+#   2. defaults — namespace-prefix glob, most-specific wins. Catches
+#      everything not explicitly pinned.
+#
+# Unmatched members produce REACTOR_DOC_REGISTRY_W001 at build time and
+# fall through with no category/guide-pages.
+
+defaults:
+  - match: "Microsoft.UI.Reactor.Hooks.*"
+    category: hooks
+    guide-pages: [hooks, effects]
+  - match: "Microsoft.UI.Reactor.Factories.*"
+    category: factories
+    guide-pages: [layout, forms, collections]
+  - match: "Microsoft.UI.Reactor.Charting.*"
+    category: charting
+    guide-pages: [charting]
+
+overrides:
+  - cref: "M:Microsoft.UI.Reactor.Factories.DataGrid``1"
+    guide-pages: [data-system]
+  - cref: "T:Microsoft.UI.Reactor.ErrorBoundary"
+    guide-pages: [advanced]
+  - match: "Microsoft.UI.Reactor.Factories.*Chart*"
+    guide-pages: [charting]

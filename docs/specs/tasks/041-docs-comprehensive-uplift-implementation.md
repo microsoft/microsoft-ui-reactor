@@ -241,15 +241,19 @@ infrastructure to unblock content phases.
 
 ### 1.6 Reference-map registry (spec §10.4 + §10.4.1)
 
-- [ ] Create `docs/_pipeline/reference-map.yaml` with the schema in
+- [x] Create `docs/_pipeline/reference-map.yaml` with the schema in
       spec §10.4.1: `defaults:` + `overrides:` sections.
-- [ ] Seed defaults for the three known namespaces:
+- [x] Seed defaults for the three known namespaces:
       `Microsoft.UI.Reactor.Hooks.*`, `Microsoft.UI.Reactor.Factories.*`,
       `Microsoft.UI.Reactor.Charting.*` (per spec §10.4.1 example).
-- [ ] Implement YAML loader + match-rule resolver:
+- [x] Implement YAML loader + match-rule resolver:
       most-specific-wins, namespace-glob match, cref exact match.
-- [ ] Unit tests for: default match, override-wins, no-match
-      (returns null + emits warning).
+      *`src/Reactor.Cli/Docs/ReferenceMap.cs` — supports trailing `*` and
+      `*infix*` patterns; rules sorted by literal length so longer prefix
+      wins.*
+- [x] Unit tests for: default match, override-wins, no-match
+      (returns null + emits warning). *10 tests in
+      `tests/Reactor.DocPipeline.Tests/ReferenceMapTests.cs`.*
 
 ### 1.7 Reference generation prototype on Hooks (spec §9 Phase 1)
 
