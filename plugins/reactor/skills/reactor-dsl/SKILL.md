@@ -13,6 +13,13 @@ references/reactor.api.txt    (~12K tokens, ~650 lines)
 
 It is the source of truth for the public API surface, regenerated from `Reactor.dll` by `mur --regen-api`.
 
+In addition, the skill carries **focused topical references** for surfaces
+big enough to need their own page:
+
+| Topic | File | When to load |
+|---|---|---|
+| Keyed list reconciliation | [`references/keyed-lists.md`](references/keyed-lists.md) | Choosing between `IReactorKeyed`, an explicit `keySelector`, and the three `.WithKey(...)` overloads; debugging a list that re-mounts on insert; understanding the bulk-replace bailout or the duplicate-key diagnostic. (Spec 042.) |
+
 ## When to load this skill
 
 You probably don't need to. The `reactor-getting-started` skill carries the hooks table, the most-used factory signatures, the React-to-Reactor mapping, modifiers, theme tokens, and the critical gotchas — that's the 90% case.

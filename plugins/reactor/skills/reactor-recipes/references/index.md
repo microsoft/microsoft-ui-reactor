@@ -18,6 +18,7 @@ component.
 | Intent | Recipe | Hooks / APIs used |
 |---|---|---|
 | Add / remove items in a list | [`list-add-delete.cs`](list-add-delete.cs) | `UseReducer`, `WithKey`, `Command` |
+| Animate list edits (insert / move / remove) | [`animated-list.md`](animated-list.md) | `Animations.Animate`, `AnimationKind`, `IReactorKeyed`, `UseReducedMotion` |
 | Sidebar navigation between pages | [`sidebar-nav.cs`](sidebar-nav.cs) | `UseNavigation`, `NavigationView`, `NavigationHost` |
 | Form with validation + submit | [`form-with-validation.cs`](form-with-validation.cs) | `UseValidationContext`, `FormField`, `Validate.*` |
 | Fetch data, show loading / error | [`async-fetch-list.cs`](async-fetch-list.cs) | `UseResource`, `AsyncValue<T>.Match` |

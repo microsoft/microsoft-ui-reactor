@@ -14,6 +14,7 @@ The full recipe content is in `references/<name>.cs`. Read just the recipe(s) th
 | Intent | Recipe | APIs used |
 |---|---|---|
 | Add / remove / toggle items in a list | `references/list-add-delete.cs` | `UseReducer`, `WithKey`, `Command` |
+| Animate list insert / move / remove | `references/animated-list.md` | `Animations.Animate`, `AnimationKind`, `IReactorKeyed`, `UseReducedMotion` |
 | Sidebar navigation between pages | `references/sidebar-nav.cs` | `UseNavigation`, `NavigationView`, `NavigationHost`, `WithNavigation` |
 | Form with validation + submit gating | `references/form-with-validation.cs` | `UseValidationContext`, `FormField`, `Validate.*`, `ShowWhen` |
 | Fetch data with loading / error / data states | `references/async-fetch-list.cs` | `UseResource`, `AsyncValue<T>.Match` |

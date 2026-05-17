@@ -607,24 +607,48 @@ box.
 
 ### 5.1 `reactor-dsl` references
 
-- [ ] Add `plugins/reactor/skills/reactor-dsl/references/keyed-lists.md`
+- [x] Add `plugins/reactor/skills/reactor-dsl/references/keyed-lists.md`
       covering: `IReactorKeyed`, explicit `KeySelector`, `.WithKey(...)`,
       the hand-built `.Select(...)` pattern.
-- [ ] Cross-link from the skill's index file.
+      → **Landed. Covers all three call sites, the three `.WithKey`
+      overloads, the diff behavior (incremental ops vs. bulk-replace
+      bailout), duplicate / null-key diagnostics, and four explicit
+      gotchas (OC-from-UseState, mixed keyed/unkeyed siblings,
+      property mutations that don't trigger structural diffs, when
+      not to use `IReactorKeyed`).**
+- [x] Cross-link from the skill's index file.
+      → **`reactor-dsl/SKILL.md` now carries a "focused topical
+      references" table that points at `references/keyed-lists.md`.**
 
 ### 5.2 `reactor-recipes` references
 
-- [ ] Add `plugins/reactor/skills/reactor-recipes/references/animated-list.md`
+- [x] Add `plugins/reactor/skills/reactor-recipes/references/animated-list.md`
       with the canonical `Animate(.Spring, () => setItems(...))` recipe.
-- [ ] Include a "common mistakes" sub-section: mutating
+      → **Landed. Self-contained single-file program with the
+      `Mutate(...)` chokepoint pattern + `UseReducedMotion()` bypass
+      (WCAG 2.3.3).**
+- [x] Include a "common mistakes" sub-section: mutating
       `ObservableCollection` from `UseState` (doesn't work — Reactor compares
       by reference), forgetting `KeySelector` on a non-`IReactorKeyed` type.
+      → **Five mistakes documented with paired ❌ / ✓ examples:
+      OC-from-UseState, missing `keySelector` on non-`IReactorKeyed`
+      types, wrapping non-structural changes in `Animate`, ignoring
+      reduced motion, and capturing stale `items` in change closures.
+      Cross-linked from `reactor-recipes/SKILL.md` and
+      `references/index.md`.**
 
 ### 5.3 Skill validation
 
-- [ ] Run the skill's existing validation harness (find via
+- [x] Run the skill's existing validation harness (find via
       `plugins/reactor/skills/.../tests/` or equivalent) so the new
       references parse and link-check.
+      → **No automated harness exists under `plugins/reactor/skills/`.
+      Manually verified: every relative link in the two new references
+      and the AnimatedListDemo README resolves (8 / 8 OK), the YAML
+      frontmatter parses, and the embedded C# code block matches the
+      same API surface as the runnable `animated-list-demo` sample.
+      Recommend a follow-up linter under `tools/` rather than blocking
+      Phase 5 close-out on it.**
 
 ---
 
