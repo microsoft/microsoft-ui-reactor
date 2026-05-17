@@ -977,14 +977,37 @@ source snippets, "Read the source" callout, tier-lint clean.)
 
 ### 4.2 New `wpf-interop.md` — Solid
 
-- [ ] Doc app under `docs/_pipeline/apps/wpf-interop/`.
-- [ ] Cover host control, data flow, threading constraints; parallel
-      to `winforms-interop.md`.
+- [x] Doc app under `docs/_pipeline/apps/wpf-interop/`. *Builds clean
+      against `Reactor.csproj` on x64. Five snippet markers (bootstrap,
+      host-element, data-flow, threading, accessibility) plus one
+      screenshot (host-element) and one Mermaid diagram
+      (`diagrams/wpf-interop/host-architecture.mmd`).*
+- [x] Cover host control, data flow, threading constraints; parallel
+      to `winforms-interop.md`. *Option A — `Reactor.Interop.Wpf` does
+      not exist yet; the page is honest about it. The proposed surface
+      (`WpfXamlIslandBootstrap` / `WpfXamlIslandControl`) is documented
+      as roadmap-shape inside a comment-form snippet, with the
+      shipping today story being "embed `DesktopWindowXamlSource`
+      directly". Data-flow snippet bridges a WPF MVVM view-model
+      through `UseObservable`; threading snippet covers the
+      WPF `Dispatcher` vs WinUI `DispatcherQueue` distinction;
+      accessibility snippet covers the sibling automation-tree model.
+      Zero tier-lint findings under `mur docs compile --validate-only
+      --tier=solid`.*
 
 ### 4.3 New `performance.md` — Solid
 
-- [ ] Top-down ETW / `EventDispatch` walkthrough.
-- [ ] Cross-link to `perf-instrumentation.md` (Under the hood).
+- [x] Top-down ETW / `EventDispatch` walkthrough. *Solid tier: five
+      `snippet="source:..."` references (ETW keywords, reconciler
+      entry, event-trampoline, bench entrypoint, bench-report fields)
+      + one Mermaid diagram (`top-down-flow.mmd`) covering the
+      dotnet-trace vs. PerfView decision tree. Reference table maps
+      tools (dotnet-trace, PerfView, perf_bench, overlays) to what
+      they read. Reproducing-a-bench section walks
+      `tests/perf_bench/PerfBench.*` invocation.*
+- [x] Cross-link to `perf-instrumentation.md` (Under the hood). *Done
+      from the lead paragraph and Next Steps; perf-instrumentation
+      reciprocally links back to this page.*
 
 ### 4.4 New `packaging.md` — Solid
 

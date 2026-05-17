@@ -1,0 +1,12 @@
+app:
+  title: "WPF Interop"
+  width: 600
+  height: 400
+  startup-delay: 2000
+
+screenshots:
+  - id: host-element
+    description: "Reactor component that a WPF host control would mount"
+    component: WpfHostDemo
+    region: client
+    format: png

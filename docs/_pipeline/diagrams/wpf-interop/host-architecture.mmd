@@ -1,0 +1,23 @@
+%% WPF interop architecture (proposed) alongside the shipping WinForms shape.
+%% Both hosts stand on the same WinAppSDK primitive — DesktopWindowXamlSource —
+%% and mount a ReactorHostControl that owns the Reactor element tree. The WPF
+%% host control on the left is on the roadmap; the WinForms host control on
+%% the right ships today in Reactor.Interop.WinForms.
+flowchart TB
+    subgraph WPF["WPF host (roadmap)"]
+        WpfApp["System.Windows.Application"]
+        WpfWindow["System.Windows.Window"]
+        WpfIsland["WpfXamlIslandControl<br/>FrameworkElement wrapper<br/>(not yet shipped)"]
+    end
+    subgraph WF["WinForms host (shipped)"]
+        WfApp["System.Windows.Forms.Application"]
+        WfForm["System.Windows.Forms.Form"]
+        WfIsland["XamlIslandControl<br/>System.Windows.Forms.Control<br/>Reactor.Interop.WinForms"]
+    end
+    DWXS["DesktopWindowXamlSource<br/>WinAppSDK primitive"]
+    Host["ReactorHostControl<br/>WinUI UserControl"]
+    Reactor["Reactor element tree<br/>hooks · reconciler · effects"]
+
+    WpfApp --> WpfWindow --> WpfIsland --> DWXS
+    WfApp --> WfForm --> WfIsland --> DWXS
+    DWXS --> Host --> Reactor
