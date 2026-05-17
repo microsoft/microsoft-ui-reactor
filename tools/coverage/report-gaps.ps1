@@ -99,28 +99,31 @@ Write-Host ""
 Write-Host "===== Hot spots (line% < $Threshold, sorted by lines missed) =====" -ForegroundColor Yellow
 $hot | Format-Table File, LinePct, BranchPct, LinesMissed, BranchesMissed, LinesTotal -AutoSize
 
-# Markdown report
-$md = New-Object System.Text.StringBuilder
-[void]$md.AppendLine("# Coverage gap report")
-[void]$md.AppendLine("")
-[void]$md.AppendLine("Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
-[void]$md.AppendLine("Source:    `coverage/merged.cobertura.xml`")
-[void]$md.AppendLine("")
-[void]$md.AppendLine("## Overall")
-[void]$md.AppendLine("")
-[void]$md.AppendLine("| Metric | Coverage |")
-[void]$md.AppendLine("|---|---|")
-[void]$md.AppendLine("| Line   | $overallLine% ($covLines / $totLines) |")
-[void]$md.AppendLine("| Branch | $overallBranch% ($covBranches / $totBranches) |")
-[void]$md.AppendLine("")
-[void]$md.AppendLine("## Hot spots (line% < $Threshold, top $Top by lines missed)")
-[void]$md.AppendLine("")
-[void]$md.AppendLine("| File | Line % | Branch % | Lines missed | Branches missed | Lines total |")
-[void]$md.AppendLine("|---|---:|---:|---:|---:|---:|")
+# Markdown report (built via a here-string + line list to avoid backtick-escape headaches)
+$now = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+$lines = New-Object System.Collections.Generic.List[string]
+$lines.Add('# Coverage gap report')
+$lines.Add('')
+$lines.Add("Generated: $now")
+$lines.Add('Source:    coverage/merged.cobertura.xml')
+$lines.Add('')
+$lines.Add('## Overall')
+$lines.Add('')
+$lines.Add('| Metric | Coverage |')
+$lines.Add('|---|---|')
+$lines.Add("| Line   | $overallLine% ($covLines / $totLines) |")
+$lines.Add("| Branch | $overallBranch% ($covBranches / $totBranches) |")
+$lines.Add('')
+$lines.Add("## Hot spots (line% < $Threshold, top $Top by lines missed)")
+$lines.Add('')
+$lines.Add('| File | Line % | Branch % | Lines missed | Branches missed | Lines total |')
+$lines.Add('|---|---:|---:|---:|---:|---:|')
 foreach ($r in $hot) {
-  [void]$md.AppendLine("| ``$($r.File)`` | $($r.LinePct)% | $($r.BranchPct)% | $($r.LinesMissed) | $($r.BranchesMissed) | $($r.LinesTotal) |")
+  $f = $r.File
+  $lines.Add("| $f | $($r.LinePct)% | $($r.BranchPct)% | $($r.LinesMissed) | $($r.BranchesMissed) | $($r.LinesTotal) |")
 }
+$md = [string]::Join([Environment]::NewLine, $lines)
 
 $mdPath = Join-Path (Split-Path $ReportPath -Parent) 'gap-report.md'
-[System.IO.File]::WriteAllText($mdPath, $md.ToString())
+[System.IO.File]::WriteAllText($mdPath, $md)
 Write-Host "Markdown report written: $mdPath" -ForegroundColor Cyan
