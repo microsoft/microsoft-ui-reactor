@@ -627,9 +627,19 @@ to keep the surface area visible. Tracker for the follow-up:
 
 ### 2.7 `rules-of-reactor.md` — Solid
 
-- [ ] Hook rules, render-purity rules, anti-patterns, key idioms.
-- [ ] Cross-link liberally from `hooks`, `effects`, `components`.
-- [ ] Template at Solid tier.
+- [x] Hook rules, render-purity rules, anti-patterns, key idioms.
+      *Five core rules — hook-order stability, render purity, list
+      keys, stable deps, theme tokens — each with a before/after
+      snippet pair pulled from the rules-of-reactor doc app and the
+      analyzer code that catches violations at build time.*
+- [x] Cross-link liberally from `hooks`, `effects`, `components`.
+      *Every rule cross-links to its deep-dive page; the Reference
+      table at the top names the analyzer + the page for each rule.
+      Inbound link injection from hooks/effects/components is part
+      of the Phase 4 cross-link sweep.*
+- [x] Template at Solid tier. *Zero findings under
+      `mur docs compile --validate-only --tier=solid` after moving
+      the rule-index table into the first half of the page.*
 
 ### 2.8 Phase 2 review
 
