@@ -1063,6 +1063,7 @@ source snippets, "Read the source" callout, tier-lint clean.)
   - Wave-2 promotions tracked here:
     - `commanding.md.dt` → comprehensive (4.6 wave-2).
     - `context.md.dt` → comprehensive (4.6 wave-2).
+    - `layout.md.dt` → comprehensive (4.6 wave-2).
   - Wave-3 promotions tracked here:
     - `flex-layout.md.dt` → comprehensive (4.6 wave-3).
     - `advanced.md.dt` → comprehensive (4.6 wave-3).

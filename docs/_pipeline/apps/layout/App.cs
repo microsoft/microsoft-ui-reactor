@@ -168,6 +168,138 @@ class ResponsiveDemo : Component
 }
 // </snippet:responsive>
 
+// <snippet:app-shell>
+// App shell scaffold: title bar + sidebar + content using a single Grid
+// declaration. The two-column / three-row layout is the canonical
+// shape for an admin-style app and replaces hand-rolled nested
+// HStacks/VStacks.
+class AppShellExample : Component
+{
+    public override Element Render()
+    {
+        return Grid(
+            columns: [GridSize.Px(220), GridSize.Star()],
+            rows:    [GridSize.Px(44),  GridSize.Star(), GridSize.Px(28)],
+            // Top bar — spans both columns.
+            Border(TextBlock("My App").Bold().Padding(12))
+                .Background(Theme.LayerFill)
+                .Grid(row: 0, column: 0, columnSpan: 2),
+            // Sidebar.
+            Border(VStack(4,
+                    TextBlock("Dashboard"),
+                    TextBlock("Reports"),
+                    TextBlock("Settings"))
+                .Padding(12))
+                .Background(Theme.CardBackground)
+                .Grid(row: 1, column: 0),
+            // Main content.
+            ScrollView(VStack(8,
+                    Title("Welcome"),
+                    Body("Stack -> Grid for the shell, VStack inside the panes.")))
+                .Padding(16)
+                .Grid(row: 1, column: 1),
+            // Status bar.
+            TextBlock("Ready").Padding(6)
+                .Grid(row: 2, column: 0, columnSpan: 2)
+        ).Width(560).Height(360);
+    }
+}
+// </snippet:app-shell>
+
+// <snippet:auto-grid>
+// Auto-grid: WrapGrid wraps a sequence of items into columns once a
+// row fills, no manual row/column placement. Picks "max 4 per row".
+class AutoGridExample : Component
+{
+    public override Element Render()
+    {
+        return WrapGrid(maxRowsOrColumns: 4,
+            children: Enumerable.Range(1, 11)
+                .Select(i =>
+                    Border(TextBlock($"Tile {i}").Padding(12))
+                        .Background(Theme.CardBackground)
+                        .CornerRadius(6)
+                        .Width(110).Height(60))
+                .Cast<Element?>()
+                .ToArray()
+        ).Padding(24);
+    }
+}
+// </snippet:auto-grid>
+
+// <snippet:responsive-switcher>
+// Responsive switcher: the same content renders as HStack at wide
+// widths, VStack when the window narrows past 480px. UseBreakpoint is
+// the canonical hook for this pattern.
+class ResponsiveSwitcherExample : Component
+{
+    public override Element Render()
+    {
+        var (simulated, setSimulated) = UseState(true);  // toy demo without a window handle
+
+        var panels = new Element[]
+        {
+            Border(TextBlock("Panel A").Padding(16))
+                .Background(Theme.CardBackground).CornerRadius(4),
+            Border(TextBlock("Panel B").Padding(16))
+                .Background(Theme.CardBackground).CornerRadius(4),
+            Border(TextBlock("Panel C").Padding(16))
+                .Background(Theme.CardBackground).CornerRadius(4),
+        };
+
+        return VStack(8,
+            HStack(8,
+                TextBlock("Simulate wide window:"),
+                ToggleSwitch(simulated, setSimulated)),
+            If(simulated,
+                () => HStack(12, panels),
+                () => VStack(8, panels))
+        ).Padding(24);
+    }
+}
+// </snippet:responsive-switcher>
+
+// <snippet:dont-deep-stack>
+// BAD — deeply nested VStack/HStack hierarchies obscure intent and
+// produce a layout cost that Grid would absorb in one measure pass.
+class DontDeepStack : Component
+{
+    public override Element Render()
+    {
+        return HStack(8,
+            VStack(4,
+                TextBlock("Label").Bold(),
+                TextBlock("Sublabel").Foreground(Theme.SecondaryText)),
+            VStack(0,
+                HStack(4, TextBlock("First:"), TextBlock("Value 1")),
+                HStack(4, TextBlock("Second:"), TextBlock("Value 2")),
+                HStack(4, TextBlock("Third:"), TextBlock("Value 3")))
+        ).Padding(24);
+    }
+}
+// </snippet:dont-deep-stack>
+
+// <snippet:do-grid-for-forms>
+// GOOD — same shape as a 2-column Grid. Labels in column 0 are auto-
+// sized to their content; column 1 stretches.
+class DoGridForForms : Component
+{
+    public override Element Render()
+    {
+        return Grid(
+            columns: [GridSize.Auto, GridSize.Star()],
+            rows:    [GridSize.Auto, GridSize.Auto, GridSize.Auto],
+            TextBlock("First:").Margin(4).Grid(row: 0, column: 0),
+            TextBlock("Value 1").Margin(4).Grid(row: 0, column: 1),
+            TextBlock("Second:").Margin(4).Grid(row: 1, column: 0),
+            TextBlock("Value 2").Margin(4).Grid(row: 1, column: 1),
+            TextBlock("Third:").Margin(4).Grid(row: 2, column: 0),
+            TextBlock("Value 3").Margin(4).Grid(row: 2, column: 1)
+        ).Padding(24).Width(300);
+    }
+}
+// </snippet:do-grid-for-forms>
+
 class LayoutApp : Component
 {
     public override Element Render()
@@ -181,7 +313,11 @@ class LayoutApp : Component
                 Component<TypeRampDemo>(),
                 Component<ScrollBorderDemo>(),
                 Component<ExpanderCanvasDemo>(),
-                Component<ResponsiveDemo>()
+                Component<ResponsiveDemo>(),
+                Component<AppShellExample>(),
+                Component<AutoGridExample>(),
+                Component<ResponsiveSwitcherExample>(),
+                Component<DoGridForForms>()
             ).Padding(24)
         );
     }
