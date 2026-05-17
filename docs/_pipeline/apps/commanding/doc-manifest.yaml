@@ -30,3 +30,18 @@ screenshots:
     component: MenuBarExample
     region: client
     format: png
+  - id: button-and-menu
+    description: "One Command record bound to both a Button and a MenuFlyout item"
+    component: ButtonAndMenuExample
+    region: client
+    format: png
+  - id: parameterized-command
+    description: "Single Command<TodoItem> driving Delete on every list row"
+    component: ParameterizedCommandExample
+    region: client
+    format: png
+  - id: async-with-progress
+    description: "Async UseCommand with IsExecuting-driven ProgressBar"
+    component: AsyncWithProgressExample
+    region: client
+    format: png
