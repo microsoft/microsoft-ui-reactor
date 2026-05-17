@@ -869,7 +869,7 @@ Parallel to Phase 3, different author skillset (per spec §9 Phase
 
 ### 3.5.6 `effects-scheduling.md` — Comprehensive
 
-- [ ] Link to `docs/reference/async-system.md` for deeper internals
+- [x] Link to `docs/reference/async-system.md` for deeper internals
       (per spec §7.1.1: that file stays as deeper reference for now).
 
 ### 3.5.7 `modifier-system.md` — Comprehensive

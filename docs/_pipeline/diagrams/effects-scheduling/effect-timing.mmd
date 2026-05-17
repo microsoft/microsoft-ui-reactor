@@ -1,13 +1,17 @@
-%% Phase 3.5 scaffold — render-vs-effect timing. Author should expand
-%% with the FlushEffects call after commit, the cleanup-before-effect
-%% ordering, and the Pending bubble-up signal flow.
+%% effects-scheduling: when UseEffect runs relative to render + commit.
+%% Reads: Render -> Reconciler.Mount/Update -> WinUI tree visible
+%% -> FlushEffects (cleanup-of-prev THEN run-new).
 sequenceDiagram
+    autonumber
     participant C as Component.Render
     participant R as Reconciler
-    participant E as Effects queue
-    participant U as WinUI
+    participant U as WinUI tree
+    participant E as ctx.FlushEffects
     C->>R: returns Element tree
-    R->>U: mount / update controls
-    R->>E: FlushEffects (after commit)
-    E->>E: cleanup prior effect
-    E->>E: run new effect body
+    R->>R: diff old vs new
+    R->>U: mount / update controls (commit)
+    Note over U: pixels visible to user
+    R->>E: FlushEffectsTraced(ctx)
+    E->>E: phase 1 — run pending cleanups (prev deps)
+    E->>E: phase 2 — run new effect bodies
+    Note over E: setState here<br/>schedules another render
