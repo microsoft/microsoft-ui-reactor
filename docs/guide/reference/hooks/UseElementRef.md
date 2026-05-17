@@ -7,6 +7,12 @@ _cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(M
 
 ## Summary
 
-*Summary pending.*
+Component-extension overload of [UseElementRef](UseElementRef.md) ([guide](../../hooks.md)).
+Equivalent to calling the `RenderContext`-extension form against
+<c>component.Context</c>.
+
+## Parameters
+
+- **component** — The component whose render context owns the hook slot.
 
 
