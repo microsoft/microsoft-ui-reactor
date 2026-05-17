@@ -1064,6 +1064,7 @@ source snippets, "Read the source" callout, tier-lint clean.)
     - `context.md.dt` → comprehensive (4.6 wave-2).
   - Wave-3 promotions tracked here:
     - `flex-layout.md.dt` → comprehensive (4.6 wave-3).
+    - `advanced.md.dt` → comprehensive (4.6 wave-3).
 - [ ] Final doc review pass — read the docset end-to-end as a new
       user (start at readme, walk Previous/Next).
 - [ ] Comparison alignment check: each of the 19 categories in
