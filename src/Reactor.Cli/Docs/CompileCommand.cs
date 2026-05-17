@@ -407,20 +407,54 @@ internal static partial class CompileCommand
         return result;
     }
 
+    /// <summary>
+    /// Discovers every <c>*.md.dt</c> template under <paramref name="templatesDir"/>,
+    /// recursing into subfolders (e.g. <c>recipes/</c>) but excluding the
+    /// <c>_skeletons/</c> directory — those files are author scaffolds with
+    /// placeholder tokens, not real pages, and intentionally fail tier-lint.
+    /// The topic id includes any subfolder path so a template at
+    /// <c>recipes/login.md.dt</c> has id <c>recipes/login</c> and emits to
+    /// <c>docs/guide/recipes/login.md</c>.
+    /// </summary>
     private static List<(string topicId, DocTemplate template)> DiscoverTemplates(string templatesDir, string? topic)
     {
         var result = new List<(string, DocTemplate)>();
         if (!Directory.Exists(templatesDir)) return result;
 
-        foreach (var file in Directory.GetFiles(templatesDir, "*.md.dt"))
+        foreach (var file in EnumerateTemplateFiles(templatesDir))
         {
-            var topicId = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(file));
+            // Topic id = repo-relative path under templatesDir minus the .md.dt
+            // extension, with forward slashes so it round-trips to a guide
+            // output path on every OS.
+            var rel = Path.GetRelativePath(templatesDir, file).Replace('\\', '/');
+            var topicId = rel.EndsWith(".md.dt", StringComparison.Ordinal)
+                ? rel[..^".md.dt".Length]
+                : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(rel));
             if (topic != null && !topicId.Equals(topic, StringComparison.OrdinalIgnoreCase))
                 continue;
             result.Add((topicId, TemplateParser.Parse(file)));
         }
 
         return result.OrderBy(t => t.Item2.Order).ToList();
+    }
+
+    /// <summary>
+    /// Yields every <c>*.md.dt</c> under <paramref name="templatesDir"/>,
+    /// recursing into subfolders but skipping the <c>_skeletons/</c>
+    /// scaffold directory (spec 041 §9 Phase 1.11).
+    /// </summary>
+    internal static IEnumerable<string> EnumerateTemplateFiles(string templatesDir)
+    {
+        if (!Directory.Exists(templatesDir)) yield break;
+        var skeletons = Path.Combine(templatesDir, "_skeletons");
+        foreach (var file in Directory.EnumerateFiles(templatesDir, "*.md.dt", SearchOption.AllDirectories))
+        {
+            // Skip anything under _skeletons/ (or nested subfolders thereof).
+            if (file.StartsWith(skeletons + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                file.StartsWith(skeletons + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                continue;
+            yield return file;
+        }
     }
 
     // ── Build ─────────────────────────────────────────────────────────────
@@ -539,13 +573,13 @@ internal static partial class CompileCommand
         // (small file count) for Phase 1B.
         var templateBodies = new List<(string topicId, string body)>();
         var templatesDir = Path.Combine(repoRoot, "docs", "_pipeline", "templates");
-        if (Directory.Exists(templatesDir))
+        foreach (var f in EnumerateTemplateFiles(templatesDir))
         {
-            foreach (var f in Directory.GetFiles(templatesDir, "*.md.dt"))
-            {
-                var id = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(f));
-                templateBodies.Add((id, File.ReadAllText(f)));
-            }
+            var rel = Path.GetRelativePath(templatesDir, f).Replace('\\', '/');
+            var id = rel.EndsWith(".md.dt", StringComparison.Ordinal)
+                ? rel[..^".md.dt".Length]
+                : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(rel));
+            templateBodies.Add((id, File.ReadAllText(f)));
         }
         var reverseIndex = ReferenceLinkInjector.BuildReverseIndex(templateBodies);
 

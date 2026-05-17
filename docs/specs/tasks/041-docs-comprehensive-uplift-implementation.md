@@ -348,18 +348,20 @@ infrastructure to unblock content phases.
 
 ### 1.10 AI Author Skill update (spec §10.5)
 
-- [ ] Update `docs/_pipeline/ai-author-skill.md`:
-  - [ ] Document the `tier:` front-matter field with examples.
-  - [ ] Document the `winui-ref:` front-matter field.
-  - [ ] Document the `<!-- ai:caveat -->` block.
-  - [ ] Document the `snippet="source:..."` directive.
-  - [ ] Add the SVG-over-ASCII policy with Mermaid example block.
-  - [ ] Add a "Diagram authoring" subsection alongside "Snippet markers".
-  - [ ] Document the `<!-- ref:Member -->` marker.
-  - [ ] Update the "Topic Ideas" table to reflect the 64-page layout
+- [x] Update `docs/_pipeline/ai-author-skill.md`:
+  - [x] Document the `tier:` front-matter field with examples.
+  - [x] Document the `winui-ref:` front-matter field.
+  - [x] Document the `<!-- ai:caveat -->` block.
+  - [x] Document the `snippet="source:..."` directive.
+  - [x] Add the SVG-over-ASCII policy with Mermaid example block.
+  - [x] Add a "Diagram authoring" subsection alongside "Snippet markers".
+  - [x] Document the `<!-- ref:Member -->` marker.
+  - [x] Update the "Topic Ideas" table to reflect the 64-page layout
         from spec §7.1.
-- [ ] Review the updated skill end-to-end against one new template
-      to confirm the directives are actionable.
+- [x] Review the updated skill end-to-end against one new template
+      to confirm the directives are actionable. *Validated against
+      the Phase 1.11 skeletons + Phase 1.12 stub readme rewrite —
+      all new directives have a worked example.*
 
 ### 1.11 Page-template skeletons (spec §9 Phase 1)
 
