@@ -113,6 +113,16 @@ class VirtualListApp : Component
         var editOpsCountRef = UseRef<int>(0);
         var editRngRef = UseRef<Random?>(null);
 
+        // Latest-committed items snapshot, refreshed on every render. The
+        // edit timer's closure is created once per StartBenchmark call;
+        // without a ref it would always read the original `items` and
+        // every tick would replace the same prefix instead of growing
+        // the list. Reading through the ref gives the timer the freshest
+        // committed snapshot — same pattern WinUI gets for free by
+        // mutating an OC in place.
+        var itemsRef = UseRef<ListItemSource.ListItem[]>(items);
+        itemsRef.Current = items;
+
         // Hook CompositionTarget.Rendering once. Counts FPS into PerfTracker
         // continuously, drives the scroll tween while a benchmark is active.
         var renderHooked = UseRef(false);
@@ -203,10 +213,14 @@ class VirtualListApp : Component
                 // position. Keeps the visible viewport's identity churning
                 // without unbounded growth.
                 var rng = editRngRef.Current!;
-                // Read the freshest committed snapshot through the dispatch
-                // closure rather than `items` (which is stale by definition
-                // since this lambda was created on a prior render).
-                ListItemSource.ListItem[] cur = items;
+                // Read the freshest committed snapshot through the ref —
+                // `items` (the locally-captured array) is bound to the
+                // render that called StartBenchmark and would be stale
+                // every tick after the first. `itemsRef` is refreshed
+                // each render with the just-committed snapshot, so the
+                // bench actually exercises incremental growth instead
+                // of replacing the same prefix forever.
+                ListItemSource.ListItem[] cur = itemsRef.Current!;
                 if (rng.NextDouble() < 0.5 || cur.Length < 100)
                 {
                     // Insert
