@@ -1011,7 +1011,23 @@ source snippets, "Read the source" callout, tier-lint clean.)
 
 ### 4.4 New `packaging.md` — Solid
 
-- [ ] MSIX, single-file, ARM64, AOT considerations.
+- [x] MSIX, single-file, ARM64, AOT considerations.
+      *Done. Solid-tier `packaging.md.dt` covers the four publish
+      shapes (unpackaged / MSIX / single-file / Native AOT), pulls
+      three CSPROJ snippets via `source:` from
+      `samples/TodoApp/TodoApp.csproj`,
+      `tools/Templates/templates/WinUIApp-CSharp/Company.ReactorApp1.csproj`,
+      and `tests/stress_perf/StressPerf.Reactor/StressPerf.Reactor.csproj`
+      (added `<!-- <snippet:id> -->` markers), with a
+      `publish-pipeline.mmd` Mermaid diagram for the visual
+      requirement. Caveat block calls out the two reflection
+      surfaces (`AutoColumns<T>` carries `[DynamicallyAccessedMembers]`;
+      `ReactorApp.Run(..., devtools: true)` walks
+      `Assembly.GetTypes()` and carries `[RequiresUnreferencedCode]`)
+      so AOT consumers know what to expect. Cross-links forward to
+      `dev-tooling.md`, `getting-started.md`, `performance.md`,
+      `perf-instrumentation.md`, and `components.md`. Zero tier-lint
+      findings under `mur docs compile --validate-only --tier=solid`.*
 
 ### 4.5 Cross-link sweep
 

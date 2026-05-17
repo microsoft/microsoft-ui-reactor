@@ -1,0 +1,22 @@
+%% packaging: dotnet publish → MSIX / single-file / AOT decision tree.
+%% Sources at left, three output shapes at right. WinUI 3 apps with
+%% WindowsPackageType=None produce an unpackaged .exe with a sibling
+%% Microsoft.WindowsAppSDK runtime folder; WindowsPackageType=MSIX
+%% bundles the same payload into a signed .msix; PublishAot turns the
+%% managed apphost into a native binary on top of either shape.
+flowchart LR
+    SRC["C# sources + Reactor element factories"]
+    CSP["MyApp.csproj<br/>UseWinUI=true<br/>WindowsPackageType=None|MSIX"]
+    DP{"dotnet publish<br/>-r win-x64 | win-arm64"}
+
+    UNP["Unpackaged folder<br/>MyApp.exe + WindowsAppSDK runtime"]
+    SF["Single-file bundle<br/>PublishSingleFile=true<br/>+IncludeNativeLibrariesForSelfExtract"]
+    MSIX["Signed MSIX<br/>WindowsPackageType=MSIX<br/>GenerateAppxPackageOnBuild"]
+    AOT["Native AOT exe<br/>PublishAot=true<br/>InvariantGlobalization=true"]
+
+    SRC --> CSP --> DP
+    DP --> UNP
+    DP --> SF
+    DP --> MSIX
+    UNP -.AOT layered on top.-> AOT
+    MSIX -.AOT layered on top.-> AOT

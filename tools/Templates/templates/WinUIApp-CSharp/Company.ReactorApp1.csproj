@@ -1,10 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+    <!-- <snippet:template-shape> -->
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
         <TargetFramework Condition="'$(TargetFrameworkOverride)' == ''">net10.0-windows10.0.22621.0</TargetFramework>
         <TargetFramework Condition="'$(TargetFrameworkOverride)' != ''">TargetFrameworkOverride-windows10.0.22621.0</TargetFramework>
-        <Platforms>ARM64;X86;X64</Platforms>    
+        <Platforms>ARM64;X86;X64</Platforms>
         <UseWinUI>true</UseWinUI>
         <WindowsPackageType>None</WindowsPackageType>
         <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
@@ -16,6 +17,7 @@
         <InvariantGlobalization>true</InvariantGlobalization>
         <!--#endif -->
     </PropertyGroup>
+    <!-- </snippet:template-shape> -->
 
     <ItemGroup>
         <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.1" />
