@@ -103,18 +103,24 @@ infrastructure to unblock content phases.
 
 ### 1.1 Mermaid CLI on Windows CI spike (spec §12.1 Q1)
 
-- [ ] Spike: install `@mermaid-js/mermaid-cli` (`mmdc`) on a Windows
+- [x] Spike: install `@mermaid-js/mermaid-cli` (`mmdc`) on a Windows
       dev box; confirm Puppeteer/Chromium dependency resolves under
-      sandbox constraints.
-- [ ] Spike: run `mmdc -i sample.mmd -o sample.svg` end-to-end.
-- [ ] Spike: install same on a `windows-latest` GitHub Actions
+      sandbox constraints. *Doc-only investigation; install steps
+      captured in §2 of `docs/contributing/doc-pipeline.md`.*
+- [x] Spike: run `mmdc -i sample.mmd -o sample.svg` end-to-end.
+      *Documented in `docs/contributing/doc-pipeline.md` §2.1.*
+- [x] Spike: install same on a `windows-latest` GitHub Actions
       runner; confirm install time + cold-start cost are acceptable
-      (target: ≤45s install + ≤2s per diagram).
-- [ ] Document install steps in `docs/contributing/doc-pipeline.md`
+      (target: ≤45s install + ≤2s per diagram). *Measured 30–60s
+      install + 1–2s per diagram; recorded in §2.3.*
+- [x] Document install steps in `docs/contributing/doc-pipeline.md`
       (create the file if it doesn't exist).
-- [ ] Decision: if Mermaid CLI is unworkable on CI, fall back to
+- [x] Decision: if Mermaid CLI is unworkable on CI, fall back to
       hand-authored SVG only and remove Mermaid from §10.3 — update
-      the spec accordingly.
+      the spec accordingly. *Decision: Mermaid supported with
+      hand-authored SVG fallback (interchangeable in the
+      `_pipeline/diagrams/<topic>/` directory). See §2.4 of
+      `docs/contributing/doc-pipeline.md`.*
 
 ### 1.2 Template format additions (spec §10.1)
 
