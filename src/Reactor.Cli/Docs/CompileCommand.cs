@@ -18,6 +18,16 @@ internal static partial class CompileCommand
         var noAi = HasFlag(args, "--no-ai");
         var noBuild = HasFlag(args, "--no-build");
         var skipDiagrams = HasFlag(args, "--skip-diagrams");
+        // Reference generation (spec 041 §10.4) defaults to ON so the
+        // compile step is uniform — `--skip-reference` is the inner-loop
+        // escape hatch and `--reference` is a no-op alias for explicit
+        // callers. Phase 1B restricts generation to the `hooks` category;
+        // later phases lift the gate as more categories come online.
+        var skipReference = HasFlag(args, "--skip-reference");
+        // --reference is accepted but a no-op — present so authors can
+        // call it out explicitly in CI scripts. Discarded so we don't shadow
+        // the variable.
+        _ = HasFlag(args, "--reference");
         var validateOnly = HasFlag(args, "--validate-only");
         var ci = HasFlag(args, "--ci");
         var tierFilterRaw = GetOption(args, "--tier");
@@ -293,6 +303,39 @@ internal static partial class CompileCommand
             }
         }
 
+        // ── Phase 5.7: Reference generation (spec §10.4) ──────────────────
+        Console.WriteLine();
+        if (skipReference)
+        {
+            Console.WriteLine("═══ Phase 5.7: Reference (skipped) ═══");
+        }
+        else
+        {
+            Console.WriteLine("═══ Phase 5.7: Reference ═══");
+            var refResult = RunReferenceGeneration(repoRoot, outputDir);
+            if (refResult is not null)
+            {
+                foreach (var f in refResult.Findings)
+                {
+                    if (f.Severity == TierLintSeverity.Error)
+                    {
+                        Console.Error.WriteLine(f.Format());
+                        hasErrors = true;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"  ⚠ {f.Format()}");
+                    }
+                }
+                Console.WriteLine($"  Generated: {refResult.Pages.Count} page(s)");
+            }
+            if (hasErrors && ci)
+            {
+                Console.Error.WriteLine("Reference generation failed.");
+                return 1;
+            }
+        }
+
         // ── Phase 6: Assemble ─────────────────────────────────────────────
         Console.WriteLine();
         Console.WriteLine("═══ Phase 6: Assemble ═══");
@@ -428,6 +471,93 @@ internal static partial class CompileCommand
         var resolvedScreenshots = screenshotRefs.Count(r => allScreenshots.ContainsKey(r));
         var assembled = DocAssembler.Assemble(template.Body, allSnippets, allScreenshots, out _, out _);
         return (assembled, resolvedSnippets, resolvedScreenshots);
+    }
+
+    /// <summary>
+    /// Locate the freshly-built <c>Reactor.xml</c> (preferring Debug, then
+    /// Release) and run the reference generator restricted to the Hooks
+    /// category. Returns <c>null</c> when the XML doc file isn't on disk
+    /// yet — typical on first compile before <c>dotnet build src/Reactor</c>
+    /// has run. The caller can decide whether to surface that as a warning;
+    /// for Phase 1B it's silent because the unit tests are the canonical
+    /// surface.
+    /// </summary>
+    private static ReferenceGen.ReferenceGenResult? RunReferenceGeneration(string repoRoot, string outputDir)
+    {
+        var registryPath = Path.Combine(repoRoot, "docs", "_pipeline", "reference-map.yaml");
+        if (!File.Exists(registryPath))
+        {
+            Console.WriteLine($"  (reference-map.yaml not found at {Path.GetRelativePath(repoRoot, registryPath)} — skipping)");
+            return null;
+        }
+
+        ReferenceMap map;
+        try { map = ReferenceMap.Load(registryPath); }
+        catch (DocPipelineException ex)
+        {
+            Console.Error.WriteLine($"  {ex.Code}: {ex.Message}");
+            return new ReferenceGen.ReferenceGenResult(
+                Array.Empty<ReferenceGen.GeneratedPage>(),
+                new[] { new ReferenceGen.RefGenFinding(
+                    ex.Code ?? "REACTOR_DOC_REGISTRY_001",
+                    ex.Message,
+                    registryPath,
+                    TierLintSeverity.Error) });
+        }
+
+        var xmlPath = FindReactorXml(repoRoot);
+        if (xmlPath is null)
+        {
+            Console.WriteLine("  (Reactor.xml not found — run `dotnet build src/Reactor` first)");
+            return null;
+        }
+
+        var generator = new ReferenceGen.ReferenceGenerator();
+        var result = generator.Generate(
+            xmlPath,
+            map,
+            referenceRoot: outputDir,
+            categoryAllowList: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "hooks" });
+
+        // Write pages to disk so authors and lints can see the output.
+        generator.WriteToDisk(result, outputDir);
+        return result;
+    }
+
+    private static string? FindReactorXml(string repoRoot)
+    {
+        var binDir = Path.Combine(repoRoot, "src", "Reactor", "bin");
+        if (!Directory.Exists(binDir)) return null;
+
+        foreach (var config in new[] { "Debug", "Release" })
+        {
+            // Walk the standard bin layout: bin/<config>/<tfm>/Reactor.xml
+            // and the platform-stamped variants bin/<arch>/<config>/<tfm>/Reactor.xml.
+            foreach (var candidate in EnumerateCandidates(binDir, config))
+            {
+                if (File.Exists(candidate)) return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static IEnumerable<string> EnumerateCandidates(string binDir, string config)
+    {
+        // Flat layout: bin/<config>/<tfm>/Reactor.xml
+        var configRoot = Path.Combine(binDir, config);
+        if (Directory.Exists(configRoot))
+        {
+            foreach (var tfm in Directory.GetDirectories(configRoot))
+                yield return Path.Combine(tfm, "Reactor.xml");
+        }
+        // Platform-stamped: bin/<arch>/<config>/<tfm>/Reactor.xml
+        foreach (var arch in new[] { "x64", "ARM64" })
+        {
+            var archConfigRoot = Path.Combine(binDir, arch, config);
+            if (!Directory.Exists(archConfigRoot)) continue;
+            foreach (var tfm in Directory.GetDirectories(archConfigRoot))
+                yield return Path.Combine(tfm, "Reactor.xml");
+        }
     }
 
     // ── Reference extraction (for validation) ─────────────────────────────

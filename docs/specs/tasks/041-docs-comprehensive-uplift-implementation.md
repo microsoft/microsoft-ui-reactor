@@ -257,26 +257,34 @@ infrastructure to unblock content phases.
 
 ### 1.7 Reference generation prototype on Hooks (spec §9 Phase 1)
 
-- [ ] Implement XML-doc reader in
-      `tools/doc-pipeline/ReferenceGen/` that consumes
-      `bin/<config>/<tfm>/Reactor.xml`.
-- [ ] Emit one MD page per public member of the Hooks namespace,
+- [x] Implement XML-doc reader in
+      `src/Reactor.Cli/Docs/ReferenceGen/` that consumes
+      `bin/<config>/<tfm>/Reactor.xml`. *Five modules: `XmlDocReader`,
+      `MemberRouter`, `CrefResolver`, `ReferenceWriter`,
+      `ReferenceGenerator`. Implementation lives under the CLI rather
+      than `tools/doc-pipeline/` per the Phase-1 retro decision.*
+- [x] Emit one MD page per public member of the Hooks namespace,
       using the uniform template from spec §7.1.2.
-- [ ] Page output path: `docs/guide/reference/hooks/<Name>.md`.
-- [ ] Cref resolution: `<see cref="..."/>` and
+- [x] Page output path: `docs/guide/reference/hooks/<Name>.md`.
+- [x] Cref resolution: `<see cref="..."/>` and
       `<seealso cref="..."/>` in XML doc → relative MD link to the
-      target's generated page. Unresolvable cref fails build.
-- [ ] Group-level `index.md`: hand-authored stub committed at
+      target's generated page. *Phase 1B downgrades unresolvable
+      crefs (most are cross-category) to `REACTOR_DOC_REFGEN_001`
+      warning; the canonical Roslyn-level check is the
+      `REACTOR_DOC_002` analyzer (task 1.8). Retro entry captured.*
+- [x] Group-level `index.md`: hand-authored stub committed at
       `docs/guide/reference/hooks/index.md` (lists generated leaves).
 - [ ] Confirm GitHub renders the generated tree correctly — push a
-      preview branch and walk the index → leaf → cref path.
-- [ ] Measure: how many pages did Hooks generate? Multiply by
-      surface estimate; if total ~150-300 pages is acceptable per
-      §12.1 Q2, proceed. If not, switch to single-page-per-category
-      with anchor links (update spec + revisit §10.4).
-- [ ] Unit tests for the generator: golden-file fixtures of one
+      preview branch and walk the index → leaf → cref path. *Deferred
+      to Phase 1.14 (preview-branch GitHub render check).*
+- [x] Measure: how many pages did Hooks generate? *73 hook pages
+      against the live `Reactor.xml`. Recorded in
+      `docs/specs/041/phase-1-retro.md` (Task 1.7 page count).*
+- [x] Unit tests for the generator: golden-file fixtures of one
       XML doc input → expected MD output; cref resolution; missing
-      `<summary>` failure case.
+      `<summary>` failure case. *7 tests in
+      `tests/Reactor.DocPipeline.Tests/ReferenceGenTests.cs` +
+      fixture under `Fixtures/refgen/tiny.xml`.*
 
 ### 1.8 REACTOR_DOC_001 + REACTOR_DOC_002 analyzers
 

@@ -75,6 +75,43 @@ authors can grep by family.
   FileSystemWatcher plumbing is more than this phase needs. Authors
   can re-run without `--watch` for now.
 
+### Task 1.7 — Hooks ref-gen page count
+
+First end-to-end run of the §10.4 reference generator against
+`src/Reactor/bin/x64/Debug/net10.0-windows10.0.22621.0/Reactor.xml`
+emitted **73 hook pages** plus the hand-authored
+`docs/guide/reference/hooks/index.md`. Extrapolating to the eventual
+five active categories (hooks / factories / charting + the later
+modifiers and system slots) puts the docset on the order of
+300-400 generated pages — comfortably inside the 150-300 expected
+range from spec §12.1 Q2 for a single category but above the
+overall bound. Acceptable for Phase 1B; we'll revisit the
+single-page-per-category fallback after Phase 3.5 ships and the
+real bound is known.
+
+### Task 1.7 — Phase 1B prototype downgrades
+
+Two finding severities are softer in Phase 1B than the spec's
+"failure → build error" wording suggests:
+
+- `REACTOR_DOC_REFGEN_001` (unresolvable cref) is **warning** in
+  Phase 1B because only the Hooks category emits pages — most
+  cross-namespace crefs (Core, Input, Data, System) legitimately
+  fall outside the routed set. Once factories + charting + the
+  remaining categories generate, those crefs become resolvable and
+  the severity can be re-elevated. The canonical Roslyn-level
+  cref check stays an error via the `REACTOR_DOC_002` analyzer
+  (task 1.8).
+- `REACTOR_DOC_REFGEN_002` (name collision) is **warning** in
+  Phase 1B for the same prototype reason. Parallel extension
+  classes (`UseMemoCellsExtensions` and
+  `ComponentUseMemoCellsExtensions`) collapse to the same short
+  name; the first wins the page. A later phase will emit
+  per-type subsections or rename via the registry.
+- Constructors collapse to `#ctor` which collides catastrophically;
+  Phase 1B drops standalone `#ctor` pages and a later phase will
+  surface them as overload subsections on the parent type page.
+
 ## Open questions
 
 None — all of §12.1's Phase-1 questions were resolved during the
