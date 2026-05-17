@@ -917,9 +917,15 @@ source snippets, "Read the source" callout, tier-lint clean.)
 
 ### 4.1 Promote remaining Solid pages to Comprehensive
 
-- [ ] `forms.md` — already Comprehensive after Phase 3.5 expand;
-      verify.
-- [ ] `collections.md` — verify.
+- [x] `forms.md` — already Comprehensive after Phase 3.5 expand;
+      verified. *`tier: comprehensive`; `mur docs compile
+      --validate-only --tier=comprehensive` reports zero findings on
+      `forms.md.dt`. `winui-ref` already set to the WinUI Forms design
+      page; no W001.*
+- [x] `collections.md` — verified. *`tier: comprehensive`; `mur docs
+      compile --validate-only --tier=comprehensive` reports zero
+      findings on `collections.md.dt`. `winui-ref` already set to the
+      WinUI items-collections design page; no W001.*
 - [x] `navigation.md` — promote to Comprehensive. *Added 80+ word
       mental-model lead, reference table in first half, ai:caveat on
       the `SetState` guard-bypass, Patterns (guarded leave, scroll
