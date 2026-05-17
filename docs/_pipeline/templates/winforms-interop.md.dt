@@ -106,7 +106,7 @@ WinForms automation tree. The interop layer bridges:
 
 - **AutomationName**, **HeadingLevel**, and other [accessibility](accessibility.md)
   modifiers work identically to a pure Reactor app
-- **UseAnnounce** live regions are forwarded through the island boundary
+- [`UseAnnounce`](reference/hooks/UseAnnounce.md) live regions are forwarded through the island boundary
 - **Tab order** flows correctly between WinForms and Reactor controls
 - **Focus trapping** via `UseFocusTrap` works within the Reactor subtree
 

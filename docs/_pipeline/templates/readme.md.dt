@@ -117,7 +117,7 @@ first; everyone else can follow the order.
 
 - **[Navigation](navigation.md)** — NavigationView, TabView, multi-page apps, routing
 - **[Windows](windows.md)** — Top-level windows, tray icons, OpenWindow, shutdown policy
-- **[Async Resources](async-resources.md)** — UseResource, UseInfiniteResource, UseMutation, Pending
+- **[Async Resources](async-resources.md)** — `UseResource`, `UseInfiniteResource`, `UseMutation`, `Pending`
 - **[Persistence](persistence.md)** — UsePersisted, scopes, migration
 - **[Localization](localization.md)** — Multi-language support, resource strings, RTL layouts
 - **[Accessibility](accessibility.md)** — Screen readers, keyboard navigation, focus trapping, runtime scanning
@@ -161,7 +161,7 @@ does, not just how to use it.
 - **[Analyzer Architecture](analyzer-architecture.md)** — Roslyn analyzers shipped with Reactor; authoring your own
 - **[DevTools Internals](devtools-internals.md)** — Dev menu, reconcile-highlight, layout-cost overlay, MCP protocol
 - **[Animation Pipeline](animation-pipeline.md)** — Composition API end-to-end; 4 animation systems
-- **[Focus and Input Internals](focus-and-input-internals.md)** — UseFocus dispatcher, FocusTrap container, pointer event flow
+- **[Focus and Input Internals](focus-and-input-internals.md)** — `UseFocus` dispatcher, `FocusTrap` container, pointer event flow
 - **[Perf Instrumentation](perf-instrumentation.md)** — ETW sources, frame-aligned sampling, layout-cost attribution
 
 ### 10. API Reference
