@@ -85,6 +85,13 @@ internal static class KeyedListDiff
     /// diagnostic message — typically the host control type name.
     /// Hidden behind <c>?.</c> calls so the cost is paid only when a
     /// logger is attached.</param>
+    /// <param name="controlInstance">Optional reference to the host control
+    /// driving the diff. Used as the dedup key for the
+    /// <c>ReactorDiagnostics</c> bailout collector so the first occurrence
+    /// of a (control, kind, sample-set) triple lands a fresh entry and
+    /// subsequent occurrences increment its counter in place. May be
+    /// <see langword="null"/> for unit-test / standalone invocations, in
+    /// which case dedup falls back to a global context-keyed ledger.</param>
     /// <param name="ambient">Active <see cref="Animations.Animate"/>
     /// transaction, or <see langword="null"/> when the diff runs outside one.
     /// When non-null and <see cref="AmbientAnimation.HasEffect"/> is true,
@@ -104,7 +111,8 @@ internal static class KeyedListDiff
         Func<T, int, string> keySelector,
         ILogger? logger = null,
         string? diagnosticContext = null,
-        AmbientAnimation? ambient = null)
+        AmbientAnimation? ambient = null,
+        object? controlInstance = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(newItems);
@@ -134,8 +142,12 @@ internal static class KeyedListDiff
                 // produce non-null strings; this case is almost always a bug
                 // in the projection (e.g., `t => t.Id` on a nullable string
                 // property). Reset is correctness-preserving; the diagnostic
-                // is one-shot to avoid log spam.
-                LogDuplicateOrNullKeyBailout(logger, diagnosticContext, "null key");
+                // is one-shot per (control, kind) to avoid log spam.
+                ReportBailout(
+                    controlInstance, diagnosticContext, logger,
+                    Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.NullKey,
+                    new[] { "<null>" },
+                    indexHint: i);
                 return Bailout(state, newItems, keySelector);
             }
             newKeys[i] = k;
@@ -150,7 +162,11 @@ internal static class KeyedListDiff
         // diff would have two rows with the same key in ByKey).
         if (HasDuplicates(newKeys))
         {
-            LogDuplicateOrNullKeyBailout(logger, diagnosticContext, "duplicate keys");
+            ReportBailout(
+                controlInstance, diagnosticContext, logger,
+                Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.DuplicateKey,
+                CollectDuplicates(newKeys),
+                indexHint: null);
             return Bailout(state, newItems, keySelector);
         }
 
@@ -468,18 +484,64 @@ internal static class KeyedListDiff
     }
 
     // ── Diagnostics ────────────────────────────────────────────────────
-    // One-shot per (control, dup-set) suppression lives at the call site;
-    // this helper just formats and logs.
-    private static void LogDuplicateOrNullKeyBailout(ILogger? logger, string? context, string reason)
+    // Bailouts feed both the structured `ReactorDiagnostics` collector
+    // (the dev overlay reads this) and an optional `ILogger` (the unified
+    // host log stream). Both paths dedup on the first occurrence of a
+    // (controlInstance, kind, sample-set) triple — the collector tracks the
+    // dedup ledger; the logger gate falls out of the collector's
+    // `IsFirstOccurrence` check.
+    private static void ReportBailout(
+        object? controlInstance,
+        string? diagnosticContext,
+        ILogger? logger,
+        Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind kind,
+        IReadOnlyList<string> sampleKeys,
+        int? indexHint)
     {
-        if (logger is null) return;
-        if (!logger.IsEnabled(LogLevel.Warning)) return;
+        bool isFirst = Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
+            .IsFirstOccurrence(controlInstance, kind, sampleKeys);
+
+        Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
+            .Record(controlInstance, diagnosticContext, kind, sampleKeys);
+
+        // Only emit the structured ILogger warning on the *first* occurrence
+        // per triple. Subsequent occurrences still increment the collector's
+        // Count so the dev overlay accurately tracks repeat frequency.
+        if (!isFirst) return;
+        if (logger is null || !logger.IsEnabled(LogLevel.Warning)) return;
+
+        string reason = kind == Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.NullKey
+            ? (indexHint is { } i ? $"null key at index {i}" : "null key")
+            : $"duplicate keys: {string.Join(", ", sampleKeys)}";
+
         logger.LogWarning(
             "Reactor: keyed-list diff bailed out — {Reason}. Context: {Context}. " +
             "The list will be re-realized from scratch this render (animations degraded). " +
             "Check the KeySelector / IReactorKeyed.Key for stability and uniqueness. " +
             "See spec 042 §4.3.",
             reason,
-            context ?? "<unknown>");
+            diagnosticContext ?? "<unknown>");
+    }
+
+    // Walk newKeys once collecting the *distinct* duplicate values
+    // (not every occurrence). For a list with [a, b, a, c, b] returns
+    // [a, b] — the dev overlay reader cares about which keys collided,
+    // not the per-occurrence count.
+    private static IReadOnlyList<string> CollectDuplicates(string[] keys)
+    {
+        // Small set — duplicates in production are rare and the dev surface
+        // caps the displayed list anyway.
+        var seen = new HashSet<string>(global::System.StringComparer.Ordinal);
+        var dupes = new HashSet<string>(global::System.StringComparer.Ordinal);
+        foreach (var k in keys)
+        {
+            if (!seen.Add(k)) dupes.Add(k);
+        }
+        if (dupes.Count == 0) return global::System.Array.Empty<string>();
+        var arr = new string[dupes.Count];
+        int j = 0;
+        foreach (var d in dupes) arr[j++] = d;
+        global::System.Array.Sort(arr, global::System.StringComparer.Ordinal);
+        return arr;
     }
 }

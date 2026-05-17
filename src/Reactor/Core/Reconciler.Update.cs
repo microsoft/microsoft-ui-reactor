@@ -2872,7 +2872,8 @@ public sealed partial class Reconciler
             static (item, _) => item.Key,
             _logger,
             lvb.GetType().Name,
-            ambient);
+            ambient,
+            controlInstance: lvb);
 
         // Drive per-container offset animations for survivors that moved.
         // Insert / Remove animations attach through the realize/recycle
@@ -3028,7 +3029,8 @@ public sealed partial class Reconciler
             static (item, _) => item.Key,
             _logger,
             repeater.GetType().Name,
-            ambient);
+            ambient,
+            controlInstance: repeater);
 
         // ItemsRepeater realizes containers through ElementFactory, so the
         // enter animation runs from there. Moves on already-realized

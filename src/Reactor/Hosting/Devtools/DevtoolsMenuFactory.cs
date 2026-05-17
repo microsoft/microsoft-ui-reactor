@@ -1,4 +1,6 @@
+using System.Text;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 
 namespace Microsoft.UI.Reactor;
 
@@ -74,10 +76,23 @@ public static partial class Factories
                 ReactorApp.ActiveHostInternal?.RequestRender();
             });
 
+        // Keyed-list diagnostics viewer (spec 042 Phase 6.2). Surfaces the
+        // duplicate-key / null-key bailout warnings captured by
+        // ReactorDiagnostics — first occurrence per (control, kind, sample-set)
+        // logs through ILogger; subsequent occurrences bump the count in the
+        // collector. The label refreshes only when the parent component
+        // re-renders, so the click handler nudges a render after closing.
+        var warningCount = ReactorDiagnostics.RecentKeyedListWarnings.Count;
+        var keyedListItem = MenuItem(
+            warningCount == 0
+                ? "Keyed-list diagnostics (none)"
+                : $"Keyed-list diagnostics ({warningCount})",
+            ShowKeyedListDiagnosticsDialog);
+
         // Separator only makes sense when there are user items to separate from.
         var builtInItems = userItems.Length > 0
-            ? new MenuFlyoutItemBase[] { MenuSeparator(), builtInToggle, layoutCostToggle }
-            : new MenuFlyoutItemBase[] { builtInToggle, layoutCostToggle };
+            ? new MenuFlyoutItemBase[] { MenuSeparator(), builtInToggle, layoutCostToggle, keyedListItem }
+            : new MenuFlyoutItemBase[] { builtInToggle, layoutCostToggle, keyedListItem };
 
         var materialized = userItems.Concat(builtInItems).ToArray();
 
@@ -94,5 +109,85 @@ public static partial class Factories
             trigger = trigger.AutomationId(automationId);
 
         return MenuFlyout(trigger, materialized);
+    }
+
+    private static void ShowKeyedListDiagnosticsDialog()
+    {
+        // Capture a snapshot up front — the producer side keeps writing, but
+        // the dialog only shows what was visible at click time.
+        var warnings = ReactorDiagnostics.RecentKeyedListWarnings;
+        var host = ReactorApp.ActiveHostInternal;
+        var xamlRoot = host?.Window?.Content?.XamlRoot;
+        if (xamlRoot is null) return;
+
+        string body;
+        if (warnings.Count == 0)
+        {
+            body = "No keyed-list bailouts captured this session.\n\n" +
+                   "When ListView<T> / GridView<T> / LazyVStack<T> / LazyHStack<T> " +
+                   "see a duplicate or null key, the diff falls back to a full " +
+                   "Reset and one entry lands here. Spec 042 §4.3.";
+        }
+        else
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < warnings.Count; i++)
+            {
+                var w = warnings[i];
+                var ts = w.TimestampUtc.ToLocalTime().ToString("HH:mm:ss");
+                var kind = w.Kind == KeyedListDiagnosticKind.NullKey ? "null key" : "duplicate keys";
+                var times = w.Count == 1 ? "1×" : $"{w.Count}×";
+                sb.Append('[').Append(ts).Append("] ")
+                  .Append(w.ControlContext ?? "<unknown>")
+                  .Append(" — ").Append(kind)
+                  .Append(" (").Append(times).AppendLine(")");
+                if (w.SampleKeys.Count > 0)
+                    sb.Append("    keys: ").AppendLine(string.Join(", ", w.SampleKeys));
+                if (i < warnings.Count - 1) sb.AppendLine();
+            }
+            body = sb.ToString();
+        }
+
+        var bodyText = new global::Microsoft.UI.Xaml.Controls.TextBlock
+        {
+            Text = body,
+            IsTextSelectionEnabled = true,
+            TextWrapping = global::Microsoft.UI.Xaml.TextWrapping.Wrap,
+            FontFamily = new global::Microsoft.UI.Xaml.Media.FontFamily(
+                "Cascadia Code, Consolas, Courier New, monospace"),
+            FontSize = 12,
+        };
+        var scroll = new global::Microsoft.UI.Xaml.Controls.ScrollViewer
+        {
+            VerticalScrollBarVisibility = global::Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Auto,
+            MaxHeight = 420,
+            Content = bodyText,
+        };
+
+        var dialog = new global::Microsoft.UI.Xaml.Controls.ContentDialog
+        {
+            Title = warnings.Count == 0
+                ? "Keyed-list diagnostics"
+                : $"Keyed-list diagnostics ({warnings.Count})",
+            Content = scroll,
+            CloseButtonText = "Close",
+            DefaultButton = global::Microsoft.UI.Xaml.Controls.ContentDialogButton.Close,
+            XamlRoot = xamlRoot,
+        };
+
+        // Already on the UI thread (the menu's click handler dispatches
+        // there). Fire and forget — ContentDialog manages its own lifetime;
+        // wrap in try so a re-entrant click (dialog already open) doesn't
+        // crash the host.
+        try
+        {
+            var op = dialog.ShowAsync();
+            op.Completed = (_, _) => ReactorApp.ActiveHostInternal?.RequestRender();
+        }
+        catch (global::System.Exception ex)
+        {
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[Reactor.Devtools] Keyed-list diagnostics dialog failed: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 }

@@ -70,6 +70,20 @@ to land under these conventions; subsequent specs follow this shape.
   `plugins/reactor/skills/reactor-recipes/references/animated-list.md` for
   the paste-ready `Animate` recipe + five common-mistakes sections.
   (spec 042 Phase 4 + 5)
+- **Spec 042 Phase 6.2 — `ReactorDiagnostics` + devtools dialog.**
+  New public `Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics`
+  collector captures keyed-list bailouts (duplicate / null key) with
+  per-control dedup via `ConditionalWeakTable` so a torn-down control
+  doesn't leak. `RecentKeyedListWarnings` returns a bounded snapshot
+  (64 entries × 8 sample keys each, newest first). `KeyedListDiff.Apply`
+  gained a `controlInstance` parameter and now routes both bailout paths
+  through a shared reporter — `ILogger.LogWarning` fires only on the
+  first occurrence per (control, kind, sample-set) triple, while
+  subsequent repeats bump an in-place `Count`. New `DevtoolsMenu` item
+  "Keyed-list diagnostics (N)" pops a `ContentDialog` listing each
+  captured entry; behind `ReactorApp.DevtoolsEnabled` so retail apps
+  pay zero cost. Tests: 7 in `ReactorDiagnosticsTests`, all 43
+  existing `KeyedListDiffTests` still pass. (spec 042 Phase 6.2)
 - **Spec 042 Phase 6.1 — `REACTOR_DSL_001` codefix.** The existing
   missing-`.WithKey` analyzer now ships with a code fix that offers three
   insertion shapes ranked by discovery: `.WithKey(item)` when the lambda

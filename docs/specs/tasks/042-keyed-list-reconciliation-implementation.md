@@ -679,9 +679,35 @@ box.
 
 ### 6.2 Duplicate-key diagnostic surfaces in the dev overlay
 
-- [ ] Surface the duplicate-key warning from 1.5 in the existing dev tools
+- [x] Surface the duplicate-key warning from 1.5 in the existing dev tools
       overlay (find via grep on `Diagnostics` / `Devtools`). One-shot per
       `(control, set-of-duplicates)` to avoid log spam.
+      → **Landed in three pieces:**
+      1. **`Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics`** —
+         new public collector. `RecentKeyedListWarnings` returns a
+         bounded snapshot (newest-first, capped at 64 entries × 8 sample
+         keys each). Producer side is `internal Record(...)` /
+         `IsFirstOccurrence(...)` with dedup keyed on
+         (controlInstance, kind, hashed-sample-set). Per-control dedup
+         uses a `ConditionalWeakTable` so a torn-down control doesn't
+         leak; contextual fallback uses a global concurrent dictionary
+         for unit-test / standalone callers.
+      2. **`KeyedListDiff.Apply`** gained a `controlInstance` parameter
+         and now routes both bailout paths through `ReportBailout`,
+         which records into the collector *and* logs through `ILogger`
+         only on the first occurrence per triple — subsequent repeats
+         bump the in-place `Count` so the dev surface shows
+         "fired 12×" without spamming the host log. `Reconciler.Update.cs`
+         passes the live `lvb` / `repeater` instance through.
+      3. **`DevtoolsMenu`** got a new "Keyed-list diagnostics (N)"
+         item that pops a `ContentDialog` listing each recent entry —
+         timestamp, control type, kind (`null key` / `duplicate keys`),
+         repeat count, and the truncated sample-key list. Behind
+         `ReactorApp.DevtoolsEnabled` so retail apps pay zero cost.
+         Tests: 7 in `ReactorDiagnosticsTests` covering count bump,
+         per-kind separation, per-control isolation,
+         `IsFirstOccurrence`, sample truncation, and snapshot ordering;
+         the existing 43 `KeyedListDiffTests` still pass.
 
 ### 6.3 Long-tail perf
 
