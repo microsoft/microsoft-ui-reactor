@@ -19,6 +19,8 @@ internal static class DocsCommand
         return subcommand switch
         {
             "compile" => CompileCommand.Run(subArgs),
+            "render-diagrams" => RenderDiagramsCommand.Run(subArgs),
+            "new-diagram" => NewDiagramCommand.Run(subArgs),
             "--help" or "-h" => ShowHelpAndReturn(),
             _ => Unknown(subcommand),
         };
@@ -37,7 +39,9 @@ internal static class DocsCommand
         Console.WriteLine("Usage: duct docs <command> [options]");
         Console.WriteLine();
         Console.WriteLine("Commands:");
-        Console.WriteLine("  compile    Compile documentation from templates and doc apps");
+        Console.WriteLine("  compile           Compile documentation from templates and doc apps");
+        Console.WriteLine("  render-diagrams   Re-render only the diagrams under docs/_pipeline/diagrams/");
+        Console.WriteLine("  new-diagram       Scaffold a new Mermaid diagram (.mmd)");
         Console.WriteLine();
         Console.WriteLine("Compile options:");
         Console.WriteLine("  --topic <name>          Compile only a specific topic");

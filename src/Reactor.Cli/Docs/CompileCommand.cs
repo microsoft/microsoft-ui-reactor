@@ -42,6 +42,7 @@ internal static partial class CompileCommand
         var docsRoot = Path.Combine(repoRoot, "docs");
         var appsDir = Path.Combine(docsRoot, "_pipeline", "apps");
         var templatesDir = Path.Combine(docsRoot, "_pipeline", "templates");
+        var diagramsDir = Path.Combine(docsRoot, "_pipeline", "diagrams");
         var outputDir = Path.Combine(docsRoot, "guide");
         var imagesDir = Path.Combine(outputDir, "images");
 
@@ -259,6 +260,39 @@ internal static partial class CompileCommand
         Console.WriteLine();
         Console.WriteLine($"═══ Phase 5: AI Author {(noAi ? "(skipped)" : "(not yet implemented)")} ═══");
 
+        // ── Phase 5.5: Diagrams (SVG passthrough + Mermaid) ───────────────
+        Console.WriteLine();
+        if (skipDiagrams)
+        {
+            Console.WriteLine("═══ Phase 5.5: Diagrams (skipped) ═══");
+        }
+        else
+        {
+            Console.WriteLine("═══ Phase 5.5: Diagrams ═══");
+            IMermaidRunner mermaid = new MmdcRunner();
+            var diag = DiagramProcessor.Process(diagramsDir, imagesDir, mermaid, topic);
+            Console.WriteLine(
+                $"  Diagrams: {diag.CopiedSvgs.Count} copied, {diag.SkippedSvgs.Count} skipped, " +
+                $"{diag.RenderedMermaid.Count} rendered, {diag.CachedMermaid.Count} cached.");
+            foreach (var f in diag.Findings)
+            {
+                if (f.Severity == TierLintSeverity.Error)
+                {
+                    Console.Error.WriteLine(f.Format());
+                    hasErrors = true;
+                }
+                else
+                {
+                    Console.WriteLine($"  ⚠ {f.Format()}");
+                }
+            }
+            if (hasErrors && ci)
+            {
+                Console.Error.WriteLine("Diagram processing failed.");
+                return 1;
+            }
+        }
+
         // ── Phase 6: Assemble ─────────────────────────────────────────────
         Console.WriteLine();
         Console.WriteLine("═══ Phase 6: Assemble ═══");
@@ -275,10 +309,24 @@ internal static partial class CompileCommand
             foreach (var e in errors) Console.Error.WriteLine($"\n    ✗ {e}");
             foreach (var w in warnings) Console.WriteLine($"\n    ⚠ {w}");
 
+            // Image-ref validation per spec §10.3: every ![..](images/...)
+            // path in the compiled output must resolve.
+            foreach (var f in DiagramProcessor.ValidateImageRefs(template.FilePath, assembled, imagesDir))
+            {
+                Console.Error.WriteLine(f.Format());
+                hasErrors = true;
+            }
+
             var outputPath = Path.Combine(outputDir, $"{topicId}.md");
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
             File.WriteAllText(outputPath, assembled);
             Console.WriteLine($" ✓ → {Path.GetRelativePath(repoRoot, outputPath)}");
+        }
+
+        if (hasErrors && ci)
+        {
+            Console.Error.WriteLine("Compile finished with errors.");
+            return 1;
         }
 
         Console.WriteLine();

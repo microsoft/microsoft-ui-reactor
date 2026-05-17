@@ -1,0 +1,9 @@
+%% Phase 1 placeholder — Phase 3.5 (under-the-hood deep dive) will
+%% replace this with a richer diagram (element pool, async system,
+%% composition handoff). The shape and direction stay the same so
+%% authored docs keep working through the swap.
+flowchart LR
+    A[Component] --> B[Reconciler]
+    B --> C[Element pool]
+    C --> D[WinUI tree]
+    D --> E[Composition]

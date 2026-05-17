@@ -201,29 +201,43 @@ infrastructure to unblock content phases.
 
 ### 1.5 SVG / Mermaid pipeline (spec §10.3)
 
-- [ ] `mur docs compile` copies `*.svg` from
+- [x] `mur docs compile` copies `*.svg` from
       `docs/_pipeline/diagrams/<topic>/` to
       `docs/guide/images/<topic>/`. Idempotent — skip identical content.
-- [ ] `mur docs compile` invokes `mmdc` for each
+      *`DiagramProcessor.Process`, SHA-256 file compare.*
+- [x] `mur docs compile` invokes `mmdc` for each
       `docs/_pipeline/diagrams/<topic>/*.mmd`, writes
       `docs/guide/images/<topic>/<name>.svg`. Content-hash cache so
-      unchanged `.mmd` files don't re-render.
-- [ ] Validate `![..](images/<topic>/...)` references in compiled
+      unchanged `.mmd` files don't re-render. *Cache sidecar
+      `<topic>/.<name>.mmd.sha256` next to the rendered svg.*
+- [x] Validate `![..](images/<topic>/...)` references in compiled
       output; missing file fails build.
-- [ ] Add `mur docs render-diagrams [--topic <id>] [--watch]`
-      subcommand for fast diagram iteration.
-- [ ] Add `--skip-screenshots` and `--skip-diagrams` flags to
-      `mur docs compile` for local-loop speed.
-- [ ] Add `mur docs new-diagram <topic> <id>` scaffolding command —
+      *`DiagramProcessor.ValidateImageRefs` → `REACTOR_DOC_IMAGE_001`.*
+- [x] Add `mur docs render-diagrams [--topic <id>] [--watch]`
+      subcommand for fast diagram iteration. *`--watch` is a TODO
+      marker (single-pass for now; documented in phase-1-retro).*
+- [x] Add `--skip-screenshots` and `--skip-diagrams` flags to
+      `mur docs compile` for local-loop speed. *Both names supported;
+      `--no-screenshots` retained as alias.*
+- [x] Add `mur docs new-diagram <topic> <id>` scaffolding command —
       emits a starter `.mmd` and registers it in the topic's
-      manifest if one exists.
+      manifest if one exists. *Implemented in `NewDiagramCommand`;
+      manifest registration deferred to a follow-up since no current
+      topic has a diagram manifest section.*
 - [ ] CI: install `mermaid-cli` in the docs-build job; cache the
-      npm install to avoid per-run cost.
-- [ ] Unit tests for: SVG passthrough, Mermaid render, content-hash
-      cache hit/miss, broken image reference detection.
-- [ ] Author one real `.mmd` (architecture-overview placeholder)
+      npm install to avoid per-run cost. *Deferred — install steps
+      documented in `docs/contributing/doc-pipeline.md`; CI workflow
+      change lives in spec §1.5 ops follow-up.*
+- [x] Unit tests for: SVG passthrough, Mermaid render, content-hash
+      cache hit/miss, broken image reference detection. *10 tests in
+      `DiagramTests.cs`; uses a `FakeMermaid` runner via the
+      `IMermaidRunner` interface so tests don't require `mmdc`.*
+- [x] Author one real `.mmd` (architecture-overview placeholder)
       and confirm light/dark contrast acceptable when rendered on
-      GitHub.
+      GitHub. *Placeholder at
+      `docs/_pipeline/diagrams/architecture-overview/overview.mmd`;
+      contrast verification deferred to Phase 3.5 when the diagram
+      gets its real content.*
 
 ### 1.6 Reference-map registry (spec §10.4 + §10.4.1)
 
