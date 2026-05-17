@@ -107,7 +107,11 @@ public sealed class ReactorHost : IDisposable
     // Last render's total duration (tree + reconcile + effects), in ms.
     // Read by RequestRender to demote the next enqueue to Low priority when a
     // slow render is starving the dispatcher of input/layout/paint slots.
-    // See RenderPriorityPolicy.
+    // Published via Interlocked.Exchange / read via Volatile.Read because the
+    // write happens on the UI thread inside Render() but RequestRender() can
+    // be called from any thread — a plain double write is not guaranteed
+    // atomic on 32-bit and lacks the publication semantics this contract
+    // implies. See RenderPriorityPolicy.
     private double _lastRenderMs;
 
     // Public perf snapshot — updated every ~1 second, readable from components
@@ -490,9 +494,10 @@ public sealed class ReactorHost : IDisposable
         // budget — high-frequency setState sources (animation, simulation,
         // streaming data) otherwise pack the dispatcher with back-to-back
         // Normal-priority renders and starve input/layout/paint. See
-        // RenderPriorityPolicy.
+        // RenderPriorityPolicy. Volatile.Read pairs with Interlocked.Exchange
+        // in Render() so an off-UI-thread caller observes the latest value.
         _dispatcherQueue.TryEnqueue(
-            RenderPriorityPolicy.PickPriority(_lastRenderMs),
+            RenderPriorityPolicy.PickPriority(Volatile.Read(ref _lastRenderMs)),
             RenderLoop);
     }
 
@@ -734,7 +739,9 @@ public sealed class ReactorHost : IDisposable
             // to demote to Low priority. Stored as the most-recent measurement
             // — no smoothing — so a single slow render is enough to back off,
             // and a single fast render is enough to return to Normal priority.
-            _lastRenderMs = treeBuildMs + reconcileMs + effectsMs;
+            // Interlocked publishes the value to off-UI-thread RequestRender
+            // callers; the matching Volatile.Read is in RequestRender.
+            Interlocked.Exchange(ref _lastRenderMs, treeBuildMs + reconcileMs + effectsMs);
 
             OnRenderComplete?.Invoke(treeBuildMs, reconcileMs, effectsMs);
 
