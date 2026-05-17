@@ -44,6 +44,17 @@ to land under these conventions; subsequent specs follow this shape.
   shells are present so callers can stage adoption before Phase 2 / 3
   implements the semantics. Today `Animate(...)` is a no-op pass-through.
   (spec 042 §5, §6)
+- **Spec 042 Phase 2 — `IReactorKeyed` identity-on-data convention.**
+  2-argument `where T : IReactorKeyed` factory overloads land for
+  `ListView<T>` / `GridView<T>` / `FlipView<T>` / `LazyVStack<T>` /
+  `LazyHStack<T>` so the `keySelector` parameter can be omitted when the
+  data type owns its identity (it defaults to `t => t.Key`). A new
+  `WithKey<T, TKey>(this T el, TKey item) where TKey : IReactorKeyed`
+  extension is the ergonomic peer for hand-built keyed children — both
+  shapes route through the same Phase 1 incremental diff. Explicit
+  `keySelector` and `WithKey(string)` are unchanged for interop /
+  third-party POCOs. The `samples/TodoApp/` `TodoItem` model adopts
+  the convention as a worked example. (spec 042 §5)
 
 ### Fixed
 

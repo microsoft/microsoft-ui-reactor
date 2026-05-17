@@ -19,7 +19,13 @@ ReactorApp.Run<TodoApp>("Todos", width: 900, height: 720
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
-record TodoItem(string Id, string Text, bool IsCompleted);
+// Identity-on-data convention (spec 042 §5): exposing `Key` via
+// IReactorKeyed lets `.WithKey(item)` and the templated-list factories
+// drop the boilerplate `keySelector: t => t.Id` at call sites.
+record TodoItem(string Id, string Text, bool IsCompleted) : IReactorKeyed
+{
+    string IReactorKeyed.Key => Id;
+}
 
 enum TodoFilter { All, Active, Completed }
 
@@ -202,7 +208,7 @@ class TodoApp : Component
                 .Flex(shrink: 0)
          ) with { AlignItems = FlexAlign.Center, ColumnGap = 12 })
             .Padding(horizontal: 16, vertical: 8)
-            .WithKey(item.Id);
+            .WithKey(item);
 
     // ── Empty state — shown when filter returns nothing ───────────────
 

@@ -3,11 +3,11 @@
 Derived from: `docs/specs/042-keyed-list-reconciliation-design.md`
 Tracking bug: [microsoft/microsoft-ui-reactor#198](https://github.com/microsoft/microsoft-ui-reactor/issues/198)
 
-> **Status (2026-05-16):** Phase 0 + Phase 1 complete on
-> `feat/042-keyed-list-reconciliation`. Phases 2 / 3 / 4 / 5 / 6 remain
+> **Status (2026-05-16):** Phase 0 + Phase 1 + Phase 2 complete on
+> `feat/042-keyed-list-reconciliation`. Phases 3 / 4 / 5 / 6 remain
 > open. Items below preserve their original wording — completion marks
 > reflect what landed on the feature branch; non-checked items are
-> follow-up work (manual smoke, perf baselines, Phases 2+).
+> follow-up work (manual smoke, perf baselines, Phases 3+).
 
 Scope reminder: spec 042 is a three-phase design. This task list converts every
 section of that spec into ship-ready work — internal `ObservableCollection`
@@ -330,48 +330,79 @@ case.
 
 ### 2.1 Define and document the interface
 
-- [ ] Populate `src/Reactor/Core/IReactorKeyed.cs` (placeholder from 0.2):
+- [x] Populate `src/Reactor/Core/IReactorKeyed.cs` (placeholder from 0.2):
       one-property interface `string Key { get; }` with full XML docs
       explaining the convention and pointing to the spec.
       → **The interface is already populated in Phase 0.2 with full XML
       docs. What remains for Phase 2 is the defaulting logic below.**
-- [ ] Add an analyzer-friendly note in the doc comment: "The returned key
+- [x] Add an analyzer-friendly note in the doc comment: "The returned key
       must be stable for the lifetime of the item and unique across the
       list." → **Done in Phase 0.2.**
 
 ### 2.2 Default `KeySelector` on templated lists when `T : IReactorKeyed`
 
-- [ ] In `TemplatedListElementBase` (`src/Reactor/Core/Element.cs:2811`),
+- [x] In `TemplatedListElementBase` (`src/Reactor/Core/Element.cs:2811`),
       add overloads / fallback so `KeySelector` defaults to `t => t.Key`
       when `T : IReactorKeyed`.
-- [ ] Mirror on `LazyStackElementBase` (and `LazyHStack` equivalent).
-- [ ] Unit tests: `IReactorKeyed`-typed list without explicit `KeySelector`
+      → **Landed: 2-arg `where T : IReactorKeyed` factory overloads in
+      `Dsl.cs` (ListView / GridView / FlipView) that forward to the
+      3-arg form with `static t => t.Key`. The element record type
+      `TemplatedListViewElement<T>` is unchanged — defaulting happens at
+      the factory layer so the diff path stays selector-agnostic.**
+- [x] Mirror on `LazyStackElementBase` (and `LazyHStack` equivalent).
+      → **Landed: same 2-arg `IReactorKeyed` overloads for LazyVStack
+      and LazyHStack.**
+- [x] Unit tests: `IReactorKeyed`-typed list without explicit `KeySelector`
       produces the same diff ops as the same list with explicit
       `t => t.Key`.
+      → **Landed: `tests/Reactor.Tests/IReactorKeyedTests.cs` —
+      13 tests; covers GetKeyAt parity for all 5 factories and
+      KeyedListDiff op-shape parity on insert / remove / move / reverse.**
 
 ### 2.3 Add `.WithKey<T>(this Element el, T item) where T : IReactorKeyed`
 
-- [ ] Implement the overload in
+- [x] Implement the overload in
       `src/Reactor/Elements/ElementExtensions.cs` (or wherever the existing
       `.WithKey(string)` lives — confirm with a grep first).
-- [ ] Unit test: `.WithKey(item)` produces the same `Element.Key` as
+      → **Landed: `WithKey<T, TKey>(this T el, TKey item)` with
+      `where T : Element, where TKey : IReactorKeyed`. Two type
+      parameters keep the element-type fluent return and avoid
+      ambiguity with the existing `.WithKey(string)`. Guards null.**
+- [x] Unit test: `.WithKey(item)` produces the same `Element.Key` as
       `.WithKey(item.Key)`.
+      → **Landed: `WithKey_IReactorKeyed_Sets_Element_Key_To_Item_Key`
+      + element-type-preservation + null-throws tests.**
 
 ### 2.4 Migration sweep — sample apps
 
-- [ ] Update `samples/TodoApp/` `Todo` model to implement `IReactorKeyed` and
+- [x] Update `samples/TodoApp/` `Todo` model to implement `IReactorKeyed` and
       drop the explicit `KeySelector` at the ListView call site (proof of
       ergonomics).
-- [ ] Same sweep across any `samples/ReactorGallery/ControlPages/Collections/`
+      → **Landed: `TodoItem` now implements `IReactorKeyed` with
+      `string IReactorKeyed.Key => Id;`. The hand-built `.WithKey(item.Id)`
+      at the TodoRow call site is now `.WithKey(item)`. TodoApp builds
+      clean; no behavior change.**
+- [x] Same sweep across any `samples/ReactorGallery/ControlPages/Collections/`
       pages that use a list of POCOs.
+      → **Audit found only string-typed demos (e.g. `items, s => s,
+      (s, i) => …`); strings cannot implement `IReactorKeyed`, so the
+      gallery pages are left as the explicit-selector demo path.**
 
 ### 2.5 Documentation
 
-- [ ] Add a "Keyed lists" section to `docs/guide/state-and-collections.md`
+- [x] Add a "Keyed lists" section to `docs/guide/state-and-collections.md`
       (create if needed) explaining the convention, when to opt in, and
       when explicit `KeySelector` is still preferable (interop / legacy
       types you don't own).
-- [ ] Cross-link from the existing `docs/guide/` navigation index.
+      → **Landed in `docs/guide/collections.md` (the existing guide
+      page) as a new "Keyed reconciliation, in one paragraph" +
+      "`IReactorKeyed` — identity on the data" + "`.WithKey(item)` for
+      hand-built children" section sitting between ListView and
+      LazyVStack so readers hit it on the natural reading path.**
+- [x] Cross-link from the existing `docs/guide/` navigation index.
+      → **`docs/guide/collections.md` is already listed in
+      `docs/guide/readme.md`; the new sub-sections are reachable via
+      the existing TOC anchor.**
 
 ---
 

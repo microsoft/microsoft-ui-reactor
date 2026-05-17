@@ -58,6 +58,61 @@ The `keySelector` parameter (`c => c.Id`) tells Reactor how to identify each
 item. When your data changes, Reactor uses keys to match old items to new ones
 and update only what changed — no full-list rebuild.
 
+### Keyed reconciliation, in one paragraph
+
+When you replace the list (immutable state in, immutable state out), Reactor
+walks the old and new key sequences and emits the minimum set of
+`Insert` / `Move` / `RemoveAt` operations to the underlying WinUI
+`ListView` / `GridView` / `ItemsRepeater`. A single insert at the front of
+a 100-item list animates one row instead of re-realizing 100 containers.
+You get this for free as long as `keySelector` returns a value that is:
+
+- **Stable** across re-renders for the lifetime of the item — using a
+  row index defeats reconciliation and produces the same churn as
+  having no key.
+- **Unique** within the list — duplicate keys trigger a bulk-replace
+  bailout and a one-shot diagnostic in the dev log.
+- **Non-null** — null keys bail out the diff for the affected list.
+
+### `IReactorKeyed` — identity on the data
+
+When a model type owns its identity, implement `IReactorKeyed` to drop the
+`keySelector` boilerplate at every call site:
+
+```csharp
+record Contact(string Id, string Name, string Email) : IReactorKeyed
+{
+    string IReactorKeyed.Key => Id;
+}
+
+// keySelector is inferred from IReactorKeyed.Key:
+ListView<Contact>(contacts, (contact, index) => …);
+LazyVStack<Contact>(contacts, (contact, index) => …);
+GridView<Contact>(contacts, (contact, index) => …);
+```
+
+The explicit-`keySelector` overload remains the right choice for types you
+do not own (interop / third-party POCOs without a natural identity
+property) — for those, keep `c => c.Id` at the call site.
+
+### `.WithKey(item)` for hand-built children
+
+For hand-built keyed children — `FlexColumn(items.Select(…))` and
+similar — `.WithKey<TKey>(TKey item) where TKey : IReactorKeyed` is the
+ergonomic peer of `.WithKey(item.Key)`:
+
+```csharp
+FlexColumn(
+    contacts.Select(c =>
+        TextBlock(c.Name).WithKey(c)   // identity-on-data
+    ).ToArray<Element?>()
+)
+```
+
+Both shapes route through the same incremental diff, so a hand-built
+`FlexColumn` of contacts animates inserts and reorders just like the
+templated `ListView<Contact>`.
+
 ## LazyVStack (Virtualized)
 
 `LazyVStack<T>` looks like `ListView<T>` but only creates elements for items
