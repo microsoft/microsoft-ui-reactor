@@ -2804,6 +2804,7 @@ public sealed partial class Reconciler : IDisposable
     //   3. Never detaches — the trampoline stays bound for the element's lifetime.
     //      When the user handler becomes null again, the trampoline dispatches no-op.
 
+    // <snippet:event-trampoline>
     private static void EnsureSizeChangedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, SizeChangedEventArgs>? handler)
     {
         state.CurrentSizeChanged = handler;
@@ -2818,6 +2819,7 @@ public sealed partial class Reconciler : IDisposable
             Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("SizeChanged", fe.GetType().Name);
         }
     }
+    // </snippet:event-trampoline>
 
     private static void EnsurePointerPressedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
