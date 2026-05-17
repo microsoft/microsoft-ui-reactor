@@ -1089,6 +1089,19 @@ source snippets, "Read the source" callout, tier-lint clean.)
       XAML at all), renamed "Tips for XAML Developers" → `## Tips`,
       added cross-link to `reactor-vs-xaml.md` in Next Steps. No
       `winui-ref:` (meta page).
+    - `winforms-interop.md.dt` → comprehensive (4.6 wave-C). Added
+      mental-model lead, new `## Data flow across the boundary` section
+      with a 4-row mechanism table, new `## Threading constraints`
+      section, ai:caveat on the WinForms-pump vs WinUI-dispatcher
+      thread mismatch (specific failure: `RPC_E_WRONG_THREAD` from a
+      `BackgroundWorker.ProgressChanged` callback;
+      `REACTOR_INTEROP_001` analyzer catches the obvious cases),
+      `## Patterns` (bridge a WinForms VM via `UseObservable`, share
+      one accessibility tree, round-trip focus on Tab),
+      `## Common Mistakes` (missing `XamlIslandBootstrap.Run()`, putting
+      island under `DoubleBuffered = true`, ignoring host-chrome a11y),
+      added cross-link to `wpf-interop.md` in Next Steps,
+      `winui-ref` set to the XAML Islands Microsoft Learn hub.
   - Wave-D tier declarations (intentionally Solid — not promoted):
     - `readme.md.dt` → `tier: solid` declared (4.6 wave-D); added a
       "Where to start" reference table in the first half and a
