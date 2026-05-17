@@ -926,7 +926,14 @@ source snippets, "Read the source" callout, tier-lint clean.)
       restore, deep-link back stack), Common Mistakes (string routes,
       singleton handle, missing UseSystemBackButton), winui-ref →
       navigation-basics.*
-- [ ] `animation.md` — promote to Comprehensive.
+- [x] `animation.md` — promote to Comprehensive. *Added mental-model
+      lead framing the compositor ceiling + four animation systems,
+      moved the reference table to the first half (TIER_005),
+      Patterns (page enter/exit, skeleton-to-content, reorder with
+      identity), Common Mistakes (animating Width/Height, awaiting
+      inside WithAnimation, retriggering keyframes on every render),
+      ai:caveat on `[ThreadStatic]` scope loss across await boundaries,
+      winui-ref → motion hub.*
 - [ ] `accessibility.md` — promote to Comprehensive.
 - [x] `data-system.md` — promote to Comprehensive. *Lead mental-model
       paragraph framing `IDataSource<T>` as the load-bearing contract,
