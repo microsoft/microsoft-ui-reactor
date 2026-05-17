@@ -1,0 +1,10 @@
+app:
+  title: "Animation Pipeline"
+  # Source-only under-the-hood page. The manifest registers the diagram
+  # under docs/_pipeline/diagrams/animation-pipeline/ as a screenshot://
+  # reference so tier-lint sees a resolved visual.
+
+screenshots:
+  - id: four-systems
+    description: "The four animation systems — implicit (.Animate), WithAnimation scope, KeyframeBuilder, Transition enter/exit — routed onto the composition layer"
+    format: svg
