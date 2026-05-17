@@ -1,0 +1,11 @@
+app:
+  title: "Analyzer Architecture"
+  # Source-only page: no doc app to launch. The manifest exists so the
+  # Mermaid diagram(s) under docs/_pipeline/diagrams/analyzer-architecture/
+  # register as `screenshot://analyzer-architecture/<id>` references, which
+  # tier-lint counts as resolved visual references.
+
+screenshots:
+  - id: rule-pipeline
+    description: "Analyzer rule pipeline — SyntaxNode → invocation filter → fast-path name check → semantic model → diagnostic / code fix"
+    format: svg
