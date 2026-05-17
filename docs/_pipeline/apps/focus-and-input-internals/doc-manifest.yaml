@@ -1,0 +1,10 @@
+app:
+  title: "Focus and Input Internals"
+  # Source-only under-the-hood page. Manifest exists so the diagram
+  # under docs/_pipeline/diagrams/focus-and-input-internals/ registers
+  # as a screenshot:// reference for tier-lint.
+
+screenshots:
+  - id: focus-flow
+    description: "Focus and input flow — pointer/key events through hit-test, UseFocusTrap LosingFocus interception, programmatic FocusManager, and UseAnnounce live region"
+    format: svg

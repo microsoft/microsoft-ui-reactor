@@ -1,11 +1,38 @@
-%% Phase 3.5 scaffold — focus and input flow. Author should expand
-%% with the UseFocusTrap LosingFocus interception, the
-%% FocusRevalidationService cache enrollment, and the gesture-phase
-%% state machine.
+%% Reactor focus and input flow. Pointer / keyboard events enter WinUI's
+%% hit-test, route up the visual tree as routed events, and either land
+%% on an element callback (.OnTapped, .OnPointerPressed) or get
+%% intercepted by UseFocusTrap's LosingFocus handler. Programmatic
+%% focus from a FocusManager pushes directly to the control; UseAnnounce
+%% goes through WinUI's automation peer rather than the focus path.
+%% Default Mermaid palette renders on both light and dark GitHub themes.
 flowchart LR
-    Pointer[Pointer / Key event] --> Hit[WinUI hit test]
-    Hit --> Routed[Routed event handler]
-    Routed --> ReactorEl[Element callback]
-    Trap[UseFocusTrap] -.->|intercepts LosingFocus| Hit
-    Focus[UseFocus / FocusManager] -->|programmatic| Hit
-    Announce[UseAnnounce] -->|raises| AT[AT / Narrator]
+    Pointer["Pointer / Key event<br/>OS input source"]
+    Hit["WinUI hit test<br/>visual-tree topmost element"]
+    Routed["Routed event tunnel + bubble<br/>PointerPressed · KeyDown"]
+    Element["Reactor element callback<br/>.OnTapped · .OnPointerPressed · .OnKeyDown"]
+    Component["Component handler<br/>setState · imperative call"]
+
+    subgraph FocusSubsystem["Focus subsystem"]
+        Trap["UseFocusTrap<br/>LosingFocus interceptor"]
+        FM["FocusManager<br/>field registry + FocusNext / FocusPrevious"]
+        Revalidate["FocusRevalidationService<br/>window-focus → invalidate stale resources"]
+    end
+
+    subgraph A11ySubsystem["Accessibility surface"]
+        Announce["UseAnnounce<br/>AnnounceHandle.Announce()"]
+        Peer["FrameworkElementAutomationPeer<br/>RaiseNotificationEvent"]
+        AT["Narrator / NVDA / JAWS"]
+    end
+
+    Pointer --> Hit
+    Hit --> Routed
+    Routed --> Element
+    Element --> Component
+    Trap -. "owns LosingFocus on container" .-> Routed
+    Trap -- "cancels routes outside container" --> Routed
+    FM -- "control.Focus(Programmatic)" --> Hit
+    Revalidate -- "Window.Activated" --> Hit
+
+    Component -. "fires Announce" .-> Announce
+    Announce --> Peer
+    Peer --> AT
