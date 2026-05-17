@@ -610,12 +610,20 @@ to keep the surface area visible. Tracker for the follow-up:
 
 ### 2.6 `cheat-sheet.md` — Solid
 
-- [ ] Single-page reference card: factories, hooks, modifiers,
-      events, common patterns.
-- [ ] Pulls from the same source as Section 10 reference (Phase 3.5
+- [x] Single-page reference card: factories, hooks, modifiers,
+      events, common patterns. *14 hooks, ~30 factories, ~12 modifier
+      groups, ~10 hosting APIs, 35 themed colors, 6 patterns, 5
+      rules. Each row cross-links to the deep page that covers it.*
+- [~] Pulls from the same source as Section 10 reference (Phase 3.5
       / Phase 4 fully wires this) — initial version can be
-      hand-curated.
-- [ ] Template at Solid tier.
+      hand-curated. *Hand-curated for Phase 2 per the spec's
+      "initial version can be hand-curated" guidance. Phase 4
+      wiring to the auto-generated reference axis is tracked
+      in the retro.*
+- [x] Template at Solid tier. *Zero findings under
+      `mur docs compile --validate-only --tier=solid`. Three
+      snippet vignettes (hello / state / effect) + one placeholder
+      screenshot.*
 
 ### 2.7 `rules-of-reactor.md` — Solid
 
