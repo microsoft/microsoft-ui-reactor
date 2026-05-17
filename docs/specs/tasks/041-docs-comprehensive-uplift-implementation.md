@@ -945,7 +945,18 @@ source snippets, "Read the source" callout, tier-lint clean.)
       `DataGrid<T>` is Reactor-original (no WinUI parallel; WinUI ships
       DataGrid only via Community Toolkit). REACTOR_DOC_TIER_W001
       acknowledged.*
-- [ ] `charting.md` — promote to Comprehensive.
+- [x] `charting.md` — promote to Comprehensive. *Lead mental-model
+      paragraph framing the two-layer DSL (high-level chart factories
+      over D3 primitives), ai:caveat on inline data-array construction
+      churning chart identity (flicker on unrelated state changes),
+      Patterns for live-ticking feeds, switching chart type without
+      rebinding, and dropping into D3Canvas for bespoke shapes. Common
+      Mistakes covers in-Render data allocation, color-only multi-series
+      encoding (forced-colors mode), and hand-rolled compositor
+      animations bypassing reduced-motion. `winui-ref` intentionally
+      omitted — ReactorD3 is Reactor-original (no WinUI charting
+      library; the page is the reference). REACTOR_DOC_TIER_W001
+      acknowledged.*
 
 ### 4.2 New `wpf-interop.md` — Solid
 
