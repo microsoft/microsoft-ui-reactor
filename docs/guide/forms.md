@@ -1,3 +1,23 @@
+> **WinUI reference:** For the full property surface and design guidance, see [Forms](https://learn.microsoft.com/en-us/windows/apps/design/controls/forms).
+
+Forms are the Reactor surface most apps spend most of their UI time inside.
+Every input control on this page follows the same controlled-input
+contract: you own the current value, you provide a change handler, the
+control renders what you pass and calls your handler when the user edits.
+There is no two-way `Binding`, no `INotifyPropertyChanged`, no
+`DependencyProperty.SetValue` — the value flows one direction
+(state → control) and edits flow one direction back
+(handler → state). That shape comes from
+[hooks](hooks.md) and [components](components.md), and it makes every
+form testable: the form is whatever the
+[`UseState`](hooks.md) snapshot says it is. Validation layers on top
+through [`UseValidationContext`](hooks.md) and the `.Validate(...)`
+modifier — the validators run on every render, the
+[`FormField`](#formfield-helper) wrapper handles label / required marker /
+error display, and the `ValidationContext` tracks touched/dirty per
+field so errors only appear when the user has interacted. Read the
+controlled-input section first; everything else on this page is a
+specialization.
 
 # Forms and Input
 
@@ -458,6 +478,312 @@ class InputFormattersDemo : Component
 Built-in formatters: `PhoneUS`, `Currency()`, `UpperCase`, `LowerCase`,
 `TitleCase`, `TrimWhitespace`, `MaxLength(n)`, `AllowOnly(regex)`,
 `DenyOnly(regex)`, and `Custom(format, parse)`.
+
+## AutoSuggestBox
+
+`AutoSuggestBox` is the search-with-suggestions input — type a prefix,
+see a filtered list, pick one or submit free-form. The factory takes
+the text value, an `onTextChanged` handler, and an optional
+`onQuerySubmitted` handler that fires on Enter or suggestion pick:
+
+```csharp
+class AutoSuggestDemo : Component
+{
+    static readonly string[] Catalog =
+    [
+        "Aardvark", "Albatross", "Antelope", "Badger",
+        "Beaver", "Buffalo", "Camel", "Capybara"
+    ];
+
+    public override Element Render()
+    {
+        var (text, setText) = UseState("");
+
+        var matches = string.IsNullOrEmpty(text)
+            ? Array.Empty<string>()
+            : Catalog.Where(c =>
+                c.StartsWith(text, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+        return VStack(8,
+            SubHeading("AutoSuggestBox"),
+            AutoSuggestBox(text, setText,
+                onQuerySubmitted: q => setText(q))
+                .Header("Animal")
+                .QueryIcon(SymbolIcon("Find"))
+                .Width(280),
+            // Suggestion list — bind to AutoSuggestBox.ItemsSource via .Set
+            // when you need the in-control dropdown; the inline list below
+            // is a custom presentation that gives full styling control.
+            When(matches.Length > 0, () =>
+                VStack(2,
+                    ForEach(matches, m =>
+                        TextBlock(m).Padding(8, 4))
+                ).Background("#F5F5F5").Width(280))
+        ).Padding(24);
+    }
+}
+```
+
+![AutoSuggestBox with filtered suggestions](images/forms/auto-suggest.png)
+
+| Fluent | Effect |
+|---|---|
+| `.Header(string)` | Label rendered above the box. |
+| `.QueryIcon(IconData)` | Trailing icon (a search glyph is typical). |
+| `.IsSuggestionListOpen(bool)` | Force the dropdown open/closed. |
+| `.SuggestionChosen(Action<string>)` | Fires when the user picks an item from the underlying dropdown. |
+| `.Set(b => b.ItemsSource = ...)` | Bind to the WinUI suggestion list. |
+
+The snippet above renders an inline suggestion list as a custom
+presentation — more layout freedom than the built-in dropdown, at the
+cost of writing the visual surface yourself. For the canonical
+search-results recipe see [recipes/search-with-suggestions](recipes/search-with-suggestions.md).
+
+WinUI design page: [Auto-suggest box](https://learn.microsoft.com/en-us/windows/apps/design/controls/auto-suggest-box).
+
+## Date and time controls
+
+Reactor exposes three date/time inputs and a calendar surface, each
+covering a different shape of the same problem:
+
+| Control | Value | Shape | Use when |
+|---|---|---|---|
+| `DatePicker` | `DateTimeOffset` (non-null) | Inline three-spinner picker | The date is always required and inline real estate is available. |
+| `CalendarDatePicker` | `DateTimeOffset?` | Button that opens a popup calendar | Date is optional; you want a compact trigger. |
+| `CalendarView` | `IReadOnlyList<DateTimeOffset>` | Full month grid | Single, multiple, or range selection from a grid. |
+| `TimePicker` | `TimeSpan` | Hours / minutes / am-pm spinner | Time-of-day independent of a date. |
+
+```csharp
+class DatePickerDemo : Component
+{
+    public override Element Render()
+    {
+        var (date, setDate) = UseState(DateTimeOffset.Now);
+        var (optionalDate, setOptionalDate) = UseState<DateTimeOffset?>(null);
+
+        return VStack(8,
+            SubHeading("DatePicker — always-set value"),
+            DatePicker(date, setDate)
+                .DayFormat("{day.integer(2)}")
+                .MonthFormat("{month.abbreviated}")
+                .YearFormat("{year.full}"),
+            TextBlock($"Selected: {date:yyyy-MM-dd}").Opacity(0.6),
+            SubHeading("CalendarDatePicker — nullable, popup calendar"),
+            CalendarDatePicker(optionalDate, setOptionalDate)
+                .DateFormat("{month.abbreviated} {day.integer(2)}, {year.full}")
+                .IsTodayHighlighted(),
+            TextBlock(optionalDate is null
+                ? "No date selected."
+                : $"Selected: {optionalDate:yyyy-MM-dd}").Opacity(0.6)
+        ).Padding(24);
+    }
+}
+```
+
+![DatePicker (always set) and CalendarDatePicker (nullable)](images/forms/date-picker.png)
+
+```csharp
+class TimePickerDemo : Component
+{
+    public override Element Render()
+    {
+        var (time, setTime) = UseState(TimeSpan.FromHours(9));
+
+        return VStack(8,
+            SubHeading("TimePicker"),
+            TimePicker(time, setTime),
+            TextBlock($"Selected: {time:hh\\:mm}").Opacity(0.6)
+        ).Padding(24);
+    }
+}
+```
+
+![TimePicker bound to a TimeSpan](images/forms/time-picker.png)
+
+```csharp
+class CalendarViewDemo : Component
+{
+    public override Element Render()
+    {
+        var (dates, setDates) = UseState<IReadOnlyList<DateTimeOffset>>(
+            Array.Empty<DateTimeOffset>());
+
+        return VStack(8,
+            SubHeading("CalendarView — month grid"),
+            CalendarView()
+                .MinDate(DateTimeOffset.Now.AddYears(-1))
+                .MaxDate(DateTimeOffset.Now.AddYears(1))
+                .NumberOfWeeksInView(6)
+                .SelectedDatesChanged(setDates)
+                .SelectedDates(dates),
+            TextBlock($"{dates.Count} day(s) selected").Opacity(0.6)
+        ).Padding(24);
+    }
+}
+```
+
+![CalendarView month grid with multi-select](images/forms/calendar-view.png)
+
+DatePicker / TimePicker / CalendarDatePicker share their format strings
+with the underlying WinUI `DateTimeFormatter` — `"{day.integer(2)}"`,
+`"{month.abbreviated}"`, `"{year.full}"`, and friends. `CalendarView`
+exposes `.MinDate` / `.MaxDate` for range constraint and
+`.NumberOfWeeksInView` to compress the grid. For multi-day selection,
+pair `.SelectedDates(...)` with `.SelectedDatesChanged(...)` — the
+event hands you the full snapshot of the current selection, not
+add/remove deltas (same shape as
+[`ListView` multi-select](collections.md)).
+
+WinUI design pages: [Date picker](https://learn.microsoft.com/en-us/windows/apps/design/controls/date-picker),
+[Time picker](https://learn.microsoft.com/en-us/windows/apps/design/controls/time-picker),
+[Calendar view](https://learn.microsoft.com/en-us/windows/apps/design/controls/calendar-view).
+
+## ColorPicker
+
+`ColorPicker` takes a `Windows.UI.Color` and a change handler — same
+controlled pattern as `Slider`. Its surface is the largest of any input
+on this page; configure it for the shape of the chooser you need:
+
+```csharp
+class ColorPickerDemo : Component
+{
+    public override Element Render()
+    {
+        var (color, setColor) = UseState(
+            global::Windows.UI.Color.FromArgb(255, 0, 120, 215));
+
+        return VStack(8,
+            SubHeading("ColorPicker"),
+            ColorPicker(color, setColor)
+                .AlphaEnabled()
+                .HexInputVisible(true)
+                .ColorSpectrumShape(
+                    Microsoft.UI.Xaml.Controls.ColorSpectrumShape.Ring),
+            // Preview swatch driven by the picker.
+            Border(Empty())
+                .Background(
+                    new Microsoft.UI.Xaml.Media.SolidColorBrush(color))
+                .Width(80).Height(40)
+                .WithBorder("#888888")
+        ).Padding(24);
+    }
+}
+```
+
+![ColorPicker with alpha and hex input](images/forms/color-picker.png)
+
+| Fluent | Effect |
+|---|---|
+| `.AlphaEnabled(bool)` | Show the alpha slider and pre-multiply by the alpha value. |
+| `.ColorSpectrumShape(shape)` | `Box` (default) or `Ring`. |
+| `.HexInputVisible(bool)` | Toggle the hex-input field. |
+| `.ColorSpectrumVisible(bool)` | Toggle the main 2D spectrum. |
+| `.ColorSliderVisible(bool)` | Toggle the hue slider. |
+| `.ColorChannelTextInputVisible(bool)` | Toggle RGB number inputs. |
+| `.HueRange(min, max)` / `.SaturationRange(min, max)` / `.ValueRange(min, max)` | Constrain pickable hue / sat / value. |
+| `.MoreButtonVisible(bool)` | "More" chevron that expands the picker. |
+
+For palette pickers (Material-style swatch grids), build the surface
+out of `Button`s and `Background(color)` rather than this control —
+`ColorPicker` is the right shape only when the user needs continuous
+selection from the full color space.
+
+WinUI design page: [Color picker](https://learn.microsoft.com/en-us/windows/apps/design/controls/color-picker).
+
+> **Caveat:** Commit-on-blur inputs (`NumberBox`, `DatePicker`, `CalendarDatePicker`,
+> `TimePicker`) do **not** fire their change handlers per keystroke —
+> they fire when focus leaves the field. Validation derived from these
+> controls' values is therefore stale until the user tabs out. The
+> classic failure mode: a Submit button disabled until the form is valid
+> stays disabled while the user is still inside a `NumberBox` that
+> already contains a valid value. The user fixes the last field, presses
+> Tab to reach Submit, focus skips the still-disabled button, and the
+> user is stranded. Two fixes compose: `.Immediate()` on the input
+> switches it to per-keystroke commit (see
+> [Keeping Submit Reachable](#keeping-submit-reachable)), and
+> `.DisabledFocusable()` on the Submit button keeps it keyboard-focusable
+> while it's gated.
+
+## Patterns
+
+### Multi-step form with shared ValidationContext
+
+A wizard-style form spans multiple pages but the validation lives in
+one place. Hoist `UseValidationContext()` to the wizard component and
+pass it down via [context](context.md) — every step's
+`.Validate(...)` writes to the same store, and the final Submit checks
+`ctx.IsValid()` across all steps. The
+[`recipes/multi-step-form`](recipes/multi-step-form.md) recipe walks
+the full pattern; the key shape is one context per **form**, not one
+per page.
+
+### Submit on Enter
+
+For a single-field form (search box, comment input), wire submission
+to Enter rather than a Submit button. `AutoSuggestBox` does this
+automatically via `onQuerySubmitted`. For `TextField`, route through
+`.KeyDown` or wrap the field in an `[ai:lock]` form panel; see
+[input-and-gestures](input-and-gestures.md) for the routed-events
+surface.
+
+### Validating async (uniqueness checks)
+
+`Validate.MustAsync<T>(...)` runs a predicate that returns
+`Task<bool>`. The `ValidationContext` tracks the in-flight async work
+and reports `IsValidating` per field, so the Submit button can disable
+while async validation runs. Pair with `DisabledFocusable()` so the
+button stays in tab order while validating — same accessibility
+concern as [Keeping Submit Reachable](#keeping-submit-reachable).
+
+## Common Mistakes
+
+### Letting the control hold its own state
+
+```csharp
+// Don't:
+TextField(initial: "default value")
+```
+
+```csharp
+class ControlledInputDemo : Component
+{
+    public override Element Render()
+    {
+        var (name, setName) = UseState("");
+
+        return VStack(12,
+            SubHeading("Controlled Input"),
+            TextField(name, setName, placeholder: "Type your name"),
+            TextBlock($"You typed: {name}").Opacity(0.6)
+        ).Padding(24);
+    }
+}
+```
+
+Uncontrolled inputs work in trivial demos but break the moment the
+parent component needs to read, reset, or pre-fill the value. Reactor
+inputs all take `(value, onChanged)` — the control is always a passive
+view of state.
+
+### Validating in the click handler
+
+```csharp
+// Don't:
+Button("Submit", () =>
+{
+    if (string.IsNullOrEmpty(email)) { setError("…"); return; }
+    if (!email.Contains('@'))         { setError("…"); return; }
+    if (age < 18)                      { setError("…"); return; }
+    // submit…
+})
+```
+
+Imperative checks duplicate every field's validation in the submit
+handler, drift from the inline error display, and fall out of date
+when fields are added. Use [`UseValidationContext`](hooks.md)
++ `.Validate(...)` so each field carries its rules with it; the
+submit handler becomes one `ctx.IsValid()` call.
 
 ## Tips
 

@@ -1,9 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Controls.Validation;
-using Microsoft.UI.Reactor.Controls.Validation;
 using static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;
-using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
@@ -282,6 +280,136 @@ class TextFieldConfigDemo : Component
 }
 // </snippet:textfield-config>
 
+// <snippet:auto-suggest>
+class AutoSuggestDemo : Component
+{
+    static readonly string[] Catalog =
+    [
+        "Aardvark", "Albatross", "Antelope", "Badger",
+        "Beaver", "Buffalo", "Camel", "Capybara"
+    ];
+
+    public override Element Render()
+    {
+        var (text, setText) = UseState("");
+
+        var matches = string.IsNullOrEmpty(text)
+            ? Array.Empty<string>()
+            : Catalog.Where(c =>
+                c.StartsWith(text, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+        return VStack(8,
+            SubHeading("AutoSuggestBox"),
+            AutoSuggestBox(text, setText,
+                onQuerySubmitted: q => setText(q))
+                .Header("Animal")
+                .QueryIcon(SymbolIcon("Find"))
+                .Width(280),
+            // Suggestion list — bind to AutoSuggestBox.ItemsSource via .Set
+            // when you need the in-control dropdown; the inline list below
+            // is a custom presentation that gives full styling control.
+            When(matches.Length > 0, () =>
+                VStack(2,
+                    ForEach(matches, m =>
+                        TextBlock(m).Padding(8, 4))
+                ).Background("#F5F5F5").Width(280))
+        ).Padding(24);
+    }
+}
+// </snippet:auto-suggest>
+
+// <snippet:date-picker>
+class DatePickerDemo : Component
+{
+    public override Element Render()
+    {
+        var (date, setDate) = UseState(DateTimeOffset.Now);
+        var (optionalDate, setOptionalDate) = UseState<DateTimeOffset?>(null);
+
+        return VStack(8,
+            SubHeading("DatePicker — always-set value"),
+            DatePicker(date, setDate)
+                .DayFormat("{day.integer(2)}")
+                .MonthFormat("{month.abbreviated}")
+                .YearFormat("{year.full}"),
+            TextBlock($"Selected: {date:yyyy-MM-dd}").Opacity(0.6),
+            SubHeading("CalendarDatePicker — nullable, popup calendar"),
+            CalendarDatePicker(optionalDate, setOptionalDate)
+                .DateFormat("{month.abbreviated} {day.integer(2)}, {year.full}")
+                .IsTodayHighlighted(),
+            TextBlock(optionalDate is null
+                ? "No date selected."
+                : $"Selected: {optionalDate:yyyy-MM-dd}").Opacity(0.6)
+        ).Padding(24);
+    }
+}
+// </snippet:date-picker>
+
+// <snippet:time-picker>
+class TimePickerDemo : Component
+{
+    public override Element Render()
+    {
+        var (time, setTime) = UseState(TimeSpan.FromHours(9));
+
+        return VStack(8,
+            SubHeading("TimePicker"),
+            TimePicker(time, setTime),
+            TextBlock($"Selected: {time:hh\\:mm}").Opacity(0.6)
+        ).Padding(24);
+    }
+}
+// </snippet:time-picker>
+
+// <snippet:calendar-view>
+class CalendarViewDemo : Component
+{
+    public override Element Render()
+    {
+        var (dates, setDates) = UseState<IReadOnlyList<DateTimeOffset>>(
+            Array.Empty<DateTimeOffset>());
+
+        return VStack(8,
+            SubHeading("CalendarView — month grid"),
+            CalendarView()
+                .MinDate(DateTimeOffset.Now.AddYears(-1))
+                .MaxDate(DateTimeOffset.Now.AddYears(1))
+                .NumberOfWeeksInView(6)
+                .SelectedDatesChanged(setDates)
+                .SelectedDates(dates),
+            TextBlock($"{dates.Count} day(s) selected").Opacity(0.6)
+        ).Padding(24);
+    }
+}
+// </snippet:calendar-view>
+
+// <snippet:color-picker>
+class ColorPickerDemo : Component
+{
+    public override Element Render()
+    {
+        var (color, setColor) = UseState(
+            global::Windows.UI.Color.FromArgb(255, 0, 120, 215));
+
+        return VStack(8,
+            SubHeading("ColorPicker"),
+            ColorPicker(color, setColor)
+                .AlphaEnabled()
+                .HexInputVisible(true)
+                .ColorSpectrumShape(
+                    Microsoft.UI.Xaml.Controls.ColorSpectrumShape.Ring),
+            // Preview swatch driven by the picker.
+            Border(Empty())
+                .Background(
+                    new Microsoft.UI.Xaml.Media.SolidColorBrush(color))
+                .Width(80).Height(40)
+                .WithBorder("#888888")
+        ).Padding(24);
+    }
+}
+// </snippet:color-picker>
+
 class FormsApp : Component
 {
     public override Element Render()
@@ -297,7 +425,12 @@ class FormsApp : Component
                 Component<ValidationContextDemo>(),
                 Component<FormFieldDemo>(),
                 Component<MaskedInputDemo>(),
-                Component<InputFormattersDemo>()
+                Component<InputFormattersDemo>(),
+                Component<AutoSuggestDemo>(),
+                Component<DatePickerDemo>(),
+                Component<TimePickerDemo>(),
+                Component<CalendarViewDemo>(),
+                Component<ColorPickerDemo>()
             ).Padding(24)
         );
     }

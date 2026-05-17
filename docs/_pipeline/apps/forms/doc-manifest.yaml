@@ -45,3 +45,28 @@ screenshots:
     component: InputFormattersDemo
     region: client
     format: png
+  - id: auto-suggest
+    description: "AutoSuggestBox with custom inline suggestion list filtered by typed prefix."
+    component: AutoSuggestDemo
+    region: client
+    format: png
+  - id: date-picker
+    description: "DatePicker (always-set) and CalendarDatePicker (nullable) with format strings."
+    component: DatePickerDemo
+    region: client
+    format: png
+  - id: time-picker
+    description: "TimePicker bound to a TimeSpan with formatted display."
+    component: TimePickerDemo
+    region: client
+    format: png
+  - id: calendar-view
+    description: "CalendarView month grid with multi-select and selection summary."
+    component: CalendarViewDemo
+    region: client
+    format: png
+  - id: color-picker
+    description: "ColorPicker (ring spectrum, alpha enabled) with a live preview swatch."
+    component: ColorPickerDemo
+    region: client
+    format: png

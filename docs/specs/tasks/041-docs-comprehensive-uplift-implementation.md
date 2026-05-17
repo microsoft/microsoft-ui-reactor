@@ -747,13 +747,24 @@ catalog page follows the per-control template from spec §6.3.
 
 ### 3.4 `forms.md` — EXPAND
 
-- [ ] Add: AutoSuggestBox, DatePicker, TimePicker, CalendarView,
-      CalendarDatePicker, ColorPicker, NumberBox, PasswordBox,
-      RadioButtons, ToggleSwitch (verify which are missing per
-      audit).
-- [ ] Doc-app additions under
-      `docs/_pipeline/apps/forms/<control>/`.
-- [ ] Promote to Comprehensive tier.
+- [x] Add: AutoSuggestBox, DatePicker, TimePicker, CalendarView,
+      CalendarDatePicker, ColorPicker. *NumberBox, PasswordBox,
+      RadioButtons, ToggleSwitch were already present in the existing
+      `## Input Control Types` section — verified by grep, no
+      duplication added.*
+- [x] Doc-app additions in `docs/_pipeline/apps/forms/App.cs` —
+      five new components (AutoSuggestDemo, DatePickerDemo,
+      TimePickerDemo, CalendarViewDemo, ColorPickerDemo) with paired
+      doc-manifest entries. Pre-existing duplicate `using` warnings
+      cleaned up along the way. Builds clean against Reactor.csproj.
+- [x] Promote to Comprehensive tier. *`tier: comprehensive` set;
+      `winui-ref:` set to the Forms hub on Microsoft Learn.
+      Mental-model lead ~200 words; one `<!-- ai:caveat -->` block
+      (commit-on-blur input → stale Submit-disabled trap); `## Patterns`
+      (multi-step shared ValidationContext + Submit-on-Enter + async
+      validators) and `## Common Mistakes` (uncontrolled-input +
+      validate-in-click-handler) both populated. Zero findings under
+      `mur docs compile --validate-only --tier=comprehensive`.*
 
 ### 3.5 `collections.md` — EXPAND
 
