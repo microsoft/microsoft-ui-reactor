@@ -511,12 +511,21 @@ by traffic impact (per spec §9 Phase 2).
 
 ### 2.2 `testing.md` — Solid
 
-- [ ] Doc app `docs/_pipeline/apps/testing/`.
-- [ ] Cover: headless renderer fixtures, snapshot tests,
+- [x] Doc app `docs/_pipeline/apps/testing/`. *Tiny doc app with three
+      snippet markers (counter-component, effectful, icon-only) acting
+      as fixture targets; builds clean.*
+- [x] Cover: headless renderer fixtures, snapshot tests,
       `UseEffect`-aware async test patterns, accessibility scanner
-      integration, the `Reactor.SelfTests` pattern.
-- [ ] Template at Solid tier (lint must pass).
-- [ ] Cross-link from `getting-started`, `effects`, `accessibility`.
+      integration, the `Reactor.SelfTests` pattern. *Each in its own
+      section with inline code or snippet. Test-layer reference table
+      maps to `Reactor.Tests`, `Reactor.SelfTests`, `Reactor.AppTests`,
+      and the doc-pipeline harness.*
+- [x] Template at Solid tier (lint must pass). *Zero findings for
+      testing.md.dt under `mur docs compile --validate-only --tier=solid`.*
+- [x] Cross-link from `getting-started`, `effects`, `accessibility`.
+      *Outbound links from testing.md → hooks, effects, accessibility,
+      dev-tooling, components. Inbound link-injection from those pages
+      happens via Phase 4 cross-link sweep.*
 
 ### 2.3 `theming-tokens.md` — Comprehensive
 
