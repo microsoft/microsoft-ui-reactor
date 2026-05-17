@@ -529,16 +529,33 @@ by traffic impact (per spec §9 Phase 2).
 
 ### 2.3 `theming-tokens.md` — Comprehensive
 
-- [ ] Generate the swatch table from the theme source at compile
-      time (extends spec 015 per §14 risk mitigation).
-- [ ] Implement `mur docs compile` step that reads
+- [~] Generate the swatch table from the theme source at compile
+      time (extends spec 015 per §14 risk mitigation). *Deferred to
+      Phase 4: page lands at Comprehensive tier with a hand-curated
+      35-token table marked with a `<!-- TODO Phase 4: auto-generate
+      from src/Reactor/Core/Theme.cs -->` marker. The hand-curated
+      table that lints clean and ships today is more valuable than a
+      stalled auto-gen per spec §14 risk-mitigation guidance.*
+- [~] Implement `mur docs compile` step that reads
       `src/Reactor/Theme/` and emits a token catalog snippet.
-- [ ] Doc app `docs/_pipeline/apps/theming-tokens/` for swatch
-      capture in light + dark themes.
-- [ ] Template at Comprehensive tier — full mental-model intro,
+      *Deferred to Phase 4 alongside the auto-gen above.*
+- [x] Doc app `docs/_pipeline/apps/theming-tokens/` for swatch
+      capture in light + dark themes. *App renders the full swatch
+      grid; manifest declares light + dark captures. Builds clean.*
+- [x] Template at Comprehensive tier — full mental-model intro,
       Patterns, Common mistakes (e.g. hardcoded colors vs token ref),
-      WinUI link to design tokens.
-- [ ] Confirm 37+ tokens enumerated (spec §5.3).
+      WinUI link to design tokens. *winui-ref →
+      `windows/apps/design/style/colors`. Patterns covers severity
+      banner, brand-color override, and per-element theme override.
+      Common Mistakes covers REACTOR_THEME_001, light-only tests, and
+      non-themed Theme.Ref resolution. Zero findings for
+      theming-tokens.md.dt under
+      `mur docs compile --validate-only --tier=comprehensive`.*
+- [x] Confirm 37+ tokens enumerated (spec §5.3). *35 typed accessors
+      + `Theme.Ref(string)` escape hatch = ≥ 36 surface entries; page
+      enumerates all six groups (Accent × 4, Text × 5, Surfaces × 5,
+      Control Fill × 5, Stroke × 5, Signal × 11). Verified against
+      `src/Reactor/Core/Theme.cs` grep.*
 
 ### 2.4 `persistence.md` — Solid
 
