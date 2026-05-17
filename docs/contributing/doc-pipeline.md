@@ -167,6 +167,8 @@ reference-generation codes.
 | `REACTOR_DOC_SNIPPET_004`  | Nested region with same name as outer region               |
 | `REACTOR_DOC_DIAGRAM_001`  | `mermaid-cli` not on PATH but the topic has `.mmd` files   |
 | `REACTOR_DOC_IMAGE_001`    | `![..](images/<topic>/...)` reference resolves to nothing  |
+| `REACTOR_DOC_REGISTRY_W001`| Registry rule maps to a category with no `guide-pages`     |
+| `REACTOR_DOC_REGISTRY_W002`| Registry-declared guide page has no inbound `<!-- ref:Member -->` marker (doc-coverage gate, spec [041 §5.3](../specs/041-docs-comprehensive-uplift.md)) |
 
 ## 7. Tier audit cadence
 

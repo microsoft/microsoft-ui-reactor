@@ -1198,11 +1198,18 @@ source snippets, "Read the source" callout, tier-lint clean.)
 
 ### 5.3 Doc-coverage gate for new features
 
-- [ ] Add a CI/repo convention: new framework features land with a
+- [x] Add a CI/repo convention: new framework features land with a
       doc page at Solid+. Document in `CONTRIBUTING.md`.
-- [ ] Consider an analyzer or convention check that flags new public
+- [x] Consider an analyzer or convention check that flags new public
       API in `src/Reactor/` not referenced by any
-      `<!-- ref:Member -->` or `seealso cref=`.
+      `<!-- ref:Member -->` or `seealso cref=`. *(Satisfied via the
+      existing `REACTOR_DOC_REGISTRY_W002` lint — emitted by the doc
+      pipeline whenever a registry-declared guide page has no inbound
+      `<!-- ref:Member -->` marker. Surfaces the same gap a dedicated
+      analyzer would, in the surface most likely to catch it. A
+      bespoke analyzer that walks `src/Reactor/`'s public API directly
+      remains a future option if W002's reverse-lookup proves
+      insufficient.)*
 
 ### 5.4 Quarterly tier audit
 
