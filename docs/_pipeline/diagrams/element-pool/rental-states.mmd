@@ -1,0 +1,11 @@
+%% element-pool: per-control lifecycle as Mount/Unmount move it through
+%% the per-type pool. The "compositor-tainted" terminal state is what
+%% drops a control out of pooling permanently.
+stateDiagram-v2
+    [*] --> Pooled: new (first mount path falls through to ctor)
+    Pooled --> Rented: Reconciler.Mount → pool.TryRent
+    Rented --> Returning: Reconciler.Unmount → pool.Return
+    Returning --> Pooled: ForceDetach + CleanElement, stack &lt; cap
+    Returning --> [*]: cap reached (32 / type) → GC eligible
+    Returning --> [*]: compositor-tainted → never re-pooled
+    Pooled --> [*]: ElementPool.Dispose → Clear()
