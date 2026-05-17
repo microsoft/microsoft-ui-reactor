@@ -1,8 +1,10 @@
 # Resume here — spec 041 implementation handoff
 
 **Last touched:** 2026-05-17
-**Branch:** `docs/041-uplift` (31 commits ahead of `main`; not pushed)
+**Branch:** `docs/041-uplift` (32 commits ahead of `main`; not pushed)
 **Active task:** Phase 3.5 — Under-the-hood deep dive (14 pages)
+
+**Out-of-band update (4f61824):** `getting-started.md` now opens with a manual-setup warning and walks through the source-clone bootstrap (`mur pack-local` → `dotnet new install` → `dotnet new reactorapp`). Not part of any spec-041 phase; track signed-distribution rollout in [spec 022](../022-packaging-and-distribution.md).
 
 ---
 
