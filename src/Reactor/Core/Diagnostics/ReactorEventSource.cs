@@ -62,6 +62,7 @@ internal sealed class ReactorEventSource : EventSource
 
     // ── Reconcile pass boundaries ────────────────────────────────────────
 
+    // <snippet:isenabled-gate>
     [Event(1, Level = EventLevel.Informational, Keywords = Keywords.Reconcile,
         Task = Tasks.Reconcile, Opcode = EventOpcode.Start,
         Message = "Reconcile start (root={rootElementType})")]
@@ -70,6 +71,7 @@ internal sealed class ReactorEventSource : EventSource
         if (IsEnabled(EventLevel.Informational, Keywords.Reconcile))
             WriteEvent(1, rootElementType ?? string.Empty);
     }
+    // </snippet:isenabled-gate>
 
     // <snippet:reconcile-stop-event>
     [Event(2, Level = EventLevel.Informational, Keywords = Keywords.Reconcile,

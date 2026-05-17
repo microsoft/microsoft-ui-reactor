@@ -1,10 +1,45 @@
-%% Phase 3.5 scaffold — ETW / EventPipe emission. Author should expand
-%% with the per-keyword gating (IsEnabled fast path), the consumer
-%% tools (dotnet-trace / PerfView / xperf), and the optional Reactor +
-%% Microsoft-Windows-XAML correlation.
+%% Reactor ETW / EventPipe emission. Hot paths (reconciler, render,
+%% state writes, MCP dispatch, lifecycle, event trampoline) call
+%% IsEnabled(level, keyword) before computing payloads, so retail
+%% (no consumer attached) costs one branch and zero allocations.
+%% Events flow simultaneously to EventPipe (dotnet-trace) and
+%% classic ETW (PerfView / xperf). Reactor-only traces use EventPipe;
+%% Reactor + Microsoft-Windows-XAML correlated captures need ETW
+%% because the XAML provider is native-only. Default Mermaid palette
+%% renders on both light and dark GitHub themes.
 flowchart LR
-    Hot[Reconciler / Render hot path] -->|IsEnabled?| Gate{Keyword on?}
-    Gate -->|no| Skip[Skip payload alloc]
-    Gate -->|yes| Emit[WriteEvent]
-    Emit --> Pipe[EventPipe / ETW session]
-    Pipe --> Tool[dotnet-trace / PerfView]
+    subgraph Hot["Hot paths (in-process)"]
+        Reconcile["Reconciler.Reconcile<br/>ReconcileStart/Stop · ChildReconcileStart/Stop"]
+        Render["Component.Render<br/>ComponentRenderStart/Stop"]
+        Effects["FlushEffects<br/>EffectsFlushStart/Stop"]
+        State["SetState write<br/>StateChange"]
+        Mcp["MCP dispatch<br/>McpCallStart/Stop"]
+    end
+
+    Source["ReactorEventSource<br/>[EventSource Microsoft-UI-Reactor]"]
+    Gate{"IsEnabled(level, keyword)?"}
+    Write["WriteEvent(id, args)"]
+    Drop[/"Skip payload alloc<br/>(no consumer)"/]
+
+    Pipe["EventPipe<br/>session-scoped, AOT-friendly"]
+    Etw["ETW Microsoft-UI-Reactor"]
+    XamlEtw["ETW Microsoft-Windows-XAML<br/>(native, ETW-only)"]
+
+    Trace["dotnet-trace<br/>cross-platform Reactor-only"]
+    PerfView["PerfView / xperf / WPA<br/>Reactor + XAML correlated"]
+
+    Reconcile --> Source
+    Render --> Source
+    Effects --> Source
+    State --> Source
+    Mcp --> Source
+
+    Source --> Gate
+    Gate -->|"keyword off"| Drop
+    Gate -->|"keyword on"| Write
+    Write --> Pipe
+    Write --> Etw
+
+    Pipe --> Trace
+    Etw --> PerfView
+    XamlEtw -.->|"merged timeline"| PerfView
