@@ -998,7 +998,11 @@ public static partial class Factories
     public static LineElement Line(double x1, double y1, double x2, double y2) =>
         new() { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2 };
 
-    public static PathElement Path() => new();
+    // Named `Path2D` (not `Path`) to avoid colliding with `System.IO.Path`.
+    // Models reach for both in the same file and the bare name causes
+    // CS0119 cascades. Borrows the Web Canvas API's `Path2D` spelling for the
+    // vector-geometry primitive — collision-free and familiar from JS/SVG.
+    public static PathElement Path2D() => new();
 
     // ── Additional layout ───────────────────────────────────────────
 

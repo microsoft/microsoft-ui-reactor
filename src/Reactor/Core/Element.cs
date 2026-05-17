@@ -35,6 +35,34 @@ public abstract record Element
     public ElementModifiers? Modifiers { get; init; }
 
     /// <summary>
+    /// Outer margin shim that routes to <see cref="Modifiers"/>. Lets
+    /// <c>el with { Margin = new Thickness(8) }</c> work directly on a record
+    /// initializer (where extension methods are not visible). Identical
+    /// semantics to <c>.Margin(...)</c>.
+    /// </summary>
+    public Thickness? Margin
+    {
+        get => Modifiers?.Margin;
+        init => Modifiers = Modifiers is null
+            ? new ElementModifiers { Margin = value }
+            : Modifiers with { Margin = value };
+    }
+
+    /// <summary>
+    /// Inner padding shim that routes to <see cref="Modifiers"/>. Lets
+    /// <c>el with { Padding = new Thickness(8) }</c> work directly on a record
+    /// initializer (where extension methods are not visible). Identical
+    /// semantics to <c>.Padding(...)</c>.
+    /// </summary>
+    public Thickness? Padding
+    {
+        get => Modifiers?.Padding;
+        init => Modifiers = Modifiers is null
+            ? new ElementModifiers { Padding = value }
+            : Modifiers with { Padding = value };
+    }
+
+    /// <summary>
     /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).
     /// Set via fluent extension methods: Text("hi").Grid(row: 1, column: 2)
     /// Stored as a type-keyed dictionary so each provider defines its own data record.
@@ -381,7 +409,6 @@ public abstract record Element
                 BrushesEqual(ba.Background, bb.Background)
                 && BrushesEqual(ba.BorderBrush, bb.BorderBrush)
                 && ba.CornerRadius == bb.CornerRadius
-                && ba.Padding == bb.Padding
                 && ba.BorderThickness == bb.BorderThickness
                 && ReferenceEquals(ba.Child, bb.Child)
                 && ReferenceEquals(ba.Setters, bb.Setters),
@@ -2311,7 +2338,6 @@ public record ScrollViewElement(Element Child) : Element
 public record BorderElement(Element? Child) : Element
 {
     public double? CornerRadius { get; init; }
-    public Thickness? Padding { get; init; }
     public Brush? Background { get; init; }
     public Brush? BorderBrush { get; init; }
     public double? BorderThickness { get; init; }

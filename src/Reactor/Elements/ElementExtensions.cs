@@ -115,11 +115,22 @@ public static partial class ElementExtensions
     public static T VAlign<T>(this T el, VerticalAlignment alignment) where T : Element =>
         Modify(el, new ElementModifiers { VerticalAlignment = alignment });
 
+    // Long-form aliases matching the WinUI/WPF FrameworkElement property names.
+    // The agent's first-instinct write is `.HorizontalAlignment(...)`; making
+    // that compile saves a fix-loop without forcing a rename of the short forms.
+    // Parameter types are fully qualified because the method names shadow the
+    // enum names in this scope.
+    public static T HorizontalAlignment<T>(this T el, Microsoft.UI.Xaml.HorizontalAlignment alignment) where T : Element =>
+        Modify(el, new ElementModifiers { HorizontalAlignment = alignment });
+
+    public static T VerticalAlignment<T>(this T el, Microsoft.UI.Xaml.VerticalAlignment alignment) where T : Element =>
+        Modify(el, new ElementModifiers { VerticalAlignment = alignment });
+
     public static T Center<T>(this T el) where T : Element =>
         Modify(el, new ElementModifiers
         {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
+            VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
         });
 
     // ── Theme override ───────────────────────────────────────────────

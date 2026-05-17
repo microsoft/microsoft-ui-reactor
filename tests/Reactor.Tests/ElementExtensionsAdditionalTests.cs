@@ -253,6 +253,50 @@ public class ElementExtensionsAdditionalTests
     }
 
     [Fact]
+    public void LongForm_Alignment_Aliases_Match_Short_Forms()
+    {
+        var longForm = TextBlock("hi")
+            .HorizontalAlignment(HorizontalAlignment.Right)
+            .VerticalAlignment(VerticalAlignment.Bottom);
+
+        Assert.IsType<TextBlockElement>(longForm);
+        Assert.Equal(HorizontalAlignment.Right, longForm.Modifiers!.HorizontalAlignment);
+        Assert.Equal(VerticalAlignment.Bottom, longForm.Modifiers!.VerticalAlignment);
+    }
+
+    [Fact]
+    public void With_Initializer_Sets_Padding_And_Margin_On_Modifiers()
+    {
+        var el = TextBlock("hi") with
+        {
+            Padding = new Thickness(8),
+            Margin = new Thickness(4),
+        };
+
+        Assert.IsType<TextBlockElement>(el);
+        Assert.Equal(new Thickness(8), el.Modifiers!.Padding);
+        Assert.Equal(new Thickness(4), el.Modifiers!.Margin);
+    }
+
+    [Fact]
+    public void With_Initializer_Padding_Merges_With_Existing_Modifiers()
+    {
+        var el = TextBlock("hi").Width(100) with { Padding = new Thickness(8) };
+
+        Assert.Equal(100.0, el.Modifiers!.Width);
+        Assert.Equal(new Thickness(8), el.Modifiers!.Padding);
+    }
+
+    [Fact]
+    public void BorderElement_With_Initializer_Routes_Padding_Through_Modifiers()
+    {
+        var b = Border(TextBlock("x")) with { Padding = new Thickness(12) };
+
+        Assert.Equal(new Thickness(12), b.Padding);
+        Assert.Equal(new Thickness(12), b.Modifiers!.Padding);
+    }
+
+    [Fact]
     public void Multiple_Setters_Are_Accumulated()
     {
         var el = TextBlock("x")

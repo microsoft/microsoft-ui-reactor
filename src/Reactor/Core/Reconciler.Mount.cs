@@ -1186,7 +1186,6 @@ public sealed partial class Reconciler
     {
         var bdr = _pool.TryRent(typeof(WinUI.Border)) as WinUI.Border ?? new WinUI.Border();
         if (border.CornerRadius.HasValue) bdr.CornerRadius = new Microsoft.UI.Xaml.CornerRadius(border.CornerRadius.Value);
-        if (border.Padding.HasValue) bdr.Padding = border.Padding.Value;
         if (border.Background is not null) bdr.Background = border.Background;
         if (border.BorderBrush is not null) bdr.BorderBrush = border.BorderBrush;
         if (border.BorderThickness.HasValue) bdr.BorderThickness = new Microsoft.UI.Xaml.Thickness(border.BorderThickness.Value);

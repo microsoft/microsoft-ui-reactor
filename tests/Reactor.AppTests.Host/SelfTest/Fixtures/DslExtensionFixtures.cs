@@ -333,7 +333,7 @@ internal static class DslExtensionFixtures
                 TextBlock("FontFamilyObj").FontFamily(ff),
                 Button("FontWeightBtn").FontWeight(Microsoft.UI.Text.FontWeights.SemiBold),
                 TextBlock("BoldText").Bold(),
-                Path().StrokeDashArray(2, 4, 1).Stroke(brush).StrokeThickness(1)
+                Path2D().StrokeDashArray(2, 4, 1).Stroke(brush).StrokeThickness(1)
                     .Set(p => p.Data = new Microsoft.UI.Xaml.Media.PathGeometry()),
                 Rectangle().Fill(brush).Set(r => r.Width = 10).Set(r => r.Height = 10),
                 Ellipse().Fill(brush2).Set(e => e.Width = 10).Set(e => e.Height = 10),

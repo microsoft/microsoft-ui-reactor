@@ -115,7 +115,7 @@ NumberBox(double value, Action<double> onValueChanged = null, string header = nu
 Paragraph(RichTextInline[] inlines) → RichTextParagraph
 ParallaxView(Element child, double verticalShift = 0, double horizontalShift = 0) → ParallaxViewElement
 PasswordBox(string password, Action<string> onPasswordChanged = null, string placeholderText = null) → PasswordBoxElement
-Path() → PathElement
+Path2D() → PathElement
 PathIcon(string data) → PathIconData
 PersonPicture() → PersonPictureElement
 PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int> onSelectedPageIndexChanged = null) → PipsPagerElement
@@ -515,6 +515,7 @@ T.HeadingLevel<T>(AutomationHeadingLevel level) → T
 T.Height<T>(double height) → T
 T.HelpText<T>(string text) → T
 T.HierarchyLevel<T>(int level) → T
+T.HorizontalAlignment<T>(HorizontalAlignment alignment) → T
 T.Immediate<T>() → T
 T.InteractionStates<T>(Func<InteractionStatesBuilder, InteractionStatesBuilder> configure, Curve curve = null) → T
 T.IsTabStop<T>(bool isTabStop = true) → T
@@ -612,6 +613,7 @@ T.Validate<T>(string fieldName, IValidator[] validators) → T
 T.Validate<T>(string fieldName, object value, IValidator[] validators) → T
 T.ValidateAsync<T>(string fieldName, IAsyncValidator[] asyncValidators) → T
 T.ValidateAsync<T>(string fieldName, object value, IAsyncValidator[] asyncValidators) → T
+T.VerticalAlignment<T>(VerticalAlignment alignment) → T
 T.Visible<T>(bool isVisible) → T
 T.Width<T>(double width) → T
 T.WithBorder<T>(Brush brush, double thickness = 1) → T

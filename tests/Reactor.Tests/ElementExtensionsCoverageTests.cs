@@ -254,7 +254,7 @@ public class ElementExtensionsCoverageTests
     {
         // Brush-typed Fill/Stroke require WinUI activation; the StrokeThickness
         // modifier is independent and exercises the `el with` body.
-        var pa = Path().StrokeThickness(3);
+        var pa = Path2D().StrokeThickness(3);
         Assert.Equal(3.0, pa.StrokeThickness);
         var li = Line(0, 0, 1, 1).StrokeThickness(2);
         Assert.Equal(2.0, li.StrokeThickness);

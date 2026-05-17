@@ -1383,7 +1383,6 @@ public sealed partial class Reconciler
         else return Mount(newEl, requestRerender);
 
         if (n.CornerRadius.HasValue) b.CornerRadius = new Microsoft.UI.Xaml.CornerRadius(n.CornerRadius.Value);
-        if (n.Padding.HasValue) b.Padding = n.Padding.Value;
         if (n.Background is not null) b.Background = n.Background;
         if (n.BorderBrush is not null) b.BorderBrush = n.BorderBrush;
         if (n.BorderThickness.HasValue) b.BorderThickness = new Microsoft.UI.Xaml.Thickness(n.BorderThickness.Value);
