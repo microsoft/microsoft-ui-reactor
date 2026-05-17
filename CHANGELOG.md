@@ -55,6 +55,30 @@ to land under these conventions; subsequent specs follow this shape.
   `keySelector` and `WithKey(string)` are unchanged for interop /
   third-party POCOs. The `samples/TodoApp/` `TodoItem` model adopts
   the convention as a worked example. (spec 042 §5)
+- **Spec 042 Phase 4 + 5 — samples, gallery, and agent-kit references.**
+  New `samples/apps/animated-list-demo/` mini-app drives the templated
+  `ListView<Row>` and a hand-built `FlexColumn(items.Select(...).WithKey(item))`
+  side-by-side over the same edits so the OC-delta and `ChildReconciler`
+  paths animate together. `ReactorGallery`'s `ListViewPage` gains an
+  "Animated edit (spec 042)" `SampleCard` with the same toolbar. `TodoApp`
+  routes add / delete / clear-completed through an `Animations.Animate`
+  wrapper that honours `UseReducedMotion()`. New `Component.UseReducedMotion()`
+  delegation exposes the existing context hook so user components can
+  bypass `Animate` under WCAG 2.3.3. New skill references —
+  `plugins/reactor/skills/reactor-dsl/references/keyed-lists.md` for the
+  three keyed-list call sites and three `.WithKey` overloads, and
+  `plugins/reactor/skills/reactor-recipes/references/animated-list.md` for
+  the paste-ready `Animate` recipe + five common-mistakes sections.
+  (spec 042 Phase 4 + 5)
+- **Spec 042 Phase 6.1 — `REACTOR_DSL_001` codefix.** The existing
+  missing-`.WithKey` analyzer now ships with a code fix that offers three
+  insertion shapes ranked by discovery: `.WithKey(item)` when the lambda
+  parameter implements `IReactorKeyed`, `.WithKey(item.Key)` when the type
+  has a public `Key` property, and `.WithKey(item.Id)` when the type has a
+  public `Id` property. The codefix opts out of `FixAllProvider` because
+  each lambda needs an independent semantic lookup of the parameter type.
+  Covered by 6 new tests under `tests/Reactor.Tests/AnalyzerTests/MissingWithKeyAnalyzerTests.cs`.
+  (spec 042 Phase 6.1; resolves the Q2 follow-up from spec §9)
 - **Spec 042 Phase 3 — ambient `Animations.Animate(...)` transaction.**
   Wrapping a state mutation in `Animations.Animate(AnimationKind.Spring,
   () => setItems(...))` propagates animation intent through an

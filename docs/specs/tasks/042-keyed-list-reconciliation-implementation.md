@@ -656,12 +656,26 @@ box.
 
 ### 6.1 Missing-key analyzer (deferred from Q2 in 0.1)
 
-- [ ] Roslyn analyzer rule `REACTOR_LIST_001`: warn when a `.Select(...)`
+- [x] Roslyn analyzer rule `REACTOR_LIST_001`: warn when a `.Select(...)`
       expression produces `Element` children passed to a panel-like factory
       (`FlexColumn`, `VStack`, `Column`, etc.) without any child calling
       `.WithKey(...)`. Codefix offers `.WithKey(item.Id)` when the lambda
       parameter has a discoverable `Id` / `Key` property.
-- [ ] Tests under `tests/Reactor.Tests/AnalyzerTests/`.
+      → **The diagnostic already shipped as `REACTOR_DSL_001`
+      (`MissingWithKeyAnalyzer`) before spec 042 was filed; renaming
+      would break downstream suppressions. Phase 6.1 instead **completed
+      the analyzer** by adding `MissingWithKeyCodeFix`, which offers
+      three insertion shapes ranked by discoverability:
+      `.WithKey(item)` when the lambda parameter implements
+      `IReactorKeyed`, `.WithKey(item.Key)` when the type has a public
+      `Key` property, `.WithKey(item.Id)` when it has a public `Id`
+      property. The codefix opts out of `FixAllProvider` since each
+      lambda needs an independent semantic lookup of the parameter
+      type.**
+- [x] Tests under `tests/Reactor.Tests/AnalyzerTests/`.
+      → **`MissingWithKeyAnalyzerTests.cs` — 6 tests covering the
+      analyzer's positive / negative paths and all three codefix
+      offers. All pass under `dotnet test`.**
 
 ### 6.2 Duplicate-key diagnostic surfaces in the dev overlay
 
