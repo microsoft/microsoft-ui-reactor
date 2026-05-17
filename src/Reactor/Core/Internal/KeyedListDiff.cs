@@ -45,11 +45,20 @@ internal static class KeyedListDiff
     /// <summary>
     /// Per-diff bookkeeping returned to callers (tests, telemetry, the
     /// Phase 3 animation pipeline) so they can observe the op shape
-    /// without walking the OC.
+    /// without walking the OC. When the caller passes a non-null ambient
+    /// animation, <see cref="MovedRows"/> is populated with the survivors
+    /// whose index changed so the caller can drive per-container offset
+    /// animations on the matching realized containers.
     /// </summary>
-    internal readonly record struct DiffStats(int Inserts, int Removes, int Moves, int Survivors, bool Bailout)
+    internal readonly record struct DiffStats(
+        int Inserts,
+        int Removes,
+        int Moves,
+        int Survivors,
+        bool Bailout,
+        IReadOnlyList<ReactorRow>? MovedRows = null)
     {
-        public static readonly DiffStats Empty = new(0, 0, 0, 0, false);
+        public static readonly DiffStats Empty = new(0, 0, 0, 0, false, null);
 
         /// <summary>True if any structural op was emitted.</summary>
         public bool AnyOps => Inserts > 0 || Removes > 0 || Moves > 0;
@@ -76,6 +85,15 @@ internal static class KeyedListDiff
     /// diagnostic message — typically the host control type name.
     /// Hidden behind <c>?.</c> calls so the cost is paid only when a
     /// logger is attached.</param>
+    /// <param name="ambient">Active <see cref="Animations.Animate"/>
+    /// transaction, or <see langword="null"/> when the diff runs outside one.
+    /// When non-null and <see cref="AmbientAnimation.HasEffect"/> is true,
+    /// inserted rows are tagged with the kind so the templated control's
+    /// container-realization path can apply a per-container enter animation,
+    /// and survivor rows that moved are reported via
+    /// <see cref="DiffStats.MovedRows"/> so the caller can drive offset
+    /// animations on the corresponding realized containers.
+    /// (spec 042 §6.)</param>
     /// <returns>Op-shape statistics. <see cref="DiffStats.Bailout"/> is
     /// true when the caller must reset its WinUI <c>ItemsSource</c>
     /// binding to <see cref="ReactorListState.Source"/> (because Reset
@@ -85,11 +103,19 @@ internal static class KeyedListDiff
         IReadOnlyList<T> newItems,
         Func<T, int, string> keySelector,
         ILogger? logger = null,
-        string? diagnosticContext = null)
+        string? diagnosticContext = null,
+        AmbientAnimation? ambient = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(newItems);
         ArgumentNullException.ThrowIfNull(keySelector);
+
+        // Resolve the animation intent for this diff once up front. A null
+        // result means "no per-container animation work this diff" — every
+        // op path below shortcuts on this rather than re-checking the kind.
+        // The contract is symmetric across Insert / Move / Remove so the
+        // user can predict the visual effect from the ambient alone.
+        AnimationKind? enterKind = (ambient is { HasEffect: true }) ? ambient.Kind : null;
 
         int newCount = newItems.Count;
         int oldCount = state.LastKeys.Count;
@@ -149,7 +175,7 @@ internal static class KeyedListDiff
             // to the inserts as it would on a normal mount-time fill).
             for (int i = 0; i < newCount; i++)
             {
-                var row = new ReactorRow { Index = i, Key = newKeys[i] };
+                var row = new ReactorRow { Index = i, Key = newKeys[i], PendingEnterAnimation = enterKind };
                 state.Source.Add(row);
                 state.ByKey[newKeys[i]] = row;
                 state.LastKeys.Add(newKeys[i]);
@@ -176,7 +202,7 @@ internal static class KeyedListDiff
         if (newCount == oldCount + 1
             && SequenceEqualOrdinalPrefix(state.LastKeys, newKeys, oldCount))
         {
-            var row = new ReactorRow { Index = oldCount, Key = newKeys[oldCount] };
+            var row = new ReactorRow { Index = oldCount, Key = newKeys[oldCount], PendingEnterAnimation = enterKind };
             state.Source.Insert(oldCount, row);
             state.ByKey[newKeys[oldCount]] = row;
             state.LastKeys.Add(newKeys[oldCount]);
@@ -187,7 +213,7 @@ internal static class KeyedListDiff
         if (newCount == oldCount + 1
             && SequenceEqualOrdinalSuffix(state.LastKeys, newKeys, oldCount, newOffset: 1))
         {
-            var row = new ReactorRow { Index = 0, Key = newKeys[0] };
+            var row = new ReactorRow { Index = 0, Key = newKeys[0], PendingEnterAnimation = enterKind };
             state.Source.Insert(0, row);
             // Shift remembered indices forward by one.
             for (int i = 1; i < state.Source.Count; i++) state.Source[i].Index = i;
@@ -257,10 +283,10 @@ internal static class KeyedListDiff
         }
 
         // ── General case: React-style keyed diff ───────────────────────
-        return ApplyGeneral(state, newKeys);
+        return ApplyGeneral(state, newKeys, enterKind);
     }
 
-    private static DiffStats ApplyGeneral(ReactorListState state, string[] newKeys)
+    private static DiffStats ApplyGeneral(ReactorListState state, string[] newKeys, AnimationKind? enterKind)
     {
         int oldCount = state.LastKeys.Count;
         int newCount = newKeys.Length;
@@ -295,6 +321,9 @@ internal static class KeyedListDiff
         int inserts = 0;
         int moves = 0;
         int survivors = prefix + suffix;
+        // Collected only when an ambient is active. Null avoids the
+        // allocation in the non-animated (overwhelmingly common) case.
+        List<ReactorRow>? movedRows = enterKind is not null ? new List<ReactorRow>() : null;
 
         // 4) Walk new keys in the diff range.
         for (int desired = prefix; desired < newDiffEnd; desired++)
@@ -309,12 +338,13 @@ internal static class KeyedListDiff
                     state.Source.Move(currentIndex, desired);
                     RefreshIndices(state, global::System.Math.Min(desired, currentIndex), global::System.Math.Max(desired, currentIndex));
                     moves++;
+                    movedRows?.Add(survivor);
                 }
                 survivors++;
             }
             else
             {
-                var row = new ReactorRow { Index = desired, Key = key };
+                var row = new ReactorRow { Index = desired, Key = key, PendingEnterAnimation = enterKind };
                 state.Source.Insert(desired, row);
                 state.ByKey[key] = row;
                 RefreshIndices(state, desired, state.Source.Count - 1);
@@ -345,7 +375,13 @@ internal static class KeyedListDiff
         state.LastKeys.Clear();
         for (int i = 0; i < state.Source.Count; i++) state.LastKeys.Add(state.Source[i].Key);
 
-        return new DiffStats(Inserts: inserts, Removes: removes, Moves: moves, Survivors: survivors, Bailout: false);
+        return new DiffStats(
+            Inserts: inserts,
+            Removes: removes,
+            Moves: moves,
+            Survivors: survivors,
+            Bailout: false,
+            MovedRows: movedRows);
     }
 
     private static void RefreshIndices(ReactorListState state, int fromInclusive, int toInclusive)

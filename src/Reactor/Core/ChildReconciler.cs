@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Reactor.Core.Internal;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Core;
@@ -36,10 +37,17 @@ internal static class ChildReconciler
 
         bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
 
+        // Spec 042 §6 — read the active Animations.Animate ambient once
+        // per reconcile so insert / move / unmount paths can apply the
+        // same kind without re-reading AsyncLocal for every child. Stays
+        // null in the overwhelmingly common no-ambient case.
+        var ambient = AnimationAmbient.Current;
+        AnimationKind? ambientKind = ambient is { HasEffect: true } ? ambient.Kind : null;
+
         if (hasKeys)
-            ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender);
+            ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind);
         else
-            ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender);
+            ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind);
     }
 
     /// <summary>
@@ -51,7 +59,8 @@ internal static class ChildReconciler
         Element[] newChildren,
         IChildCollection children,
         Reconciler reconciler,
-        Action requestRerender)
+        Action requestRerender,
+        AnimationKind? ambientKind)
     {
         int childCount = children.Count; // cache to avoid repeated COM calls
         int common = Math.Min(oldChildren.Length, newChildren.Length);
@@ -120,7 +129,10 @@ internal static class ChildReconciler
         {
             var ctrl = reconciler.Mount(newChildren[i], requestRerender);
             if (ctrl is not null)
+            {
                 children.Insert(children.Count, ctrl);
+                ApplyAmbientEnterIfActive(ctrl, newChildren[i], ambientKind);
+            }
         }
     }
 
@@ -133,7 +145,8 @@ internal static class ChildReconciler
         Element[] newChildren,
         IChildCollection children,
         Reconciler reconciler,
-        Action requestRerender)
+        Action requestRerender,
+        AnimationKind? ambientKind)
     {
         int oldLen = oldChildren.Length;
         int newLen = newChildren.Length;
@@ -197,7 +210,10 @@ internal static class ChildReconciler
             {
                 var ctrl = reconciler.Mount(newChildren[newStart + i], requestRerender);
                 if (ctrl is not null)
+                {
                     children.Insert(prefixLen + i, ctrl);
+                    ApplyAmbientEnterIfActive(ctrl, newChildren[newStart + i], ambientKind);
+                }
             }
             return;
         }
@@ -218,7 +234,7 @@ internal static class ChildReconciler
 
         // Middle section requires key mapping + LIS
         ReconcileKeyedMiddle(oldChildren, newChildren, oldStart, oldMidLen, newStart, newMidLen,
-            prefixLen, suffixLen, children, reconciler, requestRerender);
+            prefixLen, suffixLen, children, reconciler, requestRerender, ambientKind);
     }
 
     /// <summary>
@@ -230,7 +246,8 @@ internal static class ChildReconciler
         int prefixLen, int suffixLen,
         IChildCollection children,
         Reconciler reconciler,
-        Action requestRerender)
+        Action requestRerender,
+        AnimationKind? ambientKind)
     {
         // Build old key → index map
         var oldKeyMap = new Dictionary<string, int>(oldMidLen);
@@ -297,7 +314,10 @@ internal static class ChildReconciler
             {
                 var ctrl = reconciler.Mount(newChildren[newStart + i], requestRerender);
                 if (ctrl is not null)
+                {
                     children.Insert(targetPanelIdx, ctrl);
+                    ApplyAmbientEnterIfActive(ctrl, newChildren[newStart + i], ambientKind);
+                }
             }
             else if (inLIS.Contains(i))
             {
@@ -323,9 +343,17 @@ internal static class ChildReconciler
                 int currentPos = lookupKey != null && keyToIndex.TryGetValue(lookupKey, out var pos) ? pos : -1;
                 if (currentPos >= 0 && currentPos != targetPanelIdx)
                 {
+                    var movedChild = children.Get(currentPos);
                     children.Move(currentPos, targetPanelIdx);
                     // Update lookup: moved element is now at targetPanelIdx.
                     if (lookupKey != null) keyToIndex[lookupKey] = targetPanelIdx;
+                    // Spec 042 §6 — implicit Offset animation on the moved
+                    // child so the reorder reads visually under an ambient.
+                    // Attach via the existing Composition helper rather
+                    // than the per-element LayoutAnimation modifier (which
+                    // remains the user's per-element opt-in).
+                    if (ambientKind is { } k && movedChild is UIElement movedUi)
+                        ApplyAmbientMove(movedUi, k);
                 }
                 if (targetPanelIdx < children.Count)
                 {
@@ -468,5 +496,46 @@ internal static class ChildReconciler
         // Use explicit key if available, otherwise fall back to type+position
         if (element.Key is not null) return element.Key;
         return $"__pos_{positionalIndex}_{element.GetType().Name}";
+    }
+
+    /// <summary>
+    /// Spec 042 §6 — when an <see cref="Animations.Animate"/> transaction
+    /// is active and the newly-mounted child has no explicit
+    /// <c>.Transition(...)</c> modifier, apply the default fade-up enter
+    /// so the structural change reads visually. Per-element transitions
+    /// continue to win when set; this is purely a default for the
+    /// transactional case.
+    /// </summary>
+    private static void ApplyAmbientEnterIfActive(UIElement ctrl, Element element, AnimationKind? ambientKind)
+    {
+        if (ambientKind is not { } kind) return;
+        if (element.ElementTransition is not null) return;
+        Reconciler.ApplyAmbientEnterAnimation(ctrl, kind);
+    }
+
+    /// <summary>
+    /// Spec 042 §6 — implicit Offset animation on a moved child so the
+    /// reorder reads visually. Mirrors the per-container offset animation
+    /// in <c>Reconciler.Update.cs:StartMoveOffsetAnimation</c> for the
+    /// templated-list path; same curve resolution by kind.
+    /// </summary>
+    private static void ApplyAmbientMove(UIElement ctrl, AnimationKind kind)
+    {
+        var curve = AnimationKindMap.ToCurve(kind);
+        if (curve is null) return;
+        try
+        {
+            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(ctrl);
+            var compositor = visual.Compositor;
+            var anim = Animation.AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve);
+            var coll = compositor.CreateImplicitAnimationCollection();
+            coll["Offset"] = anim;
+            visual.ImplicitAnimations = coll;
+        }
+        catch
+        {
+            // Composition can throw in headless / disposing contexts.
+            // Animation is non-critical — correctness is preserved.
+        }
     }
 }

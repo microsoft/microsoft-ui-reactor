@@ -75,6 +75,14 @@ public sealed class ReactorHost : IDisposable
     // We capture the curve here so the reconcile pass can restore it.
     private Curve? _pendingAnimationCurve;
 
+    // Captured AmbientAnimation snapshot (spec 042 §6 Q3). Setters that
+    // fire inside Animations.Animate(...) snapshot AnimationAmbient.Current
+    // synchronously and stash it here; the render loop re-pushes it onto
+    // the AsyncLocal stack around the reconcile pass so KeyedListDiff /
+    // ChildReconciler observe the same intent even when the rerender hops
+    // a dispatcher. Last-writer-wins matches _pendingAnimationCurve.
+    private Microsoft.UI.Reactor.Core.Internal.AmbientAnimation? _pendingAmbientAnimation;
+
     // ── Single shared overlay surface ──
     // One wrapper Grid + Canvas hosts every dev overlay (reconcile highlight,
     // layout cost, future additions). Constructed lazily when any overlay flag
@@ -462,6 +470,15 @@ public sealed class ReactorHost : IDisposable
         if (AnimationScope.HasScope)
             _pendingAnimationCurve = AnimationScope.Current;
 
+        // Same snapshot pattern for the Animations.Animate ambient. AsyncLocal
+        // flows through DispatcherQueue.TryEnqueue on WinUI 1.5+, but a
+        // setter that fires from a Task.Run that never awaits back would
+        // otherwise lose the ambient. This snapshot is the explicit
+        // insurance against that case (spec 042 §9 Q3).
+        var captured = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current;
+        if (captured is not null)
+            _pendingAmbientAnimation = captured;
+
         // During render: just flag — the render loop will re-enqueue after Render().
         if (_isRendering)
         {
@@ -625,6 +642,15 @@ public sealed class ReactorHost : IDisposable
             var capturedCurve = Interlocked.Exchange(ref _pendingAnimationCurve, null);
             if (capturedCurve is not null)
                 AnimationScope.PushScope(capturedCurve);
+
+            // Same restore for the Animations.Animate ambient (spec 042 §6).
+            // The scope re-pushes the captured snapshot onto the AsyncLocal
+            // so reconcile-time consumers (KeyedListDiff, ChildReconciler)
+            // see the same intent the originating setter saw.
+            var capturedAmbient = Interlocked.Exchange(ref _pendingAmbientAnimation, null);
+            using var ambientRestore = capturedAmbient is not null
+                ? new Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Scope(capturedAmbient)
+                : default;
 
             UIElement? newControl;
             try

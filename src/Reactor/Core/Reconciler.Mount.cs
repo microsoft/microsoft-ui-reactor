@@ -1810,6 +1810,57 @@ public sealed partial class Reconciler
             var ctrl = Mount(itemElement, requestRerender);
             cc.Content = ctrl;
             SetElementTag(cc, itemElement); // Store for later reconciliation
+
+            // Spec 042 §6 — if this container is materializing a row that
+            // the keyed diff tagged as inserted under an active
+            // Animations.Animate transaction, fire a one-shot enter
+            // animation on the realized container and clear the tag so the
+            // next recycle/materialize cycle doesn't replay it.
+            if (args.Item is ReactorRow row && row.PendingEnterAnimation is { } kind)
+            {
+                row.PendingEnterAnimation = null;
+                ApplyAmbientEnterAnimation(args.ItemContainer, kind);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Spec 042 §6 — apply a default fade-up enter animation to a
+    /// container freshly realized under an <see cref="Animations.Animate"/>
+    /// transaction. Uses the same per-container Composition path resolved
+    /// by Q4 (not the shared <c>ListView.ItemContainerTransitions</c>
+    /// collection) so concurrent transactions don't clobber each other. The element
+    /// developer's <c>.Transition(...)</c> modifier still wins when set —
+    /// this only fires when no per-element transition has been declared.
+    /// </summary>
+    internal static void ApplyAmbientEnterAnimation(UIElement container, AnimationKind kind)
+    {
+        var curve = AnimationKindMap.ToCurve(kind);
+        if (curve is null) return;
+
+        try
+        {
+            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(container);
+            var compositor = visual.Compositor;
+
+            // Set initial state, then animate to final. Opacity carries the
+            // fade-in; a small Y offset carries the slide-up so the row
+            // visibly emerges rather than just appearing. Both targets use
+            // the same curve so they stay phase-locked.
+            visual.Opacity = 0f;
+            var prevOffset = visual.Offset;
+            visual.Offset = new global::System.Numerics.Vector3(prevOffset.X, prevOffset.Y + 12f, prevOffset.Z);
+
+            var opacityAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, 1.0f, curve);
+            visual.StartAnimation("Opacity", opacityAnim);
+
+            var offsetAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, prevOffset, curve);
+            visual.StartAnimation("Offset", offsetAnim);
+        }
+        catch
+        {
+            // Composition can throw in headless / disposing contexts.
+            // Animation is non-critical — correctness is preserved.
         }
     }
 

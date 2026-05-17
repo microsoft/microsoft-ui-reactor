@@ -62,6 +62,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private bool _themeListenerAttached;
     private volatile bool _disposed;
     private Curve? _pendingAnimationCurve;
+    // Snapshot of AnimationAmbient.Current at setter dispatch time
+    // (spec 042 §6 Q3). Re-pushed around the reconcile pass below.
+    private Microsoft.UI.Reactor.Core.Internal.AmbientAnimation? _pendingAmbientAnimation;
 
     // Spec 033 §6 — backdrop applier in "windowless" mode. Embedded
     // ReactorHostControl does not own its window, so the modifier no-ops with
@@ -294,6 +297,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         if (AnimationScope.HasScope)
             _pendingAnimationCurve = AnimationScope.Current;
 
+        // Spec 042 §6 — snapshot the AmbientAnimation set by Animations.Animate
+        // so the reconcile pass can re-push it around the diff. Same
+        // last-writer-wins rule as the curve capture above.
+        var capturedAmbient = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current;
+        if (capturedAmbient is not null)
+            _pendingAmbientAnimation = capturedAmbient;
+
         // Flag re-render before the _isRendering / CAS checks so the request
         // survives the TOCTOU window between Render()'s finally
         // (_isRendering = false) and RenderLoop's gate-reset
@@ -431,6 +441,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             var capturedCurve = Interlocked.Exchange(ref _pendingAnimationCurve, null);
             if (capturedCurve is not null)
                 AnimationScope.PushScope(capturedCurve);
+
+            // Spec 042 §6 — re-push the captured Animations.Animate ambient
+            // so KeyedListDiff / ChildReconciler observe it during reconcile.
+            var capturedAmbient = Interlocked.Exchange(ref _pendingAmbientAnimation, null);
+            using var ambientRestore = capturedAmbient is not null
+                ? new Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Scope(capturedAmbient)
+                : default;
 
             UIElement? newControl;
             try

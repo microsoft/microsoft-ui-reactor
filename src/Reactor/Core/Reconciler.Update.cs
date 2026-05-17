@@ -2861,13 +2861,26 @@ public sealed partial class Reconciler
             return;
         }
 
-        // Project new keys through the typed peer.
+        // Project new keys through the typed peer. Pass the active ambient
+        // so newly-inserted ReactorRows are tagged with the kind and the
+        // ContainerContentChanging handler can attach a per-container
+        // enter animation as those containers realize. (spec 042 §6.)
+        var ambient = AnimationAmbient.Current;
         var stats = KeyedListDiff.Apply(
             state,
             new TemplatedKeyAdapter(n),
             static (item, _) => item.Key,
             _logger,
-            lvb.GetType().Name);
+            lvb.GetType().Name,
+            ambient);
+
+        // Drive per-container offset animations for survivors that moved.
+        // Insert / Remove animations attach through the realize/recycle
+        // path so they survive virtualization; Move requires the live
+        // container handle here because the row instance was already
+        // realized before the move op.
+        if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
+            ApplyMoveAnimations(lvb, movedRows, ambient.Kind);
 
         if (stats.Bailout)
         {
@@ -3008,12 +3021,21 @@ public sealed partial class Reconciler
             return;
         }
 
-        KeyedListDiff.Apply(
+        var ambient = AnimationAmbient.Current;
+        var stats = KeyedListDiff.Apply(
             state,
             new LazyKeyAdapter(n),
             static (item, _) => item.Key,
             _logger,
-            repeater.GetType().Name);
+            repeater.GetType().Name,
+            ambient);
+
+        // ItemsRepeater realizes containers through ElementFactory, so the
+        // enter animation runs from there. Moves on already-realized
+        // elements need the same handle-based offset animation as the
+        // templated list path. (spec 042 §6.)
+        if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
+            ApplyMoveAnimationsRepeater(repeater, movedRows, ambient.Kind);
         // Bailout reset still mutates state.Source in place, so the
         // existing ItemsSource binding remains valid.
     }
@@ -3041,6 +3063,79 @@ public sealed partial class Reconciler
             seeded[i] = (i, lazy.GetKeyAt(i) ?? $"__null_{i}");
         state.Reset(seeded);
         return state;
+    }
+
+    /// <summary>
+    /// Spec 042 §6 — per-container offset animation for ListView/GridView
+    /// survivors that moved index inside an active <see cref="Animations.Animate"/>
+    /// transaction. WinUI's <c>ListViewBase.ContainerFromItem</c>
+    /// returns the live container for a realized row (null for virtualized
+    /// ones, which is fine — the realize path attaches the animation when
+    /// they come back into view).
+    /// </summary>
+    private void ApplyMoveAnimations(WinUI.ListViewBase lvb, IReadOnlyList<ReactorRow> moved, AnimationKind kind)
+    {
+        var curve = AnimationKindMap.ToCurve(kind);
+        if (curve is null) return;
+        for (int i = 0; i < moved.Count; i++)
+        {
+            var row = moved[i];
+            // ContainerFromItem can throw if the underlying ItemsPanel is
+            // mid-rebuild (rare but observed on bulk-replace bailout
+            // recovery). Animation is non-critical; swallow and continue.
+            try
+            {
+                if (lvb.ContainerFromItem(row) is UIElement container)
+                    StartMoveOffsetAnimation(container, curve);
+            }
+            catch { /* best-effort */ }
+        }
+    }
+
+    /// <summary>
+    /// Spec 042 §6 — same as <see cref="ApplyMoveAnimations"/> but routed
+    /// through <see cref="WinUI.ItemsRepeater.TryGetElement"/> because
+    /// ItemsRepeater doesn't expose <c>ContainerFromItem</c>. Row.Index is
+    /// the post-move target position, which is what TryGetElement keys on.
+    /// </summary>
+    private void ApplyMoveAnimationsRepeater(WinUI.ItemsRepeater repeater, IReadOnlyList<ReactorRow> moved, AnimationKind kind)
+    {
+        var curve = AnimationKindMap.ToCurve(kind);
+        if (curve is null) return;
+        for (int i = 0; i < moved.Count; i++)
+        {
+            try
+            {
+                var container = repeater.TryGetElement(moved[i].Index);
+                if (container is not null)
+                    StartMoveOffsetAnimation(container, curve);
+            }
+            catch { /* best-effort */ }
+        }
+    }
+
+    /// <summary>
+    /// One-shot Composition offset animation: snap the visual to its
+    /// previous offset and animate to zero so the row visibly slides into
+    /// its new layout slot. The expression keyframe form is required so
+    /// the spring/ease curve picks the *current* visual.Offset as the
+    /// starting value — WinUI has already moved the layout slot under us
+    /// by the time we attach. (spec 042 §6, Q4 — per-container.)
+    /// </summary>
+    private static void StartMoveOffsetAnimation(UIElement container, Curve curve)
+    {
+        var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(container);
+        var compositor = visual.Compositor;
+        var anim = AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve);
+        // Implicit animations fire automatically when WinUI assigns the
+        // new Offset on layout; attaching here means the next layout pass
+        // animates instead of snapping. We deliberately don't pre-set
+        // Offset — letting the implicit animation observe WinUI's own
+        // assignment is what makes the move read correctly without us
+        // racing the layout pass.
+        var coll = compositor.CreateImplicitAnimationCollection();
+        coll["Offset"] = anim;
+        visual.ImplicitAnimations = coll;
     }
 
     private UIElement? UpdateMenuBar(MenuBarElement o, MenuBarElement n, WinUI.MenuBar mb)

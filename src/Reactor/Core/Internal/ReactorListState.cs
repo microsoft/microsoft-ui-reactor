@@ -25,6 +25,17 @@ internal sealed class ReactorRow
     /// </summary>
     public string Key { get; set; } = "";
 
+    /// <summary>
+    /// One-shot animation intent stamped by <see cref="KeyedListDiff"/> when the
+    /// row is freshly inserted under an active <see cref="AmbientAnimation"/>.
+    /// Consumed (and cleared) by the templated control's
+    /// <c>ContainerContentChanging</c> handler when WinUI realizes the container
+    /// — at that point the enter transition is applied to the freshly-realized
+    /// visual. Stays <see langword="null"/> for survivors and rows mounted
+    /// outside an <see cref="Animations.Animate"/> transaction. (spec 042 §6)
+    /// </summary>
+    public AnimationKind? PendingEnterAnimation { get; set; }
+
     public override string ToString() => $"Row[{Index}]={Key}";
 }
 
