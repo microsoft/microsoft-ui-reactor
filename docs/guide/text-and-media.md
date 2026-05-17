@@ -1,0 +1,12 @@
+
+# Text and Media
+
+Coming soon — this page documents the text and media controls:
+TextBlock, RichTextBlock, RichEditBox, MarkdownTextBlock, Image,
+MediaPlayerElement, WebView2, InkCanvas, and MapControl. See
+[the AI Author Skill](../../_pipeline/ai-author-skill.md) for the
+planned surface and the spec-041 §6.3 per-control template.
+
+Until then, [Controls](controls.md) will eventually index this page, and
+[Styling](styling.md) covers text appearance modifiers shared across
+all text controls.

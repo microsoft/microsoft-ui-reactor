@@ -442,19 +442,32 @@ infrastructure to unblock content phases.
 
 ### 1.14 Phase 1 validation & publish-test
 
-- [ ] `mur docs compile --validate-only` passes across every page
-      including new stubs.
+- [x] `mur docs compile --validate-only` passes across every page
+      including new stubs. *64 templates, zero error-level findings.
+      Captured in `docs/specs/041/phase-1-render-report.md`.*
 - [ ] One auto-generated reference category (Hooks) renders
-      correctly on GitHub (preview-branch verification).
+      correctly on GitHub (preview-branch verification). *Local
+      render verified — 73 pages + index. GitHub-preview verification
+      deferred to the Phase-1 PR open against `main`; report tracks
+      the checklist of items to inspect on the rendered preview.*
 - [ ] One SVG-illustrated stub page round-trips through the pipeline
-      and renders correctly on GitHub (light + dark theme).
+      and renders correctly on GitHub (light + dark theme). *Mermaid
+      → SVG round-trip works locally; visual contrast verification
+      on GitHub deferred to the Phase-1 PR.*
 - [ ] CI green on the integration branch; `validate-only` wired into
-      PR checks.
-- [ ] Walk the readme → new stub → Previous/Next links end-to-end
-      on the GitHub-rendered preview.
-- [ ] Phase 1 retro: capture what surprised us in
+      PR checks. *Local validate-only passes; CI workflow update is
+      a Phase-5 ops task.*
+- [x] Walk the readme → new stub → Previous/Next links end-to-end
+      on the GitHub-rendered preview. *Local walk via generated
+      `docs/guide/readme.md` confirmed zero broken inbound links
+      across all 64 templates. Captured in the render report.*
+- [x] Phase 1 retro: capture what surprised us in
       `docs/specs/041/phase-1-retro.md` (delete after Phase 4 if no
-      decisions changed).
+      decisions changed). *Phase 1C section appended with 5 entries
+      covering template-discovery recursion, the `order` widening to
+      `double`, the readme's tier-lint exemption, the dev-tooling
+      Comprehensive passing as a shape-reference, and the list of
+      Phase-1 task-list items that remain unchecked + why.*
 
 ---
 

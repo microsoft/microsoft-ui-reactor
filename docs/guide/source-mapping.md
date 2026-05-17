@@ -1,0 +1,13 @@
+
+# Source Mapping
+
+Coming soon — this page explains the source-mapping subsystem
+(spec 010): how Reactor attributes runtime work back to a specific
+line of user source, what it enables (per-component perf attribution,
+layout-cost overlay, reconcile-highlight overlay), and how the
+mapping survives across the C# → IL → element-record pipeline. See
+[the AI Author Skill](../../_pipeline/ai-author-skill.md) for the
+planned surface.
+
+Until then, [Dev Tooling](dev-tooling.md) covers the surface tooling
+that depends on this.

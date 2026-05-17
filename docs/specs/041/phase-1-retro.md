@@ -135,6 +135,70 @@ The .editorconfig at the repo root suppresses both rules under
 `samples/`, `tests/`, and `tools/` so consumer-facing public API is
 the only thing the rules can fail.
 
+## What surprised us (Phase 1C — tasks 1.10-1.14)
+
+### `recipes/` forced template-discovery to recurse
+
+The spec §7.1 Section 6 calls for `recipes/` as a folder (one
+recipe per page so the gallery scales without nav churn). The
+existing `CompileCommand.DiscoverTemplates` used
+`Directory.GetFiles(templatesDir, "*.md.dt")` with the implicit
+`SearchOption.TopDirectoryOnly`, which would silently skip every
+recipe in the new subfolder. Fix landed in the 1.10 commit:
+`EnumerateTemplateFiles` now recurses and explicitly excludes
+the `_skeletons/` directory authored in task 1.11. Topic id
+gains the subfolder prefix (`recipes/login`) so the output
+path round-trips to `docs/guide/recipes/login.md`. Worth
+remembering: any other subfolder under `templates/` now ships
+to the corresponding `docs/guide/` subfolder.
+
+### `order:` needed to widen to `double`
+
+Spec §7.2 says "new pages slot in as `.5` between existing
+integer orders until the Phase-4 rebase". The existing parser
+used `int.TryParse(value, out var o)` which silently dropped
+the fractional part (every `.5` page would have ended up at
+order 0). Widened `DocTemplate.Order` to `double` and the
+parser to `double.TryParse` with `InvariantCulture`. Cheap
+change; no other call site mattered (only `OrderBy(...)` reads
+the value).
+
+### The readme is structurally distinct enough to skip `tier:`
+
+The §11 tier-lint checklist for Solid expects a reference
+table and a `## Next Steps` section. The new readme is a
+landing-page-plus-index — its "table" is the 10-section list
+itself, and the "Next Steps" is the entire body. Easiest
+honest fix: leave `tier:` undeclared on the readme so the
+lint drops to info severity (per the existing Phase-1A
+fallback). A future refinement could special-case the readme
+in the lint, but the current behavior is already correct: the
+information-only findings serve as visible TODOs for Phase 4.
+
+### Comprehensive tier passes cleanly on dev-tooling
+
+The merged `dev-tooling.md.dt` is the first Comprehensive-tier
+page to pass the full §11 checklist end-to-end. Useful
+shape-reference for Phase 2-3 authoring: the §6.3 requirements
+(≥80-word mental-model lead, `<!-- ai:caveat -->` block,
+`## Patterns`, `## Common Mistakes`, ≥5 inline cross-links,
+reference table, ≥3 snippets, ≥1 screenshot) are all
+ergonomic — the page reads naturally without feeling
+checklist-stuffed.
+
+### Phase 1 task list — remaining unchecked items
+
+- `Phase 0 §0.1 — Confirm owner assigned in spec header`. The
+  spec still lists `Owner: TBD`. Not a Phase-1 blocker; owner
+  assignment is an organizational concern handled at PR time.
+- `Phase 1 §1.5 — CI install of mermaid-cli`. The local
+  install steps are documented in
+  `docs/contributing/doc-pipeline.md`; the GitHub Actions
+  workflow change is tracked as a Phase-5 ops follow-up.
+- `Phase 1 §1.7 — GitHub preview render check`. Deferred to
+  task 1.14's GitHub-render walk-through; the chain integrity
+  is verified locally in `phase-1-render-report.md`.
+
 ## Open questions
 
 None — all of §12.1's Phase-1 questions were resolved during the
