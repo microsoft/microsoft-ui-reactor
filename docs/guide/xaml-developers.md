@@ -1,4 +1,18 @@
 
+Reactor's render-from-state model has a clean 1:1 translation table to XAML
+that an experienced XAML developer can hold in their head. Where XAML
+describes *bindings* between view-model properties and control DPs and lets
+the binding engine pull values on change-notification, Reactor describes the
+*current UI* directly and re-evaluates the entire component when state
+changes. The control tree is the same WinUI control tree at runtime — only
+the authoring surface differs. This page is the translation key: every
+XAML idiom you reach for (DataContext, Binding modes, DataTemplate,
+DependencyProperty, code-behind, ICommand, Frame.Navigate) maps to a
+specific Reactor shape, and the body below walks each one in order.
+Companion essay [`reactor-vs-xaml`](reactor-vs-xaml.md) covers the
+architectural *why* — read this page for the recipes, that one for the
+philosophy.
+
 # Reactor for XAML Developers
 
 If you already know XAML, Reactor is not a different Windows UI stack. It still
@@ -6,6 +20,8 @@ renders real WinUI controls. The shift is in **how** you describe the UI: instea
 of splitting a page across XAML, bindings, converters, and code-behind, you
 return the UI directly from C# and let Reactor keep the native control tree in
 sync.
+
+![From XAML page to Reactor component — mental-model shift](images/xaml-developers/mental-model-shift.svg)
 
 ## The Mental Model Shift
 
@@ -163,6 +179,21 @@ Use this rule of thumb instead:
 That is why Reactor code often looks simpler than XAML. A label like
 `TextBlock($"{firstName} {lastName}")` is already "bound" because `Render()`
 re-runs whenever the relevant state changes.
+
+> **Caveat:** A XAML `Binding` with `Mode=TwoWay` becomes a Reactor controlled-input
+> pattern (`TextField(name, setName)`), not a binding-with-mode. There is
+> **no** Reactor analogue to `Mode=OneWay` / `Mode=OneTime` / `Mode=TwoWay`
+> because state IS the binding — every render re-reads from state, every
+> edit calls a setter. If you write `TextField(name, _ => { })` and never
+> call a setter, the field is read-only (effectively `Mode=OneWay`); if
+> you wire both, it round-trips (effectively `Mode=TwoWay`). The trap is
+> "reach for the binding mode for OneTime" — there is no equivalent.
+> Cache the value in a `UseRef` and read `ref.Current` if you genuinely
+> want to capture-and-freeze, or call a function once in a
+> `UseEffect(() => …, Array.Empty<object>())` so it runs only on mount.
+> The Reactor analyzer doesn't emit a specific diagnostic for "missing
+> setter" — passing `null` to a `TextField` change handler is a
+> `CS8625` "Cannot convert null literal" instead.
 
 ## Events and Commands Are Just C#
 
@@ -331,7 +362,73 @@ If you are moving an existing WinUI app to Reactor, this tends to work well:
 The goal is not to "port XAML syntax into C#." The goal is to adopt Reactor's
 state-driven model while preserving your WinUI knowledge.
 
-## Tips for XAML Developers
+## Patterns
+
+### DependencyProperty becomes a hook
+
+In XAML, every reactive value on a control sits on a `DependencyProperty`
+— a globally-registered slot with metadata, change callbacks, and
+inheritance rules. In Reactor, the analogue is a hook call inside
+[`Render()`](components.md): `var (count, setCount) = UseState(0)` is
+the equivalent of a single instance-scoped DP, and the hook slot table
+behind it ([hooks-internals](hooks-internals.md)) plays the role the
+DP system plays for XAML. The mental shift is "I don't need a registry;
+I need a positional slot," and the implementation gets vastly smaller
+in the process.
+
+### `UserControl` becomes a component
+
+XAML developers reach for `UserControl` whenever a screen contains a
+reusable visual chunk with its own state. In Reactor, that chunk is a
+[component](components.md) — a class with a `Render()` method and
+typed props. The XAML version has a `.xaml` markup file plus a
+`.xaml.cs` code-behind plus often a property dependency-injected via
+DataContext; the Reactor version is one C# class. The reuse story is
+the same; the line count drops by ~70% on most controls.
+
+### `DataTemplate` becomes a render function
+
+XAML `DataTemplate` declares how each item in a list renders. Reactor's
+equivalent is the third argument to [`ListView<T>`](collections.md) /
+[`GridView<T>`](collections.md) / [`VirtualList`](collections.md): a
+`Func<T, Element>` that returns the per-item Element tree. Item
+selection and editing are state in the parent component, not a
+hand-wired `SelectedItem` binding. The
+[recipes/master-detail](recipes/master-detail.md) walkthrough is the
+canonical example.
+
+## Common Mistakes
+
+### Trying to compute layout from a `DependencyProperty`
+
+Reactor has no DP system — there is no `DependencyProperty.Register`,
+no metadata callback, no `AffectsMeasure`. Computed values live as
+ordinary local variables inside `Render()`; cached computations live in
+[`UseMemo`](hooks.md). If you find yourself looking for "the equivalent
+of `AffectsArrange`," the answer is "your `Render()` already ran and
+the reconciler diffed the layout-affecting modifiers" — see
+[reactor-vs-xaml](reactor-vs-xaml.md) for the longer explanation.
+
+### Using `INotifyPropertyChanged` to back local state
+
+A small "binding view model" that exposes `Name`, `Email`, etc. as
+INPC properties is the XAML idiom — in Reactor, those four lines
+collapse to four `UseState` calls. The `INotifyPropertyChanged` bridge
+still exists ([`UseObservable`](advanced.md)), but reach for it only
+when you're migrating an existing view model. New code uses hooks.
+
+### Writing XAML at all
+
+Reactor does not host a XAML loader. There is no `Application.LoadComponent`
+equivalent, no `xmlns:reactor`, no `*.reactor.xml` markup. Apps that
+need part of the screen in XAML use a WinUI `Page` as the host and
+embed Reactor via [winforms-interop](winforms-interop.md) or
+`ReactorHostControl`; everything inside that host is C#. If a
+contractor's "Reactor XAML compiler" appears in your search results,
+it doesn't exist — the framework's design eliminates the second
+authoring language deliberately.
+
+## Tips
 
 **Think "render the current truth."** In XAML, you often describe relationships
 between properties. In Reactor, you usually compute the current value directly and
@@ -350,6 +447,7 @@ already C#.
 
 ## Next Steps
 
+- **[Reactor vs XAML](reactor-vs-xaml.md)** — the architectural essay: why the binding model is fundamentally different, not just syntactically
 - **[Getting Started](getting-started.md)** — build your first Reactor app from scratch
 - **[Components](components.md)** — break UI into reusable typed components
 - **[Hooks](hooks.md)** — learn `UseState`, `UseReducer`, `UseEffect`, and the core render model

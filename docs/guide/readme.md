@@ -5,6 +5,14 @@ Reactor is a declarative UI framework for building native Windows desktop apps i
 pure C#. No XAML. No data binding. No view models. You describe your UI as a
 function of state, and Reactor keeps the screen in sync.
 
+| If you want to... | Start here |
+|-------------------|------------|
+| Build your first Reactor app | [Getting Started](getting-started.md) |
+| Understand the mental model | [Thinking in Reactor](thinking-in-reactor.md) |
+| Port a XAML/WinUI/WPF app | [Reactor for XAML Developers](xaml-developers.md) |
+| Look up a hook or modifier | [API Reference](reference/hooks/index.md) |
+| Read how the runtime works | [Architecture Overview](architecture-overview.md) |
+
 ## Why Reactor?
 
 **Pure C# from top to bottom.** Your entire app — layout, styling, state,
@@ -139,7 +147,7 @@ first; everyone else can follow the order.
 
 - **[Navigation](navigation.md)** — NavigationView, TabView, multi-page apps, routing
 - **[Windows](windows.md)** — Top-level windows, tray icons, OpenWindow, shutdown policy
-- **[Async Resources](async-resources.md)** — UseResource, UseInfiniteResource, UseMutation, Pending
+- **[Async Resources](async-resources.md)** — `UseResource`, `UseInfiniteResource`, `UseMutation`, `Pending`
 - **[Persistence](persistence.md)** — UsePersisted, scopes, migration
 - **[Localization](localization.md)** — Multi-language support, resource strings, RTL layouts
 - **[Accessibility](accessibility.md)** — Screen readers, keyboard navigation, focus trapping, runtime scanning
@@ -183,7 +191,7 @@ does, not just how to use it.
 - **[Analyzer Architecture](analyzer-architecture.md)** — Roslyn analyzers shipped with Reactor; authoring your own
 - **[DevTools Internals](devtools-internals.md)** — Dev menu, reconcile-highlight, layout-cost overlay, MCP protocol
 - **[Animation Pipeline](animation-pipeline.md)** — Composition API end-to-end; 4 animation systems
-- **[Focus and Input Internals](focus-and-input-internals.md)** — UseFocus dispatcher, FocusTrap container, pointer event flow
+- **[Focus and Input Internals](focus-and-input-internals.md)** — `UseFocus` dispatcher, `FocusTrap` container, pointer event flow
 - **[Perf Instrumentation](perf-instrumentation.md)** — ETW sources, frame-aligned sampling, layout-cost attribution
 
 ### 10. API Reference
@@ -231,3 +239,10 @@ and `UseEffect` unlocks everything else.
 
 **Keep components small.** Extract pieces into their own components early.
 Composition is always easier to reason about than a single giant `Render()`.
+
+## Next Steps
+
+- **[Getting Started](getting-started.md)** — Build your first app, manage state, ship a todo list.
+- **[Hooks](hooks.md)** — `UseState`, `UseEffect`, `UseMemo`, and the rest of the core state primitives.
+- **[Components](components.md)** — Component classes, props, and function components in detail.
+- **[Reactor for XAML Developers](xaml-developers.md)** — Migration cookbook for XAML, bindings, MVVM, and navigation.

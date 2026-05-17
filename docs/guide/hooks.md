@@ -1,9 +1,44 @@
 
+Hooks are the reactivity contract for a [component](components.md). A hook is a
+positional slot — when `Render()` runs, Reactor walks each `Use*` call in order
+and looks up the matching cell in a per-component slot table held on the
+[`RenderContext`](hooks-internals.md). The first <!-- ref:UseState --> call is
+slot 0, the second is slot 1, and so on; the setter the hook returns closes
+over its slot index and writes back to that cell when you call it. Hooks
+replace what classic XAML / WPF apps build with `DependencyProperty`,
+`INotifyPropertyChanged`, view models, and lifecycle methods — instead of
+those four mechanisms, you keep state with `UseState`, derive values with
+`UseMemo`, run side effects with [`UseEffect`](effects.md), share data
+without prop drilling via [`UseContext`](context.md), and persist values
+across launches with [`UsePersisted`](persistence.md). Every hook on this
+page reads as a function call inside `Render()` and writes back through a
+setter closure; understanding that single shape makes the rest of Reactor
+fall out as composition.
+
 # Hooks
 
 Hooks are functions you call inside [`Render()`](components.md) to manage state, side effects,
 and memoization. They replace the need for view models, event handlers, and
 lifecycle methods.
+
+## Reference
+
+| Hook | Returns | Purpose |
+|------|---------|---------|
+| <!-- ref:UseState --> | `(T value, Action<T> set)` | Reactive state — re-renders on `set`. |
+| <!-- ref:UseReducer --> | `(T value, Action<Func<T,T>> update)` *or* `(TState, Action<TAction>)` | Functional or Redux-style updates. |
+| <!-- ref:UseEffect --> | `void` | Side effects after commit. With `Func<Action>` overload, runs the cleanup before the next effect and on unmount. |
+| <!-- ref:UseMemo --> | `T` | Cached computation; re-runs when any `deps` entry compares unequal. |
+| <!-- ref:UseRef --> | `Ref<T>` with mutable `.Current` | Persists across renders **without** re-rendering on change. |
+| <!-- ref:UseCallback --> | `Action` | Stable delegate identity across renders. |
+| <!-- ref:UseContext --> | `T` | Read the ambient [Context](context.md) value. |
+| <!-- ref:UseObservable --> | `T` | Re-render when a tracked `INotifyPropertyChanged` source raises a change. |
+| [UseResource](reference/hooks/UseResource.md) | `AsyncValue<T>` | Cached async read (see [Async Resources](async-resources.md)). |
+| <!-- ref:UsePersisted --> | `(T, Action<T>)` | `UseState` that survives app launches (see [Persistence](persistence.md)). |
+
+Every hook on this page is summarized again in the auto-generated
+[hooks reference](reference/hooks/index.md); the rest of the page is the
+narrative.
 
 ## UseState
 
@@ -336,7 +371,9 @@ write rather than a snapshot from the last UI tick.
 
 Hooks must be called **in the same order** every render. Reactor tracks hooks by
 their position in the call sequence — the first `UseState` call always maps to
-the first state slot, the second to the second, and so on.
+the first state slot, the second to the second, and so on. The internal walk
+of `_hookIndex` against `_hooks[currentIndex]` is described in
+[Hooks Internals](hooks-internals.md).
 
 **Do:**
 <!-- ai:lock -->
@@ -371,6 +408,149 @@ UseEffect(() => { if (a > 0) { /* ... */ } }, a);
 ```
 <!-- /ai:lock -->
 
+> **Caveat:** Calling a hook inside an `if`, `for`, `while`, `switch`, or `try` changes the
+> slot index for every hook that follows on any render that takes the branch.
+> The next render then asks slot `N` for the type the *unbranched* call shape
+> expects — `ValueHookState<int>` vs. `EffectHookState`, say — and the slot
+> table guard at `RenderContext.UseState` throws
+> `HookOrderException("Hook at index N is EffectHookState, expected
+> ValueHookState<Int32> (UseState). Hooks must be called in the same order
+> every render.")`. The Roslyn analyzer `REACTOR_HOOKS_001` flags the literal
+> pattern — `Use*` inside a control-flow construct in a `Render` override or
+> a `Use*`-prefixed custom hook — at compile time as a Warning. The analyzer
+> can't see calls through lambdas, helper functions whose names don't start
+> with `Use`, or pattern-matched dispatch, so the runtime guard is the
+> backstop. When you hit the exception, look for a `Use*` call that's
+> conditionally reached — typically the new one you just added.
+
+## Patterns
+
+### Custom hooks
+
+A custom hook is any method whose name starts with `Use` that calls other
+hooks inside it. The analyzer treats `Use*` methods as legitimate hook
+contexts, so you can compose `UseState`, `UseEffect`, and friends into a
+named, reusable bundle without losing the rules.
+
+```csharp
+static (string Value, Action<string> Set) UseDebouncedText(string initial, int ms)
+{
+    var ctx = RenderContext.Current;
+    var (value, setValue) = ctx.UseState(initial);
+    var (debounced, setDebounced) = ctx.UseState(initial);
+
+    ctx.UseEffect(() =>
+    {
+        var cts = new CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            try { await Task.Delay(ms, cts.Token); setDebounced(value); }
+            catch (OperationCanceledException) { }
+        });
+        return () => cts.Cancel();
+    }, value);
+
+    return (debounced, setValue);
+}
+```
+
+The hook owns three slots — two `UseState` and one `UseEffect` — and the
+caller still gets the simple `(value, setter)` shape they'd get from
+`UseState`. The compiled [Rules of Reactor](rules-of-reactor.md) page
+catalogs the full set of custom-hook conventions.
+
+### Lifted state
+
+When a parent and child both need to read the same value, hoist the
+`UseState` to the parent and pass `(value, setter)` down as a prop. The
+[recipes/master-detail](recipes/master-detail.md) walkthrough shows the
+classic shape — the master list and the detail panel both react to the
+shared selection state. This is the same pattern XAML developers reach
+for with shared view models; here the state lives in the parent
+[component](components.md), the children are reactive consumers.
+
+### Deferred value via UseRef
+
+`UseRef` is the right tool when a value needs to survive renders but
+must **not** trigger them. Storing the previous prop value for diffing,
+holding a `CancellationTokenSource`, or counting renders for diagnostics
+all belong in a ref:
+
+```csharp
+var prev = UseRef<int?>(null);
+UseEffect(() => { /* compare prev.Current to current */ prev.Current = current; }, current);
+```
+
+The setter writes to `.Current` immediately without scheduling a render —
+contrast with `UseState`, where every setter call queues a re-render
+through the dispatcher.
+
+## Common Mistakes
+
+### Hooks inside conditionals
+
+```csharp
+// Don't:
+public override Element Render()
+{
+    var (open, setOpen) = UseState(false);
+    if (open)
+    {
+        UseEffect(() => Subscribe(), Array.Empty<object>()); // REACTOR_HOOKS_001
+    }
+    return ...;
+}
+```
+
+The effect's slot index moves by one on every render where `open` flips.
+The next render finds `EffectHookState` where it expected `ValueHookState`
+and throws `HookOrderException`. The fix is to call the hook
+unconditionally and put the condition **inside** it:
+
+```csharp
+UseEffect(() => { if (!open) return () => { }; return Subscribe(); }, open);
+```
+
+### Stale closures
+
+```csharp
+// Don't:
+var (count, setCount) = UseState(0);
+UseEffect(() =>
+{
+    var t = new Timer(_ => setCount(count + 1), null, 0, 1000);
+    return () => t.Dispose();
+}, Array.Empty<object>()); // captured `count` is forever 0
+```
+
+The effect's empty deps array means it captures `count` once at mount.
+The timer fires forever with the stale closure, so the counter sticks at
+1. The fix is the functional-setter pattern — `setCount(c => c + 1)` —
+which reads the live cell value instead of the captured variable. The
+`Func<T,T>` overload of `UseState` and the entire `UseReducer` API are
+built around this.
+
+### Setter chain that should be `set(prev => ...)`
+
+```csharp
+// Don't:
+Button("+3", () => { setCount(count + 1); setCount(count + 1); setCount(count + 1); });
+```
+
+The three setter calls all read the same captured `count` and all write
+`count + 1` — the button advances by one, not three. Use the functional
+form so each call sees the previous setter's result:
+
+```csharp
+Button("+3", () => { setCount(c => c + 1); setCount(c => c + 1); setCount(c => c + 1); });
+```
+
+This is the same Reactor-wide rule as the [stale closure](#stale-closures)
+pattern: when an update derives from the previous value, the functional
+setter is the right shape. The auto-marshal path for cross-thread setters
+described above relies on the same overload — every queued write reads
+the latest committed value, not a snapshot.
+
 ## Tips
 
 **Use the functional setter for derived updates.** `setCount(c => c + 1)` is
@@ -397,3 +577,6 @@ own dependency arrays. See [Effects and Lifecycle](effects.md) for advanced patt
 - **[Components](components.md)** — Previous: component classes, props, and composition
 - **[Effects and Lifecycle](effects.md)** — Advanced UseEffect patterns, cleanup, and async work
 - **[Context](context.md)** — Share state across the tree without prop drilling
+- **[Hooks Internals](hooks-internals.md)** — How the slot table actually works under the surface
+- **[Persistence](persistence.md)** — `UsePersisted` for state that survives launches
+- **[Rules of Reactor](rules-of-reactor.md)** — Hook rules, idioms, and anti-patterns in one place

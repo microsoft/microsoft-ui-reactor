@@ -1,3 +1,21 @@
+> **WinUI reference:** For the full property surface and design guidance, see [Navigation Basics](https://learn.microsoft.com/en-us/windows/apps/design/basics/navigation-basics).
+
+Reactor's navigation is a stack of typed routes that lives in a hook. You
+call `UseNavigation(initialRoute)` once, in a root component, and you get
+back a `NavigationHandle<TRoute>` whose `Navigate`, `GoBack`, `Replace`,
+and `Reset` methods mutate the stack. A `NavigationHost` reads the
+current route on each render and projects it through a `route =>
+Element` function, so the page tree is a pure function of the stack —
+exactly the same shape as the rest of the framework. There is no
+`Frame.Navigate(typeof(Page))`, no `INotifyPropertyChanged` on a
+`CurrentPage` property, no `NavigationService` registered in DI. The
+stack is state; the page is render output. That makes lifecycle
+hooks ([`UseNavigationLifecycle`](hooks.md)) testable, deep links
+(`DeepLinkMap<TRoute>`) trivially round-trippable through `GetState` /
+`SetState`, and the back stack visible to your component code as a
+plain `IReadOnlyList<TRoute>`. Read [Defining Routes](#defining-routes)
+first if you're new; the rest of the page composes against that one
+shape.
 
 # Navigation
 
@@ -14,7 +32,10 @@ enum Route { Home, Settings, Profile, Details }
 ```
 
 Each enum value represents a distinct page in your app. The navigation system
-uses this type to ensure you can only navigate to valid routes.
+uses this type to ensure you can only navigate to valid routes. For pages
+that carry data — a detail page bound to a row ID, a wizard step with
+captured form state — use a discriminated-union pattern with C# records
+implementing a sealed interface instead of a flat enum.
 
 ## Basic Navigation
 
@@ -60,6 +81,22 @@ Here is what each piece does:
 - **`nav.GoBack()`** pops the current route and returns to the previous one.
 - **`NavigationHost(nav, route => ...)`** renders whichever element the
   route map returns for the current route.
+
+## Reference
+
+| API | Shape | Purpose |
+|-----|-------|---------|
+| `UseNavigation<TRoute>(initial)` | hook (root) | Create the navigation handle for this subtree. |
+| `UseNavigation<TRoute>()` | hook (descendant) | Read the ancestor handle via context. |
+| `UseNavigationLifecycle(...)` | hook | Page-side `onNavigatedTo` / `onNavigatingFrom` / `onNavigatedFrom`. The `from` callback receives a context with `.Cancel()`. |
+| `UseSystemBackButton(nav, window)` | hook | Wire the title-bar / hardware Back button to `nav.GoBack`. |
+| `NavigationHost(nav, routeMap)` | element | Renders the current route. Set `Transition`, `CacheMode`, `CacheSize`. |
+| `NavigationView(items, content)` | element | Sidebar shell. Use `.SelectedTagChanged(handler)` for selection events. |
+| `TabView(tabs)` | element | Parallel workspaces; tabs keep their own state. |
+| `BreadcrumbBar(items)` | element | Trail of ancestor routes for drill-down nav. |
+| `Frame(...)` | element | Raw WinUI Frame for XAML-page interop; `.Navigating`, `.Navigated`, `.NavigationFailed`. |
+| `DeepLinkMap<TRoute>` | type | URI pattern → route factory. `.Resolve(uri)` returns the matched route and back-stack. |
+| `NavigationDiagnostics` | static | Static events for tracing: `NavigationRequested`, `NavigationCompleted`, `NavigationCancelled`, cache and transition events. |
 
 ## NavigationView
 
@@ -189,19 +226,32 @@ class LifecyclePage : Component
 
 ![Lifecycle events](images/navigation/lifecycle.png)
 
-The three callbacks fire at different points:
+The four callbacks fire at different points:
 
 | Callback | When it fires |
 |----------|--------------|
+| `onNavigatingTo` | Before this page becomes active. Call `ctx.Cancel()` to reject from the destination side. |
 | `onNavigatedTo` | After this page becomes active |
-| `onNavigatingFrom` | Before leaving this page (can inspect target) |
+| `onNavigatingFrom` | Before leaving this page. Call `ctx.Cancel()` to block — the classic "unsaved changes" guard. |
 | `onNavigatedFrom` | After this page is no longer active |
 
 Use `onNavigatedTo` to fetch data or start timers. Use `onNavigatingFrom` to
-save drafts or confirm unsaved changes — you can call `context.Cancel()` on
-the `NavigatingToContext` to prevent navigation entirely (useful for
-"unsaved changes" guards). See [Effects and Lifecycle](effects.md) for more
-on lifecycle patterns.
+save drafts or confirm unsaved changes — call `ctx.Cancel()` on the
+`NavigatingFromContext` to prevent navigation entirely. See
+[Effects and Lifecycle](effects.md) for more on lifecycle patterns and
+async cancellation.
+
+> **Caveat:** `Reset(route)`, `Replace(route)`, and `PopTo(predicate)` all run the
+> `onNavigatingFrom` guard — `ctx.Cancel()` will block them. But
+> `SetState(json)` does **not**: it routes through `NavigationStack.RestoreState`
+> which bypasses `InvokeGuard` entirely and fires `Navigated` with
+> `NavigationMode.Reset` after the stacks are already rewritten. If your
+> unsaved-changes guard lives only in `onNavigatingFrom`, an app that
+> restores a saved navigation state from disk on launch will silently
+> overwrite the active page without ever asking the user. Either gate
+> state restoration explicitly (check the in-memory dirty flag before
+> calling `SetState`), or surface the same dirty check from a higher
+> level — e.g. an app-shutdown handler in `Window.Closed`.
 
 ## Page Transitions
 
@@ -394,7 +444,11 @@ class PageCachingDemo : Component
 
 Caching preserves scroll position, text input, and component state. Use it
 for pages that are expensive to render or where losing state would frustrate
-the user.
+the user. `Required` is the right choice for a small fixed set of always-hot
+pages (an app's three tab panes); for an unbounded route space (a detail
+page parameterized by row ID), stick with `Enabled` and tune `CacheSize` —
+`Required` never evicts and will retain every visited route's element tree
+for the process lifetime.
 
 ## TabView
 
@@ -476,7 +530,9 @@ class StateSerializationDemo : Component
 
 `GetState()` returns a JSON string. `SetState(json)` restores the stacks
 and fires `Navigated` with `Reset` mode. Pass `JsonSerializerOptions` if
-your route type needs custom serialization.
+your route type needs custom serialization. For polymorphic route
+hierarchies, mark the base type with `[JsonPolymorphic]` and
+`[JsonDerivedType]` so the round trip preserves the discriminator.
 
 ## Frame Events
 
@@ -612,6 +668,101 @@ class DiagnosticsDemo : Component
 Events fire synchronously on the UI thread. Use them for development
 logging, analytics, or custom progress indicators.
 
+## Patterns
+
+### Guarded leave on a dirty form
+
+The canonical use of `onNavigatingFrom` is the "unsaved changes" guard.
+Track a `dirty` boolean alongside form state with [`UseState`](hooks.md),
+and reject the navigation when the user tries to leave with pending
+edits. Prompt the user with a [`ContentDialog`](dialogs-and-flyouts.md);
+if they choose Discard, set `dirty = false` and call `nav.GoBack()`
+again — the second call sees a clean form and succeeds. The recipe at
+[`recipes/multi-step-form`](recipes/multi-step-form.md) wires the same
+shape across a wizard.
+
+### Restoring scroll position per route
+
+Page caching preserves the element tree, but `Disabled` mode does not —
+remount means a fresh `ScrollView`. When `CacheMode = Disabled` is the
+right shape (memory-bounded apps, dynamic routes), keep a
+`Dictionary<TRoute, double>` of scroll offsets in a
+[`UseRef`](hooks.md) at the navigation host's parent, save the
+offset in `onNavigatingFrom`, and restore it in a
+[`UseEffect`](effects.md) on the page that runs after the
+`ScrollView` mounts. Pair with `VirtualListRef.RestoreScrollOffset` for
+virtualized lists.
+
+### Deep link → typed route, with back stack
+
+Deep linking by default lands the user on the matched route with an
+empty back stack — Back goes nowhere. Pass `backStackFactory` to
+`DeepLinkMap.Map(...)` to synthesize the stack the user would have
+built up if they'd navigated naturally. For `/users/42/posts/7`, the
+factory should return `[Route.Home, Route.UserList,
+Route.UserDetail(42)]` so the user can drill back up the hierarchy.
+
+## Common Mistakes
+
+### Reading routes from a string-typed prop
+
+```csharp
+// Don't:
+class Shell : Component<ShellProps>
+{
+    public override Element Render()
+    {
+        return Props.CurrentRoute switch
+        {
+            "home" => Home(),
+            "settings" => Settings(),
+            ...
+        };
+    }
+}
+```
+
+A string-routed shell loses every type-safety win the navigation system
+provides. The compiler can't catch a typo; the analyzer can't warn
+about an unreachable route; refactoring rename is a grep. Use the
+enum (or record-union) form the [Defining Routes](#defining-routes)
+section shows — the route map's exhaustiveness check is in the C#
+switch expression.
+
+### Treating `UseNavigation` like a singleton
+
+```csharp
+// Don't:
+public static NavigationHandle<Route>? Nav;
+
+class Shell : Component
+{
+    public override Element Render()
+    {
+        var nav = UseNavigation(Route.Home);
+        Nav = nav;  // capture for later use from anywhere
+        return ...;
+    }
+}
+```
+
+The handle is bound to the dispatcher of the component that created
+it. Calling `Nav.Navigate(...)` from a background timer or an event
+handler captured in a closure that outlives the page is a silent
+no-op when the bound dispatcher has shut down. Use
+`UseNavigation<TRoute>()` (no initial value) in a descendant component
+to access the same handle via context, or pass the handle through
+[Context](context.md) explicitly.
+
+### Forgetting `UseSystemBackButton`
+
+Without `UseSystemBackButton(nav, window)`, the title-bar Back arrow
+and hardware Back key on touch devices do not trigger `nav.GoBack` —
+they fall through to the OS default, which closes the window on the
+root page. Wire `UseSystemBackButton` once at the same scope where
+you call `UseNavigation(initial)`; the back arrow becomes
+`nav.GoBack` and the visibility tracks `nav.CanGoBack`.
+
 ## Tips
 
 **Use enums for routes.** Enums give you compile-time safety — you cannot
@@ -640,3 +791,4 @@ or hardware) to your navigation stack automatically.
 - **[Effects and Lifecycle](effects.md)** — run side effects when pages appear or disappear
 - **[Animation](animation.md)** — combine page transitions with enter/exit animations
 - **[Data System](data-system.md)** — data grids with sort, filter, and inline editing
+- **[Dialogs and Flyouts](dialogs-and-flyouts.md)** — prompt the user from inside a navigation guard

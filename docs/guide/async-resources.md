@@ -7,6 +7,13 @@ for error, one `UseEffect` to tie them together" pattern. They own the
 fetch lifecycle: cancellation on deps-change, drop late results after
 unmount, shared caching across siblings, and stale-while-revalidate by default.
 
+| Hook | Use it for |
+|------|------------|
+| `UseResource` | A single async read (fetch one record, one page, one computed value) |
+| `UseInfiniteResource` | Cursor-paginated reads paired with `VirtualList` or scroll-driven loaders |
+| `UseMutation` | Optimistic writes with `InvalidateKeys` to refresh sibling resources |
+| `PendingFactory.Pending` | Hold a fallback in place until every nested resource leaves `Loading` |
+
 For the full state-machine reference, see
 [async-system.md](../reference/async-system.md). This page is task-oriented:
 each section is a recipe you can copy.

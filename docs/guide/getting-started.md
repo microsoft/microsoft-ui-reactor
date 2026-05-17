@@ -1,4 +1,17 @@
 
+A Reactor app is a tree of [components](components.md) driven by
+[hooks](hooks.md), hosted in a WinUI window that the framework opens and
+manages for you. You write one C# file, call `ReactorApp.Run<T>`, and your
+component's `Render()` method returns the element tree that becomes the
+native control tree. State lives in `UseState` and friends; every setter
+invocation re-runs `Render()`; the reconciler diffs the new tree against
+the previous one and patches the WinUI controls in place. This page is
+the bootstrap walkthrough — installing the framework, scaffolding a
+project, and growing from hello-world to a todo list and a calculator.
+By the end you will have run code, seen a screenshot of each step, and
+recognized the [layout](layout.md) primitives and [hooks](hooks.md) that
+the rest of the docset elaborates.
+
 # Getting Started with Reactor
 
 <!-- ai:lock -->
@@ -73,6 +86,18 @@ New-Item -ItemType SymbolicLink `
 > `install-skill-kit.ps1` shipped in the release archive (covered in [spec
 > 022](../specs/022-packaging-and-distribution.md) §4.4). Until that release
 > ships, the steps above are the supported path.
+
+> **Caveat:** The `mur pack-local` + `dotnet new install` flow is the supported developer
+> path *only* until the signed public NuGet ships under spec 022. If you skip
+> step 4 (`mur pack-local`) but try `dotnet new reactorapp` anyway, the template
+> installer fails with `NU1101: Unable to find package
+> Microsoft.UI.Reactor.ProjectTemplates` because nothing has produced
+> `local-nupkgs/` yet — `dotnet` looks at the configured feeds and the package
+> isn't on nuget.org. The fix is to re-run `mur pack-local` after every pull;
+> the snapshot is regenerated from the current branch, not cached. The template
+> installer also caches by package id, so if you bump the local version you
+> must `dotnet new uninstall Microsoft.UI.Reactor.ProjectTemplates` first or
+> the old template wins.
 
 ## Creating a Project
 
@@ -463,7 +488,71 @@ This demonstrates how plain C# control flow (methods, switch expressions,
 local functions) works naturally inside Reactor components. There's no special
 command pattern needed — just call `setDisplay(...)` and the UI updates.
 
-## Tips for New Reactor Developers
+## Patterns
+
+### Hot reload with `dotnet watch`
+
+The single fastest authoring loop is `dotnet watch run` from the project
+directory. Reactor's [dev tooling](dev-tooling.md) hooks watch's
+file-change events so a save in `App.cs` re-runs `Render()` without
+restarting the window. State that lives in `UseState` is preserved
+across the patch (the hook slot table survives), so a counter at 42
+stays at 42 after a layout tweak. State held in static fields is
+*not* preserved — keep startup state in `UseState` if you want it to
+survive hot reload.
+
+### First event, first state — the minimum interactive app
+
+Every Reactor app eventually has the same two ingredients: an event
+handler that calls a setter, and a value rendered from the setter's
+state slot. The hello-world snippet above wires `setName` to
+`TextField`'s change handler and reads `name` back in the
+`Text("Hello, ...")` line — that round trip is the entire reactivity
+contract. Once it feels routine, every other [hook](hooks.md) is just
+a specialization (`UseReducer` for derived updates, `UseEffect` for
+side effects, `UseRef` for non-rendering bookkeeping).
+
+### Running with devtools
+
+Launch with `dotnet run -c Debug` and Reactor mounts the in-app dev
+menu (Ctrl+Shift+D by default). The reconcile-highlight overlay flashes
+on every commit, the layout-cost overlay attributes per-component time,
+and the [dev tooling](dev-tooling.md) page covers the full menu. The
+overlays are no-cost in Release builds — the dev menu compiles out
+under `#if DEBUG`.
+
+## Common Mistakes
+
+### Editing `bin/` artifacts to "see your change"
+
+Reactor doesn't watch the build output. Edit the source files under
+your project (`App.cs`, components in subdirectories) and rebuild —
+either via `dotnet run` or under `dotnet watch run`. The `bin/` tree
+is regenerated on every build; any hand-edit there is silently
+overwritten.
+
+### Trying to use Reactor inside a WinUI `Page` or `UserControl`
+
+Reactor expects to own the window. `ReactorApp.Run<T>` opens a
+`Window`, mounts your component tree directly, and drives the
+reconciler from that root. Mounting a Reactor component inside a
+WinUI `Page` (via `xmlns:reactor=...` markup) does not work — there
+is no XAML loader for Reactor elements. If you need Reactor inside an
+existing WinUI/WinForms host, see [WinForms interop](winforms-interop.md)
+for `XamlIslandControl` or use `ReactorHostControl` from
+[components](components.md) for the WinUI host case.
+
+### Reaching for `INotifyPropertyChanged` out of habit
+
+XAML developers often try to back state with a view model. In Reactor,
+state IS the binding — `UseState` returns `(value, setter)` and the
+setter triggers the re-render. You can still bridge an existing
+`INotifyPropertyChanged` source with `UseObservable` (see
+[advanced](advanced.md)), but for new screens, hooks are the shorter
+path. The [Reactor for XAML developers](xaml-developers.md) page maps
+each XAML idiom to its Reactor equivalent.
+
+## Tips
 
 **Think in functions, not objects.** Your `Render()` method is a pure function
 from state to UI. Every time state changes, it runs again from the top. Don't

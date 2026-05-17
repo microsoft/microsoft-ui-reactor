@@ -6,6 +6,14 @@ that supplies an `IntlAccessor` to every descendant via [context](context.md).
 You look up messages, format numbers and dates, and detect RTL layouts — all
 locale-aware, all reactive.
 
+| API | Purpose |
+|-----|---------|
+| `LocaleProvider` | Wraps a subtree with the active locale and resource provider |
+| `UseIntl()` | Hook returning the `IntlAccessor` for messages, formatting, and direction |
+| `IStringResourceProvider` | Pluggable string source (`.resw`, in-memory, custom) |
+| `RtlHelper.IsRtlLocale(tag)` | Static check for right-to-left locales |
+| `pseudoLocalize: true` | `LocaleProvider` flag that accents and pads strings for testing |
+
 ## String Resource Provider
 
 You start by implementing `IStringResourceProvider`. It maps a locale,

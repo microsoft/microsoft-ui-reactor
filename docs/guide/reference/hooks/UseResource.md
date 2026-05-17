@@ -21,4 +21,8 @@ with no transient <c>Loading</c> flash.</para><para><b>Dispatcher.</b> The hook 
 dispatcher, continuations run inline on the thread-pool thread that completed
 the fetch.</para>
 
+## Featured in
+
+- [Effects](../../effects.md)
+- [Hooks](../../hooks.md)
 
