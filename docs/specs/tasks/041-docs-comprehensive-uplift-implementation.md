@@ -768,10 +768,26 @@ catalog page follows the per-control template from spec §6.3.
 
 ### 3.5 `collections.md` — EXPAND
 
-- [ ] Add: grouping recipes, drag-reorder where supported, virtual
-      list deep-dive, lazy-loading patterns.
-- [ ] Doc-app additions.
-- [ ] Promote to Comprehensive tier.
+- [x] Add: grouping recipes (manual composition via `VStack` of
+      header + items per group — Reactor doesn't ship a built-in
+      grouped-list, the composition is the recipe); drag-reorder via
+      ListView's `CanReorderItems` / `CanDragItems` / `AllowDrop`
+      surfaced through `.Set` until a first-class fluent ships;
+      virtual-list deep dive covering `itemHeight` vs.
+      `estimatedItemHeight` trade-offs (now an `<!-- ai:caveat -->`
+      block); lazy-loading via `onVisibleRangeChanged` with skeleton
+      rows for un-fetched indices.
+- [x] Doc-app additions: three new components (GroupingDemo,
+      DragReorderDemo, LazyLoadingDemo) and three manifest entries.
+      Builds clean against Reactor.csproj.
+- [x] Promote to Comprehensive tier. *`tier: comprehensive` set;
+      `winui-ref:` set to the items-collections hub. Mental-model
+      lead ~180 words; the cross-comparison table (`ListView` /
+      `LazyVStack` / `VirtualList`) lives in the first half from the
+      LazyVStack section as before. `## Patterns` (letter-jump scrub
+      bar + lifted selection) and `## Common Mistakes` (index-as-key
+      + missing itemHeight) both populated. Zero findings under
+      `mur docs compile --validate-only --tier=comprehensive`.*
 
 ### 3.6 Phase 3 review
 

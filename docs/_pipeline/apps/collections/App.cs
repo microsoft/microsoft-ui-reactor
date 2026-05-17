@@ -239,6 +239,121 @@ class WithKeyDemo : Component
 }
 // </snippet:withkey>
 
+// <snippet:grouping>
+class GroupingDemo : Component
+{
+    public override Element Render()
+    {
+        var grouped = SampleData.Contacts
+            .Take(24)
+            .GroupBy(c => c.Name[0])
+            .OrderBy(g => g.Key)
+            .ToList();
+
+        // Reactor doesn't ship a built-in grouped-list control; instead,
+        // compose a VStack of header + items per group. The render
+        // function for each group hands back its own typed collection,
+        // so virtualization still applies inside each section if you
+        // swap LazyVStack for ListView.
+        return VStack(8,
+            SubHeading($"Grouped: {grouped.Count} sections"),
+            ScrollView(
+                VStack(16,
+                    ForEach(grouped, group =>
+                        VStack(4,
+                            TextBlock($"— {group.Key} —").Bold()
+                                .Opacity(0.7),
+                            ForEach(group.ToArray(), c =>
+                                HStack(8,
+                                    TextBlock(c.Name).Bold(),
+                                    TextBlock(c.Email).Opacity(0.6))
+                                    .WithKey(c.Id))
+                        ).WithKey($"group-{group.Key}"))
+                ).Padding(8)
+            ).Height(300)
+        ).Padding(24);
+    }
+}
+// </snippet:grouping>
+
+// <snippet:drag-reorder>
+class DragReorderDemo : Component
+{
+    public override Element Render()
+    {
+        var (items, setItems) = UseState(
+            new List<string> { "Alpha", "Bravo", "Charlie",
+                "Delta", "Echo", "Foxtrot" });
+
+        // Reactor surfaces drag-reorder through the underlying WinUI
+        // ListView's CanReorderItems / AllowDrop / CanDragItems. The
+        // .Set passthrough is the supported escape hatch until a
+        // first-class fluent ships. The user's reorder is mirrored
+        // back into state via the ListView's reorder event.
+        return VStack(8,
+            SubHeading("Drag to reorder"),
+            ListView<string>(
+                items,
+                s => s,
+                (item, _) =>
+                    HStack(8,
+                        TextBlock("☰").Opacity(0.4),
+                        TextBlock(item).Bold()
+                    ).Padding(8))
+                .Set(lv =>
+                {
+                    lv.CanReorderItems = true;
+                    lv.AllowDrop = true;
+                    lv.CanDragItems = true;
+                })
+                .Height(260)
+        ).Padding(24);
+    }
+}
+// </snippet:drag-reorder>
+
+// <snippet:lazy-loading>
+class LazyLoadingDemo : Component
+{
+    public override Element Render()
+    {
+        // Pretend "loaded" up to a high-water mark; new items fetch
+        // when the visible range crosses into unloaded territory.
+        var (loadedTo, setLoadedTo) = UseState(50);
+        var totalCount = 1_000;
+
+        return VStack(8,
+            SubHeading($"Lazy-load — fetched {loadedTo} of {totalCount}"),
+            VirtualList(
+                itemCount: totalCount,
+                renderItem: index =>
+                    index < loadedTo
+                        ? HStack(8,
+                            TextBlock($"{index + 1}.").Width(50),
+                            TextBlock($"Row {index + 1}").Bold(),
+                            TextBlock($"loaded").Opacity(0.6))
+                            .Padding(8)
+                        // Skeleton for not-yet-loaded indices.
+                        : HStack(8,
+                            TextBlock($"{index + 1}.").Width(50),
+                            TextBlock("loading…").Opacity(0.4))
+                            .Padding(8),
+                getItemKey: index => $"lazy-{index}",
+                itemHeight: 40,
+                // Watcher fires whenever the visible range changes —
+                // bump the high-water mark when the bottom passes the
+                // current limit.
+                onVisibleRangeChanged: (first, last) =>
+                {
+                    if (last >= loadedTo - 5 && loadedTo < totalCount)
+                        setLoadedTo(Math.Min(loadedTo + 50, totalCount));
+                }
+            ).Height(300)
+        ).Padding(24);
+    }
+}
+// </snippet:lazy-loading>
+
 class CollectionsApp : Component
 {
     public override Element Render()
@@ -251,7 +366,10 @@ class CollectionsApp : Component
                 Component<GridViewDemo>(),
                 Component<ForEachDemo>(),
                 Component<MultiSelectDemo>(),
-                Component<WithKeyDemo>()
+                Component<WithKeyDemo>(),
+                Component<GroupingDemo>(),
+                Component<DragReorderDemo>(),
+                Component<LazyLoadingDemo>()
             ).Padding(24)
         );
     }

@@ -1,3 +1,20 @@
+> **WinUI reference:** For the full property surface and design guidance, see [Items Collections](https://learn.microsoft.com/en-us/windows/apps/design/controls/items-collections).
+
+Collections are the highest-leverage primitive in any non-trivial app —
+a contacts list, a feed, a settings tree, an editor's gutter. Reactor
+ships three typed bound collections (`ListView<T>`, `GridView<T>`,
+`LazyVStack<T>`) and one count-based virtualization primitive
+(`VirtualList`), plus the inline `ForEach` helper for non-scrolling
+maps over data. The decision tree starts with two questions: how big is
+the data, and how is it shaped. For a few dozen items in a list, reach
+for `ListView<T>`. For thousands of items with the same row template,
+reach for `LazyVStack<T>` (virtualizes by default). For millions of
+items or count-known-but-items-not-loaded scenarios, reach for
+`VirtualList`. For a tiled grid, `GridView<T>`. For inline maps inside
+a [`VStack`](layout.md), `ForEach`. Every collection takes a
+[key selector](#stable-identity-with-withkey) so reconciliation can
+match items across renders; that is the single most important thing to
+get right. Skim the comparison table first, then jump to your control.
 
 # Collections
 
@@ -360,6 +377,308 @@ Rules for good keys:
 - **Keys must be unique** within their sibling list. Duplicates cause
   undefined reconciliation behavior.
 - **Keys should be strings.** The `WithKey` modifier accepts a string.
+
+## Grouping
+
+Reactor doesn't ship a built-in grouped-list control. The composition
+recipe is straightforward: group the data with LINQ, then render a
+`VStack` of `header + items` per group. Each group's body is its own
+typed collection, so virtualization still applies inside a section if
+you swap `ForEach` for `LazyVStack<T>`:
+
+```csharp
+class GroupingDemo : Component
+{
+    public override Element Render()
+    {
+        var grouped = SampleData.Contacts
+            .Take(24)
+            .GroupBy(c => c.Name[0])
+            .OrderBy(g => g.Key)
+            .ToList();
+
+        // Reactor doesn't ship a built-in grouped-list control; instead,
+        // compose a VStack of header + items per group. The render
+        // function for each group hands back its own typed collection,
+        // so virtualization still applies inside each section if you
+        // swap LazyVStack for ListView.
+        return VStack(8,
+            SubHeading($"Grouped: {grouped.Count} sections"),
+            ScrollView(
+                VStack(16,
+                    ForEach(grouped, group =>
+                        VStack(4,
+                            TextBlock($"— {group.Key} —").Bold()
+                                .Opacity(0.7),
+                            ForEach(group.ToArray(), c =>
+                                HStack(8,
+                                    TextBlock(c.Name).Bold(),
+                                    TextBlock(c.Email).Opacity(0.6))
+                                    .WithKey(c.Id))
+                        ).WithKey($"group-{group.Key}"))
+                ).Padding(8)
+            ).Height(300)
+        ).Padding(24);
+    }
+}
+```
+
+![Grouped contacts list with letter section headers](images/collections/grouping.png)
+
+The shape generalizes to two-level grouping (city → country), sticky
+headers (set `Position` via a `Border` modifier), and collapsible
+sections (wrap each group's body in `When(expanded[key], ...)`).
+Because every group's collection has its own keyed render, items can
+move between groups across renders without remounting — the keys
+travel with the items.
+
+## Drag-to-reorder
+
+WinUI `ListView` and `GridView` ship drag-reorder, and Reactor exposes
+the relevant properties through the `.Set` passthrough until a
+first-class fluent ships. Three properties switch the surface on —
+`CanReorderItems`, `AllowDrop`, and `CanDragItems` — and the list
+mutates its internal `ItemsSource` order on drop. Mirror the new order
+back into your state via the underlying `ItemsSource` collection or a
+`DragItemsCompleted` handler:
+
+```csharp
+class DragReorderDemo : Component
+{
+    public override Element Render()
+    {
+        var (items, setItems) = UseState(
+            new List<string> { "Alpha", "Bravo", "Charlie",
+                "Delta", "Echo", "Foxtrot" });
+
+        // Reactor surfaces drag-reorder through the underlying WinUI
+        // ListView's CanReorderItems / AllowDrop / CanDragItems. The
+        // .Set passthrough is the supported escape hatch until a
+        // first-class fluent ships. The user's reorder is mirrored
+        // back into state via the ListView's reorder event.
+        return VStack(8,
+            SubHeading("Drag to reorder"),
+            ListView<string>(
+                items,
+                s => s,
+                (item, _) =>
+                    HStack(8,
+                        TextBlock("☰").Opacity(0.4),
+                        TextBlock(item).Bold()
+                    ).Padding(8))
+                .Set(lv =>
+                {
+                    lv.CanReorderItems = true;
+                    lv.AllowDrop = true;
+                    lv.CanDragItems = true;
+                })
+                .Height(260)
+        ).Padding(24);
+    }
+}
+```
+
+| Property | Effect |
+|---|---|
+| `CanDragItems` | The user can start a drag from a row. |
+| `AllowDrop` | The list accepts drops. |
+| `CanReorderItems` | Drops inside the list reorder; drops outside fire `DragItemsCompleted`. |
+
+`GridView` and `ItemsView<T>` expose the same three properties. For
+free-form drag-and-drop between two lists (move item from A to B),
+subscribe to `DragItemsStarting` on the source and `Drop` on the
+destination, then update both states. The
+[`recipes/drag-reorder`](recipes/drag-reorder.md) recipe walks the
+single-list case end-to-end.
+
+## Lazy loading
+
+For data sources where the total count is known but the items are
+loaded incrementally (paged APIs, large local stores), the
+`onVisibleRangeChanged` callback on `VirtualList` is the load
+trigger. The callback fires whenever the visible window changes;
+compare the trailing edge to your high-water mark and request the
+next page when the user scrolls past it:
+
+```csharp
+class LazyLoadingDemo : Component
+{
+    public override Element Render()
+    {
+        // Pretend "loaded" up to a high-water mark; new items fetch
+        // when the visible range crosses into unloaded territory.
+        var (loadedTo, setLoadedTo) = UseState(50);
+        var totalCount = 1_000;
+
+        return VStack(8,
+            SubHeading($"Lazy-load — fetched {loadedTo} of {totalCount}"),
+            VirtualList(
+                itemCount: totalCount,
+                renderItem: index =>
+                    index < loadedTo
+                        ? HStack(8,
+                            TextBlock($"{index + 1}.").Width(50),
+                            TextBlock($"Row {index + 1}").Bold(),
+                            TextBlock($"loaded").Opacity(0.6))
+                            .Padding(8)
+                        // Skeleton for not-yet-loaded indices.
+                        : HStack(8,
+                            TextBlock($"{index + 1}.").Width(50),
+                            TextBlock("loading…").Opacity(0.4))
+                            .Padding(8),
+                getItemKey: index => $"lazy-{index}",
+                itemHeight: 40,
+                // Watcher fires whenever the visible range changes —
+                // bump the high-water mark when the bottom passes the
+                // current limit.
+                onVisibleRangeChanged: (first, last) =>
+                {
+                    if (last >= loadedTo - 5 && loadedTo < totalCount)
+                        setLoadedTo(Math.Min(loadedTo + 50, totalCount));
+                }
+            ).Height(300)
+        ).Padding(24);
+    }
+}
+```
+
+![VirtualList with skeleton rows past the loaded high-water mark](images/collections/lazy-loading.png)
+
+Pair this with [`UseResource`](async-resources.md) to manage the
+async fetch state — `Pending` becomes the skeleton row, `Loaded`
+becomes the populated row, `Error` becomes a retry inline. The full
+shape lives in the [`recipes/paginated-list`](recipes/paginated-list.md)
+recipe.
+
+> **Caveat:** `itemHeight` vs. `estimatedItemHeight` is the single most expensive
+> decision in `VirtualList`. With `itemHeight` set, scrollbar position
+> is O(1) — multiply the index by the height. Without it, the list
+> measures every row that has been seen and maintains a cumulative
+> offset table; the scrollbar approximation drifts and large jumps can
+> cause measure-storms. Set `itemHeight` whenever your rows are the
+> same fixed height — it is almost always the right choice for paginated
+> data, message lists, and table-shaped UIs. Fall back to
+> `estimatedItemHeight` only when the row heights genuinely vary
+> (masonry feeds, chat with rich attachments). The default
+> `estimatedItemHeight: 40` is a guess; tune it to within ±25% of your
+> real row heights to keep scroll-bar drift under control.
+
+## Patterns
+
+### Virtualized contacts with letter-jump
+
+Combine grouping (section per letter) with `VirtualListRef` imperative
+scroll: the user clicks a letter, the list calls `ScrollToIndex` for
+the first row in that group. This is the canonical "A-Z scrubber"
+pattern from contacts apps:
+
+```csharp
+var listRef = UseRef<VirtualListRef?>(null);
+var groupStarts = UseMemo(() => ComputeStartIndices(contacts), contacts);
+
+return HStack(0,
+    VirtualList(contacts.Count, RenderRow,
+        getItemKey: i => contacts[i].Id,
+        itemHeight: 60,
+        @ref: r => listRef.Current = r).Width(360),
+    VStack(2,
+        ForEach("ABCDEFGHIJKLMNOPQRSTUVWXYZ".ToCharArray(), letter =>
+            Button(letter.ToString(), () =>
+                listRef.Current?.ScrollToIndex(groupStarts[letter]))))
+);
+```
+
+### Lift state for selection across remounts
+
+Selection state belongs to the parent, never to the collection. The
+parent owns the `HashSet<TKey>` of selected IDs; the row template
+checks membership on every render to set `IsSelected`. This pattern
+survives data refresh, sort changes, filter changes, and remounts —
+all of which would lose selection if it lived inside the list. Same
+shape as form state from [forms.md](forms.md).
+
+## Common Mistakes
+
+### Using array index as key
+
+```csharp
+// Don't:
+ForEach(items, (item, i) => Row(item).WithKey(i.ToString()))
+```
+
+```csharp
+class WithKeyDemo : Component
+{
+    public override Element Render()
+    {
+        var (items, updateItems) = UseReducer(
+            new List<string> { "Apple", "Banana", "Cherry" });
+        var (newItem, setNewItem) = UseState("");
+
+        return VStack(12,
+            SubHeading("Stable Identity with WithKey"),
+            HStack(8,
+                TextField(newItem, setNewItem, placeholder: "New item"),
+                Button("Add", () => {
+                    if (!string.IsNullOrWhiteSpace(newItem)) {
+                        updateItems(l => [.. l, newItem.Trim()]);
+                        setNewItem("");
+                    }
+                })
+            ),
+            VStack(4, items.Select((item, i) =>
+                HStack(8,
+                    TextBlock(item),
+                    Button("Remove", () => updateItems(
+                        l => l.Where((_, idx) => idx != i).ToList()))
+                ).WithKey($"item-{item}-{i}")
+            ).ToArray())
+        ).Padding(24);
+    }
+}
+```
+
+Index keys defeat the purpose of keys. When the list reorders or an
+item is removed, every subsequent item gets a new key, every row
+remounts, every text input inside a row loses focus, and animations
+restart. Use a stable identifier from your data.
+
+### Not setting `itemHeight` on a uniform-height VirtualList
+
+```csharp
+// Don't:
+VirtualList(itemCount, RenderItem, getItemKey: GetKey)
+// estimatedItemHeight defaults to 40 — drift accumulates for any
+// row whose actual height differs.
+```
+
+```csharp
+class VirtualListDemo : Component
+{
+    public override Element Render()
+    {
+        return VStack(12,
+            SubHeading("VirtualList (10,000 items)"),
+            VirtualList(
+                itemCount: 10_000,
+                renderItem: index =>
+                    HStack(12,
+                        TextBlock($"{index + 1}.").Width(50),
+                        TextBlock($"Item {index + 1}").Bold(),
+                        TextBlock($"data-{index}@example.com").Opacity(0.6)
+                    ).Padding(8),
+                getItemKey: index => $"item-{index}",
+                itemHeight: 40
+            ).Height(300)
+        ).Padding(24);
+    }
+}
+```
+
+If your rows are all the same height (the common case), tell the list.
+The O(1) offset math is dramatically faster than the cumulative
+measure table, and the scrollbar tracks the true position rather than
+the estimate.
 
 ## Tips
 
