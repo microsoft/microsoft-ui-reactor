@@ -854,6 +854,7 @@ SelectionMode { None, Single, Multiple }
 Severity { Info, Warning, Error }
 ShowWhen { Always, WhenTouched, WhenDirty, AfterFirstSubmit, Never }
 VisualizerStyle { Inline, Summary, InfoBar, Custom }
+AnimationKind { None, Default, Spring, EaseIn, EaseOut, EaseInOut }
 BackdropKind { None, Mica, MicaAlt, DesktopAcrylic, AcrylicThin }
 ColorScheme { Light, Dark, HighContrast }
 ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
