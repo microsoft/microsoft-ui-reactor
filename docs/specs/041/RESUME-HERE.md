@@ -1,8 +1,8 @@
 # Resume here — spec 041 implementation handoff
 
 **Last touched:** 2026-05-17
-**Branch:** `docs/041-uplift` (32 commits ahead of `main`; not pushed)
-**Active task:** Phase 3.5 — Under-the-hood deep dive (14 pages)
+**Branch:** `docs/041-uplift` (49 commits ahead of `main`; not pushed)
+**Active task:** Phase 4 — Polish, migration, and process
 
 **Out-of-band update (4f61824):** `getting-started.md` now opens with a manual-setup warning and walks through the source-clone bootstrap (`mur pack-local` → `dotnet new install` → `dotnet new reactorapp`). Not part of any spec-041 phase; track signed-distribution rollout in [spec 022](../022-packaging-and-distribution.md).
 
@@ -16,7 +16,7 @@
 | 1. Foundation (pipeline + tooling) | ✅ Complete | 14 commits; pipeline supports tiers, lint, source snippets, SVG/Mermaid, ref-gen, link injection, analyzers |
 | 2. Reactor-unique gaps | ✅ Complete (5 of 9 recipes shipped) | 10 commits; 4 recipes deferred to Phase 2.5 follow-up |
 | 3. Controls catalog | ✅ Complete | 5 commits + review (text-and-media / status-and-info / dialogs-and-flyouts / forms expand / collections expand). InkCanvas flagged as not wrapped. |
-| 3.5. Under-the-hood | ⏳ Pending | 14 pages; spawn next (different author skillset) |
+| 3.5. Under-the-hood | ✅ Complete | 1 setup + 15 page + 2 review commits; 14 internals pages + reactor-vs-xaml at target tier. Wave-A TIER_004 lint relaxation kept; wave-C placeholder shells dropped. |
 | 4. Polish & process | ⏳ Pending | 7 promotions + 3 new pages + cross-link sweep |
 | 5. Continuous quality | ⏳ Pending | check-tier subcommand + tier-drift CI |
 
@@ -24,18 +24,20 @@
 
 ## Where to resume
 
-**Open the task list:** `docs/specs/tasks/041-docs-comprehensive-uplift-implementation.md`. Phase 3.5 starts at `### 3.5.1`.
+**Open the task list:** `docs/specs/tasks/041-docs-comprehensive-uplift-implementation.md`. Phase 4 starts at `### 4.1`.
 
 **Read before spawning the next agent:**
 - `docs/specs/041/phase-1-retro.md` — Phase 1 decisions and surprises.
 - `docs/specs/041/phase-1-render-report.md` — Phase 1 publish-test results.
 - `docs/specs/041/phase-2-review.md` and `phase-2-retro.md` — Phase 2 findings.
 - `docs/specs/041/phase-3-retro.md` and `phase-3-render-report.md` — Phase 3 findings (InkCanvas not wrapped; deprecated `ProgressBar` factory swept; grouping + drag-reorder are recipe-only today).
+- `docs/specs/041/phase-3-5-retro.md` and `phase-3-5-render-report.md` — Phase 3.5 findings (TIER_004 normalization; element-pool compositor-taint exit; trampoline vocabulary; spec §11 text needs a follow-up update to match the lint change).
 
 **Pipeline state worth knowing:**
 - `mur docs compile --validate-only` runs clean across all 64 templates.
 - 73 hook reference pages auto-generated; index at `docs/guide/reference/hooks/index.md`.
 - Tier-lint codes `REACTOR_DOC_TIER_001..012/W001` enforce per-tier checklist.
+- `REACTOR_DOC_TIER_004` accepts EITHER a resolved `screenshot://` reference OR an inline `images/<topic>/` diagram (relaxation in `src/Reactor.Cli/Docs/TierLint.cs`, commit `2ecee29`). Under-the-hood pages satisfy the visual requirement via Mermaid/SVG.
 - Snippets: `snippet="<topic>/<id>"` for doc apps, `snippet="source:<path>#<region>"` for `src/`.
 - Diagrams: `.mmd` and `.svg` under `docs/_pipeline/diagrams/<topic>/`; pipeline renders/copies to `docs/guide/images/<topic>/`.
 - Catalog thumbnails: `kind: catalog-thumb` in `doc-manifest.yaml` (320×240 letterbox).
@@ -49,37 +51,66 @@
 - CI install of `mermaid-cli` not yet wired into the GitHub Actions workflow (Phase 5 ops).
 - 4 pre-existing missing screenshot references surface as `REACTOR_DOC_IMAGE_001` findings (`forms/keep-submit-reachable`, three on `winforms-interop`) — pre-Phase-1 issue, not blocking.
 - 25 pre-existing topic pages have no declared `tier:` — info-only lint findings; Phase 4 promotes them.
+- Spec 041 §11 text still reads "≥1 `screenshot://` reference resolved"; the lint change accepts either pattern, but the spec text should match. Phase 4 spec rev.
+- Renderer-internals expert review on Phase 3.5 (spec §9 explicit requirement). Cannot be ticked by a review agent — needs a human reviewer with renderer commit history.
+- Phase 3.5 vocabulary drift: "trampoline" vs. "marshal" for the cross-thread dispatch guard — spec 041 §15 has one stray "marshal" that should align with the page text. Phase 4 cross-link sweep.
+- Two stale generated stubs at `docs/guide/reconciliation.md` and `docs/guide/hooks-internals.md` from a pre-Phase-3.5 compile run — will regenerate on next full `mur docs compile` from the new templates.
 
 ---
 
 ## How to spawn the next agent
 
-Phase 3.5 (under-the-hood) is the next track. It is a different
-author skillset — these 14 pages require renderer/hook internals
-knowledge, and the spec calls for review by someone who has shipped
-renderer/hook internals. Brief the agent with:
-1. Mark the Phase 3.5 task in-progress.
-2. Spawn a `general-purpose` Agent.
-3. Briefing must include: **read the source areas listed in
-   `docs/specs/041/under-the-hood-source-map.md` before drafting each
-   page; pull `snippet="source:..."` from at least 3 source areas per
-   Comprehensive page; diagrams via `.mmd` under
-   `docs/_pipeline/diagrams/<topic>/` (the pipeline renders to SVG);
-   avoid AI slop patterns; match the Reactor voice from
-   `docs/guide/hooks.md` / `dev-tooling.md` / `theming-tokens.md`**.
+Phase 4 (polish + new pages + cross-link sweep) is the next track.
+Brief the agent with:
+1. Mark a Phase 4 sub-task in-progress.
+2. Spawn a `general-purpose` Agent per sub-task.
+3. The sub-tracks (largely independent — pick any to start):
+   - **4.1 promotions** — `navigation`, `animation`, `accessibility`,
+     `data-system`, `charting` from Solid → Comprehensive (`forms`,
+     `collections` already at Comprehensive — just verify).
+   - **4.2 wpf-interop** — new Solid page parallel to
+     `winforms-interop`.
+   - **4.3 performance** — new Solid page (top-down ETW walkthrough,
+     cross-links to `perf-instrumentation`).
+   - **4.4 packaging** — new Solid page (MSIX, single-file, ARM64,
+     AOT).
+   - **4.5 cross-link sweep** — implement the cross-link analyzer in
+     `mur docs compile`, run it, fix gaps page-by-page. Hold for last
+     once enough Phase 4 surface has landed.
 4. Each new page = its own commit on `docs/041-uplift`. Update
    task-list checkboxes as you go.
 5. Do NOT push. Local commits only until a phase exits review.
 
-Phase 3.5 can run in parallel with Phase 4 cross-link sweep once
-enough Phase 3.5 pages have landed to make the cross-link surface
-worth scanning; otherwise serial.
+The Phase 3.5 / Phase 4 boundary is the right place to start running
+parallel waves again — promotions vs. new pages don't collide, and
+the cross-link sweep needs everything else landed first.
 
 ---
 
 ## Commit chain (most recent first)
 
 ```
+<pending> docs(041): Phase 3.5 review — retro, render report, RESUME-HERE (3.5.16)
+<pending> docs(041): Phase 3.5 normalization — TIER_004 lint pattern + shell cleanup
+badc4fe docs(041): perf-instrumentation at Comprehensive tier (3.5.15)
+1d54549 docs(041): devtools-internals at Comprehensive tier (3.5.14)
+520d82a docs(041): focus-and-input-internals at Comprehensive tier (3.5.13)
+8c018af docs(041): animation-pipeline at Comprehensive tier (3.5.12)
+920f0fb docs(041): analyzer-architecture at Comprehensive tier (3.5.11)
+7c6542d docs(041): source-mapping at Solid tier (3.5.10)
+e0496b8 docs(041): element-pool at Solid tier (3.5.9)
+a92fd81 docs(041): threading-and-dispatch at Solid tier (3.5.8)
+4ca29dd docs(041): modifier-system at Comprehensive tier (3.5.7)
+0134e86 docs(041): effects-scheduling at Comprehensive tier (3.5.6)
+eeee6c0 docs(041): hooks-internals at Comprehensive tier (3.5.5)
+5aa6b73 docs(041): reconciliation at Comprehensive tier (3.5.4)
+bafb935 docs(041): reactor-vs-xaml at Comprehensive tier (3.5.3)
+f72eee8 docs(041): reactivity-model at Comprehensive tier (3.5.2)
+2ecee29 docs(041): architecture-overview at Comprehensive tier (3.5.1)
+dc5ed6b docs(041): Phase 3.5 setup — source-region markers + Mermaid scaffolds
+839c50d docs(041): note getting-started setup commit in RESUME-HERE
+4f61824 docs(getting-started): add manual setup warning + reactorapp template flow
+955424c docs(041): Phase 3 review — retro, render report, exit gate (3.6)
 80f07db docs(041): collections expanded to Comprehensive tier (3.5)
 cf117ba docs(041): forms expanded to Comprehensive tier (3.4)
 98418f6 docs(041): dialogs-and-flyouts at Comprehensive tier (3.3)

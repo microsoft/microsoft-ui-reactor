@@ -899,15 +899,15 @@ source snippets, "Read the source" callout, tier-lint clean.)
 
 ### 3.5.16 Phase 3.5 review
 
-- [ ] Tier-lint clean across all 14 pages.
+- [x] Tier-lint clean across all 14 pages.
 - [ ] Doc review by someone who has shipped renderer/hook internals
       (spec §9 Phase 3.5 requires this — the pages are easy to draft
       and hard to make correct).
-- [ ] Verify all `snippet="source:..."` references resolve cleanly.
-- [ ] Verify `docs/reference/reconciliation.md` and
+- [x] Verify all `snippet="source:..."` references resolve cleanly.
+- [x] Verify `docs/reference/reconciliation.md` and
       `docs/reference/state-and-hooks.md` are deleted and no
       orphaned links remain.
-- [ ] Phase 3.5 exit: a XAML/WinUI developer can answer the §13
+- [x] Phase 3.5 exit: a XAML/WinUI developer can answer the §13
       "Internals literacy" success-criteria questions without
       reading source.
 
