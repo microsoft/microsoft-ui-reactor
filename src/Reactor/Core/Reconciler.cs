@@ -280,6 +280,13 @@ public sealed partial class Reconciler : IDisposable
         // wrapper and ShouldSuppress on a different wrapper for the same native
         // DependencyObject see the same counter. See ChangeEchoSuppressor.cs.
         public int EchoSuppressCount;
+        // Spec 042 Phase 1 — keyed-list reconciliation state. Set when the
+        // host element is a templated items control (ListView/GridView/
+        // ItemsRepeater). The internal ObservableCollection<ReactorRow> in
+        // ListState is what WinUI binds to so incremental insert/remove/move
+        // ops translate into container-level animations rather than full
+        // re-realization.
+        public Internal.ReactorListState? ListState;
     }
 
     internal static class ReactorAttached
@@ -323,6 +330,32 @@ public sealed partial class Reconciler : IDisposable
 
     internal static Element? GetElementTag(FrameworkElement fe) =>
         (fe.GetValue(ReactorAttached.StateProperty) as ReactorState)?.Element;
+
+    // ────────────────────────────────────────────────────────────────────
+    // Spec 042 Phase 1 — keyed-list reconciliation state accessors.
+    // Stored on the same attached ReactorState as Element/Events so we do
+    // not pay for a second DependencyProperty on every realized container.
+    // Only mounted templated items controls populate this.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal static Internal.ReactorListState? GetListState(DependencyObject control)
+    {
+        if (control is FrameworkElement fe
+            && fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+            return state.ListState;
+        return null;
+    }
+
+    internal static void SetListState(FrameworkElement control, Internal.ReactorListState listState)
+    {
+        if (control.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+        {
+            state.ListState = listState;
+            return;
+        }
+        state = new ReactorState { ListState = listState };
+        control.SetValue(ReactorAttached.StateProperty, state);
+    }
 
     /// <summary>
     /// Clears the Element pointer while preserving EventHandlerState. Call on

@@ -32,9 +32,8 @@ internal sealed class ReactorRow
 /// Per-mounted-control state that backs the internal
 /// <see cref="ObservableCollection{T}"/> delta channel for ListView /
 /// GridView / ItemsRepeater. Owned by the reconciler; attached to the
-/// host control via the <c>Reconciler.GetListState</c> /
-/// <c>Reconciler.SetListState</c> helpers (added in task 1.2).
-/// See spec 042 §4 for the model.
+/// host control via <see cref="Reconciler.GetListState"/> /
+/// <see cref="Reconciler.SetListState"/>. See spec 042 §4 for the model.
 /// </summary>
 internal sealed class ReactorListState
 {
