@@ -1,0 +1,522 @@
+# Keyed-List Reconciliation & ListView Animation — Implementation Tasks
+
+Derived from: `docs/specs/042-keyed-list-reconciliation-design.md`
+Tracking bug: [microsoft/microsoft-ui-reactor#198](https://github.com/microsoft/microsoft-ui-reactor/issues/198)
+
+Scope reminder: spec 042 is a three-phase design. This task list converts every
+section of that spec into ship-ready work — internal `ObservableCollection`
+delta plumbing for `ListView<T>` / `GridView<T>` / `LazyVStack<T>` /
+`LazyHStack<T>` (Phase 1), the `IReactorKeyed` identity convention (Phase 2),
+and the ambient `Animate(...)` transaction (Phase 3) — plus the regression
+tests, performance gates, samples, guides, and agent-kit references that turn
+it into a complete platform feature. Tasks are sized to be paused/resumed;
+complete top-to-bottom within a phase. Cross-phase ordering matters (don't
+ship the convention before the delta works; don't ship the ambient before the
+op stream exists).
+
+Success criteria the work must hit, end to end:
+
+1. `ListView<T>` driven by `UseState` / `UseReducer` over an immutable list
+   animates only the changed containers on add / remove / move.
+2. `LazyVStack<T>` / `LazyHStack<T>` (ItemsRepeater-backed) does the same
+   without re-realizing every visible item on a single insert/remove.
+3. `FlexColumn(items.Select(item => TextBlock(item.Name).WithKey(item.Id)))`
+   continues to incrementally reconcile via `ChildReconciler` (already works
+   today — covered by regression tests in Phase 1 so it doesn't regress).
+4. The same component code can opt into a unified animation transaction via
+   `Animate(AnimationKind.Spring, () => setItems([..items, x]))` (Phase 3).
+
+Conventions:
+- Reconciler files: `src/Reactor/Core/Reconciler.cs`,
+  `src/Reactor/Core/Reconciler.Mount.cs`,
+  `src/Reactor/Core/Reconciler.Update.cs`.
+- New internal types live under `src/Reactor/Core/Internal/` (already an
+  established folder).
+- New public API (`IReactorKeyed`, `Animate`, `AnimationKind`) goes in
+  `src/Reactor/Core/` next to `Element.cs`.
+- Unit tests under `tests/Reactor.Tests/`. End-to-end animation tests that
+  drive a real WinUI control tree go under `tests/Reactor.AppTests/Tests/`.
+- Stress / regression perf goes under `tests/stress_perf/` with a named
+  baseline; startup perf is unaffected and does not need a new baseline.
+- Sample apps land in `samples/ReactorGallery/ControlPages/Collections/` and
+  a focused `samples/apps/AnimatedListDemo/` mini-app for the showcase.
+- Agent-kit references live under
+  `plugins/reactor/skills/reactor-dsl/references/` and
+  `plugins/reactor/skills/reactor-recipes/references/`; the human guide
+  under `docs/guide/`.
+- Public API additions need XML doc comments (no `CS1591`).
+- Code must compile under `Reactor.slnx` warnings-as-errors.
+
+A task is "done" only when:
+1. Code compiles under `Reactor.slnx` warnings-as-errors.
+2. Public API surface has XML doc comments.
+3. New unit + AppTests cover the happy path **and** every documented edge case
+   (single insert / remove / move / reverse / bulk-replace bailout / duplicate
+   key / empty → non-empty / non-empty → empty).
+4. No regression in the `ChildReconciler` hand-built path — Phase 1 adds
+   explicit pinning tests so the existing keyed-LIS behavior cannot silently
+   drift.
+5. Stress perf for the "100-item ListView, 10 inserts/sec for 30s" scenario
+   does not regress vs. the baseline captured in 1.0.
+6. Doc + sample + agent-kit references land in the same PR as the API change
+   so the surface is discoverable the moment it ships.
+
+---
+
+## Phase 0 — Decisions captured & scaffolding
+
+### 0.1 Resolve the spec's open questions before code starts
+
+- [ ] Confirm **Q1** (key-collision policy): warn-and-bailout vs hard-fail.
+      Recommendation in spec §9 is implicit "warn"; commit the decision in
+      the spec header so 4.7 below can implement it without revisiting.
+- [ ] Confirm **Q2** (missing-key analyzer for `.Select(...)` children):
+      defer to a later phase (Phase 2 or Phase 6 analyzer pass). Record
+      "deferred" in the spec.
+- [ ] Confirm **Q3** (`AsyncLocal` ambient survives until commit): write a
+      short investigation note before Phase 3 starts. Capture findings as a
+      sub-section under spec §6 ("Dispatch model validation").
+- [ ] Confirm **Q4** (`ItemContainerTransitions` per-render mutation safety):
+      decision goes alongside Q3; outcome chooses between shared-resource
+      mutation vs per-container Composition animations.
+- [ ] Confirm **Q5** (long-distance `Source.Move` animation quality on WinUI
+      `RepositionThemeTransition`): plan a manual smoke-test gate in 1.13.
+
+### 0.2 New files — empty placeholders compile first, populated later
+
+- [ ] Create `src/Reactor/Core/Internal/ReactorListState.cs` containing
+      `internal sealed class ReactorListState` + `internal sealed class
+      ReactorRow` skeletons (no diff logic yet).
+- [ ] Create `src/Reactor/Core/Internal/KeyedListDiff.cs` with an empty
+      `internal static class KeyedListDiff` (the `ApplyKeyedDiff` helper
+      lands here in 1.4).
+- [ ] Create `src/Reactor/Core/IReactorKeyed.cs` containing the interface
+      declaration only; **do not** wire up `KeySelector` defaulting yet.
+- [ ] Create `src/Reactor/Core/Animation.cs` containing the
+      `public static class Animation` + `public enum AnimationKind` shells
+      with `Animate` methods that currently just invoke the action (no
+      ambient yet).
+- [ ] Verify `Reactor.slnx` builds clean with these placeholders.
+
+### 0.3 Capture the Phase 1 baseline
+
+- [ ] Run the existing stress perf matrix and store the baseline under
+      `tests/stress_perf/baselines/keyed-list-pre-phase1/`. Include the
+      single-insert / single-remove / bulk-replace scenarios.
+- [ ] Record current frame-time for "100-item ListView with theme transitions"
+      and "1000-item LazyVStack scrolled through" in the baseline README.
+      These numbers gate the Phase 1 PR (see 1.12).
+
+### 0.4 Pin the existing `ChildReconciler` keyed-LIS behavior
+
+- [ ] Audit `tests/Reactor.Tests/ChildReconcilerLisTests.cs` and
+      `ChildReconcilerReconcileTests.cs` for coverage gaps on: pure insert,
+      pure remove, single move, reversal, duplicate key, mixed keyed +
+      unkeyed siblings.
+- [ ] Add any missing pinning tests so Phase 1 work cannot silently change
+      hand-built-children semantics (success criterion #3).
+
+---
+
+## Phase 1 — Internal `ObservableCollection<ReactorRow>` delta (closes #198)
+
+The core fix. No public DSL change. Replaces the
+`ItemsSource = Enumerable.Range(...)` short-circuits in `Reconciler.Mount.cs`
+(`:1852`, `:1896`, `:2824`) and `Reconciler.Update.cs` (`:2807-2808`,
+`:2833-2834`, `:2906-2912`) with an internally-owned OC + keyed diff.
+
+### 1.1 Implement `ReactorRow` and `ReactorListState`
+
+- [ ] Flesh out `ReactorRow` per spec §4: `Index` (int) + `Key` (string).
+      Override `ToString` for diagnostics.
+- [ ] Flesh out `ReactorListState` per spec §4: `Source`
+      (`ObservableCollection<ReactorRow>`), `ByKey` (dict), `LastKeys`
+      (`List<string>`). Add a `Reset(IEnumerable<(int Index, string Key)>)`
+      helper for mount-time population.
+- [ ] Add unit tests under `tests/Reactor.Tests/Internal/ReactorListStateTests.cs`
+      covering `Reset` and basic invariants (`Source.Count == LastKeys.Count
+      == ByKey.Count`).
+
+### 1.2 Wire `ReactorListState` onto mounted controls
+
+- [ ] Decide between extending the existing `SetElementTag` mechanism vs. a
+      dedicated attached DependencyProperty. Reuse `SetElementTag` if it
+      already carries multi-value state; otherwise add a single attached
+      property `ReactorListStateProperty` in `Reconciler.cs`.
+- [ ] Add `GetListState(DependencyObject) → ReactorListState?` and
+      `SetListState(DependencyObject, ReactorListState)` helpers.
+- [ ] Unit-test the attached-property round-trip.
+
+### 1.3 Mount path — populate `ReactorListState` for ListView / GridView
+
+- [ ] Update `MountTemplatedListView` (`Reconciler.Mount.cs:1816`):
+      build the `ReactorListState`, replace
+      `listView.ItemsSource = Enumerable.Range(0, el.ItemCount).ToList();`
+      (line 1852) with `listView.ItemsSource = state.Source;`, attach state.
+- [ ] Update `MountTemplatedGridView` (`Reconciler.Mount.cs:1860`):
+      same change at line 1896.
+- [ ] `HandleTemplatedContainerContentChanging` still reads `args.ItemIndex`
+      — confirm `Source[i]` is positionally aligned with `n.Items[i]` so the
+      existing handler keeps working. Add an assertion in DEBUG that
+      `Source.Count == currentEl.ItemCount`.
+- [ ] Adjust the `ItemClick` handler at `Reconciler.Mount.cs:1845-1850` (and
+      the GridView equivalent at `:1889-1894`) so `args.ClickedItem is
+      ReactorRow row` → `row.Index` dispatches via
+      `tel.InvokeItemClick(row.Index)`. **Backwards-compat note**: today
+      `args.ClickedItem is int idx`; preserve the int path too for the rare
+      direct-`int`-bound consumer.
+
+### 1.4 Implement the keyed diff helper
+
+- [ ] Implement `KeyedListDiff.Apply(ReactorListState state, IReadOnlyList<T>
+      newItems, Func<T, int, string> keySelector)` per spec §4.3:
+      1. Lockstep prefix walk while keys match.
+      2. Build dict of remaining old rows on first mismatch.
+      3. For each new key from mismatch: survivor (`Source.Move` if index
+         changed) or insert (`Source.Insert(desiredIndex, new ReactorRow)`).
+      4. Trailing keys-not-seen → `Source.RemoveAt(currentIndex)` descending.
+      5. Sync `LastKeys` and `ByKey`.
+- [ ] Add an internal `DiffStats` return type
+      (`Inserts/Removes/Moves/Survivors`) so tests (1.6) and Phase 3 (3.x)
+      can read the op shape without re-walking the OC.
+
+### 1.5 Fast paths and bulk-replace bailout
+
+- [ ] Short-circuit when `oldKeys.SequenceEqual(newKeys)`: skip the diff,
+      keep the existing `RefreshRealizedContainers` call so leaf content
+      still reconciles.
+- [ ] Single-append / single-prepend / single-remove-front / single-remove-end
+      → one OC op, no dict allocation. Each gets a dedicated branch with a
+      stats counter for telemetry.
+- [ ] Bulk-replace bailout: if `(removed + inserted) / max(oldCount, 1) > 0.25`
+      **or** duplicate keys in `newKeys` are detected, fall back to the
+      legacy path (`lv.ItemsSource = Enumerable.Range(0, n.ItemCount).ToList();`)
+      and rebuild a fresh `ReactorListState`.
+- [ ] Emit a `ReactorDiagnostics`-style warning on duplicate-key bailout
+      (per Q1 resolution from 0.1).
+
+### 1.6 Unit tests for the diff (`tests/Reactor.Tests/Internal/KeyedListDiffTests.cs`)
+
+- [ ] Empty → non-empty (mount-equivalent path through diff).
+- [ ] Non-empty → empty.
+- [ ] Append one to end.
+- [ ] Prepend one.
+- [ ] Insert in middle.
+- [ ] Remove from start / middle / end.
+- [ ] Single move (item floats up by 1, by N).
+- [ ] Reverse N-item list (asserts N moves emitted, not N inserts/removes;
+      verifies survivor-reuse invariant).
+- [ ] Shuffle (assert OC final order matches `newKeys`).
+- [ ] Duplicate-key bailout fires and logs the diagnostic.
+- [ ] >25% churn bailout fires.
+- [ ] Idempotency: `Apply(state, items, sel)` followed by another `Apply`
+      with the same `items` is a no-op (no OC events fired).
+- [ ] `ReactorRow` instance identity is preserved for survivors (asserts the
+      OC consumer-side animation contract).
+
+### 1.7 Update path — wire diff into `UpdateTemplatedListView` / `GridView`
+
+- [ ] Replace `Reconciler.Update.cs:2807-2808` with:
+      `KeyedListDiff.Apply(state, /*items model*/, n.KeySelector);`
+      followed by `RefreshRealizedContainers(lv, n, requestRerender);`.
+- [ ] Replace `Reconciler.Update.cs:2833-2834` with the same pattern for
+      `UpdateTemplatedGridView`.
+- [ ] Keep `SetElementTag(lv, n)` and the selected-index / control-setter
+      tail intact.
+
+### 1.8 ItemsRepeater specifics — re-key `ElementFactory<T>._mountedElements`
+
+- [ ] Change `Dictionary<int, Element>` at `src/Reactor/Core/ElementFactory.cs:20`
+      to `Dictionary<string, Element>`. Update `GetElement`, `RecycleElement`,
+      and `RefreshRealizedItems` accordingly.
+- [ ] `GetElement` translates the WinUI `args.Data` (currently `int`) ↔
+      `ReactorRow.Key` via the host control's `ReactorListState.Source`.
+      Define and document the cast/lookup path.
+- [ ] `RefreshRealizedItems` walks realized child indexes from the repeater,
+      reads `Source[i].Key`, then looks up old element by key. The dictionary
+      no longer shifts on insert-at-0.
+
+### 1.9 Update `MountLazyStack` and `UpdateLazyStack`
+
+- [ ] `MountLazyStack` (`Reconciler.Mount.cs:2814`):
+      build a `ReactorListState`, set `repeater.ItemsSource = state.Source;`
+      and pass the state through to `lazy.CreateFactory(...)` so the factory
+      uses key-indexed `_mountedElements`.
+- [ ] `UpdateLazyStack` (`Reconciler.Update.cs:2892`):
+      replace the `IReadOnlyList<int>` source swap at `:2906-2912` with
+      `KeyedListDiff.Apply(state, ...)`. Keep the `TryUpdateFactory` /
+      `RefreshRealizedItems` flow unchanged for content reconciliation.
+
+### 1.10 Validate `LazyHStack`
+
+- [ ] Grep for `LazyHStack` to confirm it shares the same mount/update entry
+      points as `LazyVStack`. If they share, 1.9 already covers it.
+      Otherwise apply 1.9 changes to the horizontal mount/update path too.
+
+### 1.11 AppTests — animation behavior with a real WinUI control tree
+
+- [ ] Add `tests/Reactor.AppTests/Tests/KeyedListReconciliationTests.cs`.
+- [ ] Test: insert-at-0 into a 5-item ListView with
+      `ItemContainerTransitions.AddDeleteThemeTransition` — assert only the
+      inserted container raised its `Loaded` event during the render tick
+      (existing containers stay loaded).
+- [ ] Test: remove-from-end — only the removed container raises `Unloaded`.
+- [ ] Test: move (single swap) — both involved containers raise the WinUI
+      `RepositionThemeTransition` (`LayoutUpdated` proxy).
+- [ ] Test: bulk-replace (>25% churn) — fallback path is exercised and the
+      diagnostic surfaces.
+- [ ] Test: ItemsRepeater equivalents for insert/remove/move (via
+      `LazyVStack`).
+- [ ] Test: hand-built `FlexColumn(items.Select(...WithKey(item.Id)))` pinning
+      — append/prepend/remove leaves all surviving `Border`s with the same
+      `RuntimeHelpers.GetHashCode` between renders (regression gate for
+      success criterion #3).
+
+### 1.12 Perf gate — no regression on the hottest cases
+
+- [ ] Rerun the stress perf matrix from 0.3 against the Phase 1 branch.
+      Store under `tests/stress_perf/baselines/keyed-list-post-phase1/`.
+- [ ] Compare against the pre-Phase-1 baseline. **Pass criteria**: median
+      frame time within ±3% on the steady-state list-render case; "insert at
+      0" case improves (fewer realized container teardowns).
+- [ ] If the diff allocation shows up in profiles, switch the per-update
+      "remaining old rows" dictionary to a pooled
+      `Dictionary<string, ReactorRow>` reused across renders on the same
+      control (clear at end of diff).
+
+### 1.13 Manual smoke gate (Q5 from 0.1)
+
+- [ ] In `samples/ReactorGallery/ControlPages/Collections/ListViewPage.cs`,
+      temporarily add a "shuffle 10 items" button. Visually confirm the
+      WinUI `RepositionThemeTransition` reads correctly on long-distance
+      moves. Remove the button before merge — replace with the production
+      sample in Phase 4.
+
+### 1.14 Documentation: changelog + spec note
+
+- [ ] Add a `## Unreleased` entry to `CHANGELOG.md` (or the established
+      changelog file) under "Fixed": "ListView/GridView/ItemsRepeater now
+      surface incremental WinUI deltas for keyed list updates, fixing
+      microsoft-ui-reactor#198."
+- [ ] Update spec §10 Phase 1 row with the merged PR number once Phase 1
+      lands so future readers can navigate.
+
+---
+
+## Phase 2 — `IReactorKeyed` identity-on-data convention
+
+Optional ergonomics layer on top of Phase 1. Removes the per-call-site
+`KeySelector` and per-element `.WithKey(string)` boilerplate for the common
+case.
+
+### 2.1 Define and document the interface
+
+- [ ] Populate `src/Reactor/Core/IReactorKeyed.cs` (placeholder from 0.2):
+      one-property interface `string Key { get; }` with full XML docs
+      explaining the convention and pointing to the spec.
+- [ ] Add an analyzer-friendly note in the doc comment: "The returned key
+      must be stable for the lifetime of the item and unique across the
+      list."
+
+### 2.2 Default `KeySelector` on templated lists when `T : IReactorKeyed`
+
+- [ ] In `TemplatedListElementBase` (`src/Reactor/Core/Element.cs:2811`),
+      add overloads / fallback so `KeySelector` defaults to `t => t.Key`
+      when `T : IReactorKeyed`.
+- [ ] Mirror on `LazyStackElementBase` (and `LazyHStack` equivalent).
+- [ ] Unit tests: `IReactorKeyed`-typed list without explicit `KeySelector`
+      produces the same diff ops as the same list with explicit
+      `t => t.Key`.
+
+### 2.3 Add `.WithKey<T>(this Element el, T item) where T : IReactorKeyed`
+
+- [ ] Implement the overload in
+      `src/Reactor/Elements/ElementExtensions.cs` (or wherever the existing
+      `.WithKey(string)` lives — confirm with a grep first).
+- [ ] Unit test: `.WithKey(item)` produces the same `Element.Key` as
+      `.WithKey(item.Key)`.
+
+### 2.4 Migration sweep — sample apps
+
+- [ ] Update `samples/TodoApp/` `Todo` model to implement `IReactorKeyed` and
+      drop the explicit `KeySelector` at the ListView call site (proof of
+      ergonomics).
+- [ ] Same sweep across any `samples/ReactorGallery/ControlPages/Collections/`
+      pages that use a list of POCOs.
+
+### 2.5 Documentation
+
+- [ ] Add a "Keyed lists" section to `docs/guide/state-and-collections.md`
+      (create if needed) explaining the convention, when to opt in, and
+      when explicit `KeySelector` is still preferable (interop / legacy
+      types you don't own).
+- [ ] Cross-link from the existing `docs/guide/` navigation index.
+
+---
+
+## Phase 3 — Ambient `Animate(...)` transaction
+
+The SwiftUI analog. Carries animation **intent** (not operations) through an
+`AsyncLocal` ambient from the state-setter call into the reconciler so the
+resulting diff ops can be tagged with an animation kind.
+
+**Hard gate**: do not begin Phase 3 until Phase 1 has merged and Q3 / Q4 from
+0.1 have a documented answer.
+
+### 3.1 Public surface — `Animate` + `AnimationKind`
+
+- [ ] Populate `src/Reactor/Core/Animation.cs` (placeholder from 0.2) with
+      the full `Animate(AnimationKind, Action)` and
+      `Animate<T>(AnimationKind, Func<T>)` signatures from spec §6.
+- [ ] Implement the `AsyncLocal<AmbientAnimation?>` stack with proper
+      push/pop in a `try/finally`.
+
+### 3.2 State-setter side — capture the ambient at dispatch
+
+- [ ] In `UseState` / `UseReducer` setters (locate via grep on
+      `_pendingState` / similar), read the current ambient at dispatch time
+      and stash it on the pending render request.
+- [ ] If multiple setters fire inside one `Animate(...)`, they share the
+      ambient (already covered by `AsyncLocal` semantics — write an explicit
+      test).
+
+### 3.3 Reconciler side — consume the ambient in `KeyedListDiff.Apply`
+
+- [ ] Pass the captured `AmbientAnimation` into the diff entry point.
+- [ ] For each `Insert` / `Move` / `Remove` op emitted, configure the
+      target container's transition per spec §6 — either by mutating the
+      per-control `ItemContainerTransitions` (lighter, Q4-decision-pending)
+      or by attaching a per-container `Microsoft.UI.Composition` animation
+      to the affected `ReactorRow`'s container.
+
+### 3.4 Reconciler side — consume the ambient in `ChildReconciler`
+
+- [ ] Plumb the ambient through `ChildReconciler.Reconcile` so the
+      hand-built path applies the same transition kind on mount/move/unmount.
+- [ ] Reuse the existing per-element `LayoutAnimation` / `ImplicitTransitions`
+      modifier wiring rather than inventing a parallel path — the ambient
+      just becomes a default if no explicit per-element modifier is set.
+
+### 3.5 Scope discipline — what `Animate(...)` does NOT do
+
+- [ ] Add a guard: `Animate(...)` is not consumed by property setters on
+      surviving leaves (colors, sizes). Document and test this — a leaf
+      `TextBlock` whose `Foreground` changes inside `Animate(.Spring)` does
+      **not** animate the foreground.
+- [ ] Update spec §6 with the final answer to Q4 (shared `ItemContainerTransitions`
+      mutation vs per-container Composition).
+
+### 3.6 Unit + AppTests
+
+- [ ] Unit: ambient is observable in the dispatch callback (synchronous);
+      ambient is null after `Animate` returns.
+- [ ] Unit: two nested `Animate(...)` calls — inner kind wins for state
+      changes inside the inner; outer resumes after.
+- [ ] AppTests: `Animate(.Spring, () => setItems([..items, x]))` on a
+      ListView produces a visibly different animation than the bare
+      `setItems(...)` (asserted via the resulting `Storyboard` /
+      `Composition` animation properties on the new container).
+- [ ] AppTests: hand-built `FlexColumn` mount/unmount picks up the ambient.
+
+### 3.7 Documentation
+
+- [ ] Add `docs/guide/animations.md` section "Transactional animation" with
+      side-by-side SwiftUI / Reactor examples.
+- [ ] Cross-link from `docs/specs/042-...md` §6.
+
+---
+
+## Phase 4 — Samples & gallery integration
+
+### 4.1 Animated list demo mini-app
+
+- [ ] Create `samples/apps/AnimatedListDemo/`. Single-window app that
+      demonstrates: insert-at-end, insert-at-0, remove, shuffle, bulk
+      replace, all with and without `Animate(.Spring)`.
+- [ ] Wire into `samples/apps/Directory.Build.props` so it builds with the
+      rest of the samples matrix.
+- [ ] Add a `samples/apps/AnimatedListDemo/README.md` explaining the demo
+      and pointing back at spec 042.
+
+### 4.2 Gallery integration
+
+- [ ] Update `samples/ReactorGallery/ControlPages/Collections/ListViewPage.cs`
+      and `LazyVStackPage` (or equivalent) with an "Animated edit" toggle
+      and a +/- buttons row. Same demo, embedded in the gallery.
+
+### 4.3 TodoApp polish
+
+- [ ] Update `samples/TodoApp/` to use `IReactorKeyed` on `Todo` (already
+      done in 2.4) **and** wrap "add todo" / "delete todo" in
+      `Animate(.Spring, () => ...)`. Smoke-test that the animation reads
+      correctly with the OS reduced-motion setting respected.
+
+---
+
+## Phase 5 — Agent-kit / DSL skill references
+
+These keep the agent-kit reference docs in sync with the new platform feature
+so Claude Code (and other tools) can recommend the right pattern out of the
+box.
+
+### 5.1 `reactor-dsl` references
+
+- [ ] Add `plugins/reactor/skills/reactor-dsl/references/keyed-lists.md`
+      covering: `IReactorKeyed`, explicit `KeySelector`, `.WithKey(...)`,
+      the hand-built `.Select(...)` pattern.
+- [ ] Cross-link from the skill's index file.
+
+### 5.2 `reactor-recipes` references
+
+- [ ] Add `plugins/reactor/skills/reactor-recipes/references/animated-list.md`
+      with the canonical `Animate(.Spring, () => setItems(...))` recipe.
+- [ ] Include a "common mistakes" sub-section: mutating
+      `ObservableCollection` from `UseState` (doesn't work — Reactor compares
+      by reference), forgetting `KeySelector` on a non-`IReactorKeyed` type.
+
+### 5.3 Skill validation
+
+- [ ] Run the skill's existing validation harness (find via
+      `plugins/reactor/skills/.../tests/` or equivalent) so the new
+      references parse and link-check.
+
+---
+
+## Phase 6 — Hardening, analyzers, follow-ups
+
+### 6.1 Missing-key analyzer (deferred from Q2 in 0.1)
+
+- [ ] Roslyn analyzer rule `REACTOR_LIST_001`: warn when a `.Select(...)`
+      expression produces `Element` children passed to a panel-like factory
+      (`FlexColumn`, `VStack`, `Column`, etc.) without any child calling
+      `.WithKey(...)`. Codefix offers `.WithKey(item.Id)` when the lambda
+      parameter has a discoverable `Id` / `Key` property.
+- [ ] Tests under `tests/Reactor.Tests/AnalyzerTests/`.
+
+### 6.2 Duplicate-key diagnostic surfaces in the dev overlay
+
+- [ ] Surface the duplicate-key warning from 1.5 in the existing dev tools
+      overlay (find via grep on `Diagnostics` / `Devtools`). One-shot per
+      `(control, set-of-duplicates)` to avoid log spam.
+
+### 6.3 Long-tail perf
+
+- [ ] Add a stress scenario "10k-item virtualized list, scroll + edit" to
+      `tests/stress_perf/` to catch future regressions in the ItemsRepeater
+      key-indexed factory path.
+- [ ] Document the new scenario in the stress_perf README.
+
+### 6.4 Spec close-out
+
+- [ ] Once Phases 1–5 ship, mark spec 042 status as **Implemented** with
+      the merged-PR list in the header.
+- [ ] Close microsoft-ui-reactor#198.
+
+---
+
+## Open items / parking lot
+
+- Fractional indexing helper for drag-to-reorder UIs without natural IDs
+  (spec §8) — separate utility, not part of this work.
+- CRDT-derived approaches — out of scope, explicitly rejected in spec §8.
+- `UseList<T>` op-capture hook — out of scope, explicitly rejected in spec §7.
