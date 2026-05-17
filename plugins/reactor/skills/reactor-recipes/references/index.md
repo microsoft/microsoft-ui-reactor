@@ -25,6 +25,7 @@ component.
 | Absolute positioning with Canvas | [`canvas-positioning.cs`](canvas-positioning.cs) | `Canvas`, `.Canvas(left, top)`, `.CenterAt`, shapes |
 | Named-style buttons + InfoBar severity | [`named-styles.cs`](named-styles.cs) | `.AccentButton()`, `.SubtleButton()`, `.TextLink()`, `.Informational()` / `.Success()` / `.Warning()` / `.Error()` |
 | Multi-select calendar | [`calendar-multiselect.cs`](calendar-multiselect.cs) | `CalendarView`, `CalendarViewSelectionMode.Multiple`, `.SelectedDatesChanged` |
+| Factor stateful logic into a custom hook | [`use-custom-hook.cs`](use-custom-hook.cs) | `UseState`, `UseEffect` inside a `Use*` extension on `RenderContext` |
 
 ## How to use a recipe
 
