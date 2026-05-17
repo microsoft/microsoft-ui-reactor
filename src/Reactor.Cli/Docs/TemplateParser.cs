@@ -16,7 +16,14 @@ internal class DocTemplate
 {
     public string Title { get; set; } = "";
     public string App { get; set; } = "";
-    public int Order { get; set; }
+
+    /// <summary>
+    /// Sequential nav order. Held as <c>double</c> so spec-041 §7.2 `.5`
+    /// slots (e.g. <c>thinking-in-reactor: 1.5</c>) can slot in between
+    /// existing integer orders without renumbering churn until the Phase-4
+    /// rebase to integers.
+    /// </summary>
+    public double Order { get; set; }
     public string Audience { get; set; } = "";
     public string Goal { get; set; } = "";
     public DocTier Tier { get; set; } = DocTier.Solid;
@@ -195,7 +202,14 @@ internal static class TemplateParser
         {
             case "title": template.Title = value; break;
             case "app": template.App = value; break;
-            case "order": if (int.TryParse(value, out var o)) template.Order = o; break;
+            case "order":
+                // Spec 041 §7.2: new pages slot in as `.5` between existing
+                // integer orders until the Phase-4 rebase, so we parse as
+                // double rather than int. Invariant culture so `1.5` works
+                // regardless of the machine locale.
+                if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var o))
+                    template.Order = o;
+                break;
             case "audience": template.Audience = value; break;
             case "goal": template.Goal = value; break;
             case "tier":

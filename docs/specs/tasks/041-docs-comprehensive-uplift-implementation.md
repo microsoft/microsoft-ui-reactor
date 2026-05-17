@@ -385,13 +385,34 @@ infrastructure to unblock content phases.
 
 ### 1.12 Readme rewrite to 10-section index (spec §7.1)
 
-- [ ] Rewrite `docs/_pipeline/templates/readme.md.dt` to the
-      10-section structure from spec §7.1.
-- [ ] Every new page filed as a Stub-tier link with "Coming soon"
+- [x] Rewrite `docs/_pipeline/templates/readme.md.dt` to the
+      10-section structure from spec §7.1. *Index lists every page
+      across §1-§10; Section 8 cross-links to §1 (XAML migration
+      lives there), §10 lists the auto-generated reference axis.*
+- [x] Every new page filed as a Stub-tier link with "Coming soon"
       anchor — so the surface area is visible even when incomplete.
-- [ ] Sequential `order:` numbers in front-matter rebase to integers;
-      new pages slot in as `.5` per spec §7.2.
-- [ ] Confirm Previous/Next chain is unbroken when only stubs exist.
+      *38 new stub templates authored: `thinking-in-reactor`,
+      `reactor-vs-xaml`, `controls`, `text-and-media`,
+      `status-and-info`, `dialogs-and-flyouts`, `persistence`,
+      `recipes/index` + 9 recipes, `cheat-sheet`,
+      `rules-of-reactor`, `theming-tokens`, `testing`,
+      `performance`, `packaging`, `wpf-interop`, plus 14
+      Under-the-hood pages.*
+- [x] Sequential `order:` numbers in front-matter rebase to integers;
+      new pages slot in as `.5` per spec §7.2. *Existing pages
+      kept their integer orders; new pages slot in as `.5` /
+      `.7` / `.85` between them. `DocTemplate.Order` widened to
+      `double` so the parser accepts fractional values; recorded
+      in phase-1-retro.*
+- [x] Confirm Previous/Next chain is unbroken when only stubs exist.
+      *`mur docs compile --validate-only --skip-reference` reports
+      64 templates and zero error-level findings.*
+- [x] Rename `async-resources-cookbook.md.dt` → `async-resources.md.dt`
+      per spec §7.1 (App folder name kept as `async-resources-cookbook`
+      to avoid renaming a separately-tracked doc app in this commit).
+- [x] Recurse template discovery into subfolders so
+      `recipes/<recipe>.md.dt` is compiled; `_skeletons/` is excluded.
+      *Implemented alongside task 1.10.*
 
 ### 1.13 dev-tooling.md promotion + devtools-ux merge (spec §9 Phase 1)
 

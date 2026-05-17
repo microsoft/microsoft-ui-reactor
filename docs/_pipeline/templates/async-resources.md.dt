@@ -1,7 +1,7 @@
 ---
-title: "Async Resources Cookbook"
+title: "Async Resources"
 app: async-resources-cookbook
-order: 12
+order: 12.5
 audience: intermediate
 goal: |
   Task-oriented recipes for Reactor's async hooks: UseResource for reads,
@@ -11,7 +11,7 @@ goal: |
   path from custom DataPageCache-style block caches.
 ---
 
-# Async Resources Cookbook
+# Async Resources
 
 Reactor's async hooks — `UseResource`, `UseInfiniteResource`, and
 `UseMutation` — replace the "one `UseState` for data, one for loading, one

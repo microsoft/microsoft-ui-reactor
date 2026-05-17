@@ -1,0 +1,26 @@
+---
+title: "Perf Instrumentation"
+app: perf-instrumentation
+order: 43
+audience: advanced
+goal: |
+  What's instrumented (every render, every effect, every
+  reconciliation). ETW event sources. Frame-aligned sampling
+  (spec 031). Layout-cost attribution (spec 032). How to read a
+  flame graph of a Reactor app. How to reproduce a bench.
+  Authored in Phase 3.5.
+tier: stub
+---
+
+# Perf Instrumentation
+
+Coming soon — this page explains Reactor's performance instrumentation:
+what's instrumented (every render, every effect, every reconciliation),
+the ETW event sources, frame-aligned sampling (spec 031), layout-cost
+attribution (spec 032), and how to read a flame graph of a Reactor
+app. See
+[the AI Author Skill](../../_pipeline/ai-author-skill.md) for the
+planned surface.
+
+Sibling page [Performance](performance.md) covers the user-facing
+profiling story.

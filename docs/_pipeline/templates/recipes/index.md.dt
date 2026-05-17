@@ -1,0 +1,24 @@
+---
+title: "Recipes"
+app: recipes-index
+order: 22
+audience: intermediate
+goal: |
+  Gallery index for the recipes folder: thumbnail image + one-line
+  description + link per recipe. Each recipe lives as its own page so
+  the folder scales without nav churn. Authored in Phase 2.
+tier: stub
+---
+
+# Recipes
+
+Coming soon — this is the gallery index for end-to-end Reactor recipes:
+login forms, master-detail layouts, settings pages, paginated lists,
+modal dialogs, multi-step forms, search-with-suggestions, command
+palettes, drag-to-reorder, and more. See
+[the AI Author Skill](../../_pipeline/ai-author-skill.md) for the
+planned surface.
+
+Until the gallery lands, the closest existing pattern coverage is
+spread across [Forms](../forms.md), [Collections](../collections.md),
+and [Navigation](../navigation.md).

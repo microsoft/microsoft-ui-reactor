@@ -1,0 +1,33 @@
+---
+title: "Reactor vs XAML"
+app: reactor-vs-xaml
+order: 1.7
+audience: intermediate
+goal: |
+  Architectural essay: side-by-side mapping for XAML developers.
+  DependencyProperty → element record + modifier. Binding → closure over
+  state. DataTemplate → function component. Style → modifier composition.
+  ResourceDictionary → ThemeRef. VisualStateManager → InteractionStates.
+  Storyboard → Animate / WithAnimation. INotifyPropertyChanged → hook
+  re-render. MVVM ViewModel → component state + UseObservable bridge.
+  Frames the philosophical shift: pull-based binding vs push-based render.
+  Lives in §1 (Get Started) AND §9 (Under the hood) — same file, indexed
+  twice. Authored in Phase 3.5.
+tier: stub
+---
+
+# Reactor vs XAML
+
+Coming soon — this page is the architectural essay for XAML developers:
+why the binding model is fundamentally different, with a side-by-side
+mapping table from XAML concepts (DependencyProperty, Binding,
+DataTemplate, Style, ResourceDictionary, VisualStateManager, Storyboard,
+INotifyPropertyChanged, MVVM ViewModel) to their Reactor equivalents.
+See [the AI Author Skill](../../_pipeline/ai-author-skill.md) for the
+planned surface.
+
+Complements [Reactor for XAML Developers](xaml-developers.md), which is
+the migration-recipe cookbook ("I have a XAML page; rewrite it as
+Reactor"). This page answers the deeper *why*. Cross-linked from
+[Architecture Overview](architecture-overview.md) in the Under-the-hood
+track.

@@ -1,0 +1,26 @@
+---
+title: "Hooks Internals"
+app: hooks-internals
+order: 32
+audience: advanced
+goal: |
+  How UseState actually stores its value. The hook slot table. Why
+  hooks must be called in order. The dispatcher / current-component
+  pattern. Closure capture and the "stale state" problem. Custom
+  hooks composition. ThreadSafe setters. How UseEffect queues. How
+  UseMemo keys. How UseRef differs. Promotes
+  docs/reference/state-and-hooks.md. Authored in Phase 3.5.
+tier: stub
+---
+
+# Hooks Internals
+
+Coming soon — this page explains how Reactor's hooks actually work
+under the hood: the hook slot table, the dispatcher / current-component
+pattern, closure capture and the "stale state" problem, how `UseEffect`
+queues, how `UseMemo` keys, how `UseRef` differs. Promotes the
+existing `docs/reference/state-and-hooks.md` once authored. See
+[the AI Author Skill](../../_pipeline/ai-author-skill.md) for the
+planned surface.
+
+Until then, [Hooks](hooks.md) covers the surface model.
