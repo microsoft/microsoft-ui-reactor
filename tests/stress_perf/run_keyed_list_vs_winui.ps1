@@ -125,16 +125,21 @@ function Read-Report {
         return $null
     }
     return [PSCustomObject]@{
-        AppName  = $AppName
-        Raw      = $raw
-        Count    = & $parse 'Count:\s+(\d+)'
-        Edits    = & $parse 'Edits:\s+(\d+)'
-        Frames   = & $parse 'Frames:\s+(\d+)'
-        AvgMs    = & $parse 'Avg dt:\s+([\d\.]+)'
-        P50Ms    = & $parse 'P50 dt:\s+([\d\.]+)'
-        P95Ms    = & $parse 'P95 dt:\s+([\d\.]+)'
-        P99Ms    = & $parse 'P99 dt:\s+([\d\.]+)'
-        MaxMs    = & $parse 'Max dt:\s+([\d\.]+)'
+        AppName        = $AppName
+        Raw            = $raw
+        Count          = & $parse 'Count:\s+(\d+)'
+        Edits          = & $parse 'Edits:\s+(\d+)'
+        Frames         = & $parse 'Frames:\s+(\d+)'
+        WallClockMs    = & $parse 'WallClock:\s+([\d\.]+)'
+        AvgMs          = & $parse 'Avg dt:\s+([\d\.]+)'
+        P50Ms          = & $parse 'P50 dt:\s+([\d\.]+)'
+        P95Ms          = & $parse 'P95 dt:\s+([\d\.]+)'
+        P99Ms          = & $parse 'P99 dt:\s+([\d\.]+)'
+        MaxMs          = & $parse 'Max dt:\s+([\d\.]+)'
+        WorkingSetMB   = & $parse 'WS:\s+(\d+)'
+        PeakWSMB       = & $parse 'PeakWS:\s+(\d+)'
+        PrivateMB      = & $parse 'Private:\s+(\d+)'
+        ManagedHeapMB  = & $parse 'ManagedHeap:\s+(\d+)'
     }
 }
 
@@ -199,18 +204,28 @@ foreach ($count in $Counts) {
             $allRunsLog.Add([PSCustomObject]@{
                 Cell    = $cellTag
                 Rep     = $r
-                Reactor_P50_ms = $rRep.P50Ms
-                Reactor_P95_ms = $rRep.P95Ms
-                Reactor_P99_ms = $rRep.P99Ms
-                Reactor_Avg_ms = $rRep.AvgMs
-                Reactor_Frames = $rRep.Frames
-                Reactor_Edits  = $rRep.Edits
-                WinUI_P50_ms   = $wRep.P50Ms
-                WinUI_P95_ms   = $wRep.P95Ms
-                WinUI_P99_ms   = $wRep.P99Ms
-                WinUI_Avg_ms   = $wRep.AvgMs
-                WinUI_Frames   = $wRep.Frames
-                WinUI_Edits    = $wRep.Edits
+                Reactor_P50_ms        = $rRep.P50Ms
+                Reactor_P95_ms        = $rRep.P95Ms
+                Reactor_P99_ms        = $rRep.P99Ms
+                Reactor_Avg_ms        = $rRep.AvgMs
+                Reactor_WallClock_ms  = $rRep.WallClockMs
+                Reactor_Frames        = $rRep.Frames
+                Reactor_Edits         = $rRep.Edits
+                Reactor_WS_MB         = $rRep.WorkingSetMB
+                Reactor_PeakWS_MB     = $rRep.PeakWSMB
+                Reactor_Private_MB    = $rRep.PrivateMB
+                Reactor_Heap_MB       = $rRep.ManagedHeapMB
+                WinUI_P50_ms          = $wRep.P50Ms
+                WinUI_P95_ms          = $wRep.P95Ms
+                WinUI_P99_ms          = $wRep.P99Ms
+                WinUI_Avg_ms          = $wRep.AvgMs
+                WinUI_WallClock_ms    = $wRep.WallClockMs
+                WinUI_Frames          = $wRep.Frames
+                WinUI_Edits           = $wRep.Edits
+                WinUI_WS_MB           = $wRep.WorkingSetMB
+                WinUI_PeakWS_MB       = $wRep.PeakWSMB
+                WinUI_Private_MB      = $wRep.PrivateMB
+                WinUI_Heap_MB         = $wRep.ManagedHeapMB
             }) | Out-Null
         }
 
@@ -233,22 +248,53 @@ foreach ($count in $Counts) {
         $deltaP95 = if ($wP95 -gt 0) { [Math]::Round(100.0 * ($rP95 - $wP95) / $wP95, 1) } else { $null }
         $deltaAvg = if ($wAvg -gt 0) { [Math]::Round(100.0 * ($rAvg - $wAvg) / $wAvg, 1) } else { $null }
 
+        # Median across reps — wall clock + memory.
+        $rWall   = Get-Median ($reactorReps | ForEach-Object { $_[0].WallClockMs })
+        $wWall   = Get-Median ($winuiReps   | ForEach-Object { $_[0].WallClockMs })
+        $rFrames = Get-Median ($reactorReps | ForEach-Object { [double]$_[0].Frames })
+        $wFrames = Get-Median ($winuiReps   | ForEach-Object { [double]$_[0].Frames })
+        $rWS     = Get-Median ($reactorReps | ForEach-Object { [double]$_[0].WorkingSetMB })
+        $wWS     = Get-Median ($winuiReps   | ForEach-Object { [double]$_[0].WorkingSetMB })
+        $rPeakWS = Get-Median ($reactorReps | ForEach-Object { [double]$_[0].PeakWSMB })
+        $wPeakWS = Get-Median ($winuiReps   | ForEach-Object { [double]$_[0].PeakWSMB })
+        $rPriv   = Get-Median ($reactorReps | ForEach-Object { [double]$_[0].PrivateMB })
+        $wPriv   = Get-Median ($winuiReps   | ForEach-Object { [double]$_[0].PrivateMB })
+        $rHeap   = Get-Median ($reactorReps | ForEach-Object { [double]$_[0].ManagedHeapMB })
+        $wHeap   = Get-Median ($winuiReps   | ForEach-Object { [double]$_[0].ManagedHeapMB })
+
+        $deltaPeak = if ($wPeakWS -gt 0) { [Math]::Round(100.0 * ($rPeakWS - $wPeakWS) / $wPeakWS, 1) } else { $null }
+        $deltaHeap = if ($wHeap   -gt 0) { [Math]::Round(100.0 * ($rHeap   - $wHeap)   / $wHeap,   1) } else { $null }
+
         $rows.Add([PSCustomObject]@{
-            Cell             = $cellTag
-            Count            = $count
-            EditsPerSec      = $eps
-            Reps             = $reactorReps.Count
-            Reactor_P50_med  = [Math]::Round($rP50, 2)
-            WinUI_P50_med    = [Math]::Round($wP50, 2)
-            DeltaP50_pct     = $deltaP50
-            Reactor_P95_med  = [Math]::Round($rP95, 2)
-            WinUI_P95_med    = [Math]::Round($wP95, 2)
-            DeltaP95_pct     = $deltaP95
-            Reactor_P99_med  = [Math]::Round($rP99, 2)
-            WinUI_P99_med    = [Math]::Round($wP99, 2)
-            Reactor_Avg_med  = [Math]::Round($rAvg, 2)
-            WinUI_Avg_med    = [Math]::Round($wAvg, 2)
-            DeltaAvg_pct     = $deltaAvg
+            Cell                  = $cellTag
+            Count                 = $count
+            EditsPerSec           = $eps
+            Reps                  = $reactorReps.Count
+            Reactor_P50_med       = [Math]::Round($rP50, 2)
+            WinUI_P50_med         = [Math]::Round($wP50, 2)
+            DeltaP50_pct          = $deltaP50
+            Reactor_P95_med       = [Math]::Round($rP95, 2)
+            WinUI_P95_med         = [Math]::Round($wP95, 2)
+            DeltaP95_pct          = $deltaP95
+            Reactor_P99_med       = [Math]::Round($rP99, 2)
+            WinUI_P99_med         = [Math]::Round($wP99, 2)
+            Reactor_Avg_med       = [Math]::Round($rAvg, 2)
+            WinUI_Avg_med         = [Math]::Round($wAvg, 2)
+            DeltaAvg_pct          = $deltaAvg
+            Reactor_WallClock_ms  = [Math]::Round($rWall, 0)
+            WinUI_WallClock_ms    = [Math]::Round($wWall, 0)
+            Reactor_Frames        = [int]$rFrames
+            WinUI_Frames          = [int]$wFrames
+            Reactor_WS_MB         = [int]$rWS
+            WinUI_WS_MB           = [int]$wWS
+            Reactor_PeakWS_MB     = [int]$rPeakWS
+            WinUI_PeakWS_MB       = [int]$wPeakWS
+            DeltaPeakWS_pct       = $deltaPeak
+            Reactor_Private_MB    = [int]$rPriv
+            WinUI_Private_MB      = [int]$wPriv
+            Reactor_Heap_MB       = [int]$rHeap
+            WinUI_Heap_MB         = [int]$wHeap
+            DeltaHeap_pct         = $deltaHeap
         }) | Out-Null
     }
 }

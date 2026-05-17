@@ -376,17 +376,34 @@ class VirtualListApp : Component
         double avg = 0;
         for (int i = 0; i < sortedSamples.Count; i++) avg += sortedSamples[i];
         avg /= sortedSamples.Count;
+        double totalMs = avg * sortedSamples.Count;
+
+        // Force a GC before sampling managed heap so the number reflects
+        // retained state, not transient allocations from the bench window.
+        global::System.GC.Collect();
+        global::System.GC.WaitForPendingFinalizers();
+        global::System.GC.Collect();
+        var p = global::System.Diagnostics.Process.GetCurrentProcess();
+        long workingSetMB = p.WorkingSet64 / (1024 * 1024);
+        long peakWorkingSetMB = p.PeakWorkingSet64 / (1024 * 1024);
+        long privateMB = p.PrivateMemorySize64 / (1024 * 1024);
+        long managedHeapMB = global::System.GC.GetTotalMemory(forceFullCollection: false) / (1024 * 1024);
 
         var sb = new StringBuilder();
         sb.AppendLine($"=== {AppName} ===");
         sb.AppendLine($"Count:       {count}");
         sb.AppendLine($"Edits:       {editOps}");
         sb.AppendLine($"Frames:      {sortedSamples.Count}");
+        sb.AppendLine($"WallClock:   {totalMs:F1} ms  (sum of frame deltas in the bench window)");
         sb.AppendLine($"Avg dt:      {avg:F2} ms  (~{1000.0 / avg:F1} fps)");
         sb.AppendLine($"P50 dt:      {p50:F2} ms");
         sb.AppendLine($"P95 dt:      {p95:F2} ms");
         sb.AppendLine($"P99 dt:      {p99:F2} ms");
         sb.AppendLine($"Max dt:      {sortedSamples[^1]:F2} ms");
+        sb.AppendLine($"WS:          {workingSetMB} MB  (working set at bench finish)");
+        sb.AppendLine($"PeakWS:      {peakWorkingSetMB} MB  (peak working set across process lifetime)");
+        sb.AppendLine($"Private:     {privateMB} MB  (committed private bytes)");
+        sb.AppendLine($"ManagedHeap: {managedHeapMB} MB  (after GC.Collect)");
 
         var dir = AppContext.BaseDirectory;
         File.WriteAllText(System.IO.Path.Combine(dir, $"{AppName}.report.txt"), sb.ToString());
