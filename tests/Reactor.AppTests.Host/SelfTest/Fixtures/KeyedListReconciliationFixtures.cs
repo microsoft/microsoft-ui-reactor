@@ -557,4 +557,393 @@ internal static class KeyedListReconciliationFixtures
                 state is not null && state.LastKeys.Count == 0);
         }
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  LazyVStack (ItemsRepeater) — full op-shape coverage. The Phase 1
+    //  `ElementFactory<T>._mountedElements` rekey only paid for itself
+    //  if remove / move / reverse also stayed incremental. Pin all three.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class LazyVStack_RemoveFromMiddle_EmitsSingleRemove(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var items = phase == 0
+                    ? new[] { new Item("a", "A"), new Item("b", "B"), new Item("c", "C"), new Item("d", "D") }
+                    : new[] { new Item("a", "A"), new Item("c", "C"), new Item("d", "D") };
+                return VStack(
+                    Button("RemoveB", () => setPhase(1)),
+                    LazyVStack<Item>(items, i => i.Id, (i, _) => TextBlock(i.Label)).Height(300)
+                );
+            });
+
+            await Harness.Render();
+
+            var rep = H.FindControl<WinUI.ItemsRepeater>(_ => true);
+            var rec = new CollectionChangedRecorder();
+            if (rep is not null) rec.Subscribe(rep);
+
+            H.ClickButton("RemoveB");
+            await Harness.Render();
+
+            H.Check("KLR_LazyVStack_RemoveMiddle_OneRemove",
+                rec.Count(NotifyCollectionChangedAction.Remove) == 1);
+            H.Check("KLR_LazyVStack_RemoveMiddle_NoOtherOps",
+                rec.Count(NotifyCollectionChangedAction.Add) == 0
+                && rec.Count(NotifyCollectionChangedAction.Reset) == 0);
+
+            var state = rep is not null ? Reconciler.GetListState(rep) : null;
+            H.Check("KLR_LazyVStack_RemoveMiddle_FinalOrder",
+                state is not null
+                && state.LastKeys.Count == 3
+                && state.LastKeys[0] == "a"
+                && state.LastKeys[1] == "c"
+                && state.LastKeys[2] == "d");
+        }
+    }
+
+    internal class LazyVStack_MoveOne_EmitsSingleMove(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var items = phase == 0
+                    ? new[] { new Item("a", "A"), new Item("b", "B"), new Item("c", "C"), new Item("d", "D") }
+                    : new[] { new Item("a", "A"), new Item("c", "C"), new Item("b", "B"), new Item("d", "D") };
+                return VStack(
+                    Button("Swap", () => setPhase(1)),
+                    LazyVStack<Item>(items, i => i.Id, (i, _) => TextBlock(i.Label)).Height(300)
+                );
+            });
+
+            await Harness.Render();
+
+            var rep = H.FindControl<WinUI.ItemsRepeater>(_ => true);
+            var rec = new CollectionChangedRecorder();
+            if (rep is not null) rec.Subscribe(rep);
+
+            H.ClickButton("Swap");
+            await Harness.Render();
+
+            H.Check("KLR_LazyVStack_Move_EmitsAtLeastOneMove",
+                rec.Count(NotifyCollectionChangedAction.Move) >= 1);
+            H.Check("KLR_LazyVStack_Move_NoAddRemove",
+                rec.Count(NotifyCollectionChangedAction.Add) == 0
+                && rec.Count(NotifyCollectionChangedAction.Remove) == 0);
+
+            var state = rep is not null ? Reconciler.GetListState(rep) : null;
+            H.Check("KLR_LazyVStack_Move_FinalOrder",
+                state is not null
+                && state.LastKeys.Count == 4
+                && state.LastKeys[0] == "a"
+                && state.LastKeys[1] == "c"
+                && state.LastKeys[2] == "b"
+                && state.LastKeys[3] == "d");
+        }
+    }
+
+    // Survivors keep their realized element across an insert. The
+    // ElementFactory<T>._mountedElements dictionary is keyed by
+    // ReactorRow.Key after Phase 1, so a prepend at index 0 must NOT
+    // invalidate the entry for "a"/"b"/"c". A reorder-stable factory
+    // is the whole point of the rekey — pin it.
+    internal class LazyVStack_InsertAtZero_RealizedElementsKeepIdentity(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var items = phase == 0
+                    ? new[] { new Item("a", "A"), new Item("b", "B"), new Item("c", "C") }
+                    : new[] { new Item("z", "Z"), new Item("a", "A"), new Item("b", "B"), new Item("c", "C") };
+                return VStack(
+                    Button("Prepend", () => setPhase(1)),
+                    LazyVStack<Item>(items, i => i.Id, (i, _) =>
+                        TextBlock(i.Label).AutomationId($"lv_{i.Id}")).Height(300)
+                );
+            });
+
+            await Harness.Render();
+
+            // Capture each TextBlock's hash before the prepend. After the
+            // prepend, the survivors should still hand back the exact
+            // same TextBlock instances.
+            int? Hash(string key) =>
+                H.FindControl<TextBlock>(t =>
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == $"lv_{key}") is { } tb
+                    ? global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(tb)
+                    : null;
+
+            var beforeA = Hash("a");
+            var beforeB = Hash("b");
+            var beforeC = Hash("c");
+            H.Check("KLR_LazyVStack_BeforePrepend_AllRealized",
+                beforeA is not null && beforeB is not null && beforeC is not null);
+
+            H.ClickButton("Prepend");
+            await Harness.Render();
+
+            var afterA = Hash("a");
+            var afterB = Hash("b");
+            var afterC = Hash("c");
+
+            H.Check("KLR_LazyVStack_SurvivorIdentity_a", beforeA == afterA);
+            H.Check("KLR_LazyVStack_SurvivorIdentity_b", beforeB == afterB);
+            H.Check("KLR_LazyVStack_SurvivorIdentity_c", beforeC == afterC);
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  GridView — match LazyVStack/ListView coverage on move + remove.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class GridView_MoveOne_EmitsSingleMove(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var items = phase == 0
+                    ? new[] { new Item("a", "A"), new Item("b", "B"), new Item("c", "C"), new Item("d", "D") }
+                    : new[] { new Item("a", "A"), new Item("c", "C"), new Item("b", "B"), new Item("d", "D") };
+                return VStack(
+                    Button("Swap", () => setPhase(1)),
+                    GridView<Item>(items, i => i.Id, (i, _) => TextBlock(i.Label)).Height(300)
+                );
+            });
+
+            await Harness.Render();
+
+            var gv = H.FindControl<WinUI.GridView>(_ => true);
+            var rec = new CollectionChangedRecorder();
+            if (gv is not null) rec.Subscribe(gv);
+
+            H.ClickButton("Swap");
+            await Harness.Render();
+
+            H.Check("KLR_GridView_Move_AtLeastOne",
+                rec.Count(NotifyCollectionChangedAction.Move) >= 1);
+            H.Check("KLR_GridView_Move_NoAddRemove",
+                rec.Count(NotifyCollectionChangedAction.Add) == 0
+                && rec.Count(NotifyCollectionChangedAction.Remove) == 0);
+
+            var state = gv is not null ? Reconciler.GetListState(gv) : null;
+            H.Check("KLR_GridView_Move_FinalOrder",
+                state is not null
+                && state.LastKeys.Count == 4
+                && state.LastKeys[1] == "c"
+                && state.LastKeys[2] == "b");
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Hand-built FlexColumn(.WithKey(...)) — extend the existing
+    //  prepend-survivor pin to cover every op shape (remove / move /
+    //  reverse). This is the ChildReconciler keyed-LIS regression gate
+    //  that spec 042 success criterion #3 calls out.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class FlexColumn_KeyedChildren_RemoveMiddle_SurvivorsKeepIdentity(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var items = phase == 0
+                    ? new[] { "a", "b", "c", "d" }
+                    : new[] { "a", "c", "d" }; // drop "b"
+                return VStack(
+                    Button("Remove", () => setPhase(1)),
+                    FlexColumn(items.Select(item =>
+                        Border(TextBlock(item).AutomationId($"fc_{item}"))
+                            .WithKey(item)).Cast<Element>().ToArray())
+                );
+            });
+
+            await Harness.Render();
+
+            int? Hash(string key) =>
+                H.FindControl<TextBlock>(t =>
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == $"fc_{key}") is { Parent: Border br }
+                    ? global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(br)
+                    : null;
+
+            var beforeA = Hash("a");
+            var beforeC = Hash("c");
+            var beforeD = Hash("d");
+            H.Check("KLR_FlexColumn_RemoveMiddle_Captured", beforeA is not null && beforeC is not null && beforeD is not null);
+
+            H.ClickButton("Remove");
+            await Harness.Render();
+
+            H.Check("KLR_FlexColumn_RemoveMiddle_SurvivorA", beforeA == Hash("a"));
+            H.Check("KLR_FlexColumn_RemoveMiddle_SurvivorC", beforeC == Hash("c"));
+            H.Check("KLR_FlexColumn_RemoveMiddle_SurvivorD", beforeD == Hash("d"));
+            H.Check("KLR_FlexColumn_RemoveMiddle_BGone",
+                H.FindControl<TextBlock>(t =>
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == "fc_b") is null);
+        }
+    }
+
+    internal class FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var items = phase == 0
+                    ? new[] { "a", "b", "c", "d" }
+                    : new[] { "a", "c", "b", "d" }; // swap b and c
+                return VStack(
+                    Button("Swap", () => setPhase(1)),
+                    FlexColumn(items.Select(item =>
+                        Border(TextBlock(item).AutomationId($"fcs_{item}"))
+                            .WithKey(item)).Cast<Element>().ToArray())
+                );
+            });
+
+            await Harness.Render();
+
+            int? Hash(string key) =>
+                H.FindControl<TextBlock>(t =>
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == $"fcs_{key}") is { Parent: Border br }
+                    ? global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(br)
+                    : null;
+
+            var before = new Dictionary<string, int?>
+            {
+                ["a"] = Hash("a"),
+                ["b"] = Hash("b"),
+                ["c"] = Hash("c"),
+                ["d"] = Hash("d"),
+            };
+            H.Check("KLR_FlexColumn_Swap_AllInitial", before.Values.All(v => v is not null));
+
+            H.ClickButton("Swap");
+            await Harness.Render();
+
+            // After swap, every key still resolves to its original Border.
+            H.Check("KLR_FlexColumn_Swap_SurvivorA", before["a"] == Hash("a"));
+            H.Check("KLR_FlexColumn_Swap_SurvivorB", before["b"] == Hash("b"));
+            H.Check("KLR_FlexColumn_Swap_SurvivorC", before["c"] == Hash("c"));
+            H.Check("KLR_FlexColumn_Swap_SurvivorD", before["d"] == Hash("d"));
+        }
+    }
+
+    internal class FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // Reverse-N is the worst case for any LIS-based reconciler
+            // because the longest increasing subsequence collapses to a
+            // single survivor pin and every other child becomes a move.
+            // Identity must still be preserved across the lot — no remount.
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var items = phase == 0
+                    ? new[] { "a", "b", "c", "d", "e" }
+                    : new[] { "e", "d", "c", "b", "a" };
+                return VStack(
+                    Button("Reverse", () => setPhase(1)),
+                    FlexColumn(items.Select(item =>
+                        Border(TextBlock(item).AutomationId($"fcr_{item}"))
+                            .WithKey(item)).Cast<Element>().ToArray())
+                );
+            });
+
+            await Harness.Render();
+
+            int? Hash(string key) =>
+                H.FindControl<TextBlock>(t =>
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == $"fcr_{key}") is { Parent: Border br }
+                    ? global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(br)
+                    : null;
+
+            var keys = new[] { "a", "b", "c", "d", "e" };
+            var before = keys.ToDictionary(k => k, Hash);
+            H.Check("KLR_FlexColumn_Reverse_AllInitial", before.Values.All(v => v is not null));
+
+            H.ClickButton("Reverse");
+            await Harness.Render();
+
+            int preserved = keys.Count(k => before[k] == Hash(k));
+            H.Check("KLR_FlexColumn_Reverse_AllSurvivorsKeepIdentity", preserved == keys.Length);
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  IReactorKeyed identity-on-data convention via WithKey<T>(item) —
+    //  proves the new Phase 2 overload threads identity into the same
+    //  ChildReconciler keyed path as the explicit string form.
+    // ────────────────────────────────────────────────────────────────────
+
+    private sealed record KeyedItem(string Id, string Label) : IReactorKeyed
+    {
+        string IReactorKeyed.Key => Id;
+    }
+
+    internal class FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var items = phase == 0
+                    ? new[] { new KeyedItem("a", "A"), new KeyedItem("b", "B"), new KeyedItem("c", "C") }
+                    : new[] { new KeyedItem("z", "Z"), new KeyedItem("a", "A"), new KeyedItem("b", "B"), new KeyedItem("c", "C") };
+                return VStack(
+                    Button("Prepend", () => setPhase(1)),
+                    // .WithKey(item) — the Phase 2 IReactorKeyed overload.
+                    // No explicit string key passed; identity comes from
+                    // KeyedItem.IReactorKeyed.Key.
+                    FlexColumn(items.Select(item =>
+                        Border(TextBlock(item.Label).AutomationId($"kw_{item.Id}"))
+                            .WithKey(item)).Cast<Element>().ToArray())
+                );
+            });
+
+            await Harness.Render();
+
+            int? Hash(string key) =>
+                H.FindControl<TextBlock>(t =>
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == $"kw_{key}") is { Parent: Border br }
+                    ? global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(br)
+                    : null;
+
+            var beforeA = Hash("a");
+            var beforeB = Hash("b");
+            var beforeC = Hash("c");
+            H.Check("KLR_FlexColumn_WithKeyItem_Captured",
+                beforeA is not null && beforeB is not null && beforeC is not null);
+
+            H.ClickButton("Prepend");
+            await Harness.Render();
+
+            H.Check("KLR_FlexColumn_WithKeyItem_SurvivorA", beforeA == Hash("a"));
+            H.Check("KLR_FlexColumn_WithKeyItem_SurvivorB", beforeB == Hash("b"));
+            H.Check("KLR_FlexColumn_WithKeyItem_SurvivorC", beforeC == Hash("c"));
+            H.Check("KLR_FlexColumn_WithKeyItem_NewMounted",
+                H.FindControl<TextBlock>(t =>
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == "kw_z") is not null);
+        }
+    }
 }
