@@ -2807,6 +2807,14 @@ public abstract record TemplatedListElementBase : Element
     public abstract string? GetHeader();
     public abstract bool GetIsItemClickEnabled();
     public abstract Element BuildItemView(int index);
+    /// <summary>
+    /// Projects the user's data item at <paramref name="index"/> through
+    /// the typed peer's <c>KeySelector</c> to produce the stable identity
+    /// string consumed by spec 042's keyed-list reconciliation pipeline.
+    /// Phase 1: ListView/GridView/LazyVStack/LazyHStack only — FlipView
+    /// pre-mounts so it does not participate.
+    /// </summary>
+    internal abstract string GetKeyAt(int index);
     public abstract void InvokeSelectionChanged(int index);
     public abstract void InvokeItemClick(int index);
     public abstract void ApplyControlSetters(object control);
@@ -2858,6 +2866,7 @@ public record TemplatedListViewElement<T>(
     public override string? GetHeader() => Header;
     public override bool GetIsItemClickEnabled() => OnItemClick is not null;
     public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
+    internal override string GetKeyAt(int index) => KeySelector(Items[index]);
     public override void InvokeSelectionChanged(int index) => OnSelectedIndexChanged?.Invoke(index);
     public override void InvokeItemClick(int index) =>
         OnItemClick?.Invoke(index >= 0 && index < Items.Count ? Items[index] : default!);
@@ -2903,6 +2912,7 @@ public record TemplatedGridViewElement<T>(
     public override string? GetHeader() => Header;
     public override bool GetIsItemClickEnabled() => OnItemClick is not null;
     public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
+    internal override string GetKeyAt(int index) => KeySelector(Items[index]);
     public override void InvokeSelectionChanged(int index) => OnSelectedIndexChanged?.Invoke(index);
     public override void InvokeItemClick(int index) =>
         OnItemClick?.Invoke(index >= 0 && index < Items.Count ? Items[index] : default!);
@@ -2940,6 +2950,13 @@ public record TemplatedFlipViewElement<T>(
     public override string? GetHeader() => null;
     public override bool GetIsItemClickEnabled() => false;
     public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
+    // FlipView pre-mounts all items so it does not participate in the
+    // keyed-list ObservableCollection delta channel; return a positional
+    // synthetic key so any external consumer that asks still gets a value.
+    internal override string GetKeyAt(int index) =>
+        KeySelector is not null && (uint)index < (uint)Items.Count
+            ? KeySelector(Items[index])
+            : $"__flip_{index}";
     public override void InvokeSelectionChanged(int index) => OnSelectedIndexChanged?.Invoke(index);
     public override void InvokeItemClick(int index) { }
     public override void ApplyControlSetters(object control) =>
@@ -2962,6 +2979,14 @@ public abstract record LazyStackElementBase : Element
     public abstract double Spacing { get; init; }
     public abstract double EstimatedItemSize { get; init; }
     public abstract object GetItemsSource();
+    /// <summary>Total number of items in the source list.</summary>
+    public abstract int ItemCount { get; }
+    /// <summary>
+    /// Projects the user's data item at <paramref name="index"/> through
+    /// the typed peer's <c>KeySelector</c> to produce the stable identity
+    /// string consumed by spec 042's keyed-list reconciliation pipeline.
+    /// </summary>
+    internal abstract string GetKeyAt(int index);
     public abstract IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool);
     /// <summary>
     /// Update an existing factory's items and viewBuilder in place, avoiding
@@ -2986,6 +3011,8 @@ public record LazyVStackElement<T>(
     public override Orientation Orientation => Orientation.Vertical;
     public override double Spacing { get; init; } = 8;
     public override double EstimatedItemSize { get; init; } = 40;
+    public override int ItemCount => Items.Count;
+    internal override string GetKeyAt(int index) => KeySelector(Items[index]);
 
     public override object GetItemsSource() =>
         Enumerable.Range(0, Items.Count).ToList();
@@ -3014,6 +3041,8 @@ public record LazyHStackElement<T>(
     public override Orientation Orientation => Orientation.Horizontal;
     public override double Spacing { get; init; } = 8;
     public override double EstimatedItemSize { get; init; } = 100;
+    public override int ItemCount => Items.Count;
+    internal override string GetKeyAt(int index) => KeySelector(Items[index]);
 
     public override object GetItemsSource() =>
         Enumerable.Range(0, Items.Count).ToList();

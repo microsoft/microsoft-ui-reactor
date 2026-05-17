@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Animation;
+using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.Extensions.Logging;
@@ -2803,18 +2804,18 @@ public sealed partial class Reconciler
         var header = n.GetHeader();
         if (header is not null) lv.Header = header;
 
-        if (o.ItemCount != n.ItemCount)
-            lv.ItemsSource = Enumerable.Range(0, n.ItemCount).ToList();
-        else
-            // Always refresh realized containers on update. The viewBuilder is
-            // a closure that legitimately captures outer state (UseState values,
-            // counters, theme, etc.); we cannot assume "items reference unchanged"
-            // implies "rendered output unchanged". Each realized container is
-            // diffed via the standard Update path, so the per-item cost is bounded
-            // by leaf ShallowEquals — invisible when nothing actually changed.
-            RefreshRealizedContainers(lv, n, requestRerender);
-
+        // SetElementTag *before* the diff so HandleTemplatedContainerContentChanging
+        // — which fires synchronously inside the OC insert/move ops — reads the
+        // new element when materializing freshly-inserted containers.
         SetElementTag(lv, n);
+
+        // Spec 042 Phase 1: feed structural changes through the
+        // keyed-diff pipeline so WinUI animates only the affected
+        // containers. RefreshRealizedContainers still runs in every case
+        // because the viewBuilder is a closure that may produce
+        // different content even when the key set is unchanged.
+        ApplyKeyedDiffOrFallback(lv, n);
+        RefreshRealizedContainers(lv, n, requestRerender);
 
         var selectedIndex = n.GetSelectedIndex();
         if (selectedIndex >= 0) lv.SelectedIndex = selectedIndex;
@@ -2829,18 +2830,82 @@ public sealed partial class Reconciler
         var header = n.GetHeader();
         if (header is not null) gv.Header = header;
 
-        if (o.ItemCount != n.ItemCount)
-            gv.ItemsSource = Enumerable.Range(0, n.ItemCount).ToList();
-        else
-            // Always refresh realized containers on update — see UpdateTemplatedListView.
-            RefreshRealizedContainers(gv, n, requestRerender);
-
         SetElementTag(gv, n);
+        ApplyKeyedDiffOrFallback(gv, n);
+        RefreshRealizedContainers(gv, n, requestRerender);
 
         var selectedIndex = n.GetSelectedIndex();
         if (selectedIndex >= 0) gv.SelectedIndex = selectedIndex;
         n.ApplyControlSetters(gv);
         return null;
+    }
+
+    /// <summary>
+    /// Spec 042 §4 — apply the keyed diff to the control's attached
+    /// <see cref="ReactorListState"/>. If the state is missing (control
+    /// mounted before Phase 1, or the diff bailed out and the legacy
+    /// ItemsSource was swapped in) we transparently rebuild a fresh
+    /// state and re-bind ItemsSource. The result is correctness either
+    /// way; bailout only degrades the animation.
+    /// </summary>
+    private void ApplyKeyedDiffOrFallback(WinUI.ListViewBase lvb, TemplatedListElementBase n)
+    {
+        var state = GetListState(lvb);
+        if (state is null || !ReferenceEquals(lvb.ItemsSource, state.Source))
+        {
+            // No state, or another path replaced ItemsSource (bailout from a
+            // prior render). Rebuild and rebind in one step.
+            var fresh = BuildListStateFromElement(n);
+            SetListState(lvb, fresh);
+            lvb.ItemsSource = fresh.Source;
+            return;
+        }
+
+        // Project new keys through the typed peer.
+        var stats = KeyedListDiff.Apply(
+            state,
+            new TemplatedKeyAdapter(n),
+            static (item, _) => item.Key,
+            _logger,
+            lvb.GetType().Name);
+
+        if (stats.Bailout)
+        {
+            // Reset replaced state.Source's contents in bulk; ItemsSource
+            // still references the same OC object so WinUI sees a single
+            // Reset action and re-realizes. Acceptable per spec §4.3.
+            // No additional binding refresh needed.
+        }
+    }
+
+    /// <summary>
+    /// Adapter so the generic <see cref="KeyedListDiff.Apply{T}"/> can run
+    /// against the abstract non-generic <see cref="TemplatedListElementBase"/>
+    /// without an extra allocation per item.
+    /// </summary>
+    private readonly struct TemplatedKeyAdapter : IReadOnlyList<TemplatedKeyAdapter.KeyOnly>
+    {
+        private readonly TemplatedListElementBase _el;
+        public TemplatedKeyAdapter(TemplatedListElementBase el) => _el = el;
+        public KeyOnly this[int index] => new(_el.GetKeyAt(index) ?? $"__null_{index}");
+        public int Count => _el.ItemCount;
+        public IEnumerator<KeyOnly> GetEnumerator()
+        {
+            for (int i = 0; i < _el.ItemCount; i++) yield return this[i];
+        }
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        public readonly record struct KeyOnly(string Key);
+    }
+
+    private static ReactorListState BuildListStateFromElement(TemplatedListElementBase el)
+    {
+        var state = new ReactorListState();
+        int n = el.ItemCount;
+        var seeded = new (int Index, string Key)[n];
+        for (int i = 0; i < n; i++)
+            seeded[i] = (i, el.GetKeyAt(i) ?? $"__null_{i}");
+        state.Reset(seeded);
+        return state;
     }
 
     private UIElement? UpdateTemplatedFlipView(TemplatedListElementBase o, TemplatedListElementBase n, WinUI.FlipView fv, Action requestRerender)
