@@ -550,26 +550,52 @@ resulting diff ops can be tagged with an animation kind.
 
 ### 4.1 Animated list demo mini-app
 
-- [ ] Create `samples/apps/AnimatedListDemo/`. Single-window app that
+- [x] Create `samples/apps/AnimatedListDemo/`. Single-window app that
       demonstrates: insert-at-end, insert-at-0, remove, shuffle, bulk
       replace, all with and without `Animate(.Spring)`.
-- [ ] Wire into `samples/apps/Directory.Build.props` so it builds with the
+      → **Landed as `samples/apps/animated-list-demo/` (kebab-case to
+      match sibling samples). Renders the templated `ListView<Row>` and
+      a hand-built `FlexColumn(items.Select(...).WithKey(item))`
+      side-by-side over the same data, so the OC-delta and
+      ChildReconciler paths animate the same edit at the same time.
+      Drives all seven ops (top, end, middle-remove, last-remove,
+      shuffle, reverse, bulk-reset) through one `Mutate(...)`
+      chokepoint that either commits directly or wraps in
+      `Animations.Animate(...)`. Reduced-motion honored via the new
+      `Component.UseReducedMotion()` delegation (WCAG 2.3.3).**
+- [x] Wire into `samples/apps/Directory.Build.props` so it builds with the
       rest of the samples matrix.
-- [ ] Add a `samples/apps/AnimatedListDemo/README.md` explaining the demo
+      → **Registered in `Reactor.slnx` under
+      `/samples/apps/animated-list-demo/`; no per-folder
+      `Directory.Build.props` exists, the repo uses
+      `samples/Directory.Build.props` which the new csproj inherits via
+      the standard MSBuild walk.**
+- [x] Add a `samples/apps/AnimatedListDemo/README.md` explaining the demo
       and pointing back at spec 042.
 
 ### 4.2 Gallery integration
 
-- [ ] Update `samples/ReactorGallery/ControlPages/Collections/ListViewPage.cs`
+- [x] Update `samples/ReactorGallery/ControlPages/Collections/ListViewPage.cs`
       and `LazyVStackPage` (or equivalent) with an "Animated edit" toggle
       and a +/- buttons row. Same demo, embedded in the gallery.
+      → **Landed: third `SampleCard` on `ListViewPage` titled "Animated
+      edit (spec 042)" with the same toolbar + Animate toggle as the
+      mini-app. Reduced-motion bypass honored. The gallery does not
+      currently ship a `LazyVStackPage`; the animated-list-demo mini-app
+      already covers the LazyVStack / FlexColumn paths.**
 
 ### 4.3 TodoApp polish
 
-- [ ] Update `samples/TodoApp/` to use `IReactorKeyed` on `Todo` (already
+- [x] Update `samples/TodoApp/` to use `IReactorKeyed` on `Todo` (already
       done in 2.4) **and** wrap "add todo" / "delete todo" in
       `Animate(.Spring, () => ...)`. Smoke-test that the animation reads
       correctly with the OS reduced-motion setting respected.
+      → **Landed: `Render()` derives a `structural` dispatcher
+      (`a => Animations.Animate(.Spring, () => dispatch(a))`) that
+      `Add` / `Delete` / `Clear completed` flow through. `Toggle` /
+      `SetFilter` / `SetNewItemText` keep the bare dispatch since they
+      don't change list identity. `UseReducedMotion()` collapses the
+      wrapper to a passthrough when the OS opts the user out.**
 
 ---
 
