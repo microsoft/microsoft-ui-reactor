@@ -70,6 +70,18 @@ to land under these conventions; subsequent specs follow this shape.
   `plugins/reactor/skills/reactor-recipes/references/animated-list.md` for
   the paste-ready `Animate` recipe + five common-mistakes sections.
   (spec 042 Phase 4 + 5)
+- **Spec 042 Phase 6.3 — 10k virtualized scroll + edit stress scenario.**
+  `StressPerf.VirtualList.Reactor` gained `--with-edits` /
+  `--edits-per-second N` flags that interleave deterministic insert / remove
+  ops with the scroll tween (50/50 mix, seeded RNG, default 4 ops/sec).
+  Catches future regressions in the `ItemsRepeater` key-indexed factory
+  path (`ElementFactory<T>._mountedElements`, rekeyed in Phase 1) that the
+  steady-state scroll bench wouldn't see. `ListItemSource.GenerateOne(id)`
+  added so synthesized items don't collide with the seed range.
+  `tests/stress_perf/README.md` documents the new scenario, the
+  command line, and the analysis rule ("if the gap to the edit-free
+  baseline scales with `count`, the rekey path has regressed").
+  (spec 042 Phase 6.3)
 - **Spec 042 Phase 6.2 — `ReactorDiagnostics` + devtools dialog.**
   New public `Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics`
   collector captures keyed-list bailouts (duplicate / null key) with

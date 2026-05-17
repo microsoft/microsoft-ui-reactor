@@ -3,12 +3,14 @@
 Derived from: `docs/specs/042-keyed-list-reconciliation-design.md`
 Tracking bug: [microsoft/microsoft-ui-reactor#198](https://github.com/microsoft/microsoft-ui-reactor/issues/198)
 
-> **Status (2026-05-16):** Phase 0 + Phase 1 + Phase 2 + Phase 3 (3.1
-> through 3.7) complete on `feat/042-keyed-list-reconciliation`. Phases
-> 4 / 5 / 6 remain open. Items below preserve their original wording —
-> completion marks reflect what landed on the feature branch; non-checked
-> items are follow-up work (manual smoke, perf baselines, samples /
-> agent-kit / analyzer follow-on phases).
+> **Status (2026-05-17):** Phase 0 + Phase 1 + Phase 2 + Phase 3 (3.1
+> through 3.7) + Phase 4 + Phase 5 + Phase 6.1 / 6.2 / 6.3 complete on
+> `feat/042-keyed-list-reconciliation`. Remaining open items: Phase 1
+> deferred perf baselines (0.3, 1.12, 1.13) — gated on a paired pre/post
+> stress_perf capture pass; and Phase 6.4 spec close-out (rename design
+> spec status to **Implemented** + close #198) — gated on the PR landing.
+> Items below preserve their original wording — completion marks reflect
+> what landed on the feature branch.
 
 Scope reminder: spec 042 is a three-phase design. This task list converts every
 section of that spec into ship-ready work — internal `ObservableCollection`
@@ -711,10 +713,23 @@ box.
 
 ### 6.3 Long-tail perf
 
-- [ ] Add a stress scenario "10k-item virtualized list, scroll + edit" to
+- [x] Add a stress scenario "10k-item virtualized list, scroll + edit" to
       `tests/stress_perf/` to catch future regressions in the ItemsRepeater
       key-indexed factory path.
-- [ ] Document the new scenario in the stress_perf README.
+      → **Landed as `--with-edits` / `--edits-per-second N` flags on the
+      existing `StressPerf.VirtualList.Reactor` project (rather than a
+      fresh project — the scroll-only and scroll+edit modes share 90% of
+      the harness). The edit timer fires 4 ops/sec by default,
+      50/50 insert/remove at random positions, deterministic seed. The
+      report adds an `Edits:` line. `ListItemSource.GenerateOne(id)`
+      added so synthesized items can carry ids that don't collide with
+      the seed range.**
+- [x] Document the new scenario in the stress_perf README.
+      → **Added a "Scenario: 10k virtualized list, scroll + edit (spec
+      042 Phase 6.3)" section under the existing matrix, with the
+      headless command line, the expected report-shape, and the
+      analysis guidance ("if the gap to the edit-free baseline scales
+      with `count`, the rekey path has regressed").**
 
 ### 6.4 Spec close-out
 
