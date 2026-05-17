@@ -74,10 +74,14 @@ internal static class TierLint
                 $"fewer than 3 resolved snippet= references (found {resolvedSnippetCount})",
                 file, 1, Severity(infoOnly)));
 
-        if (resolvedScreenshotCount < 1)
+        // Spec 041 §11: Solid+ tier requires at least one visual — either a
+        // resolved `screenshot://` reference (doc-app capture) or an inline
+        // diagram image under `images/<topic>/`. Under-the-hood pages without
+        // a doc app satisfy this via Mermaid/SVG diagrams.
+        if (resolvedScreenshotCount < 1 && CountDiagramImages(assembledBody) < 1)
             findings.Add(new TierLintFinding(
                 "REACTOR_DOC_TIER_004",
-                "no resolved screenshot:// reference",
+                "no resolved screenshot:// reference or images/<topic>/ diagram",
                 file, 1, Severity(infoOnly)));
 
         if (!HasReferenceTableInFirstHalf(assembledBody, out var tableLine))
@@ -143,6 +147,12 @@ internal static class TierLint
 
     private static TierLintSeverity Severity(bool infoOnly) =>
         infoOnly ? TierLintSeverity.Info : TierLintSeverity.Error;
+
+    private static readonly Regex DiagramImagePattern =
+        new(@"!\[[^\]]*\]\(images/[^)]+\)", RegexOptions.Compiled);
+
+    internal static int CountDiagramImages(string body) =>
+        DiagramImagePattern.Matches(body).Count;
 
     // ── Heuristics ────────────────────────────────────────────────────────
 

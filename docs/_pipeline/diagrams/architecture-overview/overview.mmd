@@ -1,22 +1,26 @@
 %% Reactor render loop. State change → component re-render → element
 %% record tree → reconciler diff → element pool reuse → WinUI control
-%% tree → composition → frame. Light/dark legible (default Mermaid
-%% palette satisfies both GitHub themes).
+%% tree → composition → frame. Default Mermaid palette is legible on
+%% both light and dark GitHub themes.
 flowchart LR
-    State[State / hook setter]
-    Component[Component.Render]
-    Elements[Element record tree]
-    Reconciler[Reconciler<br/>diff &amp; commit]
-    Pool[ElementPool<br/>rent / return]
-    WinUI[WinUI control tree]
-    Comp[Composition layer]
-    Frame[Frame to screen]
+    State["State / hook setter<br/>UseState · UseReducer · UseObservable"]
+    Component["Component.Render()<br/>RenderContext.BeginRender resets _hookIndex"]
+    Elements["Element record tree<br/>immutable, no WinUI yet"]
+    Reconciler["Reconciler.Reconcile()<br/>Mount · Update · Unmount"]
+    ChildDiff["ChildReconciler<br/>keyed (LIS) · positional"]
+    Pool["ElementPool<br/>TryRent · Return"]
+    WinUI["WinUI control tree<br/>Panel.Children · ItemsRepeater · TabView"]
+    Effects["RenderContext.FlushEffects<br/>cleanup → effect, in slot order"]
+    Comp["Composition layer<br/>implicit / explicit animations"]
+    Frame["Frame to screen"]
 
-    State -->|setState| Component
+    State -->|setter equality check<br/>EqualityComparer.Default| Component
     Component -->|describe UI| Elements
     Elements -->|old vs new| Reconciler
+    Reconciler -->|children| ChildDiff
     Reconciler -->|rent reused control| Pool
     Pool --> WinUI
     Reconciler -->|property writes| WinUI
-    WinUI --> Comp
+    WinUI -->|patched tree| Effects
+    Effects --> Comp
     Comp --> Frame

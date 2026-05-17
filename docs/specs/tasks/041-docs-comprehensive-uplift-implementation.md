@@ -830,12 +830,13 @@ Parallel to Phase 3, different author skillset (per spec §9 Phase
 
 ### 3.5.1 `architecture-overview.md` — Comprehensive
 
-- [ ] Author SVG/Mermaid architecture diagram (declarative shell →
+- [x] Author SVG/Mermaid architecture diagram (declarative shell →
       element records → reconciler → WinUI tree). Place in
       `docs/_pipeline/diagrams/architecture-overview/overview.mmd`.
-- [ ] Template at Comprehensive tier; pulls `snippet="source:..."`
+- [x] Template at Comprehensive tier; pulls `snippet="source:..."`
       from at least 3 areas of `src/Reactor/`.
-- [ ] "Read the source" callout linking to `src/Reactor/`.
+- [x] "Read the source" callout linking to `src/Reactor/`. *Via the
+      Source map table and the inline file references throughout.*
 
 ### 3.5.2 `reactivity-model.md` — Comprehensive
 
