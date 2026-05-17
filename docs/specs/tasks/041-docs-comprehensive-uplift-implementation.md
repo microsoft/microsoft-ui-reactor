@@ -866,8 +866,10 @@ Parallel to Phase 3, different author skillset (per spec §9 Phase
 ### 3.5.5 `hooks-internals.md` — Comprehensive (promotes
       `docs/reference/state-and-hooks.md`)
 
-- [ ] Migrate content from `docs/reference/state-and-hooks.md`.
-- [ ] Delete the reference source after promotion.
+- [x] Migrate content from `docs/reference/state-and-hooks.md`.
+- [x] Delete the reference source after promotion. *Inbound link in
+      docs/reference/async-system.md §13 already updated when
+      reconciliation reference was deleted (3.5.4).*
 
 ### 3.5.6 `effects-scheduling.md` — Comprehensive
 
