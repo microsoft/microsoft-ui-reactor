@@ -724,11 +724,26 @@ catalog page follows the per-control template from spec §6.3.
 
 ### 3.3 `dialogs-and-flyouts.md` — NEW, Comprehensive
 
-- [ ] Doc app under `docs/_pipeline/apps/dialogs-and-flyouts/`.
-- [ ] Controls: ContentDialog, MenuFlyout, CommandBarFlyout, Popup.
-- [ ] Cover commanding integration patterns; cross-link to
-      `commanding.md`.
-- [ ] Template at Comprehensive tier.
+- [x] Doc app under `docs/_pipeline/apps/dialogs-and-flyouts/`. *Seven
+      snippet markers: basic-dialog, confirm-dialog, dialog-gated-primary,
+      menu-flyout, command-bar-flyout, popup, commanding-integration.
+      Builds clean against Reactor.csproj.*
+- [x] Controls: ContentDialog (with controlled `IsOpen`, three-button
+      shape, gated primary), MenuFlyout (with sub-items and toggle
+      items), CommandBarFlyout (primary + secondary commands), Popup
+      (with light-dismiss and offset).
+- [x] Cover commanding integration patterns — one Command drives a
+      Button AND a MenuItem; cross-links to `commanding.md` from the
+      dedicated section and patterns. Pattern shows async command
+      with `IsExecuting`-aware primary disable.
+- [x] Template at Comprehensive tier. *Zero findings under `mur docs
+      compile --validate-only --tier=comprehensive`. Mental-model lead
+      ~250 words; one `<!-- ai:caveat -->` block (single-instance
+      ShowAsync); `## Patterns` (async-command + right-click on row)
+      and `## Common Mistakes` (imperative show + shared dialog) both
+      populated. Focus and ARIA section explains the ContentDialog /
+      MenuFlyout focus-trap surface and the Popup gap that requires
+      `UseFocusTrap`.*
 
 ### 3.4 `forms.md` — EXPAND
 

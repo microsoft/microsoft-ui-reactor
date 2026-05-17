@@ -169,7 +169,7 @@ logic.
 | `CommandBarFlyout` | Mini-toolbar with commands. |
 | `Popup` | Free-form anchored surface. |
 
-Detail page (Phase 3): [Dialogs & Flyouts](dialogs-and-flyouts.md).
+Detail page: [Dialogs & Flyouts](dialogs-and-flyouts.md).
 
 ## Data System
 

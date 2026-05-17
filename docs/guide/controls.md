@@ -185,7 +185,7 @@ class StatusGroup : Component
 | `PersonPicture` | Contact avatar. |
 | `RatingControl` | 1–5 star rating. |
 
-Detail page (Phase 3): [Status & Info](status-and-info.md).
+Detail page: [Status & Info](status-and-info.md).
 
 ## Dialogs & Flyouts
 
@@ -217,7 +217,7 @@ class DialogsGroup : Component
 | `CommandBarFlyout` | Mini-toolbar with commands. |
 | `Popup` | Free-form anchored surface. |
 
-Detail page (Phase 3): [Dialogs & Flyouts](dialogs-and-flyouts.md).
+Detail page: [Dialogs & Flyouts](dialogs-and-flyouts.md).
 
 ## Data System
 

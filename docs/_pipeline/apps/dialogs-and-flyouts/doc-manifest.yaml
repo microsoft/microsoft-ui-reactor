@@ -1,0 +1,42 @@
+app:
+  title: "Dialogs and Flyouts"
+  width: 640
+  height: 960
+  startup-delay: 1500
+
+screenshots:
+  - id: basic-dialog
+    description: "Basic ContentDialog with a single OK button."
+    component: BasicDialogDemo
+    region: client
+    format: png
+  - id: confirm-dialog
+    description: "Three-button confirmation dialog with primary, secondary, and close buttons."
+    component: ConfirmDialogDemo
+    region: client
+    format: png
+  - id: dialog-gated-primary
+    description: "Dialog with TextField input; primary button disabled until input is non-empty."
+    component: DialogGatedPrimaryDemo
+    region: client
+    format: png
+  - id: menu-flyout
+    description: "MenuFlyout with items, separator, and a submenu."
+    component: MenuFlyoutDemo
+    region: client
+    format: png
+  - id: command-bar-flyout
+    description: "CommandBarFlyout with primary and secondary commands."
+    component: CommandBarFlyoutDemo
+    region: client
+    format: png
+  - id: popup
+    description: "Popup anchored to a button with light-dismiss enabled."
+    component: PopupDemo
+    region: client
+    format: png
+  - id: commanding-integration
+    description: "One Command drives both a Button and a MenuItem; status updates when invoked."
+    component: CommandingIntegrationDemo
+    region: client
+    format: png
