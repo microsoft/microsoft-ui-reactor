@@ -1031,10 +1031,26 @@ source snippets, "Read the source" callout, tier-lint clean.)
 
 ### 4.5 Cross-link sweep
 
-- [ ] Implement the cross-link analyzer in `mur docs compile`: every
+- [x] Implement the cross-link analyzer in `mur docs compile`: every
       prose mention of a concept that has a page must link.
-- [ ] Run analyzer; fix gaps page-by-page.
-- [ ] Exit gate: zero warnings from the cross-link analyzer.
+      *Implemented as `src/Reactor.Cli/Docs/CrossLinkLint.cs` emitting
+      `REACTOR_DOC_XLINK_001` at Warning severity. Registry is the union
+      of template titles (filtered to identifier-shape), front-matter
+      `concept-aliases:`, and generated reference-page filenames.
+      Paragraph-scoped opt-out via `<!-- xlink:skip -->` (or finer
+      `<!-- xlink:skip "Phrase" -->`). 15 unit tests in
+      `tests/Reactor.DocPipeline.Tests/CrossLinkLintTests.cs`.*
+- [x] Run analyzer; fix gaps page-by-page. *First-run findings: 6
+      (after identifier-shape filter dropped the single-word
+      English-collision concepts like "Reactor"/"Focus"/"Hooks"). All
+      6 were on two pages (`readme.md.dt` index bullets, one prose
+      mention in `winforms-interop.md.dt`); fixed in a single sweep
+      commit by wrapping the inline hook names in backticks (readme)
+      and converting one bullet to a Markdown link
+      (winforms-interop).*
+- [x] Exit gate: zero warnings from the cross-link analyzer. *Final
+      `mur docs compile --validate-only` run reports
+      `Cross-link findings: 0 (0 error, 0 warning).`*
 
 ### 4.6 Phase 4 review & exit
 
