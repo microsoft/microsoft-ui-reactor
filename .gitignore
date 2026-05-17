@@ -212,6 +212,10 @@ tests/stress_perf/publish_log*.txt
 # Cobertura reports are regenerated on demand and should never be committed.
 coverage/
 *.cobertura.xml
+# `tools/coverage/` holds source-controlled coverage helper scripts and is
+# NOT generated output; carve it out of the `coverage/` ignore above.
+!tools/coverage/
+!tools/coverage/**
 
 # Eval / scratch run output — local artifacts from eval drivers, never tracked.
 runs/
