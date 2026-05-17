@@ -1,9 +1,10 @@
-%% Phase 3.5 scaffold — fluent modifier chain folds into Element.Modifiers
-%% via ElementModifiers.Merge. Author should add the typed-element
-%% preservation (Set() works after .Margin) and the Theme/Attached
-%% sidebands.
+%% modifier-system: a fluent chain folds into Element.Modifiers via
+%% ElementModifiers.Merge. The concrete element type stays preserved so
+%% .Set() still gets the strongly-typed control.
 flowchart LR
-    Text[Text element] -->|.Margin| M1[el with Modifiers]
-    M1 -->|.Padding| M2[Merged modifiers]
-    M2 -->|.Width| M3[Final ElementModifiers]
-    M3 --> Reconcile[Reconciler reads on commit]
+    Start["Text(&quot;hi&quot;)<br/>TextBlockElement"] -->|.Bold| M1["TextBlockElement<br/>Modifiers = { FontWeight }"]
+    M1 -->|.Margin(8)| M2["TextBlockElement<br/>Modifiers.Merge({ Margin })"]
+    M2 -->|.Background(Theme.Accent)| M3["TextBlockElement<br/>ThemeBindings[&quot;Background&quot;]"]
+    M3 -->|.Grid(row: 1)| M4["TextBlockElement<br/>Attached[GridAttached]"]
+    M4 -->|.Set(tb =&gt; tb.TextWrapping = …)| M5["TextBlockElement<br/>+ Set callback"]
+    M5 --> Reconciler["Reconciler reads Modifiers,<br/>ThemeBindings, Attached on commit"]
