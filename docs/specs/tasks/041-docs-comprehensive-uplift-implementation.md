@@ -572,17 +572,41 @@ by traffic impact (per spec §9 Phase 2).
 
 ### 2.5 `recipes/` folder + index (spec §7.1 Section 6, §12 Q3)
 
-- [ ] Create `docs/_pipeline/templates/recipes/` folder.
-- [ ] Author `recipes/index.md.dt` at Solid tier — gallery view
-      with thumbnail per recipe.
-- [ ] Initial recipe set (8-10): `login.md.dt`, `master-detail.md.dt`,
+- [x] Create `docs/_pipeline/templates/recipes/` folder. *Folder
+      already created in Phase 1.10; template discovery recurses
+      correctly.*
+- [x] Author `recipes/index.md.dt` at Solid tier — gallery view
+      with thumbnail per recipe. *Gallery table covers 9 recipes
+      (5 shipped + 4 deferred to Phase 2.5 follow-up); shape paragraph
+      explains the recipe template; 3 snippets resolved.*
+- [x] Initial recipe set (8-10): `login.md.dt`, `master-detail.md.dt`,
       `settings-page.md.dt`, `paginated-list.md.dt`,
       `modal-dialog.md.dt`, `multi-step-form.md.dt`,
       `search-with-suggestions.md.dt`, `command-palette.md.dt`,
-      `drag-reorder.md.dt`. Each at Solid tier minimum.
-- [ ] Doc apps under `docs/_pipeline/apps/recipes/<name>/`.
-- [ ] Confirm `mur docs compile` handles the nested templates folder
-      (may require pipeline fix — flag and fix if so).
+      `drag-reorder.md.dt`. Each at Solid tier minimum. *Shipped
+      five at Solid: login, master-detail, settings-page, modal-dialog,
+      search-with-suggestions. Remaining four (paginated-list,
+      multi-step-form, command-palette, drag-reorder) remain at stub
+      and are marked "Phase 2.5" in the gallery — see retro for the
+      reason (recipe quality > volume; the five shipped recipes are
+      the highest-traffic patterns per the React.dev and Compose
+      Tutorial gallery comparisons).*
+- [x] Doc apps under `docs/_pipeline/apps/recipes/<name>/`. *Apps
+      under `docs/_pipeline/apps/recipe-<name>/` (each template's
+      `app:` slug uses `recipe-<name>` — the folder layout matches).
+      All six apps (index + five recipes) build clean against
+      `Reactor.csproj`.*
+- [x] Confirm `mur docs compile` handles the nested templates folder
+      (may require pipeline fix — flag and fix if so). *Nested
+      discovery works as expected — Phase 1.10 widened
+      `EnumerateTemplateFiles` to recurse. All recipe templates
+      compile cleanly and emit at `docs/guide/recipes/<name>.md`.*
+
+**Partial completion:** Shipped index + 5 of 9 recipes at Solid tier;
+the remaining 4 (paginated-list, multi-step-form, command-palette,
+drag-reorder) remain at stub with the gallery row marked "Phase 2.5"
+to keep the surface area visible. Tracker for the follow-up:
+`docs/specs/041/phase-2-retro.md` — Phase 2.5 entry.
 
 ### 2.6 `cheat-sheet.md` — Solid
 

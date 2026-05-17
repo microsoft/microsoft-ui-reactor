@@ -1,0 +1,11 @@
+app:
+  title: "Search-with-Suggestions Recipe"
+  width: 460
+  height: 380
+  startup-delay: 1200
+
+screenshots:
+  - id: search
+    description: "Search box with inline suggestion dropdown."
+    region: client
+    format: png
