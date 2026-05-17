@@ -224,6 +224,9 @@ tests/stress_perf/dwm-attribution.log
 tests/stress_perf/attr-*.csv
 tests/stress_perf/sweep-results/
 tests/stress_perf/sweep_results.csv
+# Per-frame CSV captures under baselines/ — only summary.md / summary.csv are tracked.
+tests/stress_perf/baselines/**/*.frames.csv
+tests/stress_perf/baselines/**/per-rep.csv
 # Build artifacts inside react-native-windows projects that the templates
 # don't already cover. The per-project .gitignore files inside
 # tests/stress_perf_rn/*/  handle node_modules, msbuild output, etc.;
