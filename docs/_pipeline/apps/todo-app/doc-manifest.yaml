@@ -7,5 +7,6 @@ app:
 screenshots:
   - id: todo-app
     description: "Todo list app with items checked off"
+    component: TodoApp
     region: client
     format: png

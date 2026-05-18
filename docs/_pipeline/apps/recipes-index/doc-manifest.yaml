@@ -7,5 +7,6 @@ app:
 screenshots:
   - id: gallery
     description: "Recipe gallery preview tile row."
+    component: RecipesIndexApp
     region: client
     format: png

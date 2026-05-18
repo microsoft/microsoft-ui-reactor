@@ -7,9 +7,11 @@ app:
 screenshots:
   - id: palette
     description: "Open command palette with a typed query and a filtered list of commands."
+    component: CommandPaletteRecipeApp
     region: client
     format: png
   - id: closed
     description: "Idle surface with the Ctrl+K hint before the palette is opened."
+    component: CommandPaletteRecipeApp
     region: client
     format: png

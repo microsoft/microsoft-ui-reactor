@@ -7,5 +7,6 @@ app:
 screenshots:
   - id: list
     description: "Reorderable list with a dragged row in flight and the keyboard focus ring on a sibling."
+    component: DragReorderApp
     region: client
     format: png

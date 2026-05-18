@@ -7,5 +7,6 @@ app:
 screenshots:
   - id: ok
     description: "Trivial Reactor app — the page leans on inline before/after snippets rather than visuals."
+    component: RulesApp
     region: client
     format: png

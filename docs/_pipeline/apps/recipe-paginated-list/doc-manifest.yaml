@@ -7,5 +7,6 @@ app:
 screenshots:
   - id: loaded
     description: "Paginated list after two pages have loaded, with a Load More button and a remaining-count footer."
+    component: PaginatedListApp
     region: client
     format: png

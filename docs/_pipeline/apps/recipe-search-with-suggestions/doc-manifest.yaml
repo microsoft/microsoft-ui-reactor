@@ -7,5 +7,6 @@ app:
 screenshots:
   - id: search
     description: "Search box with inline suggestion dropdown."
+    component: SearchRecipeApp
     region: client
     format: png

@@ -7,5 +7,6 @@ app:
 screenshots:
   - id: settings
     description: "Settings page with a Toggle, ComboBox, and Slider, each persisted by key."
+    component: SettingsRecipeApp
     region: client
     format: png

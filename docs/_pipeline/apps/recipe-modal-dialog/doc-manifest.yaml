@@ -7,5 +7,6 @@ app:
 screenshots:
   - id: confirm
     description: "Confirmation dialog modal pattern with scrim background."
+    component: ModalDialogRecipeApp
     region: client
     format: png

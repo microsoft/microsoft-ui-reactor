@@ -7,5 +7,6 @@ app:
 screenshots:
   - id: form
     description: "Login form with inline validation and disabled submit state."
+    component: LoginRecipeApp
     region: client
     format: png

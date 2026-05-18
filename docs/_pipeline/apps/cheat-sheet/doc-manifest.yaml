@@ -7,5 +7,6 @@ app:
 screenshots:
   - id: vignettes
     description: "Three minimal vignettes — hello, state, effect — shown stacked."
+    component: CheatSheetApp
     region: client
     format: png
