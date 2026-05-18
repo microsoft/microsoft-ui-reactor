@@ -960,3 +960,74 @@ prior iteration), with `-Top` and `-MinMissed` knobs. Use it after
   layers. Next iteration's choice between "new code to cover" and
   "stiffen existing covered code" should weigh: the metric only moves
   for genuinely-uncovered lines, but the test bar moves on both.
+
+### 2026-05-17 — CellRenderers catalog (machine B, seventh pass)
+
+- Baseline: **80.14% line / 68.34% branch**.
+- Area picked: **`Controls/Editors/CellRenderers.cs`** — sister catalog
+  to Editors (which was iteration 4's target). No existing test coverage
+  beyond incidental exercise via `TypedColumnsBehaviorTests`. Text-shaped
+  renderers (Text, Number, Date, Time, Enum, Hyperlink) are pure-C# over
+  Reactor records — same shape as the Editors factories.
+- Added **24 new tests** in
+  `tests/Reactor.Tests/Controls/CellRenderersTests.cs`:
+  - **Text (4)** — null guard, ToString fallback, IFormattable + format
+    (locale-tolerant), non-IFormattable + format (falls through).
+  - **Number (3)** — TextAlignment.Right + HAlign.Stretch contract
+    (the source's "stretch so right-alignment takes effect" pin), N0
+    format, null guard.
+  - **Date (3)** — default-d format, invariant "yyyy-MM-dd" format,
+    null guard.
+  - **Time (3)** — `hh\:mm\:ss` TimeSpan custom format (escaped colons,
+    a sharp edge — see surprise below), DateTime + standard "t" format,
+    null guard.
+  - **Enum (2)** — ToString of enum value, null → empty.
+  - **Hyperlink (6)** — three branches of the if-chain (Uri → button;
+    string parseable as absolute → button; non-Uri string → TextBlock
+    fallback) plus displayTextFormat usage, null guard, relative-path
+    fallback. Pin: a regression that emitted a HyperlinkButton with
+    null NavigateUri would crash WinUI on click.
+  - **FormatValue helper (3)** — IFormattable without format,
+    non-IFormattable without format, invariant "R" round-trip.
+- **Surprises / non-obvious findings:**
+  - **`HAlign(...)` vs the TextBlockElement's own HorizontalAlignment
+    property are two different shapes.** `.HAlign(value)` (extension)
+    writes to `el.Modifiers.HorizontalAlignment` (the generic
+    Element-modifier slot). The record's own `HorizontalAlignment
+    { get; init; }` init prop is set by a different code path (not
+    used by the Number renderer). Initial test assertion against
+    `el.HorizontalAlignment` failed with `null` — pin the right slot
+    or the test never catches a HAlign regression. Wrote a comment in
+    the test for the next agent.
+  - **TimeSpan custom format strings need escaped colons.** Passing
+    `HH:mm:ss` (DateTime format) to a TimeSpan via
+    `IFormattable.ToString(format, …)` throws FormatException. Use
+    `hh\:mm\:ss` (backslash-escaped). This is a real product sharp
+    edge: `CellRenderers.Time(string format = "t")`'s default `"t"` is
+    also not a standard TimeSpan format — calling Time() on a TimeSpan
+    column would throw at render time. Not fixing the product here, but
+    pinning the workaround so the next agent doesn't re-discover it.
+    Filed as a deferred follow-up: either add a TimeSpan→DateTime
+    conversion in the renderer or document the constraint clearly on
+    the public API.
+- **Coverage delta** (merged):
+  **80.14% → 80.18% line (+0.04)**, **68.34% → 68.41% branch (+0.07)**.
+  Same shape as the TypedColumns iteration — CellRenderers is small
+  (131 lines), and ~40 lines of that are brush-bound and unreachable
+  from xUnit. The 24 tests cover the text-shaped renderers (≈ 50 lines)
+  but most of those lines were already incidentally touched by
+  `TypedColumnsBehaviorTests`. The branch swing is the better signal:
+  +0.07 from a 71-line file is good ROI per line because many of the
+  new tests hit previously-untouched if-chain arms (Hyperlink's three
+  branches especially).
+- **Lesson on small files vs metric movement:** the four most recent
+  iterations have averaged +0.09 line per iteration, with each
+  iteration cleanly identifying a real product behavior. The metric is
+  starting to plateau against unit-testable code — the remaining unit
+  surface tilts toward "stiffening existing coverage" rather than
+  "covering new code." If the deferral candidates (~1,639 lines)
+  are approved, they'd jump the metric ~1.6 points in a single commit
+  while honoring the no-vanity rule (the excluded code is genuinely
+  not unit-testable). Without that approval, the path to 85% is a
+  long tail of small-file iterations PLUS at least one selftest
+  fixture push targeting Reconciler.Mount / Reconciler.Update.
