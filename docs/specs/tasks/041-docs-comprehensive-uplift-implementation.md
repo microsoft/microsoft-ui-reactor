@@ -583,14 +583,10 @@ by traffic impact (per spec §9 Phase 2).
       `settings-page.md.dt`, `paginated-list.md.dt`,
       `modal-dialog.md.dt`, `multi-step-form.md.dt`,
       `search-with-suggestions.md.dt`, `command-palette.md.dt`,
-      `drag-reorder.md.dt`. Each at Solid tier minimum. *Shipped
-      five at Solid: login, master-detail, settings-page, modal-dialog,
-      search-with-suggestions. Remaining four (paginated-list,
-      multi-step-form, command-palette, drag-reorder) remain at stub
-      and are marked "Phase 2.5" in the gallery — see retro for the
-      reason (recipe quality > volume; the five shipped recipes are
-      the highest-traffic patterns per the React.dev and Compose
-      Tutorial gallery comparisons).*
+      `drag-reorder.md.dt`. Each at Solid tier minimum. *All 9 now at
+      Solid: login, master-detail, settings-page, modal-dialog,
+      search-with-suggestions (Phase 2); paginated-list, multi-step-form,
+      command-palette, drag-reorder (Phase 2.5b, landed 2026-05-17).*
 - [x] Doc apps under `docs/_pipeline/apps/recipes/<name>/`. *Apps
       under `docs/_pipeline/apps/recipe-<name>/` (each template's
       `app:` slug uses `recipe-<name>` — the folder layout matches).
@@ -602,11 +598,13 @@ by traffic impact (per spec §9 Phase 2).
       `EnumerateTemplateFiles` to recurse. All recipe templates
       compile cleanly and emit at `docs/guide/recipes/<name>.md`.*
 
-**Partial completion:** Shipped index + 5 of 9 recipes at Solid tier;
-the remaining 4 (paginated-list, multi-step-form, command-palette,
-drag-reorder) remain at stub with the gallery row marked "Phase 2.5"
-to keep the surface area visible. Tracker for the follow-up:
-`docs/specs/041/phase-2-retro.md` — Phase 2.5 entry.
+**Complete (2026-05-17):** All 9 recipes ship at Solid tier. Phase 2.5b
+mini-phase closed the remaining 4 stubs (paginated-list,
+multi-step-form, command-palette, drag-reorder) with parallel
+content-author agents — each shipping a working WinAppSDK doc app
+under `docs/_pipeline/apps/recipe-<name>/` + a Solid-tier template
+upgrade. All 4 apps build clean against `Reactor.csproj`; full-suite
+`mur docs check-tier` reports 0 errors across the 63-template docset.
 
 ### 2.6 `cheat-sheet.md` — Solid
 
