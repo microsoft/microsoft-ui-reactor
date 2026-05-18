@@ -12,6 +12,8 @@ description: >
 
 Translate Figma designs built with the [Windows UI Kit (Community)](https://www.figma.com/design/t7yLwpMUOWJSYt5ahz3ROC/Windows-UI-kit--Community-) into Reactor C# code. This skill provides the mapping tables and rules the agent applies during code generation.
 
+**Goal: Pixel-accurate reproduction.** Every dimension, gap, margin, padding, and position value from Figma must be used exactly as specified — no rounding, no substitution. The generated app should match the Figma design pixel-for-pixel. Where `design.md` recommends flexible sizing (MinWidth) or 4px grid rounding for hand-written code, those rules are overridden here — Figma translation uses exact values.
+
 **Prerequisites:**
 - A Figma MCP server must be configured (e.g., `figma-developer-mcp`) for URL-based extraction. See [spec 033](../docs/specs/033-figma-to-reactor.md) for the full workflow architecture.
 
@@ -75,21 +77,30 @@ Pass the full URL to the Figma MCP tool — the server handles node scoping.
 | `layoutMode` | `VERTICAL` | `VStack(gap, children)` |
 | `layoutMode` | `HORIZONTAL` | `HStack(gap, children)` |
 | `itemSpacing` | `N` | Gap parameter: `VStack(N, ...)` or `HStack(N, ...)` |
-| `paddingTop/Right/Bottom/Left` | uniform `P` | Wrap in `Border(VStack(...)).Padding(P)` |
-| `paddingTop/Right/Bottom/Left` | mixed | Wrap in `Border(VStack(...)).Padding(left, top, right, bottom)` |
+| `paddingTop/Right/Bottom/Left` | all equal `P` | `.Padding(P)` on the wrapping `Border` |
+| `paddingTop/Right/Bottom/Left` | symmetric (h≠v) | `.Padding(vertical, horizontal)` on the wrapping `Border` |
+| `paddingTop/Right/Bottom/Left` | mixed | `.Padding(left: L, top: T, right: R, bottom: B)` on the wrapping `Border` |
 
 **Important:** `VStack` and `HStack` do not support `.Padding()` — only `Border` and control-based elements do. Always wrap the stack in a `Border` when padding is needed. Use `.Margin()` when the spacing is between the element and its siblings rather than internal padding.
+
+**Margin overloads:**
+- `.Margin(uniform)` — all four sides equal
+- `.Margin(vertical, horizontal)` — top/bottom share one value, left/right share another
+- `.Margin(left: L, top: T, right: R, bottom: B)` — use named args for per-side values
 
 ### Sizing
 
 | Figma Sizing Mode | Reactor Output |
 |---|---|
-| Fixed width/height | `.MinWidth(N)` / `.MinHeight(N)` (prefer over fixed `.Width(N)` / `.Height(N)` for text scaling) |
+| Fixed width | `.Width(N)` — use the **exact** pixel value from Figma |
+| Fixed height | `.Height(N)` — use the **exact** pixel value from Figma |
+| Fixed width + height | `.Size(W, H)` — shorthand for both |
 | Hug contents | No explicit size (natural sizing) |
 | Fill container | `.HAlign(HorizontalAlignment.Stretch)` |
-| Min/max constraints | `.MinWidth(N)` / `.MaxWidth(N)` |
+| Fill container (vertical) | `.VAlign(VerticalAlignment.Stretch)` |
+| Min/max constraints | `.MinWidth(N)` / `.MaxWidth(N)` / `.MinHeight(N)` / `.MaxHeight(N)` |
 
-Prefer `MinWidth`/`MinHeight` over fixed `Width`/`Height` on controls and text containers — fixed sizes clip content at larger text scales.
+**Pixel-accuracy rule:** When Figma specifies a fixed width or height, always use the **exact** value via `.Width(N)` / `.Height(N)` / `.Size(W, H)`. Do NOT substitute `MinWidth`/`MinHeight` for fixed dimensions — that produces different layout behavior. Only use `MinWidth`/`MinHeight` when the Figma node explicitly has min/max constraints.
 
 ### Alignment
 
@@ -117,15 +128,16 @@ Prefer `MinWidth`/`MinHeight` over fixed `Width`/`Height` on controls and text c
 
 Always set `HorizontalContentAlignment = Stretch` on vertical scroll regions to prevent content from collapsing. Place headers and footers outside the ScrollView so they remain fixed.
 
-### Spacing Grid Rule
+### Spacing Rule
 
-Round all spacing values to the **4px grid**: 4, 8, 12, 16, 20, 24, 32, 40, 48.
-
-If a Figma value is not on the grid (e.g., 15px), round to nearest grid value (16px) and add a comment:
+Use the **exact** pixel values from Figma for all spacing, gaps, margins, and padding. Do NOT round to a grid. Pixel-accurate reproduction is the goal.
 
 ```csharp
-// Note: Figma spacing was 15px, rounded to 16px (4px grid)
-VStack(16, children)
+// Figma says itemSpacing = 13 → use 13, not 12 or 16
+VStack(13, children)
+
+// Figma says padding top=18, left=24 → use exact values
+Border(content).Padding(left: 24, top: 18)
 ```
 
 ## Control Mapping
@@ -444,7 +456,7 @@ Note: `dotnet watch` does not maintain MCP/devtools sessions across rebuilds. Us
 3. **Follow design.md best practices** — all generated code must comply with the `design.md` skill rules. Key requirements:
    - Use `.ApplyStyle()` or Reactor text factories (`Caption()`, `SubHeading()`, `Heading()`) for typography — not raw `FontSize`/`FontWeight` (§4).
    - `VStack`/`HStack` do not support `.Padding()` — wrap in `Border` (§5).
-   - Prefer `MinWidth`/`MinHeight` over fixed `Width`/`Height` on controls and text containers (§5).
+   - Use `.Width(N)` / `.Height(N)` / `.Size(W, H)` for fixed Figma dimensions. Only use `MinWidth`/`MinHeight` when Figma explicitly sets min/max constraints (§5).
    - Use `.HAlign()` / `.VAlign()` for alignment — not `.HorizontalAlignment()` / `.VerticalAlignment()` (§5).
    - Set `HorizontalContentAlignment = Stretch` on vertical `ScrollView` (§5).
    - Add `.AutomationName()` on icon-only interactive controls; use `.AccessibilityHidden()` on decorative icons (§7).
@@ -453,7 +465,7 @@ Note: `dotnet watch` does not maintain MCP/devtools sessions across rebuilds. Us
    - Use `SymbolThemeFontFamily` for icon font glyphs (§4).
    - For circular elements, derive radius from size (`size / 2`) instead of hardcoded values (§5).
 4. **Use Theme tokens first** — follow the token resolution ladder strictly. No hex on themed surfaces.
-5. **Round to 4px grid** — all spacing values must be multiples of 4.
+5. **Use exact pixel values** — do NOT round spacing, margins, padding, gaps, widths, or heights. Use the exact values from Figma for pixel-accurate output.
 6. **Use theme resources for corner radii** — `ControlCornerRadius` (4px) and `OverlayCornerRadius` (8px). Do not hardcode number values.
 7. **Emit TODO for unknowns** — never silently skip or guess. Every unmapped element gets a placeholder with the Figma node ID.
 8. **One Component per top-level frame** — each major Figma frame becomes a Reactor Component class.

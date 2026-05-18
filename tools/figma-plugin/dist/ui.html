@@ -207,12 +207,16 @@
       var csproj = getCsprojPath();
       var name = getProjectName();
 
-      var skillRef = 'Read skills/figma.md for Figma-to-Reactor control mapping, theme tokens, typography, and layout rules. Read skills/design.md for WinUI design best practices. Match every dimension, gap, and padding value exactly from the Figma design for pixel-accurate output.';
+      var skillRef = 'Read skills/figma.md for Figma-to-Reactor control mapping, theme tokens, typography, and layout rules. Read skills/design.md for WinUI design best practices. Use exact pixel values from Figma for all widths, heights, gaps, margins, and padding — do NOT round to a grid or substitute MinWidth/MinHeight for fixed dimensions. The goal is pixel-to-pixel accuracy with the Figma design.';
       var watchCmd = 'dotnet run --project src/Reactor.Cli -- figma watch "' + url + '" --interval 10';
-      var watchLoop = ' After the initial sync, start a live watch loop: run `' + watchCmd +
-        '` in a background shell. It emits JSON events to stdout when the Figma file changes.' +
+      var runCmd = 'dotnet run --project ' + csproj;
+      var watchLoop = ' After the initial sync, start the app with `' + runCmd +
+        '` in a background shell. Then start a live watch loop: run `' + watchCmd +
+        '` in another background shell. It emits JSON events to stdout when the Figma file changes.' +
         ' When you see an event with "event":"changed", re-fetch the design via get_figma_data MCP tool for file key ' + (frameInfo.fileKey || '') + ' node ' + (frameInfo.nodeId || '') +
         ', diff it against the current code, and apply only the changes needed.' +
+        ' After editing the code, stop the running app process and relaunch it with `' + runCmd + '` so the changes are visible.' +
+        ' Do NOT rely on dotnet watch hot reload — always restart the app after edits.' +
         ' Keep this loop running — do NOT exit after the first sync. You are a live sync agent.';
 
       var prompt;
@@ -221,7 +225,7 @@
           ' using mur --create ' + name +
           ', then translate this Figma design into it: ' + url +
           '. ' + skillRef +
-          ' After generating the code, run: dotnet watch run --project ' + csproj + '.' +
+          ' After generating the code, launch the app with `' + runCmd + '`.' +
           watchLoop;
       } else {
         if (!csproj) {
@@ -234,7 +238,6 @@
           ' Apply only the changes needed to bring the code in sync with the design — update text, spacing, sizing, colors, and layout to match.' +
           ' Do not regenerate from scratch unless the structure has fundamentally changed.' +
           ' ' + skillRef +
-          ' Make sure dotnet watch run --project ' + csproj + ' is running.' +
           watchLoop;
       }
 
@@ -253,7 +256,7 @@
     function copyRunCmd() {
       var csproj = getCsprojPath();
       if (csproj) {
-        copyToClipboard('dotnet watch run --project ' + csproj);
+        copyToClipboard('dotnet watch --non-interactive run --project ' + csproj);
         showToast('Copied — paste in terminal');
       }
     }
