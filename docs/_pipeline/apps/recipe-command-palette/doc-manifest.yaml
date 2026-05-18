@@ -1,0 +1,15 @@
+app:
+  title: "Command Palette Recipe"
+  width: 520
+  height: 420
+  startup-delay: 1200
+
+screenshots:
+  - id: palette
+    description: "Open command palette with a typed query and a filtered list of commands."
+    region: client
+    format: png
+  - id: closed
+    description: "Idle surface with the Ctrl+K hint before the palette is opened."
+    region: client
+    format: png
