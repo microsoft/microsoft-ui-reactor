@@ -1101,6 +1101,25 @@ public sealed partial class Reconciler : IDisposable
             foreach (var child in panel.Children)
                 UnmountRecursive(child);
         }
+        else if (control is WinUI.ItemsRepeater repeater)
+        {
+            // ItemsRepeater projects to C# as a FrameworkElement (not a
+            // Panel — see microsoft-ui-xaml-lift/.../ItemsRepeater.idl), so
+            // the Panel branch above doesn't catch it even though the
+            // framework keeps both realized and recycled containers in
+            // its visual subtree. Without this branch, row Components'
+            // UseEffect cleanups would never run when the LazyStack is
+            // unmounted (e.g., on navigation), leaking any in-flight
+            // timers / subscriptions / async loops. We walk via
+            // VisualTreeHelper because the public ItemsRepeater surface
+            // doesn't expose a Children collection. (PR #324 review)
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(repeater);
+            for (int i = 0; i < count; i++)
+            {
+                if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(repeater, i) is UIElement child)
+                    UnmountRecursive(child);
+            }
+        }
         else if (control is WinUI.Border border && border.Child is not null)
         {
             UnmountRecursive(border.Child);

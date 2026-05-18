@@ -166,6 +166,11 @@ internal static class SelfTestFixtureRegistry
         "EFR_Factory_BoundedDistinctControls_AcrossManyRealizeCycles",
         "EFR_Factory_RecycledControlIsReusedOnNextRealize",
         "EFR_Factory_BookkeepingBoundedAcrossCycles",
+        // PR #324 review fixes — heterogeneous rows, RefreshRealizedItems
+        // sync, and ItemsRepeater unmount cleanup.
+        "EFR_Factory_ReplacementOnRootTypeChange_DropsOldControlTracking",
+        "EFR_Factory_RefreshRealizedItems_SyncsLastElementByControl",
+        "EFR_LazyStack_Unmount_CleansUpAllRecycledRowComponents",
         // Spec 042 Phase 3 — Animate(...) ambient end-to-end.
         "AAF_ListView_InsertUnderAnimate_TagsRowWithKind",
         "AAF_ListView_InsertWithoutAnimate_RowNotTagged",
@@ -987,6 +992,9 @@ internal static class SelfTestFixtureRegistry
         "EFR_Factory_BoundedDistinctControls_AcrossManyRealizeCycles" => new ElementFactoryRecyclingFixtures.Factory_BoundedDistinctControls_AcrossManyRealizeCycles(harness),
         "EFR_Factory_RecycledControlIsReusedOnNextRealize" => new ElementFactoryRecyclingFixtures.Factory_RecycledControlIsReusedOnNextRealize(harness),
         "EFR_Factory_BookkeepingBoundedAcrossCycles" => new ElementFactoryRecyclingFixtures.Factory_BookkeepingBoundedAcrossCycles(harness),
+        "EFR_Factory_ReplacementOnRootTypeChange_DropsOldControlTracking" => new ElementFactoryRecyclingFixtures.Factory_ReplacementOnRootTypeChange_DropsOldControlTracking(harness),
+        "EFR_Factory_RefreshRealizedItems_SyncsLastElementByControl" => new ElementFactoryRecyclingFixtures.Factory_RefreshRealizedItems_SyncsLastElementByControl(harness),
+        "EFR_LazyStack_Unmount_CleansUpAllRecycledRowComponents" => new ElementFactoryRecyclingFixtures.LazyStack_Unmount_CleansUpAllRecycledRowComponents(harness),
         // Spec 042 Phase 3 — Animate(...) ambient end-to-end.
         "AAF_ListView_InsertUnderAnimate_TagsRowWithKind" => new AnimateAmbientFixtures.ListView_InsertUnderAnimate_TagsRowWithKind(harness),
         "AAF_ListView_InsertWithoutAnimate_RowNotTagged" => new AnimateAmbientFixtures.ListView_InsertWithoutAnimate_RowNotTagged(harness),

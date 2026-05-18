@@ -67,6 +67,8 @@ public sealed partial class ElementFactory<T> : IElementFactory
     internal int DebugLastElementByControlCount => _lastElementByControl.Count;
     internal int DebugMountedElementsCount => _mountedElements.Count;
     internal int DebugKeyByControlCount => _keyByControl.Count;
+    internal bool DebugTryGetLastElementByControl(UIElement control, out Element? element)
+        => _lastElementByControl.TryGetValue(control, out element!);
 
     public ElementFactory(
         IReadOnlyList<T> items,
@@ -161,6 +163,12 @@ public sealed partial class ElementFactory<T> : IElementFactory
 
             var newElement = _viewBuilder(_items[currentIndex], currentIndex);
             _mountedElements[key] = newElement;
+            // Keep the per-control "last element" tracking in lockstep with
+            // _mountedElements. Without this, a later RecycleElement→GetElement
+            // round-trip for the same control would feed the pre-refresh
+            // Element to Reconcile as oldElement and diff against a stale
+            // tree shape. (PR #324 review)
+            _lastElementByControl[child] = newElement;
 
             _reconciler.Reconcile(oldElement, newElement, child, _requestRerender);
         }
@@ -206,7 +214,22 @@ public sealed partial class ElementFactory<T> : IElementFactory
             if (_lastElementByControl.TryGetValue(reused, out var oldElement))
             {
                 var replacement = _reconciler.Reconcile(oldElement, element, reused, _requestRerender);
-                control = replacement ?? reused;
+                if (replacement is not null && !ReferenceEquals(replacement, reused))
+                {
+                    // Heterogeneous-row case: Reconcile decided the root
+                    // element type changed and built a fresh control.
+                    // `reused` is now unmounted but still parented to the
+                    // ItemsRepeater — detach so it doesn't sit there as
+                    // an orphan (the original leak shape we're fixing).
+                    // (PR #324 review)
+                    DetachFromParent(reused);
+                    _lastElementByControl.Remove(reused);
+                    control = replacement;
+                }
+                else
+                {
+                    control = reused;
+                }
             }
             else
             {
@@ -228,6 +251,27 @@ public sealed partial class ElementFactory<T> : IElementFactory
         }
 
         return control ?? new TextBlock { Text = "" };
+    }
+
+    // Detach a UIElement from whatever container it's parented to. ItemsRepeater
+    // is a Panel subclass so the standard Children.Remove path applies; we also
+    // handle Border/ScrollViewer/ContentControl so this is safe to call on
+    // arbitrary recycled subtrees.
+    private static void DetachFromParent(UIElement control)
+    {
+        if (control is not FrameworkElement fe) return;
+        switch (fe.Parent)
+        {
+            case Microsoft.UI.Xaml.Controls.Panel panel:
+                panel.Children.Remove(fe);
+                break;
+            case Microsoft.UI.Xaml.Controls.Border border when ReferenceEquals(border.Child, fe):
+                border.Child = null;
+                break;
+            case Microsoft.UI.Xaml.Controls.ContentControl cc when ReferenceEquals(cc.Content, fe):
+                cc.Content = null;
+                break;
+        }
     }
 
     public void RecycleElement(ElementFactoryRecycleArgs args)
