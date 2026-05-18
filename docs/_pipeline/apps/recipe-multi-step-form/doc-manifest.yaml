@@ -1,0 +1,15 @@
+app:
+  title: "Multi-Step Form Recipe"
+  width: 420
+  height: 460
+  startup-delay: 1200
+
+screenshots:
+  - id: step1
+    description: "Wizard step one — account details with Next gated by validation."
+    region: client
+    format: png
+  - id: summary
+    description: "Final summary step showing the values captured across all three steps."
+    region: client
+    format: png
