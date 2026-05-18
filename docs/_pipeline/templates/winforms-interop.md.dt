@@ -69,8 +69,6 @@ application. WinForms owns the message loop — Reactor runs inside it.
 ```csharp snippet="winforms-interop/island-control"
 ```
 
-![Reactor component in a WinForms form](screenshot://winforms-interop/island-control)
-
 There are three ways to set the content:
 
 | Property | Use case |
@@ -90,8 +88,6 @@ all concrete `Component` subclasses with parameterless constructors:
 
 ```csharp snippet="winforms-interop/designer"
 ```
-
-![Designer with ComponentType dropdown](screenshot://winforms-interop/designer)
 
 At design time, the control renders a placeholder with a border showing the
 component name. No WinUI objects are created until the app runs, so the
@@ -200,8 +196,6 @@ Reactor components hosted in WinForms must manage their own background:
 
 ```csharp snippet="winforms-interop/background"
 ```
-
-![Component with explicit background](screenshot://winforms-interop/background)
 
 Wrap your component's root in `Grid(...)` with `.Background(...)` to fill
 the island area. Without this, the component renders on a transparent

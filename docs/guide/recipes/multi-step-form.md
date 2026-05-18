@@ -114,8 +114,6 @@ return VStack(16,
 ).Padding(20).Width(380);
 ```
 
-![Multi-step form, step one](images/recipe-multi-step-form/step1.png)
-
 The orchestrator is a `switch` over `step` plus a `Back` / `Next` row.
 The Back button is disabled on step 0; the Next button is disabled
 until `canAdvance`; on the last step the Next button swaps to

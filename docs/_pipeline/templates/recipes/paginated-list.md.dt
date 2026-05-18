@@ -69,8 +69,6 @@ didn't change.
 ```csharp snippet="recipe-paginated-list/render"
 ```
 
-![Paginated list after two pages and a Load More button](screenshot://recipe-paginated-list/loaded)
-
 The body branches on three predicates: initial load (skeleton), first-page
 error with zero loaded items (full-screen retry), or a populated list.
 The footer is the sentinel — a `Button("Load more")` while pages remain,

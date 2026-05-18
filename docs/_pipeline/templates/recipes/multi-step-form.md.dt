@@ -72,8 +72,6 @@ in, setter out, same shape as a single-page form.
 ```csharp snippet="recipe-multi-step-form/render"
 ```
 
-![Multi-step form, step one](screenshot://recipe-multi-step-form/step1)
-
 The orchestrator is a `switch` over `step` plus a `Back` / `Next` row.
 The Back button is disabled on step 0; the Next button is disabled
 until `canAdvance`; on the last step the Next button swaps to

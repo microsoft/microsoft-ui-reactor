@@ -88,8 +88,6 @@ class WinFormsHostDemo : Component
 }
 ```
 
-![Reactor component in a WinForms form](images/winforms-interop/island-control.png)
-
 There are three ways to set the content:
 
 | Property | Use case |
@@ -119,8 +117,6 @@ all concrete `Component` subclasses with parameterless constructors:
 // with parameterless constructors. Select your component and the
 // designer serializes it as typeof(DashboardComponent).
 ```
-
-![Designer with ComponentType dropdown](images/winforms-interop/designer.png)
 
 At design time, the control renders a placeholder with a border showing the
 component name. No WinUI objects are created until the app runs, so the
@@ -283,8 +279,6 @@ class BackgroundDemo : Component
     }
 }
 ```
-
-![Component with explicit background](images/winforms-interop/background.png)
 
 Wrap your component's root in `Grid(...)` with `.Background(...)` to fill
 the island area. Without this, the component renders on a transparent

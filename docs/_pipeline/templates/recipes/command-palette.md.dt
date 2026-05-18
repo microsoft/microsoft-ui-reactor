@@ -84,8 +84,6 @@ covers the preview-vs-bubble pairing in detail.
 ```csharp snippet="recipe-command-palette/render"
 ```
 
-![Command palette open with a filtered list](screenshot://recipe-command-palette/palette)
-
 The page renders normally; the palette is a `Border` wrapping a
 `VStack` returned alongside it in a `Group(page, palette)`. The
 scrim background `#80000000` dims the page underneath. The root
