@@ -1197,3 +1197,88 @@ prior iteration), with `-Top` and `-MinMissed` knobs. Use it after
   a Window directly so very little is reachable; `ChartAutomationPeer`
   (308 missed) — needs a real AutomationPeer host. Of those,
   `PreviewCaptureServer` is the best remaining catch-arm scout.
+
+### 2026-05-17 — PreviewCaptureServer pure helpers (machine B, tenth pass)
+
+- Baseline: **80.55% line / 68.70% branch**.
+- Carried the iteration-9 scout note forward — `PreviewCaptureServer`
+  *did* have unit-reachable surface. The ctor is gated on
+  DispatcherQueue + Window, but six security-critical helpers are
+  reachable: 4 via straight reflection on private static methods
+  (`GenerateToken`, `IsAllowedOrigin`, `ReadCappedBody`,
+  `AcquireFreePortHolding`), and 2 via uninitialized-object +
+  field-injection for instance methods (`BearerMatches`,
+  `IsAllowedHost`). The `<Port>k__BackingField` reflection trick
+  let the instance methods reach their `Port` dependency without
+  going through the ctor's TCP-port acquisition.
+- Added **17 new tests** in
+  `tests/Reactor.Tests/PreviewCaptureServerTests.cs`:
+  - **GenerateToken (2)** — 43-char url-safe base64 (no `+`/`/`/`=`)
+    + RNG generates distinct tokens across calls. Pin: a regression
+    that statically initialised the RNG buffer would emit a fixed
+    token (catastrophic auth weakening across launches).
+  - **IsAllowedOrigin (Theory × 6 accept + Theory × 6 reject + 1 gap
+    pin)** — vscode-webview, http://127.0.0.1, http://localhost,
+    https://localhost arms all hit. Rejects: arbitrary HTTP/HTTPS,
+    file://, ftp://, empty, `http://evil.com/localhost`. Documented
+    a real product gap (see surprises below).
+  - **ReadCappedBody (4)** — TASK-023 4 MB cap enforcement: read
+    within cap, throw on over-cap, empty stream returns empty
+    string, exact-cap boundary succeeds (the `total > cap` not
+    `total >= cap` boundary).
+  - **AcquireFreePortHolding (1)** — returns a real loopback-bound
+    TcpListener with a valid ephemeral port; test cleans up the
+    holder. Pin: a regression that returned port 0 (without binding)
+    would let an attacker race in between Reactor and HttpListener.
+  - **BearerMatches (6)** — null/empty/missing-prefix/correct/wrong-
+    same-length/wrong-length/whitespace-trim. Pin: the constant-
+    time XOR comparison contract and the `presented.Length !=
+    expected.Length` early-out (without which a malformed header
+    would IndexOutOfRange).
+  - **IsAllowedHost (5)** — null/empty/127.0.0.1:port/localhost:port
+    (case-insensitive)/DNS-rebinding rejection
+    (`attacker.com:54321` even with matching port)/wrong-port
+    rejection. Pin: the DNS-rebinding defense at the
+    host-header layer (TASK-020), the actual security fence
+    backing the advisory CORS allow-list.
+- **Surprises / non-obvious findings:**
+  - **REAL SECURITY FINDING: `IsAllowedOrigin` has a StartsWith-based
+    subdomain attack surface.** The current code uses
+    `origin.StartsWith("http://localhost", OrdinalIgnoreCase)` —
+    which matches `http://localhost.evil.com` because that string
+    genuinely starts with "http://localhost". Currently this is
+    backstopped by the `IsAllowedHost` host-header check (the actual
+    security fence), but the advisory CORS allow-list is over-broad
+    against direct browser-driven attacks. **Filed as a deferred
+    follow-up.** The fix: require the next char after "localhost"
+    to be `:`, `/`, or end-of-string. The test
+    `IsAllowedOrigin_StartsWith_Has_Known_Subdomain_Gap` pins the
+    current behavior so a tightening fix reverts predictably (the
+    test would need to flip from Assert.True to Assert.False).
+  - **Test surface via uninitialized-object reflection** worked
+    cleanly for the two instance methods that don't touch the
+    host-bound fields (`_dispatcherQueue`, `_window`, etc.).
+    Setting `_authToken` for `BearerMatches` and the
+    `<Port>k__BackingField` for `IsAllowedHost` is enough. A future
+    test could exercise the JSON request/response shapers
+    (`ServeStatus`, `ServeFrame`, `ServeComponents`) similarly,
+    by mocking `HttpListenerResponse` — though that's a heavier
+    lift and not strictly catch-arm coverage.
+- **Coverage delta** (merged):
+  **80.55% → 80.68% line (+0.13)**, **68.70% → 68.85% branch (+0.15)**.
+  Smaller than iteration 9 (TaskbarOverlay was simpler / smaller; the
+  PreviewCaptureServer ctor + ListenAsync + capture loop + HTTP
+  handlers all remain uncovered) but the per-test ROI is high:
+  17 tests for +0.13% on a 665-line file with the highest-value
+  net-new arms being the security pins.
+- **Hand-off:** Three new files exhausted from the "deferral
+  candidates" list now have real coverage. The remaining 0% files
+  in the worklist (`TrayFlyoutHostWindow`, `ChartAutomationPeer`,
+  rest of `PreviewCaptureServer`'s HTTP machinery, large parts of
+  `JumpListComInterop`) are genuinely host-bound — the catch-arm
+  scout has been thorough. The next batch of metric wins really does
+  require either (a) the deferral approval (~1.6%) or (b) selftest
+  fixtures for Reconciler.Mount / Reconciler.Update. Documented as
+  next-session triage. The remaining unit-test runway in mid-tier
+  pure-C# code is probably ≤ 1 percentage point, gained across
+  ~10 more iterations at the current pace.
