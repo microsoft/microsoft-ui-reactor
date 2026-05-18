@@ -170,11 +170,58 @@ reference-generation codes.
 | `REACTOR_DOC_REGISTRY_W001`| Registry rule maps to a category with no `guide-pages`     |
 | `REACTOR_DOC_REGISTRY_W002`| Registry-declared guide page has no inbound `<!-- ref:Member -->` marker (doc-coverage gate, spec [041 §5.3](../specs/041-docs-comprehensive-uplift.md)) |
 
-## 7. Tier audit cadence
+## 7. Quarterly tier audit (spec 041 §5.4)
 
-Run a manual `mur docs check-tier` (or the broader
-`mur docs compile --validate-only`) audit every quarter to catch silent
-tier drift. Owners: see CODEOWNERS for `docs/_pipeline/`.
+The CI tier-drift gate (§8 below) catches *per-PR* drift — i.e. a PR
+that touches a template body in a way that violates its declared tier.
+It does not catch *silent* drift: a Comprehensive page whose
+surrounding API changed under it, leaving its mental-model lead
+correct in structure but stale in content; a Solid page whose
+companion doc app stopped working months ago; a reference table that
+no longer matches the current public surface.
+
+That gap is closed by a **quarterly tier audit**.
+
+**Cadence.** Once per quarter, on the first business day of the
+quarter (i.e. early January, April, July, October).
+
+**Owner.** The Reactor doc-pipeline owner — see `CODEOWNERS` for
+`docs/_pipeline/` for the current name. The spec 041 §0 owner field
+also tracks this role.
+
+**Workflow.**
+
+1. Run `mur docs compile --validate-only --ci` against a clean clone.
+   Capture the full output. Errors block other audit work — fix them
+   first.
+2. Run `mur docs check-tier` once with `--tier comprehensive` and once
+   with `--tier solid`. Read every finding — including W-level
+   warnings the CI gate currently ignores (e.g. W001 winui-ref noise).
+   Treat each as a small "should this still be at this tier?"
+   question rather than a strict fail.
+3. Pick a sample of 5–8 Comprehensive pages from the
+   highest-traffic and the most-recently-changed surfaces and read
+   them end-to-end. Look for stale references, missing newer hooks /
+   controls / behaviors, drift in mental-model framing.
+4. Re-rank any page where the audit changes your mind: drop a
+   Comprehensive that no longer earns its keep down to Solid, promote
+   a Solid that has organically grown to Comprehensive.
+5. Record the audit pass — even a one-line entry — in a new
+   `docs/specs/041/audits/<YYYY-Qn>-tier-audit.md` file with: pages
+   inspected, findings, re-rankings applied, follow-ups deferred. The
+   pattern matches the existing Phase 4 retro file shape.
+6. Land any re-rankings or content fixes as their own PR(s) — do not
+   bundle them with the audit-record commit.
+
+**Findings disposition.** If an audit pass surfaces ≥5 stale pages
+the owner should also schedule a focused doc-rev sprint within the
+quarter. The expectation is that most quarters produce 0–2 findings;
+runs producing more than that indicate the per-PR gate is too lax and
+should be tightened (e.g. flip W001 to error after the lint-quality
+cleanup, or expand the path filter in `.github/workflows/ci.yml`).
+
+For inner-loop iteration during the audit, the local commands in §8
+(below) are the same surface CI runs.
 
 ## 8. Tier-drift CI gate (spec 041 §5.2)
 

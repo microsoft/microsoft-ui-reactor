@@ -1213,7 +1213,7 @@ source snippets, "Read the source" callout, tier-lint clean.)
 
 ### 5.4 Quarterly tier audit
 
-- [ ] Schedule a recurring "tier audit" — re-rank every page and
+- [x] Schedule a recurring "tier audit" — re-rank every page and
       catch silent drift. Owner & cadence captured in
       `docs/contributing/doc-pipeline.md`.
 
