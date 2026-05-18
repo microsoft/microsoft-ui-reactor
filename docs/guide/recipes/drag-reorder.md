@@ -182,6 +182,8 @@ return VStack(8,
 ).Padding(16).Width(320);
 ```
 
+![Reorderable list with a dragged row in flight](images/recipe-drag-reorder/list.png)
+
 Each row is a `HStack` with a grab-handle glyph and the title.
 `.OnDragStart<StackElement, int>` advertises the row's `Id` as a
 typed `int` payload; `.OnDrop<StackElement, int>` accepts an `int`

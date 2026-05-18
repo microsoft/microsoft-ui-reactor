@@ -88,6 +88,8 @@ class WinFormsHostDemo : Component
 }
 ```
 
+![A WinForms form hosts a XamlIslandControl that stands on DesktopWindowXamlSource and a ReactorHostControl, which owns the Reactor element tree.](images/winforms-interop/host-architecture.svg)
+
 There are three ways to set the content:
 
 | Property | Use case |
