@@ -33,6 +33,31 @@ public sealed partial class ElementFactory<T> : IElementFactory
     private readonly Dictionary<string, Element> _mountedElements =
         new(global::System.StringComparer.Ordinal);
 
+    // Reverse lookup: realized WinUI control → key. Lets RecycleElement drop
+    // the matching _mountedElements entry in O(1) when ItemsRepeater hands a
+    // container back. Without this, entries accumulate one per unique key as
+    // the user scrolls (every realize adds; recycle never removes), and on
+    // any subsequent re-render RefreshRealizedItems walks stale entries
+    // whose row.Index now points at a different logical row's container —
+    // running Reconcile against a mismatched UIElement tree.
+    private readonly Dictionary<UIElement, string> _keyByControl = new();
+
+    // Recycle pool for proper WinUI ItemsRepeater integration. The framework
+    // keeps every realized UIElement parented to the repeater forever and
+    // expects the factory to cycle them — see ViewManager.cpp:865-869 in the
+    // microsoft-ui-xaml-lift source: on realize, it skips Append if the
+    // returned control is already parented to the repeater. So a recycled
+    // container must come back out via GetElement to keep the working set
+    // bounded; allocating fresh on every realize creates one orphan in
+    // Children per call.
+    private readonly Stack<UIElement> _recyclePool = new();
+
+    // Last Element bound to a given realized control. On reuse from the
+    // recycle pool, this is the oldElement passed to Reconciler.Reconcile so
+    // the existing WinUI tree gets diffed-in-place against the new content
+    // rather than thrown away and re-mounted.
+    private readonly Dictionary<UIElement, Element> _lastElementByControl = new();
+
     public ElementFactory(
         IReadOnlyList<T> items,
         Func<T, int, Element> viewBuilder,
@@ -160,8 +185,38 @@ public sealed partial class ElementFactory<T> : IElementFactory
 
         var item = _items[index];
         var element = _viewBuilder(item, index);
+
+        UIElement? control;
+        if (_recyclePool.Count > 0)
+        {
+            // Reuse a previously-recycled container. The framework still has
+            // it parented to the ItemsRepeater, so the ViewManager.cpp:866
+            // Append-skip kicks in and the visual tree stays stable.
+            var reused = _recyclePool.Pop();
+            if (_lastElementByControl.TryGetValue(reused, out var oldElement))
+            {
+                var replacement = _reconciler.Reconcile(oldElement, element, reused, _requestRerender);
+                control = replacement ?? reused;
+            }
+            else
+            {
+                // Defensive: pool entry without a tracked oldElement should
+                // not happen — fall back to re-mounting on top of it.
+                control = _reconciler.Mount(element, _requestRerender);
+            }
+        }
+        else
+        {
+            control = _reconciler.Mount(element, _requestRerender);
+        }
+
         _mountedElements[key] = element;
-        var control = _reconciler.Mount(element, _requestRerender);
+        if (control is not null)
+        {
+            _keyByControl[control] = key;
+            _lastElementByControl[control] = element;
+        }
+
         return control ?? new TextBlock { Text = "" };
     }
 
@@ -169,42 +224,18 @@ public sealed partial class ElementFactory<T> : IElementFactory
     {
         if (args.Element is null) return;
 
-        // Clean up Reactor state (component contexts, effects).
-        _reconciler.UnmountChild(args.Element);
+        // Drop the mounted-element tracking for this container so a later
+        // RefreshRealizedItems can't run Reconcile against a stale Element
+        // paired with a now-foreign realized child.
+        if (_keyByControl.Remove(args.Element, out var stashedKey))
+            _mountedElements.Remove(stashedKey);
 
-        // Pool interactive leaf controls for reuse. Layout containers (Panel, Border)
-        // are NOT pooled here because ItemsRepeater may still reference the root element
-        // during its layout pass and modifying children causes COMExceptions. Interactive
-        // controls are safe to detach and pool because they are leaves with no children.
-        if (_pool is not null)
-            PoolInteractiveLeaves(args.Element);
+        // DON'T UnmountChild — the WinUI tree stays alive and is reused on
+        // the next GetElement call via Reconciler.Reconcile. ItemsRepeater
+        // keeps the element parented either way (see ViewManager.cpp), so
+        // tearing down Reactor state here would just be discarded work.
+        // The _lastElementByControl entry stays valid for the next realize.
+        _recyclePool.Push(args.Element);
     }
 
-    /// <summary>
-    /// Walk the recycled subtree and pool interactive leaf controls (Button, TextBox,
-    /// ToggleSwitch). These are the most expensive controls to create and benefit most
-    /// from pooling. Detaches each from its parent panel before returning to the pool.
-    /// </summary>
-    private void PoolInteractiveLeaves(UIElement root)
-    {
-        if (root is Microsoft.UI.Xaml.Controls.Panel panel)
-        {
-            // Walk children in reverse so removal doesn't shift indices
-            for (int i = panel.Children.Count - 1; i >= 0; i--)
-                PoolInteractiveLeaves(panel.Children[i]);
-        }
-        else if (root is Microsoft.UI.Xaml.Controls.Border border && border.Child is not null)
-        {
-            PoolInteractiveLeaves(border.Child);
-        }
-        else if (root is FrameworkElement fe && IsPoolableInteractive(fe))
-        {
-            _pool!.Return(fe);
-        }
-    }
-
-    private static bool IsPoolableInteractive(FrameworkElement fe) =>
-        fe is Microsoft.UI.Xaml.Controls.Button
-        or TextBox
-        or Microsoft.UI.Xaml.Controls.ToggleSwitch;
 }

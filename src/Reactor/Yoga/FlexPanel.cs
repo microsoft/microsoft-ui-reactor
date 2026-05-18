@@ -31,50 +31,33 @@ public partial class FlexPanel : Panel
     private readonly YogaNode _rootNode;
     private readonly HashSet<UIElement> _syncCurrentChildren = new();
     private readonly List<UIElement> _syncToRemove = new();
-    private XamlRoot? _subscribedXamlRoot;
 
     public FlexPanel()
     {
         _rootNode = new YogaNode(_yogaConfig);
-        Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Read the current rasterization scale from this panel's XamlRoot and
+    /// update <see cref="YogaConfig.PointScaleFactor"/> if it changed. Called
+    /// from <see cref="MeasureOverride"/> so the scale tracks the live system
+    /// DPI without subscribing to <c>XamlRoot.Changed</c>. The subscription
+    /// approach pinned every FlexPanel through XamlRoot's multicast delegate
+    /// list — fatal for virtualized lists where ItemsRepeater's recycle path
+    /// does not reliably fire Unloaded on every recycled container.
+    /// </summary>
+    private void SyncPointScaleLazy()
     {
-        var current = XamlRoot;
-        if (current is null || ReferenceEquals(current, _subscribedXamlRoot))
-            return;
-
-        if (_subscribedXamlRoot is not null)
-            _subscribedXamlRoot.Changed -= OnXamlRootChanged;
-        _subscribedXamlRoot = current;
-        _subscribedXamlRoot.Changed += OnXamlRootChanged;
-        SyncPointScaleFromXamlRoot();
-    }
-
-    private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
-    {
-        SyncPointScaleFromXamlRoot();
-    }
-
-    private void SyncPointScaleFromXamlRoot()
-    {
-        var scale = (float)(_subscribedXamlRoot?.RasterizationScale ?? 1.0);
+        var scale = (float)(XamlRoot?.RasterizationScale ?? 1.0);
         if (scale <= 0) return;
         if (Math.Abs(_yogaConfig.PointScaleFactor - scale) < 0.0001f) return;
         _yogaConfig.PointScaleFactor = scale;
         _rootNode.MarkDirtyAndPropagate();
-        InvalidateMeasure();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        if (_subscribedXamlRoot is not null)
-        {
-            _subscribedXamlRoot.Changed -= OnXamlRootChanged;
-            _subscribedXamlRoot = null;
-        }
         // Clear Yoga node cache when removed from the visual tree to avoid leaking references
         foreach (var node in _nodeCache.Values)
             _rootNode.RemoveChild(node);
@@ -311,6 +294,7 @@ public partial class FlexPanel : Panel
 
     protected override Size MeasureOverride(Size availableSize)
     {
+        SyncPointScaleLazy();
         _measuredThisPass.Clear();
         SyncYogaTree();
         SetRootConstraints(availableSize);
