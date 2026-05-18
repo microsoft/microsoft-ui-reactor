@@ -901,3 +901,62 @@ prior iteration), with `-Top` and `-MinMissed` knobs. Use it after
   excluding code from the metric is the opposite mistake." Per the
   doc rule, this requires explicit user confirmation in this log
   before the next session applies it.
+
+### 2026-05-17 — TypedColumns vanity-to-real rewrite (machine B, sixth pass)
+
+- Baseline: **80.10% line / 68.29% branch**.
+- Area picked: **`TypedEditorsTests.cs` strengthening + TypedColumns
+  branch coverage**. The previous Editors iteration noted that
+  `TypedEditorsTests` was full of `Assert.NotNull(factory)` vanity; this
+  iteration *replaces* that bar by invoking each resolved editor and
+  asserting the returned Element's shape.
+- Added **26 new tests** in
+  `tests/Reactor.Tests/Controls/TypedColumnsBehaviorTests.cs`:
+  - **TypeRegistry resolutions (9)** — DateTime / DateTimeOffset /
+    DateOnly / TimeSpan / TimeOnly / Uri / Color / Bool-Standard /
+    Bool-Compact. Each invokes the resolved factory and asserts the
+    Element record type (DatePicker / TimePicker / TextField /
+    ColorPicker / Toggle vs CheckBox), then exercises OnXxx where
+    applicable to verify type-preserving onChange round-trips.
+  - **ReflectionTypeMetadataProvider (3)** — `[DataType(DataType.Url)]`
+    on `string` vs `Uri` properties (separate branches of the if-chain
+    in ReflectionTypeMetadataProvider), and `[Range]` on int with
+    Setters-count + FromDouble round-trip assertion.
+  - **TypedColumns factories (14)** — NumberColumn for int / decimal /
+    long (FromDouble inverse coverage), CheckBoxColumn vs
+    ToggleSwitchColumn (compact vs explicit), DateColumn for all three
+    type-switch arms (DateTime / DateTimeOffset / DateOnly — the
+    last two were previously uncovered), TimeColumn for TimeSpan vs
+    TimeOnly, HyperlinkColumn for Uri vs string (the string branch was
+    previously uncovered), ComboBoxColumn with strongly-typed choices,
+    ColorColumn editor + CellRenderer wiring.
+- **Surfaced a contract pin (not a bug):** initial test asserted
+  `[DataType(DataType.Url)]` on a string property commits Uri. The test
+  failed and surfaced that the source explicitly comments:
+  "[DataType.Url] on string → URL text input + Hyperlink display; on
+  Uri → Uri editor + Hyperlink display." String properties keep
+  receiving strings — the Hyperlink display happens at render time, not
+  via Editors.Uri. Test rewritten to pin this branch faithfully.
+- **Did NOT delete the old vanity TypedEditorsTests this iteration.**
+  Same reason as last iteration: they exercise type-registration code
+  paths that the new file doesn't reach (the new file invokes
+  `TypeRegistry.ResolveEditor` but doesn't exercise the
+  `RegisterCellRenderer` / `GetCellRenderer` round-trip the way the
+  old `Explicit_CellRenderer_Registration_Wins_Over_Fallback` does).
+  Follow-up: rewrite each remaining vanity test into the
+  invoke-and-assert pattern, then delete what's truly superseded.
+- **Test results:** 26/26 pass; 7,904/7,950 full unit suite (was
+  7,878 — clean +26).
+- **Coverage delta** (merged):
+  **80.10% → 80.14% line (+0.04)**, **68.29% → 68.34% branch (+0.05)**.
+  Small because TypedColumns is a thin wrapper — most of the lines
+  exercised by the new tests are inside `Editors.*` (already at high
+  coverage from iteration 4) and `Factories.Column<T>`. The real value
+  of this batch is the regression net: each test catches a *wiring*
+  regression in TypedColumns / ReflectionTypeMetadataProvider that
+  the old NotNull-only tests would have silently passed through.
+- **Lesson:** invoke-and-assert tests on already-covered helpers don't
+  move coverage much, but they do firm up the boundaries between
+  layers. Next iteration's choice between "new code to cover" and
+  "stiffen existing covered code" should weigh: the metric only moves
+  for genuinely-uncovered lines, but the test bar moves on both.
