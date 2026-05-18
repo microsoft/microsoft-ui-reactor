@@ -474,3 +474,87 @@ Append-only. Newest at the bottom. Date format `YYYY-MM-DD`.
   honest-deferrals list (PreviewCaptureServer, JumpListComInterop,
   TrayFlyoutHostWindow, TaskbarOverlay, ChartAutomationPeer) for user
   approval — together they're worth ~1.6 points without a single test.
+
+### 2026-05-17 — Element.OwnPropsEqual (machine B, second pass)
+
+- Baseline at start: **79.56% line / 67.29% branch** (no need to
+  re-measure — git state hadn't changed since the LogCaptureInstall
+  iteration finished 25 min earlier; treating the previous run's
+  `coverage/merged.cobertura.xml` + `gap-report.md` as canonical saved
+  ~6 min of build+collect. The doc previously did not mention this
+  optimization — adding it now: **if your commit is the only diff
+  against the last full run, you can skip step 3.**)
+- Area picked: **`Element.OwnPropsEqual`** — surfaced by drilling into
+  per-method coverage on `Core/Element.cs`. The method was at
+  **19% line / 17% branch** (the worst-covered method in the file by a
+  wide margin), with **zero direct tests** despite gating every
+  reconcile-highlight-overlay decision on every render. The 99 missed
+  lines in Element.cs cluster around this single method.
+- Audit: no existing tests directly cover `OwnPropsEqual`. The 19%
+  came from incidental invocation in `ReconcilerCorrectnessTests` /
+  `PanelChildReconciliationTests`. No vanity to strip.
+- Added **44 new tests** in `tests/Reactor.Tests/OwnPropsEqualTests.cs`
+  covering every switch arm in the method:
+  - **Reference + type-tag fast paths** — `ReferenceEquals(a, a)` short
+    circuits, different types short circuit.
+  - **Container layouts** — Stack (Orientation/Spacing/H/V Alignment),
+    Grid (RowSpacing/ColumnSpacing/Definition-by-reference), Border
+    (CornerRadius/Padding/BorderThickness), ScrollView (all 6 DPs),
+    Flex (Direction/Justify/AlignItems/AlignContent/Wrap/Gap×2/Padding),
+    WrapGrid (Orientation/ItemWidth/ItemHeight/MaximumRowsOrColumns),
+    Canvas/RelativePanel/Viewbox children-don't-trigger-rebuild guard.
+  - **Structural wrappers** — NavigationHost / CommandHost / Group /
+    ErrorBoundary / Component / Func / Memo / Modified all return true
+    so their own re-render doesn't strobe the highlight overlay. Each
+    test passes *different* args to prove the arm is wired
+    correctly (a regression that started inspecting args would fail).
+  - **TitleBar** — 5 own-props vary individually; explicit pinning that
+    Content / RightHeader are NOT own-props (the source-level comment
+    says "without this, TitleBar flashes yellow on every reconcile when
+    only descendants changed" — now there's a test enforcing it).
+  - **Popup** — IsOpen / IsLightDismissEnabled vary individually.
+  - **Flyout family** — MenuFlyout / ContentFlyout / MenuFlyoutContent /
+    Flyout all always-equal even with different Target / Content.
+  - **Selection collections** — ComboBox (SelectedIndex/Placeholder/
+    Header/IsEditable + the "fresh items array doesn't flash" pin),
+    ListView / GridView (SelectedIndex/SelectionMode/Header), FlipView,
+    Pivot (SelectedIndex/Title), TabView (SelectedIndex/
+    IsAddTabButtonVisible), TreeView (SelectionMode/CanDragItems/
+    AllowDrop/CanReorderItems), SelectorBar, ListBox,
+    RadioButtons (SelectedIndex/Header), BreadcrumbBar setters-only.
+  - **Fallback** — Leaf type (ButtonElement) returns false so the
+    reconciler always re-applies props. Test pins the default-false
+    contract; a future arm that accidentally collapsed a leaf to "equal"
+    would silently stop pushing label / state updates.
+- Every test names a concrete product bug. The framing is:
+  "if `OwnPropsEqual` returns true when X changes, the WinUI control
+  keeps the stale value." Reviewer can verify by mentally inverting
+  the assertion: `Assert.True` → "what if it returned false?" gives
+  "highlight overlay flashes". `Assert.False` → "what if it returned
+  true?" gives "user sees stale UI." Both are observable.
+- **Test results:** 85/85 `OwnPropsEqual` tests pass. One initial
+  test about `OnMount(...)` mutating Setters reference was removed when
+  it turned out `.OnMount` wraps in `ModifiedElement` instead of
+  cloning the leaf element's `Setters` array. That's a useful pin
+  for the next agent: **Setters-reference inequality is hard to
+  trigger from outside the assembly** because the public fluent API
+  goes through `ModifiedElement` wrappers, not direct Setters
+  mutation. To hit the `ReferenceEquals(setters, setters)` branch of
+  `OwnPropsEqual` reliably, future tests would need to construct the
+  element record directly with a custom `Setters` array assignment via
+  the `internal` initializer, which requires being in the same
+  `InternalsVisibleTo` boundary (we are) but also using the right
+  syntax (`new StackElement(...) { Setters = [...] }` — and Setters
+  is `internal init`, so a `with`-expression from the test assembly
+  cannot mutate it).
+- **Coverage delta** (merged unit + selftest):
+  **79.57% → 79.80% line (+0.23)** and
+  **67.29% → 67.80% branch (+0.51).** The branch swing is roughly 2× the
+  line swing — that's exactly the payoff for picking a method full of
+  switch arms and varying one prop at a time. Pacing implication: a
+  *branch-shaped* target (large switch, many ?:, many if-chains) gives
+  much more branch-% than a scalar new file of equivalent line count.
+  Recommended priority signal for future iterations: prefer files whose
+  branch% trails line% by >25 points (e.g. ChartKeyboardNavigator at
+  35.7%/5.6%, SemanticPanel at 36.8%/2.7%) when there is a host-bound
+  vs unit-testable trade-off — the branch math compounds faster.
