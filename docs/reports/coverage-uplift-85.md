@@ -323,6 +323,34 @@ factory catalog directly). Next-session candidate: rewrite
 which would both raise the bar AND cover the type-registration paths
 end-to-end.
 
+### 2026-05-17 audit — `TreeChartsTests.cs`
+
+351-line file (43 tests) for the TreeChart / ForceGraph fluent builders and
+their IChartAccessibilityData implementations. Mixed:
+
+| Pattern | Count | Verdict |
+|---|---|---|
+| `Same(chart, chart.Foo(...))` fluent-return assertions | ~20 tests | **Vanity.** Each setter is `Foo(x) { _foo = x; return this; }`. `return this` is a language-level guarantee for the chosen pattern; the test can only fail if a deliberate redesign rewrites the body to `return new TreeChartElement<T>(...)`. That's not a regression, it's an explicit API change — and the test would be expected to be updated alongside. |
+| `chart.Width(1000)…; Assert.NotNull(chart)` (fluent-chaining) | ~2 tests | **Vanity.** Returning non-null is also a language guarantee. |
+| IChartAccessibilityData property reads (`Name`, `Description`, `ChartTypeName`, `Series.Count`, depth values, etc.) | ~13 tests | **Real.** These hit `BuildElement`-internal state via the IChartAccessibilityData getters and assert observable values. |
+
+**Constraint preventing rewrite this iteration:** the fluent setters store
+into `private` fields (`_width`, `_height`, `_linkColor`, …); only the
+IChartAccessibilityData getters expose state, and those expose only the
+ChartSeriesDescriptor (label + depth) shape — not _width/_height. The
+strongest replacement would test that `BuildElement` produces a Canvas
+with the configured width/height, but `BuildElement` calls
+`Brush(_linkColor)` which constructs a `SolidColorBrush` — **host-bound,
+same trap as the ColorCompact swatch in the Editors iteration.** A
+selftest fixture is the right home for the BuildElement assertions; the
+fluent-setter coverage they deliver is a side-effect that the existing
+tests already get with the `return this` pattern.
+
+**Recommendation:** keep TreeChart fluent-setter tests as-is until a
+selftest fixture replaces them with mount-time assertions on the rendered
+Canvas. The fluent-return assertions are weak but not actively misleading —
+they at least exercise the setter line.
+
 **Audit philosophy:** an assertion is "real" if you can imagine a product bug
 the assertion would catch. `Assert.Single(el.Setters)` after `.Set(x => x.Foo = 1)`
 catches nothing — Setters has count 1 after `Set` is called, by definition.
@@ -788,3 +816,88 @@ prior iteration), with `-Top` and `-MinMissed` knobs. Use it after
   To close 5 points purely in unit tests, the next agent should batch
   3-5 small files per iteration rather than one — the build+coverage
   loop is 5-10 min regardless of how many test files changed.
+
+### 2026-05-17 — RenderContext hook-order exceptions (machine B, fifth pass)
+
+- Baseline at start: **80.04% line / 68.24% branch** (re-confirmed by
+  rerunning `run-coverage.ps1` after the Editors commit landed).
+- Picked **`Core/RenderContext.cs`** — specifically the
+  `HookOrderException` throw paths for `UseReducer<T>`,
+  `UseReducer<TState, TAction>`, `UseMemo<T>`, and `UseRef<T>`. Existing
+  `HookStateRefactorTests.cs` already covers UseState↔UseEffect hook-
+  order swaps, but the four other hook flavours had **zero direct
+  coverage** of the throw path despite each one being part of the
+  framework's "loud failure for cardinal React sin" contract.
+- Did not find a larger unit-testable hot spot this iteration after
+  scoping `DevtoolsUiaTools` (heavy UIA peer / pattern provider —
+  host-bound), `DevtoolsTools` (97% of the main class is covered;
+  remaining 101 missed lines are tool handler lambdas that need a
+  real DispatcherQueue + Window), `SelectorResolver` (NodeId branch
+  fully covered, rest is VisualTreeHelper.GetParent — host-bound),
+  `LayoutEtwConsumer` (real ETW session — admin-bound), and
+  `ChartKeyboardNavigator` (HandleKeyDown is a FuncElement closure
+  invoked by sealed `KeyRoutedEventArgs` — host-bound). Recording the
+  scan here so the next session doesn't re-tour the same dead ends.
+- Audited `TreeChartsTests.cs` (351 lines, 43 tests). Wrote an audit
+  entry above; bottom line is ~20 fluent-setter tests are
+  `Assert.Same(chart, result)` after `chart.Foo(...)` — vanity, but
+  not actively misleading. Kept as-is for now per the doc rule
+  "don't drop coverage without replacement." A selftest fixture that
+  mounts a TreeChart and asserts the live Canvas Width / Height /
+  Brush colors would be the right replacement.
+- Added **12 new tests** in
+  `tests/Reactor.Tests/RenderContextHookOrderTests.cs`:
+  - **HookOrderException paths (7)** — UseReducer<T> at effect slot,
+    UseReducer<TState, TAction> at effect slot, UseReducer<TState, TAction>
+    with generic-type mismatch on existing UseState slot, UseMemo at
+    effect slot, UseMemo with different generic type at same slot,
+    UseRef at effect slot, UseRef with different generic type at same
+    slot. Each asserts the exception message includes both the
+    actual and expected hook-state type names so the developer-facing
+    error remains diagnostic.
+  - **UseStateSetterByIndex (3)** — happy path (updates cell, triggers
+    re-render, next render observes the new value); out-of-range
+    index (silent no-op, no re-render); type-mismatch index (silent
+    no-op, original cell intact). Pin: a regression that threw on
+    mismatch instead of silently failing would break the devtools
+    state-mutation tool, since it walks the snapshot and tries
+    multiple types when it doesn't know the cell's T.
+  - **UseColorScheme null-Application path (2)** — verifies the hook
+    doesn't NRE when `Application.Current` is null (the unit-test
+    state). Bug shape: a regression that dereferenced `theme.Value`
+    instead of using the null-conditional `theme?` operator would
+    crash every headless RenderContext test. The wrapper
+    `UseIsDarkTheme()` gets a separate test for the same reason.
+- **Test results:** 12/12 pass; 7,878/7,924 full unit suite passes
+  (was 7,866 — clean +12).
+- **Coverage delta** (merged):
+  **80.04% → 80.10% line (+0.06)**, **68.24% → 68.29% branch (+0.05)**.
+  Expected scale: 4 hook-order throw paths × ~3 lines each + 3
+  setter-by-index paths × ~3 lines + 2 color-scheme paths × ~4
+  lines ≈ 30 lines on a 101k denominator = +0.03% line. Got
+  +0.06% — the rest came from inferred-arm coverage in
+  `HookStateRefactorTests`' shared fixture-style helpers.
+- **Surprises / non-obvious findings:**
+  - The `HookOrderException` message templates differ slightly
+    between UseRef ("expected ValueHookState<Ref<X>>, got Y") and
+    UseReducer ("Hook at index N is X, expected ValueHookState<T>
+    (UseReducer)"). A future cleanup could unify them, but the
+    asymmetry is what the source ships today; tests pin both.
+  - **Untested but unit-reachable still:** `MarshalIfOffUIThread`'s
+    two error paths (no captured UI dispatcher off-thread; TryEnqueue
+    refused because the dispatcher is shutting down). Both require a
+    real `DispatcherQueue` in a shutting-down state, which xUnit
+    cannot set up reliably without a host. Flagged as selftest
+    candidate.
+- **Deferral-candidate proposal (for user approval next iteration):**
+  the doc lists ~1,639 lines across `PreviewCaptureServer` (665),
+  `JumpListComInterop` (338), `ChartAutomationPeer` (308),
+  `TrayFlyoutHostWindow` (230), `TaskbarOverlay` (98) that are
+  **inherently host-bound** and cannot be unit tested. Adding
+  `[ExcludeFromCodeCoverage]` to these would shift the denominator
+  by ~1,639 / 101,473 ≈ 1.6 percentage points without writing a
+  single test, taking us from 80.10% → ~81.7%. The trade-off the
+  doc flagged: "the user's mandate is 'no vanity coverage,' and
+  excluding code from the metric is the opposite mistake." Per the
+  doc rule, this requires explicit user confirmation in this log
+  before the next session applies it.
