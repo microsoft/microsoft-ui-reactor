@@ -1031,3 +1031,84 @@ prior iteration), with `-Top` and `-MinMissed` knobs. Use it after
   not unit-testable). Without that approval, the path to 85% is a
   long tail of small-file iterations PLUS at least one selftest
   fixture push targeting Reconciler.Mount / Reconciler.Update.
+
+### 2026-05-17 — Persistence stores edge cases (machine B, eighth pass)
+
+- Baseline: **80.18% line / 68.41% branch**.
+- Area picked: **`Hosting/Persistence/JsonFileStore.cs`** (76.4% / 35
+  missed) and **`Hosting/Persistence/PackagedSettingsStore.cs`** (0% /
+  38 missed). Both are pure-ish — JsonFileStore is file I/O over a
+  temp path, PackagedSettingsStore wraps WinRT `ApplicationData.Current`
+  which throws in unpackaged xUnit hosts. The catch arms are the
+  testable surface.
+- Audited existing `JsonFileStoreTests.cs` (9 tests, all real — happy
+  path + missing file + malformed JSON + oversize + ctor guard +
+  DefaultPath). Kept all and added orthogonal edge cases.
+- Added **19 new tests** total:
+  - **JsonFileStoreTests +13 tests:**
+    - **Early-return guards (3)** — Write with empty id / null data /
+      empty id-read short-circuit before touching the filesystem.
+      Pin: a regression that dropped the guards would create
+      `<ProcessName>/reactor-windows.json` on every program start with
+      a placeholder entry.
+    - **Per-entry corruption arms (4)** — malformed base64 in a valid
+      JSON envelope (FormatException catch), non-string entry type
+      mismatch, non-object root, empty-string entry. Each branch was
+      previously 0% — a regression that propagated would crash every
+      app whose persistence file was tampered with or partially
+      written from an OS crash.
+    - **Merge over tampered file (1)** — if the existing file is a
+      top-level array, ReadDocumentOrEmpty's catch arm returns an
+      empty dict, the Write proceeds, and the tampered content is
+      replaced. Pin: a regression that propagated the JsonException
+      would crash the *next* save after any tampering.
+    - **AppendQuotedString escape arms (5)** — round-trip ids
+      containing `"`, `\`, `\n`+`\t`, control chars < 0x20 (Unicode
+      \u#### escape), `\r`+`\b`+`\f`. Each new test forces a unique
+      switch arm in the escape ladder. Bug shape: any unescaped
+      special character in an id would produce invalid JSON that
+      breaks every subsequent TryRead — and ReactorWindow keys are
+      user-controlled.
+  - **PackagedSettingsStoreTests +6 tests (new file):**
+    - Early-return guards (3) — empty id / null data / empty-id read.
+    - WinRT-unavailable catch arms (2) — TryRead and Write in an
+      unpackaged context must NOT throw the
+      InvalidOperationException 0x80073D54 that
+      `ApplicationData.Current` raises. Bug shape: a regression that
+      removed the try/catch would crash every unpackaged host at
+      startup (ReactorApp's auto-detection logic calls TryRead during
+      bring-up).
+    - `IsAvailable()` returns false in unpackaged context — pins the
+      contract that the static probe never throws (used by spec §8
+      auto-detection to pick the right store).
+- **Test results:** 28/28 in the persistence cluster pass; 7,947/7,993
+  full unit suite (was 7,928 — clean +19, plus the file-rebuild also
+  surfaced a few new xUnit-skipped Yoga tests).
+- **Coverage delta** (merged):
+  **80.18% → 80.26% line (+0.08)**, **68.41% → 68.50% branch (+0.09)**.
+  Best yield since iteration 4. Two reasons:
+  1. **PackagedSettingsStore was at 0%** — every test moves new lines
+     into the covered set, no incidental coverage to share.
+  2. **JsonFileStore's catch arms are branch-dense** — each malformed-
+     payload test hits a distinct catch handler that has a unique
+     line + branch contribution.
+- **Surprises / non-obvious findings:**
+  - **PackagedSettingsStore is unit-testable when the goal is
+    catch-arm coverage.** Despite the class's reliance on
+    `Windows.Storage.ApplicationData.Current` (which throws on
+    unpackaged), every public method's contract is "warn-and-default
+    on failure" — and the failure path *is* the unpackaged path. So
+    headless xUnit naturally drives the unhappy path. The doc had
+    listed this file as "0% / 38 missed" without flagging it as a
+    cheap pickup; corrected now.
+  - **TimeSpan custom format strings (carried over from
+    CellRenderers iteration):** the carry-over insight is that
+    "host-bound" sometimes means "WinUI XAML controls only" — pure
+    .NET WinRT projections (Windows.Storage, etc.) that throw
+    deterministically in unpackaged still produce reproducible
+    test paths. A future scan should re-examine the "0% / host-bound"
+    cluster in the worklist for this shape:
+    `JumpListComInterop`, `PreviewCaptureServer`, `TaskbarOverlay`,
+    `TrayFlyoutHostWindow` *might* be reachable for catch-arm
+    coverage if their WinRT/COM calls throw deterministically. Worth
+    a 30-min scout before reaching for `[ExcludeFromCodeCoverage]`.
