@@ -558,3 +558,80 @@ Append-only. Newest at the bottom. Date format `YYYY-MM-DD`.
   branch% trails line% by >25 points (e.g. ChartKeyboardNavigator at
   35.7%/5.6%, SemanticPanel at 36.8%/2.7%) when there is a host-bound
   vs unit-testable trade-off — the branch math compounds faster.
+
+### 2026-05-17 — DragData lazy providers + FormatEntry state machine (machine B, third pass)
+
+- Baseline (no need to re-measure — git state unchanged since prior
+  iteration): **79.80% / 67.80%**.
+- Picked **`Input/DragData.cs`** (45.5% line / 18.9% branch / 97 missed).
+  Per-method drill-down: every `With{Uri,Html,Rtf,Bitmap,Files,
+  CustomFormat}` overload at 0% line, the `FormatEntry` resolve state
+  machine partially covered, the transfer-registry static methods
+  internal-only and untested. The branch% gap of 26.6 points placed it
+  third on the new "branch-gap ranking" produced from the merged
+  cobertura at the end of the previous iteration (a tooling lift worth
+  capturing — see _Self-improvement_ below).
+- Audited existing `DragDataTests.cs` (28 tests): all real, all kept.
+  Coverage gaps clustered in three areas: (a) lazy-provider variants
+  for non-text formats, (b) the `FormatEntry` resolve-precedence
+  contract (eager > async > sync in async; eager > sync in sync; async-only
+  is a no-block in sync), (c) the `Register / Resolve / Unregister`
+  in-memory transfer registry. The host-bound `PopulatePackage` and the
+  bitmap / files paths that need a real `IStorageItem` are deliberately
+  skipped — first attempt at mocking `IStorageItem` would be a flaky
+  rabbit hole.
+- Added **34 new tests**, all passing:
+  - **Lazy providers (12)** — `WithUri / WithRtf / WithHtml /
+    WithCustomFormat` × (sync provider, async provider) plus the
+    "sync provider satisfies `TryGet*`" and "async-only provider
+    falls through to false in `TryGet*` and resolves in `Get*Async`"
+    pair that pins the UI-thread no-block contract.
+  - **AvailableFormats / HasFormat / FormatEntries (5)** — covers the
+    standard-format key mapping (regression catcher: WithUri writing to
+    the Text key would advertise the wrong format), the
+    ProcId-marker-always-present invariant, and the internal-getter
+    reference identity (PopulatePackage relies on it; copy-semantics
+    would silently fork the package state).
+  - **Overwrite / last-write-wins (2)** — `WithText("a").WithText("b")`
+    overwrites, doesn't append; sync-then-eager pin (catches a bug
+    where `FormatEntry` retains stale `SyncProvider` after `WithUri`
+    promotion to eager).
+  - **GetCustomFormatAsync / TryGetCustomFormat type-mismatch (4)** —
+    absent → default/false (not throw), wrong-type → default/false
+    (not InvalidCastException). The spec contract is "silent fall-through"
+    so consumers can chain.
+  - **Transfer registry (3)** — Register/Resolve/Unregister cycle,
+    Resolve(unknown) returns null (not KeyNotFoundException),
+    Unregister(unknown) is idempotent (DropCompleted can fire twice).
+  - **FormatEntry state-machine (12, new test class)** — each precedence
+    arm of `ResolveAsync` / `ResolveSync`, the `HasEager` invariant
+    (false when any provider set or eager is null), and the
+    cancellation-token propagation pin. The critical pin:
+    `ResolveSync_AsyncOnly_ReturnsNullWithoutBlocking` — a regression
+    that called `.GetAwaiter().GetResult()` here would freeze the UI
+    dispatcher on every drop with a lazy-async format. The test asserts
+    *both* that the result is null *and* that the async provider is
+    not invoked.
+- **Coverage delta** (merged):
+  **79.80% → 79.82% line (+0.02)** and
+  **67.80% → 67.85% branch (+0.05).** Per-file:
+  `DragData.cs` 45.5% → 52.8% line, 18.9% → 27.0% branch. The modest
+  global delta on a 34-test batch is the file's *natural ceiling* for
+  unit tests — the remaining `PopulatePackage`, eager-bitmap path,
+  `WithFiles(IEnumerable<IStorageItem>)`, and `TryGetSafeLocalFiles`
+  UNC/DOS/reparse safety filter all require either a real
+  `DataPackage` (WinRT activation) or `IStorageItem` mocks that the
+  CsWinRT projection makes painful from a headless xUnit. **Deferral
+  candidate flagged:** the `TryGetSafeLocalFiles` security branch
+  (TASK-069) is unreachable from xUnit without `IStorageItem` mocks;
+  the next agent should consider a selftest fixture that pops up a
+  receiver and synthesizes a `DataPackageView` with crafted paths to
+  exercise the UNC / DOS-device / reparse rejections. That's the
+  highest-value uncovered code in this file.
+
+#### Self-improvement: branch-gap ranking query
+
+Added `tools/coverage/rank-branch-gap.ps1` — surfaces files where
+branch% trails line% by the widest margin (the heuristic from the
+prior iteration), with `-Top` and `-MinMissed` knobs. Use it after
+`run-coverage.ps1` to pick the next branch-shaped target.

@@ -296,4 +296,413 @@ public class DragDataTests
         Assert.Equal(DragOperations.Link, ctx.CompletedOperation);
         Assert.False(ctx.WasCancelled);
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Lazy providers — sync + async variants for every standard format
+    //  Each test pins: "if WithX(Func<...>) regresses to eager evaluation,
+    //  the provider would run at WithX-call time instead of GetXAsync-call
+    //  time — observable when the source provides expensive content (file
+    //  read, network fetch) that should only fire on actual consumer pull."
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task WithUri_LazySync_DefersResolution()
+    {
+        int invocations = 0;
+        var data = new DragData().WithUri(() => { invocations++; return new Uri("https://example.com/"); });
+        Assert.Equal(0, invocations);
+        var got = await data.GetUriAsync();
+        Assert.Equal(1, invocations);
+        Assert.Equal(new Uri("https://example.com/"), got);
+        // Second pull invokes the provider again (FormatEntry.SyncProvider is not memoized).
+        await data.GetUriAsync();
+        Assert.Equal(2, invocations);
+    }
+
+    [Fact]
+    public async Task WithUri_LazyAsync_DefersResolution()
+    {
+        int invocations = 0;
+        var data = new DragData().WithUri(async ct => { invocations++; await Task.Yield(); return new Uri("https://example.com/"); });
+        Assert.Equal(0, invocations);
+        var got = await data.GetUriAsync();
+        Assert.Equal(1, invocations);
+        Assert.Equal(new Uri("https://example.com/"), got);
+    }
+
+    [Fact]
+    public void WithUri_Sync_TryGetUri_ResolvesSynchronously()
+    {
+        // Bug this catches: sync providers should resolve inside TryGet*
+        // without spinning the dispatcher. A regression that always required
+        // the async path would deadlock UI thread consumers.
+        var data = new DragData().WithUri(() => new Uri("https://x/"));
+        Assert.True(data.TryGetUri(out var uri));
+        Assert.Equal(new Uri("https://x/"), uri);
+    }
+
+    [Fact]
+    public async Task WithUri_AsyncOnly_TryGetUri_FallsThroughToFalse()
+    {
+        // Bug this catches: TryGet (sync) should NOT block on an async-only
+        // provider. The contract: TryGet returns false, the caller falls
+        // through to GetXAsync. A regression that synchronously blocked an
+        // async provider would freeze the UI thread on drop.
+        var data = new DragData().WithUri(async ct => { await Task.Yield(); return new Uri("https://x/"); });
+        Assert.False(data.TryGetUri(out _));
+        // But the async path still works.
+        var got = await data.GetUriAsync();
+        Assert.Equal(new Uri("https://x/"), got);
+    }
+
+    [Fact]
+    public async Task WithRtf_LazySync_DefersResolution()
+    {
+        int invocations = 0;
+        var data = new DragData().WithRtf(() => { invocations++; return "{\\rtf1}"; });
+        Assert.Equal(0, invocations);
+        var got = await data.GetRtfAsync();
+        Assert.Equal(1, invocations);
+        Assert.Equal("{\\rtf1}", got);
+    }
+
+    [Fact]
+    public async Task WithRtf_LazyAsync_DefersResolution()
+    {
+        int invocations = 0;
+        var data = new DragData().WithRtf(async ct => { invocations++; await Task.Yield(); return "{\\rtf1}"; });
+        Assert.Equal(0, invocations);
+        var got = await data.GetRtfAsync();
+        Assert.Equal(1, invocations);
+        Assert.Equal("{\\rtf1}", got);
+    }
+
+    [Fact]
+    public void WithHtml_LazySync_SatisfiesTryGet()
+    {
+        // Bug this catches: WithHtml(Func<string>) routing through a wrong
+        // storage path so TryGetHtml never finds the entry.
+        var data = new DragData().WithHtml(() => "<p>x</p>");
+        Assert.True(data.TryGetHtml(out var html));
+        Assert.Equal("<p>x</p>", html);
+    }
+
+    [Fact]
+    public async Task WithCustomFormat_LazySync_DefersResolution()
+    {
+        int invocations = 0;
+        var data = new DragData().WithCustomFormat(
+            "reactor.test/payload",
+            () => { invocations++; return (object)"value"; });
+        Assert.Equal(0, invocations);
+        Assert.True(data.TryGetCustomFormat<string>("reactor.test/payload", out var got));
+        Assert.Equal("value", got);
+        Assert.Equal(1, invocations);
+    }
+
+    [Fact]
+    public async Task WithCustomFormat_LazyAsync_DefersResolutionAndYieldsViaGetAsync()
+    {
+        int invocations = 0;
+        var data = new DragData().WithCustomFormat(
+            "reactor.test/payload",
+            async ct => { invocations++; await Task.Yield(); return (object)42; });
+        Assert.Equal(0, invocations);
+        // TryGetCustomFormat is sync — async-only provider should return false.
+        Assert.False(data.TryGetCustomFormat<int>("reactor.test/payload", out _));
+        // GetCustomFormatAsync resolves the provider.
+        var got = await data.GetCustomFormatAsync<int>("reactor.test/payload");
+        Assert.Equal(42, got);
+        Assert.Equal(1, invocations);
+    }
+
+    [Fact]
+    public async Task GetCustomFormatAsync_MissingFormat_ReturnsDefault()
+    {
+        // Bug this catches: GetCustomFormatAsync throwing for an absent
+        // format instead of returning default(T) — the contract per spec
+        // is "absent → default, never throw" so callers can branch on
+        // null/0/etc. without try/catch.
+        var data = new DragData();
+        var got = await data.GetCustomFormatAsync<string>("absent");
+        Assert.Null(got);
+    }
+
+    [Fact]
+    public async Task GetCustomFormatAsync_WrongType_ReturnsDefault()
+    {
+        // Bug this catches: a wrong-type cast inside GetCustomFormatAsync
+        // bubbling up an InvalidCastException — the spec says wrong type
+        // is equivalent to absent.
+        var data = new DragData().WithCustomFormat("k", 42);
+        var got = await data.GetCustomFormatAsync<string>("k");
+        Assert.Null(got);
+    }
+
+    [Fact]
+    public void TryGetCustomFormat_MissingFormat_ReturnsFalse()
+    {
+        var data = new DragData();
+        Assert.False(data.TryGetCustomFormat<string>("absent", out var v));
+        Assert.Null(v);
+    }
+
+    [Fact]
+    public void TryGetCustomFormat_WrongType_ReturnsFalse()
+    {
+        // Bug this catches: a wrong-type cast throwing — same contract as
+        // GetCustomFormatAsync. Mismatch is silent-false, not exception.
+        var data = new DragData().WithCustomFormat("k", 42);
+        Assert.False(data.TryGetCustomFormat<string>("k", out var v));
+        Assert.Null(v);
+    }
+
+    [Fact]
+    public void AvailableFormats_IncludesAllStandardFormats()
+    {
+        // Bug this catches: WithX populating the wrong format key (e.g.
+        // Text → StorageItems) — the agent-visible FormatEntries list
+        // would advertise a format the consumer can't pull.
+        var data = new DragData()
+            .WithText("t")
+            .WithUri(new Uri("https://x/"))
+            .WithHtml("<p>x</p>")
+            .WithRtf("{\\rtf1}");
+        Assert.Contains(StandardDataFormats.Text, data.AvailableFormats);
+        Assert.Contains(StandardDataFormats.WebLink, data.AvailableFormats);
+        Assert.Contains(StandardDataFormats.Html, data.AvailableFormats);
+        Assert.Contains(StandardDataFormats.Rtf, data.AvailableFormats);
+        Assert.Contains(DragData.ProcIdFormatId, data.AvailableFormats);
+    }
+
+    [Fact]
+    public void HasFormat_CustomFormat_ReturnsTrue()
+    {
+        var data = new DragData().WithCustomFormat("reactor.test/x", 1);
+        Assert.True(data.HasFormat("reactor.test/x"));
+        Assert.False(data.HasFormat("reactor.test/y"));
+    }
+
+    [Fact]
+    public void HasFormat_ProcIdMarker_AlwaysTrue()
+    {
+        // ProcId marker is virtual — always advertised even on an empty
+        // DragData. This is how cross-process drops detect "same proc".
+        var data = new DragData();
+        Assert.True(data.HasFormat(DragData.ProcIdFormatId));
+    }
+
+    [Fact]
+    public void FormatEntries_ExposesInternalDictionary()
+    {
+        // Internal getter — used by PopulatePackage when projecting to a
+        // DataPackage. Bug this catches: a regression that exposed the
+        // dictionary by *copy* instead of *reference* would leak two
+        // sources of truth and same-process drops would see stale data.
+        var data = new DragData().WithText("hello").WithCustomFormat("k", 1);
+        var entries = data.FormatEntries;
+        Assert.Equal(2, entries.Count);
+        Assert.True(entries.ContainsKey(StandardDataFormats.Text));
+        Assert.True(entries.ContainsKey("k"));
+    }
+
+    [Fact]
+    public void WithText_OverwritesPriorEntry()
+    {
+        // Bug this catches: WithText called twice appends two entries
+        // instead of overwriting — agents would see stale text in the
+        // FormatEntries dictionary even after the source updated it.
+        var data = new DragData().WithText("first").WithText("second");
+        Assert.True(data.TryGetText(out var got));
+        Assert.Equal("second", got);
+        // Only one Text entry — overwrite, not append.
+        Assert.Single(data.FormatEntries, kvp => kvp.Key == StandardDataFormats.Text);
+    }
+
+    [Fact]
+    public async Task SwitchingProviderShape_LastWriteWins()
+    {
+        // Bug this catches: WithUri(sync provider) followed by WithUri(eager)
+        // leaving both a SyncProvider AND an EagerValue on the FormatEntry —
+        // ResolveSync would return the eager value but ResolveAsync would
+        // return the sync provider's result if they diverged. Contract is
+        // "last write wins, single source of truth per FormatEntry."
+        var data = new DragData()
+            .WithUri(() => new Uri("https://stale/"))
+            .WithUri(new Uri("https://fresh/"));
+        Assert.True(data.TryGetUri(out var sync));
+        Assert.Equal(new Uri("https://fresh/"), sync);
+        var async = await data.GetUriAsync();
+        Assert.Equal(new Uri("https://fresh/"), async);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Internal in-memory transfer registry (Register / Resolve / Unregister)
+    //  Same-process DnD relies on the registry to round-trip the DragData
+    //  via a GUID written into DataPackage.Properties. A leak here is a
+    //  per-drag memory leak; a miss is a same-process drop that silently
+    //  drops the typed payload.
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void TransferRegistry_RegisterResolveUnregister_FullCycle()
+    {
+        var data = new DragData().WithText("x");
+        var id = DragData.Register(data);
+        Assert.Same(data, DragData.Resolve(id));
+        DragData.Unregister(id);
+        Assert.Null(DragData.Resolve(id));
+    }
+
+    [Fact]
+    public void TransferRegistry_Resolve_UnknownGuid_ReturnsNull()
+    {
+        // Bug this catches: Resolve(unknown) throwing KeyNotFoundException
+        // instead of returning null — the cross-process detection path
+        // expects "absent → null" to fall back to the DataPackage formats.
+        Assert.Null(DragData.Resolve(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public void TransferRegistry_Unregister_UnknownGuid_IsIdempotent()
+    {
+        // Bug this catches: Unregister throwing on an unknown id —
+        // DropCompleted can fire twice (cancel + completed race) and the
+        // second call must not throw.
+        DragData.Unregister(Guid.NewGuid());
+        DragData.Unregister(Guid.NewGuid());
+    }
+}
+
+/// <summary>
+/// Tests for <see cref="DragData.FormatEntry"/> directly. The entry's resolve
+/// state machine (eager > async > sync precedence in ResolveAsync; eager > sync
+/// precedence in ResolveSync; async-only returns null in ResolveSync) is the
+/// foundation of every WithX/GetX path; pinning it here means future regressions
+/// surface here, not in flaky drop-target tests.
+/// </summary>
+public class DragDataFormatEntryTests
+{
+    [Fact]
+    public void HasEager_TrueWhenOnlyEagerSet()
+    {
+        var e = new DragData.FormatEntry { EagerValue = "x" };
+        Assert.True(e.HasEager);
+    }
+
+    [Fact]
+    public void HasEager_FalseWhenSyncProviderPresent()
+    {
+        // Bug this catches: HasEager incorrectly returning true when a sync
+        // provider is set, causing the PopulatePackage path to emit the
+        // null EagerValue to the DataPackage instead of the provider's
+        // resolved value.
+        var e = new DragData.FormatEntry { SyncProvider = () => "x" };
+        Assert.False(e.HasEager);
+    }
+
+    [Fact]
+    public void HasEager_FalseWhenAsyncProviderPresent()
+    {
+        var e = new DragData.FormatEntry { AsyncProvider = _ => Task.FromResult<object?>("x") };
+        Assert.False(e.HasEager);
+    }
+
+    [Fact]
+    public void HasEager_FalseWhenEagerValueNull()
+    {
+        // Bug this catches: HasEager treating an explicit-null eager as
+        // "present", causing the package to emit null where the source
+        // didn't intend any payload.
+        var e = new DragData.FormatEntry { EagerValue = null };
+        Assert.False(e.HasEager);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_PrefersEagerOverProviders()
+    {
+        var e = new DragData.FormatEntry
+        {
+            EagerValue = "eager",
+            SyncProvider = () => "sync",
+            AsyncProvider = _ => Task.FromResult<object?>("async"),
+        };
+        Assert.Equal("eager", await e.ResolveAsync(default));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_AsyncProviderTakesPrecedenceOverSync()
+    {
+        // Bug this catches: precedence regression where ResolveAsync picks
+        // the sync provider when both are set. Per the source order, async
+        // wins — important because async providers carry the cancellation
+        // token and the sync provider does not.
+        var e = new DragData.FormatEntry
+        {
+            SyncProvider = () => "sync",
+            AsyncProvider = _ => Task.FromResult<object?>("async"),
+        };
+        Assert.Equal("async", await e.ResolveAsync(default));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_NoValueAndNoProviders_ReturnsNull()
+    {
+        var e = new DragData.FormatEntry();
+        Assert.Null(await e.ResolveAsync(default));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_PropagatesCancellationToken()
+    {
+        // Bug this catches: regression that drops the CancellationToken
+        // before handing it to the async provider — long-running provider
+        // can't be aborted on drag-leave.
+        using var cts = new global::System.Threading.CancellationTokenSource();
+        global::System.Threading.CancellationToken seen = default;
+        var e = new DragData.FormatEntry
+        {
+            AsyncProvider = ct => { seen = ct; return Task.FromResult<object?>(null); },
+        };
+        await e.ResolveAsync(cts.Token);
+        Assert.Equal(cts.Token, seen);
+    }
+
+    [Fact]
+    public void ResolveSync_PrefersEagerOverSync()
+    {
+        var e = new DragData.FormatEntry { EagerValue = "eager", SyncProvider = () => "sync" };
+        Assert.Equal("eager", e.ResolveSync());
+    }
+
+    [Fact]
+    public void ResolveSync_AsyncOnly_ReturnsNullWithoutBlocking()
+    {
+        // The critical UI-thread invariant: ResolveSync must NOT block on
+        // an async-only entry. Bug this catches: a regression that called
+        // `.GetAwaiter().GetResult()` here would freeze the dispatcher on
+        // every drop with a lazy-async format.
+        bool invoked = false;
+        var e = new DragData.FormatEntry
+        {
+            AsyncProvider = _ => { invoked = true; return Task.FromResult<object?>("x"); },
+        };
+        Assert.Null(e.ResolveSync());
+        Assert.False(invoked); // not even invoked — fall through, caller goes async.
+    }
+
+    [Fact]
+    public void ResolveSync_SyncProvider_InvokesAndReturns()
+    {
+        int n = 0;
+        var e = new DragData.FormatEntry { SyncProvider = () => { n++; return "v"; } };
+        Assert.Equal("v", e.ResolveSync());
+        Assert.Equal(1, n);
+    }
+
+    [Fact]
+    public void ResolveSync_NoValueAndNoProviders_ReturnsNull()
+    {
+        Assert.Null(new DragData.FormatEntry().ResolveSync());
+    }
 }
