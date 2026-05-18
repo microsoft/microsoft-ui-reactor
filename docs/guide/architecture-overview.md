@@ -119,14 +119,80 @@ sees one shape per concept.
 ```csharp
 public UIElement GetElement(ElementFactoryGetArgs args)
 {
-    var index = args.Data is int i ? i : 0;
+    // Resolve the realized data → (key, dataIndex). Three paths:
+    //   1. Spec 042: args.Data is ReactorRow — read both off the row.
+    //   2. Legacy: args.Data is int — index directly, synthetic key.
+    //   3. Fallback: unknown shape, treat as index 0.
+    string key;
+    int index;
+    switch (args.Data)
+    {
+        case ReactorRow row:
+            key = row.Key;
+            index = row.Index;
+            break;
+        case int i:
+            index = i;
+            key = i.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
+            break;
+        default:
+            index = 0;
+            key = "0";
+            break;
+    }
+
     if (index < 0 || index >= _items.Count)
         return new TextBlock { Text = "" };
 
     var item = _items[index];
     var element = _viewBuilder(item, index);
-    _mountedElements[index] = element;
-    var control = _reconciler.Mount(element, _requestRerender);
+
+    UIElement? control;
+    if (_recyclePool.Count > 0)
+    {
+        // Reuse a previously-recycled container. The framework still has
+        // it parented to the ItemsRepeater, so the ViewManager.cpp:866
+        // Append-skip kicks in and the visual tree stays stable.
+        var reused = _recyclePool.Pop();
+        if (_lastElementByControl.TryGetValue(reused, out var oldElement))
+        {
+            var replacement = _reconciler.Reconcile(oldElement, element, reused, _requestRerender);
+            if (replacement is not null && !ReferenceEquals(replacement, reused))
+            {
+                // Heterogeneous-row case: Reconcile decided the root
+                // element type changed and built a fresh control.
+                // `reused` is now unmounted but still parented to the
+                // ItemsRepeater — detach so it doesn't sit there as
+                // an orphan (the original leak shape we're fixing).
+                // (PR #324 review)
+                DetachFromParent(reused);
+                _lastElementByControl.Remove(reused);
+                control = replacement;
+            }
+            else
+            {
+                control = reused;
+            }
+        }
+        else
+        {
+            // Defensive: pool entry without a tracked oldElement should
+            // not happen — fall back to re-mounting on top of it.
+            control = _reconciler.Mount(element, _requestRerender);
+        }
+    }
+    else
+    {
+        control = _reconciler.Mount(element, _requestRerender);
+    }
+
+    _mountedElements[key] = element;
+    if (control is not null)
+    {
+        _keyByControl[control] = key;
+        _lastElementByControl[control] = element;
+    }
+
     return control ?? new TextBlock { Text = "" };
 }
 ```

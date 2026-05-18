@@ -188,7 +188,7 @@ internal sealed class ReferenceGenerator
         {
             var outPath = Path.Combine(outputRoot, "reference", page.Route.Category, Path.GetFileName(page.Route.AbsolutePath));
             Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
-            File.WriteAllText(outPath, page.Body);
+            File.WriteAllText(outPath, CompileCommand.NormalizeLineEndings(page.Body));
             written.Add(outPath);
         }
         return written;

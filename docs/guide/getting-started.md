@@ -129,6 +129,13 @@ defaults to a slightly richer starter; the simpler form is easier to walk
 through):
 
 ```csharp
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using static Microsoft.UI.Reactor.Factories;
+using Microsoft.UI.Xaml;
+
+ReactorApp.Run<GettingStartedApp>("Getting Started", width: 600, height: 400, devtools: true);
+
 class GettingStartedApp : Component
 {
     public override Element Render()
@@ -150,6 +157,9 @@ Run it with `dotnet run` and you'll see this:
 Here's what's happening:
 
 - **`ReactorApp.Run<T>`** launches a window and mounts your root component.
+- **`devtools: true`** enables the in-app dev menu and screenshot capture. In a
+  real app you'd normally guard this under `#if DEBUG` so release builds don't
+  ship the dev surface; we skip the conditional here for brevity.
 - **[`UseState`](hooks.md)** returns the current value and a setter. When you call the
   setter, Reactor re-renders the component with the new value.
 - **[`VStack`](layout.md)** stacks children vertically. The number `16` is the pixel spacing.
@@ -169,6 +179,9 @@ managing values that change over time.
 Here's a counter that tracks a single number:
 
 ```csharp
+// Launch with:
+//   ReactorApp.Run<CounterExample>("Counter", width: 600, height: 400);
+
 class CounterExample : Component
 {
     public override Element Render()
@@ -198,6 +211,9 @@ Components can call `UseState` multiple times — each call tracks an independen
 value:
 
 ```csharp
+// Launch with:
+//   ReactorApp.Run<MultipleStateExample>("Multiple State", width: 600, height: 400);
+
 class MultipleStateExample : Component
 {
     public override Element Render()
@@ -233,6 +249,9 @@ expressions work because `Render()` runs every time state changes.
 Reactor provides a small set of layout primitives that compose together:
 
 ```csharp
+// Launch with:
+//   ReactorApp.Run<LayoutBasicsExample>("Layout", width: 600, height: 400);
+
 class LayoutBasicsExample : Component
 {
     public override Element Render()
@@ -292,6 +311,13 @@ record TodoItem(string Text, bool Done);
 Now the full component:
 
 ```csharp
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using static Microsoft.UI.Reactor.Factories;
+using Microsoft.UI.Xaml;
+
+ReactorApp.Run<TodoApp>("Todo App", width: 550, height: 600, devtools: true);
+
 class TodoApp : Component
 {
     public override Element Render()
@@ -380,6 +406,13 @@ Key patterns to notice:
 Here's a more complex example that manages multiple pieces of related state:
 
 ```csharp
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using static Microsoft.UI.Reactor.Factories;
+using Microsoft.UI.Xaml;
+
+ReactorApp.Run<CalculatorApp>("Calculator", width: 380, height: 500, devtools: true);
+
 class CalculatorApp : Component
 {
     public override Element Render()

@@ -2,7 +2,7 @@
 Effects are commit-phase side effects with dependency tracking. After Reactor
 finishes [reconciling](reconciliation.md) the element tree and patching the
 WinUI controls for a render, it walks the effect queue for that render and
-runs every <!-- ref:UseEffect --> body whose dependency array has changed
+runs every [UseEffect](reference/hooks/UseEffect.md) body whose dependency array has changed
 since the previous commit. The body runs **after** the new UI has been
 committed — never during render — so an effect is the safe place to start a
 timer, open a subscription, or kick off a `Task.Run` that will eventually

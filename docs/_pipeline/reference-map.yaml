@@ -13,6 +13,9 @@
 # fall through with no category/guide-pages.
 
 defaults:
+  - match: "Microsoft.UI.Reactor.Core.RenderContext.Use*"
+    category: hooks
+    guide-pages: [hooks, effects]
   - match: "Microsoft.UI.Reactor.Hooks.*"
     category: hooks
     guide-pages: [hooks, effects]

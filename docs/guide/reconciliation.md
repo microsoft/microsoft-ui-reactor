@@ -240,10 +240,17 @@ internal static void Reconcile(
 
     bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
 
+    // Spec 042 §6 — read the active Animations.Animate ambient once
+    // per reconcile so insert / move / unmount paths can apply the
+    // same kind without re-reading AsyncLocal for every child. Stays
+    // null in the overwhelmingly common no-ambient case.
+    var ambient = AnimationAmbient.Current;
+    AnimationKind? ambientKind = ambient is { HasEffect: true } ? ambient.Kind : null;
+
     if (hasKeys)
-        ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender);
+        ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind);
     else
-        ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender);
+        ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind);
 }
 ```
 
@@ -415,10 +422,17 @@ internal static void Reconcile(
 
     bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
 
+    // Spec 042 §6 — read the active Animations.Animate ambient once
+    // per reconcile so insert / move / unmount paths can apply the
+    // same kind without re-reading AsyncLocal for every child. Stays
+    // null in the overwhelmingly common no-ambient case.
+    var ambient = AnimationAmbient.Current;
+    AnimationKind? ambientKind = ambient is { HasEffect: true } ? ambient.Kind : null;
+
     if (hasKeys)
-        ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender);
+        ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind);
     else
-        ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender);
+        ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind);
 }
 ```
 

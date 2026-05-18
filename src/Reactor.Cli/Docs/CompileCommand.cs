@@ -405,7 +405,7 @@ internal static partial class CompileCommand
 
             var outputPath = Path.Combine(outputDir, $"{topicId}.md");
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-            File.WriteAllText(outputPath, assembled);
+            File.WriteAllText(outputPath, NormalizeLineEndings(assembled));
             Console.WriteLine($" ✓ → {Path.GetRelativePath(repoRoot, outputPath)}");
         }
 
@@ -708,6 +708,22 @@ internal static partial class CompileCommand
             foreach (var tfm in Directory.GetDirectories(archConfigRoot))
                 yield return Path.Combine(tfm, "Reactor.xml");
         }
+    }
+
+    // Normalize emitted Markdown to the host's native line endings. The
+    // assembler concatenates template + snippet text with `\n` regardless of
+    // platform; writing those bytes directly leaves a CRLF-checkout (Windows
+    // default) with a flapping working tree where every generated file shows
+    // as modified after a compile. Match git's expected working-tree shape
+    // by writing `Environment.NewLine`.
+    internal static string NormalizeLineEndings(string text)
+    {
+        // Collapse CRLF and bare CR down to LF, then re-expand to the host
+        // newline. Without the bare-CR pass, a stray `\r` in a snippet or
+        // template would survive into the output and produce mixed line
+        // endings — which still trips git's autocrlf detection.
+        var lf = text.Replace("\r\n", "\n").Replace('\r', '\n');
+        return Environment.NewLine == "\n" ? lf : lf.Replace("\n", Environment.NewLine);
     }
 
     // ── Reference extraction (for validation) ─────────────────────────────

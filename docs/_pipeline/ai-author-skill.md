@@ -336,15 +336,11 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<MyApp>("Title", width: 600, height: 400
-#if DEBUG
-    , preview: true
-#endif
-);
+ReactorApp.Run<MyApp>("Title", width: 600, height: 400, devtools: true);
 ```
 
-- Always include `preview: true` under `#if DEBUG` — this enables the
-  screenshot capture system.
+- Always include `devtools: true` — this enables the screenshot capture system.
+  (The older `preview:` parameter is deprecated; the compiler will warn.)
 - Each component class in the file can be wrapped in snippet markers.
 - The app should display a reasonable default state on launch (the screenshots
   are captured after `startup-delay` ms with no interaction).

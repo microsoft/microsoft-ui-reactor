@@ -1,15 +1,11 @@
+// <snippet:hello-world>
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<GettingStartedApp>("Getting Started", width: 600, height: 400
-#if DEBUG
-    , preview: true
-#endif
-);
+ReactorApp.Run<GettingStartedApp>("Getting Started", width: 600, height: 400, devtools: true);
 
-// <snippet:hello-world>
 class GettingStartedApp : Component
 {
     public override Element Render()
@@ -24,7 +20,15 @@ class GettingStartedApp : Component
 }
 // </snippet:hello-world>
 
+// The classes below are alternate roots for the rest of this page. Only one
+// ReactorApp.Run<T>() call can run as a top-level statement, so the launch
+// lines for these classes are shown as comments — drop one into a fresh
+// App.cs to try it.
+
 // <snippet:usestate-counter>
+// Launch with:
+//   ReactorApp.Run<CounterExample>("Counter", width: 600, height: 400);
+
 class CounterExample : Component
 {
     public override Element Render()
@@ -44,6 +48,9 @@ class CounterExample : Component
 // </snippet:usestate-counter>
 
 // <snippet:layout-basics>
+// Launch with:
+//   ReactorApp.Run<LayoutBasicsExample>("Layout", width: 600, height: 400);
+
 class LayoutBasicsExample : Component
 {
     public override Element Render()
@@ -77,6 +84,9 @@ class LayoutBasicsExample : Component
 // </snippet:layout-basics>
 
 // <snippet:multiple-state>
+// Launch with:
+//   ReactorApp.Run<MultipleStateExample>("Multiple State", width: 600, height: 400);
+
 class MultipleStateExample : Component
 {
     public override Element Render()

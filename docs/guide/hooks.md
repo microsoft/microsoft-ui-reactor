@@ -2,7 +2,7 @@
 Hooks are the reactivity contract for a [component](components.md). A hook is a
 positional slot — when `Render()` runs, Reactor walks each `Use*` call in order
 and looks up the matching cell in a per-component slot table held on the
-[`RenderContext`](hooks-internals.md). The first <!-- ref:UseState --> call is
+[`RenderContext`](hooks-internals.md). The first [UseState](reference/hooks/UseState.md) call is
 slot 0, the second is slot 1, and so on; the setter the hook returns closes
 over its slot index and writes back to that cell when you call it. Hooks
 replace what classic XAML / WPF apps build with `DependencyProperty`,
@@ -25,16 +25,16 @@ lifecycle methods.
 
 | Hook | Returns | Purpose |
 |------|---------|---------|
-| <!-- ref:UseState --> | `(T value, Action<T> set)` | Reactive state — re-renders on `set`. |
-| <!-- ref:UseReducer --> | `(T value, Action<Func<T,T>> update)` *or* `(TState, Action<TAction>)` | Functional or Redux-style updates. |
-| <!-- ref:UseEffect --> | `void` | Side effects after commit. With `Func<Action>` overload, runs the cleanup before the next effect and on unmount. |
-| <!-- ref:UseMemo --> | `T` | Cached computation; re-runs when any `deps` entry compares unequal. |
-| <!-- ref:UseRef --> | `Ref<T>` with mutable `.Current` | Persists across renders **without** re-rendering on change. |
-| <!-- ref:UseCallback --> | `Action` | Stable delegate identity across renders. |
-| <!-- ref:UseContext --> | `T` | Read the ambient [Context](context.md) value. |
-| <!-- ref:UseObservable --> | `T` | Re-render when a tracked `INotifyPropertyChanged` source raises a change. |
+| [UseState](reference/hooks/UseState.md) | `(T value, Action<T> set)` | Reactive state — re-renders on `set`. |
+| [UseReducer](reference/hooks/UseReducer.md) | `(T value, Action<Func<T,T>> update)` *or* `(TState, Action<TAction>)` | Functional or Redux-style updates. |
+| [UseEffect](reference/hooks/UseEffect.md) | `void` | Side effects after commit. With `Func<Action>` overload, runs the cleanup before the next effect and on unmount. |
+| [UseMemo](reference/hooks/UseMemo.md) | `T` | Cached computation; re-runs when any `deps` entry compares unequal. |
+| [UseRef](reference/hooks/UseRef.md) | `Ref<T>` with mutable `.Current` | Persists across renders **without** re-rendering on change. |
+| [UseCallback](reference/hooks/UseCallback.md) | `Action` | Stable delegate identity across renders. |
+| [UseContext](reference/hooks/UseContext.md) | `T` | Read the ambient [Context](context.md) value. |
+| [UseObservable](reference/hooks/UseObservable.md) | `T` | Re-render when a tracked `INotifyPropertyChanged` source raises a change. |
 | [UseResource](reference/hooks/UseResource.md) | `AsyncValue<T>` | Cached async read (see [Async Resources](async-resources.md)). |
-| <!-- ref:UsePersisted --> | `(T, Action<T>)` | `UseState` that survives app launches (see [Persistence](persistence.md)). |
+| [UsePersisted](reference/hooks/UsePersisted.md) | `(T, Action<T>)` | `UseState` that survives app launches (see [Persistence](persistence.md)). |
 
 Every hook on this page is summarized again in the auto-generated
 [hooks reference](reference/hooks/index.md); the rest of the page is the
