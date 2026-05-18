@@ -294,6 +294,35 @@ at 749 + 1,085 lines. A focused audit produced these findings:
 | `AttachedExtensionsCoverageTests.cs` (106 lines) | _Not yet audited._ |
 | Other `*CoverageTests.cs` | _Not yet audited._ |
 
+### 2026-05-17 audit — `Controls/TypedEditorsTests.cs`
+
+The 217-line file (17 tests) attached to the spec-030 typed-editor work. Found
+**heavy vanity** — most tests assert `Assert.NotNull(factory)` against a
+delegate-returning method that, by C# language semantics, cannot return null.
+Specific findings:
+
+| Test | Verdict | Action |
+|---|---|---|
+| `Bool_Standard_Editor_Is_Distinct_From_Compact` | **Real** — asserts `Assert.NotSame(standard, compact)`. A regression collapsing them into one delegate would fail. | Keep. |
+| `Registry_Resolves_Editor_For_Primitive` (Theory × 7) | **Vanity** — `Assert.NotNull(r.ResolveEditor(...))` cannot fail because the resolver returns a Func. | Strengthen: invoke the resolved factory with a typed value and assert the returned Element's shape (see `EditorsBehaviorTests` for the pattern). Until then, supersedes are in place. |
+| `Registry_Falls_Back_To_Builtin_CellRenderer` (Theory × 7) | **Vanity** — same shape. | Same action. |
+| `Explicit_CellRenderer_Registration_Wins_Over_Fallback` | **Real** — `Assert.Same(custom, resolved)`. | Keep. |
+| `DataType_Url_On_String_Sets_Hyperlink_Renderer` | **Mixed** — asserts NotNull on Editor + CellRenderer. The real assertion would be: invoke the resolved CellRenderer with a Uri and confirm it renders a Hyperlink element. | Tighten. |
+| `Range_On_Numeric_Sets_Editor` | **Vanity** — Editor is non-null trivially. The real assertion is that the Range attribute wired Minimum/Maximum on the NumberBox. | Tighten. |
+| `Plain_String_Has_No_Attribute_Editor` | **Real** — asserts both Editor and CellRenderer are null. | Keep. |
+| `Number_Editor_For_Int_Returns_Factory` | **Vanity** — the comment in the test acknowledges this ("we can't exercise the onChange path end-to-end here"). This is now wrong — `EditorsBehaviorTests.Number_Int_OnValueChanged_Returns_Int_Not_Double` exercises that path against the record callbacks. | **Delete** (superseded). Doing in a follow-up to keep the current commit focused on additions. |
+| `Number_Editor_Decimal_Min_Max_Accept_Decimal_Literals` | **Vanity** — proves the signature compiles, not that the literals reach the NumberBox. | Tighten or delete (superseded by `Number_Min_Max_Set_When_Provided`). |
+| Typed column factories (`NumberColumn_...`, `ToggleSwitchColumn_...`, `ColorColumn_...`, `ComboBoxColumn_...`, `DateColumn_...`, `HyperlinkColumn_...`) | **Vanity** — every test only asserts `Editor` and `CellRenderer` are non-null. Should instead invoke the wired editor and assert the inner Element shape (e.g. NumberColumn's Editor returns a NumberBox with the configured min/max; ToggleSwitchColumn returns a ToggleSwitch not a CheckBox). | Tighten — the new harness in `EditorsBehaviorTests` shows how. |
+
+**Did not delete the existing vanity tests in this commit.** Doing so would
+drop coverage of the type-registration code paths without a replacement
+(the existing tests at least exercise `ResolveEditor` / `GetCellRenderer`,
+which the new `EditorsBehaviorTests` does not — the new file tests the
+factory catalog directly). Next-session candidate: rewrite
+`TypedEditorsTests.cs` to invoke the resolved factory and assert shape,
+which would both raise the bar AND cover the type-registration paths
+end-to-end.
+
 **Audit philosophy:** an assertion is "real" if you can imagine a product bug
 the assertion would catch. `Assert.Single(el.Setters)` after `.Set(x => x.Foo = 1)`
 catches nothing — Setters has count 1 after `Set` is called, by definition.
@@ -635,3 +664,127 @@ Added `tools/coverage/rank-branch-gap.ps1` — surfaces files where
 branch% trails line% by the widest margin (the heuristic from the
 prior iteration), with `-Top` and `-MinMissed` knobs. Use it after
 `run-coverage.ps1` to pick the next branch-shaped target.
+
+### 2026-05-17 — Editors catalog (machine B, fourth pass)
+
+- Baseline at start: **79.82% line / 67.85% branch** (re-confirmed by
+  running `run-coverage.ps1`; the latest commit was the one we wanted
+  to measure against).
+- Area picked: **`Controls/Editors/Editors.cs`** (29.7% line / 24.4%
+  branch / 294 missed). Picked over the bigger absolute targets
+  (Reconciler.Update at 1696, ReactorApp at 1251) because:
+  - The file is **a catalog of pure-C# editor factories** returning
+    `Func<object, Action<object>, Element>`, and Reactor elements are
+    record types — no WinUI activation required to inspect the
+    returned shape.
+  - The existing `TypedEditorsTests.cs` exercises type-registration
+    plumbing but **does not call the factories** — its assertions are
+    all `Assert.NotNull(factory)`, which can't fail by C# semantics.
+    The Number/Decimal/Float/Long/Short/Byte type-coercion paths (the
+    biggest source of "InvalidCastException in production when
+    NumberBox hands a double to an int setter" bugs) had **zero real
+    coverage**.
+  - The `ToDouble` switch (13 arms) and `FromDouble` if-chain (12
+    arms) together carry ~30 uncovered branches. The doc's previous
+    branch-shaped-target heuristic flagged this directly.
+- Audited the existing tests (`TypedEditorsTests.cs`, 17 tests,
+  217 lines). Wrote a Vanity-test audit findings entry above; bottom
+  line is most TypedEditorsTests assertions are vanity but the
+  type-registration paths they exercise are not duplicated by my new
+  file, so I did **not** delete them this iteration. Follow-up
+  candidate.
+- Added **66 new tests** in
+  `tests/Reactor.Tests/Controls/EditorsBehaviorTests.cs`:
+  - **Numeric round-trip (15)** — every `ToDouble` switch arm
+    (int/long/decimal/float/short/byte/uint/double/null/string-via-
+    fallback) plus the FromDouble inverse for the most common
+    target types. Each `OnValueChanged_Returns_<T>` test asserts
+    `Assert.IsType<T>(captured)` — a regression that dropped the
+    target-type switch would fail loudly on the type assertion, not
+    silently on the value.
+  - **Text / CheckBox / Toggle (8)** — null-default coercion, value
+    pass-through, MaxLength branch counting (the `maxLength is { } max`
+    ternary's true/false arms), placeholder propagation, on-content
+    forwarding.
+  - **Date variants (8)** — DateTime/DateTimeOffset/DateOnly initial-
+    value handling, plus the `DateTimeKind.Unspecified → Local`
+    branch (the bug shape: passing a JSON-deserialized DateTime
+    shifts hours by UTC offset). Pin: `Date_OnChange_Returns_DateTime`
+    (not DTO) — catches the InvalidCastException that would hit any
+    model property typed as `DateTime`.
+  - **Time variants (8)** — TimeSpan/TimeOnly coercion in both
+    directions, including the subtle "factory captures original
+    value type, emits back same type" contract for `TimeOfDay()`.
+    Pin: `TimeOfDay_OnChange_Returns_TimeOnly_When_Source_Was_TimeOnly`
+    catches a regression that dropped the `value is TimeOnly` check.
+  - **Uri (6)** — `TryCreate` gating (partial-input no-op),
+    RelativeOrAbsolute accepts paths, Uri-object stringification,
+    null default. Pin: `Uri_OnChange_Truly_Invalid_String_Does_Not_Commit`
+    — uses an embedded control char to force TryCreate failure.
+  - **Combo / EnumCombo (8)** — index lookup with hit, miss-defaults-
+    to-zero (cardinal UI bug: stale data picking "no selection"
+    would silently lose the field), strongly-typed onChange, name
+    projection of null choices, enum parse-back.
+  - **Color (2)** — null-default-Transparent, value pass-through and
+    Color round-trip through OnColorChanged.
+- **Initially included 9 ColorCompact tests** but they all failed with
+  COMException on `SolidColorBrush` construction inside `.Background(hex)`.
+  The swatch's brush eagerly builds a WinUI brush — host-bound. **Lesson
+  for next session:** even "pure C# returning Element records" can hide
+  WinUI activation if a factory chains `.Background(...)` on a Border —
+  `BrushHelper.Parse` calls `new SolidColorBrush(color)`, which requires
+  a packaged WinUI runtime. Removed the ColorCompact block and left a
+  comment in the test file flagging the deferral (`TryParseHexColor`'s
+  3 length-based arms + exception path are not unit-reachable; a
+  selftest fixture that mounts a ColorCompact cell in a DataGrid is the
+  right path).
+- **Did NOT delete vanity tests this iteration.** The existing
+  `TypedEditorsTests` exercise `ResolveEditor` / `GetCellRenderer` /
+  `ReflectionTypeMetadataProvider` which the new file does not cover.
+  Deleting them now would drop ~5-10 lines of registry-path coverage.
+  Next iteration: rewrite each NotNull-only test to invoke the resolved
+  factory and assert shape — would both raise the bar AND keep registry
+  coverage.
+- **Test results:** 66/66 EditorsBehaviorTests pass; 7,866 / 7,912 full
+  unit suite pass (no regressions; 46 unchanged YogaGenerated skips).
+- **Per-file delta** (`Controls/Editors/Editors.cs`): merged
+  29.7% → 67.6% line; the remaining ~32% are the ColorCompact /
+  WithBorder paths that build SolidColorBrush eagerly.
+- **Merged delta** (full unit + selftest):
+  **79.82% → 80.04% line (+0.22)** and
+  **67.85% → 68.24% branch (+0.39).** Branch swing ≈ 2× line — again
+  validating the branch-gap heuristic from the OwnPropsEqual /
+  DragData iterations. A 71-line slice of a 317-line file moves
+  branch% by 0.4 *points* of a 48k-branch denominator because every
+  test was deliberately picked to hit a different switch arm.
+- **Surprises / non-obvious findings:**
+  - `Editors.ColorCompact()` is **not** unit-testable in headless
+    xUnit, despite returning an Element. The reason is buried two
+    extension methods deep: `Border(...).Background("#80000000", 1)`
+    calls `BrushHelper.Parse` which `new SolidColorBrush(color)`s
+    eagerly. Recommendation: split `BrushHelper.Parse` into a "store
+    the hex string, materialize the brush at mount time" two-phase
+    pattern, OR mark `ColorCompact`'s 18-line factory with
+    `[ExcludeFromCodeCoverage]` and write a selftest fixture for it.
+    Deferral candidate — **add to honest-deferrals list**.
+  - The `TypedEditorsTests` file was checked in **with a comment
+    saying "we can't exercise the onChange path end-to-end here"**.
+    That comment is now wrong — the OnXxx callbacks on the record
+    types are publicly invokable from the test assembly. The vanity
+    tests there were defensible at the time of writing but no longer
+    are; a future cleanup should rewrite them.
+  - `factory(null!, _ => {})` is the cleanest way to test null-input
+    paths from C# (`object?` can't be inferred from `null` literal
+    alone). Using the null-forgiving operator on a parameter typed
+    `object` makes the call site readable and survives nullable-
+    reference-type tightening.
+- **Pacing observation:** +0.22% line from 66 tests on a 317-line file
+  is the unit-test-only ceiling for a single mid-tier source file.
+  The math: a file with N missed lines, when bumped from ~30% to ~70%
+  line coverage, adds 0.4*N covered lines. On a 101k-line denominator
+  that's 0.0004*N points. So Editors.cs's 294 missed × 0.4 = ~118 newly-
+  covered lines = +0.12% expected; we got +0.22% (the rest came from
+  shared lines in Element record constructors and Dsl factory calls).
+  To close 5 points purely in unit tests, the next agent should batch
+  3-5 small files per iteration rather than one — the build+coverage
+  loop is 5-10 min regardless of how many test files changed.
