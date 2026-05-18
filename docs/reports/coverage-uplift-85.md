@@ -1282,3 +1282,64 @@ prior iteration), with `-Top` and `-MinMissed` knobs. Use it after
   next-session triage. The remaining unit-test runway in mid-tier
   pure-C# code is probably ≤ 1 percentage point, gained across
   ~10 more iterations at the current pace.
+
+### 2026-05-17 — LayoutEtwConsumer initial-state + helpers (machine B, eleventh pass)
+
+- Baseline: **80.68% line / 68.85% branch**.
+- Area picked: **`Hosting/Etw/LayoutEtwConsumer.cs`** (26.9% / 490
+  missed). Existing 3 tests already cover Dispose-without-start +
+  double-Start + post-Dispose IsRunning. Strengthened the file's
+  catch-arm coverage and pinned the public-constant contracts
+  without standing up a real ETW session.
+- Added **10 new tests** to existing `LayoutEtwConsumerTests.cs`:
+  - **Initial state (1)** — counters zero, IsRunning/IsUnavailable
+    false, UnavailableReason null. Pin: a regression that init'd
+    counters via null-backed Interlocked.Read would NRE on first
+    diagnostic poll.
+  - **Public constants (2)** — `SessionNamePrefix` value pin
+    (orphan-cleanup matches against this), `XamlProviderGuid` pin
+    (a typo'd GUID would silently subscribe to the wrong ETW
+    provider with no session-level diagnostics).
+  - **Stop / Dispose lifecycle (2)** — Stop without Start is a
+    silent no-op (the early-out guard); Dispose idempotent (the
+    `_disposed` guard's second-call path).
+  - **IsProcessAlive private static (5, via reflection)** — pid ≤ 0
+    (Theory × 3) → false without calling GetProcessById; current
+    process → true; bogus high PID → false (the
+    ArgumentException catch arm — that's what lets orphan-session
+    cleanup actually clean up).
+- **Did NOT call Start() in the new tests** to avoid leaking
+  real ETW sessions across test runs. The existing 3 tests already
+  exercise the Start path; the new tests cover the parts that
+  don't depend on platform success/failure.
+- **Test results:** 13/13 LayoutEtwConsumer tests pass; 8,006/8,052
+  full unit suite (was 7,996 — clean +10).
+- **Coverage delta** (merged):
+  **80.68% → 80.70% line (+0.02)**, **68.85% → 68.83% branch (-0.02)**.
+  Smallest yield this session. Two reasons:
+  1. LayoutEtwConsumer is 551 lines with most of the body inside
+     `OnEtwEvent`, `ProcessLoop`, payload decoders, orphan cleanup —
+     all reachable only with a real ETW session active.
+  2. Branch% wiggled -0.02 from the selftest leg's natural noise
+     (a few rerolls of the ETW-bound branches that don't hit
+     deterministically across machines). The unit-only leg of this
+     commit added net-positive coverage; the merge dilution
+     averaged it down.
+- **Hand-off note:** the unit-test runway is now genuinely tapped.
+  This session ran 8 iterations from 79.82% → 80.70% (+0.88%).
+  The remaining gap to 85% (4.30 pts) needs:
+  - **Deferral approval** for `PreviewCaptureServer`'s remaining
+    HTTP machinery (~390 lines uncovered), `TrayFlyoutHostWindow`
+    (230), `ChartAutomationPeer` (308), and `JumpListComInterop`'s
+    COM body (~300). Together that's ~1,228 lines = ~1.2 pts.
+  - **Selftest fixtures** for `Reconciler.Mount`'s remaining 5
+    points worth (932 missed, mostly `UpdateXxx` element-specific
+    handlers) and one or two `Reconciler.Update` element clusters.
+    Each fixture adds 30-100 covered lines.
+  - **A second pass at the deferral candidates already documented**
+    (`PreviewCaptureServer.cs`, `JumpListComInterop.cs`,
+    `TaskbarOverlay.cs`, `TrayFlyoutHostWindow.cs`) — though some
+    are now partially covered, the rest may need
+    `[ExcludeFromCodeCoverage]` on the genuinely-host-bound
+    methods within those files (per-method exclusions, not
+    per-file).
