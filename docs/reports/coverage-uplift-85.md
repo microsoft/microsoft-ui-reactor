@@ -1112,3 +1112,88 @@ prior iteration), with `-Top` and `-MinMissed` knobs. Use it after
     `TrayFlyoutHostWindow` *might* be reachable for catch-arm
     coverage if their WinRT/COM calls throw deterministically. Worth
     a 30-min scout before reaching for `[ExcludeFromCodeCoverage]`.
+
+### 2026-05-17 — Shell-API previously-deferred files (machine B, ninth pass)
+
+- Baseline: **80.26% line / 68.50% branch**.
+- Carried the "WinRT projections still test their catch arms in
+  unpackaged xUnit" lesson from iteration 8 forward to the shell
+  cluster. Picked two of the previously-flagged deferral candidates
+  (`TaskbarOverlay` 0% / 98 missed; `JumpList` 46.5% / 200 missed).
+  `JumpListComInterop` (0% / 338 missed) deferred — the COM coclass
+  cast `(ICustomDestinationList)new DestinationList()` happens
+  *before* any try block and would need a real shell host. Updated
+  the worklist commentary accordingly.
+- Added **17 new tests** across two new files:
+  - **`TaskbarOverlayTests.cs` (9 tests):**
+    - Constructor + Icon getter/setter + nullable round-trip (3).
+    - `_isDisposed()` short-circuit in Apply — setters after dispose
+      are silent no-ops, NOT throws (2).
+    - `TaskbarComSingleton.TryGet() is null` second early return —
+      the live-but-uninitialised-COM path also no-ops cleanly (1).
+    - `LoadIconFor` private static helper, reached via reflection
+      (3): null icon → 0, IsResource icon → 0 (resource paths can't
+      become HICONs), missing file → 0 without throw (LoadImageW
+      returns 0 for non-existent files + catch arm swallows).
+  - **`JumpListUpdateValidationTests.cs` (8 tests):**
+    - `UpdateAsync(null)` → ArgumentNullException (1).
+    - Per-entry validation: null entry → ArgumentException; task /
+      custom item with empty title → ArgumentException; separator
+      with empty title → permitted (the kind-aware gate) (4).
+    - Unpackaged-without-AppUserModelId → InvalidOperationException;
+      `ClearAsync` inherits the same gate (2).
+    - Happy-ish path: valid items + AppUserModelId set → Task
+      completes without throwing even when the inner COM call
+      fails in xUnit (1). Pin: a regression that propagated the
+      COM exception would crash every startup-path JumpList update.
+- **Did not duplicate** the existing `JumpListStateTests` (in
+  `JumpListItemTests.cs`) which already covers the static state
+  round-trips for AppUserModelId / ShowRecent / ShowFrequent /
+  ResetForTests. Renamed the new class to
+  `JumpListUpdateValidationTests` to avoid the collision after
+  initial compile failure surfaced the duplication.
+- **Test results:** 17/17 in new classes pass; 7,964 / 8,010 full
+  unit suite (was 7,947 — clean +17, plus a couple of new
+  YogaGenerated entries from the test-build refresh).
+- **Coverage delta** (merged):
+  **80.26% → 80.55% line (+0.29)**, **68.50% → 68.70% branch (+0.20)**.
+  Strongest single-iteration jump since iteration 4 (Editors).
+  Reasons:
+  1. **TaskbarOverlay was at 0%** — every test net-new covered lines.
+  2. **JumpList.UpdateAsync** is a large async method; the
+     validation loop and `TryUpdatePackaged` / unpackaged-fallback
+     branches together carry ~30 previously-uncovered lines that
+     the test net-newly exercised.
+  3. **Reflection-driven `LoadIconFor` tests** hit a private static
+     helper that had zero callers in test code — every line was net
+     new.
+- **Surprises / non-obvious findings:**
+  - **`JumpList.UpdateAsync` doesn't throw even with no
+    AppUserModelId — until you actually need the unpackaged path.**
+    The synchronous AppUserModelId check fires only AFTER
+    `TryUpdatePackaged` returns false. In an actually-packaged app
+    the unset AppUserModelId is harmless (the package manifest
+    supplies one). In unpackaged xUnit, `PackageRuntime.IsPackaged`
+    returns false → TryUpdatePackaged returns false → AppUserModelId
+    gate fires. Pin: a regression that moved the AppUserModelId
+    check to the top would break packaged apps that legitimately
+    leave the static unset.
+  - **`ClearAsync` is `=> UpdateAsync(Array.Empty<JumpListItem>())`.**
+    It doesn't short-circuit on empty input — the same validation
+    + AppUserModelId gate applies. A "clear" call on an unconfigured
+    unpackaged app throws, even though it has nothing to clear.
+    Probably right: a Clear-without-config is a developer mistake,
+    not a benign no-op. Pinned.
+  - **Reflection access to `private static` helpers is fine for
+    coverage hooks**, but the resulting test is brittle to rename.
+    Used a clear failure message in `InvokeLoadIconFor` so a future
+    rename surfaces the broken reflection lookup loudly.
+- **Pacing observation:** revisiting "deferred" files for catch-arm
+  coverage with the lesson from iteration 8 paid off. **The cluster
+  remaining for that scan:** `PreviewCaptureServer` (665 missed) —
+  ctor takes DispatcherQueue + Window so most paths are gated, but
+  the GenerateToken static and the per-request validators *might*
+  be reachable; `TrayFlyoutHostWindow` (230 missed) — ctor builds
+  a Window directly so very little is reachable; `ChartAutomationPeer`
+  (308 missed) — needs a real AutomationPeer host. Of those,
+  `PreviewCaptureServer` is the best remaining catch-arm scout.
