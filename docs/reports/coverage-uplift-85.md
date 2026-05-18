@@ -1343,3 +1343,116 @@ prior iteration), with `-Top` and `-MinMissed` knobs. Use it after
     `[ExcludeFromCodeCoverage]` on the genuinely-host-bound
     methods within those files (per-method exclusions, not
     per-file).
+
+### 2026-05-18 — PropertyGrid EditChain + statics (machine A, twelfth pass)
+
+- Baseline at start: **80.70% line / 68.83% branch**.
+- Area picked: **`Controls/PropertyGrid/PropertyGridComponent.cs`**
+  (68.4% line / 57.6% branch / 178 missed) — the `EditChain` internal
+  class and the file's static helpers (`RenderReadOnlyValue`,
+  `IsPrimitiveOrEnum`). Picked because:
+  - The file's `Render()` and `BlankButton` are host-bound
+    (`SolidColorBrush`, `FlexColumn` mount-time, `WithFlyout`) — but
+    the bottom half of the file (≈110 lines of `EditChain` + 3
+    static helpers) is pure C# with substantial branch logic.
+  - `EditChain.CannotPropagate` has 5 distinct decision points
+    gating the read-only-fallback in `RenderEditor` — each one
+    represents a real product-bug shape (e.g. "mutable ancestor
+    in chain makes leaf editable even without leaf SetValue").
+  - **Auditing existing tests** (`PropertyGridDecompositionTests.cs`):
+    `EditChain` was already partly exercised by
+    `Fully_Immutable_Root_Fires_OnRootChanged` and
+    `EditChain_Propagates_Through_Multiple_Immutable_Levels`, but
+    `CannotPropagate`, `PropagateNewOwner`, `BuildPath`, and the
+    "mutable ancestor absorbs composed child" branch of
+    `PropagateImmutableEdit` (lines 379-384) had zero coverage.
+- **Picked up the untracked `PropertyGridDefaultsTests.cs` from a
+  prior session's worktree** (14 tests, all passing). Targets
+  `PropertyGridDefaults` templates: `PropertyLabelTemplate` (label
+  fallback, AutomationName prefix, indent×4 margin, tooltip),
+  `PropertyRowTemplate` (FlexRow shape, editor AutomationName,
+  indent×16 padding), `ArrayItemTemplate` (expand glyph
+  ▶/▼, toggle inversion, [N] bracket, 3/4/6-child branches,
+  remove ✕ callback). `ArrayToolbarTemplate` skipped — calls
+  `.SemiBold()` which dereferences `FontWeights.SemiBold`, a WinRT
+  activation factory that throws COMException without packaged WinUI
+  (same trap class as iteration 4's ColorCompact and iteration 7's
+  brush-shaped CellRenderers).
+- Added **31 new tests** in
+  `tests/Reactor.Tests/Controls/EditChainTests.cs`:
+  - **BuildPath (2)** — empty-chain returns just the property name;
+    multi-level joins with `.` (pin: a regression to `/` would
+    break every saved expand-state key).
+  - **CannotPropagate (6)** — direct SetValue short-circuits false;
+    empty-path + Compose-less root + null callback → true (the
+    only "read-only" terminal); empty-path + OnRootChanged → false;
+    empty-path + Compose → false; path-entry SetValue → false
+    (mutable ancestor unfreezes a leaf); path-entry SetValue=null
+    AND Compose=null → true (terminal mid-chain).
+  - **PropagateNewOwner (4)** — empty-path hits OnRootChanged with
+    the new owner; mutable ancestor `SetValue` returning Same(parent)
+    stops propagation (pin: a regression that always invoked
+    OnRootChanged would do a redundant root reassignment on every
+    leaf edit); multi-level Compose chain reaches root with
+    fully-immutable hierarchy; chain entry with neither SetValue
+    nor Compose silently drops.
+  - **PropagateImmutableEdit (2)** — mutable-ancestor branch
+    (lines 379-384): Compose builds new immutable child, then
+    SetValue on the mutable holder absorbs it. Pin: dropping the
+    SetValue call after Compose would lose the edit silently.
+    No-Compose-chain + no-Compose-root + callback → silent drop
+    without NRE.
+  - **RenderReadOnlyValue via reflection (6)** — bool true →
+    `ToggleSwitchElement.IsOn=true` with `Modifiers.IsEnabled=false`;
+    bool null → IsOn=false (the `?? false` coercion);
+    string → `TextFieldElement` with `Modifiers.IsEnabled=false`;
+    string null → Value=""; other-type → `TextBlockElement` with
+    `ToString()` content; other-type null → `(null)` sentinel
+    (pin: a regression to empty would visually hide null values).
+  - **IsPrimitiveOrEnum via reflection (Theory × 11)** — int/long/
+    double/bool/byte = primitive; string + decimal = special-cased
+    true; enum = true; object/class/record = false. Pin: the
+    `IsPrimitive || IsEnum || string || decimal` predicate exactly,
+    so that decimals don't get auto-decomposed in the grid.
+- **Test results:** 45/45 new (14 PropertyGridDefaults + 31
+  EditChain) pass; **8,053 / 8,099 unit suite pass** (was 7,996 — clean
+  +57; one transient WindowPersistedScopeIsolation flake on first run
+  passed cleanly on second).
+- **Coverage delta** (merged):
+  **80.70% → 80.79% line (+0.09)**, **68.83% → 69.00% branch (+0.17)**.
+  Branch swing 1.9× line — again validating the branch-shaped-target
+  heuristic. The 45 new tests hit ~70 net-new lines on a 101k
+  denominator (≈0.07% by arithmetic; the 0.02% surplus came from
+  incidental Element-record / FieldDescriptor constructor coverage).
+- **Surprises / non-obvious findings:**
+  - **`TypeRegistry.Register` is generic-only**
+    (`Register<T>(TypeMetadata)`). My first draft used
+    `Register(typeof(X), ...)` and didn't compile. The next
+    agent should remember: to inject a Compose-less metadata
+    for an existing record-shaped type, call the generic
+    overload — there's no `Register(Type, ...)` non-generic.
+  - **`Decompose` on a Compose-less re-registration**: when you
+    `Register<T>(new TypeMetadata { Decompose = oldMeta.Decompose })`
+    you can keep field decomposition while explicitly removing
+    Compose, which is exactly the setup needed to test the
+    "terminal mid-chain Compose=null" branch.
+  - **The `WindowPersistedScopeIsolation` test fails intermittently
+    in parallel runs** — there's a `tools/flake-loop.ps1` and
+    `.flake-runs/` from prior work tracking it. It's pre-existing,
+    not caused by this iteration. The coverage script should retry
+    on transient failures; consider adding `-MaxRetry 1` to
+    `run-coverage.ps1` for the unit leg.
+- **Hand-off:** This iteration validates that the PropertyGrid
+  family still has unit-testable surface despite the WinUI-bound
+  `Render()` method — the pure-C# helpers and the EditChain logic
+  are the testable core. Same shape as the iteration-8 lesson:
+  "host-bound files often have a pure-C# core that's underrated."
+  The remaining mid-tier unit-testable targets (per gap-report):
+  - `DevtoolsPropertyTools.cs` (714 missed, U) — reflection over
+    records, the biggest remaining unit-only hot spot. The most
+    valuable next pick if focusing on raw line gain.
+  - `ReflectionTypeMetadataProvider.cs` (sibling of TypeRegistry,
+    PropertyGrid family) — likely ≤30 lines uncovered after the
+    existing TypedColumnsBehaviorTests, but worth a 10-min audit.
+  - The deferral approval discussion (still pending) — would
+    jump the metric ~1.2 points without writing a single test.
