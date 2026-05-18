@@ -58,6 +58,16 @@ public sealed partial class ElementFactory<T> : IElementFactory
     // rather than thrown away and re-mounted.
     private readonly Dictionary<UIElement, Element> _lastElementByControl = new();
 
+    // Test-only accessors for the regression fixture
+    // ElementFactoryRecyclingFixtures.Factory_BookkeepingBoundedAcrossCycles.
+    // Confirm that the four bookkeeping structures don't grow with the
+    // number of realize/recycle cycles. Gated by InternalsVisibleTo on
+    // Reactor.AppTests.Host (see Reactor.csproj).
+    internal int DebugRecyclePoolCount => _recyclePool.Count;
+    internal int DebugLastElementByControlCount => _lastElementByControl.Count;
+    internal int DebugMountedElementsCount => _mountedElements.Count;
+    internal int DebugKeyByControlCount => _keyByControl.Count;
+
     public ElementFactory(
         IReadOnlyList<T> items,
         Func<T, int, Element> viewBuilder,
