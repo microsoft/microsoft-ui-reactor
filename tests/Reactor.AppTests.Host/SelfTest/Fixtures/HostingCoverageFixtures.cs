@@ -382,59 +382,59 @@ internal static class HostingCoverageFixtures
             using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.Port}/") };
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
 
-            var status = await client.GetAsync("status");
+            using var status = await client.GetAsync("status");
             var statusText = await status.Content.ReadAsStringAsync();
             H.Check("Preview_StatusOk", status.StatusCode == HttpStatusCode.OK && statusText.Contains("\"fps\":3"));
 
-            var components = await client.GetAsync("components");
+            using var components = await client.GetAsync("components");
             var componentsText = await components.Content.ReadAsStringAsync();
             H.Check("Preview_ComponentsOk",
                 components.StatusCode == HttpStatusCode.OK &&
                 componentsText.Contains("Counter") &&
                 componentsText.Contains("\"current\":\"Counter\""));
 
-            var frameEmpty = await client.GetAsync("frame");
+            using var frameEmpty = await client.GetAsync("frame");
             H.Check("Preview_FrameEmpty204", frameEmpty.StatusCode == HttpStatusCode.NoContent);
 
             typeof(PreviewCaptureServer)
                 .GetField("_latestFrame", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(server, new byte[] { 1, 2, 3, 4 });
-            var frame = await client.GetAsync("frame");
+            using var frame = await client.GetAsync("frame");
             H.Check("Preview_FrameOk", frame.StatusCode == HttpStatusCode.OK && frame.Content.Headers.ContentType?.MediaType == "image/jpeg");
 
-            var focusGet = await client.GetAsync("focus");
+            using var focusGet = await client.GetAsync("focus");
             H.Check("Preview_FocusGet405", focusGet.StatusCode == HttpStatusCode.MethodNotAllowed);
 
-            var focusPost = await client.PostAsync("focus", new StringContent("", Encoding.UTF8, "application/json"));
+            using var focusPost = await client.PostAsync("focus", new StringContent("", Encoding.UTF8, "application/json"));
             H.Check("Preview_FocusPostOk", focusPost.StatusCode == HttpStatusCode.OK);
 
-            var previewGet = await client.GetAsync("preview");
+            using var previewGet = await client.GetAsync("preview");
             H.Check("Preview_SwitchGet405", previewGet.StatusCode == HttpStatusCode.MethodNotAllowed);
 
-            var previewWrongType = await client.PostAsync("preview", new StringContent("component=Todo", Encoding.UTF8, "text/plain"));
+            using var previewWrongType = await client.PostAsync("preview", new StringContent("component=Todo", Encoding.UTF8, "text/plain"));
             H.Check("Preview_SwitchContentType415", previewWrongType.StatusCode == HttpStatusCode.UnsupportedMediaType);
 
-            var previewMissing = await client.PostAsync("preview", new StringContent("{}", Encoding.UTF8, "application/json"));
+            using var previewMissing = await client.PostAsync("preview", new StringContent("{}", Encoding.UTF8, "application/json"));
             H.Check("Preview_SwitchMissing400", previewMissing.StatusCode == HttpStatusCode.BadRequest);
 
-            var previewOk = await client.PostAsync("preview", new StringContent("{\"component\":\"Todo\"}", Encoding.UTF8, "application/json"));
+            using var previewOk = await client.PostAsync("preview", new StringContent("{\"component\":\"Todo\"}", Encoding.UTF8, "application/json"));
             var previewOkText = await previewOk.Content.ReadAsStringAsync();
             H.Check("Preview_SwitchOk", previewOk.StatusCode == HttpStatusCode.OK && current == "Todo" && previewOkText.Contains("\"ok\":true"));
 
-            var previewMissingComponent = await client.PostAsync("preview", new StringContent("{\"component\":\"Missing\"}", Encoding.UTF8, "application/json"));
+            using var previewMissingComponent = await client.PostAsync("preview", new StringContent("{\"component\":\"Missing\"}", Encoding.UTF8, "application/json"));
             H.Check("Preview_SwitchNotFound404", previewMissingComponent.StatusCode == HttpStatusCode.NotFound);
 
-            var missingPath = await client.GetAsync("missing");
+            using var missingPath = await client.GetAsync("missing");
             H.Check("Preview_MissingPath404", missingPath.StatusCode == HttpStatusCode.NotFound);
 
             using var noAuth = new HttpClient { BaseAddress = client.BaseAddress };
-            var unauthorized = await noAuth.GetAsync("status");
+            using var unauthorized = await noAuth.GetAsync("status");
             H.Check("Preview_Unauthorized401", unauthorized.StatusCode == HttpStatusCode.Unauthorized);
 
             using var corsReq = new HttpRequestMessage(HttpMethod.Options, "status");
             corsReq.Headers.TryAddWithoutValidation("Origin", "vscode-webview://reactor-preview");
             corsReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
-            var cors = await client.SendAsync(corsReq);
+            using var cors = await client.SendAsync(corsReq);
             H.Check("Preview_OptionsCors204",
                 cors.StatusCode == HttpStatusCode.NoContent &&
                 cors.Headers.TryGetValues("Access-Control-Allow-Origin", out var values) &&
@@ -443,13 +443,13 @@ internal static class HostingCoverageFixtures
             using var badOriginReq = new HttpRequestMessage(HttpMethod.Get, "status");
             badOriginReq.Headers.TryAddWithoutValidation("Origin", "http://localhost.evil.com");
             badOriginReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
-            var badOrigin = await client.SendAsync(badOriginReq);
+            using var badOrigin = await client.SendAsync(badOriginReq);
             H.Check("Preview_BadOrigin403", badOrigin.StatusCode == HttpStatusCode.Forbidden);
 
             using var badHostReq = new HttpRequestMessage(HttpMethod.Get, "status");
             badHostReq.Headers.Host = $"example.com:{server.Port}";
             badHostReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
-            var badHost = await client.SendAsync(badHostReq);
+            using var badHost = await client.SendAsync(badHostReq);
             H.Check("Preview_BadHost421", (int)badHost.StatusCode == 421);
 
             var small = PreviewCaptureServer.ReadCappedBody(new MemoryStream(Encoding.UTF8.GetBytes("abc")), Encoding.UTF8, cap: 4);

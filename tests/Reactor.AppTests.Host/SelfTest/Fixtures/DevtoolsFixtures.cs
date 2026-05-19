@@ -88,7 +88,7 @@ internal static class DevtoolsFixtures
             };
             req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Server.AuthToken);
-            var resp = await _client.SendAsync(req);
+            using var resp = await _client.SendAsync(req);
             var text = await resp.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(text);
             // Clone so the element survives disposing the document.
@@ -1282,7 +1282,7 @@ internal static class DevtoolsFixtures
             using var req = new HttpRequestMessage(HttpMethod.Post, "mcp")
             { Content = new StringContent(body, Encoding.UTF8, "application/json") };
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", mcp.Server.AuthToken);
-            var resp = await client.SendAsync(req);
+            using var resp = await client.SendAsync(req);
             var text = await resp.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(text);
             var root2 = doc.RootElement;
@@ -1305,6 +1305,7 @@ internal static class DevtoolsFixtures
         public override async Task RunAsync()
         {
             var projectId = "reactor-selftest-" + Guid.NewGuid().ToString("N");
+            var lockfilePath = LockfileRegistry.PathFor(projectId);
             using var server = new DevtoolsMcpServer(
                 H.Window.DispatcherQueue,
                 H.Window,
@@ -1316,24 +1317,26 @@ internal static class DevtoolsFixtures
             server.AnnounceReady();
 
             H.Check("Devtools_McpLockfileActive",
-                DevtoolsMcpServer.IsAnotherSessionActive(projectId, out var active) &&
+                LockfileRegistry.TryRead(lockfilePath, out var active) &&
                 active is not null &&
-                active.Token == server.AuthToken);
+                active.Token == server.AuthToken &&
+                active.Port == server.Port);
 
             using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.Port}/") };
 
-            var options = await client.SendAsync(new HttpRequestMessage(HttpMethod.Options, "mcp"));
+            using var optionsReq = new HttpRequestMessage(HttpMethod.Options, "mcp");
+            using var options = await client.SendAsync(optionsReq);
             H.Check("Devtools_McpOptions204", options.StatusCode == global::System.Net.HttpStatusCode.NoContent);
 
-            var missingPath = await client.GetAsync("missing");
+            using var missingPath = await client.GetAsync("missing");
             H.Check("Devtools_McpMissingPath404", missingPath.StatusCode == global::System.Net.HttpStatusCode.NotFound);
 
-            var unauthorized = await client.PostAsync("mcp", new StringContent("{}", Encoding.UTF8, "application/json"));
+            using var unauthorized = await client.PostAsync("mcp", new StringContent("{}", Encoding.UTF8, "application/json"));
             H.Check("Devtools_McpUnauthorized401", unauthorized.StatusCode == global::System.Net.HttpStatusCode.Unauthorized);
 
             using var schemaReq = new HttpRequestMessage(HttpMethod.Get, "mcp");
             schemaReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
-            var schema = await client.SendAsync(schemaReq);
+            using var schema = await client.SendAsync(schemaReq);
             var schemaText = await schema.Content.ReadAsStringAsync();
             H.Check("Devtools_McpSchemaGet200",
                 schema.StatusCode == global::System.Net.HttpStatusCode.OK &&
@@ -1342,7 +1345,7 @@ internal static class DevtoolsFixtures
 
             using var methodReq = new HttpRequestMessage(HttpMethod.Put, "mcp");
             methodReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
-            var method = await client.SendAsync(methodReq);
+            using var method = await client.SendAsync(methodReq);
             H.Check("Devtools_McpMethod405", method.StatusCode == global::System.Net.HttpStatusCode.MethodNotAllowed);
 
             using var typeReq = new HttpRequestMessage(HttpMethod.Post, "mcp")
@@ -1350,7 +1353,7 @@ internal static class DevtoolsFixtures
                 Content = new StringContent("{}", Encoding.UTF8, "text/plain"),
             };
             typeReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
-            var type = await client.SendAsync(typeReq);
+            using var type = await client.SendAsync(typeReq);
             H.Check("Devtools_McpContentType415", type.StatusCode == global::System.Net.HttpStatusCode.UnsupportedMediaType);
 
             using var originReq = new HttpRequestMessage(HttpMethod.Post, "mcp")
@@ -1359,7 +1362,7 @@ internal static class DevtoolsFixtures
             };
             originReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
             originReq.Headers.TryAddWithoutValidation("Origin", "http://localhost.evil.com");
-            var origin = await client.SendAsync(originReq);
+            using var origin = await client.SendAsync(originReq);
             H.Check("Devtools_McpBadOrigin403", origin.StatusCode == global::System.Net.HttpStatusCode.Forbidden);
 
             using var largeReq = new HttpRequestMessage(HttpMethod.Post, "mcp")
@@ -1368,7 +1371,7 @@ internal static class DevtoolsFixtures
             };
             largeReq.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             largeReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
-            var large = await client.SendAsync(largeReq);
+            using var large = await client.SendAsync(largeReq);
             H.Check("Devtools_McpLarge413", large.StatusCode == global::System.Net.HttpStatusCode.RequestEntityTooLarge);
 
             var envelope = new
@@ -1383,7 +1386,7 @@ internal static class DevtoolsFixtures
                 Content = new StringContent(JsonSerializer.Serialize(envelope, DevtoolsMcpServer.JsonOpts), Encoding.UTF8, "application/json"),
             };
             validReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
-            var valid = await client.SendAsync(validReq);
+            using var valid = await client.SendAsync(validReq);
             var validText = await valid.Content.ReadAsStringAsync();
             H.Check("Devtools_McpPostDispatch200",
                 valid.StatusCode == global::System.Net.HttpStatusCode.OK && validText.Contains("pong"));
@@ -1391,7 +1394,7 @@ internal static class DevtoolsFixtures
             using var badHostReq = new HttpRequestMessage(HttpMethod.Get, "mcp");
             badHostReq.Headers.Host = $"example.com:{server.Port}";
             badHostReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
-            var badHost = await client.SendAsync(badHostReq);
+            using var badHost = await client.SendAsync(badHostReq);
             H.Check("Devtools_McpBadHost421", (int)badHost.StatusCode == 421);
 
             var capped = DevtoolsMcpServer.ReadCappedBody(new MemoryStream(Encoding.UTF8.GetBytes("ok")), Encoding.UTF8, cap: 2);
@@ -1410,7 +1413,7 @@ internal static class DevtoolsFixtures
 
             server.Dispose();
             H.Check("Devtools_McpLockfileRemoved",
-                !DevtoolsMcpServer.IsAnotherSessionActive(projectId, out _));
+                !LockfileRegistry.TryRead(lockfilePath, out _));
         }
     }
 }
