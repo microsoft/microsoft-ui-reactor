@@ -36,7 +36,7 @@ A task is "done" only when:
 - [x] Create `src/Reactor/Core/Diagnostics/` folder and `LogCategory.cs` with the enum from spec §6.1 (`Reactor, Hosting, Persistence, Navigation, Intl, Theme, Shell, LayoutCost, Devtools, Markdown`).
 - [x] Create `src/Reactor/Core/Diagnostics/HResults.cs` with the named constants from spec §6.7 (start with the ones listed; grow during audit).
 - [x] Create `src/Reactor/Core/Diagnostics/DiagnosticLog.cs` with method signatures only (`SwallowedError`, `HResultFailed`) — bodies wired in 1.1.
-- [ ] Create `src/Reactor/Diagnostics/` folder and `ReactorTrace.cs` + `ReactorEvent.cs` shells with the public API surface from spec §6.4 (signatures + XML doc, body in Phase D).
+- [x] Create `src/Reactor/Diagnostics/` folder and `ReactorTrace.cs` + `ReactorEvent.cs` shells with the public API surface from spec §6.4 (signatures + XML doc, body in Phase D).
 - [x] Verify `Reactor.slnx` builds clean with these placeholders.
 
 ### 0.3 Audit baseline — inventory every site touched by Phase C
@@ -270,33 +270,33 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 5.1 Implement the listener
 
-- [ ] Implement `ReactorTrace.Subscribe(Action<ReactorEvent>, EventLevel, EventKeywords): IDisposable` per spec §6.4 in `src/Reactor/Diagnostics/ReactorTrace.cs`.
-- [ ] Backing implementation is a sealed `EventListener` filtered on `EventSource.Name == "Microsoft-UI-Reactor"`.
-- [ ] Default level is `Verbose` (spec §6.4 — earlier draft defaulted to Informational; we explicitly want Verbose).
-- [ ] Default keywords are `(EventKeywords)(-1)` (all).
-- [ ] Multiple concurrent subscribers supported; each subscriber's keywords/level are independently active until disposed.
-- [ ] Subscriber callback wrapped in `try/catch` so a buggy subscriber can't deadlock the dispatcher (spec §6.4 second bullet).
+- [x] Implement `ReactorTrace.Subscribe(Action<ReactorEvent>, EventLevel, EventKeywords): IDisposable` per spec §6.4 in `src/Reactor/Diagnostics/ReactorTrace.cs`.
+- [x] Backing implementation is a sealed `EventListener` filtered on `EventSource.Name == "Microsoft-UI-Reactor"`.
+- [x] Default level is `Verbose` (spec §6.4 — earlier draft defaulted to Informational; we explicitly want Verbose).
+- [x] Default keywords are `(EventKeywords)(-1)` (all).
+- [x] Multiple concurrent subscribers supported; each subscriber's keywords/level are independently active until disposed.
+- [x] Subscriber callback wrapped in `try/catch` so a buggy subscriber can't deadlock the dispatcher (spec §6.4 second bullet).
 
 ### 5.2 `ReactorEvent` payload
 
-- [ ] `ReactorEvent` is a `public readonly record struct` per spec §6.4.
-- [ ] `Payload` / `PayloadNames` use `IReadOnlyList<object?>` / `IReadOnlyList<string>` (the `EventWrittenEventArgs.Payload` shape — no reflection).
-- [ ] No reflection on consumer payload — verify AOT/trim-clean compile.
+- [x] `ReactorEvent` is a `public readonly record struct` per spec §6.4.
+- [x] `Payload` / `PayloadNames` use `IReadOnlyList<object?>` / `IReadOnlyList<string>` (the `EventWrittenEventArgs.Payload` shape — no reflection).
+- [x] No reflection on consumer payload — verify AOT/trim-clean compile.
 
 ### 5.3 Phase D tests
 
-- [ ] `ReactorTraceSubscribeTests`:
-  - [ ] Subscribe → fire a known event → callback receives the matching `ReactorEvent` with correct EventId/Name/Level/Keywords/Payload.
-  - [ ] Dispose the subscription → subsequent fires don't reach the callback.
-  - [ ] Two concurrent subscribers see the same event independently.
-  - [ ] A subscriber that throws inside its callback does not break other subscribers and does not propagate to `EventSource.WriteEvent`.
-  - [ ] Subscriber with `keywords: Keywords.Errors` does not receive events fired only under `Keywords.Reconcile`.
-  - [ ] `EventLevel.Warning` subscriber does not receive Verbose events.
+- [x] `ReactorTraceSubscribeTests`:
+  - [x] Subscribe → fire a known event → callback receives the matching `ReactorEvent` with correct EventId/Name/Level/Keywords/Payload.
+  - [x] Dispose the subscription → subsequent fires don't reach the callback.
+  - [x] Two concurrent subscribers see the same event independently.
+  - [x] A subscriber that throws inside its callback does not break other subscribers and does not propagate to `EventSource.WriteEvent`.
+  - [x] Subscriber with `keywords: Keywords.Errors` does not receive events fired only under `Keywords.Reconcile`.
+  - [x] `EventLevel.Warning` subscriber does not receive Verbose events.
 
 ### 5.4 Phase D acceptance
 
-- [ ] AOT/trim build clean for `src/Reactor/Diagnostics/ReactorTrace.cs`.
-- [ ] Public API surface has XML doc comments including the §6.4 capture-to-file pointers ("For writing a trace file, use one of: …").
+- [x] AOT/trim build clean for `src/Reactor/Diagnostics/ReactorTrace.cs`.
+- [x] Public API surface has XML doc comments including the §6.4 capture-to-file pointers ("For writing a trace file, use one of: …").
 - [ ] No reflection added.
 
 ---
