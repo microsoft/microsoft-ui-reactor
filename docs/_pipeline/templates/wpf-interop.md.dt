@@ -4,188 +4,45 @@ app: wpf-interop
 order: 20.5
 audience: advanced
 goal: |
-  Status of WPF interop in Reactor: what ships today, what's on the
-  roadmap, and how to host a Reactor component tree from a WPF app
-  through the WinAppSDK primitives that already exist. Cover the
-  hypothetical Reactor.Interop.Wpf surface so readers can plan around
-  it, plus the data-flow / threading patterns that already work today.
-tier: solid
+  Status page: a first-class WPF host control is not yet shipped. Point
+  readers at the WinAppSDK primitive (`DesktopWindowXamlSource`) that
+  unblocks WPF→Reactor hosting today, and at the WinForms interop docs
+  as the shape reference for the eventual surface.
+tier: stub
 ---
 
 # WPF Interop
 
-**Status:** A first-class WPF host control (`Reactor.Interop.Wpf`) is
-not yet shipped. The package `Reactor.Interop.WinForms` is the only
-host wrapper in the box today; the WPF equivalent is on the roadmap.
-Until it ships, host Reactor content from WPF by embedding
+**Status: coming soon.** A first-class WPF host control
+(`Reactor.Interop.Wpf`) is on the roadmap but not yet shipped. The only
+host wrapper in the box today is `Reactor.Interop.WinForms`.
+
+## Workaround for today
+
+Host a Reactor component tree from WPF by embedding
 [`DesktopWindowXamlSource`](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.hosting.desktopwindowxamlsource)
-directly — the same WinAppSDK primitive [WinForms Interop](winforms-interop.md)
-wraps in `XamlIslandControl`. This page describes the proposed surface
-so existing WPF apps can plan around it, and the data-flow / threading
-patterns that already work today.
+directly — the same WinAppSDK primitive that
+[WinForms Interop](winforms-interop.md) wraps in `XamlIslandControl`.
+Inside the island, mount a `ReactorHostControl` and assign it a
+`ComponentType`. The Reactor side of the boundary is identical to any
+other host: components, hooks, modifiers, and
+[`UseObservable<T>`](hooks.md) for bridging an `INotifyPropertyChanged`
+view-model all work unchanged.
 
-![WPF and WinForms hosts both stand on DesktopWindowXamlSource and mount a ReactorHostControl that owns the Reactor element tree. The WPF host control on the left is on the roadmap; the WinForms one on the right ships today.](images/wpf-interop/host-architecture.svg)
-
-## Proposed surface
-
-The WPF host control will mirror `Reactor.Interop.WinForms`. Two types:
-a single-shot bootstrap that brings up WinAppSDK alongside WPF's
-dispatcher, and a `FrameworkElement` that wraps `DesktopWindowXamlSource`
-and mounts a Reactor `Component` by type:
-
-```csharp snippet="wpf-interop/bootstrap"
-```
-
-The snippet is roadmap-shaped — the types `WpfXamlIslandBootstrap` and
-`WpfXamlIslandControl` are not yet shipped. The shape parallels
-`XamlIslandBootstrap.Run()` from
-[Reactor.Interop.WinForms](winforms-interop.md), with WPF's
-`System.Windows.Application` driving the message loop in place of
-`System.Windows.Forms.Application.Run()`.
-
-## Reference
-
-| Surface | Status | Notes |
-|---|---|---|
-| `Reactor.Interop.Wpf.WpfXamlIslandBootstrap.Run(Action)` | Roadmap | Initializes WinAppSDK + WinUI dispatcher; calls back into WPF startup. |
-| `Reactor.Interop.Wpf.WpfXamlIslandControl` | Roadmap | `FrameworkElement` wrapping `DesktopWindowXamlSource`. `ComponentType` / `ContentFactory` / `XamlContent` slots mirror [WinForms](winforms-interop.md). |
-| `Microsoft.UI.Xaml.Hosting.DesktopWindowXamlSource` | Ships (WinAppSDK) | The underlying primitive both hosts wrap. Today's WPF apps embed this directly. |
-| `Microsoft.UI.Reactor.Hosting.ReactorHostControl` | Ships | The WinUI `UserControl` that owns the Reactor element tree. Any WPF host control would mount this inside the island. |
-| `UseObservable<T>(INotifyPropertyChanged)` | Ships | Bridges a WPF MVVM view-model into Reactor's re-render. |
-
-The Reactor side is the same surface a WinForms or WinUI host uses —
-nothing about the component, hooks, or modifiers changes inside the
-island. The interop wrapper is purely a host-side adapter.
-
-## The component a host mounts
-
-`WpfXamlIslandControl.ComponentType` will accept any concrete
-`Component` subclass with a parameterless constructor — same shape as
-`XamlIslandControl.ComponentType` on the WinForms side. The component
-itself has no idea it's hosted in WPF:
-
-```csharp snippet="wpf-interop/host-element"
-```
-
-![Reactor counter component as the future WPF host would mount it](screenshot://wpf-interop/host-element)
-
-This is the screenshot of `WpfHostDemo` running in a stock Reactor
-window — exactly what `WpfXamlIslandControl` will render once the host
-ships. Build the component first, then bring up the WPF shell around
-it when the API lands.
-
-## Bridging a WPF MVVM view-model
-
-The most common WPF migration story today is "I have a working
-view-model implementing `INotifyPropertyChanged` and I want the Reactor
-island to observe it." [`UseObservable`](hooks.md) does exactly that —
-it subscribes the current component's re-render to the source's
-`PropertyChanged` event:
-
-```csharp snippet="wpf-interop/data-flow"
-```
-
-Passing the view-model through `Props` rather than capturing a
-singleton in the closure makes the component independent of the host's
-service-locator setup — the same component renders against a real
-view-model from the WPF side and a fake one from a unit test that
-drives `Component<UserPanelProps>` directly. The `OnPropertyChanged`
-fire from a setter on the WPF side enqueues a render; the next render
-sees the new value.
-
-Two-way binding flows the other direction through plain event handlers.
-The snippet's `TextField` writes back to `vm.Name`, which raises
-`PropertyChanged`, which re-enters `UseObservable`, which schedules a
-no-op re-render (the value has already been written; equality
-short-circuits the slot update).
-
-## Threading: WPF Dispatcher vs WinUI DispatcherQueue
-
-The single most load-bearing fact about WPF + WinUI cohabitation:
-WPF's `System.Windows.Threading.Dispatcher` and WinUI's
-`Microsoft.UI.Dispatching.DispatcherQueue` are **distinct objects**.
-They run on the same UI thread, but they are separate queues with
-separate continuations. A property write that originates inside a WPF
-event handler — a `Click`, a `Loaded`, a `Binding` update — is on
-WPF's dispatcher; reaching a Reactor hook setter from that handler
-means the setter sees an `Environment.CurrentManagedThreadId` that
-matches the WinUI dispatcher's captured thread, so the fast path
-runs and nothing has to be marshalled.
-
-The case to think about is the *other* direction: a Reactor effect
-that touches a WPF `DependencyProperty` directly. Inside the effect,
-you're on the WinUI dispatcher; the WPF property setter expects WPF's.
-Reach for `Dispatcher.Invoke` on the WPF side:
-
-```csharp snippet="wpf-interop/threading"
-```
-
-The snippet uses an off-thread background timer to update Reactor
-state — that path is fully automatic; `setTicks` detects the
-off-dispatcher call and posts back onto the captured WinUI dispatcher
-without any wrapper code. The hand-marshalling concern only applies
-when you reach *out of* Reactor into WPF objects from inside an effect
-or callback.
-
-## Accessibility
-
-Inside the WinUI subtree, every accessibility modifier from a pure
-Reactor app keeps working — `AutomationName`, `HeadingLevel`,
-`Landmark`, [`UseFocusTrap`](accessibility.md), and `UseAnnounce` all
-operate against the WinUI automation peer attached to
-`DesktopWindowXamlSource`:
-
-```csharp snippet="wpf-interop/accessibility"
-```
-
-The interop boundary itself shows up as a sibling automation tree —
-the screen reader walks WPF's tree via its window peer and the
-WinUI tree via the island's peer. Build the WinUI-side semantics with
-Reactor modifiers and don't try to reach across the boundary from
-either side; the two automation trees are explicitly designed to
-coexist without cross-tree parent/child links.
-
-## Tips
-
-**Use `Reactor.Interop.WinForms` as the shape reference.** Until the
-WPF host ships, the WinForms host control demonstrates every
-designer / `ComponentType` / `ContentFactory` decision the WPF host
-will mirror. Reading [WinForms Interop](winforms-interop.md) first is
-the fastest way to be productive against the proposed surface.
-
-**Keep the Reactor component dispatcher-agnostic.** Don't reach for
-`System.Windows.Threading.Dispatcher.CurrentDispatcher` from inside a
-hook body — the captured `DispatcherQueue` is the only dispatcher the
-reconciler knows about. Hand-marshalling onto WPF's dispatcher belongs
-in `UseEffect` cleanup against WPF objects, not inside `Render()`.
-
-**Bridge view-models through `UseObservable`, not `DataContext`.** WPF
-`DataContext` is a pull-based binding propagation mechanism; Reactor
-binds by closure, with re-renders driven by `INotifyPropertyChanged`
-through [`UseObservable`](hooks.md). Pass the view-model through `Props`
-so the component is testable without a WPF host.
-
-**Build and screenshot the component first.** Author the Reactor side
-(component, hooks, modifiers) as a standalone Reactor window the same
-way every other doc app in this docset does. When the WPF host control
-ships, dropping the component into a `WpfXamlIslandControl.ComponentType`
-slot is a one-line change.
+The WPF `Dispatcher` and WinUI `DispatcherQueue` are distinct objects
+on the same UI thread, so plain property writes from WPF event handlers
+into Reactor setters work without marshalling — see
+[Threading and Dispatch](threading-and-dispatch.md) for the invariants
+the WinUI side enforces.
 
 ## Next Steps
 
-- **[WinForms Interop](winforms-interop.md)** — Previous: the shipping
-  parallel host with `XamlIslandControl`, `XamlIslandBootstrap.Run()`,
-  and the `ComponentType` designer integration the WPF surface will
-  mirror.
-- **[Windows](windows.md)** — Next: top-level windows, multi-window apps,
-  and tray icons inside a Reactor-primary host.
+- **[WinForms Interop](winforms-interop.md)** — The shipping parallel
+  host. Read this first; the WPF surface will mirror it.
 - **[Hooks](hooks.md)** — `UseObservable`, `UseObservableTree`, and
-  `UseObservableProperty` for bridging WPF view-models.
-- **[Threading and Dispatch](threading-and-dispatch.md)** — How
-  Reactor's hook setters auto-marshal across dispatchers and the
-  invariants the WinUI side enforces.
+  `UseObservableProperty` for bridging `INotifyPropertyChanged`
+  view-models from WPF.
+- **[Threading and Dispatch](threading-and-dispatch.md)** — How Reactor's
+  hook setters auto-marshal across dispatchers.
 - **[XAML Developers](xaml-developers.md)** — Migration cookbook for
-  WPF XAML pages moving to Reactor's declarative shell.
-- **[Reactor vs XAML](reactor-vs-xaml.md)** — The architectural shift
-  from `Binding` / `DataContext` / `DataTemplate` to closure-based
-  binding and function components.
+  WPF/XAML pages moving to Reactor's declarative shell.
