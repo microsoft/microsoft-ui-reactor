@@ -102,30 +102,30 @@ internal static class ReconcileHighlightOverlayLifecycleTests
     {
         public override async Task RunAsync()
         {
-            // holdMs=500, firstDelay=350, secondDelay=250:
-            //   350 < 500            → alive before refresh (150ms margin)
-            //   350+250=600 > 500    → would have expired without timer reset
-            //   250 < 500            → still alive after refresh (250ms margin)
-            // Original 200ms/120ms had only 80ms margin and flaked under load.
-            var (canvas, targets, _, overlay) = await SetupAsync(H, holdMs: 500);
+            // holdMs=800, firstDelay=500, secondDelay=400, finalWait=500:
+            //   500 < 800            → alive before refresh (300ms margin)
+            //   500+400=900 > 800    → would have expired without timer reset
+            //   400 < 800            → still alive after refresh (400ms margin)
+            // Previous 500/350/250 had only 150–250ms margin and flaked under load.
+            var (canvas, targets, _, overlay) = await SetupAsync(H, holdMs: 800);
             try
             {
                 overlay.Show(canvas, targets, Array.Empty<UIElement>());
-                await Task.Delay(350);
+                await Task.Delay(500);
                 H.Check("OverlayLifecycle_Refresh_AliveBeforeRefresh",
                     overlay.LiveSpriteCount == 1);
 
                 // Refresh — timer should restart from 0
                 overlay.Show(canvas, targets, Array.Empty<UIElement>());
-                await Task.Delay(250);
-                // ~600ms since first Show, ~250ms since refresh.
-                // Without the timer reset the sprite would have expired at 500ms;
+                await Task.Delay(400);
+                // ~900ms since first Show, ~400ms since refresh.
+                // Without the timer reset the sprite would have expired at 800ms;
                 // with the reset it should still be alive.
                 H.Check("OverlayLifecycle_Refresh_AliveAfterRefresh",
                     overlay.LiveSpriteCount == 1);
 
                 // Wait past the new window — should expire.
-                await Task.Delay(350);
+                await Task.Delay(500);
                 H.Check("OverlayLifecycle_Refresh_ExpiresAfterFinalWindow",
                     overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0);
             }
