@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 
 namespace Microsoft.UI.Reactor.Hosting.Shell;
 
@@ -95,7 +96,9 @@ internal sealed class ThumbnailToolbarState
                 : taskbar.ThumbBarAddButtons(_hwnd, MaxButtons, native);
             if (hr < 0)
             {
-                Debug.WriteLine($"[Reactor] ThumbBar{(_initialized ? "Update" : "Add")}Buttons HR={hr:X8}");
+                DiagnosticLog.HResultFailed(LogCategory.Shell,
+                    _initialized ? "ThumbnailToolbar.UpdateButtons" : "ThumbnailToolbar.AddButtons",
+                    hr);
                 FreeIcons(newIcons);
                 return;
             }

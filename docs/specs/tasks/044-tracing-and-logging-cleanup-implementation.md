@@ -213,8 +213,8 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 4.4 PR: HResult diagnostics → `DiagnosticLog.HResultFailed`
 
-- [ ] Replace the ~20 sites matching `Debug.WriteLine($"... HR=0x{hr:X8}");` across `src/Reactor/Shell/*`, `WindowMessageMonitor`, `ReactorWindow`.
-- [ ] Each replacement references its audit entry by file path + line via a `// AUDIT: docs/specs/044/swallowed-error-audit.md#...` comment if also wrapped in a catch.
+- [x] Replace the `Debug.WriteLine($"... HR=0x{hr:X8}");` sites in the Shell hosting code. Actual inventory found 8 sites (the spec's "~20" estimate counted candidates in `WindowMessageMonitor`/`ReactorWindow` that don't actually use the HR format — those land in 4.5 instead): 6 in `JumpListComInterop.cs` (BeginList / AddUserTasks / AppendCategory / AppendKnownCategory.Recent / AppendKnownCategory.Frequent / CommitList), 1 in `ThumbnailToolbar.cs` (Update vs Add Buttons), 1 in `TrayFlyoutHostWindow.cs` (GetDpiForMonitor). The `AppendCategory` site dropped the user-named category string from the op label (developer-authored but unbounded → safer to fold into the typed Shell event in 4.6).
+- [ ] Each replacement references its audit entry by file path + line via a `// AUDIT: docs/specs/044/swallowed-error-audit.md#...` comment if also wrapped in a catch. _(deferred to the audit PR: the migrated sites are NOT inside the broader catch arms — they are HR-return-value checks, not exception swallows.)_
 
 ### 4.5 PR: ReactorWindow swallowed-error migration
 

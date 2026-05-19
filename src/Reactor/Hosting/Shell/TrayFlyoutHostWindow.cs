@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
@@ -188,7 +189,7 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
             int hr = GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, out uint dx, out _);
             if (hr != 0)
             {
-                Debug.WriteLine($"[Reactor] TrayFlyout: GetDpiForMonitor returned hr=0x{hr:X8}; falling back to 96 DPI.");
+                DiagnosticLog.HResultFailed(LogCategory.Shell, "TrayFlyout.GetDpiForMonitor", hr);
                 return 96;
             }
             if (dx == 0)

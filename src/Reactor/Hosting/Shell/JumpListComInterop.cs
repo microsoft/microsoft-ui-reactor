@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 
 namespace Microsoft.UI.Reactor.Hosting.Shell;
 
@@ -52,7 +53,7 @@ internal static class JumpListComInterop
             int hr = cdl.BeginList(out slotCount, ref iidObjArray, out removed);
             if (hr < 0)
             {
-                Debug.WriteLine($"[Reactor] BeginList HR=0x{hr:X8}");
+                DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.BeginList", hr);
                 return;
             }
 
@@ -85,7 +86,7 @@ internal static class JumpListComInterop
                     {
                         var asArray = (IObjectArray)coll;
                         int taskHr = cdl.AddUserTasks(asArray);
-                        if (taskHr < 0) Debug.WriteLine($"[Reactor] AddUserTasks HR=0x{taskHr:X8}");
+                        if (taskHr < 0) DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.AddUserTasks", taskHr);
                     }
                     finally { Marshal.ReleaseComObject(coll); }
                 }
@@ -100,7 +101,7 @@ internal static class JumpListComInterop
                 {
                     var asArray = (IObjectArray)coll;
                     int catHr = cdl.AppendCategory(category, asArray);
-                    if (catHr < 0) Debug.WriteLine($"[Reactor] AppendCategory '{category}' HR=0x{catHr:X8}");
+                    if (catHr < 0) DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.AppendCategory", catHr);
                 }
                 finally { Marshal.ReleaseComObject(coll); }
             }
@@ -108,17 +109,17 @@ internal static class JumpListComInterop
             if (showRecent)
             {
                 int recHr = cdl.AppendKnownCategory(KnownDestCategory.Recent);
-                if (recHr < 0) Debug.WriteLine($"[Reactor] AppendKnownCategory Recent HR=0x{recHr:X8}");
+                if (recHr < 0) DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.AppendKnownCategory.Recent", recHr);
             }
             if (showFrequent)
             {
                 int freqHr = cdl.AppendKnownCategory(KnownDestCategory.Frequent);
-                if (freqHr < 0) Debug.WriteLine($"[Reactor] AppendKnownCategory Frequent HR=0x{freqHr:X8}");
+                if (freqHr < 0) DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.AppendKnownCategory.Frequent", freqHr);
             }
 
             int commitHr = cdl.CommitList();
             if (commitHr < 0)
-                Debug.WriteLine($"[Reactor] JumpList CommitList HR=0x{commitHr:X8}");
+                DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.CommitList", commitHr);
         }
         catch (Exception ex)
         {
