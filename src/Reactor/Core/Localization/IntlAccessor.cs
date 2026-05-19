@@ -1,10 +1,11 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.Tracing;
 using System.Globalization;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Xaml;
 
 namespace Microsoft.UI.Reactor.Localization;
@@ -75,7 +76,7 @@ public sealed class IntlAccessor
         {
             // SECURITY (TASK-050): one bad .resw row would otherwise tear
             // down the rendering page. Log and degrade to the raw pattern.
-            Debug.WriteLine($"[Reactor.Intl] Format failed for '{key}': {ex.GetType().Name}: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Intl, $"Message.Format[{key}]", ex);
             result = pattern;
         }
 
@@ -122,7 +123,7 @@ public sealed class IntlAccessor
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Reactor.Intl] RichMessage format failed for '{key}': {ex.GetType().Name}: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Intl, $"RichMessage.Format[{key}]", ex);
             formatted = pattern;
         }
 
@@ -317,13 +318,19 @@ public sealed class IntlAccessor
         // Fallback to default locale
         if (!string.Equals(Locale, _defaultLocale, StringComparison.OrdinalIgnoreCase))
         {
-            Debug.WriteLine($"[Reactor.Intl] Missing key '{key}' for locale '{Locale}', falling back to {_defaultLocale}");
             pattern = _resourceProvider.GetString(_defaultLocale, key.Namespace, key.Key);
             if (pattern is not null)
+            {
+                // Spec 044 §6.2.1 PII: MessageKey carries developer-authored
+                // identifiers (namespace + key from .resw), never user data.
+                if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Intl))
+                    ReactorEventSource.Log.IntlMissingKey(key.ToString(), Locale, fellBack: true);
                 return pattern;
+            }
         }
 
-        Debug.WriteLine($"[Reactor.Intl] Missing key '{key}' for locale '{Locale}' — no fallback available");
+        if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Intl))
+            ReactorEventSource.Log.IntlMissingKey(key.ToString(), Locale, fellBack: false);
         return null;
     }
 

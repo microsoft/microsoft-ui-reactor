@@ -209,7 +209,7 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 4.3 PR: `IntlAccessor` missing-key warnings → `IntlMissingKey`
 
-- [ ] Replace the 4 sites in `src/Reactor/Localization/IntlAccessor.cs` (or equivalent path) with `ReactorEventSource.Log.IntlMissingKey(...)`.
+- [x] Replace the 4 sites in `src/Reactor/Core/Localization/IntlAccessor.cs` with the Phase B Intl events. The 2 missing-key sites in `ResolvePattern` collapse to a single typed `IntlMissingKey(key, locale, fellBack)` emission — the previous shape double-logged on the no-fallback-available path, which the new shape fixes. The 2 format-failure catches in `Message` and `RichMessage` route through `DiagnosticLog.SwallowedError(LogCategory.Intl, ...)` because they are exception swallows, not missing-key reports. PII (§6.2.1): MessageKey is namespace + key from .resw — developer-authored only.
 
 ### 4.4 PR: HResult diagnostics → `DiagnosticLog.HResultFailed`
 
