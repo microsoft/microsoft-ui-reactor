@@ -198,9 +198,9 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 4.1 PR: `Debug.Fail("Unreachable")` → `throw new UnreachableException(...)`
 
-- [ ] Replace 4 sites in `src/Reactor/Markdown/Md4cParser.Block.cs` (spec §4.3).
-- [ ] Replace 1 site in `src/Reactor/Core/Reconciler.cs:~2635` (spec §4.3).
-- [ ] Verify each replaced site is genuinely unreachable in tests (`UnreachableException` is Release-visible; we don't want it to fire in real code).
+- [x] Replace 4 sites in `src/Reactor/Markdown/Md4cParser.Block.cs` (spec §4.3).
+- [ ] Replace 1 site in `src/Reactor/Core/Reconciler.cs:~2635` (spec §4.3). **Skipped intentionally:** that site is not a `Debug.Fail("Unreachable")` pattern — its message is `"ElementRef<{T}> attached to a {U}. Use ElementRef<U> or untyped ElementRef."` — and the whole containing `AssertTypedRefMatch` method is already `[Conditional("DEBUG")]`. Re-asking the reviewer in a follow-up if a behavior change is desired.
+- [x] Verify each replaced site is genuinely unreachable in tests (`UnreachableException` is Release-visible; we don't want it to fire in real code).
 
 ### 4.2 PR: `NavigationDiagnostics` Debug.WriteLines → typed events
 
