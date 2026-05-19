@@ -146,6 +146,27 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Fixed
 
+- **`DropDownButton` / `SplitButton` / `ToggleSplitButton` `.Flyout` now
+  reconciles across re-renders.** Mount built each button's flyout once
+  and the corresponding Update paths never rebuilt it, so any dynamic
+  flyout content (a `MenuFlyoutContentElement` whose `Items` array is
+  state-derived, a `ContentFlyoutElement` whose subtree depends on
+  state, or a swapped flyout instance entirely) froze at first-mount
+  values. The matching X→null transition (a button whose flyout is
+  removed across renders) also left the stale flyout attached.
+  `UpdateDropDownButton`, `UpdateSplitButton`, and
+  `UpdateToggleSplitButton` now thread the old element +
+  `requestRerender` and call the existing `ApplyFlyoutAttachment`
+  helper, which already knows how to reuse the realized `FlyoutBase`
+  (so an already-open flyout stays open), clear+repopulate
+  `MenuFlyout.Items`, or reconcile content inside a `Flyout.Content`
+  child; an explicit `Flyout = null` branch handles the clear case.
+  Same class of bug as the recently-fixed CommandBar / TeachingTip
+  Content gap (microsoft-ui-reactor#343). Adds `FlyoutReconcileFixtures`
+  (six selftests covering text mutation, count mutation,
+  `ContentFlyoutElement` subtree mutation, and X→null clearing across
+  the three button kinds).
+
 - **ListView / GridView / LazyVStack / LazyHStack now surface incremental
   WinUI deltas for keyed updates.** Previously, any `ItemCount` change
   rebuilt `ItemsSource` from `Enumerable.Range(...)`, which caused WinUI

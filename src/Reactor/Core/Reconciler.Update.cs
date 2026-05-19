@@ -124,12 +124,12 @@ public sealed partial class Reconciler
                 => UpdateRepeatButton(o, n, rb),
             (ToggleButtonElement o, ToggleButtonElement n, WinPrim.ToggleButton tb)
                 => UpdateToggleButton(o, n, tb),
-            (DropDownButtonElement, DropDownButtonElement n, WinUI.DropDownButton ddb)
-                => UpdateDropDownButton(n, ddb),
+            (DropDownButtonElement o, DropDownButtonElement n, WinUI.DropDownButton ddb)
+                => UpdateDropDownButton(o, n, ddb, requestRerender),
             (SplitButtonElement o, SplitButtonElement n, WinUI.SplitButton sb)
-                => UpdateSplitButton(o, n, sb),
+                => UpdateSplitButton(o, n, sb, requestRerender),
             (ToggleSplitButtonElement o, ToggleSplitButtonElement n, WinUI.ToggleSplitButton tsb)
-                => UpdateToggleSplitButton(o, n, tsb),
+                => UpdateToggleSplitButton(o, n, tsb, requestRerender),
             (RichEditBoxElement o, RichEditBoxElement n, WinUI.RichEditBox reb)
                 => UpdateRichEditBox(o, n, reb),
             (TextFieldElement o, TextFieldElement n, TextBox tb)
@@ -736,24 +736,32 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateDropDownButton(DropDownButtonElement n, WinUI.DropDownButton ddb)
+    private UIElement? UpdateDropDownButton(DropDownButtonElement o, DropDownButtonElement n, WinUI.DropDownButton ddb, Action requestRerender)
     {
         if (ddb.Content as string != n.Label) ddb.Content = n.Label;
         SetElementTag(ddb, n);
+        if (n.Flyout is not null)
+            ApplyFlyoutAttachment(ddb, o.Flyout, n.Flyout, requestRerender);
+        else if (o.Flyout is not null)
+            ddb.Flyout = null;
         ApplySetters(n.Setters, ddb);
         return null;
     }
 
-    private UIElement? UpdateSplitButton(SplitButtonElement o, SplitButtonElement n, WinUI.SplitButton sb)
+    private UIElement? UpdateSplitButton(SplitButtonElement o, SplitButtonElement n, WinUI.SplitButton sb, Action requestRerender)
     {
         sb.Content = n.Label; SetElementTag(sb, n);
         if (o.OnClick is null && n.OnClick is not null)
             sb.Click += (s, _) => (GetElementTag((UIElement)s!) as SplitButtonElement)?.OnClick?.Invoke();
+        if (n.Flyout is not null)
+            ApplyFlyoutAttachment(sb, o.Flyout, n.Flyout, requestRerender);
+        else if (o.Flyout is not null)
+            sb.Flyout = null;
         ApplySetters(n.Setters, sb);
         return null;
     }
 
-    private UIElement? UpdateToggleSplitButton(ToggleSplitButtonElement o, ToggleSplitButtonElement n, WinUI.ToggleSplitButton tsb)
+    private UIElement? UpdateToggleSplitButton(ToggleSplitButtonElement o, ToggleSplitButtonElement n, WinUI.ToggleSplitButton tsb, Action requestRerender)
     {
         SetElementTag(tsb, n);
         if (o.OnIsCheckedChanged is null && n.OnIsCheckedChanged is not null)
@@ -769,6 +777,10 @@ public sealed partial class Reconciler
             ChangeEchoSuppressor.BeginSuppress(tsb);
             tsb.IsChecked = n.IsChecked;
         }
+        if (n.Flyout is not null)
+            ApplyFlyoutAttachment(tsb, o.Flyout, n.Flyout, requestRerender);
+        else if (o.Flyout is not null)
+            tsb.Flyout = null;
         ApplySetters(n.Setters, tsb);
         return null;
     }

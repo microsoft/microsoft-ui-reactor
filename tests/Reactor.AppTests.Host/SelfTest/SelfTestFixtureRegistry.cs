@@ -564,6 +564,14 @@ internal static class SelfTestFixtureRegistry
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates",
         "Issue343_TeachingTipContentUpdates",
+        // Companion to Issue 343 — Flyout reconciliation on
+        // DropDownButton / SplitButton / ToggleSplitButton.
+        "FlyoutReconcile_DropDownButtonFlyoutUpdates",
+        "FlyoutReconcile_SplitButtonFlyoutUpdates",
+        "FlyoutReconcile_ToggleSplitButtonFlyoutUpdates",
+        "FlyoutReconcile_DropDownButtonFlyoutItemsGrow",
+        "FlyoutReconcile_DropDownButtonContentFlyoutUpdates",
+        "FlyoutReconcile_DropDownButtonFlyoutClears",
         // Hooks coverage — FocusManager, UseFocus
         "HooksCov_FocusManagerRegistration",
         "HooksCov_FocusManagerNavigation",
@@ -1430,6 +1438,12 @@ internal static class SelfTestFixtureRegistry
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates" => new Issue343Fixtures.CommandBarContentUpdates(harness),
         "Issue343_TeachingTipContentUpdates" => new Issue343Fixtures.TeachingTipContentUpdates(harness),
+        "FlyoutReconcile_DropDownButtonFlyoutUpdates"        => new FlyoutReconcileFixtures.DropDownButtonFlyoutUpdates(harness),
+        "FlyoutReconcile_SplitButtonFlyoutUpdates"           => new FlyoutReconcileFixtures.SplitButtonFlyoutUpdates(harness),
+        "FlyoutReconcile_ToggleSplitButtonFlyoutUpdates"     => new FlyoutReconcileFixtures.ToggleSplitButtonFlyoutUpdates(harness),
+        "FlyoutReconcile_DropDownButtonFlyoutItemsGrow"      => new FlyoutReconcileFixtures.DropDownButtonFlyoutItemsGrow(harness),
+        "FlyoutReconcile_DropDownButtonContentFlyoutUpdates" => new FlyoutReconcileFixtures.DropDownButtonContentFlyoutUpdates(harness),
+        "FlyoutReconcile_DropDownButtonFlyoutClears"         => new FlyoutReconcileFixtures.DropDownButtonFlyoutClears(harness),
         "ControlsCov_SearchManager" => new ControlsCoverageFixtures.SearchManagerExercise(harness),
         // Hooks coverage
         "HooksCov_FocusManagerRegistration" => new HooksCoverageFixtures.FocusManagerRegistration(harness),
