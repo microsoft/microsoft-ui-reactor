@@ -26,7 +26,7 @@ class TextBlockModifiersDemo : Component
 {
     public override Element Render() => VStack(8,
         TextBlock("Bold + sized").Bold().FontSize(18),
-        TextBlock("Selectable so the user can copy.").Selectable(),
+        TextBlock("Selectable so the user can copy.").IsTextSelectionEnabled(),
         TextBlock(
             "A long paragraph that demonstrates wrapping behavior. " +
             "Without TextWrapping, content stays on one line and is " +

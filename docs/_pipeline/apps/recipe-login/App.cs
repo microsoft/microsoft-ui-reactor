@@ -58,7 +58,7 @@ class LoginForm : Component
                 ? Empty()
                 : TextBlock(error).Foreground("#C42B1C"),
             Button(submitting ? "Signing in…" : "Sign in", () => _ = Submit())
-                .Disabled(!canSubmit)
+                .IsEnabled(canSubmit)
         ).Padding(20).Width(320);
         // </snippet:render>
     }

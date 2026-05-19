@@ -72,7 +72,7 @@ class TextBlockModifiersDemo : Component
 {
     public override Element Render() => VStack(8,
         TextBlock("Bold + sized").Bold().FontSize(18),
-        TextBlock("Selectable so the user can copy.").Selectable(),
+        TextBlock("Selectable so the user can copy.").IsTextSelectionEnabled(),
         TextBlock(
             "A long paragraph that demonstrates wrapping behavior. " +
             "Without TextWrapping, content stays on one line and is " +
@@ -100,7 +100,7 @@ The fluents you reach for most often:
 | `.TextTrimming(mode)` | `CharacterEllipsis` / `WordEllipsis` / `Clip` / `None`. |
 | `.TextAlignment(alignment)` | `Left` / `Right` / `Center` / `Justify`. |
 | `.LineHeight(double)` | Override the line-box height (useful for dense lists). |
-| `.Selectable()` | Lets the user select and copy the text. |
+| `.IsTextSelectionEnabled()` | Lets the user select and copy the text. |
 | `.CharacterSpacing(int)` | Hundredths of an em — `30` ≈ 0.3em tracking. |
 
 > **Caveat:** `TextBlock` has a fast-path renderer that activates only when you set the

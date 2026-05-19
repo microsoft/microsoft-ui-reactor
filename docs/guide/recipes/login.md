@@ -11,7 +11,7 @@ no view model, no event handler classes.
 | Concern | API |
 |---|---|
 | Per-field state | `UseState<string>` / `UseState<bool>` |
-| Submit-disabled gating | `.Disabled(!canSubmit)` |
+| Submit-disabled gating | `.IsEnabled(canSubmit)` |
 | Async submit | `async Task` + `Task.Delay` |
 | Error display | Conditional `Empty()` vs `TextBlock` |
 | Password input | [`PasswordBox`](../forms.md) |
@@ -78,7 +78,7 @@ return VStack(12,
         ? Empty()
         : TextBlock(error).Foreground("#C42B1C"),
     Button(submitting ? "Signing in…" : "Sign in", () => _ = Submit())
-        .Disabled(!canSubmit)
+        .IsEnabled(canSubmit)
 ).Padding(20).Width(320);
 ```
 

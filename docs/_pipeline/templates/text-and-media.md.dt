@@ -88,7 +88,7 @@ The fluents you reach for most often:
 | `.TextTrimming(mode)` | `CharacterEllipsis` / `WordEllipsis` / `Clip` / `None`. |
 | `.TextAlignment(alignment)` | `Left` / `Right` / `Center` / `Justify`. |
 | `.LineHeight(double)` | Override the line-box height (useful for dense lists). |
-| `.Selectable()` | Lets the user select and copy the text. |
+| `.IsTextSelectionEnabled()` | Lets the user select and copy the text. |
 | `.CharacterSpacing(int)` | Hundredths of an em — `30` ≈ 0.3em tracking. |
 
 <!-- ai:caveat -->

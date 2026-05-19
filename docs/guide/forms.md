@@ -702,7 +702,7 @@ WinUI design page: [Color picker](https://learn.microsoft.com/en-us/windows/apps
 > user is stranded. Two fixes compose: `.Immediate()` on the input
 > switches it to per-keystroke commit (see
 > [Keeping Submit Reachable](#keeping-submit-reachable)), and
-> `.DisabledFocusable()` on the Submit button keeps it keyboard-focusable
+> `.IsDisabledFocusable()` on the Submit button keeps it keyboard-focusable
 > while it's gated.
 
 ## Patterns

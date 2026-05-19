@@ -21,7 +21,7 @@ screenshots:
     region: client
     format: png
   - id: keep-submit-reachable
-    description: "Form using .Immediate() on NumberBox and .DisabledFocusable() on Submit so keyboard users can always reach the button"
+    description: "Form using .Immediate() on NumberBox and .IsDisabledFocusable() on Submit so keyboard users can always reach the button"
     component: KeepSubmitReachableDemo
     region: client
     format: png

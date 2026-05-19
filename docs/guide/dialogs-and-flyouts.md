@@ -133,7 +133,7 @@ all three as Cancel.
 
 When the dialog content is itself a form (rename file, set password),
 the primary button should be disabled until the form is valid. Use
-`IsPrimaryButtonEnabled` rather than `.Disabled()` on a custom button
+`IsPrimaryButtonEnabled` rather than `.IsEnabled(false)` on a custom button
 inside the content — the dialog primary keeps the accent color, the
 keyboard binding to Enter, and the focus trap that the WinUI dialog
 provides:
@@ -324,7 +324,7 @@ class PopupDemo : Component
                 () => setOpen(!open)),
             Popup(popupContent, isOpen: open,
                 onClosed: () => setOpen(false))
-                .LightDismiss()
+                .IsLightDismissEnabled()
                 .Offset(120, 0)
         ).Padding(24);
     }
@@ -340,7 +340,7 @@ content that isn't a menu — all of them are popups.
 
 | Fluent | Effect |
 |---|---|
-| `.LightDismiss(bool)` | Close on outside click. Default `true`. |
+| `.IsLightDismissEnabled(bool)` | Close on outside click. Default `true`. |
 | `.Offset(horizontal, vertical)` | Position relative to the popup's anchor point. |
 | `.Opened(Action)` | Fires after the popup is on screen. |
 | `.Closed(Action)` | Fires after the popup leaves the screen. |

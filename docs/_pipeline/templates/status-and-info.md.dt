@@ -49,7 +49,7 @@ icon, color, and accessibility role in one call:
 | Fluent | Effect |
 |---|---|
 | `.Informational()` / `.Success()` / `.Warning()` / `.Error()` | Sets `Severity` + paired icon/color. |
-| `.Closable(bool)` | Toggle the dismiss button. |
+| `.IsClosable(bool)` | Toggle the dismiss button. |
 | `.IconSource(IconData)` | Override the severity icon. |
 | `.Content(Element)` | Render rich content (links, embedded controls) below the message. |
 | `.ActionButtonClick(Action)` | Subscribe to the trailing action button. |
@@ -186,7 +186,7 @@ same controlled-input pattern as `Slider` and `NumberBox` from
 | Fluent | Effect |
 |---|---|
 | `.MaxRating(int)` | Star count. Default 5. |
-| `.ReadOnly(bool)` | Display-only mode for showing an existing rating. |
+| `.IsReadOnly(bool)` | Display-only mode for showing an existing rating. |
 | `.Caption(string)` | Caption shown below the stars. |
 | `.PlaceholderValue(double)` | Greyed-out value before the user rates. |
 | `.InitialSetValue(int)` | Value applied on first interaction. |

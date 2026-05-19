@@ -176,7 +176,7 @@ class PopupDemo : Component
                 () => setOpen(!open)),
             Popup(popupContent, isOpen: open,
                 onClosed: () => setOpen(false))
-                .LightDismiss()
+                .IsLightDismissEnabled()
                 .Offset(120, 0)
         ).Padding(24);
     }

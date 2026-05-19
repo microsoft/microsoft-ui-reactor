@@ -34,15 +34,15 @@ class InfoBarSeveritiesDemo : Component
     public override Element Render() => VStack(8,
         SubHeading("InfoBar — severity fluents"),
         InfoBar("Saving…", "Your changes are being written.")
-            .Informational().Closable(false),
+            .Informational().IsClosable(false),
         InfoBar("Saved", "Your changes were saved.")
-            .Success().Closable(false),
+            .Success().IsClosable(false),
         InfoBar("Slow connection",
             "Some assets may not load until the network recovers.")
-            .Warning().Closable(false),
+            .Warning().IsClosable(false),
         InfoBar("Save failed",
             "The destination drive is read-only.")
-            .Error().Closable(false)
+            .Error().IsClosable(false)
     ).Padding(24);
 }
 ```
@@ -52,7 +52,7 @@ class InfoBarSeveritiesDemo : Component
 | Fluent | Effect |
 |---|---|
 | `.Informational()` / `.Success()` / `.Warning()` / `.Error()` | Sets `Severity` + paired icon/color. |
-| `.Closable(bool)` | Toggle the dismiss button. |
+| `.IsClosable(bool)` | Toggle the dismiss button. |
 | `.IconSource(IconData)` | Override the severity icon. |
 | `.Content(Element)` | Render rich content (links, embedded controls) below the message. |
 | `.ActionButtonClick(Action)` | Subscribe to the trailing action button. |
@@ -82,7 +82,7 @@ class InfoBarDismissDemo : Component
                 OnClosed = () => setOpen(false),
                 Severity = Microsoft.UI.Xaml.Controls.InfoBarSeverity.Informational,
             },
-            Button("Show again", () => setOpen(true)).Disabled(open)
+            Button("Show again", () => setOpen(true)).IsEnabled(!open)
         ).Padding(24);
     }
 }
@@ -168,7 +168,7 @@ class ProgressRingDemo : Component
         // Determinate ring at 60%.
         ProgressRing(0.6).Width(48).Height(48),
         // Indeterminate spinner.
-        ProgressRing().Active().Width(48).Height(48)
+        ProgressRing().IsActive().Width(48).Height(48)
     ).Padding(24);
 }
 ```
@@ -322,7 +322,7 @@ class RatingDemo : Component
 | Fluent | Effect |
 |---|---|
 | `.MaxRating(int)` | Star count. Default 5. |
-| `.ReadOnly(bool)` | Display-only mode for showing an existing rating. |
+| `.IsReadOnly(bool)` | Display-only mode for showing an existing rating. |
 | `.Caption(string)` | Caption shown below the stars. |
 | `.PlaceholderValue(double)` | Greyed-out value before the user rates. |
 | `.InitialSetValue(int)` | Value applied on first interaction. |

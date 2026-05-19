@@ -199,7 +199,7 @@ class ParameterizedCommandExample : Component
                     // Inline button — Command<T> doesn't have a Button(cmd, arg) overload
                     // by design, so call .Execute(arg) directly from the click handler.
                     Button(delete.Label, () => delete.Execute?.Invoke(item))
-                        .Disabled(!delete.IsEnabled)))
+                        .IsEnabled(delete.IsEnabled)))
         ).Padding(24);
     }
 }

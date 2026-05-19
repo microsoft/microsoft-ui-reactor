@@ -22,7 +22,7 @@ no view model, no event handler classes.
 | Concern | API |
 |---|---|
 | Per-field state | `UseState<string>` / `UseState<bool>` |
-| Submit-disabled gating | `.Disabled(!canSubmit)` |
+| Submit-disabled gating | `.IsEnabled(canSubmit)` |
 | Async submit | `async Task` + `Task.Delay` |
 | Error display | Conditional `Empty()` vs `TextBlock` |
 | Password input | [`PasswordBox`](../forms.md) |

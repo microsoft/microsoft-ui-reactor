@@ -132,7 +132,7 @@ Element footer = atEnd
         : Button(
             loadingMore ? "Loading more…" : $"Load more ({commits.EstimatedRemaining} remaining)",
             () => commits.FetchNext()
-          ).Disabled(loadingMore).Padding(8);
+          ).IsEnabled(!loadingMore).Padding(8);
 
 return VStack(0,
     Heading($"Commits ({commits.TotalCount ?? loadedItems.Length})").Padding(20),

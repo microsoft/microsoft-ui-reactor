@@ -110,7 +110,7 @@ Full coverage on [Controls](controls.md).
 | Text | `.FontSize(n)` `.Bold()` `.SemiBold()` `.Opacity(n)` |
 | Color | `.Background(token)` `.Foreground(token)` `.WithBorder(token, thickness?)` |
 | Shape | `.CornerRadius(n)` |
-| Behavior | `.Disabled(bool)` `.Visible(bool)` `.ToolTip(s)` |
+| Behavior | `.IsEnabled(bool)` `.IsVisible(bool)` `.ToolTip(s)` |
 | Keying | `.WithKey(s)` |
 | Flex | `.Flex(grow?, shrink?, basis?)` |
 | Themed | `.RequestedTheme(ElementTheme)` `.Backdrop(BackdropKind)` |
@@ -168,7 +168,7 @@ so the reconciler can move rows rather than rebuild them.
 the function-component cache holds it across parent re-renders.
 
 **Disable submit during async work.** A single `submitting` bool
-covers both the button's `.Disabled(...)` and the spinner label.
+covers both the button's `.IsEnabled(...)` and the spinner label.
 
 ## Rules
 

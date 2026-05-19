@@ -177,7 +177,7 @@ matches the stale handle and `args.Cancel = true` wedges focus on a
 neighboring page element. Always flip `isActive` to false in the same
 state batch that unmounts the container, or apply the trap to an
 element that stays in the tree across the open/closed transition
-(an always-mounted overlay with `.Visible(open)` rather than
+(an always-mounted overlay with `.IsVisible(open)` rather than
 `When(open, ...)`).
 <!-- /ai:caveat -->
 
@@ -281,7 +281,7 @@ The standard accessible modal combines three primitives: a controlled
 `isOpen` boolean, a `UseFocusTrap` keyed on it, and a
 `UseAnnounce` that announces "Dialog opened" on first render and
 "Dialog closed" on dismiss. The trap container should stay mounted
-across the open/closed transition (use `.Visible(open)` not
+across the open/closed transition (use `.IsVisible(open)` not
 `When(open, ...)`) so focus is released cleanly when `isActive`
 flips false — see the caveat above. The
 [modal-dialog recipe](recipes/modal-dialog.md) wires all three end
@@ -311,17 +311,17 @@ keeps them keyboard- and pointer-interactive.
 
 ## Common Mistakes
 
-### Disabled Submit with no `.DisabledFocusable()`
+### Disabled Submit with no `.IsDisabledFocusable()`
 
 ```csharp
 // Don't:
-Button("Submit", onSubmit).Disabled(!form.IsValid)
+Button("Submit", onSubmit).IsEnabled(form.IsValid)
 ```
 
 A disabled button is removed from the Tab order. The user fixes the
 last field, presses Tab to reach Submit, focus skips past the still-
 disabled button, and they're stranded with no keyboard route. Use
-`.DisabledFocusable(!form.IsValid)` on the button — it keeps the
+`.IsDisabledFocusable(!form.IsValid)` on the button — it keeps the
 button keyboard-focusable while presenting as disabled. The
 [Forms page](forms.md#keeping-submit-reachable) covers the full
 shape (it composes with `.Immediate()` on commit-on-blur inputs).
@@ -338,7 +338,7 @@ Button("Save", onSave)
 focus and pointer hit-testing still work. The result is a button the
 user can Tab to and click but a screen reader user cannot discover.
 If the control should not be exposed to assistive tech, it should
-not exist for keyboard users either; use `.Disabled(true)` or pull it
+not exist for keyboard users either; use `.IsEnabled(false)` or pull it
 from the tree with `When(...)`. Use `.AccessibilityHidden()` only on
 decorative elements that don't accept focus (icons, ornamental
 borders, redundant labels).

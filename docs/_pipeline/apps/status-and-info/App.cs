@@ -15,15 +15,15 @@ class InfoBarSeveritiesDemo : Component
     public override Element Render() => VStack(8,
         SubHeading("InfoBar — severity fluents"),
         InfoBar("Saving…", "Your changes are being written.")
-            .Informational().Closable(false),
+            .Informational().IsClosable(false),
         InfoBar("Saved", "Your changes were saved.")
-            .Success().Closable(false),
+            .Success().IsClosable(false),
         InfoBar("Slow connection",
             "Some assets may not load until the network recovers.")
-            .Warning().Closable(false),
+            .Warning().IsClosable(false),
         InfoBar("Save failed",
             "The destination drive is read-only.")
-            .Error().Closable(false)
+            .Error().IsClosable(false)
     ).Padding(24);
 }
 // </snippet:infobar-severities>
@@ -47,7 +47,7 @@ class InfoBarDismissDemo : Component
                 OnClosed = () => setOpen(false),
                 Severity = Microsoft.UI.Xaml.Controls.InfoBarSeverity.Informational,
             },
-            Button("Show again", () => setOpen(true)).Disabled(open)
+            Button("Show again", () => setOpen(true)).IsEnabled(!open)
         ).Padding(24);
     }
 }
@@ -106,7 +106,7 @@ class ProgressRingDemo : Component
         // Determinate ring at 60%.
         ProgressRing(0.6).Width(48).Height(48),
         // Indeterminate spinner.
-        ProgressRing().Active().Width(48).Height(48)
+        ProgressRing().IsActive().Width(48).Height(48)
     ).Padding(24);
 }
 // </snippet:progress-ring>

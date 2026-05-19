@@ -14,7 +14,7 @@ visible slot changes.
 | Step index | `UseState<int>` |
 | Per-field state | `UseState<string>` / `UseState<int>` / `UseState<bool>` |
 | Step branching | `switch` on the step index returning `Element` |
-| Advance gating | `.Disabled(!canAdvance)` on the Next button |
+| Advance gating | `.IsEnabled(canAdvance)` on the Next button |
 | Input controls | [`TextField`](../forms.md), [`RadioButtons`](../forms.md), [`CheckBox`](../forms.md) |
 
 ### State
@@ -54,7 +54,7 @@ bool canAdvance = step switch
 
 `canAdvance` is a pure function of the current step plus the field
 values. It runs on every render — no debounce, no validation pass —
-and the Next button binds to it directly via `.Disabled(!canAdvance)`.
+and the Next button binds to it directly via `.IsEnabled(canAdvance)`.
 Step 0 wants a name and a plausible email; step 1 wants a role
 selected; step 2 (summary) is always advanceable since the only
 forward action is Submit.
@@ -107,9 +107,9 @@ return VStack(16,
     Heading("Create your account"),
     body,
     HStack(8,
-        Button("Back", () => setStep(step - 1)).Disabled(step == 0),
+        Button("Back", () => setStep(step - 1)).IsEnabled(step != 0),
         Button(step == 2 ? "Submit" : "Next",
-            () => setStep(step + 1)).Disabled(!canAdvance || step == 2)
+            () => setStep(step + 1)).IsEnabled(canAdvance && step != 2)
     )
 ).Padding(20).Width(380);
 ```
