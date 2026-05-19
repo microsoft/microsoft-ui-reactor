@@ -1,0 +1,377 @@
+
+Reactor ships a small Roslyn analyzer suite that catches mistakes the
+type system can't — conditional hook calls, missing list keys,
+hardcoded colors, icon buttons with no accessible name, stale closure
+captures in `UseMemoCells`, and missing XML docs on public API. The
+analyzers run inside the C# compiler on every build, so a violation
+shows up as a red squiggle in the editor before you ever run the app.
+They're written to be cheap: each one starts with a syntactic gate
+(does this invocation even mention the method name we care about?)
+before consulting the [`SemanticModel`](rules-of-reactor.md), which is
+where the expensive type resolution lives. The most common mistake is
+authoring a new analyzer that hits `SemanticModel.GetSymbolInfo` on
+every `InvocationExpression` — that single change can double build
+time on a large solution.
+
+# Analyzer Architecture
+
+This page walks through the Reactor analyzer pipeline end-to-end:
+how a diagnostic descriptor wires into the C# compilation, what
+happens on each `InvocationExpression`, and how to add your own
+rule. The user-facing catalog of diagnostics lives on the
+[Rules of Reactor](rules-of-reactor.md) page; this is the contributor
+view. The analyzers sit in
+[`src/Reactor.Analyzers/`](https://github.com/microsoft/reactor) and
+are pulled into every Reactor consumer through the SDK's
+`Analyzers` ItemGroup.
+
+## The rule pipeline
+
+![Reactor analyzer rule pipeline — SyntaxNode → invocation filter → fast-path name check → semantic model → diagnostic / code fix](images/analyzer-architecture/rule-pipeline.svg)
+
+Every analyzer is a `DiagnosticAnalyzer` that registers one or more
+syntax-node actions in `Initialize`. The host (Roslyn) hands the
+analyzer a `SyntaxNodeAnalysisContext` per matching node; the analyzer
+inspects the node, optionally walks the [`SemanticModel`](rules-of-reactor.md)
+to resolve symbols, and calls `context.ReportDiagnostic` when it finds a
+violation. Reactor's analyzers all match on `SyntaxKind.InvocationExpression`
+because every diagnostic in the catalog fires on a method call — a hook,
+a factory, a modifier, a LINQ `Select`.
+
+```csharp
+public override void Initialize(AnalysisContext context)
+{
+    context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+    context.EnableConcurrentExecution();
+    context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
+}
+
+private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
+{
+    var invocation = (InvocationExpressionSyntax)context.Node;
+    var methodName = GetInvokedMethodName(invocation);
+    if (methodName is null) return;
+    if (!LooksLikeHook(methodName)) return;
+    if (!IsLikelyReactorHook(context, invocation)) return;
+```
+
+The four cheap calls at the top do the heavy lifting on cost:
+`GetInvokedMethodName` reads the syntax tree only, `LooksLikeHook`
+matches a `Use` prefix on the bare string, and `IsLikelyReactorHook`
+short-circuits on `using` directives so a third-party method named
+`UseSomething` doesn't trip the rule. Only after all three pass does
+the rule body run. The same fast-path / slow-path layering shows up in
+every analyzer in the suite — it's the difference between a rule that
+costs microseconds per file and one that re-walks the symbol graph on
+every invocation.
+
+> **Caveat:** `SemanticModel.GetSymbolInfo` is allocation-heavy and not free even on a
+> single call. Don't reach for it inside the syntax callback unless a
+> cheaper syntactic check has already filtered the node down to plausible
+> candidates. The `MissingWithKeyAnalyzer` is the extreme: it never calls
+> `GetSymbolInfo` at all — a substring check for `.WithKey(` in the
+> lambda body is enough because false positives only fire when the layout
+> container also turns out to be a Reactor factory, which the analyzer
+> then confirms by name list.
+
+## Diagnostic descriptors
+
+Every diagnostic is described by a `DiagnosticDescriptor` — the id, the
+title, the message format, the category, the severity, and the help URL
+(when one exists). The descriptor is `static readonly` so Roslyn can
+deduplicate it across analyzer instances.
+
+```csharp
+private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
+{
+    var invocation = (InvocationExpressionSyntax)context.Node;
+
+    // Match: Button(expr, action) as a factory call (IdentifierNameSyntax, not member access)
+    if (invocation.Expression is not IdentifierNameSyntax identifier)
+        return;
+    if (identifier.Identifier.Text != "Button")
+        return;
+
+    var args = invocation.ArgumentList.Arguments;
+    if (args.Count != 2)
+        return;
+
+    // If the first argument is a string literal, it's a text button — no diagnostic needed
+    var firstArg = args[0].Expression;
+    if (firstArg is LiteralExpressionSyntax literal
+        && literal.IsKind(SyntaxKind.StringLiteralExpression))
+        return;
+
+    // Check the fluent chain for .AutomationName()
+    if (HasModifierInChain(invocation, "AutomationName"))
+        return;
+
+    context.ReportDiagnostic(Diagnostic.Create(
+        Rule,
+        invocation.GetLocation()));
+}
+```
+
+`AnalyzeInvocation` here is the rule body for [`REACTOR_A11Y_001`](rules-of-reactor.md):
+it matches `Button(expr, action)` as an `IdentifierNameSyntax`-rooted
+call (not a member access — that filter alone rejects most invocations
+in a typical codebase), then walks back up the fluent chain looking for
+a `.AutomationName(...)` modifier. The walk caps at the enclosing
+statement so a chain that wanders into another statement doesn't
+falsely satisfy the rule. The `HasModifierInChain` helper is the same
+shape every analyzer that needs to look at trailing modifiers uses.
+
+## The current diagnostic set
+
+These are the rules shipping out of
+[`src/Reactor.Analyzers/`](https://github.com/microsoft/reactor) today.
+Severity is the default; consumers can promote or suppress per project
+via `.editorconfig`.
+
+| Id | Severity | Title | Source |
+|---|---|---|---|
+| `REACTOR_HOOKS_001` | Warning | Hook called conditionally | `HookRulesAnalyzer.cs` |
+| `REACTOR_HOOKS_004` | Warning | Hook deps contains freshly allocated value | `HookRulesAnalyzer.cs` |
+| `REACTOR_HOOKS_005` | Warning | Hook called outside Render or a custom-hook method | `HookRulesAnalyzer.cs` |
+| `REACTOR_HOOKS_006` | Info | Resource fetcher looks non-idempotent | `HookRulesAnalyzer.cs` |
+| `REACTOR_HOOKS_007` | Warning | UseMemoCells builder captures variable not in deps | `UseMemoCellsAnalyzer.cs` |
+| `REACTOR_A11Y_001` | Warning | Icon-only button needs an accessible name | `AccessibilityAnalyzers.cs` |
+| `REACTOR_A11Y_002` | Warning | Image needs alt text or AccessibilityHidden | `AccessibilityAnalyzers.cs` |
+| `REACTOR_A11Y_003` | Warning | Form field needs a label | `AccessibilityAnalyzers.cs` |
+| `REACTOR_THEME_001` | Warning | Use ThemeRef instead of hard-coded color | `UseThemeRefAnalyzer.cs` |
+| `REACTOR_THEME_002` | Warning | Prefer lightweight styling | `UseLightweightStylingAnalyzer.cs` |
+| `REACTOR_THEME_003` | Warning | RequestedTheme set on a non-root element | `RequestedThemeSetAnalyzer.cs` |
+| `REACTOR_DSL_001` | Warning | Dynamic list item missing .WithKey | `MissingWithKeyAnalyzer.cs` |
+| `REACTOR_DOC_001` | Warning | Public API missing XML doc summary | `XmlDocSummaryAnalyzer.cs` |
+| `REACTOR_DOC_002` | Warning | XML doc cref does not resolve | `XmlDocCrefAnalyzer.cs` |
+
+`REACTOR_HOOKS_002` and `_003` are reserved for future control-flow /
+data-flow analyses (variable hook counts across early returns, async
+boundaries inside `UseEffect`). They have descriptor slots but no
+implementation today.
+
+## Symbol-grounded matching — the WithKey case
+
+```csharp
+static void Analyze(SyntaxNodeAnalysisContext ctx)
+{
+    var inv = (InvocationExpressionSyntax)ctx.Node;
+
+    if (inv.Expression is not MemberAccessExpressionSyntax member) return;
+    if (member.Name.Identifier.ValueText != "Select") return;
+
+    // Single lambda argument with an invocation body.
+    if (inv.ArgumentList.Arguments.Count != 1) return;
+    if (inv.ArgumentList.Arguments[0].Expression is not LambdaExpressionSyntax lambda) return;
+
+    var body = lambda.Body;
+    if (body is BlockSyntax block) body = ExtractReturnExpression(block) ?? body;
+    if (body is not InvocationExpressionSyntax) return;
+
+    // Cheap textual probe — analyzers run hot, so avoid full symbol resolution.
+    // If the lambda body mentions ".WithKey(" anywhere, assume it's keyed.
+    var bodyText = body.ToString();
+    if (bodyText.Contains(".WithKey(")) return;
+```
+
+[`REACTOR_DSL_001`](rules-of-reactor.md) is the loudest example of
+syntactic-only matching done right. It fires on
+`items.Select(x => Row(x))` where `Row(...)` doesn't end in
+`.WithKey(...)`, and the entire decision is a substring check on
+`body.ToString()`. The trade-off is conservative: a `Select` projecting
+to a non-Reactor element type also gets the substring check, but the
+follow-on `IsConsumedAsLayoutChildren` walk filters to
+[`VStack`](layout.md) / `HStack` / `FlexRow` / `Grid` / `WrapGrid`
+parents by name. False positives require the user to be inside one of
+those layout factories *and* projecting a method that happens not to
+end in `.WithKey` — rare enough that the syntactic-only approach is
+correct.
+
+```csharp
+private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
+{
+    var invocation = (InvocationExpressionSyntax)context.Node;
+
+    if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+        return;
+
+    var methodName = memberAccess.Name.Identifier.Text;
+    if (!TargetMethods.Contains(methodName))
+        return;
+
+    var args = invocation.ArgumentList.Arguments;
+    if (args.Count == 0)
+        return;
+
+    // Check if the first argument is a string literal
+    var firstArg = args[0].Expression;
+    if (firstArg is not LiteralExpressionSyntax literal)
+        return;
+    if (!literal.IsKind(SyntaxKind.StringLiteralExpression))
+        return;
+
+    var colorValue = literal.Token.ValueText;
+```
+
+[`REACTOR_THEME_001`](theming-tokens.md) is a counterpoint: the rule
+needs to read the string literal that follows
+`.Background("...")` / `.Foreground("...")` / `.WithBorder("...")` and
+map it to a suggested theme token. The descriptor message format has a
+`{0}` slot for the suggested token, which the analyzer looks up in
+`ColorToThemeToken` after the syntactic match. The diagnostic flows
+through to a paired `CodeFixProvider` that rewrites the literal to the
+matching `Theme.Accent` / `Theme.PrimaryText` member.
+
+## Property-bag handoff to the code fix
+
+Some rules carry data from the analyzer to the fix provider that isn't
+trivial to recover from the diagnostic location alone. The
+[`UseMemoCellsAnalyzer`](rules-of-reactor.md) does this — when the
+builder lambda closes over a variable that isn't in `deps`, the rule
+needs to tell the code fix which variable name to add:
+
+```csharp
+private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
+{
+    var invocation = (InvocationExpressionSyntax)context.Node;
+    var name = GetInvokedMethodName(invocation);
+    if (name is null || !HookNames.Contains(name)) return;
+
+    var model = context.SemanticModel;
+    var symbol = model.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+    if (symbol is null) return;
+
+    // Match by symbol so user-defined methods named UseMemoCells in
+    // unrelated namespaces don't trip the analyzer.
+    if (!IsReactorMemoCellsHook(symbol)) return;
+```
+
+`CaptureNameProperty` is the contract. The rule body, after walking the
+lambda's body for unbound captures, writes the variable name into
+`Diagnostic.Properties` keyed by that string. The fix provider reads it
+back out and inserts the corresponding argument into the call's
+`deps` list. Round-tripping through the property bag is the supported
+pattern — embedding the value in the message text would break the
+fix the moment the message changes or gets localized.
+
+## The doc-system analyzers
+
+Phase 1.8 of [spec 041](https://github.com/microsoft/reactor) added
+two analyzers that don't fire on application code at all — they fire
+on the Reactor SDK's own source to keep the auto-generated reference
+docset honest. `REACTOR_DOC_001` flags any public type, method,
+property, or event without a `<summary>` XML doc comment;
+`REACTOR_DOC_002` flags `cref="X"` attributes that don't resolve to a
+real symbol. Both run during the `dotnet build` of `Reactor.csproj`
+itself; downstream consumers don't see them.
+
+The doc analyzers register a `SymbolAction` instead of a
+`SyntaxNodeAction` — the question they answer is per-symbol
+(is this symbol documented?) rather than per-syntax-node, so the
+symbol-level callback is the cheaper and more accurate hook. This is
+the second registration pattern in the codebase; everything else uses
+the syntax-node pattern from the rule pipeline above. When you author a
+new analyzer, the question to ask first is "is this rule about a
+location in source, or about a thing in the type system" — the answer
+picks the registration kind.
+
+## Patterns
+
+### Authoring a new analyzer
+
+The minimum new-analyzer surface is one descriptor, one registration,
+one rule body, and one entry in the project's `AnalyzerReleases.Shipped.md`
+when the rule moves out of preview. Start by writing the descriptor
+with a stable id that follows the `REACTOR_<CATEGORY>_<NNN>` convention:
+
+```csharp
+public const string DiagnosticId = "REACTOR_MYTHING_001";
+private static readonly DiagnosticDescriptor Rule = new(
+    DiagnosticId,
+    title: "One-line title",
+    messageFormat: "Specific problem: {0}",
+    category: "Reactor.MyThing",
+    defaultSeverity: DiagnosticSeverity.Warning,
+    isEnabledByDefault: true,
+    description: "Why this is wrong and what to do instead.");
+```
+
+Then register the syntax-node action in `Initialize` and write the
+rule body. Mirror the layering from
+[`HookRulesAnalyzer`](rules-of-reactor.md) — cheapest syntactic check
+first, name fast-path second, symbol resolution last, diagnostic
+report only after all of those. If the rule wants a code fix, route
+the relevant capture into `Diagnostic.Properties` and pair the
+analyzer with a `CodeFixProvider` in the same assembly. Add a unit
+test under `tests/Reactor.Analyzers.Tests/` for the positive case,
+the negative case, and any edge that almost trips the syntactic
+fast path — those are the regressions that bite later.
+
+## Common Mistakes
+
+### Reaching for SemanticModel on every node
+
+```csharp
+// Don't:
+private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
+{
+    var invocation = (InvocationExpressionSyntax)context.Node;
+    var symbol = context.SemanticModel.GetSymbolInfo(invocation).Symbol;
+    if (symbol is not IMethodSymbol m) return;
+    if (m.Name != "Button") return;
+    // ...
+}
+```
+
+```csharp
+public override void Initialize(AnalysisContext context)
+{
+    context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+    context.EnableConcurrentExecution();
+    context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
+}
+
+private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
+{
+    var invocation = (InvocationExpressionSyntax)context.Node;
+    var methodName = GetInvokedMethodName(invocation);
+    if (methodName is null) return;
+    if (!LooksLikeHook(methodName)) return;
+    if (!IsLikelyReactorHook(context, invocation)) return;
+```
+
+The anti-pattern resolves a full symbol on every invocation in the
+compilation — every `.ToString()`, every `string.Format`, every
+LINQ method, every method call in every test file. The correct shape
+checks the method name syntactically first and only resolves the
+symbol after the cheap check passes. On a large solution the
+difference is seconds of build time per file.
+
+## Tips
+
+**Match `IdentifierNameSyntax` for factories, `MemberAccessExpressionSyntax`
+for modifiers.** Reactor factories are imported as
+[`using static`](components.md) so they show up as bare identifiers
+(`Button(...)`, `VStack(...)`). Modifiers are always
+`.Method(...)` chains, which are member accesses. Splitting on the
+expression kind early prunes most of the irrelevant invocations
+before any name check runs.
+
+**Use `Diagnostic.Properties` for the fix-provider handoff.** Anything
+the fix needs that isn't trivially recoverable from the diagnostic
+`Location` goes in the property bag. Re-parsing the message text
+breaks the moment the message is touched.
+
+**Run the analyzer against `samples/`.** The Reactor sample apps
+collectively cover every modifier and every hook combination the test
+suite cares about. A new analyzer that produces zero findings against
+`samples/` either over-fits its tests or has a syntactic gate that's
+too narrow — both warrant a look before merge.
+
+## Next Steps
+
+- **[Rules of Reactor](rules-of-reactor.md)** — User-facing catalog of every diagnostic in the suite.
+- **[Theming Tokens](theming-tokens.md)** — How `REACTOR_THEME_001` plugs into the styling story.
+- **[Accessibility](accessibility.md)** — How the `REACTOR_A11Y_*` rules read code.
+- **[Hooks Internals](hooks-internals.md)** — Why the hook rules exist; the slot-table invariant they protect.
+- **[DevTools Internals](devtools-internals.md)** — Next under-the-hood page.

@@ -5,6 +5,14 @@
 // auto-validation. FormField wraps each input with label + required marker +
 // error display. The validation context is resolved through React-style
 // context — no need to thread it explicitly to .Validate().
+//
+// Named-input fluents (`.NumericInput()`, `.EmailInput()`) pre-configure the
+// TextField with the right InputScope / keyboard hint so on-screen / IME
+// keyboards open in the correct mode. They layer on top of validators.
+// `.MaxLength(n)` caps input length at the control level.
+// `.Changed(handler)` is the fluent alias for the positional onChanged
+// callback — it REPLACES (does not append). When you need state-setter +
+// side-effects, fold both into one lambda.
 
 // In this clone, run `mur pack-local` once. Bump the version below to match
 // whatever `mur pack-local` printed (default: 0.0.0-local). For a real NuGet
@@ -35,10 +43,15 @@ class App : Component
         var (email,   setEmail)   = UseState("");
         var (password, setPwd)    = UseState("");
         var (confirm, setConfirm) = UseState("");
+        var (age,     setAge)     = UseState("");
         var (submitted, setSubmitted) = UseState(false);
 
         var sw = submitted ? ShowWhen.Always : ShowWhen.WhenTouched;
 
+        // The positional onChanged is the single callback slot. `.Changed(...)`
+        // is the fluent alias — equivalent, but it REPLACES the positional
+        // handler. To layer side effects (state setter + MarkTouched), fold
+        // them into one lambda as below.
         return VStack(12,
             Heading("Sign up"),
 
@@ -51,10 +64,19 @@ class App : Component
 
             FormField(
                 TextField(email, v => { setEmail(v); ctx.MarkTouched("email"); }, placeholder: "you@example.com")
+                    .EmailInput()
                     .Validate("email", email,
                         Validate.Required("Email is required"),
                         Validate.Email("Not a valid email")),
                 label: "Email", required: true, showWhen: sw),
+
+            FormField(
+                TextField(age, v => { setAge(v); ctx.MarkTouched("age"); }, placeholder: "Age")
+                    .NumericInput()
+                    .MaxLength(3)
+                    .Validate("age", age,
+                        Validate.Required("Age is required")),
+                label: "Age", required: true, showWhen: sw),
 
             FormField(
                 PasswordBox(password, v => { setPwd(v); ctx.MarkTouched("password"); })

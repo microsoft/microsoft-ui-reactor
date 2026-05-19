@@ -28,7 +28,7 @@ public class ObservableListDataSource<[DynamicallyAccessedMembers(DynamicallyAcc
             SubscribeItem(item);
     }
 
-    public event Action? DataChanged;
+    public event EventHandler? DataChanged;
 
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -58,7 +58,7 @@ public class ObservableListDataSource<[DynamicallyAccessedMembers(DynamicallyAcc
                 SubscribeItem(item);
         }
 
-        DataChanged?.Invoke();
+        DataChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void SyncInternalList()
@@ -91,7 +91,7 @@ public class ObservableListDataSource<[DynamicallyAccessedMembers(DynamicallyAcc
 
     private void OnItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        DataChanged?.Invoke();
+        DataChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void Dispose()

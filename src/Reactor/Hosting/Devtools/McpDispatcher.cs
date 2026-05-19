@@ -140,6 +140,7 @@ internal sealed class McpDispatcher
         };
     }
 
+    // <snippet:tools-call-dispatch>
     private object? HandleCall(JsonElement? @params)
     {
         if (@params is not { } p || p.ValueKind != JsonValueKind.Object)
@@ -152,6 +153,7 @@ internal sealed class McpDispatcher
         JsonElement? args = p.TryGetProperty("arguments", out var argsEl) ? argsEl : null;
         return Invoke(name, args);
     }
+    // </snippet:tools-call-dispatch>
 
     private object? HandleDirect(string method, JsonElement? @params)
     {

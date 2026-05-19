@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>StressPerf.VirtualList.WinUI</RootNamespace>
+    <AssemblyName>StressPerf.VirtualList.WinUI</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <!-- PublishAot intentionally OFF for this variant: the spec 042 perf
+         gate compares the JIT'd Reactor variant against a JIT'd WinUI
+         vanilla baseline, so neither side has the AOT linker as a
+         confound. (StressPerf.VirtualList.Reactor is also JIT'd at
+         dotnet build time — PublishAot only matters at publish.) -->
+    <PublishAot>false</PublishAot>
+    <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StressPerf.Shared\StressPerf.Shared.csproj" />
+  </ItemGroup>
+</Project>

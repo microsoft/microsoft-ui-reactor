@@ -1,0 +1,12 @@
+app:
+  title: "Testing Demo"
+  width: 360
+  height: 240
+  startup-delay: 1200
+
+screenshots:
+  - id: counter
+    description: "Tiny counter Component used as the fixture target in testing.md examples."
+    component: TestingApp
+    region: client
+    format: png

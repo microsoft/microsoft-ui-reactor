@@ -1,0 +1,17 @@
+app:
+  title: "Multi-Step Form Recipe"
+  width: 420
+  height: 460
+  startup-delay: 1200
+
+screenshots:
+  - id: step1
+    description: "Wizard step one — account details with Next gated by validation."
+    component: MultiStepFormApp
+    region: client
+    format: png
+  - id: summary
+    description: "Final summary step showing the values captured across all three steps."
+    component: MultiStepFormApp
+    region: client
+    format: png

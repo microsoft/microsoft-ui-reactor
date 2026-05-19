@@ -309,7 +309,7 @@ public sealed class DemoScriptShell : Component
         {
             try
             {
-                var dq = ReactorApp.ActiveHost?.Window?.DispatcherQueue;
+                var dq = ReactorApp.PrimaryWindow?.Host.Window?.DispatcherQueue;
                 if (dq is null || dq.HasThreadAccess)
                     announce.Announce(message, assertive);
                 else
@@ -807,7 +807,7 @@ public sealed class DemoScriptShell : Component
 
     static void InitPicker(object picker)
     {
-        var window = ReactorApp.ActiveHost?.Window;
+        var window = ReactorApp.PrimaryWindow?.Host.Window;
         if (window is null) return;
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
         WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);

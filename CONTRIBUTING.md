@@ -329,6 +329,25 @@ Hooks live in `src/Reactor/Core/Component.cs` (public API) and `src/Reactor/Core
 
 ---
 
+## Documenting changes
+
+New public surface in `src/Reactor/` lands with a doc page — no merge without doc. The bar is **Solid tier or higher** (spec [041 §11](docs/specs/041-docs-comprehensive-uplift.md)); Comprehensive is preferred when the surface is top-traffic or has non-obvious mental-model implications.
+
+What "lands with a doc page" means in practice depends on the change:
+
+| Change | Doc obligation |
+|---|---|
+| New element factory in `Dsl.cs` | Extend the matching topic page (e.g. add to the controls catalog under `text-and-media`, `forms`, `collections`, etc.) with at least a row in the reference table + a snippet ref. Add a `<!-- ref:Member -->` marker so the generated reference page backlinks the topic. |
+| New hook on `RenderContext` / `Component` | Add to `hooks.md` reference table + a Pattern section showing real usage. Add a `<!-- ref:UseX -->` marker. |
+| New public type that doesn't fit an existing topic | Author a new template under `docs/_pipeline/templates/`. Solid tier is the minimum for net-new pages. Add an entry to `reference-map.yaml` so reference generation routes its members. |
+| Internal refactor with no public-API change | No doc page required, but if you renamed a public symbol that templates reference, update those templates in the same PR. |
+
+The CI tier-drift gate (`docs-check-tier` in `.github/workflows/ci.yml`, spec [041 §5.2](docs/specs/041-docs-comprehensive-uplift.md)) blocks merges that knock a template's declared tier out of compliance with its §11 structural shape. The doc pipeline also emits `REACTOR_DOC_REGISTRY_W002` when a registry-declared guide page has no inbound `<!-- ref:Member -->` markers — that warning surfaces public API that has slipped through the doc-coverage gate.
+
+For the full doc-pipeline workflow (compile, check-tier, render-diagrams), see [`docs/contributing/doc-pipeline.md`](docs/contributing/doc-pipeline.md).
+
+---
+
 ## Code style
 
 - **Elements are immutable records.** Use `with` expressions for variations.

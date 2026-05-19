@@ -1253,10 +1253,11 @@ Element Pending(Element fallback, Element child);
 
 - [`docs/specs/020-async-resources-design.md`](../specs/020-async-resources-design.md)
   — the design specification; this reference paper's intent.
-- [`docs/reference/state-and-hooks.md`](state-and-hooks.md) — the hook / state
-  foundation that async resources build on.
-- [`docs/reference/reconciliation.md`](reconciliation.md) — how component
-  unmount / effect-cleanup / rerender flows work, which this system depends on.
+- [`docs/guide/hooks-internals.md`](../guide/hooks-internals.md) — the
+  hook / state foundation that async resources build on.
+- [`docs/guide/reconciliation.md`](../guide/reconciliation.md) — how
+  component unmount / effect-cleanup / rerender flows work, which this
+  system depends on.
 - `tests/Reactor.Tests/Core/UseResourceTests.cs` and siblings —
   deterministic test harness that exercises every transition described here.
 - `tests/Reactor.AppTests.Host/SelfTest/Fixtures/AsyncResource*Fixtures.cs` —

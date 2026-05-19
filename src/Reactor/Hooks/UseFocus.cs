@@ -70,6 +70,7 @@ public sealed class FocusManager
     /// Focuses the field after the given field in registration order.
     /// If the current field is the last one, triggers submit.
     /// </summary>
+    // <snippet:focus-manager>
     public void FocusNext(string? currentField = null)
     {
         if (_fieldOrder.Count == 0) return;
@@ -92,6 +93,7 @@ public sealed class FocusManager
             _onSubmit?.Invoke();
         }
     }
+    // </snippet:focus-manager>
 
     /// <summary>
     /// Focuses the field before the given field in registration order.

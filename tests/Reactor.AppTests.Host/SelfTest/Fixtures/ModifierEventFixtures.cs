@@ -323,4 +323,114 @@ internal static class ModifierEventFixtures
             H.Check("MountAction_Fired", mountActionCount >= 1);
         }
     }
+
+    internal class ModifierClearResets(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var brush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red);
+
+                var controlMods = phase == 0
+                    ? new ElementModifiers
+                    {
+                        RequestedTheme = ElementTheme.Dark,
+                        Margin = new Thickness(3, 4, 5, 6),
+                        Padding = new Thickness(7, 8, 9, 10),
+                        Width = 120,
+                        Height = 44,
+                        MinWidth = 80,
+                        MinHeight = 30,
+                        MaxWidth = 240,
+                        MaxHeight = 90,
+                        HorizontalAlignment = HorizontalAlignment.Right,
+                        VerticalAlignment = VerticalAlignment.Bottom,
+                        Opacity = 0.5,
+                        IsVisible = false,
+                        ToolTip = "clear-me",
+                        IsEnabled = false,
+                        CornerRadius = new CornerRadius(6),
+                        BorderBrush = brush,
+                        BorderThickness = new Thickness(2),
+                        Background = brush,
+                        Foreground = brush,
+                        AutomationName = "clear-name",
+                        AutomationId = "clear-id",
+                        IsTabStop = false,
+                        TabIndex = 7,
+                        AccessKey = "C",
+                        XYFocusKeyboardNavigation = Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Enabled,
+                        ElementSoundMode = ElementSoundMode.Off,
+                        HeadingLevel = Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2,
+                        FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+                        FontSize = 22,
+                        FontWeight = new global::Windows.UI.Text.FontWeight(700),
+                    }
+                    : new ElementModifiers();
+
+                var borderMods = phase == 0
+                    ? new ElementModifiers
+                    {
+                        Margin = new Thickness(4),
+                        Padding = new Thickness(5),
+                        CornerRadius = new CornerRadius(8),
+                        BorderBrush = brush,
+                        BorderThickness = new Thickness(3),
+                        Background = brush,
+                        AutomationName = "border-clear-name",
+                    }
+                    : new ElementModifiers();
+
+                return VStack(
+                    Button("ClearModifierPhase", () => setPhase(1)),
+                    Button("ClearTarget") with { Modifiers = controlMods },
+                    Border(TextBlock("ClearBorderChild")) with { Modifiers = borderMods });
+            });
+
+            await Harness.Render();
+            var initial = H.FindButton("ClearTarget");
+            H.Check("ModifierClear_InitialCollapsed",
+                initial is not null && initial.Visibility == Visibility.Collapsed);
+
+            H.ClickButton("ClearModifierPhase");
+            await Harness.Render();
+
+            var button = H.FindButton("ClearTarget");
+            H.Check("ModifierClear_ButtonPresent", button is not null);
+            if (button is not null)
+            {
+                H.Check("ModifierClear_ThemeCleared", button.RequestedTheme == ElementTheme.Default);
+                H.Check("ModifierClear_SizeCleared",
+                    double.IsNaN(button.Width) && double.IsNaN(button.Height)
+                    && button.MinWidth == 0 && button.MinHeight == 0
+                    && double.IsPositiveInfinity(button.MaxWidth)
+                    && double.IsPositiveInfinity(button.MaxHeight));
+                H.Check("ModifierClear_AlignmentCleared",
+                    button.HorizontalAlignment == HorizontalAlignment.Stretch
+                    && button.VerticalAlignment == VerticalAlignment.Stretch);
+                H.Check("ModifierClear_VisibleEnabled",
+                    button.Visibility == Visibility.Visible && button.IsEnabled);
+                H.Check("ModifierClear_TooltipCleared",
+                    ToolTipService.GetToolTip(button) is null);
+                H.Check("ModifierClear_AutomationCleared",
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(button) != "clear-name"
+                    && Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(button) != "clear-id");
+                H.Check("ModifierClear_AccessKeyCleared", button.AccessKey == "");
+                H.Check("ModifierClear_BorderCleared", button.BorderThickness == new Thickness(0));
+            }
+
+            var border = H.FindControl<Border>(b => b.Child is TextBlock tb && tb.Text == "ClearBorderChild");
+            H.Check("ModifierClear_BorderPresent", border is not null);
+            if (border is not null)
+            {
+                H.Check("ModifierClear_BorderThicknessCleared", border.BorderThickness == new Thickness(0));
+                H.Check("ModifierClear_BorderCornerCleared", border.CornerRadius == new CornerRadius(0));
+                H.Check("ModifierClear_BorderAutomationCleared",
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(border) != "border-clear-name");
+            }
+        }
+    }
 }

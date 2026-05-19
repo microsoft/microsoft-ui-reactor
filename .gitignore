@@ -212,6 +212,10 @@ tests/stress_perf/publish_log*.txt
 # Cobertura reports are regenerated on demand and should never be committed.
 coverage/
 *.cobertura.xml
+# `tools/coverage/` holds source-controlled coverage helper scripts and is
+# NOT generated output; carve it out of the `coverage/` ignore above.
+!tools/coverage/
+!tools/coverage/**
 
 # Eval / scratch run output — local artifacts from eval drivers, never tracked.
 runs/
@@ -224,6 +228,9 @@ tests/stress_perf/dwm-attribution.log
 tests/stress_perf/attr-*.csv
 tests/stress_perf/sweep-results/
 tests/stress_perf/sweep_results.csv
+# Per-frame CSV captures under baselines/ — only summary.md / summary.csv are tracked.
+tests/stress_perf/baselines/**/*.frames.csv
+tests/stress_perf/baselines/**/per-rep.csv
 # Build artifacts inside react-native-windows projects that the templates
 # don't already cover. The per-project .gitignore files inside
 # tests/stress_perf_rn/*/  handle node_modules, msbuild output, etc.;

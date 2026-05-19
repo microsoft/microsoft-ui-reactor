@@ -1,7 +1,10 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hooks;
+using Microsoft.UI.Reactor.Input;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using Component = Microsoft.UI.Reactor.Core.Component;
@@ -183,6 +186,86 @@ class ObservableCollectionDemo : Component
 }
 // </snippet:observable-collection>
 
+// <snippet:element-ref-focus>
+class ElementRefFocusDemo : Component
+{
+    public override Element Render()
+    {
+        var (name, setName) = UseState("");
+        var fieldRef = this.UseElementRef<TextBox>();
+
+        return VStack(12,
+            SubHeading("Imperative focus via ElementRef<T>"),
+            TextField(name, setName, placeholder: "Name").Ref(fieldRef),
+            Button("Focus the field", () =>
+                fieldRef.Current?.Focus(FocusState.Programmatic))
+        ).Padding(24);
+    }
+}
+// </snippet:element-ref-focus>
+
+// <snippet:custom-hook>
+// Custom hook — composes UseState + UseEffect on RenderContext. Treated like
+// a built-in hook from any function-component Render. Same hook-rules apply:
+// call unconditionally, at the top of render, in the same order every time.
+static class TogglerHook
+{
+    public static (bool IsOn, Action Toggle) UseToggler(this RenderContext ctx, bool initial = false)
+    {
+        var (on, setOn) = ctx.UseState(initial);
+        return (on, () => setOn(!on));
+    }
+}
+
+class CustomHookDemo : Component
+{
+    public override Element Render() => Memo(ctx =>
+    {
+        var (isOn, toggle) = ctx.UseToggler();
+        return VStack(8,
+            SubHeading("Custom hook: UseToggler"),
+            Button(isOn ? "On" : "Off", toggle),
+            TextBlock(isOn ? "State is on." : "State is off.")
+                .Foreground(isOn ? "#107c10" : "#666666")
+        ).Padding(24);
+    });
+}
+// </snippet:custom-hook>
+
+// <snippet:error-boundary-retry>
+class ErrorBoundaryRetryDemo : Component
+{
+    public override Element Render()
+    {
+        var (resetKey, setResetKey) = UseState(0);
+
+        return VStack(12,
+            SubHeading("ErrorBoundary with retry"),
+            ErrorBoundary(
+                Component<FlakyComponent>().WithKey($"flaky-{resetKey}"),
+                ex => VStack(8,
+                    TextBlock("Couldn't load.").Bold().Foreground("#d13438"),
+                    TextBlock(ex.Message).FontSize(12).Opacity(0.7),
+                    // Bumping resetKey reassigns identity to the child, so the
+                    // ErrorBoundary mounts a fresh subtree on the next render.
+                    Button("Retry", () => setResetKey(resetKey + 1))
+                ).Padding(12).Background("#fde7e9").CornerRadius(8)
+            )
+        ).Padding(24);
+    }
+}
+
+class FlakyComponent : Component
+{
+    public override Element Render()
+    {
+        var (attempt, _) = UseState(Random.Shared.Next(0, 3));
+        if (attempt == 0) throw new InvalidOperationException("Service unavailable");
+        return TextBlock("Loaded.").Foreground("#107c10");
+    }
+}
+// </snippet:error-boundary-retry>
+
 // Main app
 class AdvancedApp : Component
 {
@@ -192,8 +275,11 @@ class AdvancedApp : Component
             VStack(24,
                 Heading("Advanced Patterns"),
                 Component<ErrorBoundaryDemo>(),
+                Component<ErrorBoundaryRetryDemo>(),
                 Component<MemoSubtreeDemo>(),
                 Component<SetEscapeHatchDemo>(),
+                Component<ElementRefFocusDemo>(),
+                Component<CustomHookDemo>(),
                 Component<ObservableTreeDemo>(),
                 Component<ObservableCollectionDemo>()
             ).Padding(24)

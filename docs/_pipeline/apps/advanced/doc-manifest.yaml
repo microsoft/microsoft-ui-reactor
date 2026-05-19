@@ -10,6 +10,11 @@ screenshots:
     component: ErrorBoundaryDemo
     region: client
     format: png
+  - id: error-boundary-retry
+    description: "ErrorBoundary with a Retry button keyed by WithKey"
+    component: ErrorBoundaryRetryDemo
+    region: client
+    format: png
   - id: memo-subtree
     description: "Memo skipping re-render of an expensive subtree"
     component: MemoSubtreeDemo

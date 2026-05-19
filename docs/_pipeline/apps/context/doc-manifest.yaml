@@ -25,3 +25,18 @@ screenshots:
     component: MultipleContextsExample
     region: client
     format: png
+  - id: user-context
+    description: "Typed CurrentUser context driving an AccountMenu and AdminPanel"
+    component: UserContextExample
+    region: client
+    format: png
+  - id: memoize-context-value
+    description: "UseMemo-stabilized ThemeConfig context with toggleable mode and scale"
+    component: MemoizeContextValueExample
+    region: client
+    format: png
+  - id: mock-provider-test
+    description: "Same CartConsumer rendered with production default and a test stub Provide"
+    component: MockProviderExample
+    region: client
+    format: png

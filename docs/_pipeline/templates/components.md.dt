@@ -6,13 +6,48 @@ audience: beginner
 goal: |
   Cover Component, Component<TProps>, record props, composition, ShouldUpdate,
   function components via ReactorApp.Run(ctx => ...), Memo(ctx => ...), and
-  RenderEachTime(ctx => ...).
+  RenderEachTime(ctx => ...). Cover identity stability across renders and
+  why keys matter in lists.
+tier: comprehensive
 ---
+
+A component in Reactor is a pure function from (state + props) to an element
+tree. `Render()` is called every time the component's state changes or its
+parent's render produces new props, and its only job is to return what the
+UI should look like *right now*. Reactor takes that return value, diffs it
+against the previous render via the [reconciler](reconciliation.md), and
+patches the underlying WinUI controls in place — only the properties and
+children that actually changed get touched. The "function" framing is
+load-bearing: a component must not mutate props, must not write to external
+state during render, and must call [hooks](hooks.md) in the same positional
+order on every render. Side effects belong in [`UseEffect`](effects.md);
+derived values belong in [`UseMemo`](hooks.md) or inline; subscriptions
+belong in effects with cleanup. Get those four rules right and a component
+becomes the unit of composition that the rest of the framework is built on
+— class components for stateful nodes, function components via `Memo` for
+inline shapes, both composed into trees by being instantiated inside their
+parent's `Render()` return value.
 
 # Components
 
 Components are the building blocks of a Reactor app. Each component is a class
 with a `Render()` method that returns an element tree describing its UI.
+
+## Reference
+
+| Shape | Use when | Re-renders when |
+|---|---|---|
+| `class C : Component` | Stateful node with no input from parent. | Internal state changes (default `ShouldUpdate()` returns `false` for propless components — parent re-renders alone don't propagate). |
+| `class C : Component<TProps>` | Stateful node that takes a `record` of inputs. | Props compare unequal (records use structural equality), or internal state changes. |
+| `Memo(ctx => …)` | Inline function component with its own hook state. | Internal state changes; with `deps` argument, also when any dep changes. |
+| `RenderEachTime(ctx => …)` | Inline component that should always re-render with its parent. | Every parent render — opts out of memoization. |
+| `Component<C, TProps>(new(…))` | Instantiate a typed-props class component inside another component's render. | Driven by the rules above. |
+
+Override `ShouldUpdate(TProps? old, TProps? new)` to make a `Component<TProps>`
+ignore certain prop changes (cosmetic-only label updates, for example). The
+default `Equals()`-based check on records is the right call for most cases.
+The auto-generated [components reference](reference/elements/index.md) covers
+every member; the rest of this page is the narrative.
 
 ## Basic Component
 
@@ -144,6 +179,158 @@ Each component manages its own state independently. The parent creates child
 components with `new` and sets their `Props`. Reactor handles the rest —
 mounting, updating, and unmounting as the tree changes.
 
+<!-- ai:caveat -->
+Identity stability across renders is what lets a component preserve its
+state, its hook slots, and its WinUI control instance between renders. The
+[reconciler](reconciliation.md) matches children by **position** by default —
+the first child in render N matches the first child in render N+1 regardless
+of what type it is. That's fine when a list is append-only and order is
+stable; it's catastrophic when items reorder, because the second-position
+state cell now belongs to a different item. Apply
+`.WithKey(item.Id)` (or any stable key) on every child of a `ForEach` /
+collection render so the reconciler matches by **identity** instead. The
+[Reconciliation](reconciliation.md#child-reconciler--keyed-vs-positional)
+chapter walks the four-phase keyed algorithm in full. The classic failure
+mode: a todo list where deleting item 2 makes item 3's checkbox state
+appear on item 2 — because positionally, slot 2 is still occupied, and the
+reconciler updated the existing component instead of mounting a new one.
+The fix is one `.WithKey(item.Id)` call per row.
+<!-- /ai:caveat -->
+
+## Patterns
+
+### Composition with children
+
+Component nesting is the primary way Reactor composes UI — there's no
+"slot" or `ContentPresenter` concept; the parent's `Render()` directly
+returns child element trees:
+
+```csharp
+class Card : Component<CardProps>
+{
+    public override Element Render() =>
+        Border(
+            VStack(8,
+                TextBlock(Props.Title).Bold(),
+                Props.Body                 // any Element, including child components
+            ).Padding(12)
+        ).CornerRadius(8).WithBorder(Theme.Stroke);
+}
+```
+
+The caller decides what to put inside — a `TextBlock`, a `Component<Form>`,
+even a runtime-built tree from `ForEach`. This is the equivalent of
+React's `children` prop or XAML's `ContentControl`, but expressed in plain
+C# without any binding boilerplate.
+
+### Render-props equivalent
+
+When a component needs to delegate part of its render to the caller, take
+a `Func<…, Element>` prop. The function gets called inside the
+component's `Render()` and its return value is spliced in — same as
+React's render props or the `DataTemplate` selector pattern:
+
+```csharp
+record ListProps<T>(IReadOnlyList<T> Items, Func<T, Element> Render);
+
+class List<T> : Component<ListProps<T>>
+{
+    public override Element Render() =>
+        VStack(4, ForEach(Props.Items, item => Props.Render(item).WithKey(item)));
+}
+```
+
+The caller picks the row shape — `item => TextBlock(item.Name)` or a full
+nested component — without the list component knowing anything about the
+item type beyond the key.
+
+### Lifted state
+
+When two siblings need to coordinate, push the state up to their common
+parent and pass `(value, setter)` down. This is the
+[recipes/master-detail](recipes/master-detail.md) pattern: the master list
+and the detail panel both react to a shared `selectedId`, owned by the
+parent. The siblings stay pure — they take props in, call back out. See
+[hooks](hooks.md) for the `UseState` shape this pattern composes from.
+
+### ErrorBoundary integration
+
+Wrap a subtree in `ErrorBoundary` to catch exceptions from any of its
+children's `Render` calls. The boundary swaps in your fallback element
+instead of letting the exception bubble up to the host, which would
+unmount the whole tree:
+
+```csharp
+ErrorBoundary(
+    fallback: ex => TextBlock($"Crash: {ex.Message}").Foreground(Theme.Error),
+    child: Component<RiskyView>()
+)
+```
+
+The [Advanced Patterns](advanced.md) page covers the lifecycle and
+recovery contract; the point at the components layer is that boundaries
+are themselves components, composed into the tree at the granularity you
+want isolation.
+
+## Common Mistakes
+
+### Side effects in render
+
+```csharp
+// Don't:
+public override Element Render()
+{
+    File.AppendAllText("log.txt", "rendered\n");  // I/O during render
+    Globals.RenderCount++;                          // mutation during render
+    return TextBlock("hi");
+}
+```
+
+`Render()` may be called any number of times per user action — once per
+state change, plus diagnostic renders the [devtools](dev-tooling.md) may
+trigger. Side effects must move into [`UseEffect`](effects.md) so they
+run exactly once per commit. Diagnostic counters belong in
+[`UseRef`](hooks.md), which mutates without scheduling a re-render.
+
+### Mutating props
+
+```csharp
+// Don't:
+public override Element Render()
+{
+    Props.Items.Add(newItem); // mutates the parent's collection
+    return ListView(...);
+}
+```
+
+Props are inputs from the parent — read-only by contract. Mutating the
+underlying list bypasses the parent's state setter, so the parent never
+sees the change and doesn't re-render. Worse, the next time the parent
+*does* re-render and pass `Items` down again, your local mutation has
+silently changed the parent's snapshot. The fix is to call back through
+the prop's setter: take an `Action<Item> OnAdd` prop and have the parent
+own the list via [`UseState`](hooks.md).
+
+### Creating components inside render
+
+```csharp
+// Don't:
+public override Element Render()
+{
+    class LocalComponent : Component { ... }     // not even valid C#, but
+    var inline = (Component)CreateLocal();        // any "build a class per render" shape
+    return Component<inline>();
+}
+```
+
+The reconciler matches by type identity — a fresh component class per
+render compares unequal to last render's class, so the child unmounts and
+remounts every commit, losing all hook state and WinUI control instances.
+Define component classes at the top level of a file (or use `Memo(ctx =>
+…)` for inline shapes, which the reconciler treats as a stable function
+identity). The same anti-pattern in React loses state for the same reason
+and for the same root cause.
+
 ## Tips
 
 **Use records for props.** They give you immutable data, value equality, and
@@ -172,3 +359,5 @@ function from (state + props) to elements.
 - **[Dev Tooling](dev-tooling.md)** — Previous: hot reload and preview mode for faster iteration
 - **[Layout](layout.md)** — Arrange components with VStack, HStack, Grid, and responsive patterns
 - **[Styling and Theming](styling.md)** — Apply colors, typography, and themes to your components
+- **[Reconciliation](reconciliation.md)** — How the diff matches components across renders and why keys matter
+- **[Advanced Patterns](advanced.md)** — ErrorBoundary, Memo, .Set, custom hooks

@@ -54,6 +54,7 @@ public static class ControlRegistry
 
         // Layout
         new("Border", "A container that draws a border around its child element.", "Layout", "\uE8A1", "border", "Border.png"),
+        new("Card", "A theme-aware preset Border with the WinUI card brushes, corner radius, and padding.", "Layout", "\uE8A1", "card", "Border.png"),
         new("Canvas", "A layout panel that supports absolute positioning of child elements.", "Layout", "\uE8A1", "canvas", "Canvas.png"),
         new("Expander", "A container that expands and collapses to show or hide content.", "Layout", "\uE8A1", "expander", "Expander.png"),
         new("Flex", "A flexible layout container inspired by CSS flexbox.", "Layout", "\uE8A1", "flex", "Grid.png"),
@@ -77,6 +78,7 @@ public static class ControlRegistry
 
         // Navigation
         new("BreadcrumbBar", "A trail of links showing the user's navigation path.", "Navigation", "\uE8B0", "breadcrumb-bar", "BreadcrumbBar.png"),
+        new("Frame", "A container that hosts Page navigation, raising .Navigated / .Navigating / .NavigationFailed.", "Navigation", "\uE8B0", "frame", "Placeholder.png"),
         new("NavigationView", "A side or top navigation pane for app-level navigation.", "Navigation", "\uE8B0", "navigation-view", "NavigationView.png"),
         new("Pivot", "A tabbed interface for switching between content sections.", "Navigation", "\uE8B0", "pivot", "Pivot.png"),
         new("TabView", "A control that displays a set of closable, rearrangeable tabs.", "Navigation", "\uE8B0", "tab-view", "TabView.png"),
@@ -93,6 +95,7 @@ public static class ControlRegistry
         new("AutoSuggestBox", "A text input that shows suggestions as the user types.", "Text", "\uE8D2", "auto-suggest-box", "AutoSuggestBox.png"),
         new("RichEditBox", "A rich text editing control with formatting support.", "Text", "\uE8D2", "rich-edit-box", "RichEditBox.png"),
         new("RichTextBlock", "A control that displays formatted read-only rich text.", "Text", "\uE8D2", "rich-text-block", "RichTextBlock.png"),
+        new("Type ramp", "WinUI 3 type ramp factories \u2014 Title, Subtitle, Body, BodyStrong, BodyLarge.", "Text", "\uE8D2", "type-ramp", "TextBlock.png"),
 
         // Styles
         new("Acrylic", "A translucent material brush that creates a frosted glass effect.", "Styles", "\uE790", "acrylic", "Acrylic.png"),

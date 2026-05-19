@@ -30,3 +30,33 @@ screenshots:
     component: ResponsiveDemo
     region: client
     format: png
+  - id: card
+    description: "Card chrome wrapping a recent-activity summary"
+    component: CardDemo
+    region: client
+    format: png
+  - id: type-ramp
+    description: "Title / Subtitle / BodyLarge / BodyStrong / Body factories"
+    component: TypeRampDemo
+    region: client
+    format: png
+  - id: app-shell
+    description: "App-shell scaffold: title bar, sidebar, content, and status bar"
+    component: AppShellExample
+    region: client
+    format: png
+  - id: auto-grid
+    description: "WrapGrid auto-flowing 11 tiles into 4-column rows"
+    component: AutoGridExample
+    region: client
+    format: png
+  - id: responsive-switcher
+    description: "HStack-to-VStack switch driven by a simulated wide-window toggle"
+    component: ResponsiveSwitcherExample
+    region: client
+    format: png
+  - id: do-grid-for-forms
+    description: "Two-column Auto/Star Grid form with aligned labels"
+    component: DoGridForForms
+    region: client
+    format: png

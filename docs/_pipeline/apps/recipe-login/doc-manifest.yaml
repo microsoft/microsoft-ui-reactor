@@ -1,0 +1,12 @@
+app:
+  title: "Login Recipe"
+  width: 360
+  height: 380
+  startup-delay: 1200
+
+screenshots:
+  - id: form
+    description: "Login form with inline validation and disabled submit state."
+    component: LoginRecipeApp
+    region: client
+    format: png

@@ -158,7 +158,7 @@ public static class GalleryControls
                 .Height(200)
                 .Background(Theme.SubtleFill),
                 isExpanded: false,
-                onExpandedChanged: null
+                onIsExpandedChanged: null
             )
             .OnMount(el =>
             {

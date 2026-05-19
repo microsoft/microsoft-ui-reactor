@@ -21,7 +21,12 @@ All factories live on `Microsoft.UI.Reactor.Factories` — use
 | `Heading(content)` | 28px bold | `string → TextBlockElement` |
 | `SubHeading(content)` | 20px semi-bold | `string → TextBlockElement` |
 | `Caption(content)` | 12px | `string → TextBlockElement` |
-| `RichText(text)` | Rich text block | `string → RichTextBlockElement` |
+| `Title(content)` | WinUI `TitleTextBlockStyle` (28px Semibold) | `string → TextBlockElement` |
+| `Subtitle(content)` | WinUI `SubtitleTextBlockStyle` (20px Semibold) | `string → TextBlockElement` |
+| `Body(content)` | WinUI `BodyTextBlockStyle` (14px Regular) | `string → TextBlockElement` |
+| `BodyStrong(content)` | WinUI `BodyStrongTextBlockStyle` (14px Semibold) | `string → TextBlockElement` |
+| `BodyLarge(content)` | WinUI `BodyLargeTextBlockStyle` (18px Regular) | `string → TextBlockElement` |
+| `RichTextBlock(text)` | Rich text block | `string → RichTextBlockElement` |
 
 **Implicit conversion:** `string` implicitly converts to `TextBlockElement`, so
 `VStack("Hello", "World")` works.
@@ -85,7 +90,8 @@ All factories live on `Microsoft.UI.Reactor.Factories` — use
 | `HStack(children...)` | `params Element?[]` | Horizontal, spacing 8 |
 | `HStack(spacing, children...)` | `(double, params Element?[])` | Custom spacing |
 | `ScrollView(child)` | `Element` | Scrollable container |
-| `Border(child)` | `Element` | Card-like container |
+| `Border(child)` | `Element` | Bordered container — raw |
+| `Card(child)` | `Element → BorderElement` | Preset card: `Theme.CardBackground` + 1px `Theme.CardStroke` + 8px corner radius + 16px padding |
 | `Expander(header, content, isExpanded?, onExpandedChanged?)` | See type | Collapsible |
 | `SplitView(pane?, content?)` | `(Element?, Element?)` | Side pane |
 | `Viewbox(child)` | `Element` | Scales child to fit |
@@ -269,7 +275,7 @@ signatures.
 
 | Factory | Signature |
 |---------|-----------|
-| `RichText(paragraphs)` | `RichTextParagraph[]` |
+| `RichTextBlock(paragraphs)` | `RichTextParagraph[]` |
 | `Paragraph(inlines...)` | `params RichTextInline[]` |
 | `Run(text)` | `string` |
 | `Hyperlink(text, navigateUri)` | `(string, Uri)` |

@@ -45,6 +45,7 @@ public class KeyframeBuilder
         return this;
     }
 
+    // <snippet:keyframe-anim>
     public KeyframeBuilder At(float progress,
         float? opacity = null, Vector3? scale = null,
         Vector3? translation = null, float? rotation = null,
@@ -63,6 +64,7 @@ public class KeyframeBuilder
         });
         return this;
     }
+    // </snippet:keyframe-anim>
 
     public KeyframeAnimationDef Build() => new()
     {

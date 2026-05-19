@@ -205,7 +205,7 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
         {
             if (source is IObservableDataSource<T> observable)
             {
-                void OnDataChanged()
+                void OnDataChanged(object? sender, EventArgs e)
                 {
                     if (state.IsEditing || state.IsRowEditing)
                         state.CancelEdit();

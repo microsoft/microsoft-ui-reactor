@@ -14,3 +14,5 @@ REACTOR_A11Y_001 | Microsoft.UI.Reactor.Accessibility | Warning | AccessibilityA
 REACTOR_A11Y_002 | Microsoft.UI.Reactor.Accessibility | Warning | AccessibilityAnalyzers - Image needs alt text or AccessibilityHidden
 REACTOR_A11Y_003 | Microsoft.UI.Reactor.Accessibility | Warning | AccessibilityAnalyzers - Form field needs a label
 REACTOR_DSL_001 | Reactor.Dsl | Warning | MissingWithKeyAnalyzer - Dynamic list item missing .WithKey
+REACTOR_DOC_001 | Reactor.Documentation | Warning | XmlDocSummaryAnalyzer - Public API missing XML doc summary
+REACTOR_DOC_002 | Reactor.Documentation | Warning | XmlDocCrefAnalyzer - XML doc cref does not resolve

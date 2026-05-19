@@ -1,15 +1,11 @@
+// <snippet:calculator-app>
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<CalculatorApp>("Calculator", width: 380, height: 500
-#if DEBUG
-    , preview: true
-#endif
-);
+ReactorApp.Run<CalculatorApp>("Calculator", width: 380, height: 500, devtools: true);
 
-// <snippet:calculator-app>
 class CalculatorApp : Component
 {
     public override Element Render()

@@ -29,6 +29,7 @@ internal sealed class Harness
     public Harness(Window window) { _window = window; _currentWindow = window; }
     public Window Window => _window;
     public int Failures => _failures;
+    public void RecordFailure() => _failures++;
 
     // -- TitleBar setup ---------------------------------------------------
 

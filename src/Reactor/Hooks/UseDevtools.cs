@@ -22,6 +22,8 @@ public static class UseDevtoolsExtensions
     /// return VStack(Content(), dev ? DebugOverlay() : null);
     /// </code>
     /// </summary>
+    // <snippet:devtools-gate>
     public static bool UseDevtools(this RenderContext ctx) =>
         ReactorApp.DevtoolsEnabled;
+    // </snippet:devtools-gate>
 }

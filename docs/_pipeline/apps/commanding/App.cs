@@ -143,6 +143,128 @@ class MenuBarExample : Component
 }
 // </snippet:menu-bar>
 
+// <snippet:button-and-menu>
+class ButtonAndMenuExample : Component
+{
+    public override Element Render()
+    {
+        var (saves, setSaves) = UseState(0);
+
+        // One Command. Two surfaces. Identical enabled-state, label, icon, accelerator.
+        var save = new Command
+        {
+            Label = "Save",
+            Icon = SymbolIcon("Save"),
+            Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
+            Execute = () => setSaves(saves + 1),
+            CanExecute = saves < 3,
+        };
+
+        return VStack(12,
+            // Button surface.
+            Button(save),
+            // MenuFlyout surface — same Command record.
+            MenuFlyout(
+                Button("File…"),
+                MenuItem(save)),
+            TextBlock($"Saved {saves} time(s); CanExecute={save.CanExecute}")
+                .Foreground(Theme.SecondaryText)
+        ).Padding(24);
+    }
+}
+// </snippet:button-and-menu>
+
+// <snippet:parameterized-command>
+record TodoItem(int Id, string Title);
+
+class ParameterizedCommandExample : Component
+{
+    public override Element Render()
+    {
+        var (items, setItems) = UseState<IReadOnlyList<TodoItem>>(
+            new[] { new TodoItem(1, "Buy milk"), new TodoItem(2, "Walk dog"), new TodoItem(3, "Ship doc") });
+
+        // One Command<TodoItem> drives every row.
+        var delete = new Command<TodoItem>
+        {
+            Label = "Delete",
+            Icon = SymbolIcon("Delete"),
+            Execute = item => setItems(items.Where(i => i.Id != item.Id).ToList()),
+        };
+
+        return VStack(8,
+            ForEach(items, item =>
+                HStack(8,
+                    TextBlock(item.Title).Width(180),
+                    // Inline button — Command<T> doesn't have a Button(cmd, arg) overload
+                    // by design, so call .Execute(arg) directly from the click handler.
+                    Button(delete.Label, () => delete.Execute?.Invoke(item))
+                        .Disabled(!delete.IsEnabled)))
+        ).Padding(24);
+    }
+}
+// </snippet:parameterized-command>
+
+// <snippet:async-with-progress>
+class AsyncWithProgressExample : Component
+{
+    public override Element Render()
+    {
+        var (progress, setProgress) = UseState(0.0);
+
+        var upload = UseCommand(new Command
+        {
+            Label = "Upload",
+            Icon = SymbolIcon("Upload"),
+            ExecuteAsync = async () =>
+            {
+                for (var i = 0; i <= 100; i += 10)
+                {
+                    setProgress(i / 100.0);
+                    await Task.Delay(120);
+                }
+            },
+        });
+
+        return VStack(12,
+            HStack(8,
+                Button(upload),
+                When(upload.IsExecuting, () =>
+                    TextBlock($"{(int)(progress * 100)}%")
+                        .Foreground(Theme.SecondaryText))
+            ),
+            When(upload.IsExecuting, () =>
+                Progress(progress * 100).Width(300))
+        ).Padding(24);
+    }
+}
+// </snippet:async-with-progress>
+
+// <snippet:dont-create-in-render>
+// Don't: re-create the Command on every render — every surface that
+// holds the previous reference sees a fresh identity each frame, which
+// thrashes the WinUI keyboard-accelerator wiring and re-renders every
+// consumer. Lift to a memo or hoist out of Render().
+class DontCreateInRender : Component
+{
+    public override Element Render()
+    {
+        // BAD — Command identity churns every render:
+        // var save = new Command { Label = "Save", Execute = () => { } };
+
+        // GOOD — UseMemo pins identity until deps change:
+        var (count, setCount) = UseState(0);
+        var save = UseMemo(() => new Command
+        {
+            Label = "Save",
+            Execute = () => setCount(count + 1),
+        }, count);
+
+        return VStack(8, Button(save), TextBlock($"Saved {count}")).Padding(24);
+    }
+}
+// </snippet:dont-create-in-render>
+
 // Main app
 class CommandingApp : Component
 {
@@ -155,7 +277,11 @@ class CommandingApp : Component
                 Component<StandardCommandsExample>(),
                 Component<AsyncCommandExample>(),
                 Component<CommandBarExample>(),
-                Component<MenuBarExample>()
+                Component<MenuBarExample>(),
+                Component<ButtonAndMenuExample>(),
+                Component<ParameterizedCommandExample>(),
+                Component<AsyncWithProgressExample>(),
+                Component<DontCreateInRender>()
             ).Padding(24)
         );
     }

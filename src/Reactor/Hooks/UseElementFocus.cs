@@ -49,7 +49,13 @@ public static class UseElementFocusExtensions
         return (elRef, requestFocus);
     }
 
-    /// <inheritdoc cref="UseElementFocus(RenderContext, FocusState)"/>
+    /// <summary>
+    /// Component-extension overload of <see cref="UseElementFocus(RenderContext, FocusState)"/>.
+    /// Equivalent to calling the <see cref="RenderContext"/>-extension form against
+    /// <c>component.Context</c>; see that overload for the full contract.
+    /// </summary>
+    /// <param name="component">The component whose render context owns the hook slot.</param>
+    /// <param name="state">The focus state used by the imperative request.</param>
     public static (ElementRef Ref, Action RequestFocus) UseElementFocus(this Component component,
         FocusState state = FocusState.Programmatic)
         => component.Context.UseElementFocus(state);

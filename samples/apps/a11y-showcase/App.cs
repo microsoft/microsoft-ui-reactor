@@ -1,27 +1,24 @@
 // ════════════════════════════════════════════════════════════════════════════
-//  A11y Showcase — intentionally broken accessibility sample
+//  A11y Showcase — accessibility best-practices demo
 //
-//  PURPOSE: This sample is a realistic-looking task tracker that follows
-//  best practices for layout, theming, and state management — but
-//  intentionally omits or misuses accessibility attributes. It exists
-//  to demonstrate how Reactor's accessibility tooling (Roslyn analyzers +
-//  runtime AccessibilityScanner) catches these issues.
+//  PURPOSE: This sample is a realistic task tracker that demonstrates the
+//  Reactor accessibility surface in use. Every screen-reader-relevant
+//  element carries the appropriate metadata (AutomationName, HeadingLevel,
+//  Landmark, LiveRegion, etc.) so that the runtime AccessibilityScanner
+//  and the REACTOR_A11Y_* Roslyn analyzers produce zero findings on a
+//  clean build.
 //
-//  DO NOT FIX THE ACCESSIBILITY ISSUES IN THIS FILE.
-//  They are the whole point of the sample.
-//
-//  Expected diagnostics (runtime AccessibilityScanner):
-//    A11Y_001  — Icon-only buttons without .AutomationName()       (6 instances)
-//    A11Y_002  — Images without .AutomationName() or .AccessibilityHidden()  (2+)
-//    A11Y_003  — Form fields without labels                        (1 instance)
-//    A11Y_004  — Heading-styled text without .HeadingLevel()       (1 instance)
-//    A11Y_005  — Concrete brush on interactive control              (2 instances)
-//    A11Y_006  — No .Landmark(Main) in the tree                    (1 instance)
-//    A11Y_008  — .LabeledBy() referencing a missing AutomationId   (1 instance)
-//
-//  Expected diagnostics (Roslyn compile-time analyzers):
-//    REACTOR_A11Y_001 — Icon-only buttons without .AutomationName()
-//    REACTOR_A11Y_003 — Form fields without header/AutomationName/LabeledBy
+//  What's demonstrated here:
+//    • Icon-only buttons name themselves via .AutomationName()
+//    • Decorative images opt out with .AccessibilityHidden()
+//    • Form fields use the `header:` argument so screen readers announce
+//      a label alongside the value
+//    • The main content region is tagged with .Landmark(Main) and the
+//      app title carries .HeadingLevel(Level1)
+//    • Status messages use .LiveRegion(Polite) so screen readers
+//      announce updates without interrupting
+//    • List rows use .WithKey() so the reconciler keeps focus/state
+//      stable across re-renders
 //
 //  To run the scanner at runtime, call AccessibilityScanner.Scan() on
 //  the rendered element tree and inspect the structured JSON output.
@@ -30,6 +27,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -39,8 +37,9 @@ record TaskItem(string Id, string Title, string Assignee, string Priority, bool 
 
 sealed class App : Component
 {
-    // Icon helpers — uses Image elements so the scanner sees ContentElement
-    static Element Icon(string name) => Image($"ms-appx:///Assets/{name}.png").Size(16, 16);
+    // Decorative icon — the surrounding button/label carries the accessible name,
+    // so the image itself is hidden from screen readers.
+    static Element Icon(string name) => Image($"ms-appx:///Assets/{name}.png").Size(16, 16).AccessibilityHidden();
 
     public override Element Render()
     {
@@ -72,20 +71,19 @@ sealed class App : Component
             // ── Header ──────────────────────────────────────────────
             Border(
                 HStack(12,
-                    // A11Y_002: Image without alt text or AccessibilityHidden
-                    Image("ms-appx:///Assets/logo.png").Size(28, 28),
+                    // Logo is decorative — the heading next to it conveys the app identity.
+                    Image("ms-appx:///Assets/logo.png").Size(28, 28).AccessibilityHidden(),
 
-                    // A11Y_004: Large bold text styled as heading but no HeadingLevel set
-                    TextBlock("Task Tracker").Bold().FontSize(24),
+                    // App title is the document heading.
+                    TextBlock("Task Tracker").Bold().FontSize(24).HeadingLevel(AutomationHeadingLevel.Level1),
 
                     HStack(4,
-                        // A11Y_001: Icon-only buttons without AutomationName
-                        Button(Icon("settings"), () => { }),
-                        Button(Icon("people"), () => { }),
+                        Button(Icon("settings"), () => { }).AutomationName("Settings"),
+                        Button(Icon("people"), () => { }).AutomationName("Manage team"),
                         Button(Icon("refresh"), () =>
                         {
                             setStatusMsg("Tasks refreshed");
-                        })
+                        }).AutomationName("Refresh tasks")
                     ).HAlign(HorizontalAlignment.Right)
                 ).Padding(16, 12, 16, 12)
             ).Background(Theme.CardBackground),
@@ -93,18 +91,17 @@ sealed class App : Component
             // ── Toolbar ─────────────────────────────────────────────
             Border(
                 HStack(12,
-                    // Filter buttons with concrete brush — A11Y_005
                     HStack(4,
                         FilterBtn("All", filter, setFilter),
                         FilterBtn("Active", filter, setFilter),
                         FilterBtn("Done", filter, setFilter)
                     ),
 
-                    // A11Y_003: TextField without header or AutomationName
-                    TextField(newTitle, setNewTitle, placeholder: "New task...")
+                    // header: associates the visible label with the input for
+                    // screen readers and meets REACTOR_A11Y_003.
+                    TextField(newTitle, setNewTitle, placeholder: "New task...", header: "New task")
                         .Width(280),
 
-                    // A11Y_001: Icon-only button without AutomationName
                     Button(Icon("add"), () =>
                     {
                         if (!string.IsNullOrWhiteSpace(newTitle))
@@ -114,10 +111,12 @@ sealed class App : Component
                             setNewTitle("");
                             setStatusMsg($"Added: {newTitle.Trim()}");
                         }
-                    }),
+                    }).AutomationName("Add task"),
 
-                    // Status text (no LiveRegion — screen readers won't hear updates)
+                    // LiveRegion so updates ("Added: ...", "Deleted: ...") are
+                    // announced by the screen reader without stealing focus.
                     TextBlock(statusMsg).Opacity(0.6).HAlign(HorizontalAlignment.Right)
+                        .LiveRegion(AutomationLiveSetting.Polite)
                 ).Padding(12, 8, 12, 8)
             ).Background(Theme.LayerFill).WithBorder(Theme.Ref("DividerStrokeColorDefaultBrush"), 1),
 
@@ -125,25 +124,23 @@ sealed class App : Component
             HStack(8,
                 Caption($"{doneCount}/{totalCount} complete"),
                 Progress(progress).HAlign(HorizontalAlignment.Stretch)
+                    .AutomationName($"{doneCount} of {totalCount} tasks complete")
             ).Margin(16, 8, 16, 8),
 
-            // ── Task list ── (no .Landmark(Main) — A11Y_006 at tree level)
+            // ── Task list ── Landmark(Main) lets screen-reader users jump
+            // straight to the list with a navigation shortcut.
             ScrollView(
                 VStack(4,
-                    filtered.Select((task, i) =>
-                        TaskRow(task, i, updateTasks, setStatusMsg)
+                    filtered.Select(task =>
+                        TaskRow(task, updateTasks, setStatusMsg).WithKey(task.Id)
                     ).ToArray()
                 ).Padding(16, 4, 16, 16)
-            ),
+            ).Landmark(AutomationLandmarkType.Main),
 
             // ── Footer ──────────────────────────────────────────────
             Border(
                 HStack(12,
-                    // A11Y_003 + A11Y_008: TextField with .LabeledBy()
-                    // referencing a missing AutomationId (typo in the ID)
-                    TextBlock("Quick note:"),
-                    TextField("", _ => { })
-                        .LabeledBy("FooterNoteLabel_TYPO")
+                    TextField("", _ => { }, header: "Quick note")
                         .Width(300),
 
                     Caption("v1.0.0 — A11y Showcase").Opacity(0.5)
@@ -153,7 +150,8 @@ sealed class App : Component
         );
 
         // ── Runtime accessibility scan (DEBUG only) ─────────────────
-        // Run on first render, print diagnostics to VS Output window.
+        // The scanner should now find zero issues — run it on first render
+        // to confirm and print the (empty) report.
         var scanRan = UseRef(false);
         if (!scanRan.Current)
         {
@@ -165,7 +163,6 @@ sealed class App : Component
                 global::System.Diagnostics.Debug.WriteLine($"  [{f.Id}] {f.Severity.ToUpper()}: {f.Message}");
             global::System.Diagnostics.Debug.WriteLine($"");
 
-            // Also export structured JSON for AI-agent consumption
             var jsonPath = global::System.IO.Path.Combine(
                 global::System.IO.Path.GetTempPath(), "a11y-showcase-diagnostics.json");
             AccessibilityScanner.ExportJson(findings, jsonPath);
@@ -176,10 +173,9 @@ sealed class App : Component
         return tree;
     }
 
-    // ── Task row (icon-heavy, missing automation names) ─────────────
+    // ── Task row ────────────────────────────────────────────────────
     static Element TaskRow(
         TaskItem task,
-        int index,
         Action<Func<List<TaskItem>, List<TaskItem>>> updateTasks,
         Action<string> setStatusMsg)
     {
@@ -195,7 +191,7 @@ sealed class App : Component
                         return copy;
                     });
                     setStatusMsg(done ? $"Completed: {task.Title}" : $"Reopened: {task.Title}");
-                }),
+                }).AutomationName($"Mark '{task.Title}' as done"),
 
                 VStack(2,
                     TextBlock(task.Title).SemiBold()
@@ -207,31 +203,29 @@ sealed class App : Component
                 HStack(4,
                     PriorityBadge(task.Priority),
 
-                    // A11Y_001: Icon-only buttons without AutomationName
                     Button(Icon("edit"), () =>
                     {
                         setStatusMsg($"Editing: {task.Title}");
-                    }),
+                    }).AutomationName($"Edit {task.Title}"),
                     Button(Icon("delete"), () =>
                     {
                         updateTasks(list => list.Where(t => t.Id != task.Id).ToList());
                         setStatusMsg($"Deleted: {task.Title}");
-                    })
+                    }).AutomationName($"Delete {task.Title}")
                 ).HAlign(HorizontalAlignment.Right)
             ).Padding(8, 6, 8, 6)
         )
         .CornerRadius(4)
-        .Background(Theme.ControlFill)
-        // No .WithKey() on list items — not a11y, but a reconciler best-practice gap
-        ;
+        .Background(Theme.ControlFill);
     }
 
-    // ── Filter button with concrete brush (A11Y_005) ────────────────
+    // ── Filter button — label argument is the text *and* the accessible name.
     static Element FilterBtn(string label, string current, Action<string> set) =>
         Button(label, () => set(label))
-            .Background(label == current ? "#0078d4" : "#00000000");
+            .AutomationName(label)
+            .Background(label == current ? Theme.Ref("AccentFillColorDefaultBrush") : Theme.Ref("SubtleFillColorTransparentBrush"));
 
-    // ── Priority badge (decorative image not hidden — A11Y_002) ─────
+    // ── Priority badge — image is decorative; the Caption provides the text.
     static Element PriorityBadge(string priority)
     {
         var (color, icon) = priority switch
@@ -241,10 +235,9 @@ sealed class App : Component
             _ => ("#8a8886", "Remove"),
         };
 
-        // A11Y_002: Icon used decoratively but not hidden from UIA
         return Border(
             HStack(4,
-                Image($"ms-appx:///Assets/{icon}.png").Size(14, 14),
+                Image($"ms-appx:///Assets/{icon}.png").Size(14, 14).AccessibilityHidden(),
                 Caption(priority)
             ).Padding(4, 2, 8, 2)
         ).CornerRadius(4).Background(color).Opacity(0.85);

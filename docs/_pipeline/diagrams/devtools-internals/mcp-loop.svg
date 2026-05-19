@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 640" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 11px; fill: #1f2328; }
+    .lifeline { stroke: #afb8c1; stroke-width: 1.25; stroke-dasharray: 4 3; }
+    .actor-rect { fill: #f6f8fa; stroke: #57606a; stroke-width: 1.5; }
+    .msg { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .msg-return { stroke: #57606a; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+    .note { fill: #fff8c5; stroke: #9a6700; stroke-width: 1; }
+    .marker-fill { fill: #57606a; }
+    .step-num { font-size: 10.5px; fill: #57606a; font-weight: 600; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #e6edf3; }
+      .lifeline { stroke: #6e7681; }
+      .actor-rect { fill: #21262d; stroke: #8b949e; }
+      .msg { stroke: #8b949e; }
+      .msg-return { stroke: #8b949e; }
+      .note { fill: #341a00; stroke: #d29922; }
+      .marker-fill { fill: #8b949e; }
+      .step-num { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Actors -->
+  <rect class="actor-rect" x="30" y="20" width="140" height="56" rx="6"/>
+  <text class="label" x="100" y="40" text-anchor="middle">mur devtools CLI</text>
+  <text class="sub" x="100" y="56" text-anchor="middle">JSON-RPC client</text>
+
+  <rect class="actor-rect" x="210" y="20" width="160" height="56" rx="6"/>
+  <text class="label" x="290" y="40" text-anchor="middle">Lockfile</text>
+  <text class="sub" x="290" y="56" text-anchor="middle">%TEMP%/reactor-devtools/</text>
+  <text class="sub" x="290" y="68" text-anchor="middle">&lt;hash&gt;.json</text>
+
+  <rect class="actor-rect" x="410" y="20" width="160" height="56" rx="6"/>
+  <text class="label" x="490" y="40" text-anchor="middle">DevtoolsMcpServer</text>
+  <text class="sub" x="490" y="56" text-anchor="middle">HttpListener / stdio</text>
+
+  <rect class="actor-rect" x="610" y="20" width="160" height="56" rx="6"/>
+  <text class="label" x="690" y="40" text-anchor="middle">McpDispatcher</text>
+  <text class="sub" x="690" y="56" text-anchor="middle">+ McpToolRegistry</text>
+
+  <rect class="actor-rect" x="810" y="20" width="140" height="56" rx="6"/>
+  <text class="label" x="880" y="40" text-anchor="middle">UI thread</text>
+  <text class="sub" x="880" y="56" text-anchor="middle">DispatcherQueue</text>
+
+  <rect class="actor-rect" x="980" y="20" width="140" height="56" rx="6"/>
+  <text class="label" x="1050" y="40" text-anchor="middle">DevtoolsMenu</text>
+  <text class="sub" x="1050" y="56" text-anchor="middle">UseDevtools gate</text>
+
+  <!-- Lifelines -->
+  <line class="lifeline" x1="100" y1="76" x2="100" y2="620"/>
+  <line class="lifeline" x1="290" y1="76" x2="290" y2="620"/>
+  <line class="lifeline" x1="490" y1="76" x2="490" y2="620"/>
+  <line class="lifeline" x1="690" y1="76" x2="690" y2="620"/>
+  <line class="lifeline" x1="880" y1="76" x2="880" y2="620"/>
+  <line class="lifeline" x1="1050" y1="76" x2="1050" y2="620"/>
+
+  <text class="step-num" x="10" y="116">1</text>
+  <path class="msg" d="M100 120 L290 120" marker-end="url(#arr)"/>
+  <text class="edge-label" x="195" y="110" text-anchor="middle">read endpoint + bearer token</text>
+
+  <text class="step-num" x="10" y="176">2</text>
+  <path class="msg" d="M100 180 L490 180" marker-end="url(#arr)"/>
+  <text class="edge-label" x="295" y="170" text-anchor="middle">POST /mcp · Authorization: Bearer …</text>
+  <text class="sub" x="295" y="195" text-anchor="middle">{"method":"tools/call","params":{...}}</text>
+
+  <text class="step-num" x="10" y="246">3</text>
+  <path class="msg" d="M490 250 L690 250" marker-end="url(#arr)"/>
+  <text class="edge-label" x="590" y="240" text-anchor="middle">Dispatch(body)</text>
+
+  <text class="step-num" x="10" y="306">4</text>
+  <path class="msg" d="M690 310 L880 310" marker-end="url(#arr)"/>
+  <text class="edge-label" x="785" y="300" text-anchor="middle">hop via DispatcherQueue.TryEnqueue</text>
+
+  <text class="step-num" x="10" y="366">5</text>
+  <path class="msg" d="M880 370 C 840 385 840 385 880 400" marker-end="url(#arr)"/>
+  <text class="edge-label" x="820" y="383" text-anchor="end">run tool handler</text>
+  <text class="sub" x="820" y="397" text-anchor="end">against live tree</text>
+
+  <text class="step-num" x="10" y="446">6</text>
+  <path class="msg-return" d="M880 450 L690 450" marker-end="url(#arr)"/>
+  <text class="edge-label" x="785" y="440" text-anchor="middle">JSON result</text>
+
+  <text class="step-num" x="10" y="486">7</text>
+  <path class="msg-return" d="M690 490 L490 490" marker-end="url(#arr)"/>
+  <text class="edge-label" x="590" y="480" text-anchor="middle">JsonRpcResponse</text>
+
+  <text class="step-num" x="10" y="526">8</text>
+  <path class="msg-return" d="M490 530 L100 530" marker-end="url(#arr)"/>
+  <text class="edge-label" x="295" y="520" text-anchor="middle">HTTP 200 · JSON-RPC envelope</text>
+
+  <!-- In-app menu uses same gate -->
+  <rect class="note" x="800" y="565" width="320" height="45" rx="4"/>
+  <text class="sub" x="960" y="585" text-anchor="middle">In-app DevtoolsMenu shares the same UseDevtools() gate;</text>
+  <text class="sub" x="960" y="600" text-anchor="middle">it observes the same live tree without going through HTTP.</text>
+  <path class="msg" d="M1050 565 L1050 555 L880 555 L880 565" marker-end="url(#arr)"/>
+</svg>

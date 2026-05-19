@@ -1,0 +1,12 @@
+app:
+  title: "Master-Detail Recipe"
+  width: 640
+  height: 360
+  startup-delay: 1200
+
+screenshots:
+  - id: layout
+    description: "Two-pane master-detail layout — list on the left, detail on the right."
+    component: MasterDetailApp
+    region: client
+    format: png

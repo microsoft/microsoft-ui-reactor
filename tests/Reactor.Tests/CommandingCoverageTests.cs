@@ -88,8 +88,8 @@ public class CommandingCoverageTests
         var cmd = MakeCmd(() => count++);
         var el = ToggleButton(cmd);
 
-        el.OnToggled!(true);
-        el.OnToggled!(false);
+        el.OnIsCheckedChanged!(true);
+        el.OnIsCheckedChanged!(false);
         Assert.Equal(2, count);
     }
 

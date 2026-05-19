@@ -52,6 +52,7 @@ static class PageRouter
 
         // Layout
         "border" => Component<BorderPage>(),
+        "card" => Component<ControlPages.Layout.CardPage>(),
         "canvas" => Component<CanvasPage>(),
         "expander" => Component<ExpanderPage>(),
         "flex" => Component<FlexPage>(),
@@ -75,6 +76,7 @@ static class PageRouter
 
         // Navigation
         "breadcrumb-bar" => Component<ControlPages.Navigation.BreadcrumbBarPage>(),
+        "frame" => Component<ControlPages.Navigation.FrameNavigationPage>(),
         "navigation-view" => Component<ControlPages.Navigation.NavigationViewPage>(),
         "pivot" => Component<ControlPages.Navigation.PivotPage>(),
         "tab-view" => Component<ControlPages.Navigation.TabViewPage>(),
@@ -91,6 +93,7 @@ static class PageRouter
         "auto-suggest-box" => Component<AutoSuggestBoxPage>(),
         "rich-edit-box" => Component<RichEditBoxPage>(),
         "rich-text-block" => Component<RichTextBlockPage>(),
+        "type-ramp" => Component<ControlPages.Text.TypeRampPage>(),
 
         // Styles
         "acrylic" => Component<ControlPages.Styles.AcrylicPage>(),

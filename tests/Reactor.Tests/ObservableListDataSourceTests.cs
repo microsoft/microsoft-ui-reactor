@@ -37,7 +37,7 @@ public class ObservableListDataSourceTests
         var collection = new ObservableCollection<InpcItem>();
         var source = new ObservableListDataSource<InpcItem>(collection, x => (RowKey)x.Id);
         var fired = false;
-        source.DataChanged += () => fired = true;
+        source.DataChanged += (_, _) => fired = true;
 
         collection.Add(new InpcItem { Id = 1, Name = "Alice" });
         Assert.True(fired);
@@ -50,7 +50,7 @@ public class ObservableListDataSourceTests
         var collection = new ObservableCollection<InpcItem> { item };
         var source = new ObservableListDataSource<InpcItem>(collection, x => (RowKey)x.Id);
         var fired = false;
-        source.DataChanged += () => fired = true;
+        source.DataChanged += (_, _) => fired = true;
 
         collection.Remove(item);
         Assert.True(fired);
@@ -63,7 +63,7 @@ public class ObservableListDataSourceTests
         var collection = new ObservableCollection<InpcItem> { item };
         var source = new ObservableListDataSource<InpcItem>(collection, x => (RowKey)x.Id);
         var fired = false;
-        source.DataChanged += () => fired = true;
+        source.DataChanged += (_, _) => fired = true;
 
         item.Name = "Alice Updated";
         Assert.True(fired);
@@ -76,7 +76,7 @@ public class ObservableListDataSourceTests
         var collection = new ObservableCollection<InpcItem> { item };
         var source = new ObservableListDataSource<InpcItem>(collection, x => (RowKey)x.Id);
         var count = 0;
-        source.DataChanged += () => count++;
+        source.DataChanged += (_, _) => count++;
 
         source.Dispose();
 
@@ -102,5 +102,30 @@ public class ObservableListDataSourceTests
 
         var page2 = await source.GetPageAsync(new DataRequest());
         Assert.Equal(2, page2.Items.Count);
+    }
+
+    [Fact]
+    public void DataChanged_Provides_Sender()
+    {
+        var collection = new ObservableCollection<InpcItem>();
+        var source = new ObservableListDataSource<InpcItem>(collection, x => (RowKey)x.Id);
+        object? capturedSender = null;
+        source.DataChanged += (s, _) => capturedSender = s;
+
+        collection.Add(new InpcItem { Id = 1, Name = "Alice" });
+        Assert.Same(source, capturedSender);
+    }
+
+    [Fact]
+    public void DataChanged_From_INPC_Provides_Sender()
+    {
+        var item = new InpcItem { Id = 1, Name = "Alice" };
+        var collection = new ObservableCollection<InpcItem> { item };
+        var source = new ObservableListDataSource<InpcItem>(collection, x => (RowKey)x.Id);
+        object? capturedSender = null;
+        source.DataChanged += (s, _) => capturedSender = s;
+
+        item.Name = "Updated";
+        Assert.Same(source, capturedSender);
     }
 }

@@ -821,7 +821,7 @@ public class MoreCoverageTests2
         var withHandlers = el with
         {
             Header = "H",
-            OnSelectionChanged = idx => seen = idx,
+            OnSelectedIndexChanged = idx => seen = idx,
             OnItemClick = v => seen = v,
         };
         Assert.Equal("H", withHandlers.GetHeader());

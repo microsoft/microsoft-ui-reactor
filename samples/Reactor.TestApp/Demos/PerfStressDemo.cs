@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Reactor.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
+using WinMedia = Microsoft.UI.Xaml.Media;
 
 class PerfStressDemo : Component
 {
@@ -19,6 +20,32 @@ class PerfStressDemo : Component
         "#4fc3f7", "#81c784", "#fff176", "#ff8a65", "#ba68c8",
         "#4dd0e1", "#aed581", "#ffd54f", "#e57373", "#9575cd",
     ];
+
+    // Brush cache: at 500 bars × 3 colored sub-elements per bar, the string
+    // overload of .Background() would allocate ~1500 SolidColorBrush instances
+    // per render tick — and because each new brush is reference-different,
+    // UpdateBorder writes Background unconditionally and WinUI re-paints every
+    // border every tick. Caching one brush per color string per host thread
+    // collapses that to ~1500 dictionary lookups per render and lets the
+    // reconciler's reference-equality check on Background short-circuit.
+    //
+    // SolidColorBrush is a DependencyObject — it has thread affinity, so the
+    // cache is keyed by managed thread id. PerfStress only renders on one UI
+    // thread; the per-thread keying is defensive for hot reload / multi-window
+    // futures.
+    [ThreadStatic]
+    private static Dictionary<string, WinMedia.SolidColorBrush>? t_brushCache;
+
+    static WinMedia.SolidColorBrush Brush(string color)
+    {
+        var cache = t_brushCache ??= new Dictionary<string, WinMedia.SolidColorBrush>(StringComparer.OrdinalIgnoreCase);
+        if (!cache.TryGetValue(color, out var brush))
+        {
+            brush = BrushHelper.Parse(color);
+            cache[color] = brush;
+        }
+        return brush;
+    }
 
     public override Element Render()
     {
@@ -233,11 +260,14 @@ class PerfStressDemo : Component
                     int val = sortState.Values[i];
 
                     // Each bar contains child controls to stress the reconciler:
-                    // a tiny progress indicator + a value label + a colored pip
+                    // a tiny progress indicator + a value label + a colored pip.
+                    // All Background() calls go through the cached brush so the
+                    // reconciler sees stable brush references between renders
+                    // and skips redundant WinUI Background writes.
                     Element barContent = VStack(0,
                         // Top: small colored indicator pip (changes with sort state)
                         Border(Empty())
-                            .Background(isPivot ? "#ffffff" : isActive ? "#ffeb3b" : BarColors[(colorIdx + 1) % BarColors.Length])
+                            .Background(Brush(isPivot ? "#ffffff" : isActive ? "#ffeb3b" : BarColors[(colorIdx + 1) % BarColors.Length]))
                             .CornerRadius(1)
                             .Width(Math.Min(barWidth - 1, 6))
                             .Height(2),
@@ -247,7 +277,7 @@ class PerfStressDemo : Component
                             : Empty(),
                         // Bottom: progress-like fill showing relative position
                         Border(Empty())
-                            .Background(BarColors[(colorIdx + 2) % BarColors.Length])
+                            .Background(Brush(BarColors[(colorIdx + 2) % BarColors.Length]))
                             .CornerRadius(0)
                             .Width(Math.Max(1, barWidth * 0.6))
                             .Height(Math.Max(1, barHeight * 0.15))
@@ -255,7 +285,7 @@ class PerfStressDemo : Component
                     );
 
                     Element bar = Border(barContent)
-                        .Background(BarColors[colorIdx])
+                        .Background(Brush(BarColors[colorIdx]))
                         .CornerRadius(0)
                         .Width(barWidth)
                         .Height(barHeight)
@@ -270,7 +300,7 @@ class PerfStressDemo : Component
                 return HStack(0, barElements).Height(220).VAlign(VerticalAlignment.Bottom);
             }))
                 .CornerRadius(8)
-                .Background("#1a1a2e")
+                .Background(Brush("#1a1a2e"))
                 .Padding(8),
 
             // Performance stats
@@ -315,7 +345,7 @@ class PerfStressDemo : Component
                         double h = Math.Min(50, t * 10); // 1ms = 10px
                         string color = t < 2 ? "#81c784" : t < 8 ? "#fff176" : t < 16 ? "#ff8a65" : "#e57373";
                         return (Element)Border(Empty())
-                            .Background(color)
+                            .Background(Brush(color))
                             .CornerRadius(0)
                             .Width(Math.Max(1, 600.0 / 100))
                             .Height(Math.Max(1, h))
@@ -337,7 +367,7 @@ class PerfStressDemo : Component
 
     static Element LegendItem(string color, string label) =>
         HStack(4,
-            Border(Empty()).Background(color).CornerRadius(2).Width(12).Height(12),
+            Border(Empty()).Background(Brush(color)).CornerRadius(2).Width(12).Height(12),
             Caption(label).Foreground(SecondaryText)
         );
 }

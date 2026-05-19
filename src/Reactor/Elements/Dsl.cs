@@ -43,6 +43,17 @@ public static partial class Factories
 
     public static TextBlockElement TextBlock(string content) => new(content);
 
+    /// <summary>
+    /// Creates a heading-styled <see cref="TextBlockElement"/> (28px, bold,
+    /// automation heading level 1).
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience wrapper — there is no WinUI control named
+    /// <c>Heading</c>. Sized for the WinUI Title type-ramp slot, with the
+    /// accessibility heading level set so screen readers announce it as a
+    /// landmark. Prefer this over hand-styled <see cref="TextBlock(string)"/>
+    /// for page / section titles. (spec 039 §0.3)
+    /// </remarks>
     public static TextBlockElement Heading(string content) =>
         new(content) { FontSize = 28, Weight = new global::Windows.UI.Text.FontWeight(700),
             Modifiers = new Core.ElementModifiers
@@ -50,6 +61,16 @@ public static partial class Factories
                 HeadingLevel = Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1
             } };
 
+    /// <summary>
+    /// Creates a sub-heading styled <see cref="TextBlockElement"/> (20px,
+    /// semi-bold, automation heading level 2).
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience wrapper — there is no WinUI control named
+    /// <c>SubHeading</c>. Pairs with <see cref="Heading(string)"/> for the
+    /// secondary section level; sized for the WinUI Subtitle type-ramp slot.
+    /// (spec 039 §0.3)
+    /// </remarks>
     public static TextBlockElement SubHeading(string content) =>
         new(content) { FontSize = 20, Weight = new global::Windows.UI.Text.FontWeight(600),
             Modifiers = new Core.ElementModifiers
@@ -57,10 +78,37 @@ public static partial class Factories
                 HeadingLevel = Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2
             } };
 
+    /// <summary>
+    /// Creates a caption-styled <see cref="TextBlockElement"/> (12px).
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience wrapper — there is no WinUI control named
+    /// <c>Caption</c>. Sized for the WinUI Caption type-ramp slot; use for
+    /// secondary metadata (timestamps, helper text, hints) below primary copy.
+    /// (spec 039 §0.3)
+    /// </remarks>
     public static TextBlockElement Caption(string content) =>
         new(content) { FontSize = 12 };
 
-    public static RichTextBlockElement RichText(string text) => new(text);
+    /// <summary>
+    /// Creates a <see cref="RichTextBlockElement"/> wrapping a single string of
+    /// plain text. Use the <see cref="RichTextBlock(RichTextParagraph[])"/>
+    /// overload to compose runs, hyperlinks, and inline formatting.
+    /// </summary>
+    /// <remarks>
+    /// Named for parity with WinUI's <c>Microsoft.UI.Xaml.Controls.RichTextBlock</c>.
+    /// (spec 039 §1.3 / §14 #8)
+    /// </remarks>
+    public static RichTextBlockElement RichTextBlock(string text) => new(text);
+
+    /// <summary>
+    /// Deprecated forwarding alias for <see cref="RichTextBlock(string)"/>.
+    /// </summary>
+    [global::System.Obsolete(
+        "Renamed to RichTextBlock for parity with WinUI's Microsoft.UI.Xaml.Controls.RichTextBlock. " +
+        "RichText will be removed in the next minor release. (spec 039 §1.3 / §14 #8)",
+        error: false)]
+    public static RichTextBlockElement RichText(string text) => RichTextBlock(text);
 
     public static RichEditBoxElement RichEditBox(string text = "", Action<string>? onTextChanged = null) =>
         new(text) { OnTextChanged = onTextChanged };
@@ -76,7 +124,9 @@ public static partial class Factories
     /// <summary>
     /// Creates a Button driven by a Command. Maps Label → Content, Execute → Click,
     /// IsEnabled → IsEnabled. Description / Accelerator / AccessKey are wired via
-    /// a Setter so per-site overrides win via the normal modifier ordering.
+    /// a Setter so per-site overrides win via the normal modifier ordering — e.g.
+    /// <c>Button(saveCommand).IsEnabled(canSave)</c> or
+    /// <c>.Set(b =&gt; b.FlowDirection = FlowDirection.RightToLeft)</c>.
     /// </summary>
     public static ButtonElement Button(Core.Command command) =>
         new ButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
@@ -90,8 +140,8 @@ public static partial class Factories
 
     /// <summary>
     /// Creates a HyperlinkButton driven by a Command. Maps Label → Content, Execute →
-    /// Click. For external navigation combine with <c>.NavigateUri(...)</c> via
-    /// <c>.Set()</c>.
+    /// Click. For external navigation, chain <see cref="ElementExtensions.NavigateUri(HyperlinkButtonElement, Uri)"/>:
+    /// <c>HyperlinkButton(cmd).NavigateUri(new Uri("https://..."))</c>.
     /// </summary>
     public static HyperlinkButtonElement HyperlinkButton(Core.Command command) =>
         new HyperlinkButtonElement(command.Label, null, () => Core.CommandBindings.Invoke(command))
@@ -109,8 +159,8 @@ public static partial class Factories
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
 
-    public static ToggleButtonElement ToggleButton(string label, bool isChecked = false, Action<bool>? onToggled = null) =>
-        new(label, isChecked, onToggled);
+    public static ToggleButtonElement ToggleButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null) =>
+        new(label, isChecked, onIsCheckedChanged);
 
     /// <summary>
     /// Creates a ToggleButton driven by a Command. The command fires on each toggle
@@ -122,6 +172,13 @@ public static partial class Factories
         {
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+
+    /// <summary>
+    /// Three-state toggle button (true → false → null → ...). Matches the
+    /// established <c>ThreeStateCheckBox</c> factory pattern from spec 039 §2.4.
+    /// </summary>
+    public static ToggleButtonElement ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?>? onCheckedStateChanged = null) =>
+        new(label, checkedState == true) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
 
     public static DropDownButtonElement DropDownButton(string label, Element? flyout = null) =>
         new(label, flyout);
@@ -151,6 +208,17 @@ public static partial class Factories
 
     // ── Input controls ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Creates a <see cref="TextFieldElement"/> — the Reactor name for WinUI's
+    /// <c>Microsoft.UI.Xaml.Controls.TextBox</c>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor uses <c>TextField</c> (HTML / iOS / Android / SwiftUI vocabulary)
+    /// rather than WinUI's legacy WinForms-era <c>TextBox</c>. The deviation
+    /// is deliberate — see spec 039 §3.1 / §16 for the impact analysis and
+    /// §16.5 for the decision (keep as-is). The reconciler still maps this to
+    /// a real WinUI <c>TextBox</c> internally. (spec 039 §3.1 / §16)
+    /// </remarks>
     public static TextFieldElement TextField(string value, Action<string>? onChanged = null, string? placeholder = null, string? header = null) =>
         new(value, onChanged, placeholder) { Header = header };
 
@@ -163,29 +231,29 @@ public static partial class Factories
     public static AutoSuggestBoxElement AutoSuggestBox(string text, Action<string>? onTextChanged = null, Action<string>? onQuerySubmitted = null) =>
         new(text, onTextChanged, onQuerySubmitted);
 
-    public static CheckBoxElement CheckBox(bool isChecked, Action<bool>? onChanged = null, string? label = null) =>
-        new(isChecked, onChanged, label);
+    public static CheckBoxElement CheckBox(bool isChecked, Action<bool>? onIsCheckedChanged = null, string? label = null) =>
+        new(isChecked, onIsCheckedChanged, label);
 
     public static CheckBoxElement ThreeStateCheckBox(bool? checkedState, Action<bool?>? onCheckedStateChanged = null, string? label = null) =>
         new(checkedState == true, Label: label) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
 
-    public static RadioButtonElement RadioButton(string label, bool isChecked = false, Action<bool>? onChecked = null, string? groupName = null) =>
-        new(label, isChecked, onChecked, groupName);
+    public static RadioButtonElement RadioButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, string? groupName = null) =>
+        new(label, isChecked, onIsCheckedChanged, groupName);
 
-    public static RadioButtonsElement RadioButtons(string[] items, int selectedIndex = -1, Action<int>? onSelectionChanged = null) =>
-        new(items, selectedIndex, onSelectionChanged);
+    public static RadioButtonsElement RadioButtons(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
+        new(items, selectedIndex, onSelectedIndexChanged);
 
-    public static ComboBoxElement ComboBox(string[] items, int selectedIndex = -1, Action<int>? onSelectionChanged = null) =>
-        new(items, selectedIndex, onSelectionChanged);
+    public static ComboBoxElement ComboBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
+        new(items, selectedIndex, onSelectedIndexChanged);
 
-    public static ComboBoxElement ComboBox(Element[] itemElements, int selectedIndex, Action<int>? onSelectionChanged) =>
-        new([], selectedIndex, onSelectionChanged) { ItemElements = itemElements };
+    public static ComboBoxElement ComboBox(Element[] itemElements, int selectedIndex, Action<int>? onSelectedIndexChanged) =>
+        new([], selectedIndex, onSelectedIndexChanged) { ItemElements = itemElements };
 
-    public static SliderElement Slider(double value, double min = 0, double max = 100, Action<double>? onChanged = null) =>
-        new(value, min, max, onChanged);
+    public static SliderElement Slider(double value, double min = 0, double max = 100, Action<double>? onValueChanged = null) =>
+        new(value, min, max, onValueChanged);
 
-    public static ToggleSwitchElement ToggleSwitch(bool isOn, Action<bool>? onChanged = null, string? onContent = null, string? offContent = null, string? header = null) =>
-        new(isOn, onChanged, onContent, offContent) { Header = header };
+    public static ToggleSwitchElement ToggleSwitch(bool isOn, Action<bool>? onIsOnChanged = null, string? onContent = null, string? offContent = null, string? header = null) =>
+        new(isOn, onIsOnChanged, onContent, offContent) { Header = header };
 
     public static RatingControlElement RatingControl(double value = 0, Action<double>? onValueChanged = null) =>
         new(value, onValueChanged);
@@ -206,8 +274,47 @@ public static partial class Factories
 
     // ── Progress ────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Creates a determinate <see cref="ProgressElement"/> at the given value.
+    /// </summary>
+    /// <remarks>
+    /// The element reconciles to a WinUI <c>ProgressBar</c>. The Reactor name
+    /// <c>Progress</c> is the short, intent-naming spelling — the WinUI name
+    /// includes the visual shape (<c>Bar</c>) the way agents reach for a
+    /// rendering primitive; Reactor calls it by what it does. The
+    /// <c>ProgressBar</c> alias is preserved for callers reaching for the
+    /// WinUI name. <see cref="ProgressRing(double)"/> is the circular variant.
+    /// (spec 039 §5 / §16)
+    /// </remarks>
     public static ProgressElement Progress(double value) => new(value);
+
+    /// <summary>
+    /// Creates an indeterminate <see cref="ProgressElement"/> (animated bar with
+    /// no value). The reconciler maps this to <c>ProgressBar.IsIndeterminate</c>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience for the indeterminate-bar case; see
+    /// <see cref="Progress(double)"/> for the naming rationale. (spec 039 §5 / §16)
+    /// </remarks>
     public static ProgressElement ProgressIndeterminate() => new(null);
+
+    /// <summary>
+    /// Deprecated forwarding alias for <see cref="Progress(double)"/>.
+    /// </summary>
+    [global::System.Obsolete(
+        "Use Progress(double) for parity with Reactor's intent-naming convention. " +
+        "ProgressBar(double) will be removed in the next minor release. (spec 039 §5 / §16)",
+        error: false)]
+    public static ProgressElement ProgressBar(double value) => Progress(value);
+
+    /// <summary>
+    /// Deprecated forwarding alias for <see cref="ProgressIndeterminate"/>.
+    /// </summary>
+    [global::System.Obsolete(
+        "Use ProgressIndeterminate() for parity with Reactor's intent-naming convention. " +
+        "ProgressBar() will be removed in the next minor release. (spec 039 §5 / §16)",
+        error: false)]
+    public static ProgressElement ProgressBar() => ProgressIndeterminate();
 
     public static ProgressRingElement ProgressRing() => new(null);
     public static ProgressRingElement ProgressRing(double value) => new(value);
@@ -221,15 +328,53 @@ public static partial class Factories
 
     // ── Layout ──────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Creates a vertical <see cref="StackElement"/> (WinUI <c>StackPanel</c>
+    /// with <see cref="Orientation.Vertical"/>). Default <c>Spacing</c> is 8 —
+    /// see <see cref="StackElement.Spacing"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original name — WinUI exposes one <c>StackPanel</c> control
+    /// keyed by <c>Orientation</c>; Reactor splits it into two factories
+    /// (<see cref="VStack(Element?[])"/> / <see cref="HStack(Element?[])"/>)
+    /// because the orientation is almost always known at the call site and the
+    /// shorter names reduce DSL noise. The SwiftUI / React Native names are
+    /// load-bearing for cross-platform agent familiarity. (spec 039 §0.3)
+    /// </remarks>
     public static StackElement VStack(params Element?[] children) =>
         new(Orientation.Vertical, FilterChildren(children));
 
+    /// <summary>
+    /// Creates a vertical <see cref="StackElement"/> with an explicit
+    /// <c>Spacing</c> override (the first positional argument).
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience overload — see <see cref="VStack(Element?[])"/>
+    /// for the naming rationale.
+    /// </remarks>
     public static StackElement VStack(double spacing, params Element?[] children) =>
         new(Orientation.Vertical, FilterChildren(children)) { Spacing = spacing };
 
+    /// <summary>
+    /// Creates a horizontal <see cref="StackElement"/> (WinUI <c>StackPanel</c>
+    /// with <see cref="Orientation.Horizontal"/>). Default <c>Spacing</c> is 8 —
+    /// see <see cref="StackElement.Spacing"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original name — see <see cref="VStack(Element?[])"/> for the
+    /// naming rationale. (spec 039 §0.3)
+    /// </remarks>
     public static StackElement HStack(params Element?[] children) =>
         new(Orientation.Horizontal, FilterChildren(children));
 
+    /// <summary>
+    /// Creates a horizontal <see cref="StackElement"/> with an explicit
+    /// <c>Spacing</c> override (the first positional argument).
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience overload — see <see cref="VStack(Element?[])"/>
+    /// for the naming rationale.
+    /// </remarks>
     public static StackElement HStack(double spacing, params Element?[] children) =>
         new(Orientation.Horizontal, FilterChildren(children)) { Spacing = spacing };
 
@@ -239,12 +384,30 @@ public static partial class Factories
     public static WrapGridElement WrapGrid(int maxRowsOrColumns, params Element?[] children) =>
         new(FilterChildren(children)) { MaximumRowsOrColumns = maxRowsOrColumns };
 
+    /// <summary>
+    /// Creates a <see cref="ScrollViewElement"/> wrapping <paramref name="child"/>
+    /// in a scroll container.
+    /// </summary>
+    /// <remarks>
+    /// The element reconciles to a WinUI <c>ScrollViewer</c>. The Reactor name
+    /// <c>ScrollView</c> matches the newer <c>Microsoft.UI.Xaml.Controls.ScrollView</c>
+    /// type WinUI 3 ships alongside the legacy <c>ScrollViewer</c>; the shorter,
+    /// more modern name is preferred. (spec 039 §6 / §16)
+    /// </remarks>
+    /// <remarks>
+    /// No <c>ScrollViewer</c> factory alias is exposed — that name would
+    /// shadow <c>Microsoft.UI.Xaml.Controls.ScrollViewer</c>'s attached
+    /// properties (e.g. <c>ScrollViewer.SetVerticalScrollMode(...)</c>) for
+    /// any caller using <c>using static Microsoft.UI.Reactor.Factories;</c>
+    /// alongside <c>using Microsoft.UI.Xaml.Controls;</c>. Reach for
+    /// <c>ScrollView</c> directly.
+    /// </remarks>
     public static ScrollViewElement ScrollView(Element child) => new(child);
 
     public static BorderElement Border(Element? child) => new(child!);
 
-    public static ExpanderElement Expander(string header, Element content, bool isExpanded = false, Action<bool>? onExpandedChanged = null) =>
-        new(header, content, isExpanded, onExpandedChanged);
+    public static ExpanderElement Expander(string header, Element content, bool isExpanded = false, Action<bool>? onIsExpandedChanged = null) =>
+        new(header, content, isExpanded, onIsExpandedChanged);
 
     public static SplitViewElement SplitView(Element? pane = null, Element? content = null) =>
         new(pane, content);
@@ -255,15 +418,50 @@ public static partial class Factories
 
     // ── Flex ────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Creates a Yoga-based flexbox container (<see cref="FlexElement"/>).
+    /// Default direction is <see cref="Microsoft.UI.Reactor.Layout.FlexDirection.Row"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original — there is no WinUI <c>Flex</c> control. This is a
+    /// custom panel backed by Yoga (Facebook's flexbox engine, see
+    /// <see cref="Microsoft.UI.Reactor.Layout.FlexPanel"/>) for full CSS-flexbox
+    /// semantics inside a WinUI tree. Prefer <see cref="VStack(Element?[])"/> /
+    /// <see cref="HStack(Element?[])"/> for simple stacks; reach for Flex when
+    /// you need wrap, justify-content / align-items, or per-child grow/shrink.
+    /// (spec 039 §0.3)
+    /// </remarks>
     public static FlexElement Flex(params Element?[] children) =>
         new(FilterChildren(children));
 
+    /// <summary>
+    /// Creates a Yoga flexbox container with an explicit direction.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original — see <see cref="Flex(Element?[])"/> for the rationale.
+    /// </remarks>
     public static FlexElement Flex(Microsoft.UI.Reactor.Layout.FlexDirection direction, params Element?[] children) =>
         new(FilterChildren(children)) { Direction = direction };
 
+    /// <summary>
+    /// Creates a Yoga flexbox container with
+    /// <see cref="Microsoft.UI.Reactor.Layout.FlexDirection.Row"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience for the row-direction flex case — see
+    /// <see cref="Flex(Element?[])"/> for the rationale. (spec 039 §0.3)
+    /// </remarks>
     public static FlexElement FlexRow(params Element?[] children) =>
         new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Row };
 
+    /// <summary>
+    /// Creates a Yoga flexbox container with
+    /// <see cref="Microsoft.UI.Reactor.Layout.FlexDirection.Column"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original convenience for the column-direction flex case — see
+    /// <see cref="Flex(Element?[])"/> for the rationale. (spec 039 §0.3)
+    /// </remarks>
     public static FlexElement FlexColumn(params Element?[] children) =>
         new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Column };
 
@@ -493,7 +691,7 @@ public static partial class Factories
             Description = command.Description,
         };
 
-    public static ToggleMenuFlyoutItemData ToggleMenuItem(string text, bool isChecked = false, Action<bool>? onToggled = null, string? icon = null) => new(text, isChecked, onToggled, icon);
+    public static ToggleMenuFlyoutItemData ToggleMenuItem(string text, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, string? icon = null) => new(text, isChecked, onIsCheckedChanged, icon);
 
     public static RadioMenuFlyoutItemData RadioMenuItem(string text, string groupName, bool isChecked = false, Action? onClick = null, string? icon = null) => new(text, groupName, isChecked, onClick, icon);
 
@@ -522,8 +720,8 @@ public static partial class Factories
             Description = command.Description,
         };
 
-    public static AppBarToggleButtonData AppBarToggleButton(string label, bool isChecked = false, Action<bool>? onToggled = null, string? icon = null) =>
-        new(label, isChecked, onToggled, icon);
+    public static AppBarToggleButtonData AppBarToggleButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, string? icon = null) =>
+        new(label, isChecked, onIsCheckedChanged, icon);
 
     public static AppBarSeparatorData AppBarSeparator() => new();
 
@@ -717,32 +915,130 @@ public static partial class Factories
 
     // ── Typed (data-driven) collections ───────────────────────────
 
+    /// <summary>
+    /// Creates a typed, data-driven <see cref="TemplatedListViewElement{T}"/>.
+    /// The reconciler builds a WinUI <c>ListView</c> bound to <paramref name="items"/>
+    /// and instantiates one view per item via <paramref name="viewBuilder"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original generic peer of WinUI's untyped <c>ListView</c>. The
+    /// element record name is <c>TemplatedListViewElement&lt;T&gt;</c> (templated +
+    /// typed) but the factory is the short <c>ListView</c>; the type parameter
+    /// disambiguates from the existing untyped factory at the call site.
+    /// (spec 039 §0.3)
+    /// </remarks>
     public static TemplatedListViewElement<T> ListView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
 
+    /// <summary>
+    /// Creates a typed, data-driven <see cref="TemplatedListViewElement{T}"/>
+    /// for items that implement <see cref="IReactorKeyed"/>. The
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c> so call sites can
+    /// omit it. (spec 042 §5)
+    /// </summary>
+    public static TemplatedListViewElement<T> ListView<T>(
+        IReadOnlyList<T> items,
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
+        new(items, static t => t.Key, viewBuilder);
+
+    /// <summary>
+    /// Creates a typed, data-driven <see cref="TemplatedGridViewElement{T}"/>
+    /// — the templated peer of WinUI's untyped <c>GridView</c>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original — see <see cref="ListView{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>
+    /// for the templated-peer naming rationale. (spec 039 §0.3)
+    /// </remarks>
     public static TemplatedGridViewElement<T> GridView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
 
+    /// <summary>
+    /// <see cref="IReactorKeyed"/>-typed overload of
+    /// <see cref="GridView{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>;
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c>. (spec 042 §5)
+    /// </summary>
+    public static TemplatedGridViewElement<T> GridView<T>(
+        IReadOnlyList<T> items,
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
+        new(items, static t => t.Key, viewBuilder);
+
+    /// <summary>
+    /// Creates a typed, data-driven <see cref="TemplatedFlipViewElement{T}"/>
+    /// — the templated peer of WinUI's untyped <c>FlipView</c>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original — see <see cref="ListView{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>
+    /// for the templated-peer naming rationale. (spec 039 §0.3)
+    /// </remarks>
     public static TemplatedFlipViewElement<T> FlipView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
 
+    /// <summary>
+    /// <see cref="IReactorKeyed"/>-typed overload of
+    /// <see cref="FlipView{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>;
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c>. (spec 042 §5)
+    /// </summary>
+    public static TemplatedFlipViewElement<T> FlipView<T>(
+        IReadOnlyList<T> items,
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
+        new(items, static t => t.Key, viewBuilder);
+
     // ── Virtualized collections ───────────────────────────────────
 
+    /// <summary>
+    /// Creates a virtualized vertical stack of templated items. Backed by a
+    /// WinUI <c>ItemsRepeater</c> inside a <c>ScrollViewer</c> — children are
+    /// materialized on demand, so this scales to large item counts.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original — there is no WinUI <c>LazyVStack</c>; the name is borrowed
+    /// from SwiftUI for the "vertical stack, lazy materialization" semantics.
+    /// Prefer this over <see cref="VStack(Element?[])"/> when the child count is
+    /// large or the children are expensive to instantiate. (spec 039 §0.3)
+    /// </remarks>
     public static LazyVStackElement<T> LazyVStack<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
 
+    /// <summary>
+    /// <see cref="IReactorKeyed"/>-typed overload of
+    /// <see cref="LazyVStack{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>;
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c>. (spec 042 §5)
+    /// </summary>
+    public static LazyVStackElement<T> LazyVStack<T>(
+        IReadOnlyList<T> items,
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
+        new(items, static t => t.Key, viewBuilder);
+
+    /// <summary>
+    /// Creates a virtualized horizontal stack of templated items — the horizontal
+    /// peer of <see cref="LazyVStack{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reactor-original — see <see cref="LazyVStack{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>
+    /// for the naming rationale. (spec 039 §0.3)
+    /// </remarks>
     public static LazyHStackElement<T> LazyHStack<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
         Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+
+    /// <summary>
+    /// <see cref="IReactorKeyed"/>-typed overload of
+    /// <see cref="LazyHStack{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>;
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c>. (spec 042 §5)
+    /// </summary>
+    public static LazyHStackElement<T> LazyHStack<T>(
+        IReadOnlyList<T> items,
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
+        new(items, static t => t.Key, viewBuilder);
 
     // ── Shapes ───────────────────────────────────────────────────────
 
@@ -753,7 +1049,11 @@ public static partial class Factories
     public static LineElement Line(double x1, double y1, double x2, double y2) =>
         new() { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2 };
 
-    public static PathElement Path() => new();
+    // Named `Path2D` (not `Path`) to avoid colliding with `System.IO.Path`.
+    // Models reach for both in the same file and the bare name causes
+    // CS0119 cascades. Borrows the Web Canvas API's `Path2D` spelling for the
+    // vector-geometry primitive — collision-free and familiar from JS/SVG.
+    public static PathElement Path2D() => new();
 
     // ── Additional layout ───────────────────────────────────────────
 
@@ -770,18 +1070,18 @@ public static partial class Factories
     public static SemanticZoomElement SemanticZoom(Element zoomedInView, Element zoomedOutView) =>
         new(zoomedInView, zoomedOutView);
 
-    public static ListBoxElement ListBox(string[] items, int selectedIndex = -1, Action<int>? onSelectionChanged = null) =>
-        new(items) { SelectedIndex = selectedIndex, OnSelectionChanged = onSelectionChanged };
+    public static ListBoxElement ListBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
+        new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
 
     // ── Additional navigation ───────────────────────────────────────
 
-    public static SelectorBarElement SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int>? onSelectionChanged = null) =>
-        new(items) { SelectedIndex = selectedIndex, OnSelectionChanged = onSelectionChanged };
+    public static SelectorBarElement SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int>? onSelectedIndexChanged = null) =>
+        new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
 
     public static SelectorBarItemData SelectorBarItem(string text, string? icon = null) => new(text, icon);
 
-    public static PipsPagerElement PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int>? onSelectedIndexChanged = null) =>
-        new(numberOfPages) { SelectedPageIndex = selectedPageIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    public static PipsPagerElement PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int>? onSelectedPageIndexChanged = null) =>
+        new(numberOfPages) { SelectedPageIndex = selectedPageIndex, OnSelectedPageIndexChanged = onSelectedPageIndexChanged };
 
     public static AnnotatedScrollBarElement AnnotatedScrollBar() => new();
 
@@ -835,8 +1135,28 @@ public static partial class Factories
 
     // ── Rich text helpers ───────────────────────────────────────────
 
-    public static RichTextBlockElement RichText(RichTextParagraph[] paragraphs) =>
+    /// <summary>
+    /// Creates a <see cref="RichTextBlockElement"/> from an array of typed
+    /// paragraphs. Each paragraph contains a sequence of inline runs / hyperlinks
+    /// / line breaks built with <see cref="Paragraph(RichTextInline[])"/>,
+    /// <see cref="Run(string)"/>, and <see cref="Hyperlink(string, Uri)"/>.
+    /// </summary>
+    /// <remarks>
+    /// Named for parity with WinUI's <c>Microsoft.UI.Xaml.Controls.RichTextBlock</c>.
+    /// (spec 039 §1.3 / §14 #8)
+    /// </remarks>
+    public static RichTextBlockElement RichTextBlock(RichTextParagraph[] paragraphs) =>
         new("") { Paragraphs = paragraphs };
+
+    /// <summary>
+    /// Deprecated forwarding alias for <see cref="RichTextBlock(RichTextParagraph[])"/>.
+    /// </summary>
+    [global::System.Obsolete(
+        "Renamed to RichTextBlock for parity with WinUI's Microsoft.UI.Xaml.Controls.RichTextBlock. " +
+        "RichText will be removed in the next minor release. (spec 039 §1.3 / §14 #8)",
+        error: false)]
+    public static RichTextBlockElement RichText(RichTextParagraph[] paragraphs) =>
+        RichTextBlock(paragraphs);
 
     public static RichTextParagraph Paragraph(params RichTextInline[] inlines) => new(inlines);
 

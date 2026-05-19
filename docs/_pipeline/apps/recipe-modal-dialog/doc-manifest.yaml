@@ -1,0 +1,12 @@
+app:
+  title: "Modal Dialog Recipe"
+  width: 420
+  height: 320
+  startup-delay: 1200
+
+screenshots:
+  - id: confirm
+    description: "Confirmation dialog modal pattern with scrim background."
+    component: ModalDialogRecipeApp
+    region: client
+    format: png

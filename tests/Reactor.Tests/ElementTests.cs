@@ -110,7 +110,7 @@ public class ElementTests
         var el = ToggleButton("Toggle");
         Assert.Equal("Toggle", el.Label);
         Assert.False(el.IsChecked);
-        Assert.Null(el.OnToggled);
+        Assert.Null(el.OnIsCheckedChanged);
     }
 
     [Fact]

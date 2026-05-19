@@ -5,14 +5,45 @@ order: 11
 audience: intermediate
 goal: |
   Teach UseEffect lifecycle: mount, update, cleanup. Cover timers, async data
-  loading, dependency arrays, and infinite-loop pitfalls.
+  loading, dependency arrays, cleanup ordering, identity churn in deps, and
+  the boundary between effects and UseResource for cached async reads.
+tier: comprehensive
 ---
+
+Effects are commit-phase side effects with dependency tracking. After Reactor
+finishes [reconciling](reconciliation.md) the element tree and patching the
+WinUI controls for a render, it walks the effect queue for that render and
+runs every <!-- ref:UseEffect --> body whose dependency array has changed
+since the previous commit. The body runs **after** the new UI has been
+committed — never during render — so an effect is the safe place to start a
+timer, open a subscription, or kick off a `Task.Run` that will eventually
+call a setter to re-render the [component](components.md). The cleanup
+function you return is the mirror image: Reactor calls it before re-running
+the effect with a new dep set, and again when the component unmounts. The
+dependency array is the contract between you and the scheduler — every value
+the effect *reads* from state, props, or context belongs in it. Forget one
+and the effect captures a stale closure; allocate a new array or lambda each
+render and the effect re-runs forever because reference identity churns.
 
 # Effects and Lifecycle
 
 `UseEffect` runs side effects — code that reaches outside the
 [component's](components.md) render function. Timers, data fetching,
 subscriptions, and DOM manipulation all belong in effects, not in `Render()`.
+
+## Reference
+
+| Overload | When the body runs | When cleanup runs |
+|---|---|---|
+| `UseEffect(Action body, params object[] deps)` | After every commit where any entry in `deps` compares unequal (`Array.Empty<object>()` → mount only). | Never — no cleanup function. |
+| `UseEffect(Func<Action> bodyWithCleanup, params object[] deps)` | Same as above. | Before the next body run, and on unmount. |
+
+Both overloads accept a `params` deps argument; pass no values for "run every
+commit" (rarely correct), `Array.Empty<object>()` for "run once on mount",
+or one-or-more reactive values for "re-run when any of these change". Compare
+with <!-- ref:UseResource --> when the side effect is a cached async read —
+see [Async Resources](async-resources.md) for the cached-fetch shape, which
+handles cancellation, retry, and revalidation for you.
 
 ## Running Once on Mount
 
@@ -92,6 +123,164 @@ This would re-render, re-run the effect, set state again, re-render, and
 loop forever. Always guard state updates with a condition, or remove the
 changing value from the dependency array.
 
+<!-- ai:caveat -->
+Cleanup runs **before** the next effect body, not after. When a dependency
+changes, the sequence on the next commit is: cleanup of the previous effect
+instance, then a render with the new dep set, then the new effect body
+running. So if your effect subscribes to channel A and the dep changes to
+channel B, you'll see `unsubscribe(A) → subscribe(B)` in that order — never
+two simultaneous subscriptions, never a missing unsubscribe between them.
+The same ordering applies on unmount: cleanup runs once, the effect body
+never runs again. The concrete failure mode this prevents: a `PeriodicTimer`
+that captures `cts` in the cleanup closure stops correctly when the dep
+changes, but only if you return `() => { cts.Cancel(); timer.Dispose(); }`
+from the body. Forget the cleanup and the old timer keeps firing alongside
+the new one. The scheduling internals — when each phase runs relative to
+the reconciler — are documented in
+[effects-scheduling](effects-scheduling.md).
+<!-- /ai:caveat -->
+
+## Patterns
+
+### Data fetching with cancellation
+
+When an effect kicks off an async fetch, the cleanup function must cancel
+it. Otherwise a stale request can land after the user has navigated away,
+overwriting state on the next component instance (or worse, throwing on a
+disposed setter):
+
+```csharp
+UseEffect(() =>
+{
+    var cts = new CancellationTokenSource();
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            var data = await FetchAsync(query, cts.Token);
+            setItems(data);
+        }
+        catch (OperationCanceledException) { /* expected */ }
+    });
+    return () => cts.Cancel();
+}, query);
+```
+
+When `query` changes, cleanup cancels the in-flight fetch before the new
+one starts. For the cached / retry / focus-revalidation shape of the same
+pattern, reach for [`UseResource`](async-resources.md) instead — it handles
+all of this plus a per-component cache key for free.
+
+### Subscriptions with cleanup
+
+The pattern is the same regardless of what you're subscribing to —
+`INotifyPropertyChanged`, an `IObservable`, a global event bus, a
+WinUI control's `RoutedEventHandler`. Subscribe in the body, return an
+unsubscribe in the cleanup:
+
+```csharp
+UseEffect(() =>
+{
+    void Handler(object? s, EventArgs e) => setTick(t => t + 1);
+    Source.Changed += Handler;
+    return () => Source.Changed -= Handler;
+}, Source); // re-attach if Source identity changes
+```
+
+If you only need to react to property changes on an `INotifyPropertyChanged`
+source, use [`UseObservable`](hooks.md) instead — it owns the
+subscribe/unsubscribe pair so you don't have to.
+
+### UseResource for async data
+
+For data that lives outside the component (server fetch, file read, slow
+computation), reach for [`UseResource`](async-resources.md) rather than
+hand-rolling `UseEffect` + `UseState`. It returns an `AsyncValue<T>` with
+`Pending` / `Value` / `Error` shape, handles cancellation on dep change,
+retries on `await Refresh()`, and shares a per-context query cache so two
+components reading the same key reuse the in-flight task. The pattern
+to recognize: if the effect body would be "kick off a fetch, write the
+result to state, handle the loading flag, handle the error flag", you're
+re-implementing `UseResource`.
+
+## Common Mistakes
+
+### Object or array literals in the deps array
+
+```csharp
+// Don't:
+var options = new { Url = url, Limit = 10 };
+UseEffect(() => FetchAsync(options), options); // new instance every render
+```
+
+`options` is a fresh anonymous object on every render — its reference
+compares unequal to the previous one, so the effect re-runs every commit
+and the fetch fires in a loop. The `REACTOR_HOOKS_004` analyzer warns
+when a hook's deps argument is a freshly-allocated object, array, or
+lambda. Pass the *primitives* instead:
+
+```csharp
+UseEffect(() => FetchAsync(url, 10), url);
+```
+
+Or memoize the container with [`UseMemo`](hooks.md) so its identity is
+stable across renders.
+
+### Missing cleanup
+
+```csharp
+// Don't:
+UseEffect(() =>
+{
+    var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+    _ = Task.Run(async () =>
+    {
+        while (await timer.WaitForNextTickAsync())
+            setTick(t => t + 1);
+    });
+}, Array.Empty<object>()); // no cleanup → timer fires forever after unmount
+```
+
+The component unmounts, the timer keeps firing, the setter is called on a
+dead [`RenderContext`](hooks-internals.md), and the setter throws (or worse,
+silently leaks the closure tree the timer captured). Always return a
+cleanup that cancels the producer:
+
+```csharp
+UseEffect(() =>
+{
+    var cts = new CancellationTokenSource();
+    var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+    _ = Task.Run(async () =>
+    {
+        while (await timer.WaitForNextTickAsync(cts.Token))
+            setTick(t => t + 1);
+    });
+    return () => { cts.Cancel(); timer.Dispose(); };
+}, Array.Empty<object>());
+```
+
+### Running an effect that should be a memo
+
+```csharp
+// Don't:
+var (full, setFull) = UseState("");
+UseEffect(() => setFull($"{first} {last}"), first, last);
+```
+
+This pays for two extra renders (initial mount with empty `full`, then
+re-render after the effect writes) just to derive a string. The deriving
+should happen **in render**, either inline or via
+[`UseMemo`](hooks.md) for an expensive computation:
+
+```csharp
+var full = $"{first} {last}";                  // inline
+var stats = UseMemo(() => Compute(input), input); // memoized when expensive
+```
+
+Effects are for *side effects* — work that reaches outside the component.
+Pure derivations of existing state belong in render.
+
 ## Tips
 
 **Use empty deps for one-time setup.** `UseEffect(action, Array.Empty<object>())`
@@ -118,4 +307,6 @@ one place and avoids cascading re-renders.
 - **[Styling and Theming](styling.md)** — Previous: apply theme tokens, colors, and dark/light mode
 - **[Commanding](commanding.md)** — Next: bundle actions with labels, icons, and accelerators
 - **[Hooks](hooks.md)** — Deep dive into UseState, UseReducer, and other hooks used by effects
+- **[Async Resources](async-resources.md)** — Cached async reads with `UseResource` and `UseMutation`
+- **[Effects Scheduling](effects-scheduling.md)** — When effects run relative to render and commit
 - **[Advanced Patterns](advanced.md)** — Combine effects with other hooks for complex scenarios

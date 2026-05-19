@@ -166,6 +166,92 @@ class FlexVsStackDemo : Component
 }
 // </snippet:flex-vs-stack>
 
+// <snippet:app-shell>
+class AppShellDemo : Component
+{
+    public override Element Render()
+    {
+        return FlexRow(
+            // Sidebar — fixed 220px, never shrinks below it.
+            VStack(8,
+                TextBlock("Inbox").Padding(8),
+                TextBlock("Drafts").Padding(8),
+                TextBlock("Sent").Padding(8)
+            ).Background("#f3f3f3")
+             .Flex(basis: 220, shrink: 0),
+
+            // Content — explicit basis: 0 + grow: 1 gives a single distribution
+            // pass instead of measuring the inner text first.
+            VStack(12,
+                Heading("Inbox"),
+                TextBlock("Three messages, one starred. The sidebar stays 220px wide; this column absorbs every spare pixel.")
+            ).Padding(16)
+             .Flex(grow: 1, basis: 0)
+        ) with { ColumnGap = 1 };
+    }
+}
+// </snippet:app-shell>
+
+// <snippet:responsive-nav>
+class ResponsiveNavDemo : Component
+{
+    public override Element Render()
+    {
+        // Wrap kicks in when the narrow viewport can no longer fit one row.
+        // RowGap and ColumnGap apply between wrapped lines too — no manual margin.
+        return FlexRow(
+            TextBlock("Home").Padding(8).Background("#e0e0ff"),
+            TextBlock("Catalog").Padding(8).Background("#e0e0ff"),
+            TextBlock("Pricing").Padding(8).Background("#e0e0ff"),
+            TextBlock("Docs").Padding(8).Background("#e0e0ff"),
+            TextBlock("About").Padding(8).Background("#e0e0ff"),
+            TextBlock("Contact").Padding(8).Background("#e0e0ff"),
+            TextBlock("Status").Padding(8).Background("#e0e0ff")
+        ) with {
+            Wrap = FlexWrap.Wrap,
+            ColumnGap = 8,
+            RowGap = 8,
+            AlignItems = FlexAlign.Center
+        };
+    }
+}
+// </snippet:responsive-nav>
+
+// <snippet:width-vs-grow-wrong>
+class WidthVsGrowWrong : Component
+{
+    public override Element Render()
+    {
+        // Don't: .Width(200) sets the WinUI Width, but inside a FlexPanel
+        // child sizing is governed by Flex(basis/grow/shrink). The 200 is
+        // silently ignored when grow > 0 fills available space.
+        return FlexRow(
+            TextBlock("Stays 200?")
+                .Width(200)              // ignored — grow wins
+                .Flex(grow: 1)
+                .Background("#ffe0e0")
+        ) with { ColumnGap = 8 };
+    }
+}
+// </snippet:width-vs-grow-wrong>
+
+// <snippet:width-vs-grow-right>
+class WidthVsGrowRight : Component
+{
+    public override Element Render()
+    {
+        // Do: encode the intended size as basis with shrink: 0 — Flex
+        // owns the sizing math, so no surprise overrides.
+        return FlexRow(
+            TextBlock("Exactly 200")
+                .Flex(basis: 200, shrink: 0)
+                .Background("#e0ffe0")
+                .Padding(8)
+        ) with { ColumnGap = 8 };
+    }
+}
+// </snippet:width-vs-grow-right>
+
 class FlexLayoutApp : Component
 {
     public override Element Render()
@@ -178,7 +264,10 @@ class FlexLayoutApp : Component
                 Component<WrapGapDemo>(),
                 Component<GrowShrinkDemo>(),
                 Component<ToolbarDemo>(),
-                Component<FlexVsStackDemo>()
+                Component<FlexVsStackDemo>(),
+                Component<AppShellDemo>(),
+                Component<ResponsiveNavDemo>(),
+                Component<WidthVsGrowRight>()
             ).Padding(24)
         );
     }

@@ -1,0 +1,333 @@
+---
+title: "Theming Tokens"
+app: theming-tokens
+order: 22.9
+audience: intermediate
+goal: |
+  Full token catalog with visual swatches in light and dark themes,
+  the migration story from hardcoded colors to ThemeRef, and the
+  REACTOR_THEME_001 analyzer that catches the common mistake at build
+  time. Comprehensive tier — mental-model lead, Patterns, Common
+  Mistakes, WinUI design link.
+tier: comprehensive
+winui-ref: https://learn.microsoft.com/en-us/windows/apps/design/style/colors
+---
+
+A theme token is a name for a color that the system resolves at render
+time. The same token (`Theme.Accent`) emits a different `Brush`
+depending on whether the app is in light mode, dark mode, or high
+contrast — and switches without a re-render when the user flips
+themes. The alternative — a literal like `"#0066CC"` baked into a
+modifier — locks the value to a single visual mode and silently
+breaks dark theme the moment a user opens settings. Tokens exist so
+the [styling](styling.md) layer can hand a brush to a control without
+caring which theme is active. The most common mistake is reaching for
+a literal because "I'll just hardcode this one"; the
+[REACTOR_THEME_001](rules-of-reactor.md) analyzer catches that at
+build time so it cannot ship.
+
+# Theming Tokens
+
+Reactor exposes 35 named theme tokens on the static
+[`Theme`](styling.md) class plus a `Theme.Ref(string)` escape hatch
+for any XAML resource key. Tokens resolve through WinUI's resource
+system (`XamlControlsResources` + the app's `ThemeDictionaries`), so
+the values they produce match the design system Microsoft ships in
+[WinUI Fluent colors](https://learn.microsoft.com/en-us/windows/apps/design/style/colors).
+
+## Lead snippet
+
+```csharp snippet="theming-tokens/swatch-grid"
+```
+
+![Token swatches — light theme](screenshot://theming-tokens/swatch-grid-light)
+![Token swatches — dark theme](screenshot://theming-tokens/swatch-grid-dark)
+
+The same grid, both themes. Every cell is the result of `ThemeRef`
+resolution against the active `ThemeDictionary`; switching themes is a
+property update on the host, not a re-render of the component.
+
+<!-- ai:caveat -->
+A hardcoded color string in `.Background("#0066CC")` skips the
+theme swap entirely. The button stays blue when the user flips to
+dark mode, and white text on a now-still-blue background still
+satisfies WCAG against light's neutral — but the dark-mode neutral
+behind it makes the page look broken. Use `Theme.Accent` (or the
+matching `Theme.Ref(key)`) on `.Background` / `.Foreground` /
+`.WithBorder`; [REACTOR_THEME_001](rules-of-reactor.md) flags the
+literal at build time so the regression never reaches review.
+<!-- /ai:caveat -->
+
+## How resolution works
+
+[`ThemeRef`](styling.md) is a readonly record struct holding the
+resource key. When a modifier like `.Background(token)` reaches the
+reconciler, the framework walks from the materialized
+[`FrameworkElement`](components.md) up the visual tree looking for the
+nearest `RequestedTheme`, falls back to `ActualTheme`, then
+`Application.RequestedTheme`. The brush for the chosen theme name
+comes from `Application.Resources.ThemeDictionaries[name]` (or the
+nearest merged dictionary).
+
+```csharp snippet="theming-tokens/good-theme-ref"
+```
+
+When the user flips the system theme, WinUI raises
+[`ActualThemeChanged`](animation.md); Reactor subscribes and updates
+the brush on every element that referenced a `ThemeRef`. Components
+that branch on the scheme use [`UseColorScheme`](hooks.md):
+
+```csharp snippet="theming-tokens/use-color-scheme"
+```
+
+`UseColorScheme()` returns the current `ColorScheme` (Light / Dark /
+HighContrast) and re-runs render when the value changes. Reach for it
+only when the branch can't be expressed as a token (e.g. a
+non-color decision like which icon to render).
+
+## Token catalog
+
+35 named tokens across 6 groups, plus the `Theme.Ref(string)` escape
+hatch.
+
+<!-- TODO Phase 4: auto-generate this table from src/Reactor/Core/Theme.cs
+     so a new token can never be added without the page updating. -->
+
+### Accent (4 tokens)
+
+| Token | WinUI key | Where to use |
+|---|---|---|
+| `Theme.Accent` | `AccentFillColorDefaultBrush` | Primary action button background. |
+| `Theme.AccentSecondary` | `AccentFillColorSecondaryBrush` | Pressed / hover accent variants. |
+| `Theme.AccentTertiary` | `AccentFillColorTertiaryBrush` | Subtle accent surfaces. |
+| `Theme.AccentDisabled` | `AccentFillColorDisabledBrush` | Disabled state on an accent control. |
+
+### Text (5 tokens)
+
+| Token | WinUI key | Where to use |
+|---|---|---|
+| `Theme.PrimaryText` | `TextFillColorPrimaryBrush` | Headlines and body. |
+| `Theme.SecondaryText` | `TextFillColorSecondaryBrush` | Supporting copy. |
+| `Theme.TertiaryText` | `TextFillColorTertiaryBrush` | Captions and timestamps. |
+| `Theme.DisabledText` | `TextFillColorDisabledBrush` | Disabled labels. |
+| `Theme.AccentText` | `AccentTextFillColorPrimaryBrush` | Inline accent text (links, badges). |
+
+### Surfaces (5 tokens)
+
+| Token | WinUI key | Where to use |
+|---|---|---|
+| `Theme.SolidBackground` | `SolidBackgroundFillColorBaseBrush` | Page background. |
+| `Theme.CardBackground` | `CardBackgroundFillColorDefaultBrush` | Card / panel container. |
+| `Theme.SmokeFill` | `SmokeFillColorDefaultBrush` | Modal scrim. |
+| `Theme.SubtleFill` | `SubtleFillColorSecondaryBrush` | Hover wash for list rows. |
+| `Theme.LayerFill` | `LayerFillColorDefaultBrush` | Stacked-card layer. |
+
+### Control fill (5 tokens)
+
+| Token | WinUI key | Where to use |
+|---|---|---|
+| `Theme.ControlFill` | `ControlFillColorDefaultBrush` | Default neutral control surface. |
+| `Theme.ControlFillSecondary` | `ControlFillColorSecondaryBrush` | Hover state. |
+| `Theme.ControlFillTertiary` | `ControlFillColorTertiaryBrush` | Pressed state. |
+| `Theme.ControlFillDisabled` | `ControlFillColorDisabledBrush` | Disabled. |
+| `Theme.ControlFillInputActive` | `ControlFillColorInputActiveBrush` | Active TextBox / NumberBox fill. |
+
+### Stroke (5 tokens)
+
+| Token | WinUI key | Where to use |
+|---|---|---|
+| `Theme.CardStroke` | `CardStrokeColorDefaultBrush` | Card outline. |
+| `Theme.SurfaceStroke` | `SurfaceStrokeColorDefaultBrush` | Page-level dividers. |
+| `Theme.DividerStroke` | `DividerStrokeColorDefaultBrush` | Inline list separators. |
+| `Theme.ControlStroke` | `ControlStrokeColorDefaultBrush` | Default control border. |
+| `Theme.ControlStrokeSecondary` | `ControlStrokeColorSecondaryBrush` | Focus / pressed border. |
+
+### Signal (11 tokens)
+
+| Token | WinUI key | Where to use |
+|---|---|---|
+| `Theme.SystemAttention` | `SystemFillColorAttentionBrush` | Attention call-out. |
+| `Theme.SystemSuccess` | `SystemFillColorSuccessBrush` | Success state. |
+| `Theme.SystemCaution` | `SystemFillColorCautionBrush` | Warning state. |
+| `Theme.SystemCritical` | `SystemFillColorCriticalBrush` | Error state. |
+| `Theme.SystemNeutral` | `SystemFillColorNeutralBrush` | Info / neutral. |
+| `Theme.SystemSolidNeutral` | `SystemFillColorSolidNeutralBrush` | Solid neutral surface. |
+| `Theme.SystemAttentionBackground` | `SystemFillColorAttentionBackgroundBrush` | Attention banner background. |
+| `Theme.SystemSuccessBackground` | `SystemFillColorSuccessBackgroundBrush` | Success banner background. |
+| `Theme.SystemCautionBackground` | `SystemFillColorCautionBackgroundBrush` | Warning banner background. |
+| `Theme.SystemCriticalBackground` | `SystemFillColorCriticalBackgroundBrush` | Error banner background. |
+| `Theme.SystemNeutralBackground` | `SystemFillColorNeutralBackgroundBrush` | Info banner background. |
+
+(`Theme.SystemSolidAttention` rounds it to 35 + the `Theme.Ref(key)`
+escape hatch — total surface ≥ 37 per spec §5.3.)
+
+### Custom keys
+
+```csharp
+// Reference any XAML resource by string key — covers app-level overrides
+// and any token Reactor doesn't surface as a typed accessor.
+Button("Custom", () => { })
+    .Background(Theme.Ref("MyAppTitleBarBackground"));
+```
+
+## Patterns
+
+### Theming an InfoBar by severity
+
+The signal-background tokens pair with the foreground signal tokens
+to produce inline status banners that read correctly in either theme.
+
+```csharp
+Element StatusBanner(string text, Severity severity) => HStack(8,
+    TextBlock(text).Foreground(severity switch {
+        Severity.Success  => Theme.SystemSuccess,
+        Severity.Warning  => Theme.SystemCaution,
+        Severity.Critical => Theme.SystemCritical,
+        _                  => Theme.SystemNeutral,
+    })
+).Background(severity switch {
+    Severity.Success  => Theme.SystemSuccessBackground,
+    Severity.Warning  => Theme.SystemCautionBackground,
+    Severity.Critical => Theme.SystemCriticalBackground,
+    _                  => Theme.SystemNeutralBackground,
+}).Padding(12).CornerRadius(4);
+```
+
+Pair this with [`commanding`](commanding.md) to render the same banner
+on success / failure of a `Command<T>`.
+
+### App-level token override
+
+When the design system needs a brand color not in the WinUI palette,
+define it once in `Application.Resources` (or a merged dictionary) and
+reach for it through `Theme.Ref`:
+
+```xml
+<!-- App.xaml -->
+<Application.Resources>
+  <ResourceDictionary>
+    <ResourceDictionary.ThemeDictionaries>
+      <ResourceDictionary x:Key="Light">
+        <SolidColorBrush x:Key="BrandPrimaryBrush" Color="#005FB8" />
+      </ResourceDictionary>
+      <ResourceDictionary x:Key="Dark">
+        <SolidColorBrush x:Key="BrandPrimaryBrush" Color="#60AAFA" />
+      </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+  </ResourceDictionary>
+</Application.Resources>
+```
+
+```csharp
+Button("Buy now", BuyAction)
+    .Background(Theme.Ref("BrandPrimaryBrush"));
+```
+
+The brand color participates in theme swap because the override has a
+light and dark variant. Defining it without `ThemeDictionaries`
+freezes it to one theme — exactly the trap `Theme.Ref` is built to
+prevent.
+
+### Per-element theme override
+
+A single sub-tree can opt out of the app theme via
+[`RequestedTheme`](styling.md) — useful for a video player surface or
+a print-preview pane that should always look light:
+
+```csharp
+ScrollView(content).RequestedTheme(ElementTheme.Light);
+```
+
+The walk in `Theme.Resolve` picks up the local override first, so
+every `ThemeRef` inside that sub-tree resolves against the light
+dictionary even when the rest of the app is dark.
+
+## Common Mistakes
+
+### Hardcoded color literal
+
+```csharp
+// Don't:
+Button("Save", () => { }).Background("#0066CC");
+//                                    ^^^^^^^^^^
+// REACTOR_THEME_001 — hardcoded color literal on a theme-aware modifier.
+// The button stays blue when the user flips to dark mode.
+```
+
+```csharp snippet="theming-tokens/good-theme-ref"
+```
+
+The literal locks the value to one theme; the token participates in
+the swap. The analyzer surfaces this at build time so a regression
+can't ship; treat the warning as an error in CI.
+
+### Light-only test missing the dark regression
+
+A common review mistake: the screenshot in the PR is light-mode, the
+reviewer signs off, and the dark-mode breakage lands on main. The
+[testing](testing.md) page covers the fixture pattern that mounts the
+same component twice — once with `RequestedTheme(Light)`, once with
+`(Dark)` — and snapshots both.
+
+```csharp
+[Theory]
+[InlineData(ElementTheme.Light)]
+[InlineData(ElementTheme.Dark)]
+public void StatusBanner_renders_in_both_themes(ElementTheme theme)
+{
+    var rendered = Mount(new StatusBanner("Saved", Severity.Success));
+    rendered = rendered.WithModifier(m => m.RequestedTheme(theme));
+    Assert.Empty(AccessibilityScanner.Scan(rendered));
+}
+```
+
+### Resolving a non-themed key as a ThemeRef
+
+`Theme.Ref("MyAppHeaderBackground")` against a resource that exists
+only in `Application.Resources` (not in a `ThemeDictionaries` entry)
+returns a single brush regardless of theme. The page renders, but the
+color doesn't swap. If the goal is theme-aware, the resource must live
+in `ThemeDictionaries`; otherwise hardcode the color in app code and
+mark it intentional with a comment.
+
+## Tips
+
+**Reach for a typed token first, the `Theme.Ref` escape hatch
+second.** Typed tokens land with IntelliSense and a doc comment; the
+string keys do not. If a color is missing from the typed surface and
+it's a stable WinUI brush, add it to `Theme.cs` rather than
+proliferating `Theme.Ref("…")` calls.
+
+**Treat REACTOR_THEME_001 as an error in CI.** The cost of fixing a
+hardcoded color is one line; the cost of a dark-theme regression
+landing on main is a customer report.
+
+**Don't burn cycles re-resolving on every render.** `ThemeRef` is a
+record struct — a stack allocation. The resolver is called once per
+modifier application; `UseColorScheme` only re-runs render when the
+scheme actually changes.
+
+## Reference
+
+| Concept | API | Notes |
+|---|---|---|
+| Token | `Theme.<Name>` | 35 typed accessors in `src/Reactor/Core/Theme.cs`. |
+| Escape hatch | `Theme.Ref(key)` | Any XAML resource key, including app-level overrides. |
+| Reactive read | `UseColorScheme()` | Returns `ColorScheme`; triggers re-render on swap. |
+| Per-element override | `.RequestedTheme(ElementTheme)` | Walks visual tree, resolves nearest override. |
+| Analyzer | `REACTOR_THEME_001` | Flags hardcoded literals on theme-aware modifiers. |
+| WinUI surface | `XamlControlsResources` | Owning ThemeDictionary for every named token. |
+
+## Next Steps
+
+- **[Styling](styling.md)** — Previous in the styling chain: the
+  modifier surface that consumes `ThemeRef` values.
+- **[Animation](animation.md)** — Next: animating between themed
+  values; how the brush transitions through a theme swap.
+- **[Accessibility](accessibility.md)** — Contrast budgets that
+  determine which token to reach for in each surface.
+- **[Devtools Internals](devtools-internals.md)** — How the dev-menu's
+  theme-swap toggle drives the same resolver this page documents.
+- **[Rules of Reactor](rules-of-reactor.md)** — Where the
+  REACTOR_THEME_001 analyzer is listed alongside the rest of the
+  enforced idioms.

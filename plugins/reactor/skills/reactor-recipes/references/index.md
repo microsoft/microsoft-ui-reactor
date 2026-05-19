@@ -18,10 +18,15 @@ component.
 | Intent | Recipe | Hooks / APIs used |
 |---|---|---|
 | Add / remove items in a list | [`list-add-delete.cs`](list-add-delete.cs) | `UseReducer`, `WithKey`, `Command` |
+| Animate list edits (insert / move / remove) | [`animated-list.md`](animated-list.md) | `Animations.Animate`, `AnimationKind`, `IReactorKeyed`, `UseReducedMotion` |
 | Sidebar navigation between pages | [`sidebar-nav.cs`](sidebar-nav.cs) | `UseNavigation`, `NavigationView`, `NavigationHost` |
 | Form with validation + submit | [`form-with-validation.cs`](form-with-validation.cs) | `UseValidationContext`, `FormField`, `Validate.*` |
 | Fetch data, show loading / error | [`async-fetch-list.cs`](async-fetch-list.cs) | `UseResource`, `AsyncValue<T>.Match` |
-| Themed card with 4px grid spacing | [`themed-card.cs`](themed-card.cs) | `Theme.*`, `Border`, `FlexColumn`, `.Padding`, `.CornerRadius` |
+| Themed card with 4px grid spacing | [`themed-card.cs`](themed-card.cs) | `Card(child)` factory, `Subtitle` / `Caption`, `Theme.*` |
+| Absolute positioning with Canvas | [`canvas-positioning.cs`](canvas-positioning.cs) | `Canvas`, `.Canvas(left, top)`, `.CenterAt`, shapes |
+| Named-style buttons + InfoBar severity | [`named-styles.cs`](named-styles.cs) | `.AccentButton()`, `.SubtleButton()`, `.TextLink()`, `.Informational()` / `.Success()` / `.Warning()` / `.Error()` |
+| Multi-select calendar | [`calendar-multiselect.cs`](calendar-multiselect.cs) | `CalendarView`, `CalendarViewSelectionMode.Multiple`, `.SelectedDatesChanged` |
+| Factor stateful logic into a custom hook | [`use-custom-hook.cs`](use-custom-hook.cs) | `UseState`, `UseEffect` inside a `Use*` extension on `RenderContext` |
 
 ## How to use a recipe
 

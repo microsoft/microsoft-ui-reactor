@@ -1,0 +1,83 @@
+---
+# Skeleton: solid tier (spec 041 §6.2).
+#
+# This file is a scaffold — copy it to docs/_pipeline/templates/<topic>.md.dt
+# and replace every {{REPLACE_ME}} token with real content. The compile
+# pipeline excludes everything under _skeletons/ from template discovery, so
+# this skeleton does not produce a guide page even though its tier-lint
+# would fail until the placeholders are filled in.
+#
+# Required structural elements for the solid tier (tier-lint enforces all):
+#   - front-matter (title, app, order, audience, goal, tier)
+#   - one `#` title heading + one body paragraph (inherited from stub)
+#   - ≥3 resolved `snippet="<topic>/<id>"` references → real code from
+#     docs/_pipeline/apps/<topic>/
+#   - ≥1 `screenshot://<topic>/<id>` reference → declared in the app's
+#     doc-manifest.yaml
+#   - one Markdown reference table in the first half of the page
+#     (modifier list, hook signatures, or option matrix)
+#   - `## Tips` section with 3-5 bold-lead bullets
+#   - `## Next Steps` section with ≥3 inline links (previous, next,
+#     related)
+title: "{{REPLACE_ME: human-readable title}}"
+app: {{REPLACE_ME: topic-id, matches docs/_pipeline/apps/<id>/}}
+order: {{REPLACE_ME: numeric or .5 slot per spec §7.2}}
+audience: {{REPLACE_ME: beginner|intermediate|advanced}}
+goal: |
+  {{REPLACE_ME: 2-4 sentence directive to the AI author describing what
+  this page must accomplish, framed in the second person.}}
+tier: solid
+---
+
+# {{REPLACE_ME: human-readable title}}
+
+{{REPLACE_ME: one-to-three sentence orientation paragraph that frames the
+topic and names the primary API surface the page covers.}}
+
+## {{REPLACE_ME: first concept heading}}
+
+{{REPLACE_ME: 1-2 sentence lead-in.}}
+
+```csharp snippet="{{REPLACE_ME: topic-id}}/{{REPLACE_ME: snippet-id-1}}"
+```
+
+![{{REPLACE_ME: alt text describing what the screenshot shows}}](screenshot://{{REPLACE_ME: topic-id}}/{{REPLACE_ME: screenshot-id}})
+
+{{REPLACE_ME: explanation of the snippet — what changed, why it works,
+which line is doing the work.}}
+
+## {{REPLACE_ME: second concept heading}}
+
+```csharp snippet="{{REPLACE_ME: topic-id}}/{{REPLACE_ME: snippet-id-2}}"
+```
+
+{{REPLACE_ME: explanation.}}
+
+## {{REPLACE_ME: third concept heading}}
+
+```csharp snippet="{{REPLACE_ME: topic-id}}/{{REPLACE_ME: snippet-id-3}}"
+```
+
+{{REPLACE_ME: explanation.}}
+
+## Reference
+
+| {{REPLACE_ME: column 1}} | {{REPLACE_ME: column 2}} | {{REPLACE_ME: column 3}} |
+|---|---|---|
+| {{REPLACE_ME: row 1 cell 1}} | {{REPLACE_ME: row 1 cell 2}} | {{REPLACE_ME: row 1 cell 3}} |
+| {{REPLACE_ME: row 2 cell 1}} | {{REPLACE_ME: row 2 cell 2}} | {{REPLACE_ME: row 2 cell 3}} |
+| {{REPLACE_ME: row 3 cell 1}} | {{REPLACE_ME: row 3 cell 2}} | {{REPLACE_ME: row 3 cell 3}} |
+
+## Tips
+
+**{{REPLACE_ME: tip 1 bold lead}}.** {{REPLACE_ME: tip 1 body sentence.}}
+
+**{{REPLACE_ME: tip 2 bold lead}}.** {{REPLACE_ME: tip 2 body sentence.}}
+
+**{{REPLACE_ME: tip 3 bold lead}}.** {{REPLACE_ME: tip 3 body sentence.}}
+
+## Next Steps
+
+- **[{{REPLACE_ME: previous topic}}]({{REPLACE_ME: prev.md}})** — Previous in the learning path.
+- **[{{REPLACE_ME: next topic}}]({{REPLACE_ME: next.md}})** — Next: {{REPLACE_ME: 1-line description}}.
+- **[{{REPLACE_ME: related topic}}]({{REPLACE_ME: related.md}})** — {{REPLACE_ME: why a reader on this page benefits from that page}}.

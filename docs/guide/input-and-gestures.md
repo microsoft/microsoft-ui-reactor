@@ -1,3 +1,23 @@
+> **WinUI reference:** For the full property surface and design guidance, see [Input](https://learn.microsoft.com/en-us/windows/apps/design/input/).
+
+Input flows from raw pointer and keyboard events through Reactor's
+modifier tower into your component's render logic, with gesture
+recognizers and focus state stacked on top. The bottom layer is the
+raw `.OnPointerPressed` / `.OnKeyDown` / `.OnGotFocus` etc. surface,
+which mirrors WinUI's routed events one-to-one and uses bubbling by
+default — events start at the deepest element and propagate up the
+tree. Above that sit the high-level recognizers: `.OnTapped`,
+`.OnDoubleTapped`, `.OnPan`, `.OnPinch`, `.OnRotate`, `.OnLongPress`
+— each auto-enables the underlying WinUI flag (e.g.
+`IsDoubleTapEnabled`) and installs a single stable trampoline so
+re-rendering with a new handler closure costs no re-subscription.
+Focus is the third tower: declarative `.TabIndex` / `.AccessKey` /
+`.IsTabStop` modifiers, the [`UseElementFocus`](hooks.md) /
+[`UseElementRef`](hooks.md) hooks for imperative focus, and
+[`UseFocusTrap`](accessibility.md) for modal containment. Everything
+is re-render-safe by design; the [focus-and-input-internals](focus-and-input-internals.md)
+page covers the dispatcher and trampoline mechanics for readers who
+want the implementation details.
 
 # Input and gestures
 
@@ -10,6 +30,21 @@ This page covers the modifiers you'll reach for on most screens, the higher-leve
 gesture recognizers for continuous input, and the imperative escape hatches —
 ref-based focus and access keys — that round out the commanding story.
 
+## Reference
+
+| Modifier / hook | Purpose |
+|---|---|
+| `.OnPointerPressed` / `.OnPointerReleased` / `.OnPointerEntered` / `.OnPointerExited` / `.OnPointerMoved` | Raw pointer events. Bubble by default. |
+| `.OnTapped` / `.OnDoubleTapped` / `.OnRightTapped` / `.OnHolding` | High-level tap recognizers. Auto-enable the matching `IsXEnabled` flag. |
+| `.OnPan` / `.OnPinch` / `.OnRotate` / `.OnLongPress` | Continuous-gesture recognizers. Take `onBegan` / `onChanged` / `onEnded`. |
+| `.OnKeyDown` / `.OnKeyUp` / `.OnPreviewKeyDown` / `.OnPreviewKeyUp` / `.OnCharacterReceived` | Keyboard events. Preview-pair tunnels; the unprefixed pair bubbles. |
+| `.OnGotFocus` / `.OnLostFocus` | Focus events; bubble by default. |
+| `.OnDragStart<TEl,T>` / `.OnDrop<TEl,T>` / `.OnDragOver` | Drag-and-drop sources and targets with typed in-process payloads. |
+| `.TabIndex(n)` / `.IsTabStop()` / `.AccessKey("S")` / `.TabNavigation(...)` | Declarative focus order and keyboard navigation. |
+| [`UseElementFocus`](hooks.md) | Untyped element ref + dispatcher-scheduled `RequestFocus()` action. |
+| [`UseElementRef<T>`](hooks.md) | Typed element ref for calling methods on the underlying control. |
+| [`UseFocusTrap`](accessibility.md) | Keyboard focus trapping for modals and flyouts. |
+
 ## Pointer, tap, and keyboard modifiers
 
 Every [component](components.md) exposes the full WinUI input event surface as
@@ -17,15 +52,31 @@ Every [component](components.md) exposes the full WinUI input event surface as
 installs a trampoline so re-renders don't re-subscribe the underlying event.
 
 ```csharp
-Rectangle()
-    .Fill(Brushes.SteelBlue)
-    .OnPointerEntered((_, _) => logger.Debug("enter"))
-    .OnPointerExited((_, _) => logger.Debug("exit"))
-    .OnTapped((_, _) => OnClicked())
-    .OnDoubleTapped((_, _) => Open())
-    .OnRightTapped((_, _) => ShowContextMenu())
-    .OnHolding((_, _) => ShowContextMenu());
+class PointerModifiersExample : Component
+{
+    public override Element Render()
+    {
+        var (hover, setHover) = UseState(false);
+        var (tapCount, setTapCount) = UseState(0);
+
+        return VStack(12,
+            Border(TextBlock(hover ? "hovered" : "hover me")
+                .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+                .Width(240).Height(120)
+                .Background(hover ? "#BFE3FF" : "#E5F1FB")
+                .CornerRadius(8)
+                .OnPointerEntered((_, _) => setHover(true))
+                .OnPointerExited((_, _) => setHover(false))
+                .OnTapped((_, _) => setTapCount(tapCount + 1))
+                .OnDoubleTap(() => setTapCount(0)),
+
+            TextBlock($"Tapped {tapCount} time(s) — double-tap to reset")
+        ).Padding(24);
+    }
+}
 ```
+
+![Pointer modifiers on a Border with hover, tap, and double-tap reset](images/input-and-gestures/pointer-modifiers.png)
 
 Auto-enablement keeps handlers honest: attaching `.OnDoubleTapped(...)` sets
 `IsDoubleTapEnabled = true` on the mounted control so the WinUI event actually
@@ -102,28 +153,63 @@ compositor property update is cheap enough to run on every tick. Only call
 setState at gesture end — once per drag, not 60× per second.
 
 ```csharp
-var cardRef = UseRef<FrameworkElement?>(null);
-var committedRef = UseRef(Vector2.Zero);
-var (offset, setOffset) = UseState(Vector2.Zero);
+class PanGestureExample : Component
+{
+    public override Element Render()
+    {
+        // For 60 Hz smooth panning, write directly to the mounted element's
+        // Translation inside onChanged. Going through setState would queue
+        // Low-priority re-renders that get starved by the manipulation event
+        // stream itself, producing a laggy drag. The committedRef holds the
+        // position at the last gesture end so successive drags accumulate.
+        // Reset lives on a sibling Button because WinUI suppresses the tap
+        // recognizer when ManipulationMode ≠ System — .OnDoubleTap on the same
+        // element as .OnPan wouldn't fire.
+        var cardRef = UseRef<FrameworkElement?>(null);
+        var committedRef = UseRef(Vector2.Zero);
+        var (offset, setOffset) = UseState(Vector2.Zero);
 
-card
-    .Translation(offset.X, offset.Y, 0)
-    .OnMount(fe => cardRef.Current = fe)
-    .OnPan(
-        onChanged: g =>
+        void Reset()
         {
-            var next = committedRef.Current +
-                new Vector2((float)g.Translation.X, (float)g.Translation.Y);
+            committedRef.Current = Vector2.Zero;
+            setOffset(Vector2.Zero);
             if (cardRef.Current is { } fe)
-                fe.Translation = new Vector3(next.X, next.Y, 0);
-        },
-        onEnded: g =>
-        {
-            committedRef.Current += new Vector2(
-                (float)g.Translation.X, (float)g.Translation.Y);
-            setOffset(committedRef.Current);
-        });
+                fe.Translation = System.Numerics.Vector3.Zero;
+        }
+
+        return VStack(8,
+            Border(
+                Border(TextBlock("drag me")
+                    .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+                    .Width(120).Height(120)
+                    .Background("#3A7BD5")
+                    .Foreground("#ffffff")
+                    .CornerRadius(8)
+                    .Translation(offset.X, offset.Y, 0)
+                    .OnMount(fe => cardRef.Current = fe)
+                    .OnPan(
+                        onChanged: g =>
+                        {
+                            var next = committedRef.Current +
+                                new Vector2((float)g.Translation.X, (float)g.Translation.Y);
+                            if (cardRef.Current is { } fe)
+                                fe.Translation = new System.Numerics.Vector3(next.X, next.Y, 0);
+                        },
+                        onEnded: g =>
+                        {
+                            committedRef.Current += new Vector2((float)g.Translation.X, (float)g.Translation.Y);
+                            setOffset(committedRef.Current);
+                        },
+                        withInertia: true)
+            ).Height(260).Background("#f3f3f3").CornerRadius(8).Padding(16),
+
+            Button("Reset position", Reset)
+        );
+    }
+}
 ```
+
+![Card with .OnPan that writes Translation directly for 60 Hz drag](images/input-and-gestures/pan-gesture.png)
 
 If the panned position doesn't drive anything else on the screen (no adjacent
 counter, no snap-to-grid indicator), you can even skip the setState at
@@ -162,12 +248,27 @@ unions the required `ManipulationModes` flags.
 ### Long press
 
 ```csharp
-listItem
-    .OnLongPress(
-        g => ShowContextMenu(g.Position),
-        minimumDuration: TimeSpan.FromMilliseconds(500),
-        cancelDistance: 10.0);
+class LongPressExample : Component
+{
+    public override Element Render()
+    {
+        var (log, setLog) = UseState("hold the card for 500 ms");
+
+        return VStack(12,
+            Border(TextBlock("Hold me")
+                .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+                .Height(80).Background("#FFF4CE").CornerRadius(6).Padding(12)
+                .OnLongPress(
+                    g => setLog($"long-press after {g.Duration.TotalMilliseconds:F0}ms"),
+                    enableMouseEmulation: true),
+
+            TextBlock(log)
+        ).Padding(24);
+    }
+}
 ```
+
+![Long-press gesture showing duration of last trigger](images/input-and-gestures/long-press.png)
 
 Long-press is touch-and-pen first: the reconciler routes `Holding` events into
 the callback and sets `IsHoldingEnabled = true`. Mouse long-press is off by
@@ -214,20 +315,23 @@ stable `ElementRef` plus a `RequestFocus` action that schedules the focus on the
 UI dispatcher so it runs after the current reconcile pass.
 
 ```csharp
-public class LoginForm : Component
+class UseElementFocusExample : Component
 {
     public override Element Render()
     {
-        var (inputRef, requestFocus) = Context.UseElementFocus();
+        var (name, setName) = UseState("");
+        var (inputRef, requestFocus) = this.UseElementFocus();
+        UseEffect(() => requestFocus(), Array.Empty<object>());
 
-        Context.UseEffect(() => requestFocus(), Array.Empty<object>());
-
-        return VStack(
-            TextField(email, setEmail).Ref(inputRef),
-            Button("Sign in", OnSubmit));
+        return VStack(12,
+            TextBlock("The field below auto-focuses on mount via UseElementFocus()."),
+            TextField(name, setName, placeholder: "name").Width(280).Ref(inputRef)
+        ).Padding(24);
     }
 }
 ```
+
+![Form auto-focusing its first input on mount via UseElementFocus](images/input-and-gestures/use-element-focus.png)
 
 `ElementRef.Current` is null until the referenced element mounts; the ref
 survives re-renders so the same instance reliably points at the currently
@@ -318,16 +422,60 @@ written into `DataPackage.Properties`, so arbitrary CLR objects can round-trip
 without a serializer.
 
 ```csharp
-record Card(string Id, string Title);
+sealed record KanbanCard(string Id, string Title);
 
-Element RenderCard(Card card) =>
-    Border(Text(card.Title))
-        .OnDragStart<BorderElement, Card>(() => card);
+class KanbanDndExample : Component
+{
+    public override Element Render()
+    {
+        var (todo, setTodo) = UseState<IReadOnlyList<KanbanCard>>(new KanbanCard[]
+        {
+            new("k1", "Write docs"),
+            new("k2", "Ship feature"),
+        });
+        var (done, setDone) = UseState<IReadOnlyList<KanbanCard>>(Array.Empty<KanbanCard>());
 
-Element RenderColumn(IEnumerable<Card> cards, Action<Card> onDrop) =>
-    VStack(cards.Select(RenderCard).ToArray())
-        .OnDrop<VStackElement, Card>(onDrop);
+        Element Column(string label,
+            IReadOnlyList<KanbanCard> cards,
+            Action<IReadOnlyList<KanbanCard>> setThis)
+        {
+            var children = new List<Element> { TextBlock(label).SemiBold() };
+            foreach (var card in cards)
+            {
+                var captured = card;
+                children.Add(
+                    Border(TextBlock(captured.Title).Foreground("#ffffff"))
+                        .Background("#4B7BEC").CornerRadius(6).Padding(10)
+                        .OnDragStart<BorderElement, KanbanCard>(
+                            getPayload: () => captured,
+                            allowedOperations: DragOperations.Move,
+                            onEnd: ctx =>
+                            {
+                                if (!ctx.WasCancelled && ctx.CompletedOperation == DragOperations.Move)
+                                    setThis(cards.Where(c => c.Id != captured.Id).ToList());
+                            }));
+            }
+            return VStack(6, children.ToArray())
+                .OnDrop<StackElement, KanbanCard>(
+                    onDrop: c =>
+                    {
+                        if (!cards.Any(x => x.Id == c.Id))
+                            setThis(cards.Append(c).ToList());
+                    },
+                    acceptedOps: DragOperations.Move);
+        }
+
+        return HStack(12,
+            Border(Column("Todo", todo, setTodo))
+                .Width(240).Background("#F7F7F7").CornerRadius(6).Padding(10),
+            Border(Column("Done", done, setDone))
+                .Width(240).Background("#F1FFF4").CornerRadius(6).Padding(10)
+        ).Padding(24);
+    }
+}
 ```
+
+![Typed kanban drag-and-drop columns with move-on-confirmation](images/input-and-gestures/kanban-dnd.png)
 
 ### Standard formats + cross-process interop
 
@@ -411,3 +559,123 @@ target (ESC, dropped on empty space, system abort).
 `DragEndContext.CompletedOperation` carries the final negotiated operation
 — whatever the target set via `DragTargetArgs.AcceptedOperation` — or
 `DragOperations.None` when cancelled.
+
+> **Caveat:** `.OnPointerPressed` on a parent fires **after** its children when using the
+> default bubbling phase — Reactor mirrors WinUI's routed-event model, where
+> events start at the deepest hit-tested element and propagate up.
+> If a parent needs to capture the press *before* children see it, you have two
+> options: (1) set the matching `.On<Event>Handled(true)` on the parent (the
+> handled-too overload) so the parent runs even if a child marked the event
+> handled, and bubble order still applies (parent runs last); (2) attach to
+> the preview/tunnel pair (`.OnPreviewKeyDown` for keys; for pointer events
+> there is no preview pair — you must drop down to the manual
+> `AddHandler(PointerPressedEvent, handler, handledEventsToo: true)` via
+> `.Set(c => ...)`). The trap: relying on tunneling for pointer capture
+> silently does the wrong thing in 80% of cases because the tunnel pair
+> doesn't exist for pointer events. The
+> [focus-and-input-internals](focus-and-input-internals.md) page walks the
+> routed-event phases end-to-end.
+
+## Patterns
+
+### Drag-reorder a list
+
+Combine `.OnDragStart<TEl, T>` on each item with `.OnDrop<TEl, T>` on the
+list container. The kanban example above is the canonical shape — typed
+payload, GUID transfer registry, move-on-confirmation. For a
+recipe-style walkthrough with full state management and animation,
+see [recipes/drag-reorder](recipes/drag-reorder.md).
+
+### Pinch-to-zoom on an image
+
+Combine `.OnPinch` with a `Translation` scale modifier driven from
+state. Scale is cumulative since `Began` — apply it directly to the
+element's `Scale` compositor property in `onChanged` for 60 Hz
+behavior (same pattern as pan above), then commit to `UseState` in
+`onEnded`. The reconciler unions `ManipulationModes` so adding
+`.OnRotate` on the same element is free.
+
+### Trap focus inside a modal
+
+Wrap the modal's content tree in a container with
+`.FocusTrap(handle)` where the handle comes from
+[`UseFocusTrap(isActive)`](accessibility.md). Tab and Shift+Tab cycle
+within the trap; the modal's close handler flips `isActive` to false,
+which lifts the trap and returns focus to the previously-focused
+element. The [accessibility](accessibility.md) page covers the
+full ARIA dialog shape (announcement, restore-focus-on-close,
+`aria-labelledby` via `AutomationName`).
+
+## Common Mistakes
+
+### Relying on tunneling for pointer capture
+
+Reactor exposes pointer events through the bubbling phase only —
+there is no `.OnPreviewPointerPressed` / `.OnPreviewPointerReleased`
+modifier because WinUI's routed-event surface for pointer events
+doesn't expose a tunneling pair the same way it does for keyboard.
+If a parent needs to see the press before children consume it, use
+`.OnPointerPressed` with the handled-too overload (or
+`.Set(c => c.AddHandler(...))` for the manual case). The
+[caveat above](#ai:caveat) goes into the routing detail.
+
+### Using `.OnKeyDown` for accelerator chords
+
+`.OnKeyDown` fires per element on focus — a `Ctrl+S` handler attached
+to a `TextField` only fires while that field has focus. For app-wide
+accelerators (Save, Find, Run), use Reactor's
+[commanding](commanding.md) system: `new Command { ..., AccessKey =
+"S", AccessKeyModifiers = VirtualKeyModifiers.Control }` registers
+the chord with the WinUI accelerator infrastructure, which routes
+through the window's `AccessKeyManager` regardless of focus. The
+analyzer `REACTOR_INPUT_001` flags Ctrl/Alt key combinations attached
+via `.OnKeyDown` and suggests the `Command` rewrite.
+
+### Forgetting `Focusable(true)` on a clickable Border
+
+A `Border` with `.OnTapped(...)` is hit-testable for pointer events
+but is not in the keyboard tab order by default — pressing Tab skips
+right past it, which fails [accessibility](accessibility.md) (every
+interactive control must be keyboard-reachable). Add `.IsTabStop()`
+or set `.TabIndex(n)` to put the Border in the tab order, and pair
+it with `.OnKeyDown` for Enter/Space activation. The
+[`AccessibilityScanner`](accessibility.md) catches this as
+`A11Y_KEYBOARD_001`.
+
+## Tips
+
+**Use the high-level recognizer when one exists.** `.OnTapped` is
+the right primitive for click — it filters out drags, handles
+touch and mouse uniformly, and respects the system's tap-distance
+threshold. Reach for `.OnPointerPressed` only when you need the
+raw event (preview, capture, multi-touch coordination).
+
+**Write `Translation` directly during pan.** A per-event `setState`
+during pan drops frames — Reactor's render loop priorities lose to
+the manipulation event stream. Grab a ref to the mounted element
+and write `Translation` inside `onChanged`; commit to state once on
+`onEnded`. The pan snippet above is the canonical shape.
+
+**Long-press needs `enableMouseEmulation: true` for mouse users.**
+WinUI's `Holding` event doesn't fire for mouse pointers by design.
+If your context-menu trigger needs mouse support (most do), opt in
+explicitly. Touch and pen work without it.
+
+**Bridge to `Command` for anything keyboard-shortcut-shaped.**
+Per-element `.OnKeyDown` handlers are right for "Enter submits this
+form"; app-wide chords belong on a `Command` with
+`AccessKey` + `AccessKeyModifiers`. See
+[commanding](commanding.md) for the full surface.
+
+**Run the a11y scanner.** A keyboard-focusable interactive control
+without `AutomationName` or a focus-visible affordance is a bug.
+[`AccessibilityScanner`](accessibility.md) flags both at runtime.
+
+## Next Steps
+
+- **[Focus and Input Internals](focus-and-input-internals.md)** — under-the-hood: trampoline dispatch, routed-event phases, dispatcher coalescing for focus
+- **[Accessibility](accessibility.md)** — `UseFocusTrap`, `UseAnnounce`, `AccessibilityScanner`, ARIA patterns
+- **[Commanding](commanding.md)** — app-wide accelerators, command bars, the `Command` and `Command<T>` types
+- **[Animation](animation.md)** — pairing gestures with `.InteractionStates()` for hover / press / focus visuals
+- **[recipes/drag-reorder](recipes/drag-reorder.md)** — full drag-to-reorder list recipe
+- **[Components](components.md)** — previous topic: components, props, and composition

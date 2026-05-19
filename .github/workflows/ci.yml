@@ -14,6 +14,7 @@ jobs:
       pull-requests: read
     outputs:
       non-md: ${{ steps.filter.outputs.non-md }}
+      docs-templates: ${{ steps.filter.outputs.docs-templates }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -37,13 +38,15 @@ jobs:
             files=$(git diff --name-only "$PUSH_BEFORE" "$PUSH_SHA")
             rc=$?
           else
-            echo "No valid diff range; defaulting to non-md=true"
+            echo "No valid diff range; defaulting to non-md=true and docs-templates=true"
             echo "non-md=true" >> "$GITHUB_OUTPUT"
+            echo "docs-templates=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "$rc" -ne 0 ]; then
-            echo "git diff failed; defaulting to non-md=true"
+            echo "git diff failed; defaulting to non-md=true and docs-templates=true"
             echo "non-md=true" >> "$GITHUB_OUTPUT"
+            echo "docs-templates=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "Changed files:"
@@ -52,6 +55,15 @@ jobs:
             echo "non-md=true" >> "$GITHUB_OUTPUT"
           else
             echo "non-md=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Spec 041 §5.2: tier-drift triggers when a template or doc-app
+          # changes. Templates live under docs/_pipeline/templates/, apps
+          # under docs/_pipeline/apps/, and the doc-pipeline CLI itself
+          # under src/Reactor.Cli/Docs/.
+          if echo "$files" | grep -qE '^(docs/_pipeline/templates/|docs/_pipeline/apps/|src/Reactor\.Cli/Docs/)'; then
+            echo "docs-templates=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docs-templates=false" >> "$GITHUB_OUTPUT"
           fi
 
   unit-tests:
@@ -130,6 +142,31 @@ jobs:
 
       - name: Build
         run: dotnet build Reactor.slnx --no-restore --configuration Release
+
+  docs-check-tier:
+    name: Docs tier-drift
+    needs: changes
+    if: needs.changes.outputs.docs-templates == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: 10.0.x
+
+      # Spec 041 §5.2 — fast tier-drift gate. Fails when a template's
+      # declared tier no longer matches the §11 structural checklist. The
+      # narrower `check-tier` surface runs in ~seconds vs. the full
+      # `docs compile` (no build, capture, diagrams, or reference-gen).
+      # `--ci` is not yet flipped on: the existing 24 W001
+      # winui-ref-not-declared warnings are intentional noise on
+      # internals/meta pages and are being addressed separately as a
+      # Phase 5 lint-quality item. Errors (REACTOR_DOC_TIER_001..012)
+      # still fail the job. See docs/contributing/doc-pipeline.md §8.
+      - name: Tier-lint
+        run: dotnet run --project src/Reactor.Cli -- docs check-tier
 
   docs-compile:
     name: Docs compile

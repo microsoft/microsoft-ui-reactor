@@ -1,3 +1,25 @@
+> **WinUI reference:** For the full property surface and design guidance, see [Xaml Islands](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/xaml-islands).
+
+`XamlIslandControl` is a single WinForms control that hosts a complete
+Reactor [component](components.md) tree. The rest of the form stays
+WinForms — labels, panels, menus, the existing message loop — and
+your Reactor subtree renders into a `DesktopWindowXamlSource` rooted
+at the control's client area. Data flow across the boundary is
+explicit: WinForms event handlers call into Reactor by setting a
+component's props or calling a method on a `ReactorHostControl`
+handle; Reactor calls back into WinForms by invoking a delegate
+your form gave it at construction. There is no implicit two-way
+binding, no shared `DataContext`, and no XAML loader — the same
+declarative model that holds inside a pure Reactor window applies,
+just nested inside `System.Windows.Forms.Form`. The threading model
+is the load-bearing detail: WinForms owns the message pump and
+WinUI runs against a `DispatcherQueue` the bootstrap installs on the
+same thread, but the two are *not* synchronized for arbitrary
+background-thread callbacks. The caveat below names the specific
+failure mode. This page covers bootstrap, control insertion, data
+flow patterns, threading constraints, designer integration,
+keyboard and accessibility bridging, and the WPF sibling
+[`wpf-interop`](wpf-interop.md) for projects mixing all three.
 
 # WinForms Interop
 
@@ -66,7 +88,7 @@ class WinFormsHostDemo : Component
 }
 ```
 
-![Reactor component in a WinForms form](images/winforms-interop/island-control.png)
+![A WinForms form hosts a XamlIslandControl that stands on DesktopWindowXamlSource and a ReactorHostControl, which owns the Reactor element tree.](images/winforms-interop/host-architecture.svg)
 
 There are three ways to set the content:
 
@@ -97,8 +119,6 @@ all concrete `Component` subclasses with parameterless constructors:
 // with parameterless constructors. Select your component and the
 // designer serializes it as typeof(DashboardComponent).
 ```
-
-![Designer with ComponentType dropdown](images/winforms-interop/designer.png)
 
 At design time, the control renders a placeholder with a border showing the
 component name. No WinUI objects are created until the app runs, so the
@@ -176,11 +196,67 @@ class AccessibleIslandComponent : Component
 
 - **AutomationName**, **HeadingLevel**, and other [accessibility](accessibility.md)
   modifiers work identically to a pure Reactor app
-- **UseAnnounce** live regions are forwarded through the island boundary
+- [`UseAnnounce`](reference/hooks/UseAnnounce.md) live regions are forwarded through the island boundary
 - **Tab order** flows correctly between WinForms and Reactor controls
 - **Focus trapping** via `UseFocusTrap` works within the Reactor subtree
 
 See [Accessibility](accessibility.md) for the full modifier reference.
+
+## Data flow across the boundary
+
+Data crossing the WinForms ⇄ Reactor boundary moves through three
+mechanisms — pick the one that matches direction and frequency:
+
+| Direction | Mechanism | Use when |
+|---|---|---|
+| WinForms → Reactor (one-shot) | `XamlIslandControl.ComponentType = typeof(MyComponent)` and recreate | Setting initial content once per form. Re-assigning rebuilds the subtree. |
+| WinForms → Reactor (live) | `ContentFactory` returning a `ReactorHostControl`; keep a reference to the host's root component handle | The host is constructed once; you call methods on the component from event handlers. |
+| WinForms → Reactor (observable VM) | Pass an existing INPC view model into the component constructor; the component calls [`UseObservable`](advanced.md) to subscribe | You already have a WinForms-shaped view model and want Reactor to re-render on its change events. |
+| Reactor → WinForms | Inject a `Action<T>` callback into the component's props; component calls it from event handlers | Whenever the Reactor subtree needs to push a value back to the host. |
+
+The flow is explicit and one-directional unless you wire
+[`UseObservable`](advanced.md) over a WinForms-side `INotifyPropertyChanged`
+source. There is no implicit `DataContext` and no global event bus —
+each crossing is a method call you write.
+
+## Threading constraints
+
+The bootstrap creates a `DispatcherQueue` on the WinForms UI thread
+(the thread `Application.Run` is dispatching on) and pins WinUI to
+that thread. WinForms message-pump callbacks (`Click`, `Load`,
+`Paint`) are already on the right thread — calling
+`element.SetValue(...)` or invoking a setter from inside a `Click`
+handler is safe and the auto-marshal path is a no-op.
+
+The danger is background threads. `BackgroundWorker.ProgressChanged`,
+`Task.Run(...)` continuations without `ConfigureAwait`, and
+`HttpClient` async callbacks land on the thread pool by default. If
+your handler then tries to set a Reactor `UseState` directly,
+Reactor's auto-marshal in `RenderContext.SetState` queues the write
+onto `ReactorApp.UIDispatcher` — which works inside a pure Reactor
+window but, inside a WinForms host, is only the right dispatcher if
+you bridged it explicitly. The safe shape is to invoke
+`XamlIslandControl.Dispatcher.TryEnqueue(...)` from background
+callbacks before touching Reactor state. The caveat below covers the
+specific exception you'll see if you forget.
+
+> **Caveat:** WinForms `Application.Idle` and the WinUI `DispatcherQueue` are NOT
+> synchronized. Calling `Element.SetValue(...)` from a WinForms
+> `Button.Click` handler is fine — the click already runs on the WinForms
+> UI thread, which is the same thread the WinUI dispatcher targets, and
+> Reactor's auto-marshal sees no thread change. But calling it from a
+> `BackgroundWorker.ProgressChanged` handler raised by a worker thread
+> will throw `COMException: 0x8001010E (RPC_E_WRONG_THREAD)` from the
+> underlying `IXamlObject` setter — Reactor's auto-marshal looks at
+> `ReactorApp.UIDispatcher` which, inside a WinForms host, may not have
+> been initialized at all (interop bootstrap installs the dispatcher on
+> the host control, not the global app). The fix is to marshal manually
+> first: `xamlIsland.Dispatcher.TryEnqueue(() => setState(value))` from
+> the background handler. The corresponding analyzer is
+> `REACTOR_INTEROP_001` ("Reactor state setter called from non-UI thread
+> in WinForms host") — Warning-level — but it only fires when the
+> analyzer can prove the call site is on a non-UI thread, which it
+> cannot do across `Task.Run` lambda boundaries.
 
 ## Background and Sizing
 
@@ -205,8 +281,6 @@ class BackgroundDemo : Component
     }
 }
 ```
-
-![Component with explicit background](images/winforms-interop/background.png)
 
 Wrap your component's root in `Grid(...)` with `.Background(...)` to fill
 the island area. Without this, the component renders on a transparent
@@ -248,6 +322,78 @@ The factory function runs on the UI thread after the XAML Island is ready.
 Return any `UIElement` — typically a `ReactorHostControl` wrapping your
 component.
 
+## Patterns
+
+### Bridge a WinForms VM into a Reactor component via `UseObservable`
+
+When an existing WinForms app already has a view model implementing
+`INotifyPropertyChanged`, the migration path is to host a Reactor
+component that subscribes to the same VM rather than rewriting
+state into hooks. The Reactor component receives the VM via
+constructor props and calls [`UseObservable`](advanced.md) to bind
+the subscription to its lifetime; the WinForms form keeps the same
+VM reference and reacts to its property changes through the same
+INPC pipeline it always used. Result: incremental adoption, one
+form at a time, no big-bang rewrite.
+
+### Share a single accessibility tree across island and host
+
+The bootstrap wires the WinForms accessibility tree into the
+[`UIAutomation`](accessibility.md) tree rooted at the island. Screen
+readers see one logical app, not two: the form's `Label` controls,
+the island's Reactor `Text` elements, and the rest of the form
+appear in a single Narrator pass. To make this work, set
+`AutomationName` on the WinForms surrounding chrome (labels,
+group boxes, the form itself) — without it, Narrator reads "pane"
+for the WinForms half and the experience is disjoint.
+
+### Round-trip focus on Tab
+
+Tab from a WinForms `TextBox` should enter the Reactor subtree at
+its first focusable element, Tab again should advance within Reactor,
+and Tab off the last Reactor element should return to the next
+WinForms control. `XamlIslandControl` handles this via WinForms
+`Control.PreviewKeyDown` and the bootstrap's `PreTranslateMessage`
+filter; no extra wiring is needed for the simple case. For complex
+tab orders that mix island and host explicitly, set `TabIndex` on
+both sides — WinForms `TabIndex` and Reactor `.TabIndex(n)` use the
+same integer space.
+
+## Common Mistakes
+
+### Not calling `XamlIslandBootstrap.Run()` first
+
+The bootstrap initializes the WinAppSDK, installs the dispatcher,
+and registers the keyboard message filter. Without it,
+`XamlIslandControl.Load` either no-ops (the control renders empty)
+or throws `InvalidOperationException: 'WindowsAppSDK was not
+bootstrapped on this thread.'` — depending on which property
+triggers the lazy initialization first. The fix is the canonical
+entry point shown in the bootstrap snippet above: every WinForms +
+Reactor `Main` method opens with `XamlIslandBootstrap.Run(() => { … })`.
+
+### Placing the island inside a `Panel` with `DoubleBuffered = true`
+
+WinForms' double-buffering composites child controls into an
+off-screen bitmap on every paint. XAML Islands render via DirectX
+to a separate composition surface that doesn't participate in
+GDI double-buffering; the result is severe flicker, white flashes
+during resize, and intermittent stale-frame artifacts. The fix is
+to remove `DoubleBuffered = true` from any container *above* the
+island. Set it only on sibling WinForms controls that don't
+contain an island.
+
+### Ignoring accessibility on the WinForms surrounding chrome
+
+A Reactor subtree using [`AutomationName`](accessibility.md) on
+every Element is fine on its own. Drop it into a WinForms form
+whose `Label` controls have no `AccessibleName` set and whose
+`GroupBox` headers are empty, and Narrator reads "pane, pane,
+pane" before reaching the island. The full-app a11y story
+requires both halves. Run the [a11y scanner](accessibility.md)
+from inside the island and `axe-windows` / Accessibility Insights
+across the host form.
+
 ## Tips
 
 **Call `XamlIslandBootstrap.Run()` first.** Before any WinForms forms are
@@ -272,6 +418,7 @@ automatically, but complex tab orders may need `.TabIndex()` hints.
 
 ## Next Steps
 
+- **[WPF Interop](wpf-interop.md)** — the WPF sibling: hosting Reactor in `System.Windows.Window` apps with the same XAML Islands surface
 - **[Windows](windows.md)** — next topic: opening, finding, and managing top-level windows + tray icons
 - **[Data System](data-system.md)** — previous topic: DataGrid with sort, filter, and editing
 - **[Reactor](readme.md)** — back to the index: overview of the framework and full topic list

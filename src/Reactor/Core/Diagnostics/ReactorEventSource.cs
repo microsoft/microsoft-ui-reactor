@@ -38,6 +38,7 @@ internal sealed class ReactorEventSource : EventSource
 
     private ReactorEventSource() { }
 
+    // <snippet:etw-keywords>
     public static class Keywords
     {
         public const EventKeywords Reconcile = (EventKeywords)0x1;
@@ -48,6 +49,7 @@ internal sealed class ReactorEventSource : EventSource
         public const EventKeywords Errors = (EventKeywords)0x20;
         public const EventKeywords EventDispatch = (EventKeywords)0x40;
     }
+    // </snippet:etw-keywords>
 
     public static class Tasks
     {
@@ -60,6 +62,7 @@ internal sealed class ReactorEventSource : EventSource
 
     // ── Reconcile pass boundaries ────────────────────────────────────────
 
+    // <snippet:isenabled-gate>
     [Event(1, Level = EventLevel.Informational, Keywords = Keywords.Reconcile,
         Task = Tasks.Reconcile, Opcode = EventOpcode.Start,
         Message = "Reconcile start (root={rootElementType})")]
@@ -68,7 +71,9 @@ internal sealed class ReactorEventSource : EventSource
         if (IsEnabled(EventLevel.Informational, Keywords.Reconcile))
             WriteEvent(1, rootElementType ?? string.Empty);
     }
+    // </snippet:isenabled-gate>
 
+    // <snippet:reconcile-stop-event>
     [Event(2, Level = EventLevel.Informational, Keywords = Keywords.Reconcile,
         Task = Tasks.Reconcile, Opcode = EventOpcode.Stop,
         Message = "Reconcile stop (diffed={elementsDiffed}, skipped={elementsSkipped}, created={uiElementsCreated}, modified={uiElementsModified})")]
@@ -77,6 +82,7 @@ internal sealed class ReactorEventSource : EventSource
         if (IsEnabled(EventLevel.Informational, Keywords.Reconcile))
             WriteEvent(2, elementsDiffed, elementsSkipped, uiElementsCreated, uiElementsModified);
     }
+    // </snippet:reconcile-stop-event>
 
     // ── Component render boundaries ──────────────────────────────────────
 

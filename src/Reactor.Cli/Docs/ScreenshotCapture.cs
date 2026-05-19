@@ -111,11 +111,17 @@ internal static class ScreenshotCapture
                         Console.Error.WriteLine($" ✗ no frame produced within deadline");
                         continue;
                     }
-                    var outputPath = Path.GetFullPath(Path.Combine(topicDir, $"{screenshot.Id}.{screenshot.Format}"));
+                    // Catalog-thumb captures land at `<id>-thumb.<format>` so the
+                    // controls-catalog index can refer to them without colliding with
+                    // a full-size screenshot of the same id (spec 041 §6.3 + §12 Q7).
+                    var isThumb = string.Equals(screenshot.Kind, "catalog-thumb", StringComparison.OrdinalIgnoreCase);
+                    var fileBase = isThumb ? $"{screenshot.Id}-thumb" : screenshot.Id;
+                    var outputPath = Path.GetFullPath(Path.Combine(topicDir, $"{fileBase}.{screenshot.Format}"));
                     if (!outputPath.StartsWith(Path.GetFullPath(topicDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidOperationException($"Screenshot id '{screenshot.Id}' would escape output directory");
-                    // Auto-crop whitespace, add border + drop shadow, convert to PNG
-                    var processed = ImageProcessor.Process(frameBytes);
+                    var processed = isThumb
+                        ? ImageProcessor.ProcessThumb(frameBytes, screenshot.ThumbWidth, screenshot.ThumbHeight)
+                        : ImageProcessor.Process(frameBytes);
                     File.WriteAllBytes(outputPath, processed);
                     Console.WriteLine(" ✓");
                 }

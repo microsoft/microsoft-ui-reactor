@@ -250,6 +250,73 @@ internal static class CoverageBoostFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  3b. ElementPool clean-on-rent — regression for properties leaking
+    //      across pool round-trips. The smoke test above only verifies that
+    //      pool reuse doesn't crash; this fixture verifies that non-default
+    //      property values set on the first mount don't survive into a later
+    //      mount that leaves the same property unset.
+    //
+    //      Concrete bug this guards: ViewboxElement.Stretch wasn't cleared
+    //      in ElementPool.CleanElement, so a recycled Viewbox could render
+    //      with the previous Stretch mode (PR #310 review feedback).
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class ElementPoolCleanOnRent_Viewbox(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                return phase switch
+                {
+                    // Phase 0: Viewbox configured with non-default Stretch / StretchDirection.
+                    0 => VStack(
+                        Viewbox(TextBlock("vb-content"))
+                            .Stretch(Stretch.Fill)
+                            .StretchDirection(StretchDirection.DownOnly),
+                        Button("Drop", () => set(1))
+                    ),
+                    // Phase 1: Viewbox removed — instance returns to pool.
+                    1 => VStack(
+                        TextBlock("dropped"),
+                        Button("Remount", () => set(2))
+                    ),
+                    // Phase 2: Viewbox remounted with no stretch settings — should
+                    // rent the pooled instance and render with WinUI defaults.
+                    _ => VStack(
+                        Viewbox(TextBlock("vb-content-2")),
+                        TextBlock("remounted")
+                    ),
+                };
+            });
+
+            await Harness.Render();
+            var vb0 = H.FindControl<Viewbox>(_ => true);
+            H.Check("PoolClean_Vb_Phase0_Mounted", vb0 is not null);
+            H.Check("PoolClean_Vb_Phase0_StretchFill",
+                vb0 is not null && vb0.Stretch == Stretch.Fill);
+            H.Check("PoolClean_Vb_Phase0_DirectionDownOnly",
+                vb0 is not null && vb0.StretchDirection == StretchDirection.DownOnly);
+
+            H.ClickButton("Drop");
+            await Harness.Render();
+            H.Check("PoolClean_Vb_Phase1_Removed", H.FindControl<Viewbox>(_ => true) is null);
+
+            H.ClickButton("Remount");
+            await Harness.Render();
+            var vb2 = H.FindControl<Viewbox>(_ => true);
+            H.Check("PoolClean_Vb_Phase2_Remounted", vb2 is not null);
+            // Default values per WinUI: Stretch=Uniform, StretchDirection=Both.
+            H.Check("PoolClean_Vb_Phase2_StretchDefault",
+                vb2 is not null && vb2.Stretch == Stretch.Uniform);
+            H.Check("PoolClean_Vb_Phase2_DirectionDefault",
+                vb2 is not null && vb2.StretchDirection == StretchDirection.Both);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  4. FlexPanel attached properties — directly exercises the Get/Set
     //     accessors on FlexPanel (Position, Left, Top, Right, Bottom, AlignSelf)
     //     that are currently uncovered

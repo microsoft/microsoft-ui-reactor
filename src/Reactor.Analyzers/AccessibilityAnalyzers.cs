@@ -44,6 +44,7 @@ public sealed class IconButtonAccessibilityAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
     }
 
+    // <snippet:a11y-rule>
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
@@ -72,6 +73,7 @@ public sealed class IconButtonAccessibilityAnalyzer : DiagnosticAnalyzer
             Rule,
             invocation.GetLocation()));
     }
+    // </snippet:a11y-rule>
 
     private static bool HasModifierInChain(SyntaxNode node, params string[] modifierNames)
     {

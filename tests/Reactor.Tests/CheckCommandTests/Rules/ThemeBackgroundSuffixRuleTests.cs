@@ -39,6 +39,7 @@ namespace Microsoft.UI.Reactor.Core
     {
         public static object SolidBackground => null!;
         public static object CardBackground => null!;
+        public static object LayerFill => null!;
         public static object Accent => null!;
     }
 }";
@@ -58,6 +59,20 @@ namespace Microsoft.UI.Reactor.Core
         // Source run_id: reactor-skilled-sweep-db7ffb9050df-2026-05-11T04:15:22.011Z
         // (corpus row member="DefaultBackground", code=CS0117).
         AssertFiresOn("DefaultBackground");
+    }
+
+    [Fact]
+    public void LayerBackground_Routes_To_LayerFill_Not_SolidBackground()
+    {
+        // run5 opus-4.7 corpus, 64 occurrences across 28 distinct trials.
+        // The agent wants a layer fill, not a surface background — pre-
+        // refinement, the suffix rule incorrectly suggested SolidBackground.
+        var diag = MakeThemeDiag("LayerBackground", ThemeStub, out var c);
+        var suggestion = RunRule(diag, c);
+        Assert.NotNull(suggestion);
+        Assert.Equal("ThemeBackgroundSuffixRule", suggestion!.SuggesterName);
+        Assert.Equal("Theme.LayerFill", suggestion.Text);
+        Assert.Contains("run5 cross-trial override", suggestion.Evidence);
     }
 
     [Fact]

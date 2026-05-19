@@ -249,6 +249,10 @@ public static class UseMemoCellsExtensions
 
     // ── Helpers ─────────────────────────────────────────────────────────
 
+    // <snippet:demo>
+    // Memo snapshot: copy the caller's items into a private buffer so a
+    // subsequent mutation by the caller can't corrupt the memo's view of
+    // "what we showed last time".
     private static T[] SnapshotItems<T>(IReadOnlyList<T> items)
     {
         var snapshot = new T[items.Count];
@@ -256,6 +260,7 @@ public static class UseMemoCellsExtensions
             snapshot[i] = items[i];
         return snapshot;
     }
+    // </snippet:demo>
 
     private static object[] SnapshotDeps(object[] deps)
     {
@@ -290,7 +295,16 @@ public static class UseMemoCellsExtensions
 /// <remarks>Spec 034 §C.</remarks>
 public static class ComponentUseMemoCellsExtensions
 {
-    /// <inheritdoc cref="UseMemoCellsExtensions.UseMemoCells{T}(RenderContext, IReadOnlyList{T}, Func{T, int, Element}, object[])"/>
+    /// <summary>
+    /// Component-extension shim for <see cref="UseMemoCellsExtensions.UseMemoCells{T}(RenderContext, IReadOnlyList{T}, Func{T, int, Element}, object[])"/>.
+    /// Same semantics as the <see cref="RenderContext"/>-extension form;
+    /// dispatches against <c>component.Context</c>.
+    /// </summary>
+    /// <typeparam name="T">Cell item type.</typeparam>
+    /// <param name="component">The component whose render context owns the hook slot.</param>
+    /// <param name="items">Source items.</param>
+    /// <param name="builder">Per-cell builder.</param>
+    /// <param name="dependencies">Additional hook dependencies.</param>
     public static Element[] UseMemoCells<T>(
         this Component component,
         IReadOnlyList<T> items,
@@ -302,7 +316,18 @@ public static class ComponentUseMemoCellsExtensions
         return ComponentContext(component).UseMemoCells(items, builder, dependencies);
     }
 
-    /// <inheritdoc cref="UseMemoCellsExtensions.UseMemoCellsByKey{T, TKey}(RenderContext, IReadOnlyList{T}, Func{T, TKey}, Func{T, int, Element}, object[])"/>
+    /// <summary>
+    /// Component-extension shim for <see cref="UseMemoCellsExtensions.UseMemoCellsByKey{T, TKey}(RenderContext, IReadOnlyList{T}, Func{T, TKey}, Func{T, int, Element}, object[])"/>.
+    /// Same semantics as the <see cref="RenderContext"/>-extension form;
+    /// dispatches against <c>component.Context</c>.
+    /// </summary>
+    /// <typeparam name="T">Cell item type.</typeparam>
+    /// <typeparam name="TKey">Stable cell key type.</typeparam>
+    /// <param name="component">The component whose render context owns the hook slot.</param>
+    /// <param name="items">Source items.</param>
+    /// <param name="keySelector">Projection from item to stable key.</param>
+    /// <param name="builder">Per-cell builder.</param>
+    /// <param name="dependencies">Additional hook dependencies.</param>
     public static Element[] UseMemoCellsByKey<T, TKey>(
         this Component component,
         IReadOnlyList<T> items,
@@ -316,7 +341,17 @@ public static class ComponentUseMemoCellsExtensions
         return ComponentContext(component).UseMemoCellsByKey(items, keySelector, builder, dependencies);
     }
 
-    /// <inheritdoc cref="UseMemoCellsExtensions.UseMemoCellsByIndex{T}(RenderContext, IReadOnlyList{T}, IReadOnlyList{int}, Func{T, int, Element}, object[])"/>
+    /// <summary>
+    /// Component-extension shim for <see cref="UseMemoCellsExtensions.UseMemoCellsByIndex{T}(RenderContext, IReadOnlyList{T}, IReadOnlyList{int}, Func{T, int, Element}, object[])"/>.
+    /// Same semantics as the <see cref="RenderContext"/>-extension form;
+    /// dispatches against <c>component.Context</c>.
+    /// </summary>
+    /// <typeparam name="T">Cell item type.</typeparam>
+    /// <param name="component">The component whose render context owns the hook slot.</param>
+    /// <param name="items">Source items.</param>
+    /// <param name="changedIndices">Indices whose builder output should re-run.</param>
+    /// <param name="builder">Per-cell builder.</param>
+    /// <param name="dependencies">Additional hook dependencies.</param>
     public static Element[] UseMemoCellsByIndex<T>(
         this Component component,
         IReadOnlyList<T> items,

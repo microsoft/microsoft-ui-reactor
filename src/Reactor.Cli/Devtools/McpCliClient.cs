@@ -10,6 +10,7 @@ namespace Microsoft.UI.Reactor.Cli.Devtools;
 /// (named verbs, the generic <c>call</c> escape hatch) layers on top.
 /// Spec 025 §4.
 /// </summary>
+// <snippet:mcp-cli-client>
 internal sealed class McpCliClient : IDisposable
 {
     private readonly HttpClient _http;
@@ -27,6 +28,7 @@ internal sealed class McpCliClient : IDisposable
                 new global::System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         }
     }
+    // </snippet:mcp-cli-client>
 
     public void Dispose() => _http.Dispose();
 

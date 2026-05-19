@@ -1,7 +1,7 @@
 namespace Microsoft.UI.Reactor;
 
 /// <summary>
-/// Immutable, declarative description of a system-tray icon. Hand to
+/// Immutable (init-only) declarative description of a system-tray icon. Hand to
 /// <see cref="ReactorApp.OpenTrayIcon"/> to register; hand to
 /// <see cref="ReactorTrayIcon.Update"/> to diff and re-apply only changed
 /// fields. (spec 036 §11.4)

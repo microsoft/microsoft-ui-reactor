@@ -1,0 +1,19 @@
+app:
+  title: "Theming Tokens"
+  width: 760
+  height: 720
+  startup-delay: 1500
+
+screenshots:
+  - id: swatch-grid-light
+    description: "Full swatch grid in light theme."
+    component: ThemingTokensApp
+    region: client
+    theme: light
+    format: png
+  - id: swatch-grid-dark
+    description: "Full swatch grid in dark theme — same tokens, theme-swapped values."
+    component: ThemingTokensApp
+    region: client
+    theme: dark
+    format: png

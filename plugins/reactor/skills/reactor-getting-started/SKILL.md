@@ -170,10 +170,6 @@ FlexColumn(children...)                       FlexRow(children...)
 // Prefer FlexRow/FlexColumn for linear layout — CSS Flexbox semantics
 // (grow/shrink/gap/wrap, justify-content, align-items). VStack/HStack
 // remain for StackPanel's shrink-wrap behavior.
-// FlexElement record properties (use `with { ... }`):
-//   Direction, JustifyContent, AlignItems, AlignContent, Wrap, ColumnGap, RowGap
-//   ⚠️ It's `JustifyContent` — NOT `Justify`
-// Example: FlexRow(a, b, c) with { JustifyContent = FlexJustify.SpaceBetween, ColumnGap = 8 }
 Border(child).CornerRadius(8).Background(Theme.CardBackground).Padding(16)
 ScrollView(VStack(...))
 Grid(columns: [GridSize.Star(), GridSize.Px(200)],
@@ -240,12 +236,17 @@ items.Select(i => Component<Card, CardProps>(new CardProps(i)).WithKey(i.Id)).To
 
 ## Theme tokens (always)
 
-Use `Theme.*` for all themed colors — never hardcoded hex on themed surfaces. The full token list with WinUI keys is in the api index.
+Use `Theme.*` for all themed colors — never hardcoded hex on themed surfaces. The full token list with WinUI keys is in the `reactor-design` skill.
+
+> ⚠️ **`Theme.Error`, `Theme.Success`, `Theme.Warning`, `Theme.ErrorText` do NOT exist.**
+> Use `Theme.SystemCritical` (red/error), `Theme.SystemSuccess` (green), `Theme.SystemCaution` (yellow).
 
 ```csharp
 TextBlock("Hi").Foreground(Theme.PrimaryText)
 Border(child).Background(Theme.CardBackground).WithBorder(Theme.CardStroke, 1)
 Button("Action").Background(Theme.Accent)
+TextBlock("Error!").Foreground(Theme.SystemCritical)       // NOT Theme.Error
+TextBlock("Saved").Foreground(Theme.SystemSuccess)         // NOT Theme.Success
 ```
 
 ## Critical gotchas

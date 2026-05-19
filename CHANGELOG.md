@@ -27,6 +27,177 @@ to land under these conventions; subsequent specs follow this shape.
 
 ## [Unreleased]
 
+### Added
+
+- **Spec 042 Phase 1 — keyed-list reconciliation & ListView animation
+  groundwork.** New internal `Microsoft.UI.Reactor.Core.Internal.ReactorRow`
+  /  `ReactorListState` carry reference-typed identity rows inside an
+  internally-owned `ObservableCollection<ReactorRow>` per mounted templated
+  items control. The new `KeyedListDiff.Apply` helper produces the
+  React-style structural delta from the user's immutable list — lockstep
+  prefix + suffix walks, single-op fast paths (append / prepend /
+  remove-front / remove-back / insert-in-middle / remove-from-middle), and
+  a bulk-replace bailout (>25% churn with ≥8 absolute ops) that returns
+  to the legacy `ItemsSource` swap for correctness. (spec 042 §4)
+- **Spec 042 Phase 2 — `IReactorKeyed` identity-on-data convention.**
+  2-argument `where T : IReactorKeyed` factory overloads land for
+  `ListView<T>` / `GridView<T>` / `FlipView<T>` / `LazyVStack<T>` /
+  `LazyHStack<T>` so the `keySelector` parameter can be omitted when the
+  data type owns its identity (it defaults to `t => t.Key`). A new
+  `WithKey<T, TKey>(this T el, TKey item) where TKey : IReactorKeyed`
+  extension is the ergonomic peer for hand-built keyed children — both
+  shapes route through the same Phase 1 incremental diff. Explicit
+  `keySelector` and `WithKey(string)` are unchanged for interop /
+  third-party POCOs. The `samples/TodoApp/` `TodoItem` model adopts
+  the convention as a worked example. (spec 042 §5)
+- **Spec 042 Phase 4 + 5 — samples, gallery, and agent-kit references.**
+  New `samples/apps/animated-list-demo/` mini-app drives the templated
+  `ListView<Row>` and a hand-built `FlexColumn(items.Select(...).WithKey(item))`
+  side-by-side over the same edits so the OC-delta and `ChildReconciler`
+  paths animate together. `ReactorGallery`'s `ListViewPage` gains an
+  "Animated edit (spec 042)" `SampleCard` with the same toolbar. `TodoApp`
+  routes add / delete / clear-completed through an `Animations.Animate`
+  wrapper that honours `UseReducedMotion()`. New `Component.UseReducedMotion()`
+  delegation exposes the existing context hook so user components can
+  bypass `Animate` under WCAG 2.3.3. New skill references —
+  `plugins/reactor/skills/reactor-dsl/references/keyed-lists.md` for the
+  three keyed-list call sites and three `.WithKey` overloads, and
+  `plugins/reactor/skills/reactor-recipes/references/animated-list.md` for
+  the paste-ready `Animate` recipe + five common-mistakes sections.
+  (spec 042 Phase 4 + 5)
+- **Spec 042 perf gate — paired Reactor vs WinUI vanilla baseline.**
+  New `StressPerf.VirtualList.WinUI` is a hand-authored WinUI 3 twin
+  to `StressPerf.VirtualList.Reactor` — `ItemsRepeater` +
+  `ObservableCollection<ListItem>` with a recycling `IElementFactory`,
+  same row visual tree, same scroll tween, same edit policy
+  (deterministic seed). `tests/stress_perf/run_keyed_list_vs_winui.ps1`
+  drives a paired N-rep matrix that interleaves the two apps within
+  each rep to neutralize DRR / thermal drift, computes per-cell
+  medians, and writes a markdown verdict alongside per-rep frames CSVs
+  for forensic re-analysis. First baseline at
+  `tests/stress_perf/baselines/keyed-list-vs-winui-2026-05-17-104102/`
+  pins Reactor inside 0.3 % P50 of WinUI at production-realistic list
+  sizes; the 10k-item P50 spread is unrelated to the diff path (gap
+  doesn't move with edit pressure; Reactor's P95 / P99 tail is
+  tighter than WinUI's). (spec 042 §10 perf gate)
+- **Spec 042 Phase 6.3 — 10k virtualized scroll + edit stress scenario.**
+  `StressPerf.VirtualList.Reactor` gained `--with-edits` /
+  `--edits-per-second N` flags that interleave deterministic insert / remove
+  ops with the scroll tween (50/50 mix, seeded RNG, default 4 ops/sec).
+  Catches future regressions in the `ItemsRepeater` key-indexed factory
+  path (`ElementFactory<T>._mountedElements`, rekeyed in Phase 1) that the
+  steady-state scroll bench wouldn't see. `ListItemSource.GenerateOne(id)`
+  added so synthesized items don't collide with the seed range.
+  `tests/stress_perf/README.md` documents the new scenario, the
+  command line, and the analysis rule ("if the gap to the edit-free
+  baseline scales with `count`, the rekey path has regressed").
+  (spec 042 Phase 6.3)
+- **Spec 042 Phase 6.2 — `ReactorDiagnostics` + devtools dialog.**
+  New public `Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics`
+  collector captures keyed-list bailouts (duplicate / null key) with
+  per-control dedup via `ConditionalWeakTable` so a torn-down control
+  doesn't leak. `RecentKeyedListWarnings` returns a bounded snapshot
+  (64 entries × 8 sample keys each, newest first). `KeyedListDiff.Apply`
+  gained a `controlInstance` parameter and now routes both bailout paths
+  through a shared reporter — `ILogger.LogWarning` fires only on the
+  first occurrence per (control, kind, sample-set) triple, while
+  subsequent repeats bump an in-place `Count`. New `DevtoolsMenu` item
+  "Keyed-list diagnostics (N)" pops a `ContentDialog` listing each
+  captured entry; behind `ReactorApp.DevtoolsEnabled` so retail apps
+  pay zero cost. Tests: 7 in `ReactorDiagnosticsTests`, all 43
+  existing `KeyedListDiffTests` still pass. (spec 042 Phase 6.2)
+- **Spec 042 Phase 6.1 — `REACTOR_DSL_001` codefix.** The existing
+  missing-`.WithKey` analyzer now ships with a code fix that offers three
+  insertion shapes ranked by discovery: `.WithKey(item)` when the lambda
+  parameter implements `IReactorKeyed`, `.WithKey(item.Key)` when the type
+  has a public `Key` property, and `.WithKey(item.Id)` when the type has a
+  public `Id` property. The codefix opts out of `FixAllProvider` because
+  each lambda needs an independent semantic lookup of the parameter type.
+  Covered by 6 new tests under `tests/Reactor.Tests/AnalyzerTests/MissingWithKeyAnalyzerTests.cs`.
+  (spec 042 Phase 6.1; resolves the Q2 follow-up from spec §9)
+- **Spec 042 Phase 3 — ambient `Animations.Animate(...)` transaction.**
+  Wrapping a state mutation in `Animations.Animate(AnimationKind.Spring,
+  () => setItems(...))` propagates animation intent through an
+  `AsyncLocal` ambient so the resulting structural diff — insert / move /
+  remove on `ListView<T>` / `GridView<T>` / `LazyVStack<T>` /
+  `LazyHStack<T>` and on hand-built keyed children inside `FlexColumn`
+  etc. — picks up the kind without per-element modifiers. Setters snapshot
+  the ambient synchronously at dispatch time so the eventual render observes
+  the same intent even if the rerender hops a dispatcher; `ReactorHost` /
+  `ReactorHostControl` re-push the snapshot around the reconcile pass.
+  `KeyedListDiff.Apply` tags inserted `ReactorRow`s with the kind so the
+  `ContainerContentChanging` realize path can attach a per-container
+  fade-up Composition animation; survivor moves drive an implicit
+  `Offset` animation on the realized container (deferred one dispatcher
+  turn so WinUI has reconciled positions before lookup).
+  `ChildReconciler` consumes the same ambient — insert sites apply the
+  same default enter, move sites attach an implicit `Offset` animation,
+  and `RemoveChildWithExitTransition` fabricates a fade-out exit when no
+  per-element `.Transition(...)` is set. Per-element animation modifiers
+  continue to win when declared; the ambient is purely a default for the
+  transactional case. The two channels (transactional ambient on
+  `AsyncLocal`, per-element curve scope on `ThreadStatic`) remain
+  independent — a leaf `TextBlock`'s `Foreground` change inside
+  `Animate(.Spring)` does *not* animate the foreground. New types:
+  `AnimationKind` (public enum), `Animations.Animate(...)` (public),
+  `AmbientAnimation` / `AnimationAmbient` / `AnimationKindMap` (internal
+  glue). (spec 042 §6; matches Phase 3.2 / 3.3 / 3.4 / 3.5 of the task
+  list, including the §9 Q3 / Q4 resolutions.)
+
+### Fixed
+
+- **ListView / GridView / LazyVStack / LazyHStack now surface incremental
+  WinUI deltas for keyed updates.** Previously, any `ItemCount` change
+  rebuilt `ItemsSource` from `Enumerable.Range(...)`, which caused WinUI
+  to tear down every realized container and replay the entrance theme
+  transition for every visible row — the symptom captured in
+  microsoft-ui-reactor#198. Phase 1 routes structural changes through a
+  per-control `ObservableCollection<ReactorRow>` delta channel so only
+  the affected containers animate. Hand-built `FlexColumn(items.Select(...
+  .WithKey(item.Id)))` already worked correctly and is now pinned by
+  regression tests. (spec 042 §1, §4; closes microsoft-ui-reactor#198)
+- **`ItemsRepeater` `ElementFactory<T>._mountedElements` is now keyed by
+  the stable `ReactorRow.Key` instead of by realized index.** Insert-at-0
+  used to shift every realized entry's effective index by one, so
+  `RefreshRealizedItems` looked up the wrong element after every prepend.
+  Keying by string makes the mapping reorder-stable. (spec 042 §4.4)
+
+### Added
+
+- **Spec 039 — Property & event API scrub.**
+  - **New fluent extensions.** Every callback property in the inventory has a
+    matching fluent on its element record — ~60 callbacks across §1–§9 of the
+    spec. Fluents drop the leading `On` (so `OnClick` → `.Click(handler)`)
+    because C# binds delegate-property invocation in preference to extension
+    methods. Property names are unchanged; existing
+    `new ButtonElement(…) { OnClick = … }` syntax still compiles. Passing
+    `null` clears any previously-set handler. (spec 039 §0.1, §14 #1)
+  - **Named-style helpers.** `.AccentButton()`, `.SubtleButton()`,
+    `.TextLink()` (overloaded across `ButtonElement`, `DropDownButtonElement`,
+    `SplitButtonElement`, `ToggleSplitButtonElement`, and
+    `HyperlinkButtonElement` where applicable); InfoBar severity helpers
+    `.Informational()` / `.Success()` / `.Warning()` / `.Error()`;
+    `Card(child)` factory with theme-aware background and stroke; type-ramp
+    factories `Title` / `Subtitle` / `Body` / `BodyStrong` / `BodyLarge`
+    mapping to the WinUI 3 `*TextBlockStyle` resources. (spec 039 §2, §17)
+  - **New events exposed.** `CalendarView.OnSelectedDatesChanged`;
+    `Frame.OnNavigated` / `OnNavigating` / `OnNavigationFailed`;
+    `ScrollView.OnViewChanged`; `Popup.OnOpened`;
+    `WebView2.OnWebMessageReceived` / `OnCoreWebView2Initialized`;
+    `MediaPlayerElement.OnMediaOpened` / `OnMediaEnded` / `OnMediaFailed`;
+    `ContentDialog.OnOpened`; `Image.OnImageOpened` / `OnImageFailed`;
+    `ComboBox.OnDropDownOpened` / `OnDropDownClosed`;
+    `DataGrid.OnSelectionChanged`; universal multi-select
+    `OnSelectionChanged` on `ListView` / `GridView` / `ListBox` (with
+    `IReadOnlyList<int>` snapshot) and the typed peers `ItemsView<T>` /
+    `TemplatedListView<T>` / `TemplatedGridView<T>` (with `IReadOnlyList<T>`
+    snapshot). TreeView multi-select is intentionally deferred. (spec 039 §3,
+    §5.8, §14 #3)
+  - **New init properties.** Common-property gaps closed across the text,
+    input, date/time, progress/layout/navigation, collection/dialog, and
+    media/shape families (Phase 4 / Phase 5 of the implementation task list).
+    See spec 039 §14 #4 for the inventory.
+
 ### Changed (breaking)
 
 - **`.Margin(double, double)` and `.Padding(double, double)` parameter order
@@ -581,6 +752,32 @@ to land under these conventions; subsequent specs follow this shape.
   marked `[Obsolete]`. Replace with `Memo(ctx => …)` (render once + state
   changes) or `RenderEachTime(ctx => …)` (always re-render). Slated for
   removal in the next minor release. (spec 033 §4)
+
+### Breaking changes (deferred)
+
+Naming-alignment renames that introduce an `[Obsolete]` forwarding alias today
+and remove the old name in the next minor release.
+
+- `Microsoft.UI.Reactor.Factories.RichText(string)` and
+  `RichText(RichTextParagraph[])` renamed to `RichTextBlock(...)` for parity
+  with WinUI's `Microsoft.UI.Xaml.Controls.RichTextBlock` (record was already
+  `RichTextBlockElement`). The old `RichText` factory is preserved as a
+  thin `[Obsolete]` forwarding alias for one release; slated for removal in
+  the next minor release. (spec 039 §1.3 / §14 #8)
+- No `Microsoft.UI.Reactor.Factories.ScrollViewer` alias. (Originally
+  considered as a discoverability hint for callers reaching for the
+  WPF/WinUI-legacy name, but the alias would shadow
+  `Microsoft.UI.Xaml.Controls.ScrollViewer`'s attached-property type for
+  callers using `using static Microsoft.UI.Reactor.Factories;` alongside
+  `using Microsoft.UI.Xaml.Controls;` — forcing them to fully-qualify
+  `ScrollViewer.SetVerticalScrollMode(...)` etc. Discoverability win
+  didn't justify the imposed disambiguation cost on existing consumers.
+  Use `ScrollView` directly.) (spec 039 §6 / §16)
+- `Microsoft.UI.Reactor.Factories.ProgressBar(double)` and `ProgressBar()`
+  added as `[Obsolete]` aliases for the existing `Progress(double)` /
+  `ProgressIndeterminate()` factories. Reactor's `Progress` reconciles to
+  WinUI's `ProgressBar`; the alias lets agents reaching for the WinUI name
+  discover it. (spec 039 §5 / §16)
 
 ### Removed
 

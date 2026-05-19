@@ -42,8 +42,8 @@ return VStack(12,
 
 | Factory | Value type | Common modifiers |
 |---------|-----------|------------------|
-| `TextField(value, setValue, placeholder, header)` | `string` | `.Header()`, `.ReadOnly()`, `.AcceptsReturn()`, `.TextWrapping()` |
-| `PasswordBox(value, setValue, placeholder, header)` | `string` | `.Set(pb => ...)` |
+| `TextField(value, setValue, placeholder, header)` | `string` | `.Header()`, `.ReadOnly()`, `.AcceptsReturn()`, `.TextWrapping()`, `.MaxLength(n)`, `.NumericInput()`, `.EmailInput()`, `.Changed(handler)` |
+| `PasswordBox(password, setPassword, placeholder)` | `string` | `.Header(text)`, `.MaxLength(n)`, `.PasswordChanged(handler)` |
 | `NumberBox(value, setValue, placeholder, header)` | `double` | `.Range(min, max)`, `.SpinButtons(...)` |
 | `Slider(value, min, max, setValue)` | `double` | `.Header()`, `.StepFrequency()` |
 | `ToggleSwitch(isOn, setIsOn, header, onContent, offContent)` | `bool` | `.Header()` |
@@ -55,6 +55,17 @@ return VStack(12,
 | `AutoSuggestBox(text, setText, placeholder, header)` | `string` | `.Set(asb => ...)` |
 | `RichEditBox(doc, setDoc, header)` | `string` | `.Set(reb => ...)` |
 | `CalendarDatePicker(date, setDate, placeholder, header)` | `DateTimeOffset?` | `.Set(cdp => ...)` |
+
+**Named-input shapes** (Spec 039 §17.3): `.NumericInput()` / `.EmailInput()`
+preconfigure `InputScope` and IME hints so on-screen / soft keyboards open
+in the right mode. Stack them with validators:
+
+```csharp
+TextField(email, setEmail, placeholder: "you@example.com")
+    .EmailInput()
+    .MaxLength(254)
+    .Validate("email", email, Validate.Required(), Validate.Email())
+```
 
 For modifiers that aren't in the typed surface (e.g. `PasswordRevealMode`,
 date min/max), use `.Set(native => ...)` to reach the underlying WinUI control.

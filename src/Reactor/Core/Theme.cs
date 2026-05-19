@@ -7,6 +7,7 @@ namespace Microsoft.UI.Reactor.Core;
 /// A reference to a WinUI theme resource that resolves at render time.
 /// Use via <see cref="Theme"/> tokens or <see cref="Theme.Ref"/> for custom keys.
 /// </summary>
+// <snippet:theme-ref>
 public readonly record struct ThemeRef(string ResourceKey)
 {
     public override string ToString() => $"ThemeRef({ResourceKey})";
@@ -22,6 +23,7 @@ public readonly record struct ThemeRef(string ResourceKey)
         var themeName = GetEffectiveThemeName(fe);
         return ResolveForTheme(resourceKey, themeName);
     }
+// </snippet:theme-ref>
 
     /// <summary>
     /// Resolves a theme resource using an explicit isDark flag.

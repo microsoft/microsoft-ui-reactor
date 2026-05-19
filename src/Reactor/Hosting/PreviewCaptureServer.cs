@@ -323,10 +323,24 @@ internal sealed class PreviewCaptureServer : IDisposable
 
     private static bool IsAllowedOrigin(string origin)
     {
-        if (origin.StartsWith("vscode-webview://", StringComparison.OrdinalIgnoreCase)) return true;
-        if (origin.StartsWith("http://127.0.0.1", StringComparison.Ordinal)) return true;
-        if (origin.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase)) return true;
-        if (origin.StartsWith("https://localhost", StringComparison.OrdinalIgnoreCase)) return true;
+        // Parse the Origin header through System.Uri rather than string-prefix
+        // matching. StartsWith-based allow-lists let `http://localhost.evil.com`
+        // through because the malicious host genuinely starts with "localhost";
+        // Uri.TryCreate decomposes scheme/host/port correctly per RFC 3986.
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+            return false;
+
+        if (string.Equals(uri.Scheme, "vscode-webview", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Preserve the pre-refactor allow-list shape: http accepts both
+        // 127.0.0.1 and localhost, but https accepts only localhost. Don't
+        // collapse to a generic http-or-https rule — that would silently
+        // open `https://127.0.0.1` which the original code rejected.
+        if (uri.Scheme == Uri.UriSchemeHttp)
+            return uri.Host == "127.0.0.1" || uri.Host == "localhost";
+        if (uri.Scheme == Uri.UriSchemeHttps)
+            return uri.Host == "localhost";
         return false;
     }
 

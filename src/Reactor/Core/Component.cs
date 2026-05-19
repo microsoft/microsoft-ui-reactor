@@ -6,6 +6,7 @@ namespace Microsoft.UI.Reactor.Core;
 /// Base class for stateful components (like React class components, but using hooks).
 /// Components hold a RenderContext that tracks their hook state across re-renders.
 /// </summary>
+// <snippet:render-loop>
 public abstract class Component
 {
     internal RenderContext Context { get; } = new();
@@ -22,6 +23,7 @@ public abstract class Component
     /// Override and return true to always re-render when the parent re-renders.
     /// </summary>
     protected internal virtual bool ShouldUpdate() => false;
+// </snippet:render-loop>
 
     // ── Hook convenience methods (delegate to Context) ─────────────
 
@@ -140,6 +142,15 @@ public abstract class Component
 
     protected bool UseIsDarkTheme()
         => Context.UseIsDarkTheme();
+
+    /// <summary>
+    /// Re-renders when the user's OS reduced-motion preference changes; returns
+    /// the current value. Pair with <c>Animations.Animate(...)</c> to opt out
+    /// of structural transitions when accessibility settings request it
+    /// (WCAG 2.3.3 — spec 042 §6).
+    /// </summary>
+    protected bool UseReducedMotion()
+        => Context.UseReducedMotion();
 
     protected Localization.IntlAccessor UseIntl()
         => Context.UseIntl();

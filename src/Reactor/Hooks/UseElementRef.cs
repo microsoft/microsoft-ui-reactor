@@ -28,6 +28,7 @@ public static class UseElementRefExtensions
     /// Returns a stable <see cref="ElementRef{T}"/> for the current component scope.
     /// </summary>
     /// <typeparam name="T">The concrete control type the ref will attach to.</typeparam>
+    // <snippet:use-elementref>
     public static ElementRef<T> UseElementRef<T>(this RenderContext ctx)
         where T : FrameworkElement
     {
@@ -41,8 +42,15 @@ public static class UseElementRefExtensions
         // cheap stable ref hook.
         return ctx.UseMemo(static () => new ElementRef<T>(new ElementRef()), Array.Empty<object>());
     }
+    // </snippet:use-elementref>
 
-    /// <inheritdoc cref="UseElementRef{T}(RenderContext)"/>
+    /// <summary>
+    /// Component-extension overload of <see cref="UseElementRef{T}(RenderContext)"/>.
+    /// Equivalent to calling the <see cref="RenderContext"/>-extension form against
+    /// <c>component.Context</c>.
+    /// </summary>
+    /// <typeparam name="T">The concrete control type the ref will attach to.</typeparam>
+    /// <param name="component">The component whose render context owns the hook slot.</param>
     public static ElementRef<T> UseElementRef<T>(this Component component)
         where T : FrameworkElement
         => component.Context.UseElementRef<T>();

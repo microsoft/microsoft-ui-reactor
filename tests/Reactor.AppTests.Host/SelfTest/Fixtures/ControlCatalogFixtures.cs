@@ -76,7 +76,7 @@ internal static class ControlCatalogFixtures
 
             // ── Text / Display ──
             Add("Text", TextBlock("CatalogText"), "CatalogText");
-            Add("RichText", RichText("CatalogRich"), "CatalogRich");
+            Add("RichTextBlock", RichTextBlock("CatalogRich"), "CatalogRich");
             Add("RichEditBox", RichEditBox("CatalogEdit"), null);
 
             // ── Buttons ──

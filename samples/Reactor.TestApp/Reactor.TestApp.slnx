@@ -1,0 +1,13 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="ARM64" />
+  </Configurations>
+  <Project Path="Reactor.TestApp.csproj" DefaultStartup="true">
+    <Platform Solution="*|ARM64" Project="ARM64" />
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="../../src/Reactor/Reactor.csproj" />
+  <Project Path="../../src/Reactor.Localization.Generator/Reactor.Localization.Generator.csproj" />
+  <Project Path="../../src/Reactor.Analyzers/Reactor.Analyzers.csproj" />
+</Solution>

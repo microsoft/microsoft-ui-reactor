@@ -54,6 +54,7 @@ internal static class SelfTestRunner
                             if (fixture is null)
                             {
                                 Console.WriteLine($"not ok {testIndex} {fixtureName} - fixture not found");
+                                harness.RecordFailure();
                                 crashed = true;
                             }
                             else
@@ -67,6 +68,7 @@ internal static class SelfTestRunner
                             crashed = true;
                             Console.WriteLine($"not ok {testIndex} {fixtureName}_CRASH - {ex.GetType().Name}: {ex.Message}");
                             Console.Error.WriteLine(ex.ToString());
+                            harness.RecordFailure();
                         }
                         harness.MarkFixtureResult(testIndex - 1,
                             !crashed && harness.Failures == failuresBefore);
@@ -79,6 +81,7 @@ internal static class SelfTestRunner
                 {
                     Console.WriteLine($"Bail out! {ex.GetType().Name}: {ex.Message}");
                     Console.Error.WriteLine(ex.ToString());
+                    harness.RecordFailure();
                 }
                 finally
                 {

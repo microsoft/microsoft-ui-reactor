@@ -78,8 +78,8 @@ public class MarkdownBuilderTests
             foreach (var child in stack.Children)
                 foreach (var d in FlattenElements(child))
                     yield return d;
-        else if (el is BorderElement border)
-            foreach (var d in FlattenElements(border.Child))
+        else if (el is BorderElement border && border.Child is { } borderChild)
+            foreach (var d in FlattenElements(borderChild))
                 yield return d;
         else if (el is GridElement grid)
             foreach (var child in grid.Children)

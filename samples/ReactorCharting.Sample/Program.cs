@@ -73,7 +73,7 @@ class ChartGallery : Component
             }).Grid(row: 0),
             VStack(8,
                 SelectorBar(tabs.Select(t => SelectorBarItem(t)).ToArray(),
-                    selectedIndex: tab, onSelectionChanged: setTab).Margin(24, 16, 24, 0),
+                    selectedIndex: tab, onSelectedIndexChanged: setTab).Margin(24, 16, 24, 0),
             ScrollView(
                 Border(
                     tab switch

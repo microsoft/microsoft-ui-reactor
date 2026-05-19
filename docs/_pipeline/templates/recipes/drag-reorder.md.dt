@@ -1,0 +1,135 @@
+---
+title: "Recipe: Drag to Reorder"
+app: recipe-drag-reorder
+order: 22.7
+audience: intermediate
+goal: |
+  A small ordered list where the user can drag an item to a new
+  position. Identity-preserving moves so the reconciler doesn't
+  remount rows. Alt+Up / Alt+Down keyboard alternative so the
+  recipe works for users who can't operate the mouse.
+tier: solid
+---
+
+# Recipe: Drag to Reorder
+
+Drag-reorder is a `UseState<List<T>>` plus a function that splices
+one item from one index to another. Reactor's keyed reconciler does
+the rest — moves preserve identity, so the same row element keeps
+its focus, its hover state, and its place in the visual tree.
+Pointer drag is one entry point; an Alt+Up / Alt+Down keyboard
+shortcut is the second, and it carries the accessibility story.
+
+## Primitives
+
+| Concern | API |
+|---|---|
+| Ordered state | `UseState<List<T>>` |
+| Stable identity across moves | Record `Id` field; row keyed in `Select` |
+| Source-side drag | [`.OnDragStart<T, TPayload>`](../input-and-gestures.md) |
+| Target-side drop | [`.OnDrop<T, TPayload>`](../input-and-gestures.md) |
+| Hover indicator | `.OnDragEnter` writing to local state |
+| Keyboard alternative | `.OnKeyDown` + `InputKeyboardSource.GetKeyStateForCurrentThread` |
+| Focusable rows | `.IsTabStop(true)` + `.OnGotFocus` |
+
+### Data
+
+```csharp snippet="recipe-drag-reorder/data"
+```
+
+The record carries an `Id`. Moves never mint new ids — that's what
+lets the reconciler keep the same row element across a reorder
+instead of unmounting one and mounting another at the new slot.
+
+### State
+
+```csharp snippet="recipe-drag-reorder/state"
+```
+
+Four `UseState` hooks: the list itself, the id of the row being
+dragged (so we can dim it), the id of the hovered drop target (so
+we can outline it), and the focused row id (so the keyboard
+shortcut knows which row to move). Two of the four exist only
+during an active drag and reset on completion.
+
+### The move
+
+```csharp snippet="recipe-drag-reorder/move"
+```
+
+The whole reorder is a list splice. `RemoveAt` then `Insert` on a
+fresh copy, then `setItems` — the reconciler diffs old vs. new by
+`Id`, sees the same set of records in a different order, and reuses
+every row. `MoveById` is a small ergonomic wrapper so the pointer
+handlers can pass payload ids without computing indices.
+
+### Keyboard alternative
+
+```csharp snippet="recipe-drag-reorder/keyboard"
+```
+
+Pointer drag is half the recipe — the keyboard path is the other
+half. `Alt+Up` and `Alt+Down` move the focused row by one slot;
+`e.Handled = true` keeps the event from bubbling to a parent
+`ScrollViewer`. Modifier detection uses
+[`InputKeyboardSource.GetKeyStateForCurrentThread`](https://learn.microsoft.com/uwp/api/windows.ui.core.corewindow.getkeystate)
+because `KeyRoutedEventArgs.KeyStatus` doesn't carry Alt cleanly.
+
+### Render
+
+```csharp snippet="recipe-drag-reorder/render"
+```
+
+![Reorderable list with a dragged row in flight](screenshot://recipe-drag-reorder/list)
+
+Each row is a `HStack` with a grab-handle glyph and the title.
+`.OnDragStart<StackElement, int>` advertises the row's `Id` as a
+typed `int` payload; `.OnDrop<StackElement, int>` accepts an `int`
+payload on any sibling row and calls `MoveById`. The dragged row
+fades to 0.4 opacity; the hover target gets a 2-px accent border.
+`IsTabStop(true)` plus `.OnGotFocus` makes every row a keyboard
+landing pad so the Alt+Arrow shortcut has somewhere to anchor.
+
+## Tips
+
+**Key your rows by the record's `Id`, not by index.** Index keying
+defeats the whole point — every move would invalidate every row
+after the drop position and the reconciler would remount them.
+[`Collections`](../collections.md) covers the key-selector pattern
+in depth.
+
+**Treat the keyboard path as load-bearing, not as a fallback.**
+A drag-only reorder is unusable with a screen reader, with a
+keyboard-only workflow, or with motor impairments that preclude
+fine pointer control. The Alt+Arrow shortcut is the same `Move`
+function as the pointer path — there's no duplicated logic and the
+[`Accessibility`](../accessibility.md) story flows from one code
+path.
+
+**Don't reach for a `ListView<T>` for ten rows.** A virtualized
+collection's drag surface is genuinely harder (the row element
+under the pointer may unmount mid-drag as the user scrolls), and a
+plain `VStack` of rows is enough for recipe-sized lists. Promote
+to `ListView<T>` only when row counts cross the dozens.
+
+**Animation is optional polish.** Reactor doesn't ship a turnkey
+list-reorder animation primitive at the moment; for the doc-app
+above, the position change is instant. [`Animation`](../animation.md)
+covers the building blocks (`UseAnimation`, easing curves) if you
+want to layer a 150ms slide on top.
+
+## Next Steps
+
+- **[Collections](../collections.md)** — Key selectors, the
+  underlying list primitives, and when to promote to `ListView<T>`.
+- **[Animation](../animation.md)** — Optional motion polish for the
+  reorder transition.
+- **[Accessibility](../accessibility.md)** — Focus, tab order, and
+  the full keyboard-alternative story that the Alt+Arrow handler
+  participates in.
+- **[Input and Gestures](../input-and-gestures.md)** — The full
+  drag/drop surface: typed payloads, allowed operations, UI
+  override hooks, drag-end callbacks.
+- **[Recipe: Master-detail](master-detail.md)** — Adjacent recipe
+  for the selection-driven shape.
+- **[Recipes index](index.md)** — Back to the gallery.

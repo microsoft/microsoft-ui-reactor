@@ -88,7 +88,7 @@ class DataTemplateDemo : Component
                 ) with
                 {
                     SelectedIndex = selectedListIndex,
-                    OnSelectionChanged = setSelectedListIndex,
+                    OnSelectedIndexChanged = setSelectedListIndex,
                     OnItemClick = a => setSelectedListIndex(filtered.IndexOf(a)),
                     Header = "Animals"
                 }
@@ -126,7 +126,7 @@ class DataTemplateDemo : Component
                 ) with
                 {
                     SelectedIndex = selectedGridIndex,
-                    OnSelectionChanged = setSelectedGridIndex,
+                    OnSelectedIndexChanged = setSelectedGridIndex,
                     Header = "Gallery"
                 }
             ).CornerRadius(8).Height(300),
@@ -148,7 +148,7 @@ class DataTemplateDemo : Component
                 ) with
                 {
                     SelectedIndex = flipIndex,
-                    OnSelectionChanged = setFlipIndex,
+                    OnSelectedIndexChanged = setFlipIndex,
                 }
             ).CornerRadius(8).Height(250).Width(400),
 

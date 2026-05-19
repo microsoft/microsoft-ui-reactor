@@ -1,10 +1,42 @@
 
+Reactor's accessibility surface is two layers: modifiers that map to
+WinUI automation properties (`.AutomationName`, `.HeadingLevel`,
+`.Landmark`, `.LiveRegion`, `.TabIndex`, `.AccessKey`) and hooks that
+add runtime behavior (`UseFocusTrap` for modal focus trapping,
+`UseAnnounce` for live-region announcements, `SemanticPanel` for
+custom automation peers that the modifier set can't express). The
+analyzer set is the third layer — `REACTOR_A11Y_001..003` catch the
+three most common omissions (icon-only buttons missing an automation
+name, images missing alt text, form fields missing a label) at
+compile time. The `AccessibilityScanner` is the runtime cousin: it
+walks the post-reconciliation element tree and emits 8 categories of
+WCAG-mapped diagnostics with concrete fix suggestions. Aim for clean
+analyzer output as you type, clean scanner output before merge, and
+Narrator tab-through as the final manual check. Read [Tier 1
+Modifiers](#tier-1-modifiers) first — those five modifiers cover most
+production cases; everything else on this page is for the
+non-trivial 20%.
+
 # Accessibility
 
 Reactor provides accessibility modifiers on every [component](components.md). They map directly to
 WinUI's automation properties, so screen readers, keyboard navigation, and
 test tools work out of the box. Modifiers are split into two tiers based on
 how often you need them.
+
+## Reference
+
+| Surface | Where it lives | What it does |
+|---|---|---|
+| Tier 1 modifiers | `.AutomationName`, `.HeadingLevel`, `.TabIndex`, `.AccessKey`, `.IsTabStop` | Inline on every render — labels, headings, keyboard order. |
+| Tier 2 modifiers | `.HelpText`, `.FullDescription`, `.AccessibilityHidden`, `.AccessibilityView`, `.Landmark`, `.Required`, `.LiveRegion` | Lazy-allocated; descriptions, landmarks, hidden subtrees, regions. |
+| `UseFocusTrap(isActive)` | hook | Returns a `FocusTrapHandle`; apply with `.FocusTrap(handle)` on a container. |
+| `UseAnnounce()` | hook | Returns an `AnnounceHandle` with `.Region` (zero-size element) and `.Announce(message, assertive?)`. |
+| `SemanticPanel` | wrapper | Custom automation peer (role / value / range) for composites. |
+| `AccessibilityScanner.Scan(root)` | static | Post-render runtime diagnostic — 8 WCAG checks with fix suggestions. |
+| `REACTOR_A11Y_001` | analyzer | Icon-only `Button(icon, action)` without `.AutomationName()`. |
+| `REACTOR_A11Y_002` | analyzer | `Image()` without `.AutomationName()` or `.AccessibilityHidden()`. |
+| `REACTOR_A11Y_003` | analyzer | Form field without `header:` or label modifier. |
 
 ## Tier 1 Modifiers
 
@@ -260,6 +292,24 @@ within the subtree; when false, normal tab behavior resumes.
 
 Use focus trapping for any overlay that should prevent interaction with
 background content: modal dialogs, confirmation sheets, and dropdown menus.
+For a complete dialog pattern that combines `UseFocusTrap` with
+[`ContentDialog`](dialogs-and-flyouts.md), see the
+[modal-dialog recipe](recipes/modal-dialog.md).
+
+> **Caveat:** `UseFocusTrap` guards its `LosingFocus` handler against three "no
+> sensible container" states — `IsLoaded == false`, `Visibility !=
+> Visible`, and `!IsHitTestVisible`. Outside those guards, the trap
+> keeps eating focus changes for as long as the handle says
+> `IsActive`. The classic failure: an `When(isOpen, () => ...)`
+> modal whose `setOpen(false)` runs first (unmounting the trapped
+> container) and *then* flips `isActive` to false on the next render —
+> between the two, `Tab` from outside the now-removed container still
+> matches the stale handle and `args.Cancel = true` wedges focus on a
+> neighboring page element. Always flip `isActive` to false in the same
+> state batch that unmounts the container, or apply the trap to an
+> element that stays in the tree across the open/closed transition
+> (an always-mounted overlay with `.Visible(open)` rather than
+> `When(open, ...)`).
 
 ## Screen Reader Announcements
 
@@ -298,6 +348,13 @@ somewhere in your element tree — it renders an invisible live region. Then
 call `announce.Announce(message)` for polite announcements (queued after
 current speech) or `announce.Announce(message, assertive: true)` to
 interrupt.
+
+Calling `Announce` before `Region` has been mounted is a silent no-op —
+the handle holds an internal `TextBlock?` that the modifier pipeline
+fills in `OnMount`. If a [`UseEffect`](effects.md) with `[]` deps fires
+an `Announce` immediately on mount, the live region may not have wired
+up yet; defer the first announcement by a dispatcher tick or trigger
+it from `onNavigatedTo`.
 
 Common use cases: form submission confirmations, async operation completions,
 error messages, and timer-based status updates.
@@ -398,7 +455,93 @@ as you type in your IDE:
 
 These analyzers run automatically when you reference the `Reactor.Analyzers`
 package. They complement the runtime `AccessibilityScanner` by catching the
-most common violations at compile time.
+most common violations at compile time. The analyzer architecture itself is
+documented in [Analyzer Architecture](analyzer-architecture.md) under the
+Under-the-hood track.
+
+## Patterns
+
+### Modal dialog with focus trap and announcement
+
+The standard accessible modal combines three primitives: a controlled
+`isOpen` boolean, a `UseFocusTrap` keyed on it, and a
+`UseAnnounce` that announces "Dialog opened" on first render and
+"Dialog closed" on dismiss. The trap container should stay mounted
+across the open/closed transition (use `.Visible(open)` not
+`When(open, ...)`) so focus is released cleanly when `isActive`
+flips false — see the caveat above. The
+[modal-dialog recipe](recipes/modal-dialog.md) wires all three end
+to end against [`ContentDialog`](dialogs-and-flyouts.md).
+
+### Toast / status updates
+
+Application-wide live announcements (save succeeded, connection
+restored, error toast) belong on a single `AnnounceHandle` hoisted to
+the app root and shared through [context](context.md). Each surface
+that wants to announce reads it with `UseContext` and calls
+`announce.Announce(message)`. The single live region keeps WCAG 4.1.3
+satisfied without sprinkling regions through the tree, and message
+ordering is sequential because the underlying
+`RaiseNotificationEvent` queues at the automation peer.
+
+### Custom-control semantics
+
+Composite controls (a star rating built from `Button` children, a
+custom toggle group, a draggable slider) need a single automation node
+that says "this is a slider, the value is 3 of 5". Wrap the composite
+in `SemanticPanel { SemanticRole = "slider", RangeMinimum = 1,
+RangeMaximum = 5, RangeValue = rating }`. Mark the child buttons
+`.AccessibilityHidden()` so screen readers see one node, not five — the
+hidden modifier removes the descendants from the automation tree but
+keeps them keyboard- and pointer-interactive.
+
+## Common Mistakes
+
+### Disabled Submit with no `.DisabledFocusable()`
+
+```csharp
+// Don't:
+Button("Submit", onSubmit).Disabled(!form.IsValid)
+```
+
+A disabled button is removed from the Tab order. The user fixes the
+last field, presses Tab to reach Submit, focus skips past the still-
+disabled button, and they're stranded with no keyboard route. Use
+`.DisabledFocusable(!form.IsValid)` on the button — it keeps the
+button keyboard-focusable while presenting as disabled. The
+[Forms page](forms.md#keeping-submit-reachable) covers the full
+shape (it composes with `.Immediate()` on commit-on-blur inputs).
+
+### `AccessibilityHidden` on a focusable element
+
+```csharp
+// Don't:
+Button("Save", onSave)
+    .AccessibilityHidden()  // hides the button from screen readers
+```
+
+`.AccessibilityHidden()` only affects the automation tree — keyboard
+focus and pointer hit-testing still work. The result is a button the
+user can Tab to and click but a screen reader user cannot discover.
+If the control should not be exposed to assistive tech, it should
+not exist for keyboard users either; use `.Disabled(true)` or pull it
+from the tree with `When(...)`. Use `.AccessibilityHidden()` only on
+decorative elements that don't accept focus (icons, ornamental
+borders, redundant labels).
+
+### Heading levels skipped or out of order
+
+```csharp
+// Don't:
+TextBlock("Page Title").HeadingLevel(Level1),
+TextBlock("Subtle Detail").HeadingLevel(Level4)
+```
+
+Screen readers build a page outline by walking heading levels in
+order; gaps confuse navigation (NVDA's "next heading at level 2"
+silently fails). Promote the second heading to `Level2` or demote
+the first to match the structure. Treat heading levels like HTML —
+`h1` once per page, `h2` for sections, `h3` for subsections.
 
 ## Tips
 
@@ -427,4 +570,6 @@ WinUI renders the key tips automatically when the user presses Alt.
 - **[Forms and Input](forms.md)** — build accessible forms with labels, validation, and tab order
 - **[Navigation](navigation.md)** — add landmarks and keyboard-navigable page structure
 - **[Styling and Theming](styling.md)** — ensure high-contrast themes work with your accessible controls
+- **[Dialogs and Flyouts](dialogs-and-flyouts.md)** — focus traps and ARIA semantics for modal surfaces
+- **[Analyzer Architecture](analyzer-architecture.md)** — how `REACTOR_A11Y_001..003` are authored
 - **[WinForms Interop](winforms-interop.md)** — accessibility bridging between WinForms and Reactor

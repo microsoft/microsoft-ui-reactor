@@ -3,12 +3,21 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Navigation;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 ReactorApp.Run<NavigationApp>("Navigation", width: 800, height: 700
 #if DEBUG
     , preview: true
 #endif
 );
+
+internal sealed partial class DocsFrameDemoPage : Page
+{
+    public DocsFrameDemoPage()
+    {
+        Content = new TextBlock { Text = "Inside Frame" };
+    }
+}
 
 // <snippet:route-enum>
 enum Route { Home, Settings, Profile, Details }
@@ -365,6 +374,58 @@ class TabNavDemo : Component
 }
 // </snippet:tab-navigation>
 
+// <snippet:nav-selected-tag-changed>
+class SelectedTagChangedDemo : Component
+{
+    public override Element Render()
+    {
+        var nav = UseNavigation(Route.Home);
+        var (lastTag, setLastTag) = UseState<string?>(null);
+
+        return NavigationView(
+            [
+                NavItem("Home", icon: "Home", tag: "Home"),
+                NavItem("Settings", icon: "Setting", tag: "Settings")
+            ],
+            content: VStack(12,
+                Heading(lastTag ?? "Home"),
+                TextBlock("Last selected tag: " + (lastTag ?? "(none)"))
+                    .Opacity(0.6)
+            ).Padding(24)
+        ).SelectedTagChanged(tag =>
+        {
+            setLastTag(tag);
+            if (tag == "Settings") nav.Navigate(Route.Settings);
+        });
+    }
+}
+// </snippet:nav-selected-tag-changed>
+
+// <snippet:frame-events>
+class FrameEventsDemo : Component
+{
+    public override Element Render()
+    {
+        var (log, updateLog) = UseReducer(new List<string>());
+
+        return VStack(8,
+            SubHeading("Frame events"),
+            Frame(sourcePageType: typeof(DocsFrameDemoPage))
+                .Navigating(target =>
+                    updateLog(l => [.. l, $"Navigating to {target.Name}"]))
+                .Navigated(target =>
+                    updateLog(l => [.. l, $"Arrived at {target.Name}"]))
+                .NavigationFailed((target, ex) =>
+                    updateLog(l => [.. l, $"Failed {target.Name}: {ex.Message}"]))
+                .Height(300),
+            VStack(4, log.TakeLast(6).Select(
+                entry => TextBlock(entry).FontSize(11).Opacity(0.6)
+            ).ToArray())
+        ).Padding(24);
+    }
+}
+// </snippet:frame-events>
+
 class NavigationApp : Component
 {
     public override Element Render()
@@ -377,7 +438,9 @@ class NavigationApp : Component
                 Component<PageTransitionsDemo>(),
                 Component<DeepLinkingDemo>(),
                 Component<PageCachingDemo>(),
-                Component<TabNavDemo>()
+                Component<TabNavDemo>(),
+                Component<FrameEventsDemo>(),
+                Component<SelectedTagChangedDemo>()
             ).Padding(24)
         );
     }

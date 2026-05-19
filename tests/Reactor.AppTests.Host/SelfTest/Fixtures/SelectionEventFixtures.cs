@@ -8,7 +8,7 @@ using static Microsoft.UI.Reactor.Factories;
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
-/// Verifies that OnSelectionChanged callbacks wired by the reconciler
+/// Verifies that OnSelectedIndexChanged / OnSelectedTagChanged callbacks wired by the reconciler
 /// actually fire through to user code when the underlying WinUI control
 /// raises its native selection event.
 ///
@@ -32,7 +32,7 @@ internal static class SelectionEventFixtures
                 ComboBox(
                     ["A", "B", "C"],
                     selectedIndex: -1,
-                    onSelectionChanged: i => { count++; lastIndex = i; })
+                    onSelectedIndexChanged: i => { count++; lastIndex = i; })
                     .Set(c => c.Name = "comboSel")
             ));
             await Harness.Render();
@@ -60,7 +60,7 @@ internal static class SelectionEventFixtures
                 RadioButtons(
                     ["R1", "R2", "R3"],
                     selectedIndex: -1,
-                    onSelectionChanged: i => { count++; lastIndex = i; })
+                    onSelectedIndexChanged: i => { count++; lastIndex = i; })
                     .Set(r => r.Name = "rbsSel")
             ));
             await Harness.Render();
@@ -97,7 +97,7 @@ internal static class SelectionEventFixtures
                 ])
                 {
                     SelectedIndex = -1,
-                    OnSelectionChanged = i => { count++; lastIndex = i; },
+                    OnSelectedIndexChanged = i => { count++; lastIndex = i; },
                 }.Set(l => l.Name = "lvSel")
             ));
             await Harness.Render();
@@ -129,7 +129,7 @@ internal static class SelectionEventFixtures
                 ])
                 {
                     SelectedIndex = -1,
-                    OnSelectionChanged = i => { count++; lastIndex = i; },
+                    OnSelectedIndexChanged = i => { count++; lastIndex = i; },
                 }.Set(g => g.Name = "gvSel")
             ));
             await Harness.Render();
@@ -161,7 +161,7 @@ internal static class SelectionEventFixtures
                 ])
                 {
                     SelectedIndex = 0,
-                    OnSelectionChanged = i => { count++; lastIndex = i; },
+                    OnSelectedIndexChanged = i => { count++; lastIndex = i; },
                 }.Set(f => f.Name = "fvSel")
             ));
             await Harness.Render();
@@ -193,7 +193,7 @@ internal static class SelectionEventFixtures
                 ])
                 {
                     SelectedIndex = 0,
-                    OnSelectionChanged = i => { count++; lastIndex = i; },
+                    OnSelectedIndexChanged = i => { count++; lastIndex = i; },
                 }.Set(t => t.Name = "tvSel")
             ));
             await Harness.Render();
@@ -230,7 +230,7 @@ internal static class SelectionEventFixtures
                 ])
                 {
                     SelectedIndex = 0,
-                    OnSelectionChanged = i => { count++; lastIndex = i; },
+                    OnSelectedIndexChanged = i => { count++; lastIndex = i; },
                 }.Set(p => p.Name = "pivSel")
             ));
             await Harness.Render();
@@ -263,7 +263,7 @@ internal static class SelectionEventFixtures
                     ],
                     TextBlock("nav content"))
                 {
-                    OnSelectionChanged = tag => { count++; lastTag = tag; },
+                    OnSelectedTagChanged = tag => { count++; lastTag = tag; },
                     IsSettingsVisible = false,
                 }.Set(n => n.Name = "navSel")
             ));

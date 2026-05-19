@@ -52,7 +52,7 @@ internal static class DevtoolsUxFixtures
                         {
                             ToggleMenuItem("Debug UI",
                                 isChecked: debugUI,
-                                onToggled: v => DebugUI.Value = v),
+                                onIsCheckedChanged: v => DebugUI.Value = v),
                         },
                         automationId: "DevtoolsTrigger")
                 ),

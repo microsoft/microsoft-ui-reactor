@@ -56,7 +56,7 @@ class GalleryApp : Component
         // colors directly onto AppWindow.TitleBar so they track the toggle.
         UseEffect(() =>
         {
-            if (Microsoft.UI.Reactor.ReactorApp.ActiveHost?.Window?.AppWindow is { } aw)
+            if (Microsoft.UI.Reactor.ReactorApp.PrimaryWindow?.Host.Window?.AppWindow is { } aw)
             {
                 var tb = aw.TitleBar;
                 var fg       = isDark ? global::Windows.UI.Color.FromArgb(255, 240, 240, 240)

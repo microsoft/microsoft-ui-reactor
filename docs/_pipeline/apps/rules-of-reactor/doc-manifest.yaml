@@ -1,0 +1,12 @@
+app:
+  title: "Rules of Reactor"
+  width: 360
+  height: 220
+  startup-delay: 1200
+
+screenshots:
+  - id: ok
+    description: "Trivial Reactor app — the page leans on inline before/after snippets rather than visuals."
+    component: RulesApp
+    region: client
+    format: png

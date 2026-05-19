@@ -109,7 +109,8 @@ sub-skills' tables.
 the most common Reactor patterns. **Load a recipe instead of synthesizing
 from skill prose.** See [`skills/recipes/index.md`](skills/recipes/index.md)
 for the intent → recipe map. Available today: list-add-delete, sidebar-nav,
-form-with-validation, async-fetch-list, themed-card.
+form-with-validation, async-fetch-list, themed-card, canvas-positioning,
+named-styles, calendar-multiselect.
 
 ## `mur check` — fast feedback with skill pointers
 
@@ -381,6 +382,10 @@ For the complete catalog (every factory, modifier, enum) see
 FlexColumn(children...)         FlexRow(children...)
 VStack(spacing, children...)    HStack(spacing, children...)
 TextBlock("hi")  Heading("Title")    SubHeading("Section")  Caption("note")
+// WinUI 3 type-ramp factories — map 1:1 to TitleTextBlockStyle etc.
+Title("Page")    Subtitle("Group")   Body("paragraph")      BodyStrong("bold")  BodyLarge("intro")
+// Card(child) factory bakes in CardBackground + 1px CardStroke + 8 radius + 16 padding.
+Card(child)
 Border(child).CornerRadius(8).Background(Theme.CardBackground).Padding(16)
 ScrollView(VStack(...))
 Grid(columns: [GridSize.Star(), GridSize.Px(200)],

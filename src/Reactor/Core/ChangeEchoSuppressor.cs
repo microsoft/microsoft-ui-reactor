@@ -41,6 +41,7 @@ internal static class ChangeEchoSuppressor
     /// will raise a change event. Pair exactly one BeginSuppress with exactly
     /// one expected event.
     /// </summary>
+    // <snippet:change-echo>
     internal static void BeginSuppress(UIElement control)
     {
         if (control is not FrameworkElement fe) return;
@@ -63,4 +64,5 @@ internal static class ChangeEchoSuppressor
         }
         return false;
     }
+    // </snippet:change-echo>
 }

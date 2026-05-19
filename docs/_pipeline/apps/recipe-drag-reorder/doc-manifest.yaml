@@ -1,0 +1,12 @@
+app:
+  title: "Drag-Reorder Recipe"
+  width: 360
+  height: 440
+  startup-delay: 1200
+
+screenshots:
+  - id: list
+    description: "Reorderable list with a dragged row in flight and the keyboard focus ring on a sibling."
+    component: DragReorderApp
+    region: client
+    format: png

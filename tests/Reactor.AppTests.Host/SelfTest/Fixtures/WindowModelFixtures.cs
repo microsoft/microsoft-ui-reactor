@@ -4,6 +4,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Factories;
+using System.Reflection;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -402,6 +403,93 @@ internal static class WindowModelFixtures
                 if (child is not null) await CloseAndSettle(child);
                 await CloseAndSettle(parent);
             }
+        }
+    }
+
+    internal class WindowMutatorsOwnerAndGuards(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var parent = await OpenAndSettle(
+                new WindowSpec
+                {
+                    Title = "Owner Window",
+                    Width = 260,
+                    Height = 180,
+                    MinWidth = 120,
+                    MinHeight = 90,
+                    MaxWidth = 640,
+                    MaxHeight = 480,
+                    ActivateOnOpen = false,
+                    StartPosition = WindowStartPosition.Manual,
+                    ManualPosition = (20, 20),
+                },
+                () => new StubComponent());
+
+            ReactorWindow? child = null;
+            try
+            {
+                child = await OpenAndSettle(
+                    new WindowSpec
+                    {
+                        Title = "Owned Child",
+                        Width = 220,
+                        Height = 150,
+                        Owner = parent,
+                        ActivateOnOpen = false,
+                        StartPosition = WindowStartPosition.CenterOnOwner,
+                        Key = WindowKey.Of("owned-child-coverage"),
+                    },
+                    () => new StubComponent());
+
+                H.Check("WindowMut_OwnedRegistered", parent.OwnedWindows.Contains(child));
+                H.Check("WindowMut_FindByKey", ReferenceEquals(ReactorApp.FindWindow(WindowKey.Of("owned-child-coverage")), child));
+
+                var guard = (IDisposable)typeof(ReactorWindow)
+                    .GetMethod("RegisterClosingGuard", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(child, [new Func<bool>(() => true)])!;
+                guard.Dispose();
+                guard.Dispose();
+                H.Check("WindowMut_GuardTokenIdempotent", true);
+
+                child.Hide();
+                await Task.Delay(20);
+                child.Show();
+                child.SetSize(240, 160);
+                child.SetPosition(40, 60);
+                child.CenterOnScreen();
+
+                bool rejectedSize = false;
+                try { child.SetSize(0, 1); }
+                catch (ArgumentOutOfRangeException) { rejectedSize = true; }
+                H.Check("WindowMut_SetSizeRejectsInvalid", rejectedSize);
+
+                child.Update(child.Spec with
+                {
+                    Title = "Owned Child Updated",
+                    Width = 250,
+                    Height = 170,
+                    IsResizable = false,
+                    IsMinimizable = false,
+                    IsMaximizable = false,
+                    IsAlwaysOnTop = true,
+                    ExtendsContentIntoTitleBar = true,
+                });
+                H.Check("WindowMut_UpdateSpec", child.Spec.Title == "Owned Child Updated");
+
+                child.Mount(ctx => TextBlock("window-render-root"));
+                await child.Host.WaitForIdleAsync();
+                H.Check("WindowMut_MountRenderFunc", child.NativeWindow.Content is not null);
+            }
+            finally
+            {
+                if (child is not null) await CloseAndSettle(child);
+                await CloseAndSettle(parent);
+            }
+
+            H.Check("WindowMut_OwnedRemoved", child is null || !parent.OwnedWindows.Contains(child));
         }
     }
 }

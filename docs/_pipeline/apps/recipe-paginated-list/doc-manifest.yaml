@@ -1,0 +1,12 @@
+app:
+  title: "Paginated List Recipe"
+  width: 420
+  height: 520
+  startup-delay: 1400
+
+screenshots:
+  - id: loaded
+    description: "Paginated list after two pages have loaded, with a Load More button and a remaining-count footer."
+    component: PaginatedListApp
+    region: client
+    format: png

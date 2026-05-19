@@ -63,11 +63,11 @@ public sealed class TreeChartElement<T> : IChartAccessibilityData
     private string? _description;
     private Element? _alternateView;
 
-    public TreeChartElement<T> Width(double w) { _width = w; return this; }
-    public TreeChartElement<T> Height(double h) { _height = h; return this; }
-    public TreeChartElement<T> LinkColor(string c) { _linkColor = c; return this; }
-    public TreeChartElement<T> NodeColor(string c) { _nodeColor = c; return this; }
-    public TreeChartElement<T> NodeRadius(double r) { _nodeRadius = r; return this; }
+    public TreeChartElement<T> Width(double width) { _width = width; return this; }
+    public TreeChartElement<T> Height(double height) { _height = height; return this; }
+    public TreeChartElement<T> LinkColor(string color) { _linkColor = color; return this; }
+    public TreeChartElement<T> NodeColor(string color) { _nodeColor = color; return this; }
+    public TreeChartElement<T> NodeRadius(double radius) { _nodeRadius = radius; return this; }
     public TreeChartElement<T> OnReady(Action<TreeChartHandle> callback) { _onReady = callback; return this; }
 
     /// <summary>Sets visible title + accessible name for the chart.</summary>
@@ -216,13 +216,13 @@ public sealed class ForceGraphElement : IChartAccessibilityData
     private string? _description;
     private Element? _alternateView;
 
-    public ForceGraphElement Width(double w) { _width = w; return this; }
-    public ForceGraphElement Height(double h) { _height = h; return this; }
-    public ForceGraphElement LinkColor(string c) { _linkColor = c; return this; }
-    public ForceGraphElement NodeColor(string c) { _nodeColor = c; return this; }
+    public ForceGraphElement Width(double width) { _width = width; return this; }
+    public ForceGraphElement Height(double height) { _height = height; return this; }
+    public ForceGraphElement LinkColor(string color) { _linkColor = color; return this; }
+    public ForceGraphElement NodeColor(string color) { _nodeColor = color; return this; }
     public ForceGraphElement Charge(double strength) { _chargeStrength = strength; return this; }
-    public ForceGraphElement Distance(double d) { _linkDistance = d; return this; }
-    public ForceGraphElement Iterations(int n) { _iterations = n; return this; }
+    public ForceGraphElement Distance(double distance) { _linkDistance = distance; return this; }
+    public ForceGraphElement Iterations(int count) { _iterations = count; return this; }
 
     /// <summary>Sets visible title + accessible name for the graph.</summary>
     public ForceGraphElement Title(string title) { _title = title; return this; }

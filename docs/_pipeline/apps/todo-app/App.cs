@@ -1,19 +1,11 @@
+// <snippet:todo-app>
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<TodoApp>("Todo App", width: 550, height: 600
-#if DEBUG
-    , preview: true
-#endif
-);
+ReactorApp.Run<TodoApp>("Todo App", width: 550, height: 600, devtools: true);
 
-// <snippet:todo-record>
-record TodoItem(string Text, bool Done);
-// </snippet:todo-record>
-
-// <snippet:todo-app>
 class TodoApp : Component
 {
     public override Element Render()
@@ -81,3 +73,7 @@ class TodoApp : Component
     }
 }
 // </snippet:todo-app>
+
+// <snippet:todo-record>
+record TodoItem(string Text, bool Done);
+// </snippet:todo-record>

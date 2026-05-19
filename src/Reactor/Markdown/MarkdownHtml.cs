@@ -89,23 +89,17 @@ public static class MarkdownHtml
     {
         if (unsafeAllowed) return url;
         if (string.IsNullOrEmpty(url)) return url;
-        // Relative URLs (no scheme) are safe; only absolute schemes need
-        // checking. Pull the scheme by hand because Uri.TryCreate is too
-        // lenient — it would parse `javascript:alert(1)` as a valid Uri.
-        int colon = url.IndexOf(':');
-        if (colon <= 0) return url; // no scheme = treat as path-relative
-        // Schemes per RFC 3986: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
-        for (int i = 0; i < colon; i++)
-        {
-            var c = url[i];
-            bool ok = (i == 0)
-                ? (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-                : (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-                    || (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.';
-            if (!ok) return url; // not a real scheme — treat as relative
-        }
-        var scheme = url[..colon];
-        return SafeUrlSchemes.Contains(scheme) ? url : "about:blank";
+
+        // Uri.TryCreate happily parses `javascript:alert(1)` as a valid
+        // absolute Uri — that's fine, because the allow-list filter on
+        // uri.Scheme below rejects it. The point is to use System.Uri's
+        // RFC 3986 scheme/host decomposition rather than hand-rolled
+        // string parsing, which is fragile and a known source of bypass
+        // bugs in URL sanitizers.
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return url; // Not absolute — treat as path-relative; safe.
+
+        return SafeUrlSchemes.Contains(uri.Scheme) ? url : "about:blank";
     }
 
     private sealed class HtmlRenderer

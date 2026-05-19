@@ -1,7 +1,7 @@
 namespace Microsoft.UI.Reactor.Core;
 
 /// <summary>
-/// Immutable command descriptor that bundles an action with its metadata (label, icon,
+/// Immutable (init-only) command descriptor that bundles an action with its metadata (label, icon,
 /// keyboard accelerator, enabled state). Define once, use in any surface:
 ///   var save = new Command { Label = "Save", Execute = () => Save(), Icon = SymbolIcon("Save") };
 ///   AppBarButton(save)   // toolbar
@@ -44,7 +44,7 @@ public sealed record Command
 }
 
 /// <summary>
-/// Parameterized command descriptor. The action receives an argument of type <typeparamref name="T"/>,
+/// Immutable (init-only) parameterized command descriptor. The action receives an argument of type <typeparamref name="T"/>,
 /// enabling a single command definition to operate on different targets:
 ///   var delete = new Command&lt;Item&gt; { Label = "Delete", Execute = item => Remove(item) };
 ///   MenuItem(delete, selectedItem)

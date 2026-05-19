@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<doc>
+  <assembly>
+    <name>Reactor</name>
+  </assembly>
+  <members>
+    <member name="T:Microsoft.UI.Reactor.Hooks.UseState">
+      <summary>State hook. Stores a value across renders.</summary>
+    </member>
+    <member name="M:Microsoft.UI.Reactor.Hooks.UseState.SetValue(System.Int32)">
+      <summary>Updates the stored value and queues a re-render.</summary>
+      <param name="value">The new value.</param>
+      <returns>The previous value.</returns>
+      <remarks>
+        Setters are thread-safe; see <see cref="T:Microsoft.UI.Reactor.Hooks.UseState"/>
+        for the broader lifecycle.
+      </remarks>
+      <seealso cref="T:Microsoft.UI.Reactor.Hooks.UseState"/>
+    </member>
+  </members>
+</doc>

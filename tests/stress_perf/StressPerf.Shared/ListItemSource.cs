@@ -68,6 +68,13 @@ public sealed class ListItemSource
         return items;
     }
 
+    /// <summary>
+    /// One item with a synthetic id distinct from any positional id —
+    /// used by edit-during-scroll stress scenarios that need fresh keys
+    /// that won't collide with the seed set's <c>0..N-1</c> ids.
+    /// </summary>
+    public static ListItem GenerateOne(int id) => ItemAt(id) with { Id = id };
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ListItem ItemAt(int i)
     {

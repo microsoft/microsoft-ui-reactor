@@ -134,6 +134,144 @@ class ProfileCard : Component
 }
 // </snippet:multiple-contexts>
 
+// <snippet:user-context>
+// A typed user-context record at the app root — every page reads the
+// current user via UseContext rather than threading a User prop through
+// every component along the way.
+record CurrentUser(string Id, string DisplayName, bool IsAdmin);
+
+static class AppContexts
+{
+    public static Context<CurrentUser> User = new(
+        new CurrentUser("guest", "Guest", IsAdmin: false));
+}
+
+class UserContextExample : Component
+{
+    public override Element Render()
+    {
+        var (user, setUser) = UseState(new CurrentUser("u1", "Alice", IsAdmin: true));
+
+        return VStack(12,
+            HStack(8,
+                Button("Sign in as Alice (admin)",
+                    () => setUser(new CurrentUser("u1", "Alice", IsAdmin: true))),
+                Button("Sign in as Bob (user)",
+                    () => setUser(new CurrentUser("u2", "Bob", IsAdmin: false)))
+            ),
+            VStack(8,
+                Component<AccountMenu>(),
+                Component<AdminPanel>()
+            ).Provide(AppContexts.User, user)
+        ).Padding(24);
+    }
+}
+
+class AccountMenu : Component
+{
+    public override Element Render()
+    {
+        var user = UseContext(AppContexts.User);
+        return TextBlock($"Signed in as: {user.DisplayName}").SemiBold();
+    }
+}
+
+class AdminPanel : Component
+{
+    public override Element Render()
+    {
+        var user = UseContext(AppContexts.User);
+        return user.IsAdmin
+            ? Border(TextBlock("Admin tools available").Padding(8))
+                .Background(Theme.CardBackground).CornerRadius(4)
+            : TextBlock("(no admin tools)").Foreground(Theme.SecondaryText);
+    }
+}
+// </snippet:user-context>
+
+// <snippet:memoize-context-value>
+// The value identity matters. Wrapping in UseMemo with explicit deps
+// stops every consumer from re-rendering on every provider render —
+// the inline-literal version below would create a fresh tuple every
+// frame even when nothing changed.
+record ThemeConfig(string Mode, int FontScale, string Accent);
+
+static class ThemeContexts
+{
+    public static Context<ThemeConfig> Theme = new(new ThemeConfig("light", 14, "#0078D4"));
+}
+
+class MemoizeContextValueExample : Component
+{
+    public override Element Render()
+    {
+        var (mode, setMode) = UseState("light");
+        var (scale, setScale) = UseState(14);
+
+        // GOOD — identity stable while inputs unchanged. Consumers only
+        // re-render when mode or scale actually change.
+        var theme = UseMemo(() => new ThemeConfig(mode, scale, "#0078D4"), mode, scale);
+
+        // BAD — every render creates a fresh ThemeConfig.
+        // var theme = new ThemeConfig(mode, scale, "#0078D4");
+
+        return VStack(12,
+            HStack(8,
+                Button("Toggle mode", () => setMode(mode == "light" ? "dark" : "light")),
+                Button("Bump scale", () => setScale(scale + 2))
+            ),
+            VStack(8, Component<ThemedHeading>())
+                .Provide(ThemeContexts.Theme, theme)
+        ).Padding(24);
+    }
+}
+
+class ThemedHeading : Component
+{
+    public override Element Render()
+    {
+        var t = UseContext(ThemeContexts.Theme);
+        return TextBlock($"Headline @ {t.FontScale}px ({t.Mode})")
+            .FontSize(t.FontScale).Foreground(t.Accent);
+    }
+}
+// </snippet:memoize-context-value>
+
+// <snippet:mock-provider-test>
+// Production root provides the real value; tests render the same
+// component tree with a Provide(...) wrapper supplying a stub. The
+// consumer code is unchanged — context lets you swap dependencies
+// without re-plumbing props.
+class CartConsumer : Component
+{
+    public override Element Render()
+    {
+        var user = UseContext(AppContexts.User);
+        return TextBlock($"Cart for {user.DisplayName} ({user.Id})");
+    }
+}
+
+class MockProviderExample : Component
+{
+    public override Element Render()
+    {
+        // Two trees: one with the "real" production default, one with a
+        // test stub supplied via .Provide(). Same CartConsumer in both.
+        return HStack(24,
+            VStack(8,
+                Caption("Production default"),
+                Component<CartConsumer>()
+            ),
+            VStack(8,
+                Caption("Test stub"),
+                VStack(0, Component<CartConsumer>())
+                    .Provide(AppContexts.User, new CurrentUser("test", "Test User", IsAdmin: false))
+            )
+        ).Padding(24);
+    }
+}
+// </snippet:mock-provider-test>
+
 // Main app
 class ContextApp : Component
 {
@@ -145,7 +283,10 @@ class ContextApp : Component
                 Component<ProvideConsumeExample>(),
                 Component<ThemeSwitchExample>(),
                 Component<NestedOverrideExample>(),
-                Component<MultipleContextsExample>()
+                Component<MultipleContextsExample>(),
+                Component<UserContextExample>(),
+                Component<MemoizeContextValueExample>(),
+                Component<MockProviderExample>()
             ).Padding(24)
         );
     }

@@ -31,20 +31,20 @@ class TabViewPage : Component
                     ) with
                     {
                         SelectedIndex = selectedIdx,
-                        OnSelectionChanged = i => setSelectedIdx(i),
+                        OnSelectedIndexChanged = i => setSelectedIdx(i),
                     }).Height(200),
                     @"TabView(
     Tab(""Home"", TextBlock(""Home content"")),
     Tab(""Document"", TextBlock(""Document content"")),
     Tab(""Settings"", TextBlock(""Settings content""))
-) with { SelectedIndex = idx, OnSelectionChanged = i => setIdx(i) }"),
+) with { SelectedIndex = idx, OnSelectedIndexChanged = i => setIdx(i) }"),
 
                 SampleCard("Dynamic Tabs",
                     VStack(8,
                         (TabView(tabs) with
                         {
                             SelectedIndex = Math.Min(selectedIdx, tabCount - 1),
-                            OnSelectionChanged = i => setSelectedIdx(i),
+                            OnSelectedIndexChanged = i => setSelectedIdx(i),
                         }).Height(180),
                         HStack(8,
                             Button("Add Tab", () => setTabCount(tabCount + 1)),

@@ -115,6 +115,11 @@ return NavigationView(
 `NavItem(label, icon?, tag?)` creates sidebar items. Icons are Segoe Fluent
 Icons names. The `NavigationView` handles selection state.
 
+**Manual wiring (without `UseNavigation`):**
+`SelectedTag` and `OnSelectionChanged` are record properties — use `with { }`.
+For the settings item: set `IsSettingsVisible = true` and check `args.IsSettingsSelected` (not via tag).
+Use `.Set(nv => nv.PaneDisplayMode = ...)` for non-record properties.
+
 ## 5. TabView (parallel tabs)
 
 Unlike stack navigation, tabs keep all content alive simultaneously:

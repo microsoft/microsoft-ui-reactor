@@ -35,3 +35,18 @@ screenshots:
     component: WithKeyDemo
     region: client
     format: png
+  - id: grouping
+    description: "Composed VStack of group-header + items per group, scrollable."
+    component: GroupingDemo
+    region: client
+    format: png
+  - id: drag-reorder
+    description: "ListView with CanReorderItems / CanDragItems set for drag-to-reorder."
+    component: DragReorderDemo
+    region: client
+    format: png
+  - id: lazy-loading
+    description: "VirtualList with onVisibleRangeChanged-driven incremental load showing 50 of 1000 loaded."
+    component: LazyLoadingDemo
+    region: client
+    format: png

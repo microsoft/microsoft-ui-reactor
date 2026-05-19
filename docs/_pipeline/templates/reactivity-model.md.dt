@@ -1,0 +1,281 @@
+---
+title: "Reactivity Model"
+app: reactivity-model
+order: 31
+audience: advanced
+goal: |
+  Explain what "reactive" means in Reactor: a state-setter call writes
+  a slot, checks for equality, and re-renders the owning component.
+  Compare with `INotifyPropertyChanged` push-from-property, contrast
+  with auto-tracking systems like SwiftUI's `@Observable`, and explain
+  why Reactor chose explicit slot identity over either. Cover the
+  `ShouldUpdate` bail-out, the `UseObservable` bridge to existing INPC
+  state, and what state batching actually does.
+tier: comprehensive
+---
+
+Reactivity in Reactor is one direction and one verb: a setter writes a
+slot, the framework asks the owning component to describe the next
+tree, the reconciler diffs and commits. There is no observer graph
+between properties, no dependency tracker watching reads, no binding
+expression listening for `PropertyChanged`. The setter — the second
+element of every `UseState` tuple — is the only thing the runtime
+treats as a signal. Hold the value in a hook slot, change it through
+the setter, and the component re-renders with the new value visible.
+Hold the value in a plain field, mutate it directly, and nothing
+happens — the render loop never finds out. This is the same trade-off
+React made: the model is small and predictable, but every reactive
+edge is something you typed.
+
+# Reactivity Model
+
+This page is the *why* behind the [Hooks](hooks.md) surface. If you've
+come from XAML and `INotifyPropertyChanged`, the change of model is
+larger than the syntax. If you've come from SwiftUI's `@Observable` or
+Vue's reactivity, the change is smaller, but Reactor is more explicit
+than either.
+
+## What flows through the render loop
+
+![Reactivity flow: setter call, equality check, slot write, rerender request, dispatcher coalesce, render, reconcile, flush effects](images/reactivity-model/state-flow.svg)
+
+| Step | Code | Notes |
+|---|---|---|
+| Setter call | closure returned from `UseState` | Captures the hook slot index |
+| UI-thread check | `MarshalIfOffUIThread` | Auto-marshal via `DispatcherQueue` from background |
+| Equality | `EqualityComparer<T>.Default.Equals` | No write, no rerender if equal |
+| Slot write | `ValueHookState<T>.Value = newValue` | Stays inside `RenderContext` |
+| Rerender request | `_requestRerender?.Invoke()` | Host queues a render |
+| Coalesce | `DispatcherQueue.TryEnqueue` | Many setters → one render |
+| Render | `Component.Render()` | Hooks read the new slot value |
+| Diff | `Reconciler.Reconcile` | Property writes to existing WinUI controls |
+| Flush | `FlushEffects` | Cleanups, then effect bodies |
+
+Every section below explains why one step in that table is shaped the
+way it is.
+
+## The setter is the signal
+
+```csharp snippet="source:src/Reactor/Core/RenderContext.cs#use-state-slot"
+```
+
+`UseState` returns `(value, setter)`. The `value` is just a read of
+the slot at the current hook index. The `setter` is a closure over
+that index. Calling the setter does not, by itself, "react". It walks
+to the slot, compares the new value against the old via
+`EqualityComparer<T>.Default`, writes if different, and calls back
+into the host with `_requestRerender`. The host decides when to render
+next — typically on the next dispatcher tick — and once it does, the
+component's `Render()` runs and the slot read returns the new value.
+
+```csharp snippet="source:src/Reactor/Core/RenderContext.cs#set-state"
+```
+
+A few details matter for understanding the model:
+
+- **No subscribers.** Nothing listens to the slot. The setter knows
+  one piece of mutable state (the slot) and one piece of mutable
+  behaviour (the host's render request). Components don't see other
+  components' state changes; they re-render when their own slots
+  change, when their parent re-renders, or when a context value they
+  consume changes — and not otherwise.
+- **Equality short-circuits.** If you set `count` to its current value,
+  no rerender. This is why hook-driven re-renders compose cleanly:
+  passing the same slot value through three parent renders does not
+  multiply work in the leaf.
+- **Setters are stable.** The closure captures the slot index and the
+  context, both of which are fixed for the lifetime of the component.
+  Passing `setCount` as a [`UseEffect`](effects.md) dependency or
+  through a child prop does not retrigger work.
+
+<!-- ai:caveat -->
+Mutating a reference-typed slot value in place does not trigger a
+rerender even if you call the setter. The equality check compares
+`newValue` against `hook.Value`, and after an in-place mutation
+they're the same reference — so the equality check returns true and
+the framework bails. If you need to "change" a `List<T>` or a custom
+class, allocate a new instance (`new List<T>(old) { newItem }`) and
+hand that to the setter, or use [`UseReducer`](hooks.md) and return a
+new value from the reducer.
+<!-- /ai:caveat -->
+
+## Why not INotifyPropertyChanged?
+
+XAML reactivity hangs off `INotifyPropertyChanged`. A view model
+implements `INotifyPropertyChanged`, properties raise `PropertyChanged`
+on assignment, [`BindingExpression`](reactor-vs-xaml.md) instances
+listen and pull the new value. The model is "the property is the
+signal" — every property declared on a VM is a potential reactive
+edge, with a runtime cost (the event), an ergonomic cost (you write
+the raise yourself or rely on a source generator), and a correctness
+cost (anything mutating the property without raising is a silent bug).
+
+Reactor moves the signal off the property and onto the setter. The
+value lives in a [hook slot](hooks-internals.md), the only path to a
+write is the setter the framework hands you, and the only path to a
+read is calling the hook again in the next render. This eliminates
+the silent-mutation class of bug: there is no way to update a
+`UseState` value without going through the setter, and the setter is
+the thing the framework hooks. It also eliminates the per-property
+event subscription cost — there are no subscriptions at all.
+
+The cost is that every piece of state you want to make reactive has to
+go through a hook. A plain field can hold any value, but if you change
+it inside a render handler the UI won't update. The
+[Rules of Reactor](rules-of-reactor.md) document encodes this: every
+mutable thing the UI depends on lives in a hook, every mutation goes
+through that hook's setter.
+
+```csharp snippet="source:src/Reactor/Core/Observable.cs#observable-bridge"
+```
+
+There is a bridge. `Observable<T>` is a minimal INPC cell — one
+property, raises `PropertyChanged` when value differs — and
+`RenderContext.UseObservable` subscribes the current component to it.
+Use this when you have a piece of state shared across components (dev
+flags, the currently-signed-in user, light/dark mode) or when you're
+interoperating with existing INPC view models. It's deliberately a
+small surface; full INPC view models with multiple properties and
+computed expressions stay in their own world, and a wrapper component
+typically funnels their data into local hooks for the rendered slice.
+
+## Why not auto-tracking?
+
+SwiftUI's `@Observable`, Vue's `ref`/`reactive`, MobX's `observable`,
+and Solid's signals all hide the dependency edge inside the read:
+accessing a tracked property during render registers the component as
+a dependent of that property, and a write later notifies whoever
+registered. The model is "the framework figures out who needs to
+rerender". The ergonomics are excellent when it works. The trade-offs
+are that the dependency graph is invisible (the dev tools become a
+mandatory part of debugging), the read-side becomes load-bearing
+(passing a tracked value to a memoizing helper can detach the
+dependency), and the proxy machinery on the reactive object has a
+runtime cost that's hard to predict.
+
+Reactor's positional hook table chooses the opposite trade-off. The
+dependency edge is the code you wrote: `UseState` is a slot, the
+setter is the signal, re-render is the effect. The graph is the call
+stack. Debugging is reading source. This is the same reason React
+picked hooks over `observable` after the class-component era: when the
+reactive surface is small enough, an explicit setter beats invisible
+tracking.
+
+## ShouldUpdate — opting out of parent-driven re-renders
+
+```csharp snippet="source:src/Reactor/Core/Component.cs#render-loop"
+```
+
+A parent re-render normally cascades to its children: the parent's
+`Render()` produces a new element tree, the reconciler walks it, and
+each child component's `Render()` is invoked because the parent's call
+to `Component(...)` is what allocated the child element. The default
+`ShouldUpdate` returns `false` for *propless* components — those have
+no inputs that could have changed, so a parent re-render with the same
+shape doesn't propagate. Components with props always re-render on
+parent change today; equality comparison on props is on the roadmap.
+
+Override `ShouldUpdate` to opt a propless component back in (rare —
+the typical reason is a context value the component implicitly reads
+that you want it to pick up). Don't reach for it to memoize: use
+[`UseMemo`](hooks.md) on the expensive computation, or hoist state
+upward so the parent doesn't need to re-render for an unrelated
+change.
+
+## State batching
+
+```csharp snippet="source:src/Reactor/Core/RenderContext.cs#set-state"
+```
+
+Three setters in the same synchronous block call `_requestRerender`
+three times, and the host's request handler enqueues a render via
+`DispatcherQueue.TryEnqueue`. The dispatcher coalesces repeated
+enqueues on the same tick — only one render runs. This is the
+batching contract: any sequence of setter calls in one event handler,
+one effect body, one timer callback, etc., collapses into a single
+render. The component sees all three new values at once on the next
+frame.
+
+Batching breaks if you `await` between setters and the continuation
+hops to a different dispatcher tick. The first render fires before
+the second setter runs; the second setter triggers another render
+afterward. If you need them atomic, set them before the `await` or
+use a single [`UseReducer`](hooks.md) state that captures all the
+fields you're updating.
+
+## Patterns
+
+### Bridging an existing INPC view model
+
+```csharp snippet="source:src/Reactor/Core/Observable.cs#observable-bridge"
+```
+
+When you have an `INotifyPropertyChanged` view model you need to render
+— a port from an existing XAML app, a model exposed by a service —
+expose the values you actually display via `UseObservable` for `Observable<T>`
+cells, or build a custom hook that subscribes to `PropertyChanged`
+inside an effect and stashes the latest value in `UseState`. Either
+way, the component's own state lives in hooks; the INPC cell is a
+source the hook listens to.
+
+### Atomic multi-field updates
+
+When two state values must change together, pick one of:
+
+- **One `UseReducer`** holding both fields in a record. A single
+  `update(prev => prev with { Foo = ..., Bar = ... })` writes both.
+- **A computed slot.** Hoist the second value into a `UseMemo`
+  derived from the first.
+
+Don't write `setFoo(...); setBar(...)` after an `await` and hope —
+the awaited continuation may have already let one render run.
+
+## Common Mistakes
+
+### Mutating a UseState value in place
+
+```csharp
+// Don't:
+var (items, setItems) = UseState(new List<string>());
+items.Add("new");        // mutates the same list the slot holds
+setItems(items);         // equality check sees same reference → no rerender
+```
+
+```csharp snippet="source:src/Reactor/Core/RenderContext.cs#use-state-slot"
+```
+
+The setter's equality compares `newValue` against `hook.Value`. After
+`items.Add`, both refer to the same list, the comparison returns true,
+and nothing is written or re-rendered. Allocate a new list — or use
+[`UseReducer`](hooks.md) so the framework forces you to return a new
+value from the reducer:
+
+```csharp
+var (items, update) = UseReducer(new List<string>());
+update(prev => [.. prev, "new"]);
+```
+
+## Tips
+
+**The setter is the contract.** Anything that needs to be reactive
+goes through a setter. Fields, properties, statics, and direct
+mutations are invisible to the render loop — they may exist in C#,
+but the UI won't reflect them until something else triggers a render.
+
+**Equality is `EqualityComparer<T>.Default`.** Records are value-equal
+by default, primitives are value-equal, classes default to reference
+equality. If you store a custom class in `UseState`, either implement
+`IEquatable<T>` or replace the instance on every change so the
+equality check can decide correctly.
+
+**Don't reach for `UseObservable` for component-local state.** It
+exists to bridge cross-component or external state. Local state lives
+in `UseState` / `UseReducer` so the slot table tracks it.
+
+## Next Steps
+
+- **[Architecture Overview](architecture-overview.md)** — Previous: the full render loop.
+- **[Hooks Internals](hooks-internals.md)** — Next: how the slot table is laid out.
+- **[Reactor vs XAML](reactor-vs-xaml.md)** — Same model contrasted with XAML's binding / INPC.
+- **[Reconciliation](reconciliation.md)** — What the diff phase does once `Render()` returns.
+- **[Effects Scheduling](effects-scheduling.md)** — When effects fire relative to the setter / render cycle.

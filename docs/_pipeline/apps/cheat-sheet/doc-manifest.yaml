@@ -1,0 +1,12 @@
+app:
+  title: "Cheat Sheet"
+  width: 480
+  height: 360
+  startup-delay: 1200
+
+screenshots:
+  - id: vignettes
+    description: "Three minimal vignettes — hello, state, effect — shown stacked."
+    component: CheatSheetApp
+    region: client
+    format: png

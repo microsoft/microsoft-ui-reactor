@@ -1,0 +1,12 @@
+app:
+  title: "Recipes Gallery"
+  width: 520
+  height: 320
+  startup-delay: 1200
+
+screenshots:
+  - id: gallery
+    description: "Recipe gallery preview tile row."
+    component: RecipesIndexApp
+    region: client
+    format: png

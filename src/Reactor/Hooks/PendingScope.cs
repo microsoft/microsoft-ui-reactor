@@ -17,6 +17,7 @@ namespace Microsoft.UI.Reactor.Hooks;
 /// so nested <c>Pending</c>s are independent. A hook registers only with its nearest
 /// ancestor scope.</para>
 /// </remarks>
+// <snippet:pending-scope>
 public sealed class PendingScope
 {
     private readonly Dictionary<object, bool> _loadingByToken = new(capacity: 4);
@@ -34,6 +35,7 @@ public sealed class PendingScope
         lock (_lock) _loadingByToken[token] = isLoading;
         Changed?.Invoke();
     }
+// </snippet:pending-scope>
 
     /// <summary>
     /// Update <paramref name="token"/>'s loading state. Silently ignored if the token

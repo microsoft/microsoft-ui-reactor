@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 namespace Microsoft.UI.Reactor;
 
 /// <summary>
-/// Immutable, declarative description of a top-level Reactor window. Hand to
+/// Immutable (init-only) declarative description of a top-level Reactor window. Hand to
 /// <see cref="ReactorApp.OpenWindow(WindowSpec, Func{Component}, Action{Microsoft.UI.Reactor.Hosting.ReactorHost})"/>
 /// to open a window; hand to <see cref="ReactorWindow.Update"/> to diff
 /// against the current spec and apply only changed fields.

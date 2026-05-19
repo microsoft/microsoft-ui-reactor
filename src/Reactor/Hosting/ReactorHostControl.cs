@@ -62,6 +62,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private bool _themeListenerAttached;
     private volatile bool _disposed;
     private Curve? _pendingAnimationCurve;
+    // Snapshot of AnimationAmbient.Current at setter dispatch time
+    // (spec 042 §6 Q3). Re-pushed around the reconcile pass below.
+    private Microsoft.UI.Reactor.Core.Internal.AmbientAnimation? _pendingAmbientAnimation;
 
     // Spec 033 §6 — backdrop applier in "windowless" mode. Embedded
     // ReactorHostControl does not own its window, so the modifier no-ops with
@@ -88,6 +91,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private int _renderCount;
     private readonly Stopwatch _reportClock = Stopwatch.StartNew();
     private long _totalRenderCount;
+
+    // Last render's total duration (tree + reconcile + effects), in ms.
+    // Read by RequestRender to demote the next enqueue to Low priority when a
+    // slow render is starving the dispatcher of input/layout/paint slots.
+    // Published via Interlocked.Exchange / read via Volatile.Read — see the
+    // matching note in ReactorHost.
+    private double _lastRenderMs;
 
     // Public perf snapshot — updated every ~1 second, readable from components
     private RenderStats _stats;
@@ -287,6 +297,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         if (AnimationScope.HasScope)
             _pendingAnimationCurve = AnimationScope.Current;
 
+        // Spec 042 §6 — snapshot the AmbientAnimation set by Animations.Animate
+        // so the reconcile pass can re-push it around the diff. Same
+        // last-writer-wins rule as the curve capture above.
+        var capturedAmbient = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current;
+        if (capturedAmbient is not null)
+            _pendingAmbientAnimation = capturedAmbient;
+
         // Flag re-render before the _isRendering / CAS checks so the request
         // survives the TOCTOU window between Render()'s finally
         // (_isRendering = false) and RenderLoop's gate-reset
@@ -299,7 +316,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // Between renders: CAS 0→1 gates a single TryEnqueue.
         if (Interlocked.CompareExchange(ref _renderPending, 1, 0) != 0) return;
 
-        _dispatcherQueue.TryEnqueue(RenderLoop);
+        // Demote to Low priority after a slow render so input/layout/paint
+        // catch up. See RenderPriorityPolicy and the matching code in
+        // ReactorHost.RequestRender. Volatile.Read pairs with the
+        // Interlocked.Exchange in Render().
+        _dispatcherQueue.TryEnqueue(
+            RenderPriorityPolicy.PickPriority(Volatile.Read(ref _lastRenderMs)),
+            RenderLoop);
     }
 
     private void RenderLoop()
@@ -357,7 +380,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // additional reset steps, throttling) only need editing here.
         void RecoverFromHookOrder(HookOrderException ex, RenderContext ctx, string mode)
         {
-            _logger.LogWarning(ex,
+            _logger?.LogWarning(ex,
                 "Hot reload: hook order/type changed — resetting {Mode} state and re-rendering",
                 mode);
             ctx.ResetForHotReload();
@@ -418,6 +441,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             var capturedCurve = Interlocked.Exchange(ref _pendingAnimationCurve, null);
             if (capturedCurve is not null)
                 AnimationScope.PushScope(capturedCurve);
+
+            // Spec 042 §6 — re-push the captured Animations.Animate ambient
+            // so KeyedListDiff / ChildReconciler observe it during reconcile.
+            var capturedAmbient = Interlocked.Exchange(ref _pendingAmbientAnimation, null);
+            using var ambientRestore = capturedAmbient is not null
+                ? new Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Scope(capturedAmbient)
+                : default;
 
             UIElement? newControl;
             try
@@ -508,6 +538,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 _funcContext.FlushEffects();
 
             double effectsMs = _phaseSw.Elapsed.TotalMilliseconds;
+
+            // Feed RenderPriorityPolicy. Interlocked publishes to off-UI-thread
+            // RequestRender callers. See matching note in ReactorHost.Render.
+            Interlocked.Exchange(ref _lastRenderMs, treeBuildMs + reconcileMs + effectsMs);
 
             OnRenderComplete?.Invoke(treeBuildMs, reconcileMs, effectsMs);
 

@@ -34,8 +34,69 @@ audience: beginner|intermediate|advanced
 goal: |
   2-4 sentence description of what this page should accomplish.
   Written as a directive to you, the AI author.
+tier: stub|solid|comprehensive   # quality bar (spec 041 §6); see "Tiers" below
+winui-ref: https://learn.microsoft.com/en-us/windows/apps/design/controls/...
+                                 # optional — only on pages that wrap a WinUI control
 ---
 ```
+
+#### Tiers (`tier:` field)
+
+Every page declares one tier. The `mur docs compile --validate-only` lint
+enforces the structural checklist below. Pick the tier the page is *meant*
+to be; do not mark a page Comprehensive that doesn't meet the bar.
+
+| Tier | Structural minimum | When to use |
+|------|---------------------|-------------|
+| `stub` | front-matter + title + one paragraph | Placeholder for surface visibility while you draft. "Coming soon" content. |
+| `solid` | ≥3 resolved `snippet=` refs, ≥1 `screenshot://`, a Markdown reference table, `## Tips`, `## Next Steps` with ≥3 links | Default bar for any new page. Code-first, working examples, modifier table. |
+| `comprehensive` | All solid checks plus an ≥80-word mental-model lead paragraph, ≥1 `<!-- ai:caveat -->` block, `## Patterns` heading, `## Common Mistakes` heading, ≥5 inline cross-links, `winui-ref:` if the page wraps a WinUI control | Top-traffic pages and Under-the-hood deep dives. |
+
+Stub example:
+
+```yaml
+---
+title: "Persistence"
+app: persistence
+order: 14.5
+audience: intermediate
+goal: "Coming soon — UsePersisted, scopes, and migration."
+tier: stub
+---
+```
+
+Solid example:
+
+```yaml
+---
+title: "Forms"
+app: forms
+order: 7
+audience: intermediate
+goal: "Cover every form control with controlled-input idioms and validation."
+tier: solid
+```
+
+Comprehensive example:
+
+```yaml
+---
+title: "Date Pickers"
+app: date-pickers
+order: 7.6
+audience: intermediate
+goal: "DatePicker, CalendarDatePicker, CalendarView, TimePicker — full coverage."
+tier: comprehensive
+winui-ref: https://learn.microsoft.com/en-us/windows/apps/design/controls/date-picker
+---
+```
+
+When `winui-ref:` is present, the compiler emits a styled "WinUI reference"
+blockquote at the top of the generated page. Use it for transparent-wrapper
+pages so readers reach Microsoft's design guidance in one click. Reactor-
+original controls (DataGrid, VirtualList, FlexPanel, MarkdownTextBlock,
+ErrorBoundary, AccessibilityScanner) do **not** set `winui-ref:` — the
+Reactor page *is* the reference.
 
 ### Body Directives
 
@@ -70,6 +131,72 @@ The pipeline replaces `screenshot://` with a relative path like
 When regenerating or revising a template, preserve `ai:lock` sections exactly.
 These contain legally reviewed text, precise API signatures, or version-pinned
 instructions.
+
+**Caveats** — per-API gotchas, rendered as a "Caveat" callout (React-style):
+
+```markdown
+<!-- ai:caveat -->
+`UseEffect` runs **after** the render commit, not during. State you set
+inside an effect causes a second render, which the compiler will warn about
+if the dep array is missing.
+<!-- /ai:caveat -->
+```
+
+Comprehensive pages must include at least one `<!-- ai:caveat -->` block.
+A missing close tag fails compile with `REACTOR_DOC_CAVEAT_001`.
+
+**Reference-page link marker** — link to an auto-generated reference page
+(Section 10 of the index) from a guide page:
+
+```markdown
+The state hook (<!-- ref:UseState -->) is the building block.
+```
+
+The marker accepts either a short name (`<!-- ref:UseState -->`) or a
+full XML-doc cref (`<!-- ref:M:Microsoft.UI.Reactor.Hooks.UseState -->`).
+The compiler resolves it to a relative link into
+`docs/guide/reference/<category>/<name>.md` and also feeds the reverse
+"Featured in" callout that appears on the reference page. Use the marker
+inline in prose — it is the only Reactor-specific syntax for cross-axis
+linking; everything else is standard XML doc `<see cref="..."/>` /
+`<seealso cref="..."/>` in the source.
+
+**Cross-link analyzer (`REACTOR_DOC_XLINK_001`)** — `mur docs compile`
+walks every prose paragraph and flags any mention of a concept that has
+its own page when that mention is not already a link. The concept
+registry is built from (a) template titles, (b) optional
+`concept-aliases:` declared in front-matter, and (c) reference-page
+filenames (`UseFocusTrap`, `DataGrid`, …). Single-word common-noun
+titles (`Hooks`, `Focus`, `Reactor`) are filtered out by default to
+avoid English-usage false positives — opt them in via
+`concept-aliases:` if the page truly owns that exact word as a concept.
+
+Single-page exemptions use a paragraph-scoped marker:
+
+```markdown
+<!-- xlink:skip -->
+This paragraph mentions UseState and UseEffect on purpose without
+linking; the rule resumes at the next blank line.
+```
+
+A finer-grained form silences just one concept:
+
+```markdown
+<!-- xlink:skip "UseFocusTrap" -->
+UseFocusTrap appears here unlinked; other concepts are still enforced.
+```
+
+Use sparingly. The right fix for most findings is to add the link —
+inline the concept name as the link text. **Do not** insert "see also
+X" sentences or "click here for more on X" — link the noun in the
+existing prose. The opt-out exists for comparison pages and other
+contexts where linking every mention hurts flow.
+
+Optional front-matter for opting single-word concepts in:
+
+```yaml
+concept-aliases: "Trampoline, Cross-thread dispatch"
+```
 
 ---
 
@@ -129,6 +256,44 @@ Rules:
 - Do not include `using` statements or class declarations in snippets unless
   they are the point of the snippet. The template prose provides that context.
 
+#### Source-tree snippets (`snippet="source:..."`)
+
+There are **two snippet forms**. Use the right one for the page.
+
+1. **Doc-app form** — for everything teaching the public API:
+
+   ```markdown
+   ```csharp snippet="hooks/usestate-counter"
+   ```​
+   ```
+
+   Resolves against `docs/_pipeline/apps/<topic>/`. This is the default.
+   The code must come from a real compilable doc app that ships with the
+   docset; reviewers should be able to launch it and see the screenshot.
+
+2. **Source-tree form** — for the Under-the-hood track (spec §7.1.1) and
+   any reference-grounded prose that shows real framework internals:
+
+   ```markdown
+   ```csharp snippet="source:src/Reactor/Hooks/UseState.cs#main"
+   ```​
+   ```
+
+   Resolves against the repo source tree. Region markers in the source
+   look exactly like the doc-app markers:
+
+   ```csharp
+   // <snippet:main>
+   public static (T, Action<T>) UseState<T>(T initial) { ... }
+   // </snippet:main>
+   ```
+
+   The `source:` prefix is the disambiguator — anything before the `#` is
+   the path under repo root. Use this form when the page is *about* the
+   framework's own behavior (reconciliation, hooks-internals, animation
+   pipeline). Do **not** use it on user-facing topic pages — those should
+   stay grounded in a doc app the reader can run themselves.
+
 ### `doc-manifest.yaml`
 
 ```yaml
@@ -147,6 +312,18 @@ screenshots:
     description: "Detailed view after interaction"
     region: client
     format: png
+  # Controls-catalog index thumbnails (spec 041 §6.3, §12 Q7).
+  # kind: catalog-thumb downscales the captured frame to 320x240 with
+  # high-quality interpolation and writes <id>-thumb.png (rather than
+  # <id>.png) so a topic can declare both a full-size screenshot and a
+  # thumbnail under the same logical id.
+  - id: forms-group
+    kind: catalog-thumb
+    description: "Forms category thumbnail for the controls catalog index."
+    region: client
+    format: png
+    # thumb-width / thumb-height default to 320 x 240 — override only if a
+    # catalog category benefits from a non-default aspect.
 ```
 
 ### App Code Guidelines
@@ -159,18 +336,92 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<MyApp>("Title", width: 600, height: 400
-#if DEBUG
-    , preview: true
-#endif
-);
+ReactorApp.Run<MyApp>("Title", width: 600, height: 400, devtools: true);
 ```
 
-- Always include `preview: true` under `#if DEBUG` — this enables the
-  screenshot capture system.
+- Always include `devtools: true` — this enables the screenshot capture system.
+  (The older `preview:` parameter is deprecated; the compiler will warn.)
 - Each component class in the file can be wrapped in snippet markers.
 - The app should display a reasonable default state on launch (the screenshots
   are captured after `startup-delay` ms with no interaction).
+
+---
+
+## Diagram Authoring
+
+**SVG-over-ASCII policy** (spec 041 §7.1.0). The docset is published on
+GitHub, which renders SVG inline. ASCII boxes-and-arrows diagrams are
+hard to maintain, hostile to screen readers, and look poor against the
+SVG-rendered docsets we benchmarked.
+
+Rules:
+
+- **Default to SVG.** Architectural diagrams, flowcharts, state machines,
+  reconciler walks, hook-table snapshots — all SVG. Author as Mermaid
+  (`.mmd`) and let the pipeline render to `.svg` at compile time, or
+  hand-author the `.svg` directly.
+- **Screenshots stay PNG.** SVG is for vector content; screenshots of a
+  running app remain PNG, captured via `doc-manifest.yaml`.
+- **ASCII art is allowed only when** the visual is ≤8 lines, purely
+  structural (folder tree, code skeleton), and needs no spatial
+  precision. Anything else is SVG.
+- **Light-and-dark aware.** Use CSS variables (`currentColor`, theme-aware
+  fills) or duplicate paths so the diagram is legible on GitHub's light
+  *and* dark themes. Default to a palette that contrasts on both
+  (foreground `#1f2937` ↔ `#e5e7eb` is a safe pair).
+
+### Authoring a Mermaid diagram
+
+```
+docs/_pipeline/diagrams/<topic>/<id>.mmd
+```
+
+`mur docs compile` renders each `.mmd` to
+`docs/guide/images/<topic>/<id>.svg` (content-hash cached so unchanged
+files don't re-render). Reference the rendered SVG with a normal
+Markdown image link:
+
+```markdown
+![Reactor render loop](images/architecture-overview/render-loop.svg)
+```
+
+Scaffold a new diagram with:
+
+```
+mur docs new-diagram architecture-overview render-loop
+```
+
+This emits a starter `.mmd` with a placeholder graph. Iterate with
+`mur docs render-diagrams --topic architecture-overview` (no full
+compile required). Pass `--skip-diagrams` to `mur docs compile` for
+fast inner-loop runs when you are only editing prose.
+
+A minimal Mermaid example for an Under-the-hood page:
+
+```mermaid
+flowchart LR
+    State[State] -->|setState| Reconciler
+    Reconciler -->|diff| Tree[Element tree]
+    Tree -->|commit| WinUI[WinUI controls]
+```
+
+Hand-authored SVG works the same way — drop the `.svg` under
+`docs/_pipeline/diagrams/<topic>/` and the pipeline copies it through.
+
+### When ASCII is fine
+
+```
+src/Reactor/
+  Hooks/
+    UseState.cs
+    UseEffect.cs
+  Reconciler/
+    Reconciler.cs
+```
+
+Folder trees, four-line code skeletons, and similar structural snippets
+are clearer as preformatted text than as a diagram. Use a fenced code
+block (no language tag) — not an SVG.
 
 ---
 
@@ -234,31 +485,10 @@ these rules:
 - **Link format.** Use relative `.md` paths: `[Getting Started](getting-started.md)`.
   Do not use absolute paths or `screenshot://` syntax for page links.
 
-**Topic order for sequential navigation:**
-
-| Order | Topic | File |
-|-------|-------|------|
-| 0 | Reactor (readme) | `readme.md` |
-| 1 | Getting Started | `getting-started.md` |
-| 2 | Dev Tooling | `dev-tooling.md` |
-| 3 | Components | `components.md` |
-| 4 | Hooks | `hooks.md` |
-| 5 | Layout | `layout.md` |
-| 6 | Flex Layout | `flex-layout.md` |
-| 7 | Forms and Input | `forms.md` |
-| 8 | Collections | `collections.md` |
-| 9 | Navigation | `navigation.md` |
-| 10 | Styling and Theming | `styling.md` |
-| 11 | Effects and Lifecycle | `effects.md` |
-| 12 | Commanding | `commanding.md` |
-| 13 | Context | `context.md` |
-| 14 | Accessibility | `accessibility.md` |
-| 15 | Localization | `localization.md` |
-| 16 | Animation | `animation.md` |
-| 17 | Charting | `charting.md` |
-| 18 | Advanced Patterns | `advanced.md` |
-| 19 | Data System | `data-system.md` |
-| 20 | WinForms Interop | `winforms-interop.md` |
+**Topic order for sequential navigation:** see the full 64-page index in
+the "Topic Ideas" table at the bottom of this file. Authors should always
+trust the `order:` value in each template's front-matter as the source of
+truth; the bottom-of-file index is a snapshot of the spec-041 §7.1 layout.
 
 ---
 
@@ -516,37 +746,143 @@ no-ops (spec 033 §6).
 
 ## Topic Ideas for the Full Docset
 
-Generate these as `<topic>.md.dt` + `docs/_pipeline/apps/<topic>/` pairs:
+The 64-page layout mirrors spec 041 §7.1. Each row lists the target tier,
+the `order:` slot, and a one-line description. "NEW" pages were authored
+as Stub-tier templates in Phase 1 and grow tier-by-tier through Phases
+2-4. Generate every page as `<topic>.md.dt` + `docs/_pipeline/apps/<topic>/`
+unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 
-### Beginner
+### 1. Get Started
 
-0. **readme** — Landing page: what Reactor is, why no XAML, links to all topics
-1. **getting-started** *(done)* — Project setup, hello world, state, layout, todo + calculator mini-apps
-2. **dev-tooling** — `dotnet watch` + preview mode, VS Code extension, `mur` CLI, hot reload workflow
-3. **components** — `Component`, `Component<TProps>`, record props, composition, `ShouldUpdate`, function components via `ReactorApp.Run(ctx => ...)`
-4. **hooks** — Deep dive: UseState, UseReducer (both overloads), UseEffect (with cleanup), UseMemo, UseRef, UseCallback; hook rules and ordering
-5. **layout** — VStack, HStack, Grid, ScrollView, Border, Expander, Canvas; spacing, alignment, responsive patterns with UseWindowSize/UseBreakpoint
+| Order | Page | Tier | Description |
+|-------|------|------|-------------|
+| 0 | readme | comprehensive | Landing page: what Reactor is, the 10-section index, decision tree |
+| 1 | getting-started | comprehensive | Project setup, hello world, state, layout, todo + calculator |
+| 1.5 | thinking-in-reactor | NEW stub | Mental-model essay — function of state, no XAML, declarative shell |
+| 24 | xaml-developers | comprehensive | Migration cookbook: XAML/binding/MVVM/navigation → Reactor |
+| 1.7 | reactor-vs-xaml | NEW stub | Architectural essay (also indexed in §9): DependencyProperty → modifier, Binding → closure, DataTemplate → function component |
 
-### Intermediate
+### 2. Learn the framework
 
-6. **flex-layout** — FlexPanel powered by Yoga (CSS Flexbox): direction, justify, align, wrap, grow/shrink/basis, gap, absolute positioning; when to use Flex vs. VStack/Grid
-7. **forms** — TextField, CheckBox, ComboBox, Slider, NumberBox, PasswordBox, RadioButtons, ToggleSwitch; controlled-input idioms, ValidationContext + .Validate() with 11 built-in validators, FormField helper, MaskEngine (8 presets), InputFormatter (11 built-ins), AutoSuggest\<T\>, UseFocus for focus management
-8. **collections** — ListView\<T\>, LazyVStack\<T\>, GridView\<T\>, VirtualList (count-based); virtualization, key selection, ForEach, stable identity with WithKey, VirtualListRef for imperative scrolling
-9. **navigation** — UseNavigation\<TRoute\> hook, NavigationHandle (forward nav, state serialization, PopTo), type-safe stack-based routing, NavigationView/TabView/BreadcrumbBar elements, DeepLinkMap for URL routing (query params, wildcards, typed extraction), NavigationCache with Required mode, page lifecycle (UseNavigationLifecycle with cancel guards), UseSystemBackButton, animated transitions via TransitionEngine, NavigationDiagnostics events
-10. **styling** — Theme tokens (37+ semantic ThemeRef values), UseColorScheme/UseIsDarkTheme hooks, .RequestedTheme() modifier, lightweight styling via .Resources() + ResourceBuilder, Style caching, Roslyn analyzers (REACTOR_THEME_001-003), fonts, CornerRadius
-11. **effects** — UseEffect lifecycle: mount, update, cleanup; timers, async data loading, file I/O, dependency arrays, infinite-loop pitfalls
-12. **commanding** — Command, Command\<T\>, StandardCommand, UseCommand hook, keyboard accelerators, async commands with IsExecuting tracking
-13. **context** — Context\<T\>, ContextProvider, UseContext, nested/overridden contexts; theme context as a worked example
+| Order | Page | Tier | Description |
+|-------|------|------|-------------|
+| 3 | components | comprehensive | `Component`, `Component<TProps>`, record props, function components, `ShouldUpdate` |
+| 4 | hooks | comprehensive | Deep dive: UseState, UseReducer, UseEffect, UseMemo, UseRef, UseCallback; rules and ordering |
+| 11 | effects | comprehensive | UseEffect lifecycle, async patterns, cleanup, dependency arrays |
+| 13 | context | comprehensive | Context\<T\>, ContextProvider, UseContext, scoped overrides |
+| 12 | commanding | comprehensive | Command, Command\<T\>, UseCommand, accelerators, async tracking |
+| 18 | advanced | comprehensive | ErrorBoundary, Memo, `.Set()`, observable binding, perf tuning |
 
-### Advanced
+### 3. UI surface
 
-14. **accessibility** — AutomationName, HeadingLevel, landmarks, live regions, IsTabStop/TabIndex, AccessKey, FullDescription; tiered modifier pattern (common vs. advanced); WCAG compliance patterns; UseFocusTrap for modals, UseAnnounce for screen reader notifications, SemanticPanel for custom automation peers, AccessibilityScanner runtime diagnostics, Roslyn analyzers (REACTOR\_A11Y\_001-003)
-15. **localization** — LocaleProvider, UseIntl, RtlHelper, logical layout properties (MarginInlineStart/End), string resource providers, date/number formatting, pseudo-localization for testing
-16. **animation** — Implicit transitions (opacity, scale, translate, rotation, background), .Animate() compositor modifier, enter/exit .Transition() with combinators (+, |), .InteractionStates() zero-reconcile hover/press/focus, .Stagger() cascade, .Keyframes() trigger animations, .ScrollLinked() expression animations, WithAnimation/WithAnimationAsync ambient scopes, spring/ease curves, LayoutAnimation, ConnectedAnimation
-17. **charting** — ReactorCharting chart DSL: LineChart, BarChart, AreaChart, PieChart, TreeChart, ForceGraph; scales (Linear, Band, Log, Pow, Ordinal); shape generators; D3 Canvas drawing primitives; ChartHandle for live updates
-18. **advanced** — ErrorBoundary + fallback UI, Memo for subtree skip, performance tuning (ElementPool, batched renders, bitmask diffs), WinUI escape hatch (`.Set()`), observable data binding (UseObservableTree, UseCollection)
-19. **data-system** — DataGrid\<T\> with sort, filter, search, inline editing (cell/row modes), column resize/reorder, selection; IDataSource\<T\> abstraction, ListDataSource, ObservableListDataSource; FieldDescriptor and `Column<T>` / `AutoColumns<T>` factories for column definition; DataPageCache for incremental paging; DataGridState headless state machine
-20. **winforms-interop** — Hosting Reactor components in WinForms via XAML Islands; XamlIslandBootstrap.Run() initialization flow, XamlIslandControl (code and designer), ComponentType property with Properties-grid dropdown, Tab/keyboard bridging, accessibility hooks, background/stretch considerations
+| Order | Page | Tier | Description |
+|-------|------|------|-------------|
+| 5 | layout | solid | VStack, HStack, Grid, ScrollView, Border, Expander; responsive patterns |
+| 6 | flex-layout | comprehensive | FlexPanel (Yoga): direction, justify, align, wrap, gap |
+| 10 | styling | comprehensive | Theme tokens, UseColorScheme, `.RequestedTheme()`, lightweight styling |
+| 16 | animation | comprehensive | Implicit transitions, `.Animate`, `.Transition`, `.InteractionStates`, keyframes, scroll-linked |
+| 16.5 | input-and-gestures | solid | Pointer events, `.OnTapped`, gestures, AccessKey wiring |
+
+### 4. Controls catalog
+
+| Order | Page | Tier | Description |
+|-------|------|------|-------------|
+| 6.5 | controls | NEW stub → comprehensive | Thumbnail index linking every catalog page |
+| 7 | forms | solid → comprehensive | TextField, CheckBox, ComboBox, Slider, NumberBox, PasswordBox, RadioButtons, ToggleSwitch, AutoSuggestBox, DatePicker, TimePicker, CalendarView, ColorPicker, validation |
+| 8 | collections | solid → comprehensive | ListView, GridView, LazyVStack, VirtualList, grouping, drag-reorder |
+| 8.3 | text-and-media | NEW stub → comprehensive | TextBlock variants, RichTextBlock, RichEditBox, MarkdownTextBlock, Image, MediaPlayerElement, WebView2, InkCanvas, MapControl |
+| 8.5 | status-and-info | NEW stub → solid | InfoBar, InfoBadge, ProgressBar, ProgressRing, TeachingTip, PipsPager, PersonPicture, RatingControl |
+| 8.7 | dialogs-and-flyouts | NEW stub → comprehensive | ContentDialog, MenuFlyout, CommandBarFlyout, Popup |
+| 19 | data-system | comprehensive | DataGrid\<T\>: sort, filter, search, inline editing, paging |
+| 17 | charting | comprehensive | LineChart, BarChart, AreaChart, PieChart, TreeChart, ForceGraph |
+
+### 5. App architecture
+
+| Order | Page | Tier | Description |
+|-------|------|------|-------------|
+| 9 | navigation | comprehensive | UseNavigation, NavigationHandle, NavigationView, TabView, DeepLinkMap, lifecycle |
+| 21 | windows | solid | ReactorApp.Run, OpenWindow, WindowSpec, ShutdownPolicy, tray icons (moved from §3) |
+| 12 | async-resources | solid → comprehensive | UseResource, UseInfiniteResource, UseMutation, Pending (renamed from async-resources-cookbook) |
+| 14.5 | persistence | NEW stub → solid | UsePersisted, Window/Application scopes, migration |
+| 15 | localization | solid | LocaleProvider, UseIntl, RtlHelper, logical layout, pseudo-localization |
+| 14 | accessibility | comprehensive | AutomationName, landmarks, UseFocusTrap, UseAnnounce, SemanticPanel, AccessibilityScanner |
+
+### 6. Patterns & recipes
+
+| Order | Page | Tier | Description |
+|-------|------|------|-------------|
+| 22 | recipes/index | NEW stub → solid | Gallery: thumbnail + one-line per recipe |
+| 22.1 | recipes/login | NEW stub → solid | Login form recipe |
+| 22.2 | recipes/master-detail | NEW stub → solid | Master-detail recipe |
+| 22.3 | recipes/settings-page | NEW stub → solid | Settings page recipe |
+| 22.4 | recipes/paginated-list | NEW stub → solid | Paginated list recipe |
+| 22.5 | recipes/modal-dialog | NEW stub → solid | Modal dialog recipe |
+| 22.6 | recipes/multi-step-form | NEW stub → solid | Multi-step form recipe |
+| 22.7 | recipes/search-with-suggestions | NEW stub → solid | Search-with-suggestions recipe |
+| 22.8 | recipes/command-palette | NEW stub → solid | Command-palette recipe |
+| 22.9 | recipes/drag-reorder | NEW stub → solid | Drag-to-reorder recipe |
+| 22.95 | cheat-sheet | NEW stub → solid | Single-page reference card |
+| 22.97 | rules-of-reactor | NEW stub → solid | Hook rules, idioms, anti-patterns |
+| 22.99 | theming-tokens | NEW stub → comprehensive | Full token catalog with swatches |
+
+### 7. Tooling & process
+
+| Order | Page | Tier | Description |
+|-------|------|------|-------------|
+| 2 | dev-tooling | solid → comprehensive | `mur` CLI, MCP server, VS Code panel, dotnet watch, in-app dev menu, reconcile-highlight + layout-cost overlays |
+| 22.6 | testing | NEW stub → solid | Renderer fixtures, headless tests, snapshot tests, a11y scanner |
+| 22.7 | performance | NEW stub → solid | ETW, EventDispatch walkthroughs, flame graphs |
+| 22.8 | packaging | NEW stub → solid | MSIX, single-file, ARM64, AOT considerations |
+
+### 8. Interop & integration
+
+| Order | Page | Tier | Description |
+|-------|------|------|-------------|
+| 20 | winforms-interop | comprehensive | XAML Islands hosting, XamlIslandBootstrap, ComponentType property |
+| 20.5 | wpf-interop | NEW stub → solid | WPF host control, data flow, threading |
+
+### 9. Under the hood (NEW track — Phase 3.5)
+
+| Order | Page | Tier | Description |
+|-------|------|------|-------------|
+| 30 | architecture-overview | NEW stub → comprehensive | Diagram-led: shell → element records → reconciler → WinUI tree |
+| 31 | reactivity-model | NEW stub → comprehensive | setState → re-render mental model; why hooks not INPC |
+| 1.7 | reactor-vs-xaml | NEW stub → comprehensive | (also indexed in §1) DependencyProperty/Binding/DataTemplate mapping |
+| 32 | hooks-internals | NEW stub → comprehensive | Hook slot table, dispatcher, closure capture, stale state |
+| 33 | reconciliation | NEW stub → comprehensive | Element-record diff, identity, `WithKey`, three phases — promotes `docs/reference/reconciliation.md` |
+| 34 | element-pool | NEW stub → solid | Pooling for GC pressure under scroll-heavy lists (spec 034) |
+| 35 | effects-scheduling | NEW stub → comprehensive | When effects run; dep semantics; cleanup ordering; async cancellation |
+| 36 | threading-and-dispatch | NEW stub → solid | UI-thread invariants, trampoline, batched renders, off-thread patterns |
+| 37 | source-mapping | NEW stub → solid | Spec 010: stack-trace attribution to user source |
+| 38 | modifier-system | NEW stub → comprehensive | `.FontSize(24).Bold()` — modifier records vs property writes |
+| 39 | analyzer-architecture | NEW stub → comprehensive | REACTOR_THEME/A11Y/GRID/FUNC/PERSIST — authoring your own analyzer |
+| 40 | devtools-internals | NEW stub → comprehensive | Dev menu, reconcile-highlight overlay, layout-cost overlay, MCP protocol |
+| 41 | animation-pipeline | NEW stub → comprehensive | Composition API end-to-end, 4 animation systems, compositor-property ceiling |
+| 42 | focus-and-input-internals | NEW stub → comprehensive | UseFocus dispatcher, UseFocusTrap container, pointer vs routed events |
+| 43 | perf-instrumentation | NEW stub → comprehensive | ETW sources, frame-aligned sampling (spec 031), layout-cost attribution (spec 032) |
+
+### 10. API Reference (auto-generated — spec §7.1.2)
+
+Section 10 is generated from XML doc comments in `src/Reactor*/` and
+landed in Phase 1 for the Hooks category. Authors do **not** hand-write
+template files for the leaves — they author `<summary>`, `<remarks>`,
+`<param>`, `<returns>`, `<example>`, and `<seealso cref="..."/>` in the
+canonical C# source, and the pipeline emits one MD page per public
+member into `docs/guide/reference/<category>/<name>.md`. The hand-
+written part is the per-category `index.md` (e.g.
+`docs/guide/reference/hooks/index.md`).
+
+Categories (driven by `docs/_pipeline/reference-map.yaml`):
+
+- **factories** — every element factory
+- **hooks** — every `Use*` hook (Phase 1 prototype: 73 pages)
+- **modifiers** — every chainable modifier
+- **elements** — every Element record type
+- **system** — App, Window, Navigation, Context, Command primitives
+
+Cross-axis linking: write `<!-- ref:UseState -->` in a guide template to
+link into the reference axis; write `<seealso cref="UseState"/>` in XML
+doc to link from a reference page into the conceptual guide.
 
 ---
 

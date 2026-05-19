@@ -19,7 +19,13 @@ ReactorApp.Run<TodoApp>("Todos", width: 900, height: 720
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
-record TodoItem(string Id, string Text, bool IsCompleted);
+// Identity-on-data convention (spec 042 §5): exposing `Key` via
+// IReactorKeyed lets `.WithKey(item)` and the templated-list factories
+// drop the boilerplate `keySelector: t => t.Id` at call sites.
+record TodoItem(string Id, string Text, bool IsCompleted) : IReactorKeyed
+{
+    string IReactorKeyed.Key => Id;
+}
 
 enum TodoFilter { All, Active, Completed }
 
@@ -71,6 +77,17 @@ class TodoApp : Component
     public override Element Render()
     {
         var (state, dispatch) = UseReducer<TodoState, TodoAction>(TodoReducer.Reduce, TodoState.Initial);
+        var reduceMotion = UseReducedMotion();
+
+        // Wrap structural mutations (add / delete / clear-completed) in an
+        // ambient Animations.Animate so the resulting Insert / Remove ops on
+        // the keyed list pick up a Spring transition. Toggle / SetFilter /
+        // SetNewItemText don't change list identity, so they go through the
+        // bare dispatch. WCAG 2.3.3 — when the OS reduced-motion preference
+        // is on, bypass the wrapper entirely. (Spec 042 §6)
+        Action<TodoAction> structural = reduceMotion
+            ? dispatch
+            : a => Animations.Animate(AnimationKind.Spring, () => dispatch(a));
 
         var filtered = UseMemo(() => state.Filter switch
         {
@@ -85,7 +102,7 @@ class TodoApp : Component
         var addCmd = new Command
         {
             Label = "Add",
-            Execute = () => dispatch(new AddItem()),
+            Execute = () => structural(new AddItem()),
             CanExecute = !string.IsNullOrWhiteSpace(state.NewItemText),
             Accelerator = Accelerator(Windows.System.VirtualKey.Enter),
         };
@@ -112,7 +129,7 @@ class TodoApp : Component
                     Grid(
                         columns: [GridSize.Star(), GridSize.Auto, GridSize.Star()],
                         rows: [GridSize.Auto],
-                        Card(state, filtered, addCmd, remaining, completed, dispatch)
+                        Card(state, filtered, addCmd, remaining, completed, dispatch, structural)
                             .MinWidth(320)
                             .MaxWidth(560)
                             .Margin(16, 16, 16, 24)
@@ -132,16 +149,17 @@ class TodoApp : Component
         Command addCmd,
         int remaining,
         int completed,
-        Action<TodoAction> dispatch) =>
+        Action<TodoAction> dispatch,
+        Action<TodoAction> structural) =>
         Border(
             FlexColumn(
                 InputRow(state.NewItemText, addCmd, dispatch),
                 Divider(),
                 filtered.Length == 0
                     ? EmptyState(state.Filter)
-                    : FlexColumn(filtered.Select(item => TodoRow(item, dispatch)).ToArray<Element?>()),
+                    : FlexColumn(filtered.Select(item => TodoRow(item, dispatch, structural)).ToArray<Element?>()),
                 Divider(),
-                FooterRow(remaining, completed, state.Filter, dispatch)
+                FooterRow(remaining, completed, state.Filter, dispatch, structural)
             )
         )
         .Background(CardBackground)
@@ -161,7 +179,7 @@ class TodoApp : Component
 
     // ── Todo row ─────────────────────────────────────────────────────
 
-    static Element TodoRow(TodoItem item, Action<TodoAction> dispatch) =>
+    static Element TodoRow(TodoItem item, Action<TodoAction> dispatch, Action<TodoAction> structural) =>
         (FlexRow(
             // CheckBox's default style sets MinWidth=120 (CheckBoxMinWidth theme
             // resource) to reserve space for a Content label. Collapse it with
@@ -187,7 +205,7 @@ class TodoApp : Component
             // Segoe Fluent icon font. Styled as a subtle "ghost" button so it
             // recedes visually but still reveals hover + pressed states
             // through .Resources().
-            Button("", () => dispatch(new DeleteItem(item.Id)))
+            Button("", () => structural(new DeleteItem(item.Id)))
                 .AutomationName($"Delete '{item.Text}'")
                 .ToolTip("Delete")
                 .FontSize(14)
@@ -202,7 +220,7 @@ class TodoApp : Component
                 .Flex(shrink: 0)
          ) with { AlignItems = FlexAlign.Center, ColumnGap = 12 })
             .Padding(horizontal: 16, vertical: 8)
-            .WithKey(item.Id);
+            .WithKey(item);
 
     // ── Empty state — shown when filter returns nothing ───────────────
 
@@ -234,7 +252,7 @@ class TodoApp : Component
 
     // ── Footer — counts, filter toggles, clear-completed ──────────────
 
-    static Element FooterRow(int remaining, int completed, TodoFilter active, Action<TodoAction> dispatch) =>
+    static Element FooterRow(int remaining, int completed, TodoFilter active, Action<TodoAction> dispatch, Action<TodoAction> structural) =>
         (FlexRow(
             Caption($"{remaining} item{(remaining == 1 ? "" : "s")} left")
                 .Foreground(SecondaryText)
@@ -248,7 +266,7 @@ class TodoApp : Component
             FilterToggle("Completed", TodoFilter.Completed, active, dispatch),
 
             When(completed > 0, () =>
-                HyperlinkButton("Clear completed", onClick: () => dispatch(new ClearCompleted()))
+                HyperlinkButton("Clear completed", onClick: () => structural(new ClearCompleted()))
                     .Flex(shrink: 0, alignSelf: FlexAlign.Center))
          ) with { AlignItems = FlexAlign.Center, ColumnGap = 6 })
             .Padding(horizontal: 16, vertical: 10);
@@ -258,6 +276,6 @@ class TodoApp : Component
         // "Completed" → "Comp" in narrower windows.
         ToggleButton(label,
             isChecked: filter == active,
-            onToggled: _ => dispatch(new SetFilter(filter)))
+            onIsCheckedChanged: _ => dispatch(new SetFilter(filter)))
             .Flex(shrink: 0);
 }

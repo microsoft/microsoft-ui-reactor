@@ -36,7 +36,10 @@ StressPerf.ReactorOptimized/       ← Reactor with spec-034 perf-tuning idioms
                                      UseMemoCells; spec 034 reference impl)
 StressPerf.Shared/                 ← PerfTracker, StockDataSource, ListItemSource
 
-StressPerf.VirtualList.Reactor/    ← virtualizing-list scenario (Reactor)
+StressPerf.VirtualList.Reactor/    ← virtualizing-list scenario (Reactor LazyVStack)
+StressPerf.VirtualList.WinUI/      ← virtualizing-list scenario (hand-written WinUI 3
+                                     ItemsRepeater + ObservableCollection — the
+                                     spec 042 perf gate's vanilla baseline)
 PresentTracer/                     ← ETW Present-rate sampler (admin)
 
 run_stocks_grid_baseline.ps1       ← full matrix runner (admin)
@@ -116,6 +119,55 @@ scrapes its on-screen report via UI Automation.
 - **DRR (Dynamic Refresh Rate)** is real and changes which framework
   "feels" fastest depending on power state. Always label battery vs AC.
 - Latest baseline: `docs/reports/stress-perf-stocks-grid.md`.
+
+## Scenario: 10k virtualized list, scroll + edit (spec 042 Phase 6.3)
+
+`StressPerf.VirtualList.Reactor` ships with a `--with-edits` mode that
+interleaves random insert / remove ops with the scroll tween. Catches
+regressions in the `ItemsRepeater` key-indexed factory path
+(`ElementFactory<T>._mountedElements`, rekeyed in spec 042 Phase 1) that
+the steady-state scroll bench wouldn't see.
+
+```powershell
+# 10k items, 10s bench, 4 edits/second mixed with the scroll tween
+dotnet run --project tests/stress_perf/StressPerf.VirtualList.Reactor `
+    -c Release -p:Platform=ARM64 `
+    -- --headless --count 10000 --duration 10 --with-edits --edits-per-second 4
+```
+
+The report (`StressPerf.VirtualList.Reactor.report.txt`) adds an `Edits:` line
+with the total op count for the bench window. Compare frame-time percentiles
+to a baseline captured *without* `--with-edits` to isolate the per-edit cost
+of the keyed diff under load — a single insert at a random visible position
+should cost a constant ~1 ms regardless of total list size; if the gap to the
+edit-free baseline scales with `count`, the rekey path has regressed.
+
+Defaults: `--count 10000`, `--edits-per-second 4`, `--duration 5`. Edits
+respect a 50 / 50 insert / remove mix to keep the list size bounded.
+
+## Scenario: Reactor vs WinUI vanilla paired baseline (spec 042 perf gate)
+
+`StressPerf.VirtualList.WinUI` is the WinUI-3 vanilla counterpart to the
+Reactor variant — same row visual tree, same scroll tween, same edit
+policy (deterministic seed `1234567`), but the data path is a plain
+`ObservableCollection<ListItem>` mutated in place rather than Reactor's
+keyed diff. The paired-run driver computes per-cell medians across N
+reps with warm-ups discarded:
+
+```powershell
+# From repo root, both apps built for Release|ARM64:
+& tests/stress_perf/run_keyed_list_vs_winui.ps1 `
+    -Counts 1000,10000 -EditRates 0,4,16 `
+    -DurationSeconds 8 -Repetitions 5 -WarmupReps 1
+```
+
+The runner interleaves Reactor/WinUI within each rep so DRR / thermal
+drift can only affect a paired measurement, not the whole matrix. Output
+goes under `tests/stress_perf/baselines/keyed-list-vs-winui-<stamp>/`:
+`summary.md` (verdict + histogram analysis), `summary.csv` (one row per
+cell), `per-rep.csv` (all reps), and per-rep raw frames CSVs (60 files
+for a 6-cell × 5-rep × 2-app matrix). The seed baseline lives at
+`tests/stress_perf/baselines/keyed-list-vs-winui-2026-05-17-104102/`.
 
 ## Adding a new variant
 

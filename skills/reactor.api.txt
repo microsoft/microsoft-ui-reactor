@@ -15,10 +15,13 @@ AnnotatedScrollBar() → AnnotatedScrollBarElement
 AppBarButton(Command command) → AppBarButtonData
 AppBarButton(string label, Action onClick = null, string icon = null) → AppBarButtonData
 AppBarSeparator() → AppBarSeparatorData
-AppBarToggleButton(string label, bool isChecked = false, Action<bool> onToggled = null, string icon = null) → AppBarToggleButtonData
+AppBarToggleButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string icon = null) → AppBarToggleButtonData
 AutoColumns<T>(TypeRegistry registry = null, Func<FieldDescriptor, FieldDescriptor> overrides = null) → IReadOnlyList<FieldDescriptor>
 AutoSuggestBox(string text, Action<string> onTextChanged = null, Action<string> onQuerySubmitted = null) → AutoSuggestBoxElement
 BitmapIcon(Uri source, bool showAsMonochrome = true) → BitmapIconData
+Body(string content) → TextBlockElement
+BodyLarge(string content) → TextBlockElement
+BodyStrong(string content) → TextBlockElement
 Border(Element child) → BorderElement
 Breadcrumb(string label, object tag = null) → BreadcrumbBarItemData
 BreadcrumbBar(BreadcrumbBarItemData[] items, Action<BreadcrumbBarItemData> onItemClicked = null) → BreadcrumbBarElement
@@ -29,11 +32,12 @@ CalendarDatePicker(DateTimeOffset? date = null, Action<DateTimeOffset?> onDateCh
 CalendarView() → CalendarViewElement
 Canvas(Element[] children) → CanvasElement
 Caption(string content) → TextBlockElement
-CheckBox(bool isChecked, Action<bool> onChanged = null, string label = null) → CheckBoxElement
+Card(Element child) → BorderElement
+CheckBox(bool isChecked, Action<bool> onIsCheckedChanged = null, string label = null) → CheckBoxElement
 ColorPicker(Color color, Action<Color> onColorChanged = null) → ColorPickerElement
 Column<T>(string name, Func<T, object> accessor, bool editable = false, string displayName = null, string format = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
-ComboBox(Element[] itemElements, int selectedIndex, Action<int> onSelectionChanged) → ComboBoxElement
-ComboBox(string[] items, int selectedIndex = -1, Action<int> onSelectionChanged = null) → ComboBoxElement
+ComboBox(Element[] itemElements, int selectedIndex, Action<int> onSelectedIndexChanged) → ComboBoxElement
+ComboBox(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChanged = null) → ComboBoxElement
 CommandBar(AppBarItemBase[] primaryCommands = null, AppBarItemBase[] secondaryCommands = null) → CommandBarElement
 CommandBarFlyout(Element target, AppBarItemBase[] primaryCommands = null, AppBarItemBase[] secondaryCommands = null) → CommandBarFlyoutElement
 CommandHost(Command[] commands, Element child) → CommandHostElement
@@ -50,13 +54,14 @@ Ellipse() → EllipseElement
 Empty() → Element
 ErrorBoundary(Element child, Element fallback) → ErrorBoundaryElement
 ErrorBoundary(Element child, Func<Exception, Element> fallback) → ErrorBoundaryElement
-Expander(string header, Element content, bool isExpanded = false, Action<bool> onExpandedChanged = null) → ExpanderElement
+Expander(string header, Element content, bool isExpanded = false, Action<bool> onIsExpandedChanged = null) → ExpanderElement
 Expr(Func<Element> render) → Element
 Flex(Element[] children) → FlexElement
 Flex(FlexDirection direction, Element[] children) → FlexElement
 FlexColumn(Element[] children) → FlexElement
 FlexRow(Element[] children) → FlexElement
 FlipView(Element[] items) → FlipViewElement
+FlipView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedFlipViewElement<T>
 FlipView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedFlipViewElement<T>
 Flyout(Element target, Element flyoutContent) → FlyoutElement
 FontIcon(string glyph, string fontFamily = null, double? fontSize = null) → FontIconData
@@ -65,6 +70,7 @@ ForEach<T>(IEnumerable<T> items, Func<T, int, Element> render) → Element
 Frame(Type sourcePageType = null, object navigationParameter = null) → FrameElement
 Grid(GridSize[] columns, GridSize[] rows, Element[] children) → GridElement
 GridView(Element[] items) → GridViewElement
+GridView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedGridViewElement<T>
 GridView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedGridViewElement<T>
 Group(Element[] children) → Element
 HStack(Element[] children) → StackElement
@@ -81,11 +87,14 @@ InfoBadge(int value) → InfoBadgeElement
 InfoBar(string title = null, string message = null) → InfoBarElement
 InterspersedGrid(Orientation orientation, Element[] items, double[] proportions, double separatorSize, Func<int, Element> separatorFactory) → GridElement
 ItemsView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → ItemsViewElement<T>
+LazyHStack<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
 LazyHStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
+LazyVStack<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → LazyVStackElement<T>
 LazyVStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyVStackElement<T>
 Line(double x1, double y1, double x2, double y2) → LineElement
-ListBox(string[] items, int selectedIndex = -1, Action<int> onSelectionChanged = null) → ListBoxElement
+ListBox(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChanged = null) → ListBoxElement
 ListView(Element[] items) → ListViewElement
+ListView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedListViewElement<T>
 ListView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedListViewElement<T>
 LocaleProvider(string locale, Element child, IStringResourceProvider resourceProvider = null, string defaultLocale = "en-US", bool pseudoLocalize = false) → Element
 MapControl(string mapServiceToken = null, double zoomLevel = 1) → MapControlElement
@@ -111,10 +120,10 @@ NumberBox(double value, Action<double> onValueChanged = null, string header = nu
 Paragraph(RichTextInline[] inlines) → RichTextParagraph
 ParallaxView(Element child, double verticalShift = 0, double horizontalShift = 0) → ParallaxViewElement
 PasswordBox(string password, Action<string> onPasswordChanged = null, string placeholderText = null) → PasswordBoxElement
-Path() → PathElement
+Path2D() → PathElement
 PathIcon(string data) → PathIconData
 PersonPicture() → PersonPictureElement
-PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int> onSelectedIndexChanged = null) → PipsPagerElement
+PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int> onSelectedPageIndexChanged = null) → PipsPagerElement
 Pivot(PivotItemData[] items) → PivotElement
 PivotItem(string header, Element content) → PivotItemData
 Popup(Element child, bool isOpen = false, Action onClosed = null) → PopupElement
@@ -123,8 +132,8 @@ ProgressIndeterminate() → ProgressElement
 ProgressRing() → ProgressRingElement
 ProgressRing(double value) → ProgressRingElement
 PropertyGrid(object target, TypeRegistry registry, Action<object> onRootChanged = null) → ComponentElement
-RadioButton(string label, bool isChecked = false, Action<bool> onChecked = null, string groupName = null) → RadioButtonElement
-RadioButtons(string[] items, int selectedIndex = -1, Action<int> onSelectionChanged = null) → RadioButtonsElement
+RadioButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string groupName = null) → RadioButtonElement
+RadioButtons(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChanged = null) → RadioButtonsElement
 RadioMenuItem(string text, string groupName, bool isChecked = false, Action onClick = null, string icon = null) → RadioMenuFlyoutItemData
 RatingControl(double value = 0, Action<double> onValueChanged = null) → RatingControlElement
 Rectangle() → RectangleElement
@@ -134,18 +143,19 @@ RenderEachTime(Func<RenderContext, Element> render) → FuncElement
 RepeatButton(Command command) → RepeatButtonElement
 RepeatButton(string label, Action onClick = null) → RepeatButtonElement
 RichEditBox(string text = "", Action<string> onTextChanged = null) → RichEditBoxElement
-RichText(RichTextParagraph[] paragraphs) → RichTextBlockElement
-RichText(string text) → RichTextBlockElement
+RichTextBlock(RichTextParagraph[] paragraphs) → RichTextBlockElement
+RichTextBlock(string text) → RichTextBlockElement
 Run(string text) → RichTextRun
 ScrollView(Element child) → ScrollViewElement
-SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int> onSelectionChanged = null) → SelectorBarElement
+SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int> onSelectedIndexChanged = null) → SelectorBarElement
 SelectorBarItem(string text, string icon = null) → SelectorBarItemData
 SemanticZoom(Element zoomedInView, Element zoomedOutView) → SemanticZoomElement
-Slider(double value, double min = 0, double max = 100, Action<double> onChanged = null) → SliderElement
+Slider(double value, double min = 0, double max = 100, Action<double> onValueChanged = null) → SliderElement
 SplitButton(Command command, Element flyout = null) → SplitButtonElement
 SplitButton(string label, Action onClick = null, Element flyout = null) → SplitButtonElement
 SplitView(Element pane = null, Element content = null) → SplitViewElement
 SubHeading(string content) → TextBlockElement
+Subtitle(string content) → TextBlockElement
 SwipeControl(Element content, SwipeItemData[] leftItems = null, SwipeItemData[] rightItems = null) → SwipeControlElement
 SymbolIcon(string symbol) → SymbolIconData
 Tab(string header, Element content) → TabViewItemData
@@ -157,14 +167,16 @@ Thick(double horizontal, double vertical) → Thickness
 Thick(double left, double top, double right, double bottom) → Thickness
 Thick(double uniform) → Thickness
 ThreeStateCheckBox(bool? checkedState, Action<bool?> onCheckedStateChanged = null, string label = null) → CheckBoxElement
+ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?> onCheckedStateChanged = null) → ToggleButtonElement
 TimePicker(TimeSpan time, Action<TimeSpan> onTimeChanged = null) → TimePickerElement
+Title(string content) → TextBlockElement
 TitleBar(string title) → TitleBarElement
 ToggleButton(Command command, bool isChecked = false) → ToggleButtonElement
-ToggleButton(string label, bool isChecked = false, Action<bool> onToggled = null) → ToggleButtonElement
-ToggleMenuItem(string text, bool isChecked = false, Action<bool> onToggled = null, string icon = null) → ToggleMenuFlyoutItemData
+ToggleButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null) → ToggleButtonElement
+ToggleMenuItem(string text, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string icon = null) → ToggleMenuFlyoutItemData
 ToggleSplitButton(Command command, bool isChecked = false, Element flyout = null) → ToggleSplitButtonElement
 ToggleSplitButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null, Element flyout = null) → ToggleSplitButtonElement
-ToggleSwitch(bool isOn, Action<bool> onChanged = null, string onContent = null, string offContent = null, string header = null) → ToggleSwitchElement
+ToggleSwitch(bool isOn, Action<bool> onIsOnChanged = null, string onContent = null, string offContent = null, string header = null) → ToggleSwitchElement
 TreeNode(string content, TreeViewNodeData[] children) → TreeViewNodeData
 TreeView(TreeViewNodeData[] nodes) → TreeViewElement
 UniformGrid(Orientation orientation, Element[] items) → GridElement
@@ -184,46 +196,133 @@ WrapGrid(int maxRowsOrColumns, Element[] children) → WrapGridElement
 AnimatedIconElement.Set(Action<AnimatedIcon> configure) → AnimatedIconElement
 AnimatedVisualPlayerElement.Set(Action<AnimatedVisualPlayer> configure) → AnimatedVisualPlayerElement
 AnnotatedScrollBarElement.Set(Action<AnnotatedScrollBar> configure) → AnnotatedScrollBarElement
+AutoSuggestBoxElement.Header(string header) → AutoSuggestBoxElement
+AutoSuggestBoxElement.IsSuggestionListOpen(bool open = true) → AutoSuggestBoxElement
+AutoSuggestBoxElement.QueryIcon(IconData icon) → AutoSuggestBoxElement
+AutoSuggestBoxElement.QuerySubmitted(Action<string> handler) → AutoSuggestBoxElement
 AutoSuggestBoxElement.Set(Action<AutoSuggestBox> configure) → AutoSuggestBoxElement
+AutoSuggestBoxElement.SuggestionChosen(Action<string> handler) → AutoSuggestBoxElement
+AutoSuggestBoxElement.TextChanged(Action<string> handler) → AutoSuggestBoxElement
+AutoSuggestElement<T>.Selected<T>(Action<T> handler) → AutoSuggestElement<T>
 BorderElement.Set(Action<Border> configure) → BorderElement
+BreadcrumbBarElement.ItemClicked(Action<BreadcrumbBarItemData> handler) → BreadcrumbBarElement
 BreadcrumbBarElement.Set(Action<BreadcrumbBar> configure) → BreadcrumbBarElement
+ButtonElement.AccentButton() → ButtonElement
+ButtonElement.Click(Action handler) → ButtonElement
 ButtonElement.DisabledFocusable(bool disabled = true) → ButtonElement
 ButtonElement.Set(Action<Button> configure) → ButtonElement
+ButtonElement.SubtleButton() → ButtonElement
+ButtonElement.TextLink() → ButtonElement
+CalendarDatePickerElement.DateChanged(Action<DateTimeOffset?> handler) → CalendarDatePickerElement
+CalendarDatePickerElement.DateFormat(string format) → CalendarDatePickerElement
+CalendarDatePickerElement.IsCalendarOpen(bool open = true) → CalendarDatePickerElement
+CalendarDatePickerElement.IsGroupLabelVisible(bool visible = true) → CalendarDatePickerElement
+CalendarDatePickerElement.IsTodayHighlighted(bool highlighted = true) → CalendarDatePickerElement
 CalendarDatePickerElement.Set(Action<CalendarDatePicker> configure) → CalendarDatePickerElement
+CalendarViewElement.DisplayMode(CalendarViewDisplayMode mode) → CalendarViewElement
+CalendarViewElement.FirstDayOfWeek(DayOfWeek day) → CalendarViewElement
+CalendarViewElement.MaxDate(DateTimeOffset date) → CalendarViewElement
+CalendarViewElement.MinDate(DateTimeOffset date) → CalendarViewElement
+CalendarViewElement.NumberOfWeeksInView(int weeks) → CalendarViewElement
+CalendarViewElement.SelectedDates(IReadOnlyList<DateTimeOffset> dates) → CalendarViewElement
+CalendarViewElement.SelectedDatesChanged(Action<IReadOnlyList<DateTimeOffset>> handler) → CalendarViewElement
 CalendarViewElement.Set(Action<CalendarView> configure) → CalendarViewElement
 CanvasElement.Set(Action<Canvas> configure) → CanvasElement
+CheckBoxElement.CheckedStateChanged(Action<bool?> handler) → CheckBoxElement
+CheckBoxElement.IsCheckedChanged(Action<bool> handler) → CheckBoxElement
 CheckBoxElement.Set(Action<CheckBox> configure) → CheckBoxElement
+ColorPickerElement.AlphaEnabled(bool enabled = true) → ColorPickerElement
+ColorPickerElement.ColorChanged(Action<Color> handler) → ColorPickerElement
+ColorPickerElement.ColorChannelTextInputVisible(bool visible) → ColorPickerElement
+ColorPickerElement.ColorSliderVisible(bool visible) → ColorPickerElement
+ColorPickerElement.ColorSpectrumShape(ColorSpectrumShape shape) → ColorPickerElement
+ColorPickerElement.ColorSpectrumVisible(bool visible = true) → ColorPickerElement
+ColorPickerElement.HexInputVisible(bool visible) → ColorPickerElement
+ColorPickerElement.HueRange(int minHue, int maxHue) → ColorPickerElement
+ColorPickerElement.MoreButtonVisible(bool visible = true) → ColorPickerElement
+ColorPickerElement.SaturationRange(int minSaturation, int maxSaturation) → ColorPickerElement
 ColorPickerElement.Set(Action<ColorPicker> configure) → ColorPickerElement
+ColorPickerElement.ValueRange(int minValue, int maxValue) → ColorPickerElement
+ComboBoxElement.Description(string description) → ComboBoxElement
+ComboBoxElement.DropDownClosed(Action handler) → ComboBoxElement
+ComboBoxElement.DropDownOpened(Action handler) → ComboBoxElement
 ComboBoxElement.Editable(bool editable = true) → ComboBoxElement
 ComboBoxElement.Header(string header) → ComboBoxElement
+ComboBoxElement.MaxDropDownHeight(double height) → ComboBoxElement
 ComboBoxElement.Placeholder(string text) → ComboBoxElement
+ComboBoxElement.SelectedIndexChanged(Action<int> handler) → ComboBoxElement
 ComboBoxElement.Set(Action<ComboBox> configure) → ComboBoxElement
 CommandBarElement.Set(Action<CommandBar> configure) → CommandBarElement
 CommandBarFlyoutElement.Set(Action<CommandBarFlyout> configure) → CommandBarFlyoutElement
+ContentDialogElement.Closed(Action<ContentDialogResult> handler) → ContentDialogElement
+ContentDialogElement.IsPrimaryButtonEnabled(bool enabled = true) → ContentDialogElement
+ContentDialogElement.IsSecondaryButtonEnabled(bool enabled = true) → ContentDialogElement
+ContentDialogElement.Opened(Action handler) → ContentDialogElement
 ContentDialogElement.Set(Action<ContentDialog> configure) → ContentDialogElement
+DataGridElement<T>.SelectionChanged<T>(Action<IReadOnlySet<RowKey>> handler) → DataGridElement<T>
+DatePickerElement.DateChanged(Action<DateTimeOffset> handler) → DatePickerElement
+DatePickerElement.DayFormat(string format) → DatePickerElement
+DatePickerElement.MonthFormat(string format) → DatePickerElement
+DatePickerElement.Orientation(Orientation orientation) → DatePickerElement
 DatePickerElement.Set(Action<DatePicker> configure) → DatePickerElement
+DatePickerElement.YearFormat(string format) → DatePickerElement
+DropDownButtonElement.AccentButton() → DropDownButtonElement
 DropDownButtonElement.Set(Action<DropDownButton> configure) → DropDownButtonElement
+DropDownButtonElement.SubtleButton() → DropDownButtonElement
 EllipseElement.Fill(Brush brush) → EllipseElement
 EllipseElement.Set(Action<Ellipse> configure) → EllipseElement
+ExpanderElement.ContentTransitions(TransitionCollection transitions) → ExpanderElement
 ExpanderElement.Direction(ExpandDirection dir) → ExpanderElement
+ExpanderElement.HeaderTemplate(Element header) → ExpanderElement
+ExpanderElement.IsExpandedChanged(Action<bool> handler) → ExpanderElement
 ExpanderElement.Set(Action<Expander> configure) → ExpanderElement
 FlexElement.FlexPadding(double horizontal, double vertical) → FlexElement
 FlexElement.FlexPadding(double left, double top, double right, double bottom) → FlexElement
 FlexElement.FlexPadding(double uniform) → FlexElement
 FlexElement.Set(Action<FlexPanel> configure) → FlexElement
+FlipViewElement.SelectedIndexChanged(Action<int> handler) → FlipViewElement
 FlipViewElement.Set(Action<FlipView> configure) → FlipViewElement
+FlyoutElement.AreOpenCloseAnimationsEnabled(bool enabled = true) → FlyoutElement
+FlyoutElement.Closed(Action handler) → FlyoutElement
+FlyoutElement.Opened(Action handler) → FlyoutElement
+FlyoutElement.OverlayInputPassThroughElement(Element passThrough) → FlyoutElement
 FlyoutElement.Set(Action<Flyout> configure) → FlyoutElement
+FlyoutElement.ShowMode(FlyoutShowMode mode) → FlyoutElement
+FrameElement.Navigated(Action<Type> handler) → FrameElement
+FrameElement.Navigating(Action<Type> handler) → FrameElement
+FrameElement.NavigationFailed(Action<Type, Exception> handler) → FrameElement
 FrameElement.Set(Action<Frame> configure) → FrameElement
 GridElement.BackgroundTransition(TimeSpan? duration = null) → GridElement
 GridElement.Set(Action<Grid> configure) → GridElement
+GridViewElement.IncrementalLoadingTrigger(IncrementalLoadingTrigger trigger) → GridViewElement
+GridViewElement.ItemClick(Action<int> handler) → GridViewElement
+GridViewElement.ItemContainerStyle(Style style) → GridViewElement
+GridViewElement.SelectedIndexChanged(Action<int> handler) → GridViewElement
+GridViewElement.SelectionChanged(Action<IReadOnlyList<int>> handler) → GridViewElement
 GridViewElement.SelectionMode(ListViewSelectionMode mode) → GridViewElement
 GridViewElement.Set(Action<GridView> configure) → GridViewElement
+HyperlinkButtonElement.Click(Action handler) → HyperlinkButtonElement
+HyperlinkButtonElement.NavigateUri(Uri uri) → HyperlinkButtonElement
 HyperlinkButtonElement.Set(Action<HyperlinkButton> configure) → HyperlinkButtonElement
+HyperlinkButtonElement.TextLink() → HyperlinkButtonElement
+ImageElement.ImageFailed(Action<string> handler) → ImageElement
+ImageElement.ImageOpened(Action handler) → ImageElement
+ImageElement.NineGrid(Thickness nineGrid) → ImageElement
 ImageElement.Set(Action<Image> configure) → ImageElement
 InfoBadgeElement.Set(Action<InfoBadge> configure) → InfoBadgeElement
+InfoBarElement.ActionButtonClick(Action handler) → InfoBarElement
 InfoBarElement.Closable(bool closable = true) → InfoBarElement
+InfoBarElement.Closed(Action handler) → InfoBarElement
+InfoBarElement.Content(Element content) → InfoBarElement
+InfoBarElement.Error() → InfoBarElement
+InfoBarElement.IconSource(IconData icon) → InfoBarElement
+InfoBarElement.Informational() → InfoBarElement
 InfoBarElement.Set(Action<InfoBar> configure) → InfoBarElement
 InfoBarElement.Severity(InfoBarSeverity severity) → InfoBarElement
+InfoBarElement.Success() → InfoBarElement
+InfoBarElement.Warning() → InfoBarElement
+ItemsViewElement<T>.ItemInvoked<T>(Action<T> handler) → ItemsViewElement<T>
+ItemsViewElement<T>.SelectionChanged<T>(Action<IReadOnlyList<T>> handler) → ItemsViewElement<T>
 ItemsViewElement<T>.Set<T>(Action<ItemsView> configure) → ItemsViewElement<T>
 LazyHStackElement<T>.Set<T>(Action<ScrollViewer> configure) → LazyHStackElement<T>
 LazyHStackElement<T>.SetRepeater<T>(Action<ItemsRepeater> configure) → LazyHStackElement<T>
@@ -232,63 +331,146 @@ LazyVStackElement<T>.SetRepeater<T>(Action<ItemsRepeater> configure) → LazyVSt
 LineElement.Set(Action<Line> configure) → LineElement
 LineElement.Stroke(Brush brush) → LineElement
 LineElement.StrokeThickness(double thickness) → LineElement
+ListBoxElement.SelectedIndexChanged(Action<int> handler) → ListBoxElement
+ListBoxElement.SelectionChanged(Action<IReadOnlyList<int>> handler) → ListBoxElement
 ListBoxElement.Set(Action<ListBox> configure) → ListBoxElement
+ListViewElement.IncrementalLoadingTrigger(IncrementalLoadingTrigger trigger) → ListViewElement
+ListViewElement.ItemClick(Action<int> handler) → ListViewElement
+ListViewElement.ItemContainerStyle(Style style) → ListViewElement
+ListViewElement.SelectedIndexChanged(Action<int> handler) → ListViewElement
+ListViewElement.SelectionChanged(Action<IReadOnlyList<int>> handler) → ListViewElement
 ListViewElement.SelectionMode(ListViewSelectionMode mode) → ListViewElement
 ListViewElement.Set(Action<ListView> configure) → ListViewElement
 MapControlElement.Set(Action<MapControl> configure) → MapControlElement
+MaskedTextFieldElement.Changed(Action<string> handler) → MaskedTextFieldElement
+MediaPlayerElementElement.MediaEnded(Action handler) → MediaPlayerElementElement
+MediaPlayerElementElement.MediaFailed(Action<string> handler) → MediaPlayerElementElement
+MediaPlayerElementElement.MediaOpened(Action handler) → MediaPlayerElementElement
 MediaPlayerElementElement.Set(Action<MediaPlayerElement> configure) → MediaPlayerElementElement
 MenuBarElement.Set(Action<MenuBar> configure) → MenuBarElement
 MenuFlyoutElement.Set(Action<MenuFlyout> configure) → MenuFlyoutElement
+NavigationViewElement.AutoSuggestBox(AutoSuggestBoxElement box) → NavigationViewElement
+NavigationViewElement.BackRequested(Action handler) → NavigationViewElement
+NavigationViewElement.CompactModeThresholdWidth(double width) → NavigationViewElement
+NavigationViewElement.ExpandedModeThresholdWidth(double width) → NavigationViewElement
+NavigationViewElement.OpenPaneLength(double length) → NavigationViewElement
+NavigationViewElement.PaneCustomContent(Element content) → NavigationViewElement
 NavigationViewElement.PaneDisplayMode(NavigationViewPaneDisplayMode mode) → NavigationViewElement
+NavigationViewElement.PaneFooter(Element footer) → NavigationViewElement
 NavigationViewElement.PaneTitle(string title) → NavigationViewElement
+NavigationViewElement.SelectedTagChanged(Action<string> handler) → NavigationViewElement
 NavigationViewElement.Set(Action<NavigationView> configure) → NavigationViewElement
 NavigationViewElement.WithNavigation<TRoute>(NavigationHandle<TRoute> nav, Func<TRoute, string> routeToTag, Func<string, TRoute> tagToRoute) → NavigationViewElement
+NumberBoxElement.AcceptsExpression(bool accepts = true) → NumberBoxElement
+NumberBoxElement.Description(string description) → NumberBoxElement
 NumberBoxElement.Focus(FocusManager fm, string fieldName, bool autoFocus = false) → NumberBoxElement
+NumberBoxElement.NumberFormatter(INumberFormatter2 formatter) → NumberBoxElement
 NumberBoxElement.Range(double min, double max) → NumberBoxElement
 NumberBoxElement.Set(Action<NumberBox> configure) → NumberBoxElement
 NumberBoxElement.SpinButtons(NumberBoxSpinButtonPlacementMode placement = NumberBoxSpinButtonPlacementMode.Inline) → NumberBoxElement
+NumberBoxElement.ValidationMode(NumberBoxValidationMode mode) → NumberBoxElement
+NumberBoxElement.ValueChanged(Action<double> handler) → NumberBoxElement
 ParallaxViewElement.Set(Action<ParallaxView> configure) → ParallaxViewElement
+ParallaxViewElement.Source(UIElement source) → ParallaxViewElement
+ParallaxViewElement.VerticalSourceEndOffset(double offset) → ParallaxViewElement
+ParallaxViewElement.VerticalSourceStartOffset(double offset) → ParallaxViewElement
+PasswordBoxElement.Header(string header) → PasswordBoxElement
+PasswordBoxElement.MaxLength(int maxLength) → PasswordBoxElement
+PasswordBoxElement.PasswordChanged(Action<string> handler) → PasswordBoxElement
+PasswordBoxElement.PasswordChar(string passwordChar) → PasswordBoxElement
+PasswordBoxElement.PasswordRevealMode(PasswordRevealMode mode) → PasswordBoxElement
 PasswordBoxElement.Set(Action<PasswordBox> configure) → PasswordBoxElement
 PathElement.Fill(Brush brush) → PathElement
+PathElement.FillRule(FillRule rule) → PathElement
 PathElement.Set(Action<Path> configure) → PathElement
 PathElement.Stroke(Brush brush) → PathElement
 PathElement.StrokeDashArray(double[] dashes) → PathElement
+PathElement.StrokeDashCap(PenLineCap cap) → PathElement
+PathElement.StrokeDashOffset(double offset) → PathElement
+PathElement.StrokeEndLineCap(PenLineCap cap) → PathElement
+PathElement.StrokeLineJoin(PenLineJoin join) → PathElement
+PathElement.StrokeMiterLimit(double limit) → PathElement
+PathElement.StrokeStartLineCap(PenLineCap cap) → PathElement
 PathElement.StrokeThickness(double thickness) → PathElement
 PersonPictureElement.DisplayName(string name) → PersonPictureElement
 PersonPictureElement.Initials(string initials) → PersonPictureElement
 PersonPictureElement.Set(Action<PersonPicture> configure) → PersonPictureElement
+PipsPagerElement.MaxVisiblePips(int max) → PipsPagerElement
+PipsPagerElement.NextButtonVisibility(PipsPagerButtonVisibility visibility) → PipsPagerElement
+PipsPagerElement.PreviousButtonVisibility(PipsPagerButtonVisibility visibility) → PipsPagerElement
+PipsPagerElement.SelectedPageIndexChanged(Action<int> handler) → PipsPagerElement
 PipsPagerElement.Set(Action<PipsPager> configure) → PipsPagerElement
+PipsPagerElement.WrapMode(PipsPagerWrapMode mode) → PipsPagerElement
+PivotElement.SelectedIndexChanged(Action<int> handler) → PivotElement
 PivotElement.Set(Action<Pivot> configure) → PivotElement
+PopupElement.Closed(Action handler) → PopupElement
 PopupElement.LightDismiss(bool enabled = true) → PopupElement
 PopupElement.Offset(double horizontal, double vertical) → PopupElement
+PopupElement.Opened(Action handler) → PopupElement
 PopupElement.Set(Action<Popup> configure) → PopupElement
 ProgressElement.Set(Action<ProgressBar> configure) → ProgressElement
 ProgressRingElement.Active(bool active = true) → ProgressRingElement
 ProgressRingElement.Set(Action<ProgressRing> configure) → ProgressRingElement
+PropertyGridElement.RootChanged(Action<object> handler) → PropertyGridElement
+RadioButtonElement.IsCheckedChanged(Action<bool> handler) → RadioButtonElement
 RadioButtonElement.Set(Action<RadioButton> configure) → RadioButtonElement
+RadioButtonsElement.SelectedIndexChanged(Action<int> handler) → RadioButtonsElement
 RadioButtonsElement.Set(Action<RadioButtons> configure) → RadioButtonsElement
+RatingControlElement.Caption(string caption) → RatingControlElement
+RatingControlElement.InitialSetValue(int value) → RatingControlElement
 RatingControlElement.MaxRating(int max) → RatingControlElement
+RatingControlElement.PlaceholderValue(double value) → RatingControlElement
 RatingControlElement.ReadOnly(bool readOnly = true) → RatingControlElement
 RatingControlElement.Set(Action<RatingControl> configure) → RatingControlElement
+RatingControlElement.ValueChanged(Action<double> handler) → RatingControlElement
 RectangleElement.Fill(Brush brush) → RectangleElement
 RectangleElement.Set(Action<Rectangle> configure) → RectangleElement
+RefreshContainerElement.PullDirection(RefreshPullDirection direction) → RefreshContainerElement
+RefreshContainerElement.RefreshRequested(Action handler) → RefreshContainerElement
 RefreshContainerElement.Set(Action<RefreshContainer> configure) → RefreshContainerElement
 RelativePanelElement.Set(Action<RelativePanel> configure) → RelativePanelElement
+RepeatButtonElement.Click(Action handler) → RepeatButtonElement
 RepeatButtonElement.Delay(int delay) → RepeatButtonElement
 RepeatButtonElement.Interval(int interval) → RepeatButtonElement
 RepeatButtonElement.Set(Action<RepeatButton> configure) → RepeatButtonElement
+RichEditBoxElement.AcceptsReturn(bool accepts = true) → RichEditBoxElement
+RichEditBoxElement.IsSpellCheckEnabled(bool enabled = true) → RichEditBoxElement
+RichEditBoxElement.MaxLength(int maxLength) → RichEditBoxElement
+RichEditBoxElement.SelectionHighlightColor(SolidColorBrush brush) → RichEditBoxElement
 RichEditBoxElement.Set(Action<RichEditBox> configure) → RichEditBoxElement
+RichEditBoxElement.TextChanged(Action<string> handler) → RichEditBoxElement
+RichEditBoxElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → RichEditBoxElement
+RichTextBlockElement.CharacterSpacing(int spacing) → RichTextBlockElement
+RichTextBlockElement.LineHeight(double height) → RichTextBlockElement
+RichTextBlockElement.MaxLines(int maxLines) → RichTextBlockElement
 RichTextBlockElement.Set(Action<RichTextBlock> configure) → RichTextBlockElement
+RichTextBlockElement.TextAlignment(TextAlignment alignment) → RichTextBlockElement
+RichTextBlockElement.TextTrimming(TextTrimming trimming) → RichTextBlockElement
 ScrollViewElement.HorizontalScrollMode(ScrollMode mode) → ScrollViewElement
 ScrollViewElement.Set(Action<ScrollViewer> configure) → ScrollViewElement
 ScrollViewElement.VerticalScrollMode(ScrollMode mode) → ScrollViewElement
+ScrollViewElement.ViewChanged(Action<ScrollViewerViewChangedEventArgs> handler) → ScrollViewElement
 ScrollViewElement.ZoomMode(ZoomMode mode) → ScrollViewElement
+SelectorBarElement.SelectedIndexChanged(Action<int> handler) → SelectorBarElement
 SelectorBarElement.Set(Action<SelectorBar> configure) → SelectorBarElement
 SemanticZoomElement.Set(Action<SemanticZoom> configure) → SemanticZoomElement
 SliderElement.Header(string header) → SliderElement
+SliderElement.Orientation(Orientation orientation) → SliderElement
 SliderElement.Set(Action<Slider> configure) → SliderElement
+SliderElement.SnapsTo(SliderSnapsTo snapsTo) → SliderElement
 SliderElement.StepFrequency(double step) → SliderElement
+SliderElement.ThumbToolTip(bool enabled = true) → SliderElement
+SliderElement.TickFrequency(double frequency) → SliderElement
+SliderElement.TickPlacement(TickPlacement placement) → SliderElement
+SliderElement.ValueChanged(Action<double> handler) → SliderElement
+SplitButtonElement.AccentButton() → SplitButtonElement
+SplitButtonElement.Click(Action handler) → SplitButtonElement
 SplitButtonElement.Set(Action<SplitButton> configure) → SplitButtonElement
+SplitButtonElement.SubtleButton() → SplitButtonElement
+SplitViewElement.LightDismissOverlayMode(LightDismissOverlayMode mode) → SplitViewElement
+SplitViewElement.PaneBackground(Brush brush) → SplitViewElement
+SplitViewElement.PaneBackground(ThemeRef theme) → SplitViewElement
+SplitViewElement.PaneOpenChanged(Action<bool> handler) → SplitViewElement
 SplitViewElement.Set(Action<SplitView> configure) → SplitViewElement
 StackElement.BackgroundTransition(TimeSpan? duration = null) → StackElement
 StackElement.Set(Action<StackPanel> configure) → StackElement
@@ -338,6 +520,7 @@ T.HeadingLevel<T>(AutomationHeadingLevel level) → T
 T.Height<T>(double height) → T
 T.HelpText<T>(string text) → T
 T.HierarchyLevel<T>(int level) → T
+T.HorizontalAlignment<T>(HorizontalAlignment alignment) → T
 T.Immediate<T>() → T
 T.InteractionStates<T>(Func<InteractionStatesBuilder, InteractionStatesBuilder> configure, Curve curve = null) → T
 T.IsTabStop<T>(bool isTabStop = true) → T
@@ -435,6 +618,7 @@ T.Validate<T>(string fieldName, IValidator[] validators) → T
 T.Validate<T>(string fieldName, object value, IValidator[] validators) → T
 T.ValidateAsync<T>(string fieldName, IAsyncValidator[] asyncValidators) → T
 T.ValidateAsync<T>(string fieldName, object value, IAsyncValidator[] asyncValidators) → T
+T.VerticalAlignment<T>(VerticalAlignment alignment) → T
 T.Visible<T>(bool isVisible) → T
 T.Width<T>(double width) → T
 T.WithBorder<T>(Brush brush, double thickness = 1) → T
@@ -443,46 +627,116 @@ T.WithBorder<T>(string color, double thickness = 1) → T
 T.WithContextFlyout<T>(Element contextFlyout) → T
 T.WithErrorStyling<T>(ValidationContext ctx, string fieldName, ShowWhen showWhen = ShowWhen.WhenTouched, bool submitAttempted = false) → T
 T.WithFlyout<T>(Element flyout) → T
+T.WithKey<T, TKey>(TKey item) → T
 T.WithKey<T>(string key) → T
 T.WithToolTip<T>(Element tooltip) → T
 T.WithTransitions<T>(Transition[] transitions) → T
+T.WrapGridColumnSpan<T>(int columnSpan) → T
+T.WrapGridRowSpan<T>(int rowSpan) → T
 T.XYFocusKeyboardNavigation<T>(XYFocusKeyboardNavigationMode mode) → T
+TabViewElement.AddTabButtonClick(Action handler) → TabViewElement
+TabViewElement.AllowDropTabs(bool allow = true) → TabViewElement
+TabViewElement.CanDragTabs(bool canDrag = true) → TabViewElement
+TabViewElement.CanReorderTabs(bool canReorder = true) → TabViewElement
+TabViewElement.CloseButtonOverlayMode(TabViewCloseButtonOverlayMode mode) → TabViewElement
+TabViewElement.SelectedIndexChanged(Action<int> handler) → TabViewElement
 TabViewElement.Set(Action<TabView> configure) → TabViewElement
 TabViewElement.ShowAddButton(bool visible = true) → TabViewElement
+TabViewElement.TabCloseRequested(Action<int> handler) → TabViewElement
+TabViewElement.TabStripFooter(Element footer) → TabViewElement
+TabViewElement.TabStripHeader(Element header) → TabViewElement
+TabViewElement.TabWidthMode(TabViewWidthMode mode) → TabViewElement
+TeachingTipElement.ActionButtonClick(Action handler) → TeachingTipElement
+TeachingTipElement.Closed(Action handler) → TeachingTipElement
+TeachingTipElement.HeroContent(Element hero) → TeachingTipElement
+TeachingTipElement.IconSource(IconData icon) → TeachingTipElement
+TeachingTipElement.PlacementMargin(Thickness margin) → TeachingTipElement
+TeachingTipElement.PreferredPlacement(TeachingTipPlacementMode placement) → TeachingTipElement
 TeachingTipElement.Set(Action<TeachingTip> configure) → TeachingTipElement
+TemplatedFlipViewElement<T>.SelectedIndexChanged<T>(Action<int> handler) → TemplatedFlipViewElement<T>
 TemplatedFlipViewElement<T>.Set<T>(Action<FlipView> configure) → TemplatedFlipViewElement<T>
+TemplatedGridViewElement<T>.ItemClick<T>(Action<T> handler) → TemplatedGridViewElement<T>
+TemplatedGridViewElement<T>.SelectedIndexChanged<T>(Action<int> handler) → TemplatedGridViewElement<T>
+TemplatedGridViewElement<T>.SelectionChanged<T>(Action<IReadOnlyList<T>> handler) → TemplatedGridViewElement<T>
 TemplatedGridViewElement<T>.Set<T>(Action<GridView> configure) → TemplatedGridViewElement<T>
+TemplatedListViewElement<T>.ItemClick<T>(Action<T> handler) → TemplatedListViewElement<T>
+TemplatedListViewElement<T>.SelectedIndexChanged<T>(Action<int> handler) → TemplatedListViewElement<T>
+TemplatedListViewElement<T>.SelectionChanged<T>(Action<IReadOnlyList<T>> handler) → TemplatedListViewElement<T>
 TemplatedListViewElement<T>.Set<T>(Action<ListView> configure) → TemplatedListViewElement<T>
 TextBlockElement.Bold() → TextBlockElement
+TextBlockElement.CharacterSpacing(int spacing) → TextBlockElement
 TextBlockElement.FontFamily(FontFamily family) → TextBlockElement
 TextBlockElement.FontFamily(string family) → TextBlockElement
 TextBlockElement.FontSize(double size) → TextBlockElement
 TextBlockElement.FontStyle(FontStyle style) → TextBlockElement
+TextBlockElement.LineHeight(double height) → TextBlockElement
+TextBlockElement.MaxLines(int maxLines) → TextBlockElement
 TextBlockElement.Selectable(bool selectable = true) → TextBlockElement
 TextBlockElement.SemiBold() → TextBlockElement
 TextBlockElement.Set(Action<TextBlock> configure) → TextBlockElement
 TextBlockElement.TextAlignment(TextAlignment alignment) → TextBlockElement
+TextBlockElement.TextDecorations(TextDecorations decorations) → TextBlockElement
 TextBlockElement.TextTrimming(TextTrimming trimming) → TextBlockElement
 TextBlockElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextBlockElement
 TextFieldElement.AcceptsReturn(bool accepts = true) → TextFieldElement
+TextFieldElement.Changed(Action<string> handler) → TextFieldElement
+TextFieldElement.CharacterCasing(CharacterCasing casing) → TextFieldElement
+TextFieldElement.Description(string description) → TextFieldElement
+TextFieldElement.EmailInput() → TextFieldElement
 TextFieldElement.Focus(FocusManager fm, string fieldName, bool autoFocus = false) → TextFieldElement
 TextFieldElement.Header(string header) → TextFieldElement
+TextFieldElement.InputScope(InputScopeNameValue scope) → TextFieldElement
+TextFieldElement.IsSpellCheckEnabled(bool enabled = true) → TextFieldElement
+TextFieldElement.MaxLength(int maxLength) → TextFieldElement
+TextFieldElement.NumericInput() → TextFieldElement
+TextFieldElement.PhoneInput() → TextFieldElement
 TextFieldElement.ReadOnly(bool readOnly = true) → TextFieldElement
+TextFieldElement.SearchInput() → TextFieldElement
+TextFieldElement.SelectionChanged(Action<string, int, int> handler) → TextFieldElement
 TextFieldElement.Set(Action<TextBox> configure) → TextFieldElement
+TextFieldElement.TextAlignment(TextAlignment alignment) → TextFieldElement
 TextFieldElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextFieldElement
+TextFieldElement.UrlInput() → TextFieldElement
 TimePickerElement.Set(Action<TimePicker> configure) → TimePickerElement
+TimePickerElement.TimeChanged(Action<TimeSpan> handler) → TimePickerElement
+TitleBarElement.BackButtonEnabled(bool enabled) → TitleBarElement
+TitleBarElement.BackButtonVisible(bool visible) → TitleBarElement
+TitleBarElement.BackRequested(Action handler) → TitleBarElement
+TitleBarElement.Content(Element content) → TitleBarElement
+TitleBarElement.Icon(IconData icon) → TitleBarElement
+TitleBarElement.Icon(string imageUri) → TitleBarElement
+TitleBarElement.PaneToggleButtonVisible(bool visible) → TitleBarElement
+TitleBarElement.PaneToggleRequested(Action handler) → TitleBarElement
+TitleBarElement.RightHeader(Element rightHeader) → TitleBarElement
 TitleBarElement.Set(Action<TitleBar> configure) → TitleBarElement
 TitleBarElement.Subtitle(string subtitle) → TitleBarElement
 TitleBarElement.WithNavigation<TRoute>(NavigationHandle<TRoute> nav) → TitleBarElement
+ToggleButtonElement.CheckedState(bool? state) → ToggleButtonElement
+ToggleButtonElement.CheckedStateChanged(Action<bool?> handler) → ToggleButtonElement
+ToggleButtonElement.IsCheckedChanged(Action<bool> handler) → ToggleButtonElement
+ToggleButtonElement.IsThreeState(bool isThreeState = true) → ToggleButtonElement
 ToggleButtonElement.Set(Action<ToggleButton> configure) → ToggleButtonElement
+ToggleSplitButtonElement.AccentButton() → ToggleSplitButtonElement
+ToggleSplitButtonElement.IsCheckedChanged(Action<bool> handler) → ToggleSplitButtonElement
 ToggleSplitButtonElement.Set(Action<ToggleSplitButton> configure) → ToggleSplitButtonElement
+ToggleSplitButtonElement.SubtleButton() → ToggleSplitButtonElement
 ToggleSwitchElement.Header(string header) → ToggleSwitchElement
+ToggleSwitchElement.IsOnChanged(Action<bool> handler) → ToggleSwitchElement
 ToggleSwitchElement.Set(Action<ToggleSwitch> configure) → ToggleSwitchElement
+TreeViewElement.Expanding(Action<TreeViewNodeData> handler) → TreeViewElement
+TreeViewElement.ItemInvoked(Action<TreeViewNodeData> handler) → TreeViewElement
 TreeViewElement.Set(Action<TreeView> configure) → TreeViewElement
 ValidationRuleElement.Evaluate(ValidationContext ctx) → void
 ValidationRuleElement.EvaluateAsync(ValidationContext ctx, CancellationToken cancellationToken = null) → Task
 ViewboxElement.Set(Action<Viewbox> configure) → ViewboxElement
+ViewboxElement.Stretch(Stretch stretch) → ViewboxElement
+ViewboxElement.StretchDirection(StretchDirection direction) → ViewboxElement
+VirtualListElement.VisibleRangeChanged(Action<int, int> handler) → VirtualListElement
+WebView2Element.CoreWebView2Initialized(Action handler) → WebView2Element
+WebView2Element.NavigationCompleted(Action<Uri> handler) → WebView2Element
+WebView2Element.NavigationStarting(Action<Uri> handler) → WebView2Element
 WebView2Element.Set(Action<WebView2> configure) → WebView2Element
+WebView2Element.WebMessageReceived(Action<string> handler) → WebView2Element
 WrapGridElement.Set(Action<VariableSizedWrapGrid> configure) → WrapGridElement
 
 ## Hooks (RenderContext / Component)
@@ -606,8 +860,10 @@ SelectionMode { None, Single, Multiple }
 Severity { Info, Warning, Error }
 ShowWhen { Always, WhenTouched, WhenDirty, AfterFirstSubmit, Never }
 VisualizerStyle { Inline, Summary, InfoBar, Custom }
+AnimationKind { None, Default, Spring, EaseIn, EaseOut, EaseInOut }
 BackdropKind { None, Mica, MicaAlt, DesktopAcrylic, AcrylicThin }
 ColorScheme { Light, Dark, HighContrast }
+KeyedListDiagnosticKind { NullKey, DuplicateKey }
 ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
 PersistedScope { Window, Application }
 TemplatedControlKind { ListView, GridView, FlipView }

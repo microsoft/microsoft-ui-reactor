@@ -24,6 +24,7 @@ public static class AnimationScope
     /// Nesting is supported: inner scopes override outer ones, restoring correctly in finally.
     /// Pass null to explicitly suppress animation (e.g., inside an outer animated scope).
     /// </summary>
+    // <snippet:with-animation-scope>
     public static void WithAnimation(Curve? curve, Action action)
     {
         var prevCurve = _current;
@@ -33,6 +34,7 @@ public static class AnimationScope
         try { action(); }
         finally { _current = prevCurve; _hasScope = prevScope; }
     }
+    // </snippet:with-animation-scope>
 
     /// <summary>
     /// Pushes a curve onto the animation scope. Must be paired with <see cref="PopScope"/>.

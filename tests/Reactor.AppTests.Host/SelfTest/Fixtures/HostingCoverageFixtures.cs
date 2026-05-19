@@ -1,3 +1,8 @@
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Reflection;
+using System.Text;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
@@ -348,6 +353,118 @@ internal static class HostingCoverageFixtures
 
             hostControl.Dispose();
             window.Close();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  9. PreviewCaptureServer — HTTP/auth/CORS/component endpoints
+    //     Targets: PreviewCaptureServer request handling without external tools.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class PreviewCaptureServerEndpoints(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            string? current = "Counter";
+            using var server = new PreviewCaptureServer(H.Window.DispatcherQueue, H.Window, fps: 3)
+            {
+                GetComponents = () => ["Counter", "Todo"],
+                GetCurrentComponent = () => current,
+                SwitchComponent = name =>
+                {
+                    if (name is not ("Counter" or "Todo")) return false;
+                    current = name;
+                    return true;
+                },
+            };
+            server.Start();
+
+            using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.Port}/") };
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
+
+            using var status = await client.GetAsync("status");
+            var statusText = await status.Content.ReadAsStringAsync();
+            H.Check("Preview_StatusOk", status.StatusCode == HttpStatusCode.OK && statusText.Contains("\"fps\":3"));
+
+            using var components = await client.GetAsync("components");
+            var componentsText = await components.Content.ReadAsStringAsync();
+            H.Check("Preview_ComponentsOk",
+                components.StatusCode == HttpStatusCode.OK &&
+                componentsText.Contains("Counter") &&
+                componentsText.Contains("\"current\":\"Counter\""));
+
+            using var frameEmpty = await client.GetAsync("frame");
+            H.Check("Preview_FrameEmpty204", frameEmpty.StatusCode == HttpStatusCode.NoContent);
+
+            typeof(PreviewCaptureServer)
+                .GetField("_latestFrame", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(server, new byte[] { 1, 2, 3, 4 });
+            using var frame = await client.GetAsync("frame");
+            H.Check("Preview_FrameOk", frame.StatusCode == HttpStatusCode.OK && frame.Content.Headers.ContentType?.MediaType == "image/jpeg");
+
+            using var focusGet = await client.GetAsync("focus");
+            H.Check("Preview_FocusGet405", focusGet.StatusCode == HttpStatusCode.MethodNotAllowed);
+
+            using var focusPost = await client.PostAsync("focus", new StringContent("", Encoding.UTF8, "application/json"));
+            H.Check("Preview_FocusPostOk", focusPost.StatusCode == HttpStatusCode.OK);
+
+            using var previewGet = await client.GetAsync("preview");
+            H.Check("Preview_SwitchGet405", previewGet.StatusCode == HttpStatusCode.MethodNotAllowed);
+
+            using var previewWrongType = await client.PostAsync("preview", new StringContent("component=Todo", Encoding.UTF8, "text/plain"));
+            H.Check("Preview_SwitchContentType415", previewWrongType.StatusCode == HttpStatusCode.UnsupportedMediaType);
+
+            using var previewMissing = await client.PostAsync("preview", new StringContent("{}", Encoding.UTF8, "application/json"));
+            H.Check("Preview_SwitchMissing400", previewMissing.StatusCode == HttpStatusCode.BadRequest);
+
+            using var previewOk = await client.PostAsync("preview", new StringContent("{\"component\":\"Todo\"}", Encoding.UTF8, "application/json"));
+            var previewOkText = await previewOk.Content.ReadAsStringAsync();
+            H.Check("Preview_SwitchOk", previewOk.StatusCode == HttpStatusCode.OK && current == "Todo" && previewOkText.Contains("\"ok\":true"));
+
+            using var previewMissingComponent = await client.PostAsync("preview", new StringContent("{\"component\":\"Missing\"}", Encoding.UTF8, "application/json"));
+            H.Check("Preview_SwitchNotFound404", previewMissingComponent.StatusCode == HttpStatusCode.NotFound);
+
+            using var missingPath = await client.GetAsync("missing");
+            H.Check("Preview_MissingPath404", missingPath.StatusCode == HttpStatusCode.NotFound);
+
+            using var noAuth = new HttpClient { BaseAddress = client.BaseAddress };
+            using var unauthorized = await noAuth.GetAsync("status");
+            H.Check("Preview_Unauthorized401", unauthorized.StatusCode == HttpStatusCode.Unauthorized);
+
+            using var corsReq = new HttpRequestMessage(HttpMethod.Options, "status");
+            corsReq.Headers.TryAddWithoutValidation("Origin", "vscode-webview://reactor-preview");
+            corsReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
+            using var cors = await client.SendAsync(corsReq);
+            H.Check("Preview_OptionsCors204",
+                cors.StatusCode == HttpStatusCode.NoContent &&
+                cors.Headers.TryGetValues("Access-Control-Allow-Origin", out var values) &&
+                values.Contains("vscode-webview://reactor-preview"));
+
+            using var badOriginReq = new HttpRequestMessage(HttpMethod.Get, "status");
+            badOriginReq.Headers.TryAddWithoutValidation("Origin", "http://localhost.evil.com");
+            badOriginReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
+            using var badOrigin = await client.SendAsync(badOriginReq);
+            H.Check("Preview_BadOrigin403", badOrigin.StatusCode == HttpStatusCode.Forbidden);
+
+            using var badHostReq = new HttpRequestMessage(HttpMethod.Get, "status");
+            badHostReq.Headers.Host = $"example.com:{server.Port}";
+            badHostReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
+            using var badHost = await client.SendAsync(badHostReq);
+            H.Check("Preview_BadHost421", (int)badHost.StatusCode == 421);
+
+            var small = PreviewCaptureServer.ReadCappedBody(new MemoryStream(Encoding.UTF8.GetBytes("abc")), Encoding.UTF8, cap: 4);
+            H.Check("Preview_ReadCappedSmall", small == "abc");
+
+            bool cappedThrows = false;
+            try
+            {
+                _ = PreviewCaptureServer.ReadCappedBody(new MemoryStream(Encoding.UTF8.GetBytes("abcde")), Encoding.UTF8, cap: 4);
+            }
+            catch (InvalidDataException)
+            {
+                cappedThrows = true;
+            }
+            H.Check("Preview_ReadCappedThrows", cappedThrows);
         }
     }
 

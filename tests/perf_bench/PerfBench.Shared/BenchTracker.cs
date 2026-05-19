@@ -160,6 +160,7 @@ public sealed class BenchTracker
         var sb = new StringBuilder();
         sb.AppendLine($"=== {appName} ===");
         sb.AppendLine($"Duration:      {_wallClock.Elapsed.TotalSeconds:F1}s");
+        // <snippet:bench-report-fields>
         sb.AppendLine($"Avg FPS:       {_fpsSamples.Average():F1}");
         sb.AppendLine($"Min FPS:       {_fpsSamples.Min():F1}");
         sb.AppendLine($"Max FPS:       {_fpsSamples.Max():F1}");
@@ -184,6 +185,7 @@ public sealed class BenchTracker
         // Frame jank
         sb.AppendLine($"Longest Block: {_longestFrameBlockMs:F1} ms");
         sb.AppendLine($"Anim Drops:    {_animationDrops}");
+        // </snippet:bench-report-fields>
 
         if (_uiBlockSamples.Count > 0)
             sb.AppendLine($"Avg UI Block:  {_uiBlockSamples.Average():F2} ms");

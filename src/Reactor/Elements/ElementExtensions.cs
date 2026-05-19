@@ -28,7 +28,7 @@ namespace Microsoft.UI.Reactor;
 ///   Button("Click", onClick)
 ///       .Set(b => b.FlowDirection = FlowDirection.RightToLeft)
 /// </summary>
-public static class ElementExtensions
+public static partial class ElementExtensions
 {
     // ════════════════════════════════════════════════════════════════
     //  Layout modifiers (stored inline on Element.Modifiers)
@@ -115,11 +115,22 @@ public static class ElementExtensions
     public static T VAlign<T>(this T el, VerticalAlignment alignment) where T : Element =>
         Modify(el, new ElementModifiers { VerticalAlignment = alignment });
 
+    // Long-form aliases matching the WinUI/WPF FrameworkElement property names.
+    // The agent's first-instinct write is `.HorizontalAlignment(...)`; making
+    // that compile saves a fix-loop without forcing a rename of the short forms.
+    // Parameter types are fully qualified because the method names shadow the
+    // enum names in this scope.
+    public static T HorizontalAlignment<T>(this T el, Microsoft.UI.Xaml.HorizontalAlignment alignment) where T : Element =>
+        Modify(el, new ElementModifiers { HorizontalAlignment = alignment });
+
+    public static T VerticalAlignment<T>(this T el, Microsoft.UI.Xaml.VerticalAlignment alignment) where T : Element =>
+        Modify(el, new ElementModifiers { VerticalAlignment = alignment });
+
     public static T Center<T>(this T el) where T : Element =>
         Modify(el, new ElementModifiers
         {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
+            VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
         });
 
     // ── Theme override ───────────────────────────────────────────────
@@ -558,6 +569,66 @@ public static class ElementExtensions
     public static TextBlockElement FontFamily(this TextBlockElement el, Microsoft.UI.Xaml.Media.FontFamily family) =>
         el with { FontFamily = family };
 
+    /// <summary>Sets the line height in pixels (overrides the proportional WinUI default).</summary>
+    public static TextBlockElement LineHeight(this TextBlockElement el, double height) =>
+        el with { LineHeight = height };
+
+    /// <summary>Maximum number of lines to render before truncating per <c>TextTrimming</c>. <c>0</c> = no limit.</summary>
+    public static TextBlockElement MaxLines(this TextBlockElement el, int maxLines) =>
+        el with { MaxLines = maxLines };
+
+    /// <summary>Extra spacing between characters, in units of 1/1000em.</summary>
+    public static TextBlockElement CharacterSpacing(this TextBlockElement el, int spacing) =>
+        el with { CharacterSpacing = spacing };
+
+    /// <summary>Underline / strikethrough decorations. Combine with bitwise OR.</summary>
+    public static TextBlockElement TextDecorations(this TextBlockElement el, global::Windows.UI.Text.TextDecorations decorations) =>
+        el with { TextDecorations = decorations };
+
+    // ── RichTextBlock sugar ────────────────────────────────────────────
+
+    /// <summary>Maximum number of lines before trimming. <c>0</c> = no limit.</summary>
+    public static RichTextBlockElement MaxLines(this RichTextBlockElement el, int maxLines) =>
+        el with { MaxLines = maxLines };
+
+    /// <summary>Line height in pixels (overrides the WinUI proportional default).</summary>
+    public static RichTextBlockElement LineHeight(this RichTextBlockElement el, double height) =>
+        el with { LineHeight = height };
+
+    /// <summary>Horizontal alignment of text within the block.</summary>
+    public static RichTextBlockElement TextAlignment(this RichTextBlockElement el, TextAlignment alignment) =>
+        el with { TextAlignment = alignment };
+
+    /// <summary>How overflowing text is truncated.</summary>
+    public static RichTextBlockElement TextTrimming(this RichTextBlockElement el, TextTrimming trimming) =>
+        el with { TextTrimming = trimming };
+
+    /// <summary>Extra spacing between characters, in units of 1/1000em.</summary>
+    public static RichTextBlockElement CharacterSpacing(this RichTextBlockElement el, int spacing) =>
+        el with { CharacterSpacing = spacing };
+
+    // ── RichEditBox sugar ───────────────────────────────────────────────
+
+    /// <summary>Enable or disable built-in spell-check.</summary>
+    public static RichEditBoxElement IsSpellCheckEnabled(this RichEditBoxElement el, bool enabled = true) =>
+        el with { IsSpellCheckEnabled = enabled };
+
+    /// <summary>Maximum number of characters allowed. <c>0</c> = no limit.</summary>
+    public static RichEditBoxElement MaxLength(this RichEditBoxElement el, int maxLength) =>
+        el with { MaxLength = maxLength };
+
+    /// <summary>How text wraps within the editor.</summary>
+    public static RichEditBoxElement TextWrapping(this RichEditBoxElement el, TextWrapping wrapping = Microsoft.UI.Xaml.TextWrapping.Wrap) =>
+        el with { TextWrapping = wrapping };
+
+    /// <summary>Whether Enter inserts a newline (vs committing input).</summary>
+    public static RichEditBoxElement AcceptsReturn(this RichEditBoxElement el, bool accepts = true) =>
+        el with { AcceptsReturn = accepts };
+
+    /// <summary>Brush used to render the selection highlight.</summary>
+    public static RichEditBoxElement SelectionHighlightColor(this RichEditBoxElement el, Microsoft.UI.Xaml.Media.SolidColorBrush brush) =>
+        el with { SelectionHighlightColor = brush };
+
     // ── TextField sugar ────────────────────────────────────────────────
 
     public static TextFieldElement ReadOnly(this TextFieldElement el, bool readOnly = true) =>
@@ -569,6 +640,26 @@ public static class ElementExtensions
     public static TextFieldElement TextWrapping(this TextFieldElement el, TextWrapping wrapping = Microsoft.UI.Xaml.TextWrapping.Wrap) =>
         el with { TextWrapping = wrapping };
 
+    /// <summary>Maximum number of characters allowed in the box. Use <c>0</c> for no limit.</summary>
+    public static TextFieldElement MaxLength(this TextFieldElement el, int maxLength) =>
+        el with { MaxLength = maxLength };
+
+    /// <summary>Enable or disable built-in spell-check.</summary>
+    public static TextFieldElement IsSpellCheckEnabled(this TextFieldElement el, bool enabled = true) =>
+        el with { IsSpellCheckEnabled = enabled };
+
+    /// <summary>Forces input to upper/lower-case as the user types.</summary>
+    public static TextFieldElement CharacterCasing(this TextFieldElement el, CharacterCasing casing) =>
+        el with { CharacterCasing = casing };
+
+    /// <summary>Sets horizontal text alignment within the box.</summary>
+    public static TextFieldElement TextAlignment(this TextFieldElement el, TextAlignment alignment) =>
+        el with { TextAlignment = alignment };
+
+    /// <summary>Sets the help/description text rendered below the box.</summary>
+    public static TextFieldElement Description(this TextFieldElement el, string description) =>
+        el with { Description = description };
+
     // ── Path sugar ─────────────────────────────────────────────────────
 
     public static PathElement StrokeDashArray(this PathElement el, params double[] dashes)
@@ -577,6 +668,78 @@ public static class ElementExtensions
         foreach (var d in dashes) dc.Add(d);
         return el with { StrokeDashArray = dc };
     }
+
+    /// <summary>Cap rendered at the start of an open stroke.</summary>
+    public static PathElement StrokeStartLineCap(this PathElement el, PenLineCap cap) =>
+        el with { StrokeStartLineCap = cap };
+
+    /// <summary>Cap rendered at the end of an open stroke.</summary>
+    public static PathElement StrokeEndLineCap(this PathElement el, PenLineCap cap) =>
+        el with { StrokeEndLineCap = cap };
+
+    /// <summary>Join style between two connected stroke segments.</summary>
+    public static PathElement StrokeLineJoin(this PathElement el, PenLineJoin join) =>
+        el with { StrokeLineJoin = join };
+
+    /// <summary>Maximum extent of a miter join relative to half the stroke thickness.</summary>
+    public static PathElement StrokeMiterLimit(this PathElement el, double limit) =>
+        el with { StrokeMiterLimit = limit };
+
+    /// <summary>Cap rendered on dashes when <c>StrokeDashArray</c> is set.</summary>
+    public static PathElement StrokeDashCap(this PathElement el, PenLineCap cap) =>
+        el with { StrokeDashCap = cap };
+
+    /// <summary>Distance into the dash pattern at which to begin drawing.</summary>
+    public static PathElement StrokeDashOffset(this PathElement el, double offset) =>
+        el with { StrokeDashOffset = offset };
+
+    /// <summary>How interior regions are determined for fills.</summary>
+    public static PathElement FillRule(this PathElement el, FillRule rule) =>
+        el with { FillRule = rule };
+
+    // ── Image extras (spec §10) ─────────────────────────────────────
+
+    /// <summary>Nine-grid (slice) values for resolution-independent corner stretching.</summary>
+    public static ImageElement NineGrid(this ImageElement el, Thickness nineGrid) =>
+        el with { NineGrid = nineGrid };
+
+    // ── PipsPager extras (spec §12) ─────────────────────────────────
+
+    /// <summary>Whether the selected index wraps around the ends.</summary>
+    public static PipsPagerElement WrapMode(this PipsPagerElement el, PipsPagerWrapMode mode) =>
+        el with { WrapMode = mode };
+
+    /// <summary>Maximum number of visible pips.</summary>
+    public static PipsPagerElement MaxVisiblePips(this PipsPagerElement el, int max) =>
+        el with { MaxVisiblePips = max };
+
+    /// <summary>When the previous button shows.</summary>
+    public static PipsPagerElement PreviousButtonVisibility(this PipsPagerElement el, PipsPagerButtonVisibility visibility) =>
+        el with { PreviousButtonVisibility = visibility };
+
+    /// <summary>When the next button shows.</summary>
+    public static PipsPagerElement NextButtonVisibility(this PipsPagerElement el, PipsPagerButtonVisibility visibility) =>
+        el with { NextButtonVisibility = visibility };
+
+    // ── RefreshContainer extras (spec §12) ──────────────────────────
+
+    /// <summary>Direction the user pulls to trigger refresh.</summary>
+    public static RefreshContainerElement PullDirection(this RefreshContainerElement el, RefreshPullDirection direction) =>
+        el with { PullDirection = direction };
+
+    // ── ParallaxView extras (spec §12) ──────────────────────────────
+
+    /// <summary>Source UIElement that drives the parallax (typically a ScrollViewer / ListView).</summary>
+    public static ParallaxViewElement Source(this ParallaxViewElement el, UIElement source) =>
+        el with { Source = source };
+
+    /// <summary>Vertical-axis source offset (in pixels) at which parallax begins.</summary>
+    public static ParallaxViewElement VerticalSourceStartOffset(this ParallaxViewElement el, double offset) =>
+        el with { VerticalSourceStartOffset = offset };
+
+    /// <summary>Vertical-axis source offset (in pixels) at which parallax ends.</summary>
+    public static ParallaxViewElement VerticalSourceEndOffset(this ParallaxViewElement el, double offset) =>
+        el with { VerticalSourceEndOffset = offset };
 
     // ── IsEnabled (on Control — works on buttons, inputs, etc.) ────
 
@@ -708,6 +871,16 @@ public static class ElementExtensions
     public static FlexElement FlexPadding(this FlexElement el, double left, double top, double right, double bottom) =>
         el with { FlexPadding = new Thickness(left, top, right, bottom) };
 
+    // ── HyperlinkButton sugar ───────────────────────────────────────
+
+    /// <summary>
+    /// Sets the navigation target for the hyperlink. Pairs naturally with
+    /// the <c>HyperlinkButton(Command)</c> factory when a command-driven
+    /// hyperlink also needs an external URI.
+    /// </summary>
+    public static HyperlinkButtonElement NavigateUri(this HyperlinkButtonElement el, Uri uri) =>
+        el with { NavigateUri = uri };
+
     // ── Stack sugar ─────────────────────────────────────────────────
 
     public static StackElement Spacing(this StackElement el, double spacing) =>
@@ -737,6 +910,22 @@ public static class ElementExtensions
     public static NumberBoxElement SpinButtons(this NumberBoxElement el, NumberBoxSpinButtonPlacementMode placement = NumberBoxSpinButtonPlacementMode.Inline) =>
         el with { SpinButtonPlacement = placement };
 
+    /// <summary>Sets a custom number formatter (currency, percent, scientific, etc.).</summary>
+    public static NumberBoxElement NumberFormatter(this NumberBoxElement el, global::Windows.Globalization.NumberFormatting.INumberFormatter2 formatter) =>
+        el with { NumberFormatter = formatter };
+
+    /// <summary>Whether the user can type arithmetic expressions (e.g. <c>2*3+1</c>) that resolve on commit.</summary>
+    public static NumberBoxElement AcceptsExpression(this NumberBoxElement el, bool accepts = true) =>
+        el with { AcceptsExpression = accepts };
+
+    /// <summary>Controls how invalid input is handled on commit.</summary>
+    public static NumberBoxElement ValidationMode(this NumberBoxElement el, NumberBoxValidationMode mode) =>
+        el with { ValidationMode = mode };
+
+    /// <summary>Sets the help/description text rendered below the box.</summary>
+    public static NumberBoxElement Description(this NumberBoxElement el, string description) =>
+        el with { Description = description };
+
     // ── Slider sugar ────────────────────────────────────────────────
 
     public static SliderElement StepFrequency(this SliderElement el, double step) =>
@@ -745,10 +934,108 @@ public static class ElementExtensions
     public static SliderElement Header(this SliderElement el, string header) =>
         el with { Header = header };
 
+    /// <summary>Sets the slider orientation (horizontal or vertical).</summary>
+    public static SliderElement Orientation(this SliderElement el, Orientation orientation) =>
+        el with { Orientation = orientation };
+
+    /// <summary>Sets the interval between tick marks. Pair with <c>.TickPlacement</c> to make ticks visible.</summary>
+    public static SliderElement TickFrequency(this SliderElement el, double frequency) =>
+        el with { TickFrequency = frequency };
+
+    /// <summary>Controls where tick marks render relative to the slider track.</summary>
+    public static SliderElement TickPlacement(this SliderElement el, TickPlacement placement) =>
+        el with { TickPlacement = placement };
+
+    /// <summary>Whether the thumb snaps to ticks or step values during drag.</summary>
+    public static SliderElement SnapsTo(this SliderElement el, SliderSnapsTo snapsTo) =>
+        el with { SnapsTo = snapsTo };
+
+    /// <summary>Whether the floating value tooltip appears while dragging the thumb.</summary>
+    public static SliderElement ThumbToolTip(this SliderElement el, bool enabled = true) =>
+        el with { IsThumbToolTipEnabled = enabled };
+
     // ── ToggleSwitch sugar ──────────────────────────────────────────
 
     public static ToggleSwitchElement Header(this ToggleSwitchElement el, string header) =>
         el with { Header = header };
+
+    // ── ColorPicker sugar ───────────────────────────────────────────
+
+    /// <summary>Whether the alpha (transparency) channel is editable.</summary>
+    public static ColorPickerElement AlphaEnabled(this ColorPickerElement el, bool enabled = true) =>
+        el with { IsAlphaEnabled = enabled };
+
+    /// <summary>Whether the "More" disclosure button is shown to expand additional inputs.</summary>
+    public static ColorPickerElement MoreButtonVisible(this ColorPickerElement el, bool visible = true) =>
+        el with { IsMoreButtonVisible = visible };
+
+    /// <summary>Whether the 2D hue/saturation spectrum is shown.</summary>
+    public static ColorPickerElement ColorSpectrumVisible(this ColorPickerElement el, bool visible = true) =>
+        el with { IsColorSpectrumVisible = visible };
+
+    /// <summary>Whether the lightness/value slider is shown.</summary>
+    public static ColorPickerElement ColorSliderVisible(this ColorPickerElement el, bool visible) =>
+        el with { IsColorSliderVisible = visible };
+
+    /// <summary>Whether the per-channel numeric text inputs (RGB / HSV) are shown.</summary>
+    public static ColorPickerElement ColorChannelTextInputVisible(this ColorPickerElement el, bool visible) =>
+        el with { IsColorChannelTextInputVisible = visible };
+
+    /// <summary>Whether the hex code text input is shown.</summary>
+    public static ColorPickerElement HexInputVisible(this ColorPickerElement el, bool visible) =>
+        el with { IsHexInputVisible = visible };
+
+    // ── ToggleButton sugar ──────────────────────────────────────────
+
+    /// <summary>Enable the three-state cycle. Pair with <c>.CheckedState(...)</c> and the <c>.CheckedStateChanged(...)</c> event fluent.</summary>
+    public static ToggleButtonElement IsThreeState(this ToggleButtonElement el, bool isThreeState = true) =>
+        el with { IsThreeState = isThreeState };
+
+    /// <summary>Sets the three-state value (<c>null</c> = indeterminate). Active only when <c>IsThreeState</c> is true.</summary>
+    public static ToggleButtonElement CheckedState(this ToggleButtonElement el, bool? state) =>
+        el with { CheckedState = state, IsThreeState = true };
+
+    // ── PasswordBox sugar ───────────────────────────────────────────
+
+    /// <summary>Maximum number of characters allowed. <c>0</c> = no limit.</summary>
+    public static PasswordBoxElement MaxLength(this PasswordBoxElement el, int maxLength) =>
+        el with { MaxLength = maxLength };
+
+    /// <summary>Optional label rendered above the box.</summary>
+    public static PasswordBoxElement Header(this PasswordBoxElement el, string header) =>
+        el with { Header = header };
+
+    /// <summary>Controls how the reveal button behaves.</summary>
+    public static PasswordBoxElement PasswordRevealMode(this PasswordBoxElement el, PasswordRevealMode mode) =>
+        el with { PasswordRevealMode = mode };
+
+    /// <summary>Character displayed in place of the entered password.</summary>
+    public static PasswordBoxElement PasswordChar(this PasswordBoxElement el, string passwordChar) =>
+        el with { PasswordChar = passwordChar };
+
+    // ── AutoSuggestBox sugar ────────────────────────────────────────
+
+    /// <summary>Optional label rendered above the box.</summary>
+    public static AutoSuggestBoxElement Header(this AutoSuggestBoxElement el, string header) =>
+        el with { Header = header };
+
+    /// <summary>Icon rendered in the trailing query slot.</summary>
+    public static AutoSuggestBoxElement QueryIcon(this AutoSuggestBoxElement el, IconData icon) =>
+        el with { QueryIcon = icon };
+
+    /// <summary>Programmatically open or close the suggestion list.</summary>
+    public static AutoSuggestBoxElement IsSuggestionListOpen(this AutoSuggestBoxElement el, bool open = true) =>
+        el with { IsSuggestionListOpen = open };
+
+    // ── ComboBox additional sugar (spec §3.7) ───────────────────────
+
+    /// <summary>Maximum pixel height of the open drop-down.</summary>
+    public static ComboBoxElement MaxDropDownHeight(this ComboBoxElement el, double height) =>
+        el with { MaxDropDownHeight = height };
+
+    /// <summary>Help text rendered below the box.</summary>
+    public static ComboBoxElement Description(this ComboBoxElement el, string description) =>
+        el with { Description = description };
 
     // ── RatingControl sugar ─────────────────────────────────────────
 
@@ -758,6 +1045,94 @@ public static class ElementExtensions
     public static RatingControlElement ReadOnly(this RatingControlElement el, bool readOnly = true) =>
         el with { IsReadOnly = readOnly };
 
+    /// <summary>Promotes the existing <c>Caption</c> init property to a fluent.</summary>
+    public static RatingControlElement Caption(this RatingControlElement el, string caption) =>
+        el with { Caption = caption };
+
+    /// <summary>Star value shown when the rating is unset. Use a negative number to disable the placeholder.</summary>
+    public static RatingControlElement PlaceholderValue(this RatingControlElement el, double value) =>
+        el with { PlaceholderValue = value };
+
+    /// <summary>Integer rating to assume when the user first interacts.</summary>
+    public static RatingControlElement InitialSetValue(this RatingControlElement el, int value) =>
+        el with { InitialSetValue = value };
+
+    // ── CalendarDatePicker sugar (spec §4.1) ────────────────────────
+
+    /// <summary>Display format string for the picker's text. See WinUI's <c>DateFormat</c> reference.</summary>
+    public static CalendarDatePickerElement DateFormat(this CalendarDatePickerElement el, string format) =>
+        el with { DateFormat = format };
+
+    /// <summary>Highlight today's date in the popup.</summary>
+    public static CalendarDatePickerElement IsTodayHighlighted(this CalendarDatePickerElement el, bool highlighted = true) =>
+        el with { IsTodayHighlighted = highlighted };
+
+    /// <summary>Programmatically open or close the calendar popup.</summary>
+    public static CalendarDatePickerElement IsCalendarOpen(this CalendarDatePickerElement el, bool open = true) =>
+        el with { IsCalendarOpen = open };
+
+    /// <summary>Show month/year group label headers in the popup.</summary>
+    public static CalendarDatePickerElement IsGroupLabelVisible(this CalendarDatePickerElement el, bool visible = true) =>
+        el with { IsGroupLabelVisible = visible };
+
+    // ── DatePicker sugar (spec §4.1) ────────────────────────────────
+
+    /// <summary>Display format string for the day column.</summary>
+    public static DatePickerElement DayFormat(this DatePickerElement el, string format) =>
+        el with { DayFormat = format };
+
+    /// <summary>Display format string for the month column.</summary>
+    public static DatePickerElement MonthFormat(this DatePickerElement el, string format) =>
+        el with { MonthFormat = format };
+
+    /// <summary>Display format string for the year column.</summary>
+    public static DatePickerElement YearFormat(this DatePickerElement el, string format) =>
+        el with { YearFormat = format };
+
+    /// <summary>Layout direction of the picker.</summary>
+    public static DatePickerElement Orientation(this DatePickerElement el, Orientation orientation) =>
+        el with { Orientation = orientation };
+
+    // ── CalendarView sugar (spec §4.1) ──────────────────────────────
+
+    /// <summary>Earliest selectable date.</summary>
+    public static CalendarViewElement MinDate(this CalendarViewElement el, DateTimeOffset date) =>
+        el with { MinDate = date };
+
+    /// <summary>Latest selectable date.</summary>
+    public static CalendarViewElement MaxDate(this CalendarViewElement el, DateTimeOffset date) =>
+        el with { MaxDate = date };
+
+    /// <summary>Day of the week that starts each row.</summary>
+    public static CalendarViewElement FirstDayOfWeek(this CalendarViewElement el, global::Windows.Globalization.DayOfWeek day) =>
+        el with { FirstDayOfWeek = day };
+
+    /// <summary>How many week rows to display in month mode (2–8).</summary>
+    public static CalendarViewElement NumberOfWeeksInView(this CalendarViewElement el, int weeks) =>
+        el with { NumberOfWeeksInView = weeks };
+
+    /// <summary>Initial display mode (Month / Year / Decade).</summary>
+    public static CalendarViewElement DisplayMode(this CalendarViewElement el, CalendarViewDisplayMode mode) =>
+        el with { DisplayMode = mode };
+
+    // ── ColorPicker (spec §3.11 spectrum + bounds) ──────────────────
+
+    /// <summary>Shape of the 2D color spectrum (Box or Ring).</summary>
+    public static ColorPickerElement ColorSpectrumShape(this ColorPickerElement el, ColorSpectrumShape shape) =>
+        el with { ColorSpectrumShape = shape };
+
+    /// <summary>Inclusive hue bounds (0–359).</summary>
+    public static ColorPickerElement HueRange(this ColorPickerElement el, int minHue, int maxHue) =>
+        el with { MinHue = minHue, MaxHue = maxHue };
+
+    /// <summary>Inclusive saturation bounds (0–100).</summary>
+    public static ColorPickerElement SaturationRange(this ColorPickerElement el, int minSaturation, int maxSaturation) =>
+        el with { MinSaturation = minSaturation, MaxSaturation = maxSaturation };
+
+    /// <summary>Inclusive value/brightness bounds (0–100).</summary>
+    public static ColorPickerElement ValueRange(this ColorPickerElement el, int minValue, int maxValue) =>
+        el with { MinValue = minValue, MaxValue = maxValue };
+
     // ── InfoBar sugar ───────────────────────────────────────────────
 
     public static InfoBarElement Severity(this InfoBarElement el, InfoBarSeverity severity) =>
@@ -765,6 +1140,131 @@ public static class ElementExtensions
 
     public static InfoBarElement Closable(this InfoBarElement el, bool closable = true) =>
         el with { IsClosable = closable };
+
+    /// <summary>Custom icon source (overrides the severity-default icon).</summary>
+    public static InfoBarElement IconSource(this InfoBarElement el, IconData icon) =>
+        el with { IconSource = icon };
+
+    /// <summary>Custom rich content rendered below the message (overload to the message string).</summary>
+    public static InfoBarElement Content(this InfoBarElement el, Element content) =>
+        el with { Content = content };
+
+    // ── Expander extra sugar (HeaderTemplate, ContentTransitions) ───
+
+    /// <summary>
+    /// Sets an Element header (overrides the string <c>Header</c> from the
+    /// factory). Mirrors WinUI's <c>HeaderTemplate</c> slot.
+    /// </summary>
+    public static ExpanderElement HeaderTemplate(this ExpanderElement el, Element header) =>
+        el with { HeaderTemplate = header };
+
+    /// <summary>Custom <c>TransitionCollection</c> applied to the expanding content area.</summary>
+    public static ExpanderElement ContentTransitions(this ExpanderElement el, Microsoft.UI.Xaml.Media.Animation.TransitionCollection transitions) =>
+        el with { ContentTransitions = transitions };
+
+    // ── SplitView extra sugar (PaneBackground, LightDismissOverlayMode) ──
+
+    /// <summary>Pane background brush.</summary>
+    public static SplitViewElement PaneBackground(this SplitViewElement el, Brush brush) =>
+        el with { PaneBackground = brush };
+
+    /// <summary>
+    /// Pane background bound to a WinUI theme resource (light/dark adaptive).
+    /// Resolves via the same ThemeBindings pipeline that powers
+    /// <c>Background(ThemeRef)</c>.
+    /// </summary>
+    public static SplitViewElement PaneBackground(this SplitViewElement el, ThemeRef theme) =>
+        ModifyTheme(el, "PaneBackground", theme);
+
+    /// <summary>How the light-dismiss overlay reacts to taps in Overlay mode.</summary>
+    public static SplitViewElement LightDismissOverlayMode(this SplitViewElement el, LightDismissOverlayMode mode) =>
+        el with { LightDismissOverlayMode = mode };
+
+    // ── ListView / GridView (spec §8 — incremental loading + container style) ──
+
+    /// <summary>Style applied to each generated <c>ListViewItem</c> container.</summary>
+    public static ListViewElement ItemContainerStyle(this ListViewElement el, Style style) =>
+        el with { ItemContainerStyle = style };
+
+    /// <summary>Controls when incremental data sources fetch the next page.</summary>
+    public static ListViewElement IncrementalLoadingTrigger(this ListViewElement el, IncrementalLoadingTrigger trigger) =>
+        el with { IncrementalLoadingTrigger = trigger };
+
+    /// <summary>Style applied to each generated <c>GridViewItem</c> container.</summary>
+    public static GridViewElement ItemContainerStyle(this GridViewElement el, Style style) =>
+        el with { ItemContainerStyle = style };
+
+    /// <summary>Controls when incremental data sources fetch the next page.</summary>
+    public static GridViewElement IncrementalLoadingTrigger(this GridViewElement el, IncrementalLoadingTrigger trigger) =>
+        el with { IncrementalLoadingTrigger = trigger };
+
+    // ── ContentDialog (spec §9 button-enabled + opening lifecycle) ──
+
+    /// <summary>Enables/disables the primary button while the dialog is open.</summary>
+    public static ContentDialogElement IsPrimaryButtonEnabled(this ContentDialogElement el, bool enabled = true) =>
+        el with { IsPrimaryButtonEnabled = enabled };
+
+    /// <summary>Enables/disables the secondary button while the dialog is open.</summary>
+    public static ContentDialogElement IsSecondaryButtonEnabled(this ContentDialogElement el, bool enabled = true) =>
+        el with { IsSecondaryButtonEnabled = enabled };
+
+    // ── Flyout (spec §9 show-mode + animations + pass-through) ──────
+
+    /// <summary>How the flyout reacts to outside clicks (Auto / Standard / Transient / TransientWithDismissOnPointerMoveAway).</summary>
+    public static FlyoutElement ShowMode(this FlyoutElement el, FlyoutShowMode mode) =>
+        el with { ShowMode = mode };
+
+    /// <summary>Whether the flyout animates on open/close.</summary>
+    public static FlyoutElement AreOpenCloseAnimationsEnabled(this FlyoutElement el, bool enabled = true) =>
+        el with { AreOpenCloseAnimationsEnabled = enabled };
+
+    /// <summary>Element whose input passes through the light-dismiss overlay.</summary>
+    public static FlyoutElement OverlayInputPassThroughElement(this FlyoutElement el, Element passThrough) =>
+        el with { OverlayInputPassThroughElement = passThrough };
+
+    // ── TeachingTip (spec §9 icon + hero + placement) ───────────────
+
+    /// <summary>Custom icon source rendered in the tip's leading slot.</summary>
+    public static TeachingTipElement IconSource(this TeachingTipElement el, IconData icon) =>
+        el with { IconSource = icon };
+
+    /// <summary>Optional "hero" Element (image / banner) rendered above the title.</summary>
+    public static TeachingTipElement HeroContent(this TeachingTipElement el, Element hero) =>
+        el with { HeroContent = hero };
+
+    /// <summary>Extra margin around the tip when placed relative to its target.</summary>
+    public static TeachingTipElement PlacementMargin(this TeachingTipElement el, Thickness margin) =>
+        el with { PlacementMargin = margin };
+
+    /// <summary>Preferred placement edge.</summary>
+    public static TeachingTipElement PreferredPlacement(this TeachingTipElement el, TeachingTipPlacementMode placement) =>
+        el with { PreferredPlacement = placement };
+
+    // ── WrapGrid attached-prop fluents ──────────────────────────────
+
+    /// <summary>
+    /// Sets <c>VariableSizedWrapGrid.ColumnSpan</c> on this child. Only
+    /// meaningful when the element is a child of a <see cref="WrapGridElement"/>.
+    /// </summary>
+    public static T WrapGridColumnSpan<T>(this T el, int columnSpan) where T : Element
+    {
+        var existing = el.GetAttached<WrapGridAttached>();
+        return (T)el.SetAttached(new WrapGridAttached(
+            RowSpan: existing?.RowSpan ?? 1,
+            ColumnSpan: columnSpan));
+    }
+
+    /// <summary>
+    /// Sets <c>VariableSizedWrapGrid.RowSpan</c> on this child. Only meaningful
+    /// when the element is a child of a <see cref="WrapGridElement"/>.
+    /// </summary>
+    public static T WrapGridRowSpan<T>(this T el, int rowSpan) where T : Element
+    {
+        var existing = el.GetAttached<WrapGridAttached>();
+        return (T)el.SetAttached(new WrapGridAttached(
+            RowSpan: rowSpan,
+            ColumnSpan: existing?.ColumnSpan ?? 1));
+    }
 
     // ── NavigationView sugar ────────────────────────────────────────
 
@@ -774,15 +1274,39 @@ public static class ElementExtensions
     public static NavigationViewElement PaneTitle(this NavigationViewElement el, string title) =>
         el with { PaneTitle = title };
 
+    /// <summary>Sets the AutoSuggestBox rendered at the top of the pane.</summary>
+    public static NavigationViewElement AutoSuggestBox(this NavigationViewElement el, AutoSuggestBoxElement box) =>
+        el with { AutoSuggestBox = box };
+
+    /// <summary>Sets the element rendered at the bottom of the pane (below menu items).</summary>
+    public static NavigationViewElement PaneFooter(this NavigationViewElement el, Element footer) =>
+        el with { PaneFooter = footer };
+
+    /// <summary>Sets the custom element rendered between the AutoSuggestBox and the menu items.</summary>
+    public static NavigationViewElement PaneCustomContent(this NavigationViewElement el, Element content) =>
+        el with { PaneCustomContent = content };
+
+    /// <summary>Sets the width of the pane when expanded.</summary>
+    public static NavigationViewElement OpenPaneLength(this NavigationViewElement el, double length) =>
+        el with { OpenPaneLength = length };
+
+    /// <summary>Sets the window width below which the pane collapses to compact mode.</summary>
+    public static NavigationViewElement CompactModeThresholdWidth(this NavigationViewElement el, double width) =>
+        el with { CompactModeThresholdWidth = width };
+
+    /// <summary>Sets the window width at which the pane auto-expands.</summary>
+    public static NavigationViewElement ExpandedModeThresholdWidth(this NavigationViewElement el, double width) =>
+        el with { ExpandedModeThresholdWidth = width };
+
     /// <summary>
     /// Auto-syncs this NavigationView with a NavigationHandle: sets <c>SelectedTag</c>
-    /// from the current route, wires <c>OnSelectionChanged</c> to navigate,
+    /// from the current route, wires <c>OnSelectedTagChanged</c> to navigate,
     /// <c>OnBackRequested</c> to <c>GoBack</c>, and <c>IsBackEnabled</c> to <c>CanGoBack</c>.
     /// </summary>
     /// <param name="el">The NavigationView element to configure.</param>
     /// <param name="nav">The navigation handle obtained from <c>UseNavigation</c>.</param>
     /// <param name="routeToTag">Maps a route to its NavigationViewItem tag. Return null for routes without a corresponding menu item.</param>
-    /// <param name="tagToRoute">Maps a NavigationViewItem tag back to a route for <c>OnSelectionChanged</c>.</param>
+    /// <param name="tagToRoute">Maps a NavigationViewItem tag back to a route for <c>OnSelectedTagChanged</c>.</param>
     public static NavigationViewElement WithNavigation<TRoute>(
         this NavigationViewElement el,
         Navigation.NavigationHandle<TRoute> nav,
@@ -792,7 +1316,7 @@ public static class ElementExtensions
     {
         SelectedTag = routeToTag(nav.CurrentRoute),
         IsBackEnabled = nav.CanGoBack,
-        OnSelectionChanged = tag =>
+        OnSelectedTagChanged = tag =>
         {
             if (tag is not null)
             {
@@ -808,6 +1332,34 @@ public static class ElementExtensions
 
     public static TitleBarElement Subtitle(this TitleBarElement el, string subtitle) =>
         el with { Subtitle = subtitle };
+
+    /// <summary>Shows or hides the back button on the title bar.</summary>
+    public static TitleBarElement BackButtonVisible(this TitleBarElement el, bool visible) =>
+        el with { IsBackButtonVisible = visible };
+
+    /// <summary>Enables or disables the back button (when visible).</summary>
+    public static TitleBarElement BackButtonEnabled(this TitleBarElement el, bool enabled) =>
+        el with { IsBackButtonEnabled = enabled };
+
+    /// <summary>Shows or hides the pane toggle (hamburger) button on the title bar.</summary>
+    public static TitleBarElement PaneToggleButtonVisible(this TitleBarElement el, bool visible) =>
+        el with { IsPaneToggleButtonVisible = visible };
+
+    /// <summary>Sets the centered content slot of the title bar (typically a search box).</summary>
+    public static TitleBarElement Content(this TitleBarElement el, Element content) =>
+        el with { Content = content };
+
+    /// <summary>Sets the trailing-edge content slot (typically a profile / settings element).</summary>
+    public static TitleBarElement RightHeader(this TitleBarElement el, Element rightHeader) =>
+        el with { RightHeader = rightHeader };
+
+    /// <summary>Sets the icon shown in the leading slot. Pass a <see cref="SymbolIconData"/>, <see cref="FontIconData"/>, <see cref="ImageIconData"/>, or <see cref="BitmapIconData"/>.</summary>
+    public static TitleBarElement Icon(this TitleBarElement el, IconData icon) =>
+        el with { Icon = icon };
+
+    /// <summary>Convenience overload — sets the icon to a bundled image / .ico via a Uri string (e.g. <c>"ms-appx:///Assets/AppIcon.ico"</c>).</summary>
+    public static TitleBarElement Icon(this TitleBarElement el, string imageUri) =>
+        el with { Icon = new ImageIconData(new Uri(imageUri)) };
 
     /// <summary>
     /// Auto-syncs this TitleBar's back button with a NavigationHandle: sets
@@ -868,10 +1420,57 @@ public static class ElementExtensions
     public static TabViewElement ShowAddButton(this TabViewElement el, bool visible = true) =>
         el with { IsAddTabButtonVisible = visible };
 
+    /// <summary>Controls how tab widths are sized (Equal, SizeToContent, Compact).</summary>
+    public static TabViewElement TabWidthMode(this TabViewElement el, TabViewWidthMode mode) =>
+        el with { TabWidthMode = mode };
+
+    /// <summary>Controls when the per-tab close button is visible (Auto, OnPointerOver, Always).</summary>
+    public static TabViewElement CloseButtonOverlayMode(this TabViewElement el, TabViewCloseButtonOverlayMode mode) =>
+        el with { CloseButtonOverlayMode = mode };
+
+    /// <summary>Whether tabs can be dragged out (e.g. to detach into a new window).</summary>
+    public static TabViewElement CanDragTabs(this TabViewElement el, bool canDrag = true) =>
+        el with { CanDragTabs = canDrag };
+
+    /// <summary>Whether tabs can be reordered within the strip via drag.</summary>
+    public static TabViewElement CanReorderTabs(this TabViewElement el, bool canReorder = true) =>
+        el with { CanReorderTabs = canReorder };
+
+    /// <summary>Whether tabs from another TabView can be dropped onto this one.</summary>
+    public static TabViewElement AllowDropTabs(this TabViewElement el, bool allow = true) =>
+        el with { AllowDropTabs = allow };
+
+    /// <summary>Sets the element rendered at the leading edge of the tab strip.</summary>
+    public static TabViewElement TabStripHeader(this TabViewElement el, Element header) =>
+        el with { TabStripHeader = header };
+
+    /// <summary>Sets the element rendered at the trailing edge of the tab strip.</summary>
+    public static TabViewElement TabStripFooter(this TabViewElement el, Element footer) =>
+        el with { TabStripFooter = footer };
+
     // ── Key ─────────────────────────────────────────────────────────
 
     public static T WithKey<T>(this T el, string key) where T : Element =>
         el with { Key = key };
+
+    /// <summary>
+    /// Assigns the stable identity from an <see cref="IReactorKeyed"/> data
+    /// item directly to a hand-built element — equivalent to
+    /// <c>el.WithKey(item.Key)</c> but lets call sites avoid hoisting the
+    /// item to read <c>.Key</c>. (spec 042 §5)
+    /// </summary>
+    /// <remarks>
+    /// Typical use: <c>FlexColumn(items.Select(item =&gt; TextBlock(item.Name).WithKey(item)))</c>.
+    /// The <c>TKey</c> parameter is independent of the element type so the
+    /// usual fluent inference (return the element type) is preserved.
+    /// </remarks>
+    public static T WithKey<T, TKey>(this T el, TKey item)
+        where T : Element
+        where TKey : IReactorKeyed
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return el with { Key = item.Key };
+    }
 
     // ════════════════════════════════════════════════════════════════
     //  Set() — strongly-typed native property access per element type
@@ -1006,6 +1605,12 @@ public static class ElementExtensions
 
     public static ViewboxElement Set(this ViewboxElement el, Action<WinUI.Viewbox> configure) =>
         el with { Setters = [.. el.Setters, configure] };
+
+    public static ViewboxElement Stretch(this ViewboxElement el, Stretch stretch) =>
+        el with { Stretch = stretch };
+
+    public static ViewboxElement StretchDirection(this ViewboxElement el, StretchDirection direction) =>
+        el with { StretchDirection = direction };
 
     public static CanvasElement Set(this CanvasElement el, Action<WinUI.Canvas> configure) =>
         el with { Setters = [.. el.Setters, configure] };
@@ -1709,6 +2314,7 @@ public static class ElementExtensions
     //  Internal
     // ════════════════════════════════════════════════════════════════
 
+    // <snippet:modifier-chain>
     private static T Modify<T>(T el, ElementModifiers mods) where T : Element =>
         el with { Modifiers = el.Modifiers is not null ? el.Modifiers.Merge(mods) : mods };
 
@@ -1726,4 +2332,5 @@ public static class ElementExtensions
             : new Dictionary<string, ThemeRef> { [property] = theme };
         return el with { ThemeBindings = bindings };
     }
+    // </snippet:modifier-chain>
 }

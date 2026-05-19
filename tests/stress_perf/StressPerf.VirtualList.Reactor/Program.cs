@@ -24,6 +24,18 @@ class VirtualListCli
     public int Count { get; set; } = 5000;
     public int DurationSeconds { get; set; } = 5;
 
+    /// <summary>
+    /// Spec 042 Phase 6.3 — when true, interleave list edits (insert / remove
+    /// in random positions) with the scroll tween so the keyed-list
+    /// reconciler runs alongside virtualization. Catches future regressions
+    /// in the ItemsRepeater key-indexed factory path that the steady-state
+    /// scroll bench wouldn't see.
+    /// </summary>
+    public bool WithEdits { get; set; }
+
+    /// <summary>Number of edit ops per second when <see cref="WithEdits"/> is on. Default 4.</summary>
+    public int EditsPerSecond { get; set; } = 4;
+
     public static VirtualListCli Parse(string[] args)
     {
         var o = new VirtualListCli();
@@ -34,6 +46,8 @@ class VirtualListCli
                 case "--headless": o.Headless = true; break;
                 case "--count" when i + 1 < args.Length: o.Count = int.Parse(args[++i]); break;
                 case "--duration" when i + 1 < args.Length: o.DurationSeconds = int.Parse(args[++i]); break;
+                case "--with-edits": o.WithEdits = true; break;
+                case "--edits-per-second" when i + 1 < args.Length: o.EditsPerSecond = int.Parse(args[++i]); break;
             }
         }
         return o;
@@ -62,13 +76,13 @@ class VirtualListApp : Component
     public override Element Render()
     {
         var (count, setCount) = UseState(Cli.Count);
+        var (items, setItems) = UseState<ListItemSource.ListItem[]>([]);
 
-        // Generate items deterministically. Cached in a ref so a re-render
-        // for stat updates doesn't realloc the array.
-        var itemsRef = UseRef<(int Count, ListItemSource.ListItem[] Items)>((0, []));
-        if (itemsRef.Current.Count != count)
-            itemsRef.Current = (count, ListItemSource.Generate(count));
-        var items = itemsRef.Current.Items;
+        // Generate items deterministically when the count knob changes.
+        // The edit timer below mutates `items` via setItems so the keyed
+        // diff sees fresh structural deltas.
+        if (items.Length != count)
+            setItems(ListItemSource.Generate(count));
 
         var (fpsLabel, setFpsLabel) = UseState("FPS: --");
         var (p50Label, setP50Label) = UseState("P50: -- ms");
@@ -90,6 +104,24 @@ class VirtualListApp : Component
         var benchStartTicksRef = UseRef<long>(0);
         var benchDurationMsRef = UseRef<double>(Cli.DurationSeconds * 1000.0);
         var benchMaxOffsetRef = UseRef<double>(0);
+
+        // Edit timer state (spec 042 Phase 6.3). Declared up here so the
+        // CompositionTarget.Rendering closure below — which calls
+        // FinishBenchmark(), which uses these refs — captures definitely-
+        // assigned variables.
+        var editTimerRef = UseRef<DispatcherTimer?>(null);
+        var editOpsCountRef = UseRef<int>(0);
+        var editRngRef = UseRef<Random?>(null);
+
+        // Latest-committed items snapshot, refreshed on every render. The
+        // edit timer's closure is created once per StartBenchmark call;
+        // without a ref it would always read the original `items` and
+        // every tick would replace the same prefix instead of growing
+        // the list. Reading through the ref gives the timer the freshest
+        // committed snapshot — same pattern WinUI gets for free by
+        // mutating an OC in place.
+        var itemsRef = UseRef<ListItemSource.ListItem[]>(items);
+        itemsRef.Current = items;
 
         // Hook CompositionTarget.Rendering once. Counts FPS into PerfTracker
         // continuously, drives the scroll tween while a benchmark is active.
@@ -132,6 +164,11 @@ class VirtualListApp : Component
         void FinishBenchmark()
         {
             benchActiveRef.Current = false;
+            // Stop edits before sorting samples so any in-flight tick can't
+            // tail-allocate after we've reported.
+            var t = editTimerRef.Current;
+            if (t is not null) { t.Stop(); editTimerRef.Current = null; }
+
             var samples = frameSamplesRef.Current!;
             if (samples.Count == 0)
             {
@@ -147,9 +184,65 @@ class VirtualListApp : Component
             setP99Label($"P99: {p99:F1} ms");
             setFpsLabel($"FPS: {perfRef.Current!.CurrentFps:F0}");
             setMemLabel($"Mem: {perfRef.Current!.CurrentMemoryMB} MB");
-            setStatus($"done ({samples.Count} frames)");
+            setStatus(Cli.WithEdits
+                ? $"done ({samples.Count} frames, {editOpsCountRef.Current} edits)"
+                : $"done ({samples.Count} frames)");
 
-            WriteReport(samples, count);
+            WriteReport(samples, count, Cli.WithEdits ? editOpsCountRef.Current : 0);
+        }
+
+        void StopEditTimer()
+        {
+            var t = editTimerRef.Current;
+            if (t is null) return;
+            t.Stop();
+            editTimerRef.Current = null;
+        }
+
+        void StartEditTimer()
+        {
+            if (!Cli.WithEdits) return;
+            editOpsCountRef.Current = 0;
+            editRngRef.Current = new Random(1234567);
+            var period = TimeSpan.FromMilliseconds(1000.0 / Math.Max(1, Cli.EditsPerSecond));
+            var t = new DispatcherTimer { Interval = period };
+            t.Tick += (_, _) =>
+            {
+                if (!benchActiveRef.Current) { StopEditTimer(); return; }
+                // Pick: 50% insert at random position, 50% remove at random
+                // position. Keeps the visible viewport's identity churning
+                // without unbounded growth.
+                var rng = editRngRef.Current!;
+                // Read the freshest committed snapshot through the ref —
+                // `items` (the locally-captured array) is bound to the
+                // render that called StartBenchmark and would be stale
+                // every tick after the first. `itemsRef` is refreshed
+                // each render with the just-committed snapshot, so the
+                // bench actually exercises incremental growth instead
+                // of replacing the same prefix forever.
+                ListItemSource.ListItem[] cur = itemsRef.Current!;
+                if (rng.NextDouble() < 0.5 || cur.Length < 100)
+                {
+                    // Insert
+                    int pos = rng.Next(cur.Length + 1);
+                    var inserted = new ListItemSource.ListItem[cur.Length + 1];
+                    Array.Copy(cur, 0, inserted, 0, pos);
+                    inserted[pos] = ListItemSource.GenerateOne(int.MaxValue - editOpsCountRef.Current);
+                    Array.Copy(cur, pos, inserted, pos + 1, cur.Length - pos);
+                    setItems(inserted);
+                }
+                else
+                {
+                    int pos = rng.Next(cur.Length);
+                    var removed = new ListItemSource.ListItem[cur.Length - 1];
+                    Array.Copy(cur, 0, removed, 0, pos);
+                    Array.Copy(cur, pos + 1, removed, pos, cur.Length - pos - 1);
+                    setItems(removed);
+                }
+                editOpsCountRef.Current++;
+            };
+            editTimerRef.Current = t;
+            t.Start();
         }
 
         void StartBenchmark()
@@ -168,7 +261,8 @@ class VirtualListApp : Component
             lastFrameTicksRef.Current = 0;
             benchStartTicksRef.Current = Stopwatch.GetTimestamp();
             benchActiveRef.Current = true;
-            setStatus("running…");
+            setStatus(Cli.WithEdits ? "running… (edits on)" : "running…");
+            StartEditTimer();
         }
 
         // Headless: kick off the benchmark right after first paint, then exit.
@@ -198,6 +292,8 @@ class VirtualListApp : Component
                 Button("1k", () => setCount(1000)).Disabled(count == 1000),
                 Button("5k", () => setCount(5000)).Disabled(count == 5000),
                 Button("10k", () => setCount(10000)).Disabled(count == 10000),
+                Button(Cli.WithEdits ? "Edits: on" : "Edits: off",
+                    () => { Cli.WithEdits = !Cli.WithEdits; }),
                 Button("Run benchmark", StartBenchmark),
                 TextBlock(fpsLabel).VAlign(VerticalAlignment.Center).Width(90),
                 TextBlock(p50Label).VAlign(VerticalAlignment.Center).Width(110),
@@ -271,7 +367,7 @@ class VirtualListApp : Component
         return p;
     }
 
-    private static void WriteReport(List<double> sortedSamples, int count)
+    private static void WriteReport(List<double> sortedSamples, int count, int editOps)
     {
         // sortedSamples is already sorted ascending.
         double p50 = sortedSamples[(int)(sortedSamples.Count * 0.50)];
@@ -280,16 +376,34 @@ class VirtualListApp : Component
         double avg = 0;
         for (int i = 0; i < sortedSamples.Count; i++) avg += sortedSamples[i];
         avg /= sortedSamples.Count;
+        double totalMs = avg * sortedSamples.Count;
+
+        // Force a GC before sampling managed heap so the number reflects
+        // retained state, not transient allocations from the bench window.
+        global::System.GC.Collect();
+        global::System.GC.WaitForPendingFinalizers();
+        global::System.GC.Collect();
+        var p = global::System.Diagnostics.Process.GetCurrentProcess();
+        long workingSetMB = p.WorkingSet64 / (1024 * 1024);
+        long peakWorkingSetMB = p.PeakWorkingSet64 / (1024 * 1024);
+        long privateMB = p.PrivateMemorySize64 / (1024 * 1024);
+        long managedHeapMB = global::System.GC.GetTotalMemory(forceFullCollection: false) / (1024 * 1024);
 
         var sb = new StringBuilder();
         sb.AppendLine($"=== {AppName} ===");
         sb.AppendLine($"Count:       {count}");
+        sb.AppendLine($"Edits:       {editOps}");
         sb.AppendLine($"Frames:      {sortedSamples.Count}");
+        sb.AppendLine($"WallClock:   {totalMs:F1} ms  (sum of frame deltas in the bench window)");
         sb.AppendLine($"Avg dt:      {avg:F2} ms  (~{1000.0 / avg:F1} fps)");
         sb.AppendLine($"P50 dt:      {p50:F2} ms");
         sb.AppendLine($"P95 dt:      {p95:F2} ms");
         sb.AppendLine($"P99 dt:      {p99:F2} ms");
         sb.AppendLine($"Max dt:      {sortedSamples[^1]:F2} ms");
+        sb.AppendLine($"WS:          {workingSetMB} MB  (working set at bench finish)");
+        sb.AppendLine($"PeakWS:      {peakWorkingSetMB} MB  (peak working set across process lifetime)");
+        sb.AppendLine($"Private:     {privateMB} MB  (committed private bytes)");
+        sb.AppendLine($"ManagedHeap: {managedHeapMB} MB  (after GC.Collect)");
 
         var dir = AppContext.BaseDirectory;
         File.WriteAllText(System.IO.Path.Combine(dir, $"{AppName}.report.txt"), sb.ToString());

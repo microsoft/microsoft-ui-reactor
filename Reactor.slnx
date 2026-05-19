@@ -205,6 +205,12 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
+  <Folder Name="/samples/apps/animated-list-demo/">
+    <Project Path="samples/apps/animated-list-demo/AnimatedListDemo.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
   <Folder Name="/samples/apps/chat/">
     <Project Path="samples/apps/chat/Chat.Model/Chat.Model.csproj" />
     <Project Path="samples/apps/chat/Chat.UI/Chat.UI.csproj" />
@@ -271,6 +277,10 @@
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
+    <Project Path="tests/Reactor.DocPipeline.Tests/Reactor.DocPipeline.Tests.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj" />
     <Project Path="tests/Reactor.SelfTests/Reactor.SelfTests.csproj" />
     <Project Path="tests/Reactor.Tests/Reactor.Tests.csproj">
@@ -308,6 +318,14 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
     <Project Path="tests/stress_perf/StressPerf.Shared/StressPerf.Shared.csproj" />
+    <Project Path="tests/stress_perf/StressPerf.VirtualList.Reactor/StressPerf.VirtualList.Reactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/stress_perf/StressPerf.VirtualList.WinUI/StressPerf.VirtualList.WinUI.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="tests/stress_perf/StressPerf.Wpf/StressPerf.Wpf.csproj" />
   </Folder>
   <Folder Name="/tools/" />
