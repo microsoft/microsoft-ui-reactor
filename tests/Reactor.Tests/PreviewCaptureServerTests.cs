@@ -82,6 +82,7 @@ public class PreviewCaptureServerTests
     [InlineData("http://localhost?q=1")]         // query delimiter
     [InlineData("http://localhost#frag")]        // fragment delimiter
     [InlineData("https://localhost")]
+    [InlineData("https://localhost:8443")]
     public void IsAllowedOrigin_Accepts_Expected_Origins(string origin)
     {
         Assert.True(InvokeIsAllowedOrigin(origin));
@@ -95,6 +96,13 @@ public class PreviewCaptureServerTests
     [InlineData("")]
     [InlineData("not a url")]
     [InlineData("http://evil.com/localhost")]
+    // Shape-preservation pin: the pre-refactor allow-list rejected
+    // `https://127.0.0.1` (only `http://127.0.0.1` was accepted, and
+    // `https` was reserved for `localhost`). A refactor that collapsed
+    // the scheme/host pair into a generic "http-or-https + loopback"
+    // rule would silently widen the surface.
+    [InlineData("https://127.0.0.1")]
+    [InlineData("https://127.0.0.1:8443")]
     // Suffix attack — the host is "localhost.evil.com", not "localhost".
     // A naive StartsWith allow-list would wave these through because the
     // string genuinely starts with "http://localhost". Uri.TryCreate parses

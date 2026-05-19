@@ -333,13 +333,15 @@ internal sealed class PreviewCaptureServer : IDisposable
         if (string.Equals(uri.Scheme, "vscode-webview", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
-            return false;
-
-        // Uri.Host is already lower-cased and normalized. http://127.0.0.1
-        // parses with Host == "127.0.0.1"; http://localhost.evil.com parses
-        // with Host == "localhost.evil.com" — exact-match fails closed.
-        return uri.Host == "localhost" || uri.Host == "127.0.0.1";
+        // Preserve the pre-refactor allow-list shape: http accepts both
+        // 127.0.0.1 and localhost, but https accepts only localhost. Don't
+        // collapse to a generic http-or-https rule — that would silently
+        // open `https://127.0.0.1` which the original code rejected.
+        if (uri.Scheme == Uri.UriSchemeHttp)
+            return uri.Host == "127.0.0.1" || uri.Host == "localhost";
+        if (uri.Scheme == Uri.UriSchemeHttps)
+            return uri.Host == "localhost";
+        return false;
     }
 
     private void ServeFrame(HttpListenerResponse response)

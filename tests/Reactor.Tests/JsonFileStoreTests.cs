@@ -271,7 +271,7 @@ public class JsonFileStoreTests : IDisposable
         // raw insertion. Pin: a regression that emitted raw control chars
         // would produce invalid JSON.
         var store = new JsonFileStore(_path);
-        var id = "abc"; // SOH + US — both < 0x20 but not in the named-escape list.
+        var id = "a\x01b\x1Fc"; // SOH + US — both < 0x20 but not in the named-escape list.
         store.Write(id, new byte[] { 7 });
         Assert.True(store.TryRead(id, out var read));
         Assert.Equal(new byte[] { 7 }, read);

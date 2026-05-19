@@ -312,8 +312,11 @@ public class CellRenderersTests
     [Fact]
     public void FormatValue_Invariant_Format_With_Decimal()
     {
-        // Pin a known-invariant format ("R" round-trip) — culture-independent.
-        var r = CellRenderers.Number("R");
+        // Pin invariant-culture formatting. Use "G" — it's the documented
+        // general-format specifier for decimal. "R" is documented only for
+        // Single/Double/Half; on decimal it's implementation-defined and
+        // historically has thrown FormatException on some runtimes.
+        var r = CellRenderers.Number("G");
         var el = (TextBlockElement)r(1.5m);
         Assert.Equal("1.5", el.Content);
     }

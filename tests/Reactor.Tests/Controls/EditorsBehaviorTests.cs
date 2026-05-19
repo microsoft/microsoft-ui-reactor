@@ -453,9 +453,17 @@ public class EditorsBehaviorTests
     [Fact]
     public void DateOnly_Null_Defaults_To_Today()
     {
+        // Capture the date range before AND after invoking the factory so a
+        // midnight-cross during the call doesn't flake. The factory's
+        // "default to today" contract is met as long as the result is one
+        // of {before, after} — those can differ by at most one day.
+        var before = DateOnly.FromDateTime(DateTime.Today);
         var factory = Editors.DateOnly();
         var el = (DatePickerElement)factory(null!, _ => { });
-        Assert.Equal(DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(el.Date.DateTime));
+        var after = DateOnly.FromDateTime(DateTime.Today);
+        var actual = DateOnly.FromDateTime(el.Date.DateTime);
+        Assert.True(actual == before || actual == after,
+            $"Expected today (before={before}, after={after}), got {actual}.");
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -627,8 +635,10 @@ public class EditorsBehaviorTests
         bool changed = false;
         var factory = Editors.Uri();
         var el = (TextFieldElement)factory("", v => { captured = v; changed = true; });
-        // Embedded control characters trip Uri parsing.
-        el.OnChanged!.Invoke("http://exa\x01mple.com ");
+        // Use explicit \x## escapes for the control characters so the test
+        // input is visible in source (embedded raw bytes get mangled by
+        // editors and are invisible in reviews).
+        el.OnChanged!.Invoke("http://exa\x01mple.com\x00");
         Assert.False(changed, "Invalid URI must not call onChange");
         Assert.Null(captured);
     }
