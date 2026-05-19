@@ -75,8 +75,12 @@ public class PreviewCaptureServerTests
     [InlineData("VSCODE-WEBVIEW://abc")] // case-insensitive
     [InlineData("http://127.0.0.1:5000")]
     [InlineData("http://127.0.0.1")]
+    [InlineData("http://127.0.0.1/")]            // trailing slash → path delimiter
     [InlineData("http://localhost")]
     [InlineData("HTTP://LOCALHOST:1234")]
+    [InlineData("http://localhost/")]
+    [InlineData("http://localhost?q=1")]         // query delimiter
+    [InlineData("http://localhost#frag")]        // fragment delimiter
     [InlineData("https://localhost")]
     public void IsAllowedOrigin_Accepts_Expected_Origins(string origin)
     {
@@ -89,30 +93,26 @@ public class PreviewCaptureServerTests
     [InlineData("file:///C:/foo")]
     [InlineData("ftp://localhost")]
     [InlineData("")]
+    [InlineData("not a url")]
     [InlineData("http://evil.com/localhost")]
+    // Suffix attack — the host is "localhost.evil.com", not "localhost".
+    // A naive StartsWith allow-list would wave these through because the
+    // string genuinely starts with "http://localhost". Uri.TryCreate parses
+    // the host field separately, so exact-match against "localhost" /
+    // "127.0.0.1" fails closed.
+    [InlineData("http://localhost.evil.com")]
+    [InlineData("https://localhost.evil.com")]
+    [InlineData("http://localhost.evil.com:8080")]
+    [InlineData("http://127.0.0.1.evil.com")]
+    [InlineData("http://127.0.0.1.evil.com:80")]
+    // Hyphen — same suffix-attack shape, different separator char.
+    [InlineData("http://localhost-evil.com")]
+    // Userinfo trick — `user@host` syntax; the real host is evil.com.
+    [InlineData("http://localhost@evil.com")]
+    [InlineData("http://127.0.0.1@evil.com")]
     public void IsAllowedOrigin_Rejects_Unallowed_Origins(string origin)
     {
         Assert.False(InvokeIsAllowedOrigin(origin));
-    }
-
-    [Fact]
-    public void IsAllowedOrigin_StartsWith_Has_Known_Subdomain_Gap()
-    {
-        // Pinning current behavior, NOT endorsing it. The source uses
-        // `StartsWith("http://localhost", OrdinalIgnoreCase)` which
-        // matches `http://localhost.evil.com` because that string
-        // genuinely starts with "http://localhost". The product's
-        // defense in depth lives in `IsAllowedHost` (host-header
-        // check against exact `localhost:port` / `127.0.0.1:port`) —
-        // that's the actual security fence; this CORS allow-list
-        // is advisory at the response-headers layer.
-        //
-        // A tightening fix would require the next char after
-        // "localhost" to be `:`, `/`, or end-of-string. Filed as a
-        // deferred follow-up in the status log. Until then, this
-        // test pins the gap so a "fix" reverts predictably.
-        Assert.True(InvokeIsAllowedOrigin("http://localhost.evil.com"));
-        Assert.True(InvokeIsAllowedOrigin("https://localhost.evil.com"));
     }
 
     // ══════════════════════════════════════════════════════════════

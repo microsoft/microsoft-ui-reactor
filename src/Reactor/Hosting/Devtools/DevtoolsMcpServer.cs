@@ -465,10 +465,22 @@ internal sealed class DevtoolsMcpServer : IDisposable
 
     private static bool IsAllowedOrigin(string origin)
     {
-        if (origin.StartsWith("vscode-webview://", StringComparison.OrdinalIgnoreCase)) return true;
-        if (origin.StartsWith("http://127.0.0.1", StringComparison.Ordinal)) return true;
-        if (origin.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase)) return true;
-        return false;
+        // Parse via System.Uri rather than string-prefix matching. A
+        // StartsWith allow-list would let `http://localhost.evil.com` through
+        // because the malicious host genuinely starts with "localhost";
+        // Uri.TryCreate decomposes scheme/host correctly per RFC 3986.
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+            return false;
+
+        if (string.Equals(uri.Scheme, "vscode-webview", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // MCP traffic is HTTP only — no https:// arm (HttpListener binds to
+        // http://127.0.0.1:<port>, so an https origin would never originate
+        // from this server's own callers).
+        if (uri.Scheme != Uri.UriSchemeHttp) return false;
+
+        return uri.Host == "localhost" || uri.Host == "127.0.0.1";
     }
 
     // -- Dispatch ----------------------------------------------------------------
