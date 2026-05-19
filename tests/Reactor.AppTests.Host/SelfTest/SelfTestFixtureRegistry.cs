@@ -74,6 +74,7 @@ internal static class SelfTestFixtureRegistry
         "Markdown_Rerender",
         "Markdown_EmptyInput",
         "Markdown_InlineHtmlPassthrough",
+        "Markdown_UnicodeClassification",
         "D3_LineChart",
         "D3_BarChart",
         "D3_PieChart",
@@ -136,6 +137,7 @@ internal static class SelfTestFixtureRegistry
         "ChartA11y_LiveRegionAnnounce",
         "ChartA11y_OnDemandAnnounce",
         "ChartA11y_FullIntegration",
+        "ChartA11y_AutomationPeerProviderExercise",
 
         "MdHtml_HtmlGeneration",
         "MdHtml_HtmlInWebView2",
@@ -254,6 +256,7 @@ internal static class SelfTestFixtureRegistry
         "ModifierEvent_ImplicitTransitions",
         "ModifierEvent_BorderModifiers",
         "ModifierEvent_OnMountAction",
+        "ModifierEvent_ModifierClearResets",
         // Rare control mount + update tests
         "RareControl_ColorPicker",
         "RareControl_TeachingTip",
@@ -466,6 +469,7 @@ internal static class SelfTestFixtureRegistry
         "Hosting_HostDispose",
         "Hosting_PageHelperExercise",
         "Hosting_XamlInteropRegister",
+        "Hosting_PreviewCaptureServerEndpoints",
         // Navigation coverage — advanced handle ops, serialization, deep links, transitions
         "NavCov_HandleAdvancedOps",
         "NavCov_HandlePopTo",
@@ -539,6 +543,8 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_RapidSelection",
         "DataGrid_ExternalStateUpdate",
         "DataGrid_CellTypeFlipPreservesTrailingCells",
+        "DataGrid_RowEditTemplatesAndEmptyState",
+        "DataGrid_KeyboardAndPrivateRenderPaths",
         // DataGrid incremental paging
         "DataGrid_IncrementalLoadVerification",
         "DataGrid_SmallDatasetFullyLoaded",
@@ -614,6 +620,9 @@ internal static class SelfTestFixtureRegistry
         "Devtools_WaitForTimeoutLoggedAsErr",
         "Devtools_InitializeHandshake",
         "Devtools_SwitchComponentInvalidatesIds",
+        "Devtools_PropertyToolsExercise",
+        "Devtools_PropertyToolsReflectionExercise",
+        "Devtools_McpServerProtocolEdges",
         // Coverage boost — targeting remaining gaps to reach 85%
         "CovBoost_ComponentHookWrappers",
         "CovBoost_ThemeTokenResolution",
@@ -697,6 +706,7 @@ internal static class SelfTestFixtureRegistry
         "DragDrop_DragEnterHandlerAutoSetsAllowDrop",
         "DragDrop_SourceAndTargetOnSameElement",
         "DragDrop_DraggableWhenWithoutPayloadStillSetsCanDrag",
+        "DragDrop_DragDataPayloadExercise",
 
         // Devtools UX — spec 028
         "DevtoolsUx_MenuHiddenWhenDisabled",
@@ -821,6 +831,10 @@ internal static class SelfTestFixtureRegistry
         "RBC_TreeViewProgrammaticInvoke",
         "RBC_RichEditBoxFireEvent",
         "RBC_CollectionsHandlerWiring",
+        "RBC_SecondRenderCallbackInvocation",
+        "RBC_ExpanderTemplateTransitionEvents",
+        "RBC_PrivateUpdateHotPaths",
+        "RBC_PrivateMountHotPaths",
 
         // Issue #142 — controls with private static readonly DPs
         "Issue142_CustomControlPrivateDp_Renders",
@@ -834,6 +848,7 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_PersistedScopeIsolated",
         "WindowModel_TrayIconRoundTrip",
         "WindowModel_UseOpenWindowReusesByKey",
+        "WindowModel_MutatorsOwnerAndGuards",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -903,6 +918,7 @@ internal static class SelfTestFixtureRegistry
         "Markdown_Rerender" => new MarkdownFixtures.MarkdownRerender(harness),
         "Markdown_EmptyInput" => new MarkdownFixtures.EmptyInput(harness),
         "Markdown_InlineHtmlPassthrough" => new MarkdownFixtures.InlineHtmlPassthrough(harness),
+        "Markdown_UnicodeClassification" => new MarkdownFixtures.UnicodeClassification(harness),
         "D3_LineChart" => new D3Fixtures.LineChart(harness),
         "D3_BarChart" => new D3Fixtures.BarChart(harness),
         "D3_PieChart" => new D3Fixtures.PieChart(harness),
@@ -965,6 +981,7 @@ internal static class SelfTestFixtureRegistry
         "ChartA11y_LiveRegionAnnounce" => new ChartAccessibilityFixtures.LiveRegionAnnounce(harness),
         "ChartA11y_OnDemandAnnounce" => new ChartAccessibilityFixtures.OnDemandAnnounce(harness),
         "ChartA11y_FullIntegration" => new ChartAccessibilityFixtures.FullIntegration(harness),
+        "ChartA11y_AutomationPeerProviderExercise" => new ChartAccessibilityFixtures.AutomationPeerProviderExercise(harness),
 
         "MdHtml_HtmlGeneration" => new MarkdownHtmlFixtures.HtmlGeneration(harness),
         "MdHtml_HtmlInWebView2" => new MarkdownHtmlFixtures.HtmlInWebView2(harness),
@@ -1078,6 +1095,7 @@ internal static class SelfTestFixtureRegistry
         "ModifierEvent_ImplicitTransitions" => new ModifierEventFixtures.ImplicitTransitionModifier(harness),
         "ModifierEvent_BorderModifiers" => new ModifierEventFixtures.BorderModifiers(harness),
         "ModifierEvent_OnMountAction" => new ModifierEventFixtures.OnMountActionModifier(harness),
+        "ModifierEvent_ModifierClearResets" => new ModifierEventFixtures.ModifierClearResets(harness),
         // Rare control tests
         "RareControl_ColorPicker" => new RareControlFixtures.ColorPickerMountUpdate(harness),
         "RareControl_TeachingTip" => new RareControlFixtures.TeachingTipMount(harness),
@@ -1290,6 +1308,7 @@ internal static class SelfTestFixtureRegistry
         "Hosting_HostDispose" => new HostingCoverageFixtures.HostDispose(harness),
         "Hosting_PageHelperExercise" => new HostingCoverageFixtures.PageHelperExercise(harness),
         "Hosting_XamlInteropRegister" => new HostingCoverageFixtures.XamlInteropRegister(harness),
+        "Hosting_PreviewCaptureServerEndpoints" => new HostingCoverageFixtures.PreviewCaptureServerEndpoints(harness),
         // Navigation coverage
         "NavCov_HandleAdvancedOps" => new NavigationCoverageFixtures.NavHandleAdvancedOps(harness),
         "NavCov_HandlePopTo" => new NavigationCoverageFixtures.NavHandlePopTo(harness),
@@ -1360,6 +1379,8 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_RapidSelection" => new DataGridEditFixtures.RapidSelection(harness),
         "DataGrid_ExternalStateUpdate" => new DataGridEditFixtures.ExternalStateUpdate(harness),
         "DataGrid_CellTypeFlipPreservesTrailingCells" => new DataGridEditFixtures.CellTypeFlipPreservesTrailingCells(harness),
+        "DataGrid_RowEditTemplatesAndEmptyState" => new DataGridEditFixtures.RowEditTemplatesAndEmptyState(harness),
+        "DataGrid_KeyboardAndPrivateRenderPaths" => new DataGridEditFixtures.KeyboardAndPrivateRenderPaths(harness),
         // DataGrid incremental paging
         "DataGrid_IncrementalLoadVerification" => new DataGridPagingFixtures.IncrementalLoadVerification(harness),
         "DataGrid_SmallDatasetFullyLoaded" => new DataGridPagingFixtures.SmallDatasetFullyLoaded(harness),
@@ -1436,6 +1457,9 @@ internal static class SelfTestFixtureRegistry
         "Devtools_WaitForTimeoutLoggedAsErr" => new DevtoolsFixtures.WaitForTimeoutLoggedAsErr(harness),
         "Devtools_InitializeHandshake" => new DevtoolsFixtures.InitializeHandshake(harness),
         "Devtools_SwitchComponentInvalidatesIds" => new DevtoolsFixtures.SwitchComponentInvalidatesIds(harness),
+        "Devtools_PropertyToolsExercise" => new DevtoolsFixtures.PropertyToolsExercise(harness),
+        "Devtools_PropertyToolsReflectionExercise" => new DevtoolsFixtures.PropertyToolsReflectionExercise(harness),
+        "Devtools_McpServerProtocolEdges" => new DevtoolsFixtures.McpServerProtocolEdges(harness),
         // Coverage boost
         "CovBoost_ComponentHookWrappers" => new CoverageBoostFixtures.ComponentHookWrappers(harness),
         "CovBoost_ThemeTokenResolution" => new CoverageBoostFixtures.ThemeTokenResolution(harness),
@@ -1519,6 +1543,7 @@ internal static class SelfTestFixtureRegistry
         "DragDrop_DragEnterHandlerAutoSetsAllowDrop" => new DragDropFixtures.DragEnterHandlerAutoSetsAllowDrop(harness),
         "DragDrop_SourceAndTargetOnSameElement" => new DragDropFixtures.SourceAndTargetOnSameElement(harness),
         "DragDrop_DraggableWhenWithoutPayloadStillSetsCanDrag" => new DragDropFixtures.DraggableWhenWithoutPayloadStillSetsCanDrag(harness),
+        "DragDrop_DragDataPayloadExercise" => new DragDropFixtures.DragDataPayloadExercise(harness),
 
         // Devtools UX — spec 028 (DevtoolsMenu + UseDevtools + Observable<T>)
         "DevtoolsUx_MenuHiddenWhenDisabled" => new DevtoolsUxTests.MenuHiddenWhenDisabled(harness),
@@ -1641,6 +1666,10 @@ internal static class SelfTestFixtureRegistry
         "RBC_TreeViewProgrammaticInvoke" => new ReconcilerBigCoverageFixtures.TreeViewProgrammaticInvoke(harness),
         "RBC_RichEditBoxFireEvent" => new ReconcilerBigCoverageFixtures.RichEditBoxFireEvent(harness),
         "RBC_CollectionsHandlerWiring" => new ReconcilerBigCoverageFixtures.CollectionsHandlerWiring(harness),
+        "RBC_SecondRenderCallbackInvocation" => new ReconcilerBigCoverageFixtures.SecondRenderCallbackInvocation(harness),
+        "RBC_ExpanderTemplateTransitionEvents" => new ReconcilerBigCoverageFixtures.ExpanderTemplateTransitionEvents(harness),
+        "RBC_PrivateUpdateHotPaths" => new ReconcilerBigCoverageFixtures.PrivateUpdateHotPaths(harness),
+        "RBC_PrivateMountHotPaths" => new ReconcilerBigCoverageFixtures.PrivateMountHotPaths(harness),
 
         "Issue142_CustomControlPrivateDp_Renders" => new Issue142Fixtures.CustomControlPrivateDp_Renders(harness),
         "Issue142_ThirdPartyControlPrivateDp_Renders" => new Issue142Fixtures.ThirdPartyControlPrivateDp_Renders(harness),
@@ -1653,6 +1682,7 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_PersistedScopeIsolated" => new WindowModelFixtures.WindowPersistedScopeIsolated(harness),
         "WindowModel_TrayIconRoundTrip" => new WindowModelFixtures.TrayIconRoundTrip(harness),
         "WindowModel_UseOpenWindowReusesByKey" => new WindowModelFixtures.UseOpenWindowReusesByKey(harness),
+        "WindowModel_MutatorsOwnerAndGuards" => new WindowModelFixtures.WindowMutatorsOwnerAndGuards(harness),
 
         _ => null,
     };

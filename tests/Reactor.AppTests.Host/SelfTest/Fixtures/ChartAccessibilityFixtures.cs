@@ -1131,4 +1131,100 @@ internal static class ChartAccessibilityFixtures
             }
         }
     }
+
+    private sealed class PeerExerciseData : IChartAccessibilityData
+    {
+        public string? Name => "Quarterly revenue";
+        public string? Description => null;
+        public string ChartTypeName => "Line";
+        public IReadOnlyList<ChartSeriesDescriptor> Series { get; } =
+        [
+            new("Revenue", [
+                new ChartPointDescriptor("Q1", 10),
+                new ChartPointDescriptor("Q2", 12.5),
+                new ChartPointDescriptor("Q3", 9, "Revenue dipped in Q3"),
+            ]),
+            new("Profit", [
+                new ChartPointDescriptor("Q1", 3),
+                new ChartPointDescriptor("Q2", 4),
+            ]),
+        ];
+
+        public IReadOnlyList<ChartAxisDescriptor> Axes { get; } =
+        [
+            new(ChartAxisType.X, "Quarter", 1, 3),
+            new(ChartAxisType.Y, "Revenue", 0, 15, "m"),
+        ];
+
+        public ChartViewport? Viewport => new(0, 3, 0, 15);
+    }
+
+    internal class AutomationPeerProviderExercise(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var owner = new Border();
+            var data = new PeerExerciseData();
+            var peer = new ChartAutomationPeer(owner, data);
+
+            H.Check("ChartA11y_PeerProvider_Name", peer.GetName() == "Quarterly revenue");
+            H.Check("ChartA11y_PeerProvider_Description", !string.IsNullOrWhiteSpace(peer.GetFullDescription()));
+
+            var grid = (IGridProvider)peer.GetPattern(PatternInterface.Grid);
+            H.Check("ChartA11y_PeerProvider_GridShape", grid.RowCount == 2 && grid.ColumnCount == 3);
+            H.Check("ChartA11y_PeerProvider_ItemValid", grid.GetItem(0, 1) is not null);
+            H.Check("ChartA11y_PeerProvider_ItemInvalid", grid.GetItem(-1, 0) is null && grid.GetItem(0, 99) is null);
+
+            var table = (ITableProvider)peer.GetPattern(PatternInterface.Table);
+            H.Check("ChartA11y_PeerProvider_TableHeaders",
+                table.GetRowHeaders().Length == 2 && table.GetColumnHeaders().Length == 3);
+
+            var children = peer.GetChildren();
+            H.Check("ChartA11y_PeerProvider_Children", children.Count >= 7);
+            var point = children.OfType<ChartPointProvider>().First();
+            H.Check("ChartA11y_PeerProvider_PointValue",
+                point.Value.Contains("Revenue", StringComparison.Ordinal)
+                && point.Row == 0
+                && point.Column == 0
+                && point.RowSpan == 1
+                && point.ColumnSpan == 1);
+            H.Check("ChartA11y_PeerProvider_PointPatterns",
+                ReferenceEquals(point.GetPattern(PatternInterface.GridItem), point)
+                && ReferenceEquals(point.GetPattern(PatternInterface.TableItem), point)
+                && ReferenceEquals(point.GetPattern(PatternInterface.Value), point));
+            H.Check("ChartA11y_PeerProvider_PointHeaders",
+                point.GetRowHeaderItems().Length == 1 && point.GetColumnHeaderItems().Length == 1);
+
+            var formatted = ChartPointProvider.FormatDefaultLabel(
+                data.Series[0],
+                data.Series[0].Points[1],
+                pointIndex: 1,
+                yUnits: "m");
+            H.Check("ChartA11y_PeerProvider_StaticFormat",
+                formatted == "Revenue, Q2: 12.50m, point 2 of 3");
+
+            peer.EnablePan();
+            peer.UpdateViewport(25, 50, 75, 80);
+            H.Check("ChartA11y_PeerProvider_ScrollState",
+                peer.HorizontallyScrollable
+                && peer.VerticallyScrollable
+                && peer.HorizontalScrollPercent == 25
+                && peer.VerticalScrollPercent == 50
+                && peer.HorizontalViewSize == 75
+                && peer.VerticalViewSize == 80
+                && ReferenceEquals(peer.GetPattern(PatternInterface.Scroll), peer));
+
+            bool scrollThrows = false;
+            try { peer.Scroll(ScrollAmount.SmallIncrement, ScrollAmount.NoAmount); }
+            catch (InvalidOperationException) { scrollThrows = true; }
+            H.Check("ChartA11y_PeerProvider_ScrollThrows", scrollThrows);
+
+            bool setValueThrows = false;
+            try { point.SetValue("nope"); }
+            catch (InvalidOperationException) { setValueThrows = true; }
+            H.Check("ChartA11y_PeerProvider_SetValueThrows", setValueThrows);
+
+            await Task.CompletedTask;
+        }
+    }
 }

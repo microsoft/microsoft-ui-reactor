@@ -989,4 +989,42 @@ internal static class MarkdownFixtures
             H.Check("Md_InlineHTML_TextPresent", hasHtmlText);
         }
     }
+
+    internal class UnicodeClassification(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+                ScrollView(
+                    Factories.Markdown(
+                        "**Καλημέρα** — «κόσμε»\n\n" +
+                        "Straße\u00A0mit\u00A0non-breaking spaces and *éclair*.\n\n" +
+                        "[リンク](https://example.com/παθ) around full-width punctuation：ok")
+                )
+            );
+
+            await Harness.Render();
+
+            var rtbs = H.FindAllControls<RichTextBlock>(_ => true);
+            H.Check("Md_Unicode_HasRichTextBlocks", rtbs.Count >= 3);
+
+            var paragraphs = rtbs
+                .SelectMany(rtb => rtb.Blocks.OfType<Paragraph>())
+                .ToList();
+            var runs = paragraphs.SelectMany(p => p.Inlines.OfType<Run>()).ToList();
+            var hyperlinks = paragraphs.SelectMany(p => p.Inlines.OfType<Hyperlink>()).ToList();
+
+            H.Check("Md_Unicode_BoldGreek",
+                runs.Any(r => r.Text.Contains("Καλημέρα", StringComparison.Ordinal)
+                              && r.FontWeight.Weight >= 700));
+            H.Check("Md_Unicode_ItalicAccent",
+                runs.Any(r => r.Text.Contains("éclair", StringComparison.Ordinal)
+                              && r.FontStyle == global::Windows.UI.Text.FontStyle.Italic));
+            H.Check("Md_Unicode_NonBreakingSpacePreserved",
+                runs.Any(r => r.Text.Contains("Straße\u00A0mit", StringComparison.Ordinal)));
+            H.Check("Md_Unicode_LinkWithUnicodePath",
+                hyperlinks.Any(h => h.NavigateUri?.AbsoluteUri.Contains("%CF%80%CE%B1%CE%B8", StringComparison.Ordinal) == true));
+        }
+    }
 }

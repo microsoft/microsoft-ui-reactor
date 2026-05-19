@@ -1007,6 +1007,250 @@ internal static class DevtoolsFixtures
         }
     }
 
+    private sealed class PropertyToolsRoot : Component
+    {
+        public override Element Render() => VStack(
+            Border(
+                Button("Property Target").AutomationId("prop-button") with
+                {
+                    Modifiers = new ElementModifiers
+                    {
+                        OnMountAction = fe =>
+                        {
+                            if (fe is not Button button) return;
+
+                            button.Resources["DevtoolsElementBrush"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red);
+
+                            var merged = new ResourceDictionary
+                            {
+                                ["DevtoolsMergedThickness"] = new Thickness(1, 2, 3, 4),
+                            };
+                            button.Resources.MergedDictionaries.Add(merged);
+
+                            var theme = new ResourceDictionary
+                            {
+                                ["DevtoolsThemeCorner"] = new CornerRadius(3),
+                            };
+                            button.Resources.ThemeDictionaries.Add("Default", theme);
+
+                            var basedOn = new Style(typeof(Button));
+                            basedOn.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(2)));
+
+                            var style = new Style(typeof(Button))
+                            {
+                                BasedOn = basedOn,
+                            };
+                            style.Setters.Add(new Setter(Control.FontSizeProperty, 23.0));
+                            style.Setters.Add(new Setter(Control.ForegroundProperty, new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Blue)));
+                            button.Style = style;
+                        },
+                    },
+                }).AutomationId("prop-border")
+        );
+    }
+
+    internal sealed class PropertyToolsExercise(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            var root = new PropertyToolsRoot();
+            H.Check("Devtools_PropertyTools_Start", root is not null);
+            host.Mount(root);
+            await Harness.Render();
+
+            using var mcp = new McpHarness(H.Window, () => root, nameof(PropertyToolsRoot));
+
+            var allProps = Result(await mcp.CallAsync("properties", new { selector = "#prop-button" }))
+                ?? throw new Exception("missing properties result");
+            H.Check("Devtools_Props_Enumerates",
+                allProps.GetProperty("count").GetInt32() > 10
+                && allProps.GetProperty("properties").EnumerateArray().Any(p => p.GetProperty("name").GetString() == "Width"));
+
+            var widthProp = Result(await mcp.CallAsync("properties", new { selector = "#prop-button", name = "Width" }))
+                ?? throw new Exception("missing width result");
+            H.Check("Devtools_Props_ReadSingle",
+                widthProp.GetProperty("name").GetString() == "Width"
+                && widthProp.GetProperty("declaringType").GetString() is { Length: > 0 });
+
+            var attachedProp = Result(await mcp.CallAsync("properties", new { selector = "#prop-button", name = "Grid.Row" }))
+                ?? throw new Exception("missing attached property result");
+            H.Check("Devtools_Props_ReadAttached",
+                attachedProp.GetProperty("name").GetString() == "Grid.Row");
+
+            H.Check("Devtools_SetProp_Width",
+                Result(await mcp.CallAsync("setProperty", new { selector = "#prop-button", name = "Width", value = "155.5" }))!
+                    .Value.GetProperty("ok").GetBoolean());
+            H.Check("Devtools_SetProp_Margin",
+                Result(await mcp.CallAsync("setProperty", new { selector = "#prop-button", name = "Margin", value = "1,2,3,4" }))!
+                    .Value.GetProperty("ok").GetBoolean());
+            H.Check("Devtools_SetProp_CornerRadius",
+                Result(await mcp.CallAsync("setProperty", new { selector = "#prop-button", name = "CornerRadius", value = "5" }))!
+                    .Value.GetProperty("ok").GetBoolean());
+            H.Check("Devtools_SetProp_Background",
+                Result(await mcp.CallAsync("setProperty", new { selector = "#prop-button", name = "Background", value = "#0f0" }))!
+                    .Value.GetProperty("ok").GetBoolean());
+            H.Check("Devtools_SetProp_Visibility",
+                Result(await mcp.CallAsync("setProperty", new { selector = "#prop-button", name = "Visibility", value = "Collapsed" }))!
+                    .Value.GetProperty("ok").GetBoolean());
+            H.Check("Devtools_SetProp_Alignment",
+                Result(await mcp.CallAsync("setProperty", new { selector = "#prop-button", name = "HorizontalAlignment", value = "Right" }))!
+                    .Value.GetProperty("ok").GetBoolean());
+
+            var button = H.FindButton("Property Target");
+            H.Check("Devtools_SetProp_Applied",
+                button is not null
+                && Math.Abs(button.Width - 155.5) < 0.01
+                && button.Visibility == Visibility.Collapsed
+                && button.HorizontalAlignment == HorizontalAlignment.Right);
+
+            var resources = Result(await mcp.CallAsync("resources", new { selector = "#prop-button", scope = "element", filter = "Devtools" }))
+                ?? throw new Exception("missing resources result");
+            var resourceKeys = resources.GetProperty("resources").EnumerateArray()
+                .Select(r => r.GetProperty("key").GetString())
+                .ToArray();
+            H.Check("Devtools_Resources_ElementMergedTheme",
+                resourceKeys.Contains("DevtoolsElementBrush")
+                && resourceKeys.Contains("DevtoolsMergedThickness")
+                && resourceKeys.Contains("DevtoolsThemeCorner"));
+
+            var setElementResource = Result(await mcp.CallAsync("setResource", new
+            {
+                selector = "#prop-button",
+                scope = "element",
+                key = "DevtoolsSetElementThickness",
+                value = "6,7",
+            })) ?? throw new Exception("missing setResource element result");
+            H.Check("Devtools_SetResource_Element", setElementResource.GetProperty("ok").GetBoolean());
+
+            var setWindowResource = Result(await mcp.CallAsync("setResource", new
+            {
+                selector = "#prop-button",
+                scope = "window",
+                key = "DevtoolsSetWindowBrush",
+                value = "#11223344",
+            })) ?? throw new Exception("missing setResource window result");
+            H.Check("Devtools_SetResource_Window", setWindowResource.GetProperty("ok").GetBoolean());
+
+            var appKey = "DevtoolsSetAppResource_" + Guid.NewGuid().ToString("N");
+            var setAppResource = Result(await mcp.CallAsync("setResource", new
+            {
+                scope = "application",
+                key = appKey,
+                value = "app-value",
+                confirmAppWide = true,
+            })) ?? throw new Exception("missing setResource app result");
+            H.Check("Devtools_SetResource_App", setAppResource.GetProperty("ok").GetBoolean());
+            Application.Current.Resources.Remove(appKey);
+
+            var styles = Result(await mcp.CallAsync("styles", new { selector = "#prop-button" }))
+                ?? throw new Exception("missing styles result");
+            H.Check("Devtools_Styles_DescribesSetters",
+                styles.GetProperty("hasStyle").GetBoolean()
+                && styles.GetProperty("style").GetProperty("setterCount").GetInt32() >= 2
+                && styles.GetProperty("style").TryGetProperty("basedOn", out var basedOn)
+                && basedOn.ValueKind == JsonValueKind.Object);
+
+            var ancestors = Result(await mcp.CallAsync("ancestors", new { selector = "#prop-button" }))
+                ?? throw new Exception("missing ancestors result");
+            H.Check("Devtools_Ancestors_WalksTree",
+                ancestors.GetProperty("count").GetInt32() > 0
+                && ancestors.GetProperty("ancestors").EnumerateArray().Any(a => a.GetProperty("type").GetString() == "Border"));
+
+            H.SetContent(null);
+        }
+    }
+
+    internal sealed class PropertyToolsReflectionExercise(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var toolsType = typeof(DevtoolsPropertyTools);
+            H.Check("Devtools_PropReflect_Start", toolsType is not null);
+            object? Invoke(string name, params object?[] args) =>
+                toolsType.GetMethod(name, global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static)!
+                    .Invoke(null, args);
+
+            var button = new Button
+            {
+                Width = 123,
+                Margin = new Thickness(1, 2, 3, 4),
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red),
+            };
+
+            var width = Invoke("FindDependencyProperty", button, "Width");
+            var margin = Invoke("FindDependencyProperty", button, "Margin");
+            H.Check("Devtools_PropReflect_FindDp", width is not null && margin is not null);
+
+            var enumerated = (IEnumerable<object>)Invoke("EnumerateDependencyProperties", button)!;
+            H.Check("Devtools_PropReflect_Enumerates", enumerated.Any());
+
+            H.Check("Devtools_PropReflect_FormatValues",
+                (string?)Invoke("FormatValue", button.Background) == "#FFFF0000"
+                && (string?)Invoke("FormatValue", new Thickness(1, 2, 3, 4)) == "1,2,3,4"
+                && (string?)Invoke("FormatValue", new CornerRadius(1, 2, 3, 4)) == "1,2,3,4"
+                && (string?)Invoke("FormatValue", Microsoft.UI.Colors.Blue) == "#FF0000FF"
+                && (string?)Invoke("FormatValue", 12.5) == "12.5");
+
+            H.Check("Devtools_PropReflect_ParseValues",
+                Invoke("ParseValue", "Collapsed", typeof(Visibility)) is Visibility.Collapsed
+                && Invoke("ParseValue", "Right", typeof(HorizontalAlignment)) is HorizontalAlignment.Right
+                && Invoke("ParseValue", "Bottom", typeof(VerticalAlignment)) is VerticalAlignment.Bottom
+                && Invoke("ParseValue", "true", null) is true
+                && Invoke("ParseValue", "1,2", typeof(Thickness)) is Thickness
+                && Invoke("ParseValue", "3", typeof(CornerRadius)) is CornerRadius
+                && Invoke("ParseValue", "#0f0", typeof(Microsoft.UI.Xaml.Media.Brush)) is Microsoft.UI.Xaml.Media.SolidColorBrush
+                && Invoke("ParseValue", "42", typeof(int)) is 42
+                && Invoke("ParseValue", "42.5", typeof(double)) is 42.5);
+
+            var thicknessArgs = new object?[] { "5,6,7,8", null };
+            var thicknessOk = (bool)Invoke("TryParseThickness", thicknessArgs)!;
+            var cornerArgs = new object?[] { "1,2,3,4", null };
+            var cornerOk = (bool)Invoke("TryParseCornerRadius", cornerArgs)!;
+            var colorArgs = new object?[] { "#11223344", null };
+            var colorOk = (bool)Invoke("TryParseColor", colorArgs)!;
+            H.Check("Devtools_PropReflect_TryParse", thicknessOk && cornerOk && colorOk);
+
+            var dict = new ResourceDictionary
+            {
+                ["ReflectBrush"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Green),
+            };
+            dict.MergedDictionaries.Add(new ResourceDictionary
+            {
+                ["ReflectMerged"] = new Thickness(2),
+            });
+            dict.ThemeDictionaries.Add("Default", new ResourceDictionary
+            {
+                ["ReflectTheme"] = new CornerRadius(4),
+            });
+            var resources = new List<object>();
+            Invoke(
+                "CollectResources",
+                dict,
+                "element",
+                new global::System.Text.RegularExpressions.Regex("Reflect", global::System.Text.RegularExpressions.RegexOptions.IgnoreCase),
+                resources);
+            H.Check("Devtools_PropReflect_CollectResources", resources.Count == 3);
+
+            var baseStyle = new Style(typeof(Button));
+            baseStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(2)));
+            var style = new Style(typeof(Button)) { BasedOn = baseStyle };
+            style.Setters.Add(new Setter(Control.FontSizeProperty, 21.0));
+            var description = Invoke("DescribeStyle", style);
+            H.Check("Devtools_PropReflect_DescribeStyle", description is not null);
+
+            bool invalidParseThrows = false;
+            try { Invoke("ParseValue", "not-a-number", typeof(double)); }
+            catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is McpToolException)
+            {
+                invalidParseThrows = true;
+            }
+            H.Check("Devtools_PropReflect_InvalidParseThrows", invalidParseThrows);
+
+            await Task.CompletedTask;
+        }
+    }
+
     /// <summary>
     /// U7: standard MCP clients hit <c>initialize</c> first. The server must
     /// respond with a well-formed handshake (protocol version + capabilities
@@ -1053,6 +1297,120 @@ internal static class DevtoolsFixtures
                 r.TryGetProperty("capabilities", out var caps) && caps.ValueKind == JsonValueKind.Object);
             H.Check("Devtools_Initialize_ServerInfo",
                 r.TryGetProperty("serverInfo", out var info) && info.ValueKind == JsonValueKind.Object);
+        }
+    }
+
+    internal sealed class McpServerProtocolEdges(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var projectId = "reactor-selftest-" + Guid.NewGuid().ToString("N");
+            using var server = new DevtoolsMcpServer(
+                H.Window.DispatcherQueue,
+                H.Window,
+                projectIdentifier: projectId);
+            server.Tools.Register(
+                new McpToolDescriptor("selftest.echo", "Echoes a value", new { type = "object" }),
+                args => new { ok = true, value = args is { } a && a.TryGetProperty("value", out var value) ? value.GetString() : null });
+            server.Start();
+            server.AnnounceReady();
+
+            H.Check("Devtools_McpLockfileActive",
+                DevtoolsMcpServer.IsAnotherSessionActive(projectId, out var active) &&
+                active is not null &&
+                active.Token == server.AuthToken);
+
+            using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.Port}/") };
+
+            var options = await client.SendAsync(new HttpRequestMessage(HttpMethod.Options, "mcp"));
+            H.Check("Devtools_McpOptions204", options.StatusCode == global::System.Net.HttpStatusCode.NoContent);
+
+            var missingPath = await client.GetAsync("missing");
+            H.Check("Devtools_McpMissingPath404", missingPath.StatusCode == global::System.Net.HttpStatusCode.NotFound);
+
+            var unauthorized = await client.PostAsync("mcp", new StringContent("{}", Encoding.UTF8, "application/json"));
+            H.Check("Devtools_McpUnauthorized401", unauthorized.StatusCode == global::System.Net.HttpStatusCode.Unauthorized);
+
+            using var schemaReq = new HttpRequestMessage(HttpMethod.Get, "mcp");
+            schemaReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
+            var schema = await client.SendAsync(schemaReq);
+            var schemaText = await schema.Content.ReadAsStringAsync();
+            H.Check("Devtools_McpSchemaGet200",
+                schema.StatusCode == global::System.Net.HttpStatusCode.OK &&
+                schemaText.Contains("reactor-devtools-mcp/1") &&
+                schemaText.Contains("selftest.echo"));
+
+            using var methodReq = new HttpRequestMessage(HttpMethod.Put, "mcp");
+            methodReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
+            var method = await client.SendAsync(methodReq);
+            H.Check("Devtools_McpMethod405", method.StatusCode == global::System.Net.HttpStatusCode.MethodNotAllowed);
+
+            using var typeReq = new HttpRequestMessage(HttpMethod.Post, "mcp")
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "text/plain"),
+            };
+            typeReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
+            var type = await client.SendAsync(typeReq);
+            H.Check("Devtools_McpContentType415", type.StatusCode == global::System.Net.HttpStatusCode.UnsupportedMediaType);
+
+            using var originReq = new HttpRequestMessage(HttpMethod.Post, "mcp")
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+            };
+            originReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
+            originReq.Headers.TryAddWithoutValidation("Origin", "http://localhost.evil.com");
+            var origin = await client.SendAsync(originReq);
+            H.Check("Devtools_McpBadOrigin403", origin.StatusCode == global::System.Net.HttpStatusCode.Forbidden);
+
+            using var largeReq = new HttpRequestMessage(HttpMethod.Post, "mcp")
+            {
+                Content = new ByteArrayContent(new byte[DevtoolsMcpServer.MaxRequestBodyBytes + 1]),
+            };
+            largeReq.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            largeReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
+            var large = await client.SendAsync(largeReq);
+            H.Check("Devtools_McpLarge413", large.StatusCode == global::System.Net.HttpStatusCode.RequestEntityTooLarge);
+
+            var envelope = new
+            {
+                jsonrpc = "2.0",
+                id = 1,
+                method = "tools/call",
+                @params = new { name = "selftest.echo", arguments = new { value = "pong" } },
+            };
+            using var validReq = new HttpRequestMessage(HttpMethod.Post, "mcp")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(envelope, DevtoolsMcpServer.JsonOpts), Encoding.UTF8, "application/json"),
+            };
+            validReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
+            var valid = await client.SendAsync(validReq);
+            var validText = await valid.Content.ReadAsStringAsync();
+            H.Check("Devtools_McpPostDispatch200",
+                valid.StatusCode == global::System.Net.HttpStatusCode.OK && validText.Contains("pong"));
+
+            using var badHostReq = new HttpRequestMessage(HttpMethod.Get, "mcp");
+            badHostReq.Headers.Host = $"example.com:{server.Port}";
+            badHostReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
+            var badHost = await client.SendAsync(badHostReq);
+            H.Check("Devtools_McpBadHost421", (int)badHost.StatusCode == 421);
+
+            var capped = DevtoolsMcpServer.ReadCappedBody(new MemoryStream(Encoding.UTF8.GetBytes("ok")), Encoding.UTF8, cap: 2);
+            H.Check("Devtools_McpReadCappedSmall", capped == "ok");
+
+            bool cappedThrows = false;
+            try
+            {
+                _ = DevtoolsMcpServer.ReadCappedBody(new MemoryStream(Encoding.UTF8.GetBytes("toolarge")), Encoding.UTF8, cap: 3);
+            }
+            catch (InvalidDataException)
+            {
+                cappedThrows = true;
+            }
+            H.Check("Devtools_McpReadCappedThrows", cappedThrows);
+
+            server.Dispose();
+            H.Check("Devtools_McpLockfileRemoved",
+                !DevtoolsMcpServer.IsAnotherSessionActive(projectId, out _));
         }
     }
 }

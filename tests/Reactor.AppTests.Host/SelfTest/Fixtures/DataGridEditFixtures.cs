@@ -366,6 +366,102 @@ internal static class DataGridEditFixtures
     }
 
     /// <summary>
+    /// Exercises row edit mode, custom header/cell templates, search chrome,
+    /// row-detail columns, empty templates, and the async row-commit path in one
+    /// mounted DataGrid scenario.
+    /// </summary>
+    internal class RowEditTemplatesAndEmptyState(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            string lastCommit = "";
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var source = ctx.UseMemo(() => CreateSource(8));
+                var emptySource = ctx.UseMemo(() => CreateSource(0));
+                var columns = new FieldDescriptor[]
+                {
+                    Column<TestProduct>("Id", p => p.Id, width: 60),
+                    Column<TestProduct>("Name", p => p.Name, editable: true, width: 160),
+                    Column<TestProduct>("Category", p => p.Category, editable: true, width: 120),
+                    Column<TestProduct>("Price", p => p.Price, editable: true, format: "C2", width: 100),
+                };
+
+                return VStack(
+                    DataGrid(
+                        source: source,
+                        columns: columns,
+                        selectionMode: Microsoft.UI.Reactor.Controls.SelectionMode.Single,
+                        editable: true,
+                        editMode: EditMode.Row,
+                        onRowChanged: (key, item) =>
+                        {
+                            lastCommit = $"{key.Value}:{item.Name}:{item.Category}:{item.Price:G}";
+                            return Task.CompletedTask;
+                        },
+                        rowHeight: 36,
+                        cellTemplate: ctx => TextBlock($"cell:{ctx.Column.Name}:{ctx.Value}"),
+                        headerTemplate: ctx => Button(
+                            $"hdr:{ctx.Column.Name}:{ctx.CurrentSort?.ToString() ?? "none"}",
+                            ctx.ToggleSort),
+                        showSearch: true,
+                        rowDetailTemplate: (row, key) => TextBlock($"detail:{key.Value}:{row.Name}")),
+                    DataGrid(
+                        source: emptySource,
+                        columns: columns,
+                        rowHeight: 36,
+                        emptyTemplate: TextBlock("empty-grid-template")));
+            });
+
+            await Harness.Render(600);
+
+            H.Check("DataGrid_RowEdit_CustomCellRendered",
+                H.FindText("cell:Name:Product 0") is not null);
+            H.Check("DataGrid_RowEdit_CustomHeaderRendered",
+                H.FindButton("hdr:Name:none") is not null);
+            H.Check("DataGrid_RowEdit_SearchBoxRendered",
+                H.FindAllControls<TextBox>(_ => true).Count >= 1);
+            H.Check("DataGrid_RowEdit_EmptyTemplateRendered",
+                H.FindText("empty-grid-template") is not null);
+
+            H.ClickButton("hdr:Name:none");
+            await Harness.Render(600);
+            H.Check("DataGrid_RowEdit_HeaderSortUpdated",
+                H.FindButton("hdr:Name:Ascending") is not null);
+
+            H.ClickButton("Edit");
+            await Harness.Render(600);
+
+            var rowEditTextBoxes = H.FindAllControls<TextBox>(tb =>
+                tb.Text == "Product 0" || tb.Text == "A");
+            var rowEditNumberBoxes = H.FindAllControls<NumberBox>(nb =>
+                Math.Abs(nb.Value - 10.0) < 0.01);
+
+            H.Check("DataGrid_RowEdit_TextEditorsMounted", rowEditTextBoxes.Count >= 2);
+            H.Check("DataGrid_RowEdit_NumberEditorMounted", rowEditNumberBoxes.Count >= 1);
+            H.Check("DataGrid_RowEdit_SaveCancelMounted",
+                H.FindButton("Save") is not null && H.FindButton("Cancel") is not null);
+
+            H.ClickButton("Cancel");
+            await Harness.Render(400);
+            H.Check("DataGrid_RowEdit_CancelClearsEditors",
+                H.FindButton("Save") is null);
+
+            H.ClickButton("Edit");
+            await Harness.Render(500);
+            H.ClickButton("Save");
+            await Harness.Render(700);
+
+            H.Check("DataGrid_RowEdit_SaveCommitted",
+                lastCommit.StartsWith("0:Product 0:A:10", StringComparison.Ordinal));
+            H.Check("DataGrid_RowEdit_ReturnedToDisplay",
+                H.FindText("cell:Name:Product 0") is not null);
+        }
+    }
+
+    /// <summary>
     /// Regression for GitHub #34. When a child element's type flips inside a Grid
     /// (TextBlock → TextBox → TextBlock — e.g. a DataGrid cell entering and leaving
     /// inline-edit mode), the row Grid used to drop the trailing cell and retarget
@@ -480,6 +576,100 @@ internal static class DataGridEditFixtures
                 H.Check($"CellFlip_NameAutomationNameIntact (name='{uiName}')",
                     uiName == "Alice");
             }
+        }
+    }
+
+    internal class KeyboardAndPrivateRenderPaths(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var source = CreateSource(8);
+            var columns = CreateEditableColumns();
+            var state = new DataGridState<TestProduct>(source, columns, Microsoft.UI.Reactor.Controls.SelectionMode.Multiple);
+            await state.LoadDataAsync();
+
+            var committed = 0;
+            var el = new DataGridElement<TestProduct>
+            {
+                Source = source,
+                Columns = columns,
+                Editable = true,
+                SelectionMode = Microsoft.UI.Reactor.Controls.SelectionMode.Multiple,
+                EditMode = EditMode.Cell,
+                OnRowChanged = (_, _) =>
+                {
+                    committed++;
+                    return Task.CompletedTask;
+                },
+            };
+
+            var componentType = typeof(DataGridComponent<TestProduct>);
+            object? Invoke(string name, params object?[] args) =>
+                componentType.GetMethod(name, global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static)!
+                    .Invoke(null, args);
+
+            bool Should(global::Windows.System.VirtualKey key) =>
+                (bool)Invoke("ShouldHandleKey", state, el, key)!;
+
+            void Key(global::Windows.System.VirtualKey key) =>
+                Invoke("HandleKeyDown", state, el, key);
+
+            H.Check("DataGrid_KeyReflect_ShouldHandleNavigation",
+                Should(global::Windows.System.VirtualKey.Down)
+                && Should(global::Windows.System.VirtualKey.Tab)
+                && Should(global::Windows.System.VirtualKey.Home)
+                && Should(global::Windows.System.VirtualKey.End)
+                && Should(global::Windows.System.VirtualKey.Enter)
+                && Should(global::Windows.System.VirtualKey.F2)
+                && !Should(global::Windows.System.VirtualKey.A));
+
+            Key(global::Windows.System.VirtualKey.Down);
+            Key(global::Windows.System.VirtualKey.Right);
+            Key(global::Windows.System.VirtualKey.Home);
+            Key(global::Windows.System.VirtualKey.End);
+            Key(global::Windows.System.VirtualKey.Tab);
+            H.Check("DataGrid_KeyReflect_FocusMoved", state.FocusedRowIndex >= 0 && state.FocusedColIndex >= 0);
+
+            Key(global::Windows.System.VirtualKey.Space);
+            H.Check("DataGrid_KeyReflect_SpaceSelected", state.SelectedKeys.Count > 0);
+
+            state.SetFocus(0, 1);
+            Key(global::Windows.System.VirtualKey.F2);
+            H.Check("DataGrid_KeyReflect_BeginEdit", state.IsEditing);
+            H.Check("DataGrid_KeyReflect_ShouldHandleEditing",
+                Should(global::Windows.System.VirtualKey.Enter)
+                && Should(global::Windows.System.VirtualKey.Escape)
+                && Should(global::Windows.System.VirtualKey.Tab)
+                && !Should(global::Windows.System.VirtualKey.Down));
+
+            state.UpdateEditingValue("Updated product");
+            Key(global::Windows.System.VirtualKey.Enter);
+            await Task.Delay(50);
+            H.Check("DataGrid_KeyReflect_EnterCommitted", !state.IsEditing && committed >= 1);
+
+            state.BeginEdit(0, 1);
+            Key(global::Windows.System.VirtualKey.Escape);
+            H.Check("DataGrid_KeyReflect_EscapeCanceled", !state.IsEditing);
+
+            state.SetFocus(0, 1);
+            state.BeginEdit(0, 1);
+            state.UpdateEditingValue("Tab product");
+            Key(global::Windows.System.VirtualKey.Tab);
+            await Task.Delay(50);
+            H.Check("DataGrid_KeyReflect_TabMovesAndReopens", state.IsEditing && committed >= 2);
+
+            var registry = new TypeRegistry();
+            var cell = Invoke("RenderCell", columns[3], 12.5, registry);
+            var editingCell = Invoke("RenderEditingCell", columns[1], state, registry);
+            var rowEditingCell = Invoke("RenderRowEditingCell", columns[1], state, registry);
+            var placeholder = Invoke("RenderDefaultPlaceholderCell", columns[1], 120.0);
+            var error = Invoke("RenderDefaultError", new InvalidOperationException("boom"));
+            H.Check("DataGrid_KeyReflect_RenderHelpers",
+                cell is Element
+                && editingCell is Element
+                && rowEditingCell is Element
+                && placeholder is Element
+                && error is Element);
         }
     }
 }

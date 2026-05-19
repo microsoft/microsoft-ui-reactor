@@ -1,10 +1,14 @@
+using System.Reflection;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using WinShapes = Microsoft.UI.Xaml.Shapes;
+using WinUI = Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;
 using static Microsoft.UI.Reactor.Controls.Validation.ValidationVisualizerDsl;
@@ -1394,6 +1398,217 @@ internal static class ReconcilerBigCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════
+    //  25n. Invoke callbacks that are first wired during Update*. These are
+    //       distinct from mount-time callback tests because the reconciler
+    //       attaches the native event handlers from the old-null/new-non-null
+    //       transition path.
+    // ════════════════════════════════════════════════════════════════════
+    internal class SecondRenderCallbackInvocation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var calendarInitial = new DateTimeOffset(2026, 1, 10, 0, 0, 0, TimeSpan.Zero);
+            var calendarNext = new DateTimeOffset(2026, 1, 11, 0, 0, 0, TimeSpan.Zero);
+            var dateInitial = new DateTimeOffset(2026, 2, 10, 0, 0, 0, TimeSpan.Zero);
+            var dateNext = new DateTimeOffset(2026, 2, 11, 0, 0, 0, TimeSpan.Zero);
+            var timeInitial = TimeSpan.FromHours(8);
+            var timeNext = TimeSpan.FromHours(9);
+            var red = global::Windows.UI.Color.FromArgb(255, 255, 0, 0);
+            var blue = global::Windows.UI.Color.FromArgb(255, 0, 0, 255);
+
+            int repeatClicks = 0, splitClicks = 0, toggleHits = 0, toggleSplitHits = 0;
+            int checkHits = 0, radioHits = 0, sliderHits = 0, numberHits = 0, passwordHits = 0;
+            int colorHits = 0, calendarHits = 0, dateHits = 0, timeHits = 0;
+            bool? toggleLast = null, toggleSplitLast = null, checkLast = null, radioLast = null;
+            double sliderLast = double.NaN, numberLast = double.NaN;
+            string? passwordLast = null;
+            global::Windows.UI.Color colorLast = default;
+            DateTimeOffset? calendarLast = null;
+            DateTimeOffset dateLast = default;
+            TimeSpan timeLast = default;
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (wired, setWired) = ctx.UseState(false);
+
+                Element repeat = wired
+                    ? RepeatButton("update-repeat", () => repeatClicks++).Set(b => b.Name = "updateRepeat")
+                    : RepeatButton("update-repeat").Set(b => b.Name = "updateRepeat");
+                Element split = wired
+                    ? SplitButton("update-split", () => splitClicks++).Set(b => b.Name = "updateSplit")
+                    : SplitButton("update-split").Set(b => b.Name = "updateSplit");
+                Element toggle = wired
+                    ? ToggleButton("update-toggle", false, v => { toggleHits++; toggleLast = v; }).Set(b => b.Name = "updateToggle")
+                    : ToggleButton("update-toggle", false).Set(b => b.Name = "updateToggle");
+                Element toggleSplit = wired
+                    ? ToggleSplitButton("update-toggle-split", false, v => { toggleSplitHits++; toggleSplitLast = v; }).Set(b => b.Name = "updateToggleSplit")
+                    : ToggleSplitButton("update-toggle-split", false).Set(b => b.Name = "updateToggleSplit");
+                Element check = wired
+                    ? CheckBox(false, v => { checkHits++; checkLast = v; }, "update-check").Set(c => c.Name = "updateCheck")
+                    : CheckBox(false, label: "update-check").Set(c => c.Name = "updateCheck");
+                Element radio = wired
+                    ? RadioButton("update-radio", false, v => { radioHits++; radioLast = v; }).Set(r => r.Name = "updateRadio")
+                    : RadioButton("update-radio", false).Set(r => r.Name = "updateRadio");
+                Element slider = wired
+                    ? Slider(10, 0, 100, v => { sliderHits++; sliderLast = v; }).Set(s => s.Name = "updateSlider")
+                    : Slider(10, 0, 100).Set(s => s.Name = "updateSlider");
+                Element number = wired
+                    ? NumberBox(5, v => { numberHits++; numberLast = v; }, "update-number").Set(n => n.Name = "updateNumber")
+                    : NumberBox(5, header: "update-number").Set(n => n.Name = "updateNumber");
+                Element password = wired
+                    ? PasswordBox("initial", v => { passwordHits++; passwordLast = v; }).Set(p => p.Name = "updatePassword")
+                    : PasswordBox("initial").Set(p => p.Name = "updatePassword");
+                Element color = wired
+                    ? ColorPicker(red, v => { colorHits++; colorLast = v; }).Set(c => c.Name = "updateColor")
+                    : ColorPicker(red).Set(c => c.Name = "updateColor");
+                Element calendar = wired
+                    ? CalendarDatePicker(calendarInitial, v => { calendarHits++; calendarLast = v; }).Set(c => c.Name = "updateCalendar")
+                    : CalendarDatePicker(calendarInitial).Set(c => c.Name = "updateCalendar");
+                Element date = wired
+                    ? DatePicker(dateInitial, v => { dateHits++; dateLast = v; }).Set(d => d.Name = "updateDate")
+                    : DatePicker(dateInitial).Set(d => d.Name = "updateDate");
+                Element time = wired
+                    ? TimePicker(timeInitial, v => { timeHits++; timeLast = v; }).Set(t => t.Name = "updateTime")
+                    : TimePicker(timeInitial).Set(t => t.Name = "updateTime");
+
+                return VStack(
+                    Button("WireUpdateCallbacks", () => setWired(true)),
+                    repeat, split, toggle, toggleSplit, check, radio, slider, number,
+                    password, color, calendar, date, time);
+            });
+
+            await Harness.Render();
+            H.ClickButton("WireUpdateCallbacks");
+            await Harness.Render();
+
+            repeatClicks = splitClicks = toggleHits = toggleSplitHits = checkHits = radioHits = 0;
+            sliderHits = numberHits = passwordHits = colorHits = calendarHits = dateHits = timeHits = 0;
+
+            var repeat = H.FindControl<Microsoft.UI.Xaml.Controls.Primitives.RepeatButton>(b => b.Name == "updateRepeat");
+            var split = H.FindControl<SplitButton>(b => b.Name == "updateSplit");
+            var toggle = H.FindControl<Microsoft.UI.Xaml.Controls.Primitives.ToggleButton>(b => b.Name == "updateToggle");
+            var toggleSplit = H.FindControl<ToggleSplitButton>(b => b.Name == "updateToggleSplit");
+            var check = H.FindControl<CheckBox>(c => c.Name == "updateCheck");
+            var radio = H.FindControl<RadioButton>(r => r.Name == "updateRadio");
+            var slider = H.FindControl<Microsoft.UI.Xaml.Controls.Slider>(s => s.Name == "updateSlider");
+            var number = H.FindControl<NumberBox>(n => n.Name == "updateNumber");
+            var password = H.FindControl<PasswordBox>(p => p.Name == "updatePassword");
+            var color = H.FindControl<ColorPicker>(c => c.Name == "updateColor");
+            var calendar = H.FindControl<CalendarDatePicker>(c => c.Name == "updateCalendar");
+            var date = H.FindControl<DatePicker>(d => d.Name == "updateDate");
+            var time = H.FindControl<TimePicker>(t => t.Name == "updateTime");
+
+            H.Check("UpdateCallbacks_RepeatInvokable", repeat is not null && TryInvoke(repeat));
+            H.Check("UpdateCallbacks_SplitInvokable", split is not null && TryInvoke(split));
+            ToggleViaAutomation(toggle);
+            if (toggleSplit is not null) toggleSplit.IsChecked = true;
+            if (check is not null) check.IsChecked = true;
+            if (radio is not null) radio.IsChecked = true;
+            if (slider is not null) slider.Value = 42;
+            if (number is not null) number.Value = 17;
+            if (password is not null) password.Password = "changed";
+            if (color is not null) color.Color = blue;
+            if (calendar is not null) calendar.Date = calendarNext;
+            if (date is not null) date.Date = dateNext;
+            if (time is not null) time.Time = timeNext;
+
+            await Harness.Render();
+
+            H.Check("UpdateCallbacks_RepeatClick", repeatClicks == 1);
+            H.Check("UpdateCallbacks_SplitClick", splitClicks == 1);
+            H.Check("UpdateCallbacks_Toggle", toggleHits == 1 && toggleLast == true);
+            H.Check("UpdateCallbacks_ToggleSplit", toggleSplitHits == 1 && toggleSplitLast == true);
+            H.Check("UpdateCallbacks_CheckBox", checkHits == 1 && checkLast == true);
+            H.Check("UpdateCallbacks_RadioButton", radioHits == 1 && radioLast == true);
+            H.Check("UpdateCallbacks_Slider", sliderHits >= 1 && Math.Abs(sliderLast - 42) < 0.01);
+            H.Check("UpdateCallbacks_NumberBox", numberHits >= 1 && Math.Abs(numberLast - 17) < 0.01);
+            H.Check("UpdateCallbacks_PasswordBox", passwordHits >= 1 && passwordLast == "changed");
+            H.Check("UpdateCallbacks_ColorPicker", colorHits >= 1 && colorLast.B == 255);
+            H.Check("UpdateCallbacks_CalendarDatePicker", calendarHits >= 1 && calendarLast == calendarNext);
+            H.Check("UpdateCallbacks_DatePicker", dateHits >= 1 && dateLast == dateNext);
+            H.Check("UpdateCallbacks_TimePicker", timeHits >= 1 && timeLast == timeNext);
+        }
+
+        private static bool TryInvoke(FrameworkElement element)
+        {
+            var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(element);
+            if (peer?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)
+                is Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invoker)
+            {
+                invoker.Invoke();
+                return true;
+            }
+            return false;
+        }
+
+        private static void ToggleViaAutomation(Microsoft.UI.Xaml.Controls.Primitives.ToggleButton? toggle)
+        {
+            if (toggle is null) return;
+            var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(toggle);
+            if (peer?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Toggle)
+                is Microsoft.UI.Xaml.Automation.Provider.IToggleProvider toggler)
+            {
+                toggler.Toggle();
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  25o. Expander update paths: string header -> HeaderTemplate, content
+    //       replacement, ContentTransitions assignment, and callbacks wired
+    //       during UpdateExpander.
+    // ════════════════════════════════════════════════════════════════════
+    internal class ExpanderTemplateTransitionEvents(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int expandHits = 0;
+            bool? lastExpanded = null;
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var expander = phase == 0
+                    ? Expander("plain-header", TextBlock("plain-content"), isExpanded: false)
+                    : Expander("fallback-header", TextBlock("templated-content"), isExpanded: true,
+                            onIsExpandedChanged: v => { expandHits++; lastExpanded = v; })
+                        .HeaderTemplate(TextBlock("templated-header"))
+                        .ContentTransitions(new Microsoft.UI.Xaml.Media.Animation.TransitionCollection())
+                        .Direction(ExpandDirection.Up);
+
+                return VStack(
+                    Button("UpdateExpanderTemplate", () => setPhase(1)),
+                    expander.Set(e => e.Name = "updateExpander"));
+            });
+
+            await Harness.Render();
+            H.ClickButton("UpdateExpanderTemplate");
+            await Harness.Render();
+
+            var expander = H.FindControl<Expander>(e => e.Name == "updateExpander");
+            H.Check("ExpanderUpdate_Mounted", expander is not null);
+            H.Check("ExpanderUpdate_HeaderTemplate",
+                expander?.Header is TextBlock header && header.Text == "templated-header");
+            H.Check("ExpanderUpdate_ContentReplaced",
+                expander?.Content is TextBlock content && content.Text == "templated-content");
+            H.Check("ExpanderUpdate_TransitionAssigned", expander?.ContentTransitions is not null);
+            H.Check("ExpanderUpdate_DirectionChanged", expander?.ExpandDirection == ExpandDirection.Up);
+
+            expandHits = 0;
+            if (expander is not null)
+            {
+                expander.IsExpanded = false;
+                expander.IsExpanded = true;
+            }
+
+            await Harness.Render();
+            H.Check("ExpanderUpdate_CallbacksFire", expandHits >= 2 && lastExpanded == true);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     //  26. Interaction-state pressed-merge inheritance (MergePressed).
     //     Targets Reconciler.cs lines 1768-1783.
     // ════════════════════════════════════════════════════════════════════
@@ -1413,5 +1628,211 @@ internal static class ReconcilerBigCoverageFixtures
             await Harness.Render();
             H.Check("ISMerge_Mounted", H.FindText("is-target") is not null);
         }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  27. Private reconciler hot paths that are otherwise difficult to
+    //      drive from synthesized WinUI input in the selftest harness.
+    // ════════════════════════════════════════════════════════════════════
+    internal class PrivateUpdateHotPaths(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            await Task.Yield();
+
+            var reconciler = new Reconciler();
+            var red = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red);
+            var blue = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Blue);
+            Action rerender = () => { };
+
+            var swipe = new WinUI.SwipeControl { Content = new TextBlock { Text = "swipe-old" } };
+            InvokePrivate<UIElement?>(reconciler, "UpdateSwipeControl",
+                SwipeControl(TextBlock("swipe-old"), rightItems: [new SwipeItemData("Delete")]),
+                SwipeControl(TextBlock("swipe-new"), leftItems:
+                [
+                    new SwipeItemData("Pin", Background: red, Foreground: blue),
+                    new SwipeItemData("Archive")
+                ]) with
+                {
+                    LeftItemsMode = WinUI.SwipeMode.Reveal,
+                    RightItemsMode = WinUI.SwipeMode.Execute,
+                },
+                swipe,
+                rerender);
+            H.Check("PrivUpdate_SwipeItems", swipe.LeftItems is not null && swipe.LeftItems.Count == 2);
+
+            var refresh = new WinUI.RefreshContainer { Content = new TextBlock { Text = "refresh-old" } };
+            InvokePrivate<UIElement?>(reconciler, "UpdateRefreshContainer",
+                RefreshContainer(TextBlock("refresh-old")),
+                RefreshContainer(Button("refresh-new")) with { PullDirection = WinUI.RefreshPullDirection.LeftToRight },
+                refresh,
+                rerender);
+            H.Check("PrivUpdate_RefreshReplacement",
+                refresh.Content is Button button && Equals(button.Content, "refresh-new"));
+
+            var cmdTarget = new Button { Content = "cmd-flyout" };
+            InvokePrivate<UIElement?>(reconciler, "UpdateCommandBarFlyout",
+                CommandBarFlyout(Button("cmd-flyout")),
+                CommandBarFlyout(
+                    Button("cmd-flyout"),
+                    primaryCommands: [AppBarButton("Bold", icon: "Edit")],
+                    secondaryCommands: [AppBarButton("More")]) with
+                {
+                    Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Bottom,
+                },
+                cmdTarget,
+                rerender);
+            H.Check("PrivUpdate_CommandBarFlyout",
+                Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.GetAttachedFlyout(cmdTarget) is WinUI.CommandBarFlyout);
+
+            var flyoutTarget = new Button { Content = "plain-flyout" };
+            InvokePrivate<UIElement?>(reconciler, "UpdateFlyoutElement",
+                Flyout(Button("plain-flyout"), TextBlock("old-flyout")),
+                Flyout(Button("plain-flyout"), TextBlock("new-flyout")) with
+                {
+                    Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Right,
+                    ShowMode = Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowMode.Transient,
+                    AreOpenCloseAnimationsEnabled = false,
+                    OnOpened = () => { },
+                    OnClosed = () => { },
+                },
+                flyoutTarget,
+                rerender);
+            H.Check("PrivUpdate_PlainFlyout",
+                flyoutTarget.Flyout is WinUI.Flyout
+                || Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.GetAttachedFlyout(flyoutTarget) is WinUI.Flyout);
+
+            var path = new WinShapes.Path();
+            InvokePrivate<UIElement?>(reconciler, "UpdatePath",
+                Path2D() with { PathDataString = "M0,0 L5,5" },
+                Path2D() with
+                {
+                    PathDataString = "M0,0 L10,10",
+                    Fill = red,
+                    Stroke = blue,
+                    StrokeThickness = 3,
+                    StrokeDashArray = new Microsoft.UI.Xaml.Media.DoubleCollection { 1, 2 },
+                    RenderTransform = new Microsoft.UI.Xaml.Media.TranslateTransform { X = 1, Y = 2 },
+                    StrokeStartLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Round,
+                    StrokeEndLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Square,
+                    StrokeLineJoin = Microsoft.UI.Xaml.Media.PenLineJoin.Bevel,
+                    StrokeMiterLimit = 4,
+                    StrokeDashCap = Microsoft.UI.Xaml.Media.PenLineCap.Triangle,
+                    StrokeDashOffset = 2,
+                },
+                path);
+            H.Check("PrivUpdate_Path", path.Fill == red && path.Stroke == blue && path.StrokeThickness == 3);
+
+            var line = new WinShapes.Line();
+            InvokePrivate<UIElement?>(reconciler, "UpdateLine",
+                Line(1, 2, 3, 4) with { Stroke = red, StrokeThickness = 5 },
+                line);
+            H.Check("PrivUpdate_Line", line.X2 == 3 && line.Stroke == red && line.StrokeThickness == 5);
+
+            var calendar = new WinUI.CalendarView { SelectionMode = WinUI.CalendarViewSelectionMode.Multiple };
+            var d1 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+            var d2 = new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero);
+            InvokePrivateStatic("SyncSelectedDates", calendar, new[] { d1, d2 });
+            H.Check("PrivUpdate_CalendarAdds", calendar.SelectedDates.Count == 2);
+            InvokePrivateStatic("SyncSelectedDates", calendar, Array.Empty<DateTimeOffset>());
+            H.Check("PrivUpdate_CalendarRemoves", calendar.SelectedDates.Count == 0);
+
+            var rows = new[] { new KeyRow("a"), new KeyRow("b"), new KeyRow("c") };
+            var listState = InvokePrivateStatic<ReactorListState>("BuildListStateFromElement",
+                ListView(rows, r => r.Key, (r, _) => TextBlock(r.Key)));
+            var lazyState = InvokePrivateStatic<ReactorListState>("BuildListStateFromLazy",
+                LazyVStack(rows, r => r.Key, (r, _) => TextBlock(r.Key)));
+            H.Check("PrivUpdate_ListStates", listState.Source.Count == 3 && lazyState.Source.Count == 3);
+
+            var repeater = new WinUI.ItemsRepeater();
+            InvokePrivate(reconciler, "ApplyMoveAnimationsRepeater",
+                repeater,
+                new List<ReactorRow> { new() { Index = 0, Key = "a" } },
+                AnimationKind.EaseOut);
+            H.Check("PrivUpdate_MoveRepeater", true);
+        }
+    }
+
+    internal class PrivateMountHotPaths(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            await Task.Yield();
+
+            var reconciler = new Reconciler();
+            Action rerender = () => { };
+
+            var iconSources = new WinUI.IconSource?[]
+            {
+                Reconciler.ResolveIconSource(new SymbolIconData("Edit")),
+                Reconciler.ResolveIconSource(new SymbolIconData("DefinitelyNotASymbol")),
+                Reconciler.ResolveIconSource(new FontIconData("\uE700", "Segoe Fluent Icons", 18)),
+                Reconciler.ResolveIconSource(new BitmapIconData(new Uri("ms-appx:///Assets/StoreLogo.png"), false)),
+                Reconciler.ResolveIconSource(new PathIconData("M0,0 L8,8")),
+                Reconciler.ResolveIconSource(new ImageIconData(new Uri("ms-appx:///Assets/StoreLogo.png"))),
+                Reconciler.ResolveIconSource("DefinitelyNotASymbol"),
+            };
+            H.Check("PrivMount_IconSources", iconSources.Take(6).All(i => i is not null));
+
+            var rows = new[] { new KeyRow("a"), new KeyRow("b"), new KeyRow("c") };
+            int selected = -1;
+            IReadOnlyList<KeyRow>? multi = null;
+            KeyRow? clicked = null;
+
+            var listEl = new TemplatedListViewElement<KeyRow>(rows, r => r.Key, (r, _) => TextBlock(r.Key))
+            {
+                Header = "header",
+                SelectionMode = WinUI.ListViewSelectionMode.Multiple,
+                OnSelectedIndexChanged = i => selected = i,
+                OnSelectionChanged = items => multi = items,
+                OnItemClick = item => clicked = item,
+            };
+            var list = InvokePrivate<WinUI.ListView>(reconciler, "MountTemplatedListView", listEl, rerender);
+            if (list.ItemsSource is IList<ReactorRow> listRows)
+            {
+                list.SelectedItems.Add(listRows[0]);
+                list.SelectedIndex = 1;
+            }
+            H.Check("PrivMount_TemplatedList", list.Header as string == "header" && selected >= 0 && multi is { Count: > 0 });
+
+            var gridEl = new TemplatedGridViewElement<KeyRow>(rows, r => r.Key, (r, _) => TextBlock(r.Key))
+            {
+                Header = "grid-header",
+                SelectionMode = WinUI.ListViewSelectionMode.Multiple,
+                OnSelectedIndexChanged = i => selected = i,
+                OnSelectionChanged = items => multi = items,
+                OnItemClick = item => clicked = item,
+            };
+            var grid = InvokePrivate<WinUI.GridView>(reconciler, "MountTemplatedGridView", gridEl, rerender);
+            if (grid.ItemsSource is IList<ReactorRow> gridRows)
+            {
+                grid.SelectedItems.Add(gridRows[1]);
+                grid.SelectedIndex = 2;
+            }
+            H.Check("PrivMount_TemplatedGrid", grid.Header as string == "grid-header" && selected >= 0 && multi is { Count: > 0 });
+            _ = clicked;
+        }
+    }
+
+    private sealed record KeyRow(string Key) : IReactorKeyed;
+
+    private static T InvokePrivate<T>(Reconciler reconciler, string methodName, params object?[] args) =>
+        (T)InvokePrivate(reconciler, methodName, args)!;
+
+    private static object? InvokePrivate(Reconciler reconciler, string methodName, params object?[] args)
+    {
+        var method = typeof(Reconciler).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException(typeof(Reconciler).FullName, methodName);
+        return method.Invoke(reconciler, args);
+    }
+
+    private static T InvokePrivateStatic<T>(string methodName, params object?[] args) =>
+        (T)InvokePrivateStatic(methodName, args)!;
+
+    private static object? InvokePrivateStatic(string methodName, params object?[] args)
+    {
+        var method = typeof(Reconciler).GetMethod(methodName, BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException(typeof(Reconciler).FullName, methodName);
+        return method.Invoke(null, args);
     }
 }
