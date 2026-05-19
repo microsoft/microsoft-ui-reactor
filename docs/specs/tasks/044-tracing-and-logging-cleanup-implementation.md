@@ -204,8 +204,8 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 4.2 PR: `NavigationDiagnostics` Debug.WriteLines → typed events
 
-- [ ] Replace the 9 sites in `src/Reactor/Navigation/NavigationDiagnostics.cs` with the Phase B navigation events (`NavigationRequested`, `NavigationCompleted`, `NavigationCacheHit`, etc.).
-- [ ] Confirm `NavigationDiagnostics` callers continue to function (no behavior change in DEBUG; new visibility in Release).
+- [x] Replace the 9 sites in `src/Reactor/Core/Navigation/NavigationDiagnostics.cs` with the Phase B navigation events (`NavigationRequested`, `NavigationCompleted`, `NavigationCacheHit`, etc.). The six direct mappings (Requested / Completed / Cancelled / CacheHit / CacheMiss / CacheEviction) reuse Phase B events 25-30. Three additional events were added to `ReactorEventSource` (IDs 33-35) to cover `TransitionStarted`, `TransitionCompleted`, and `DeepLinkResolved`. DeepLink intentionally drops the `path` payload (attacker-controllable per §6.2.1) and emits only `matched` + `routeCount`.
+- [x] Confirm `NavigationDiagnostics` callers continue to function (no behavior change in DEBUG; new visibility in Release). Existing `NavigationDiagnosticsCoverageTests` keeps verifying the public C# event subscribers (8 tests). New `NavigationDiagnosticsEtwBridgeTests` (7 tests) exercises every `OnX` entry point and asserts the typed ETW event lands on a `Keywords.Navigation` listener with the expected payload. `OnDeepLinkResolved_match_emits_outcome_only_no_path` is the explicit §6.2.1 PII regression guard.
 
 ### 4.3 PR: `IntlAccessor` missing-key warnings → `IntlMissingKey`
 

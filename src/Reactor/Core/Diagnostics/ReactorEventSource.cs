@@ -388,6 +388,37 @@ internal sealed class ReactorEventSource : EventSource
             WriteEvent(30, routeTemplate ?? string.Empty, reason ?? string.Empty);
     }
 
+    // Transition + DeepLink (spec 044 Phase C §4.2 follow-on). The
+    // transition events log the transition's *type name* (e.g.
+    // "FadeNavigationTransition") and the navigation mode, both of which
+    // are framework-defined identifiers — never user data. DeepLink does
+    // NOT include the input path (it is attacker-controllable per §6.2.1);
+    // only the resolution outcome and candidate-route count.
+
+    [Event(33, Level = EventLevel.Verbose, Keywords = Keywords.Navigation,
+        Message = "Navigation transition started (type={transitionType}, mode={mode})")]
+    public void NavigationTransitionStarted(string transitionType, string mode)
+    {
+        if (IsEnabled(EventLevel.Verbose, Keywords.Navigation))
+            WriteEvent(33, transitionType ?? string.Empty, mode ?? string.Empty);
+    }
+
+    [Event(34, Level = EventLevel.Verbose, Keywords = Keywords.Navigation,
+        Message = "Navigation transition completed (type={transitionType}, mode={mode})")]
+    public void NavigationTransitionCompleted(string transitionType, string mode)
+    {
+        if (IsEnabled(EventLevel.Verbose, Keywords.Navigation))
+            WriteEvent(34, transitionType ?? string.Empty, mode ?? string.Empty);
+    }
+
+    [Event(35, Level = EventLevel.Informational, Keywords = Keywords.Navigation,
+        Message = "Deep link resolved (matched={matched}, routeCount={routeCount})")]
+    public void NavigationDeepLinkResolved(bool matched, int routeCount)
+    {
+        if (IsEnabled(EventLevel.Informational, Keywords.Navigation))
+            WriteEvent(35, matched, routeCount);
+    }
+
     // ── Intl (spec 044 Phase B §2.4) ────────────────────────────────────
     //
     // PII: keys are developer-authored static identifiers ("Settings.Title",
@@ -415,6 +446,7 @@ internal sealed class ReactorEventSource : EventSource
     // ── EventId allocation ──────────────────────────────────────────────
     //
     // Used: 1-15 (original surface), 16-17 (spec 044 Phase A generics),
-    //       18-32 (spec 044 Phase B subsystem coverage).
-    // Next free EventId: 33.
+    //       18-32 (spec 044 Phase B subsystem coverage),
+    //       33-35 (spec 044 Phase C §4.2 navigation transition + deep link).
+    // Next free EventId: 36.
 }
