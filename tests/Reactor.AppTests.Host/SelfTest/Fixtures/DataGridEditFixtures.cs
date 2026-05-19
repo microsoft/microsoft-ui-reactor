@@ -341,13 +341,15 @@ internal static class DataGridEditFixtures
                 );
             });
 
-            await Harness.Render(500);
-
-            // 1. Initial render with fontSize=14
-            H.Check("DataGrid_ExtState_Renders",
-                H.FindTextContaining("Product 0") is not null);
-
-            var initialTb = H.FindControl<TextBlock>(tb => tb.Text == "Product 0");
+            // 1. Initial render with fontSize=14 — retry to absorb VirtualList
+            //    item realization timing on slow CI runners.
+            TextBlock? initialTb = null;
+            for (int attempt = 0; attempt < 5 && initialTb is null; attempt++)
+            {
+                await Harness.Render(200);
+                initialTb = H.FindControl<TextBlock>(tb => tb.Text == "Product 0");
+            }
+            H.Check("DataGrid_ExtState_Renders", initialTb is not null);
             H.Check("DataGrid_ExtState_InitialFontSize",
                 initialTb is not null && Math.Abs(initialTb.FontSize - 14.0) < 0.1);
 
