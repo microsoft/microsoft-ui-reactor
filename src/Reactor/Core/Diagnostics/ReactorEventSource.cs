@@ -263,8 +263,158 @@ internal sealed class ReactorEventSource : EventSource
             WriteEvent(17, category ?? string.Empty, operation ?? string.Empty, hr);
     }
 
+    // ── Hosting (spec 044 Phase B §2.1) ─────────────────────────────────
+    //
+    // PII: windowType is the C# type name (developer-authored, OK).
+    //      Window titles are NEVER emitted on this surface (spec §6.2.1).
+    //      HWND is emitted as a long; not user data.
+
+    [Event(18, Level = EventLevel.Informational, Keywords = Keywords.Hosting,
+        Message = "Window opened (type={windowType}, hwnd=0x{hwnd:X16})")]
+    public void WindowOpened(string windowType, long hwnd)
+    {
+        if (IsEnabled(EventLevel.Informational, Keywords.Hosting))
+            WriteEvent(18, windowType ?? string.Empty, hwnd);
+    }
+
+    [Event(19, Level = EventLevel.Informational, Keywords = Keywords.Hosting,
+        Message = "Window closed (type={windowType}, hwnd=0x{hwnd:X16})")]
+    public void WindowClosed(string windowType, long hwnd)
+    {
+        if (IsEnabled(EventLevel.Informational, Keywords.Hosting))
+            WriteEvent(19, windowType ?? string.Empty, hwnd);
+    }
+
+    [Event(20, Level = EventLevel.Informational, Keywords = Keywords.Hosting,
+        Message = "Window DPI changed (type={windowType}, old={oldDpi}, new={newDpi})")]
+    public void WindowDpiChanged(string windowType, int oldDpi, int newDpi)
+    {
+        if (IsEnabled(EventLevel.Informational, Keywords.Hosting))
+            WriteEvent(20, windowType ?? string.Empty, oldDpi, newDpi);
+    }
+
+    [Event(21, Level = EventLevel.Warning, Keywords = Keywords.Hosting,
+        Message = "Backdrop materialization failed (kind={kind}, exception={exceptionType})")]
+    public void BackdropMaterializationFailed(string kind, string exceptionType)
+    {
+        if (IsEnabled(EventLevel.Warning, Keywords.Hosting))
+            // PII: exception type only — same discipline as RenderError.
+            WriteEvent(21, kind ?? string.Empty, exceptionType ?? string.Empty);
+    }
+
+    // ── Persistence (spec 044 Phase B §2.2) ─────────────────────────────
+    //
+    // PII: file paths NEVER emitted; storeKind is a short label
+    //      ("settings", "placement", etc.). sizeBytes is an int; not PII.
+
+    [Event(22, Level = EventLevel.Informational, Keywords = Keywords.Persistence,
+        Message = "Persistence read (store={storeKind}, size={sizeBytes})")]
+    public void PersistenceRead(string storeKind, int sizeBytes)
+    {
+        if (IsEnabled(EventLevel.Informational, Keywords.Persistence))
+            WriteEvent(22, storeKind ?? string.Empty, sizeBytes);
+    }
+
+    [Event(23, Level = EventLevel.Informational, Keywords = Keywords.Persistence,
+        Message = "Persistence write (store={storeKind}, size={sizeBytes})")]
+    public void PersistenceWrite(string storeKind, int sizeBytes)
+    {
+        if (IsEnabled(EventLevel.Informational, Keywords.Persistence))
+            WriteEvent(23, storeKind ?? string.Empty, sizeBytes);
+    }
+
+    [Event(24, Level = EventLevel.Warning, Keywords = Keywords.Persistence,
+        Message = "Persistence rejected (store={storeKind}, reason={reason})")]
+    public void PersistenceRejected(string storeKind, string reason)
+    {
+        if (IsEnabled(EventLevel.Warning, Keywords.Persistence))
+            // PII: reason is a short, developer-authored label
+            // ("oversize", "corrupt", "schema-mismatch"), NEVER a path
+            // or raw error message.
+            WriteEvent(24, storeKind ?? string.Empty, reason ?? string.Empty);
+    }
+
+    // ── Navigation (spec 044 Phase B §2.3) ──────────────────────────────
+    //
+    // PII: route TEMPLATE only ("/users/{id}"). The instantiated path is
+    //      NEVER emitted; instantiated path parameter values are user
+    //      data per §6.2.1.
+
+    [Event(25, Level = EventLevel.Informational, Keywords = Keywords.Navigation,
+        Message = "Navigation requested (route={routeTemplate})")]
+    public void NavigationRequested(string routeTemplate)
+    {
+        if (IsEnabled(EventLevel.Informational, Keywords.Navigation))
+            WriteEvent(25, routeTemplate ?? string.Empty);
+    }
+
+    [Event(26, Level = EventLevel.Informational, Keywords = Keywords.Navigation,
+        Message = "Navigation completed (route={routeTemplate}, durationMs={durationMs})")]
+    public void NavigationCompleted(string routeTemplate, double durationMs)
+    {
+        if (IsEnabled(EventLevel.Informational, Keywords.Navigation))
+            WriteEvent(26, routeTemplate ?? string.Empty, durationMs);
+    }
+
+    [Event(27, Level = EventLevel.Informational, Keywords = Keywords.Navigation,
+        Message = "Navigation cancelled (route={routeTemplate}, reason={reason})")]
+    public void NavigationCancelled(string routeTemplate, string reason)
+    {
+        if (IsEnabled(EventLevel.Informational, Keywords.Navigation))
+            WriteEvent(27, routeTemplate ?? string.Empty, reason ?? string.Empty);
+    }
+
+    [Event(28, Level = EventLevel.Verbose, Keywords = Keywords.Navigation,
+        Message = "Navigation cache hit (route={routeTemplate})")]
+    public void NavigationCacheHit(string routeTemplate)
+    {
+        if (IsEnabled(EventLevel.Verbose, Keywords.Navigation))
+            WriteEvent(28, routeTemplate ?? string.Empty);
+    }
+
+    [Event(29, Level = EventLevel.Verbose, Keywords = Keywords.Navigation,
+        Message = "Navigation cache miss (route={routeTemplate})")]
+    public void NavigationCacheMiss(string routeTemplate)
+    {
+        if (IsEnabled(EventLevel.Verbose, Keywords.Navigation))
+            WriteEvent(29, routeTemplate ?? string.Empty);
+    }
+
+    [Event(30, Level = EventLevel.Verbose, Keywords = Keywords.Navigation,
+        Message = "Navigation cache evict (route={routeTemplate}, reason={reason})")]
+    public void NavigationCacheEvict(string routeTemplate, string reason)
+    {
+        if (IsEnabled(EventLevel.Verbose, Keywords.Navigation))
+            WriteEvent(30, routeTemplate ?? string.Empty, reason ?? string.Empty);
+    }
+
+    // ── Intl (spec 044 Phase B §2.4) ────────────────────────────────────
+    //
+    // PII: keys are developer-authored static identifiers ("Settings.Title",
+    //      "Errors.NetworkOffline"). Locale tags are BCP-47 strings, also OK.
+
+    [Event(31, Level = EventLevel.Warning, Keywords = Keywords.Intl,
+        Message = "Intl missing key (key={key}, locale={locale}, fellBack={fellBack})")]
+    public void IntlMissingKey(string key, string locale, bool fellBack)
+    {
+        if (IsEnabled(EventLevel.Warning, Keywords.Intl))
+            WriteEvent(31, key ?? string.Empty, locale ?? string.Empty, fellBack);
+    }
+
+    // ── Theme (spec 044 Phase B §2.5) ───────────────────────────────────
+
+    [Event(32, Level = EventLevel.Warning, Keywords = Keywords.Theme,
+        Message = "Theme apply failed (target={targetType}, exception={exceptionType})")]
+    public void ThemeApplyFailed(string targetType, string exceptionType)
+    {
+        if (IsEnabled(EventLevel.Warning, Keywords.Theme))
+            // PII: exception type only.
+            WriteEvent(32, targetType ?? string.Empty, exceptionType ?? string.Empty);
+    }
+
     // ── EventId allocation ──────────────────────────────────────────────
     //
-    // Used: 1-15 (original surface), 16-17 (spec 044 Phase A generics).
-    // Next free EventId for spec 044 Phase B (subsystem events): 18.
+    // Used: 1-15 (original surface), 16-17 (spec 044 Phase A generics),
+    //       18-32 (spec 044 Phase B subsystem coverage).
+    // Next free EventId: 33.
 }

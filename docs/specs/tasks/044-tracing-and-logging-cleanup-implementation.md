@@ -91,55 +91,55 @@ Adds the typed events that the §6.7 "Promote to typed event" verdicts will use.
 
 ### 2.1 Add Hosting events
 
-- [ ] `WindowOpened(string windowType, long hwnd)` — Informational, Hosting.
-- [ ] `WindowClosed(string windowType, long hwnd)` — Informational, Hosting.
-- [ ] `WindowDpiChanged(string windowType, int oldDpi, int newDpi)` — Informational, Hosting.
-- [ ] `BackdropMaterializationFailed(string kind, string exceptionType)` — Warning, Hosting.
-- [ ] PII review: `windowType` is the C# type name (developer-authored, OK). Window titles are **not** emitted (spec §6.2.1).
+- [x] `WindowOpened(string windowType, long hwnd)` — Informational, Hosting.
+- [x] `WindowClosed(string windowType, long hwnd)` — Informational, Hosting.
+- [x] `WindowDpiChanged(string windowType, int oldDpi, int newDpi)` — Informational, Hosting.
+- [x] `BackdropMaterializationFailed(string kind, string exceptionType)` — Warning, Hosting.
+- [x] PII review: `windowType` is the C# type name (developer-authored, OK). Window titles are **not** emitted (spec §6.2.1).
 
 ### 2.2 Add Persistence events
 
-- [ ] `PersistenceRead(string storeKind, int sizeBytes)` — Informational, Persistence.
-- [ ] `PersistenceWrite(string storeKind, int sizeBytes)` — Informational, Persistence.
-- [ ] `PersistenceRejected(string storeKind, string reason)` — Warning, Persistence (oversize, corrupt, schema mismatch).
-- [ ] PII review: file paths are **not** emitted; use a `storeKind` label (`"settings"`, `"placement"`, etc.).
+- [x] `PersistenceRead(string storeKind, int sizeBytes)` — Informational, Persistence.
+- [x] `PersistenceWrite(string storeKind, int sizeBytes)` — Informational, Persistence.
+- [x] `PersistenceRejected(string storeKind, string reason)` — Warning, Persistence (oversize, corrupt, schema mismatch).
+- [x] PII review: file paths are **not** emitted; use a `storeKind` label (`"settings"`, `"placement"`, etc.).
 
 ### 2.3 Add Navigation events
 
-- [ ] `NavigationRequested(string routeTemplate)` — Informational, Navigation.
-- [ ] `NavigationCompleted(string routeTemplate, double durationMs)` — Informational, Navigation.
-- [ ] `NavigationCancelled(string routeTemplate, string reason)` — Informational, Navigation.
-- [ ] `NavigationCacheHit(string routeTemplate)` — Verbose, Navigation.
-- [ ] `NavigationCacheMiss(string routeTemplate)` — Verbose, Navigation.
-- [ ] `NavigationCacheEvict(string routeTemplate, string reason)` — Verbose, Navigation.
-- [ ] PII review: **route template** (`/users/{id}`) only, never the instantiated path (spec §6.2.1).
+- [x] `NavigationRequested(string routeTemplate)` — Informational, Navigation.
+- [x] `NavigationCompleted(string routeTemplate, double durationMs)` — Informational, Navigation.
+- [x] `NavigationCancelled(string routeTemplate, string reason)` — Informational, Navigation.
+- [x] `NavigationCacheHit(string routeTemplate)` — Verbose, Navigation.
+- [x] `NavigationCacheMiss(string routeTemplate)` — Verbose, Navigation.
+- [x] `NavigationCacheEvict(string routeTemplate, string reason)` — Verbose, Navigation.
+- [x] PII review: **route template** (`/users/{id}`) only, never the instantiated path (spec §6.2.1).
 
 ### 2.4 Add Intl event
 
-- [ ] `IntlMissingKey(string key, string locale, bool fellBack)` — Warning, Intl.
-- [ ] PII review: keys are developer-authored static identifiers (OK).
+- [x] `IntlMissingKey(string key, string locale, bool fellBack)` — Warning, Intl.
+- [x] PII review: keys are developer-authored static identifiers (OK).
 
 ### 2.5 Add Theme event
 
-- [ ] `ThemeApplyFailed(string targetType, string exceptionType)` — Warning, Theme.
+- [x] `ThemeApplyFailed(string targetType, string exceptionType)` — Warning, Theme.
 
 ### 2.6 Reserve event IDs / verify ordering
 
-- [ ] All new events get sequential `EventId`s after the Phase A additions.
-- [ ] Update the `ReactorEventSource` `EventId` allocation comment so future additions know the next free ID.
+- [x] All new events get sequential `EventId`s after the Phase A additions.
+- [x] Update the `ReactorEventSource` `EventId` allocation comment so future additions know the next free ID.
 
 ### 2.7 Phase B tests
 
-- [ ] Add `tests/Reactor.Tests/Diagnostics/ReactorEventSourceCoverageTests.cs`:
-  - [ ] One smoke test per new event that fires it and asserts the captured payload via an in-test `EventListener`.
+- [x] Add `tests/Reactor.Tests/Diagnostics/ReactorEventSourceCoverageTests.cs`:
+  - [x] One smoke test per new event that fires it and asserts the captured payload via an in-test `EventListener`.
   - [ ] Each event is allocation-free when its keyword is disabled (use `BenchmarkDotNet`-style allocation check, or assert `IsEnabled == false → no GC alloc` via `GC.GetAllocatedBytesForCurrentThread()` delta).
-- [ ] Add a single end-to-end test that enables `Keywords.Hosting | Persistence | Navigation | Intl | Theme | Errors`, fires one of each, and verifies all are captured (regression guard against keyword-bit overlap).
+- [x] Add a single end-to-end test that enables `Keywords.Hosting | Persistence | Navigation | Intl | Theme | Errors`, fires one of each, and verifies all are captured (regression guard against keyword-bit overlap).
 
 ### 2.8 Phase B acceptance
 
-- [ ] `dotnet build Reactor.slnx` clean.
-- [ ] `dotnet test tests/Reactor.Tests` green.
-- [ ] Each new event has its PII policy decision documented inline (a `// PII:` comment on the event method or in a section comment).
+- [x] `dotnet build Reactor.slnx` clean.
+- [x] `dotnet test tests/Reactor.Tests` green.
+- [x] Each new event has its PII policy decision documented inline (a `// PII:` comment on the event method or in a section comment).
 
 ---
 
