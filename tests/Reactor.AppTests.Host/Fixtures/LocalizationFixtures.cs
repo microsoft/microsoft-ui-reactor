@@ -127,7 +127,7 @@ internal static class LocalizationFixtures
                 HStack(4,
                     languages.Select(lang =>
                         Button(lang, () => setLocale(lang))
-                            .Disabled(locale == lang)
+                            .IsEnabled(!(locale == lang))
                             .AutomationId($"Lang_{lang}")
                     ).ToArray()
                 ),

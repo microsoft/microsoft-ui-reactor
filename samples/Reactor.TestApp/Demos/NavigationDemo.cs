@@ -36,9 +36,9 @@ class NavigationDemo : Component
             TextBlock($"Route: {nav.CurrentRoute}  |  Depth: {nav.Depth}  |  Back stack: {nav.BackStack.Count}"),
 
             HStack(8,
-                Button("Back", () => nav.GoBack()).Disabled(!nav.CanGoBack),
-                Button("Forward", () => nav.GoForward()).Disabled(!nav.CanGoForward),
-                Button("Reset", () => nav.Reset(new NavHome())).Disabled(nav.CurrentRoute is NavHome && nav.Depth == 1)
+                Button("Back", () => nav.GoBack()).IsEnabled(nav.CanGoBack),
+                Button("Forward", () => nav.GoForward()).IsEnabled(nav.CanGoForward),
+                Button("Reset", () => nav.Reset(new NavHome())).IsEnabled(!(nav.CurrentRoute is NavHome && nav.Depth == 1))
             ),
 
             // Transition selector (persisted across tab switches)

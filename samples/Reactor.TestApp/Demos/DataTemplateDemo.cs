@@ -60,7 +60,7 @@ class DataTemplateDemo : Component
                 })),
                 Button("Remove Last", () => updateAnimals(list =>
                     list.Count > 0 ? list.Take(list.Count - 1).ToList() : list
-                )).Disabled(animals.Count == 0)
+                )).IsEnabled(!(animals.Count == 0))
             ),
 
             TextBlock($"{filtered.Count} animals shown").Foreground(SecondaryText),

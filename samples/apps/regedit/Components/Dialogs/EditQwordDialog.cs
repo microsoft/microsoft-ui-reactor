@@ -27,7 +27,7 @@ internal sealed class EditQwordDialog : Component<EditQwordDialogProps>
                 VStack(4,
                     TextBlock(Strings.ValueName),
                     TextField(Props.ValueName, _ => { })
-                        .ReadOnly()
+                        .IsReadOnly()
                 ),
                 VStack(4,
                     TextBlock(Strings.ValueData),

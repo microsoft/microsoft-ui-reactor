@@ -119,11 +119,11 @@ class KeepSubmitReachableDemo : Component
             // commit-on-keystroke, so validation reacts as the user types.
             NumberBox(age, setAge, header: "Age").Immediate(),
 
-            // .DisabledFocusable() keeps the button tab-reachable and
+            // .IsDisabledFocusable() keeps the button tab-reachable and
             // visually dimmed while preventing invocation. Pattern mirrors
             // Fluent UI's `disabledFocusable` and ARIA `aria-disabled`.
             Button("Submit", () => { /* submit */ })
-                .DisabledFocusable(!formValid)
+                .IsDisabledFocusable(!formValid)
                 .Margin(0, 8, 0, 0)
         ).Padding(24);
     }
@@ -162,7 +162,7 @@ class ValidationContextDemo : Component
             {
                 ctx.MarkAllTouched();
                 if (ctx.IsValid()) setSubmitted(true);
-            }).Disabled(submitted),
+            }).IsEnabled(!submitted),
             When(submitted, () =>
                 TextBlock("Registration successful!")
                     .Foreground(Theme.SystemSuccess).SemiBold())

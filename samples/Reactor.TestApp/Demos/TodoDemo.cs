@@ -41,7 +41,7 @@ class TodoDemo : Component
                         updateItems(list => [.. list, new TodoItem(newText.Trim(), false)]);
                         setNewText("");
                     }
-                }).Disabled(string.IsNullOrWhiteSpace(newText))
+                }).IsEnabled(!(string.IsNullOrWhiteSpace(newText)))
             ),
 
             // List of items

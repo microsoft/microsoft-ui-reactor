@@ -27,8 +27,8 @@ class ButtonPage: Component
                 sourceCode: @"Button(""Save"").Click(() => setOutput(""Saved!""))"),
 
             SampleCard("Disabled Button",
-                Button("Can't Click").Disabled(),
-                sourceCode: @"Button(""Can't Click"").Disabled()"),
+                Button("Can't Click").IsEnabled(false),
+                sourceCode: @"Button(""Can't Click"").IsEnabled(false)"),
 
             // Phase 8.1 — .AccentButton() named-style fluent (spec 039 §17.1).
             SampleCard("Accent style — .AccentButton()",

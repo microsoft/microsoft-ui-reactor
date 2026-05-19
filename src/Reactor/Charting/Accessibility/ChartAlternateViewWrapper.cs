@@ -62,8 +62,8 @@ internal static class ChartAlternateViewWrapper
                 : "Showing chart";
 
             return Factories.VStack(
-                chart.Visible(!isShowingAlternate),
-                alternate.Visible(isShowingAlternate),
+                chart.IsVisible(!isShowingAlternate),
+                alternate.IsVisible(isShowingAlternate),
                 // Visually hidden text block for live-region announcement.
                 // Uses 1×1 size at far offscreen position instead of zero-size,
                 // because some screen readers skip zero-dimension elements.

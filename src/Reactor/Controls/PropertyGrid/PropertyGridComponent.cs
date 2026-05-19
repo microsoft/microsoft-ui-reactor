@@ -269,9 +269,9 @@ public class PropertyGridComponent : Component<PropertyGridElement>
     private static Element RenderReadOnlyValue(object? value, Type type)
     {
         if (type == typeof(bool))
-            return ToggleSwitch((bool)(value ?? false), null).Disabled();
+            return ToggleSwitch((bool)(value ?? false), null).IsEnabled(false);
         if (type == typeof(string))
-            return TextField((string)(value ?? ""), null).Disabled();
+            return TextField((string)(value ?? ""), null).IsEnabled(false);
         return TextBlock(value?.ToString() ?? "(null)");
     }
 

@@ -246,11 +246,11 @@ class KeepSubmitReachableDemo : Component
             // commit-on-keystroke, so validation reacts as the user types.
             NumberBox(age, setAge, header: "Age").Immediate(),
 
-            // .DisabledFocusable() keeps the button tab-reachable and
+            // .IsDisabledFocusable() keeps the button tab-reachable and
             // visually dimmed while preventing invocation. Pattern mirrors
             // Fluent UI's `disabledFocusable` and ARIA `aria-disabled`.
             Button("Submit", () => { /* submit */ })
-                .DisabledFocusable(!formValid)
+                .IsDisabledFocusable(!formValid)
                 .Margin(0, 8, 0, 0)
         ).Padding(24);
     }
@@ -259,7 +259,7 @@ class KeepSubmitReachableDemo : Component
 
 ![Keep submit reachable](images/forms/keep-submit-reachable.png)
 
-**`.DisabledFocusable(bool)` on Button** keeps the button keyboard-focusable
+**`.IsDisabledFocusable(bool)` on Button** keeps the button keyboard-focusable
 and tab-reachable while presenting it as disabled (dimmed; the click is
 suppressed). Mirrors Fluent UI React's `disabledFocusable` and ARIA's
 `aria-disabled`. Use it for any Submit gated on validation, busy state, or
@@ -273,14 +273,14 @@ the right choice when an intermediate value would be expensive or surprising
 (snapping `2.50` to `2.5` mid-edit). Apply when validation gates UI state
 and you want it to feel live.
 
-Use `.DisabledFocusable()` whenever a button is conditionally disabled in a
+Use `.IsDisabledFocusable()` whenever a button is conditionally disabled in a
 form — even if you've also applied `.Immediate()` to every commit-on-blur
 input. The two cover different failure modes: `.Immediate()` keeps validity
-in sync with typing; `.DisabledFocusable()` keeps the button discoverable
+in sync with typing; `.IsDisabledFocusable()` keeps the button discoverable
 when validity is gated on async checks, required-but-untouched fields,
 cross-field rules, or any derived condition that can't be made instantaneous.
 
-> **Where not to use `.DisabledFocusable()`:** only buttons. For data-entry
+> **Where not to use `.IsDisabledFocusable()`:** only buttons. For data-entry
 > controls (`TextField`, `NumberBox`, `CheckBox`, etc.), `IsEnabled=false`
 > usually means "this field isn't part of your current task" (cascading
 > from another input), and tab-skipping is the correct UX. Use
@@ -324,7 +324,7 @@ class ValidationContextDemo : Component
             {
                 ctx.MarkAllTouched();
                 if (ctx.IsValid()) setSubmitted(true);
-            }).Disabled(submitted),
+            }).IsEnabled(!submitted),
             When(submitted, () =>
                 TextBlock("Registration successful!")
                     .Foreground(Theme.SystemSuccess).SemiBold())

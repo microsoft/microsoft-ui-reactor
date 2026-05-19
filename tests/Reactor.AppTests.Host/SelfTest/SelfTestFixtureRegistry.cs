@@ -733,7 +733,7 @@ internal static class SelfTestFixtureRegistry
         "ValueEvt_PasswordBox",
         "ValueEvt_ColorPicker",
 
-        // Validation pit-of-success: NumberBox.Immediate() + Button.DisabledFocusable()
+        // Validation pit-of-success: NumberBox.Immediate() + Button.IsDisabledFocusable()
         // Keystroke-level coverage lives in Reactor.AppTests (Appium tier).
         "Immediate_NumberBoxFiresOnTextChange",
         "DisabledFocusable_ButtonState",

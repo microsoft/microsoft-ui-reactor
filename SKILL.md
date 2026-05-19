@@ -476,7 +476,7 @@ class App : Component
     }
 
     static Element NavBtn(string label, string current, Action<string> set) =>
-        Button(label, () => set(label)).Disabled(label == current);
+        Button(label, () => set(label)).IsEnabled(!(label == current));
 }
 ```
 

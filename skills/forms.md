@@ -37,7 +37,7 @@ return VStack(12,
     TextField(name, setName, placeholder: "Name"),
     NumberBox(age, setAge),
     CheckBox("I agree", agreed, setAgreed),
-    Button("Submit", onSubmit).Disabled(string.IsNullOrEmpty(name) || !agreed)
+    Button("Submit", onSubmit).IsEnabled(!(string.IsNullOrEmpty(name) || !agreed))
 );
 ```
 
@@ -69,7 +69,7 @@ var isValid = email.Contains('@') && email.Length > 3;
 
 return VStack(12,
     TextField(email, setEmail, placeholder: "Email"),
-    Button("Submit", onSubmit).Disabled(!isValid)
+    Button("Submit", onSubmit).IsEnabled(isValid)
 );
 ```
 

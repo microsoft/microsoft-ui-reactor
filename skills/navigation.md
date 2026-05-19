@@ -60,7 +60,7 @@ class App : Component
             HStack(8,
                 Button("Home", () => nav.Navigate(Route.Home)),
                 Button("Settings", () => nav.Navigate(Route.Settings)),
-                Button("Back", () => nav.GoBack()).Disabled(!nav.CanGoBack)
+                Button("Back", () => nav.GoBack()).IsEnabled(nav.CanGoBack)
             ),
             NavigationHost(nav, route => route switch
             {

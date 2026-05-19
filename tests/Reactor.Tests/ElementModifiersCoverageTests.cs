@@ -158,7 +158,16 @@ public class ElementModifiersCoverageTests
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void Popup_LightDismiss()
+    public void Popup_IsLightDismissEnabled()
+    {
+        var el = new PopupElement(TextBlock("popup content"))
+            .IsLightDismissEnabled(true);
+        Assert.True(el.IsLightDismissEnabled);
+    }
+
+    [Fact]
+    [Obsolete("Tests the deprecated LightDismiss shim")]
+    public void Popup_LightDismiss_Shim()
     {
         var el = new PopupElement(TextBlock("popup content"))
             .LightDismiss(true);

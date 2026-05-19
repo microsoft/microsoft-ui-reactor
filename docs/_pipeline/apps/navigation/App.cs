@@ -38,7 +38,7 @@ class BasicNavDemo : Component
                 Button("Settings", () => nav.Navigate(Route.Settings)),
                 Button("Profile", () => nav.Navigate(Route.Profile)),
                 Button("Back", () => nav.GoBack())
-                    .Disabled(!nav.CanGoBack)
+                    .IsEnabled(nav.CanGoBack)
             ),
             NavigationHost(nav, route => route switch
             {
@@ -101,9 +101,9 @@ class StackOperationsDemo : Component
                 Button("Reset", () =>
                     nav.Reset(Route.Home)),
                 Button("Back", () => nav.GoBack())
-                    .Disabled(!nav.CanGoBack),
+                    .IsEnabled(nav.CanGoBack),
                 Button("Forward", () => nav.GoForward())
-                    .Disabled(!nav.CanGoForward)
+                    .IsEnabled(nav.CanGoForward)
             ),
             NavigationHost(nav, route =>
                 TextBlock($"Page: {route}")
@@ -158,7 +158,7 @@ class PageTransitionsDemo : Component
                 Button("Settings", () => nav.Navigate(Route.Settings)),
                 Button("Profile", () => nav.Navigate(Route.Profile)),
                 Button("Back", () => nav.GoBack())
-                    .Disabled(!nav.CanGoBack)
+                    .IsEnabled(nav.CanGoBack)
             ),
             NavigationHost(nav, route => route switch
             {
@@ -256,7 +256,7 @@ class StateSerializationDemo : Component
                 {
                     if (savedState is not null)
                         nav.SetState(savedState);
-                }).Disabled(savedState is null)
+                }).IsEnabled(!(savedState is null))
             ),
             TextBlock($"Current: {nav.CurrentRoute}"),
             TextBlock($"Saved: {savedState?[..Math.Min(50, savedState?.Length ?? 0)] ?? "(none)"}")
@@ -322,7 +322,7 @@ class PageCachingDemo : Component
                 Button("Home", () => nav.Navigate(Route.Home)),
                 Button("Settings", () => nav.Navigate(Route.Settings)),
                 Button("Back", () => nav.GoBack())
-                    .Disabled(!nav.CanGoBack)
+                    .IsEnabled(nav.CanGoBack)
             ),
             NavigationHost(nav, route => route switch
             {

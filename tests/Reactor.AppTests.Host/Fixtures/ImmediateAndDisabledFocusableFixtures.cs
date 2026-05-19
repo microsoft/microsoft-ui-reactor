@@ -7,7 +7,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.Fixtures;
 
 /// <summary>
 /// TestHost fixture for the validation pit-of-success APIs (NumberBox
-/// .Immediate() and Button .DisabledFocusable()). Drives the Appium tier in
+/// .Immediate() and Button .IsDisabledFocusable()). Drives the Appium tier in
 /// <c>Reactor.AppTests.Tests.ImmediateAndDisabledFocusableTests</c> with real
 /// keystroke input so we cover the real-typing path that the in-process self-
 /// tests cannot reach (programmatic <c>NumberBox.Text =</c> also commits Value,
@@ -56,7 +56,7 @@ internal static class ImmediateAndDisabledFocusableFixtures
                     .AutomationId("ValImmediate_FireCount"),
 
                 Button("Submit", () => setSubmitCount(submitCount + 1))
-                    .DisabledFocusable(!formValid)
+                    .IsDisabledFocusable(!formValid)
                     .AutomationId("ValImmediate_Submit"),
 
                 TextBlock($"Submits: {submitCount}")

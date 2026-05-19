@@ -289,9 +289,9 @@ class VirtualListApp : Component
 
         return VStack(
             HStack(8,
-                Button("1k", () => setCount(1000)).Disabled(count == 1000),
-                Button("5k", () => setCount(5000)).Disabled(count == 5000),
-                Button("10k", () => setCount(10000)).Disabled(count == 10000),
+                Button("1k", () => setCount(1000)).IsEnabled(count != 1000),
+                Button("5k", () => setCount(5000)).IsEnabled(count != 5000),
+                Button("10k", () => setCount(10000)).IsEnabled(count != 10000),
                 Button(Cli.WithEdits ? "Edits: on" : "Edits: off",
                     () => { Cli.WithEdits = !Cli.WithEdits; }),
                 Button("Run benchmark", StartBenchmark),

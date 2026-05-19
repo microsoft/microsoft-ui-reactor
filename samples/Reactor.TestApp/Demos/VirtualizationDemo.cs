@@ -71,18 +71,18 @@ class VirtualizationDemo : Component
                     TextBlock("Mode:"),
                     HStack(8,
                         Button("LazyVStack", () => setMode("LazyVStack"))
-                            .Disabled(mode == "LazyVStack"),
+                            .IsEnabled(!(mode == "LazyVStack")),
                         Button("ListView", () => setMode("ListView"))
-                            .Disabled(mode == "ListView")
+                            .IsEnabled(!(mode == "ListView"))
                     )
                 ),
                 VStack(4,
                     TextBlock("Items:"),
                     HStack(8,
-                        Button("100", () => setItemCount(100)).Disabled(itemCount == 100),
-                        Button("1000", () => setItemCount(1000)).Disabled(itemCount == 1000),
-                        Button("5000", () => setItemCount(5000)).Disabled(itemCount == 5000),
-                        Button("10000", () => setItemCount(10000)).Disabled(itemCount == 10000)
+                        Button("100", () => setItemCount(100)).IsEnabled(!(itemCount == 100)),
+                        Button("1000", () => setItemCount(1000)).IsEnabled(!(itemCount == 1000)),
+                        Button("5000", () => setItemCount(5000)).IsEnabled(!(itemCount == 5000)),
+                        Button("10000", () => setItemCount(10000)).IsEnabled(!(itemCount == 10000))
                     )
                 )
             ),

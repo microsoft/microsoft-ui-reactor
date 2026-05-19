@@ -111,7 +111,7 @@ public sealed class CurveExplorerSample : GallerySample
                         Slider(tension, 0, 1, setTension)
                             .StepFrequency(0.05)
                             .Width(160)
-                            .Disabled(!hasTension),
+                            .IsEnabled(hasTension),
                         (TextBlock($"{tension:F2}") with { FontSize = 11 }).Opacity(hasTension ? 1 : 0.4)
                     ).VAlign(VerticalAlignment.Center)
                 ).Padding(8, 0, 8, 0),

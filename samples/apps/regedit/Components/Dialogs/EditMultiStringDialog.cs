@@ -25,7 +25,7 @@ internal sealed class EditMultiStringDialog : Component<EditMultiStringDialogPro
                 VStack(4,
                     TextBlock(Strings.ValueName),
                     TextField(Props.ValueName, _ => { })
-                        .ReadOnly()
+                        .IsReadOnly()
                 ),
                 VStack(4,
                     TextBlock(Strings.ValueData),

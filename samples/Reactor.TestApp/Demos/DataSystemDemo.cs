@@ -417,10 +417,10 @@ class DataSourceDemo : Microsoft.UI.Reactor.Core.Component
 
                         FlexRow(
                             Button("\u25C0 Previous", () => setToken(null))
-                                .Disabled(token is null),
+                                .IsEnabled(!(token is null)),
                             TextBlock($"Page size: {pageSize}"),
                             Button("Next \u25B6", () => setToken(page.ContinuationToken))
-                                .Disabled(page.ContinuationToken is null)
+                                .IsEnabled(!(page.ContinuationToken is null))
                         ) with { ColumnGap = 8, AlignItems = FlexAlign.Center }
                       ) with { RowGap = 4 }
                     : TextBlock("No data")

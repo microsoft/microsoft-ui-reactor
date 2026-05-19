@@ -9,7 +9,7 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// E2E coverage for the validation pit-of-success APIs:
 ///  • <c>NumberBox.Immediate()</c> — fires <c>OnValueChanged</c> on every
 ///    parseable keystroke instead of waiting for blur/Enter/spin.
-///  • <c>Button.DisabledFocusable()</c> — keeps Submit in the keyboard tab
+///  • <c>Button.IsDisabledFocusable()</c> — keeps Submit in the keyboard tab
 ///    order while dimmed, and drops the user <c>OnClick</c> when active so
 ///    invalid submits are suppressed.
 ///
@@ -125,7 +125,7 @@ public class ImmediateAndDisabledFocusableTests : AppTestBase
 
         // Clicking the dimmed Submit should NOT increment the counter —
         // the trampoline drops the invoke. (Without DisabledFocusable,
-        // .Disabled(true) would make the click target unreachable; with
+        // .IsEnabled(false) would make the click target unreachable; with
         // it, the click reaches the trampoline but is suppressed there.)
         var submit = FindById("ValImmediate_Submit");
         submit.Click();

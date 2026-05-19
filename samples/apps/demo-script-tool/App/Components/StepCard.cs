@@ -416,7 +416,7 @@ public sealed class StepCard : Component<StepCardProps>
                 if (command.Execute is not null) command.Execute();
                 else if (command.ExecuteAsync is not null) _ = command.ExecuteAsync();
             })
-        .Disabled(!command.IsEnabled)
+        .IsEnabled(command.IsEnabled)
         .HAlign(HorizontalAlignment.Stretch)
         .AutomationName(automationName);
 

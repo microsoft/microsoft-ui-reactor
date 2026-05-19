@@ -39,7 +39,7 @@ class PersistedDemo : Component
                 VStack(4,
                     TextBlock("Color"),
                     HStack(4, colors.Select(c =>
-                        Button(c, () => setColor(c)).Disabled(color == c)
+                        Button(c, () => setColor(c)).IsEnabled(!(color == c))
                     ).ToArray())
                 ),
                 Border(VStack(4,

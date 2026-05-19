@@ -156,7 +156,7 @@ class AccessibleFormDemo : Component
             CheckBox(agree, setAgree, label: "I accept the terms")
                 .TabIndex(3),
             Button("Register", () => { })
-                .Disabled(!valid).TabIndex(4).AccessKey("R")
+                .IsEnabled(valid).TabIndex(4).AccessKey("R")
         ).Landmark(AutomationLandmarkType.Form).Padding(24);
     }
 }

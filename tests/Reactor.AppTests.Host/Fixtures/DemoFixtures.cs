@@ -22,7 +22,7 @@ internal static class DemoFixtures
                 HStack(8,
                     Button("-1", () => setCount(count - 1)).AutomationId("DecrementBtn"),
                     Button("Reset", () => setCount(0))
-                        .Disabled(count == 0)
+                        .IsEnabled(!(count == 0))
                         .AutomationId("ResetBtn"),
                     Button("+1", () => setCount(count + 1)).AutomationId("IncrementBtn")
                 ),
@@ -80,11 +80,11 @@ internal static class DemoFixtures
             return VStack(12,
                 HStack(8,
                     Button("Home", () => setTab("Home"))
-                        .Disabled(tab == "Home").AutomationId("DemoHomeTab"),
+                        .IsEnabled(!(tab == "Home")).AutomationId("DemoHomeTab"),
                     Button("Settings", () => setTab("Settings"))
-                        .Disabled(tab == "Settings").AutomationId("DemoSettingsTab"),
+                        .IsEnabled(!(tab == "Settings")).AutomationId("DemoSettingsTab"),
                     Button("About", () => setTab("About"))
-                        .Disabled(tab == "About").AutomationId("DemoAboutTab")
+                        .IsEnabled(!(tab == "About")).AutomationId("DemoAboutTab")
                 ),
                 Border(
                     tab switch

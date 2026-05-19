@@ -79,7 +79,7 @@ class CommandingTestDemo : Component
                 HStack(8,
                     Button(asyncCmd),
                     When(asyncCmd.IsExecuting, () =>
-                        ProgressRing().Width(20).Height(20).Active(true))
+                        ProgressRing().Width(20).Height(20).IsActive(true))
                 ),
 
                 // Parameterized command

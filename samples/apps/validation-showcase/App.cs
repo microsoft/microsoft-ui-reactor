@@ -338,7 +338,7 @@ class DirtyResetDemo : Component
                     if (restored.TryGetValue("name", out var n)) setName((string)(n ?? ""));
                     if (restored.TryGetValue("color", out var c)) setColor((int)(c ?? 0));
                     setTick(tick + 1);
-                }).Disabled(!ctx.IsDirty()),
+                }).IsEnabled(ctx.IsDirty()),
                 Button("Mark All Touched", () =>
                 {
                     ctx.MarkAllTouched();

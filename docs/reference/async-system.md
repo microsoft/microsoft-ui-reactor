@@ -765,7 +765,7 @@ cause a flicker on the next render.
 Overlapping `RunAsync` calls each get their own `callCts`; both complete in
 completion order. There is no built-in serialization — if the caller wants
 "only one in flight at a time," they gate the `RunAsync` invocation
-themselves (e.g., `Button.Disabled(mut.IsPending)`).
+themselves (e.g., `Button.IsEnabled(!mut.IsPending)`).
 
 ### 6.3 Unmount
 

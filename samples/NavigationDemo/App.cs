@@ -419,7 +419,7 @@ class DetailPage : Component<Detail>
         NavigationHandle<AppRoute> nav) =>
         Button(label, () => nav.Navigate(new Detail(id, tab),
             new NavigateOptions { PushToBackStack = false }))
-            .Disabled(tab == activeTab);
+            .IsEnabled(!(tab == activeTab));
 }
 
 // ─── Docs page (wildcard route target) ──────────────────────────────────────
@@ -546,7 +546,7 @@ class SettingsPage : Component
         {
             if (!Equals(route, nav.CurrentRoute))
                 nav.Navigate(route, new NavigateOptions { PushToBackStack = false });
-        }).Disabled(Equals(route, nav.CurrentRoute));
+        }).IsEnabled(!(Equals(route, nav.CurrentRoute)));
 
     static Element GeneralSettingsContent() =>
         VStack(12,
@@ -623,7 +623,7 @@ class ProfilePage : Component<string>
                             setDisplayName(name);
                             setBio("");
                             setSaved(true);
-                        }).Disabled(saved)
+                        }).IsEnabled(!saved)
                     )
                 ),
 

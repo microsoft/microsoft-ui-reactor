@@ -415,7 +415,7 @@ values, series headers, and axis labels without any visible table.
 
 - [x] Add `.Interactive()` modifier — turns on navigator (default off for static)
 - [x] `.Interactive()` is implicit when `.Pan()`, `.Zoom()`, `.Brush()`,
-      `.OnPointInvoke()`, or `.Selectable()` is used
+      `.OnPointInvoke()`, or `.IsTextSelectionEnabled()` is used
 - [x] Add `.OnPointInvoke(Action<T, int>)` for Enter/Space + click
 - [x] Add `.OnBrushChanged(Action<ChartRange>)` for brush selection
 

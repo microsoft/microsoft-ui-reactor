@@ -28,40 +28,40 @@ class FlexPanelDemo : Component
                 VStack(4,
                     TextBlock("Direction").SemiBold(),
                     Button("Row", () => setDirection(FlexDirection.Row))
-                        .Disabled(direction == FlexDirection.Row),
+                        .IsEnabled(!(direction == FlexDirection.Row)),
                     Button("Column", () => setDirection(FlexDirection.Column))
-                        .Disabled(direction == FlexDirection.Column),
+                        .IsEnabled(!(direction == FlexDirection.Column)),
                     Button("Row Reverse", () => setDirection(FlexDirection.RowReverse))
-                        .Disabled(direction == FlexDirection.RowReverse)
+                        .IsEnabled(!(direction == FlexDirection.RowReverse))
                 ),
                 VStack(4,
                     TextBlock("Wrap").SemiBold(),
                     Button("No Wrap", () => setWrap(FlexWrap.NoWrap))
-                        .Disabled(wrap == FlexWrap.NoWrap),
+                        .IsEnabled(!(wrap == FlexWrap.NoWrap)),
                     Button("Wrap", () => setWrap(FlexWrap.Wrap))
-                        .Disabled(wrap == FlexWrap.Wrap)
+                        .IsEnabled(!(wrap == FlexWrap.Wrap))
                 ),
                 VStack(4,
                     TextBlock("Justify Content").SemiBold(),
                     Button("Start", () => setJustify(FlexJustify.FlexStart))
-                        .Disabled(justify == FlexJustify.FlexStart),
+                        .IsEnabled(!(justify == FlexJustify.FlexStart)),
                     Button("Center", () => setJustify(FlexJustify.Center))
-                        .Disabled(justify == FlexJustify.Center),
+                        .IsEnabled(!(justify == FlexJustify.Center)),
                     Button("Space Between", () => setJustify(FlexJustify.SpaceBetween))
-                        .Disabled(justify == FlexJustify.SpaceBetween),
+                        .IsEnabled(!(justify == FlexJustify.SpaceBetween)),
                     Button("Space Evenly", () => setJustify(FlexJustify.SpaceEvenly))
-                        .Disabled(justify == FlexJustify.SpaceEvenly)
+                        .IsEnabled(!(justify == FlexJustify.SpaceEvenly))
                 ),
                 VStack(4,
                     TextBlock("Align Items").SemiBold(),
                     Button("Stretch", () => setAlignItems(FlexAlign.Stretch))
-                        .Disabled(alignItems == FlexAlign.Stretch),
+                        .IsEnabled(!(alignItems == FlexAlign.Stretch)),
                     Button("Center", () => setAlignItems(FlexAlign.Center))
-                        .Disabled(alignItems == FlexAlign.Center),
+                        .IsEnabled(!(alignItems == FlexAlign.Center)),
                     Button("Start", () => setAlignItems(FlexAlign.FlexStart))
-                        .Disabled(alignItems == FlexAlign.FlexStart),
+                        .IsEnabled(!(alignItems == FlexAlign.FlexStart)),
                     Button("End", () => setAlignItems(FlexAlign.FlexEnd))
-                        .Disabled(alignItems == FlexAlign.FlexEnd)
+                        .IsEnabled(!(alignItems == FlexAlign.FlexEnd))
                 )
             ),
 

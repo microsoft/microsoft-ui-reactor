@@ -88,10 +88,10 @@ public class ElementTests
     [Fact]
     public void Button_Disabled_Extension_Toggles_IsEnabled()
     {
-        var el = Button("Go").Disabled();
+        var el = Button("Go").IsEnabled(false);
         Assert.False(el.Modifiers!.IsEnabled);
 
-        var el2 = Button("Go").Disabled(false);
+        var el2 = Button("Go").IsEnabled(true);
         Assert.True(el2.Modifiers!.IsEnabled);
     }
 
@@ -548,7 +548,7 @@ public class ElementTests
     [Fact]
     public void Visible_False_Sets_IsVisible()
     {
-        var el = TextBlock("Hi").Visible(false);
+        var el = TextBlock("Hi").IsVisible(false);
         Assert.IsType<TextBlockElement>(el);
         Assert.NotNull(el.Modifiers);
         Assert.False(el.Modifiers!.IsVisible);
@@ -587,7 +587,7 @@ public class ElementTests
     public void Set_Chains_Multiple_Setters()
     {
         var el = TextBlock("Hi")
-            .Selectable()
+            .IsTextSelectionEnabled()
             .TextWrapping();
         // Fluent methods create new record instances with the properties set
         Assert.NotEqual(TextBlock("Hi"), el);

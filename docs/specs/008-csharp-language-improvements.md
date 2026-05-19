@@ -905,7 +905,7 @@ return VStack(16) {
         Text("Name"),
         TextField(name, setName, placeholder: "Enter your name").Width(300)
     },
-    Button("Submit", () => setSubmitted(true)).Disabled(!isValid)
+    Button("Submit", () => setSubmitted(true)).IsEnabled(isValid)
 };
 ```
 
@@ -1879,7 +1879,7 @@ class FormDemo : Component
             CheckBox(agreeToTerms, setAgree, label: "I agree to the terms"),
             When(!isValid, () =>
                 Text("Please fill all fields and agree to terms").Opacity(0.6)),
-            Button("Submit", () => setSubmitted(true)).Disabled(!isValid)
+            Button("Submit", () => setSubmitted(true)).IsEnabled(isValid)
         );
     }
 }

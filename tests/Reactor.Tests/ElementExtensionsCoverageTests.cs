@@ -110,7 +110,7 @@ public class ElementExtensionsCoverageTests
     {
         var v3 = new global::System.Numerics.Vector3(2, 3, 4);
         var el = TextBlock("x")
-            .Visible(false)
+            .IsVisible(false)
             .Opacity(0.5)
             .Scale(2.0f)
             .Scale(v3)
@@ -181,7 +181,7 @@ public class ElementExtensionsCoverageTests
     }
 
     // ────────────────────────────────────────────────────────────────
-    //  CornerRadius / Disabled
+    //  CornerRadius / IsEnabled
     // ────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -194,7 +194,17 @@ public class ElementExtensionsCoverageTests
     }
 
     [Fact]
-    public void Disabled_Inverts_To_IsEnabled()
+    public void IsEnabled_Sets_Modifier()
+    {
+        var el = Button("Y").IsEnabled(false);
+        Assert.False(el.Modifiers!.IsEnabled);
+        var enabled = Button("Y").IsEnabled();
+        Assert.True(enabled.Modifiers!.IsEnabled);
+    }
+
+    [Fact]
+    [Obsolete("Tests the deprecated Disabled shim")]
+    public void Disabled_Shim_Inverts_To_IsEnabled()
     {
         var el = Button("Y").Disabled();
         Assert.False(el.Modifiers!.IsEnabled);
@@ -216,7 +226,7 @@ public class ElementExtensionsCoverageTests
             .TextWrapping()
             .TextAlignment(TextAlignment.Center)
             .TextTrimming(TextTrimming.CharacterEllipsis)
-            .Selectable();
+            .IsTextSelectionEnabled();
         Assert.Equal(14.0, el.FontSize);
         Assert.Equal(global::Microsoft.UI.Xaml.TextWrapping.Wrap, el.TextWrapping);
         Assert.Equal(TextAlignment.Center, el.TextAlignment);
@@ -225,10 +235,18 @@ public class ElementExtensionsCoverageTests
     }
 
     [Fact]
+    [Obsolete("Tests the deprecated Selectable shim")]
+    public void TextBlock_Selectable_Shim()
+    {
+        var el = TextBlock("x").Selectable();
+        Assert.True(el.IsTextSelectionEnabled);
+    }
+
+    [Fact]
     public void TextField_Sugar()
     {
         var el = TextField("x", _ => { })
-            .ReadOnly()
+            .IsReadOnly()
             .AcceptsReturn()
             .TextWrapping()
             .Header("Label");
@@ -241,9 +259,17 @@ public class ElementExtensionsCoverageTests
     // Path.StrokeDashArray uses DoubleCollection (WinUI), tested in selftest.
 
     [Fact]
-    public void Popup_Sugar_LightDismiss_And_Offset()
+    [Obsolete("Tests the deprecated ReadOnly shim for TextField")]
+    public void TextField_ReadOnly_Shim()
     {
-        var el = Popup(TextBlock("x")).LightDismiss().Offset(10, 20);
+        var el = TextField("x", _ => { }).ReadOnly();
+        Assert.True(el.IsReadOnly);
+    }
+
+    [Fact]
+    public void Popup_Sugar_IsLightDismissEnabled_And_Offset()
+    {
+        var el = Popup(TextBlock("x")).IsLightDismissEnabled().Offset(10, 20);
         Assert.True(el.IsLightDismissEnabled);
         Assert.Equal(10, el.HorizontalOffset);
         Assert.Equal(20, el.VerticalOffset);
@@ -276,11 +302,19 @@ public class ElementExtensionsCoverageTests
     {
         var el = ComboBox(new string[] { "a", "b" }, 0, _ => { })
             .Placeholder("Pick…")
-            .Editable()
+            .IsEditable()
             .Header("Lbl");
         Assert.Equal("Pick…", el.PlaceholderText);
         Assert.True(el.IsEditable);
         Assert.Equal("Lbl", el.Header);
+    }
+
+    [Fact]
+    [Obsolete("Tests the deprecated Editable shim")]
+    public void ComboBox_Editable_Shim()
+    {
+        var el = ComboBox(new string[] { "a" }, 0, _ => { }).Editable();
+        Assert.True(el.IsEditable);
     }
 
     [Fact]
@@ -308,18 +342,34 @@ public class ElementExtensionsCoverageTests
     }
 
     [Fact]
-    public void RatingControl_MaxRating_And_ReadOnly()
+    public void RatingControl_MaxRating_And_IsReadOnly()
     {
-        var el = RatingControl(0, _ => { }).MaxRating(10).ReadOnly();
+        var el = RatingControl(0, _ => { }).MaxRating(10).IsReadOnly();
         Assert.Equal(10, el.MaxRating);
         Assert.True(el.IsReadOnly);
     }
 
     [Fact]
-    public void InfoBar_Severity_And_Closable()
+    [Obsolete("Tests the deprecated ReadOnly shim for RatingControl")]
+    public void RatingControl_ReadOnly_Shim()
     {
-        var el = InfoBar("Title", "Msg").Severity(InfoBarSeverity.Warning).Closable(false);
+        var el = RatingControl(0, _ => { }).ReadOnly();
+        Assert.True(el.IsReadOnly);
+    }
+
+    [Fact]
+    public void InfoBar_Severity_And_IsClosable()
+    {
+        var el = InfoBar("Title", "Msg").Severity(InfoBarSeverity.Warning).IsClosable(false);
         Assert.Equal(InfoBarSeverity.Warning, el.Severity);
+        Assert.False(el.IsClosable);
+    }
+
+    [Fact]
+    [Obsolete("Tests the deprecated Closable shim")]
+    public void InfoBar_Closable_Shim()
+    {
+        var el = InfoBar("Title", "Msg").Closable(false);
         Assert.False(el.IsClosable);
     }
 
@@ -354,7 +404,15 @@ public class ElementExtensionsCoverageTests
     }
 
     [Fact]
-    public void ProgressRing_Active_Sugar()
+    public void ProgressRing_IsActive_Sugar()
+    {
+        var el = ProgressRing().IsActive(false);
+        Assert.False(el.IsActive);
+    }
+
+    [Fact]
+    [Obsolete("Tests the deprecated Active shim")]
+    public void ProgressRing_Active_Shim()
     {
         var el = ProgressRing().Active(false);
         Assert.False(el.IsActive);
@@ -378,7 +436,15 @@ public class ElementExtensionsCoverageTests
     }
 
     [Fact]
-    public void TabView_IsAddButtonVisible_Sugar()
+    public void TabView_IsAddTabButtonVisible_Sugar()
+    {
+        var el = TabView([]).IsAddTabButtonVisible(false);
+        Assert.False(el.IsAddTabButtonVisible);
+    }
+
+    [Fact]
+    [Obsolete("Tests the deprecated IsAddButtonVisible shim")]
+    public void TabView_IsAddButtonVisible_Shim()
     {
         var el = TabView([]).IsAddButtonVisible(false);
         Assert.False(el.IsAddTabButtonVisible);
@@ -386,7 +452,7 @@ public class ElementExtensionsCoverageTests
 
     [Fact]
     [Obsolete("Tests the deprecated ShowAddButton shim")]
-    public void TabView_ShowAddButton_Sugar_Obsolete_Shim()
+    public void TabView_ShowAddButton_Shim()
     {
         var el = TabView([]).ShowAddButton(false);
         Assert.False(el.IsAddTabButtonVisible);

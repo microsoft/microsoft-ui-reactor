@@ -223,7 +223,7 @@ class ChatSampleApp : Component
             : Component<ChatTimeline, ChatTimelineProps>(new(SelectedId, entries, false, null));
 
         Element notificationBar = _notification is { } n
-            ? InfoBar(n.Message).Severity(n.Severity).Closable()
+            ? InfoBar(n.Message).Severity(n.Severity).IsClosable()
                 .Set(ib => { ib.IsOpen = true; ib.Closed += (_, _) => _setNotification(null); })
             : Empty();
 

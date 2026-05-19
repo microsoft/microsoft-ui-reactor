@@ -67,11 +67,11 @@ class ConditionalDemo : Component
             SubHeading("2. Switch expression picks a sub-tree"),
             HStack(8,
                 Button("Simple", () => setViewMode(_ => ViewMode.Simple))
-                    .Disabled(viewMode == ViewMode.Simple),
+                    .IsEnabled(!(viewMode == ViewMode.Simple)),
                 Button("Detailed", () => setViewMode(_ => ViewMode.Detailed))
-                    .Disabled(viewMode == ViewMode.Detailed),
+                    .IsEnabled(!(viewMode == ViewMode.Detailed)),
                 Button("Custom", () => setViewMode(_ => ViewMode.Custom))
-                    .Disabled(viewMode == ViewMode.Custom)
+                    .IsEnabled(!(viewMode == ViewMode.Custom))
             ),
 
             // Each branch renders a COMPLETELY different control tree

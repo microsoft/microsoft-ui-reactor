@@ -702,7 +702,7 @@ case (no deps); `Memo(ctx => …, deps)` to also re-render when any dep changes;
 `.Background(color|ThemeRef)`, `.Foreground(color|ThemeRef)`,
 `.CornerRadius(n)`, `.WithBorder(color|ThemeRef, thickness?)`,
 `.HAlign(alignment)`, `.VAlign(alignment)`,
-`.Disabled(bool)`, `.Visible(bool)`, `.WithKey(string)`,
+`.IsEnabled(!bool)`, `.IsVisible(bool)`, `.WithKey(string)`,
 `.Flex(grow?, shrink?, basis?)`, `.ToolTip(string)`,
 `.FocusTrap(FocusTrapHandle)`,
 `.Set(control => { /* raw WinUI access */ })`

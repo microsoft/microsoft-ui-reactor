@@ -25,9 +25,9 @@ RatingControl(rating, v => setRating(v))
 "),
 
             SampleCard("Read-Only Rating",
-                RatingControl(4.0).ReadOnly(),
+                RatingControl(4.0).IsReadOnly(),
                 sourceCode: @"
-RatingControl(4.0).ReadOnly()
+RatingControl(4.0).IsReadOnly()
 "),
 
             SampleCard("Custom Max Rating",

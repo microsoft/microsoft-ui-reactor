@@ -18,11 +18,11 @@ internal static class NavigationFixtures
             return VStack(
                 HStack(
                     Button("Home", () => setTab("Home"))
-                        .Disabled(tab == "Home").AutomationId("HomeTab"),
+                        .IsEnabled(!(tab == "Home")).AutomationId("HomeTab"),
                     Button("Settings", () => setTab("Settings"))
-                        .Disabled(tab == "Settings").AutomationId("SettingsTab"),
+                        .IsEnabled(!(tab == "Settings")).AutomationId("SettingsTab"),
                     Button("About", () => setTab("About"))
-                        .Disabled(tab == "About").AutomationId("AboutTab")
+                        .IsEnabled(!(tab == "About")).AutomationId("AboutTab")
                 ),
                 Border(
                     tab switch
@@ -63,7 +63,7 @@ internal static class NavigationFixtures
             return VStack(
                 HStack(8,
                     Button("Back", () => nav.GoBack())
-                        .Disabled(!nav.CanGoBack)
+                        .IsEnabled(nav.CanGoBack)
                         .AutomationId("BackBtn"),
                     TextBlock($"Depth: {nav.Depth}").AutomationId("NavDepth")
                 ),

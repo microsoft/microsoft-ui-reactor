@@ -83,7 +83,7 @@ class TutorialFormPage : Component
             TextField(email, setEmail, header: "Email"),
             CheckBox(wantsUpdates, setWantsUpdates, label: "Email me updates"),
             HStack(8,
-                Button("Save", () => { }).Disabled(!canSave),
+                Button("Save", () => { }).IsEnabled(canSave),
                 TextBlock(canSave ? "Ready to save" : "Complete all required fields")
                     .Opacity(0.7)
             )

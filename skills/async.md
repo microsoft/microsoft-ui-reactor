@@ -107,7 +107,7 @@ var addTodo = UseMutation<TodoInput, Todo>(
 
 return VStack(
     Button("Add", () => _ = addTodo.RunAsync(new TodoInput("New")))
-        .Disabled(addTodo.IsPending));
+        .IsEnabled(!addTodo.IsPending));
 ```
 
 - `OnOptimistic` runs synchronously on the caller. If it throws, the mutator

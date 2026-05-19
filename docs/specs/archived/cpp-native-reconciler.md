@@ -812,7 +812,7 @@ class CounterDemo : Component
             Text($"Current count: {count}").FontSize(24).SemiBold(),
             HStack(8,
                 Button($"- {step}", () => setCount(count - step)),
-                Button("Reset", () => setCount(0)).Disabled(count == 0),
+                Button("Reset", () => setCount(0)).IsEnabled(!(count == 0)),
                 Button($"+ {step}", () => setCount(count + step))
             ),
             HStack(8,

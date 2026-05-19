@@ -33,9 +33,9 @@ ComboBox(colors).Placeholder(""Pick a color"")
 "),
 
             SampleCard("Editable ComboBox",
-                ComboBox(colors, editableIndex, i => setEditableIndex(i)).Editable(),
+                ComboBox(colors, editableIndex, i => setEditableIndex(i)).IsEditable(),
                 sourceCode: @"
-ComboBox(colors, editableIndex, i => setEditableIndex(i)).Editable()
+ComboBox(colors, editableIndex, i => setEditableIndex(i)).IsEditable()
 ")
         ).Margin(36, 24, 36, 36));
     }

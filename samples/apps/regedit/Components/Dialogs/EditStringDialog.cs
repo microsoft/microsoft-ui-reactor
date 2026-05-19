@@ -25,7 +25,7 @@ internal sealed class EditStringDialog : Component<EditStringDialogProps>
                 VStack(4,
                     TextBlock(Strings.ValueName),
                     TextField(Props.ValueName, _ => { })
-                        .ReadOnly()
+                        .IsReadOnly()
                 ),
                 VStack(4,
                     TextBlock(Strings.ValueData),

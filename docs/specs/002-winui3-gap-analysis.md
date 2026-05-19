@@ -691,7 +691,7 @@ XY focus, and drag-drop are all missing as first-class modifiers.**
 | **XamlUICommand** | Missing | Label+Icon+Accelerator+Description bundling not replicated |
 | **StandardUICommand** | Missing | No pre-built Cut/Copy/Paste/Undo command objects |
 | **Command property on controls** | Missing | Controls only have OnClick/OnChanged callbacks, not a Command binding point |
-| **CanExecute / auto-disable** | Missing | No automatic disable-when-unavailable; `.Disabled(condition)` is manual and must be wired separately per control |
+| **CanExecute / auto-disable** | Missing | No automatic disable-when-unavailable; `.IsEnabled(!condition)` is manual and must be wired separately per control |
 
 **Verdict: Missing.** Reactor has no command abstraction. Action callbacks cover the simplest
 case (click → do thing) but do not replicate what ICommand provides: a named, queryable,

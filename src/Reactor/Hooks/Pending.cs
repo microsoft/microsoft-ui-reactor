@@ -67,8 +67,8 @@ public sealed class PendingComponent : Component<PendingProps>
         return Microsoft.UI.Reactor.Factories.Grid(
             columns: new[] { Microsoft.UI.Reactor.GridSize.Star() },
             rows: new[] { Microsoft.UI.Reactor.GridSize.Star() },
-            Props.Child.Visible(!showFallback),
-            Props.Fallback.Visible(showFallback))
+            Props.Child.IsVisible(!showFallback),
+            Props.Fallback.IsVisible(showFallback))
             .Provide(AppContexts.PendingScope, (PendingScope?)scope);
     }
 

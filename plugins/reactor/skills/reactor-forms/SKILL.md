@@ -34,7 +34,7 @@ return VStack(12,
     TextField(name, setName, placeholder: "Name"),
     NumberBox(age, setAge),
     CheckBox(agreed, setAgreed, label: "I agree"),
-    Button("Submit", onSubmit).Disabled(string.IsNullOrEmpty(name) || !agreed)
+    Button("Submit", onSubmit).IsEnabled(!(string.IsNullOrEmpty(name) || !agreed))
 );
 ```
 
@@ -42,14 +42,14 @@ return VStack(12,
 
 | Factory | Value type | Common modifiers |
 |---------|-----------|------------------|
-| `TextField(value, setValue, placeholder, header)` | `string` | `.Header()`, `.ReadOnly()`, `.AcceptsReturn()`, `.TextWrapping()`, `.MaxLength(n)`, `.NumericInput()`, `.EmailInput()`, `.Changed(handler)` |
+| `TextField(value, setValue, placeholder, header)` | `string` | `.Header()`, `.IsReadOnly()`, `.AcceptsReturn()`, `.TextWrapping()`, `.MaxLength(n)`, `.NumericInput()`, `.EmailInput()`, `.Changed(handler)` |
 | `PasswordBox(password, setPassword, placeholder)` | `string` | `.Header(text)`, `.MaxLength(n)`, `.PasswordChanged(handler)` |
 | `NumberBox(value, setValue, placeholder, header)` | `double` | `.Range(min, max)`, `.SpinButtons(...)` |
 | `Slider(value, min, max, setValue)` | `double` | `.Header()`, `.StepFrequency()` |
 | `ToggleSwitch(isOn, setIsOn, header, onContent, offContent)` | `bool` | `.Header()` |
 | `CheckBox(isChecked, setIsChecked, label)` | `bool` | — |
 | `RadioButtons(items, selected, setSelected, header)` | `int` | `.Set(rb => ...)` |
-| `ComboBox(items, selected, setSelected, placeholder)` | `object` | `.Header()`, `.Editable()`, `.Placeholder()` |
+| `ComboBox(items, selected, setSelected, placeholder)` | `object` | `.Header()`, `.IsEditable()`, `.Placeholder()` |
 | `DatePicker(date, setDate, header)` | `DateTimeOffset` | `.Set(dp => ...)` |
 | `TimePicker(time, setTime, header)` | `TimeSpan` | `.Set(tp => ...)` |
 | `AutoSuggestBox(text, setText, placeholder, header)` | `string` | `.Set(asb => ...)` |
@@ -81,7 +81,7 @@ var isValid = email.Contains('@') && email.Length > 3;
 
 return VStack(12,
     TextField(email, setEmail, placeholder: "Email"),
-    Button("Submit", onSubmit).Disabled(!isValid)
+    Button("Submit", onSubmit).IsEnabled(isValid)
 );
 ```
 

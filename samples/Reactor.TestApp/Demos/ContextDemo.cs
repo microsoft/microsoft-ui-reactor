@@ -28,9 +28,9 @@ class ContextDemo : Component
             SubHeading("1. Provide context values"),
             HStack(8,
                 TextBlock("Accent color:"),
-                Button("Blue", () => setAccent("#0078D4")).Disabled(accent == "#0078D4"),
-                Button("Red", () => setAccent("#E74C3C")).Disabled(accent == "#E74C3C"),
-                Button("Green", () => setAccent("#50C878")).Disabled(accent == "#50C878"),
+                Button("Blue", () => setAccent("#0078D4")).IsEnabled(!(accent == "#0078D4")),
+                Button("Red", () => setAccent("#E74C3C")).IsEnabled(!(accent == "#E74C3C")),
+                Button("Green", () => setAccent("#50C878")).IsEnabled(!(accent == "#50C878")),
                 Border(Empty()).Background(accent).CornerRadius(4).Size(24, 24)
             ),
             HStack(8,

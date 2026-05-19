@@ -32,11 +32,11 @@ class ProgressRingPage : Component
 
                 SampleCard("Indeterminate ProgressRing",
                     VStack(8,
-                        ProgressRing().Active(isActive).Width(60).Height(60),
+                        ProgressRing().IsActive(isActive).Width(60).Height(60),
                         ToggleSwitch(isActive, b => setIsActive(b),
                             onContent: "Active", offContent: "Inactive")
                     ),
-                    @"ProgressRing().Active(true)")
+                    @"ProgressRing().IsActive(true)")
             ).Margin(36, 24, 36, 36)
         );
     }

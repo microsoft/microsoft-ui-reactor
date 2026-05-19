@@ -138,7 +138,7 @@ Reactor offers two opt-in fixes for this. They compose:
 
 ![Keep submit reachable](screenshot://forms/keep-submit-reachable)
 
-**`.DisabledFocusable(bool)` on Button** keeps the button keyboard-focusable
+**`.IsDisabledFocusable(bool)` on Button** keeps the button keyboard-focusable
 and tab-reachable while presenting it as disabled (dimmed; the click is
 suppressed). Mirrors Fluent UI React's `disabledFocusable` and ARIA's
 `aria-disabled`. Use it for any Submit gated on validation, busy state, or
@@ -152,14 +152,14 @@ the right choice when an intermediate value would be expensive or surprising
 (snapping `2.50` to `2.5` mid-edit). Apply when validation gates UI state
 and you want it to feel live.
 
-Use `.DisabledFocusable()` whenever a button is conditionally disabled in a
+Use `.IsDisabledFocusable()` whenever a button is conditionally disabled in a
 form — even if you've also applied `.Immediate()` to every commit-on-blur
 input. The two cover different failure modes: `.Immediate()` keeps validity
-in sync with typing; `.DisabledFocusable()` keeps the button discoverable
+in sync with typing; `.IsDisabledFocusable()` keeps the button discoverable
 when validity is gated on async checks, required-but-untouched fields,
 cross-field rules, or any derived condition that can't be made instantaneous.
 
-> **Where not to use `.DisabledFocusable()`:** only buttons. For data-entry
+> **Where not to use `.IsDisabledFocusable()`:** only buttons. For data-entry
 > controls (`TextField`, `NumberBox`, `CheckBox`, etc.), `IsEnabled=false`
 > usually means "this field isn't part of your current task" (cascading
 > from another input), and tab-skipping is the correct UX. Use

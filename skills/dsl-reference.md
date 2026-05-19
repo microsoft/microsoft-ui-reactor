@@ -341,7 +341,7 @@ Modifiers return `Element`, so type-specific sugar (`.Bold()`,
 .MinWidth(...) / .MinHeight(...) / .MaxWidth(...) / .MaxHeight(...)
 .HAlign(HorizontalAlignment.Center) / .VAlign(VerticalAlignment.Top)
 .Center()               // both H and V
-.Visible(bool)          // Collapsed when false
+.IsVisible(bool)          // Collapsed when false
 .Opacity(0.6)
 .ToolTip("text") / .WithToolTip(element)
 .WithFlyout(flyout) / .WithContextFlyout(flyout)
@@ -367,24 +367,24 @@ Modifiers return `Element`, so type-specific sugar (`.Bold()`,
 
 ```csharp
 TextBlock("Hello").Bold() / .SemiBold() / .FontSize(24) / .FontStyle(style)
-Button("Click").Disabled() / .Disabled(condition)
+Button("Click").IsEnabled(false) / .IsEnabled(!condition)
 Border(child).CornerRadius(8).Background("#f5f5f5").WithBorder("#ccc", 1)
 VStack(...).Spacing(16)
-ComboBox(items).Placeholder("...").Editable()
+ComboBox(items).Placeholder("...").IsEditable()
 NumberBox(v).Range(0, 100).SpinButtons()
 Slider(v, 0, 100).StepFrequency(5)
-RatingControl(3).MaxRating(10).ReadOnly()
-InfoBar("T", "M").Severity(InfoBarSeverity.Warning).Closable(false)
+RatingControl(3).MaxRating(10).IsReadOnly()
+InfoBar("T", "M").Severity(InfoBarSeverity.Warning).IsClosable(false)
 NavigationView(items, c).PaneDisplayMode(...).PaneTitle("...")
 TitleBar("App").Subtitle("Home")
 Expander("Hdr", body).Direction(ExpandDirection.Up)
 PersonPicture().DisplayName("John Doe").Initials("JD")
 ListView(items).SelectionMode(ListViewSelectionMode.Multiple)
-TabView(tabs).ShowAddButton()
-ProgressRing().Active(active)
+TabView(tabs).IsAddTabButtonVisible()
+ProgressRing().IsActive(active)
 RepeatButton("Go", fn).Delay(d).Interval(i)
 Rectangle().Fill(brush) / Ellipse().Fill(brush)
-Popup(c, open).LightDismiss(true).Offset(h, v)
+Popup(c, open).IsLightDismissEnabled(true).Offset(h, v)
 ScrollView(c).ZoomMode(...).HorizontalScrollMode(...).VerticalScrollMode(...)
 TextField(v, setV).Header("...")
 element.WithKey("stable-id")  // always last

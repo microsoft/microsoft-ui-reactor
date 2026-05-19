@@ -133,7 +133,7 @@ internal static class LocalizationFixtures
                     HStack(4,
                         languages.Select(lang =>
                             Button(lang, () => setLocale(lang))
-                                .Disabled(locale == lang)).ToArray()
+                                .IsEnabled(!(locale == lang))).ToArray()
                     ),
 
                     VStack(8,

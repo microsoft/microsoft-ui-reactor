@@ -179,7 +179,7 @@ class WindowsDemo : Component
                         }
                         foreach (var w in toClose) w.Close();
                         setChildCount(0);
-                    }).Disabled(ReactorApp.Windows.Count <= 1)
+                    }).IsEnabled(!(ReactorApp.Windows.Count <= 1))
                 ),
                 TextBlock($"Total open windows: {ReactorApp.Windows.Count}")
                     .Foreground(TertiaryText)

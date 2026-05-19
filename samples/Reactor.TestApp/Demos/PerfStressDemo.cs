@@ -197,12 +197,12 @@ class PerfStressDemo : Component
                 VStack(4,
                     TextBlock("Elements:"),
                     HStack(8,
-                        Button("10", () => { if (!running) setElementCount(10); }).Disabled(running || elementCount == 10),
-                        Button("50", () => { if (!running) setElementCount(50); }).Disabled(running || elementCount == 50),
-                        Button("100", () => { if (!running) setElementCount(100); }).Disabled(running || elementCount == 100),
-                        Button("250", () => { if (!running) setElementCount(250); }).Disabled(running || elementCount == 250),
-                        Button("500", () => { if (!running) setElementCount(500); }).Disabled(running || elementCount == 500),
-                        Button("1000", () => { if (!running) setElementCount(1000); }).Disabled(running || elementCount == 1000)
+                        Button("10", () => { if (!running) setElementCount(10); }).IsEnabled(!(running || elementCount == 10)),
+                        Button("50", () => { if (!running) setElementCount(50); }).IsEnabled(!(running || elementCount == 50)),
+                        Button("100", () => { if (!running) setElementCount(100); }).IsEnabled(!(running || elementCount == 100)),
+                        Button("250", () => { if (!running) setElementCount(250); }).IsEnabled(!(running || elementCount == 250)),
+                        Button("500", () => { if (!running) setElementCount(500); }).IsEnabled(!(running || elementCount == 500)),
+                        Button("1000", () => { if (!running) setElementCount(1000); }).IsEnabled(!(running || elementCount == 1000))
                     )
                 ),
                 VStack(4,
@@ -220,14 +220,14 @@ class PerfStressDemo : Component
             ),
 
             HStack(8,
-                Button("Start Sort", StartSort).Disabled(running),
+                Button("Start Sort", StartSort).IsEnabled(!running),
                 Button("Reset", () =>
                 {
                     setSortState(_ => null);
                     setRenderTimes(_ => new List<double>());
                     setTotalSwaps(0);
                     setStepCount(0);
-                }).Disabled(running)
+                }).IsEnabled(!running)
             ),
 
             // Status

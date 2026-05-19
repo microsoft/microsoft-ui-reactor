@@ -150,8 +150,14 @@ public static partial class ElementExtensions
 
     // ── Visibility ──────────────────────────────────────────────────
 
-    public static T Visible<T>(this T el, bool isVisible) where T : Element =>
+    /// <summary>Sets whether the element is visible or collapsed.</summary>
+    public static T IsVisible<T>(this T el, bool isVisible) where T : Element =>
         Modify(el, new ElementModifiers { IsVisible = isVisible });
+
+    /// <inheritdoc cref="IsVisible{T}(T, bool)"/>
+    [Obsolete("Use IsVisible() — aligns with WinUI boolean modifier naming (see #268).")]
+    public static T Visible<T>(this T el, bool isVisible) where T : Element =>
+        el.IsVisible(isVisible);
 
     public static T Opacity<T>(this T el, double opacity) where T : Element =>
         Modify(el, new ElementModifiers { Opacity = opacity });
@@ -560,8 +566,14 @@ public static partial class ElementExtensions
     public static TextBlockElement TextTrimming(this TextBlockElement el, TextTrimming trimming) =>
         el with { TextTrimming = trimming };
 
+    /// <summary>Controls whether text can be selected in a TextBlock.</summary>
+    public static TextBlockElement IsTextSelectionEnabled(this TextBlockElement el, bool enabled = true) =>
+        el with { IsTextSelectionEnabled = enabled };
+
+    /// <inheritdoc cref="IsTextSelectionEnabled"/>
+    [Obsolete("Use IsTextSelectionEnabled() — aligns with WinUI naming (see #268).")]
     public static TextBlockElement Selectable(this TextBlockElement el, bool selectable = true) =>
-        el with { IsTextSelectionEnabled = selectable };
+        el.IsTextSelectionEnabled(selectable);
 
     public static TextBlockElement FontFamily(this TextBlockElement el, string family) =>
         el with { FontFamily = WinRTCache.GetFontFamily(family) };
@@ -631,8 +643,14 @@ public static partial class ElementExtensions
 
     // ── TextField sugar ────────────────────────────────────────────────
 
-    public static TextFieldElement ReadOnly(this TextFieldElement el, bool readOnly = true) =>
+    /// <summary>Sets whether the text field is read-only.</summary>
+    public static TextFieldElement IsReadOnly(this TextFieldElement el, bool readOnly = true) =>
         el with { IsReadOnly = readOnly };
+
+    /// <inheritdoc cref="IsReadOnly(TextFieldElement, bool)"/>
+    [Obsolete("Use IsReadOnly() — aligns with WinUI naming (see #268).")]
+    public static TextFieldElement ReadOnly(this TextFieldElement el, bool readOnly = true) =>
+        el.IsReadOnly(readOnly);
 
     public static TextFieldElement AcceptsReturn(this TextFieldElement el, bool accepts = true) =>
         el with { AcceptsReturn = accepts };
@@ -743,13 +761,19 @@ public static partial class ElementExtensions
 
     // ── IsEnabled (on Control — works on buttons, inputs, etc.) ────
 
+    /// <summary>Sets Control.IsEnabled.</summary>
+    public static T IsEnabled<T>(this T el, bool enabled = true) where T : Element =>
+        Modify(el, new ElementModifiers { IsEnabled = enabled });
+
+    /// <inheritdoc cref="IsEnabled{T}(T, bool)"/>
+    [Obsolete("Use IsEnabled(false) — aligns with WinUI naming (see #268).")]
     public static T Disabled<T>(this T el, bool disabled = true) where T : Element =>
-        Modify(el, new ElementModifiers { IsEnabled = !disabled });
+        el.IsEnabled(!disabled);
 
     /// <summary>
     /// Keeps the button keyboard-focusable while presenting it as disabled
     /// (visually dimmed, click suppressed). Use for submit buttons gated on
-    /// validation: a true <c>.Disabled(true)</c> removes the button from tab
+    /// validation: a true <c>.IsEnabled(false)</c> removes the button from tab
     /// order, which combined with commit-on-blur inputs like NumberBox/
     /// DatePicker produces a focus trap where Tab skips a Submit that is
     /// *about* to become valid. Conceptually the Fluent UI React
@@ -757,8 +781,13 @@ public static partial class ElementExtensions
     /// sees the button as enabled (a custom AutomationPeer override for full
     /// AT "unavailable" reporting is a tracked follow-up).
     /// </summary>
-    public static ButtonElement DisabledFocusable(this ButtonElement el, bool disabled = true) =>
+    public static ButtonElement IsDisabledFocusable(this ButtonElement el, bool disabled = true) =>
         el with { IsDisabledFocusable = disabled };
+
+    /// <inheritdoc cref="IsDisabledFocusable"/>
+    [Obsolete("Use IsDisabledFocusable() — aligns with WinUI naming (see #268).")]
+    public static ButtonElement DisabledFocusable(this ButtonElement el, bool disabled = true) =>
+        el.IsDisabledFocusable(disabled);
 
     // ── Background (Panel, Control, Border) ────────────────────────
 
@@ -896,8 +925,14 @@ public static partial class ElementExtensions
     public static ComboBoxElement Placeholder(this ComboBoxElement el, string text) =>
         el with { PlaceholderText = text };
 
-    public static ComboBoxElement Editable(this ComboBoxElement el, bool editable = true) =>
+    /// <summary>Sets whether the ComboBox is editable.</summary>
+    public static ComboBoxElement IsEditable(this ComboBoxElement el, bool editable = true) =>
         el with { IsEditable = editable };
+
+    /// <inheritdoc cref="IsEditable"/>
+    [Obsolete("Use IsEditable() — aligns with WinUI naming (see #268).")]
+    public static ComboBoxElement Editable(this ComboBoxElement el, bool editable = true) =>
+        el.IsEditable(editable);
 
     public static ComboBoxElement Header(this ComboBoxElement el, string header) =>
         el with { Header = header };
@@ -1042,7 +1077,8 @@ public static partial class ElementExtensions
     public static RatingControlElement MaxRating(this RatingControlElement el, int max) =>
         el with { MaxRating = max };
 
-    public static RatingControlElement ReadOnly(this RatingControlElement el, bool readOnly = true) =>
+    /// <summary>Sets whether the RatingControl is read-only.</summary>
+    public static RatingControlElement IsReadOnly(this RatingControlElement el, bool readOnly = true) =>
         el with { IsReadOnly = readOnly };
 
     /// <summary>Promotes the existing <c>Caption</c> init property to a fluent.</summary>
@@ -1133,12 +1169,17 @@ public static partial class ElementExtensions
     public static ColorPickerElement ValueRange(this ColorPickerElement el, int minValue, int maxValue) =>
         el with { MinValue = minValue, MaxValue = maxValue };
 
+    /// <inheritdoc cref="IsReadOnly(RatingControlElement, bool)"/>
+    [Obsolete("Use IsReadOnly() — aligns with WinUI naming (see #268).")]
+    public static RatingControlElement ReadOnly(this RatingControlElement el, bool readOnly = true) =>
+        el.IsReadOnly(readOnly);
     // ── InfoBar sugar ───────────────────────────────────────────────
 
     public static InfoBarElement Severity(this InfoBarElement el, InfoBarSeverity severity) =>
         el with { Severity = severity };
 
-    public static InfoBarElement Closable(this InfoBarElement el, bool closable = true) =>
+    /// <summary>Sets whether the InfoBar can be closed by the user.</summary>
+    public static InfoBarElement IsClosable(this InfoBarElement el, bool closable = true) =>
         el with { IsClosable = closable };
 
     /// <summary>Custom icon source (overrides the severity-default icon).</summary>
@@ -1266,6 +1307,10 @@ public static partial class ElementExtensions
             ColumnSpan: existing?.ColumnSpan ?? 1));
     }
 
+    /// <inheritdoc cref="IsClosable"/>
+    [Obsolete("Use IsClosable() — aligns with WinUI naming (see #268).")]
+    public static InfoBarElement Closable(this InfoBarElement el, bool closable = true) =>
+        el.IsClosable(closable);
     // ── NavigationView sugar ────────────────────────────────────────
 
     public static NavigationViewElement PaneDisplayMode(this NavigationViewElement el, NavigationViewPaneDisplayMode mode) =>
@@ -1396,8 +1441,14 @@ public static partial class ElementExtensions
 
     // ── ProgressRing sugar ──────────────────────────────────────────
 
-    public static ProgressRingElement Active(this ProgressRingElement el, bool active = true) =>
+    /// <summary>Sets whether the ProgressRing is active (spinning).</summary>
+    public static ProgressRingElement IsActive(this ProgressRingElement el, bool active = true) =>
         el with { IsActive = active };
+
+    /// <inheritdoc cref="IsActive"/>
+    [Obsolete("Use IsActive() — aligns with WinUI naming (see #268).")]
+    public static ProgressRingElement Active(this ProgressRingElement el, bool active = true) =>
+        el.IsActive(active);
 
     // ── PersonPicture sugar ─────────────────────────────────────────
 
@@ -1420,7 +1471,7 @@ public static partial class ElementExtensions
     /// <summary>
     /// Controls visibility of the "add tab" button in a TabView.
     /// </summary>
-    public static TabViewElement IsAddButtonVisible(this TabViewElement el, bool visible = true) =>
+    public static TabViewElement IsAddTabButtonVisible(this TabViewElement el, bool visible = true) =>
         el with { IsAddTabButtonVisible = visible };
 
     /// <summary>Controls how tab widths are sized (Equal, SizeToContent, Compact).</summary>
@@ -1451,10 +1502,15 @@ public static partial class ElementExtensions
     public static TabViewElement TabStripFooter(this TabViewElement el, Element footer) =>
         el with { TabStripFooter = footer };
 
-    /// <inheritdoc cref="IsAddButtonVisible"/>
-    [Obsolete("Use IsAddButtonVisible() — imperative 'Show*' naming is deprecated (see #268).")]
+    /// <inheritdoc cref="IsAddTabButtonVisible"/>
+    [Obsolete("Use IsAddTabButtonVisible() — aligns with WinUI naming (see #268).")]
+    public static TabViewElement IsAddButtonVisible(this TabViewElement el, bool visible = true) =>
+        el.IsAddTabButtonVisible(visible);
+
+    /// <inheritdoc cref="IsAddTabButtonVisible"/>
+    [Obsolete("Use IsAddTabButtonVisible() — aligns with WinUI naming (see #268).")]
     public static TabViewElement ShowAddButton(this TabViewElement el, bool visible = true) =>
-        el.IsAddButtonVisible(visible);
+        el.IsAddTabButtonVisible(visible);
     // ── Key ─────────────────────────────────────────────────────────
 
     public static T WithKey<T>(this T el, string key) where T : Element =>
@@ -1788,8 +1844,14 @@ public static partial class ElementExtensions
 
     // ── Popup convenience modifiers ─────────────────────────────────
 
-    public static PopupElement LightDismiss(this PopupElement el, bool enabled = true) =>
+    /// <summary>Sets whether the Popup closes on outside interaction.</summary>
+    public static PopupElement IsLightDismissEnabled(this PopupElement el, bool enabled = true) =>
         el with { IsLightDismissEnabled = enabled };
+
+    /// <inheritdoc cref="IsLightDismissEnabled"/>
+    [Obsolete("Use IsLightDismissEnabled() — aligns with WinUI naming (see #268).")]
+    public static PopupElement LightDismiss(this PopupElement el, bool enabled = true) =>
+        el.IsLightDismissEnabled(enabled);
 
     public static PopupElement Offset(this PopupElement el, double horizontal, double vertical) =>
         el with { HorizontalOffset = horizontal, VerticalOffset = vertical };

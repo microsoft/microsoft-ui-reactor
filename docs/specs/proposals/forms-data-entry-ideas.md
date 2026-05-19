@@ -351,7 +351,7 @@ ValidationVisualizer(VisualizerStyle.InfoBar,
         ),
 
         Button("Submit", HandleSubmit)
-            .Disabled(!UseValidationContext().IsValid())
+            .IsEnabled(UseValidationContext().IsValid())
     )
 )
 ```
@@ -637,9 +637,9 @@ return VStack(16,
     HStack(12,
         When(wizard.CanGoBack, () => Button("Back", wizard.GoBack)),
         When(!wizard.IsLastStep, () =>
-            Button("Next", wizard.GoNext).Disabled(!wizard.IsCurrentStepValid)),
+            Button("Next", wizard.GoNext).IsEnabled(wizard.IsCurrentStepValid)),
         When(wizard.IsLastStep, () =>
-            Button("Submit", HandleSubmit).Disabled(!wizard.IsValid))
+            Button("Submit", HandleSubmit).IsEnabled(wizard.IsValid))
     )
 );
 ```
@@ -841,7 +841,7 @@ class RegistrationForm : Component
                         if (result.Errors is { } errors)
                             foreach (var e in errors)
                                 ctx.Add(e.Field, e.Message);
-                    }).Disabled(!ctx.IsValid()),
+                    }).IsEnabled(ctx.IsValid()),
 
                     When(ctx.IsDirty(), () =>
                         Button("Reset", () => ctx.Reset())

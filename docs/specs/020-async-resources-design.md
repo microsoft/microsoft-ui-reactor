@@ -552,7 +552,7 @@ var save = UseMutation<Employee, Employee>(
         OnError: (ex, e) => cache.Revert(e.Key),
         InvalidateKeys: ["employees.list"]));
 
-Button("Save", () => save.RunAsync(edited)).Disabled(save.IsPending);
+Button("Save", () => save.RunAsync(edited)).IsEnabled(!save.IsPending);
 ```
 
 ### 8.3 Why a separate hook, not "write support on UseResource"

@@ -22,7 +22,7 @@ class DynamicListDemo : Component
             TextBlock("Demonstrates conditional and list rendering"),
 
             HStack(8,
-                Button("Remove", () => setCount(Math.Max(0, count - 1))).Disabled(count == 0),
+                Button("Remove", () => setCount(Math.Max(0, count - 1))).IsEnabled(!(count == 0)),
                 TextBlock($"{count} items"),
                 Button("Add", () => setCount(count + 1))
             ),

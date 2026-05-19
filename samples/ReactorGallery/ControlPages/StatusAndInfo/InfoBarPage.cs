@@ -42,11 +42,11 @@ InfoBar(""Info"",    ""FYI…""     ).Informational().Closable(false)"),
                 SampleCard("Closable InfoBar",
                     VStack(8,
                         showClosable
-                            ? InfoBar("Closable", "Click the close button to dismiss.").Closable()
+                            ? InfoBar("Closable", "Click the close button to dismiss.").IsClosable()
                             : TextBlock("InfoBar was closed.").Foreground(Theme.SecondaryText),
                         Button("Reset", () => setShowClosable(true))
                     ),
-                    @"InfoBar(""Closable"", ""Click close to dismiss."").Closable()")
+                    @"InfoBar(""Closable"", ""Click close to dismiss."").IsClosable()")
             ).Margin(36, 24, 36, 36)
         );
     }

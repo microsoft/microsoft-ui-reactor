@@ -16,7 +16,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 ///    level behavior under real input is verified in the Appium tier
 ///    (Reactor.AppTests); this fixture only validates wiring and marker
 ///    propagation.
-///  • Button .DisabledFocusable() — keeps the button keyboard-focusable
+///  • Button .IsDisabledFocusable() — keeps the button keyboard-focusable
 ///    while visually dimmed and dropping invokes via the Click trampoline.
 ///    UIA still reports the button as enabled (a full assistive-tech
 ///    "unavailable" signal would require a custom AutomationPeer override
@@ -72,7 +72,7 @@ internal static class ImmediateAndDisabledFocusableFixtures
 
 
     // ════════════════════════════════════════════════════════════════════════
-    //  Button.DisabledFocusable()
+    //  Button.IsDisabledFocusable()
     // ════════════════════════════════════════════════════════════════════════
 
     internal class ButtonDisabledFocusableState(Harness h) : SelfTestFixtureBase(h)
@@ -84,7 +84,7 @@ internal static class ImmediateAndDisabledFocusableFixtures
             var host = H.CreateHost();
             host.Mount(_ => VStack(
                 Button("Submit", () => clicks++)
-                    .DisabledFocusable()
+                    .IsDisabledFocusable()
                     .Set(b => b.Name = "btnDF")
             ));
             await Harness.Render();
@@ -119,7 +119,7 @@ internal static class ImmediateAndDisabledFocusableFixtures
             var host = H.CreateHost();
             host.Mount(_ => VStack(
                 Button("Submit", () => clicks++)
-                    .DisabledFocusable(disabledFocusable)
+                    .IsDisabledFocusable(disabledFocusable)
                     .Set(b => b.Name = "btnDFT")
             ));
             await Harness.Render();
@@ -134,7 +134,7 @@ internal static class ImmediateAndDisabledFocusableFixtures
             disabledFocusable = false;
             host.Mount(_ => VStack(
                 Button("Submit", () => clicks++)
-                    .DisabledFocusable(disabledFocusable)
+                    .IsDisabledFocusable(disabledFocusable)
                     .Set(b => b.Name = "btnDFT")
             ));
             await Harness.Render();

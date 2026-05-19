@@ -361,7 +361,7 @@ LineChart(...)
 ```
 
 `.Interactive()` is implicit when any of `.Pan()`, `.Zoom()`, `.Brush()`, `.OnPointInvoke()`,
-or `.Selectable()` is used.
+or `.IsTextSelectionEnabled()` is used.
 
 ---
 
