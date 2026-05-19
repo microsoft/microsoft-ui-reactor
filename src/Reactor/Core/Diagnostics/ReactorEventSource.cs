@@ -48,6 +48,15 @@ internal sealed class ReactorEventSource : EventSource
         public const EventKeywords Lifecycle = (EventKeywords)0x10;
         public const EventKeywords Errors = (EventKeywords)0x20;
         public const EventKeywords EventDispatch = (EventKeywords)0x40;
+        // Spec 044 — subsystem coverage gaps. Each gets its own bit so a
+        // consumer (dotnet-trace, EventListener, ReactorTrace.Subscribe) can
+        // pick exactly the area it cares about without paying for the rest.
+        public const EventKeywords Hosting = (EventKeywords)0x80;       // Window/HWND/DPI/Backdrop
+        public const EventKeywords Persistence = (EventKeywords)0x100;  // settings store, placement
+        public const EventKeywords Navigation = (EventKeywords)0x200;   // route push, cache, transitions
+        public const EventKeywords Intl = (EventKeywords)0x400;         // missing keys, fallback, format
+        public const EventKeywords Theme = (EventKeywords)0x800;        // theme apply, bindings
+        public const EventKeywords Shell = (EventKeywords)0x1000;       // JumpList/Tray/ThumbnailToolbar
     }
     // </snippet:etw-keywords>
 
@@ -232,4 +241,30 @@ internal sealed class ReactorEventSource : EventSource
             // own ACL, not the Microsoft-UI-Reactor provider.
             WriteEvent(9, componentName ?? string.Empty, exceptionType ?? string.Empty, string.Empty);
     }
+
+    // Spec 044 §6.1 — generic swallowed-exception event used by
+    // DiagnosticLog.SwallowedError. PII: exception type only; the message
+    // is intentionally never on the payload.
+    [Event(16, Level = EventLevel.Warning, Keywords = Keywords.Errors,
+        Message = "Swallowed error (category={category}, op={operation}, exception={exceptionType})")]
+    public void SwallowedError(string category, string operation, string exceptionType)
+    {
+        if (IsEnabled(EventLevel.Warning, Keywords.Errors))
+            WriteEvent(16, category ?? string.Empty, operation ?? string.Empty, exceptionType ?? string.Empty);
+    }
+
+    // Spec 044 §6.1 — generic HRESULT-failed event used by
+    // DiagnosticLog.HResultFailed. HRESULT is signed (matches Exception.HResult).
+    [Event(17, Level = EventLevel.Warning, Keywords = Keywords.Errors,
+        Message = "HResult failed (category={category}, op={operation}, hr=0x{hr:X8})")]
+    public void HResultFailed(string category, string operation, int hr)
+    {
+        if (IsEnabled(EventLevel.Warning, Keywords.Errors))
+            WriteEvent(17, category ?? string.Empty, operation ?? string.Empty, hr);
+    }
+
+    // ── EventId allocation ──────────────────────────────────────────────
+    //
+    // Used: 1-15 (original surface), 16-17 (spec 044 Phase A generics).
+    // Next free EventId for spec 044 Phase B (subsystem events): 18.
 }
