@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Reactor.Controls;
@@ -9,7 +10,7 @@ public static partial class Factories
     /// <summary>
     /// Creates a DataGrid with explicit column definitions.
     /// </summary>
-    public static ComponentElement<DataGridElement<T>> DataGrid<T>(
+    public static ComponentElement<DataGridElement<T>> DataGrid<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
         IDataSource<T> source,
         IReadOnlyList<FieldDescriptor> columns,
         TypeRegistry? registry = null,
@@ -56,7 +57,7 @@ public static partial class Factories
     /// <summary>
     /// Creates a DataGrid with auto-generated columns from TypeRegistry + reflection.
     /// </summary>
-    public static ComponentElement<DataGridElement<T>> DataGrid<T>(
+    public static ComponentElement<DataGridElement<T>> DataGrid<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
         IDataSource<T> source,
         TypeRegistry registry,
         Func<FieldDescriptor, FieldDescriptor>? columnOverrides = null,

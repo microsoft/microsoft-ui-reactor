@@ -233,8 +233,21 @@ Caching preserves scroll position, text input, and component state.
 ## 10. State serialization
 
 ```csharp
-var json = nav.GetState();          // serialize full nav state
-nav.SetState(json);                 // restore stacks + navigate
+var state = nav.GetState();         // NavigationState<TRoute> snapshot
+nav.SetState(state);                // restore stacks + fire Navigated(Reset)
+```
+
+Reactor returns a plain `NavigationState<TRoute>` POCO and lets you pick the
+storage format. For JSON persistence pair the snapshot with a
+`JsonSerializerContext` (AOT-safe):
+
+```csharp
+[JsonSerializable(typeof(NavigationState<AppRoute>))]
+partial class AppJsonContext : JsonSerializerContext { }
+
+var json = JsonSerializer.Serialize(nav.GetState(), AppJsonContext.Default.NavigationStateAppRoute);
+// later…
+nav.SetState(JsonSerializer.Deserialize(json, AppJsonContext.Default.NavigationStateAppRoute)!);
 ```
 
 Use for persisting navigation across app restarts.

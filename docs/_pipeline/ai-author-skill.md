@@ -562,7 +562,7 @@ class MyComponent : Component<MyProps>
 `.CanGoForward`, `.ForwardStack`, `.GoForward()` — forward navigation,
 `.PopTo(predicate)` — pop until matching route,
 `.Navigate(route, NavigateOptions)` — with transition override and `PushToBackStack` flag,
-`.GetState(options?)` / `.SetState(json)` — serialize/restore full nav state.
+`.GetState()` / `.SetState(state)` — capture/restore full nav state as a `NavigationState<TRoute>` POCO (serialize externally — e.g. `JsonSerializer.Serialize(snapshot, MyJsonContext.Default.NavigationStateRoute)`).
 
 **Validation & forms:**
 

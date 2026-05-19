@@ -149,7 +149,7 @@ async cancellation.
 <!-- ai:caveat -->
 `Reset(route)`, `Replace(route)`, and `PopTo(predicate)` all run the
 `onNavigatingFrom` guard — `ctx.Cancel()` will block them. But
-`SetState(json)` does **not**: it routes through `NavigationStack.RestoreState`
+`SetState(state)` does **not**: it routes through `NavigationStack.RestoreState`
 which bypasses `InvokeGuard` entirely and fires `Navigated` with
 `NavigationMode.Reset` after the stacks are already rewritten. If your
 unsaved-changes guard lives only in `onNavigatingFrom`, an app that
@@ -254,20 +254,25 @@ Use tabs when users need to switch freely between parallel workspaces.
 
 ## State Serialization
 
-`NavigationHandle` can serialize and restore the full navigation state —
-back stack, current route, and forward stack — as JSON. Use this to persist
-navigation state across app restarts or to restore deep-linked sessions:
+`NavigationHandle` can capture and restore the full navigation state —
+back stack, current route, and forward stack — as a plain
+`NavigationState<TRoute>` snapshot. Reactor intentionally does **not**
+pick a serialization format: persist the snapshot however you like
+(JSON via your own source-gen context, MessagePack, hand-rolled binary).
 
 ```csharp snippet="navigation/state-serialization"
 ```
 
 ![State serialization](screenshot://navigation/state-serialization)
 
-`GetState()` returns a JSON string. `SetState(json)` restores the stacks
-and fires `Navigated` with `Reset` mode. Pass `JsonSerializerOptions` if
-your route type needs custom serialization. For polymorphic route
-hierarchies, mark the base type with `[JsonPolymorphic]` and
-`[JsonDerivedType]` so the round trip preserves the discriminator.
+`GetState()` returns a `NavigationState<TRoute>` record. `SetState(state)`
+restores the stacks and fires `Navigated` with `Reset` mode. The record
+carries `[JsonPropertyName]` metadata so a one-line
+`JsonSerializer.Serialize(snapshot, MyJsonContext.Default.NavigationStateRoute)`
+gives you camelCase JSON for free — fully AOT-safe when paired with a
+`JsonSerializerContext`. For polymorphic route hierarchies, mark the base
+type with `[JsonPolymorphic]` and `[JsonDerivedType]` so the round trip
+preserves the discriminator.
 
 ## Frame Events
 

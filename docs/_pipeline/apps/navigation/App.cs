@@ -243,7 +243,7 @@ class StateSerializationDemo : Component
     public override Element Render()
     {
         var nav = UseNavigation(Route.Home);
-        var (savedState, setSavedState) = UseState<string?>(null);
+        var (savedJson, setSavedJson) = UseState<string?>(null);
 
         return VStack(12,
             SubHeading("State Serialization"),
@@ -251,21 +251,29 @@ class StateSerializationDemo : Component
                 Button("Navigate", () =>
                     nav.Navigate(Route.Settings)),
                 Button("Save State", () =>
-                    setSavedState(nav.GetState())),
+                    setSavedJson(System.Text.Json.JsonSerializer.Serialize(
+                        nav.GetState(), DocsNavJsonContext.Default.NavigationStateRoute))),
                 Button("Restore State", () =>
                 {
-                    if (savedState is not null)
-                        nav.SetState(savedState);
-                }).IsEnabled(!(savedState is null))
+                    if (savedJson is not null)
+                    {
+                        var state = System.Text.Json.JsonSerializer.Deserialize(
+                            savedJson, DocsNavJsonContext.Default.NavigationStateRoute);
+                        if (state is not null) nav.SetState(state);
+                    }
+                }).IsEnabled(savedJson is not null)
             ),
             TextBlock($"Current: {nav.CurrentRoute}"),
-            TextBlock($"Saved: {savedState?[..Math.Min(50, savedState?.Length ?? 0)] ?? "(none)"}")
+            TextBlock($"Saved: {savedJson?[..Math.Min(50, savedJson?.Length ?? 0)] ?? "(none)"}")
                 .FontSize(12).Opacity(0.6),
             NavigationHost(nav, route =>
                 TextBlock($"Page: {route}").Padding(16))
         ).Padding(24);
     }
 }
+
+[System.Text.Json.Serialization.JsonSerializable(typeof(NavigationState<Route>))]
+partial class DocsNavJsonContext : System.Text.Json.Serialization.JsonSerializerContext { }
 // </snippet:state-serialization>
 
 // <snippet:diagnostics>

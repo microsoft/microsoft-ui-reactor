@@ -243,7 +243,7 @@ async cancellation.
 
 > **Caveat:** `Reset(route)`, `Replace(route)`, and `PopTo(predicate)` all run the
 > `onNavigatingFrom` guard — `ctx.Cancel()` will block them. But
-> `SetState(json)` does **not**: it routes through `NavigationStack.RestoreState`
+> `SetState(state)` does **not**: it routes through `NavigationStack.RestoreState`
 > which bypasses `InvokeGuard` entirely and fires `Navigated` with
 > `NavigationMode.Reset` after the stacks are already rewritten. If your
 > unsaved-changes guard lives only in `onNavigatingFrom`, an app that
@@ -491,9 +491,11 @@ Use tabs when users need to switch freely between parallel workspaces.
 
 ## State Serialization
 
-`NavigationHandle` can serialize and restore the full navigation state —
-back stack, current route, and forward stack — as JSON. Use this to persist
-navigation state across app restarts or to restore deep-linked sessions:
+`NavigationHandle` can capture and restore the full navigation state —
+back stack, current route, and forward stack — as a plain
+`NavigationState<TRoute>` snapshot. Reactor intentionally does **not**
+pick a serialization format: persist the snapshot however you like
+(JSON via your own source-gen context, MessagePack, hand-rolled binary).
 
 ```csharp
 class StateSerializationDemo : Component
@@ -501,7 +503,7 @@ class StateSerializationDemo : Component
     public override Element Render()
     {
         var nav = UseNavigation(Route.Home);
-        var (savedState, setSavedState) = UseState<string?>(null);
+        var (savedJson, setSavedJson) = UseState<string?>(null);
 
         return VStack(12,
             SubHeading("State Serialization"),
@@ -509,30 +511,41 @@ class StateSerializationDemo : Component
                 Button("Navigate", () =>
                     nav.Navigate(Route.Settings)),
                 Button("Save State", () =>
-                    setSavedState(nav.GetState())),
+                    setSavedJson(System.Text.Json.JsonSerializer.Serialize(
+                        nav.GetState(), DocsNavJsonContext.Default.NavigationStateRoute))),
                 Button("Restore State", () =>
                 {
-                    if (savedState is not null)
-                        nav.SetState(savedState);
-                }).IsEnabled(!(savedState is null))
+                    if (savedJson is not null)
+                    {
+                        var state = System.Text.Json.JsonSerializer.Deserialize(
+                            savedJson, DocsNavJsonContext.Default.NavigationStateRoute);
+                        if (state is not null) nav.SetState(state);
+                    }
+                }).IsEnabled(savedJson is not null)
             ),
             TextBlock($"Current: {nav.CurrentRoute}"),
-            TextBlock($"Saved: {savedState?[..Math.Min(50, savedState?.Length ?? 0)] ?? "(none)"}")
+            TextBlock($"Saved: {savedJson?[..Math.Min(50, savedJson?.Length ?? 0)] ?? "(none)"}")
                 .FontSize(12).Opacity(0.6),
             NavigationHost(nav, route =>
                 TextBlock($"Page: {route}").Padding(16))
         ).Padding(24);
     }
 }
+
+[System.Text.Json.Serialization.JsonSerializable(typeof(NavigationState<Route>))]
+partial class DocsNavJsonContext : System.Text.Json.Serialization.JsonSerializerContext { }
 ```
 
 ![State serialization](images/navigation/state-serialization.png)
 
-`GetState()` returns a JSON string. `SetState(json)` restores the stacks
-and fires `Navigated` with `Reset` mode. Pass `JsonSerializerOptions` if
-your route type needs custom serialization. For polymorphic route
-hierarchies, mark the base type with `[JsonPolymorphic]` and
-`[JsonDerivedType]` so the round trip preserves the discriminator.
+`GetState()` returns a `NavigationState<TRoute>` record. `SetState(state)`
+restores the stacks and fires `Navigated` with `Reset` mode. The record
+carries `[JsonPropertyName]` metadata so a one-line
+`JsonSerializer.Serialize(snapshot, MyJsonContext.Default.NavigationStateRoute)`
+gives you camelCase JSON for free — fully AOT-safe when paired with a
+`JsonSerializerContext`. For polymorphic route hierarchies, mark the base
+type with `[JsonPolymorphic]` and `[JsonDerivedType]` so the round trip
+preserves the discriminator.
 
 ## Frame Events
 

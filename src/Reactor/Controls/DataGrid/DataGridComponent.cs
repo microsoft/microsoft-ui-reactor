@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Reactor.Hooks;
@@ -24,7 +25,7 @@ namespace Microsoft.UI.Reactor.Controls;
 /// callback, same item count), and the Reactor reconciler only updates the cells whose
 /// output changed — as property updates on existing controls, not collection changes.
 /// </summary>
-public class DataGridComponent<T> : Component<DataGridElement<T>>
+public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T> : Component<DataGridElement<T>>
 {
     /// <summary>
     /// Input to the row-commit mutation. Bundles the row key, the post-edit item
@@ -45,9 +46,7 @@ public class DataGridComponent<T> : Component<DataGridElement<T>>
         // affecting CellRenderers). Auto-columns are cached by UseMemo.
         var columns = el.Columns is not null
             ? el.Columns
-#pragma warning disable IL2091 // Generic type parameter flows through without DynamicallyAccessedMembers annotation
             : UseMemo(() => Factories.AutoColumns<T>(registry, el.ColumnOverrides));
-#pragma warning restore IL2091
 
         // Create the headless state machine once and hold it in a ref.
         var stateRef = UseRef<DataGridState<T>>(null!);

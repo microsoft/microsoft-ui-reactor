@@ -1010,10 +1010,11 @@ restored on relaunch.
 #### API
 
 ```csharp
-// Save
-string json = nav.GetState();
-// json: {"backStack":[{"$type":"Home"},{"$type":"Detail","Id":42}],
-//        "current":{"$type":"Settings"},
+// Save (caller picks the storage format)
+NavigationState<AppRoute> state = nav.GetState();
+string json = JsonSerializer.Serialize(state, AppJsonContext.Default.NavigationStateAppRoute);
+// json: {"backStack":[{"$type":"home"},{"$type":"detail","Id":42}],
+//        "current":{"$type":"settings"},
 //        "forwardStack":[]}
 
 ApplicationData.Current.LocalSettings.Values["nav_state"] = json;
@@ -1021,7 +1022,8 @@ ApplicationData.Current.LocalSettings.Values["nav_state"] = json;
 // Restore
 if (ApplicationData.Current.LocalSettings.Values.TryGetValue("nav_state", out var saved))
 {
-    nav.SetState((string)saved);
+    var restored = JsonSerializer.Deserialize((string)saved, AppJsonContext.Default.NavigationStateAppRoute);
+    if (restored is not null) nav.SetState(restored);
 }
 ```
 

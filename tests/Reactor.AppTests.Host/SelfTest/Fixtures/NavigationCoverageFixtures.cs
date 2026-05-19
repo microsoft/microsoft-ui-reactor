@@ -147,7 +147,7 @@ internal static class NavigationCoverageFixtures
         {
             var host = H.CreateHost();
             NavigationHandle<string>? navHandle = null;
-            string? savedState = null;
+            NavigationState<string>? savedState = null;
 
             host.Mount(ctx =>
             {
@@ -175,7 +175,7 @@ internal static class NavigationCoverageFixtures
             H.ClickButton("Save");
             await Harness.Render();
             H.Check("NavSer_StateSaved", savedState is not null);
-            H.Check("NavSer_StateHasB", savedState?.Contains("B") == true);
+            H.Check("NavSer_StateHasB", savedState?.Current == "B");
 
             // Reset to clear everything
             H.ClickButton("Reset");

@@ -61,6 +61,13 @@ static class AuthState
 
 // ─── Route types ──────────────────────────────────────────────────────────────
 
+[System.Text.Json.Serialization.JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(Home), "home")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(Detail), "detail")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(Settings), "settings")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(Profile), "profile")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(DocsPage), "docs")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(AdminPage), "admin")]
 abstract record AppRoute;
 sealed record Home : AppRoute;
 sealed record Detail(int Id, string Tab = "overview") : AppRoute;
@@ -68,6 +75,10 @@ sealed record Settings : AppRoute;
 sealed record Profile(string Name) : AppRoute;
 sealed record DocsPage(string Path) : AppRoute;
 sealed record AdminPage : AppRoute;
+
+// App-side source-gen context for AOT-safe JSON persistence of nav state.
+[System.Text.Json.Serialization.JsonSerializable(typeof(NavigationState<AppRoute>))]
+partial class NavDemoJsonContext : System.Text.Json.Serialization.JsonSerializerContext { }
 
 // Settings sub-routes for nested navigation
 abstract record SettingsRoute;
@@ -629,11 +640,14 @@ class ProfilePage : Component<string>
 
                 // Serialization demo
                 SubHeading("State Serialization").Margin(0, 24, 0, 0),
-                TextBlock("Save and restore the entire navigation stack as JSON."),
+                TextBlock("Save and restore the entire navigation stack. GetState/SetState " +
+                          "return a plain POCO; persist it however you like (here we use System.Text.Json)."),
                 HStack(8,
                     Button("Save State", () =>
                     {
-                        var json = nav.GetState();
+                        var snapshot = nav.GetState();
+                        var json = System.Text.Json.JsonSerializer.Serialize(
+                            snapshot, NavDemoJsonContext.Default.NavigationStateAppRoute);
                         Debug.WriteLine($"Navigation state: {json}");
                     }),
                     Button("Log Stack Info", () =>

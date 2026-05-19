@@ -183,7 +183,7 @@ internal sealed class NavigationStack<TRoute> where TRoute : notnull
     /// Replaces the entire stack state. Used for deserialization and deep linking.
     /// Does NOT invoke guards. Fires OnChanged.
     /// </summary>
-    internal void RestoreState(IList<TRoute> backStack, TRoute current, IList<TRoute> forwardStack)
+    internal void RestoreState(IReadOnlyList<TRoute> backStack, TRoute current, IReadOnlyList<TRoute> forwardStack)
     {
         _backStack.Clear();
         _backStack.AddRange(backStack);

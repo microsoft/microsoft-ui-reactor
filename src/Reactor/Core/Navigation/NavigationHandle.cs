@@ -1,7 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
 namespace Microsoft.UI.Reactor.Navigation;
 
 /// <summary>
@@ -238,41 +234,36 @@ public sealed class NavigationHandle<TRoute> : INavigationHandle where TRoute : 
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  State serialization
+    //  State snapshot / restore
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Serializes the full navigation state (back stack, current, forward stack) to JSON.
-    /// The route type must support <c>global::System.Text.Json</c> serialization.
-    /// For polymorphic route hierarchies, use <c>[JsonPolymorphic]</c> and <c>[JsonDerivedType]</c>
-    /// attributes on the base route type.
+    /// Returns a snapshot of the full navigation state — back stack, current route,
+    /// and forward stack — as a plain POCO. Persist it however you like (JSON,
+    /// MessagePack, hand-rolled binary): Reactor intentionally does not pick a
+    /// serialization format for you.
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization of navigation state; callers provide appropriate types.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization of navigation state; callers provide appropriate types.")]
-    public string GetState(JsonSerializerOptions? options = null)
-    {
-        var state = new NavigationState<TRoute>
-        {
-            BackStack = _stack.BackStack.ToList(),
-            Current = _stack.Current,
-            ForwardStack = _stack.ForwardStack.ToList(),
-        };
-        return JsonSerializer.Serialize(state, options);
-    }
+    /// <remarks>
+    /// For JSON persistence, declare a <c>JsonSerializerContext</c> covering
+    /// <see cref="NavigationState{TRoute}"/> and your route type so the call is
+    /// AOT-safe. For polymorphic route hierarchies, annotate the base route type
+    /// with <c>[JsonPolymorphic]</c> and <c>[JsonDerivedType]</c>.
+    /// </remarks>
+    public NavigationState<TRoute> GetState() => new(
+        BackStack: _stack.BackStack.ToList(),
+        Current: _stack.Current,
+        ForwardStack: _stack.ForwardStack.ToList());
 
     /// <summary>
-    /// Restores the full navigation state from JSON. Replaces back stack, current, and forward stack.
-    /// Fires <see cref="Navigated"/> with <see cref="NavigationMode.Reset"/>.
+    /// Restores a previously captured <see cref="NavigationState{TRoute}"/>. Replaces
+    /// the back stack, current route, and forward stack, then fires
+    /// <see cref="Navigated"/> with <see cref="NavigationMode.Reset"/>.
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON deserialization of navigation state; callers provide appropriate types.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON deserialization of navigation state; callers provide appropriate types.")]
-    public void SetState(string json, JsonSerializerOptions? options = null)
+    public void SetState(NavigationState<TRoute> state)
     {
-        var state = JsonSerializer.Deserialize<NavigationState<TRoute>>(json, options)
-            ?? throw new JsonException("Failed to deserialize navigation state.");
-
+        ArgumentNullException.ThrowIfNull(state);
         if (state.Current is null)
-            throw new JsonException("Navigation state must include a non-null 'current' route.");
+            throw new ArgumentException("Navigation state must include a non-null Current route.", nameof(state));
 
         var previous = _stack.Current;
         _stack.RestoreState(state.BackStack, state.Current, state.ForwardStack);
@@ -280,19 +271,4 @@ public sealed class NavigationHandle<TRoute> : INavigationHandle where TRoute : 
         Navigated?.Invoke(new NavigationEventArgs<TRoute>(state.Current, previous, NavigationMode.Reset));
         RouteChanged?.Invoke();
     }
-}
-
-/// <summary>
-/// Serializable representation of the full navigation stack state.
-/// </summary>
-internal sealed class NavigationState<TRoute>
-{
-    [JsonPropertyName("backStack")]
-    public List<TRoute> BackStack { get; set; } = new();
-
-    [JsonPropertyName("current")]
-    public TRoute Current { get; set; } = default!;
-
-    [JsonPropertyName("forwardStack")]
-    public List<TRoute> ForwardStack { get; set; } = new();
 }

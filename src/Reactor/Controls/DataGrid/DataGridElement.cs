@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Reactor.Controls;
@@ -8,7 +9,7 @@ namespace Microsoft.UI.Reactor.Controls;
 /// Element record for the DataGrid component.
 /// Defines the full API surface for data grid rendering and interaction.
 /// </summary>
-public record DataGridElement<T> : Element
+public record DataGridElement<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T> : Element
 {
     /// <summary>The data source providing rows.</summary>
     public required IDataSource<T> Source { get; init; }

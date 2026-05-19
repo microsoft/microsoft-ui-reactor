@@ -6,11 +6,17 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Tests;
 
 /// <summary>
-/// Phase 6 tests: Navigation state serialization, deep linking, and related functionality.
+/// Phase 6 tests: Navigation state snapshot/restore, deep linking, and related functionality.
 /// </summary>
-public class NavigationSerializationTests
+/// <remarks>
+/// Reactor's <see cref="NavigationHandle{TRoute}.GetState"/> and <see cref="NavigationHandle{TRoute}.SetState"/>
+/// expose a POCO <see cref="NavigationState{TRoute}"/> snapshot. These tests verify both the
+/// POCO round-trip and that the snapshot is JSON-friendly (with the right property names
+/// and polymorphism support) when the caller plugs in their own serializer.
+/// </remarks>
+public partial class NavigationSerializationTests
 {
-    // Polymorphic route hierarchy for testing
+    // Polymorphic route hierarchy for JSON round-trip tests
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
     [JsonDerivedType(typeof(Home), "home")]
     [JsonDerivedType(typeof(Detail), "detail")]
@@ -22,21 +28,26 @@ public class NavigationSerializationTests
     private sealed record Settings : Route;
     private sealed record Profile(string Name) : Route;
 
+    // App-side source-gen context — mirrors the AOT-safe pattern callers should use.
+    [JsonSourceGenerationOptions]
+    [JsonSerializable(typeof(NavigationState<Route>))]
+    private partial class RouteJsonContext : JsonSerializerContext { }
+
     // ════════════════════════════════════════════════════════════════
-    //  GetState
+    //  GetState — POCO snapshot
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void GetState_Produces_Correct_JSON_For_Single_Route()
+    public void GetState_Returns_Current_Route()
     {
         var stack = new NavigationStack<Route>(new Home());
         var handle = new NavigationHandle<Route>(stack);
 
-        var json = handle.GetState();
+        var state = handle.GetState();
 
-        Assert.Contains("\"current\"", json);
-        Assert.Contains("\"backStack\"", json);
-        Assert.Contains("\"forwardStack\"", json);
+        Assert.IsType<Home>(state.Current);
+        Assert.Empty(state.BackStack);
+        Assert.Empty(state.ForwardStack);
     }
 
     [Fact]
@@ -49,16 +60,17 @@ public class NavigationSerializationTests
         handle.Navigate(new Detail(2));
         handle.GoBack(); // Detail(2) in forward stack
 
-        var json = handle.GetState();
-        var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
+        var state = handle.GetState();
 
-        Assert.Equal(1, root.GetProperty("backStack").GetArrayLength()); // [Home]
-        Assert.Equal(1, root.GetProperty("forwardStack").GetArrayLength()); // [Detail(2)]
+        Assert.Single(state.BackStack); // [Home]
+        Assert.Single(state.ForwardStack); // [Detail(2)]
+        Assert.IsType<Home>(state.BackStack[0]);
+        Assert.Equal(new Detail(2), state.ForwardStack[0]);
+        Assert.Equal(new Detail(1), state.Current);
     }
 
     [Fact]
-    public void GetState_RoundTrips_Through_SetState()
+    public void GetState_RoundTrips_Through_SetState_POCO()
     {
         var stack = new NavigationStack<Route>(new Home());
         var handle = new NavigationHandle<Route>(stack);
@@ -68,23 +80,38 @@ public class NavigationSerializationTests
         handle.Navigate(new Profile("Alice"));
         handle.GoBack(); // Profile in forward stack
 
-        var json = handle.GetState();
+        var snapshot = handle.GetState();
 
-        // Create a fresh stack and restore
+        // Create a fresh stack and restore directly from the POCO
         var stack2 = new NavigationStack<Route>(new Home());
         var handle2 = new NavigationHandle<Route>(stack2);
 
-        handle2.SetState(json);
+        handle2.SetState(snapshot);
 
         Assert.Equal(handle.CurrentRoute, handle2.CurrentRoute);
-        Assert.Equal(handle.BackStack.Count, handle2.BackStack.Count);
-        Assert.Equal(handle.ForwardStack.Count, handle2.ForwardStack.Count);
         Assert.Equal(handle.BackStack, handle2.BackStack);
         Assert.Equal(handle.ForwardStack, handle2.ForwardStack);
     }
 
     [Fact]
-    public void SetState_With_Polymorphic_Route_Hierarchy_Deserializes_Correctly()
+    public void GetState_Snapshot_Serializes_To_Json_With_Expected_Property_Names()
+    {
+        // Confirms the public NavigationState<T> record uses camelCase via [JsonPropertyName]
+        // — the recommended persistence path for callers who want JSON.
+        var stack = new NavigationStack<Route>(new Home());
+        var handle = new NavigationHandle<Route>(stack);
+        handle.Navigate(new Detail(1));
+
+        var snapshot = handle.GetState();
+        var json = JsonSerializer.Serialize(snapshot, RouteJsonContext.Default.NavigationStateRoute);
+
+        Assert.Contains("\"current\"", json);
+        Assert.Contains("\"backStack\"", json);
+        Assert.Contains("\"forwardStack\"", json);
+    }
+
+    [Fact]
+    public void SetState_With_Polymorphic_Route_Hierarchy_RoundTrips_Through_Json()
     {
         var stack = new NavigationStack<Route>(new Home());
         var handle = new NavigationHandle<Route>(stack);
@@ -92,11 +119,13 @@ public class NavigationSerializationTests
         handle.Navigate(new Detail(42));
         handle.Navigate(new Settings());
 
-        var json = handle.GetState();
+        // Caller picks JSON; framework just hands them the POCO.
+        var json = JsonSerializer.Serialize(handle.GetState(), RouteJsonContext.Default.NavigationStateRoute);
 
         var stack2 = new NavigationStack<Route>(new Home());
         var handle2 = new NavigationHandle<Route>(stack2);
-        handle2.SetState(json);
+        var restored = JsonSerializer.Deserialize(json, RouteJsonContext.Default.NavigationStateRoute)!;
+        handle2.SetState(restored);
 
         Assert.IsType<Settings>(handle2.CurrentRoute);
         Assert.Equal(2, handle2.BackStack.Count);
@@ -117,9 +146,8 @@ public class NavigationSerializationTests
         var source = new NavigationStack<Route>(new Home());
         var sourceHandle = new NavigationHandle<Route>(source);
         sourceHandle.Navigate(new Detail(1));
-        var json = sourceHandle.GetState();
 
-        handle.SetState(json);
+        handle.SetState(sourceHandle.GetState());
 
         Assert.NotNull(eventArgs);
         Assert.Equal(NavigationMode.Reset, eventArgs!.Mode);
@@ -142,6 +170,13 @@ public class NavigationSerializationTests
         handle.SetState(sourceHandle.GetState());
 
         Assert.Equal(1, changeCount);
+    }
+
+    [Fact]
+    public void SetState_Throws_For_Null_State()
+    {
+        var handle = new NavigationHandle<Route>(new NavigationStack<Route>(new Home()));
+        Assert.Throws<ArgumentNullException>(() => handle.SetState(null!));
     }
 
     // ════════════════════════════════════════════════════════════════

@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.Tests;
 /// large stacks, deep link resolution stress, query strings, optional params,
 /// wildcards, and NavigatingToContext validation.
 /// </summary>
-public class NavigationStressTests
+public partial class NavigationStressTests
 {
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
     [JsonDerivedType(typeof(Home), "home")]
@@ -25,6 +25,9 @@ public class NavigationStressTests
     private sealed record Detail(int Id) : Route;
     private sealed record Settings : Route;
     private sealed record Profile(string Name) : Route;
+
+    [JsonSerializable(typeof(NavigationState<Route>))]
+    private partial class StressJsonContext : JsonSerializerContext { }
 
     private static CachedPage MakePage(NavigationCacheMode cacheMode = NavigationCacheMode.Enabled) =>
         new() { MountedControl = null!, CacheMode = cacheMode };
@@ -281,11 +284,11 @@ public class NavigationStressTests
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  6. Serialization round-trip with large stack
+    //  6. State snapshot / restore round-trip with large stack
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void Serialization_RoundTrip_With_Large_Stack()
+    public void State_Snapshot_RoundTrip_With_Large_Stack()
     {
         var stack = new NavigationStack<Route>(new Home());
         var handle = new NavigationHandle<Route>(stack);
@@ -301,12 +304,12 @@ public class NavigationStressTests
         Assert.Equal(44, handle.BackStack.Count);
         Assert.Equal(5, handle.ForwardStack.Count);
 
-        var json = handle.GetState();
+        var snapshot = handle.GetState();
 
         // Restore into a fresh handle
         var stack2 = new NavigationStack<Route>(new Home());
         var handle2 = new NavigationHandle<Route>(stack2);
-        handle2.SetState(json);
+        handle2.SetState(snapshot);
 
         Assert.Equal(handle.CurrentRoute, handle2.CurrentRoute);
         Assert.Equal(handle.Depth, handle2.Depth);
@@ -323,7 +326,7 @@ public class NavigationStressTests
     }
 
     [Fact]
-    public void Serialization_RoundTrip_Preserves_Polymorphic_Types()
+    public void State_Snapshot_RoundTrip_Preserves_Polymorphic_Types_Via_Json()
     {
         var stack = new NavigationStack<Route>(new Home());
         var handle = new NavigationHandle<Route>(stack);
@@ -332,11 +335,13 @@ public class NavigationStressTests
         handle.Navigate(new Settings());
         handle.Navigate(new Profile("Alice"));
 
-        var json = handle.GetState();
+        // App-side: caller picks JSON via their own source-gen context.
+        var json = JsonSerializer.Serialize(handle.GetState(), StressJsonContext.Default.NavigationStateRoute);
 
         var stack2 = new NavigationStack<Route>(new Home());
         var handle2 = new NavigationHandle<Route>(stack2);
-        handle2.SetState(json);
+        var restored = JsonSerializer.Deserialize(json, StressJsonContext.Default.NavigationStateRoute)!;
+        handle2.SetState(restored);
 
         Assert.IsType<Profile>(handle2.CurrentRoute);
         Assert.Equal(new Profile("Alice"), handle2.CurrentRoute);

@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace Microsoft.UI.Reactor.Controls;
 
@@ -7,12 +8,21 @@ namespace Microsoft.UI.Reactor.Controls;
 /// Provides add/remove/reorder operations for array/list properties.
 /// Works with IList for runtime polymorphism over List&lt;T&gt; and T[].
 /// </summary>
+/// <remarks>
+/// The <see cref="IList"/> branch (covers <c>List&lt;T&gt;</c>,
+/// <c>ObservableCollection&lt;T&gt;</c>, etc.) is fully AOT-safe. The plain-array branch
+/// of <see cref="Add"/> / <see cref="RemoveAt"/> calls <see cref="Array.CreateInstance(Type, int)"/>,
+/// which requires dynamic code; under Native AOT we throw <see cref="NotSupportedException"/>
+/// rather than risk a runtime crash inside the BCL.
+/// </remarks>
 internal static class ArrayOperations
 {
     /// <summary>
     /// Adds an item to the end of the list. For arrays, returns a new array.
+    /// Throws <see cref="NotSupportedException"/> on Native AOT for the array branch.
     /// </summary>
-    [RequiresDynamicCode("Array.CreateInstance requires dynamic code for array creation at runtime.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "Array.CreateInstance is only reached when RuntimeFeature.IsDynamicCodeSupported is true; otherwise we throw before calling it.")]
     public static object Add(object collection, object item, Type elementType)
     {
         if (collection is IList list && !collection.GetType().IsArray)
@@ -21,9 +31,13 @@ internal static class ArrayOperations
             return collection;
         }
 
-        // Array — create a new array with the item appended
         if (collection is Array array)
         {
+            if (!RuntimeFeature.IsDynamicCodeSupported)
+                throw new NotSupportedException(
+                    $"Adding to a plain {elementType.Name}[] property requires dynamic code (Array.CreateInstance), " +
+                    "which is unavailable on Native AOT. Use List<T> or another IList implementation instead.");
+
             var newArray = Array.CreateInstance(elementType, array.Length + 1);
             Array.Copy(array, newArray, array.Length);
             newArray.SetValue(item, array.Length);
@@ -35,8 +49,10 @@ internal static class ArrayOperations
 
     /// <summary>
     /// Removes an item at the given index. For arrays, returns a new array.
+    /// Throws <see cref="NotSupportedException"/> on Native AOT for the array branch.
     /// </summary>
-    [RequiresDynamicCode("Array.CreateInstance requires dynamic code for array creation at runtime.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "Array.CreateInstance is only reached when RuntimeFeature.IsDynamicCodeSupported is true; otherwise we throw before calling it.")]
     public static object RemoveAt(object collection, int index, Type elementType)
     {
         if (index < 0)
@@ -54,6 +70,12 @@ internal static class ArrayOperations
         {
             if (index >= array.Length)
                 throw new ArgumentOutOfRangeException(nameof(index), index, $"Index must be less than the array length ({array.Length}).");
+
+            if (!RuntimeFeature.IsDynamicCodeSupported)
+                throw new NotSupportedException(
+                    $"Removing from a plain {elementType.Name}[] property requires dynamic code (Array.CreateInstance), " +
+                    "which is unavailable on Native AOT. Use List<T> or another IList implementation instead.");
+
             var newArray = Array.CreateInstance(elementType, array.Length - 1);
             if (index > 0)
                 Array.Copy(array, 0, newArray, 0, index);

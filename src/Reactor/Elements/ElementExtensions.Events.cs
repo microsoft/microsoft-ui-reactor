@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.Data;
@@ -457,6 +458,6 @@ public static partial class ElementExtensions
     /// Receives the full set of currently-selected <c>RowKey</c>s on every
     /// change (not added/removed deltas). Passing <c>null</c> clears.
     /// </summary>
-    public static DataGridElement<T> SelectionChanged<T>(this DataGridElement<T> el, Action<IReadOnlySet<RowKey>>? handler) =>
+    public static DataGridElement<T> SelectionChanged<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] T>(this DataGridElement<T> el, Action<IReadOnlySet<RowKey>>? handler) =>
         el with { OnSelectionChanged = handler };
 }
