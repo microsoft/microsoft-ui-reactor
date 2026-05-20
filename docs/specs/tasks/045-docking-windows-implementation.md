@@ -1,0 +1,1212 @@
+# Docking Windows — Implementation Tasks
+
+Derived from: `docs/specs/045-docking-windows-design.md`
+
+Scope reminder: land a first-class docking system across four phases —
+**P1** vendor [WinUI.Dock](https://github.com/qian-o/WinUI.Dock) + thin Reactor
+wrapper; **P2** Reactor-native rewrite of the entire pipeline; **P3** fold
+docking into the [spec 036 Window primitive](../036-window-design.md) so a
+`DockableWindow` *is* a `ReactorWindow`; **P4** Windows 11 native-chrome
+polish via the WinUI `TitleBar` control with tabs-in-titlebar. The public API
+surface committed at P1 exit is the same surface P2/P3 implement
+underneath — P2 swaps implementations only, P3 extends additively, P4
+changes chrome only.
+
+Source references:
+- **Primary source (vendoring + interaction reference):**
+  `C:\Users\andersonch\Code\WinUI.Dock\src\WinUI.Dock\` — Reviewed types:
+  `DockManager.xaml.cs`, `LayoutPanel.xaml.cs`, `DocumentGroup.xaml.cs`,
+  `Document.xaml.cs`, `Abstracts/DockContainer.cs`, `Abstracts/DockModule.cs`,
+  `Controls/DockTabItem.xaml.cs`, `Controls/DockTargetButton.xaml.cs`,
+  `Controls/FloatingWindow.xaml.cs`, `Controls/Preview.xaml.cs`,
+  `Controls/SidePopup.xaml.cs`, `Controls/Sidebar.xaml.cs`,
+  `Helpers/DragDropHelpers.cs`, `Helpers/LayoutHelpers.cs`,
+  `Helpers/PointerHelpers.cs`, `Helpers/FloatingWindowHelpers.cs`,
+  `Helpers/DocumentHelpers.cs`, `Interfaces/IDockAdapter.cs`,
+  `Interfaces/IDockBehavior.cs`, `Enums/DockTarget.cs`, `Enums/DockSide.cs`,
+  `Enums/TabPosition.cs`. Upstream Example app:
+  `C:\Users\andersonch\Code\WinUI.Dock\src\Examples\Example.WinUI`.
+- **Reference only (architecture, do not copy code — Ms-PL):**
+  `C:\Users\andersonch\Code\AvalonDock\source\Components\AvalonDock\`.
+  Specifically inform the model-as-source-of-truth shape, the cancellable
+  event surface, `ILayoutUpdateStrategy`, `LayoutSerializationCallback`,
+  `PreviousContainer`, and the role split (`LayoutDocument` vs
+  `LayoutAnchorable`). FlaUI test suite layout (`AvalonDockTest/FlaUI/`) is
+  a scenario checklist — implementations belong to Reactor selftests.
+
+Conventions:
+- `src/` paths are under `src/Reactor/` unless otherwise noted; vendored
+  source lands under `third_party/WinUI.Dock/`; vendored wrapper assembly
+  is `src/Reactor.Docking.Xaml/`; the native rewrite extends
+  `src/Reactor/` proper (no separate assembly at P2 exit).
+- All public sizes / positions are **DIPs** (`double`). No `int` pixel
+  params anywhere on the public surface.
+- Public API additions get XML doc comments with `<remarks>` linking to
+  spec 045 § number.
+- Localized strings route through `IntlAccessor` (spec 005), keyed under
+  the `Docking.*` resource prefix.
+- All new persisted layout JSON values use invariant culture; numeric
+  fields never use the current culture's decimal separator.
+- `DockHostModel` and all docking mutation APIs are UI-thread-affined;
+  off-thread access throws (documented contract, not enforced with locks).
+- Pointer-move / hover-state code paths must be zero-allocation (verified
+  via Reactor's allocation-counting harness — precedent: spec 034).
+- Tests:
+  - Unit tests: `tests/Reactor.Tests/Docking/`.
+  - Self-host fixtures: `tests/Reactor.AppTests.Host/SelfTest/Fixtures/Docking*`.
+  - UI-driver E2E: `tests/Reactor.AppTests/Docking*` (strictly bounded to
+    the ~5–8 cases in spec §8.3).
+- A task is **done** when:
+  1. Code compiles under `Reactor.sln` warnings-as-errors.
+  2. Tests cover happy path + every documented failure mode.
+  3. Public API has XML docs (no CS1591).
+  4. No new analyzer warnings.
+  5. Self-host fixture mounts under Light / Dark / NightSky at 100 % +
+     200 % on Win10 + Win11 (matches spec 036 testing baseline).
+  6. CHANGELOG entry appended under the relevant phase section, grouped
+     under "Spec 045 — Docking".
+
+Phasing gate: **each phase exit requires a human-in-the-loop review
+checklist green** (spec §4.7, §5.7, §6.8, §7.4). No phase merges without
+the gate.
+
+---
+
+## Phase 0: Cross-cutting setup
+
+### 0.1 Tracking & docs
+
+- [ ] Create this tracking checklist at
+  `docs/specs/tasks/045-docking-windows-implementation.md` (this file).
+  Update as tasks land.
+- [ ] Add a "Spec 045 — Docking" entry under `## [Unreleased]` in
+  `CHANGELOG.md`. Each phase appends to Added / Changed / Deprecated /
+  Removed as it lands.
+- [ ] Decide PR cadence: default is **one feature branch per phase, multiple
+  PRs per phase** (matches spec §10). Capture deviations in this file.
+
+### 0.2 Public-API surface tracking
+
+- [ ] Confirm whether docking projects adopt
+  `Microsoft.CodeAnalysis.PublicApiAnalyzers` (project decision — match
+  spec 036 outcome). Record the answer and apply consistently.
+
+### 0.3 Localization scaffolding
+
+- [ ] Reserve the `Docking.*` resource-key prefix in
+  `src/Reactor/Resources/Reactor.resw`. Document the convention in the
+  resource header comment so new docking surfaces land under it.
+- [ ] Add placeholder entries for the strings P1 surfaces (drop-target
+  tooltips, default floating-window title, side-pin tooltip).
+
+### 0.4 Spec / skill cross-linking
+
+- [ ] Verify `docs/specs/045-docking-windows-design.md` links from the
+  spec index (if one exists). Skip if no central index.
+- [ ] Author the docs source under `docs/_pipeline/apps/docking/`. **Do
+  NOT hand-edit** `docs/guide/docking.md` (generated output — see
+  memory `feedback_docs_pipeline.md`).
+- [ ] Skill content under `skills/docking.md` is **deferred to P1 exit at
+  the earliest** (per spec §8.4).
+
+### 0.5 Third-party notice plumbing
+
+- [ ] Verify `ThirdPartyNoticeText.txt` exists at repo root and document
+  the append convention used for this notice in the PR description
+  (spec §12).
+
+---
+
+## Phase 1 — vendor + wrap (XAML)
+
+**Goal:** ship a working docking experience to a Reactor sample inside the
+next release cycle by vendoring WinUI.Dock as-is and writing the thinnest
+possible Reactor wrapper element. Exit criteria per spec §4 intro:
+(a) showcase builds + runs; (b) every WinUI.Dock matrix feature
+demonstrated; (c) human reviewer signs off side-by-side vs upstream
+`Example.WinUI`; (d) public API (§4.3) committed as the P2 target.
+
+### 1.1 Vendoring (spec §4.1, §4.2)
+
+- [ ] Create `third_party/WinUI.Dock/` at repo root. Copy entire
+  `src/WinUI.Dock/` tree from upstream snapshot.
+- [ ] Preserve upstream `LICENSE` at `third_party/WinUI.Dock/LICENSE`.
+- [ ] Add `third_party/WinUI.Dock/VENDORED.md` recording:
+  - exact upstream commit hash
+  - copy date
+  - list of light edits applied (§4.2 items 1–4)
+  - sunset note (P2 exit removes runtime use; source stays for reference;
+    see §5.6)
+- [ ] **Light edit #1 — strip Uno code paths.** Remove Uno-targeted
+  projects, multitargeting in `.csproj`, every `#if HAS_UNO` /
+  `#if !WINDOWS` branch. Document removals in `VENDORED.md`.
+- [ ] **Light edit #2 — apply `.editorconfig` formatting** (whitespace
+  only; no semantic change).
+- [ ] **Light edit #3 — `[assembly: InternalsVisibleTo]`** for
+  `Reactor.Docking.Xaml.Tests` in `Properties/AssemblyInfo.cs`.
+- [ ] **Light edit #4 (conditional)** — patch the documented
+  "cross-window DnD races against window close" bug *iff* upstream has
+  not fixed it by vendor time. Otherwise skip and re-snapshot from latest.
+- [ ] Append WinUI.Dock MIT notice block to `ThirdPartyNoticeText.txt`
+  using the exact text in spec §12.
+
+### 1.2 Wrapper assembly (spec §4.1)
+
+- [ ] Create `src/Reactor.Docking.Xaml/` C# project. Output assembly
+  name: `Microsoft.UI.Reactor.Docking.Xaml`.
+- [ ] Add the project to `Reactor.slnx`.
+- [ ] Keep the vendored `WinUI.Dock` namespace internal; add
+  `[TypeForwardedTo]` redirects under
+  `Microsoft.UI.Reactor.Docking.Xaml.Internal` so external API references
+  the Reactor namespace.
+- [ ] Add target-framework / WindowsAppSDK version pinning that matches
+  the rest of `src/Reactor/`. Track the pin in `Directory.Build.props`.
+- [ ] CI: ensure the new project builds in `Reactor.sln` warnings-as-errors.
+
+### 1.3 Public API surface — committed at P1 exit (spec §4.3)
+
+> This is the **commitment surface for P2** — no breaking changes between
+> P1 exit and P2 exit. Verify each item via XML doc + spec § linkback.
+
+- [ ] `namespace Microsoft.UI.Reactor.Docking;`
+- [ ] `public sealed record DockManager(...)` with fields:
+  `Layout`, `LeftSide`, `TopSide`, `RightSide`, `BottomSide`,
+  `ActiveDocument`, `Adapter`, `Behavior`, `PersistenceId`,
+  `LayoutSchemaVersion = 1`. Inherits `Element`.
+- [ ] `public abstract record DockNode;` (sealed hierarchy).
+- [ ] `public sealed record DockSplit(...)` (orientation, children,
+  width/height + min/max constraints).
+- [ ] `public sealed record DockTabGroup(...)` (documents, tab position,
+  compact, show-when-empty, selected index, width/height).
+- [ ] `public sealed record DockableContent(...)` (title, content, key,
+  can-close, can-pin, width/height, persistence-state). Inherits
+  `DockNode`. Phase-1 single role; P2 introduces `Document` /
+  `ToolWindow` subclasses.
+- [ ] `public enum TabPosition { Top, Bottom }`.
+- [ ] `public enum DockTarget { Center, SplitLeft, SplitTop, SplitRight,
+  SplitBottom, DockLeft, DockTop, DockRight, DockBottom }`.
+- [ ] `public interface IDockAdapter` with members
+  `OnContentCreated`, `OnGroupCreated`, `GetFloatingWindowTitleBar`.
+- [ ] `public interface IDockBehavior` with `OnDocked`, `OnFloating`.
+  `ActivateMainWindow` is absorbed by Reactor's window topology; do not
+  expose.
+- [ ] XML docs on every public member with `<remarks>` linking to spec 045
+  § number. Cross-reference deprecation plan for P2 collapse (the
+  interfaces collapse into `On*` props on the P2 `DockHost`).
+
+### 1.4 Wrapper implementation (spec §4.4)
+
+- [ ] **Leaf-wrapper plumbing** following the `PropertyGridComponent` /
+  `DataGridFactories` precedent. The `DockManager` Reactor element
+  reconciles to a single vendored `WinUI.Dock.DockManager` instance.
+- [ ] **First-mount path.** Instantiate the upstream control, walk the
+  `DockNode` tree, build corresponding `LayoutPanel` / `DocumentGroup` /
+  `Document` instances. Wire `IDockAdapter` / `IDockBehavior` thunk
+  implementations forwarding to Reactor-side interfaces.
+- [ ] **Update path.** Structural diff between previous and new
+  `DockNode` tree, keyed on `DockableContent.Key`. Map tree edits onto
+  upstream mutations (`Document.DockTo`, `Children.Add/Remove`,
+  `ActiveDocument` setter). Sub-tree pane content reconciles normally
+  via Reactor under the `Document.Content` slot.
+- [ ] **Pane content host.** Wrap each `Document.Content` in a
+  `ReactorContentControl` (precedent: `DataTemplateDemo`) so the
+  reconciler has a slot host inside the XAML object graph.
+- [ ] **Cross-window drag routing.** Intercept upstream
+  `Behavior.ActivateMainWindow()` and route to
+  `ReactorApp.PrimaryWindow.Activate()`. **Cross-`DockManager` drag is
+  not exercised in P1** — defer to P3.
+- [ ] **Persistence on detach.** Call `SaveLayout()`; store JSON under
+  `WindowPersistedScope["docking:<PersistenceId>"]` (spec 036 §8).
+- [ ] **Persistence on mount.** Attempt `LoadLayout()` before applying
+  the declarative tree as a fallback.
+- [ ] **Keyed reconciliation contract.** `DockableContent.Key` survives
+  tab reorderings per spec 042. Replace WinUI.Dock's `Title`-as-key with
+  explicit `Key`. No fallback to `Title` keying.
+- [ ] **Active-document round-trip.** When upstream raises
+  `ActiveDocumentChanged`, surface it on the Reactor side (P1 has no
+  event yet; route to debug logging; P2 wires the `OnActiveContentChanged`
+  prop from §5.3.5).
+
+### 1.5 Risks + contingencies (spec §4.6)
+
+- [ ] Pin `VENDORED.md` to a specific upstream commit; re-snapshot
+  immediately before merge; reapply the four light edits.
+- [ ] Restrict drag-out to within a single `DockManager` instance in P1
+  (the reconciler-tears-down-on-source-mutation risk).
+- [ ] Verify the `Document.Content` `object?` slot accepts the
+  `ReactorContentControl` host without XAML schema warnings.
+- [ ] **AOT verification:** confirm `Reactor.AppTests.Host` AOT build
+  passes with the new project referenced. Document any new trim warnings.
+
+### 1.6 Showcase sample (spec §4.5) — the human-tested deliverable
+
+Path: `samples/apps/dock-showcase/`.
+
+- [ ] Scaffold the sample as a Reactor app; wire it into
+  `samples/ReactorGallery/` navigation.
+- [ ] **Scene A — IDE layout.** Solution explorer (left tool), code-editor
+  tabs (center), properties panel (right tool), error list + terminal
+  (bottom tool tabs). Mirrors upstream `Example.WinUI` content.
+- [ ] **Scene B — Floating tear-out.** Tear a tab out; verify the
+  FloatingWindow renders the custom title bar and accepts drop-back.
+- [ ] **Scene C — Side pin.** Pin a panel to the right side; click to
+  expand; verify SidePopup animation and re-dock.
+- [ ] **Scene D — Compact / bottom tabs.** Demonstrate `CompactTabs=true`
+  and `TabPosition=Bottom` together.
+- [ ] **Scene E — Persistence menu.** "Save Layout to file" /
+  "Load Layout from file" via `SaveLayout()` / `LoadLayout()`. Mirror
+  upstream `Example.WinUI` Open/Save commands.
+- [ ] **Scene F — Programmatic dock.** A "Open Properties" button calls
+  `DockTo(target, DockTarget.SplitRight)`.
+- [ ] Each scene gets a brief in-app description card explaining what to
+  try (drives the human review).
+
+### 1.7 P1 testing scaffolding (spec §8.3)
+
+- [ ] Create `tests/Reactor.AppTests.Host/SelfTest/Fixtures/DockingSmokeFixture.cs`
+  (the minimal smoke fixture called out in §10.1 item 10): mount a
+  `DockManager` with a 2-pane layout, assert basic tree shape, unmount.
+- [ ] Mount the showcase under the existing AppTests harness — same
+  Light/Dark/NightSky × 100/200 % matrix.
+- [ ] Optional: a single AT-tree assertion smoke test (full coverage is P2).
+
+### 1.8 P1 documentation
+
+- [ ] Author `docs/_pipeline/apps/docking/overview.md`: what docking is,
+  the four-phase plan summary, P1 capabilities, sample link.
+- [ ] Author `docs/_pipeline/apps/docking/api.md`: the P1 API surface
+  with code examples (mirror §4.3 / §4.5).
+- [ ] Document the known P1 limitations explicitly (no cross-DockManager
+  drag; single role `DockableContent`; no per-pane state; no a11y
+  guarantees yet beyond what `TabView` provides). These motivate the
+  P2 fills.
+
+### 1.9 P1 human review gate (spec §4.7) — **mandatory**
+
+Run side-by-side against `WinUI.Dock/src/Examples/Example.WinUI`,
+recording outcomes for each step:
+
+- [ ] **Step 1** — drag a center tab to each of 5 split targets
+  (center, SplitL/T/R/B). Verify preview match, drop landing, Esc
+  snap-back.
+- [ ] **Step 2** — drag to each of 4 edge dock targets. Same checklist.
+- [ ] **Step 3** — drag a tab out of the title bar into open space;
+  floating window appears at pointer; title bar matches adapter content.
+- [ ] **Step 4** — drag a floating tab back into a tab group; floating
+  window auto-closes if last document.
+- [ ] **Step 5** — resize splits via splitter; min sizes respected;
+  re-mount restores sizes.
+- [ ] **Step 6** — pin a tab to a side; click side icon; popup shows;
+  resize popup; re-pin from popup; close from popup.
+- [ ] **Step 7** — save layout to JSON, quit, restart, load; layout
+  matches.
+- [ ] **Step 8** — (negative) tear out a tab while resizing a different
+  split; no crash.
+- [ ] Sign-off captured in the merge PR description (named reviewer +
+  date). **Do not merge** P1 without this section green.
+
+---
+
+## Phase 2 — Reactor-native rewrite (no XAML)
+
+**Goal:** identical user-visible behavior, zero XAML control dependency;
+public API (§4.3) is unchanged but extended additively (§5.3). Exit
+criteria per spec §5: no human-discernible behavior difference vs P1
+showcase across the full review script plus six new items.
+
+### 2.1 Split + size constraint solver (spec §5.1 item 1)
+
+- [ ] Implement a Yoga-backed split solver on Reactor's `FlexPanel`
+  (precedent: `FlexPanelDemo`). Replaces `LayoutPanel.UpdateLayoutStructure`
+  which uses Grid + `GridSplitter` upstream.
+- [ ] Implement a Reactor `Splitter` element: pointer-drag with min/max
+  clamping; persistent ratio storage (ratios — not absolute px — per
+  §5.4 note 1); focusable for keyboard resize (spec §8.7).
+- [ ] Splitter handle: 8 DIP visual, 16 DIP hit-test (spec §8.7 touch
+  targets).
+- [ ] Splitter `LayoutMetricsChanged` reacts to DPI changes (spec §8.5
+  DPI cost ≤ 16 ms).
+- [ ] Unit tests for constraint solving: min < proposed < max clamp,
+  ratio persistence, multi-child layouts, RTL flip (sizes invariant;
+  child order flips per spec §8.8).
+
+### 2.2 Tab group rendering (spec §5.1 item 2; §11 retained)
+
+- [ ] Keep using WinUI `TabView` (decision: spec §11 — retained for
+  accessibility shape).
+- [ ] `DockTabGroup` element renders a Reactor `TabView` modifier with
+  configurable `TabPosition`, `CompactTabs`, `ShowWhenEmpty`,
+  `SelectedIndex`.
+- [ ] Tabs are arrow-key navigable; `Ctrl+PageUp`/`Ctrl+PageDown`
+  navigate (VS parity — spec §8.7).
+- [ ] `Ctrl+W` / `Ctrl+F4` closes active tab when `CanClose=true`.
+- [ ] Per-tab close button uses the TabView affordance with localized
+  AT name.
+- [ ] Per-tab pin button (icon + AT name + tooltip — localized).
+
+### 2.3 Drop-target overlay (spec §5.1 item 3)
+
+- [ ] Floating Reactor element absolutely positioned over the manager
+  via the existing overlay system (precedent: tooltip, highlight,
+  dialog — see `Controls/Tooltips/*`,
+  `ReconcileHighlightOverlayLifecycleTests`).
+- [ ] Render the 9 drop-target buttons (5 split + 4 edge) per the
+  WinUI.Dock `DockTargetButton` visual contract. Replace it with
+  Reactor primitives.
+- [ ] Render the drop preview rectangle for the currently-hovered
+  target (replaces `Preview.xaml.cs`).
+- [ ] **Overlay z-priority:** docking overlays sit *below* dialogs and
+  *above* tooltips — use the spec 036 §11 overlay-priority enum.
+- [ ] Hover-state latency budget ≤ 2 ms per pointer-move (spec §8.1).
+  Add a perf benchmark fixture.
+- [ ] Drop targets are minimum 44 × 44 DIPs (spec §8.7 WCAG 2.5.5).
+- [ ] Drop targets are focusable; keyboard nav between targets uses
+  arrow keys + Enter (spec §8.7).
+- [ ] Drop targets respect reduced-motion: when
+  `UISettings.AnimationsEnabled = false`, suppress preview animation
+  but keep static highlight (spec §8.7).
+- [ ] AT roles: drop targets expose `Button` with localized name
+  ("Dock left", "Split right", "Add as tab"). Strings in `Docking.*`
+  resources.
+
+### 2.4 Drag/drop pipeline (spec §5.1 item 4; depends on spec 027)
+
+- [ ] Replace `DragDropHelpers.cs` with a docking gesture recognizer
+  built on input-and-gestures (spec 027). Tab drag is one of the
+  recognizers — not a parallel system.
+- [ ] **Zero-allocation hot path** on pointer-move (spec §8.5). No
+  LINQ; no string concat for AT names per event; drop-target hit-test
+  results pooled. Verify via the allocation-counting harness (spec 034
+  precedent).
+- [ ] Drag-threshold: spec 027's standard threshold; tear-out only
+  fires past it (avoid accidental floats).
+- [ ] Esc cancels in-flight drag, snaps back (P1 review item 1).
+- [ ] Cross-window in-process drag: an object-ref payload (not the
+  WinUI.Dock string-keyed GUID table — spec §8.9 security).
+- [ ] Keyboard-initiated move: `Ctrl+Shift+M` enters drop-target focus
+  mode (spec §5.3.3 / §8.7). All chords configurable via spec 027
+  input binding.
+
+### 2.5 Side popup (spec §5.1 item 5)
+
+- [ ] Implement on Reactor's existing `Popup`. Replaces `SidePopup` /
+  `Sidebar` (`Controls/SidePopup.xaml.cs`, `Controls/Sidebar.xaml.cs`).
+- [ ] Anchor to manager edge; size persisted; close on click-outside.
+- [ ] Side-pin entry: AT role `Button` until expanded, then `Pane`
+  (spec §8.7).
+- [ ] Side tooltip text uses the pane `Title` — localized via
+  `IntlAccessor`.
+- [ ] Reduced-motion: suppress slide animation; static position only
+  (spec §8.7).
+
+### 2.6 Floating window (spec §5.1 item 6; meets P3 head-on)
+
+- [ ] **Floating panes are real Reactor `Window`s.** Do not build a
+  mini-window primitive. Open a top-level Reactor `Window` with the
+  pane mounted as its root.
+- [ ] Tear-out opens the new `Window` **synchronously** with the pane
+  pre-attached as content — not on next dispatcher tick (spec §5.5
+  race mitigation).
+- [ ] HWND cold-create on UI thread is deferred until visible: pane
+  subtree renders into a `Border` host first, then handed off (spec
+  §8.5 — 30–80 ms HWND creation can't run on UI thread).
+- [ ] Floating window emits the spec-036 `WindowOpened` /
+  `WindowClosed` events.
+- [ ] Custom title bar slot: `IDockAdapter.GetFloatingWindowTitleBar`
+  returns the content; P1 contract preserved.
+- [ ] Multi-display floating restore: clamp restored bounds against
+  `DisplayArea.FindAll()` (spec §8.10 reliability); re-position to
+  primary center if off-screen.
+- [ ] Floating window outliving its `DockHost`: when host unmounts,
+  call `OnLayoutChanging` cleanup → close (spec §8.10).
+- [ ] DPI change on monitor cross: re-layout in ≤ 16 ms (spec §8.5).
+
+### 2.7 Layout persistence (spec §5.1 item 7, §5.4)
+
+- [ ] Implement v2 JSON writer matching the schema in §5.4.
+- [ ] Implement v2 JSON reader. Use `JsonSerializerContext` (AOT-clean).
+- [ ] Implement v1→v2 migration; spec §5.4.4: phase-1-format files
+  (no `$schema`) infer keys from `title`.
+- [ ] `IDockLayoutMigration` service registry; ordered by `(from, to)`
+  version pairs (spec §5.3.4).
+- [ ] **Size limit:** parser refuses inputs > 1 MB (spec §8.9).
+- [ ] **Depth limit:** `JsonReaderOptions.MaxDepth = 32` (spec §8.9).
+- [ ] **Schema validation:** every node validated against v2 schema
+  before applying to model; unknown fields tolerated for forward-compat;
+  missing required fields → reject whole layout, fall back to default.
+- [ ] **No code paths from JSON.** No reflection, no type-name
+  instantiation, no expression evaluation. Layout is structure + identity
+  only (spec §8.9).
+- [ ] **No external schema URLs** — `$schema` is a version integer.
+- [ ] **Failure mode:** corrupt JSON → log via `ReactorEventSource`
+  (spec 044), fall back to default layout, never throw on load path
+  (spec §8.9, §8.10).
+- [ ] Sizes stored as **ratios** for splits (not absolute pixels — DPI
+  robust). Absolute px reserved for floating x/y/w/h and per-pane
+  width/height overrides.
+- [ ] **Invariant culture** for all numeric fields — verify with a
+  selftest that saves under `de-DE` and loads under `en-US` (spec §8.8).
+- [ ] Per-pane state slot — typed via `Document<TState>` (§5.3.2);
+  serialized via `WindowPersistedScope`.
+- [ ] Layout JSON load latency ≤ 50 ms for 200-pane layout (spec §8.1).
+  Add benchmark.
+
+### 2.8 Documents vs tool windows (spec §5.3.1)
+
+- [ ] `DockableContent` becomes the abstract base.
+- [ ] `public sealed record Document(...)` — closable, lives in
+  `DocumentPane`; `CanClose` defaults to `true`, `CanPin` defaults
+  to `false`.
+- [ ] `public sealed record ToolWindow(...)` — hideable, lives in
+  `ToolPane`, pinnable to a side; `CanHide` defaults to `true`,
+  `CanAutoHide` defaults to `true`, `CanDockAsDocument` defaults to `true`.
+- [ ] `ToolWindow` default tab styling: bottom-position compact.
+- [ ] `Document` default tab styling: top-position full.
+- [ ] **Drag-pin gesture** offered only for `ToolWindow`.
+- [ ] **Non-breaking deprecation** of the closed-shape
+  `DockableContent(...)` constructor: warning analyzer points users to
+  `Document(...)` / `ToolWindow(...)`. The base type still accepts the
+  old shape for P1 source compat.
+
+### 2.9 Per-pane content state (spec §5.3.2)
+
+- [ ] `Document<TState>` generic record carrying a typed `State`.
+- [ ] `TState` serialized through `WindowPersistedScope` (spec 033/036).
+- [ ] State included in layout JSON (round-trips through one file).
+- [ ] Per-pane `TState` schema versioning is **app responsibility**
+  (spec §8.11). Document the convention in docs and `<remarks>` XML.
+
+### 2.10 Keyboard navigation (spec §5.3.3, §8.7)
+
+- [ ] **`Ctrl+Tab`** opens VS-style pane navigator overlay listing all
+  open panes.
+- [ ] **`Ctrl+F4`** closes active pane if `CanClose`.
+- [ ] **`Ctrl+Shift+M`** enters keyboard-initiated drag: focus the
+  drop-target overlay; arrow keys navigate; Enter confirms; Esc cancels.
+- [ ] **`Alt+F7`** opens hidden-pane picker (re-show closed-but-remembered
+  tool windows; pairs with `PreviousContainer` in §5.3.9).
+- [ ] **`Ctrl+PageUp`** / **`Ctrl+PageDown`** previous/next tab in
+  group (VS parity).
+- [ ] Live-region announcements via UIA `LiveSetting=Polite` for layout
+  state transitions ("MainView.xaml moved to right pane", "Output
+  pinned to bottom", "Properties window torn out"). One shared live
+  region per `DockHost`, registered via `Reactor.Hosting`'s AT bridge
+  (spec §8.7).
+- [ ] All chords configurable via spec 027 input binding.
+
+### 2.11 Layout versioning (spec §5.3.4, §8.11)
+
+- [ ] `"$schema": 2` field at root of v2 layout JSON.
+- [ ] `IDockLayoutMigration` service interface + registry.
+- [ ] **Backward read-compat:** v1 readable forever; future v3+
+  readable through all future versions.
+- [ ] **Forward-tolerance:** newer-than-known schema logs warning,
+  best-effort parses what it understands, falls back to default for
+  unknown nodes (spec §8.11).
+- [ ] Migration ladder runs all (v1→v2, v2→v3, …) in order.
+
+### 2.12 Cancellable lifecycle events (spec §5.3.5)
+
+- [ ] On `DockHost` record, expose `Action<TArgs>?` props for every
+  event below; every `*ing` carries `Cancel`:
+  - [ ] `OnLayoutChanging` / `OnLayoutChanged`
+  - [ ] `OnDocumentClosing` / `OnDocumentClosed`
+  - [ ] `OnToolWindowHiding` / `OnToolWindowHidden`
+  - [ ] `OnToolWindowClosing` / `OnToolWindowClosed`
+  - [ ] `OnContentFloating` / `OnContentFloated`
+  - [ ] `OnContentDocking` / `OnContentDocked`
+  - [ ] `OnActiveContentChanged`
+  - [ ] `OnFloatingWindowCreated` / `OnFloatingWindowClosed`
+- [ ] `IDockBehavior` from P1 collapses into these props (its three
+  methods map onto `OnContentDocked`, `OnContentFloating`, and the
+  per-group docked variant). Keep `IDockBehavior` as a `[Obsolete]`
+  forwarder for one release.
+- [ ] **No `+=` accumulation** — each render passes a fresh delegate;
+  the reconciler holds only the current one (spec §8.10 memory).
+
+### 2.13 Insertion-policy hook `IDockLayoutStrategy` (spec §5.3.6)
+
+- [ ] Define `public interface IDockLayoutStrategy` with
+  `BeforeInsertDocument`, `AfterInsertDocument`,
+  `BeforeInsertToolWindow`, `AfterInsertToolWindow`.
+- [ ] `Before*` returning `true` short-circuits the default insertion;
+  `false` lets the manager proceed. `After*` is the chance to set
+  dimensions / pin to side.
+- [ ] Strategies receive `DockHostModel` (mutable handle) — not the
+  immutable `DockNode` tree.
+- [ ] Example fixture: route any tool window with
+  `Title.StartsWith("Error")` to bottom side, height 180.
+
+### 2.14 Fine-grained per-pane permissions (spec §5.3.8)
+
+- [ ] On `DockableContent` base: `CanClose` (default false),
+  `CanFloat` (default true), `CanMove` (default true), `Key`.
+- [ ] `Document.CanClose` default flips to `true`.
+- [ ] `Document.CanDockAsToolWindow` (default false).
+- [ ] `ToolWindow.CanHide` (default true) — **X button hides**, not
+  closes (AvalonDock semantic).
+- [ ] `ToolWindow.CanAutoHide` (default true).
+- [ ] `ToolWindow.CanDockAsDocument` (default true).
+- [ ] Permission gating: drag pipeline checks `CanMove`; floating
+  gesture checks `CanFloat`; close button checks `CanClose`; pin
+  gesture checks `CanAutoHide`. UI cues for disabled permissions.
+
+### 2.15 `PreviousContainer` — show-panel-where-you-left-it (spec §5.3.9)
+
+- [ ] Every `DockableContent` instance tracks last `DockNode` container
+  it was inside (internal state — no public field).
+- [ ] Hidden → re-shown: lands in remembered container, not default
+  insertion point.
+- [ ] State survives layout serialization (stored as `previousContainer`
+  on the JSON content node).
+- [ ] `IDockLayoutStrategy.BeforeInsertToolWindow` can override.
+- [ ] Selftest: hide → show → assert container identity preserved.
+
+### 2.16 `DockHostModel` layout-as-model surface (spec §5.3.10)
+
+- [ ] `public sealed class DockHostModel` with read surface: `Root`,
+  `LeftSide`/`TopSide`/`RightSide`/`BottomSide` (`IReadOnlyList<ToolWindow>`),
+  `Floating` (`IReadOnlyList<FloatingDockWindow>`), `ActiveContent`.
+- [ ] Enumerations: `AllContent()`, `Descendants()`.
+- [ ] Mutations: `Dock`, `Float`, `Hide`, `Show`, `Close`, `Activate`.
+- [ ] Serialization: `SaveJson(schemaVersion = 2)`, `LoadJson(json)`.
+- [ ] **All mutations UI-dispatcher-affined.** Off-thread access
+  throws (`InvalidOperationException`). Documented contract, not
+  enforced with locks (spec §8.10).
+- [ ] **Model is internal source of truth, not parallel writable
+  surface.** Apps interact via the controlled `Layout` prop +
+  `OnLayoutChanged` round-trip (spec §5.3.10 controlled/uncontrolled
+  note).
+- [ ] `DockHost` element owns one `DockHostModel` instance; reconciler
+  reads from it.
+
+### 2.17 `DockContext` + property hooks (spec §5.3.11)
+
+- [ ] `DockHost` registers `DockContext` in `RenderContext` on mount;
+  unregisters on unmount.
+- [ ] `RenderContext.UseDockHost()` → `DockHostModel?`. Walks context
+  chain. Returns null outside any host.
+- [ ] `UseActivePaneKey()` → `object?`. Re-renders only the consumer
+  on active change (selector-style subscription per spec 017
+  precedent).
+- [ ] `UseIsActivePane()` → `bool`. Boolean derivative; re-renders
+  only on transitions.
+- [ ] `UsePane()` → `DockPaneInfo` (Key, Title, Content). Throws if
+  called outside a `Document`/`ToolWindow` Content subtree.
+- [ ] `UseDockState()` → `DockPaneState` (`Docked`, `Floating`,
+  `AutoHidden`, `AutoHiddenExpanded`, `Hidden`). Re-renders per pane on
+  transitions only.
+- [ ] `UseDockLayout()` → `DockLayoutSnapshot`. Wide-net; re-renders
+  on any structural change. Documented as "used sparingly — devtools,
+  not pane content".
+- [ ] `public readonly record struct DockPaneInfo(object? Key, string
+  Title, DockableContent Content);`
+- [ ] `public enum DockPaneState { Docked, Floating, AutoHidden,
+  AutoHiddenExpanded, Hidden }`.
+- [ ] Two-host process selftest: components inside `hostA` resolve to
+  `hostA`; components inside `hostB` resolve to `hostB`. No string
+  IDs needed in user code.
+
+### 2.18 No `DocumentsSource` / `LayoutItemTemplate` (spec §5.3.7)
+
+- [ ] **Do not add `DocumentsSource`, `LayoutItemTemplate`,
+  `ContentResolver`, or any binding API.** Reactor functional
+  composition is the data-to-tree mapping. Document the rationale in
+  guide docs (spec §3.2 lesson #3, §5.3.7).
+- [ ] Self-host fixture demonstrating
+  `documents.Select(d => new Document(Key: d.Id, ...))` reconciliation
+  through state changes. Verifies "the component is the rehydrator".
+
+### 2.19 Phase-2 chrome removal (spec §5.6)
+
+- [ ] Remove `Reactor.Docking.Xaml` from `Reactor.slnx`.
+- [ ] Remove the assembly from any published packages.
+- [ ] **Keep** `third_party/WinUI.Dock/` source in repo — license
+  compliance + reference + regression A/B (§5.6).
+- [ ] Update `third_party/WinUI.Dock/VENDORED.md` documenting the
+  disposition (runtime-unused at P2 exit).
+
+### 2.20 Performance (spec §8.1, §8.5)
+
+- [ ] **Hover-state update ≤ 2 ms** — perf benchmark fixture per
+  spec 031 frame-aligned sampling.
+- [ ] **Tear-out ≤ 1 frame (16 ms)** — gesture fire → HWND visible.
+- [ ] **Layout JSON load ≤ 50 ms** for 200-pane layout.
+- [ ] **Zero allocation in drag hot path** — allocation-counting
+  selftest per spec 034 precedent.
+- [ ] **Reconciler diff ≤ 1 ms** for 50-pane layout shape change.
+  Verified via Reactor's diff benchmark harness.
+- [ ] **Cold start of persisted layout ≤ 200 ms** first frame for
+  50-pane layout. Off-viewport panes defer content `useEffect`
+  registration until first visible.
+- [ ] **No static dictionary of all-time pane keys; no GUID→object
+  table outliving a drag; no captured-closure leaks on event
+  subscriptions** — leak selftest opens 100 panes, closes randomly,
+  asserts allocation baseline returns (§8.10).
+- [ ] **DPI change re-layout ≤ 16 ms** when floating window crosses a
+  monitor boundary.
+
+### 2.21 Localization (spec §8.6)
+
+- [ ] All docking user-facing strings route through `IntlAccessor`
+  under the `Docking.*` prefix.
+- [ ] Resource keys added for:
+  - [ ] Drop-target tooltips and AT names ("Dock left", "Dock top",
+    "Dock right", "Dock bottom", "Split left", "Split top",
+    "Split right", "Split bottom", "Add as tab").
+  - [ ] `NavigatorWindow` headings ("Documents", "Tool Windows",
+    "Active") and pane-state labels.
+  - [ ] Per-pane context-menu items: "Close", "Hide", "Float",
+    "Pin to side", "Auto-hide", "Move to next group".
+  - [ ] Side-pin sidebar tooltip uses pane `Title` (passthrough).
+  - [ ] Floating-window default fallback title ("Floating Window").
+  - [ ] Error/fallback strings for layout-restore failures.
+- [ ] `.xlf` pipeline (spec 005) generates downstream loc files.
+- [ ] Docs: clarify that `Document.Title` / `ToolWindow.Title` are
+  app-owned; docking does not localize them.
+
+### 2.22 Accessibility (spec §8.7)
+
+- [ ] **AT roles:** `Document` → `TabItem` inside `DocumentGroup`
+  (`Tab`); `ToolWindow` → `Pane` with `AccessibleName` from `Title`;
+  auto-hidden ToolWindow on side strip → `Button` until expanded,
+  then `Pane`.
+- [ ] Each pane carries stable `AutomationId` derived from
+  `Key.ToString()` so AT + selftests address panes deterministically.
+- [ ] `DockHost` itself exposes `LandmarkRegion` with app-supplied
+  localized name.
+- [ ] Splitter handles focusable + arrow-key resizable (precedent:
+  WPF `GridSplitter`).
+- [ ] Tab strip fully arrow-key navigable.
+- [ ] **Focus invariants:** after close, focus moves to next-active
+  pane in same group; if group empty, to the host. After tear-out,
+  focus moves to new floating window's active pane. After re-adoption
+  (P3), focus moves to adopted pane in its new home.
+- [ ] **Touch targets:** drop-target buttons ≥ 44 × 44 DIPs;
+  splitter handles 8/16 DIPs visual/hit.
+- [ ] **Tab-strip hit-test** extends 4 DIPs past visual border for
+  close-button targeting forgiveness.
+- [ ] **Reduced-motion** (`UISettings.AnimationsEnabled = false`):
+  drop-preview animations, side-popup slide, tab-reorder slide all
+  disabled; static positioning verified.
+- [ ] **High-contrast:** chrome legibility (P4 review item 27
+  explicit; P2 baseline must not regress).
+- [ ] **A11y-specific selftests:**
+  - [ ] AT-tree walk asserts role/name/AutomationId for every pane.
+  - [ ] Keyboard-only docking cycle: open / move / pin / close
+    entirely via keyboard; state transitions + live-region
+    announcements asserted.
+  - [ ] Focus invariant: after every transition, focused element is
+    valid (not null, not disposed) inside the host.
+
+### 2.23 Globalization / RTL + bidi (spec §8.8)
+
+- [ ] `DockHost` honors `FlowDirection` from `RenderContext` (spec
+  005).
+- [ ] **Sidebar order flips** in RTL (left becomes right visually;
+  semantics preserved — `LeftSide` is logical "left of reading
+  order" per Office/VS convention).
+- [ ] **Tab order in `DocumentGroup`** flips (first tab on right).
+- [ ] **Drop-target overlay** mirrors (DockLeft icon at right edge).
+- [ ] **Splitter drag direction** inverts for RTL.
+- [ ] Floating-window screen-coord math is RTL-invariant (no flip).
+- [ ] Bidi text in titles passes through the WinUI `TextBlock` bidi
+  pipeline; no docking-specific handling.
+- [ ] **Invariant culture** JSON: layout saved in `de-DE` loads in
+  `en-US`; selftest asserts.
+- [ ] RTL selftest: mount showcase under RTL `RenderContext`; assert
+  visual-tree mirror; assert pointer hit-tests resolve to mirrored
+  regions.
+
+### 2.24 Security (spec §8.9)
+
+- [ ] Layout JSON 1 MB size limit (rejected if exceeded).
+- [ ] Layout JSON nesting depth 32 limit
+  (`JsonReaderOptions.MaxDepth`).
+- [ ] Schema validation before applying to model; unknown fields
+  tolerated; missing required → reject whole, fall back to default.
+- [ ] No reflection / type-name instantiation from JSON.
+- [ ] No external schema URLs.
+- [ ] AOT-clean parsing via `JsonSerializerContext` for all docking
+  types — no reflection at runtime.
+- [ ] Failure mode: log via `ReactorEventSource` (spec 044), fall
+  back to default, never throw on load path.
+- [ ] Per-pane state isolation: `WindowPersistedScope` keyed by
+  `(window-id, dockable-key)`. Document cross-user-secret caveat
+  in docs (`§8.4`).
+- [ ] Drag-drop payload: in-process object refs only (no GUID
+  table). Selftest verifies no serialization across the drag.
+
+### 2.25 Reliability (spec §8.10)
+
+- [ ] Corrupt-persisted-layout fallback: load failure → log →
+  fall back to default. Selftest with malformed JSON asserts no
+  throw + event fires.
+- [ ] Off-screen restore: floating window saved at (10000, 10000) on
+  a single-display rig → repositioned to primary center on load.
+  Selftest with simulated `DisplayArea`.
+- [ ] Orphan floating window when parent shell closes: respects
+  `WindowSpec.Owner` (spec 036 §9); without owner, persists as
+  top-level shell.
+- [ ] Process crash mid-drag: drag state in-memory only; on restart,
+  persisted layout restored; partial drag lost (correct behavior).
+- [ ] `useEffect` cleanup on pane close runs in dependency order
+  (Reactor invariant; selftest with effect-counter pattern verifies
+  for docking).
+- [ ] Floating window outliving its host: `OnLayoutChanging` cleanup
+  closes them (P2). P3 decouples — orphan top-levels.
+- [ ] Concurrent mutation off UI dispatcher throws — selftest verifies
+  the throw.
+- [ ] Event-subscription leak baseline selftest: 100-pane open/close
+  cycle returns to allocation baseline.
+
+### 2.26 Devtools / MCP (spec §8.2)
+
+- [ ] `docking.snapshot` MCP tool: returns the layout tree of a host.
+  P1 introduced; P2 may extend the snapshot schema.
+- [ ] `docking.dock` MCP tool: moves a pane programmatically for
+  headless test driving. New in P2.
+- [ ] No mid-flight drag introspection — spec N6 explicit non-goal.
+
+### 2.27 Self-host & unit testing matrix (spec §8.3)
+
+- [ ] **Selftests (the bulk)** under
+  `tests/Reactor.AppTests.Host/SelfTest/Fixtures/Docking*.cs`:
+  - [ ] Layout-model fixture: `Dock`/`Float`/`Hide`/`Show`/`Close`
+    sequences; assert tree + `Descendants()`.
+  - [ ] Reconciler fixture: mount `DockHost`, mutate inputs, assert
+    rendered visual-tree shape.
+  - [ ] Serialization fixture: SaveJson → LoadJson round-trips;
+    structural + identity equivalence; v1 fixture loads in v2.
+  - [ ] `IDockLayoutStrategy` fixture: assert `BeforeInsert*`
+    decisions land where expected.
+  - [ ] Cancellable-events fixture: setting `Cancel = true` on every
+    `*ing` event aborts transition; state unchanged.
+  - [ ] `PreviousContainer` fixture: hide → show preserves container.
+  - [ ] Composition-driven content updates: mutate state feeding
+    `DockNode` tree; assert keyed reconciliation preserves unchanged
+    pane state.
+  - [ ] Rehydration via composition: save → restart → component-
+    supplied content lands in restored slots matched by `Key`.
+  - [ ] Hook re-render scope: `UseActivePaneKey` re-renders only
+    consumer; `UseDockState` transitions on adopt/promote (P3).
+- [ ] **UI automation (strictly bounded; ≤ 5–8 total across all
+  phases):**
+  - [ ] (P1) Drag a tab from one group to another within same host.
+  - [ ] (P2) Tear out a tab → assert new `ReactorWindow` exists.
+  - [ ] (P2) Drag floating window's title bar → `AppWindow.Position`
+    changes.
+  - [ ] (P2) Ctrl+Tab navigator opens and selects a pane.
+- [ ] **Do not adopt FlaUI** (spec §8.3 rationale). AvalonDock
+  scenario list informs coverage, implementation belongs to selftests.
+- [ ] Coverage gate on `Reactor.Docking` mirrors policy applied to
+  other components.
+
+### 2.28 P2 risks + mitigations (spec §5.5)
+
+- [ ] Overlay z-order verified against tooltip + dialog precedence.
+- [ ] Tear-out race: synchronous open + pre-attached content
+  (already §2.6 above).
+- [ ] Drop-target hit-test perf on 4K display: benchmark in CI;
+  fail on regression.
+- [ ] AOT trim warnings: CI fails on new ones.
+
+### 2.29 P2 human review gate (spec §5.7) — **mandatory**
+
+Phase-1 review script (§4.7 items 1–8) re-run against P2, plus:
+
+- [ ] **Item 9** — Documents vs tool windows visual distinction matches
+  intent.
+- [ ] **Item 10** — Per-pane content state survives save→quit→restart
+  →load (e.g. editor scroll position).
+- [ ] **Item 11** — `Ctrl+Tab` pane navigator opens, navigates,
+  closes correctly.
+- [ ] **Item 12** — Layout JSON v1 file (P1 build) loads correctly in
+  P2 build.
+- [ ] **Item 13** — Drop preview latency feels equivalent (timed where
+  reasonable; subjective otherwise).
+- [ ] **Item 14** — AOT-published binary runs the showcase end-to-end.
+- [ ] **Item 15** — Run under `de-DE` and `ar-SA` (RTL); titles
+  localize; drop targets / context-menu items localize; layout mirrors;
+  pointer hit-tests resolve in mirrored regions.
+- [ ] **Item 16** — Screen reader pass (Narrator/NVDA): pane roles
+  announced; AutomationIds stable; focus never lost; drop-target
+  navigation keyboard-only with arrow+Enter.
+- [ ] **Item 17** — Reduced-motion: transitions disappear; static
+  positioning correct.
+- [ ] **Item 18** — Corrupt layout recovery: hand-edit JSON to invalid;
+  app starts with default; error event logged; no crash dialog.
+- [ ] Sign-off recorded in PR description. **Do not merge** P2 without
+  these green.
+
+---
+
+## Phase 3 — fold into the Window primitive
+
+**Goal:** `DockableWindow` is a `ReactorWindow` variant; any window can
+be re-parented into a `DockHost`. Exit criteria per spec §6: P2 review
+items plus five new items.
+
+### 3.1 Model surface (spec §6.1, §6.3)
+
+- [ ] `WindowSpec.IsDockable = false` opt-in (spec 036 prereq must
+  ship first).
+- [ ] `WindowSpec.Kind` → `DockableWindowKind { Document, ToolWindow }`.
+- [ ] `WindowSpec.AdoptionKey` — stable identity across adopt/promote.
+- [ ] `WindowSpec.DefaultHostId` — host to adopt into on open.
+- [ ] `WindowSpec.DefaultAdoptionTarget` (default `DockTarget.Center`).
+- [ ] `ReactorWindow.DockState` enum `{ Floating, Adopted, Hidden }`.
+- [ ] `ReactorWindow.AdoptedBy` → `DockHost?`.
+- [ ] `ReactorApp.DockableWindows` — `IReadOnlyList<ReactorWindow>`
+  (subset where `IsDockable`).
+- [ ] `ReactorApp.DockHosts` — `IReadOnlyList<DockHost>` registry by Id.
+
+### 3.2 `DockManager` → `DockHost` rename (spec §6.4)
+
+- [ ] Rename `DockManager` record to `DockHost`. Keep `DockManager` as
+  `[Obsolete]` type forwarder through next release (spec §9 migration).
+- [ ] `Id` is now **required** (global identity for `DefaultHostId`
+  lookup).
+- [ ] `LayoutSchemaVersion` default becomes 2 (P3 deployment reading
+  P2 layout just works).
+- [ ] Extend `DockNode` algebra: add
+  `public sealed record DockableWindowRef(ReactorWindow Window) : DockNode;`
+- [ ] Migration path: a P2 `DockableContent` becomes a synthetic
+  `DockableWindowRef` with `WindowSpec` opened at load time.
+
+### 3.3 Adoption / promotion primitives (spec §6.2, §6.7)
+
+- [ ] `ReactorApp.PromoteToFloating(window, position)`: closes adopted
+  state; creates HWND; migrates element tree from host's subtree into
+  new HWND's root; OS now sees a top-level window.
+- [ ] `ReactorApp.AdoptIntoHost(window, host, target)`: closes
+  floating HWND; migrates element tree into host's tab slot.
+- [ ] **Element-tree migration with state preservation.** `useState` /
+  `useEffect` snapshots carry across host boundaries, identified by
+  `AdoptionKey`. *This is the largest single piece of reconciler work
+  in the spec — budget accordingly.*
+- [ ] **Lazy HWND creation.** No HWND exists while adopted (alt-tab,
+  taskbar correctness). HWND created only on first `PromoteToFloating`.
+- [ ] **Modal dialog `XamlRoot` routing.** `ContentDialog` finds
+  `XamlRoot` against the *host* window when adopted, not the dockable
+  window. Explicit XamlRoot routing in spec.
+- [ ] Adoption / promotion ≤ 1 frame for element-tree migration itself,
+  exclusive of content first-render (spec §8.1).
+
+### 3.4 Cross-shell drag (spec §6.7)
+
+- [ ] **Lift spec 036 N2** for dockable windows: cross-Reactor-Window
+  drag is in scope because windows share a process, dispatcher, and
+  docking gesture recognizer.
+- [ ] Cross-shell drag uses same in-process object-ref payload as P2
+  (spec §8.9 security).
+- [ ] Selftest + UI automation case: drag a dockable window from main
+  shell to secondary shell; reverse direction works.
+
+### 3.5 Shell integration (spec §6.5)
+
+- [ ] Floating `DockableWindow` participates in spec-036
+  `WindowOpened`/`WindowClosed` events.
+- [ ] Adopted-state windows emit `Adopted`/`Promoted` events on the
+  host (no OS window).
+- [ ] Taskbar progress, overlay icons, jump lists (spec 036 §11) apply
+  to floating dockable windows.
+- [ ] Window persistence id (spec 036 §8) honored across floating AND
+  adopted lifetimes — tear-out, restart, re-attach preserves persisted
+  scope.
+- [ ] Devtools / MCP address dockable windows by stable id regardless
+  of state.
+- [ ] `WindowRegistry` includes `IsDockable` + `DockState` per window
+  (spec §8.2).
+
+### 3.6 Tray-icon flyout integration (spec §6.3, §6.6, §8.9)
+
+- [ ] Tray flyouts (spec 036 §11) can host a `DockHost` in their
+  content.
+- [ ] Tray flyout closing while a pane is being dragged out: lazy-HWND
+  mechanism handles the transition.
+- [ ] Selftest + showcase scenario.
+
+### 3.7 Showcase sample, updated (spec §6.6)
+
+- [ ] Solution Explorer opens via `OpenWindow(new WindowSpec(
+  IsDockable: true, Kind: ToolWindow, DefaultHostId: "main-shell",
+  DefaultAdoptionTarget: DockLeft))`. Tear-out → real top-level
+  window; close + reopen reuses same `ReactorWindow` instance.
+- [ ] Tray-icon flyout with `DockHost` and two adopted tool windows.
+- [ ] Secondary top-level shell ("Settings") with its own `DockHost`;
+  cross-shell drag works.
+
+### 3.8 P3 risks (spec §6.7)
+
+- [ ] Element-tree migration across `ReactorHost` boundaries: largest
+  reconciler work. Track in dedicated PR with extra review.
+- [ ] Adopted-window HWND lifecycle: verify alt-tab + taskbar exclude
+  adopted windows.
+- [ ] Modal dialog XamlRoot from adopted dockable window: explicit
+  resolution against host window.
+- [ ] Cross-shell drag races: gesture recognizer is single-instance
+  per process; verify under concurrent dragging stress.
+
+### 3.9 P3 selftests (additions to §8.3 matrix)
+
+- [ ] State migration: mount `DockableWindow`, `PromoteToFloating`,
+  `AdoptIntoHost(otherHost)`; assert per-pane `useState` / `useEffect`
+  state survives.
+- [ ] `UseDockState` re-render scope on adopt/promote.
+- [ ] Lazy HWND: adopted window has no `HWND`; promote creates one;
+  re-adopt destroys it.
+- [ ] UI automation (the one bounded P3 case): cross-shell drag from
+  one Reactor `Window` to another (spec §8.3 item 5).
+
+### 3.10 P3 human review gate (spec §6.8) — **mandatory**
+
+P2 script (§5.7), plus:
+
+- [ ] **Item 15** — Open a dockable tool window into main shell. Tear
+  out → free-floating top-level with own taskbar entry. Close. Reopen.
+  Re-adopts at default position.
+- [ ] **Item 16** — Open tray-icon flyout containing `DockHost`. Tear
+  out a tool window — becomes top-level, flyout closes, tool window
+  persists. Trigger tray again — flyout re-opens, tool window re-adopts.
+- [ ] **Item 17** — Open secondary shell. Drag dockable window from
+  main → secondary. Tab lands. Reverse works.
+- [ ] **Item 18** — Save layout from main shell. Reset. Reload.
+  Adopted reappear adopted; floating reappear floating at same
+  positions.
+- [ ] **Item 19** — AT/AT-SPI: screen reader announces adopted
+  dockable window with correct role (document/tool); focus traversal
+  includes both adopted panes and floating windows.
+- [ ] Sign-off recorded in PR description.
+
+---
+
+## Phase 4 — Windows 11 native-chrome polish
+
+**Goal:** floating windows use WinUI `TitleBar` with tabs-in-titlebar
+(Edge/Files/Terminal pattern). Exit criteria per spec §7: P3 script
+re-run with new chrome plus eight visual items.
+
+### 4.1 WindowsAppSDK min-version bump (spec §7, §7.3, §8.11)
+
+- [ ] Bump `WindowsAppSDK` minimum in `Directory.Build.props` to the
+  version that stabilizes `TitleBar` (target: 1.7+; pin exact at P4
+  entry).
+- [ ] Announce bump one release cycle in advance.
+- [ ] Feature-detect: older SDK falls back to P2/P3 chrome (degrades to
+  system-themed title bar without tabs on Windows 10 — acceptable per
+  §7.3).
+
+### 4.2 `TitleBar` control adoption (spec §7.1.1)
+
+- [ ] Floating dockable windows use
+  `Microsoft.UI.Xaml.Controls.TitleBar` as root chrome.
+- [ ] `ReactorWindow.NativeWindow.ExtendsContentIntoTitleBar = true`.
+- [ ] Root content gets `TitleBar` slot at top; docking tab strip lives
+  inside its content area.
+- [ ] Reactor's existing `TitleBar(...)` element (`src/Reactor/Elements/
+  Dsl.cs:610`, `TitleBarElement`) wires through `DockHost` for the
+  floating-window path.
+
+### 4.3 Tabs in the title bar (spec §7.1.2) — headline feature
+
+- [ ] **Single-group float:** tab strip renders inside `TitleBar`
+  content slot, flush with caption buttons, active tab styles as
+  window's identity (Edge / Files / modern-VS pattern).
+- [ ] **Multi-group float:** revert to standard floating title (via
+  `IDockAdapter.GetFloatingWindowTitleBar`); tabs render in normal pane
+  position. The same `GetFloatingWindowTitleBar` surface continues to
+  exist — it supplies the non-tab portion (text/branding) in both
+  modes.
+- [ ] Drag semantics:
+  - [ ] Drag a **tab** → tear it out (most-tested case; tab now lives
+    inside OS-managed title-bar hit-test surface).
+  - [ ] Drag **title-bar background** (non-tab, non-caption) → move
+    floating window. OS-handled.
+  - [ ] Drag **active tab when it is the only tab** → moves whole
+    window (single-tab floats behave like normal windows).
+- [ ] `AppWindow.TitleBar.SetDragRectangles` integration: hit-test
+  regions computed per frame from tab-strip measured geometry; pushed
+  to OS so it knows interactive vs drag-region sub-rects.
+- [ ] **Debounce `SetDragRectangles` to layout-measure-change events**
+  (not every-frame). Perf budget per spec §7.3 + §8.5.
+
+### 4.4 Caption-button area awareness (spec §7.1.5)
+
+- [ ] Tab strip reserves `AppWindow.TitleBar.RightInset` as
+  right-padding (LeftInset in RTL).
+- [ ] Subscribe to `AppWindowTitleBar.LayoutMetricsChanged`; re-measure
+  on next layout pass (handles theme switch flipping RTL mid-flight).
+
+### 4.5 Snap Layouts (spec §7.1.3)
+
+- [ ] Windows 11 Snap Layouts on caption hover: works for free via OS
+  caption button.
+- [ ] **Do not** attempt OS Snap Layouts integration into in-shell
+  docking — drop-target overlay (P2) is the equivalent and it would be
+  a category error.
+
+### 4.6 System backdrop coordination (spec §7.1.4)
+
+- [ ] Floating dockable windows inherit `WindowSpec.Backdrop`
+  (spec 036 §4.1, §5).
+- [ ] Splitter gutters semi-transparent under Mica / Acrylic.
+- [ ] Tab-strip background uses `TitleBarBackgroundFillBrush`, not a
+  hard color.
+
+### 4.7 Dark mode / accent color (spec §7.1.6)
+
+- [ ] WinUI 11 `TitleBar` honors system theme without intervention.
+- [ ] QA pass: system title bar + Reactor docking content + custom
+  theme combination produces no contrast mismatch.
+
+### 4.8 Floating-window persona (spec §7.1.7)
+
+- [ ] Single-tab float: tab `Title` and `Icon` → `AppWindow.Title` and
+  `AppWindow.SetIcon`. Alt-tab shows the tab title.
+- [ ] Multi-tab float: active tab's title reflected.
+- [ ] Composition with spec 036 §8 persistence: persisted Window
+  identity is the dockable-window key, not the transient tab content.
+
+### 4.9 P4 risks (spec §7.3)
+
+- [ ] WindowsAppSDK `TitleBar` API stability — pin version; if API
+  moves before merge, P4 slips (P1–P3 unaffected).
+- [ ] `SetDragRectangles` perf on per-frame hover — debounce verified
+  with benchmark.
+- [ ] Caption-button inset on theme/RTL flip — subscribe to
+  `LayoutMetricsChanged`.
+- [ ] `GetFloatingWindowTitleBar` × tab-in-titlebar interplay — adapter
+  supplies non-tab portion only; doesn't contradict.
+- [ ] Non-Windows-11 graceful degradation — `TitleBar` degrades to
+  system-themed-without-tabs on Win10; "looks like P2" is acceptable.
+
+### 4.10 P4 human review gate (spec §7.4) — **mandatory**
+
+P3 script (§6.8), plus:
+
+- [ ] **Item 20** — Floating window with one tab shows tab in title
+  bar; OS-default caption buttons; theme matches system.
+- [ ] **Item 21** — Drag tab in title bar → tear-out fires. Drag
+  non-tab area → window moves, no tear-out.
+- [ ] **Item 22** — Maximize via caption button; hover maximize → Snap
+  Layouts appear; pick quadrant; window snaps; restore; verify
+  Reactor reconciler does not interfere with snap geometry.
+- [ ] **Item 23** — Toggle system theme dark↔light with float open;
+  title bar updates; docking content updates; no flash; no contrast
+  regression.
+- [ ] **Item 24** — Alt-tab shows floating window's tab title, not
+  "Reactor App".
+- [ ] **Item 25** — Snap Layouts assist windows show tab title + icon,
+  not generic.
+- [ ] **Item 26** — RTL system locale: caption buttons on left; tab
+  strip reserves left inset; behaviors mirror.
+- [ ] **Item 27** — High-contrast theme: chrome legible; drop targets
+  distinguishable.
+- [ ] UI automation: tab-in-title-bar hit-testing case (spec §8.3
+  item 6); title-bar drag-region case (item 7).
+- [ ] Sign-off recorded in PR description. **Final visual gate**.
+
+---
+
+## Cross-phase concerns (rolling checklist)
+
+These appear under specific phases above; this section is the
+**aggregate gate** to confirm before each phase ships.
+
+### CP.1 Performance budget (spec §8.1, §8.5)
+
+- [ ] Drop-target hover ≤ 2 ms (P2+).
+- [ ] Tear-out ≤ 1 frame (P2+).
+- [ ] Layout JSON load ≤ 50 ms for 200 panes (P2+).
+- [ ] Adoption/promotion ≤ 1 frame element-tree migration (P3).
+- [ ] Reconciler diff ≤ 1 ms for 50-pane shape change (P2+).
+- [ ] Cold-start ≤ 200 ms first frame for 50-pane layout (P2+).
+- [ ] Zero allocation on pointer-move (P2+).
+- [ ] No static dictionaries, no GUID-table leaks, no closure leaks on
+  events (P2+).
+- [ ] DPI change re-layout ≤ 16 ms (P2+).
+- [ ] `SetDragRectangles` debounced (P4).
+
+### CP.2 Testing strategy (spec §8.3) — selftests first
+
+- [ ] Selftests under
+  `tests/Reactor.AppTests.Host/SelfTest/Fixtures/Docking*` cover the
+  full matrix per §2.27.
+- [ ] UI automation ≤ 5–8 total across all phases.
+- [ ] Do not adopt FlaUI.
+- [ ] Coverage gate on `Reactor.Docking` matches sibling components.
+
+### CP.3 Documentation (spec §8.4)
+
+- [ ] Source docs live in `docs/_pipeline/apps/docking/`.
+- [ ] **Never hand-edit** `docs/guide/docking.md` (generated). See
+  memory `feedback_docs_pipeline.md`.
+- [ ] Skill content at `skills/docking.md` once API stabilizes (P1 exit
+  earliest).
+- [ ] Each phase appends to docs; CHANGELOG updated.
+
+### CP.4 Localization (spec §8.6)
+
+- [ ] All user-facing strings under `Docking.*` resource prefix.
+- [ ] No app-string responsibility for `Document.Title` /
+  `ToolWindow.Title`; docs clarify.
+- [ ] `.xlf` pipeline (spec 005) generates loc.
+
+### CP.5 Accessibility (spec §8.7)
+
+- [ ] Roles, `AutomationId`s, focusable drop targets + splitters,
+  live-region announcements, focus invariants, reduced-motion,
+  44-DIP touch targets, 4-DIP hit-test forgiveness, high-contrast
+  legibility.
+- [ ] A11y selftests landed by P2 exit.
+
+### CP.6 Globalization (spec §8.8)
+
+- [ ] `FlowDirection` propagation, sidebar/tab/drop-target/splitter
+  RTL flips, bidi title rendering, invariant-culture JSON, RTL
+  selftest.
+
+### CP.7 Security (spec §8.9)
+
+- [ ] Layout JSON size + depth limits, schema validation, AOT-clean
+  parsing, no code paths from JSON, safe-fallback on corrupt,
+  per-pane state isolation, in-process drag payload only.
+- [ ] Vendored upstream tracked in `VENDORED.md`; CVEs monitored
+  while the source ships.
+
+### CP.8 Reliability (spec §8.10)
+
+- [ ] Corrupt layout, off-screen restore, orphan floats, crash mid-
+  drag, useEffect cleanup, floating-window outliving host, off-thread
+  mutation, event-subscription baseline — all selftests landed.
+
+### CP.9 Versioning (spec §8.11)
+
+- [ ] Layout JSON: backward read-compat forever; forward-tolerance with
+  warning; migration ladder via `IDockLayoutMigration`.
+- [ ] Public API stable across phases; `[Obsolete]` shims for renamed
+  types through next release.
+- [ ] Per-pane `TState` schema versioning documented as app
+  responsibility.
+- [ ] WindowsAppSDK min-version bump only at P4 entry, announced one
+  release in advance.
+
+---
+
+## Resume notes
+
+- This file is the single source of truth for progress. Update
+  checkboxes inline as work lands. **Never** delete a section header
+  even after completion — they describe scope, not just state.
+- Each phase has a **gate section** that must be green before its PR
+  merges. Treat these as MERGE BLOCKERS, not aspirational.
+- Cross-phase concerns appear both in the per-phase task lists and in
+  the rolling CP.* aggregate. Check both before declaring a phase
+  done.
+- For pauses spanning multiple sessions, the topmost unchecked task
+  in the current phase is the resume point. The previous phase's gate
+  must be green or work must be against an explicit phase backtrack
+  PR (rare).
+- Memory pointer: see auto-memory `feedback_docs_pipeline.md` (never
+  hand-edit `docs/guide/*`).

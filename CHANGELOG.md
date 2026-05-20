@@ -29,6 +29,13 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 — Docking (Phase 0 scaffolding).** Tracking checklist
+  established at `docs/specs/tasks/045-docking-windows-implementation.md`.
+  CHANGELOG bucket reserved for the docking workstream. The third-party
+  notice for WinUI.Dock (MIT, https://github.com/qian-o/WinUI.Dock) was
+  landed alongside the design doc and remains in `ThirdPartyNoticeText.txt`
+  pending the Phase 1 vendor drop under `third_party/WinUI.Dock/`.
+  (spec 045 §0)
 - **Spec 042 Phase 1 — keyed-list reconciliation & ListView animation
   groundwork.** New internal `Microsoft.UI.Reactor.Core.Internal.ReactorRow`
   /  `ReactorListState` carry reference-typed identity rows inside an
