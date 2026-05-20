@@ -1,7 +1,5 @@
 using Microsoft.UI.Reactor.Core;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
 namespace Microsoft.UI.Reactor.Docking.Native;
 
@@ -107,37 +105,25 @@ internal static class DockTabGroupRenderer
     }
 
     /// <summary>
-    /// Maps <see cref="DockTabGroup.TabPosition"/> onto the rendered
-    /// TabView. WinUI's TabView has no native bottom-tab mode; upstream
-    /// WinUI.Dock flips the strip via <c>ScaleY = -1</c> on the control
-    /// (and a counter-scale on tab content so text reads upright). We
-    /// reuse the same trick on the Reactor element via a Setter that
-    /// installs the scale transform after mount.
+    /// Hook for applying <see cref="DockTabGroup.TabPosition"/>-driven
+    /// chrome to the rendered <see cref="TabView"/>. WinUI's
+    /// <see cref="TabView"/> has no native bottom-tab mode; the upstream
+    /// WinUI.Dock workaround composes <c>ScaleY = -1</c> on the outer
+    /// control with counter-scales on every tab header (text + close
+    /// button) AND on every tab body — requiring access to template
+    /// parts of <c>TabViewItem</c> that aren't reachable without
+    /// subclassing.
+    ///
+    /// For P2 the bottom-tab variant intentionally renders as a
+    /// top-tab variant: legible, no upside-down text, but visually it
+    /// doesn't match upstream's bottom-strip placement. A true
+    /// translation lands when a dedicated tab-item subclass (or a
+    /// manual strip+content composition) replaces the shared
+    /// <see cref="TabViewElement"/>.
     /// </summary>
     private static Action<TabView>[] BuildSetters(DockTabGroup group)
     {
-        if (group.TabPosition != TabPosition.Bottom) return Array.Empty<Action<TabView>>();
-        return [tab =>
-        {
-            tab.RenderTransformOrigin = new global::Windows.Foundation.Point(0.5, 0.5);
-            tab.RenderTransform = new ScaleTransform { ScaleY = -1 };
-            // Counter-scale each tab's content so the body renders upright
-            // inside the flipped strip. Subscribe to SelectionChanged so
-            // dynamically-added tabs pick up the transform on first show.
-            tab.SelectionChanged += static (s, _) => FlipTabContent((TabView)s);
-            FlipTabContent(tab);
-        }];
-    }
-
-    private static void FlipTabContent(TabView tab)
-    {
-        for (int i = 0; i < tab.TabItems.Count; i++)
-        {
-            if (tab.ContainerFromIndex(i) is not TabViewItem item) continue;
-            if (item.Content is not FrameworkElement fe) continue;
-            if (fe.RenderTransform is ScaleTransform existing && existing.ScaleY < 0) continue;
-            fe.RenderTransformOrigin = new global::Windows.Foundation.Point(0.5, 0.5);
-            fe.RenderTransform = new ScaleTransform { ScaleY = -1 };
-        }
+        _ = group;
+        return Array.Empty<Action<TabView>>();
     }
 }

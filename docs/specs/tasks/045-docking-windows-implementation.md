@@ -453,13 +453,16 @@ WinUI.Dock wrapper for side-by-side review.
 - [x] Keep using WinUI `TabView` (decision: spec §11 — retained for
   accessibility shape).
 - [x] `DockTabGroup` element renders a Reactor `TabView` modifier with
-  configurable `TabPosition`, `CompactTabs`, `ShowWhenEmpty`,
-  `SelectedIndex`. `DockTabGroupRenderer.Render` produces a
-  `TabViewElement` keyed off `Documents` / `SelectedIndex` / `CanClose`.
-  `CompactTabs` / `TabPosition` (Top/Bottom positioning) land via a
-  setter when the §2.16 reconciler exposes them — current renderer
-  passes selection + closability; positioning rides on TabView's native
-  property surface.
+  configurable `CompactTabs`, `ShowWhenEmpty`, `SelectedIndex`.
+  `DockTabGroupRenderer.Render` produces a `TabViewElement` keyed off
+  `Documents` / `SelectedIndex` / `CanClose`. `CompactTabs` maps to
+  `TabWidthMode.Compact`. **`TabPosition.Bottom` is currently rendered
+  as top-position** — WinUI `TabView` has no native bottom mode, and
+  the upstream `ScaleY=-1` flip requires per-tab-header counter-scales
+  inside `TabViewItem` template parts that aren't reachable without a
+  dedicated subclass. Showcase Scene A's bottom-row groups read
+  correctly but with strip-on-top; a dedicated `DockTabItem`
+  subclassing of `TabViewItem` lands this faithfully in a follow-up.
 - [ ] Tabs are arrow-key navigable; `Ctrl+PageUp`/`Ctrl+PageDown`
   navigate (VS parity — spec §8.7). *Default TabView already supports
   arrow nav; chord wiring lands with §2.10 keyboard pass.*
