@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RootNamespace>Microsoft.UI.Reactor.Docking</RootNamespace>
+    <AssemblyName>Microsoft.UI.Reactor.Docking.Xaml</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Suppress CS1591 only on the internal namespace; XML docs are required
+         on every Microsoft.UI.Reactor.Docking.* public member per spec 045
+         §0 (the tracking-file "task is done" criteria item 3). -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- Phase 1 packaging — ships alongside Microsoft.UI.Reactor as a separate
+       NuGet package so consumers who don't want the docking dependency aren't
+       forced to take it. Phase 2 collapses the vendored XAML dependency and
+       the runtime here goes away (spec 045 §5.6); Phase 3+ rolls the native
+       implementation into the core Reactor assembly. -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Microsoft.UI.Reactor.Docking.Xaml</PackageId>
+    <Version Condition="'$(Version)' == ''">0.0.0-local</Version>
+    <Authors>Microsoft</Authors>
+    <Company>Microsoft</Company>
+    <Description>Phase-1 docking surface for Reactor: thin wrapper over the vendored WinUI.Dock control library. See docs/specs/045-docking-windows-design.md.</Description>
+    <PackageProjectUrl>https://github.com/microsoft/microsoft-ui-reactor</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/microsoft/microsoft-ui-reactor</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" Condition="Exists('..\..\LICENSE')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Reactor.Docking.Xaml.Tests" />
+    <InternalsVisibleTo Include="Reactor.Tests" />
+    <InternalsVisibleTo Include="Reactor.AppTests.Host" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Reactor\Reactor.csproj" />
+    <ProjectReference Include="..\..\third_party\WinUI.Dock\WinUI.Dock.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -351,6 +351,10 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
+  <Project Path="src/Reactor.Docking.Xaml/Reactor.Docking.Xaml.csproj">
+    <Platform Solution="*|ARM64" Project="ARM64" />
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
   <Project Path="src/Reactor.Analyzers/Reactor.Analyzers.csproj" />
   <Project Path="src/Reactor.Cli/Reactor.Cli.csproj">
     <Platform Solution="*|ARM64" Project="ARM64" />
