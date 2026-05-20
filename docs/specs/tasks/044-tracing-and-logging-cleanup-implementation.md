@@ -218,9 +218,9 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 4.5 PR: ReactorWindow swallowed-error migration
 
-- [x] Migrated all 29 `catch (Exception ex) { Debug.WriteLine(...) }` sites in `src/Reactor/Hosting/ReactorWindow.cs` to `DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.<op>", ex)`. Two persistence-placement sites (`TryRestorePersistedPlacement`, `TrySavePersistedPlacement`) route to `LogCategory.Persistence` because the failure class is store-shaped, not window-shaped. `using System.Diagnostics` removed since no `Debug.WriteLine` remains.
-- [ ] **Narrowing deferred.** Spec §6.7.2 calls for `catch (COMException ex) when (ex.HResult is HResults.X or HResults.Y)` filters; doing this honestly requires the per-site audit (Phase C-audit) which has not been written yet. The Keep migration above delivers the spec §12.4 acceptance ("zero error/HR-reporting `Debug.WriteLine` in src/Reactor/") and the §12.1 release-visibility goal; narrowing each catch's HRESULT filter is a follow-up that gates on the audit and on having a Hosting subject-matter reviewer sign off per-site.
-- [ ] Each migrated site's audit-comment reference is deferred with the narrowing work.
+- [x] Phase C.8 migrated all 29 sites to `DiagnosticLog.SwallowedError(LogCategory.Hosting, ...)`. Two persistence-placement sites route to `LogCategory.Persistence`. `using System.Diagnostics` removed.
+- [x] **Narrowing landed in Phase C.9.** Spec §6.7.2 properly applied. Added `HResults.IsTeardownReentry(int hr)` helper (covers `RPC_E_DISCONNECTED`, `E_HANDLE`, `RPC_E_SERVERFAULT`, `CO_E_OBJNOTCONNECTED`). 17 WinUI API sites now use `catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))`. 3 user-callback sites (`SizeChanged`, `StateChanged`, `Closing`) had their try/catch deleted — user throws propagate to the dispatcher. 1 user-callback site with framework cleanup after it (`Closed?.Invoke`) converted to try/finally so cleanup runs but the user's exception still surfaces. Dispose chain converted to nested try/finally. 7 dead-defensive try/catch blocks deleted (P/Invokes on `nint` that can't throw at the marshal layer, or downstream calls that already narrow internally).
+- [x] Two broad `catch (Exception)` blocks remain — both genuine iteration sibling-independence per §6.7.3: `IClosingGuard.CanClose()` (fail-safe-to-cancel, spec 036 §3.4 test) and owned-window cascade (spec 036 §9). Both have inline comments naming the contract.
 
 ### 4.6 PR: Shell COM-call promotion to typed events
 

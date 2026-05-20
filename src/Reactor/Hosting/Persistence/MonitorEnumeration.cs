@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace Microsoft.UI.Reactor.Hosting.Persistence;
@@ -34,24 +33,22 @@ internal static class MonitorEnumeration
 
     public static IReadOnlyList<MonitorRect> Snapshot()
     {
+        // Both P/Invokes accept nint and signal failure via a bool return —
+        // no managed exception can surface from the marshal layer here, and
+        // the callback is pure framework code with no allocations that
+        // could OOM in practice. If EnumDisplayMonitors fails, list stays
+        // empty (caller treats as "no monitors known" → restore-rejects).
         var list = new List<MonitorRect>(2);
-        try
+        EnumDisplayMonitors(0, 0, (nint h, nint _, ref RECT _, nint _) =>
         {
-            EnumDisplayMonitors(0, 0, (nint h, nint _, ref RECT _, nint _) =>
+            var info = new MONITORINFOEX { cbSize = Marshal.SizeOf<MONITORINFOEX>() };
+            if (GetMonitorInfo(h, ref info))
             {
-                var info = new MONITORINFOEX { cbSize = Marshal.SizeOf<MONITORINFOEX>() };
-                if (GetMonitorInfo(h, ref info))
-                {
-                    var r = info.rcMonitor;
-                    list.Add(new MonitorRect(info.szDevice, r.Left, r.Top, r.Right, r.Bottom));
-                }
-                return true;
-            }, 0);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Reactor] MonitorEnumeration.Snapshot failed: {ex.GetType().Name}: {ex.Message}");
-        }
+                var r = info.rcMonitor;
+                list.Add(new MonitorRect(info.szDevice, r.Left, r.Top, r.Right, r.Bottom));
+            }
+            return true;
+        }, 0);
         return list;
     }
 }

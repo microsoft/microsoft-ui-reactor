@@ -37,4 +37,19 @@ internal static class HResults
 
     /// <summary>Access is denied.</summary>
     public const int ERROR_ACCESS_DENIED = unchecked((int)0x80070005);
+
+    /// <summary>
+    /// True if <paramref name="hr"/> is one of the WinUI / COM teardown-reentry
+    /// HRESULTs — the standard "your proxy is gone, your handle is gone, your
+    /// out-of-proc server is gone" surface that <c>AppWindow</c> / <c>Window</c>
+    /// API calls throw during <c>Close</c>, <c>Dispose</c>, DPI change, and
+    /// presenter transitions. Spec 044 §6.7.2 narrow-catch sites use this
+    /// helper as the predicate in <c>catch (COMException ex) when (...)</c>.
+    /// Anything outside this set is a bug we want to surface, not swallow.
+    /// </summary>
+    public static bool IsTeardownReentry(int hr) =>
+        hr is RPC_E_DISCONNECTED
+           or E_HANDLE
+           or RPC_E_SERVERFAULT
+           or CO_E_OBJNOTCONNECTED;
 }

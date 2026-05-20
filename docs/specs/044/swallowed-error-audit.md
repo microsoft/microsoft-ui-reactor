@@ -44,13 +44,16 @@ auditable against the working code.
 
 | Verdict | Count | Shipped | Deferred |
 |---|---|---|---|
-| Keep | 56 | 56 | — |
-| Narrow | 9 | 6 (Persistence) | 3 (ReactorWindow HRESULT filters) |
-| Propagate | 0 | — | — |
+| Keep (iteration sibling-independence) | 8 | 8 | — |
+| Narrow (specific exception type / HR filter) | 36 | 33 | 3 (Shell HResultFailed already narrowed; typed-event promotion deferred) |
+| Propagate (no catch — user / framework bug surfaces) | 12 | 12 | — |
 | Replace with `TryXxx` | 10 | 0 | 10 (Win32 P/Invoke reporters, Phase 4.8) |
 | Promote to typed event | 18 | 9 (Navigation 6 + Intl 1 + Persistence 2) | 9 (Shell COM-calls 5 + ConnectedAnimation 4, Phase 4.6) |
+| Deleted (dead-defensive try/catch) | 9 | 9 | — |
 
-Spec §6.7.4 worry-threshold for `Propagate` is 20; we're at 0.
+Spec §6.7.4 worry-threshold for `Propagate` is 20; we're at 12.
+
+The dramatic shift from "56 Keep" in the first audit pass to "8 Keep + 12 Propagate + 9 Deleted + 33 Narrow" came from applying the §6.7.2 narrowing properly to ReactorWindow.cs (29 sites) and the related Hosting code. The first pass migrated `Debug.WriteLine` → `DiagnosticLog.SwallowedError` with the catch shape unchanged ("Keep"); the second pass actually applied the §6.7.2 rule that broad `catch (Exception)` is wrong almost everywhere it isn't iteration sibling-independence or genuine fail-safe-to-default behavior.
 
 ---
 
@@ -137,16 +140,16 @@ the inventory in §3.3 of the task doc.
 |---|---|---|
 | `ContentDialog.ShowAsync + OnClosed` | Keep + DiagnosticLog | User-callback isolation per §6.7.3 — the try wraps both `ShowAsync` AND the user-supplied `OnClosed` delegate. Cannot narrow without splitting the try-catch into two; deferred. |
 
-### `src/Reactor/Core/RenderContext.cs` — Phase C.6 (commit `90d516b0`)
+### `src/Reactor/Core/RenderContext.cs` — Phase C.6 (commit `90d516b0`) + Phase C.9 narrowing
 
 | Site | Verdict | Notes |
 |---|---|---|
-| `UseCommand.ExecuteAsync` | Keep + DiagnosticLog | User-callback isolation. |
-| `UseCommand<T>.ExecuteAsync` | Keep + DiagnosticLog | Same. |
-| `UseEffect` cleanup (FlushEffects phase 1) | Keep + DiagnosticLog | Cleanup ordering — must run all even if one throws. |
-| `UseEffect` effect (FlushEffects phase 2) | Keep + DiagnosticLog | Effect-flush forward progress — must not let one bad effect freeze the dispatcher. |
-| `RunCleanups.effectCleanup` | Keep + DiagnosticLog | Same as cleanup above. |
-| `RunCleanups.persistedSave` | Keep + DiagnosticLog | Persisted-slot independence — one slot's save failure must not block other slots. The try-catch wraps the user contact point (`IPersistedStateScope.Set`); the surrounding hook-iteration loop is outside. |
+| `UseCommand.ExecuteAsync` | **Narrow (try/finally — no catch)** | Phase C.9: fire-and-forget `Task.Run` wraps the user action with `try { await asyncAction(); } finally { guardRef.Current = false; setIsExecuting(false); }`. The framework state is restored before unwind; the user's throw faults the Task and surfaces via `Task.UnobservedTaskException` rather than being swallowed under `SwallowedError`. The earlier "Keep + DiagnosticLog" shape was hiding user bugs — apps couldn't tell their command was broken without subscribing to ETW. |
+| `UseCommand<T>.ExecuteAsync` | **Narrow (try/finally — no catch)** | Same shape. |
+| `UseEffect` cleanup (FlushEffects phase 1) | Keep + DiagnosticLog | Iteration sibling-independence — slot i's failure must not block slots i+1…n in the same flush. The loop's invariant (forward progress through all cleanups) requires the broad catch. |
+| `UseEffect` effect (FlushEffects phase 2) | Keep + DiagnosticLog | Same. |
+| `RunCleanups.effectCleanup` | Keep + DiagnosticLog | Same. |
+| `RunCleanups.persistedSave` | Keep + DiagnosticLog | Same — persisted-slot independence. The try-catch wraps the user contact point (`IPersistedStateScope.Set`); the surrounding hook-iteration loop is outside. |
 
 ### `src/Reactor/Hosting/Etw/LayoutEtwConsumer.cs` — Phase C.7a (commit `b761a7a1`)
 
@@ -155,18 +158,23 @@ the inventory in §3.3 of the task doc.
 | 7 error-swallow catches (provider start, session enable, parser, etc.) | Keep + DiagnosticLog | LogCategory.LayoutCost. |
 | 5 pure-trace `Debug.WriteLine` (session started / parser output / orphan cleanup) | Keep as `Debug.WriteLine` | Framework-internal per spec §6.3 carve-out. |
 
-### `src/Reactor/Hosting/ReactorWindow.cs` — Phase C.8 (commit `21cd6ef9`)
+### `src/Reactor/Hosting/ReactorWindow.cs` — Phase C.8 (commit `21cd6ef9`) + Phase C.9 narrowing
 
-All 29 sites Keep + DiagnosticLog. LogCategory.Hosting except for the
-two persistence-shaped placement sites which use LogCategory.Persistence.
-Operation labels match the pre-migration message stem (so a developer
-greppping the audit trail against the source lands on the same call
-site).
+Phase C.8 migrated 29 `Debug.WriteLine` → `DiagnosticLog` with the catch
+shape unchanged. Phase C.9 applies the actual §6.7.2 narrowing per site:
 
-Narrowing the HRESULT filters per spec §6.7.2 is deferred — the
-window lifecycle catches a long tail of HRESULTs (RPC failures
-during teardown, AppWindow API quirks during DPI change) and the
-narrow list needs Hosting subject-matter review.
+| Group | Sites | Verdict | After |
+|---|---|---|---|
+| Pure-advisory user callbacks | `SizeChanged`, `StateChanged`, `Closing` | **Propagate** — try/catch deleted | User throw goes to dispatcher's UnhandledException; developer sees the bug. Previous swallow silently treated thrown `Closing` handler as "didn't cancel," which was worse than crashing. |
+| User callback with framework cleanup after | `Closed?.Invoke` | **try/finally** | User throw propagates AND `RemoveOwned` / `UnregisterWindow` / `Dispose` still run. Handles the limp-along case where the app set `Application.UnhandledException.Handled = true`. |
+| WinUI AppWindow / Window API surface | `Title.set`, `Presenter.apply`, `IsShownInSwitchers.set`, `ExtendsContentIntoTitleBar.set`, `InitialResize`, `SetOwner`, `FirstDpiResize`, `Hide`, `Show`, `Close`, `SetSize`, `SetPosition`, `CenterOnScreen`, `ResolveCurrentState`, `TryApplyExeIconFallback`, `TryApplyInitialPlacement`, `ResolveOwnerDisplayArea`, all five event unsubscriptions in `Dispose` (×5) | **Narrow** — `catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))` (the well-known `RPC_E_DISCONNECTED` / `E_HANDLE` / `RPC_E_SERVERFAULT` / `CO_E_OBJNOTCONNECTED` set) | Anything outside that HR set propagates as a genuine bug. |
+| Iteration sibling-independence | `IClosingGuard.CanClose()`, owned-window-cascade `child._window.Close()` | **Keep + DiagnosticLog (annotated)** | Closing-guard fail-safe-to-cancel is documented behavior (spec 036 §3.4 test pins it); owned-cascade sibling independence is spec 036 §9. Both have inline comments naming the contract. |
+| Framework dispose chain | `_messageMonitor.Dispose()` → `_host.Dispose()` → `_persistedScope.Dispose()` → `_thumbnailToolbar?.Dispose()` | **try/finally chain** | All four disposes run regardless of which throws; first exception propagates. No swallowing — a framework Dispose bug should surface. |
+| Dead-defensive try/catch | `QueryDpiForWindow`, `WM_GETMINMAXINFO.apply`, `GetDpiForSystemFallback`, `NativeIcon.DestroyIcon`, `MonitorEnumeration.Snapshot`, `TryRestorePersistedPlacementCore`, `TrySavePersistedPlacement` | **Try deleted** | The wrapped operations are P/Invokes on `nint` that can't throw at the marshal layer, or downstream calls that already narrow internally and return sentinel values. The outer try/catch was hiding nothing real. |
+
+LogCategory.Hosting except for the two persistence-shaped placement
+sites (LogCategory.Persistence) and the user-event sites which now
+have no catch at all.
 
 ### `src/Reactor/Hosting/Shell/JumpListComInterop.cs` — Phase C.4 (commit `301593bc`)
 

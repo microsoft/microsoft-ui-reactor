@@ -28,6 +28,31 @@ namespace Microsoft.UI.Reactor;
 /// </remarks>
 public sealed class ReactorWindow : IDisposable
 {
+    // Spec 044 §6.7 catch-shape conventions used throughout this file:
+    //
+    //   §6.7.2 WinUI API narrow catch:
+    //     `catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))`
+    //     for AppWindow / Window / Win32 calls that can throw the well-known
+    //     proxy-disconnect / handle-gone HRESULTs during teardown, DPI flux,
+    //     and presenter transitions. Anything outside that HR set propagates
+    //     as a real bug.
+    //
+    //   §6.7.3 iteration sibling-independence:
+    //     Broad `catch (Exception)` is kept ONLY where one slot/iteration
+    //     failure must not block forward progress on its siblings (closing
+    //     guards, owned-window cascade, effect-flush loops in RenderContext).
+    //     Each such site has an inline comment naming the contract.
+    //
+    //   try / finally for cleanup ordering:
+    //     User-callback invocations followed by framework cleanup use
+    //     try { Handler?.Invoke(...); } finally { ... }. The user's exception
+    //     propagates (the developer sees their bug); the framework cleanup
+    //     still runs (no stale references in the limp-along case where the
+    //     app catches via Application.UnhandledException).
+    //
+    //   Purely-advisory user callbacks (SizeChanged, StateChanged, Closing,
+    //   Closed) have NO try/catch — a throwing handler propagates to the
+    //   dispatcher. Swallowing those just hides the developer's bug.
     private static int s_nextId;
 
     private readonly string _id;
@@ -263,25 +288,22 @@ public sealed class ReactorWindow : IDisposable
                     return Microsoft.UI.Reactor.WindowState.CompactOverlay;
             }
         }
-        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ResolveCurrentState", ex); }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ResolveCurrentState", ex);
+        }
         return Microsoft.UI.Reactor.WindowState.Normal;
     }
 
     private static uint QueryDpiForWindow(nint hwnd)
     {
-        try
-        {
-            uint dpi = NativeDpi.GetDpiForWindow(hwnd);
-            // Some non-realized HWNDs report 0; use the system DPI as a fallback.
-            if (dpi == 0)
-                dpi = NativeDpi.GetDpiForSystemFallback();
-            return dpi == 0 ? 96 : dpi;
-        }
-        catch (Exception ex)
-        {
-            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.QueryDpiForWindow", ex);
-            return 96;
-        }
+        // P/Invoke on nint cannot throw at the marshal layer; both
+        // GetDpiForWindow and GetDpiForSystem signal failure via a 0
+        // return value, handled inline. No try/catch needed.
+        uint dpi = NativeDpi.GetDpiForWindow(hwnd);
+        if (dpi == 0)
+            dpi = NativeDpi.GetDpiForSystemFallback();
+        return dpi == 0 ? 96 : dpi;
     }
 
     private static class NativeDpi
@@ -292,10 +314,7 @@ public sealed class ReactorWindow : IDisposable
         [DllImport("user32.dll")]
         public static extern uint GetDpiForSystem();
 
-        public static uint GetDpiForSystemFallback()
-        {
-            try { return GetDpiForSystem(); } catch { return 96; }
-        }
+        public static uint GetDpiForSystemFallback() => GetDpiForSystem();
     }
 
     /// <summary>
@@ -320,7 +339,10 @@ public sealed class ReactorWindow : IDisposable
     private void ApplyChrome(WindowSpec spec, bool isInitial)
     {
         try { _window.Title = spec.Title; }
-        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Title.set", ex); }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Title.set", ex);
+        }
 
         // Presenter: full-screen / compact-overlay flip via AppWindow.SetPresenter.
         // Default Overlapped chrome modulators (resizable, minimizable, maximizable,
@@ -347,7 +369,10 @@ public sealed class ReactorWindow : IDisposable
                     break;
             }
         }
-        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Presenter.apply", ex); }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Presenter.apply", ex);
+        }
 
         try
         {
@@ -358,10 +383,16 @@ public sealed class ReactorWindow : IDisposable
             // owned windows ignore it. (spec 036 §9)
             _appWindow.IsShownInSwitchers = spec.Owner is null && spec.IsShownInSwitchers;
         }
-        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.IsShownInSwitchers.set", ex); }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.IsShownInSwitchers.set", ex);
+        }
 
         try { _window.ExtendsContentIntoTitleBar = spec.ExtendsContentIntoTitleBar; }
-        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ExtendsContentIntoTitleBar.set", ex); }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ExtendsContentIntoTitleBar.set", ex);
+        }
 
         // Sizing — DIP -> physical at the current per-window DPI. (spec 036 §5.1)
         if (isInitial && spec.Presenter == PresenterKind.Overlapped)
@@ -370,7 +401,10 @@ public sealed class ReactorWindow : IDisposable
             {
                 _appWindow.Resize(DipToPhysicalSize(spec.Width, spec.Height));
             }
-            catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.InitialResize", ex); }
+            catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+            {
+                DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.InitialResize", ex);
+            }
         }
 
         if (spec.Icon is { } icon)
@@ -388,7 +422,10 @@ public sealed class ReactorWindow : IDisposable
             {
                 NativeOwnership.SetOwner(_hwnd, owner._hwnd);
             }
-            catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SetOwner", ex); }
+            catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+            {
+                DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SetOwner", ex);
+            }
             owner.AddOwned(this);
         }
     }
@@ -464,8 +501,11 @@ public sealed class ReactorWindow : IDisposable
             // ownership rationale.
             _exeFallbackHIcon = hIcon;
         }
-        catch (Exception ex)
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
         {
+            // _appWindow.SetIcon during teardown reentry — the only WinRT call
+            // in the try that can plausibly fail here. LoadImageW returns 0 on
+            // failure (handled inline) and GetIconIdFromIcon is non-throwing.
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyExeIconFallback", ex);
         }
     }
@@ -545,7 +585,10 @@ public sealed class ReactorWindow : IDisposable
                         {
                             _appWindow.Resize(DipToPhysicalSize(_spec.Width, _spec.Height));
                         }
-                        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.FirstDpiResize", ex); }
+                        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+                        {
+                            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.FirstDpiResize", ex);
+                        }
                     }
                     break;
                 }
@@ -604,25 +647,22 @@ public sealed class ReactorWindow : IDisposable
         if (spec.MinWidth is null && spec.MinHeight is null && spec.MaxWidth is null && spec.MaxHeight is null)
             return;
 
-        try
-        {
-            var info = (MINMAXINFO*)args.LParam;
-            if (info == null) return;
-            var dpi = Dpi == 0 ? 96 : Dpi;
+        // Pointer dereferences only — no API call here that throws. An
+        // invalid args.LParam would crash via AccessViolationException
+        // (which doesn't reach managed catches anyway); the inline null
+        // check guards the only correctable case.
+        var info = (MINMAXINFO*)args.LParam;
+        if (info == null) return;
+        var dpi = Dpi == 0 ? 96 : Dpi;
 
-            int DipToPxScalar(double dip) => (int)Math.Round(dip * dpi / 96.0);
+        int DipToPxScalar(double dip) => (int)Math.Round(dip * dpi / 96.0);
 
-            if (spec.MinWidth is { } mnw) info->ptMinTrackSize.X = DipToPxScalar(mnw);
-            if (spec.MinHeight is { } mnh) info->ptMinTrackSize.Y = DipToPxScalar(mnh);
-            if (spec.MaxWidth is { } mxw) info->ptMaxTrackSize.X = DipToPxScalar(mxw);
-            if (spec.MaxHeight is { } mxh) info->ptMaxTrackSize.Y = DipToPxScalar(mxh);
-            args.Handled = true;
-            args.Result = 0;
-        }
-        catch (Exception ex)
-        {
-            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.WM_GETMINMAXINFO.apply", ex);
-        }
+        if (spec.MinWidth is { } mnw) info->ptMinTrackSize.X = DipToPxScalar(mnw);
+        if (spec.MinHeight is { } mnh) info->ptMinTrackSize.Y = DipToPxScalar(mnh);
+        if (spec.MaxWidth is { } mxw) info->ptMaxTrackSize.X = DipToPxScalar(mxw);
+        if (spec.MaxHeight is { } mxh) info->ptMaxTrackSize.Y = DipToPxScalar(mxh);
+        args.Handled = true;
+        args.Result = 0;
     }
 
     private void OnNativeActivated(object? sender, WindowActivatedEventArgs args)
@@ -639,13 +679,12 @@ public sealed class ReactorWindow : IDisposable
 
     private void OnNativeSizeChanged(object sender, Microsoft.UI.Xaml.WindowSizeChangedEventArgs args)
     {
-        try
-        {
-            // Window.Bounds is already DIPs (the WinUI XAML rendering surface).
-            var dip = (args.Size.Width, args.Size.Height);
-            SizeChanged?.Invoke(this, new WindowDipSizeChangedEventArgs(dip, args));
-        }
-        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SizeChanged.dispatch", ex); }
+        // Pure advisory dispatch. A throwing handler propagates to the
+        // dispatcher's UnhandledException pipeline — the developer's bug
+        // is theirs to see; wrapping it would just hide it.
+        // Window.Bounds is already DIPs (the WinUI XAML rendering surface).
+        var dip = (args.Size.Width, args.Size.Height);
+        SizeChanged?.Invoke(this, new WindowDipSizeChangedEventArgs(dip, args));
     }
 
     private void OnAppWindowChanged(AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args)
@@ -656,8 +695,10 @@ public sealed class ReactorWindow : IDisposable
         if (newState != prev)
         {
             Volatile.Write(ref _stateValue, (int)newState);
-            try { StateChanged?.Invoke(this, newState); }
-            catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.StateChanged.dispatch", ex); }
+            // Pure advisory dispatch. A throwing handler propagates to the
+            // dispatcher; we've already updated _stateValue, so the framework
+            // invariant is held regardless of whether the user crashes.
+            StateChanged?.Invoke(this, newState);
         }
     }
 
@@ -675,10 +716,11 @@ public sealed class ReactorWindow : IDisposable
         for (int i = 0; i < guards.Length; i++)
         {
             try { if (!guards[i].CanClose()) { cancel = true; break; } }
+            // User-callback isolation (spec 044 §6.7.3): IClosingGuard.CanClose
+            // is app code — a throwing guard is fail-safed to "cancel" rather
+            // than allowed to crash the close. (spec 036 §3.4 tests pin this.)
             catch (Exception ex)
             {
-                // Fail-safe: treat a throwing guard as "cancel" with a stderr
-                // notice. (spec 036 §3.4 tests).
                 DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ClosingGuard.dispatch", ex);
                 cancel = true;
                 break;
@@ -687,8 +729,11 @@ public sealed class ReactorWindow : IDisposable
 
         if (!cancel)
         {
-            try { Closing?.Invoke(this, cea); }
-            catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.OnClosing.dispatch", ex); }
+            // Closing is app code. A throwing handler propagates: previous
+            // behavior swallowed the throw and proceeded with close (silently
+            // treating the bug as "didn't cancel") which is worse than
+            // crashing — the developer needs to see their bug.
+            Closing?.Invoke(this, cea);
             cancel = cea.Cancel;
         }
 
@@ -704,6 +749,14 @@ public sealed class ReactorWindow : IDisposable
                 if (child._disposed) continue;
                 child._closingReason = WindowCloseReason.OwnerClosed;
                 try { child._window.Close(); }
+                // Iteration sibling-independence (spec 044 §6.7.3): one
+                // failing child must not abort the cascade across its
+                // siblings. The Window.Close call also re-enters the child's
+                // own Closing/Closed dispatch — its user handlers now
+                // propagate (per the SizeChanged/StateChanged/Closing/Closed
+                // rule above), so this broad catch is the cascade-loop
+                // protection that keeps the OWNER's close attempt sane even
+                // when a single child's handler crashes.
                 catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.OwnedWindow.Close", ex); }
                 // After Close(), if the child is still alive (a guard
                 // cancelled), abort the owner close.
@@ -764,16 +817,26 @@ public sealed class ReactorWindow : IDisposable
         // the user's last interactive size/position. Best-effort.
         TrySavePersistedPlacement();
 
-        try { Closed?.Invoke(this, EventArgs.Empty); }
-        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.OnClosed.dispatch", ex); }
+        // try/finally so framework cleanup (RemoveOwned, UnregisterWindow,
+        // Dispose) runs regardless of whether the user's Closed handler
+        // throws. The user's exception still propagates to the dispatcher
+        // (the developer sees their bug); but for the limp-along case where
+        // the app sets Application.UnhandledException += (..., Handled = true)
+        // we don't leave stale window references behind.
+        try
+        {
+            Closed?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            // Detach from the owner's child-list so a later owner-close cascade
+            // doesn't iterate over an already-closed pointer. (spec 036 §9)
+            var spec = _spec;
+            spec.Owner?.RemoveOwned(this);
 
-        // Detach from the owner's child-list so a later owner-close cascade
-        // doesn't iterate over an already-closed pointer. (spec 036 §9)
-        var spec = _spec;
-        spec.Owner?.RemoveOwned(this);
-
-        ReactorApp.UnregisterWindow(this);
-        Dispose();
+            ReactorApp.UnregisterWindow(this);
+            Dispose();
+        }
     }
 
     // ── public mutators ───────────────────────────────────────────────
@@ -796,7 +859,9 @@ public sealed class ReactorWindow : IDisposable
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Hide));
         if (_disposed) return;
-        try { _appWindow.Hide(); } catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Hide", ex); }
+        try { _appWindow.Hide(); }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Hide", ex); }
         IsVisible = false;
     }
 
@@ -807,7 +872,9 @@ public sealed class ReactorWindow : IDisposable
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Show));
         if (_disposed) return;
-        try { _appWindow.Show(); } catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Show", ex); }
+        try { _appWindow.Show(); }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Show", ex); }
         IsVisible = true;
     }
 
@@ -823,7 +890,8 @@ public sealed class ReactorWindow : IDisposable
         if (_disposed) return;
         _closingReason = WindowCloseReason.AppClosed;
         try { _window.Close(); }
-        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Close", ex); }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Close", ex); }
     }
 
     /// <summary>
@@ -865,7 +933,8 @@ public sealed class ReactorWindow : IDisposable
         // first-DPI re-apply path stops fighting it. (spec 036 §5.1)
         _userResized = true;
         try { _appWindow.Resize(DipToPhysicalSize(width, height)); }
-        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SetSize", ex); }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SetSize", ex); }
     }
 
     /// <summary>
@@ -887,7 +956,8 @@ public sealed class ReactorWindow : IDisposable
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetPosition));
         if (_disposed) return;
         try { _appWindow.Move(DipToPhysicalPoint(x, y)); }
-        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SetPosition", ex); }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SetPosition", ex); }
     }
 
     /// <summary>Center on the window's current monitor. UI-thread only.</summary>
@@ -903,7 +973,8 @@ public sealed class ReactorWindow : IDisposable
             int y = area.Value.Y + (area.Value.Height - _appWindow.Size.Height) / 2;
             _appWindow.Move(new global::Windows.Graphics.PointInt32(x, y));
         }
-        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.CenterOnScreen", ex); }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.CenterOnScreen", ex); }
     }
 
     /// <summary>
@@ -971,29 +1042,49 @@ public sealed class ReactorWindow : IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        try { _window.Activated -= OnNativeActivated; } catch { /* best effort */ }
-        try { _window.SizeChanged -= OnNativeSizeChanged; } catch { /* best effort */ }
-        try { _appWindow.Changed -= OnAppWindowChanged; } catch { /* best effort */ }
-        try { _appWindow.Closing -= OnAppWindowClosing; } catch { /* best effort */ }
-        try { _window.Closed -= OnNativeClosed; } catch { /* best effort */ }
-        try { _messageMonitor.Dispose(); } catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.MessageMonitor.Dispose", ex); }
+        // Event unsubscription — these throw at most COMException when the
+        // proxy is already disconnected (which is exactly the "we're tearing
+        // down anyway" case). Narrow to the teardown-reentry HR set.
+        try { _window.Activated -= OnNativeActivated; }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult)) { /* expected during teardown */ }
+        try { _window.SizeChanged -= OnNativeSizeChanged; }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult)) { /* expected during teardown */ }
+        try { _appWindow.Changed -= OnAppWindowChanged; }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult)) { /* expected during teardown */ }
+        try { _appWindow.Closing -= OnAppWindowClosing; }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult)) { /* expected during teardown */ }
+        try { _window.Closed -= OnNativeClosed; }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult)) { /* expected during teardown */ }
 
-        // ReactorHost already subscribes to Window.Closed; let it dispose itself.
-        // We avoid double-dispose because Dispose() is idempotent there too.
-        try { _host.Dispose(); } catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Host.Dispose", ex); }
-
-        // Drop per-window persisted state — bounded by window lifetime per spec.
-        try { _persistedScope.Dispose(); } catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.PersistedScope.Dispose", ex); }
-
-        // Release thumbnail-toolbar HICONs and clear the click-dispatch map so
-        // a late WM_COMMAND can't reach freed handlers. (spec 036 §11.5)
-        try { Volatile.Read(ref _thumbnailToolbar)?.Dispose(); } catch { /* best effort */ }
+        // Cleanup chain: nested try/finally so all four disposes run even if
+        // one throws, while the first exception still propagates. ReactorHost
+        // and _persistedScope both have idempotent Dispose; double-dispose
+        // is safe even if a downstream subscriber already disposed them.
+        try { _messageMonitor.Dispose(); }
+        finally
+        {
+            try { _host.Dispose(); }
+            finally
+            {
+                try { _persistedScope.Dispose(); }
+                finally
+                {
+                    // Release thumbnail-toolbar HICONs and clear the
+                    // click-dispatch map so a late WM_COMMAND can't reach
+                    // freed handlers. (spec 036 §11.5)
+                    Volatile.Read(ref _thumbnailToolbar)?.Dispose();
+                }
+            }
+        }
 
         // Free the EXE-fallback HICON if we loaded one. AppWindow keeps its
         // own internal reference, so post-Close destruction is safe.
         if (_exeFallbackHIcon != 0)
         {
-            try { NativeIcon.DestroyIcon(_exeFallbackHIcon); } catch { /* best effort */ }
+            // DestroyIcon is a [DllImport] bool — cannot throw at the marshal
+            // layer on an nint argument. Failure (handle already freed) returns
+            // false silently, which is fine here.
+            NativeIcon.DestroyIcon(_exeFallbackHIcon);
             _exeFallbackHIcon = 0;
         }
     }
@@ -1054,8 +1145,10 @@ public sealed class ReactorWindow : IDisposable
                 // fall through to WinUI's default placement.
             }
         }
-        catch (Exception ex)
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
         {
+            // _appWindow.Move / DisplayArea.GetFromWindowId during teardown
+            // reentry. Anything outside this HR set is a real bug.
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyInitialPlacement", ex);
         }
     }
@@ -1066,20 +1159,19 @@ public sealed class ReactorWindow : IDisposable
         var store = ReactorApp.ResolvePersistenceStore();
         if (store is null) return false;
 
-        try
-        {
-            if (!store.TryRead(spec.PersistenceId!, out var data) || data is null)
-                return false;
-            var monitors = MonitorEnumeration.Snapshot();
-            // Fingerprint mismatch / malformed payload returns false; caller
-            // falls back to spec's default placement.
-            return WindowPlacementCodec.Restore(_hwnd, data, monitors);
-        }
-        catch (Exception ex)
-        {
-            DiagnosticLog.SwallowedError(LogCategory.Persistence, "ReactorWindow.TryRestorePersistedPlacement", ex);
+        // All three downstream calls now signal failure via a return value
+        // rather than throwing — store.TryRead is narrowed inside the store
+        // (see C.5 audit entries for JsonFileStore / PackagedSettingsStore),
+        // MonitorEnumeration.Snapshot has no failure modes that surface as
+        // exceptions on managed nint args, and WindowPlacementCodec.Restore
+        // catches IOException internally and returns false. No outer catch
+        // needed; a propagating exception would be a genuine bug.
+        if (!store.TryRead(spec.PersistenceId!, out var data) || data is null)
             return false;
-        }
+        var monitors = MonitorEnumeration.Snapshot();
+        // Fingerprint mismatch / malformed payload returns false; caller
+        // falls back to spec's default placement.
+        return WindowPlacementCodec.Restore(_hwnd, data, monitors);
     }
 
     private void CenterIn(DisplayArea? area)
@@ -1096,7 +1188,12 @@ public sealed class ReactorWindow : IDisposable
     {
         if (owner is null || owner._disposed) return DisplayArea.Primary;
         try { return DisplayArea.GetFromWindowId(owner._appWindow.Id, DisplayAreaFallback.Nearest); }
-        catch { return DisplayArea.Primary; }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        {
+            // Owner already torn down between the _disposed check and the
+            // WinRT call — fall back to primary display.
+            return DisplayArea.Primary;
+        }
     }
 
     /// <summary>
@@ -1112,16 +1209,12 @@ public sealed class ReactorWindow : IDisposable
         var store = ReactorApp.ResolvePersistenceStore();
         if (store is null) return;
 
-        try
-        {
-            var monitors = MonitorEnumeration.Snapshot();
-            var payload = WindowPlacementCodec.Capture(_hwnd, monitors);
-            if (payload is null) return;
-            store.Write(spec.PersistenceId!, payload);
-        }
-        catch (Exception ex)
-        {
-            DiagnosticLog.SwallowedError(LogCategory.Persistence, "ReactorWindow.TrySavePersistedPlacement", ex);
-        }
+        // Same shape as TryRestorePersistedPlacementCore — every downstream
+        // failure mode now returns a sentinel value (null/false) rather than
+        // throwing. store.Write narrows internally per the C.5 audit entry.
+        var monitors = MonitorEnumeration.Snapshot();
+        var payload = WindowPlacementCodec.Capture(_hwnd, monitors);
+        if (payload is null) return;
+        store.Write(spec.PersistenceId!, payload);
     }
 }

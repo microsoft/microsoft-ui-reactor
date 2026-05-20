@@ -927,17 +927,17 @@ public sealed class RenderContext
             if (guardRef.Current) return;
             guardRef.Current = true;
             setIsExecuting(true);
+            // try/finally — NOT try/catch. The user's command throw becomes a
+            // faulted Task; the framework's reentry-guard and IsExecuting
+            // state still get restored. We deliberately let the exception
+            // surface via Task.UnobservedTaskException rather than swallowing,
+            // so a buggy command is visible to the developer (matches the
+            // dispose / lifecycle policy elsewhere — don't hide user bugs).
             _ = Task.Run(async () =>
             {
                 try
                 {
                     await asyncAction();
-                }
-                catch (Exception ex)
-                {
-                    // User-callback isolation (spec 044 §6.7.3): a thrown user
-                    // command must not tear down the IsExecuting reset below.
-                    DiagnosticLog.SwallowedError(LogCategory.Reactor, "UseCommand.ExecuteAsync", ex);
                 }
                 finally
                 {
@@ -970,16 +970,13 @@ public sealed class RenderContext
             if (guardRef.Current) return;
             guardRef.Current = true;
             setIsExecuting(true);
+            // try/finally — same shape as the non-generic UseCommand above.
+            // Cleanup runs; user throw surfaces via Task.UnobservedTaskException.
             _ = Task.Run(async () =>
             {
                 try
                 {
                     await asyncAction(arg);
-                }
-                catch (Exception ex)
-                {
-                    // User-callback isolation (spec 044 §6.7.3).
-                    DiagnosticLog.SwallowedError(LogCategory.Reactor, $"UseCommand<{typeof(T).Name}>.ExecuteAsync", ex);
                 }
                 finally
                 {
