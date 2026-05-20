@@ -63,7 +63,11 @@ internal static class DockSplitRenderer
         var splitterDir = isRow ? DockSplitterDirection.Columns : DockSplitterDirection.Rows;
 
         var n = children.Count;
-        Action<FlexPanel>[] setters = [p => p.LayoutDirection = flowDirection];
+        // Setters intentionally empty for now — re-issuing them each render
+        // (even when the value doesn't change) was suspected of causing
+        // child detach/reattach. RTL flip will re-attach via a stable
+        // reference once we confirm the splitter stays mounted.
+        Action<FlexPanel>[] setters = [];
         if (n == 0)
             return new FlexElement([]) { Direction = direction, Setters = setters };
 

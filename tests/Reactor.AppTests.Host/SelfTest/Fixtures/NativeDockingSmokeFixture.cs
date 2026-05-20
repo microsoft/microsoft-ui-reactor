@@ -482,20 +482,245 @@ internal static class NativeDockingSmokeFixtures
         }
 
         /// <summary>
-        /// Fires the splitter's internal ResizeDelta event using a stable
-        /// 1000 DIP hostExtent. Reflection-free path: the event is a
-        /// regular CLR event, so we call its public method via the
-        /// internal type's accessor — visible through
-        /// InternalsVisibleTo("Reactor.AppTests.Host").
+        /// Fires the splitter's internal ResizeDelta event using the
+        /// splitter's live host extent. Bypasses pointer/keyboard.
         /// </summary>
         private static void FireResizeDelta(DockSplitterControl splitter, double delta, bool isFinal)
         {
-            // Use the actual host extent reported by the parent FlexPanel
-            // so the solver's clamp space matches the live layout.
             var hostExtent = splitter.GetHostExtent();
             if (hostExtent < 1) hostExtent = 1000;
             var args = new DockSplitterDeltaEventArgs(delta, splitter.Direction, hostExtent, isFinal);
-            // Internal Raise method — see DockSplitterControl.
+            splitter.RaiseResizeDeltaForTest(args);
+        }
+    }
+
+    /// <summary>
+    /// Spec 045 §2.1 — rapid-fire drag simulator. Fires many small
+    /// ResizeDelta events in quick succession (no render await between
+    /// them) to model what a real pointer drag does. If the ratios shift
+    /// smoothly cumulatively, the rewiring-during-render path is safe;
+    /// if they snap or freeze, the bug is in the closure-recapture flow
+    /// fired by mid-drag re-renders.
+    /// </summary>
+    internal class SplitterRapidFireDragSurvivesRerender(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            DockManager Build() => new()
+            {
+                Layout = new DockSplit(
+                    Orientation.Horizontal,
+                    new DockNode[]
+                    {
+                        new DockableContent("L", TextBlock("l-body"), Key: "k:l"),
+                        new DockableContent("R", TextBlock("r-body"), Key: "k:r"),
+                    }),
+            };
+
+            host.Mount(_ => Build());
+            await Harness.Render();
+
+            var splitter = H.FindAllControls<DockSplitterControl>(_ => true).FirstOrDefault();
+            H.Check("SplitFire_SplitterMounted", splitter is not null);
+
+            FlexPanel? parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(splitter!) as FlexPanel;
+            H.Check("SplitFire_ParentIsFlexPanel", parent is not null);
+
+            double LeadingGrow() => FlexPanel.GetGrow(parent!.Children[0]);
+            var initial = LeadingGrow();
+            Console.WriteLine($"# initial leading grow={initial:F4}");
+
+            // Fire 20 incremental deltas with NO await between them. Each
+            // increment is 4 DIP. Total = 80 DIP. Mid-drag re-renders are
+            // queued; the closures must continue to find the right ratios.
+            for (int i = 0; i < 20; i++)
+            {
+                FireResizeDelta(splitter!, delta: 4, isFinal: false);
+            }
+            FireResizeDelta(splitter!, delta: 0, isFinal: true);
+            await Harness.Render();
+
+            var afterRapidGrow = LeadingGrow();
+            Console.WriteLine($"# afterRapid leading grow={afterRapidGrow:F4} (delta from initial={initial - afterRapidGrow:F4})");
+
+            // 80 DIP of accumulated drag on a ~945 DIP host should shift
+            // the leading ratio by ~80/945 ≈ 0.085. Allow some slack for
+            // the actual hostExtent the test runs in.
+            H.Check("SplitFire_LeadingShrankByAccumulatedDelta",
+                afterRapidGrow < initial - 0.01);
+
+            // Fire 20 MORE deltas — the ratios should continue to shift,
+            // NOT snap back, NOT freeze.
+            for (int i = 0; i < 20; i++)
+            {
+                FireResizeDelta(splitter!, delta: 4, isFinal: false);
+            }
+            FireResizeDelta(splitter!, delta: 0, isFinal: true);
+            await Harness.Render();
+
+            var afterSecond = LeadingGrow();
+            Console.WriteLine($"# afterSecond leading grow={afterSecond:F4}");
+            H.Check("SplitFire_SecondRapidBurstCumulates",
+                afterSecond < afterRapidGrow - 0.01);
+
+            // Reverse direction — drag the trailing child back.
+            for (int i = 0; i < 30; i++)
+            {
+                FireResizeDelta(splitter!, delta: -4, isFinal: false);
+            }
+            FireResizeDelta(splitter!, delta: 0, isFinal: true);
+            await Harness.Render();
+
+            var afterReverse = LeadingGrow();
+            Console.WriteLine($"# afterReverse leading grow={afterReverse:F4}");
+            H.Check("SplitFire_ReverseDragGrowsLeading",
+                afterReverse > afterSecond + 0.01);
+
+            host.Mount(_ => TextBlock("rapid-fire-done"));
+            await Harness.Render();
+        }
+
+        private static void FireResizeDelta(DockSplitterControl splitter, double delta, bool isFinal)
+        {
+            var hostExtent = splitter.GetHostExtent();
+            if (hostExtent < 1) hostExtent = 1000;
+            var args = new DockSplitterDeltaEventArgs(delta, splitter.Direction, hostExtent, isFinal);
+            splitter.RaiseResizeDeltaForTest(args);
+        }
+    }
+
+    /// <summary>
+    /// Visual demo fixture — mounts an IDE-style layout and drives each
+    /// splitter programmatically with paced delays so a human observer
+    /// can watch the panes resize step by step. Asserts the same as the
+    /// other splitter fixtures but with ~800 ms gaps between operations.
+    /// </summary>
+    internal class SplitterProgrammaticVisualDemo(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            DockManager Build() => new()
+            {
+                Layout = new DockSplit(
+                    Orientation.Vertical,
+                    new DockNode[]
+                    {
+                        new DockSplit(
+                            Orientation.Horizontal,
+                            new DockNode[]
+                            {
+                                new DockableContent("Editor",
+                                    VStack(8,
+                                        TextBlock("editor body — top half, left pane").SemiBold(),
+                                        TextBlock("Drag programmatically below to watch this pane resize.")),
+                                    Key: "k:editor"),
+                                new DockableContent("Tools",
+                                    VStack(8,
+                                        TextBlock("tools body — top half, right pane").SemiBold(),
+                                        TextBlock("Outline / properties etc.")),
+                                    Key: "k:tools"),
+                            }),
+                        new DockSplit(
+                            Orientation.Horizontal,
+                            new DockNode[]
+                            {
+                                new DockableContent("Output",
+                                    VStack(8,
+                                        TextBlock("output body — bottom half, left").SemiBold(),
+                                        TextBlock("Build / test output.")),
+                                    Key: "k:output"),
+                                new DockableContent("Terminal",
+                                    VStack(8,
+                                        TextBlock("terminal body — bottom half, right").SemiBold(),
+                                        TextBlock("PS> _")),
+                                    Key: "k:terminal"),
+                            }),
+                    }),
+            };
+
+            host.Mount(_ => Build());
+            await Harness.Render();
+            await Task.Delay(1200); // settle on initial layout so the eye registers it
+
+            var splitters = H.FindAllControls<DockSplitterControl>(_ => true);
+            var rowSplitter = splitters.FirstOrDefault(s => s.Direction == DockSplitterDirection.Rows);
+            var colSplitters = splitters.Where(s => s.Direction == DockSplitterDirection.Columns).ToList();
+
+            H.Check("VizDemo_LayoutMounted",
+                rowSplitter is not null && colSplitters.Count == 2);
+
+            // 1) Shrink the top row gradually — five 40-DIP nudges.
+            for (int i = 0; i < 5; i++)
+            {
+                FireResizeDelta(rowSplitter!, delta: 40, isFinal: false);
+                await Harness.Render();
+                await Task.Delay(400);
+            }
+            FireResizeDelta(rowSplitter!, delta: 0, isFinal: true);
+            await Harness.Render();
+            await Task.Delay(800);
+
+            // 2) Grow the top row back — five -40-DIP nudges.
+            for (int i = 0; i < 5; i++)
+            {
+                FireResizeDelta(rowSplitter!, delta: -40, isFinal: false);
+                await Harness.Render();
+                await Task.Delay(400);
+            }
+            FireResizeDelta(rowSplitter!, delta: 0, isFinal: true);
+            await Harness.Render();
+            await Task.Delay(800);
+
+            // 3) Shrink the top-row's left column (editor) — five 40 DIP.
+            for (int i = 0; i < 5; i++)
+            {
+                FireResizeDelta(colSplitters[0], delta: 40, isFinal: false);
+                await Harness.Render();
+                await Task.Delay(400);
+            }
+            FireResizeDelta(colSplitters[0], delta: 0, isFinal: true);
+            await Harness.Render();
+            await Task.Delay(800);
+
+            // 4) Restore the top-row's left column — five -40 DIP.
+            for (int i = 0; i < 5; i++)
+            {
+                FireResizeDelta(colSplitters[0], delta: -40, isFinal: false);
+                await Harness.Render();
+                await Task.Delay(400);
+            }
+            FireResizeDelta(colSplitters[0], delta: 0, isFinal: true);
+            await Harness.Render();
+            await Task.Delay(800);
+
+            // 5) Shrink the bottom-row's left column (output) — five 40 DIP.
+            for (int i = 0; i < 5; i++)
+            {
+                FireResizeDelta(colSplitters[1], delta: 40, isFinal: false);
+                await Harness.Render();
+                await Task.Delay(400);
+            }
+            FireResizeDelta(colSplitters[1], delta: 0, isFinal: true);
+            await Harness.Render();
+            await Task.Delay(1500);
+
+            H.Check("VizDemo_CompletedAllFourQuadrants", true);
+
+            host.Mount(_ => TextBlock("viz demo done"));
+            await Harness.Render();
+        }
+
+        private static void FireResizeDelta(DockSplitterControl splitter, double delta, bool isFinal)
+        {
+            var hostExtent = splitter.GetHostExtent();
+            if (hostExtent < 1) hostExtent = 1000;
+            var args = new DockSplitterDeltaEventArgs(delta, splitter.Direction, hostExtent, isFinal);
             splitter.RaiseResizeDeltaForTest(args);
         }
     }

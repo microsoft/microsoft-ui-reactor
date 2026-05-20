@@ -3694,6 +3694,7 @@ public sealed partial class Reconciler
 
     private UIElement? UpdateFlex(FlexElement o, FlexElement n, Layout.FlexPanel panel, Action requestRerender)
     {
+        global::System.Console.WriteLine($"# [Reactor] UpdateFlex children old={o.Children.Length} new={n.Children.Length}");
         panel.Direction = n.Direction;
         panel.JustifyContent = n.JustifyContent;
         panel.AlignItems = n.AlignItems;

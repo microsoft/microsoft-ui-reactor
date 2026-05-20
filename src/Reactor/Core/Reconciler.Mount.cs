@@ -1363,6 +1363,7 @@ public sealed partial class Reconciler
 
     private Layout.FlexPanel MountFlex(FlexElement flex, Action requestRerender)
     {
+        global::System.Console.WriteLine($"# [Reactor] MountFlex children={flex.Children.Length} dir={flex.Direction}");
         var panel = _pool.TryRent(typeof(Layout.FlexPanel)) as Layout.FlexPanel ?? new Layout.FlexPanel();
         panel.Direction = flex.Direction;
         panel.JustifyContent = flex.JustifyContent;

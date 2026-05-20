@@ -106,6 +106,9 @@ internal sealed partial class DockSplitterControl : Grid
         };
         Children.Add(_handle);
 
+        Loaded += (_, _) => Console.WriteLine($"# [splitter] Loaded — capturing={_isCapturing}");
+        Unloaded += (_, _) => Console.WriteLine($"# [splitter] Unloaded — capturing={_isCapturing}");
+
         ApplyDirection();
 
         PointerEntered += OnPointerEntered;
@@ -227,6 +230,7 @@ internal sealed partial class DockSplitterControl : Grid
 
     private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
+        Console.WriteLine($"# [splitter] PointerCaptureLost — wasCapturing={_isCapturing}");
         if (!_isCapturing) return;
         _isCapturing = false;
         _capturePointerId = 0;

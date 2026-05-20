@@ -206,10 +206,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             },
             onSplitterDelta: (idx, delta, hostExtent, isFinal) =>
             {
+                Console.WriteLine($"# [host:{path}] onDelta idx={idx} delta={delta:F2} extent={hostExtent:F1} isFinal={isFinal} ratios=[{string.Join(",", ratios.Select(r => r.ToString("F3")))}]");
                 if (delta == 0) return;
-                // hostExtent < 1 means the FlexPanel hasn't been laid out
-                // yet (control just attached, arrangement pending). Skip
-                // the mutation rather than divide by zero / a tiny number.
                 if (hostExtent < 1) return;
 
                 var perChild = new DockSplitChild[children.Count];
@@ -218,12 +216,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
 
                 var sol = DockSplitSolver.ApplyDelta(perChild, idx, delta, totalDip: hostExtent);
                 var newRatios = sol.Ratios;
-                // Mutate the live array so subsequent pointer-move events in
-                // the same drag see the updated values without waiting for
-                // the next render pass; the ratioStore entry IS this same
-                // array reference, so writing to `ratios` is also writing
-                // through to the store.
                 for (int i = 0; i < ratios.Length; i++) ratios[i] = newRatios[i];
+                Console.WriteLine($"# [host:{path}]   → newRatios=[{string.Join(",", ratios.Select(r => r.ToString("F3")))}]");
                 requestRerender();
             });
     }

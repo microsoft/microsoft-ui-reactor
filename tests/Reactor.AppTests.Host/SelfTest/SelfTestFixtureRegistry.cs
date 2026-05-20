@@ -900,6 +900,8 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_SidePopupExpandsAndCollapses",
         "NativeDocking_FloatingWindowOpensAsRealWindow",
         "NativeDocking_SplitterProgrammaticResizeAcrossRenders",
+        "NativeDocking_SplitterRapidFireDragSurvivesRerender",
+        "NativeDocking_SplitterProgrammaticVisualDemo",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1782,6 +1784,8 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_SidePopupExpandsAndCollapses" => new NativeDockingSmokeFixtures.SidePopupExpandsAndCollapses(harness),
         "NativeDocking_FloatingWindowOpensAsRealWindow" => new NativeDockingSmokeFixtures.FloatingWindowOpensAsRealWindow(harness),
         "NativeDocking_SplitterProgrammaticResizeAcrossRenders" => new NativeDockingSmokeFixtures.SplitterProgrammaticResizeAcrossRenders(harness),
+        "NativeDocking_SplitterRapidFireDragSurvivesRerender" => new NativeDockingSmokeFixtures.SplitterRapidFireDragSurvivesRerender(harness),
+        "NativeDocking_SplitterProgrammaticVisualDemo" => new NativeDockingSmokeFixtures.SplitterProgrammaticVisualDemo(harness),
 
         _ => null,
     };
