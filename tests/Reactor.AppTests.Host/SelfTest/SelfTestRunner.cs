@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Dispatching;
@@ -13,6 +14,14 @@ internal static class SelfTestRunner
 {
     public static string? Filter { get; set; }
 
+    /// <summary>
+    /// When true, the AOT skip list is ignored — every fixture runs even under
+    /// NativeAOT. Use for targeted repro of a hanging/crashing fixture together
+    /// with <c>--filter &lt;name&gt;</c>. Off-dispatcher watchdog (see
+    /// <see cref="HangTimeout"/>) still fires for dispatcher-starvation hangs.
+    /// </summary>
+    public static bool SkipAotPatterns { get; set; } = true;
+
     // Per-fixture watchdog. A managed hang used to lock up the whole run; now
     // we time out, mark it failed, and continue. (Note: native crashes under
     // AOT terminate the process before this can fire — use AotSkip patterns
@@ -20,213 +29,158 @@ internal static class SelfTestRunner
     // in milliseconds — 15s is generous.
     private static readonly TimeSpan FixtureTimeout = TimeSpan.FromSeconds(15);
 
-    // Fixtures known to crash/hang under NativeAOT. Skipped with a TAP SKIP
-    // directive so the run completes and the remaining failure surface is
-    // visible. Patterns are exact-match or "Prefix*" wildcard. Override via
-    // REACTOR_AOT_SKIP=Pat1,Pat2 (no rebuild needed). Remove an entry once
-    // its underlying issue is fixed.
+    // Off-dispatcher hang watchdog. The in-band FixtureTimeout above relies on
+    // the dispatcher processing a Task.Delay continuation, so it cannot fire
+    // when a fixture synchronously blocks the UI thread. This second watchdog
+    // runs on a background Thread (immune to dispatcher starvation) and
+    // declares a hang after HangTimeout of no progress in the fixture loop.
+    // Threshold is well past FixtureTimeout so it only catches the
+    // dispatcher-starvation case. Override via REACTOR_SELFTEST_HANG_TIMEOUT_SECONDS;
+    // set to 0 or a negative value to disable entirely (useful when attaching
+    // a debugger). Also auto-disabled when Debugger.IsAttached.
+    private static readonly TimeSpan HangTimeout = ResolveHangTimeout();
+
+    private static TimeSpan ResolveHangTimeout()
+    {
+        var env = Environment.GetEnvironmentVariable("REACTOR_SELFTEST_HANG_TIMEOUT_SECONDS");
+        if (!string.IsNullOrWhiteSpace(env) && int.TryParse(env, out var s))
+            return s <= 0 ? TimeSpan.Zero : TimeSpan.FromSeconds(s);
+        return TimeSpan.FromSeconds(60);
+    }
+
+    // Single immutable progress record — published atomically via
+    // Volatile.Read/Write so the watchdog can never read a mixed
+    // (new-name, old-timestamp) state.
+    private sealed record FixtureProgress(string Name, long StartTimestamp);
+    private static FixtureProgress? _currentFixture;
+
+    // Fixtures known to crash or assert-fail under NativeAOT, captured by
+    // running .aot_runs/probe_skips.ps1 against the AOT-published Host.
+    // Each name was verified to fail in isolation; wildcards from earlier
+    // skip-list iterations have been replaced with explicit names so that
+    // newly-passing siblings re-enter the run automatically.
+    //
+    // Override via REACTOR_AOT_SKIP=Pat1,Pat2 (no rebuild needed). Patterns
+    // are exact-match or Prefix* wildcard. Re-run the probe after framework
+    // changes to find new stale skips. See docs/aot-support.md for the full
+    // debugging workflow.
     private static readonly string[] DefaultAotSkipPatterns =
     {
-        // ControlUpdate_TextProperty and _ButtonProperty are the only two in
-        // this family known to pass under AOT; the rest crash silently.
-        "ControlUpdate_InputControls",
-        "ControlUpdate_DateTimePicker",
-        "ControlUpdate_Containers",
+        // -- Native crashes (process exits 0xC0000409 / STATUS_STACK_BUFFER_OVERRUN).
+        // Capture a dump with DOTNET_DbgEnableMiniDump=1 to diagnose. --
+        "Commanding_DisabledCommandDisablesControl",
+        "Commanding_SplitButtonCommandInvokesExecute",
         "ControlUpdate_Collections",
+        "ControlUpdate_Containers",
+        "ControlUpdate_InputControls",
         "ControlUpdate_Navigation",
-        "ControlUpdate_Modifiers",
-        "ControlUpdate_PaddingModifiers",
-        "ControlUpdate_Shapes",
         "ControlUpdate_StatusControls",
-        "ControlUpdate_Grid",
-        "ControlUpdate_ModifiedElementUnwrap",
-        "ControlUpdate_HyperlinkButton",
-        // First ControlUpdate2_* fixture crashes; rest unverified but assumed
-        // to share the same shape problem. Remove this wildcard to test each.
-        "ControlUpdate2_*",
-        // RareControl_ColorPicker crashed — uncommon-control family, assume
-        // shared risk.
-        "RareControl_*",
-        // DslExt_FactoryMethods crashed mid-family; FluentModifierChain and
-        // TransitionExtensions passed. Skip the rest from FactoryMethods on.
-        "DslExt_FactoryMethods",
-        "DslExt_ShapeExtensions",
-        "DslExt_GridBuilders",
-        "DslExt_MenuDslMethods",
-        "DslExt_AttachedProperties",
-        "DslExt_ErrorBoundaryElement",
-        "DslExt_GroupElement",
-        "DslExt_BrushAndFontModifiers",
-        // CoreCov_* crashers observed iteratively. Many control-specific
-        // CoreCov_* fixtures crash silently under AOT.
-        "CoreCov_MenuBarMountUpdate",
-        "CoreCov_MediaPlayerMount",
-        "CoreCov_SwipeControlMount",
-        "CoreCov_SelectorBarPipsPagerMount",
-        "CoreCov_PopupRefreshContainerMount",
+        "ControlUpdate2_AdditionalControls",
+        "ControlUpdate2_ButtonVariants",
+        "ControlUpdate2_ExpanderContent",
+        "ControlUpdate2_NavigationView",
         "CoreCov_AnnotatedScrollBarMount",
-        "CoreCov_TreeViewUpdateExercise",
         "CoreCov_ExpanderChildUpdateDeep",
-        // CoreCov2_* — InfoBarActionButton crashed; pre-skip the other
-        // control-specific ones (named after specific WinUI controls) which
-        // are likely to share the same shape problem.
-        "CoreCov2_InfoBarActionButton",
+        "CoreCov_MediaPlayerMount",
+        "CoreCov_MenuBarMountUpdate",
+        "CoreCov_PopupRefreshContainerMount",
+        "CoreCov_SelectorBarPipsPagerMount",
+        "CoreCov_SwipeControlMount",
+        "CoreCov_TreeViewUpdateExercise",
         "CoreCov2_CalendarPipsPagerUpdate",
-        "CoreCov2_FrameAnimatedIconUpdate",
-        "CoreCov2_ParallaxViewMount",
-        "CoreCov2_XamlHostMount",
         "CoreCov2_InfoBadgeMountUpdate",
+        "CoreCov2_InfoBarActionButton",
         "CoreCov2_SelectorBarUpdate",
-        // ---- Iteration round 2 (2026-05-20) ----
-        // Crashers observed when re-running selftests against an AOT-published
-        // Host. A native crash terminates the process before the managed
-        // watchdog can fire, so each entry below is the name of the *last*
-        // fixture printed before exit. Wildcards are an inference — when the
-        // crashed fixture is part of an obvious family (e.g. one of N
-        // per-control variants), assume the family shares the shape problem
-        // rather than rebuild+rerun N times. Drop the wildcard back to
-        // explicit names if you have time to verify which members pass.
-
-        // ValCov_FormFieldRendering: single fixture, exercises form-field
-        // editor selection over reflected property metadata.
-        "ValCov_FormFieldRendering",
-
-        // EchoSuppress family: ColorPicker crashed; other members unverified.
-        // Suspected shared path through value-change event echo suppression
-        // on the control wrappers.
-        "EchoSuppress_*",
-
-        // IdentityPreserve family: two distinct fixtures crashed (RadioButtons,
-        // SelectorBar). Not wildcarding the whole family — other members of
-        // this family passed under AOT and we don't want to lose the coverage.
+        "CovBoost_ElementPoolExercise",
+        "CovBoost2_ElementPoolInteractiveReset",
+        "CovBoost2_NavigationViewExercise",
+        "CovBoost2_ReconcileChildPaths",
+        "CovBoost2_TitleBarMountUpdate",
+        "DataGrid_RowEditTemplatesAndEmptyState",
+        "DslExt_FactoryMethods",
+        "DslExt_MenuDslMethods",
+        "EchoSuppress_ColorPicker",
+        "EchoSuppress_NumberBox",
+        "EchoSuppress_NumberBoxMinMaxCoercion",
+        "EchoSuppress_RatingControl",
+        "EchoSuppress_ToggleSplitButton",
+        "Editors_ColorMounts",
+        "Editors_NumberMounts",
         "IdentityPreserve_RadioButtons",
         "IdentityPreserve_SelectorBar",
+        "Immediate_NumberBoxFiresOnTextChange",
+        "RareControl_ColorPicker",
+        "RareControl_ComboBoxRadioButtons",
+        "RareControl_PersonPicture",
+        "RareControl_TeachingTip",
+        "RBC_ExpanderTemplateTransitionEvents",
+        "RBC_HandlerWiringOnSecondRender",
+        "RBC_InputControlsFireEvents",
+        "RBC_SecondRenderCallbackInvocation",
+        "RBC_SwipeControlItemsSwap",
+        "RBC_TeachingTipMount",
+        "RBC_TreeViewHandlerWiring",
+        "RBC_TreeViewHandlerWiringFastPath",
+        "RBC_TreeViewProgrammaticInvoke",
+        "RBC_ValidationVisualizerStyles",
+        "SelectionEvt_NavigationView",
+        "SelectionEvt_RadioButtons",
+        "ValCov_FormFieldRendering",
+        "ValueEvt_ColorPicker",
+        "ValueEvt_NumberBox",
+        "ValueEvt_RatingControl",
 
-        // DataGrid_RowEditTemplatesAndEmptyState: template-instantiation path
-        // in DataGrid row editing. Other DataGrid fixtures pass.
-        "DataGrid_RowEditTemplatesAndEmptyState",
-
-        // CovBoost / CovBoost2 individual crashers — heterogeneous, so listed
-        // individually rather than wildcarded. Each crash was at the named
-        // fixture; rest of CovBoost / CovBoost2 currently runs.
-        "CovBoost_ElementPoolExercise",
-        "CovBoost2_TitleBarMountUpdate",
-        "CovBoost2_ReconcileChildPaths",
-        "CovBoost2_NavigationViewExercise",
-        "CovBoost2_ElementPoolInteractiveReset",
-
-        // Commanding_* — SplitButtonCommandInvokesExecute crashed. ICommand
-        // dispatch wires up through reflected `CanExecute` / `Execute`; the
-        // whole family likely shares the breakage.
-        "Commanding_*",
-
-        // Event-handler families. In each case the named fixture crashed;
-        // wildcarding the family on the assumption that the breakage is in
-        // shared event-subscription code paths (handler binding /
-        // EventHandler<T> instantiation under AOT) rather than per-control.
-        "SelectionEvt_*",   // RadioButtons crashed; covers ComboBox/ListBox/…
-        "ValueEvt_*",       // NumberBox crashed; covers Slider/ToggleSwitch/…
-        "Immediate_*",      // NumberBoxFiresOnTextChange crashed; "immediate" event variants
-        "Editors_*",        // NumberMounts crashed; PropertyGrid auto-editor mounts
-        "RBC_*",            // HandlerWiringOnSecondRender crashed; recycle-by-component event rewiring
-
-        // ---- Iteration round 3 (2026-05-20) ----
-        // After the round-2 skips above eliminated all native crashers, an AOT
-        // run completed end-to-end with 22 assertion failures + 20 fixture
-        // init crashes. Investigating each cluster against
-        // `docs/aot-support.md` showed every remaining failure is a fixture
-        // that exercises a subsystem already documented as not-yet-AOT-clean:
-        // PropertyGrid auto-discovery, devtools/MCP reflection, UseObservable
-        // on POCOs, theme resource lookup, and XAML-metadata-dependent control
-        // hosting. Skipping them gives a 0-failure AOT run that maps cleanly
-        // to the documented surface, so a future fix for any one subsystem
-        // (e.g. source-generated PropertyGrid metadata) translates directly
-        // into selftests being re-enabled here.
-
-        // PropertyGrid auto-discovery: ReflectionTypeMetadataProvider walks
-        // public properties + builds init-only setters. AOT trims members of
-        // the user-supplied target type before the reflection runs. Per
-        // aot-support.md (PropertyGrid auto-discovery row), manually-built
-        // TypeMetadata works; auto-discovery does not. INPC_ExternalMutation
-        // is the only PropertyGrid fixture that passes (it stays inside the
-        // mutation pipeline that's already AOT-clean), so we skip explicitly
-        // rather than wildcard PropertyGrid_*.
-        "PropertyGrid_Reflection_MutableObject",
-        "PropertyGrid_Reflection_Categorized",
-        "PropertyGrid_Reflection_EnumEditor",
-        "PropertyGrid_Target_Switching",
-        "PropertyGrid_Nested_ImmutableRecord",
-        "PropertyGrid_Category_ExpandCollapse",
-        "PropertyGrid_DeepNesting_RecordInRecord",
-        "PropertyGrid_Immutable_Root",
-        "PropertyGrid_Custom_Editor",
-
-        // UseObservable on POCO: ObservableTreeTracker walks public properties
-        // via reflection to subscribe to INPC (aot-support.md). The DeepMutation
-        // assertion is the one that exercises the per-property subscribe path.
+        // -- Assertion failures (fixture runs but "not ok" checks fail).
+        // Most map to documented not-yet-AOT-clean subsystems (PropertyGrid
+        // auto-discovery, devtools/MCP reflection, ThemeRef.Resolve, XAML
+        // metadata for NavigationView/TabView/TemplateBinding). --
+        "CoreCov_NavigationViewContentUpdate",
         "CoreCov2_UseObservableTreeHook",
-
-        // ThemeRef.Resolve walks Application.Current.Resources merged + theme
-        // dictionaries; under AOT the XamlControlsResources entries that
-        // ReactorApplication.xaml loads aren't populated the way the JIT
-        // build sees them, so Resolve returns null for keys that exist at
-        // JIT time. Token *construction* passes; only the Resolve path fails.
         "CovBoost_ThemeRefExplicitResolution",
         "CovBoost_ThemeTokenResolution",
-
-        // NavigationView + TabView don't mount under AOT in this host —
-        // the very first FindControl<…> returns null. WinUI's lifted XAML
-        // metadata provider for these controls appears to lose entries
-        // through trimming; the existing skip list already pre-skipped the
-        // ControlUpdate_Navigation family for the same reason.
-        "CoreCov_NavigationViewContentUpdate",
-        "IdentityPreserve_TabView",
-
-        // Issue142 reproduces TemplateBinding-from-Generic.xaml against a
-        // custom control with a private DP. Under AOT the template/DP
-        // resolution path can't see the metadata it needs (the third-party
-        // variant fails earlier, complaining that no IXamlMetadataProvider
-        // is reachable in the satellite assembly). Both variants depend on
-        // XAML metadata that AOT trimming removes.
-        "Issue142_CustomControlPrivateDp_Renders",
-        "Issue142_ThirdPartyControlPrivateDp_Renders",
-
-        // Devtools / MCP server: JSON-RPC requests come back as
-        // "Invalid JSON-RPC request" or with empty `result` payloads because
-        // System.Text.Json + Assembly.GetTypes + reflection-based property
-        // enumeration + DP enumeration all live behind unconditional
-        // suppressions today (aot-support.md, Devtools/MCP row). Most of
-        // the family is broken; the few fixtures that touch only the
-        // edges (PropertyToolsReflectionExercise, ScreenshotReturnsPng,
-        // and large portions of McpServerProtocolEdges) still pass, so we
-        // skip individually rather than wildcard Devtools_*.
-        "Devtools_VersionTool",
-        "Devtools_ComponentsTool",
-        "Devtools_WindowsTool",
-        "Devtools_TreeSummary",
-        "Devtools_TreeFullView",
-        "Devtools_TreeSelectorScope",
         "Devtools_ClickInvokesButton",
-        "Devtools_TypeSetsTextBox",
+        "Devtools_ComponentsTool",
+        "Devtools_FireInvokesNamedHandler",
+        "Devtools_FireRejectsLifecycleMethods",
         "Devtools_FocusElement",
+        "Devtools_InitializeHandshake",
+        "Devtools_InvokeDirectPattern",
+        "Devtools_LoggerWritesOneLinePerCall",
+        "Devtools_McpServerProtocolEdges",
+        "Devtools_NameSelectorMatchesButtonContent",
+        "Devtools_PropertyToolsExercise",
+        "Devtools_ScrollByAndInto",
+        "Devtools_SelectListItem",
+        "Devtools_StateReadsHooks",
+        "Devtools_SwitchComponentInvalidatesIds",
+        "Devtools_ToggleFlipsCheckBox",
+        "Devtools_TreeFullView",
+        "Devtools_TreeIdsUniqueAcrossSiblingsWithDifferentParents",
+        "Devtools_TreeSelectorScope",
+        "Devtools_TreeSummary",
+        "Devtools_TypeSetsTextBox",
+        "Devtools_UnknownSelectorStructuredError",
+        "Devtools_VersionTool",
         "Devtools_WaitForTextChange",
         "Devtools_WaitForTimeout",
-        "Devtools_ToggleFlipsCheckBox",
-        "Devtools_InvokeDirectPattern",
-        "Devtools_StateReadsHooks",
-        "Devtools_SelectListItem",
-        "Devtools_ScrollByAndInto",
-        "Devtools_LoggerWritesOneLinePerCall",
-        "Devtools_UnknownSelectorStructuredError",
-        "Devtools_NameSelectorMatchesButtonContent",
-        "Devtools_TreeIdsUniqueAcrossSiblingsWithDifferentParents",
-        "Devtools_FireRejectsLifecycleMethods",
-        "Devtools_FireInvokesNamedHandler",
         "Devtools_WaitForTimeoutLoggedAsErr",
-        "Devtools_InitializeHandshake",
-        "Devtools_SwitchComponentInvalidatesIds",
-        "Devtools_PropertyToolsExercise",
-        "Devtools_McpServerProtocolEdges",
+        "Devtools_WindowsTool",
+        "IdentityPreserve_TabView",
+        "Issue142_CustomControlPrivateDp_Renders",
+        "Issue142_ThirdPartyControlPrivateDp_Renders",
+        "PropertyGrid_Category_ExpandCollapse",
+        "PropertyGrid_Custom_Editor",
+        "PropertyGrid_DeepNesting_RecordInRecord",
+        "PropertyGrid_Immutable_Root",
+        "PropertyGrid_Nested_ImmutableRecord",
+        "PropertyGrid_Reflection_Categorized",
+        "PropertyGrid_Reflection_EnumEditor",
+        "PropertyGrid_Reflection_MutableObject",
+        "PropertyGrid_Target_Switching",
+        "RBC_ManyControlsHandlerWiring",
+        "RBC_NavViewContentNullSwap",
+        "RBC_TabViewGrowAndShrink",
+        "SelectionEvt_TabView",
     };
 
     private static string[] GetAotSkipPatterns()
@@ -272,6 +226,7 @@ internal static class SelfTestRunner
 
     public static void RunAll()
     {
+        StartHangWatchdog();
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(_ =>
         {
@@ -314,10 +269,13 @@ internal static class SelfTestRunner
                         // looks like a hang on the prior fixture.
                         await YieldLowPriorityAsync(dispatcher);
 
-                        if (isAot && MatchesAnyPattern(fixtureName, aotSkipPatterns))
+                        if (isAot && SkipAotPatterns && MatchesAnyPattern(fixtureName, aotSkipPatterns))
                         {
                             Console.WriteLine($"ok {testIndex} {fixtureName} # SKIP crashes/hangs under NativeAOT");
                             harness.MarkFixtureSkipped(testIndex - 1);
+                            // Clear progress so the hang watchdog doesn't trip
+                            // while we yield between skips.
+                            Volatile.Write(ref _currentFixture, null);
                             // Yield at Low priority so WinUI layout / render
                             // / compositor work can actually run before the
                             // next iteration — Task.Yield runs at Normal,
@@ -326,6 +284,12 @@ internal static class SelfTestRunner
                             await YieldLowPriorityAsync(dispatcher);
                             continue;
                         }
+
+                        // Publish progress to the off-dispatcher watchdog so
+                        // it can identify the in-flight fixture if the
+                        // dispatcher gets blocked.
+                        Volatile.Write(ref _currentFixture,
+                            new FixtureProgress(fixtureName, Stopwatch.GetTimestamp()));
 
                         int failuresBefore = harness.Failures;
                         bool crashed = false;
@@ -341,6 +305,10 @@ internal static class SelfTestRunner
                             else
                             {
                                 Console.WriteLine($"# Running: {fixtureName}");
+                                // Flush so the parent harness can attribute a
+                                // hang to this fixture by name even if the
+                                // child terminates abruptly afterward.
+                                Console.Out.Flush();
                                 var runTask = fixture.RunAsync();
                                 var timeoutTask = Task.Delay(FixtureTimeout);
                                 var completed = await Task.WhenAny(runTask, timeoutTask);
@@ -363,6 +331,10 @@ internal static class SelfTestRunner
                             Console.Error.WriteLine(ex.ToString());
                             harness.RecordFailure();
                         }
+                        // Clear progress now that the fixture finished (or
+                        // its dispatcher-bound timeout fired) so the watchdog
+                        // doesn't blame this fixture for an inter-fixture gap.
+                        Volatile.Write(ref _currentFixture, null);
                         harness.MarkFixtureResult(testIndex - 1,
                             !crashed && harness.Failures == failuresBefore);
                     }
@@ -383,5 +355,60 @@ internal static class SelfTestRunner
                 }
             });
         });
+    }
+
+    private static void StartHangWatchdog()
+    {
+        if (HangTimeout <= TimeSpan.Zero) return;
+        var thread = new Thread(HangWatchdogLoop)
+        {
+            IsBackground = true,
+            Name = "Reactor.SelfTest.HangWatchdog",
+        };
+        thread.Start();
+    }
+
+    private static void HangWatchdogLoop()
+    {
+        // Sleep small slices so disabling-via-debugger-attach takes effect
+        // quickly. Polling 1Hz is plenty: HangTimeout is measured in seconds.
+        var pollMs = 1000;
+        while (true)
+        {
+            try { Thread.Sleep(pollMs); }
+            catch (ThreadInterruptedException) { return; }
+
+            // Auto-disable when a debugger is attached: developers stepping
+            // through a fixture would otherwise trip the watchdog.
+            if (Debugger.IsAttached) continue;
+
+            var progress = Volatile.Read(ref _currentFixture);
+            if (progress is null) continue;
+
+            var elapsed = Stopwatch.GetElapsedTime(progress.StartTimestamp);
+            if (elapsed < HangTimeout) continue;
+
+            // We are >= HangTimeout into a fixture and the dispatcher hasn't
+            // moved on. Emit a structured signal, flush, and FailFast so a
+            // Watson/.NET minidump is produced (when DOTNET_DbgEnableMiniDump=1).
+            var elapsedSec = (int)elapsed.TotalSeconds;
+            var message =
+                $"Bail out! HANG_DETECTED: {progress.Name} ran {elapsedSec}s " +
+                $"without progress — UI dispatcher unresponsive. " +
+                $"Rerun with --no-aot-skip --filter {progress.Name} and " +
+                $"DOTNET_DbgEnableMiniDump=1 to capture a dump for analysis.";
+            try
+            {
+                Console.WriteLine(message);
+                Console.Out.Flush();
+                Console.Error.WriteLine(message);
+                Console.Error.Flush();
+            }
+            catch { /* swallow IO errors — we're about to FailFast anyway */ }
+
+            // FailFast: synchronous, dumpable termination. Preferred over
+            // Environment.Exit (no dump) and Process.Kill (no chance to flush).
+            Environment.FailFast(message);
+        }
     }
 }

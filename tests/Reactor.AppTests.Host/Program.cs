@@ -22,6 +22,8 @@ if (args.Contains("--self-test"))
     var filterIdx = Array.IndexOf(args, "--filter");
     if (filterIdx >= 0 && filterIdx + 1 < args.Length)
         SelfTestRunner.Filter = args[filterIdx + 1];
+    if (args.Contains("--no-aot-skip"))
+        SelfTestRunner.SkipAotPatterns = false;
     SelfTestRunner.RunAll();
 }
 else if (args.Contains("--devtools-stress"))

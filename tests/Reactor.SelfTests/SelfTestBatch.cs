@@ -37,18 +37,89 @@ public class SelfTestBatch
         if (!string.IsNullOrEmpty(stderr))
             _fullOutput += "\n--- stderr ---\n" + stderr;
 
+        ParseTap(stdout);
+
+        // Off-dispatcher watchdog in the Host emits a structured signal on
+        // dispatcher-starvation hangs. Parse it from stdout *and* stderr (the
+        // Host writes to both before FailFast so the signal survives buffered
+        // pipes), then attribute the failure to the named fixture so the dev
+        // sees a clear pointer to the offender instead of an opaque "process
+        // timed out" affecting every fixture.
+        var hangFixture = ExtractHangSignal(stdout) ?? ExtractHangSignal(stderr);
+
         if (timedOut)
         {
-            _initError = $"Self-test process timed out after {SelfTestTimeoutMs}ms.\n{_fullOutput}";
+            // Process didn't exit on its own. If the Host emitted a hang
+            // signal, attribute the timeout to that fixture. Otherwise fall
+            // back to the last "# Running:" line — that's the fixture that
+            // was in flight when the timeout fired.
+            var attributed = hangFixture ?? ExtractLastRunningFixture(stdout);
+            if (attributed is not null)
+            {
+                _byFixture[attributed] = (false,
+                    $"Selftest process timed out after {SelfTestTimeoutMs}ms with this fixture in flight. " +
+                    $"Repro: build the Host (AOT publish if needed) and run " +
+                    $"`Reactor.AppTests.Host.exe --self-test --no-aot-skip --filter {attributed}`. " +
+                    $"Set DOTNET_DbgEnableMiniDump=1 (and COMPlus_DbgEnableMiniDump=1) to capture a dump.\n" +
+                    $"--- tail of full output ---\n{Tail(_fullOutput, 4000)}");
+            }
+            else
+            {
+                _initError = $"Self-test process timed out after {SelfTestTimeoutMs}ms with no fixture attribution.\n{_fullOutput}";
+            }
             _initialized = true;
             return;
         }
 
-        ParseTap(stdout);
+        if (hangFixture is not null)
+        {
+            _byFixture[hangFixture] = (false,
+                $"Selftest Host detected a dispatcher-starvation hang. " +
+                $"Repro: `Reactor.AppTests.Host.exe --self-test --no-aot-skip --filter {hangFixture}`. " +
+                $"Set DOTNET_DbgEnableMiniDump=1 (and COMPlus_DbgEnableMiniDump=1) for a dump.\n" +
+                $"--- tail of full output ---\n{Tail(_fullOutput, 4000)}");
+        }
+
         _initialized = true;
 
         if (exitCode != 0 && _byFixture.IsEmpty)
             _initError = $"Self-test process exited with code {exitCode} but produced no parsable TAP output.\n{_fullOutput}";
+    }
+
+    private static string? ExtractHangSignal(string output)
+    {
+        if (string.IsNullOrEmpty(output)) return null;
+        const string marker = "HANG_DETECTED: ";
+        foreach (var raw in output.Split('\n'))
+        {
+            var idx = raw.IndexOf(marker, StringComparison.Ordinal);
+            if (idx < 0) continue;
+            var rest = raw[(idx + marker.Length)..].TrimStart();
+            var space = rest.IndexOf(' ');
+            var name = (space > 0 ? rest[..space] : rest).Trim();
+            if (name.Length > 0) return name;
+        }
+        return null;
+    }
+
+    private static string? ExtractLastRunningFixture(string stdout)
+    {
+        if (string.IsNullOrEmpty(stdout)) return null;
+        string? last = null;
+        const string marker = "# Running: ";
+        foreach (var raw in stdout.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.StartsWith(marker, StringComparison.Ordinal))
+                last = line[marker.Length..].Trim();
+        }
+        return string.IsNullOrEmpty(last) ? null : last;
+    }
+
+    private static string Tail(string s, int maxChars)
+    {
+        if (string.IsNullOrEmpty(s) || s.Length <= maxChars) return s;
+        return "..." + s[^maxChars..];
     }
 
     private static void ParseTap(string stdout)
@@ -231,6 +302,19 @@ public class SelfTestBatch
 
     private static string FindHostExe()
     {
+        // Allow callers to point the harness at an AOT-published Host (which
+        // lives under a `publish` directory, not the standard build output)
+        // or any other custom build. This lets the same MSTest harness validate
+        // the AOT binary that the developer is actually trying to ship.
+        var overrideExe = Environment.GetEnvironmentVariable("REACTOR_SELFTEST_HOST_EXE");
+        if (!string.IsNullOrWhiteSpace(overrideExe))
+        {
+            if (!File.Exists(overrideExe))
+                throw new FileNotFoundException(
+                    $"REACTOR_SELFTEST_HOST_EXE points at a path that does not exist: {overrideExe}");
+            return overrideExe;
+        }
+
         var dir = AppContext.BaseDirectory;
         while (dir != null && !File.Exists(Path.Combine(dir, "Reactor.slnx")))
             dir = Path.GetDirectoryName(dir);

@@ -42,6 +42,69 @@ These subsystems compile cleanly with `IsAotCompatible=true` (the warnings are s
 - **Suppressions are temporary.** Every `[UnconditionalSuppressMessage("Trimming", ...)]` or `("AOT", ...)` in this repo is a TODO. The justification field names the reflection use; tracking is folded into issue #70.
 - **The benchmark canary.** `tests/stress_perf/StressPerf.Reactor` (and the `StressPerf.Direct`/`ReactorGrid` siblings) set `PublishAot=true`. If they stop publishing, an AOT regression has landed in the framework.
 
+## Debugging an AOT selftest hang
+
+`tests/Reactor.AppTests.Host` maintains an explicit allow-list of fixtures that hang, crash, or assert-fail under NativeAOT (`SelfTestRunner.DefaultAotSkipPatterns`). When you remove an entry from that list and the published Host hangs, crashes, or asserts instead of producing output, use the following workflow.
+
+### Failure mode at a glance
+
+Probing each `DefaultAotSkipPatterns` entry in isolation (via the `.aot_runs/probe_skips.ps1` helper) reveals three buckets. Pick the matching workflow:
+
+| Bucket | Symptom | Debug step |
+|---|---|---|
+| **Hang** (dispatcher starvation) | Fixture's `RunAsync()` synchronously blocks the UI thread; the in-band 15 s `Task.Delay` watchdog cannot fire because the dispatcher isn't pumping. | Off-dispatcher hang watchdog (60 s default, configurable via `REACTOR_SELFTEST_HANG_TIMEOUT_SECONDS`) writes `Bail out! HANG_DETECTED: <fixture> …` to stdout + stderr, flushes, then `Environment.FailFast`. With `DOTNET_DbgEnableMiniDump=1` set, this produces a Watson minidump. |
+| **Native crash** | Process exits with `0xC0000409` (`STATUS_STACK_BUFFER_OVERRUN`) — the AOT runtime's `FailFast` for unhandled managed exceptions. No `# Total failures:` line because the process terminated abruptly. | Set `DOTNET_DbgEnableMiniDump=1` (and `COMPlus_DbgEnableMiniDump=1` — both, matching `DevtoolsStressE2ERunner`) before launching. Open the resulting `.dmp` with `dotnet-dump analyze` or WinDbg; look at the dispatcher (UI) thread's stack for the throwing call. |
+| **Assertion failure** | TAP output already shows `not ok <name> - <reason>`; process exits 1 cleanly. | No special tooling needed — read the TAP failure line. The fixture and check name are in the message. |
+
+### Parent attribution
+
+The MSTest harness (`Reactor.SelfTests.SelfTestBatch`) parses the `HANG_DETECTED` signal from both stdout and stderr, and on process timeout falls back to the last `# Running:` line. Either way, the failure surfaces against the named fixture in the failing test's detail with a copy-pasteable repro command. It does *not* cascade through `_initError` (which would mark every unrelated fixture failed).
+
+### Capturing a dump
+
+Set these env vars before launching the Host:
+
+```text
+DOTNET_DbgEnableMiniDump=1
+DOTNET_DbgMiniDumpType=2
+DOTNET_DbgMiniDumpName=%TEMP%\reactor-selftest-%p.dmp
+COMPlus_DbgEnableMiniDump=1
+COMPlus_DbgMiniDumpType=2
+COMPlus_DbgMiniDumpName=%TEMP%\reactor-selftest-%p.dmp
+```
+
+Both `Environment.FailFast` (hang path) and the AOT runtime's unhandled-exception fast-fail (crash path) honour these vars.
+
+### Isolated repro
+
+Once you have the offending fixture name, repro it standalone against the AOT-published binary:
+
+```powershell
+dotnet publish tests/Reactor.AppTests.Host -p:PublishAotInternal=true -p:Platform=x64 -r win-x64 -c Release
+$env:DOTNET_DbgEnableMiniDump=1
+$env:DOTNET_DbgMiniDumpName="$env:TEMP\reactor-hang-%p.dmp"
+& "<publish-dir>\Reactor.AppTests.Host.exe" --self-test --no-aot-skip --filter <FixtureName>
+```
+
+`--no-aot-skip` bypasses the entire skip list so the targeted fixture actually runs. To drive the MSTest harness against the AOT-published binary, point it at the publish output:
+
+```powershell
+$env:REACTOR_SELFTEST_HOST_EXE="<publish-dir>\Reactor.AppTests.Host.exe"
+dotnet test tests/Reactor.SelfTests
+```
+
+### Disabling the watchdog while debugging
+
+When stepping through a fixture in a debugger, set `REACTOR_SELFTEST_HANG_TIMEOUT_SECONDS=0` to suppress the hang watchdog entirely. (It also auto-disables whenever `Debugger.IsAttached` returns true at poll time.)
+
+### Categorising the skip list (`tests/Reactor.AppTests.Host/probe-aot-skips.ps1`)
+
+The repo includes a probe script that runs every `DefaultAotSkipPatterns` entry in isolation under `--no-aot-skip` and writes a CSV summarising whether each one passes, hangs, crashes natively, or assert-fails. Use it after AOT framework changes to find stale skips that have started passing, and to triage what's still broken.
+
+```powershell
+pwsh -NoProfile -File tests\Reactor.AppTests.Host\probe-aot-skips.ps1
+```
+
 ## When in doubt
 
 If you need a feature listed in the "does not work" table and you're publishing AOT, file an issue against #70 with your scenario. The fix in most cases is a source generator pass; what gets prioritized is driven by who's hitting the wall.
