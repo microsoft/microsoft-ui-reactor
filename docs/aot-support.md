@@ -48,7 +48,7 @@ These subsystems compile cleanly with `IsAotCompatible=true` (the warnings are s
 
 ### Failure mode at a glance
 
-Probing each `DefaultAotSkipPatterns` entry in isolation (via the `.aot_runs/probe_skips.ps1` helper) reveals three buckets. Pick the matching workflow:
+Probing each `DefaultAotSkipPatterns` entry in isolation (via the `tests/Reactor.AppTests.Host/probe-aot-skips.ps1` helper) reveals three buckets. Pick the matching workflow:
 
 | Bucket | Symptom | Debug step |
 |---|---|---|

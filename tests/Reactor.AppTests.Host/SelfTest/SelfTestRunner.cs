@@ -15,10 +15,12 @@ internal static class SelfTestRunner
     public static string? Filter { get; set; }
 
     /// <summary>
-    /// When true, the AOT skip list is ignored — every fixture runs even under
-    /// NativeAOT. Use for targeted repro of a hanging/crashing fixture together
-    /// with <c>--filter &lt;name&gt;</c>. Off-dispatcher watchdog (see
-    /// <see cref="HangTimeout"/>) still fires for dispatcher-starvation hangs.
+    /// When true (the default), <see cref="DefaultAotSkipPatterns"/> is honoured
+    /// under NativeAOT — matching fixtures are skipped. Set to false (via
+    /// <c>--no-aot-skip</c>) to run every fixture even under NativeAOT, for
+    /// targeted repro of a hanging/crashing fixture together with
+    /// <c>--filter &lt;name&gt;</c>. The off-dispatcher watchdog (see
+    /// <see cref="HangTimeout"/>) still fires regardless.
     /// </summary>
     public static bool SkipAotPatterns { get; set; } = true;
 
@@ -55,7 +57,8 @@ internal static class SelfTestRunner
     private static FixtureProgress? _currentFixture;
 
     // Fixtures known to crash or assert-fail under NativeAOT, captured by
-    // running .aot_runs/probe_skips.ps1 against the AOT-published Host.
+    // running tests/Reactor.AppTests.Host/probe-aot-skips.ps1 against the
+    // AOT-published Host.
     // Each name was verified to fail in isolation; wildcards from earlier
     // skip-list iterations have been replaced with explicit names so that
     // newly-passing siblings re-enter the run automatically.

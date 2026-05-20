@@ -26,6 +26,13 @@ public class SelfTestBatch
     private static string _fullOutput = "";
     private static bool _initialized;
     private static string? _initError;
+    // When the Host run aborts (hang/timeout) we attribute the failure to a
+    // single fixture, but every later fixture still has no entry in
+    // _byFixture. _abortedReason marks the run as not-fully-executed so the
+    // Fixture test method can report missing entries as Inconclusive rather
+    // than cascading "was not reported by the Host" failures across every
+    // fixture downstream of the hang.
+    private static string? _abortedReason;
 
     [ClassInitialize]
     public static void RunSelfTests(TestContext context)
@@ -62,6 +69,7 @@ public class SelfTestBatch
                     $"`Reactor.AppTests.Host.exe --self-test --no-aot-skip --filter {attributed}`. " +
                     $"Set DOTNET_DbgEnableMiniDump=1 (and COMPlus_DbgEnableMiniDump=1) to capture a dump.\n" +
                     $"--- tail of full output ---\n{Tail(_fullOutput, 4000)}");
+                _abortedReason = $"Run aborted by timeout on fixture '{attributed}'";
             }
             else
             {
@@ -78,6 +86,7 @@ public class SelfTestBatch
                 $"Repro: `Reactor.AppTests.Host.exe --self-test --no-aot-skip --filter {hangFixture}`. " +
                 $"Set DOTNET_DbgEnableMiniDump=1 (and COMPlus_DbgEnableMiniDump=1) for a dump.\n" +
                 $"--- tail of full output ---\n{Tail(_fullOutput, 4000)}");
+            _abortedReason = $"Run aborted by hang on fixture '{hangFixture}'";
         }
 
         _initialized = true;
@@ -226,7 +235,13 @@ public class SelfTestBatch
             Assert.Fail(_initError);
 
         if (!_byFixture.TryGetValue(name, out var result))
+        {
+            if (_abortedReason is not null)
+                Assert.Inconclusive(
+                    $"{_abortedReason}; fixture '{name}' was not executed. " +
+                    $"Re-run after the offending fixture is fixed or added to DefaultAotSkipPatterns.");
             Assert.Fail($"Fixture '{name}' was not reported by the Host. Full output:\n{_fullOutput}");
+        }
 
         if (!result.Passed)
             Assert.Fail(result.Detail);

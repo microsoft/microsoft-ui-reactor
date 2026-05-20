@@ -93,9 +93,12 @@ foreach ($fixture in ($fixturesToTest | Sort-Object)) {
     } elseif (($sout + $serr) -match 'HANG_DETECTED:\s*(\S+)') {
         $category = 'HANG'
         $detail = "watchdog fired: $($Matches[1])"
-    } elseif ($exitCode -eq -1073741189 -or $exitCode -eq 0xC0000409) {
+    } elseif ($exitCode -eq -1073740791) {
+        # 0xC0000409 as a signed 32-bit Win32 exit code. PowerShell hex literals
+        # widen to Int64 so a direct `-eq 0xC0000409` would never match a
+        # negative Process.ExitCode — compare the normalized signed form.
         $category = 'NATIVE_CRASH'
-        $detail = "STATUS_STACK_BUFFER_OVERRUN ($exitCode)"
+        $detail = "STATUS_STACK_BUFFER_OVERRUN (0xC0000409)"
     } elseif ($exitCode -lt 0) {
         $category = 'NATIVE_CRASH'
         $detail = "exit=$exitCode (native fault)"
