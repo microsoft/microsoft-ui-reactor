@@ -1,6 +1,6 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Hosting.Messaging;
 using Microsoft.UI.Reactor.Hosting.Persistence;
@@ -263,7 +263,7 @@ public sealed class ReactorWindow : IDisposable
                     return Microsoft.UI.Reactor.WindowState.CompactOverlay;
             }
         }
-        catch (Exception ex) { Debug.WriteLine($"[Reactor] ResolveCurrentState failed: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ResolveCurrentState", ex); }
         return Microsoft.UI.Reactor.WindowState.Normal;
     }
 
@@ -279,7 +279,7 @@ public sealed class ReactorWindow : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Reactor] QueryDpiForWindow failed: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.QueryDpiForWindow", ex);
             return 96;
         }
     }
@@ -320,7 +320,7 @@ public sealed class ReactorWindow : IDisposable
     private void ApplyChrome(WindowSpec spec, bool isInitial)
     {
         try { _window.Title = spec.Title; }
-        catch (Exception ex) { Debug.WriteLine($"[Reactor] Window.Title set failed: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Title.set", ex); }
 
         // Presenter: full-screen / compact-overlay flip via AppWindow.SetPresenter.
         // Default Overlapped chrome modulators (resizable, minimizable, maximizable,
@@ -347,7 +347,7 @@ public sealed class ReactorWindow : IDisposable
                     break;
             }
         }
-        catch (Exception ex) { Debug.WriteLine($"[Reactor] Presenter apply failed: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Presenter.apply", ex); }
 
         try
         {
@@ -358,10 +358,10 @@ public sealed class ReactorWindow : IDisposable
             // owned windows ignore it. (spec 036 §9)
             _appWindow.IsShownInSwitchers = spec.Owner is null && spec.IsShownInSwitchers;
         }
-        catch (Exception ex) { Debug.WriteLine($"[Reactor] IsShownInSwitchers failed: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.IsShownInSwitchers.set", ex); }
 
         try { _window.ExtendsContentIntoTitleBar = spec.ExtendsContentIntoTitleBar; }
-        catch (Exception ex) { Debug.WriteLine($"[Reactor] ExtendsContentIntoTitleBar failed: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ExtendsContentIntoTitleBar.set", ex); }
 
         // Sizing — DIP -> physical at the current per-window DPI. (spec 036 §5.1)
         if (isInitial && spec.Presenter == PresenterKind.Overlapped)
@@ -370,7 +370,7 @@ public sealed class ReactorWindow : IDisposable
             {
                 _appWindow.Resize(DipToPhysicalSize(spec.Width, spec.Height));
             }
-            catch (Exception ex) { Debug.WriteLine($"[Reactor] Initial resize failed: {ex.Message}"); }
+            catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.InitialResize", ex); }
         }
 
         if (spec.Icon is { } icon)
@@ -388,7 +388,7 @@ public sealed class ReactorWindow : IDisposable
             {
                 NativeOwnership.SetOwner(_hwnd, owner._hwnd);
             }
-            catch (Exception ex) { Debug.WriteLine($"[Reactor] SetOwner failed: {ex.Message}"); }
+            catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SetOwner", ex); }
             owner.AddOwned(this);
         }
     }
@@ -466,7 +466,7 @@ public sealed class ReactorWindow : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Reactor] TryApplyExeIconFallback failed: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyExeIconFallback", ex);
         }
     }
 
@@ -545,7 +545,7 @@ public sealed class ReactorWindow : IDisposable
                         {
                             _appWindow.Resize(DipToPhysicalSize(_spec.Width, _spec.Height));
                         }
-                        catch (Exception ex) { Debug.WriteLine($"[Reactor] First-DPI resize failed: {ex.Message}"); }
+                        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.FirstDpiResize", ex); }
                     }
                     break;
                 }
@@ -621,7 +621,7 @@ public sealed class ReactorWindow : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Reactor] WM_GETMINMAXINFO apply failed: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.WM_GETMINMAXINFO.apply", ex);
         }
     }
 
@@ -645,7 +645,7 @@ public sealed class ReactorWindow : IDisposable
             var dip = (args.Size.Width, args.Size.Height);
             SizeChanged?.Invoke(this, new WindowDipSizeChangedEventArgs(dip, args));
         }
-        catch (Exception ex) { Debug.WriteLine($"[Reactor] SizeChanged dispatch failed: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SizeChanged.dispatch", ex); }
     }
 
     private void OnAppWindowChanged(AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args)
@@ -657,7 +657,7 @@ public sealed class ReactorWindow : IDisposable
         {
             Volatile.Write(ref _stateValue, (int)newState);
             try { StateChanged?.Invoke(this, newState); }
-            catch (Exception ex) { Debug.WriteLine($"[Reactor] StateChanged dispatch failed: {ex.Message}"); }
+            catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.StateChanged.dispatch", ex); }
         }
     }
 
@@ -679,7 +679,7 @@ public sealed class ReactorWindow : IDisposable
             {
                 // Fail-safe: treat a throwing guard as "cancel" with a stderr
                 // notice. (spec 036 §3.4 tests).
-                Debug.WriteLine($"[Reactor] ClosingGuard threw — cancelling close: {ex.Message}");
+                DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ClosingGuard.dispatch", ex);
                 cancel = true;
                 break;
             }
@@ -688,7 +688,7 @@ public sealed class ReactorWindow : IDisposable
         if (!cancel)
         {
             try { Closing?.Invoke(this, cea); }
-            catch (Exception ex) { Debug.WriteLine($"[Reactor] Closing handler threw: {ex.Message}"); }
+            catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.OnClosing.dispatch", ex); }
             cancel = cea.Cancel;
         }
 
@@ -704,7 +704,7 @@ public sealed class ReactorWindow : IDisposable
                 if (child._disposed) continue;
                 child._closingReason = WindowCloseReason.OwnerClosed;
                 try { child._window.Close(); }
-                catch (Exception ex) { Debug.WriteLine($"[Reactor] Owned window close threw: {ex.Message}"); }
+                catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.OwnedWindow.Close", ex); }
                 // After Close(), if the child is still alive (a guard
                 // cancelled), abort the owner close.
                 if (!child._disposed)
@@ -765,7 +765,7 @@ public sealed class ReactorWindow : IDisposable
         TrySavePersistedPlacement();
 
         try { Closed?.Invoke(this, EventArgs.Empty); }
-        catch (Exception ex) { Debug.WriteLine($"[Reactor] Closed handler threw: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.OnClosed.dispatch", ex); }
 
         // Detach from the owner's child-list so a later owner-close cascade
         // doesn't iterate over an already-closed pointer. (spec 036 §9)
@@ -796,7 +796,7 @@ public sealed class ReactorWindow : IDisposable
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Hide));
         if (_disposed) return;
-        try { _appWindow.Hide(); } catch (Exception ex) { Debug.WriteLine($"[Reactor] Hide failed: {ex.Message}"); }
+        try { _appWindow.Hide(); } catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Hide", ex); }
         IsVisible = false;
     }
 
@@ -807,7 +807,7 @@ public sealed class ReactorWindow : IDisposable
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Show));
         if (_disposed) return;
-        try { _appWindow.Show(); } catch (Exception ex) { Debug.WriteLine($"[Reactor] Show failed: {ex.Message}"); }
+        try { _appWindow.Show(); } catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Show", ex); }
         IsVisible = true;
     }
 
@@ -823,7 +823,7 @@ public sealed class ReactorWindow : IDisposable
         if (_disposed) return;
         _closingReason = WindowCloseReason.AppClosed;
         try { _window.Close(); }
-        catch (Exception ex) { Debug.WriteLine($"[Reactor] Close failed: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Close", ex); }
     }
 
     /// <summary>
@@ -865,7 +865,7 @@ public sealed class ReactorWindow : IDisposable
         // first-DPI re-apply path stops fighting it. (spec 036 §5.1)
         _userResized = true;
         try { _appWindow.Resize(DipToPhysicalSize(width, height)); }
-        catch (Exception ex) { Debug.WriteLine($"[Reactor] SetSize failed: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SetSize", ex); }
     }
 
     /// <summary>
@@ -887,7 +887,7 @@ public sealed class ReactorWindow : IDisposable
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetPosition));
         if (_disposed) return;
         try { _appWindow.Move(DipToPhysicalPoint(x, y)); }
-        catch (Exception ex) { Debug.WriteLine($"[Reactor] SetPosition failed: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.SetPosition", ex); }
     }
 
     /// <summary>Center on the window's current monitor. UI-thread only.</summary>
@@ -903,7 +903,7 @@ public sealed class ReactorWindow : IDisposable
             int y = area.Value.Y + (area.Value.Height - _appWindow.Size.Height) / 2;
             _appWindow.Move(new global::Windows.Graphics.PointInt32(x, y));
         }
-        catch (Exception ex) { Debug.WriteLine($"[Reactor] CenterOnScreen failed: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.CenterOnScreen", ex); }
     }
 
     /// <summary>
@@ -976,14 +976,14 @@ public sealed class ReactorWindow : IDisposable
         try { _appWindow.Changed -= OnAppWindowChanged; } catch { /* best effort */ }
         try { _appWindow.Closing -= OnAppWindowClosing; } catch { /* best effort */ }
         try { _window.Closed -= OnNativeClosed; } catch { /* best effort */ }
-        try { _messageMonitor.Dispose(); } catch (Exception ex) { Debug.WriteLine($"[Reactor] MessageMonitor dispose failed: {ex.Message}"); }
+        try { _messageMonitor.Dispose(); } catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.MessageMonitor.Dispose", ex); }
 
         // ReactorHost already subscribes to Window.Closed; let it dispose itself.
         // We avoid double-dispose because Dispose() is idempotent there too.
-        try { _host.Dispose(); } catch (Exception ex) { Debug.WriteLine($"[Reactor] Host dispose failed: {ex.Message}"); }
+        try { _host.Dispose(); } catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Host.Dispose", ex); }
 
         // Drop per-window persisted state — bounded by window lifetime per spec.
-        try { _persistedScope.Dispose(); } catch (Exception ex) { Debug.WriteLine($"[Reactor] PersistedScope dispose failed: {ex.Message}"); }
+        try { _persistedScope.Dispose(); } catch (Exception ex) { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.PersistedScope.Dispose", ex); }
 
         // Release thumbnail-toolbar HICONs and clear the click-dispatch map so
         // a late WM_COMMAND can't reach freed handlers. (spec 036 §11.5)
@@ -1056,7 +1056,7 @@ public sealed class ReactorWindow : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Reactor] TryApplyInitialPlacement failed: {ex.GetType().Name}: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryApplyInitialPlacement", ex);
         }
     }
 
@@ -1077,7 +1077,7 @@ public sealed class ReactorWindow : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Reactor] TryRestorePersistedPlacement failed: {ex.GetType().Name}: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "ReactorWindow.TryRestorePersistedPlacement", ex);
             return false;
         }
     }
@@ -1121,7 +1121,7 @@ public sealed class ReactorWindow : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Reactor] TrySavePersistedPlacement failed: {ex.GetType().Name}: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "ReactorWindow.TrySavePersistedPlacement", ex);
         }
     }
 }

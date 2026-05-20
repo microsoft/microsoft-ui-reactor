@@ -2136,8 +2136,15 @@ public sealed partial class Reconciler
         }
         catch (Exception ex)
         {
-            global::System.Diagnostics.Debug.WriteLine(
-                $"[Reactor.ContentDialog] ShowAsync failed: {ex.GetType().Name}: {ex.Message}");
+            // User-callback isolation (spec 044 §6.7.3): the try wraps both
+            // ShowAsync and the user-supplied OnClosed delegate — if
+            // OnClosed throws we must not let that crash the dispatcher.
+            // The broad catch is deliberate; the SwallowedError emission
+            // is the release-visible audit trail.
+            Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
+                Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor,
+                "ContentDialog.ShowAsync+OnClosed",
+                ex);
         }
     }
 

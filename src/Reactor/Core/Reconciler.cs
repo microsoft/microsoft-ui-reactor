@@ -1033,7 +1033,7 @@ public sealed partial class Reconciler : IDisposable
                 service.PrepareToAnimate(caEl.ConnectedAnimationKey, control);
             }
             catch (global::System.Runtime.InteropServices.COMException) { }
-            catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] ConnectedAnimation PrepareToAnimate failed: {ex}"); }
+            catch (Exception ex) { Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor, "ConnectedAnimation.PrepareToAnimate", ex); }
         }
 
         // Clean up animation state (mirrors UnmountAndCollect)
@@ -1303,7 +1303,7 @@ public sealed partial class Reconciler : IDisposable
                 service.PrepareToAnimate(caEl.ConnectedAnimationKey, control);
             }
             catch (global::System.Runtime.InteropServices.COMException) { }
-            catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] ConnectedAnimation PrepareToAnimate failed: {ex}"); }
+            catch (Exception ex) { Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor, "ConnectedAnimation.PrepareToAnimate", ex); }
         }
 
         // Clean up animation state
@@ -2309,7 +2309,7 @@ public sealed partial class Reconciler : IDisposable
                 _pendingConnectedAnimationStarts.Add((anim, target));
         }
         catch (global::System.Runtime.InteropServices.COMException) { }
-        catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] ConnectedAnimation GetAnimation failed: {ex}"); }
+        catch (Exception ex) { Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor, "ConnectedAnimation.GetAnimation", ex); }
     }
 
     /// <summary>
@@ -2324,7 +2324,7 @@ public sealed partial class Reconciler : IDisposable
         {
             try { anim.TryStart(target); }
             catch (global::System.Runtime.InteropServices.COMException) { }
-            catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] ConnectedAnimation TryStart failed: {ex}"); }
+            catch (Exception ex) { Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor, "ConnectedAnimation.TryStart", ex); }
         }
         _pendingConnectedAnimationStarts.Clear();
     }
@@ -3296,7 +3296,10 @@ public sealed partial class Reconciler : IDisposable
         }
         catch (Exception ex)
         {
-            global::System.Diagnostics.Debug.WriteLine($"[Reactor.Theme] Failed to apply ThemeBindings: {ex.Message}");
+            Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
+                Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
+                "ApplyThemeBindings",
+                ex);
         }
     }
 

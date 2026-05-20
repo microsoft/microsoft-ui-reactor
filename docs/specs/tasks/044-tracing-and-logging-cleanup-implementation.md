@@ -218,9 +218,9 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 4.5 PR: ReactorWindow swallowed-error migration
 
-- [ ] Migrate every catch in `src/Reactor/Hosting/ReactorWindow.cs` per its audit verdict.
-- [ ] Narrow verdicts must use `catch (COMException ex) when (ex.HResult is HResults.X or HResults.Y)` form — never bare `catch (COMException)` (spec §6.7.2).
-- [ ] Each migrated site references its audit entry via `// AUDIT: ...` comment.
+- [x] Migrated all 29 `catch (Exception ex) { Debug.WriteLine(...) }` sites in `src/Reactor/Hosting/ReactorWindow.cs` to `DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.<op>", ex)`. Two persistence-placement sites (`TryRestorePersistedPlacement`, `TrySavePersistedPlacement`) route to `LogCategory.Persistence` because the failure class is store-shaped, not window-shaped. `using System.Diagnostics` removed since no `Debug.WriteLine` remains.
+- [ ] **Narrowing deferred.** Spec §6.7.2 calls for `catch (COMException ex) when (ex.HResult is HResults.X or HResults.Y)` filters; doing this honestly requires the per-site audit (Phase C-audit) which has not been written yet. The Keep migration above delivers the spec §12.4 acceptance ("zero error/HR-reporting `Debug.WriteLine` in src/Reactor/") and the §12.1 release-visibility goal; narrowing each catch's HRESULT filter is a follow-up that gates on the audit and on having a Hosting subject-matter reviewer sign off per-site.
+- [ ] Each migrated site's audit-comment reference is deferred with the narrowing work.
 
 ### 4.6 PR: Shell COM-call promotion to typed events
 
@@ -249,12 +249,15 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 4.10 PR: Residual catches + remaining trace prints
 
-- [ ] Migrate residual `Reconciler` catches (~10).
-- [ ] `LayoutEtwConsumer` (12 sites): errors → `DiagnosticLog.SwallowedError`; pure trace prints stay as `Debug.WriteLine` (framework-internal per spec §6.3).
-- [ ] `LayoutCostAttribution` (8 sites): keep as `Debug.WriteLine` — framework-internal.
-- [ ] `MarkdownBuilder` parse-failure (1 site): keep as `Debug.WriteLine`.
-- [ ] `YogaConfig` frozen-mutation `Debug.Assert` (6 sites): keep.
-- [ ] `ChildCollection` bounds assertions (4 sites): keep.
+- [x] Migrated residual `Reconciler` swallowed-error catches:
+  - `Reconciler.cs` ConnectedAnimation `PrepareToAnimate` (×2, mount + update paths), `GetAnimation`, `TryStart` → `DiagnosticLog.SwallowedError(LogCategory.Reactor, "ConnectedAnimation.<op>", ex)`. The spec's §6.7.4 "Promote + Narrow" verdict for these 4 entries is deferred (typed event promotion follows the same per-site audit gate as 4.5/4.6).
+  - `Reconciler.cs` `ApplyThemeBindings` → `DiagnosticLog.SwallowedError(LogCategory.Theme, "ApplyThemeBindings", ex)`. Theme is the right category — the catch wraps a `Style` XAML compile.
+  - `Reconciler.Mount.cs` `ContentDialog.ShowAsync+OnClosed` → `DiagnosticLog.SwallowedError(LogCategory.Reactor, ...)`. Inline comment marks it as user-callback isolation per §6.7.3 (the try wraps both `ShowAsync` and the user-supplied `OnClosed` delegate).
+- [x] `LayoutEtwConsumer` (12 sites): error swallows (7) already routed to `DiagnosticLog.SwallowedError` in Phase C.7a (commit `b761a7a1`). Remaining 5 sites are pure trace prints (session-started, parser output, orphan-session cleanup) — stay as `Debug.WriteLine` per spec §6.3 framework-internal carve-out.
+- [x] `LayoutCostAttribution` (8 sites): keep as `Debug.WriteLine` — framework-internal (verified by inspection).
+- [x] `MarkdownBuilder` parse-failure (1 site): keep as `Debug.WriteLine` — framework-internal.
+- [x] `YogaConfig` frozen-mutation `Debug.Assert` (6 sites): keep — these are `Debug.Assert`, not `Debug.WriteLine`; they're CI tripwires for a framework invariant, not diagnostics.
+- [x] `ChildCollection` bounds assertions (4 sites): keep — same as above.
 
 ### 4.11 Phase C tests
 
