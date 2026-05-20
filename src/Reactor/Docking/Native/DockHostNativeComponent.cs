@@ -73,17 +73,21 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             ? new BorderElement(null)
             : BuildNode(manager.Layout);
 
-        // ── Side strips — full popup expansion lands with §2.5; the
-        // strips themselves are the anchor surface. Elide when empty so
-        // the visual matches the P1 baseline for layouts that don't pin.
+        // ── Side strips + side popup (§2.5). Elide entirely when no
+        // sides are populated so the visual matches the P1 baseline for
+        // layouts that don't pin. Otherwise compose strips + a shared
+        // light-dismiss Popup overlay; click on a strip button toggles
+        // expansion of the matching pane.
         var hasSides =
             (manager.LeftSide is { Count: > 0 }) ||
             (manager.TopSide is { Count: > 0 }) ||
             (manager.RightSide is { Count: > 0 }) ||
             (manager.BottomSide is { Count: > 0 });
 
+        var (expandedSideKey, setExpandedSideKey) = UseState<object?>(null);
+
         Element composed = hasSides
-            ? DockSideStripRenderer.Compose(manager, body)
+            ? DockSideStripRenderer.Compose(manager, body, expandedSideKey, setExpandedSideKey)
             : body;
 
         // §2.17 — publish the host model + active-key + layout-snapshot

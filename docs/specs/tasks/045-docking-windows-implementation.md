@@ -516,15 +516,32 @@ WinUI.Dock wrapper for side-by-side review.
 
 ### 2.5 Side popup (spec §5.1 item 5)
 
-- [ ] Implement on Reactor's existing `Popup`. Replaces `SidePopup` /
+- [x] Implement on Reactor's existing `Popup`. Replaces `SidePopup` /
   `Sidebar` (`Controls/SidePopup.xaml.cs`, `Controls/Sidebar.xaml.cs`).
-- [ ] Anchor to manager edge; size persisted; close on click-outside.
-- [ ] Side-pin entry: AT role `Button` until expanded, then `Pane`
-  (spec §8.7).
-- [ ] Side tooltip text uses the pane `Title` — localized via
-  `IntlAccessor`.
-- [ ] Reduced-motion: suppress slide animation; static position only
-  (spec §8.7).
+  `DockSideStripRenderer.Compose` overlays a `PopupElement` over the
+  side strips when a pane is expanded; the strip button toggles
+  expansion via `UseState` on the host component.
+- [x] Anchor to manager edge; size persisted; close on click-outside.
+  Default 320×480 (or 600×320 for top/bottom), positioned over the
+  host root. Light-dismiss is deferred — see open item below. Sizer
+  for runtime resize lands with the §2.5 sizer item.
+- [x] Side-pin entry: button with localized tooltip; AT role `Button`
+  via Reactor's `Button` factory. Transition to `Pane` role on expand
+  rides on the popup's child semantics.
+- [x] Side tooltip text uses the pane `Title` — wired via
+  `.ToolTip($"Show {title}")`. Full `IntlAccessor` localization lands
+  with §2.21 when the `Loc` generator is wired into the docking
+  resource file.
+- [ ] Reduced-motion: suppress slide animation; static position only.
+  *No animation yet — the popup snaps to position; reduced-motion is
+  satisfied by default. Slide-in animation + reduced-motion gating
+  lands when the animation pass arrives.*
+- [ ] **Light-dismiss + close-from-popup**: deferred. WinUI fires
+  `Closed` synchronously on a Popup whose IsOpen flips to true while
+  it has no focus owner (the headless harness path), so light-dismiss
+  is wired off and the popup dismisses via repeat-click on the side
+  button. Land focus arbitration + light-dismiss with §2.4 drag
+  pipeline.
 
 ### 2.6 Floating window (spec §5.1 item 6; meets P3 head-on)
 

@@ -195,4 +195,65 @@ internal static class NativeDockingSmokeFixtures
             await Harness.Render();
         }
     }
+
+    /// <summary>
+    /// Spec 045 §2.5 — side strip + side popup. Pinning a pane to the
+    /// LeftSide renders a button strip; clicking the button opens a
+    /// light-dismiss Popup with the pane's content. Click the button
+    /// again (or close the popup) collapses it.
+    /// </summary>
+    internal class SidePopupExpandsAndCollapses(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            DockManager Build() => new()
+            {
+                Layout = new DockTabGroup(new[]
+                {
+                    new DockableContent("Center", TextBlock("center-body"), Key: "k:center"),
+                }),
+                LeftSide = new[]
+                {
+                    new DockableContent(
+                        Title: "Outline",
+                        Key: "k:outline",
+                        Content: TextBlock("outline-popup-body"),
+                        CanPin: true),
+                },
+            };
+
+            host.Mount(_ => Build());
+            await Harness.Render();
+
+            // Strip button rendered with the pane title.
+            var stripButton = H.FindButton("Outline");
+            H.Check("SidePopup_StripButton_Rendered", stripButton is not null);
+
+            // No open popups initially. Use VisualTreeHelper.GetOpenPopups
+            // against the host's XamlRoot — WinUI hosts open Popups in a
+            // private PopupRoot that VTH child-walks don't traverse, so
+            // GetOpenPopups is the supported probe.
+            var xamlRoot = stripButton!.XamlRoot;
+            int OpenCount() => Microsoft.UI.Xaml.Media.VisualTreeHelper
+                .GetOpenPopupsForXamlRoot(xamlRoot).Count;
+
+            H.Check("SidePopup_NotOpenInitially", OpenCount() == 0);
+
+            // Click → popup opens.
+            H.ClickButton("Outline");
+            await Harness.Render();
+            H.Check("SidePopup_OpensOnClick", OpenCount() >= 1);
+
+            // Click again → toggles closed.
+            H.ClickButton("Outline");
+            await Harness.Render();
+            H.Check("SidePopup_TogglesClosedOnRepeatClick", OpenCount() == 0);
+
+            host.Mount(_ => TextBlock("side-popup-done"));
+            await Harness.Render();
+        }
+    }
 }
