@@ -1,5 +1,5 @@
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
-using Microsoft.UI.Xaml;
 
 namespace Microsoft.UI.Reactor.Docking.Native;
 
@@ -67,23 +67,24 @@ internal static class DockSplitterReconcilerRegistration
     {
         EventHandler<DockSplitterDeltaEventArgs> handler = (_, args) =>
             element.OnDelta(args.Delta, args.IsFinal);
-        control.SetValue(HandlerTagProperty, handler);
+        _handlers.AddOrUpdate(control, handler);
         control.ResizeDelta += handler;
     }
 
     private static void Unwire(DockSplitterControl control)
     {
-        if (control.GetValue(HandlerTagProperty) is EventHandler<DockSplitterDeltaEventArgs> existing)
+        if (_handlers.TryGetValue(control, out var existing))
         {
             control.ResizeDelta -= existing;
-            control.ClearValue(HandlerTagProperty);
+            _handlers.Remove(control);
         }
     }
 
-    private static readonly DependencyProperty HandlerTagProperty =
-        DependencyProperty.RegisterAttached(
-            "HandlerTag",
-            typeof(object),
-            typeof(DockSplitterControl),
-            new PropertyMetadata(null));
+    // Per-control delegate storage. A DP value can't carry a managed generic
+    // delegate without a CCW, and WinRT marshalling rejects
+    // EventHandler<DockSplitterDeltaEventArgs> at SetValue time (the runtime
+    // can't synthesize an IID for the closed generic delegate). Storing the
+    // handler in a CWT keyed by the control sidesteps the COM trip entirely.
+    private static readonly ConditionalWeakTable<DockSplitterControl,
+        EventHandler<DockSplitterDeltaEventArgs>> _handlers = new();
 }

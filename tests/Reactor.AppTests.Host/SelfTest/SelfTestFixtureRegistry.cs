@@ -893,6 +893,9 @@ internal static class SelfTestFixtureRegistry
         // Docking smoke (spec 045 §1.7)
         "Docking_TwoPaneMountUpdateUnmount",
         "Docking_KeyedPanePreservation",
+        // Native (P2) docking smoke (spec 045 §2.1, §2.2, §2.16)
+        "NativeDocking_TwoPaneMountUpdateUnmount",
+        "NativeDocking_TabGroupRendersToTabView",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1768,6 +1771,9 @@ internal static class SelfTestFixtureRegistry
         // Docking smoke fixtures — spec 045 §1.7
         "Docking_TwoPaneMountUpdateUnmount" => new DockingSmokeFixtures.TwoPaneMountUpdateUnmount(harness),
         "Docking_KeyedPanePreservation"    => new DockingSmokeFixtures.KeyedPanePreservation(harness),
+        // Native (P2) docking smoke fixtures — spec 045 §2.1, §2.2, §2.16
+        "NativeDocking_TwoPaneMountUpdateUnmount" => new NativeDockingSmokeFixtures.TwoPaneMountUpdateUnmount(harness),
+        "NativeDocking_TabGroupRendersToTabView"  => new NativeDockingSmokeFixtures.TabGroupRendersToTabView(harness),
 
         _ => null,
     };
