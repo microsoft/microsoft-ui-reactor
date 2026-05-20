@@ -20,20 +20,23 @@ namespace Microsoft.UI.Reactor.Docking;
 /// </remarks>
 public sealed record Document : DockableContent
 {
-    /// <summary>Documents close by default.</summary>
-    public new bool CanClose { get; init; } = true;
-
-    /// <summary>Documents do not pin to sides.</summary>
-    public new bool CanPin { get; init; } = false;
-
     /// <summary>
     /// Whether this document can also be docked as a tool window (side-pinnable).
     /// Default false (spec 045 §5.3.8).
     /// </summary>
     public bool CanDockAsToolWindow { get; init; } = false;
 
-    /// <summary>Parameterless ctor for object-initializer syntax.</summary>
-    public Document() { }
+    /// <summary>Parameterless ctor — overrides the base permission defaults to Document semantics.</summary>
+    public Document()
+    {
+        // We can't shadow the base init-only props (the `new` keyword would
+        // hide them without changing the value the serializer reads via a
+        // DockableContent reference). Instead, set the base props through
+        // the init setter inside this ctor — the runtime treats the
+        // constructor body as init-scope, so the setter is callable.
+        CanClose = true;   // documents close by default
+        CanPin   = false;  // documents do not pin to sides
+    }
 }
 
 /// <summary>
@@ -48,12 +51,6 @@ public sealed record Document : DockableContent
 /// </remarks>
 public sealed record ToolWindow : DockableContent
 {
-    /// <summary>Tool windows do not close by default — they hide.</summary>
-    public new bool CanClose { get; init; } = false;
-
-    /// <summary>Tool windows pin by default.</summary>
-    public new bool CanPin { get; init; } = true;
-
     /// <summary>X button hides rather than closes. Default true.</summary>
     public bool CanHide { get; init; } = true;
 
@@ -63,8 +60,12 @@ public sealed record ToolWindow : DockableContent
     /// <summary>Tool window can be docked as a document (promoted into a DocumentPane). Default true.</summary>
     public bool CanDockAsDocument { get; init; } = true;
 
-    /// <summary>Parameterless ctor for object-initializer syntax.</summary>
-    public ToolWindow() { }
+    /// <summary>Parameterless ctor — overrides the base permission defaults to ToolWindow semantics.</summary>
+    public ToolWindow()
+    {
+        CanClose = false;  // X button hides, doesn't close
+        CanPin   = true;   // tool windows pin to sides by default
+    }
 }
 
 /// <summary>
@@ -97,18 +98,16 @@ public sealed record ToolWindow : DockableContent
 /// <c>System.Text.Json.JsonSerializerOptions</c>.</typeparam>
 public sealed record Document<TState> : DockableContent
 {
-    /// <summary>Documents close by default.</summary>
-    public new bool CanClose { get; init; } = true;
-
-    /// <summary>Documents do not pin to sides.</summary>
-    public new bool CanPin { get; init; } = false;
-
     /// <summary>Whether this document can also be docked as a tool window.</summary>
     public bool CanDockAsToolWindow { get; init; } = false;
 
     /// <summary>The typed pane state envelope. Round-trips through layout JSON.</summary>
     public TState? State { get; init; }
 
-    /// <summary>Parameterless ctor for object-initializer syntax.</summary>
-    public Document() { }
+    /// <summary>Parameterless ctor — overrides base permission defaults to Document semantics.</summary>
+    public Document()
+    {
+        CanClose = true;
+        CanPin   = false;
+    }
 }
