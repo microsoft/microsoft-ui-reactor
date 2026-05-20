@@ -1,5 +1,6 @@
 using System.Numerics;
 using Microsoft.UI.Reactor.Animation;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -3685,7 +3686,10 @@ public sealed partial class Reconciler : IDisposable
             try { hook.OnNavigatedTo?.Invoke(navigatedToCtx); }
             catch (Exception ex)
             {
-                global::System.Diagnostics.Debug.WriteLine($"[Reactor] onNavigatedTo threw: {ex}");
+                // User-callback isolation (spec 044 §6.7.3): a thrown
+                // onNavigatedTo must not block sibling subscribers or the
+                // onNavigatedFrom phase below.
+                DiagnosticLog.SwallowedError(LogCategory.Reactor, "Reconciler.OnNavigatedTo", ex);
             }
         }
 
@@ -3699,7 +3703,8 @@ public sealed partial class Reconciler : IDisposable
                 try { hook.OnNavigatedFrom?.Invoke(navigatedFromCtx); }
                 catch (Exception ex)
                 {
-                    global::System.Diagnostics.Debug.WriteLine($"[Reactor] onNavigatedFrom threw: {ex}");
+                    // User-callback isolation (spec 044 §6.7.3).
+                    DiagnosticLog.SwallowedError(LogCategory.Reactor, "Reconciler.OnNavigatedFrom", ex);
                 }
             }
         }
@@ -3720,7 +3725,10 @@ public sealed partial class Reconciler : IDisposable
             try { hook.OnNavigatingTo?.Invoke(ctx); }
             catch (Exception ex)
             {
-                global::System.Diagnostics.Debug.WriteLine($"[Reactor] onNavigatingTo threw: {ex}");
+                // User-callback isolation (spec 044 §6.7.3): a thrown
+                // onNavigatingTo must not silently cancel navigation — we
+                // still evaluate IsCancelled below for the explicit veto.
+                DiagnosticLog.SwallowedError(LogCategory.Reactor, "Reconciler.OnNavigatingTo", ex);
             }
             if (ctx.IsCancelled)
             {
