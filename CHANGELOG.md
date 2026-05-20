@@ -29,6 +29,65 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — Docking (foundation).** Foundation layer of the
+  Reactor-native rewrite. The Phase-1 public API moves from
+  `src/Reactor.Docking.Xaml/` into `src/Reactor/Docking/` (same
+  `Microsoft.UI.Reactor.Docking` namespace, so app source references
+  are unchanged); Phase-2 additive surface extensions land on top:
+  - `Document` and `ToolWindow` sealed records (Phase-2 §5.3.1) with
+    distinct default permissions (`Document.CanClose=true`,
+    `ToolWindow.CanClose=false` because X-button hides per AvalonDock
+    semantic; `ToolWindow.CanPin=true`, `CanAutoHide=true`,
+    `CanDockAsDocument=true`).
+  - `Document<TState>` generic record carrying typed per-pane state;
+    `TState` versioning is the app's responsibility (§5.3.2 / §8.11).
+  - `CanFloat` (default true) and `CanMove` (default true) added to
+    the `DockableContent` base (§5.3.8).
+  - `IDockLayoutStrategy` insertion-policy hook with default-method
+    bodies — apps short-circuit insertion via `BeforeInsertDocument` /
+    `BeforeInsertToolWindow`, or post-process via `AfterInsert*`
+    (§5.3.6).
+  - 15 cancellable lifecycle event-arg classes
+    (`DockLayoutChanging`/`Changed`, `DockDocumentClosing`/`Closed`,
+    `DockToolWindowHiding`/`Hidden`/`Closing`/`Closed`,
+    `DockContentFloating`/`Floated`/`Docking`/`Docked`,
+    `DockActiveContentChanged`,
+    `DockFloatingWindowCreated`/`Closed`); every `*ing` carries
+    `Cancel`. `DockManager` now exposes 15 `Action<TArgs>?` props for
+    each (§5.3.5).
+  - `IDockLayoutMigration` interface + `DockLayoutMigrationRegistry`
+    ladder with built-in v1→v2 step (synthesizes keys from titles per
+    §5.4.4). Forward-tolerant for schemas newer than the loader target.
+  - `DockHostModel` internal source-of-truth class with mutation queue
+    (`Dock`/`Float`/`Hide`/`Show`/`Close`/`Activate`/`PinToSide`).
+    Mutations are UI-dispatcher-affined; off-thread access throws
+    `InvalidOperationException` per spec §8.10. Enumerations
+    `AllContent()` / `Descendants()` over the dock tree.
+  - `DockContexts` slots + `DockHooks` extension methods on
+    `RenderContext` for property hooks: `UseDockHost`,
+    `UseActivePaneKey`, `UseIsActivePane`, `UsePane`, `UseDockState`,
+    `UseDockLayout`. Each slot is a separate `Context<T>` so consumers
+    only re-render on their specific slice change (selector-style scope
+    per spec §5.3.11).
+  - `DockPaneInfo` readonly struct + `DockPaneState` enum
+    (Docked/Floating/AutoHidden/AutoHiddenExpanded/Hidden).
+  - `DockSide` enum, `FloatingDockWindow` record, `DockLayoutSnapshot`
+    record for the wide-net `UseDockLayout` hook.
+  - `PreviousContainerTracker` — `ConditionalWeakTable`-backed
+    bookkeeping for the "show panel where you left it" mechanic
+    (§5.3.9). Bookkeeping decays with the pane reference.
+- **Spec 045 Phase 2 — Layout JSON v2 persistence.**
+  `DockLayoutSerializer.Save`/`Load` round-trips Reactor-native v2 JSON
+  via a source-generated `JsonSerializerContext` (AOT-clean: no
+  reflection paths from JSON; no external schema URLs; no type-name
+  instantiation). Security limits per §8.9: 1 MB max input size, depth
+  32; corruption / oversize / unknown-node-kind / missing-`$schema`
+  inputs return a `DockLayoutLoadResult.Fallback` (never throw on the
+  load path per §8.10). Invariant culture for numerics — verified by
+  a save-`de-DE` / load-`en-US` selftest (§8.8). Role-default-aware
+  permission emission keeps the file small. 200-pane load latency
+  regression guard wired in xUnit; the §8.1 50ms perf budget is
+  enforced by the perf bench harness. (spec 045 §5.4, §8.9–8.11)
 - **Spec 045 Phase 1 — Docking (vendor + wrap).** First-class docking
   surface arrives in Reactor via the new `Microsoft.UI.Reactor.Docking`
   namespace, shipped from a separate `Microsoft.UI.Reactor.Docking.Xaml`

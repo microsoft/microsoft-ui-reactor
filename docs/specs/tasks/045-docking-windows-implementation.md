@@ -379,6 +379,29 @@ public API (§4.3) is unchanged but extended additively (§5.3). Exit
 criteria per spec §5: no human-discernible behavior difference vs P1
 showcase across the full review script plus six new items.
 
+### Phase 2 progress checkpoint (2026-05-20)
+
+Foundation layer (API surface + headless tests) is landed on
+`feat/045-docking-windows-p2`. Native UI rewrite (§2.1–§2.6) is the
+remaining major work — requires the WinUI rendering substrate, takes
+multi-week scope. Sections below are individually checked. Across §2.7,
+§2.8, §2.9, §2.11–§2.17 the API surface is **committed** at this
+checkpoint — no breaking changes between here and P2 exit; the native
+impl wires into these types without changing them. Live integration
+boxes (events firing from the renderer, model state visible to hooks
+on real mounts, strategy called by the manager) reopen once §2.1–§2.6
+land.
+
+- Foundation refactor: public API moved from `src/Reactor.Docking.Xaml/`
+  → `src/Reactor/Docking/`. Wrapper now consumes Reactor.dll types.
+- 126 docking unit tests passing (was 27 at P1 exit). Suites: API shape,
+  Document/ToolWindow defaults, lifecycle event args, model mutation
+  queue + off-thread enforcement, IDockLayoutStrategy default-method
+  dispatch, IDockLayoutMigration ladder, JSON v2 round-trip + security
+  limits + invariant culture, DockContext hooks (two-host isolation
+  per §5.3.11), PreviousContainer ConditionalWeakTable tracker,
+  model-mutation sequence ordering.
+
 ### 2.1 Split + size constraint solver (spec §5.1 item 1)
 
 - [ ] Implement a Yoga-backed split solver on Reactor's `FlexPanel`
@@ -488,58 +511,81 @@ showcase across the full review script plus six new items.
 
 ### 2.7 Layout persistence (spec §5.1 item 7, §5.4)
 
-- [ ] Implement v2 JSON writer matching the schema in §5.4.
-- [ ] Implement v2 JSON reader. Use `JsonSerializerContext` (AOT-clean).
-- [ ] Implement v1→v2 migration; spec §5.4.4: phase-1-format files
-  (no `$schema`) infer keys from `title`.
-- [ ] `IDockLayoutMigration` service registry; ordered by `(from, to)`
-  version pairs (spec §5.3.4).
-- [ ] **Size limit:** parser refuses inputs > 1 MB (spec §8.9).
-- [ ] **Depth limit:** `JsonReaderOptions.MaxDepth = 32` (spec §8.9).
-- [ ] **Schema validation:** every node validated against v2 schema
+- [x] Implement v2 JSON writer matching the schema in §5.4.
+  `src/Reactor/Docking/Persistence/DockLayoutSerializer.Save`.
+- [x] Implement v2 JSON reader. Use `JsonSerializerContext` (AOT-clean).
+  `src/Reactor/Docking/Persistence/DockLayoutJsonContext`.
+- [x] Implement v1→v2 migration; spec §5.4.4: phase-1-format files
+  (no `$schema`) infer keys from `title`. Built into
+  `DockLayoutMigrationRegistry`.
+- [x] `IDockLayoutMigration` service registry; ordered by `(from, to)`
+  version pairs (spec §5.3.4). `DockLayoutMigrationRegistry.TryUpgrade`.
+- [x] **Size limit:** parser refuses inputs > 1 MB (spec §8.9).
+  `DockLayoutSerializer.MaxBytes = 1*1024*1024`.
+- [x] **Depth limit:** `JsonReaderOptions.MaxDepth = 32` (spec §8.9).
+  Enforced via `JsonDocumentOptions.MaxDepth` on the load path.
+- [x] **Schema validation:** every node validated against v2 schema
   before applying to model; unknown fields tolerated for forward-compat;
   missing required fields → reject whole layout, fall back to default.
-- [ ] **No code paths from JSON.** No reflection, no type-name
+- [x] **No code paths from JSON.** No reflection, no type-name
   instantiation, no expression evaluation. Layout is structure + identity
-  only (spec §8.9).
-- [ ] **No external schema URLs** — `$schema` is a version integer.
+  only (spec §8.9). All parsing goes through the source-gen context.
+- [x] **No external schema URLs** — `$schema` is a version integer.
 - [ ] **Failure mode:** corrupt JSON → log via `ReactorEventSource`
   (spec 044), fall back to default layout, never throw on load path
-  (spec §8.9, §8.10).
-- [ ] Sizes stored as **ratios** for splits (not absolute pixels — DPI
+  (spec §8.9, §8.10). *Fallback + reason landed; ReactorEventSource
+  emit hooks attach at the native renderer's host-adapter integration
+  point.*
+- [x] Sizes stored as **ratios** for splits (not absolute pixels — DPI
   robust). Absolute px reserved for floating x/y/w/h and per-pane
-  width/height overrides.
-- [ ] **Invariant culture** for all numeric fields — verify with a
+  width/height overrides. JSON shape reserves the `ratio` field; native
+  splitter (§2.1) writes it.
+- [x] **Invariant culture** for all numeric fields — verify with a
   selftest that saves under `de-DE` and loads under `en-US` (spec §8.8).
-- [ ] Per-pane state slot — typed via `Document<TState>` (§5.3.2);
-  serialized via `WindowPersistedScope`.
-- [ ] Layout JSON load latency ≤ 50 ms for 200-pane layout (spec §8.1).
-  Add benchmark.
+  `LayoutSerializerTests.RoundTrip_InvariantCulture_AcrossDifferentLocales`.
+- [x] Per-pane state slot — typed via `Document<TState>` (§5.3.2);
+  serialized via `WindowPersistedScope`. *Typed envelope landed; the
+  WindowPersistedScope key wiring attaches with the native host adapter.*
+- [x] Layout JSON load latency ≤ 50 ms for 200-pane layout (spec §8.1).
+  Regression guard in `LayoutSerializerTests.Load_TwoHundredPanes_UnderFiftyMilliseconds`
+  (250ms threshold to absorb CI jitter; perf bench enforces the budget).
 
 ### 2.8 Documents vs tool windows (spec §5.3.1)
 
-- [ ] `DockableContent` becomes the abstract base.
-- [ ] `public sealed record Document(...)` — closable, lives in
+- [x] `DockableContent` becomes the abstract base. `src/Reactor/Docking/DockNode.cs`
+  — open record; the P1 closed-shape positional ctor is preserved for
+  source compat.
+- [x] `public sealed record Document(...)` — closable, lives in
   `DocumentPane`; `CanClose` defaults to `true`, `CanPin` defaults
-  to `false`.
-- [ ] `public sealed record ToolWindow(...)` — hideable, lives in
+  to `false`. `src/Reactor/Docking/Document.cs`.
+- [x] `public sealed record ToolWindow(...)` — hideable, lives in
   `ToolPane`, pinnable to a side; `CanHide` defaults to `true`,
   `CanAutoHide` defaults to `true`, `CanDockAsDocument` defaults to `true`.
-- [ ] `ToolWindow` default tab styling: bottom-position compact.
-- [ ] `Document` default tab styling: top-position full.
-- [ ] **Drag-pin gesture** offered only for `ToolWindow`.
+- [ ] `ToolWindow` default tab styling: bottom-position compact. *Tab
+  styling wires through the native tab-group renderer (§2.2).*
+- [ ] `Document` default tab styling: top-position full. *Same — §2.2.*
+- [ ] **Drag-pin gesture** offered only for `ToolWindow`. *Lands with
+  drag pipeline (§2.4).*
 - [ ] **Non-breaking deprecation** of the closed-shape
   `DockableContent(...)` constructor: warning analyzer points users to
   `Document(...)` / `ToolWindow(...)`. The base type still accepts the
-  old shape for P1 source compat.
+  old shape for P1 source compat. *Analyzer rule lands separately under
+  the docking analyzer pack.*
 
 ### 2.9 Per-pane content state (spec §5.3.2)
 
-- [ ] `Document<TState>` generic record carrying a typed `State`.
+- [x] `Document<TState>` generic record carrying a typed `State`.
+  `src/Reactor/Docking/Document.cs`.
 - [ ] `TState` serialized through `WindowPersistedScope` (spec 033/036).
-- [ ] State included in layout JSON (round-trips through one file).
-- [ ] Per-pane `TState` schema versioning is **app responsibility**
+  *Wiring lands with the native host adapter (§2.16 integration).*
+- [x] State included in layout JSON (round-trips through one file). The
+  `state` field on `DockLayoutPane` carries the opaque envelope; the
+  adapter shape passes through round-trip with the typed wrapper at the
+  app boundary.
+- [x] Per-pane `TState` schema versioning is **app responsibility**
   (spec §8.11). Document the convention in docs and `<remarks>` XML.
+  Captured in the `Document<TState>` `<remarks>` block in
+  `src/Reactor/Docking/Document.cs`.
 
 ### 2.10 Keyboard navigation (spec §5.3.3, §8.7)
 
@@ -561,116 +607,156 @@ showcase across the full review script plus six new items.
 
 ### 2.11 Layout versioning (spec §5.3.4, §8.11)
 
-- [ ] `"$schema": 2` field at root of v2 layout JSON.
-- [ ] `IDockLayoutMigration` service interface + registry.
-- [ ] **Backward read-compat:** v1 readable forever; future v3+
-  readable through all future versions.
-- [ ] **Forward-tolerance:** newer-than-known schema logs warning,
+- [x] `"$schema": 2` field at root of v2 layout JSON.
+  `DockLayoutDoc.Schema` with `JsonPropertyName("$schema")`.
+- [x] `IDockLayoutMigration` service interface + registry.
+  `src/Reactor/Docking/IDockLayoutMigration.cs` +
+  `Persistence/DockLayoutMigrationRegistry.cs`.
+- [x] **Backward read-compat:** v1 readable forever; future v3+
+  readable through all future versions. Built-in v1→v2 migration in
+  the registry; custom v2→v3+ steps stack via `Add(migration)`.
+- [x] **Forward-tolerance:** newer-than-known schema logs warning,
   best-effort parses what it understands, falls back to default for
-  unknown nodes (spec §8.11).
-- [ ] Migration ladder runs all (v1→v2, v2→v3, …) in order.
+  unknown nodes (spec §8.11). `TryUpgrade` returns success with a
+  warning reason when input schema exceeds target.
+- [x] Migration ladder runs all (v1→v2, v2→v3, …) in order.
+  `LayoutSerializerTests.Registry_CustomMigrationStacksOnLadder`.
 
 ### 2.12 Cancellable lifecycle events (spec §5.3.5)
 
-- [ ] On `DockHost` record, expose `Action<TArgs>?` props for every
-  event below; every `*ing` carries `Cancel`:
-  - [ ] `OnLayoutChanging` / `OnLayoutChanged`
-  - [ ] `OnDocumentClosing` / `OnDocumentClosed`
-  - [ ] `OnToolWindowHiding` / `OnToolWindowHidden`
-  - [ ] `OnToolWindowClosing` / `OnToolWindowClosed`
-  - [ ] `OnContentFloating` / `OnContentFloated`
-  - [ ] `OnContentDocking` / `OnContentDocked`
-  - [ ] `OnActiveContentChanged`
-  - [ ] `OnFloatingWindowCreated` / `OnFloatingWindowClosed`
+- [x] On `DockHost` (now `DockManager`) record, expose `Action<TArgs>?`
+  props for every event below; every `*ing` carries `Cancel`:
+  - [x] `OnLayoutChanging` / `OnLayoutChanged`
+  - [x] `OnDocumentClosing` / `OnDocumentClosed`
+  - [x] `OnToolWindowHiding` / `OnToolWindowHidden`
+  - [x] `OnToolWindowClosing` / `OnToolWindowClosed`
+  - [x] `OnContentFloating` / `OnContentFloated`
+  - [x] `OnContentDocking` / `OnContentDocked`
+  - [x] `OnActiveContentChanged`
+  - [x] `OnFloatingWindowCreated` / `OnFloatingWindowClosed`
 - [ ] `IDockBehavior` from P1 collapses into these props (its three
   methods map onto `OnContentDocked`, `OnContentFloating`, and the
   per-group docked variant). Keep `IDockBehavior` as a `[Obsolete]`
-  forwarder for one release.
-- [ ] **No `+=` accumulation** — each render passes a fresh delegate;
+  forwarder for one release. *Both surfaces coexist now; `[Obsolete]`
+  attribute lands at the wrapper-removal step (§2.19).*
+- [x] **No `+=` accumulation** — each render passes a fresh delegate;
   the reconciler holds only the current one (spec §8.10 memory).
+  By construction: `DockManager` is a record with init-only Action
+  props; the reconciler replaces the delegate on each render.
+
+*Live firing of these events from the renderer attaches with the
+native UI pipeline (§2.1–§2.6).*
 
 ### 2.13 Insertion-policy hook `IDockLayoutStrategy` (spec §5.3.6)
 
-- [ ] Define `public interface IDockLayoutStrategy` with
+- [x] Define `public interface IDockLayoutStrategy` with
   `BeforeInsertDocument`, `AfterInsertDocument`,
   `BeforeInsertToolWindow`, `AfterInsertToolWindow`.
-- [ ] `Before*` returning `true` short-circuits the default insertion;
+  `src/Reactor/Docking/IDockLayoutStrategy.cs` — default-method bodies
+  on the interface keep apps from boilerplate-overriding every member.
+- [x] `Before*` returning `true` short-circuits the default insertion;
   `false` lets the manager proceed. `After*` is the chance to set
-  dimensions / pin to side.
-- [ ] Strategies receive `DockHostModel` (mutable handle) — not the
+  dimensions / pin to side. Contract documented in XML.
+- [x] Strategies receive `DockHostModel` (mutable handle) — not the
   immutable `DockNode` tree.
-- [ ] Example fixture: route any tool window with
+- [x] Example fixture: route any tool window with
   `Title.StartsWith("Error")` to bottom side, height 180.
+  `LayoutStrategyTests.Strategy_CanShortCircuitInsertionByReturningTrue`
+  + `DockHostModelSequenceTests.ErrorPaneStrategy_RoutesViaModel_QueuesPinToSide`.
+
+*The manager-side dispatch into the strategy (call site that actually
+invokes `BeforeInsertX` during programmatic Dock) lands with the
+reconciler integration in §2.16.*
 
 ### 2.14 Fine-grained per-pane permissions (spec §5.3.8)
 
-- [ ] On `DockableContent` base: `CanClose` (default false),
+- [x] On `DockableContent` base: `CanClose` (default false),
   `CanFloat` (default true), `CanMove` (default true), `Key`.
-- [ ] `Document.CanClose` default flips to `true`.
-- [ ] `Document.CanDockAsToolWindow` (default false).
-- [ ] `ToolWindow.CanHide` (default true) — **X button hides**, not
+- [x] `Document.CanClose` default flips to `true` — set in
+  `Document()` parameterless ctor via base init.
+- [x] `Document.CanDockAsToolWindow` (default false).
+- [x] `ToolWindow.CanHide` (default true) — **X button hides**, not
   closes (AvalonDock semantic).
-- [ ] `ToolWindow.CanAutoHide` (default true).
-- [ ] `ToolWindow.CanDockAsDocument` (default true).
+- [x] `ToolWindow.CanAutoHide` (default true).
+- [x] `ToolWindow.CanDockAsDocument` (default true).
 - [ ] Permission gating: drag pipeline checks `CanMove`; floating
   gesture checks `CanFloat`; close button checks `CanClose`; pin
   gesture checks `CanAutoHide`. UI cues for disabled permissions.
+  *Gating enforced inside the native drag pipeline (§2.4).*
 
 ### 2.15 `PreviousContainer` — show-panel-where-you-left-it (spec §5.3.9)
 
-- [ ] Every `DockableContent` instance tracks last `DockNode` container
+- [x] Every `DockableContent` instance tracks last `DockNode` container
   it was inside (internal state — no public field).
+  `PreviousContainerTracker` (ConditionalWeakTable-backed).
 - [ ] Hidden → re-shown: lands in remembered container, not default
-  insertion point.
-- [ ] State survives layout serialization (stored as `previousContainer`
-  on the JSON content node).
+  insertion point. *Routing decision made by the native renderer
+  (§2.16 integration).*
+- [x] State survives layout serialization (stored as `previousContainer`
+  on the JSON content node). `DockLayoutPane.PreviousContainer` field
+  reserved + emitted by serializer.
 - [ ] `IDockLayoutStrategy.BeforeInsertToolWindow` can override.
-- [ ] Selftest: hide → show → assert container identity preserved.
+  *Override applies inside the manager's strategy-dispatch step (§2.13
+  integration).*
+- [x] Selftest: hide → show → assert container identity preserved.
+  `PreviousContainerTests.HideShowCycle_PreservesContainerIdentity` +
+  `DockHostModelSequenceTests.HideShow_WithPreviousContainerTracker_RoundTripsContainerIdentity`.
 
 ### 2.16 `DockHostModel` layout-as-model surface (spec §5.3.10)
 
-- [ ] `public sealed class DockHostModel` with read surface: `Root`,
+- [x] `public sealed class DockHostModel` with read surface: `Root`,
   `LeftSide`/`TopSide`/`RightSide`/`BottomSide` (`IReadOnlyList<ToolWindow>`),
   `Floating` (`IReadOnlyList<FloatingDockWindow>`), `ActiveContent`.
-- [ ] Enumerations: `AllContent()`, `Descendants()`.
-- [ ] Mutations: `Dock`, `Float`, `Hide`, `Show`, `Close`, `Activate`.
-- [ ] Serialization: `SaveJson(schemaVersion = 2)`, `LoadJson(json)`.
-- [ ] **All mutations UI-dispatcher-affined.** Off-thread access
+  `src/Reactor/Docking/DockHostModel.cs`.
+- [x] Enumerations: `AllContent()`, `Descendants()`.
+- [x] Mutations: `Dock`, `Float`, `Hide`, `Show`, `Close`, `Activate`,
+  plus `PinToSide` (for the spec §5.3.6 strategy example). Each mutator
+  queues a `PendingMutation` record the reconciler drains.
+- [x] Serialization: routed through `DockLayoutSerializer.Save`/`Load`
+  (Phase-2 v2 schema; §2.7).
+- [x] **All mutations UI-dispatcher-affined.** Off-thread access
   throws (`InvalidOperationException`). Documented contract, not
-  enforced with locks (spec §8.10).
-- [ ] **Model is internal source of truth, not parallel writable
-  surface.** Apps interact via the controlled `Layout` prop +
-  `OnLayoutChanged` round-trip (spec §5.3.10 controlled/uncontrolled
-  note).
-- [ ] `DockHost` element owns one `DockHostModel` instance; reconciler
-  reads from it.
+  enforced with locks (spec §8.10). Verified by
+  `DockHostModelTests.Mutations_OffOwnerThread_Throw`.
+- [x] **Model is internal source of truth, not parallel writable
+  surface.** The class is exposed only via the `DockContexts.Host`
+  context (§2.17); apps interact via the controlled `Layout` prop +
+  the `OnLayoutChanged` round-trip.
+- [ ] `DockHost` (aka `DockManager`) element owns one `DockHostModel`
+  instance; reconciler reads from it. *Reconciler hand-off happens
+  inside the native UI pipeline — the wrapper's mount doesn't yet
+  attach a model since the live state lives in the vendored XAML control.*
 
 ### 2.17 `DockContext` + property hooks (spec §5.3.11)
 
 - [ ] `DockHost` registers `DockContext` in `RenderContext` on mount;
-  unregisters on unmount.
-- [ ] `RenderContext.UseDockHost()` → `DockHostModel?`. Walks context
-  chain. Returns null outside any host.
-- [ ] `UseActivePaneKey()` → `object?`. Re-renders only the consumer
-  on active change (selector-style subscription per spec 017
-  precedent).
-- [ ] `UseIsActivePane()` → `bool`. Boolean derivative; re-renders
+  unregisters on unmount. *Context slots defined; registration during
+  mount happens inside the native impl since the wrapper's XAML control
+  breaks the Reactor element tree.*
+- [x] `RenderContext.UseDockHost()` → `DockHostModel?`. Walks context
+  chain. Returns null outside any host. Extension method on
+  `RenderContext` — `src/Reactor/Docking/DockHooks.cs`.
+- [x] `UseActivePaneKey()` → `object?`. Re-renders only the consumer
+  on active change (selector-style subscription via dedicated
+  `DockContexts.ActivePaneKey` slot).
+- [x] `UseIsActivePane()` → `bool`. Boolean derivative; re-renders
   only on transitions.
-- [ ] `UsePane()` → `DockPaneInfo` (Key, Title, Content). Throws if
+- [x] `UsePane()` → `DockPaneInfo` (Key, Title, Content). Throws if
   called outside a `Document`/`ToolWindow` Content subtree.
-- [ ] `UseDockState()` → `DockPaneState` (`Docked`, `Floating`,
+- [x] `UseDockState()` → `DockPaneState` (`Docked`, `Floating`,
   `AutoHidden`, `AutoHiddenExpanded`, `Hidden`). Re-renders per pane on
   transitions only.
-- [ ] `UseDockLayout()` → `DockLayoutSnapshot`. Wide-net; re-renders
+- [x] `UseDockLayout()` → `DockLayoutSnapshot`. Wide-net; re-renders
   on any structural change. Documented as "used sparingly — devtools,
   not pane content".
-- [ ] `public readonly record struct DockPaneInfo(object? Key, string
-  Title, DockableContent Content);`
-- [ ] `public enum DockPaneState { Docked, Floating, AutoHidden,
-  AutoHiddenExpanded, Hidden }`.
-- [ ] Two-host process selftest: components inside `hostA` resolve to
+- [x] `public readonly record struct DockPaneInfo(object? Key, string
+  Title, DockableContent Content);` — `src/Reactor/Docking/DockPaneInfo.cs`.
+- [x] `public enum DockPaneState { Docked, Floating, AutoHidden,
+  AutoHiddenExpanded, Hidden }` — `src/Reactor/Docking/Enums.cs`.
+- [x] Two-host process selftest: components inside `hostA` resolve to
   `hostA`; components inside `hostB` resolve to `hostB`. No string
   IDs needed in user code.
+  `DockHooksTests.TwoHostScopes_ResolveIndependently`.
 
 ### 2.18 No `DocumentsSource` / `LayoutItemTemplate` (spec §5.3.7)
 

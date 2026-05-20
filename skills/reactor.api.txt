@@ -756,6 +756,7 @@ WrapGridElement.Set(Action<VariableSizedWrapGrid> configure) → WrapGridElement
 # Call from Render() / function-component body. Same order every render —
 # never inside if/for. Use the result conditionally, not the call.
 
+RenderContext.UseActivePaneKey() → object
 RenderContext.UseAnnounce() → AnnounceHandle
 RenderContext.UseBreakpoint(Window window, double minWidth) → bool
 RenderContext.UseBreakpoint(double minWidth) → bool
@@ -770,6 +771,9 @@ RenderContext.UseContext<T>(Context<T> context) → T
 RenderContext.UseDataSource<T>(IDataSource<T> source, DataRequest request, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null) → InfiniteResource<T>
 RenderContext.UseDataSource<T>(IDataSource<T> source, DataRequest request, QueryCache cache, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null) → InfiniteResource<T>
 RenderContext.UseDevtools() → bool
+RenderContext.UseDockHost() → DockHostModel
+RenderContext.UseDockLayout() → DockLayoutSnapshot
+RenderContext.UseDockState() → DockPaneState
 RenderContext.UseDpi() → UInt32
 RenderContext.UseEffect(Action effect, object[] dependencies) → void
 RenderContext.UseEffect(Func<Action> effectWithCleanup, object[] dependencies) → void
@@ -783,6 +787,7 @@ RenderContext.UseInfiniteResource<TItem, TCursor>(Func<TCursor, CancellationToke
 RenderContext.UseInfiniteResource<TItem, TCursor>(Func<TCursor, CancellationToken, Task<Page<TItem, TCursor>>> fetchPage, object[] deps, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null, Func<int, TCursor> cursorFromPageIndex = null) → InfiniteResource<TItem>
 RenderContext.UseIntl() → IntlAccessor
 RenderContext.UseIsActive() → bool
+RenderContext.UseIsActivePane() → bool
 RenderContext.UseIsDarkTheme() → bool
 RenderContext.UseMemo<T>(Func<T> factory, object[] dependencies) → T
 RenderContext.UseMemoCells<T>(IReadOnlyList<T> items, Func<T, int, Element> builder, object[] dependencies) → Element[]
@@ -797,6 +802,7 @@ RenderContext.UseObservable<T>(T source) → T
 RenderContext.UseObservableProperty<T, TProp>(T source, Func<T, TProp> selector, string propertyName) → TProp
 RenderContext.UseObservableTree<T>(T source) → T
 RenderContext.UseOpenWindow(WindowKey key, WindowSpec spec, Func<Component> factory) → ReactorWindow
+RenderContext.UsePane() → DockPaneInfo
 RenderContext.UsePersisted<T>(string key, T initialValue) → ValueTuple<T, Action<T>>
 RenderContext.UsePersisted<T>(string key, T initialValue, PersistedScope scope) → ValueTuple<T, Action<T>>
 RenderContext.UseReducedMotion() → bool
