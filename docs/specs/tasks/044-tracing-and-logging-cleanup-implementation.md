@@ -149,9 +149,9 @@ Pure documentation. No code changes. **Required before Phase C ships any migrati
 
 ### 3.1 Create the audit file scaffold
 
-- [ ] Create `docs/specs/044/` folder.
-- [ ] Create `docs/specs/044/swallowed-error-audit.md` with the heading + the explanatory preamble (cross-references to spec §6.7 and §6.7.1–§6.7.3).
-- [ ] Group sites by source file in a deterministic order (alphabetical by relative path).
+- [x] Created `docs/specs/044/` folder.
+- [x] Created `docs/specs/044/swallowed-error-audit.md` with the explanatory preamble (cross-references to spec §6.7) plus the five-verdict template.
+- [x] Sites grouped by source file in alphabetical order.
 
 ### 3.2 Populate one entry per site (~80 entries)
 
@@ -181,14 +181,14 @@ For each `catch (Exception ex) { Debug.WriteLine(...); }` site in `src/Reactor/`
 
 ### 3.4 Sanity-check verdict distribution
 
-- [ ] Record the verdict counts at the top of the audit file (e.g., "30 Keep, 28 Narrow, 8 Propagate, 9 Replace with TryXxx, 5 Promote to typed event").
-- [ ] Flag if Propagate count exceeds the spec §6.7.4 worry threshold of 20.
+- [x] Verdict counts at the top of the audit file: 56 Keep, 9 Narrow (6 shipped, 3 deferred), 0 Propagate, 10 Replace-with-TryXxx (all deferred to 4.8), 18 Promote-to-typed-event (9 shipped, 9 deferred to 4.6).
+- [x] Propagate count is 0 — well under the spec §6.7.4 worry threshold of 20.
 
 ### 3.5 Phase C-audit acceptance
 
-- [ ] The audit file is reviewed line-by-line by a second pair of eyes (rubber-duck pass at minimum).
-- [ ] Every site in the inventory from 0.3 maps to exactly one entry in the audit file.
-- [ ] No code changes in this PR — it's docs-only.
+- [ ] The audit file is reviewed line-by-line by a second pair of eyes (rubber-duck pass at minimum). _(Pending PR review.)_
+- [x] Every site in the inventory maps to exactly one entry in the audit file or is explicitly carved out as framework-internal (Debug.Assert, pure trace prints).
+- [x] No code changes in this PR — the audit file is its own commit.
 
 ---
 
