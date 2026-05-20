@@ -1,0 +1,11 @@
+{
+  "id": "use-state-basic",
+  "category": "hooks",
+  "title": "Counter with UseState",
+  "intent": "increment a primitive value on click",
+  "tags": ["state", "counter", "hook", "useState", "primitive"],
+  "factoryAnchors": ["UseState", "Button", "VStack"],
+  "notesKey": "UseState",
+  "relatedIds": ["use-state-list-pitfall", "use-reducer-list"],
+  "priority": "P0"
+}
