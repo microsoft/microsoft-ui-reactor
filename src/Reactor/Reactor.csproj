@@ -45,6 +45,11 @@
     <InternalsVisibleTo Include="Reactor.Tests" />
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
+    <!-- The first-party docking wrapper (spec 045 Phase 1) calls Reconciler
+         helpers like SetElementTag / DetachReactorState that are internal
+         to Reactor. The wrapper is a first-party Microsoft assembly that
+         ships alongside Reactor itself, not a third-party consumer. -->
+    <InternalsVisibleTo Include="Microsoft.UI.Reactor.Docking.Xaml" />
   </ItemGroup>
 
   <ItemGroup>
