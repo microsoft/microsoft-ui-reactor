@@ -404,19 +404,26 @@ land.
 
 ### 2.1 Split + size constraint solver (spec §5.1 item 1)
 
-- [ ] Implement a Yoga-backed split solver on Reactor's `FlexPanel`
+- [x] Implement a Yoga-backed split solver on Reactor's `FlexPanel`
   (precedent: `FlexPanelDemo`). Replaces `LayoutPanel.UpdateLayoutStructure`
-  which uses Grid + `GridSplitter` upstream.
-- [ ] Implement a Reactor `Splitter` element: pointer-drag with min/max
-  clamping; persistent ratio storage (ratios — not absolute px — per
-  §5.4 note 1); focusable for keyboard resize (spec §8.7).
-- [ ] Splitter handle: 8 DIP visual, 16 DIP hit-test (spec §8.7 touch
-  targets).
+  which uses Grid + `GridSplitter` upstream. `DockSplitRenderer.Render`
+  composes a `FlexElement` (→ `FlexPanel`) with panes interleaved by
+  splitters; flex-grow drives ratios.
+- [x] Implement a Reactor `Splitter` element: pointer-drag with min/max
+  clamping (ratio-space, solved by `DockSplitSolver.ApplyDelta`);
+  persistent ratio storage (ratios stored alongside the model — see §2.7
+  `ratio` field; native splitter writes it); focusable for keyboard resize
+  (`DockSplitterControl` is `IsTabStop`; arrow keys move by 16 DIP).
+- [x] Splitter handle: 8 DIP visual, 16 DIP hit-test (spec §8.7 touch
+  targets). `DockSplitterControl.VisualThicknessDip / HitThicknessDip`.
 - [ ] Splitter `LayoutMetricsChanged` reacts to DPI changes (spec §8.5
-  DPI cost ≤ 16 ms).
-- [ ] Unit tests for constraint solving: min < proposed < max clamp,
-  ratio persistence, multi-child layouts, RTL flip (sizes invariant;
-  child order flips per spec §8.8).
+  DPI cost ≤ 16 ms). *FlexPanel already syncs PointScale lazily; per-
+  splitter DPI hook lands when the renderer is wired end-to-end via §2.16.*
+- [x] Unit tests for constraint solving: min < proposed < max clamp,
+  ratio persistence, multi-child layouts. RTL flip wires through
+  `FlexPanel.LayoutDirection` and is asserted at the renderer level (sizes
+  invariant; child order flips per spec §8.8). Coverage in
+  `DockSplitSolverTests` (15 cases) + `DockSplitRendererTests` (6 cases).
 
 ### 2.2 Tab group rendering (spec §5.1 item 2; §11 retained)
 
