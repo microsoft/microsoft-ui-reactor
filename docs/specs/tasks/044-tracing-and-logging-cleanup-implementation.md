@@ -243,9 +243,9 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 4.9 PR: User-callback isolation sites (Keep verdicts)
 
-- [ ] For the ~10 user-callback swallows in `RenderContext.cs` (effect cleanups, command handlers, lifecycle hooks), preserve the broad catch but route through `DiagnosticLog.SwallowedError(LogCategory.Reactor, "UseEffect.cleanup[i=N]", ex)` per spec §6.7.3.
-- [ ] Verify framework-internal code is **outside** the try/catch (spec §6.7.3 point 2).
-- [ ] Each entry gets an inline `// AUDIT (user-callback isolation): ...` comment naming the user contract.
+- [x] For the ~10 user-callback swallows in `RenderContext.cs` (effect cleanups, command handlers, lifecycle hooks), preserve the broad catch but route through `DiagnosticLog.SwallowedError(LogCategory.Reactor, "UseEffect.cleanup[i=N]", ex)` per spec §6.7.3. Actual count was 6 in `src/Reactor/Core/RenderContext.cs`: `UseCommand.ExecuteAsync`, `UseCommand<T>.ExecuteAsync`, `UseEffect.cleanup[i=N]` (FlushEffects phase 1), `UseEffect.effect[i=N]` (FlushEffects phase 2), `RunCleanups.effectCleanup[i=N]`, `RunCleanups.persistedSave[i=N]`. The spec's "~10" estimate appears to have folded in `Reconciler` user-callback sites; those land in 4.10.
+- [x] Verify framework-internal code is **outside** the try/catch (spec §6.7.3 point 2). For `RunCleanups.persistedSave`, `PersistedHookStateBase.SaveToCache` is framework code but reaches user-supplied `IPersistedStateScope.Set` — the try-catch wraps the user contact point; the surrounding hook-iteration loop is outside.
+- [x] Each entry gets an inline `// User-callback isolation (spec 044 §6.7.3): ...` comment naming the user contract (cleanup ordering, effect-flush forward progress, persisted-slot independence).
 
 ### 4.10 PR: Residual catches + remaining trace prints
 
