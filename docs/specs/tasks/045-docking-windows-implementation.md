@@ -394,13 +394,36 @@ land.
 
 - Foundation refactor: public API moved from `src/Reactor.Docking.Xaml/`
   → `src/Reactor/Docking/`. Wrapper now consumes Reactor.dll types.
-- 126 docking unit tests passing (was 27 at P1 exit). Suites: API shape,
+- 155 docking unit tests passing (was 27 at P1 exit). Suites: API shape,
   Document/ToolWindow defaults, lifecycle event args, model mutation
   queue + off-thread enforcement, IDockLayoutStrategy default-method
   dispatch, IDockLayoutMigration ladder, JSON v2 round-trip + security
   limits + invariant culture, DockContext hooks (two-host isolation
   per §5.3.11), PreviousContainer ConditionalWeakTable tracker,
-  model-mutation sequence ordering.
+  model-mutation sequence ordering, split-ratio solver (§2.1),
+  split renderer shape (§2.1), tab-group renderer shape (§2.2).
+
+### Phase 2 native UI checkpoint (2026-05-20, continued)
+
+Reactor-native renderer is live behind `DockingNativeInterop.Register`.
+Default for the showcase; `REACTOR_DOCK_XAML=1` flips back to the P1
+WinUI.Dock wrapper for side-by-side review.
+
+- §2.1 — split solver landed (DockSplitSolver + DockSplitterControl +
+  DockSplitRenderer). Pointer drag clamps in ratio space, multi-child
+  splits untouched panes preserved.
+- §2.2 — tab-group renderer landed (DockTabGroupRenderer → WinUI
+  TabView). Close button gated by `CanClose`.
+- §2.16 (partial) — reconciler hand-off via Border + ComponentElement
+  wrapping `DockHostNativeComponent`. Live model integration deferred
+  to the §2.16 final item (lands with §2.13 strategy dispatch and §2.4
+  drag pipeline). Smoke fixtures cover mount → update → unmount and
+  TabView wiring.
+- §2.17 (partial) — DockContext hooks already defined; registration on
+  the native mount lands once the live model becomes the source of
+  truth (next pass).
+- Side-strip composition lives in `DockSideStripRenderer`; full popup
+  expansion lands with §2.5.
 
 ### 2.1 Split + size constraint solver (spec §5.1 item 1)
 
