@@ -1,4 +1,6 @@
-using System.Diagnostics;
+using System.Diagnostics.Tracing;
+using System.Runtime.InteropServices;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 
 namespace Microsoft.UI.Reactor.Hosting.Persistence;
 
@@ -21,6 +23,11 @@ public sealed class PackagedSettingsStore : IWindowPersistenceStore
     private const string ContainerName = "Reactor";
     private const string KeyPrefix = "WindowPersistence_";
 
+    // Stable, developer-authored label for the spec 044 Phase B Persistence
+    // events. Distinguishes the WinRT-backed store from JsonFileStore on the
+    // trace, and is NEVER a path or container name a user could control.
+    private const string StoreKind = "packaged-settings";
+
     /// <inheritdoc />
     public bool TryRead(string id, out byte[]? data)
     {
@@ -34,11 +41,39 @@ public sealed class PackagedSettingsStore : IWindowPersistenceStore
             if (!c.Values.TryGetValue(KeyPrefix + id, out var value)) return false;
             if (value is not string b64 || string.IsNullOrEmpty(b64)) return false;
             data = Convert.FromBase64String(b64);
+            if (data is not null
+                && ReactorEventSource.Log.IsEnabled(EventLevel.Informational, ReactorEventSource.Keywords.Persistence))
+                ReactorEventSource.Log.PersistenceRead(StoreKind, data.Length);
             return data is not null;
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            Debug.WriteLine($"[Reactor] PackagedSettingsStore.TryRead failed: {ex.GetType().Name}: {ex.Message}");
+            // Hit on every unpackaged process: ApplicationData.Current throws
+            // 0x80073D54 ("not a packaged app"). The auto-detect flow uses
+            // PackagedSettingsStore.IsAvailable() to choose JsonFileStore in
+            // that context; this catch is the belt-and-braces for callers
+            // that bypass IsAvailable().
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "PackagedSettingsStore.TryRead", ex);
+            data = null;
+            return false;
+        }
+        catch (COMException ex)
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "PackagedSettingsStore.TryRead", ex);
+            data = null;
+            return false;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "PackagedSettingsStore.TryRead", ex);
+            data = null;
+            return false;
+        }
+        catch (FormatException ex)
+        {
+            // Malformed base64 in a tampered settings entry — same shape as
+            // the JsonFileStore counterpart.
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "PackagedSettingsStore.TryRead.base64", ex);
             data = null;
             return false;
         }
@@ -54,10 +89,20 @@ public sealed class PackagedSettingsStore : IWindowPersistenceStore
             if (settings is null) return;
             var c = settings.CreateContainer(ContainerName, global::Windows.Storage.ApplicationDataCreateDisposition.Always);
             c.Values[KeyPrefix + id] = Convert.ToBase64String(data);
+            if (ReactorEventSource.Log.IsEnabled(EventLevel.Informational, ReactorEventSource.Keywords.Persistence))
+                ReactorEventSource.Log.PersistenceWrite(StoreKind, data.Length);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            Debug.WriteLine($"[Reactor] PackagedSettingsStore.Write failed: {ex.GetType().Name}: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "PackagedSettingsStore.Write", ex);
+        }
+        catch (COMException ex)
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "PackagedSettingsStore.Write", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "PackagedSettingsStore.Write", ex);
         }
     }
 

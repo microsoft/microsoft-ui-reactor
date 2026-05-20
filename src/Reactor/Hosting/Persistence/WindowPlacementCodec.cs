@@ -1,5 +1,6 @@
-using System.Diagnostics;
+using System.Diagnostics.Tracing;
 using System.Runtime.InteropServices;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 
 namespace Microsoft.UI.Reactor.Hosting.Persistence;
 
@@ -69,7 +70,13 @@ internal static class WindowPlacementCodec
             var placement = new WINDOWPLACEMENT { length = Marshal.SizeOf<WINDOWPLACEMENT>() };
             if (!GetWindowPlacement(hwnd, ref placement))
             {
-                Debug.WriteLine($"[Reactor] GetWindowPlacement failed: {Marshal.GetLastWin32Error()}");
+                // GetLastError on a Win32 BOOL failure: surface the raw code
+                // through the typed HResultFailed channel so apps capturing
+                // Microsoft-UI-Reactor see why placement save was skipped.
+                DiagnosticLog.HResultFailed(
+                    LogCategory.Persistence,
+                    "WindowPlacementCodec.GetWindowPlacement",
+                    Marshal.GetLastWin32Error());
                 return null;
             }
 
@@ -101,9 +108,9 @@ internal static class WindowPlacementCodec
             bw.Flush();
             return ms.ToArray();
         }
-        catch (Exception ex)
+        catch (global::System.IO.IOException ex)
         {
-            Debug.WriteLine($"[Reactor] WindowPlacementCodec.Capture failed: {ex.GetType().Name}: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "WindowPlacementCodec.Capture", ex);
             return null;
         }
     }
@@ -124,7 +131,8 @@ internal static class WindowPlacementCodec
             int monitorCount = br.ReadInt32();
             if (monitorCount < 0 || monitorCount > 64)
             {
-                Debug.WriteLine($"[Reactor] WindowPlacementCodec: implausible monitor count {monitorCount}; rejecting payload.");
+                if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Persistence))
+                    ReactorEventSource.Log.PersistenceRejected("placement", "implausible-monitor-count");
                 return false;
             }
             if (monitorCount != currentMonitors.Count)
@@ -163,11 +171,12 @@ internal static class WindowPlacementCodec
                 // best-effort-fix our junk.
                 if (!IsPlausiblePlacement(placement))
                 {
-                    Debug.WriteLine(
-                        $"[Reactor] WindowPlacementCodec: rejecting implausible placement " +
-                        $"(rect={placement.rcNormalPosition.Left},{placement.rcNormalPosition.Top}," +
-                        $"{placement.rcNormalPosition.Right},{placement.rcNormalPosition.Bottom} " +
-                        $"showCmd={placement.showCmd}); falling back to default.");
+                    // PII: do NOT emit the raw rect / showCmd on the ETW
+                    // payload — those can encode user behavior signals
+                    // (multi-mon layout fingerprinting). A short reason
+                    // label is enough to triage the reject in a trace.
+                    if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Persistence))
+                        ReactorEventSource.Log.PersistenceRejected("placement", "implausible-rect");
                     return false;
                 }
 
@@ -188,11 +197,16 @@ internal static class WindowPlacementCodec
         }
         catch (global::System.IO.EndOfStreamException)
         {
+            // Tampered payload truncated mid-record. Treat as schema mismatch
+            // rather than an "exception swallow" — no value in the type-only
+            // ETW payload because the type IS the reason.
+            if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Persistence))
+                ReactorEventSource.Log.PersistenceRejected("placement", "truncated");
             return false;
         }
-        catch (Exception ex)
+        catch (global::System.IO.IOException ex)
         {
-            Debug.WriteLine($"[Reactor] WindowPlacementCodec.Restore failed: {ex.GetType().Name}: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "WindowPlacementCodec.Restore", ex);
             return false;
         }
     }

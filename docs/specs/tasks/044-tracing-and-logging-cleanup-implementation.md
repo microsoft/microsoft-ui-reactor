@@ -230,7 +230,11 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 4.7 PR: Persistence narrowing
 
-- [ ] Migrate `JsonFileStore`, `PackagedSettingsStore`, `WindowPlacementCodec` swallows to narrow `catch (IOException)`, `catch (JsonException)`, `catch (UnauthorizedAccessException)` plus `DiagnosticLog.SwallowedError(LogCategory.Persistence, ...)`.
+- [x] Migrate `JsonFileStore`, `PackagedSettingsStore`, `WindowPlacementCodec` swallows to narrow `catch (IOException)`, `catch (JsonException)`, `catch (UnauthorizedAccessException)` plus `DiagnosticLog.SwallowedError(LogCategory.Persistence, ...)`.
+  - `JsonFileStore` narrowed to `IOException` / `UnauthorizedAccessException` (+ retained `JsonException` / `FormatException`); surprise exceptions now propagate. Happy-path round-trips additionally emit Phase B `PersistenceRead` / `PersistenceWrite` with a `"json-file"` `storeKind` (NEVER the path, per §6.2.1).
+  - `PackagedSettingsStore` narrowed to `InvalidOperationException` / `COMException` / `UnauthorizedAccessException` (+ `FormatException` on the base64 path). Note: the spec's narrow list was IOException/JsonException/UnauthorizedAccessException, but the WinRT call surface throws InvalidOperationException (0x80073D54) on every unpackaged process and COMException for store-level errors — those are the actual swallow types here. Storekind is `"packaged-settings"`.
+  - `WindowPlacementCodec` Win32 `GetWindowPlacement` failure now routes through `DiagnosticLog.HResultFailed` with the `GetLastError` value. `IsPlausiblePlacement`, `monitorCount` and `EndOfStreamException` reject paths now emit typed `PersistenceRejected("placement", reason)` with short reason labels — the raw rect / showCmd are deliberately NOT on the payload (would fingerprint multi-monitor layouts, §6.2.1). Outer catches narrowed to `IOException`.
+  - Tests: new `PersistenceEtwBridgeTests` (9) cover JsonFileStore round-trip (read + write event), oversize-read reject, malformed-json + malformed-base64 SwallowedError shape, PackagedSettingsStore unpackaged-context SwallowedError (read + write), and WindowPlacementCodec implausible-monitor-count + truncated-payload rejects. PII regression guard: no test payload may include the file path string.
 
 ### 4.8 PR: TryXxx refactors
 

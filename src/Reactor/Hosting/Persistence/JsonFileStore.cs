@@ -1,7 +1,8 @@
-using System.Diagnostics;
+using System.Diagnostics.Tracing;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 
 namespace Microsoft.UI.Reactor.Hosting.Persistence;
 
@@ -30,6 +31,12 @@ public sealed class JsonFileStore : IWindowPersistenceStore
     /// payloads from a tampered file. (spec 036 §0.5)
     /// </summary>
     public const long MaxFileSizeBytes = 1L * 1024 * 1024;
+
+    // Stable, developer-authored label for the spec 044 Phase B Persistence
+    // events. NEVER a file path — paths are PII per §6.2.1.
+    private const string StoreKind = "json-file";
+
+    private static int ClampSize(long bytes) => bytes > int.MaxValue ? int.MaxValue : (int)bytes;
 
     private readonly string _path;
     private readonly object _ioLock = new();
@@ -92,7 +99,8 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                 var info = new FileInfo(_path);
                 if (info.Length > MaxFileSizeBytes)
                 {
-                    Debug.WriteLine($"[Reactor] JsonFileStore: refusing oversize file ({info.Length} bytes > {MaxFileSizeBytes}); falling back to default placement.");
+                    if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Persistence))
+                        ReactorEventSource.Log.PersistenceRejected(StoreKind, "oversize-read");
                     return false;
                 }
 
@@ -104,24 +112,33 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                 var b64 = entry.GetString();
                 if (string.IsNullOrEmpty(b64)) return false;
                 data = Convert.FromBase64String(b64);
+                if (data is not null
+                    && ReactorEventSource.Log.IsEnabled(EventLevel.Informational, ReactorEventSource.Keywords.Persistence))
+                    ReactorEventSource.Log.PersistenceRead(StoreKind, ClampSize(info.Length));
                 return data is not null;
             }
         }
         catch (JsonException ex)
         {
-            Debug.WriteLine($"[Reactor] JsonFileStore: malformed JSON in {_path}: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.TryRead.parse", ex);
             data = null;
             return false;
         }
         catch (FormatException ex)
         {
-            Debug.WriteLine($"[Reactor] JsonFileStore: malformed base64 entry for id={id}: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.TryRead.base64", ex);
             data = null;
             return false;
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
-            Debug.WriteLine($"[Reactor] JsonFileStore.TryRead failed: {ex.GetType().Name}: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.TryRead", ex);
+            data = null;
+            return false;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.TryRead", ex);
             data = null;
             return false;
         }
@@ -150,7 +167,8 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                 var bytes = SerializeStringMap(doc);
                 if (bytes.Length > MaxFileSizeBytes)
                 {
-                    Debug.WriteLine($"[Reactor] JsonFileStore: serialized payload exceeds {MaxFileSizeBytes} bytes ({bytes.Length}); skipping write.");
+                    if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Persistence))
+                        ReactorEventSource.Log.PersistenceRejected(StoreKind, "oversize-write");
                     return;
                 }
 
@@ -160,11 +178,18 @@ public sealed class JsonFileStore : IWindowPersistenceStore
                 var tmp = _path + ".tmp";
                 File.WriteAllBytes(tmp, bytes);
                 File.Move(tmp, _path, overwrite: true);
+
+                if (ReactorEventSource.Log.IsEnabled(EventLevel.Informational, ReactorEventSource.Keywords.Persistence))
+                    ReactorEventSource.Log.PersistenceWrite(StoreKind, ClampSize(bytes.Length));
             }
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
-            Debug.WriteLine($"[Reactor] JsonFileStore.Write failed: {ex.GetType().Name}: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.Write", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.Write", ex);
         }
     }
 
@@ -178,8 +203,14 @@ public sealed class JsonFileStore : IWindowPersistenceStore
             using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read);
             return ParseStringMap(stream);
         }
-        catch
+        catch (IOException ex)
         {
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.ReadDocumentOrEmpty", ex);
+            return new(StringComparer.Ordinal);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Persistence, "JsonFileStore.ReadDocumentOrEmpty", ex);
             return new(StringComparer.Ordinal);
         }
     }
