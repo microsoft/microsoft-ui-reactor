@@ -81,60 +81,143 @@ class SceneAIde : Component
 {
     public override Element Render()
     {
-        return VStack(8,
-            TextBlock("Scene A — IDE layout").FontSize(20).SemiBold(),
-            TextBlock(
-                "Drag tabs between the groups. Resize the splitters. " +
-                "Esc cancels an in-flight drag."
-            ).Opacity(0.8),
-
-            new DockManager
-            {
-                PersistenceId = "dock-showcase:ide",
-                Layout = new DockSplit(
-                    Orientation.Horizontal,
-                    new DockNode[]
-                    {
-                        new DockableContent(
-                            Title: "Solution Explorer",
-                            Key: "tool:solution",
-                            Content: VStack(2,
-                                TextBlock("📁 MyApp.sln").SemiBold(),
-                                TextBlock("  📂 src").Margin(8, 0, 0, 0),
-                                TextBlock("    📄 main.cs").Margin(16, 0, 0, 0),
-                                TextBlock("    📄 App.razor").Margin(16, 0, 0, 0)
-                            ).Padding(8),
-                            Width: 240),
-
-                        new DockSplit(
-                            Orientation.Vertical,
-                            new DockNode[]
-                            {
-                                new DockTabGroup(new[]
+        // Mirrors WinUI.Dock's Example.WinUI/Views/MainView.xaml layout so the
+        // §1.9 side-by-side review is apples-to-apples: outer vertical split
+        // (top fills, bottom = 200dip), each half is a horizontal split, each
+        // leaf is a DockTabGroup. The bottom row carries TabPosition.Bottom
+        // DocumentGroups (Error List + Output/Terminal).
+        var dock = new DockManager
+        {
+            PersistenceId = "dock-showcase:ide",
+            Layout = new DockSplit(
+                Orientation.Vertical,
+                new DockNode[]
+                {
+                    // Top half — editor on the left, solution/git tabs on the right.
+                    new DockSplit(
+                        Orientation.Horizontal,
+                        new DockNode[]
+                        {
+                            new DockTabGroup(
+                                Documents: new[]
                                 {
-                                    new DockableContent("main.cs",   TextBlock("// main.cs body").Padding(12), Key: "doc:main"),
-                                    new DockableContent("App.razor", TextBlock("// app.razor body").Padding(12), Key: "doc:app"),
-                                }),
-                                new DockableContent(
-                                    Title: "Output",
-                                    Key: "tool:output",
-                                    Content: TextBlock("[12:34:01] Build succeeded.").Padding(8),
-                                    Height: 180,
-                                    CanPin: true),
-                            }),
+                                    new DockableContent(
+                                        Title: "MainView.xaml",
+                                        Key: "doc:mainview-xaml",
+                                        Content: VStack(4,
+                                            TextBlock("// MainView.xaml").SemiBold(),
+                                            TextBlock("<Page xmlns=...>").Opacity(0.7),
+                                            TextBlock("  <Grid>").Opacity(0.7),
+                                            TextBlock("    <!-- … -->").Opacity(0.7),
+                                            TextBlock("  </Grid>").Opacity(0.7),
+                                            TextBlock("</Page>").Opacity(0.7)
+                                        ).Padding(12),
+                                        CanClose: true),
+                                    new DockableContent(
+                                        Title: "MainViewModel.cs",
+                                        Key: "doc:mainviewmodel-cs",
+                                        Content: VStack(4,
+                                            TextBlock("// MainViewModel.cs").SemiBold(),
+                                            TextBlock("public sealed class MainViewModel").Opacity(0.7),
+                                            TextBlock("{ … }").Opacity(0.7)
+                                        ).Padding(12),
+                                        CanClose: true),
+                                },
+                                ShowWhenEmpty: true),
 
-                        new DockableContent(
-                            Title: "Properties",
-                            Key: "tool:properties",
-                            Content: VStack(4,
-                                TextBlock("Name: main.cs"),
-                                TextBlock("Size: 4.2 KB"),
-                                TextBlock("Modified: 2 min ago")
-                            ).Padding(8),
-                            Width: 280,
-                            CanPin: true),
-                    }),
-            }.Flex(grow: 1)
+                            new DockTabGroup(
+                                Documents: new[]
+                                {
+                                    new DockableContent(
+                                        Title: "Solution Explorer",
+                                        Key: "tool:solution-explorer",
+                                        Content: VStack(2,
+                                            TextBlock("📁 MyApp.sln").SemiBold(),
+                                            TextBlock("  📂 src").Margin(8, 0, 0, 0),
+                                            TextBlock("    📄 main.cs").Margin(16, 0, 0, 0),
+                                            TextBlock("    📄 App.razor").Margin(16, 0, 0, 0)
+                                        ).Padding(8),
+                                        CanClose: true,
+                                        CanPin: true),
+                                    new DockableContent(
+                                        Title: "Git Changes",
+                                        Key: "tool:git-changes",
+                                        Content: VStack(2,
+                                            TextBlock("Branch: feat/045-docking-windows-p1").Opacity(0.8),
+                                            TextBlock("  M  samples/apps/dock-showcase/App.cs"),
+                                            TextBlock("  ?? src/Reactor.Docking.Xaml/Resources/")
+                                        ).Padding(8),
+                                        CanClose: true,
+                                        CanPin: true),
+                                },
+                                TabPosition: TabPosition.Bottom,
+                                CompactTabs: true,
+                                Width: 240),
+                        }),
+
+                    // Bottom half — Error List + Output/Terminal, both with
+                    // tabs at the bottom (the "missing" docking windows the
+                    // upstream sample shows by default).
+                    new DockSplit(
+                        Orientation.Horizontal,
+                        new DockNode[]
+                        {
+                            new DockTabGroup(
+                                Documents: new[]
+                                {
+                                    new DockableContent(
+                                        Title: "Error List",
+                                        Key: "tool:error-list",
+                                        Content: VStack(2,
+                                            TextBlock("⚠ 0 Errors    ⚠ 2 Warnings    ℹ 1 Message").Opacity(0.8),
+                                            TextBlock("CS8602  Possible null dereference  ViewModel.cs(42,17)"),
+                                            TextBlock("CS0618  'Foo' is obsolete           Bar.cs(13,5)")
+                                        ).Padding(8),
+                                        CanClose: true,
+                                        CanPin: true),
+                                },
+                                TabPosition: TabPosition.Bottom),
+
+                            new DockTabGroup(
+                                Documents: new[]
+                                {
+                                    new DockableContent(
+                                        Title: "Output",
+                                        Key: "tool:output",
+                                        Content: VStack(2,
+                                            TextBlock("[12:34:01] Build started.").Opacity(0.8),
+                                            TextBlock("[12:34:18] Build succeeded.").Opacity(0.8)
+                                        ).Padding(8),
+                                        CanClose: true,
+                                        CanPin: true),
+                                    new DockableContent(
+                                        Title: "Terminal",
+                                        Key: "tool:terminal",
+                                        Content: VStack(2,
+                                            TextBlock("PS C:\\code\\reactor2&gt;").SemiBold(),
+                                            TextBlock("  git status").Opacity(0.7),
+                                            TextBlock("On branch feat/045-docking-windows-p1").Opacity(0.7)
+                                        ).Padding(8),
+                                        CanClose: true,
+                                        CanPin: true),
+                                },
+                                TabPosition: TabPosition.Bottom,
+                                CompactTabs: true),
+                        },
+                        Height: 200),
+                }),
+        };
+
+        return Grid(
+            new[] { GridSize.Star(1) },
+            new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(1) },
+            TextBlock("Scene A — IDE layout").FontSize(20).SemiBold().Grid(row: 0),
+            TextBlock(
+                "Mirrors WinUI.Dock's Example.WinUI/MainView.xaml: vertical split, " +
+                "two horizontal halves, bottom row uses TabPosition.Bottom. Drag tabs " +
+                "between groups; resize splitters; Esc cancels an in-flight drag."
+            ).Opacity(0.8).Margin(0, 0, 0, 8).Grid(row: 1),
+            dock.Grid(row: 2)
         ).Padding(16);
     }
 }
@@ -145,15 +228,17 @@ class SceneAIde : Component
 
 class SceneBFloating : Component
 {
-    public override Element Render() => VStack(8,
-        TextBlock("Scene B — Floating tear-out").FontSize(20).SemiBold(),
+    public override Element Render() => Grid(
+        new[] { GridSize.Star(1) },
+        new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(1) },
+        TextBlock("Scene B — Floating tear-out").FontSize(20).SemiBold().Grid(row: 0),
         TextBlock(
             "Drag a tab's title into open space — a floating window appears " +
             "at the pointer with a custom title bar from " +
             "IDockAdapter.GetFloatingWindowTitleBar. Drop back into a tab " +
             "group to re-dock; the floating window auto-closes when its " +
             "last document leaves."
-        ).Opacity(0.8),
+        ).Opacity(0.8).Margin(0, 0, 0, 8).Grid(row: 1),
 
         new DockManager
         {
@@ -164,7 +249,7 @@ class SceneBFloating : Component
                 new DockableContent("Tab B", TextBlock("body-b").Padding(16), Key: "b:b"),
                 new DockableContent("Tab C", TextBlock("body-c").Padding(16), Key: "b:c"),
             }),
-        }.Flex(grow: 1)
+        }.Grid(row: 2)
     ).Padding(16);
 
     sealed class ShowcaseAdapter : IDockAdapter
@@ -198,13 +283,15 @@ class SceneCSidePin : Component
             ).Padding(12),
             CanPin: true);
 
-        return VStack(8,
-            TextBlock("Scene C — Side pin / auto-hide").FontSize(20).SemiBold(),
+        return Grid(
+            new[] { GridSize.Star(1) },
+            new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(1) },
+            TextBlock("Scene C — Side pin / auto-hide").FontSize(20).SemiBold().Grid(row: 0),
             TextBlock(
                 "Pin a tab via its pin button — the tab collapses onto the right edge. " +
                 "Click the side icon to expand the popup. Re-pin from the popup " +
                 "(thumbtack icon) to restore it to its tab group."
-            ).Opacity(0.8),
+            ).Opacity(0.8).Margin(0, 0, 0, 8).Grid(row: 1),
 
             new DockManager
             {
@@ -214,7 +301,7 @@ class SceneCSidePin : Component
                     Content: TextBlock("Main document area — try pinning the right-side tool.")
                         .Padding(16)),
                 RightSide = new[] { tool },
-            }.Flex(grow: 1)
+            }.Grid(row: 2)
         ).Padding(16);
     }
 }
@@ -271,20 +358,22 @@ class SceneEPersistence : Component
     {
         var (status, setStatus) = UseState("");
 
-        return VStack(8,
-            TextBlock("Scene E — Persistence").FontSize(20).SemiBold(),
+        return Grid(
+            new[] { GridSize.Star(1) },
+            new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(1) },
+            TextBlock("Scene E — Persistence").FontSize(20).SemiBold().Grid(row: 0),
             TextBlock(
                 "DockManager.PersistenceId routes the JSON through " +
                 "WindowPersistedScope. Rearrange the panes, quit the app, " +
                 "restart — the saved layout restores."
-            ).Opacity(0.8),
+            ).Opacity(0.8).Margin(0, 0, 0, 8).Grid(row: 1),
 
             HStack(8,
                 Button("Note layout-restore status", () =>
                     setStatus("Layout is auto-saved on unmount; reload by relaunching."))
-            ),
+            ).Grid(row: 2),
 
-            TextBlock(status).Opacity(0.7),
+            TextBlock(status).Opacity(0.7).Margin(0, 4, 0, 8).Grid(row: 3),
 
             new DockManager
             {
@@ -297,7 +386,7 @@ class SceneEPersistence : Component
                         new DockableContent("Pane 2", TextBlock("p2").Padding(16), Key: "e:2"),
                         new DockableContent("Pane 3", TextBlock("p3").Padding(16), Key: "e:3"),
                     }),
-            }.Flex(grow: 1)
+            }.Grid(row: 4)
         ).Padding(16);
     }
 }
@@ -337,20 +426,22 @@ class SceneFProgrammatic : Component
                 CanClose: true));
         }
 
-        return VStack(8,
-            TextBlock("Scene F — Programmatic dock").FontSize(20).SemiBold(),
+        return Grid(
+            new[] { GridSize.Star(1) },
+            new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(1) },
+            TextBlock("Scene F — Programmatic dock").FontSize(20).SemiBold().Grid(row: 0),
             TextBlock(
                 "Click a tool button to open the pane. The pane joins the " +
                 "split as a new sibling. Reactor's functional composition " +
                 "(state + .Select) replaces upstream's DocumentsSource binding."
-            ).Opacity(0.8),
+            ).Opacity(0.8).Margin(0, 0, 0, 8).Grid(row: 1),
 
-            HStack(8, toolButtons),
+            HStack(8, toolButtons).Margin(0, 0, 0, 8).Grid(row: 2),
 
             new DockManager
             {
                 Layout = new DockSplit(Orientation.Horizontal, dockChildren),
-            }.Flex(grow: 1)
+            }.Grid(row: 3)
         ).Padding(16);
     }
 }
