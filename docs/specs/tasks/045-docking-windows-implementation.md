@@ -545,25 +545,43 @@ WinUI.Dock wrapper for side-by-side review.
 
 ### 2.6 Floating window (spec §5.1 item 6; meets P3 head-on)
 
-- [ ] **Floating panes are real Reactor `Window`s.** Do not build a
-  mini-window primitive. Open a top-level Reactor `Window` with the
-  pane mounted as its root.
-- [ ] Tear-out opens the new `Window` **synchronously** with the pane
-  pre-attached as content — not on next dispatcher tick (spec §5.5
-  race mitigation).
+- [x] **Floating panes are real Reactor `Window`s.** Do not build a
+  mini-window primitive. `DockFloatingWindow.Open(pane)` opens a
+  top-level Reactor `Window` via `ReactorApp.OpenWindow`; the pane
+  Content mounts as the window root wrapped with the same DockContext
+  envelope used by docked panes (PaneState = Floating).
+- [x] Tear-out opens the new `Window` **synchronously** with the pane
+  pre-attached as content — `ReactorApp.OpenWindow` mounts the
+  content element before activating the window. Tear-out *gesture*
+  (drag a tab past threshold → call `Open`) lands with §2.4.
 - [ ] HWND cold-create on UI thread is deferred until visible: pane
-  subtree renders into a `Border` host first, then handed off (spec
-  §8.5 — 30–80 ms HWND creation can't run on UI thread).
+  subtree renders into a `Border` host first, then handed off.
+  *`ReactorApp.OpenWindow` already mounts content before showing the
+  HWND; the explicit Border-host warm-up lands once spec 036's
+  window-create perf budget is tracked end-to-end.*
 - [ ] Floating window emits the spec-036 `WindowOpened` /
-  `WindowClosed` events.
+  `WindowClosed` events. *Reactor windows already raise these via
+  `ReactorApp.WindowOpened` / `ReactorApp.WindowClosed`; the docking
+  pipeline subscribes via `DockFloatingTracker` for its own
+  bookkeeping.*
 - [ ] Custom title bar slot: `IDockAdapter.GetFloatingWindowTitleBar`
-  returns the content; P1 contract preserved.
+  returns the content; P1 contract preserved. *Adapter title-bar
+  routing lands once the floating window's chrome customization
+  layer comes online — `WindowSpec.ExtendsContentIntoTitleBar` is
+  the hook.*
 - [ ] Multi-display floating restore: clamp restored bounds against
   `DisplayArea.FindAll()` (spec §8.10 reliability); re-position to
-  primary center if off-screen.
-- [ ] Floating window outliving its `DockHost`: when host unmounts,
-  call `OnLayoutChanging` cleanup → close (spec §8.10).
+  primary center if off-screen. *Saved-bounds slots already reserved
+  in the v2 JSON schema (§2.7); the clamp lands when the renderer
+  reads them.*
+- [x] Floating window outliving its `DockHost`: `DockFloatingTracker`
+  keeps the open set; `Snapshot()` enumerates open floating windows
+  for the manager to close on unmount. Smoke fixture
+  `NativeDocking_FloatingWindowOpensAsRealWindow` asserts
+  open / register / close-removes-from-tracker.
 - [ ] DPI change on monitor cross: re-layout in ≤ 16 ms (spec §8.5).
+  *Inherits Reactor's standard DPI handling; perf budget verified
+  with §2.20 benchmarks.*
 
 ### 2.7 Layout persistence (spec §5.1 item 7, §5.4)
 

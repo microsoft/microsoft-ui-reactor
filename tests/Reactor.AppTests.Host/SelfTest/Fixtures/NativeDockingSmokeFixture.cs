@@ -256,4 +256,68 @@ internal static class NativeDockingSmokeFixtures
             await Harness.Render();
         }
     }
+
+    /// <summary>
+    /// Spec 045 §2.6 — floating windows are real Reactor windows. Tear a
+    /// pane out via the programmatic API; assert that a new
+    /// <see cref="Microsoft.UI.Reactor.ReactorWindow"/> is registered and
+    /// closing it removes it from the tracker.
+    /// </summary>
+    internal class FloatingWindowOpensAsRealWindow(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            host.Mount(_ => new DockManager
+            {
+                Layout = new DockTabGroup(new[]
+                {
+                    new DockableContent("Center", TextBlock("center-body"), Key: "k:center"),
+                }),
+            });
+            await Harness.Render();
+
+            var baselineCount = DockFloatingTracker.Count;
+
+            var pane = new DockableContent(
+                Title: "Output (floating)",
+                Key: "k:output-floating",
+                Content: TextBlock("floating-pane-body"));
+
+            // The harness opens its own primary Window outside ReactorApp's
+            // registry, so a fixture-spawned floating window can otherwise
+            // become the framework's PrimaryWindow and trip
+            // ShutdownPolicy.OnPrimaryWindowClosed when the test closes it.
+            // Pin the policy to None for the duration of this fixture.
+            var savedPolicy = ReactorApp.ShutdownPolicy;
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            try
+            {
+                var floatingWindow = DockFloatingWindow.Open(pane, width: 600, height: 400);
+                await Harness.Render();
+
+                H.Check("FloatingWindow_OpenedAsRealReactorWindow",
+                    floatingWindow is not null);
+                H.Check("FloatingWindow_RegisteredWithTracker",
+                    DockFloatingTracker.Count == baselineCount + 1);
+                H.Check("FloatingWindow_TrackerSnapshotIncludesIt",
+                    DockFloatingTracker.Snapshot().Contains(floatingWindow));
+
+                // Close the floating window — tracker should drop it.
+                floatingWindow!.Close();
+                await Harness.Render();
+                H.Check("FloatingWindow_RemovedFromTrackerOnClose",
+                    DockFloatingTracker.Count == baselineCount);
+            }
+            finally
+            {
+                ReactorApp.ShutdownPolicy = savedPolicy;
+            }
+
+            host.Mount(_ => TextBlock("floating-done"));
+            await Harness.Render();
+        }
+    }
 }
