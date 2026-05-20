@@ -3,6 +3,7 @@ using System.Threading;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Session;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 
 namespace Microsoft.UI.Reactor.Hosting.Etw;
 
@@ -136,8 +137,8 @@ internal sealed class LayoutEtwConsumer : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Reactor.LayoutCost] orphan session cleanup failed: {ex.Message}");
             // Non-fatal — continue trying to start.
+            DiagnosticLog.SwallowedError(LogCategory.LayoutCost, "LayoutEtwConsumer.Start.orphanCleanup", ex);
         }
 
         try
@@ -155,15 +156,17 @@ internal sealed class LayoutEtwConsumer : IDisposable
         {
             IsUnavailable = true;
             UnavailableReason = "Access denied — user is not a member of Performance Log Users and is not an administrator.";
-            Debug.WriteLine($"[Reactor.LayoutCost] ETW session denied: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.LayoutCost, "LayoutEtwConsumer.Start.enableProvider.accessDenied", ex);
             SafeDisposeSession();
             return;
         }
         catch (Exception ex)
         {
             IsUnavailable = true;
+            // UnavailableReason is surfaced in the overlay UI (developer-facing
+            // diagnostic), not on the ETW payload — DiagnosticLog stays to ex.Type.
             UnavailableReason = ex.Message;
-            Debug.WriteLine($"[Reactor.LayoutCost] ETW session failed: {ex}");
+            DiagnosticLog.SwallowedError(LogCategory.LayoutCost, "LayoutEtwConsumer.Start.enableProvider", ex);
             SafeDisposeSession();
             return;
         }
@@ -177,7 +180,7 @@ internal sealed class LayoutEtwConsumer : IDisposable
         {
             IsUnavailable = true;
             UnavailableReason = ex.Message;
-            Debug.WriteLine($"[Reactor.LayoutCost] ETW parser hookup failed: {ex}");
+            DiagnosticLog.SwallowedError(LogCategory.LayoutCost, "LayoutEtwConsumer.Start.parserHookup", ex);
             SafeDisposeSession();
             return;
         }
@@ -225,7 +228,7 @@ internal sealed class LayoutEtwConsumer : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Reactor.LayoutCost] Source.Process() exited: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.LayoutCost, "LayoutEtwConsumer.ProcessLoop.SourceProcess", ex);
         }
         finally
         {
@@ -492,7 +495,8 @@ internal sealed class LayoutEtwConsumer : IDisposable
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[Reactor.LayoutCost] failed to close orphan session '{name}': {ex.Message}");
+                // Per-orphan failure is non-fatal; keep iterating siblings.
+                DiagnosticLog.SwallowedError(LogCategory.LayoutCost, "LayoutEtwConsumer.CloseOrphanSessions.stop", ex);
             }
         }
     }
@@ -522,7 +526,7 @@ internal sealed class LayoutEtwConsumer : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Reactor.LayoutCost] session dispose swallowed: {ex.Message}");
+            DiagnosticLog.SwallowedError(LogCategory.LayoutCost, "LayoutEtwConsumer.SafeDisposeSession", ex);
         }
         finally
         {
