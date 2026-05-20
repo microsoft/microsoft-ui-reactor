@@ -899,6 +899,7 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_DockContextHooksResolveOnRealMount",
         "NativeDocking_SidePopupExpandsAndCollapses",
         "NativeDocking_FloatingWindowOpensAsRealWindow",
+        "NativeDocking_SplitterProgrammaticResizeAcrossRenders",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1780,6 +1781,7 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_DockContextHooksResolveOnRealMount" => new NativeDockingSmokeFixtures.DockContextHooksResolveOnRealMount(harness),
         "NativeDocking_SidePopupExpandsAndCollapses" => new NativeDockingSmokeFixtures.SidePopupExpandsAndCollapses(harness),
         "NativeDocking_FloatingWindowOpensAsRealWindow" => new NativeDockingSmokeFixtures.FloatingWindowOpensAsRealWindow(harness),
+        "NativeDocking_SplitterProgrammaticResizeAcrossRenders" => new NativeDockingSmokeFixtures.SplitterProgrammaticResizeAcrossRenders(harness),
 
         _ => null,
     };

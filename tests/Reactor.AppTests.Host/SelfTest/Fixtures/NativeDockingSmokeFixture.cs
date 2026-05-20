@@ -320,4 +320,183 @@ internal static class NativeDockingSmokeFixtures
             await Harness.Render();
         }
     }
+
+    /// <summary>
+    /// Spec 045 §2.1 — programmatic splitter-drag fixture. Mounts an
+    /// IDE-style nested layout, fires <c>ResizeDelta</c> events directly
+    /// on the splitter controls (simulating a pointer drag), and asserts
+    /// that the FlexPanel's per-child <c>FlexGrow</c> attached value
+    /// shifts as expected. Isolates the render → reconcile → FlexPanel
+    /// pipeline from the pointer-capture / hit-test plumbing so failures
+    /// fingerprint quickly: if these pass and the showcase doesn't, the
+    /// bug is in <see cref="DockSplitterControl"/>'s pointer handling.
+    /// </summary>
+    internal class SplitterProgrammaticResizeAcrossRenders(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            // IDE-style nested layout. Apps typically rebuild Layout each
+            // render — model that via a state counter the host bumps to
+            // force fresh DockSplit instances.
+            DockManager Build()
+            {
+                return new DockManager
+                {
+                    Layout = new DockSplit(
+                        Orientation.Vertical,
+                        new DockNode[]
+                        {
+                            // Top row — horizontal split with two leaves.
+                            new DockSplit(
+                                Orientation.Horizontal,
+                                new DockNode[]
+                                {
+                                    new DockableContent("Editor",
+                                        TextBlock("editor-body"),
+                                        Key: "k:editor"),
+                                    new DockableContent("Tools",
+                                        TextBlock("tools-body"),
+                                        Key: "k:tools"),
+                                }),
+                            // Bottom row — horizontal split with two leaves.
+                            new DockSplit(
+                                Orientation.Horizontal,
+                                new DockNode[]
+                                {
+                                    new DockableContent("Output",
+                                        TextBlock("output-body"),
+                                        Key: "k:output"),
+                                    new DockableContent("Terminal",
+                                        TextBlock("terminal-body"),
+                                        Key: "k:terminal"),
+                                }),
+                        }),
+                };
+            }
+
+            host.Mount(_ => Build());
+            await Harness.Render();
+
+            // Discover the three splitter controls: 1 in outer (rows
+            // splitter — horizontal bar) + 1 in each inner split (column
+            // splitters — vertical bars). Distinguish by Direction.
+            var splitters = H.FindAllControls<DockSplitterControl>(_ => true);
+            H.Check("SplitProg_ThreeSplittersMounted", splitters.Count == 3);
+
+            var rowSplitter = splitters.FirstOrDefault(s => s.Direction == DockSplitterDirection.Rows);
+            var colSplitters = splitters.Where(s => s.Direction == DockSplitterDirection.Columns).ToList();
+            H.Check("SplitProg_RowSplitterFound", rowSplitter is not null);
+            H.Check("SplitProg_TwoColumnSplitters", colSplitters.Count == 2);
+
+            // Capture the initial grow values from each splitter's parent
+            // FlexPanel. Row direction parent splits vertically; column
+            // direction parents split horizontally.
+            double GrowOf(UIElement child) => FlexPanel.GetGrow(child);
+
+            double[] GrowsFor(DockSplitterControl s)
+            {
+                var parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(s) as FlexPanel;
+                if (parent is null) return [];
+                var result = new double[parent.Children.Count];
+                for (int i = 0; i < parent.Children.Count; i++)
+                    result[i] = GrowOf(parent.Children[i]);
+                return result;
+            }
+
+            var beforeRowGrows = GrowsFor(rowSplitter!);
+            var beforeCol0Grows = GrowsFor(colSplitters[0]);
+            var beforeCol1Grows = GrowsFor(colSplitters[1]);
+            Console.WriteLine($"# beforeRow=[{string.Join(",", beforeRowGrows)}]");
+            Console.WriteLine($"# beforeCol0=[{string.Join(",", beforeCol0Grows)}]");
+            Console.WriteLine($"# beforeCol1=[{string.Join(",", beforeCol1Grows)}]");
+
+            H.Check("SplitProg_InitialRowsEqual",
+                beforeRowGrows.Length >= 3
+                && Math.Abs(beforeRowGrows[0] - beforeRowGrows[2]) < 0.0001);
+
+            // ── Drag #1: shrink the row splitter's leading row by 100 DIP.
+            // Fire ResizeDelta directly with hostExtent matching the
+            // splitter's host. The control's OnDelta closure must compute
+            // a new ratio and trigger re-render.
+            FireResizeDelta(rowSplitter!, delta: 100, isFinal: false);
+            FireResizeDelta(rowSplitter!, delta: 0, isFinal: true);
+            await Harness.Render();
+
+            var afterRowGrows1 = GrowsFor(rowSplitter!);
+            Console.WriteLine($"# afterRowDrag1=[{string.Join(",", afterRowGrows1)}]");
+            H.Check("SplitProg_RowDragShiftedLeadingDown",
+                afterRowGrows1.Length >= 3 && afterRowGrows1[0] < beforeRowGrows[0] - 0.001);
+
+            // ── Drag #2 on the SAME splitter: shrink another 50 DIP.
+            // Verifies ratio accumulation across drags (not snap-back).
+            FireResizeDelta(rowSplitter!, delta: 50, isFinal: false);
+            FireResizeDelta(rowSplitter!, delta: 0, isFinal: true);
+            await Harness.Render();
+
+            var afterRowGrows2 = GrowsFor(rowSplitter!);
+            Console.WriteLine($"# afterRowDrag2=[{string.Join(",", afterRowGrows2)}]");
+            H.Check("SplitProg_RowDragCumulates",
+                afterRowGrows2[0] < afterRowGrows1[0] - 0.001);
+
+            // ── Drag the FIRST column splitter — should NOT affect the
+            // row splitter's ratios, nor the OTHER column splitter's.
+            FireResizeDelta(colSplitters[0], delta: 80, isFinal: false);
+            FireResizeDelta(colSplitters[0], delta: 0, isFinal: true);
+            await Harness.Render();
+
+            var col0After = GrowsFor(colSplitters[0]);
+            var col1After = GrowsFor(colSplitters[1]);
+            var rowAfterCol = GrowsFor(rowSplitter!);
+            Console.WriteLine($"# afterCol0Drag col0=[{string.Join(",", col0After)}] col1=[{string.Join(",", col1After)}] row=[{string.Join(",", rowAfterCol)}]");
+
+            H.Check("SplitProg_Col0DragShiftedLeading",
+                col0After[0] < beforeCol0Grows[0] - 0.001);
+            H.Check("SplitProg_Col1Untouched",
+                col1After.Length == beforeCol1Grows.Length
+                && Math.Abs(col1After[0] - beforeCol1Grows[0]) < 0.0001);
+            H.Check("SplitProg_RowUntouchedByColDrag",
+                rowAfterCol.Length == afterRowGrows2.Length
+                && Math.Abs(rowAfterCol[0] - afterRowGrows2[0]) < 0.0001);
+
+            // ── Force a re-render by re-mounting a fresh Build(). All
+            // DockSplit references change. Ratios MUST survive (the
+            // tree-position-key fix).
+            host.Mount(_ => Build());
+            await Harness.Render();
+
+            var splittersAfterRemount = H.FindAllControls<DockSplitterControl>(_ => true);
+            var rowAfterRemount = splittersAfterRemount.FirstOrDefault(s => s.Direction == DockSplitterDirection.Rows);
+            H.Check("SplitProg_RowSplitterStillPresentAfterRemount", rowAfterRemount is not null);
+
+            var rowGrowsAfterRemount = GrowsFor(rowAfterRemount!);
+            Console.WriteLine($"# afterRemount row=[{string.Join(",", rowGrowsAfterRemount)}]");
+            H.Check("SplitProg_RowRatiosSurvivedRemount",
+                rowGrowsAfterRemount.Length == afterRowGrows2.Length
+                && Math.Abs(rowGrowsAfterRemount[0] - afterRowGrows2[0]) < 0.0001);
+
+            host.Mount(_ => TextBlock("split-prog-done"));
+            await Harness.Render();
+        }
+
+        /// <summary>
+        /// Fires the splitter's internal ResizeDelta event using a stable
+        /// 1000 DIP hostExtent. Reflection-free path: the event is a
+        /// regular CLR event, so we call its public method via the
+        /// internal type's accessor — visible through
+        /// InternalsVisibleTo("Reactor.AppTests.Host").
+        /// </summary>
+        private static void FireResizeDelta(DockSplitterControl splitter, double delta, bool isFinal)
+        {
+            // Use the actual host extent reported by the parent FlexPanel
+            // so the solver's clamp space matches the live layout.
+            var hostExtent = splitter.GetHostExtent();
+            if (hostExtent < 1) hostExtent = 1000;
+            var args = new DockSplitterDeltaEventArgs(delta, splitter.Direction, hostExtent, isFinal);
+            // Internal Raise method — see DockSplitterControl.
+            splitter.RaiseResizeDeltaForTest(args);
+        }
+    }
 }

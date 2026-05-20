@@ -40,12 +40,25 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
     {
         var manager = Props.Manager;
 
-        // Per-DockSplit ratio state. Keyed by reference identity of the
-        // DockSplit node — when the app rebuilds Layout each render, new
-        // DockSplit instances are created and the dictionary is rebuilt
-        // from each node's stored Width/Height hints.
-        var (ratioStore, setRatios) = UseState<ConditionalWeakTable<DockSplit, double[]>>(
-            new ConditionalWeakTable<DockSplit, double[]>());
+        // Per-DockSplit ratio state. The store survives renders via UseRef
+        // (state participates in equality and silently no-ops on
+        // same-reference setters; refs don't).
+        //
+        // Keyed by **tree position path** (e.g. "0", "0/1", "0/1/0")
+        // rather than DockSplit reference — apps typically rebuild
+        // `Layout = new DockSplit(…)` inside Render(), so reference keys
+        // get orphaned every frame and ratios snap back to bootstrap
+        // each render. The path is stable for a stable tree shape; if
+        // the app reorders panes, ratios reset at the touched positions,
+        // which is the correct behavior anyway.
+        //
+        // A separate UseReducer tick supplies the re-render trigger
+        // (mutating the ratio array in place doesn't change any
+        // UseState-comparable value).
+        var ratioStoreRef = UseRef<Dictionary<string, double[]>>(new Dictionary<string, double[]>());
+        var ratioStore = ratioStoreRef.Current;
+        var (_, bumpTick) = UseReducer(0);
+        void RequestRatioRerender() => bumpTick(t => t + 1);
 
         // Stable DockHostModel instance for the lifetime of this component
         // (§2.16). UseRef keeps the same model object across renders so
@@ -57,9 +70,9 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         var activeKey = manager.ActiveDocument?.Key;
         var snapshot = BuildSnapshot(model);
 
-        Element BuildNode(DockNode node) => node switch
+        Element BuildNode(DockNode node, string path) => node switch
         {
-            DockSplit split => RenderSplit(split, ratioStore, setRatios, BuildNode),
+            DockSplit split => RenderSplit(split, path, ratioStore, RequestRatioRerender, BuildNode),
             DockTabGroup grp => DockTabGroupRenderer.Render(
                 grp,
                 renderLeafContent: doc => WrapLeafWithPaneContext(doc),
@@ -71,7 +84,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
 
         Element body = manager.Layout is null
             ? new BorderElement(null)
-            : BuildNode(manager.Layout);
+            : BuildNode(manager.Layout, path: "0");
 
         // ── Side strips + side popup (§2.5). Elide entirely when no
         // sides are populated so the visual matches the P1 baseline for
@@ -161,21 +174,36 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
 
     private static Element RenderSplit(
         DockSplit split,
-        ConditionalWeakTable<DockSplit, double[]> ratioStore,
-        Action<ConditionalWeakTable<DockSplit, double[]>> setRatios,
-        Func<DockNode, Element> renderChild)
+        string path,
+        Dictionary<string, double[]> ratioStore,
+        Action requestRerender,
+        Func<DockNode, string, Element> renderChild)
     {
         var children = split.Children;
-        if (!ratioStore.TryGetValue(split, out var ratios) || ratios is null || ratios.Length != children.Count)
+        if (!ratioStore.TryGetValue(path, out var ratios) || ratios is null || ratios.Length != children.Count)
         {
             ratios = BootstrapRatios(split);
-            ratioStore.AddOrUpdate(split, ratios);
+            ratioStore[path] = ratios;
         }
+
+        // renderChild for each child threads through a path suffix so
+        // nested DockSplits get their own stable ratio slot. e.g. the
+        // outer Vertical split at "0" houses a Horizontal at "0/0" and
+        // another at "0/1"; their ratios never alias.
+        Element ChildAt(int i) => renderChild(children[i], $"{path}/{i}");
 
         return DockSplitRenderer.Render(
             split,
             ratios,
-            renderChild,
+            renderChild: node =>
+            {
+                var idx = -1;
+                for (int i = 0; i < children.Count; i++)
+                {
+                    if (ReferenceEquals(children[i], node)) { idx = i; break; }
+                }
+                return idx >= 0 ? ChildAt(idx) : new BorderElement(null);
+            },
             onSplitterDelta: (idx, delta, hostExtent, isFinal) =>
             {
                 if (delta == 0) return;
@@ -190,12 +218,13 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
 
                 var sol = DockSplitSolver.ApplyDelta(perChild, idx, delta, totalDip: hostExtent);
                 var newRatios = sol.Ratios;
-                ratioStore.AddOrUpdate(split, newRatios);
                 // Mutate the live array so subsequent pointer-move events in
                 // the same drag see the updated values without waiting for
-                // the next render pass.
+                // the next render pass; the ratioStore entry IS this same
+                // array reference, so writing to `ratios` is also writing
+                // through to the store.
                 for (int i = 0; i < ratios.Length; i++) ratios[i] = newRatios[i];
-                setRatios(ratioStore);
+                requestRerender();
             });
     }
 
@@ -204,8 +233,17 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         var n = split.Children.Count;
         if (n == 0) return [];
 
+        // Read per-child Width/Height hints along the split axis. When ALL
+        // children carry a positive hint we can normalize them as a ratio
+        // tuple; mixed (some hinted, some null) is the model author's way
+        // of saying "this one is absolute, the others fill the rest" —
+        // ratio space can't represent that without knowing the host
+        // extent at render time. Until the renderer supports per-child
+        // basis-mode flex distribution (a later §2.1 follow-up), fall
+        // back to equal share whenever any child is hint-less rather
+        // than collapse the unhinted children to ratio 0.
         var raw = new double[n];
-        bool anyExplicit = false;
+        int hintedCount = 0;
         for (int i = 0; i < n; i++)
         {
             double? hint = split.Orientation == Microsoft.UI.Xaml.Controls.Orientation.Horizontal
@@ -218,9 +256,9 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             if (hint is double v and > 0)
             {
                 raw[i] = v;
-                anyExplicit = true;
+                hintedCount++;
             }
         }
-        return anyExplicit ? DockSplitSolver.Normalize(raw) : DockSplitSolver.EqualShare(n);
+        return hintedCount == n ? DockSplitSolver.Normalize(raw) : DockSplitSolver.EqualShare(n);
     }
 }

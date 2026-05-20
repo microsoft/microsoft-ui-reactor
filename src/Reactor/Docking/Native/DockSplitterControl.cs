@@ -206,6 +206,12 @@ internal sealed partial class DockSplitterControl : Grid
             : p.Y - _captureOrigin.Y;
         if (delta == 0) return;
         ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(delta, _direction, GetHostExtent(), isFinal: false));
+        // Reset origin to the current position so the next move reports
+        // its incremental delta. Without this the cumulative-from-origin
+        // delta compounds against the already-shifted ratios — by the
+        // tenth PointerMoved the leading pane has been pushed past its
+        // min clamp and stops responding.
+        _captureOrigin = p;
         e.Handled = true;
     }
 
@@ -228,6 +234,12 @@ internal sealed partial class DockSplitterControl : Grid
         if (_handle.Fill is SolidColorBrush brush)
             brush.Color = Color.FromArgb(0x33, 0x80, 0x80, 0x80);
     }
+
+    /// <summary>Test hook — fires the <see cref="ResizeDelta"/> event with
+    /// caller-supplied args, bypassing pointer / keyboard. Used by the
+    /// programmatic-drag self-test fixture (§2.1).</summary>
+    internal void RaiseResizeDeltaForTest(DockSplitterDeltaEventArgs args)
+        => ResizeDelta?.Invoke(this, args);
 
     /// <summary>
     /// Walk to the parent panel (the FlexPanel the splitter is interleaved
