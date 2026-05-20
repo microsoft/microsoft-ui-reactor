@@ -98,12 +98,23 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
 
     private static Element WrapLeafWithPaneContext(DockableContent leaf)
     {
+        // Match WinUI.Dock's Document.xaml default: 16-DIP content padding
+        // inside a transparent border, so visual rhythm carries from P1.
+        // Tool windows in upstream don't carry the same padding; §2.8
+        // splits ToolWindow into a separate type — when the renderer
+        // distinguishes them we can drop padding on the tool variant.
         var content = leaf.Content ?? (Element)new BorderElement(null);
+        var padded = new BorderElement(content)
+        {
+            Background = null,
+            BorderThickness = 0,
+        };
         var info = new DockPaneInfo(leaf.Key, leaf.Title ?? string.Empty, leaf);
         // PaneState for a docked leaf in the center tree is always Docked.
         // Floating / AutoHidden states are published by the floating window
         // host (§2.6) and the side-popup host (§2.5) respectively.
-        return content
+        return padded
+            .Padding(16)
             .Provide(DockContexts.Pane, (DockPaneInfo?)info)
             .Provide(DockContexts.PaneState, DockPaneState.Docked);
     }

@@ -137,37 +137,43 @@ internal static class NativeDockingSmokeFixtures
             var host = H.CreateHost();
             DockingNativeInterop.Register(host.Reconciler);
 
-            var alpha = new DockableContent(
-                Title: "Alpha",
-                Key: "k:alpha",
-                Content: Func(ctx =>
-                {
-                    var dockHost = ctx.UseDockHost();
-                    var pane = ctx.UsePane();
-                    var isActive = ctx.UseIsActivePane();
-                    return VStack(
-                        TextBlock($"alpha-host:{(dockHost is null ? "null" : "ok")}"),
-                        TextBlock($"alpha-pane-title:{pane.Title}"),
-                        TextBlock($"alpha-pane-key:{pane.Key}"),
-                        TextBlock($"alpha-active:{isActive}"));
-                }));
-            var beta = new DockableContent(
-                Title: "Beta",
-                Key: "k:beta",
-                Content: Func(ctx =>
-                {
-                    var isActive = ctx.UseIsActivePane();
-                    return TextBlock($"beta-active:{isActive}");
-                }));
-
-            // ActiveDocument = alpha — both panes render simultaneously
-            // (TabView keeps inactive bodies in the visual tree) so the
-            // assertions can read both.
-            host.Mount(_ => new DockManager
+            // Build the docking tree inside the mount lambda each call —
+            // matches the standard Reactor pattern where Content elements
+            // are constructed fresh per render. (Storing element refs
+            // outside Mount() means same-reference shallow-equality skips
+            // the consumer's re-render before context propagation runs.)
+            DockManager Build(bool alphaActive)
             {
-                Layout = new DockTabGroup(new[] { alpha, beta }),
-                ActiveDocument = alpha,
-            });
+                var alpha = new DockableContent(
+                    Title: "Alpha",
+                    Key: "k:alpha",
+                    Content: Func(ctx =>
+                    {
+                        var dockHost = ctx.UseDockHost();
+                        var pane = ctx.UsePane();
+                        var isActive = ctx.UseIsActivePane();
+                        return VStack(
+                            TextBlock($"alpha-host:{(dockHost is null ? "null" : "ok")}"),
+                            TextBlock($"alpha-pane-title:{pane.Title}"),
+                            TextBlock($"alpha-pane-key:{pane.Key}"),
+                            TextBlock($"alpha-active:{isActive}"));
+                    }));
+                var beta = new DockableContent(
+                    Title: "Beta",
+                    Key: "k:beta",
+                    Content: Func(ctx =>
+                    {
+                        var isActive = ctx.UseIsActivePane();
+                        return TextBlock($"beta-active:{isActive}");
+                    }));
+                return new DockManager
+                {
+                    Layout = new DockTabGroup(new[] { alpha, beta }),
+                    ActiveDocument = alphaActive ? alpha : beta,
+                };
+            }
+
+            host.Mount(_ => Build(alphaActive: true));
             await Harness.Render();
 
             H.Check("DockHooks_Host_Resolved",
@@ -179,13 +185,7 @@ internal static class NativeDockingSmokeFixtures
             H.Check("DockHooks_IsActivePane_TrueWhenActive",
                 H.FindText("alpha-active:True") is not null);
 
-            // Switch active to beta; alpha is still mounted (it's the
-            // first tab), but its IsActivePane becomes False.
-            host.Mount(_ => new DockManager
-            {
-                Layout = new DockTabGroup(new[] { alpha, beta }),
-                ActiveDocument = beta,
-            });
+            host.Mount(_ => Build(alphaActive: false));
             await Harness.Render();
 
             H.Check("DockHooks_IsActivePane_FlipsOnActiveChange",
