@@ -50,6 +50,8 @@
     <EmbeddedResource Include="..\..\SKILL.md" Link="SKILL.md" LogicalName="SKILL.md" />
     <EmbeddedResource Include="..\..\skills\reactor.api.txt" Link="reactor.api.txt" LogicalName="reactor.api.txt"
                       Condition="Exists('..\..\skills\reactor.api.txt')" />
+    <EmbeddedResource Include="..\..\samples\scenarios\_generated\scenarios.json" Link="scenarios.json" LogicalName="scenarios.json"
+                      Condition="Exists('..\..\samples\scenarios\_generated\scenarios.json')" />
   </ItemGroup>
 
   <!-- SignaturesGen transitively references WindowsAppSDK, whose targets

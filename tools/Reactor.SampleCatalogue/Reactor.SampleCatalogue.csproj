@@ -5,7 +5,4 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="System.Text.Json" Version="10.0.0-*" />
-  </ItemGroup>
 </Project>

@@ -1,0 +1,31 @@
+{
+  "scenarios": [
+    {
+      "id": "use-state-basic",
+      "category": "hooks",
+      "title": "Counter with UseState",
+      "intent": "increment a primitive value on click",
+      "tags": [
+        "state",
+        "counter",
+        "hook",
+        "useState",
+        "primitive"
+      ],
+      "factoryAnchors": [
+        "UseState",
+        "Button",
+        "VStack"
+      ],
+      "notesKey": "UseState",
+      "relatedIds": [
+        "use-state-list-pitfall",
+        "use-reducer-list"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022UseStateBasic\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (count, setCount) = UseState(0);\r\n        return VStack(\r\n            Heading($\u0022Count: {count}\u0022),\r\n            Button(\u0022\u002B1\u0022, () =\u003E setCount(count \u002B 1)));\r\n    }\r\n}\r\n",
+      "rawCode": "// id: use-state-basic\r\n// intent: count clicks; demonstrate UseState with primitive value\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022UseStateBasic\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (count, setCount) = UseState(0);\r\n        return VStack(\r\n            Heading($\u0022Count: {count}\u0022),\r\n            Button(\u0022\u002B1\u0022, () =\u003E setCount(count \u002B 1)));\r\n    }\r\n}\r\n"
+    }
+  ],
+  "generatedAt": "2026-05-20T17:33:23.8920168\u002B00:00"
+}
