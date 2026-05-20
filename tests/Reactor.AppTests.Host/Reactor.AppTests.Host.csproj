@@ -12,6 +12,10 @@
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(PublishAotInternal)' == 'true'">
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
     <PackageReference Include="MessageFormat" Version="8.0.0" />

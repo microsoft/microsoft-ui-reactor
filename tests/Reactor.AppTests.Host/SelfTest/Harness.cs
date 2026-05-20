@@ -139,6 +139,16 @@ internal sealed class Harness
                 : global::Windows.UI.Color.FromArgb(255, 244, 67, 54)); // red
     }
 
+    /// <summary>
+    /// Colors the segment at <paramref name="index"/> yellow to indicate a skipped fixture.
+    /// </summary>
+    public void MarkFixtureSkipped(int index)
+    {
+        if (index < 0 || index >= _testSegments.Count) return;
+        _testSegments[index].Background = new SolidColorBrush(
+            global::Windows.UI.Color.FromArgb(255, 255, 193, 7)); // amber/yellow
+    }
+
     public ReactorHost CreateHost()
     {
         var host = new ReactorHost(_window);
