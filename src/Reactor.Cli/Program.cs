@@ -64,6 +64,21 @@ if (arg == "docs")
     return Microsoft.UI.Reactor.Cli.Docs.DocsCommand.Run(args.Skip(1).ToArray());
 }
 
+if (arg == "find")
+{
+    return Microsoft.UI.Reactor.Cli.Find.FindCommand.Run(args.Skip(1).ToArray());
+}
+
+if (arg == "get")
+{
+    return Microsoft.UI.Reactor.Cli.Find.GetCommand.Run(args.Skip(1).ToArray());
+}
+
+if (arg == "list")
+{
+    return Microsoft.UI.Reactor.Cli.Find.ListCommand.Run(args.Skip(1).ToArray());
+}
+
 if (arg == "devtools")
 {
     return Microsoft.UI.Reactor.Cli.Devtools.DevtoolsSupervisor.Run(args.Skip(1).ToArray());
@@ -114,6 +129,9 @@ void ShowHelp()
     Console.WriteLine("  loc status       Show translation coverage per locale");
     Console.WriteLine("  loc prune        Find unused localization keys");
     Console.WriteLine("  docs compile     Compile documentation from templates and doc apps");
+    Console.WriteLine("  find <query>    Search the sample catalogue");
+    Console.WriteLine("  get <id>        Show a sample scenario");
+    Console.WriteLine("  list            List all scenarios");
     Console.WriteLine("  devtools         Launch project with --devtools run and supervise reloads");
     Console.WriteLine("  check [path]     Build and emit one-line diagnostics with skill-file pointers");
     Console.WriteLine("  pack-local       Pack the in-source framework to <repo>/local-nupkgs/ as 0.0.0-local");
