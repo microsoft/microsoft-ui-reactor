@@ -746,7 +746,8 @@ public static partial class Factories
     /// <summary>
     /// Embed a Component class with typed props as a child element.
     /// Returns <see cref="ComponentElement{TProps}"/> so callers can use a
-    /// record <c>with</c>-expression to mutate the typed props in place.
+    /// record <c>with</c>-expression to produce a modified copy with updated
+    /// typed props (records are immutable — <c>with</c> clones, it does not mutate).
     /// Usage: Component&lt;MyWidget, string&gt;("param")
     /// </summary>
     public static ComponentElement<TProps> Component<T, TProps>(TProps props)

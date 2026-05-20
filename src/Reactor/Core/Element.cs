@@ -911,13 +911,16 @@ public record ComponentElement(
 /// <summary>
 /// Strongly-typed <see cref="ComponentElement"/> that exposes <see cref="Props"/>
 /// as <typeparamref name="TProps"/> instead of <c>object?</c>, so callers can use
-/// a record <c>with</c>-expression to mutate the underlying props:
+/// a record <c>with</c>-expression to produce a modified copy of the element
+/// with updated props:
 /// <code>
-/// DataGrid&lt;Foo&gt;(source, columns) with { Props = oldProps with { RowHeight = 60 } };
+/// var grid = DataGrid&lt;Foo&gt;(source, columns);
+/// var taller = grid with { Props = grid.Props with { RowHeight = 60 } };
 /// </code>
 /// The typed <see cref="Props"/> is a thin view over the base
 /// <see cref="ComponentElement.Props"/> slot — there is no second storage field,
-/// so the reconciler (which reads <c>base.Props</c>) always sees the latest value.
+/// so the reconciler (which reads <c>base.Props</c>) always sees the same value
+/// as the typed accessor on the cloned record.
 /// </summary>
 public record ComponentElement<TProps> : ComponentElement
 {
