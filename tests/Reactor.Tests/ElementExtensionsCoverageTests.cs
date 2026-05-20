@@ -560,7 +560,7 @@ public class ElementExtensionsCoverageTests
     [Fact]
     public void ScrollView_Modifiers()
     {
-        var sv = ScrollView(TextBlock("x"))
+        var sv = ScrollViewer(TextBlock("x"))
             .ZoomMode(ZoomMode.Enabled)
             .HorizontalScrollMode(ScrollMode.Enabled)
             .VerticalScrollMode(ScrollMode.Auto);

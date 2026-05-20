@@ -176,7 +176,7 @@ public class SetExtensionsCoverageTests
     [Fact]
     public void Set_ScrollView_Appends_Setter()
     {
-        var el = ScrollView(TextBlock("content"))
+        var el = ScrollViewer(TextBlock("content"))
             .Set(sv => sv.IsEnabled = false);
         Assert.Single(el.Setters);
     }

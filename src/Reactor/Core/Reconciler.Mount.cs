@@ -100,6 +100,7 @@ public sealed partial class Reconciler
             WrapGridElement wg => MountWrapGrid(wg, requestRerender),
             StackElement stack => MountStack(stack, requestRerender),
             GridElement grid => MountGrid(grid, requestRerender),
+            ScrollViewerElement scroll => MountScrollViewer(scroll, requestRerender),
             ScrollViewElement scroll => MountScrollView(scroll, requestRerender),
             BorderElement border => MountBorder(border, requestRerender),
             ExpanderElement exp => MountExpander(exp, requestRerender),
@@ -1156,7 +1157,7 @@ public sealed partial class Reconciler
         return g;
     }
 
-    private WinUI.ScrollViewer MountScrollView(ScrollViewElement scroll, Action requestRerender)
+    private WinUI.ScrollViewer MountScrollViewer(ScrollViewerElement scroll, Action requestRerender)
     {
         var sv = _pool.TryRent(typeof(WinUI.ScrollViewer)) as WinUI.ScrollViewer ?? new WinUI.ScrollViewer();
         sv.HorizontalScrollBarVisibility = scroll.HorizontalScrollBarVisibility;
@@ -1181,8 +1182,42 @@ public sealed partial class Reconciler
         flags.ScrollViewerViewChanged = true;
         sv.ViewChanged += (s, e) =>
         {
-            if (GetElementTag((WinUI.ScrollViewer)s!) is ScrollViewElement el && el.OnViewChanged is { } h)
+            if (GetElementTag((WinUI.ScrollViewer)s!) is ScrollViewerElement el && el.OnViewChanged is { } h)
                 h(e);
+        };
+    }
+
+    private WinUI.ScrollView MountScrollView(ScrollViewElement scroll, Action requestRerender)
+    {
+        var sv = new WinUI.ScrollView
+        {
+            ContentOrientation = scroll.ContentOrientation,
+            HorizontalScrollBarVisibility = scroll.HorizontalScrollBarVisibility,
+            VerticalScrollBarVisibility = scroll.VerticalScrollBarVisibility,
+            HorizontalScrollMode = scroll.HorizontalScrollMode,
+            VerticalScrollMode = scroll.VerticalScrollMode,
+            ZoomMode = scroll.ZoomMode,
+            MinZoomFactor = scroll.MinZoomFactor,
+            MaxZoomFactor = scroll.MaxZoomFactor,
+            HorizontalAnchorRatio = scroll.HorizontalAnchorRatio,
+            VerticalAnchorRatio = scroll.VerticalAnchorRatio,
+            Content = Mount(scroll.Child, requestRerender),
+        };
+        SetElementTag(sv, scroll);
+        EnsureScrollViewViewChangedWired(sv);
+        ApplySetters(scroll.Setters, sv);
+        return sv;
+    }
+
+    private static void EnsureScrollViewViewChangedWired(WinUI.ScrollView sv)
+    {
+        var flags = GetPoolableWireFlags(sv);
+        if (flags.ScrollViewViewChanged) return;
+        flags.ScrollViewViewChanged = true;
+        sv.ViewChanged += (s, _) =>
+        {
+            if (GetElementTag((WinUI.ScrollView)s!) is ScrollViewElement el && el.OnViewChanged is { } h)
+                h();
         };
     }
 

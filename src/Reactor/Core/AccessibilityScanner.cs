@@ -202,7 +202,7 @@ public static partial class AccessibilityScanner
         GroupElement grp => grp.Children,
 
         // Single-child containers
-        ScrollViewElement sc => Single(sc.Child),
+        ScrollViewerElement sc => Single(sc.Child),
         BorderElement b when b.Child is not null => Single(b.Child),
         BorderElement => [],
         ViewboxElement vb => Single(vb.Child),

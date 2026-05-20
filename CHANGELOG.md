@@ -200,6 +200,22 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Changed (breaking)
 
+- **`ScrollView()` factory now mounts the modern
+  `Microsoft.UI.Xaml.Controls.ScrollView`; the legacy
+  `Microsoft.UI.Xaml.Controls.ScrollViewer` mapping moved to a new
+  `ScrollViewer()` factory.** Reactor's `ScrollView()` previously named the
+  ergonomic Reactor wrapper but mounted the classic `ScrollViewer`, leaving
+  the new control's capabilities (`ContentOrientation`, anchor ratios, the
+  `Scrolling*` enum surface) unreachable from the DSL. Migration: rename
+  existing `ScrollView(...)` call sites to `ScrollViewer(...)` when you want
+  to keep the classic control (and the existing `OnViewChanged` /
+  `IsIntermediate` event shape, the parallax animation infrastructure, and
+  `ScrollViewer.SetXxx` attached-property patterns). Reach for the new
+  `ScrollView(...)` factory when you want the modern control. The element
+  records follow the same rename: `ScrollViewElement` → `ScrollViewerElement`
+  for the legacy element; `ScrollViewElement` is now the new control's
+  record. (Issue #348)
+
 - **`.Margin(double, double)` and `.Padding(double, double)` parameter order
   swapped to match CSS shorthand convention.** Was `(horizontal, vertical)`;
   now `(vertical, horizontal)`. This aligns with CSS — `padding: 16px 14px;`

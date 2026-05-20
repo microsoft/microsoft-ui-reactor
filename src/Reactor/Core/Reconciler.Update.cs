@@ -176,7 +176,9 @@ public sealed partial class Reconciler
                 => UpdateWrapGrid(o, n, wg, requestRerender),
             (StackElement o, StackElement n, WinUI.StackPanel sp)
                 => UpdateStack(o, n, sp, requestRerender),
-            (ScrollViewElement o, ScrollViewElement n, WinUI.ScrollViewer sv)
+            (ScrollViewerElement o, ScrollViewerElement n, WinUI.ScrollViewer sv)
+                => UpdateScrollViewer(o, n, sv, newEl, requestRerender),
+            (ScrollViewElement o, ScrollViewElement n, WinUI.ScrollView sv)
                 => UpdateScrollView(o, n, sv, newEl, requestRerender),
             (BorderElement o, BorderElement n, WinUI.Border b)
                 => UpdateBorder(o, n, b, newEl, requestRerender),
@@ -1340,7 +1342,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateScrollView(ScrollViewElement o, ScrollViewElement n, WinUI.ScrollViewer sv, Element newEl, Action requestRerender)
+    private UIElement? UpdateScrollViewer(ScrollViewerElement o, ScrollViewerElement n, WinUI.ScrollViewer sv, Element newEl, Action requestRerender)
     {
         if (CanUpdate(o.Child, n.Child))
         {
@@ -1353,6 +1355,29 @@ public sealed partial class Reconciler
         sv.HorizontalScrollMode = (WinUI.ScrollMode)n.HorizontalScrollMode;
         sv.VerticalScrollMode = (WinUI.ScrollMode)n.VerticalScrollMode;
         sv.ZoomMode = (WinUI.ZoomMode)n.ZoomMode;
+        SetElementTag(sv, n);
+        ApplySetters(n.Setters, sv);
+        return null;
+    }
+
+    private UIElement? UpdateScrollView(ScrollViewElement o, ScrollViewElement n, WinUI.ScrollView sv, Element newEl, Action requestRerender)
+    {
+        if (CanUpdate(o.Child, n.Child))
+        {
+            var childRepl = Update(o.Child, n.Child, sv.Content ?? new WinUI.Grid(), requestRerender);
+            if (childRepl is not null) return Mount(newEl, requestRerender);
+        }
+        else return Mount(newEl, requestRerender);
+        sv.ContentOrientation = n.ContentOrientation;
+        sv.HorizontalScrollBarVisibility = n.HorizontalScrollBarVisibility;
+        sv.VerticalScrollBarVisibility = n.VerticalScrollBarVisibility;
+        sv.HorizontalScrollMode = n.HorizontalScrollMode;
+        sv.VerticalScrollMode = n.VerticalScrollMode;
+        sv.ZoomMode = n.ZoomMode;
+        sv.MinZoomFactor = n.MinZoomFactor;
+        sv.MaxZoomFactor = n.MaxZoomFactor;
+        sv.HorizontalAnchorRatio = n.HorizontalAnchorRatio;
+        sv.VerticalAnchorRatio = n.VerticalAnchorRatio;
         SetElementTag(sv, n);
         ApplySetters(n.Setters, sv);
         return null;

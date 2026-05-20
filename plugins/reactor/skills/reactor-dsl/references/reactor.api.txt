@@ -150,6 +150,7 @@ RichTextBlock(RichTextParagraph[] paragraphs) → RichTextBlockElement
 RichTextBlock(string text) → RichTextBlockElement
 Run(string text) → RichTextRun
 ScrollView(Element child) → ScrollViewElement
+ScrollViewer(Element child) → ScrollViewerElement
 SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int> onSelectedIndexChanged = null) → SelectorBarElement
 SelectorBarItem(string text, string icon = null) → SelectorBarItemData
 SemanticZoom(Element zoomedInView, Element zoomedOutView) → SemanticZoomElement
@@ -450,11 +451,19 @@ RichTextBlockElement.MaxLines(int maxLines) → RichTextBlockElement
 RichTextBlockElement.Set(Action<RichTextBlock> configure) → RichTextBlockElement
 RichTextBlockElement.TextAlignment(TextAlignment alignment) → RichTextBlockElement
 RichTextBlockElement.TextTrimming(TextTrimming trimming) → RichTextBlockElement
-ScrollViewElement.HorizontalScrollMode(ScrollMode mode) → ScrollViewElement
-ScrollViewElement.Set(Action<ScrollViewer> configure) → ScrollViewElement
-ScrollViewElement.VerticalScrollMode(ScrollMode mode) → ScrollViewElement
-ScrollViewElement.ViewChanged(Action<ScrollViewerViewChangedEventArgs> handler) → ScrollViewElement
-ScrollViewElement.ZoomMode(ZoomMode mode) → ScrollViewElement
+ScrollViewElement.AnchorRatio(double horizontal, double vertical) → ScrollViewElement
+ScrollViewElement.ContentOrientation(ScrollingContentOrientation orientation) → ScrollViewElement
+ScrollViewElement.HorizontalScrollMode(ScrollingScrollMode mode) → ScrollViewElement
+ScrollViewElement.Set(Action<ScrollView> configure) → ScrollViewElement
+ScrollViewElement.VerticalScrollMode(ScrollingScrollMode mode) → ScrollViewElement
+ScrollViewElement.ViewChanged(Action handler) → ScrollViewElement
+ScrollViewElement.ZoomMode(ScrollingZoomMode mode) → ScrollViewElement
+ScrollViewElement.ZoomRange(double min, double max) → ScrollViewElement
+ScrollViewerElement.HorizontalScrollMode(ScrollMode mode) → ScrollViewerElement
+ScrollViewerElement.Set(Action<ScrollViewer> configure) → ScrollViewerElement
+ScrollViewerElement.VerticalScrollMode(ScrollMode mode) → ScrollViewerElement
+ScrollViewerElement.ViewChanged(Action<ScrollViewerViewChangedEventArgs> handler) → ScrollViewerElement
+ScrollViewerElement.ZoomMode(ZoomMode mode) → ScrollViewerElement
 SelectorBarElement.SelectedIndexChanged(Action<int> handler) → SelectorBarElement
 SelectorBarElement.Set(Action<SelectorBar> configure) → SelectorBarElement
 SemanticZoomElement.Set(Action<SemanticZoom> configure) → SemanticZoomElement

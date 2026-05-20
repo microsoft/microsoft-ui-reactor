@@ -387,7 +387,7 @@ Title("Page")    Subtitle("Group")   Body("paragraph")      BodyStrong("bold")  
 // Card(child) factory bakes in CardBackground + 1px CardStroke + 8 radius + 16 padding.
 Card(child)
 Border(child).CornerRadius(8).Background(Theme.CardBackground).Padding(16)
-ScrollView(VStack(...))
+ScrollView(VStack(...))      // modern InteractionTracker-backed; ScrollViewer(...) is the classic control if you need attached props / parallax
 Grid(columns: [GridSize.Star(), GridSize.Px(200)],
      rows:    [GridSize.Auto,   GridSize.Star()],
     childA.Grid(row: 0, column: 0), childB.Grid(row: 1, column: 1))

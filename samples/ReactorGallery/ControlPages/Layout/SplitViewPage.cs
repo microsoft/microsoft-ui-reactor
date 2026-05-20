@@ -24,7 +24,7 @@ class SplitViewPage : Component
             _ => SplitViewDisplayMode.Overlay
         };
 
-        return ScrollView(
+        return ScrollViewer(
             VStack(16,
                 PageHeader("SplitView", "A container with a collapsible pane and a content area."),
 

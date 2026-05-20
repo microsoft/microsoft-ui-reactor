@@ -1190,7 +1190,7 @@ class DetailPage : Component<DetailProps>
             });
         }, Props.Id);
 
-        return ScrollView(VStack(16,
+        return ScrollViewer(VStack(16,
             Text(data?.Title ?? "Loading...").Heading(),
             Text(data?.Description ?? ""),
             Button("Related item", () => nav.Navigate(new Detail(Props.Id + 1),

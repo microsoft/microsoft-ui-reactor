@@ -53,7 +53,7 @@ return VStack(0,
     ).Padding(16, 8, 16, 8)
      .Background(CardBackground),
 
-    ScrollView(
+    ScrollViewer(
         VStack(0,
             filtered.Select(item => TodoRow(item, dispatch)).ToArray()
         )
@@ -566,7 +566,7 @@ return VStack(0,
         Button(addCmd)
     ) with { Padding = Thick(16, 8, 16, 8), Background = CardBackground },
 
-    ScrollView(
+    ScrollViewer(
         VStack(0, filtered.Select(item => TodoRow(item, dispatch)).ToArray())
     ) with { Flex = new(grow: 1, basis: 0) },
 
@@ -701,7 +701,7 @@ return VStack(0,
      .Background(CardBackground),
 
     // List
-    ScrollView(
+    ScrollViewer(
         VStack(0, filtered.Select(item => TodoRow(item, dispatch)).ToArray())
     ).Flex(grow: 1, basis: 0),
 
@@ -1349,7 +1349,7 @@ public override Element Render()
         Text("Folders").SemiBold().FontSize(13).Foreground(SecondaryText)
             .Padding(18, 4, 18, 6),
 
-        ScrollView(
+        ScrollViewer(
             VStack(0, others.Select(FolderRow).ToArray())
         ).Flex(grow: 1, basis: 0)
     );
@@ -1542,7 +1542,7 @@ public override Element Render()
             Foreground = SecondaryText, Padding = Thick(18, 4, 18, 6),
         },
 
-        ScrollView(
+        ScrollViewer(
             VStack(0, others.Select(FolderRow).ToArray())
         ) with { Flex = new(grow: 1, basis: 0) }
     );
@@ -1719,7 +1719,7 @@ expression picks between completely different view modes.
 
 **Current (fluent) — from `samples/Reactor.TestApp/Demos/ConditionalDemo.cs`:**
 ```csharp
-return ScrollView(VStack(16,
+return ScrollViewer(VStack(16,
     Heading("Conditional UI"),
 
     CheckBox(showAdvanced, setShowAdvanced, label: "Show advanced options"),
@@ -1955,7 +1955,7 @@ return new ScrollView { Child = new VStack { Spacing = 16, Children = [
 
 **Option B (factory + `with { }`):**
 ```csharp
-return ScrollView(VStack(16,
+return ScrollViewer(VStack(16,
     Heading("Conditional UI"),
 
     CheckBox(showAdvanced, setShowAdvanced, label: "Show advanced options"),
@@ -2417,7 +2417,7 @@ return FlexColumn(
         ThemeToggle(isDark, setIsDark)
     ).Padding(24, 24, 24, 0),
     Caption($"{SampleRegistry.All.Length} samples").Foreground(SecondaryText).Padding(24, 0),
-    ScrollView(
+    ScrollViewer(
         VStack(24, sections).Padding(24, 12, 24, 24)
     ).Flex(grow: 1, basis: 0)
 );
@@ -2544,7 +2544,7 @@ return FlexColumn(
     ) with { Padding = Thick(24, 24, 24, 0) },
     Caption($"{SampleRegistry.All.Length} samples")
         with { Foreground = SecondaryText, Padding = Thick(24, 0) },
-    ScrollView(
+    ScrollViewer(
         VStack(24, sections) with { Padding = Thick(24, 12, 24, 24) }
     ) with { Flex = new(grow: 1, basis: 0) }
 );

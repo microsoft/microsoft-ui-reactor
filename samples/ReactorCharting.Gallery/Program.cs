@@ -174,7 +174,7 @@ class LandingPage : Component
             )
         ).ToArray();
 
-        return ScrollView(
+        return ScrollViewer(
             VStack(24, sections).Padding(24, 12, 24, 24).Margin(4)
         );
     }
@@ -211,7 +211,7 @@ class SampleDetailPage : Component<GallerySample>
     {
         var sample = Props;
 
-        return ScrollView(
+        return ScrollViewer(
             VStack(16,
                 Heading(sample.Title).Foreground(Theme.PrimaryText),
                 TextBlock(sample.Description)
@@ -231,7 +231,7 @@ class SampleDetailPage : Component<GallerySample>
                 // Source-code card: long lines scroll horizontally inside this box
                 // so the outer page doesn't grow wider than the window.
                 Border(
-                    ScrollView(
+                    ScrollViewer(
                         (TextBlock(sample.SourceCode) with
                         {
                             IsTextSelectionEnabled = true,

@@ -269,7 +269,7 @@ public class ChatTimeline : Component<ChatTimelineProps>
             .ToArray();
 
         return Grid([GridSize.Star()], [GridSize.Star()],
-            ScrollView(
+            ScrollViewer(
                 Grid([GridSize.Star()], [GridSize.Auto, GridSize.Auto, GridSize.Auto],
                     loadMoreButton.Grid(row: 0, column: 0),
                     VStack(4, renderedEntries).Set(sp =>

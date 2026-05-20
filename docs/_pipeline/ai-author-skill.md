@@ -614,7 +614,7 @@ Apply with `.FocusTrap(handle)` modifier on a container element.
 `PasswordBox(password, onChange)`, `RadioButtons(items, selectedIndex, onChange)`
 
 **Layout:** `VStack(spacing?, children)`, `HStack(spacing?, children)`,
-`Grid(GridSize[] columns, GridSize[] rows, children)`, `ScrollView(child)`,
+`Grid(GridSize[] columns, GridSize[] rows, children)`, `ScrollView(child)` (modern; `ScrollViewer(child)` for the classic `Control`-shaped one),
 `Border(child)`, `Expander(header, content)`, `FlexRow(children)`,
 `FlexColumn(children)`
 

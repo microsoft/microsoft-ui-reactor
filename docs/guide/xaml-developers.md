@@ -113,7 +113,8 @@ of composition primitives.
 | `StackPanel Orientation="Horizontal"` | `HStack(...)` |
 | `Grid` with row/column definitions | `Grid(columns: ..., rows: ..., ...)` |
 | `Border` | `Border(child)` |
-| `ScrollViewer` | `ScrollView(child)` |
+| `ScrollViewer` (classic) | `ScrollViewer(child)` |
+| `ScrollView` (modern) | `ScrollView(child)` |
 
 This XAML:
 

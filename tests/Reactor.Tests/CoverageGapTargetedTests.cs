@@ -425,7 +425,7 @@ public class CoverageGapTargetedTests
     public void Scanner_WalksScrollView()
     {
         var tree = VStack(
-            new ScrollViewElement(new ImageElement("y.png"))
+            new ScrollViewerElement(new ImageElement("y.png"))
         );
         tree = tree with { Modifiers = new ElementModifiers { Accessibility = new AccessibilityModifiers { LandmarkType = AutomationLandmarkType.Main } } };
         var findings = AccessibilityScanner.Scan(tree);

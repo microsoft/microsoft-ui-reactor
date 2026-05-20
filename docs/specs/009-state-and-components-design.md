@@ -913,7 +913,7 @@ class SettingsPanel : Component
         // Regular state — lost on unmount
         var (filter, setFilter) = UseState("");
 
-        return ScrollView(
+        return ScrollViewer(
             VStack(/* settings items */)
         );
     }

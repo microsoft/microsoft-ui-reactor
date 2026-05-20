@@ -190,7 +190,7 @@ public class FactoryWithExpressionTests
         => Assert.Equal(6, (WrapGrid(3) with { MaximumRowsOrColumns = 6 }).MaximumRowsOrColumns);
 
     [Fact] public void ScrollView_WithExpr_Sets_Key()
-        => Assert.Equal("k", (ScrollView(TextBlock("c")) with { Key = "k" }).Key);
+        => Assert.Equal("k", (ScrollViewer(TextBlock("c")) with { Key = "k" }).Key);
 
     [Fact] public void Border_WithExpr_Sets_Key()
         => Assert.Equal("k", (Border(TextBlock("c")) with { Key = "k" }).Key);

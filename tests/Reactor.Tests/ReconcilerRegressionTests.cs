@@ -66,10 +66,10 @@ public class ReconcilerRegressionTests
     }
 
     [Fact]
-    public void ScrollView_Wrapping_Component_Is_Record_Equal()
+    public void ScrollViewer_Wrapping_Component_Is_Record_Equal()
     {
-        var a = new ScrollViewElement(new ComponentElement(typeof(CounterComponent)));
-        var b = new ScrollViewElement(new ComponentElement(typeof(CounterComponent)));
+        var a = new ScrollViewerElement(new ComponentElement(typeof(CounterComponent)));
+        var b = new ScrollViewerElement(new ComponentElement(typeof(CounterComponent)));
 
         Assert.Equal(a, b);
     }
@@ -84,8 +84,8 @@ public class ReconcilerRegressionTests
         var modified = new ModifiedElement(comp, mods);
         var border = new BorderElement(modified) { Padding = new Thickness(24) };
 
-        var a = new ScrollViewElement(border);
-        var b = new ScrollViewElement(border);
+        var a = new ScrollViewerElement(border);
+        var b = new ScrollViewerElement(border);
 
         Assert.Equal(a, b);
     }
@@ -132,11 +132,11 @@ public class ReconcilerRegressionTests
     }
 
     [Fact]
-    public void CanUpdate_ScrollView_Wrapping_Component_Returns_True()
+    public void CanUpdate_ScrollViewer_Wrapping_Component_Returns_True()
     {
         var reconciler = new Reconciler();
-        var a = new ScrollViewElement(new ComponentElement(typeof(CounterComponent)));
-        var b = new ScrollViewElement(new ComponentElement(typeof(CounterComponent)));
+        var a = new ScrollViewerElement(new ComponentElement(typeof(CounterComponent)));
+        var b = new ScrollViewerElement(new ComponentElement(typeof(CounterComponent)));
 
         Assert.True(reconciler.CanUpdate(a, b));
     }

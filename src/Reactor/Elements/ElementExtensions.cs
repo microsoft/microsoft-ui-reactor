@@ -1654,7 +1654,10 @@ public static partial class ElementExtensions
     public static GridElement Set(this GridElement el, Action<WinUI.Grid> configure) =>
         el with { Setters = [.. el.Setters, configure] };
 
-    public static ScrollViewElement Set(this ScrollViewElement el, Action<WinUI.ScrollViewer> configure) =>
+    public static ScrollViewerElement Set(this ScrollViewerElement el, Action<WinUI.ScrollViewer> configure) =>
+        el with { Setters = [.. el.Setters, configure] };
+
+    public static ScrollViewElement Set(this ScrollViewElement el, Action<WinUI.ScrollView> configure) =>
         el with { Setters = [.. el.Setters, configure] };
 
     public static BorderElement Set(this BorderElement el, Action<WinUI.Border> configure) =>
@@ -2004,17 +2007,39 @@ public static partial class ElementExtensions
         el with { ConnectedAnimationKey = key };
 
     // ════════════════════════════════════════════════════════════════
-    //  ScrollView zoom/scroll modifiers
+    //  ScrollViewer (classic) zoom/scroll modifiers
     // ════════════════════════════════════════════════════════════════
 
-    public static ScrollViewElement ZoomMode(this ScrollViewElement el, WinUI.ZoomMode mode) =>
+    public static ScrollViewerElement ZoomMode(this ScrollViewerElement el, WinUI.ZoomMode mode) =>
         el with { ZoomMode = mode };
 
-    public static ScrollViewElement HorizontalScrollMode(this ScrollViewElement el, WinUI.ScrollMode mode) =>
+    public static ScrollViewerElement HorizontalScrollMode(this ScrollViewerElement el, WinUI.ScrollMode mode) =>
         el with { HorizontalScrollMode = mode };
 
-    public static ScrollViewElement VerticalScrollMode(this ScrollViewElement el, WinUI.ScrollMode mode) =>
+    public static ScrollViewerElement VerticalScrollMode(this ScrollViewerElement el, WinUI.ScrollMode mode) =>
         el with { VerticalScrollMode = mode };
+
+    // ════════════════════════════════════════════════════════════════
+    //  ScrollView (modern) modifiers
+    // ════════════════════════════════════════════════════════════════
+
+    public static ScrollViewElement ContentOrientation(this ScrollViewElement el, WinUI.ScrollingContentOrientation orientation) =>
+        el with { ContentOrientation = orientation };
+
+    public static ScrollViewElement ZoomMode(this ScrollViewElement el, WinUI.ScrollingZoomMode mode) =>
+        el with { ZoomMode = mode };
+
+    public static ScrollViewElement HorizontalScrollMode(this ScrollViewElement el, WinUI.ScrollingScrollMode mode) =>
+        el with { HorizontalScrollMode = mode };
+
+    public static ScrollViewElement VerticalScrollMode(this ScrollViewElement el, WinUI.ScrollingScrollMode mode) =>
+        el with { VerticalScrollMode = mode };
+
+    public static ScrollViewElement ZoomRange(this ScrollViewElement el, double min, double max) =>
+        el with { MinZoomFactor = min, MaxZoomFactor = max };
+
+    public static ScrollViewElement AnchorRatio(this ScrollViewElement el, double horizontal, double vertical) =>
+        el with { HorizontalAnchorRatio = horizontal, VerticalAnchorRatio = vertical };
 
     // ════════════════════════════════════════════════════════════════
     //  AutomationProperties / ElementSoundMode / OnMount

@@ -89,7 +89,8 @@ All factories live on `Microsoft.UI.Reactor.Factories` — use
 | `VStack(spacing, children...)` | `(double, params Element?[])` | Custom spacing |
 | `HStack(children...)` | `params Element?[]` | Horizontal, spacing 8 |
 | `HStack(spacing, children...)` | `(double, params Element?[])` | Custom spacing |
-| `ScrollView(child)` | `Element` | Scrollable container |
+| `ScrollView(child)` | `Element` | Scrollable container (modern `Microsoft.UI.Xaml.Controls.ScrollView` — default choice) |
+| `ScrollViewer(child)` | `Element` | Classic `Microsoft.UI.Xaml.Controls.ScrollViewer` — reach for this when you need parallax animations, `ScrollViewer.SetXxx` attached props on templated parents, or the `IsIntermediate` view-changed flag |
 | `Border(child)` | `Element` | Bordered container — raw |
 | `Card(child)` | `Element → BorderElement` | Preset card: `Theme.CardBackground` + 1px `Theme.CardStroke` + 8px corner radius + 16px padding |
 | `Expander(header, content, isExpanded?, onExpandedChanged?)` | See type | Collapsible |
@@ -385,7 +386,8 @@ ProgressRing().IsActive(active)
 RepeatButton("Go", fn).Delay(d).Interval(i)
 Rectangle().Fill(brush) / Ellipse().Fill(brush)
 Popup(c, open).IsLightDismissEnabled(true).Offset(h, v)
-ScrollView(c).ZoomMode(...).HorizontalScrollMode(...).VerticalScrollMode(...)
+ScrollView(c).ZoomMode(...).HorizontalScrollMode(...).VerticalScrollMode(...)         // modern; enums under WinUI.Scrolling*
+ScrollViewer(c).ZoomMode(...).HorizontalScrollMode(...).VerticalScrollMode(...)        // classic; enums under WinUI.ScrollMode / .ZoomMode
 TextField(v, setV).Header("...")
 element.WithKey("stable-id")  // always last
 ```

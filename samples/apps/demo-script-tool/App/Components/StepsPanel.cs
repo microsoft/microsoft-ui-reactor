@@ -100,7 +100,7 @@ public sealed class StepsPanel : Component<StepsPanelProps>
             .Append(addButton)
             .ToArray();
 
-        return (ScrollView(VStack(cards))
+        return (ScrollViewer(VStack(cards))
             with
             {
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,

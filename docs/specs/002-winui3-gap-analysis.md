@@ -207,8 +207,8 @@ container, or via `Reconciler.RegisterType<>()` to create custom element types.
 
 | WinUI Control | Status | Reactor Surface | Notes |
 |---|---|---|---|
-| **ScrollViewer** | Exposed | `ScrollView(child)` | ScrollViewElement wraps ScrollView (modern) |
-| **ScrollView** | Exposed | (same as above) | Uses modern ScrollView, not legacy ScrollViewer |
+| **ScrollViewer** | Exposed | `ScrollViewer(child)` | `ScrollViewerElement` — classic `Control`-shaped one. Use for parallax animations, `ScrollViewer.SetXxx` attached properties on templated parents, or the `IsIntermediate` view-changed flag. |
+| **ScrollView** | Exposed | `ScrollView(child)` | `ScrollViewElement` — modern `InteractionTracker`-backed control. Default choice for new code. (Issue #348) |
 | **AnnotatedScrollBar** | Exposed | `AnnotatedScrollBar(...)` | AnnotatedScrollBarElement |
 | **ScrollBar** | Passthrough | Via `.Set()` | Primitive; rarely needed directly |
 

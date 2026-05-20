@@ -386,22 +386,30 @@ public static partial class Factories
         new(FilterChildren(children)) { MaximumRowsOrColumns = maxRowsOrColumns };
 
     /// <summary>
-    /// Creates a <see cref="ScrollViewElement"/> wrapping <paramref name="child"/>
-    /// in a scroll container.
+    /// Creates a <see cref="ScrollViewerElement"/> wrapping <paramref name="child"/>
+    /// in the classic <see cref="Microsoft.UI.Xaml.Controls.ScrollViewer"/>
+    /// container (derives from <c>Control</c>; pan + zoom).
     /// </summary>
     /// <remarks>
-    /// The element reconciles to a WinUI <c>ScrollViewer</c>. The Reactor name
-    /// <c>ScrollView</c> matches the newer <c>Microsoft.UI.Xaml.Controls.ScrollView</c>
-    /// type WinUI 3 ships alongside the legacy <c>ScrollViewer</c>; the shorter,
-    /// more modern name is preferred. (spec 039 §6 / §16)
+    /// For the newer InteractionTracker-backed
+    /// <see cref="Microsoft.UI.Xaml.Controls.ScrollView"/> (different enum
+    /// surface, different events, additive features like
+    /// <c>ContentOrientation</c> and anchor ratios), use
+    /// <see cref="ScrollView(Element)"/>. Issue #348.
     /// </remarks>
+    public static ScrollViewerElement ScrollViewer(Element child) => new(child);
+
+    /// <summary>
+    /// Creates a <see cref="ScrollViewElement"/> wrapping <paramref name="child"/>
+    /// in the modern <see cref="Microsoft.UI.Xaml.Controls.ScrollView"/>
+    /// (InteractionTracker-backed, derives from <c>FrameworkElement</c>).
+    /// </summary>
     /// <remarks>
-    /// No <c>ScrollViewer</c> factory alias is exposed — that name would
-    /// shadow <c>Microsoft.UI.Xaml.Controls.ScrollViewer</c>'s attached
-    /// properties (e.g. <c>ScrollViewer.SetVerticalScrollMode(...)</c>) for
-    /// any caller using <c>using static Microsoft.UI.Reactor.Factories;</c>
-    /// alongside <c>using Microsoft.UI.Xaml.Controls;</c>. Reach for
-    /// <c>ScrollView</c> directly.
+    /// Exposes capabilities the legacy <c>ScrollViewer</c> lacks —
+    /// <c>ContentOrientation</c>, <c>HorizontalAnchorRatio</c> /
+    /// <c>VerticalAnchorRatio</c>, and the <c>Scrolling*</c> enum surface.
+    /// For the classic control, use <see cref="ScrollViewer(Element)"/>.
+    /// Issue #348.
     /// </remarks>
     public static ScrollViewElement ScrollView(Element child) => new(child);
 

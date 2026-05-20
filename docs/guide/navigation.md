@@ -640,10 +640,10 @@ class DiagnosticsDemo : Component
 
         UseEffect(() =>
         {
-            Action<NavigationDiagnosticEvent> onRequested =
-                e => updateLog(l => [.. l, $"Requested: {e.From} → {e.To}"]);
-            Action<NavigationDiagnosticEvent> onCompleted =
-                e => updateLog(l => [.. l, $"Completed: {e.To}"]);
+            EventHandler<NavigationDiagnosticEvent> onRequested =
+                (_, e) => updateLog(l => [.. l, $"Requested: {e.From} → {e.To}"]);
+            EventHandler<NavigationDiagnosticEvent> onCompleted =
+                (_, e) => updateLog(l => [.. l, $"Completed: {e.To}"]);
 
             NavigationDiagnostics.NavigationRequested += onRequested;
             NavigationDiagnostics.NavigationCompleted += onCompleted;

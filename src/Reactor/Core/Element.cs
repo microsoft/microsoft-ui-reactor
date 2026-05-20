@@ -422,13 +422,27 @@ public abstract record Element
                 && ReferenceEquals(ga.Children, gb.Children)
                 && ReferenceEquals(ga.Setters, gb.Setters),
 
-            (ScrollViewElement sva, ScrollViewElement svb) =>
+            (ScrollViewerElement sva, ScrollViewerElement svb) =>
                 sva.Orientation == svb.Orientation
                 && sva.HorizontalScrollBarVisibility == svb.HorizontalScrollBarVisibility
                 && sva.VerticalScrollBarVisibility == svb.VerticalScrollBarVisibility
                 && sva.HorizontalScrollMode == svb.HorizontalScrollMode
                 && sva.VerticalScrollMode == svb.VerticalScrollMode
                 && sva.ZoomMode == svb.ZoomMode
+                && ReferenceEquals(sva.Child, svb.Child)
+                && ReferenceEquals(sva.Setters, svb.Setters),
+
+            (ScrollViewElement sva, ScrollViewElement svb) =>
+                sva.ContentOrientation == svb.ContentOrientation
+                && sva.HorizontalScrollBarVisibility == svb.HorizontalScrollBarVisibility
+                && sva.VerticalScrollBarVisibility == svb.VerticalScrollBarVisibility
+                && sva.HorizontalScrollMode == svb.HorizontalScrollMode
+                && sva.VerticalScrollMode == svb.VerticalScrollMode
+                && sva.ZoomMode == svb.ZoomMode
+                && sva.MinZoomFactor == svb.MinZoomFactor
+                && sva.MaxZoomFactor == svb.MaxZoomFactor
+                && sva.HorizontalAnchorRatio == svb.HorizontalAnchorRatio
+                && sva.VerticalAnchorRatio == svb.VerticalAnchorRatio
                 && ReferenceEquals(sva.Child, svb.Child)
                 && ReferenceEquals(sva.Setters, svb.Setters),
 
@@ -507,13 +521,26 @@ public abstract record Element
                 && ba.BorderThickness == bb.BorderThickness
                 && ReferenceEquals(ba.Setters, bb.Setters),
 
-            (ScrollViewElement sva, ScrollViewElement svb) =>
+            (ScrollViewerElement sva, ScrollViewerElement svb) =>
                 sva.Orientation == svb.Orientation
                 && sva.HorizontalScrollBarVisibility == svb.HorizontalScrollBarVisibility
                 && sva.VerticalScrollBarVisibility == svb.VerticalScrollBarVisibility
                 && sva.HorizontalScrollMode == svb.HorizontalScrollMode
                 && sva.VerticalScrollMode == svb.VerticalScrollMode
                 && sva.ZoomMode == svb.ZoomMode
+                && ReferenceEquals(sva.Setters, svb.Setters),
+
+            (ScrollViewElement sva, ScrollViewElement svb) =>
+                sva.ContentOrientation == svb.ContentOrientation
+                && sva.HorizontalScrollBarVisibility == svb.HorizontalScrollBarVisibility
+                && sva.VerticalScrollBarVisibility == svb.VerticalScrollBarVisibility
+                && sva.HorizontalScrollMode == svb.HorizontalScrollMode
+                && sva.VerticalScrollMode == svb.VerticalScrollMode
+                && sva.ZoomMode == svb.ZoomMode
+                && sva.MinZoomFactor == svb.MinZoomFactor
+                && sva.MaxZoomFactor == svb.MaxZoomFactor
+                && sva.HorizontalAnchorRatio == svb.HorizontalAnchorRatio
+                && sva.VerticalAnchorRatio == svb.VerticalAnchorRatio
                 && ReferenceEquals(sva.Setters, svb.Setters),
 
             (FlexElement fa, FlexElement fb) =>
@@ -2356,7 +2383,7 @@ public record FlexElement(Element[] Children) : Element
     internal Action<Layout.FlexPanel>[] Setters { get; init; } = [];
 }
 
-public record ScrollViewElement(Element Child) : Element
+public record ScrollViewerElement(Element Child) : Element
 {
     public Orientation Orientation { get; init; } = Orientation.Vertical;
     public ScrollBarVisibility HorizontalScrollBarVisibility { get; init; } = ScrollBarVisibility.Auto;
@@ -2373,6 +2400,41 @@ public record ScrollViewElement(Element Child) : Element
     public Action<WinUI.ScrollViewerViewChangedEventArgs>? OnViewChanged { get; init; }
 
     internal Action<WinUI.ScrollViewer>[] Setters { get; init; } = [];
+}
+
+/// <summary>
+/// Maps to the modern <see cref="Microsoft.UI.Xaml.Controls.ScrollView"/>
+/// (InteractionTracker-backed, derives from <c>FrameworkElement</c>), as
+/// opposed to <see cref="ScrollViewerElement"/>, which targets the classic
+/// <c>ScrollViewer</c>. Issue #348.
+///
+/// Exposes capabilities that exist only on the new control:
+/// <c>ContentOrientation</c>, <c>HorizontalAnchorRatio</c> /
+/// <c>VerticalAnchorRatio</c>, and the <c>Scrolling*</c> enum surface.
+/// </summary>
+public record ScrollViewElement(Element Child) : Element
+{
+    public WinUI.ScrollingContentOrientation ContentOrientation { get; init; } = WinUI.ScrollingContentOrientation.Vertical;
+    public WinUI.ScrollingScrollBarVisibility HorizontalScrollBarVisibility { get; init; } = WinUI.ScrollingScrollBarVisibility.Auto;
+    public WinUI.ScrollingScrollBarVisibility VerticalScrollBarVisibility { get; init; } = WinUI.ScrollingScrollBarVisibility.Auto;
+    public WinUI.ScrollingScrollMode HorizontalScrollMode { get; init; } = WinUI.ScrollingScrollMode.Auto;
+    public WinUI.ScrollingScrollMode VerticalScrollMode { get; init; } = WinUI.ScrollingScrollMode.Auto;
+    public WinUI.ScrollingZoomMode ZoomMode { get; init; } = WinUI.ScrollingZoomMode.Disabled;
+    public double MinZoomFactor { get; init; } = 0.1;
+    public double MaxZoomFactor { get; init; } = 10.0;
+    public double HorizontalAnchorRatio { get; init; } = 0.0;
+    public double VerticalAnchorRatio { get; init; } = 0.0;
+
+    /// <summary>
+    /// Raised after the view (offset or zoom factor) changes. The modern
+    /// control reports only the settled value — there is no intermediate flag
+    /// like the classic <c>ScrollViewer.ViewChanged</c>.
+    /// </summary>
+    public Action? OnViewChanged { get; init; }
+
+    internal Action<WinUI.ScrollView>[] Setters { get; init; } = [];
+
+    internal override bool HasCallbacks => OnViewChanged is not null;
 }
 
 public record BorderElement(Element? Child) : Element

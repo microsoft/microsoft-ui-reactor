@@ -1237,7 +1237,7 @@ public class HeroLandingPage : Component
 {
     public override Element Render(RenderContext ctx)
     {
-        return ScrollView(
+        return ScrollViewer(
             VStack(
 
                 // ── Hero section: ALWAYS DARK ──

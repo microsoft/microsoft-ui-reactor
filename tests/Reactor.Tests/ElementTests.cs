@@ -319,7 +319,7 @@ public class ElementTests
     [Fact]
     public void ScrollView_Creates_With_Defaults()
     {
-        var el = ScrollView(TextBlock("scrollable"));
+        var el = ScrollViewer(TextBlock("scrollable"));
         Assert.Equal(ScrollBarVisibility.Auto, el.HorizontalScrollBarVisibility);
         Assert.Equal(ScrollBarVisibility.Auto, el.VerticalScrollBarVisibility);
     }

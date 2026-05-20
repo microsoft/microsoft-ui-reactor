@@ -83,7 +83,8 @@ ReactorApp.Run("Demo Title", ctx =>
 Reactor essentials you may need:
 
 - Layout: `VStack`, `HStack`, `FlexRow`, `FlexColumn`, `Border(child)`,
-  `ScrollView(child)`, `Grid(columns, rows, ...)`.
+  `ScrollView(child)` (modern; `ScrollViewer(child)` for the classic
+  `Control`-shaped variant), `Grid(columns, rows, ...)`.
 - Text: `TextBlock("...")`, `Heading("...")`, `SubHeading("...")`,
   `Caption("...")`. All accept `.FontSize(double)`, `.Bold()`,
   `.Foreground("#hex")`, `.Margin(...)`.

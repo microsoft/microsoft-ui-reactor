@@ -337,7 +337,7 @@ internal static class FlexLayoutFixtures
         {
             var host = H.CreateHost();
             host.Mount(ctx =>
-                ScrollView(
+                ScrollViewer(
                     FlexColumn(
                         TextBlock("Item 1").Height(60).Background("LightCoral"),
                         TextBlock("Item 2").Height(60).Background("LightBlue"),
@@ -377,7 +377,7 @@ internal static class FlexLayoutFixtures
                 FlexColumn(
                     TextBlock("Header").Height(50).Flex(shrink: 0).Background("LightCoral"),
 
-                    ScrollView(
+                    ScrollViewer(
                         VStack(0,
                             TextBlock("Scroll Item 1").Height(80),
                             TextBlock("Scroll Item 2").Height(80),
@@ -880,7 +880,7 @@ internal static class FlexLayoutFixtures
                 Grid([GridSize.Star()], [GridSize.Px(60), GridSize.Star(), GridSize.Px(60)],
                     TextBlock("Header").Grid(row: 0, column: 0).Background("LightCoral"),
 
-                    ScrollView(
+                    ScrollViewer(
                         FlexColumn(
                             TextBlock("Item-1").Height(50).Background("LightBlue"),
                             TextBlock("Item-2").Height(50).Background("LightGreen"),
@@ -1017,7 +1017,7 @@ internal static class FlexLayoutFixtures
                 FlexColumn(
                     TextBlock("Header").Height(50).Background("LightCoral")
                         .AutomationId("HBF_Header"),
-                    ScrollView(
+                    ScrollViewer(
                         VStack(0,
                             TextBlock("Item 1").Height(80),
                             TextBlock("Item 2").Height(80),

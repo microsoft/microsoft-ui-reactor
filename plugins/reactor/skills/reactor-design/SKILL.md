@@ -493,7 +493,7 @@ HStack(8,
 // Correct: header stays fixed, content scrolls
 VStack(
     Heading("Page Title"),
-    ScrollView(
+    ScrollViewer(
         VStack(8, contentItems)
     ).Set(sv => sv.HorizontalContentAlignment = HorizontalAlignment.Stretch))
 ```

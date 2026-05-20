@@ -167,26 +167,26 @@ Grid([GridSize.Star()], [GridSize.Star()],
 
 ### ScrollView
 
-Wrap content that may exceed available space.
+Wrap content that may exceed available space. Default to `ScrollView()`
+— the modern `Microsoft.UI.Xaml.Controls.ScrollView`. Reach for
+`ScrollViewer()` only when you need a `Control`-shaped API
+(`HorizontalContentAlignment`, parallax animations, the
+`ScrollViewer.SetXxx` attached properties on templated parents, or the
+`IsIntermediate` view-changed flag).
 
 ```csharp
-ScrollView(
-    VStack(8, longContent)
-).Set(sv => sv.HorizontalContentAlignment = HorizontalAlignment.Stretch)
+ScrollView(VStack(8, longContent))
 ```
 
 **Configuration:**
-- Set `HorizontalContentAlignment = Stretch` to prevent content from collapsing to natural width.
 - Use `Auto` scrollbar visibility (the default) — scrollbar appears only when content overflows.
-- Headers and action bars should remain outside the ScrollView — only the content area scrolls.
+- Headers and action bars should remain outside the scroller — only the content area scrolls.
 
 ```csharp
 // Correct: fixed header, scrolling content
 VStack(
     Heading("Page Title").Padding(16, 16, 16, 8),
-    ScrollView(
-        VStack(8, contentItems)
-    ).Set(sv => sv.HorizontalContentAlignment = HorizontalAlignment.Stretch))
+    ScrollView(VStack(8, contentItems)))
 ```
 
 ## Sizing

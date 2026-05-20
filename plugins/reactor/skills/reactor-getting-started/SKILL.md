@@ -171,7 +171,7 @@ FlexColumn(children...)                       FlexRow(children...)
 // (grow/shrink/gap/wrap, justify-content, align-items). VStack/HStack
 // remain for StackPanel's shrink-wrap behavior.
 Border(child).CornerRadius(8).Background(Theme.CardBackground).Padding(16)
-ScrollView(VStack(...))
+ScrollView(VStack(...))      // modern (default); ScrollViewer(...) is the classic Control
 Grid(columns: [GridSize.Star(), GridSize.Px(200)],
      rows:    [GridSize.Auto,   GridSize.Star()],
     TextBlock("Header").Grid(row: 0, column: 0, columnSpan: 2),

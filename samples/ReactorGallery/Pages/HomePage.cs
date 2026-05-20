@@ -25,7 +25,7 @@ class HomePage : Component<Action<string>>
 
         var recentControls = ControlRegistry.All.Take(8).ToArray();
 
-        return (ScrollView(
+        return (ScrollViewer(
             VStack(0,
                 // ── Hero section ────────────────────────────────────────
                 Border(

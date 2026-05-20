@@ -194,7 +194,11 @@ public static partial class ElementExtensions
         el with { OnPaneOpenChanged = handler };
 
     /// <summary>Wires the view-changed handler. Inspect <c>args.IsIntermediate</c> to debounce until the scroll settles. Passing <c>null</c> clears.</summary>
-    public static ScrollViewElement ViewChanged(this ScrollViewElement el, Action<Microsoft.UI.Xaml.Controls.ScrollViewerViewChangedEventArgs>? handler) =>
+    public static ScrollViewerElement ViewChanged(this ScrollViewerElement el, Action<Microsoft.UI.Xaml.Controls.ScrollViewerViewChangedEventArgs>? handler) =>
+        el with { OnViewChanged = handler };
+
+    /// <summary>Wires the view-changed handler on the modern <see cref="ScrollViewElement"/>. The modern control reports only settled values. Passing <c>null</c> clears.</summary>
+    public static ScrollViewElement ViewChanged(this ScrollViewElement el, Action? handler) =>
         el with { OnViewChanged = handler };
 
     // ── §7 Navigation ──────────────────────────────────────────────────

@@ -73,7 +73,7 @@ internal static class ErrorFallback
     /// the stack trace remains visible/copyable.
     /// </summary>
     public static Element BuildElement(Exception ex) =>
-        new ScrollViewElement(
+        new ScrollViewerElement(
             new TextBlockElement($"⚠ Render error: {ex.GetType().Name}: {ex.Message}\n\n{ex}")
             {
                 TextWrapping = TextWrapping.Wrap,

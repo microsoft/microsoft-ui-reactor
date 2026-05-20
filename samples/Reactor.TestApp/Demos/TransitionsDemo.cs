@@ -35,7 +35,7 @@ class TransitionsDemo : Component
         var currentBg = colors[bgIndex % colors.Length];
         var comboBg = colors[comboBgIndex % colors.Length];
 
-        return ScrollView(VStack(16,
+        return ScrollViewer(VStack(16,
             Heading("Transitions"),
             TextBlock("Demonstrates implicit and theme transitions in Reactor.").Foreground(SecondaryText),
 

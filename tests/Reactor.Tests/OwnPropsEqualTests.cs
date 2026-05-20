@@ -159,12 +159,12 @@ public class OwnPropsEqualTests
     [InlineData("hMode")]
     [InlineData("vMode")]
     [InlineData("zoom")]
-    public void ScrollViewElement_DifferingProp_NotEqual(string which)
+    public void ScrollViewerElement_DifferingProp_NotEqual(string which)
     {
         // Every ScrollViewer DP here is observable to the user — collapsing
         // a scrollbar, switching axis, enabling pinch-zoom. The switch arm
         // is the only thing protecting against a silent stale render.
-        var a = new ScrollViewElement(new EmptyElement());
+        var a = new ScrollViewerElement(new EmptyElement());
         var b = which switch
         {
             "orientation" => a with { Orientation = Orientation.Horizontal },
@@ -173,6 +173,45 @@ public class OwnPropsEqualTests
             "hMode" => a with { HorizontalScrollMode = ScrollMode.Disabled },
             "vMode" => a with { VerticalScrollMode = ScrollMode.Disabled },
             "zoom" => a with { ZoomMode = ZoomMode.Enabled },
+            _ => throw new global::System.InvalidOperationException(),
+        };
+        Assert.False(Element.OwnPropsEqual(a, b));
+    }
+
+    [Fact]
+    public void ScrollViewerElement_SameOwnProps_AreEqual()
+    {
+        var a = new ScrollViewerElement(new EmptyElement());
+        var b = new ScrollViewerElement(new EmptyElement());
+        Assert.True(Element.OwnPropsEqual(a, b));
+    }
+
+    [Theory]
+    [InlineData("contentOrientation")]
+    [InlineData("hVis")]
+    [InlineData("vVis")]
+    [InlineData("hMode")]
+    [InlineData("vMode")]
+    [InlineData("zoom")]
+    [InlineData("minZoom")]
+    [InlineData("maxZoom")]
+    [InlineData("hAnchor")]
+    [InlineData("vAnchor")]
+    public void ScrollViewElement_DifferingProp_NotEqual(string which)
+    {
+        var a = new ScrollViewElement(new EmptyElement());
+        var b = which switch
+        {
+            "contentOrientation" => a with { ContentOrientation = Microsoft.UI.Xaml.Controls.ScrollingContentOrientation.Horizontal },
+            "hVis" => a with { HorizontalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollingScrollBarVisibility.Hidden },
+            "vVis" => a with { VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollingScrollBarVisibility.Hidden },
+            "hMode" => a with { HorizontalScrollMode = Microsoft.UI.Xaml.Controls.ScrollingScrollMode.Disabled },
+            "vMode" => a with { VerticalScrollMode = Microsoft.UI.Xaml.Controls.ScrollingScrollMode.Disabled },
+            "zoom" => a with { ZoomMode = Microsoft.UI.Xaml.Controls.ScrollingZoomMode.Enabled },
+            "minZoom" => a with { MinZoomFactor = 0.5 },
+            "maxZoom" => a with { MaxZoomFactor = 4.0 },
+            "hAnchor" => a with { HorizontalAnchorRatio = 0.5 },
+            "vAnchor" => a with { VerticalAnchorRatio = 1.0 },
             _ => throw new global::System.InvalidOperationException(),
         };
         Assert.False(Element.OwnPropsEqual(a, b));

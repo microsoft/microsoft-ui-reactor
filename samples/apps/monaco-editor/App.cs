@@ -251,7 +251,7 @@ class EditorApp : Component
                 )).Backdrop(BackdropKind.Mica);
         }
 
-        var previewPane = ScrollView(
+        var previewPane = ScrollViewer(
             Markdown(text).Margin(16).Foreground(PrimaryText)
         ).Set(sv => sv.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled)
          .Background(CardBackground);

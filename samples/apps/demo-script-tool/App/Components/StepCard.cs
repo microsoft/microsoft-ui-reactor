@@ -130,7 +130,7 @@ public sealed class StepCard : Component<StepCardProps>
         Element bodyContent = (showCode, hasCode, hasDelta) switch
         {
             (true, true, _) => Border(
-                (ScrollView(
+                (ScrollViewer(
                     BuildCodeRichText(step.Code, Props.PriorStep?.Code)
                         .Foreground(Theme.PrimaryText)
                         .Padding(12))
@@ -153,7 +153,7 @@ public sealed class StepCard : Component<StepCardProps>
                 .WithBorder(Theme.ControlStrokeSecondary, 1),
 
             (false, _, true) => Border(
-                (ScrollView(Markdown(step.Delta!)
+                (ScrollViewer(Markdown(step.Delta!)
                     .Foreground(Theme.PrimaryText)
                     .Padding(12))
                 with { HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }))
@@ -272,7 +272,7 @@ public sealed class StepCard : Component<StepCardProps>
 
         var failureOutput = (step.BuildState == BuildState.Failed && !string.IsNullOrEmpty(step.BuildOutput))
             ? Border(
-                (ScrollView(TextBlock(step.BuildOutput!)
+                (ScrollViewer(TextBlock(step.BuildOutput!)
                     .FontFamily("Cascadia Code, Consolas, Courier New")
                     .Foreground(Theme.PrimaryText)
                     .Padding(8))

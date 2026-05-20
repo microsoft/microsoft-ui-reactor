@@ -360,7 +360,7 @@ public class EventFluentNullClearTests
     public void ScrollView_ViewChanged_NullClears()
     {
         Action<Microsoft.UI.Xaml.Controls.ScrollViewerViewChangedEventArgs> h = _ => { };
-        var el = ScrollView(TextBlock("x")).ViewChanged(h);
+        var el = ScrollViewer(TextBlock("x")).ViewChanged(h);
         Assert.Same(h, el.OnViewChanged);
         Assert.Null(el.ViewChanged(null).OnViewChanged);
     }
