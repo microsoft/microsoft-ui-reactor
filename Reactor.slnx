@@ -221,6 +221,12 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
+  <Folder Name="/samples/apps/dock-showcase/">
+    <Project Path="samples/apps/dock-showcase/DockShowcase.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
   <Folder Name="/samples/apps/headtrax/">
     <Project Path="samples/apps/headtrax/HeadTrax/HeadTrax.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
