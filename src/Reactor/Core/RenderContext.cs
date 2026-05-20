@@ -1358,17 +1358,7 @@ public sealed class RenderContext
         {
             if (_hooks[i] is EffectHookState hook && hook.PendingCleanup is not null)
             {
-                try
-                {
-                    hook.PendingCleanup();
-                }
-                catch (Exception ex)
-                {
-                    // User-callback isolation (spec 044 §6.7.3): one bad
-                    // cleanup must not block the remaining cleanups or
-                    // Phase 2 effect re-runs in this flush.
-                    DiagnosticLog.SwallowedError(LogCategory.Reactor, $"UseEffect.cleanup[i={i}]", ex);
-                }
+                hook.PendingCleanup();
                 hook.PendingCleanup = null;
             }
         }
@@ -1379,24 +1369,15 @@ public sealed class RenderContext
             if (_hooks[i] is not EffectHookState hook || !hook.Pending) continue;
             hook.Pending = false;
 
-            try
+            if (hook.EffectWithCleanup is not null)
             {
-                if (hook.EffectWithCleanup is not null)
-                {
-                    hook.Cleanup = hook.EffectWithCleanup();
-                    hook.EffectWithCleanup = null;
-                }
-                else if (hook.Effect is not null)
-                {
-                    hook.Effect();
-                    hook.Effect = null;
-                }
+                hook.Cleanup = hook.EffectWithCleanup();
+                hook.EffectWithCleanup = null;
             }
-            catch (Exception ex)
+            else if (hook.Effect is not null)
             {
-                // User-callback isolation (spec 044 §6.7.3): a thrown effect
-                // body must not block subsequent effects on this flush.
-                DiagnosticLog.SwallowedError(LogCategory.Reactor, $"UseEffect.effect[i={i}]", ex);
+                hook.Effect();
+                hook.Effect = null;
             }
         }
     }
@@ -1408,17 +1389,7 @@ public sealed class RenderContext
         {
             if (_hooks[i] is EffectHookState hook)
             {
-                try
-                {
-                    hook.Cleanup?.Invoke();
-                }
-                catch (Exception ex)
-                {
-                    // User-callback isolation (spec 044 §6.7.3): a thrown
-                    // cleanup must not block subsequent cleanups or the
-                    // persisted-state save phase below.
-                    DiagnosticLog.SwallowedError(LogCategory.Reactor, $"RunCleanups.effectCleanup[i={i}]", ex);
-                }
+                hook.Cleanup?.Invoke();
             }
         }
 
@@ -1427,17 +1398,7 @@ public sealed class RenderContext
         {
             if (_hooks[i] is PersistedHookStateBase persisted)
             {
-                try
-                {
-                    persisted.SaveToCache();
-                }
-                catch (Exception ex)
-                {
-                    // User-callback isolation (spec 044 §6.7.3): a thrown
-                    // serializer for one persisted-state slot must not
-                    // block subsequent slots from saving.
-                    DiagnosticLog.SwallowedError(LogCategory.Reactor, $"RunCleanups.persistedSave[i={i}]", ex);
-                }
+                persisted.SaveToCache();
             }
         }
     }

@@ -1032,8 +1032,7 @@ public sealed partial class Reconciler : IDisposable
                 var service = ConnectedAnimationService.GetForCurrentView();
                 service.PrepareToAnimate(caEl.ConnectedAnimationKey, control);
             }
-            catch (global::System.Runtime.InteropServices.COMException) { }
-            catch (Exception ex) { Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor, "ConnectedAnimation.PrepareToAnimate", ex); }
+            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
         }
 
         // Clean up animation state (mirrors UnmountAndCollect)
@@ -1302,8 +1301,7 @@ public sealed partial class Reconciler : IDisposable
                 var service = ConnectedAnimationService.GetForCurrentView();
                 service.PrepareToAnimate(caEl.ConnectedAnimationKey, control);
             }
-            catch (global::System.Runtime.InteropServices.COMException) { }
-            catch (Exception ex) { Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor, "ConnectedAnimation.PrepareToAnimate", ex); }
+            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
         }
 
         // Clean up animation state
@@ -2308,8 +2306,7 @@ public sealed partial class Reconciler : IDisposable
             if (anim is not null)
                 _pendingConnectedAnimationStarts.Add((anim, target));
         }
-        catch (global::System.Runtime.InteropServices.COMException) { }
-        catch (Exception ex) { Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor, "ConnectedAnimation.GetAnimation", ex); }
+        catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
     }
 
     /// <summary>
@@ -2323,8 +2320,7 @@ public sealed partial class Reconciler : IDisposable
         foreach (var (anim, target) in _pendingConnectedAnimationStarts)
         {
             try { anim.TryStart(target); }
-            catch (global::System.Runtime.InteropServices.COMException) { }
-            catch (Exception ex) { Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor, "ConnectedAnimation.TryStart", ex); }
+            catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult)) { }
         }
         _pendingConnectedAnimationStarts.Clear();
     }
@@ -3686,14 +3682,7 @@ public sealed partial class Reconciler : IDisposable
         var navigatedToCtx = new Navigation.NavigatedToContext(currentRoute, previousRoute, mode);
         foreach (var hook in newHooks)
         {
-            try { hook.OnNavigatedTo?.Invoke(navigatedToCtx); }
-            catch (Exception ex)
-            {
-                // User-callback isolation (spec 044 §6.7.3): a thrown
-                // onNavigatedTo must not block sibling subscribers or the
-                // onNavigatedFrom phase below.
-                DiagnosticLog.SwallowedError(LogCategory.Reactor, "Reconciler.OnNavigatedTo", ex);
-            }
+            hook.OnNavigatedTo?.Invoke(navigatedToCtx);
         }
 
         // onNavigatedFrom on the old page (callbacks captured at last render)
@@ -3703,12 +3692,7 @@ public sealed partial class Reconciler : IDisposable
                 previousRoute!, currentRoute, mode);
             foreach (var hook in oldHooks)
             {
-                try { hook.OnNavigatedFrom?.Invoke(navigatedFromCtx); }
-                catch (Exception ex)
-                {
-                    // User-callback isolation (spec 044 §6.7.3).
-                    DiagnosticLog.SwallowedError(LogCategory.Reactor, "Reconciler.OnNavigatedFrom", ex);
-                }
+                hook.OnNavigatedFrom?.Invoke(navigatedFromCtx);
             }
         }
     }
@@ -3725,14 +3709,7 @@ public sealed partial class Reconciler : IDisposable
         var ctx = new Navigation.NavigatingToContext(currentRoute, previousRoute, mode);
         foreach (var hook in hooks)
         {
-            try { hook.OnNavigatingTo?.Invoke(ctx); }
-            catch (Exception ex)
-            {
-                // User-callback isolation (spec 044 §6.7.3): a thrown
-                // onNavigatingTo must not silently cancel navigation — we
-                // still evaluate IsCancelled below for the explicit veto.
-                DiagnosticLog.SwallowedError(LogCategory.Reactor, "Reconciler.OnNavigatingTo", ex);
-            }
+            hook.OnNavigatingTo?.Invoke(ctx);
             if (ctx.IsCancelled)
             {
                 Navigation.NavigationDiagnostics.OnNavigationCancelled(

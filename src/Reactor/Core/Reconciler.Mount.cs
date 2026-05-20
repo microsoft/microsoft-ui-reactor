@@ -2129,23 +2129,8 @@ public sealed partial class Reconciler
         if (cdEl.OnOpened is not null) dialog.Opened += (_, _) => cdEl.OnOpened?.Invoke();
         // ApplySetters last so caller .Set(...) wins (including overriding XamlRoot).
         ApplySetters(cdEl.Setters, dialog);
-        try
-        {
-            var winUiResult = await dialog.ShowAsync();
-            cdEl.OnClosed?.Invoke(winUiResult);
-        }
-        catch (Exception ex)
-        {
-            // User-callback isolation (spec 044 §6.7.3): the try wraps both
-            // ShowAsync and the user-supplied OnClosed delegate — if
-            // OnClosed throws we must not let that crash the dispatcher.
-            // The broad catch is deliberate; the SwallowedError emission
-            // is the release-visible audit trail.
-            Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
-                Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor,
-                "ContentDialog.ShowAsync+OnClosed",
-                ex);
-        }
+        var winUiResult = await dialog.ShowAsync();
+        cdEl.OnClosed?.Invoke(winUiResult);
     }
 
     private UIElement? MountFlyout(FlyoutElement flyEl, Action requestRerender)
