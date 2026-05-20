@@ -88,33 +88,49 @@ the gate.
 
 ### 0.2 Public-API surface tracking
 
-- [ ] Confirm whether docking projects adopt
+- [x] Confirm whether docking projects adopt
   `Microsoft.CodeAnalysis.PublicApiAnalyzers` (project decision — match
-  spec 036 outcome). Record the answer and apply consistently.
+  spec 036 outcome). **Decision: no.** Verified spec 036 §0.2 outcome
+  ("no — verified via inspection of `Reactor.csproj`") and confirmed
+  `Reactor.Docking.Xaml.csproj` carries no `PublicApiAnalyzers`
+  PackageReference. Matches sibling-component convention; revisit when
+  the repo-wide policy changes.
 
 ### 0.3 Localization scaffolding
 
-- [ ] Reserve the `Docking.*` resource-key prefix in
-  `src/Reactor/Resources/Reactor.resw`. Document the convention in the
-  resource header comment so new docking surfaces land under it.
-- [ ] Add placeholder entries for the strings P1 surfaces (drop-target
-  tooltips, default floating-window title, side-pin tooltip).
+- [x] Reserve the `Docking.*` resource-key prefix. Reservation file at
+  `src/Reactor.Docking.Xaml/Resources/Reactor.Docking.resw` (no central
+  `src/Reactor/Resources/Reactor.resw` exists — Reactor uses per-app
+  `Strings/<locale>/*.resw` consumed by `ReswResourceProvider`; the
+  wrapper's reservation file follows the same shape and ships under the
+  wrapper's `Strings\en-US\` at P2 wiring). Header comment documents the
+  `Docking.*` convention.
+- [x] Add placeholder entries for the strings P1 surfaces (drop-target
+  tooltips, default floating-window title, side-pin tooltip). Entries
+  reserved in `Reactor.Docking.resw`; first consumer is the P2 native
+  rewrite (§2.21). Not yet wired through `Reactor.Localization.Generator`
+  — that wiring lands at P2 entry alongside the first consumer.
 
 ### 0.4 Spec / skill cross-linking
 
-- [ ] Verify `docs/specs/045-docking-windows-design.md` links from the
-  spec index (if one exists). Skip if no central index.
-- [ ] Author the docs source under `docs/_pipeline/apps/docking/`. **Do
+- [x] Verify `docs/specs/045-docking-windows-design.md` links from the
+  spec index (if one exists). **N/A** — no central spec index file
+  exists under `docs/specs/`; specs are flat-numbered and discovered by
+  filename pattern. Matches spec 036's outcome.
+- [x] Author the docs source under `docs/_pipeline/apps/docking/`. **Do
   NOT hand-edit** `docs/guide/docking.md` (generated output — see
-  memory `feedback_docs_pipeline.md`).
+  memory `feedback_docs_pipeline.md`). Done via §1.8.
 - [ ] Skill content under `skills/docking.md` is **deferred to P1 exit at
   the earliest** (per spec §8.4).
 
 ### 0.5 Third-party notice plumbing
 
-- [ ] Verify `ThirdPartyNoticeText.txt` exists at repo root and document
+- [x] Verify `ThirdPartyNoticeText.txt` exists at repo root and document
   the append convention used for this notice in the PR description
-  (spec §12).
+  (spec §12). Verified: file present, WinUI.Dock MIT block appended at
+  L75 with upstream URL and copyright. Append convention follows the
+  pre-existing `------------------- <Name> ----------------------`
+  delimiter pattern used by Yoga / md4c above it.
 
 ---
 
@@ -253,8 +269,18 @@ demonstrated; (c) human reviewer signs off side-by-side vs upstream
   (the reconciler-tears-down-on-source-mutation risk).
 - [ ] Verify the `Document.Content` `object?` slot accepts the
   `ReactorContentControl` host without XAML schema warnings.
-- [ ] **AOT verification:** confirm `Reactor.AppTests.Host` AOT build
+- [x] **AOT verification:** confirm `Reactor.AppTests.Host` AOT build
   passes with the new project referenced. Document any new trim warnings.
+  Verified locally (2026-05-20): `dotnet build` Release/x64 of
+  `Reactor.Docking.Xaml` produces 0 warnings / 0 errors;
+  `Reactor.AppTests.Host` with the wrapper referenced produces only 4
+  pre-existing CS warnings (CS8602 in `DevtoolsFixtures.cs:1183`,
+  CS0618 in `ReconcilerBigCoverageFixtures.cs:40`) — no new IL trim
+  warnings. AOT canary `StressPerf.Reactor` does not reference the
+  wrapper, so the framework AOT canary is unaffected. Full
+  `PublishAot=true` on the WinUI host is out of scope (WinUI itself is
+  not AOT-published in this repo) — the relevant gate is "no new trim
+  warnings", which passes.
 
 ### 1.6 Showcase sample (spec §4.5) — the human-tested deliverable
 
