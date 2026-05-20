@@ -45,10 +45,64 @@ public static class DockingXamlInterop
     {
         ArgumentNullException.ThrowIfNull(reconciler);
 
+        // Register the vendored library's XAML metadata provider with the
+        // Reactor application so that types referenced from Themes/Generic.xaml
+        // (dock:Preview, dock:DockTargetButton, …) can be resolved when the
+        // control template is applied. Without this, the XAML loader can't
+        // find `using:WinUI.Dock` types and the template-apply pass crashes
+        // with 0xC000027B inside Microsoft.UI.Xaml.dll. Spec 045 §4.4.
+        //
+        // The selftest harness doesn't crash without this because its host
+        // project happens to discover a XamlMetaDataProvider that aggregates
+        // WinUI.Dock types via the entry-assembly scan in
+        // ReactorApplication.DiscoverHostAppProvider — but apps using
+        // ReactorApp.Run<TRoot> don't get that aggregation for transitive
+        // control-library references, so we register explicitly.
+        try { ReactorApp.RegisterControlAssembly(typeof(WinUIDock.DockManager).Assembly); }
+        catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor.Docking] RegisterControlAssembly failed: {ex.Message}"); }
+
+        // Merge the vendored library's theme resources into the
+        // Application's resource dictionary up front so the first
+        // DockManager mount doesn't trigger a parse of Themes/Generic.xaml
+        // while those resources are unresolvable.
+        EnsureDockResourcesMergedIntoApplication();
+
         reconciler.RegisterType<DockManager, WinUIDock.DockManager>(
             mount: MountDockManager,
             update: UpdateDockManager,
             unmount: UnmountDockManager);
+    }
+
+    // Idempotent — track whether we've already merged the WinUI.Dock theme
+    // resources into Application.Current.Resources. Without this, control
+    // templates in Themes/Generic.xaml that reference {ThemeResource
+    // DockStrokeActiveBrush} et al. fail to resolve (WinUI walks UP the
+    // visual tree for resources, so brushes attached to the manager itself
+    // can't satisfy lookups inside its own template). The Application-level
+    // merge is the same pattern upstream's Example.WinUI uses via
+    // <dock:WinUIDockResources/> in App.xaml.
+    private static bool _resourcesMerged;
+    private static readonly object _resourcesLock = new();
+
+    private static void EnsureDockResourcesMergedIntoApplication()
+    {
+        if (_resourcesMerged) return;
+        lock (_resourcesLock)
+        {
+            if (_resourcesMerged) return;
+            try
+            {
+                var app = Application.Current;
+                if (app?.Resources is null) return; // host has no app — selftest harness sets one up before Register
+                app.Resources.MergedDictionaries.Add(new WinUIDock.WinUIDockResources());
+                _resourcesMerged = true;
+            }
+            catch (Exception ex)
+            {
+                global::System.Diagnostics.Debug.WriteLine(
+                    $"[Reactor.Docking] Failed to merge WinUIDockResources into Application.Resources: {ex.Message}");
+            }
+        }
     }
 
     // ── Mount ─────────────────────────────────────────────────────────────
@@ -60,25 +114,16 @@ public static class DockingXamlInterop
     {
         var manager = new WinUIDock.DockManager();
 
-        // Themes/Generic.xaml + Themes/Styles.xaml + Themes/Themes.xaml need to
-        // be merged into the manager's resources so the control template +
-        // theme brushes resolve. The upstream WinUIDockResources helper does
-        // this for us; merging at the control level (instead of Application)
-        // keeps the rest of the Reactor host's styles isolated and lets two
-        // managers coexist with different theme overrides.
-        if (manager.Resources is not null)
-        {
-            try
-            {
-                manager.Resources.MergedDictionaries.Add(new WinUIDock.WinUIDockResources());
-            }
-            catch (Exception ex)
-            {
-                // Themes may already be merged at the Application level — log
-                // and proceed; the styles are idempotent under normal use.
-                global::System.Diagnostics.Debug.WriteLine($"[Reactor.Docking] Failed to merge WinUIDockResources: {ex.Message}");
-            }
-        }
+        // Themes (Generic + Styles + Themes) are merged once into
+        // Application.Current.Resources in Register() — see
+        // EnsureDockResourcesMergedIntoApplication. Resources are looked up
+        // by walking UP the visual tree, so a per-manager merge cannot
+        // satisfy lookups inside the manager's own template.
+
+        // Re-attempt the app-level merge if Register was called before
+        // Application.Current existed (e.g., the test harness creates the
+        // app after Register).
+        EnsureDockResourcesMergedIntoApplication();
 
         var state = new HostState
         {

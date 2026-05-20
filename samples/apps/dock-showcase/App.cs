@@ -27,11 +27,7 @@ ReactorApp.Run<DockShowcaseRoot>(
     title: "Reactor Docking Showcase",
     width: 1200,
     height: 800,
-    configure: host => DockingXamlInterop.Register(host.Reconciler)
-#if DEBUG
-    , devtools: true
-#endif
-);
+    configure: host => DockingXamlInterop.Register(host.Reconciler));
 
 // ════════════════════════════════════════════════════════════════════════
 //  Root — side menu to switch between scenes
