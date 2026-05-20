@@ -43,11 +43,12 @@ internal static class DiagnosticLog
     /// <param name="operation">Short, stable identifier for the operation
     /// inside the <c>try</c> block (e.g. <c>"AppWindow.Close"</c>,
     /// <c>"JsonFileStore.SaveAsync"</c>). Developer-authored; safe for
-    /// ETW.</param>
+    /// ETW. May be <see langword="null"/> at defensive call sites.</param>
     /// <param name="ex">The swallowed exception. Only its
-    /// <see cref="Exception.GetType"/> name reaches the ETW payload.</param>
+    /// <see cref="Exception.GetType"/> name reaches the ETW payload.
+    /// May be <see langword="null"/> at defensive call sites.</param>
     // <snippet:swallowed-error-shape>
-    public static void SwallowedError(LogCategory category, string operation, Exception ex)
+    public static void SwallowedError(LogCategory category, string? operation, Exception? ex)
     {
         // Cost-of-disabled: when no consumer enables Keywords.Errors at
         // Warning the entire branch is skipped — no enum-to-string, no
@@ -73,10 +74,11 @@ internal static class DiagnosticLog
     /// </summary>
     /// <param name="category">Subsystem label.</param>
     /// <param name="operation">Short, stable identifier for the operation
-    /// that returned the HR.</param>
+    /// that returned the HR. May be <see langword="null"/> at defensive
+    /// call sites.</param>
     /// <param name="hr">The HRESULT or Win32 error code as
     /// <see cref="Exception.HResult"/> exposes it (signed int).</param>
-    public static void HResultFailed(LogCategory category, string operation, int hr)
+    public static void HResultFailed(LogCategory category, string? operation, int hr)
     {
         if (ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Errors))
         {

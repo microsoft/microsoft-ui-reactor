@@ -314,7 +314,7 @@ internal static class LogCaptureInstall
             switch (value)
             {
                 case int i32: sb.Append("0x").Append(i32.ToString("X8", CultureInfo.InvariantCulture)); return;
-                case long i64: sb.Append("0x").Append(i64.ToString("X8", CultureInfo.InvariantCulture)); return;
+                case long i64: sb.Append("0x").Append(i64.ToString("X16", CultureInfo.InvariantCulture)); return;
             }
         }
 

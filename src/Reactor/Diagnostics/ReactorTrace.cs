@@ -108,26 +108,53 @@ public static class ReactorTrace
             _callback = callback;
             _level = level;
             _keywords = keywords;
+            _initialized = true;
 
-            // If ReactorEventSource.Log has already been touched
-            // (always true: it has a static constructor + Log static
-            // field) the base ctor calls OnEventSourceCreated for it.
-            // If for some reason we missed it (e.g., this listener
-            // construction races with first touch of ReactorEventSource),
-            // also enable explicitly here as a belt-and-braces fallback.
-            if (_source is null)
+            // The base EventListener ctor calls OnEventSourceCreated for
+            // every existing source *before* the derived ctor body runs,
+            // so _level/_keywords are default(0) at that point. We capture
+            // the source reference there but defer EnableEvents until here,
+            // where the fields are properly assigned.
+            if (_source is not null)
             {
+                // OnEventSourceCreated already captured the source but
+                // called EnableEvents with default filters — re-enable
+                // with the correct level/keywords now.
+                EnableEvents(_source, _level, _keywords);
+            }
+            else
+            {
+                // Belt-and-braces: if we somehow missed it (e.g., this
+                // listener construction races with first touch of
+                // ReactorEventSource), enable explicitly.
                 EnableEvents(ReactorEventSource.Log, _level, _keywords);
                 _source = ReactorEventSource.Log;
             }
         }
+
+        private volatile bool _initialized;
 
         protected override void OnEventSourceCreated(EventSource eventSource)
         {
             if (eventSource.Name == "Microsoft-UI-Reactor")
             {
                 _source = eventSource;
-                EnableEvents(eventSource, _level, _keywords);
+
+                // If the derived ctor has already run (late source
+                // creation), enable immediately with correct filters.
+                // Otherwise, just capture the reference — the ctor will
+                // call EnableEvents once _level/_keywords are assigned.
+                if (_initialized)
+                {
+                    EnableEvents(eventSource, _level, _keywords);
+                }
+                else
+                {
+                    // Enable with permissive defaults so we don't miss
+                    // events between base-ctor and derived-ctor; the
+                    // derived ctor will re-enable with correct filters.
+                    EnableEvents(eventSource, EventLevel.LogAlways, (EventKeywords)(-1));
+                }
             }
         }
 

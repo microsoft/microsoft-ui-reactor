@@ -350,17 +350,26 @@ catches it. The companion `HResultFailed` event has the same shape:
 ### Forwarding `ex.Message` through `ReactorTrace.Subscribe`
 
 ```csharp
-// Don't:
+// Don't — capturing the exception and forwarding its message defeats the strip:
+Exception? lastEx = null;
+try { /* ... */ }
+catch (Exception caught)
+{
+    lastEx = caught;
+    DiagnosticLog.SwallowedError(LogCategory.Hosting, "MyOp", caught);
+}
+
 ReactorTrace.Subscribe(evt =>
 {
-    _logger.Warn(evt.EventName + ": " + string.Join(",", evt.Payload) + " " + ex.Message);
+    // BAD: re-injects PII that the ETW payload deliberately excluded.
+    _logger.Warn(evt.EventName + ": " + string.Join(",", evt.Payload) + " " + lastEx?.Message);
 });
 ```
 
 The framework already stripped `ex.Message` from the payload —
 re-adding it from a captured local is exactly the PII leak the strip
-prevented. If a sink needs the message, build it inside the `catch`
-block (where the message is in scope and the sink's ACL applies),
+prevented. If a sink needs the message, log it inside the `catch`
+block (where the exception is in scope and the sink's ACL applies),
 not at the `ReactorTrace.Subscribe` boundary.
 
 ## Tips
