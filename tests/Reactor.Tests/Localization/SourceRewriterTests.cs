@@ -65,8 +65,7 @@ public class SourceRewriterTests : IDisposable
         Assert.Equal(1, count);
         var result = File.ReadAllText(sourceFile);
         Assert.Contains("t.Message(Loc.App.Hello", result);
-        Assert.Contains("new {", result);
-        Assert.Contains("name = user.Name", result);
+        Assert.Contains("(\"name\", user.Name)", result);
     }
 
     [Fact]
@@ -89,7 +88,7 @@ public class SourceRewriterTests : IDisposable
 
         Assert.Equal(1, count);
         var result = File.ReadAllText(sourceFile);
-        Assert.Contains("new { count }", result);
+        Assert.Contains("(\"count\", count)", result);
     }
 
     [Fact]
@@ -111,9 +110,8 @@ public class SourceRewriterTests : IDisposable
         SourceRewriter.Rewrite(keyed);
 
         var result = File.ReadAllText(sourceFile);
-        Assert.Contains("name = user.Name", result);
-        Assert.Contains("count", result);
-        Assert.Contains("new {", result);
+        Assert.Contains("(\"name\", user.Name)", result);
+        Assert.Contains("(\"count\", count)", result);
     }
 
     [Fact]

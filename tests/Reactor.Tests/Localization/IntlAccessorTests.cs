@@ -30,7 +30,7 @@ public class IntlAccessorTests
             .Add("en-US", "Settings", "LoggedInAs", "Logged in as {name}");
 
         var t = CreateAccessor("en-US", provider);
-        var result = t.Message(new MessageKey("Settings", "LoggedInAs"), new { name = "Alice" });
+        var result = t.Message(new MessageKey("Settings", "LoggedInAs"), ("name", "Alice"));
         Assert.Equal("Logged in as Alice", result);
     }
 
@@ -43,9 +43,9 @@ public class IntlAccessorTests
 
         var t = CreateAccessor("en-US", provider);
 
-        Assert.Equal("Your cart is empty", t.Message(new MessageKey("Cart", "ItemCount"), new { count = 0 }));
-        Assert.Equal("1 item in cart", t.Message(new MessageKey("Cart", "ItemCount"), new { count = 1 }));
-        Assert.Equal("5 items in cart", t.Message(new MessageKey("Cart", "ItemCount"), new { count = 5 }));
+        Assert.Equal("Your cart is empty", t.Message(new MessageKey("Cart", "ItemCount"), ("count", 0)));
+        Assert.Equal("1 item in cart", t.Message(new MessageKey("Cart", "ItemCount"), ("count", 1)));
+        Assert.Equal("5 items in cart", t.Message(new MessageKey("Cart", "ItemCount"), ("count", 5)));
     }
 
     [Fact]
@@ -57,9 +57,9 @@ public class IntlAccessorTests
 
         var t = CreateAccessor("en-US", provider);
 
-        Assert.Equal("He joined", t.Message(new MessageKey("Profile", "Greeting"), new { gender = "male" }));
-        Assert.Equal("She joined", t.Message(new MessageKey("Profile", "Greeting"), new { gender = "female" }));
-        Assert.Equal("They joined", t.Message(new MessageKey("Profile", "Greeting"), new { gender = "other" }));
+        Assert.Equal("He joined", t.Message(new MessageKey("Profile", "Greeting"), ("gender", "male")));
+        Assert.Equal("She joined", t.Message(new MessageKey("Profile", "Greeting"), ("gender", "female")));
+        Assert.Equal("They joined", t.Message(new MessageKey("Profile", "Greeting"), ("gender", "other")));
     }
 
     [Fact]

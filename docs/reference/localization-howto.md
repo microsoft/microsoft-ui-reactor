@@ -379,7 +379,7 @@ public override Element Render()
 
     return VStack(
         Text(t.Message(Loc.MyComponent.Title)),
-        Text(t.Message(Loc.MyComponent.ItemCount, new { count = items.Count })),
+        Text(t.Message(Loc.MyComponent.ItemCount, ("count", items.Count))),
         Text(t.FormatDate(DateTimeOffset.Now)),
         Text(t.FormatNumber(price)),
         Text(t.FormatList(names, ListFormatType.Conjunction))

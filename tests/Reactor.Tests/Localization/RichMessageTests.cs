@@ -68,7 +68,7 @@ public class RichMessageTests
 
         var t = CreateAccessor("en-US", provider);
         var result = t.RichMessage(new MessageKey("Profile", "Welcome"),
-            args: new { name = "Alice" },
+            args: new Dictionary<string, object> { ["name"] = "Alice" },
             tags: new()
             {
                 ["bold"] = text => new TextBlockElement(text) { FontSize = 20 },

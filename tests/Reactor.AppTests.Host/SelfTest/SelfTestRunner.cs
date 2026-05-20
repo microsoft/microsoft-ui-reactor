@@ -137,18 +137,11 @@ internal static class SelfTestRunner
         // `docs/aot-support.md` showed every remaining failure is a fixture
         // that exercises a subsystem already documented as not-yet-AOT-clean:
         // PropertyGrid auto-discovery, devtools/MCP reflection, UseObservable
-        // on POCOs, anonymous-type localization args, theme resource lookup,
-        // and XAML-metadata-dependent control hosting. Skipping them gives a
-        // 0-failure AOT run that maps cleanly to the documented surface, so a
-        // future fix for any one subsystem (e.g. source-generated PropertyGrid
-        // metadata) translates directly into selftests being re-enabled here.
-
-        // Localization: t.Message(key, new { name = "..." }) reflects on the
-        // anonymous type's properties to build the ICU args dict; properties
-        // get trimmed under AOT. Documented workaround in aot-support.md is
-        // `new Dictionary<string,object> { ["name"] = "..." }`. Whole fixture
-        // is anonymous-type-driven.
-        "Localization_LocaleSwitching",
+        // on POCOs, theme resource lookup, and XAML-metadata-dependent control
+        // hosting. Skipping them gives a 0-failure AOT run that maps cleanly
+        // to the documented surface, so a future fix for any one subsystem
+        // (e.g. source-generated PropertyGrid metadata) translates directly
+        // into selftests being re-enabled here.
 
         // PropertyGrid auto-discovery: ReflectionTypeMetadataProvider walks
         // public properties + builds init-only setters. AOT trims members of

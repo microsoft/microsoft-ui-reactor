@@ -69,7 +69,7 @@ class LocalizedContent : Component
         var title = intl.Message(new MessageKey("App", "title"));
         var greeting = intl.Message(
             new MessageKey("App", "greeting"),
-            new { name = "Alice" });
+            ("name", "Alice"));
 
         return VStack(12,
             TextBlock(title).FontSize(24).Bold(),
@@ -156,7 +156,7 @@ class PseudoLocDemo : Component
                     var title = intl.Message(new MessageKey("App", "title"));
                     var greeting = intl.Message(
                         new MessageKey("App", "greeting"),
-                        new { name = "World" });
+                        ("name", "World"));
                     return VStack(4,
                         TextBlock(title).FontSize(18).Bold(),
                         TextBlock(greeting));

@@ -76,15 +76,15 @@ internal static class SourceRewriter
             foreach (var param in icuParams)
             {
                 if (argMap.TryGetValue(param, out var exprText) && param != exprText)
-                    argParts.Add($"{param} = {exprText}");
+                    argParts.Add($"(\"{param}\", {exprText})");
                 else
-                    argParts.Add(param); // direct variable reference
+                    argParts.Add($"(\"{param}\", {param})");
             }
 
             if (argParts.Count > 0)
             {
                 var args = string.Join(", ", argParts);
-                return $"t.Message({locPath}, new {{ {args} }})";
+                return $"t.Message({locPath}, {args})";
             }
         }
 

@@ -139,14 +139,14 @@ internal static class LocalizationFixtures
                     VStack(8,
                         TextBlock(t.Message(AppTitle)).Set(tb => tb.FontSize = 24),
                         TextBlock(t.Message(Welcome)),
-                        TextBlock(t.Message(Greeting, new { name = "World" })),
+                        TextBlock(t.Message(Greeting, ("name", "World"))),
 
-                        TextBlock(t.Message(ItemCount, new { count = 0 })),
-                        TextBlock(t.Message(ItemCount, new { count = 5 })),
+                        TextBlock(t.Message(ItemCount, ("count", 0))),
+                        TextBlock(t.Message(ItemCount, ("count", 5))),
 
-                        TextBlock(t.Message(SearchResults, new { count = 0, query = locale == "ko-KR" ? "\ud14c\uc2a4\ud2b8" : "test" })),
-                        TextBlock(t.Message(SearchResults, new { count = 1, query = locale == "ko-KR" ? "\ud14c\uc2a4\ud2b8" : "test" })),
-                        TextBlock(t.Message(SearchResults, new { count = 42, query = locale == "ko-KR" ? "\ud14c\uc2a4\ud2b8" : "test" })),
+                        TextBlock(t.Message(SearchResults, ("count", 0), ("query", locale == "ko-KR" ? "\ud14c\uc2a4\ud2b8" : "test"))),
+                        TextBlock(t.Message(SearchResults, ("count", 1), ("query", locale == "ko-KR" ? "\ud14c\uc2a4\ud2b8" : "test"))),
+                        TextBlock(t.Message(SearchResults, ("count", 42), ("query", locale == "ko-KR" ? "\ud14c\uc2a4\ud2b8" : "test"))),
 
                         TextBlock(t.Message(DirectionLabel))
                     )
