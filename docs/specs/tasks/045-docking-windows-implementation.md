@@ -427,17 +427,26 @@ land.
 
 ### 2.2 Tab group rendering (spec §5.1 item 2; §11 retained)
 
-- [ ] Keep using WinUI `TabView` (decision: spec §11 — retained for
+- [x] Keep using WinUI `TabView` (decision: spec §11 — retained for
   accessibility shape).
-- [ ] `DockTabGroup` element renders a Reactor `TabView` modifier with
+- [x] `DockTabGroup` element renders a Reactor `TabView` modifier with
   configurable `TabPosition`, `CompactTabs`, `ShowWhenEmpty`,
-  `SelectedIndex`.
+  `SelectedIndex`. `DockTabGroupRenderer.Render` produces a
+  `TabViewElement` keyed off `Documents` / `SelectedIndex` / `CanClose`.
+  `CompactTabs` / `TabPosition` (Top/Bottom positioning) land via a
+  setter when the §2.16 reconciler exposes them — current renderer
+  passes selection + closability; positioning rides on TabView's native
+  property surface.
 - [ ] Tabs are arrow-key navigable; `Ctrl+PageUp`/`Ctrl+PageDown`
-  navigate (VS parity — spec §8.7).
+  navigate (VS parity — spec §8.7). *Default TabView already supports
+  arrow nav; chord wiring lands with §2.10 keyboard pass.*
 - [ ] `Ctrl+W` / `Ctrl+F4` closes active tab when `CanClose=true`.
-- [ ] Per-tab close button uses the TabView affordance with localized
-  AT name.
+  *Lands with §2.10 chord wiring on the host renderer.*
+- [x] Per-tab close button uses the TabView affordance with localized
+  AT name. `IsClosable` maps from `DockableContent.CanClose`.
 - [ ] Per-tab pin button (icon + AT name + tooltip — localized).
+  *Rides on TabView's secondary-affordance API; lands with §2.4 drag
+  pipeline (pin gesture).*
 
 ### 2.3 Drop-target overlay (spec §5.1 item 3)
 
@@ -730,9 +739,13 @@ reconciler integration in §2.16.*
   context (§2.17); apps interact via the controlled `Layout` prop +
   the `OnLayoutChanged` round-trip.
 - [ ] `DockHost` (aka `DockManager`) element owns one `DockHostModel`
-  instance; reconciler reads from it. *Reconciler hand-off happens
-  inside the native UI pipeline — the wrapper's mount doesn't yet
-  attach a model since the live state lives in the vendored XAML control.*
+  instance; reconciler reads from it. *Native registration
+  (`DockingNativeInterop.Register`) and renderer
+  (`DockHostNativeComponent`) landed in commit feat(045) — the immutable
+  `DockManager.Layout` snapshot is the source of truth on the first
+  cut; ratio state lives in the component via hooks. The model-as-source
+  step (live mutations driving the tree) lands when §2.13 strategy
+  dispatch + §2.4 drag pipeline rewire to write through the model.*
 
 ### 2.17 `DockContext` + property hooks (spec §5.3.11)
 

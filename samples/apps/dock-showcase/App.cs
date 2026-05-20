@@ -18,16 +18,25 @@ using System.Collections.Immutable;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Docking;
+using Microsoft.UI.Reactor.Docking.Native;
 using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 
+// Default: Phase 2 native renderer (spec 045 §5.1 / §2.16). Set
+// REACTOR_DOCK_XAML=1 to fall back to the Phase 1 WinUI.Dock wrapper for
+// side-by-side review.
 ReactorApp.Run<DockShowcaseRoot>(
     title: "Reactor Docking Showcase",
     width: 1200,
     height: 800,
-    configure: host => DockingXamlInterop.Register(host.Reconciler));
+    configure: host =>
+    {
+        var useXaml = Environment.GetEnvironmentVariable("REACTOR_DOCK_XAML") == "1";
+        if (useXaml) DockingXamlInterop.Register(host.Reconciler);
+        else DockingNativeInterop.Register(host.Reconciler);
+    });
 
 // ════════════════════════════════════════════════════════════════════════
 //  Root — side menu to switch between scenes
