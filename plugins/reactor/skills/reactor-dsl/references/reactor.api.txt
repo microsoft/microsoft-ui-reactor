@@ -41,12 +41,12 @@ ComboBox(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChan
 CommandBar(AppBarItemBase[] primaryCommands = null, AppBarItemBase[] secondaryCommands = null) → CommandBarElement
 CommandBarFlyout(Element target, AppBarItemBase[] primaryCommands = null, AppBarItemBase[] secondaryCommands = null) → CommandBarFlyoutElement
 CommandHost(Command[] commands, Element child) → CommandHostElement
-Component<T, TProps>(TProps props) → ComponentElement
+Component<T, TProps>(TProps props) → ComponentElement<TProps>
 Component<T>() → ComponentElement
 ContentDialog(string title, Element content, string primaryButtonText = "OK") → ContentDialogElement
 ContentFlyout(Element content, FlyoutPlacementMode placement = FlyoutPlacementMode.Auto) → ContentFlyoutElement
-DataGrid<T>(IDataSource<T> source, IReadOnlyList<FieldDescriptor> columns, TypeRegistry registry = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Func<CellContext<T>, Element> cellTemplate = null, Func<RowContext<T>, Element> rowTemplate = null, Func<HeaderContext, Element> headerTemplate = null, Element loadingTemplate = null, Element emptyTemplate = null, bool showSearch = false, Func<T, RowKey, Element> rowDetailTemplate = null, Func<FieldDescriptor, double, Element> placeholderCellTemplate = null) → ComponentElement
-DataGrid<T>(IDataSource<T> source, TypeRegistry registry, Func<FieldDescriptor, FieldDescriptor> columnOverrides = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Element loadingTemplate = null, Element emptyTemplate = null) → ComponentElement
+DataGrid<T>(IDataSource<T> source, IReadOnlyList<FieldDescriptor> columns, TypeRegistry registry = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Func<CellContext<T>, Element> cellTemplate = null, Func<RowContext<T>, Element> rowTemplate = null, Func<HeaderContext, Element> headerTemplate = null, Element loadingTemplate = null, Element emptyTemplate = null, bool showSearch = false, Func<T, RowKey, Element> rowDetailTemplate = null, Func<FieldDescriptor, double, Element> placeholderCellTemplate = null) → ComponentElement<DataGridElement<T>>
+DataGrid<T>(IDataSource<T> source, TypeRegistry registry, Func<FieldDescriptor, FieldDescriptor> columnOverrides = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Element loadingTemplate = null, Element emptyTemplate = null) → ComponentElement<DataGridElement<T>>
 DatePicker(DateTimeOffset date, Action<DateTimeOffset> onDateChanged = null) → DatePickerElement
 DevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>> items = null, string glyph = "⚡", string toolTip = "Devtools", string automationId = null) → Element
 DropDownButton(string label, Element flyout = null) → DropDownButtonElement
@@ -79,11 +79,11 @@ Heading(string content) → TextBlockElement
 Hyperlink(string text, Uri navigateUri) → RichTextHyperlink
 HyperlinkButton(Command command) → HyperlinkButtonElement
 HyperlinkButton(string content, Uri navigateUri = null, Action onClick = null) → HyperlinkButtonElement
-If(bool condition, Func<Element> then, Func<Element> otherwise = null) → Element
-Image(string source) → ImageElement
 Icon(IconData data) → IconElement
 Icon(Symbol symbol) → IconElement
 Icon(string symbol) → IconElement
+If(bool condition, Func<Element> then, Func<Element> otherwise = null) → Element
+Image(string source) → ImageElement
 ImageIcon(Uri source) → ImageIconData
 InfoBadge() → InfoBadgeElement
 InfoBadge(int value) → InfoBadgeElement
@@ -99,7 +99,7 @@ ListBox(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChang
 ListView(Element[] items) → ListViewElement
 ListView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedListViewElement<T>
 ListView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedListViewElement<T>
-LocaleProvider(string locale, Element child, IStringResourceProvider resourceProvider = null, string defaultLocale = "en-US", bool pseudoLocalize = false) → Element
+LocaleProvider(string locale, Element child, IStringResourceProvider resourceProvider = null, string defaultLocale = "en-US", bool pseudoLocalize = false) → ComponentElement<LocaleProviderElement>
 MapControl(string mapServiceToken = null, double zoomLevel = 1) → MapControlElement
 Markdown(string markdown) → Element
 Markdown(string markdown, MarkdownOptions options) → Element
@@ -134,7 +134,7 @@ Progress(double value) → ProgressElement
 ProgressIndeterminate() → ProgressElement
 ProgressRing() → ProgressRingElement
 ProgressRing(double value) → ProgressRingElement
-PropertyGrid(object target, TypeRegistry registry, Action<object> onRootChanged = null) → ComponentElement
+PropertyGrid(object target, TypeRegistry registry, Action<object> onRootChanged = null) → ComponentElement<PropertyGridElement>
 RadioButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string groupName = null) → RadioButtonElement
 RadioButtons(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChanged = null) → RadioButtonsElement
 RadioMenuItem(string text, string groupName, bool isChecked = false, Action onClick = null, string icon = null) → RadioMenuFlyoutItemData
@@ -186,7 +186,7 @@ UniformGrid(Orientation orientation, Element[] items) → GridElement
 VStack(Element[] children) → StackElement
 VStack(double spacing, Element[] children) → StackElement
 Viewbox(Element child) → ViewboxElement
-VirtualList(int itemCount, Func<int, Element> renderItem, Func<int, string> getItemKey = null, double? itemHeight = null, double estimatedItemHeight = 40, double spacing = 0, Action<VirtualListRef> ref = null, Action<int, int> onVisibleRangeChanged = null) → ComponentElement
+VirtualList(int itemCount, Func<int, Element> renderItem, Func<int, string> getItemKey = null, double? itemHeight = null, double estimatedItemHeight = 40, double spacing = 0, Action<VirtualListRef> ref = null, Action<int, int> onVisibleRangeChanged = null) → ComponentElement<VirtualListElement>
 WebView2(Uri source = null) → WebView2Element
 When(bool condition, Func<Element> then) → Element
 WrapGrid(Element[] children) → WrapGridElement
@@ -249,8 +249,8 @@ ColorPickerElement.ValueRange(int minValue, int maxValue) → ColorPickerElement
 ComboBoxElement.Description(string description) → ComboBoxElement
 ComboBoxElement.DropDownClosed(Action handler) → ComboBoxElement
 ComboBoxElement.DropDownOpened(Action handler) → ComboBoxElement
-ComboBoxElement.IsEditable(bool editable = true) → ComboBoxElement
 ComboBoxElement.Header(string header) → ComboBoxElement
+ComboBoxElement.IsEditable(bool editable = true) → ComboBoxElement
 ComboBoxElement.MaxDropDownHeight(double height) → ComboBoxElement
 ComboBoxElement.Placeholder(string text) → ComboBoxElement
 ComboBoxElement.SelectedIndexChanged(Action<int> handler) → ComboBoxElement
@@ -308,19 +308,19 @@ HyperlinkButtonElement.Click(Action handler) → HyperlinkButtonElement
 HyperlinkButtonElement.NavigateUri(Uri uri) → HyperlinkButtonElement
 HyperlinkButtonElement.Set(Action<HyperlinkButton> configure) → HyperlinkButtonElement
 HyperlinkButtonElement.TextLink() → HyperlinkButtonElement
+IconElement.Set(Action<IconElement> configure) → IconElement
 ImageElement.ImageFailed(Action<string> handler) → ImageElement
 ImageElement.ImageOpened(Action handler) → ImageElement
 ImageElement.NineGrid(Thickness nineGrid) → ImageElement
-IconElement.Set(Action<IconElement> configure) → IconElement
 ImageElement.Set(Action<Image> configure) → ImageElement
 InfoBadgeElement.Set(Action<InfoBadge> configure) → InfoBadgeElement
 InfoBarElement.ActionButtonClick(Action handler) → InfoBarElement
-InfoBarElement.IsClosable(bool closable = true) → InfoBarElement
 InfoBarElement.Closed(Action handler) → InfoBarElement
 InfoBarElement.Content(Element content) → InfoBarElement
 InfoBarElement.Error() → InfoBarElement
 InfoBarElement.IconSource(IconData icon) → InfoBarElement
 InfoBarElement.Informational() → InfoBarElement
+InfoBarElement.IsClosable(bool closable = true) → InfoBarElement
 InfoBarElement.Set(Action<InfoBar> configure) → InfoBarElement
 InfoBarElement.Severity(InfoBarSeverity severity) → InfoBarElement
 InfoBarElement.Success() → InfoBarElement
@@ -422,9 +422,9 @@ RadioButtonsElement.SelectedIndexChanged(Action<int> handler) → RadioButtonsEl
 RadioButtonsElement.Set(Action<RadioButtons> configure) → RadioButtonsElement
 RatingControlElement.Caption(string caption) → RatingControlElement
 RatingControlElement.InitialSetValue(int value) → RatingControlElement
+RatingControlElement.IsReadOnly(bool readOnly = true) → RatingControlElement
 RatingControlElement.MaxRating(int max) → RatingControlElement
 RatingControlElement.PlaceholderValue(double value) → RatingControlElement
-RatingControlElement.IsReadOnly(bool readOnly = true) → RatingControlElement
 RatingControlElement.Set(Action<RatingControl> configure) → RatingControlElement
 RatingControlElement.ValueChanged(Action<double> handler) → RatingControlElement
 RectangleElement.Fill(Brush brush) → RectangleElement
@@ -501,7 +501,6 @@ T.CenterPoint<T>(Vector3 center) → T
 T.ConnectedAnimation<T>(string key) → T
 T.CornerRadius<T>(double radius) → T
 T.CornerRadius<T>(double topLeft, double topRight, double bottomRight, double bottomLeft) → T
-T.IsEnabled<T>(bool enabled = true) → T
 T.DraggableWhen<T>(Func<bool> canDrag) → T
 T.Flex<T>(double grow = 0, double shrink = 1, double? basis = null, FlexAlign? alignSelf = null, FlexPositionType position = FlexPositionType.Relative, double? left = null, double? top = null, double? right = null, double? bottom = null) → T
 T.FocusMeta<T>(FocusManager fm, string fieldName, bool autoFocus = false) → T
@@ -525,7 +524,9 @@ T.HierarchyLevel<T>(int level) → T
 T.HorizontalAlignment<T>(HorizontalAlignment alignment) → T
 T.Immediate<T>() → T
 T.InteractionStates<T>(Func<InteractionStatesBuilder, InteractionStatesBuilder> configure, Curve curve = null) → T
+T.IsEnabled<T>(bool enabled = true) → T
 T.IsTabStop<T>(bool isTabStop = true) → T
+T.IsVisible<T>(bool isVisible) → T
 T.ItemContainerTransitions<T>(Transition[] transitions) → T
 T.ItemStatus<T>(string status) → T
 T.Keyframes<T>(string name, object trigger, Func<KeyframeBuilder, KeyframeBuilder> configure) → T
@@ -623,7 +624,6 @@ T.Validate<T>(string fieldName, object value, IValidator[] validators) → T
 T.ValidateAsync<T>(string fieldName, IAsyncValidator[] asyncValidators) → T
 T.ValidateAsync<T>(string fieldName, object value, IAsyncValidator[] asyncValidators) → T
 T.VerticalAlignment<T>(VerticalAlignment alignment) → T
-T.IsVisible<T>(bool isVisible) → T
 T.Width<T>(double width) → T
 T.WithBorder<T>(Brush brush, double thickness = 1) → T
 T.WithBorder<T>(ThemeRef theme, double thickness = 1) → T
@@ -643,9 +643,9 @@ TabViewElement.AllowDropTabs(bool allow = true) → TabViewElement
 TabViewElement.CanDragTabs(bool canDrag = true) → TabViewElement
 TabViewElement.CanReorderTabs(bool canReorder = true) → TabViewElement
 TabViewElement.CloseButtonOverlayMode(TabViewCloseButtonOverlayMode mode) → TabViewElement
+TabViewElement.IsAddTabButtonVisible(bool visible = true) → TabViewElement
 TabViewElement.SelectedIndexChanged(Action<int> handler) → TabViewElement
 TabViewElement.Set(Action<TabView> configure) → TabViewElement
-TabViewElement.IsAddTabButtonVisible(bool visible = true) → TabViewElement
 TabViewElement.TabCloseRequested(Action<int> handler) → TabViewElement
 TabViewElement.TabStripFooter(Element footer) → TabViewElement
 TabViewElement.TabStripHeader(Element header) → TabViewElement
@@ -673,9 +673,9 @@ TextBlockElement.FontFamily(FontFamily family) → TextBlockElement
 TextBlockElement.FontFamily(string family) → TextBlockElement
 TextBlockElement.FontSize(double size) → TextBlockElement
 TextBlockElement.FontStyle(FontStyle style) → TextBlockElement
+TextBlockElement.IsTextSelectionEnabled(bool enabled = true) → TextBlockElement
 TextBlockElement.LineHeight(double height) → TextBlockElement
 TextBlockElement.MaxLines(int maxLines) → TextBlockElement
-TextBlockElement.IsTextSelectionEnabled(bool enabled = true) → TextBlockElement
 TextBlockElement.SemiBold() → TextBlockElement
 TextBlockElement.Set(Action<TextBlock> configure) → TextBlockElement
 TextBlockElement.TextAlignment(TextAlignment alignment) → TextBlockElement
@@ -690,11 +690,11 @@ TextFieldElement.EmailInput() → TextFieldElement
 TextFieldElement.Focus(FocusManager fm, string fieldName, bool autoFocus = false) → TextFieldElement
 TextFieldElement.Header(string header) → TextFieldElement
 TextFieldElement.InputScope(InputScopeNameValue scope) → TextFieldElement
+TextFieldElement.IsReadOnly(bool readOnly = true) → TextFieldElement
 TextFieldElement.IsSpellCheckEnabled(bool enabled = true) → TextFieldElement
 TextFieldElement.MaxLength(int maxLength) → TextFieldElement
 TextFieldElement.NumericInput() → TextFieldElement
 TextFieldElement.PhoneInput() → TextFieldElement
-TextFieldElement.IsReadOnly(bool readOnly = true) → TextFieldElement
 TextFieldElement.SearchInput() → TextFieldElement
 TextFieldElement.SelectionChanged(Action<string, int, int> handler) → TextFieldElement
 TextFieldElement.Set(Action<TextBox> configure) → TextFieldElement

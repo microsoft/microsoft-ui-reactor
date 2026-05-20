@@ -9,7 +9,7 @@ public static partial class Factories
     /// Creates a VirtualList element — a count-based virtualized list.
     /// Items are rendered on demand via the renderItem callback.
     /// </summary>
-    public static ComponentElement VirtualList(
+    public static ComponentElement<VirtualListElement> VirtualList(
         int itemCount,
         Func<int, Element> renderItem,
         Func<int, string>? getItemKey = null,

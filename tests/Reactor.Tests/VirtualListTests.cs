@@ -159,8 +159,9 @@ public class VirtualListTests
             itemCount: 50,
             renderItem: i => TextBlock($"Item {i}"));
 
-        // Should produce a ComponentElement wrapping VirtualListComponent
-        Assert.IsType<ComponentElement>(element);
+        // Returns ComponentElement<VirtualListElement> (issue #308 — typed
+        // wrapper that preserves the props type for with-expression mutation).
+        Assert.IsType<ComponentElement<VirtualListElement>>(element);
     }
 
     [Fact]
@@ -172,7 +173,7 @@ public class VirtualListTests
             itemHeight: 32,
             spacing: 1);
 
-        Assert.IsType<ComponentElement>(element);
+        Assert.IsType<ComponentElement<VirtualListElement>>(element);
     }
 
     [Fact]
@@ -183,7 +184,7 @@ public class VirtualListTests
             renderItem: i => TextBlock($"Item {i}"),
             getItemKey: i => $"key-{i}");
 
-        Assert.IsType<ComponentElement>(element);
+        Assert.IsType<ComponentElement<VirtualListElement>>(element);
     }
 
     // ── VirtualListRef ─────────────────────────────────────────────

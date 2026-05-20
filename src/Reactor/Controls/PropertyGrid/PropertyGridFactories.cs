@@ -10,7 +10,7 @@ public static partial class Factories
     /// Keyed by target type so switching between different target types creates
     /// a fresh component (avoiding broken reconciliation of different structures).
     /// </summary>
-    public static ComponentElement PropertyGrid(
+    public static ComponentElement<PropertyGridElement> PropertyGrid(
         object target,
         TypeRegistry registry,
         Action<object>? onRootChanged = null)
