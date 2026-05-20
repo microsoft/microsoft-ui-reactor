@@ -397,6 +397,17 @@ public static partial class Factories
     /// <c>ContentOrientation</c> and anchor ratios), use
     /// <see cref="ScrollView(Element)"/>. Issue #348.
     /// </remarks>
+    /// <remarks>
+    /// <b>Naming collision with the WinUI attached-property host.</b> When
+    /// a caller imports both <c>using static Microsoft.UI.Reactor.Factories;</c>
+    /// and <c>using Microsoft.UI.Xaml.Controls;</c>, the simple name
+    /// <c>ScrollViewer</c> resolves to this factory method, and a
+    /// member-access expression like
+    /// <c>ScrollViewer.SetVerticalScrollMode(child, ScrollMode.Disabled)</c>
+    /// fails with <c>CS0119</c>. Fully-qualify the attached-property call as
+    /// <c>global::Microsoft.UI.Xaml.Controls.ScrollViewer.SetVerticalScrollMode(...)</c>
+    /// (or introduce a type alias) to disambiguate.
+    /// </remarks>
     public static ScrollViewerElement ScrollViewer(Element child) => new(child);
 
     /// <summary>

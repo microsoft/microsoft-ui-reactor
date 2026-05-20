@@ -2400,6 +2400,8 @@ public record ScrollViewerElement(Element Child) : Element
     public Action<WinUI.ScrollViewerViewChangedEventArgs>? OnViewChanged { get; init; }
 
     internal Action<WinUI.ScrollViewer>[] Setters { get; init; } = [];
+
+    internal override bool HasCallbacks => OnViewChanged is not null;
 }
 
 /// <summary>
