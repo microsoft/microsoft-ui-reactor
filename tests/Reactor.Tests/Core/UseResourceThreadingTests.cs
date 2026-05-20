@@ -9,6 +9,7 @@ namespace Microsoft.UI.Reactor.Tests.Core;
 /// after unmount, concurrent invalidation, and the global unobserved-task-exception invariant.
 /// </summary>
 [Trait("Category", "Threading")]
+[Collection("UnobservedTaskException")]
 public class UseResourceThreadingTests : IDisposable
 {
     private int _unobserved;

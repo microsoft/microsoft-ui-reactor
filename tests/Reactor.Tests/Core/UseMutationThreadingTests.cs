@@ -9,6 +9,7 @@ namespace Microsoft.UI.Reactor.Tests.Core;
 /// invariant, concurrent cache invalidation, and the unobserved-task-exception guard.
 /// </summary>
 [Trait("Category", "Threading")]
+[Collection("UnobservedTaskException")]
 public class UseMutationThreadingTests : IDisposable
 {
     private int _unobserved;

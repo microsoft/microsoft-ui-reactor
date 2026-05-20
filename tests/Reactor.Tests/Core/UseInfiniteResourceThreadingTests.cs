@@ -17,6 +17,7 @@ namespace Microsoft.UI.Reactor.Tests.Core;
 /// from the main test thread, matching the production dispatcher model.</para>
 /// </remarks>
 [Trait("Category", "Threading")]
+[Collection("UnobservedTaskException")]
 public class UseInfiniteResourceThreadingTests : IDisposable
 {
     private int _unobserved;
