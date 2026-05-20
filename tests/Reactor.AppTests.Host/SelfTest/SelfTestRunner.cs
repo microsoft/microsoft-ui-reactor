@@ -77,26 +77,58 @@ internal static class SelfTestRunner
         "CoreCov2_XamlHostMount",
         "CoreCov2_InfoBadgeMountUpdate",
         "CoreCov2_SelectorBarUpdate",
-        // Iteration round 2 (2026-05-20): crashers observed when re-running
-        // selftests against an AOT-published Host. Same approach — skip the
-        // crasher, then wildcard family members that are likely to share the
-        // shape problem.
+        // ---- Iteration round 2 (2026-05-20) ----
+        // Crashers observed when re-running selftests against an AOT-published
+        // Host. A native crash terminates the process before the managed
+        // watchdog can fire, so each entry below is the name of the *last*
+        // fixture printed before exit. Wildcards are an inference — when the
+        // crashed fixture is part of an obvious family (e.g. one of N
+        // per-control variants), assume the family shares the shape problem
+        // rather than rebuild+rerun N times. Drop the wildcard back to
+        // explicit names if you have time to verify which members pass.
+
+        // ValCov_FormFieldRendering: single fixture, exercises form-field
+        // editor selection over reflected property metadata.
         "ValCov_FormFieldRendering",
+
+        // EchoSuppress family: ColorPicker crashed; other members unverified.
+        // Suspected shared path through value-change event echo suppression
+        // on the control wrappers.
         "EchoSuppress_*",
+
+        // IdentityPreserve family: two distinct fixtures crashed (RadioButtons,
+        // SelectorBar). Not wildcarding the whole family — other members of
+        // this family passed under AOT and we don't want to lose the coverage.
         "IdentityPreserve_RadioButtons",
         "IdentityPreserve_SelectorBar",
+
+        // DataGrid_RowEditTemplatesAndEmptyState: template-instantiation path
+        // in DataGrid row editing. Other DataGrid fixtures pass.
         "DataGrid_RowEditTemplatesAndEmptyState",
+
+        // CovBoost / CovBoost2 individual crashers — heterogeneous, so listed
+        // individually rather than wildcarded. Each crash was at the named
+        // fixture; rest of CovBoost / CovBoost2 currently runs.
         "CovBoost_ElementPoolExercise",
         "CovBoost2_TitleBarMountUpdate",
         "CovBoost2_ReconcileChildPaths",
         "CovBoost2_NavigationViewExercise",
         "CovBoost2_ElementPoolInteractiveReset",
+
+        // Commanding_* — SplitButtonCommandInvokesExecute crashed. ICommand
+        // dispatch wires up through reflected `CanExecute` / `Execute`; the
+        // whole family likely shares the breakage.
         "Commanding_*",
-        "SelectionEvt_*",
-        "ValueEvt_*",
-        "Immediate_*",
-        "Editors_*",
-        "RBC_*",
+
+        // Event-handler families. In each case the named fixture crashed;
+        // wildcarding the family on the assumption that the breakage is in
+        // shared event-subscription code paths (handler binding /
+        // EventHandler<T> instantiation under AOT) rather than per-control.
+        "SelectionEvt_*",   // RadioButtons crashed; covers ComboBox/ListBox/…
+        "ValueEvt_*",       // NumberBox crashed; covers Slider/ToggleSwitch/…
+        "Immediate_*",      // NumberBoxFiresOnTextChange crashed; "immediate" event variants
+        "Editors_*",        // NumberMounts crashed; PropertyGrid auto-editor mounts
+        "RBC_*",            // HandlerWiringOnSecondRender crashed; recycle-by-component event rewiring
     };
 
     private static string[] GetAotSkipPatterns()

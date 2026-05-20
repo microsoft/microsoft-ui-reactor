@@ -146,26 +146,23 @@ The Host app supports an AOT-published build so the selftest suite doubles as Re
 ```powershell
 dotnet publish tests/Reactor.AppTests.Host `
     -c Release -p:Platform=x64 -r win-x64 `
-    -p:PublishAotInternal=true --self-contained
+    -p:PublishAotInternal=true --self-contained `
+    -o artifacts/aot-host
 ```
 
 `PublishAotInternal=true` is the internal opt-in property that flips `PublishAot` on for the Host (kept opt-in so an ordinary `dotnet build Reactor.slnx` doesn't pay the AOT compile cost). Swap `-r win-x64` / `-p:Platform=x64` for `win-arm64` / `ARM64` on ARM machines.
 
-The published binary lands at:
-
-```
-tests/Reactor.AppTests.Host/bin/x64/Release/net10.0-windows10.0.22621.0/win-x64/publish/Reactor.AppTests.Host.exe
-```
+`-o artifacts/aot-host` pins the publish output to a stable, predictable path. Without it, the binary lands under the default-shape `tests/Reactor.AppTests.Host/bin/<Platform>/<Config>/<TFM>/<RID>/publish/Reactor.AppTests.Host.exe` — fine, but the TFM/RID/SDK-version segments drift over time, so the explicit `-o` is friendlier for scripts and docs.
 
 **2. Run the suite.** Same `--self-test` flag as the JIT build:
 
 ```bash
-./tests/Reactor.AppTests.Host/bin/x64/Release/net10.0-windows10.0.22621.0/win-x64/publish/Reactor.AppTests.Host.exe --self-test
+./artifacts/aot-host/Reactor.AppTests.Host.exe --self-test
 ```
 
 Output is the same TAP stream as a normal selftest run. The runner detects AOT at startup (`RuntimeFeature.IsDynamicCodeSupported == false`) and emits `# SKIP crashes/hangs under NativeAOT` lines for known-bad fixtures.
 
-**3. Filtering known-bad fixtures.** The skip list lives in `DefaultAotSkipPatterns` in `tests/Reactor.AppTests.Host/SelfTest/SelfTestRunner.cs`. Entries are exact names or `Prefix*` wildcards. When you discover a new AOT crasher, you have two choices:
+**3. Filtering known-bad fixtures.** The skip list lives in `DefaultAotSkipPatterns` in `tests/Reactor.AppTests.Host/SelfTest/SelfTestRunner.cs`. Entries are either an exact fixture name or a prefix-wildcard ending in `*` — by convention these match a fixture family, e.g. `MyFamily_*`. When you discover a new AOT crasher, you have two choices:
 
 - **Without rebuilding** (best for iteration): append patterns via the `REACTOR_AOT_SKIP` env var. They merge into the defaults — they do *not* replace them.
 
