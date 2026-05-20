@@ -175,7 +175,7 @@ Output is the same TAP stream as a normal selftest run. The runner detects AOT a
 
 A native crash terminates the AOT process — the per-fixture managed watchdog can't fire. Iterate by tailing the TAP output for the *last* `# Running: <name>` line before exit, add that name to the skip list, and re-run. Be conservative when wildcarding a family: many `Family_*` fixtures pass even when one member crashes.
 
-**4. Expected pass count.** As of 2026-05-20, an AOT run of the suite produces roughly: 735 fixtures total → 193 skipped, ~542 passed, 0 failed. The skip list covers fixtures that exercise subsystems documented as not-yet-AOT-clean in [`docs/aot-support.md`](docs/aot-support.md) (PropertyGrid auto-discovery, devtools/MCP, UseObservable on POCOs, anonymous-type localization args, theme resource lookup, XAML-metadata-dependent control hosting). When you fix one of those subsystems, drop the corresponding entries from `DefaultAotSkipPatterns`. The non-AOT run on the same commit is 735/735 pass.
+**4. Expected pass count.** As of 2026-05-20, an AOT run of the suite produces roughly: 735 fixtures total → 192 skipped, ~543 passed, 0 failed. The skip list covers fixtures that exercise subsystems documented as not-yet-AOT-clean in [`docs/aot-support.md`](docs/aot-support.md) (PropertyGrid auto-discovery, devtools/MCP, UseObservable on POCOs, theme resource lookup, XAML-metadata-dependent control hosting). When you fix one of those subsystems, drop the corresponding entries from `DefaultAotSkipPatterns`. The non-AOT run on the same commit is 735/735 pass.
 
 ### 3. E2E tests (`tests/Reactor.AppTests`) — MSTest + WinAppDriver
 
