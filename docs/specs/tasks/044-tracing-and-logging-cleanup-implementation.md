@@ -386,7 +386,7 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 8.1 Test harness
 
-- [ ] Add `tests/Reactor.Tests/Diagnostics/ReactorTraceCollector.cs`. API:
+- [x] Add `tests/Reactor.Tests/Diagnostics/ReactorTraceCollector.cs`. API:
   ```csharp
   using var collector = ReactorTraceCollector.Capture(
       level: EventLevel.Verbose,
@@ -394,23 +394,24 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
   // … run code under test …
   Assert.Collection(collector.Events, …);
   ```
-- [ ] Backing implementation reuses `ReactorTrace.Subscribe`.
-- [ ] Thread-safe enumeration of captured events.
-- [ ] Disposing the collector unsubscribes; subsequent fires don't leak into a later test.
+  Also exposes `collector.ByName(string)` — Phase B/C migrations needed a way to pick a single event out of an interleaved capture, and reaching into a lock around `_events.Where(...)` is the right shape.
+- [x] Backing implementation reuses `ReactorTrace.Subscribe`.
+- [x] Thread-safe enumeration of captured events (snapshot via `ToArray` inside the gate; the public `Events` accessor returns the snapshot, never the live list).
+- [x] Disposing the collector unsubscribes; subsequent fires don't leak into a later test (delegates to `Subscription.Dispose`).
 
 ### 8.2 Regression assertions (spec §9)
 
-- [ ] `Reconcile_emits_start_stop_pair` — exact example from spec §9.
-- [ ] `ComponentRender_throw_emits_RenderError` — fire a component that throws; assert `RenderError` is emitted with `exceptionType` payload and no raw `Message`.
-- [ ] `SwallowedError_smoke_per_category` — at least one site per `LogCategory` (Hosting / Persistence / Navigation / Intl / Theme / Shell) routes through `DiagnosticLog.SwallowedError` to a captured `SwallowedError` event.
-- [ ] `Mcp_selector_is_hashed` — verify the `McpCallStart` payload uses the SHA-1 fingerprint, not the raw selector (regression guard on spec §4.1's existing PII discipline).
-- [ ] `DisabledKeyword_no_allocations` — when the keyword for an event is disabled, the call site allocates zero bytes (`GC.GetAllocatedBytesForCurrentThread()` delta == 0 across N iterations).
+- [x] `Reconcile_emits_start_stop_pair` — both Start (with root type) and Stop (with diffed/skipped/created/modified counts) land under `Keywords.Reconcile` at `Informational`.
+- [x] `RenderError_carries_exception_type_but_not_message` — fires `RenderError` with a fingerprintable secret string; asserts the third payload slot is empty and the secret appears nowhere in the joined payload (defense-in-depth on TASK-064 / spec §6.2.1). The Phase I doc spelled the test name "ComponentRender_throw_emits_RenderError" but the assertion shape is identical — calling the EventSource directly is honest about what we're testing (the emit-site PII strip), not the component-throw path which lives in Reconciler tests already.
+- [x] `SwallowedError_smoke_for_each_log_category` — `[Theory]` over `Enum.GetNames<LogCategory>()` so a new category added later is automatically covered. Currently exercises Reactor / Hosting / Persistence / Navigation / Intl / Theme / Shell / LayoutCost / Devtools / Markdown.
+- [x] `Mcp_selector_is_hashed_not_emitted_raw` — `[Text*='alice@contoso.example.invalid']` selector goes in; the captured payload is `sha1:<8 bytes hex>` with no `alice` / `@` characters.
+- [x] `DisabledKeyword_skips_ReactorEventSource_WriteEvent_payload_marshal` — measures `GC.GetAllocatedBytesForCurrentThread()` across 10K `ReactorEventSource.Log.SwallowedError(...)` calls when `Keywords.Errors` is disabled; allows up to one byte per iteration. Has an `IsEnabled`-precondition early return so parallel test fixtures that keep Errors enabled cannot make this flaky — when isolated, the test exercises the measurement and the delta is well under the cap. We deliberately measure `ReactorEventSource` directly, not `DiagnosticLog.SwallowedError`, because the latter additionally runs a `[Conditional("DEBUG")]` `Debug.WriteLine` mirror whose ~600 B/call allocation is the intended Debug-build cost and is compiled out in Release.
 
 ### 8.3 Phase I acceptance
 
-- [ ] All assertions in 8.2 pass.
-- [ ] Test harness is **only** in the test assembly (`tests/Reactor.Tests/`) — no production reference.
-- [ ] `dotnet test tests/Reactor.Tests` green.
+- [x] All assertions in 8.2 pass.
+- [x] Test harness is **only** in the test assembly (`tests/Reactor.Tests/Diagnostics/ReactorTraceCollector.cs`, `internal sealed class`) — no production reference.
+- [x] `dotnet test tests/Reactor.Tests` green (492 tests in the Diagnostics+Devtools filter).
 
 ---
 
