@@ -800,22 +800,30 @@ public sealed class RenderContext
     {
         var (state, _) = UseState(new HighContrastState());
 
-        // Subscribe once to HighContrastChanged and re-render when it fires.
+        // AccessibilitySettings.HighContrastChanged throws ERROR_NOT_FOUND
+        // (0x80070490) in WinUI 3 desktop apps because it requires a CoreWindow.
+        // Instead, use UISettings.ColorValuesChanged which fires reliably for
+        // system theme changes including high contrast toggles.
         UseEffect(() =>
         {
-            state.Settings ??= new global::Windows.UI.ViewManagement.AccessibilitySettings();
+            state.A11ySettings ??= new global::Windows.UI.ViewManagement.AccessibilitySettings();
+            state.UiSettings ??= new global::Windows.UI.ViewManagement.UISettings();
             var rerender = _requestRerender;
-            void OnChanged(global::Windows.UI.ViewManagement.AccessibilitySettings sender, object args)
+
+            void OnColorValuesChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
             {
-                state.IsHighContrast = sender.HighContrast;
-                state.HighContrastScheme = sender.HighContrast ? sender.HighContrastScheme : null;
+                var a11y = state.A11ySettings;
+                state.IsHighContrast = a11y.HighContrast;
+                state.HighContrastScheme = a11y.HighContrast ? a11y.HighContrastScheme : null;
                 rerender?.Invoke();
             }
-            state.Settings.HighContrastChanged += OnChanged;
+
+            state.UiSettings.ColorValuesChanged += OnColorValuesChanged;
+
             // Sync initial value
-            state.IsHighContrast = state.Settings.HighContrast;
-            state.HighContrastScheme = state.Settings.HighContrast ? state.Settings.HighContrastScheme : null;
-            return () => state.Settings.HighContrastChanged -= OnChanged;
+            state.IsHighContrast = state.A11ySettings.HighContrast;
+            state.HighContrastScheme = state.A11ySettings.HighContrast ? state.A11ySettings.HighContrastScheme : null;
+            return () => state.UiSettings.ColorValuesChanged -= OnColorValuesChanged;
         });
 
         return state;
@@ -823,7 +831,8 @@ public sealed class RenderContext
 
     private sealed class HighContrastState
     {
-        public global::Windows.UI.ViewManagement.AccessibilitySettings? Settings;
+        public global::Windows.UI.ViewManagement.AccessibilitySettings? A11ySettings;
+        public global::Windows.UI.ViewManagement.UISettings? UiSettings;
         public bool IsHighContrast;
         public string? HighContrastScheme;
     }

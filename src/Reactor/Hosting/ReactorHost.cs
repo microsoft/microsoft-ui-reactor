@@ -407,7 +407,6 @@ public sealed class ReactorHost : IDisposable
             _isForcedColors = _accessibilitySettings.HighContrast;
             if (_isForcedColors)
                 _forcedColorsTheme = Charting.ForcedColorsTheme.FromSystem();
-            _accessibilitySettings.HighContrastChanged += OnHighContrastChanged;
         }
         catch { /* headless / unit-test host — no accessibility settings */ }
 
@@ -415,6 +414,8 @@ public sealed class ReactorHost : IDisposable
         {
             _uiSettings = new global::Windows.UI.ViewManagement.UISettings();
             _isReducedMotion = !_uiSettings.AnimationsEnabled;
+            // ColorValuesChanged fires for high-contrast toggles, palette
+            // changes, and AnimationsEnabled changes — covers all charting signals.
             _uiSettings.ColorValuesChanged += OnColorValuesChanged;
         }
         catch { /* headless / unit-test host — no UI settings */ }
@@ -859,15 +860,6 @@ public sealed class ReactorHost : IDisposable
         RequestRender();
     }
 
-    private void OnHighContrastChanged(
-        global::Windows.UI.ViewManagement.AccessibilitySettings sender, object args)
-    {
-        _isForcedColors = sender.HighContrast;
-        _forcedColorsTheme = _isForcedColors ? Charting.ForcedColorsTheme.FromSystem() : null;
-        _logger?.LogDebug("High-contrast changed to {IsHighContrast} — re-rendering", _isForcedColors);
-        RequestRender();
-    }
-
     private void OnColorValuesChanged(
         global::Windows.UI.ViewManagement.UISettings sender, object args)
     {
@@ -929,8 +921,6 @@ public sealed class ReactorHost : IDisposable
         });
 
         // Accessibility listener cleanup
-        if (_accessibilitySettings is not null)
-            _accessibilitySettings.HighContrastChanged -= OnHighContrastChanged;
         if (_uiSettings is not null)
             _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
 
