@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace Microsoft.UI.Reactor.Navigation;
 
 /// <summary>
@@ -10,14 +8,13 @@ namespace Microsoft.UI.Reactor.Navigation;
 /// </summary>
 /// <remarks>
 /// Reactor intentionally does not pick a serialization format for navigation state.
-/// This record is a plain POCO that callers can persist however they like — JSON via
-/// <c>System.Text.Json</c> (preferably with a <see cref="JsonSerializerContext"/> for
-/// AOT-safety), MessagePack, BinaryFormatter (don't), or by hand. The
-/// <c>[JsonPropertyName]</c> attributes are metadata only — they give callers nice
-/// camelCase JSON for free if they choose JSON, but impose no runtime cost otherwise.
+/// This record is a plain POCO with no serializer-specific attributes — callers can
+/// persist it however they like: JSON via <c>System.Text.Json</c> (preferably with a
+/// source-generated <c>JsonSerializerContext</c> for AOT-safety), MessagePack, or by
+/// hand. Avoid insecure or obsolete serializers.
 /// </remarks>
 public sealed record NavigationState<TRoute>(
-    [property: JsonPropertyName("backStack")] IReadOnlyList<TRoute> BackStack,
-    [property: JsonPropertyName("current")] TRoute Current,
-    [property: JsonPropertyName("forwardStack")] IReadOnlyList<TRoute> ForwardStack)
+    IReadOnlyList<TRoute> BackStack,
+    TRoute Current,
+    IReadOnlyList<TRoute> ForwardStack)
     where TRoute : notnull;

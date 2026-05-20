@@ -94,10 +94,11 @@ public partial class NavigationSerializationTests
     }
 
     [Fact]
-    public void GetState_Snapshot_Serializes_To_Json_With_Expected_Property_Names()
+    public void GetState_Snapshot_Serializes_To_Json_With_Default_Property_Names()
     {
-        // Confirms the public NavigationState<T> record uses camelCase via [JsonPropertyName]
-        // — the recommended persistence path for callers who want JSON.
+        // The framework deliberately ships NavigationState<T> with no serializer
+        // attributes — callers control naming via their own JsonSerializerOptions /
+        // context. Default STJ emits the property names verbatim (PascalCase here).
         var stack = new NavigationStack<Route>(new Home());
         var handle = new NavigationHandle<Route>(stack);
         handle.Navigate(new Detail(1));
@@ -105,9 +106,9 @@ public partial class NavigationSerializationTests
         var snapshot = handle.GetState();
         var json = JsonSerializer.Serialize(snapshot, RouteJsonContext.Default.NavigationStateRoute);
 
-        Assert.Contains("\"current\"", json);
-        Assert.Contains("\"backStack\"", json);
-        Assert.Contains("\"forwardStack\"", json);
+        Assert.Contains("\"Current\"", json);
+        Assert.Contains("\"BackStack\"", json);
+        Assert.Contains("\"ForwardStack\"", json);
     }
 
     [Fact]
@@ -124,7 +125,8 @@ public partial class NavigationSerializationTests
 
         var stack2 = new NavigationStack<Route>(new Home());
         var handle2 = new NavigationHandle<Route>(stack2);
-        var restored = JsonSerializer.Deserialize(json, RouteJsonContext.Default.NavigationStateRoute)!;
+        var restored = JsonSerializer.Deserialize(json, RouteJsonContext.Default.NavigationStateRoute);
+        Assert.NotNull(restored);
         handle2.SetState(restored);
 
         Assert.IsType<Settings>(handle2.CurrentRoute);

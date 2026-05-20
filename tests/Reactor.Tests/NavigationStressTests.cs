@@ -340,7 +340,8 @@ public partial class NavigationStressTests
 
         var stack2 = new NavigationStack<Route>(new Home());
         var handle2 = new NavigationHandle<Route>(stack2);
-        var restored = JsonSerializer.Deserialize(json, StressJsonContext.Default.NavigationStateRoute)!;
+        var restored = JsonSerializer.Deserialize(json, StressJsonContext.Default.NavigationStateRoute);
+        Assert.NotNull(restored);
         handle2.SetState(restored);
 
         Assert.IsType<Profile>(handle2.CurrentRoute);

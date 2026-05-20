@@ -250,9 +250,12 @@ public sealed class NavigationHandle<TRoute> : INavigationHandle where TRoute : 
     /// with <c>[JsonPolymorphic]</c> and <c>[JsonDerivedType]</c>.
     /// </remarks>
     public NavigationState<TRoute> GetState() => new(
-        BackStack: _stack.BackStack.ToList(),
+        // Use arrays so the IReadOnlyList<TRoute> exposed on the snapshot is
+        // truly immutable in length — a caller can't cast back to IList<TRoute>
+        // and mutate the captured state via Add/Remove.
+        BackStack: _stack.BackStack.ToArray(),
         Current: _stack.Current,
-        ForwardStack: _stack.ForwardStack.ToList());
+        ForwardStack: _stack.ForwardStack.ToArray());
 
     /// <summary>
     /// Restores a previously captured <see cref="NavigationState{TRoute}"/>. Replaces

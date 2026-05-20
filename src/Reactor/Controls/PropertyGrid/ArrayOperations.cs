@@ -35,7 +35,7 @@ internal static class ArrayOperations
         {
             if (!RuntimeFeature.IsDynamicCodeSupported)
                 throw new NotSupportedException(
-                    $"Adding to a plain {elementType.Name}[] property requires dynamic code (Array.CreateInstance), " +
+                    $"Adding to a plain {DisplayName(elementType)}[] property requires dynamic code (Array.CreateInstance), " +
                     "which is unavailable on Native AOT. Use List<T> or another IList implementation instead.");
 
             var newArray = Array.CreateInstance(elementType, array.Length + 1);
@@ -73,7 +73,7 @@ internal static class ArrayOperations
 
             if (!RuntimeFeature.IsDynamicCodeSupported)
                 throw new NotSupportedException(
-                    $"Removing from a plain {elementType.Name}[] property requires dynamic code (Array.CreateInstance), " +
+                    $"Removing from a plain {DisplayName(elementType)}[] property requires dynamic code (Array.CreateInstance), " +
                     "which is unavailable on Native AOT. Use List<T> or another IList implementation instead.");
 
             var newArray = Array.CreateInstance(elementType, array.Length - 1);
@@ -153,6 +153,29 @@ internal static class ArrayOperations
         if (collection is IList list) return list[index];
         if (collection is Array array) return array.GetValue(index);
         return null;
+    }
+
+    /// <summary>
+    /// Produces a human-readable C#-style name for diagnostic messages — handles
+    /// generics (<c>List&lt;int&gt;</c> not <c>List`1</c>), nullable shorthand
+    /// (<c>int?</c> not <c>Nullable&lt;Int32&gt;</c>), and nested types
+    /// (<c>Outer.Inner</c> not <c>Outer+Inner</c>).
+    /// </summary>
+    private static string DisplayName(Type t)
+    {
+        if (Nullable.GetUnderlyingType(t) is { } inner)
+            return DisplayName(inner) + "?";
+
+        if (!t.IsGenericType)
+            return t.Name.Replace('+', '.');
+
+        var name = t.Name;
+        var tickIndex = name.IndexOf('`');
+        if (tickIndex >= 0)
+            name = name[..tickIndex];
+
+        var args = string.Join(", ", t.GetGenericArguments().Select(DisplayName));
+        return $"{name.Replace('+', '.')}<{args}>";
     }
 
     public static Type? GetElementType(Type collectionType)
