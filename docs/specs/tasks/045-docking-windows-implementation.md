@@ -761,21 +761,28 @@ reconciler integration in §2.16.*
   surface.** The class is exposed only via the `DockContexts.Host`
   context (§2.17); apps interact via the controlled `Layout` prop +
   the `OnLayoutChanged` round-trip.
-- [ ] `DockHost` (aka `DockManager`) element owns one `DockHostModel`
-  instance; reconciler reads from it. *Native registration
-  (`DockingNativeInterop.Register`) and renderer
-  (`DockHostNativeComponent`) landed in commit feat(045) — the immutable
-  `DockManager.Layout` snapshot is the source of truth on the first
-  cut; ratio state lives in the component via hooks. The model-as-source
-  step (live mutations driving the tree) lands when §2.13 strategy
-  dispatch + §2.4 drag pipeline rewire to write through the model.*
+- [x] `DockHost` (aka `DockManager`) element owns one `DockHostModel`
+  instance; reconciler reads from it. `DockHostNativeComponent` caches
+  a single `DockHostModel` per mount via `UseRef`; each render
+  `SyncModelFromElement` mirrors `Layout`/sides/`ActiveDocument` from
+  the controlled element. Apps writing through model mutators (Dock,
+  Float, Hide, …) land when §2.13 strategy dispatch + §2.4 drag
+  pipeline wire to the queue (model already enforces UI-thread affinity
+  + records `PendingMutation`s).
 
 ### 2.17 `DockContext` + property hooks (spec §5.3.11)
 
-- [ ] `DockHost` registers `DockContext` in `RenderContext` on mount;
-  unregisters on unmount. *Context slots defined; registration during
-  mount happens inside the native impl since the wrapper's XAML control
-  breaks the Reactor element tree.*
+- [x] `DockHost` registers `DockContext` in `RenderContext` on mount;
+  unregisters on unmount. `DockHostNativeComponent.Render` wraps the
+  rendered subtree with `.Provide(DockContexts.Host, model)`,
+  `.Provide(DockContexts.ActivePaneKey, key)`,
+  `.Provide(DockContexts.LayoutSnapshot, snapshot)`. Per-pane content
+  is wrapped with `.Provide(DockContexts.Pane, info)` +
+  `.Provide(DockContexts.PaneState, Docked)`. Smoke fixture
+  `NativeDocking_DockContextHooksResolveOnRealMount` asserts that
+  `UseDockHost`, `UsePane`, `UseActivePaneKey`, `UseIsActivePane`
+  resolve to live state and flip correctly when the active pane
+  changes.
 - [x] `RenderContext.UseDockHost()` → `DockHostModel?`. Walks context
   chain. Returns null outside any host. Extension method on
   `RenderContext` — `src/Reactor/Docking/DockHooks.cs`.

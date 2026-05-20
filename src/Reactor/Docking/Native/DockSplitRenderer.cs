@@ -31,7 +31,10 @@ internal static class DockSplitRenderer
     /// </param>
     /// <param name="onSplitterDelta">
     /// Invoked when a splitter handle reports a pointer/keyboard delta.
-    /// Signature: <c>(splitterIndex, deltaDip, isFinal) =&gt; ...</c>.
+    /// Signature: <c>(splitterIndex, deltaDip, hostExtentDip, isFinal) =&gt; ...</c>.
+    /// <c>hostExtentDip</c> is the measured size of the parent FlexPanel along
+    /// the split axis at the moment of the event, so the consumer can convert
+    /// pixel deltas into ratio space without assuming a synthetic total.
     /// </param>
     /// <param name="flowDirection">
     /// LTR/RTL. Reverses child order for row splits in RTL so the visual
@@ -41,7 +44,7 @@ internal static class DockSplitRenderer
         Microsoft.UI.Reactor.Docking.DockSplit split,
         IReadOnlyList<double> ratios,
         Func<Microsoft.UI.Reactor.Docking.DockNode, Element> renderChild,
-        Action<int, double, bool> onSplitterDelta,
+        Action<int, double, double, bool> onSplitterDelta,
         FlexLayoutDirection flowDirection = FlexLayoutDirection.LTR)
     {
         ArgumentNullException.ThrowIfNull(split);
@@ -78,7 +81,8 @@ internal static class DockSplitRenderer
                 var splitterIndex = i;
                 composed.Add(new DockSplitterElement(
                     Direction: splitterDir,
-                    OnDelta: (delta, isFinal) => onSplitterDelta(splitterIndex, delta, isFinal))
+                    OnDelta: (delta, hostExtent, isFinal) =>
+                        onSplitterDelta(splitterIndex, delta, hostExtent, isFinal))
                     .Flex(grow: 0, shrink: 0));
             }
         }

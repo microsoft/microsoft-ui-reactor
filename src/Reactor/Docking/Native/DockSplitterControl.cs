@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+using VTH = Microsoft.UI.Xaml.Media.VisualTreeHelper;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI;
@@ -42,10 +43,15 @@ internal enum DockSplitterDirection
 /// <summary>Pointer/keyboard delta event raised by <see cref="DockSplitterControl"/>.</summary>
 internal sealed class DockSplitterDeltaEventArgs : EventArgs
 {
-    public DockSplitterDeltaEventArgs(double delta, DockSplitterDirection direction, bool isFinal)
+    public DockSplitterDeltaEventArgs(
+        double delta,
+        DockSplitterDirection direction,
+        double hostExtentDip,
+        bool isFinal)
     {
         Delta = delta;
         Direction = direction;
+        HostExtentDip = hostExtentDip;
         IsFinal = isFinal;
     }
 
@@ -53,6 +59,16 @@ internal sealed class DockSplitterDeltaEventArgs : EventArgs
     public double Delta { get; }
 
     public DockSplitterDirection Direction { get; }
+
+    /// <summary>
+    /// The host container's measured extent along the split axis at the moment
+    /// of the event (DIPs). Equals the parent <c>FlexPanel.ActualWidth</c> for
+    /// <see cref="DockSplitterDirection.Columns"/> or <c>ActualHeight</c> for
+    /// <see cref="DockSplitterDirection.Rows"/>. Consumers pass this as the
+    /// <c>totalDip</c> to the ratio solver so the delta is interpreted in the
+    /// same DIP space the layout was arranged in.
+    /// </summary>
+    public double HostExtentDip { get; }
 
     /// <summary>True for the terminal delta of a drag/key gesture (release, capture lost, key chord).</summary>
     public bool IsFinal { get; }
@@ -189,7 +205,7 @@ internal sealed partial class DockSplitterControl : Grid
             ? p.X - _captureOrigin.X
             : p.Y - _captureOrigin.Y;
         if (delta == 0) return;
-        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(delta, _direction, isFinal: false));
+        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(delta, _direction, GetHostExtent(), isFinal: false));
         e.Handled = true;
     }
 
@@ -199,7 +215,7 @@ internal sealed partial class DockSplitterControl : Grid
         _isCapturing = false;
         _capturePointerId = 0;
         try { ReleasePointerCapture(e.Pointer); } catch { /* already lost */ }
-        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(0, _direction, isFinal: true));
+        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(0, _direction, GetHostExtent(), isFinal: true));
         e.Handled = true;
     }
 
@@ -208,9 +224,23 @@ internal sealed partial class DockSplitterControl : Grid
         if (!_isCapturing) return;
         _isCapturing = false;
         _capturePointerId = 0;
-        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(0, _direction, isFinal: true));
+        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(0, _direction, GetHostExtent(), isFinal: true));
         if (_handle.Fill is SolidColorBrush brush)
             brush.Color = Color.FromArgb(0x33, 0x80, 0x80, 0x80);
+    }
+
+    /// <summary>
+    /// Walk to the parent panel (the FlexPanel the splitter is interleaved
+    /// inside) and read its measured extent along the split axis. Returns
+    /// 0 if the parent isn't available yet (control hasn't been laid out)
+    /// — caller treats that as "no delta applied this frame".
+    /// </summary>
+    internal double GetHostExtent()
+    {
+        if (VTH.GetParent(this) is not FrameworkElement parent) return 0;
+        return _direction == DockSplitterDirection.Columns
+            ? parent.ActualWidth
+            : parent.ActualHeight;
     }
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
@@ -230,7 +260,7 @@ internal sealed partial class DockSplitterControl : Grid
             default: return;
         }
 
-        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(delta, _direction, isFinal: true));
+        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(delta, _direction, GetHostExtent(), isFinal: true));
         e.Handled = true;
     }
 

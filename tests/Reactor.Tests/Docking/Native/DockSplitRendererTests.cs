@@ -33,7 +33,7 @@ public class DockSplitRendererTests
             split,
             new[] { 0.6, 0.4 },
             RenderChild,
-            onSplitterDelta: (_, _, _) => { });
+            onSplitterDelta: (_, _, _, _) => { });
 
         Assert.Equal(FlexDirection.Row, flex.Direction);
         Assert.Equal(3, flex.Children.Length);
@@ -56,7 +56,7 @@ public class DockSplitRendererTests
             split,
             new[] { 0.5, 0.25, 0.25 },
             RenderChild,
-            onSplitterDelta: (_, _, _) => { });
+            onSplitterDelta: (_, _, _, _) => { });
 
         Assert.Equal(FlexDirection.Column, flex.Direction);
         Assert.Equal(5, flex.Children.Length);
@@ -81,7 +81,7 @@ public class DockSplitRendererTests
             split,
             new[] { 0.7, 0.3 },
             RenderChild,
-            onSplitterDelta: (_, _, _) => { });
+            onSplitterDelta: (_, _, _, _) => { });
 
         var firstAttached = flex.Children[0].GetAttached<FlexAttached>();
         var lastAttached = flex.Children[2].GetAttached<FlexAttached>();
@@ -96,6 +96,7 @@ public class DockSplitRendererTests
     {
         int seenIndex = -1;
         double seenDelta = 0;
+        double seenHostExtent = -1;
         bool seenFinal = false;
 
         var split = new DockSplit(
@@ -106,17 +107,19 @@ public class DockSplitRendererTests
             split,
             new[] { 0.33, 0.34, 0.33 },
             RenderChild,
-            onSplitterDelta: (idx, delta, final) =>
+            onSplitterDelta: (idx, delta, hostExtent, final) =>
             {
                 seenIndex = idx;
                 seenDelta = delta;
+                seenHostExtent = hostExtent;
                 seenFinal = final;
             });
 
         var secondSplitter = (DockSplitterElement)flex.Children[3];
-        secondSplitter.OnDelta(42, true);
+        secondSplitter.OnDelta(42, 1024, true);
         Assert.Equal(1, seenIndex);
         Assert.Equal(42, seenDelta);
+        Assert.Equal(1024, seenHostExtent);
         Assert.True(seenFinal);
     }
 
@@ -132,7 +135,7 @@ public class DockSplitRendererTests
                 split,
                 new[] { 0.5 },           // only one ratio
                 RenderChild,
-                onSplitterDelta: (_, _, _) => { }));
+                onSplitterDelta: (_, _, _, _) => { }));
     }
 
     [Fact]
@@ -143,7 +146,7 @@ public class DockSplitRendererTests
             split,
             Array.Empty<double>(),
             RenderChild,
-            onSplitterDelta: (_, _, _) => { });
+            onSplitterDelta: (_, _, _, _) => { });
         Assert.Empty(flex.Children);
     }
 }

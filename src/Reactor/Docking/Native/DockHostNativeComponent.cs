@@ -5,24 +5,26 @@ using Microsoft.UI.Xaml.Controls;
 namespace Microsoft.UI.Reactor.Docking.Native;
 
 // ════════════════════════════════════════════════════════════════════════
-//  Spec 045 §2.16 — DockManager renderer (Reactor-native, no XAML control).
+//  Spec 045 §2.16 / §2.17 — DockManager renderer (Reactor-native, no XAML).
 //
 //  The native registration mounts a Border whose Child is reconciled from
-//  the element this component returns. Translates DockManager.Layout into
-//  a tree of:
+//  the element this component returns. Translates DockManager.Layout into:
 //    DockSplit       → FlexElement + DockSplitterElement (§2.1)
 //    DockTabGroup    → TabViewElement (§2.2)
 //    DockableContent → its Content element (leaf)
 //
-//  Phase-2 progressive enhancement (intentionally not yet wired):
-//    • Side strips (LeftSide / TopSide / RightSide / BottomSide) —
-//      lands with §2.5 side popup.
-//    • Drop-target overlay — lands with §2.3.
-//    • Drag/drop pipeline — lands with §2.4.
-//    • Floating window mounts — lands with §2.6.
-//    • Live DockHostModel mutations driving the tree — lands with the
-//      §2.16 "reconciler reads from model" item once the model is the
-//      source of truth (today, the immutable element snapshot is).
+//  The component owns:
+//    • a stable DockHostModel instance — `UseRef`-cached so identity is
+//      preserved across renders; only mount/unmount invalidates it. The
+//      model's Root / sides / ActiveContent are synced from the immutable
+//      element snapshot each render (controlled-input pattern; live
+//      mutation will follow at §2.4 drag pipeline).
+//    • per-DockSplit ratio state (ConditionalWeakTable keyed by node ref).
+//
+//  Context publication (§2.17): the rendered subtree is wrapped with
+//  Provide(Host=model), Provide(ActivePaneKey=active key),
+//  Provide(LayoutSnapshot=snapshot). Each pane's Content is further
+//  wrapped with Provide(Pane=DockPaneInfo) so UsePane() resolves.
 // ════════════════════════════════════════════════════════════════════════
 
 /// <summary>
@@ -41,23 +43,29 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // Per-DockSplit ratio state. Keyed by reference identity of the
         // DockSplit node — when the app rebuilds Layout each render, new
         // DockSplit instances are created and the dictionary is rebuilt
-        // from each node's stored Width/Height hints. Pointer-driven
-        // ratios survive only as long as the DockSplit reference is
-        // stable (typical case: app holds a `useState` Layout and reuses
-        // it across renders). Survival across rebuilds is the §2.16
-        // model-tracker job, not the renderer's.
+        // from each node's stored Width/Height hints.
         var (ratioStore, setRatios) = UseState<ConditionalWeakTable<DockSplit, double[]>>(
             new ConditionalWeakTable<DockSplit, double[]>());
+
+        // Stable DockHostModel instance for the lifetime of this component
+        // (§2.16). UseRef keeps the same model object across renders so
+        // UseDockHost() consumers don't churn on each layout-prop change.
+        var modelRef = UseRef<DockHostModel?>(null);
+        var model = modelRef.Current ??= new DockHostModel();
+        SyncModelFromElement(model, manager);
+
+        var activeKey = manager.ActiveDocument?.Key;
+        var snapshot = BuildSnapshot(model);
 
         Element BuildNode(DockNode node) => node switch
         {
             DockSplit split => RenderSplit(split, ratioStore, setRatios, BuildNode),
             DockTabGroup grp => DockTabGroupRenderer.Render(
                 grp,
-                renderLeafContent: doc => doc.Content,
+                renderLeafContent: doc => WrapLeafWithPaneContext(doc),
                 onSelectedIndexChanged: null,
                 onTabClosing: null),
-            DockableContent leaf => leaf.Content ?? new BorderElement(null),
+            DockableContent leaf => WrapLeafWithPaneContext(leaf),
             _ => new BorderElement(null),
         };
 
@@ -65,25 +73,76 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             ? new BorderElement(null)
             : BuildNode(manager.Layout);
 
-        // ── Side strips (left/top/right/bottom) — minimal P2 cut: a thin
-        // strip on each side listing pinned tool windows by title. Full
-        // side-popup expansion lands with §2.5; the strip itself is the
-        // anchor the popup attaches to. For now we elide the strips
-        // entirely when empty so the showcase keeps the P1 visual shape.
+        // ── Side strips — full popup expansion lands with §2.5; the
+        // strips themselves are the anchor surface. Elide when empty so
+        // the visual matches the P1 baseline for layouts that don't pin.
         var hasSides =
             (manager.LeftSide is { Count: > 0 }) ||
             (manager.TopSide is { Count: > 0 }) ||
             (manager.RightSide is { Count: > 0 }) ||
             (manager.BottomSide is { Count: > 0 });
 
-        if (!hasSides) return body;
+        Element composed = hasSides
+            ? DockSideStripRenderer.Compose(manager, body)
+            : body;
 
-        // Compose center + sides into a 3-row × 3-col grid:
-        //   [   ][ top   ][   ]
-        //   [lft][center ][rgt]
-        //   [   ][bottom ][   ]
-        return DockSideStripRenderer.Compose(manager, body);
+        // §2.17 — publish the host model + active-key + layout-snapshot
+        // context slots so descendant function components hooked into
+        // DockContexts.Host / ActivePaneKey / LayoutSnapshot resolve to
+        // the live state.
+        return composed
+            .Provide(DockContexts.Host, model)
+            .Provide(DockContexts.ActivePaneKey, activeKey)
+            .Provide(DockContexts.LayoutSnapshot, snapshot);
     }
+
+    private static Element WrapLeafWithPaneContext(DockableContent leaf)
+    {
+        var content = leaf.Content ?? (Element)new BorderElement(null);
+        var info = new DockPaneInfo(leaf.Key, leaf.Title ?? string.Empty, leaf);
+        // PaneState for a docked leaf in the center tree is always Docked.
+        // Floating / AutoHidden states are published by the floating window
+        // host (§2.6) and the side-popup host (§2.5) respectively.
+        return content
+            .Provide(DockContexts.Pane, (DockPaneInfo?)info)
+            .Provide(DockContexts.PaneState, DockPaneState.Docked);
+    }
+
+    private static void SyncModelFromElement(DockHostModel model, DockManager element)
+    {
+        model.Root = element.Layout;
+        model.LeftSide = SideSlice(element.LeftSide);
+        model.TopSide = SideSlice(element.TopSide);
+        model.RightSide = SideSlice(element.RightSide);
+        model.BottomSide = SideSlice(element.BottomSide);
+        model.ActiveContent = element.ActiveDocument;
+        // Floating window state survives the §2.6 wire-up; today it stays
+        // empty until the floating renderer publishes entries.
+    }
+
+    private static IReadOnlyList<ToolWindow> SideSlice(IReadOnlyList<DockableContent>? items)
+    {
+        if (items is null or { Count: 0 }) return Array.Empty<ToolWindow>();
+        var buffer = new List<ToolWindow>(items.Count);
+        foreach (var item in items)
+        {
+            if (item is ToolWindow tw) buffer.Add(tw);
+            // Bare DockableContent in a side slot is a P1 carry-over shape;
+            // §2.8 deprecates the bare base type. Drop silently — the model
+            // exposes only ToolWindow per the spec's typed surface.
+        }
+        return buffer;
+    }
+
+    private static DockLayoutSnapshot BuildSnapshot(DockHostModel model) =>
+        new(
+            Root: model.Root,
+            LeftSide: model.LeftSide,
+            TopSide: model.TopSide,
+            RightSide: model.RightSide,
+            BottomSide: model.BottomSide,
+            Floating: model.Floating,
+            ActiveContent: model.ActiveContent);
 
     private static Element RenderSplit(
         DockSplit split,
@@ -102,29 +161,25 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             split,
             ratios,
             renderChild,
-            onSplitterDelta: (idx, delta, isFinal) =>
+            onSplitterDelta: (idx, delta, hostExtent, isFinal) =>
             {
                 if (delta == 0) return;
+                // hostExtent < 1 means the FlexPanel hasn't been laid out
+                // yet (control just attached, arrangement pending). Skip
+                // the mutation rather than divide by zero / a tiny number.
+                if (hostExtent < 1) return;
+
                 var perChild = new DockSplitChild[children.Count];
                 for (int i = 0; i < children.Count; i++)
                     perChild[i] = new DockSplitChild(ratios[i], MinDip: 60, MaxDip: double.PositiveInfinity);
 
-                // Total DIPs along the axis is not known at the model
-                // layer — we use a synthetic 1000 unit so the delta is
-                // interpreted in the same DIP space the FlexPanel arranged.
-                // Once the renderer tracks the FlexPanel's ActualWidth /
-                // ActualHeight via a ref the splitter delegates produce
-                // pixel-accurate clamping; for the first cut, ratio drift
-                // is acceptable.
-                var sol = DockSplitSolver.ApplyDelta(perChild, idx, delta, totalDip: 1000);
+                var sol = DockSplitSolver.ApplyDelta(perChild, idx, delta, totalDip: hostExtent);
                 var newRatios = sol.Ratios;
                 ratioStore.AddOrUpdate(split, newRatios);
-                // Mutate the live array so the next splitter event sees
-                // the updated values without waiting for the next render.
+                // Mutate the live array so subsequent pointer-move events in
+                // the same drag see the updated values without waiting for
+                // the next render pass.
                 for (int i = 0; i < ratios.Length; i++) ratios[i] = newRatios[i];
-                // Trigger re-render by setting state with the same store
-                // reference (state setter compares reference; we need a
-                // new ConditionalWeakTable wrapper to force).
                 setRatios(ratioStore);
             });
     }

@@ -18,7 +18,7 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 /// </summary>
 internal sealed record DockSplitterElement(
     DockSplitterDirection Direction,
-    Action<double, bool> OnDelta,
+    Action<double, double, bool> OnDelta,
     double KeyboardStep = DockSplitterControl.DefaultKeyboardStepDip)
     : Element
 {
@@ -66,7 +66,7 @@ internal static class DockSplitterReconcilerRegistration
     private static void Wire(DockSplitterControl control, DockSplitterElement element)
     {
         EventHandler<DockSplitterDeltaEventArgs> handler = (_, args) =>
-            element.OnDelta(args.Delta, args.IsFinal);
+            element.OnDelta(args.Delta, args.HostExtentDip, args.IsFinal);
         _handlers.AddOrUpdate(control, handler);
         control.ResizeDelta += handler;
     }

@@ -122,4 +122,77 @@ internal static class NativeDockingSmokeFixtures
             await Harness.Render();
         }
     }
+
+    /// <summary>
+    /// Spec 045 §2.17 — asserts that a function component rendered inside
+    /// a docked pane sees the live <c>DockContext</c> slots: <c>UseDockHost</c>
+    /// returns a non-null model, <c>UsePane</c> returns identity matching
+    /// the enclosing leaf, <c>UseActivePaneKey</c> reflects the manager's
+    /// <c>ActiveDocument</c>, and <c>UseIsActivePane</c> flips correctly.
+    /// </summary>
+    internal class DockContextHooksResolveOnRealMount(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            var alpha = new DockableContent(
+                Title: "Alpha",
+                Key: "k:alpha",
+                Content: Func(ctx =>
+                {
+                    var dockHost = ctx.UseDockHost();
+                    var pane = ctx.UsePane();
+                    var isActive = ctx.UseIsActivePane();
+                    return VStack(
+                        TextBlock($"alpha-host:{(dockHost is null ? "null" : "ok")}"),
+                        TextBlock($"alpha-pane-title:{pane.Title}"),
+                        TextBlock($"alpha-pane-key:{pane.Key}"),
+                        TextBlock($"alpha-active:{isActive}"));
+                }));
+            var beta = new DockableContent(
+                Title: "Beta",
+                Key: "k:beta",
+                Content: Func(ctx =>
+                {
+                    var isActive = ctx.UseIsActivePane();
+                    return TextBlock($"beta-active:{isActive}");
+                }));
+
+            // ActiveDocument = alpha — both panes render simultaneously
+            // (TabView keeps inactive bodies in the visual tree) so the
+            // assertions can read both.
+            host.Mount(_ => new DockManager
+            {
+                Layout = new DockTabGroup(new[] { alpha, beta }),
+                ActiveDocument = alpha,
+            });
+            await Harness.Render();
+
+            H.Check("DockHooks_Host_Resolved",
+                H.FindText("alpha-host:ok") is not null);
+            H.Check("DockHooks_Pane_TitleResolved",
+                H.FindText("alpha-pane-title:Alpha") is not null);
+            H.Check("DockHooks_Pane_KeyResolved",
+                H.FindText("alpha-pane-key:k:alpha") is not null);
+            H.Check("DockHooks_IsActivePane_TrueWhenActive",
+                H.FindText("alpha-active:True") is not null);
+
+            // Switch active to beta; alpha is still mounted (it's the
+            // first tab), but its IsActivePane becomes False.
+            host.Mount(_ => new DockManager
+            {
+                Layout = new DockTabGroup(new[] { alpha, beta }),
+                ActiveDocument = beta,
+            });
+            await Harness.Render();
+
+            H.Check("DockHooks_IsActivePane_FlipsOnActiveChange",
+                H.FindText("alpha-active:False") is not null);
+
+            host.Mount(_ => TextBlock("hooks-done"));
+            await Harness.Render();
+        }
+    }
 }
