@@ -263,9 +263,9 @@ public static class JumpList
     /// <remarks>
     /// Clears any previously-set entries first; the OS-managed Recent and
     /// Frequent categories are unaffected (toggle them via
-    /// <see cref="ShowRecent"/> / <see cref="ShowFrequent"/>). Best-effort —
-    /// platform failures (downlevel, group-policy lockdown) log to
-    /// <c>Debug.WriteLine</c> and do not throw.
+    /// <see cref="ShowRecent"/> / <see cref="ShowFrequent"/>). Platform
+    /// failures (downlevel, group-policy lockdown, COM errors) propagate
+    /// as exceptions — callers may catch if fire-and-forget is desired.
     /// </remarks>
     public static async Task UpdateAsync(IEnumerable<JumpListItem> items)
     {
@@ -287,28 +287,20 @@ public static class JumpList
 
         if (TryUpdatePackaged(snapshot, out var task))
         {
-            try { await task!.ConfigureAwait(false); }
-            catch (Exception ex) { Debug.WriteLine($"[Reactor] JumpList packaged update failed: {ex.GetType().Name}: {ex.Message}"); }
+            await task!.ConfigureAwait(false);
             return;
         }
 
         // Unpackaged path — caller-error gates run synchronously (before we
         // hand off to the threadpool) so configuration mistakes surface as
-        // exceptions instead of disappearing into Debug.WriteLine. Platform-
-        // best-effort failures (missing COM, group policy, downlevel shell)
-        // still get swallowed.
+        // exceptions. Platform failures (missing COM, group policy, downlevel
+        // shell) also propagate — callers should catch if fire-and-forget
+        // semantics are desired.
         if (string.IsNullOrEmpty(AppUserModelId))
             throw new InvalidOperationException(
                 "JumpList.AppUserModelId must be set before UpdateAsync on unpackaged apps. (spec 036 §11.3)");
 
-        try
-        {
-            await Task.Run(() => UpdateUnpackaged(snapshot)).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Reactor] JumpList unpackaged update failed: {ex.GetType().Name}: {ex.Message}");
-        }
+        await Task.Run(() => UpdateUnpackaged(snapshot)).ConfigureAwait(false);
     }
 
     /// <summary>Clear all user-defined jump-list entries. UI-thread only.</summary>
@@ -342,15 +334,7 @@ public static class JumpList
         // Methods on it are async; await on a UI thread completes via the captured
         // SynchronizationContext.
         global::Windows.UI.StartScreen.JumpList list;
-        try
-        {
-            list = await global::Windows.UI.StartScreen.JumpList.LoadCurrentAsync();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Reactor] JumpList.LoadCurrentAsync failed: {ex.GetType().Name}: {ex.Message}");
-            return;
-        }
+        list = await global::Windows.UI.StartScreen.JumpList.LoadCurrentAsync();
 
         list.Items.Clear();
         list.SystemGroupKind = ResolveSystemGroupKind();
@@ -358,39 +342,25 @@ public static class JumpList
         for (int i = 0; i < items.Count; i++)
         {
             var item = items[i];
-            try
+            if (item.Kind == JumpListItemKind.Separator)
             {
-                if (item.Kind == JumpListItemKind.Separator)
-                {
-                    list.Items.Add(global::Windows.UI.StartScreen.JumpListItem.CreateSeparator());
-                    continue;
-                }
+                list.Items.Add(global::Windows.UI.StartScreen.JumpListItem.CreateSeparator());
+                continue;
+            }
 
-                var native = global::Windows.UI.StartScreen.JumpListItem.CreateWithArguments(
-                    item.Arguments ?? string.Empty,
-                    item.Title);
-                if (!string.IsNullOrEmpty(item.Description))
-                    native.Description = item.Description;
-                if (item.Icon is { IsResource: true, Source: var src } && !string.IsNullOrEmpty(src))
-                    native.Logo = new Uri(src);
-                if (item.Kind == JumpListItemKind.Custom && !string.IsNullOrEmpty(item.GroupCategory))
-                    native.GroupName = item.GroupCategory;
-                list.Items.Add(native);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[Reactor] JumpList item add failed for '{item.Title}': {ex.GetType().Name}: {ex.Message}");
-            }
+            var native = global::Windows.UI.StartScreen.JumpListItem.CreateWithArguments(
+                item.Arguments ?? string.Empty,
+                item.Title);
+            if (!string.IsNullOrEmpty(item.Description))
+                native.Description = item.Description;
+            if (item.Icon is { IsResource: true, Source: var src } && !string.IsNullOrEmpty(src))
+                native.Logo = new Uri(src);
+            if (item.Kind == JumpListItemKind.Custom && !string.IsNullOrEmpty(item.GroupCategory))
+                native.GroupName = item.GroupCategory;
+            list.Items.Add(native);
         }
 
-        try
-        {
-            await list.SaveAsync();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Reactor] JumpList.SaveAsync failed: {ex.GetType().Name}: {ex.Message}");
-        }
+        await list.SaveAsync();
     }
 
     private static global::Windows.UI.StartScreen.JumpListSystemGroupKind ResolveSystemGroupKind()

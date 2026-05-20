@@ -82,11 +82,12 @@ public class JumpListUpdateValidationTests : IDisposable
         // Pin: separators bypass the empty-title check (they have no
         // text to render). Setting AppUserModelId so the unpackaged path
         // is reachable, then expecting NO exception from the validation
-        // loop. The downstream COM call will fail silently — its catch
-        // arms are tested elsewhere.
+        // loop. The downstream COM call will fail (no shell context in
+        // unit tests) — that's fine; we only care that validation passed.
         JumpList.AppUserModelId = "Test.App";
         var sep = new JumpListItem(Title: "", Arguments: "", Kind: JumpListItemKind.Separator);
-        // Should not throw from the validation loop.
+        // Should not throw ArgumentException or InvalidOperationException from
+        // the validation loop. COM exceptions are expected and acceptable.
         try
         {
             await JumpList.UpdateAsync(new[] { sep });
@@ -99,8 +100,14 @@ public class JumpListUpdateValidationTests : IDisposable
         {
             Assert.Fail("Separator-with-empty-title must not raise an ArgumentException.");
         }
-        // Other exceptions (COM-related) are expected and caught by
-        // UpdateAsync's catch arms — they don't bubble.
+        catch (global::System.Runtime.InteropServices.COMException)
+        {
+            // Expected — no shell context in unit tests.
+        }
+        catch (global::System.EntryPointNotFoundException)
+        {
+            // Expected — propsys.dll entry points may be unavailable in test context.
+        }
     }
 
     [Fact]
@@ -136,21 +143,20 @@ public class JumpListUpdateValidationTests : IDisposable
     // ══════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task UpdateAsync_With_Valid_Items_And_AumiD_Does_Not_Throw_Even_When_COM_Fails()
+    public async Task UpdateAsync_With_Valid_Items_And_AumiD_Throws_When_COM_Unavailable()
     {
-        // The catch arm around `Task.Run(() => UpdateUnpackaged(...))`
-        // protects callers from COM init failures (test context,
-        // remote-desktop sessions without taskbar, group-policy-locked
-        // shells). Bug shape: a regression that propagated the COM
-        // exception would crash every host launch path that updates
-        // the jump list at startup.
+        // With exceptions no longer swallowed, COM/platform failures (test
+        // context, remote-desktop sessions without taskbar, group-policy-
+        // locked shells) propagate to callers. Callers who want fire-and-
+        // forget semantics should catch at their call site.
         JumpList.AppUserModelId = "Test.App";
         var items = new[]
         {
             new JumpListItem("Open", "open --doc /path"),
             new JumpListItem("Help", "help"),
         };
-        // Must not throw.
-        await JumpList.UpdateAsync(items);
+        // In unit test context, the platform call fails — exception must propagate.
+        await Assert.ThrowsAnyAsync<Exception>(
+            async () => await JumpList.UpdateAsync(items));
     }
 }

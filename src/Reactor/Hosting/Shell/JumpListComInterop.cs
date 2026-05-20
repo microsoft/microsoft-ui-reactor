@@ -45,8 +45,7 @@ internal static class JumpListComInterop
         try
         {
             cdl = (ICustomDestinationList)new DestinationList();
-            try { cdl.SetAppID(appUserModelId); }
-            catch (Exception ex) { Debug.WriteLine($"[Reactor] JumpList SetAppID failed: {ex.Message}"); }
+            cdl.SetAppID(appUserModelId);
 
             uint slotCount;
             var iidObjArray = typeof(IObjectArray).GUID;
@@ -80,23 +79,19 @@ internal static class JumpListComInterop
             if (taskItems.Count > 0)
             {
                 var coll = BuildShellLinkArray(taskItems);
-                if (coll is not null)
+                try
                 {
-                    try
-                    {
-                        var asArray = (IObjectArray)coll;
-                        int taskHr = cdl.AddUserTasks(asArray);
-                        if (taskHr < 0) DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.AddUserTasks", taskHr);
-                    }
-                    finally { Marshal.ReleaseComObject(coll); }
+                    var asArray = (IObjectArray)coll;
+                    int taskHr = cdl.AddUserTasks(asArray);
+                    if (taskHr < 0) DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.AddUserTasks", taskHr);
                 }
+                finally { Marshal.ReleaseComObject(coll); }
             }
 
             // Custom groups.
             foreach (var (category, list) in customGroups)
             {
                 var coll = BuildShellLinkArray(list);
-                if (coll is null) continue;
                 try
                 {
                     var asArray = (IObjectArray)coll;
@@ -121,20 +116,12 @@ internal static class JumpListComInterop
             if (commitHr < 0)
                 DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.CommitList", commitHr);
         }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Reactor] JumpList unpackaged update threw: {ex.GetType().Name}: {ex.Message}");
-        }
         finally
         {
             if (removed is not null)
-            {
-                try { Marshal.ReleaseComObject(removed); } catch { }
-            }
+                Marshal.ReleaseComObject(removed);
             if (cdl is not null)
-            {
-                try { Marshal.ReleaseComObject(cdl); } catch { }
-            }
+                Marshal.ReleaseComObject(cdl);
         }
     }
 
@@ -160,61 +147,44 @@ internal static class JumpListComInterop
         }
     }
 
-    private static IObjectCollection? BuildShellLinkArray(IReadOnlyList<JumpListItem> items)
+    private static IObjectCollection BuildShellLinkArray(IReadOnlyList<JumpListItem> items)
     {
-        IObjectCollection? coll;
-        try { coll = (IObjectCollection)new EnumerableObjectCollection(); }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Reactor] EnumerableObjectCollection alloc failed: {ex.Message}");
-            return null;
-        }
+        var coll = (IObjectCollection)new EnumerableObjectCollection();
 
         // Path to the current executable. Jump-list shell links re-launch
         // the same exe with the supplied arguments.
-        string exePath;
-        try { exePath = Environment.ProcessPath ?? string.Empty; }
-        catch { exePath = string.Empty; }
+        string exePath = Environment.ProcessPath ?? string.Empty;
 
         for (int i = 0; i < items.Count; i++)
         {
             var item = items[i];
+            var link = (IShellLinkW)new CShellLink();
             try
             {
-                var link = (IShellLinkW)new CShellLink();
-                try
+                if (item.Kind == JumpListItemKind.Separator)
                 {
-                    if (item.Kind == JumpListItemKind.Separator)
-                    {
-                        ApplySeparator(link);
-                    }
-                    else
-                    {
-                        if (!string.IsNullOrEmpty(exePath))
-                            link.SetPath(exePath);
-                        link.SetArguments(item.Arguments ?? string.Empty);
-                        if (!string.IsNullOrEmpty(item.Description))
-                            link.SetDescription(item.Description);
-                        // Icon: WindowIcon.FromPath maps to filesystem; resource
-                        // URIs aren't honoured by ICustomDestinationList without
-                        // additional resource-extraction work that the unpackaged
-                        // path doesn't carry today (silently skipped).
-                        if (item.Icon is { IsResource: false, Source: var iconPath } && !string.IsNullOrEmpty(iconPath))
-                        {
-                            try { link.SetIconLocation(iconPath, 0); } catch { }
-                        }
-
-                        ApplyTitle(link, item.Title);
-                    }
-
-                    coll.AddObject(link);
+                    ApplySeparator(link);
                 }
-                finally { Marshal.ReleaseComObject(link); }
+                else
+                {
+                    if (!string.IsNullOrEmpty(exePath))
+                        link.SetPath(exePath);
+                    link.SetArguments(item.Arguments ?? string.Empty);
+                    if (!string.IsNullOrEmpty(item.Description))
+                        link.SetDescription(item.Description);
+                    // Icon: WindowIcon.FromPath maps to filesystem; resource
+                    // URIs aren't honoured by ICustomDestinationList without
+                    // additional resource-extraction work that the unpackaged
+                    // path doesn't carry today (silently skipped).
+                    if (item.Icon is { IsResource: false, Source: var iconPath } && !string.IsNullOrEmpty(iconPath))
+                        link.SetIconLocation(iconPath, 0);
+
+                    ApplyTitle(link, item.Title);
+                }
+
+                coll.AddObject(link);
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[Reactor] BuildShellLinkArray item '{item.Title}' failed: {ex.Message}");
-            }
+            finally { Marshal.ReleaseComObject(link); }
         }
         return coll;
     }
@@ -232,7 +202,7 @@ internal static class JumpListComInterop
         }
         finally
         {
-            try { PropVariantClear(ref pv); } catch { }
+            PropVariantClear(ref pv);
         }
     }
 
@@ -249,7 +219,7 @@ internal static class JumpListComInterop
         }
         finally
         {
-            try { PropVariantClear(ref pv); } catch { }
+            PropVariantClear(ref pv);
         }
     }
 
