@@ -60,6 +60,47 @@ public class DevtoolsLogsToolTests
     }
 
     [Fact]
+    public void Payload_AcceptsSourceEvent_AndExposesEventNameAndId()
+    {
+        // Spec 044 §6.3 — `source=event` filters to ETW-sourced entries and
+        // surfaces eventName/eventId. Existing source values still work.
+        var buf = new LogCaptureBuffer();
+        buf.Append(LogSource.Stdout, null, "stdout-ignored");
+        buf.Append(LogSource.Event, "Warning",
+            text: "SwallowedError category=Hosting operation=test",
+            eventName: "SwallowedError",
+            eventId: 16);
+
+        var args = JsonDocument.Parse("{\"source\":\"event\"}").RootElement;
+        var payload = DevtoolsLogsTool.BuildPayload(buf, args);
+        var json = JsonSerializer.Serialize(payload);
+        using var doc = JsonDocument.Parse(json);
+
+        var entries = doc.RootElement.GetProperty("entries");
+        Assert.Equal(1, entries.GetArrayLength());
+        var e = entries[0];
+        Assert.Equal("event", e.GetProperty("source").GetString());
+        Assert.Equal("SwallowedError", e.GetProperty("eventName").GetString());
+        Assert.Equal(16, e.GetProperty("eventId").GetInt32());
+        Assert.Equal("Warning", e.GetProperty("level").GetString());
+    }
+
+    [Fact]
+    public void Payload_AcceptsEtwAlias_ForSource()
+    {
+        // `etw` is accepted as an alias for `event` so tooling that came in
+        // from a non-MCP ETW background still discovers the filter.
+        var buf = new LogCaptureBuffer();
+        buf.Append(LogSource.Event, "Info", "X", eventName: "X", eventId: 1);
+
+        var args = JsonDocument.Parse("{\"source\":\"etw\"}").RootElement;
+        var payload = DevtoolsLogsTool.BuildPayload(buf, args);
+        var json = JsonSerializer.Serialize(payload);
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(1, doc.RootElement.GetProperty("entries").GetArrayLength());
+    }
+
+    [Fact]
     public void Payload_SinceCursor_AdvancesEachCall()
     {
         var buf = new LogCaptureBuffer();

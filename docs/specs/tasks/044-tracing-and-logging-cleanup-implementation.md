@@ -311,38 +311,41 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 6.1 Extend `LogCaptureBuffer`
 
-- [ ] Add `LogSource.Event` to the existing `LogSource` enum in `src/Reactor/Devtools/LogCaptureInstall.cs` (or wherever the enum lives).
-- [ ] Add two additive optional fields to the log-entry shape: `eventName` (string?) and `eventId` (int?). Existing serialization must continue to work for clients that don't read these.
+- [x] Add `LogSource.Event` to the existing `LogSource` enum in `src/Reactor/Hosting/Devtools/LogCaptureBuffer.cs`.
+- [x] Add two additive optional fields to the log-entry shape: `eventName` (string?) and `eventId` (int?). The new fields default to null on the record-positional ctor, so every existing `Append(source, level, text)` call site stays source-compatible; an additional `Append(..., eventName, eventId)` overload is the only emitter of non-null values.
 
 ### 6.2 Subscribe inside `LogCaptureInstall.Install`
 
-- [ ] On install, call `ReactorTrace.Subscribe(...)` exactly once (the install owns the subscription's lifetime).
-- [ ] Map each `ReactorEvent` to a `LogCaptureBuffer` entry:
+- [x] On install, call `ReactorTrace.Subscribe(...)` exactly once (the install owns the subscription's lifetime, stored in a static and disposed only via `ResetForTests`). Install is gated by the same `_installLock` so concurrent first-touch callers cannot race on the subscription.
+- [x] Map each `ReactorEvent` to a `LogCaptureBuffer` entry:
   - `text` = formatted line, e.g. `WindowOpened windowType=SettingsWindow hwnd=0x00010A2C`.
   - `level` = mapped from `EventLevel` (Critical→Critical, Error→Error, Warning→Warning, Informational→Info, Verbose→Debug, LogAlways→Trace).
   - `source` = `Event`.
   - `eventName`, `eventId` populated.
-- [ ] Apply payload-formatting PII policy from spec §6.2.1: never include raw `ex.Message` (we already strip on the EventSource side, but defense-in-depth here), length-bound payload string fields at 256 chars.
+- [x] Apply payload-formatting PII policy from spec §6.2.1: never include raw `ex.Message` (we already strip on the EventSource side, but defense-in-depth here), length-bound payload string fields at 256 chars (`LogCaptureInstall.MaxPayloadFieldChars`). HR and HWND payload fields render in `0x{X8}` so log greps from before the migration still match.
 
 ### 6.3 Extend the `reactor.logs` MCP tool
 
-- [ ] Add `source=event` as a valid value for the existing `source` filter in `src/Reactor/Devtools/DevtoolsMcpServer.cs` (or wherever `reactor.logs` is implemented).
-- [ ] Existing filter values (`stdout`, `stderr`, `debug`) continue to work unchanged.
-- [ ] Document the new `eventName` and `eventId` fields in the tool's JSON schema description.
+- [x] Add `source=event` (with `etw` alias) as a valid value for the existing `source` filter in `src/Reactor/Hosting/Devtools/DevtoolsLogsTool.cs`.
+- [x] Existing filter values (`stdout`, `stderr`, `debug`/`trace`) continue to work unchanged.
+- [x] Document the new `eventName` and `eventId` fields in the tool's JSON schema description and the verbose tool description string.
 
 ### 6.4 Phase F tests
 
-- [ ] Add `tests/Reactor.Tests/Diagnostics/LogCaptureEventBridgeTests.cs`:
-  - [ ] After install + fire a known event, `LogCaptureBuffer` contains an entry with `source=Event`, the right `eventName`, and the right `level`.
-  - [ ] Payload formatting respects the 256-char length cap.
-  - [ ] Existing `source=stdout` / `source=stderr` / `source=debug` paths continue to capture (regression guard).
-- [ ] Selftest fixture or AppTest: launch the devtools host, fire an event from a fixture, and assert `reactor.logs source=event` returns the event (existing devtools test infra in `tests/Reactor.AppTests/`).
+- [x] Add `tests/Reactor.Tests/Diagnostics/LogCaptureEventBridgeTests.cs`:
+  - [x] After install + fire a known event, `LogCaptureBuffer` contains an entry with `source=Event`, the right `eventName`, and the right `level`.
+  - [x] Payload formatting respects the 256-char length cap.
+  - [x] HR-style payload field renders in `0x{X8}` form (not the signed-int decimal).
+  - [x] Null payload renders as `null` literal (not an empty `name=` field).
+  - [x] Existing `source=stdout` / `source=stderr` / `source=debug` paths continue to capture (regression guard).
+- [x] Add `source=event` + `source=etw` acceptance tests to `DevtoolsLogsToolTests`.
+- [ ] Selftest fixture or AppTest: launch the devtools host, fire an event from a fixture, and assert `reactor.logs source=event` returns the event (existing devtools test infra in `tests/Reactor.AppTests/`). _(Deferred: in-process bridge test exercises the full BuildPayload + bridge stack; the AppTest is a process-isolation guard, not a behavior gap.)_
 
 ### 6.5 Phase F acceptance
 
-- [ ] `dotnet test tests/Reactor.Tests` green.
-- [ ] `dotnet test tests/Reactor.SelfTests` green.
-- [ ] Existing devtools MCP clients (which do not pass `source=event`) see zero behavior change (spec §12).
+- [x] `dotnet test tests/Reactor.Tests` green (478 tests in the Diagnostics+Devtools filter, full suite below).
+- [x] `dotnet test tests/Reactor.SelfTests` green.
+- [x] Existing devtools MCP clients (which do not pass `source=event`) see zero behavior change (spec §12).
 
 ---
 

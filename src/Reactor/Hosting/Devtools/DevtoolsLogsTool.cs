@@ -18,11 +18,13 @@ internal static class DevtoolsLogsTool
             new McpToolDescriptor(
                 Name: "logs",
                 Description:
-                    "Drains captured Console.Out, Console.Error, and Debug.WriteLine/Trace.WriteLine output. " +
+                    "Drains captured Console.Out, Console.Error, Debug.WriteLine/Trace.WriteLine output, " +
+                    "and Microsoft-UI-Reactor ETW events. " +
                     "Returns entries with monotonic `seq`; for incremental reads pass the previous " +
                     "response's `nextSeq` directly as `since` (inclusive). " +
                     "Filters: `tail` (keep last N after filtering), `filter` (regex; falls back to substring), " +
-                    "`source` (stdout|stderr|debug — Debug and Trace share one listener), `level`. " +
+                    "`source` (stdout|stderr|debug|event — Debug and Trace share one listener; event is the framework ETW provider), `level`. " +
+                    "Event entries carry extra `eventName` and `eventId` fields. " +
                     "Pass `waitMs > 0` to long-poll. `dropped` reports entries evicted by ring overflow.",
                 InputSchema: new
                 {
@@ -32,8 +34,8 @@ internal static class DevtoolsLogsTool
                         since = new { type = "integer", description = "Return entries with seq >= since. Pass previous `nextSeq` to continue. Default 0 returns all." },
                         tail = new { type = "integer", description = "Keep only the last N entries after filtering." },
                         filter = new { type = "string", description = "Regex; falls back to substring match if invalid." },
-                        source = new { type = "string", description = "stdout | stderr | debug (Debug and Trace both surface as `debug`)" },
-                        level = new { type = "string", description = "Exact level match (case-insensitive). Reserved for future structured sinks." },
+                        source = new { type = "string", description = "stdout | stderr | debug | event (Debug and Trace both surface as `debug`; `event` selects Microsoft-UI-Reactor ETW events)" },
+                        level = new { type = "string", description = "Exact level match (case-insensitive). For source=event the levels are Critical|Error|Warning|Info|Debug|Trace." },
                         waitMs = new { type = "integer", description = "Max time to block waiting for new entries. 0 returns immediately." },
                     },
                     additionalProperties = false,
@@ -70,8 +72,9 @@ internal static class DevtoolsLogsTool
             // Debug/Trace share one listener collection — we can't
             // distinguish them at the source.
             "debug" or "trace" => LogSource.Debug,
+            "event" or "etw" => LogSource.Event,
             _ => throw new McpToolException(
-                $"Unknown source '{sourceStr}'. Use stdout, stderr, or debug.",
+                $"Unknown source '{sourceStr}'. Use stdout, stderr, debug, or event.",
                 JsonRpcErrorCodes.InvalidParams),
         };
 
@@ -88,7 +91,7 @@ internal static class DevtoolsLogsTool
 
         return new
         {
-            entries = result.Entries.Select(e => new
+            entries = result.Entries.Select(e => (object)new
             {
                 seq = e.Seq,
                 ts = e.TimestampUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
@@ -96,6 +99,8 @@ internal static class DevtoolsLogsTool
                 level = e.Level,
                 threadId = e.ThreadId,
                 text = e.Text,
+                eventName = e.EventName,
+                eventId = e.EventId,
             }).ToArray(),
             nextSeq = result.NextSeq,
             dropped = result.Dropped,

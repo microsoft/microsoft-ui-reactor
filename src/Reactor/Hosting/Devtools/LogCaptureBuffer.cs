@@ -7,19 +7,39 @@ internal enum LogSource
     Stdout,
     Stderr,
     Debug,
+    /// <summary>
+    /// Entry forwarded from the <c>Microsoft-UI-Reactor</c> EventSource via
+    /// <c>ReactorTrace.Subscribe</c>. Carries <see cref="LogEntry.EventName"/>
+    /// and <see cref="LogEntry.EventId"/>; the formatted ETW payload lives in
+    /// <see cref="LogEntry.Text"/>.
+    /// </summary>
+    Event,
 }
 
 /// <summary>
 /// One captured log line. Monotonic <see cref="Seq"/> lets agents poll with
 /// <c>since</c> cursors instead of re-reading the whole buffer.
 /// </summary>
+/// <param name="Seq">Monotonic per-process sequence number.</param>
+/// <param name="TimestampUtc">Capture time in UTC.</param>
+/// <param name="Source">Origin: stdout, stderr, debug listener, or ETW event.</param>
+/// <param name="Level">Severity label (case-insensitive match for the <c>level</c> filter).</param>
+/// <param name="ThreadId">Managed thread id of the emitter.</param>
+/// <param name="Text">Rendered line text.</param>
+/// <param name="EventName">When <paramref name="Source"/> is <see cref="LogSource.Event"/>,
+/// the C# method name on <c>ReactorEventSource</c> that emitted the event.
+/// Null for stdout/stderr/debug entries.</param>
+/// <param name="EventId">When <paramref name="Source"/> is <see cref="LogSource.Event"/>,
+/// the numeric event identifier. Null for stdout/stderr/debug entries.</param>
 internal sealed record LogEntry(
     long Seq,
     DateTime TimestampUtc,
     LogSource Source,
     string? Level,
     int ThreadId,
-    string Text);
+    string Text,
+    string? EventName = null,
+    int? EventId = null);
 
 /// <summary>
 /// Bounded ring buffer for captured app logs. Thread-safe, zero-lock on reads
@@ -55,6 +75,15 @@ internal sealed class LogCaptureBuffer
     /// everything else.
     /// </summary>
     public void Append(LogSource source, string? level, string text)
+        => Append(source, level, text, eventName: null, eventId: null);
+
+    /// <summary>
+    /// Append an ETW-sourced entry. <paramref name="eventName"/> and
+    /// <paramref name="eventId"/> are surfaced as extra fields on the
+    /// resulting MCP <c>reactor.logs</c> response. Length-capping for
+    /// <paramref name="text"/> matches the base overload.
+    /// </summary>
+    public void Append(LogSource source, string? level, string text, string? eventName, int? eventId)
     {
         if (string.IsNullOrEmpty(text)) return;
 
@@ -70,7 +99,9 @@ internal sealed class LogCaptureBuffer
             Source: source,
             Level: level,
             ThreadId: Environment.CurrentManagedThreadId,
-            Text: text);
+            Text: text,
+            EventName: eventName,
+            EventId: eventId);
 
         TaskCompletionSource? toSignal = null;
         lock (_lock)
