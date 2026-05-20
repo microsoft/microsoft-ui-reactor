@@ -1,0 +1,174 @@
+using Microsoft.UI.Reactor.Core;
+
+namespace Microsoft.UI.Reactor.Docking;
+
+// ════════════════════════════════════════════════════════════════════════
+//  Spec 045 — Docking Windows
+//
+//  The public API surface committed at Phase 1 exit. Phase 2 swaps the
+//  implementation (Reactor-native rewrite) without changing this API.
+//  Phase 3 extends it additively (DockHost rename, DockableWindowRef).
+//
+//  Cross-reference:
+//    docs/specs/045-docking-windows-design.md §4.3 — committed surface
+//    docs/specs/tasks/045-docking-windows-implementation.md §1.3
+//
+//  These types live in Reactor.dll (the core) so that the Phase 2 native
+//  rewrite — which has no XAML dependency — can extend them in place when
+//  the Reactor.Docking.Xaml wrapper assembly is removed at §2.19.
+// ════════════════════════════════════════════════════════════════════════
+
+/// <summary>
+/// A container element that hosts a tree of docked panes inside a Reactor
+/// shell. Phase 1 reconciles to a single <c>WinUI.Dock.DockManager</c>
+/// XAML control via the Reactor.Docking.Xaml wrapper assembly; Phase 2
+/// swaps the implementation to a Reactor-native renderer without changing
+/// this public surface.
+/// </summary>
+/// <remarks>
+/// See spec 045 §4.3 for the committed API surface, §4.4 for the wrapper
+/// behavior, §5 for the Phase 2 rewrite, and §6.4 for the Phase 3 rename
+/// to <c>DockHost</c>.
+///
+/// <para>
+/// The element is reconciled by Reactor like any other <see cref="Element"/>:
+/// produce a fresh <see cref="DockManager"/> record on every render, and the
+/// reconciler will diff the previous tree against the new one and apply the
+/// minimum set of mutations.
+/// </para>
+///
+/// <para>
+/// Persistence: when <see cref="PersistenceId"/> is set, the layout JSON is
+/// stored under <c>WindowPersistedScope["docking:&lt;PersistenceId&gt;"]</c>
+/// (spec 036 §8). On mount, persisted layout is restored as a fallback when
+/// the declarative <see cref="Layout"/> is null.
+/// </para>
+/// </remarks>
+public sealed record DockManager : Element
+{
+    /// <summary>The root of the dock node tree. Null = empty layout.</summary>
+    public DockNode? Layout { get; init; }
+
+    /// <summary>Tool windows pinned to the left edge (auto-hide).</summary>
+    public IReadOnlyList<DockableContent>? LeftSide { get; init; }
+
+    /// <summary>Tool windows pinned to the top edge (auto-hide).</summary>
+    public IReadOnlyList<DockableContent>? TopSide { get; init; }
+
+    /// <summary>Tool windows pinned to the right edge (auto-hide).</summary>
+    public IReadOnlyList<DockableContent>? RightSide { get; init; }
+
+    /// <summary>Tool windows pinned to the bottom edge (auto-hide).</summary>
+    public IReadOnlyList<DockableContent>? BottomSide { get; init; }
+
+    /// <summary>
+    /// The currently-active document. Resolved by <see cref="DockableContent.Key"/>
+    /// equality against panes in <see cref="Layout"/>; mismatched keys leave
+    /// activation untouched.
+    /// </summary>
+    public DockableContent? ActiveDocument { get; init; }
+
+    /// <summary>
+    /// Optional adapter for app-controlled rehydration of pane content and
+    /// floating-window chrome. See spec 045 §4.3 / §4.4 and
+    /// <see cref="IDockAdapter"/>.
+    /// </summary>
+    public IDockAdapter? Adapter { get; init; }
+
+    /// <summary>
+    /// Optional behavior hook for app-side observation of dock / float events.
+    /// Phase 2 collapses this interface into the per-event Action props
+    /// declared below (see <see cref="OnContentDocked"/> et al.); the
+    /// interface stays as a one-release <c>[Obsolete]</c> forwarder
+    /// (spec 045 §5.3.5).
+    /// </summary>
+    public IDockBehavior? Behavior { get; init; }
+
+    /// <summary>
+    /// Optional insertion-policy hook applied to programmatic adds. See
+    /// <see cref="IDockLayoutStrategy"/> and spec 045 §5.3.6.
+    /// </summary>
+    /// <remarks>Spec 045 §5.3.6 (Phase 2 addition).</remarks>
+    public IDockLayoutStrategy? LayoutStrategy { get; init; }
+
+    /// <summary>
+    /// Stable identifier used to scope persisted layout JSON inside the host
+    /// <c>WindowPersistedScope</c>. Required to survive process restarts.
+    /// </summary>
+    public string? PersistenceId { get; init; }
+
+    /// <summary>
+    /// Schema version for persisted layout JSON. Phase 1 emits version 1;
+    /// Phase 2 introduces version 2 with migrations registered via
+    /// <see cref="IDockLayoutMigration"/> (spec 045 §5.3.4, §5.4).
+    /// </summary>
+    public int LayoutSchemaVersion { get; init; } = 1;
+
+    // ── Phase 2 lifecycle events (spec 045 §5.3.5, tracking §2.12) ─────────
+    //
+    // Each *ing variant carries a Cancel flag; setting it to true aborts the
+    // transition and leaves state unchanged. *ed variants are observation
+    // only. No `+=` accumulation: the reconciler holds only the current
+    // delegate. Replaces <see cref="IDockBehavior"/> (kept as obsolete
+    // forwarder for one release).
+
+    /// <summary>Fired before any structural layout mutation lands.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockLayoutChangingEventArgs>? OnLayoutChanging { get; init; }
+
+    /// <summary>Fired after a structural layout mutation lands.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockLayoutChangedEventArgs>? OnLayoutChanged { get; init; }
+
+    /// <summary>Fired before a Document is closed; Cancel aborts.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockDocumentClosingEventArgs>? OnDocumentClosing { get; init; }
+
+    /// <summary>Fired after a Document is closed.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockDocumentClosedEventArgs>? OnDocumentClosed { get; init; }
+
+    /// <summary>Fired before a ToolWindow auto-hides; Cancel aborts.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockToolWindowHidingEventArgs>? OnToolWindowHiding { get; init; }
+
+    /// <summary>Fired after a ToolWindow auto-hides.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockToolWindowHiddenEventArgs>? OnToolWindowHidden { get; init; }
+
+    /// <summary>Fired before a ToolWindow is closed; Cancel aborts.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockToolWindowClosingEventArgs>? OnToolWindowClosing { get; init; }
+
+    /// <summary>Fired after a ToolWindow is closed.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockToolWindowClosedEventArgs>? OnToolWindowClosed { get; init; }
+
+    /// <summary>Fired before a pane is torn out into a floating window; Cancel aborts.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockContentFloatingEventArgs>? OnContentFloating { get; init; }
+
+    /// <summary>Fired after a pane is torn out into a floating window.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockContentFloatedEventArgs>? OnContentFloated { get; init; }
+
+    /// <summary>Fired before a floating pane is docked back into a host; Cancel aborts.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockContentDockingEventArgs>? OnContentDocking { get; init; }
+
+    /// <summary>Fired after a floating pane is docked back into a host.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockContentDockedEventArgs>? OnContentDocked { get; init; }
+
+    /// <summary>Fired when the active content changes (tab focus, programmatic activation).</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockActiveContentChangedEventArgs>? OnActiveContentChanged { get; init; }
+
+    /// <summary>Fired after a floating window is created.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockFloatingWindowCreatedEventArgs>? OnFloatingWindowCreated { get; init; }
+
+    /// <summary>Fired after a floating window is closed.</summary>
+    /// <remarks>Spec 045 §5.3.5.</remarks>
+    public Action<DockFloatingWindowClosedEventArgs>? OnFloatingWindowClosed { get; init; }
+}

@@ -885,6 +885,10 @@ DataSourceCapabilities { None, ServerSort, ServerFilter, ServerSearch, ServerCou
 FilterOperator { Equals, NotEquals, Contains, StartsWith, EndsWith, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Between, In, IsNull, IsNotNull }
 PinPosition { None, Left, Right }
 SortDirection { Ascending, Descending }
+DockPaneState { Docked, Floating, AutoHidden, AutoHiddenExpanded, Hidden }
+DockSide { Left, Top, Right, Bottom }
+DockTarget { Center, SplitLeft, SplitTop, SplitRight, SplitBottom, DockLeft, DockTop, DockRight, DockBottom }
+TabPosition { Top, Bottom }
 DragOperations { None, Copy, Move, Link, All }
 GesturePhase { Began, Changed, Ended, Cancelled }
 PanAxis { Both, Horizontal, Vertical }
