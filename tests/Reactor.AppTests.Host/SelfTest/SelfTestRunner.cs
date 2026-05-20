@@ -85,7 +85,7 @@ internal static class SelfTestRunner
         if (string.IsNullOrWhiteSpace(env)) return DefaultAotSkipPatterns;
         var extra = env.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         // Env var appends to defaults so callers can add new skips without
-        // rebuilding the AOT binary. Use REACTOR_AOT_SKIP_ONLY for replace.
+        // rebuilding the AOT binary.
         return DefaultAotSkipPatterns.Concat(extra).ToArray();
     }
 
@@ -107,8 +107,16 @@ internal static class SelfTestRunner
 
     private static Task YieldLowPriorityAsync(DispatcherQueue dq)
     {
-        var tcs = new TaskCompletionSource();
-        dq.TryEnqueue(DispatcherQueuePriority.Low, () => tcs.SetResult());
+        // RunContinuationsAsynchronously: don't let the awaiting continuation
+        // run inline on the dispatcher callback — that defeats the purpose of
+        // yielding (we want the dispatcher to process other queued work — like
+        // a render pass — between our SetResult and the continuation).
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // If TryEnqueue returns false (queue shut down / disposed), the
+        // callback would never fire and the awaiter would hang forever.
+        // Resolve the TCS synchronously in that case so the caller proceeds.
+        if (!dq.TryEnqueue(DispatcherQueuePriority.Low, () => tcs.TrySetResult()))
+            tcs.TrySetResult();
         return tcs.Task;
     }
 
