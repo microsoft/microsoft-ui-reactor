@@ -255,6 +255,7 @@ internal sealed class ReactorEventSource : EventSource
 
     // Spec 044 §6.1 — generic HRESULT-failed event used by
     // DiagnosticLog.HResultFailed. HRESULT is signed (matches Exception.HResult).
+    // <snippet:hresult-failed-event>
     [Event(17, Level = EventLevel.Warning, Keywords = Keywords.Errors,
         Message = "HResult failed (category={category}, op={operation}, hr=0x{hr:X8})")]
     public void HResultFailed(string category, string operation, int hr)
@@ -262,6 +263,7 @@ internal sealed class ReactorEventSource : EventSource
         if (IsEnabled(EventLevel.Warning, Keywords.Errors))
             WriteEvent(17, category ?? string.Empty, operation ?? string.Empty, hr);
     }
+    // </snippet:hresult-failed-event>
 
     // ── Hosting (spec 044 Phase B §2.1) ─────────────────────────────────
     //

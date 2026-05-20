@@ -357,6 +357,21 @@ For the full doc-pipeline workflow (compile, check-tier, render-diagrams), see [
 - **Tag-based event dispatch.** Event handlers are wired once at mount; the current element is stored in `Tag` so handlers always read the latest closure.
 - **No XAML.** Everything is C#.
 
+### Diagnostics: audience, not severity, decides the channel
+
+`Debug.WriteLine` exists for the framework contributor reading the Output window in Visual Studio; it disappears in Release builds. `ReactorEventSource` (the `Microsoft-UI-Reactor` provider) exists for the app developer, SRE, and support engineer — it's release-visible, keyword-gated, and zero-allocation when no consumer is attached. New code that reports an error, a swallowed exception, or a failing HRESULT belongs on the EventSource side; new code that traces internal framework state for a contributor's benefit (reconciler bookkeeping, scheduler queue depth) stays on `Debug.WriteLine`.
+
+For swallowed exceptions and HRESULT-return diagnostics, route through the `DiagnosticLog` helper:
+
+```csharp
+catch (COMException ex) when (ex.HResult is HResults.RPC_E_DISCONNECTED or HResults.E_FAIL)
+{
+    DiagnosticLog.SwallowedError(LogCategory.Hosting, "AppWindow.Close", ex);
+}
+```
+
+`DiagnosticLog.SwallowedError` and `DiagnosticLog.HResultFailed` emit the typed ETW event under `Keywords.Errors` at `Warning` in Release **and** mirror a richer line (including `ex.Message`) to `Debug.WriteLine` in Debug builds via a `[Conditional("DEBUG")]` helper. The exception message never reaches the ETW payload — see [`docs/guide/diagnostics.md`](docs/guide/diagnostics.md) for the PII discipline and the full capture workflow.
+
 ---
 
 ## Hot reload

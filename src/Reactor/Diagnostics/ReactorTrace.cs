@@ -75,6 +75,7 @@ public static class ReactorTrace
     /// <paramref name="onEvent"/>.</returns>
     /// <exception cref="ArgumentNullException">If <paramref name="onEvent"/>
     /// is <c>null</c>.</exception>
+    // <snippet:subscribe-shape>
     public static IDisposable Subscribe(
         Action<ReactorEvent> onEvent,
         EventLevel level = EventLevel.Verbose,
@@ -83,6 +84,7 @@ public static class ReactorTrace
         ArgumentNullException.ThrowIfNull(onEvent);
         return new Subscription(onEvent, level, keywords);
     }
+    // </snippet:subscribe-shape>
 
     private sealed class Subscription : EventListener
     {

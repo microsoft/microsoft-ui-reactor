@@ -46,6 +46,7 @@ internal static class DiagnosticLog
     /// ETW.</param>
     /// <param name="ex">The swallowed exception. Only its
     /// <see cref="Exception.GetType"/> name reaches the ETW payload.</param>
+    // <snippet:swallowed-error-shape>
     public static void SwallowedError(LogCategory category, string operation, Exception ex)
     {
         // Cost-of-disabled: when no consumer enables Keywords.Errors at
@@ -61,6 +62,7 @@ internal static class DiagnosticLog
 
         DebugSwallowedError(category, operation, ex);
     }
+    // </snippet:swallowed-error-shape>
 
     /// <summary>
     /// Logs a bare HRESULT / Win32 code that the framework chose to

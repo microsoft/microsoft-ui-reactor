@@ -353,32 +353,38 @@ Mechanical migration driven by the audit. Each PR maps to one row of spec §6.3 
 
 ### 7.1 Author the template
 
-- [ ] Create `docs/_pipeline/templates/diagnostics.md.dt`. Sections (mirroring spec §2 + §7 + §8):
-  - [ ] The rule (`Debug.WriteLine` vs `ReactorEventSource`).
-  - [ ] How to capture a trace with environment variables (`DOTNET_EnableEventPipe`).
-  - [ ] How to attach `dotnet-trace`.
-  - [ ] How to open a `.nettrace` in Visual Studio.
-  - [ ] Performance Profiler → Events Viewer workflow with `Microsoft-UI-Reactor` as a custom provider + keyword bitmask quick reference.
-  - [ ] How to use `ReactorTrace.Subscribe(...)` from app code.
-  - [ ] How to filter `reactor.logs source=event` in the devtools MCP tool.
-  - [ ] Cross-link to `perf-instrumentation.md` for perf-shaped events.
-- [ ] **Do not** document `AddReactorEvents` / `ILoggingBuilder` — that's deferred Phase E.
+- [x] Create `docs/_pipeline/templates/diagnostics.md.dt`. Sections (mirroring spec §2 + §7 + §8):
+  - [x] The rule (`Debug.WriteLine` vs `ReactorEventSource`).
+  - [x] How to capture a trace with environment variables (`DOTNET_EnableEventPipe`).
+  - [x] How to attach `dotnet-trace`.
+  - [x] How to open a `.nettrace` in Visual Studio.
+  - [x] Performance Profiler → Events Viewer workflow with `Microsoft-UI-Reactor` as a custom provider + keyword bitmask quick reference.
+  - [x] How to use `ReactorTrace.Subscribe(...)` from app code.
+  - [x] How to filter `reactor.logs source=event` in the devtools MCP tool.
+  - [x] Cross-link to `perf-instrumentation.md` for perf-shaped events.
+- [x] **Do not** document `AddReactorEvents` / `ILoggingBuilder` — that's deferred Phase E. Confirmed: no `AddReactorEvents` mention in either template or generated output.
+
+Also added (over and above the spec checklist):
+- A "Common Mistakes" subsection covering computing payload outside the `IsEnabled` gate, capturing without pinning level, and forwarding `ex.Message` through subscribers.
+- An SVG flow diagram at `docs/_pipeline/diagrams/diagnostics/flow.svg` showing catch-site → `DiagnosticLog` → `ReactorEventSource` → four consumers. Required to clear `REACTOR_DOC_TIER_004` under `--ci`.
+- Two new source snippet anchors (`swallowed-error-shape` on `DiagnosticLog.cs`, `hresult-failed-event` on `ReactorEventSource.cs`) to clear `REACTOR_DOC_TIER_003` (≥3 snippets per comprehensive page).
 
 ### 7.2 Update related touch points
 
-- [ ] Add a short pointer in `CONTRIBUTING.md` (or equivalent) restating the rule from spec §2 ("Audience, not severity, decides the channel.").
-- [ ] Cross-link from `docs/_pipeline/templates/perf-instrumentation.md.dt` to the new diagnostics page.
+- [x] Added a "Diagnostics: audience, not severity, decides the channel" sub-section to `CONTRIBUTING.md` under Code style — restates the rule, shows the canonical `DiagnosticLog.SwallowedError` shape, and links to the generated `docs/guide/diagnostics.md`.
+- [x] Cross-linked from `docs/_pipeline/templates/perf-instrumentation.md.dt` Next Steps to the new diagnostics page as the first entry.
 
 ### 7.3 Generate
 
-- [ ] Run `mur docs compile`.
-- [ ] Verify `docs/guide/diagnostics.md` is the expected output. Hand-edits are forbidden.
+- [x] `mur docs compile --topic diagnostics --ci` runs clean (only the non-fatal `winui-ref` warning, which the spec explicitly marks as "only required for transparent-wrapper pages").
+- [x] `docs/guide/diagnostics.md` lands 404 lines, generated; 26 cross-mentions of the four headline surfaces (`DiagnosticLog` / `reactor.logs` / `ReactorTrace` / `EventSource`). Hand-edits forbidden — confirmed by the template hash.
 
 ### 7.4 Phase H acceptance
 
-- [ ] The doc renders correctly in the user-guide site preview.
-- [ ] All four capture recipes (env vars, `dotnet-trace`, VS Profiler, `ReactorTrace.Subscribe`) are present and have copy-pasteable snippets.
-- [ ] No reference to `AddReactorEvents` (deferred).
+- [x] The doc renders correctly in the user-guide site preview (verified via `mur docs compile` + reading the generated `docs/guide/diagnostics.md`).
+- [x] All four capture recipes (env vars, `dotnet-trace`, VS Profiler, `ReactorTrace.Subscribe`) are present and have copy-pasteable snippets.
+- [x] `reactor.logs source=event` recipe shows the request/response shape with the `eventName`/`eventId` fields populated.
+- [x] No reference to `AddReactorEvents` (deferred).
 
 ---
 
