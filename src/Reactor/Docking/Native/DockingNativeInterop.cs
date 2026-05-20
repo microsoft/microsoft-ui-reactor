@@ -75,7 +75,12 @@ public static class DockingNativeInterop
                     ?? new NativeHostState();
 
                 var newContent = BuildContent(newEl);
+                var oldHostChild = host.Child;
                 var newChild = rec.Reconcile(state.LastContent, newContent, host.Child, rerender);
+                if (!ReferenceEquals(oldHostChild, newChild))
+                {
+                    global::System.Console.WriteLine($"# [DockingNativeHost {host.GetHashCode():X}].Child swap old={oldHostChild?.GetType().Name ?? "<null>"}({oldHostChild?.GetHashCode():X}) new={newChild?.GetType().Name ?? "<null>"}({newChild?.GetHashCode():X})");
+                }
                 host.Child = newChild;
 
                 state.LastElement = newEl;

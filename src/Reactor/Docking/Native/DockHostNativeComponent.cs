@@ -55,8 +55,13 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // A separate UseReducer tick supplies the re-render trigger
         // (mutating the ratio array in place doesn't change any
         // UseState-comparable value).
+        //
+        // SplitRatios escape hatch (spec 045 §2.1): when the app supplies
+        // its own dictionary via DockManager.SplitRatios, use that. The
+        // app's own state-change mechanism drives re-renders; the
+        // internal tick is reserved for splitter-driven mutations.
         var ratioStoreRef = UseRef<Dictionary<string, double[]>>(new Dictionary<string, double[]>());
-        var ratioStore = ratioStoreRef.Current;
+        var ratioStore = manager.SplitRatios ?? ratioStoreRef.Current;
         var (_, bumpTick) = UseReducer(0);
         void RequestRatioRerender() => bumpTick(t => t + 1);
 
@@ -206,8 +211,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             },
             onSplitterDelta: (idx, delta, hostExtent, isFinal) =>
             {
-                Console.WriteLine($"# [host:{path}] onDelta idx={idx} delta={delta:F2} extent={hostExtent:F1} isFinal={isFinal} ratios=[{string.Join(",", ratios.Select(r => r.ToString("F3")))}]");
-                if (delta == 0) return;
+                if (delta == 0 && !isFinal) return;
                 if (hostExtent < 1) return;
 
                 var perChild = new DockSplitChild[children.Count];
@@ -216,9 +220,14 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
 
                 var sol = DockSplitSolver.ApplyDelta(perChild, idx, delta, totalDip: hostExtent);
                 var newRatios = sol.Ratios;
+                // Mutate the live array so the ratio store reflects the
+                // latest values. The DockSplitterControl applies the new
+                // grow values DIRECTLY to its sibling FlexPanel children
+                // during the drag (WPF GridSplitter pattern) — re-render
+                // is reserved for the terminal isFinal event so the model
+                // catches up after the drag completes.
                 for (int i = 0; i < ratios.Length; i++) ratios[i] = newRatios[i];
-                Console.WriteLine($"# [host:{path}]   → newRatios=[{string.Join(",", ratios.Select(r => r.ToString("F3")))}]");
-                requestRerender();
+                if (isFinal) requestRerender();
             });
     }
 

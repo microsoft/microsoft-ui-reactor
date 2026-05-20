@@ -55,7 +55,8 @@ class DockShowcaseRoot : Component
             SceneButton("sidepin",      "Scene C — Side Pin",          scene, setScene),
             SceneButton("compact",      "Scene D — Compact / Bottom",  scene, setScene),
             SceneButton("persist",      "Scene E — Persistence",       scene, setScene),
-            SceneButton("programmatic", "Scene F — Programmatic Dock", scene, setScene)
+            SceneButton("programmatic", "Scene F — Programmatic Dock", scene, setScene),
+            SceneButton("sliders",      "Scene G — Slider Resize",     scene, setScene)
         ).Width(240).Padding(8);
 
         Element body = scene switch
@@ -66,6 +67,7 @@ class DockShowcaseRoot : Component
             "compact"      => Component<SceneDCompact>(),
             "persist"      => Component<SceneEPersistence>(),
             "programmatic" => Component<SceneFProgrammatic>(),
+            "sliders"      => Component<SceneGSliders>(),
             _              => TextBlock("Unknown scene"),
         };
 
@@ -451,6 +453,116 @@ class SceneFProgrammatic : Component
             {
                 Layout = new DockSplit(Orientation.Horizontal, dockChildren),
             }.Grid(row: 3)
+        ).Padding(16);
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  Scene G — Slider Resize
+//
+//  Isolates the splitter render-and-resize pipeline from pointer / capture
+//  handling. The Scene owns a Dictionary<string, double[]> mapping tree-
+//  position paths ("0", "0/0", "0/1") to per-child ratios. Sliders mutate
+//  the dict directly and bump scene state; the DockManager element's
+//  SplitRatios prop hands the same dict to the native renderer, which
+//  reads the latest values on each render.
+//
+//  If sliders move the panes smoothly while pointer drag fails, the bug
+//  is exclusively in pointer/capture wiring. If sliders fail too, the
+//  bug is in the ratio→render path.
+// ════════════════════════════════════════════════════════════════════════
+
+class SceneGSliders : Component
+{
+    public override Element Render()
+    {
+        var (ratiosRef, _) = UseState<Dictionary<string, double[]>>(new()
+        {
+            ["0"]   = new[] { 0.5, 0.5 },
+            ["0/0"] = new[] { 0.5, 0.5 },
+            ["0/1"] = new[] { 0.5, 0.5 },
+        });
+
+        // Slider value mirrors the leading ratio (0..1). On change we
+        // mutate the shared dict in place + bump tick to force re-render.
+        var (rowLeading, setRowLeading) = UseState(0.5);
+        var (col0Leading, setCol0Leading) = UseState(0.5);
+        var (col1Leading, setCol1Leading) = UseState(0.5);
+
+        void Apply(string path, double leading)
+        {
+            ratiosRef[path] = new[] { leading, 1.0 - leading };
+        }
+
+        // Live mutate before render to ensure renderer sees the latest.
+        Apply("0",   rowLeading);
+        Apply("0/0", col0Leading);
+        Apply("0/1", col1Leading);
+
+        Element MakeSlider(string label, double value, Action<double> setter) =>
+            VStack(2,
+                TextBlock($"{label}  {value:F2}").FontSize(11),
+                (new SliderElement(Value: value, Min: 0.05, Max: 0.95,
+                                   OnValueChanged: v => setter(v))
+                {
+                    StepFrequency = 0.01,
+                }).Width(220));
+
+        var dock = new DockManager
+        {
+            SplitRatios = ratiosRef,
+            Layout = new DockSplit(
+                Orientation.Vertical,
+                new DockNode[]
+                {
+                    new DockSplit(
+                        Orientation.Horizontal,
+                        new DockNode[]
+                        {
+                            new DockableContent("Editor",
+                                VStack(8,
+                                    TextBlock("editor body").SemiBold(),
+                                    TextBlock("Slider-driven resize — no pointer involved.")),
+                                Key: "k:editor"),
+                            new DockableContent("Tools",
+                                VStack(8,
+                                    TextBlock("tools body").SemiBold(),
+                                    TextBlock("Outline / properties.")),
+                                Key: "k:tools"),
+                        }),
+                    new DockSplit(
+                        Orientation.Horizontal,
+                        new DockNode[]
+                        {
+                            new DockableContent("Output",
+                                VStack(8,
+                                    TextBlock("output body").SemiBold(),
+                                    TextBlock("Build output.")),
+                                Key: "k:output"),
+                            new DockableContent("Terminal",
+                                VStack(8,
+                                    TextBlock("terminal body").SemiBold(),
+                                    TextBlock("PS> _")),
+                                Key: "k:terminal"),
+                        }),
+                }),
+        };
+
+        return Grid(
+            new[] { GridSize.Star(1) },
+            new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(1) },
+            TextBlock("Scene G — Slider Resize").FontSize(20).SemiBold().Grid(row: 0),
+            TextBlock(
+                "Each slider drives one splitter's leading-pane ratio. They " +
+                "mutate the same dictionary the native renderer reads from, " +
+                "bypassing the pointer/capture path entirely."
+            ).Opacity(0.8).Margin(0, 0, 0, 8).Grid(row: 1),
+            HStack(16,
+                MakeSlider("Outer row",    rowLeading,  setRowLeading),
+                MakeSlider("Top columns",  col0Leading, setCol0Leading),
+                MakeSlider("Bottom cols",  col1Leading, setCol1Leading)
+            ).Margin(0, 0, 0, 8).Grid(row: 2),
+            dock.Grid(row: 3)
         ).Padding(16);
     }
 }

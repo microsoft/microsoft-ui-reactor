@@ -171,4 +171,19 @@ public sealed record DockManager : Element
     /// <summary>Fired after a floating window is closed.</summary>
     /// <remarks>Spec 045 §5.3.5.</remarks>
     public Action<DockFloatingWindowClosedEventArgs>? OnFloatingWindowClosed { get; init; }
+
+    /// <summary>
+    /// Optional externally-owned ratio store for split-pane sizing. When
+    /// supplied, the native renderer uses this dictionary instead of its
+    /// internal <see cref="DockSplit"/>-ratio cache. Keys are tree-position
+    /// paths (e.g. <c>"0"</c>, <c>"0/0"</c>, <c>"0/1"</c>); values are
+    /// per-child ratio arrays summing to ~1.0.
+    /// </summary>
+    /// <remarks>
+    /// Spec 045 §2.1 escape hatch. Exposed for app-driven resize (e.g.
+    /// slider-driven layout demos) and for tests that need to inspect or
+    /// mutate ratios without going through pointer/keyboard events.
+    /// </remarks>
+    public Dictionary<string, double[]>? SplitRatios { get; init; }
+
 }
