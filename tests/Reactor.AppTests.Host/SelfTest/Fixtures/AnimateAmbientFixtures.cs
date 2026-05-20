@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
-using WinUI = Microsoft.UI.Xaml.Controls;
+using WinXC = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -64,7 +64,7 @@ internal static class AnimateAmbientFixtures
 
             await Harness.Render();
 
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = H.FindControl<WinXC.ListView>(_ => true);
             H.Check("AAF_InsertSpring_ListViewExists", lv is not null);
 
             // Intercept the CollectionChanged Add event so we observe the
@@ -121,7 +121,7 @@ internal static class AnimateAmbientFixtures
 
             await Harness.Render();
 
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = H.FindControl<WinXC.ListView>(_ => true);
 
             AnimationKind? observedKind = AnimationKind.Spring; // sentinel: must become null
             bool addSeen = false;
@@ -174,7 +174,7 @@ internal static class AnimateAmbientFixtures
 
             await Harness.Render();
 
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = H.FindControl<WinXC.ListView>(_ => true);
 
             AnimationKind? observedKind = AnimationKind.Spring; // sentinel
             if (lv?.ItemsSource is INotifyCollectionChanged ncc)
@@ -223,7 +223,7 @@ internal static class AnimateAmbientFixtures
 
             await Harness.Render();
 
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = H.FindControl<WinXC.ListView>(_ => true);
             H.Check("AAF_MoveSpring_ListViewMounted", lv is not null);
 
             H.ClickButton("MoveSpring");

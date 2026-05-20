@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
-using WinUI = Microsoft.UI.Xaml.Controls;
+using WinXC = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -45,7 +45,7 @@ internal static class CollectionFixtures
             H.Check("ListView_TypedRendering_TitleVisible",
                 H.FindText("Animals List") is not null);
 
-            var listView = H.FindControl<WinUI.ListView>(_ => true);
+            var listView = H.FindControl<WinXC.ListView>(_ => true);
             H.Check("ListView_TypedRendering_ListViewCreated",
                 listView is not null);
 

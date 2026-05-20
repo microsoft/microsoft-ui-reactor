@@ -50,6 +50,10 @@
          simulate a 3P control NuGet referenced from a Reactor app that has its
          own XAML metadata. -->
     <ProjectReference Include="..\Reactor.AppTests.ThirdPartyControls\Reactor.AppTests.ThirdPartyControls.csproj" />
+    <!-- spec 045 Phase 1: docking smoke fixture exercises the wrapper assembly
+         end-to-end (mount → assert tree shape → unmount). See
+         SelfTest/Fixtures/DockingSmokeFixture.cs. -->
+    <ProjectReference Include="..\..\src\Reactor.Docking.Xaml\Reactor.Docking.Xaml.csproj" />
   </ItemGroup>
 
 </Project>

@@ -5,7 +5,7 @@ using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
-using WinUI = Microsoft.UI.Xaml.Controls;
+using WinXC = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -96,7 +96,7 @@ internal static class LayoutFixtures
                 H.FindText("BottomLeft") is not null &&
                 H.FindText("BottomRight") is not null);
 
-            var grid = H.FindControl<WinUI.Grid>(g => g.ColumnDefinitions.Count == 2);
+            var grid = H.FindControl<WinXC.Grid>(g => g.ColumnDefinitions.Count == 2);
             H.Check("Grid_RowColumnLayout_GridCreated",
                 grid is not null);
 
@@ -143,7 +143,7 @@ internal static class LayoutFixtures
             await Harness.Render();
 
             // Find the Grid and FlexPanel
-            var grid = H.FindControl<WinUI.Grid>(g => g.ColumnDefinitions.Count == 3);
+            var grid = H.FindControl<WinXC.Grid>(g => g.ColumnDefinitions.Count == 3);
             var flex = H.FindControl<FlexPanel>(_ => true);
 
             H.Check("GridVsFlex_BothPanelsCreated",
@@ -203,7 +203,7 @@ internal static class LayoutFixtures
             await Harness.Render();
 
             // Find the updated panels (find by column count / type)
-            var grid2 = H.FindControl<WinUI.Grid>(g => g.ColumnDefinitions.Count == 3);
+            var grid2 = H.FindControl<WinXC.Grid>(g => g.ColumnDefinitions.Count == 3);
             var flex2 = H.FindControl<FlexPanel>(_ => true);
 
             H.Check("GridVsFlex_Text_BothPanelsCreated",

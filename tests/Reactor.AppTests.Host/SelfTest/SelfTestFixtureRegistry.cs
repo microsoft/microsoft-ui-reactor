@@ -890,6 +890,9 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_TrayIconRoundTrip",
         "WindowModel_UseOpenWindowReusesByKey",
         "WindowModel_MutatorsOwnerAndGuards",
+        // Docking smoke (spec 045 §1.7)
+        "Docking_TwoPaneMountUpdateUnmount",
+        "Docking_KeyedPanePreservation",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1762,6 +1765,9 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_TrayIconRoundTrip" => new WindowModelFixtures.TrayIconRoundTrip(harness),
         "WindowModel_UseOpenWindowReusesByKey" => new WindowModelFixtures.UseOpenWindowReusesByKey(harness),
         "WindowModel_MutatorsOwnerAndGuards" => new WindowModelFixtures.WindowMutatorsOwnerAndGuards(harness),
+        // Docking smoke fixtures — spec 045 §1.7
+        "Docking_TwoPaneMountUpdateUnmount" => new DockingSmokeFixtures.TwoPaneMountUpdateUnmount(harness),
+        "Docking_KeyedPanePreservation"    => new DockingSmokeFixtures.KeyedPanePreservation(harness),
 
         _ => null,
     };

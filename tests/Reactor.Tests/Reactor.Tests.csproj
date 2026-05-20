@@ -34,6 +34,10 @@
     <ProjectReference Include="..\..\src\Reactor.Localization.Generator\Reactor.Localization.Generator.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Cli\Reactor.Cli.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Analyzers\Reactor.Analyzers.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Docking.Xaml\Reactor.Docking.Xaml.csproj" />
+    <!-- Vendored WinUI.Dock — needed by Docking/BehaviorBridgeMappingTests
+         which guards against upstream DockTarget enum drift on re-snapshot. -->
+    <ProjectReference Include="..\..\third_party\WinUI.Dock\WinUI.Dock.csproj" />
     <ProjectReference Include="..\..\samples\apps\minesweeper\Minesweeper.csproj" />
     <ProjectReference Include="..\..\tools\Reactor.MurCheckGuardrail\Reactor.MurCheckGuardrail.csproj" />
   </ItemGroup>

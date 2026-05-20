@@ -5,7 +5,7 @@ using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
-using WinUI = Microsoft.UI.Xaml.Controls;
+using WinXC = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -212,7 +212,7 @@ internal static class FlexLayoutFixtures
                 H.FindText("D1") is not null &&
                 H.FindText("D2") is not null);
 
-            var grid = H.FindControl<WinUI.Grid>(g => g.ColumnDefinitions.Count == 2);
+            var grid = H.FindControl<WinXC.Grid>(g => g.ColumnDefinitions.Count == 2);
             H.Check("FlexInGrid_GridCreated", grid is not null);
 
             if (grid is null) return;
@@ -397,7 +397,7 @@ internal static class FlexLayoutFixtures
                 H.FindText("Header") is not null &&
                 H.FindText("Footer") is not null);
 
-            var scrollViewer = H.FindControl<WinUI.ScrollViewer>(_ => true);
+            var scrollViewer = H.FindControl<WinXC.ScrollViewer>(_ => true);
             H.Check("ScrollInFlex_ScrollViewerExists", scrollViewer is not null);
             H.Check("ScrollInFlex_ScrollViewerHeight",
                 scrollViewer is not null && Near(scrollViewer.RenderSize.Height, 300, 10));
@@ -641,7 +641,7 @@ internal static class FlexLayoutFixtures
                 H.FindText("GridRight") is not null &&
                 H.FindText("Footer") is not null);
 
-            var grid = H.FindControl<WinUI.Grid>(g => g.ColumnDefinitions.Count == 2);
+            var grid = H.FindControl<WinXC.Grid>(g => g.ColumnDefinitions.Count == 2);
             H.Check("GridInFlex_GridHeight",
                 grid is not null && Near(grid.ActualHeight, 300, 10));
 
@@ -1042,7 +1042,7 @@ internal static class FlexLayoutFixtures
 
             var col = H.FindControl<FlexPanel>(p =>
                 p.Direction == FlexDirection.Column && p.Children.Count == 3);
-            var scrollViewer = H.FindControl<WinUI.ScrollViewer>(_ => true);
+            var scrollViewer = H.FindControl<WinXC.ScrollViewer>(_ => true);
             H.Check("HBF_ColumnExists", col is not null);
             H.Check("HBF_ScrollViewerExists", scrollViewer is not null);
 
@@ -1192,7 +1192,7 @@ internal static class FlexLayoutFixtures
 
             await Harness.Render();
 
-            var wrapText = H.FindControl<WinUI.TextBlock>(t =>
+            var wrapText = H.FindControl<WinXC.TextBlock>(t =>
                 t.Text != null && t.Text.StartsWith("The quick brown fox"));
             H.Check("Wrap_TextExists", wrapText is not null);
 

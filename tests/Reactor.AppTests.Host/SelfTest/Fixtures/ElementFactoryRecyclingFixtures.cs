@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
-using WinUI = Microsoft.UI.Xaml.Controls;
+using WinXC = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -261,7 +261,7 @@ internal static class ElementFactoryRecyclingFixtures
             });
             await Harness.Render();
 
-            var repeater = H.FindControl<WinUI.ItemsRepeater>(_ => true);
+            var repeater = H.FindControl<WinXC.ItemsRepeater>(_ => true);
             var factory = repeater?.ItemTemplate as ElementFactory<Item>;
             H.Check("EFR_RefreshSync_FactoryFound", factory is not null);
             if (factory is null || repeater is null) return;
@@ -335,7 +335,7 @@ internal static class ElementFactoryRecyclingFixtures
             await Harness.Render();
 
             // Sanity: at least one row Component should have been mounted.
-            var repeater = H.FindControl<WinUI.ItemsRepeater>(_ => true);
+            var repeater = H.FindControl<WinXC.ItemsRepeater>(_ => true);
             H.Check("EFR_LazyStackUnmount_LazyStackRealized", repeater is not null);
 
             int before = s_cleanupCount;

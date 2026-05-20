@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
-using WinUI = Microsoft.UI.Xaml.Controls;
+using WinXC = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -35,12 +35,12 @@ internal static class KeyedListReconciliationFixtures
     private sealed class CollectionChangedRecorder
     {
         public List<NotifyCollectionChangedEventArgs> Events { get; } = new();
-        public void Subscribe(WinUI.ListViewBase lvb)
+        public void Subscribe(WinXC.ListViewBase lvb)
         {
             if (lvb.ItemsSource is INotifyCollectionChanged ncc)
                 ncc.CollectionChanged += (_, e) => Events.Add(e);
         }
-        public void Subscribe(WinUI.ItemsRepeater repeater)
+        public void Subscribe(WinXC.ItemsRepeater repeater)
         {
             if (repeater.ItemsSource is INotifyCollectionChanged ncc)
                 ncc.CollectionChanged += (_, e) => Events.Add(e);
@@ -71,7 +71,7 @@ internal static class KeyedListReconciliationFixtures
 
             await Harness.Render();
 
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = H.FindControl<WinXC.ListView>(_ => true);
             H.Check("KLR_ListView_Mounted", lv is not null);
 
             // ItemsSource is the internally-owned OC<ReactorRow>.
@@ -120,7 +120,7 @@ internal static class KeyedListReconciliationFixtures
 
             await Harness.Render();
 
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = H.FindControl<WinXC.ListView>(_ => true);
             H.Check("KLR_InsertAt0_ListViewExists", lv is not null);
             var rec = new CollectionChangedRecorder();
             if (lv is not null) rec.Subscribe(lv);
@@ -170,7 +170,7 @@ internal static class KeyedListReconciliationFixtures
 
             await Harness.Render();
 
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = H.FindControl<WinXC.ListView>(_ => true);
             var rec = new CollectionChangedRecorder();
             if (lv is not null) rec.Subscribe(lv);
 
@@ -211,7 +211,7 @@ internal static class KeyedListReconciliationFixtures
 
             await Harness.Render();
 
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = H.FindControl<WinXC.ListView>(_ => true);
             var rec = new CollectionChangedRecorder();
             if (lv is not null) rec.Subscribe(lv);
 
@@ -264,7 +264,7 @@ internal static class KeyedListReconciliationFixtures
             });
 
             await Harness.Render();
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = H.FindControl<WinXC.ListView>(_ => true);
             var initialState = lv is not null ? Reconciler.GetListState(lv) : null;
             H.Check("KLR_BulkReplace_InitialState", initialState is not null && initialState.LastKeys.Count == 20);
 
@@ -313,7 +313,7 @@ internal static class KeyedListReconciliationFixtures
 
             await Harness.Render();
 
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = H.FindControl<WinXC.ListView>(_ => true);
             var rec = new CollectionChangedRecorder();
             if (lv is not null) rec.Subscribe(lv);
 
@@ -349,7 +349,7 @@ internal static class KeyedListReconciliationFixtures
 
             await Harness.Render();
 
-            var gv = H.FindControl<WinUI.GridView>(_ => true);
+            var gv = H.FindControl<WinXC.GridView>(_ => true);
             H.Check("KLR_GridView_Mounted", gv is not null);
             H.Check("KLR_GridView_BoundToReactorRowOc",
                 gv?.ItemsSource is global::System.Collections.ObjectModel.ObservableCollection<ReactorRow>);
@@ -393,7 +393,7 @@ internal static class KeyedListReconciliationFixtures
 
             await Harness.Render();
 
-            var rep = H.FindControl<WinUI.ItemsRepeater>(_ => true);
+            var rep = H.FindControl<WinXC.ItemsRepeater>(_ => true);
             H.Check("KLR_LazyVStack_RepeaterMounted", rep is not null);
             H.Check("KLR_LazyVStack_BoundToReactorRowOc",
                 rep?.ItemsSource is global::System.Collections.ObjectModel.ObservableCollection<ReactorRow>);
@@ -512,7 +512,7 @@ internal static class KeyedListReconciliationFixtures
             });
 
             await Harness.Render();
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = H.FindControl<WinXC.ListView>(_ => true);
             var rec = new CollectionChangedRecorder();
             if (lv is not null) rec.Subscribe(lv);
 
@@ -542,7 +542,7 @@ internal static class KeyedListReconciliationFixtures
             });
 
             await Harness.Render();
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = H.FindControl<WinXC.ListView>(_ => true);
             var rec = new CollectionChangedRecorder();
             if (lv is not null) rec.Subscribe(lv);
 
@@ -583,7 +583,7 @@ internal static class KeyedListReconciliationFixtures
 
             await Harness.Render();
 
-            var rep = H.FindControl<WinUI.ItemsRepeater>(_ => true);
+            var rep = H.FindControl<WinXC.ItemsRepeater>(_ => true);
             var rec = new CollectionChangedRecorder();
             if (rep is not null) rec.Subscribe(rep);
 
@@ -625,7 +625,7 @@ internal static class KeyedListReconciliationFixtures
 
             await Harness.Render();
 
-            var rep = H.FindControl<WinUI.ItemsRepeater>(_ => true);
+            var rep = H.FindControl<WinXC.ItemsRepeater>(_ => true);
             var rec = new CollectionChangedRecorder();
             if (rep is not null) rec.Subscribe(rep);
 
@@ -725,7 +725,7 @@ internal static class KeyedListReconciliationFixtures
 
             await Harness.Render();
 
-            var gv = H.FindControl<WinUI.GridView>(_ => true);
+            var gv = H.FindControl<WinXC.GridView>(_ => true);
             var rec = new CollectionChangedRecorder();
             if (gv is not null) rec.Subscribe(gv);
 

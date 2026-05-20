@@ -8,7 +8,7 @@ using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WinShapes = Microsoft.UI.Xaml.Shapes;
-using WinUI = Microsoft.UI.Xaml.Controls;
+using WinXC = Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;
 using static Microsoft.UI.Reactor.Controls.Validation.ValidationVisualizerDsl;
@@ -1645,7 +1645,7 @@ internal static class ReconcilerBigCoverageFixtures
             var blue = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Blue);
             Action rerender = () => { };
 
-            var swipe = new WinUI.SwipeControl { Content = new TextBlock { Text = "swipe-old" } };
+            var swipe = new WinXC.SwipeControl { Content = new TextBlock { Text = "swipe-old" } };
             InvokePrivate<UIElement?>(reconciler, "UpdateSwipeControl",
                 SwipeControl(TextBlock("swipe-old"), rightItems: [new SwipeItemData("Delete")]),
                 SwipeControl(TextBlock("swipe-new"), leftItems:
@@ -1654,17 +1654,17 @@ internal static class ReconcilerBigCoverageFixtures
                     new SwipeItemData("Archive")
                 ]) with
                 {
-                    LeftItemsMode = WinUI.SwipeMode.Reveal,
-                    RightItemsMode = WinUI.SwipeMode.Execute,
+                    LeftItemsMode = WinXC.SwipeMode.Reveal,
+                    RightItemsMode = WinXC.SwipeMode.Execute,
                 },
                 swipe,
                 rerender);
             H.Check("PrivUpdate_SwipeItems", swipe.LeftItems is not null && swipe.LeftItems.Count == 2);
 
-            var refresh = new WinUI.RefreshContainer { Content = new TextBlock { Text = "refresh-old" } };
+            var refresh = new WinXC.RefreshContainer { Content = new TextBlock { Text = "refresh-old" } };
             InvokePrivate<UIElement?>(reconciler, "UpdateRefreshContainer",
                 RefreshContainer(TextBlock("refresh-old")),
-                RefreshContainer(Button("refresh-new")) with { PullDirection = WinUI.RefreshPullDirection.LeftToRight },
+                RefreshContainer(Button("refresh-new")) with { PullDirection = WinXC.RefreshPullDirection.LeftToRight },
                 refresh,
                 rerender);
             H.Check("PrivUpdate_RefreshReplacement",
@@ -1683,7 +1683,7 @@ internal static class ReconcilerBigCoverageFixtures
                 cmdTarget,
                 rerender);
             H.Check("PrivUpdate_CommandBarFlyout",
-                Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.GetAttachedFlyout(cmdTarget) is WinUI.CommandBarFlyout);
+                Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.GetAttachedFlyout(cmdTarget) is WinXC.CommandBarFlyout);
 
             var flyoutTarget = new Button { Content = "plain-flyout" };
             InvokePrivate<UIElement?>(reconciler, "UpdateFlyoutElement",
@@ -1699,8 +1699,8 @@ internal static class ReconcilerBigCoverageFixtures
                 flyoutTarget,
                 rerender);
             H.Check("PrivUpdate_PlainFlyout",
-                flyoutTarget.Flyout is WinUI.Flyout
-                || Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.GetAttachedFlyout(flyoutTarget) is WinUI.Flyout);
+                flyoutTarget.Flyout is WinXC.Flyout
+                || Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.GetAttachedFlyout(flyoutTarget) is WinXC.Flyout);
 
             var path = new WinShapes.Path();
             InvokePrivate<UIElement?>(reconciler, "UpdatePath",
@@ -1729,7 +1729,7 @@ internal static class ReconcilerBigCoverageFixtures
                 line);
             H.Check("PrivUpdate_Line", line.X2 == 3 && line.Stroke == red && line.StrokeThickness == 5);
 
-            var calendar = new WinUI.CalendarView { SelectionMode = WinUI.CalendarViewSelectionMode.Multiple };
+            var calendar = new WinXC.CalendarView { SelectionMode = WinXC.CalendarViewSelectionMode.Multiple };
             var d1 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
             var d2 = new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero);
             InvokePrivateStatic("SyncSelectedDates", calendar, new[] { d1, d2 });
@@ -1744,7 +1744,7 @@ internal static class ReconcilerBigCoverageFixtures
                 LazyVStack(rows, r => r.Key, (r, _) => TextBlock(r.Key)));
             H.Check("PrivUpdate_ListStates", listState.Source.Count == 3 && lazyState.Source.Count == 3);
 
-            var repeater = new WinUI.ItemsRepeater();
+            var repeater = new WinXC.ItemsRepeater();
             InvokePrivate(reconciler, "ApplyMoveAnimationsRepeater",
                 repeater,
                 new List<ReactorRow> { new() { Index = 0, Key = "a" } },
@@ -1762,7 +1762,7 @@ internal static class ReconcilerBigCoverageFixtures
             var reconciler = new Reconciler();
             Action rerender = () => { };
 
-            var iconSources = new WinUI.IconSource?[]
+            var iconSources = new WinXC.IconSource?[]
             {
                 Reconciler.ResolveIconSource(new SymbolIconData("Edit")),
                 Reconciler.ResolveIconSource(new SymbolIconData("DefinitelyNotASymbol")),
@@ -1782,12 +1782,12 @@ internal static class ReconcilerBigCoverageFixtures
             var listEl = new TemplatedListViewElement<KeyRow>(rows, r => r.Key, (r, _) => TextBlock(r.Key))
             {
                 Header = "header",
-                SelectionMode = WinUI.ListViewSelectionMode.Multiple,
+                SelectionMode = WinXC.ListViewSelectionMode.Multiple,
                 OnSelectedIndexChanged = i => selected = i,
                 OnSelectionChanged = items => multi = items,
                 OnItemClick = item => clicked = item,
             };
-            var list = InvokePrivate<WinUI.ListView>(reconciler, "MountTemplatedListView", listEl, rerender);
+            var list = InvokePrivate<WinXC.ListView>(reconciler, "MountTemplatedListView", listEl, rerender);
             if (list.ItemsSource is IList<ReactorRow> listRows)
             {
                 list.SelectedItems.Add(listRows[0]);
@@ -1798,12 +1798,12 @@ internal static class ReconcilerBigCoverageFixtures
             var gridEl = new TemplatedGridViewElement<KeyRow>(rows, r => r.Key, (r, _) => TextBlock(r.Key))
             {
                 Header = "grid-header",
-                SelectionMode = WinUI.ListViewSelectionMode.Multiple,
+                SelectionMode = WinXC.ListViewSelectionMode.Multiple,
                 OnSelectedIndexChanged = i => selected = i,
                 OnSelectionChanged = items => multi = items,
                 OnItemClick = item => clicked = item,
             };
-            var grid = InvokePrivate<WinUI.GridView>(reconciler, "MountTemplatedGridView", gridEl, rerender);
+            var grid = InvokePrivate<WinXC.GridView>(reconciler, "MountTemplatedGridView", gridEl, rerender);
             if (grid.ItemsSource is IList<ReactorRow> gridRows)
             {
                 grid.SelectedItems.Add(gridRows[1]);
