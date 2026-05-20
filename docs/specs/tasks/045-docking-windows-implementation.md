@@ -263,12 +263,20 @@ demonstrated; (c) human reviewer signs off side-by-side vs upstream
 
 ### 1.5 Risks + contingencies (spec §4.6)
 
-- [ ] Pin `VENDORED.md` to a specific upstream commit; re-snapshot
-  immediately before merge; reapply the four light edits.
-- [ ] Restrict drag-out to within a single `DockManager` instance in P1
-  (the reconciler-tears-down-on-source-mutation risk).
-- [ ] Verify the `Document.Content` `object?` slot accepts the
+- [x] Pin `VENDORED.md` to a specific upstream commit; re-snapshot
+  immediately before merge; reapply the four light edits. Pinned at
+  `2f5247f10d0abfde0fcb181e3037391d4a27952e` (2026-04-17 snapshot); light
+  edits #1–#4 documented in `third_party/WinUI.Dock/VENDORED.md`.
+- [x] Restrict drag-out to within a single `DockManager` instance in P1
+  (the reconciler-tears-down-on-source-mutation risk). Enforced by
+  omission — the wrapper does not implement the cross-manager hand-off
+  path; `IDockBehavior.ActivateMainWindow` is intercepted as a no-op
+  (full wiring → P3).
+- [x] Verify the `Document.Content` `object?` slot accepts the
   `ReactorContentControl` host without XAML schema warnings.
+  `DockTreeBuilder.MountOrReuseDocument` assigns a `ContentControl` to
+  `Document.Content`; full solution build at P1 close (warnings-as-errors)
+  produces 0 XAML schema warnings.
 - [x] **AOT verification:** confirm `Reactor.AppTests.Host` AOT build
   passes with the new project referenced. Document any new trim warnings.
   Verified locally (2026-05-20): `dotnet build` Release/x64 of
@@ -341,24 +349,26 @@ Path: `samples/apps/dock-showcase/`.
 Run side-by-side against `WinUI.Dock/src/Examples/Example.WinUI`,
 recording outcomes for each step:
 
-- [ ] **Step 1** — drag a center tab to each of 5 split targets
+- [x] **Step 1** — drag a center tab to each of 5 split targets
   (center, SplitL/T/R/B). Verify preview match, drop landing, Esc
   snap-back.
-- [ ] **Step 2** — drag to each of 4 edge dock targets. Same checklist.
-- [ ] **Step 3** — drag a tab out of the title bar into open space;
+- [x] **Step 2** — drag to each of 4 edge dock targets. Same checklist.
+- [x] **Step 3** — drag a tab out of the title bar into open space;
   floating window appears at pointer; title bar matches adapter content.
-- [ ] **Step 4** — drag a floating tab back into a tab group; floating
+- [x] **Step 4** — drag a floating tab back into a tab group; floating
   window auto-closes if last document.
-- [ ] **Step 5** — resize splits via splitter; min sizes respected;
+- [x] **Step 5** — resize splits via splitter; min sizes respected;
   re-mount restores sizes.
-- [ ] **Step 6** — pin a tab to a side; click side icon; popup shows;
+- [x] **Step 6** — pin a tab to a side; click side icon; popup shows;
   resize popup; re-pin from popup; close from popup.
-- [ ] **Step 7** — save layout to JSON, quit, restart, load; layout
+- [x] **Step 7** — save layout to JSON, quit, restart, load; layout
   matches.
-- [ ] **Step 8** — (negative) tear out a tab while resizing a different
+- [x] **Step 8** — (negative) tear out a tab while resizing a different
   split; no crash.
-- [ ] Sign-off captured in the merge PR description (named reviewer +
-  date). **Do not merge** P1 without this section green.
+- [x] Sign-off captured in the merge PR description (named reviewer +
+  date). Signed off 2026-05-20 by user (Chris Anderson, project owner)
+  on branch `feat/045-docking-windows-p1` against showcase sample at
+  commit 871e1e3e.
 
 ---
 
