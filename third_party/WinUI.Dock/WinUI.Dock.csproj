@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Vendored from https://github.com/qian-o/WinUI.Dock @ 2f5247f10d0abfde0fcb181e3037391d4a27952e
+    (2026-04-17). Light edits per spec 045 §4.2:
+      1. Uno code paths removed — single-target Windows. Original csproj
+         multi-targeted net10.0 + net10.0-windows; the non-Windows branch
+         pulled Uno.WinUI and an alternate XAML pipeline.
+      2. .editorconfig formatting applied (whitespace only).
+      3. [assembly: InternalsVisibleTo("Reactor.Docking.Xaml.Tests")] —
+         see Properties/AssemblyInfo.cs.
+      4. Central package management removed; explicit versions inline. We
+         consume the same WindowsAppSDKVersion as the rest of Reactor via
+         Directory.Build.props (cascades from the repo root).
+    Track future re-snapshots in third_party/WinUI.Dock/VENDORED.md.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RootNamespace>WinUI.Dock</RootNamespace>
+    <AssemblyName>WinUI.Dock</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DisableEmbeddedXbf>false</DisableEmbeddedXbf>
+    <!-- Vendored library — not packed; the Reactor.Docking.Xaml wrapper ships
+         this content. -->
+    <IsPackable>false</IsPackable>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <!-- Suppress CS1591 + IDE0130 — vendored third-party source; we don't
+         require XML doc comments on it. -->
+    <NoWarn>$(NoWarn);CS1591;IDE0130</NoWarn>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.LayoutTransformControl" Version="8.2.251219" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.2.251219" />
+  </ItemGroup>
+
+  <!--
+    Upstream merged all *.xaml into Themes/Generic.xaml at build time via
+    XAMLTools.MSBuild (removed in light edit #1). The pre-merged
+    Themes/Generic.xaml is checked in as a static asset; the per-control
+    DockManager.xaml / Document.xaml / DocumentGroup.xaml / LayoutPanel.xaml
+    files at the root are *inputs* to that combine step (not standalone
+    style files), so they're excluded from XAML page compilation here to
+    avoid duplicate-style errors at runtime.
+  -->
+  <ItemGroup>
+    <Page Remove="DockManager.xaml" />
+    <Page Remove="Document.xaml" />
+    <Page Remove="DocumentGroup.xaml" />
+    <Page Remove="LayoutPanel.xaml" />
+    <None Include="DockManager.xaml" />
+    <None Include="Document.xaml" />
+    <None Include="DocumentGroup.xaml" />
+    <None Include="LayoutPanel.xaml" />
+  </ItemGroup>
+
+</Project>

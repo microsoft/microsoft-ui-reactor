@@ -1,0 +1,323 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:dock="using:WinUI.Dock">
+
+    <dock:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+
+    <x:Double x:Key="TabViewShadowDepth">0</x:Double>
+
+    <Style x:Key="TabViewStyle"
+           TargetType="TabView">
+        <Setter Property="BorderBrush" Value="{ThemeResource DockStrokeDefaultBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabView">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="1*" />
+                        </Grid.RowDefinitions>
+
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="IsSingleView">
+                                <VisualState x:Name="SingleView">
+                                    <VisualState.Setters>
+                                        <Setter Target="TabContainerGrid.Height" Value="0" />
+                                        <Setter Target="TabContainerGrid.IsHitTestVisible" Value="False" />
+                                        <Setter Target="TabContentPresenter.BorderThickness" Value="1" />
+                                        <Setter Target="TabContentPresenter.CornerRadius" Value="4" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="MultiView" />
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <Grid x:Name="TabContainerGrid"
+                              Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="6" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="1*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0"
+                                    Height="1"
+                                    VerticalAlignment="Bottom"
+                                    Background="{TemplateBinding BorderBrush}" />
+
+                            <TabViewListView x:Name="TabListView"
+                                             Grid.Column="1"
+                                             ItemTemplate="{TemplateBinding TabItemTemplate}"
+                                             ItemTemplateSelector="{TemplateBinding TabItemTemplateSelector}"
+                                             ItemsSource="{TemplateBinding TabItemsSource}">
+                                <TabViewListView.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <ItemsStackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </TabViewListView.ItemsPanel>
+
+                                <TabViewListView.Template>
+                                    <ControlTemplate TargetType="TabViewListView">
+                                        <ItemsPresenter x:Name="TabsItemsPresenter" />
+                                    </ControlTemplate>
+                                </TabViewListView.Template>
+                            </TabViewListView>
+
+                            <Border Grid.Column="2"
+                                    Height="1"
+                                    VerticalAlignment="Bottom"
+                                    Background="{TemplateBinding BorderBrush}" />
+                        </Grid>
+
+                        <ContentPresenter x:Name="TabContentPresenter"
+                                          Grid.Row="1"
+                                          Background="{ThemeResource DockFillDefaultBrush}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="1,0,1,1"
+                                          CornerRadius="0,0,4,4" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="TabViewItemStyle"
+           TargetType="TabViewItem">
+        <Setter Property="MinHeight" Value="{ThemeResource TabViewItemMinHeight}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabViewItem">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"
+                                              MaxWidth="4" />
+                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="Auto"
+                                              MaxWidth="4" />
+                        </Grid.ColumnDefinitions>
+
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Separator.Visibility" Value="Collapsed" />
+                                        <Setter Target="ContentPresenter.Background" Value="{ThemeResource TabViewItemHeaderBackgroundPointerOver}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Separator.Visibility" Value="Collapsed" />
+                                        <Setter Target="ContentPresenter.Background" Value="{ThemeResource TabViewItemHeaderBackgroundPointerOver}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Selected">
+                                    <VisualState.Setters>
+                                        <Setter Target="BottomLine.Opacity" Value="0" />
+                                        <Setter Target="ContentPresenter.Background" Value="{ThemeResource DockFillDefaultBrush}" />
+                                        <Setter Target="Indicator.Visibility" Value="Visible" />
+                                        <Setter Target="LeftRadius.Visibility" Value="Visible" />
+                                        <Setter Target="RightRadius.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="PointerOverSelected">
+                                    <VisualState.Setters>
+                                        <Setter Target="BottomLine.Opacity" Value="0" />
+                                        <Setter Target="ContentPresenter.Background" Value="{ThemeResource DockFillDefaultBrush}" />
+                                        <Setter Target="Indicator.Visibility" Value="Visible" />
+                                        <Setter Target="LeftRadius.Visibility" Value="Visible" />
+                                        <Setter Target="RightRadius.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="PressedSelected">
+                                    <VisualState.Setters>
+                                        <Setter Target="BottomLine.Opacity" Value="0" />
+                                        <Setter Target="ContentPresenter.Background" Value="{ThemeResource DockFillDefaultBrush}" />
+                                        <Setter Target="Indicator.Visibility" Value="Visible" />
+                                        <Setter Target="LeftRadius.Visibility" Value="Visible" />
+                                        <Setter Target="RightRadius.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <Border x:Name="BottomLine"
+                                Grid.ColumnSpan="3"
+                                Height="1"
+                                VerticalAlignment="Bottom"
+                                Background="{TemplateBinding BorderBrush}" />
+
+                        <Border x:Name="Separator"
+                                Grid.Column="1"
+                                Width="1"
+                                Margin="{ThemeResource TabViewItemSeparatorMargin}"
+                                HorizontalAlignment="Right"
+                                Background="{ThemeResource TabViewItemSeparator}" />
+
+                        <ContentPresenter x:Name="ContentPresenter"
+                                          Grid.Column="1"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Background="Transparent"
+                                          ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                          ContentTransitions="{TemplateBinding ContentTransitions}"
+                                          CornerRadius="4,4,0,0"
+                                          FontSize="{ThemeResource TabViewItemHeaderFontSize}"
+                                          FontWeight="{TemplateBinding FontWeight}"
+                                          Foreground="{ThemeResource TabViewItemHeaderForeground}" />
+
+                        <Border x:Name="Indicator"
+                                Grid.Column="1"
+                                Margin="0,0,0,4"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1,1,1,0"
+                                CornerRadius="4,4,0,0"
+                                Visibility="Collapsed" />
+
+                        <Border x:Name="LeftRadius"
+                                Grid.Column="0"
+                                Width="8"
+                                Height="8"
+                                Margin="0,0,-1.5,0"
+                                VerticalAlignment="Bottom"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="0,0,1,1"
+                                CornerRadius="0,0,4,0"
+                                Visibility="Collapsed" />
+
+                        <Border x:Name="RightRadius"
+                                Grid.Column="2"
+                                Width="8"
+                                Height="8"
+                                Margin="-1.5,0,0,0"
+                                VerticalAlignment="Bottom"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1,0,0,1"
+                                CornerRadius="0,0,0,4"
+                                Visibility="Collapsed" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="PreviewStyle"
+           TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource DockStrokeActiveBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource DockStrokeDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="4" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="Opacity" Value="0.4" />
+    </Style>
+
+    <Style x:Key="IconButtonStyle"
+           TargetType="Button">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Root"
+                            Padding="{TemplateBinding Padding}"
+                            Background="Transparent"
+                            CornerRadius="4">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <FontIcon FontSize="12"
+                                  Glyph="{TemplateBinding Content}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="LeftBottomButtonStyle"
+           TargetType="Button">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Padding="0,6,0,0"
+                            Background="Transparent">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Content.Foreground" Value="{ThemeResource DockStrokeActiveBrush}" />
+                                        <Setter Target="Mark.Background" Value="{ThemeResource DockStrokeActiveBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Content.Foreground" Value="{ThemeResource DockStrokeActiveBrush}" />
+                                        <Setter Target="Mark.Background" Value="{ThemeResource DockStrokeActiveBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <StackPanel Orientation="Vertical">
+                            <ContentPresenter x:Name="Content" />
+                            <Border x:Name="Mark"
+                                    Height="4"
+                                    Margin="0,2,0,0"
+                                    Background="{ThemeResource DockStrokeDefaultBrush}"
+                                    CornerRadius="2" />
+                        </StackPanel>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="TopRightButtonStyle"
+           TargetType="Button">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Padding="0,0,0,6"
+                            Background="Transparent">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Mark.Background" Value="{ThemeResource DockStrokeActiveBrush}" />
+                                        <Setter Target="Content.Foreground" Value="{ThemeResource DockStrokeActiveBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Mark.Background" Value="{ThemeResource DockStrokeActiveBrush}" />
+                                        <Setter Target="Content.Foreground" Value="{ThemeResource DockStrokeActiveBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <StackPanel Orientation="Vertical">
+                            <Border x:Name="Mark"
+                                    Height="4"
+                                    Margin="0,0,0,2"
+                                    Background="{ThemeResource DockStrokeDefaultBrush}"
+                                    CornerRadius="2" />
+                            <ContentPresenter x:Name="Content" />
+                        </StackPanel>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

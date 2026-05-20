@@ -1,0 +1,17 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:dock="using:WinUI.Dock">
+
+    <Style TargetType="dock:LayoutPanel">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="dock:LayoutPanel">
+                    <Grid x:Name="PART_Root"
+                          ColumnSpacing="12"
+                          RowSpacing="12" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
