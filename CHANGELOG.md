@@ -29,13 +29,42 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
-- **Spec 045 — Docking (Phase 0 scaffolding).** Tracking checklist
-  established at `docs/specs/tasks/045-docking-windows-implementation.md`.
-  CHANGELOG bucket reserved for the docking workstream. The third-party
-  notice for WinUI.Dock (MIT, https://github.com/qian-o/WinUI.Dock) was
-  landed alongside the design doc and remains in `ThirdPartyNoticeText.txt`
-  pending the Phase 1 vendor drop under `third_party/WinUI.Dock/`.
-  (spec 045 §0)
+- **Spec 045 Phase 1 — Docking (vendor + wrap).** First-class docking
+  surface arrives in Reactor via the new `Microsoft.UI.Reactor.Docking`
+  namespace, shipped from a separate `Microsoft.UI.Reactor.Docking.Xaml`
+  NuGet package so apps that don't need docking don't pay for the
+  vendored XAML dependency. Public API committed at P1 exit:
+  `DockManager : Element`, the `DockNode` algebra (`DockSplit`,
+  `DockTabGroup`, `DockableContent`), `TabPosition` /
+  `DockTarget` enums, and the `IDockAdapter` / `IDockBehavior`
+  observation hooks (spec 045 §4.3). Apps register the element type
+  with the reconciler at host construction via
+  `DockingXamlInterop.Register(host.Reconciler)` (same pattern as
+  `XamlInterop.Register`); thereafter, any `DockManager` element in the
+  Reactor tree reconciles to a vendored WinUI.Dock control. Pane
+  identity is via `DockableContent.Key` (spec 042 keyed reconciliation
+  — explicit, no Title-as-key fallback). Showcase sample lands at
+  `samples/apps/dock-showcase/` with six scenes mirroring the §4.7
+  review script. Smoke fixture
+  `Docking_TwoPaneMountUpdateUnmount` exercises mount → update →
+  unmount in the AppTests harness; 27 unit tests cover the public API
+  + upstream enum mapping. Phase 2 swaps the vendored implementation
+  for a Reactor-native renderer with the same public surface. (spec 045
+  §4)
+- **WinUI.Dock vendored under `third_party/WinUI.Dock/`.** Snapshot of
+  `qian-o/WinUI.Dock` @ `2f5247f1` (MIT) with four light edits
+  documented in `VENDORED.md`: Uno code paths stripped, formatting
+  normalized, `[InternalsVisibleTo]` added for the wrapper + tests, and
+  the cross-window DnD bug sidestepped by restricting drag-out to a
+  single manager in Phase 1 per spec §4.6. The runtime reference is
+  removed at Phase 2 exit (§5.6); the source stays in the tree for
+  license compliance and A/B regression checks against the native
+  rewrite. (spec 045 §4.1, §4.2)
+- **`Microsoft.UI.Reactor.Docking.Xaml` is granted internal access to
+  `Reactor.dll`.** The wrapper is a first-party Microsoft assembly that
+  ships alongside the framework and calls `Reconciler.SetElementTag` /
+  `DetachReactorState` — same level of trust as the in-assembly
+  `Microsoft.UI.Reactor.Hosting.XamlInterop`. (spec 045 §4.4)
 - **Spec 042 Phase 1 — keyed-list reconciliation & ListView animation
   groundwork.** New internal `Microsoft.UI.Reactor.Core.Internal.ReactorRow`
   /  `ReactorListState` carry reference-typed identity rows inside an

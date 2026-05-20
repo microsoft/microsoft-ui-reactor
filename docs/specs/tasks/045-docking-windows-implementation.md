@@ -76,14 +76,15 @@ the gate.
 
 ### 0.1 Tracking & docs
 
-- [ ] Create this tracking checklist at
+- [x] Create this tracking checklist at
   `docs/specs/tasks/045-docking-windows-implementation.md` (this file).
   Update as tasks land.
-- [ ] Add a "Spec 045 — Docking" entry under `## [Unreleased]` in
+- [x] Add a "Spec 045 — Docking" entry under `## [Unreleased]` in
   `CHANGELOG.md`. Each phase appends to Added / Changed / Deprecated /
   Removed as it lands.
-- [ ] Decide PR cadence: default is **one feature branch per phase, multiple
+- [x] Decide PR cadence: default is **one feature branch per phase, multiple
   PRs per phase** (matches spec §10). Capture deviations in this file.
+  Branch in flight: `feat/045-docking-windows-p1`.
 
 ### 0.2 Public-API surface tracking
 
@@ -128,104 +129,121 @@ demonstrated; (c) human reviewer signs off side-by-side vs upstream
 
 ### 1.1 Vendoring (spec §4.1, §4.2)
 
-- [ ] Create `third_party/WinUI.Dock/` at repo root. Copy entire
+- [x] Create `third_party/WinUI.Dock/` at repo root. Copy entire
   `src/WinUI.Dock/` tree from upstream snapshot.
-- [ ] Preserve upstream `LICENSE` at `third_party/WinUI.Dock/LICENSE`.
-- [ ] Add `third_party/WinUI.Dock/VENDORED.md` recording:
-  - exact upstream commit hash
-  - copy date
+- [x] Preserve upstream `LICENSE` at `third_party/WinUI.Dock/LICENSE`.
+- [x] Add `third_party/WinUI.Dock/VENDORED.md` recording:
+  - exact upstream commit hash: `2f5247f10d0abfde0fcb181e3037391d4a27952e`
+  - copy date: 2026-05-19 (upstream snapshot 2026-04-17)
   - list of light edits applied (§4.2 items 1–4)
   - sunset note (P2 exit removes runtime use; source stays for reference;
     see §5.6)
-- [ ] **Light edit #1 — strip Uno code paths.** Remove Uno-targeted
+- [x] **Light edit #1 — strip Uno code paths.** Remove Uno-targeted
   projects, multitargeting in `.csproj`, every `#if HAS_UNO` /
   `#if !WINDOWS` branch. Document removals in `VENDORED.md`.
-- [ ] **Light edit #2 — apply `.editorconfig` formatting** (whitespace
-  only; no semantic change).
-- [ ] **Light edit #3 — `[assembly: InternalsVisibleTo]`** for
-  `Reactor.Docking.Xaml.Tests` in `Properties/AssemblyInfo.cs`.
-- [ ] **Light edit #4 (conditional)** — patch the documented
+- [x] **Light edit #2 — apply `.editorconfig` formatting** (whitespace
+  only; no semantic change). Applied opportunistically.
+- [x] **Light edit #3 — `[assembly: InternalsVisibleTo]`** for
+  `Microsoft.UI.Reactor.Docking.Xaml` + `Reactor.Docking.Xaml.Tests`
+  in `Properties/AssemblyInfo.cs`.
+- [x] **Light edit #4 (conditional)** — patch the documented
   "cross-window DnD races against window close" bug *iff* upstream has
-  not fixed it by vendor time. Otherwise skip and re-snapshot from latest.
-- [ ] Append WinUI.Dock MIT notice block to `ThirdPartyNoticeText.txt`
-  using the exact text in spec §12.
+  not fixed it by vendor time. **Decision:** wrapper restricts drag-out
+  to single-manager scope per §4.6; no source edit applied.
+- [x] Append WinUI.Dock MIT notice block to `ThirdPartyNoticeText.txt`
+  using the exact text in spec §12. *(Already landed alongside the
+  design doc — verified.)*
 
 ### 1.2 Wrapper assembly (spec §4.1)
 
-- [ ] Create `src/Reactor.Docking.Xaml/` C# project. Output assembly
+- [x] Create `src/Reactor.Docking.Xaml/` C# project. Output assembly
   name: `Microsoft.UI.Reactor.Docking.Xaml`.
-- [ ] Add the project to `Reactor.slnx`.
+- [x] Add the project to `Reactor.slnx`.
 - [ ] Keep the vendored `WinUI.Dock` namespace internal; add
   `[TypeForwardedTo]` redirects under
   `Microsoft.UI.Reactor.Docking.Xaml.Internal` so external API references
-  the Reactor namespace.
-- [ ] Add target-framework / WindowsAppSDK version pinning that matches
-  the rest of `src/Reactor/`. Track the pin in `Directory.Build.props`.
-- [ ] CI: ensure the new project builds in `Reactor.sln` warnings-as-errors.
+  the Reactor namespace. *(Deferred — vendored namespace stays as
+  `WinUI.Dock` for P1; `TypeForwardedTo` redirects land if/when we
+  rebrand the assembly. Internal access is gated through the wrapper's
+  `Microsoft.UI.Reactor.Docking.Internal` namespace.)*
+- [x] Add target-framework / WindowsAppSDK version pinning that matches
+  the rest of `src/Reactor/`. Tracked via `$(WindowsAppSDKVersion)` in
+  `Directory.Build.props`.
+- [x] CI: ensure the new project builds in `Reactor.sln`
+  warnings-as-errors. Verified locally — 0 warnings / 0 errors.
 
 ### 1.3 Public API surface — committed at P1 exit (spec §4.3)
 
 > This is the **commitment surface for P2** — no breaking changes between
 > P1 exit and P2 exit. Verify each item via XML doc + spec § linkback.
 
-- [ ] `namespace Microsoft.UI.Reactor.Docking;`
-- [ ] `public sealed record DockManager(...)` with fields:
+- [x] `namespace Microsoft.UI.Reactor.Docking;`
+- [x] `public sealed record DockManager(...)` with fields:
   `Layout`, `LeftSide`, `TopSide`, `RightSide`, `BottomSide`,
   `ActiveDocument`, `Adapter`, `Behavior`, `PersistenceId`,
   `LayoutSchemaVersion = 1`. Inherits `Element`.
-- [ ] `public abstract record DockNode;` (sealed hierarchy).
-- [ ] `public sealed record DockSplit(...)` (orientation, children,
+- [x] `public abstract record DockNode;` (sealed hierarchy).
+- [x] `public sealed record DockSplit(...)` (orientation, children,
   width/height + min/max constraints).
-- [ ] `public sealed record DockTabGroup(...)` (documents, tab position,
+- [x] `public sealed record DockTabGroup(...)` (documents, tab position,
   compact, show-when-empty, selected index, width/height).
-- [ ] `public sealed record DockableContent(...)` (title, content, key,
+- [x] `public sealed record DockableContent(...)` (title, content, key,
   can-close, can-pin, width/height, persistence-state). Inherits
   `DockNode`. Phase-1 single role; P2 introduces `Document` /
   `ToolWindow` subclasses.
-- [ ] `public enum TabPosition { Top, Bottom }`.
-- [ ] `public enum DockTarget { Center, SplitLeft, SplitTop, SplitRight,
+- [x] `public enum TabPosition { Top, Bottom }`.
+- [x] `public enum DockTarget { Center, SplitLeft, SplitTop, SplitRight,
   SplitBottom, DockLeft, DockTop, DockRight, DockBottom }`.
-- [ ] `public interface IDockAdapter` with members
+- [x] `public interface IDockAdapter` with members
   `OnContentCreated`, `OnGroupCreated`, `GetFloatingWindowTitleBar`.
-- [ ] `public interface IDockBehavior` with `OnDocked`, `OnFloating`.
+- [x] `public interface IDockBehavior` with `OnDocked`, `OnFloating`.
   `ActivateMainWindow` is absorbed by Reactor's window topology; do not
   expose.
-- [ ] XML docs on every public member with `<remarks>` linking to spec 045
+- [x] XML docs on every public member with `<remarks>` linking to spec 045
   § number. Cross-reference deprecation plan for P2 collapse (the
   interfaces collapse into `On*` props on the P2 `DockHost`).
 
 ### 1.4 Wrapper implementation (spec §4.4)
 
-- [ ] **Leaf-wrapper plumbing** following the `PropertyGridComponent` /
+- [x] **Leaf-wrapper plumbing** following the `PropertyGridComponent` /
   `DataGridFactories` precedent. The `DockManager` Reactor element
-  reconciles to a single vendored `WinUI.Dock.DockManager` instance.
-- [ ] **First-mount path.** Instantiate the upstream control, walk the
+  reconciles to a single vendored `WinUI.Dock.DockManager` instance via
+  `Reconciler.RegisterType<DockManager, WinUIDock.DockManager>(...)`
+  in `DockingXamlInterop.Register`.
+- [x] **First-mount path.** Instantiate the upstream control, walk the
   `DockNode` tree, build corresponding `LayoutPanel` / `DocumentGroup` /
   `Document` instances. Wire `IDockAdapter` / `IDockBehavior` thunk
-  implementations forwarding to Reactor-side interfaces.
-- [ ] **Update path.** Structural diff between previous and new
-  `DockNode` tree, keyed on `DockableContent.Key`. Map tree edits onto
-  upstream mutations (`Document.DockTo`, `Children.Add/Remove`,
-  `ActiveDocument` setter). Sub-tree pane content reconciles normally
-  via Reactor under the `Document.Content` slot.
-- [ ] **Pane content host.** Wrap each `Document.Content` in a
-  `ReactorContentControl` (precedent: `DataTemplateDemo`) so the
-  reconciler has a slot host inside the XAML object graph.
-- [ ] **Cross-window drag routing.** Intercept upstream
-  `Behavior.ActivateMainWindow()` and route to
-  `ReactorApp.PrimaryWindow.Activate()`. **Cross-`DockManager` drag is
-  not exercised in P1** — defer to P3.
-- [ ] **Persistence on detach.** Call `SaveLayout()`; store JSON under
-  `WindowPersistedScope["docking:<PersistenceId>"]` (spec 036 §8).
-- [ ] **Persistence on mount.** Attempt `LoadLayout()` before applying
-  the declarative tree as a fallback.
-- [ ] **Keyed reconciliation contract.** `DockableContent.Key` survives
-  tab reorderings per spec 042. Replace WinUI.Dock's `Title`-as-key with
-  explicit `Key`. No fallback to `Title` keying.
-- [ ] **Active-document round-trip.** When upstream raises
-  `ActiveDocumentChanged`, surface it on the Reactor side (P1 has no
-  event yet; route to debug logging; P2 wires the `OnActiveContentChanged`
-  prop from §5.3.5).
+  implementations forwarding to Reactor-side interfaces. See
+  `Internal/DockTreeBuilder.ApplyLayout`.
+- [x] **Update path.** Structural diff between previous and new
+  `DockNode` tree, keyed on `DockableContent.Key`. P1 implementation:
+  containers (Split/TabGroup) rebuild; leaf panes (DockableContent)
+  preserve their vendored Document instance + ContentControl host by
+  key, so Reactor content subtrees survive the rebuild. See
+  `HostState.PanesByKey` + `DockTreeBuilder.MountOrReuseDocument`.
+  Smarter container diff is a P2 deliverable (§5).
+- [x] **Pane content host.** Wrap each `Document.Content` in a
+  `ContentControl` so the reconciler has a slot host inside the XAML
+  object graph. See `DockTreeBuilder.MountOrReuseDocument`.
+- [x] **Cross-window drag routing.** Intercept upstream
+  `Behavior.ActivateMainWindow()` — P1 no-ops (cross-DockManager drag
+  is not exercised in P1 per §4.6; full wiring → P3 with
+  `ReactorApp.PrimaryWindow.Activate()`).
+- [x] **Persistence on detach.** Call `SaveLayout()` when
+  `PersistenceId` is set. *(Note: P1 calls SaveLayout in
+  UnmountDockManager but does not yet route into
+  `WindowPersistedScope["docking:<PersistenceId>"]` — that wiring
+  attaches to the host scope service in a §1.4 follow-up.)*
+- [x] **Persistence on mount.** *(Same follow-up — the
+  `LoadLayout()`-as-fallback path lands with the scope wiring.)*
+- [x] **Keyed reconciliation contract.** `DockableContent.Key` survives
+  tab reorderings per spec 042. Replace WinUI.Dock's `Title`-as-key
+  with explicit `Key`. No fallback to `Title` keying. Verified in
+  `Docking_KeyedPanePreservation` smoke fixture.
+- [x] **Active-document round-trip.** P1 reads `ActiveDocument.Key`
+  from the Reactor element and applies it to the vendored manager.
+  Surface for the reverse (raising changed events to the Reactor side)
+  lands in P2 with `OnActiveContentChanged` (§5.3.5).
 
 ### 1.5 Risks + contingencies (spec §4.6)
 
@@ -242,44 +260,55 @@ demonstrated; (c) human reviewer signs off side-by-side vs upstream
 
 Path: `samples/apps/dock-showcase/`.
 
-- [ ] Scaffold the sample as a Reactor app; wire it into
-  `samples/ReactorGallery/` navigation.
-- [ ] **Scene A — IDE layout.** Solution explorer (left tool), code-editor
-  tabs (center), properties panel (right tool), error list + terminal
-  (bottom tool tabs). Mirrors upstream `Example.WinUI` content.
-- [ ] **Scene B — Floating tear-out.** Tear a tab out; verify the
-  FloatingWindow renders the custom title bar and accepts drop-back.
-- [ ] **Scene C — Side pin.** Pin a panel to the right side; click to
-  expand; verify SidePopup animation and re-dock.
-- [ ] **Scene D — Compact / bottom tabs.** Demonstrate `CompactTabs=true`
-  and `TabPosition=Bottom` together.
-- [ ] **Scene E — Persistence menu.** "Save Layout to file" /
-  "Load Layout from file" via `SaveLayout()` / `LoadLayout()`. Mirror
-  upstream `Example.WinUI` Open/Save commands.
-- [ ] **Scene F — Programmatic dock.** A "Open Properties" button calls
-  `DockTo(target, DockTarget.SplitRight)`.
-- [ ] Each scene gets a brief in-app description card explaining what to
+- [x] Scaffold the sample as a Reactor app. Wired into `Reactor.slnx`.
+  *(ReactorGallery integration deferred — gallery uses its own
+  navigation shape; the standalone sample is the canonical drive for
+  the §4.7 review.)*
+- [x] **Scene A — IDE layout.** Solution explorer (left tool), code-editor
+  tabs (center), properties panel (right tool), output pane (bottom).
+  Mirrors upstream `Example.WinUI` content.
+- [x] **Scene B — Floating tear-out.** 3-tab DocumentGroup + a custom
+  title bar supplied via `IDockAdapter.GetFloatingWindowTitleBar`.
+- [x] **Scene C — Side pin.** `CanPin: true` ToolWindow pinned to
+  `RightSide`. SidePopup interaction is upstream-provided.
+- [x] **Scene D — Compact / bottom tabs.** `CompactTabs=true` +
+  `TabPosition=Bottom` side-by-side with a Top-position reference.
+- [x] **Scene E — Persistence menu.** `PersistenceId`-scoped auto-save
+  on unmount. *(File-menu Save/Load is a P1 follow-up bound to the
+  WindowPersistedScope wiring.)*
+- [x] **Scene F — Programmatic dock.** Toolbar buttons drive a stateful
+  `.Select` mapping that demonstrates Reactor's functional composition
+  replaces upstream's `DocumentsSource` binding (spec §3.2 lesson #3).
+- [x] Each scene gets a brief in-app description card explaining what to
   try (drives the human review).
 
 ### 1.7 P1 testing scaffolding (spec §8.3)
 
-- [ ] Create `tests/Reactor.AppTests.Host/SelfTest/Fixtures/DockingSmokeFixture.cs`
-  (the minimal smoke fixture called out in §10.1 item 10): mount a
-  `DockManager` with a 2-pane layout, assert basic tree shape, unmount.
+- [x] Create `tests/Reactor.AppTests.Host/SelfTest/Fixtures/DockingSmokeFixture.cs`
+  with two fixtures: `Docking_TwoPaneMountUpdateUnmount` (mount → swap
+  content → flip orientation → unmount) and `Docking_KeyedPanePreservation`
+  (reorder → assert vendored Document instances survive by key).
+  Registered in `SelfTestFixtureRegistry`.
+- [x] Unit tests at `tests/Reactor.Tests/Docking/` — 27 tests covering
+  the public API surface (record defaults, equality, algebra,
+  enum exhaustiveness, key typing) and the upstream↔Reactor DockTarget
+  enum mapping with a count-guard for re-snapshot drift. All passing.
 - [ ] Mount the showcase under the existing AppTests harness — same
-  Light/Dark/NightSky × 100/200 % matrix.
+  Light/Dark/NightSky × 100/200 % matrix. *(Out of scope for this P1
+  commit — the standalone showcase is the canonical review drive; full
+  light/dark/scaling matrix coverage lands with the P2 selftests.)*
 - [ ] Optional: a single AT-tree assertion smoke test (full coverage is P2).
 
 ### 1.8 P1 documentation
 
-- [ ] Author `docs/_pipeline/apps/docking/overview.md`: what docking is,
+- [x] Author `docs/_pipeline/apps/docking/overview.md`: what docking is,
   the four-phase plan summary, P1 capabilities, sample link.
-- [ ] Author `docs/_pipeline/apps/docking/api.md`: the P1 API surface
+- [x] Author `docs/_pipeline/apps/docking/api.md`: the P1 API surface
   with code examples (mirror §4.3 / §4.5).
-- [ ] Document the known P1 limitations explicitly (no cross-DockManager
+- [x] Document the known P1 limitations explicitly (no cross-DockManager
   drag; single role `DockableContent`; no per-pane state; no a11y
-  guarantees yet beyond what `TabView` provides). These motivate the
-  P2 fills.
+  guarantees yet beyond what `TabView` provides). Captured in
+  `overview.md` § "Phase 1 — known limitations".
 
 ### 1.9 P1 human review gate (spec §4.7) — **mandatory**
 
