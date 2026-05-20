@@ -56,9 +56,14 @@ internal static class SelfTestRunner
     private sealed record FixtureProgress(string Name, long StartTimestamp);
     private static FixtureProgress? _currentFixture;
 
-    // Fixtures known to crash or assert-fail under NativeAOT, captured by
-    // running tests/Reactor.AppTests.Host/probe-aot-skips.ps1 against the
-    // AOT-published Host.
+    // Fixtures known to assert-fail under NativeAOT, captured by running
+    // tests/Reactor.AppTests.Host/probe-aot-skips.ps1 against the AOT-published
+    // Host. As of WindowsAppSDK#6394 workaround (see Reactor.AppTests.Host.csproj
+    // _CopyWinUIResourcesForAot target), all NATIVE_CRASH skips are gone — the
+    // remaining failures map to reflection-heavy subsystems (Devtools/MCP,
+    // PropertyGrid auto-discovery) plus two control-collection assertions and
+    // the Issue142 XAML-metadata-provider edge cases.
+    //
     // Each name was verified to fail in isolation; wildcards from earlier
     // skip-list iterations have been replaced with explicit names so that
     // newly-passing siblings re-enter the run automatically.
@@ -69,78 +74,14 @@ internal static class SelfTestRunner
     // debugging workflow.
     private static readonly string[] DefaultAotSkipPatterns =
     {
-        // -- Native crashes (process exits 0xC0000409 / STATUS_STACK_BUFFER_OVERRUN).
-        // Capture a dump with DOTNET_DbgEnableMiniDump=1 to diagnose. --
-        "Commanding_DisabledCommandDisablesControl",
-        "Commanding_SplitButtonCommandInvokesExecute",
+        // -- Reactor framework, control-collection assertions still under
+        // investigation (no native crash; assertion fails inside the fixture). --
         "ControlUpdate_Collections",
-        "ControlUpdate_Containers",
-        "ControlUpdate_InputControls",
-        "ControlUpdate_Navigation",
-        "ControlUpdate_StatusControls",
-        "ControlUpdate2_AdditionalControls",
-        "ControlUpdate2_ButtonVariants",
-        "ControlUpdate2_ExpanderContent",
-        "ControlUpdate2_NavigationView",
-        "CoreCov_AnnotatedScrollBarMount",
-        "CoreCov_ExpanderChildUpdateDeep",
-        "CoreCov_MediaPlayerMount",
-        "CoreCov_MenuBarMountUpdate",
-        "CoreCov_PopupRefreshContainerMount",
-        "CoreCov_SelectorBarPipsPagerMount",
-        "CoreCov_SwipeControlMount",
-        "CoreCov_TreeViewUpdateExercise",
-        "CoreCov2_CalendarPipsPagerUpdate",
-        "CoreCov2_InfoBadgeMountUpdate",
-        "CoreCov2_InfoBarActionButton",
-        "CoreCov2_SelectorBarUpdate",
-        "CovBoost_ElementPoolExercise",
-        "CovBoost2_ElementPoolInteractiveReset",
-        "CovBoost2_NavigationViewExercise",
-        "CovBoost2_ReconcileChildPaths",
-        "CovBoost2_TitleBarMountUpdate",
-        "DataGrid_RowEditTemplatesAndEmptyState",
-        "DslExt_FactoryMethods",
-        "DslExt_MenuDslMethods",
-        "EchoSuppress_ColorPicker",
-        "EchoSuppress_NumberBox",
-        "EchoSuppress_NumberBoxMinMaxCoercion",
-        "EchoSuppress_RatingControl",
-        "EchoSuppress_ToggleSplitButton",
-        "Editors_ColorMounts",
-        "Editors_NumberMounts",
-        "IdentityPreserve_RadioButtons",
-        "IdentityPreserve_SelectorBar",
-        "Immediate_NumberBoxFiresOnTextChange",
-        "RareControl_ColorPicker",
-        "RareControl_ComboBoxRadioButtons",
-        "RareControl_PersonPicture",
-        "RareControl_TeachingTip",
-        "RBC_ExpanderTemplateTransitionEvents",
-        "RBC_HandlerWiringOnSecondRender",
-        "RBC_InputControlsFireEvents",
-        "RBC_SecondRenderCallbackInvocation",
-        "RBC_SwipeControlItemsSwap",
-        "RBC_TeachingTipMount",
-        "RBC_TreeViewHandlerWiring",
-        "RBC_TreeViewHandlerWiringFastPath",
-        "RBC_TreeViewProgrammaticInvoke",
-        "RBC_ValidationVisualizerStyles",
-        "SelectionEvt_NavigationView",
-        "SelectionEvt_RadioButtons",
-        "ValCov_FormFieldRendering",
-        "ValueEvt_ColorPicker",
-        "ValueEvt_NumberBox",
-        "ValueEvt_RatingControl",
-
-        // -- Assertion failures (fixture runs but "not ok" checks fail).
-        // Most map to documented not-yet-AOT-clean subsystems (PropertyGrid
-        // auto-discovery, devtools/MCP reflection, ThemeRef.Resolve, XAML
-        // metadata for NavigationView/TabView/TemplateBinding). --
-        "CoreCov_NavigationViewContentUpdate",
         "CoreCov2_UseObservableTreeHook",
-        "CovBoost_ThemeRefExplicitResolution",
-        "CovBoost_ThemeTokenResolution",
+
+        // -- Devtools / MCP server — JSON-RPC server uses reflection-heavy
+        // tool discovery that is not AOT-safe. Documented in
+        // docs/aot-support.md as a not-yet-AOT-clean subsystem. --
         "Devtools_ClickInvokesButton",
         "Devtools_ComponentsTool",
         "Devtools_FireInvokesNamedHandler",
@@ -168,9 +109,9 @@ internal static class SelfTestRunner
         "Devtools_WaitForTimeout",
         "Devtools_WaitForTimeoutLoggedAsErr",
         "Devtools_WindowsTool",
-        "IdentityPreserve_TabView",
-        "Issue142_CustomControlPrivateDp_Renders",
-        "Issue142_ThirdPartyControlPrivateDp_Renders",
+
+        // -- PropertyGrid auto-discovery walks user types via reflection and is
+        // not AOT-safe by design. Documented in docs/aot-support.md. --
         "PropertyGrid_Category_ExpandCollapse",
         "PropertyGrid_Custom_Editor",
         "PropertyGrid_DeepNesting_RecordInRecord",
@@ -180,10 +121,15 @@ internal static class SelfTestRunner
         "PropertyGrid_Reflection_EnumEditor",
         "PropertyGrid_Reflection_MutableObject",
         "PropertyGrid_Target_Switching",
-        "RBC_ManyControlsHandlerWiring",
-        "RBC_NavViewContentNullSwap",
-        "RBC_TabViewGrowAndShrink",
-        "SelectionEvt_TabView",
+
+        // -- Issue142 private-DP rendering: requires an IXamlMetadataProvider
+        // for third-party / custom controls that is generated by the XAML
+        // compiler only when the project has at least one .xaml file. AOT
+        // tree-shaking removes the implicit metadata path even when one is
+        // present, so these fixtures need a hand-written provider hooked up
+        // before they can be re-enabled under AOT. --
+        "Issue142_CustomControlPrivateDp_Renders",
+        "Issue142_ThirdPartyControlPrivateDp_Renders",
     };
 
     private static string[] GetAotSkipPatterns()
