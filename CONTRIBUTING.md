@@ -137,6 +137,49 @@ dotnet run --project tests/Reactor.AppTests.Host -- --self-test
 dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter "Flex"
 ```
 
+#### Running selftests under NativeAOT
+
+The Host app supports an AOT-published build so the selftest suite doubles as Reactor's primary AOT regression gate. The framework itself is AOT-clean (see [`docs/aot-support.md`](docs/aot-support.md)) but a meaningful slice of selftest *fixtures* still trip over reflection paths the AOT compiler can't preserve. Those fixtures are pre-skipped via a baked-in pattern list so the run completes and the remaining failures are visible.
+
+**1. Publish the Host with AOT.** The publish step shells out to MSVC's `link.exe`, so it must run inside a Visual Studio Developer environment. From a Developer Command Prompt / Developer PowerShell (or after sourcing `Launch-VsDevShell.ps1`):
+
+```powershell
+dotnet publish tests/Reactor.AppTests.Host `
+    -c Release -p:Platform=x64 -r win-x64 `
+    -p:PublishAotInternal=true --self-contained
+```
+
+`PublishAotInternal=true` is the internal opt-in property that flips `PublishAot` on for the Host (kept opt-in so an ordinary `dotnet build Reactor.slnx` doesn't pay the AOT compile cost). Swap `-r win-x64` / `-p:Platform=x64` for `win-arm64` / `ARM64` on ARM machines.
+
+The published binary lands at:
+
+```
+tests/Reactor.AppTests.Host/bin/x64/Release/net10.0-windows10.0.22621.0/win-x64/publish/Reactor.AppTests.Host.exe
+```
+
+**2. Run the suite.** Same `--self-test` flag as the JIT build:
+
+```bash
+./tests/Reactor.AppTests.Host/bin/x64/Release/net10.0-windows10.0.22621.0/win-x64/publish/Reactor.AppTests.Host.exe --self-test
+```
+
+Output is the same TAP stream as a normal selftest run. The runner detects AOT at startup (`RuntimeFeature.IsDynamicCodeSupported == false`) and emits `# SKIP crashes/hangs under NativeAOT` lines for known-bad fixtures.
+
+**3. Filtering known-bad fixtures.** The skip list lives in `DefaultAotSkipPatterns` in `tests/Reactor.AppTests.Host/SelfTest/SelfTestRunner.cs`. Entries are exact names or `Prefix*` wildcards. When you discover a new AOT crasher, you have two choices:
+
+- **Without rebuilding** (best for iteration): append patterns via the `REACTOR_AOT_SKIP` env var. They merge into the defaults — they do *not* replace them.
+
+  ```bash
+  REACTOR_AOT_SKIP="MyFixture_Crasher,SomeFamily_*" \
+    ./.../Reactor.AppTests.Host.exe --self-test
+  ```
+
+- **Permanent**: add the pattern to `DefaultAotSkipPatterns` and re-publish. Leave a comment naming the family / observed crash mode so a future contributor can verify whether the underlying issue has been fixed and drop the entry.
+
+A native crash terminates the AOT process — the per-fixture managed watchdog can't fire. Iterate by tailing the TAP output for the *last* `# Running: <name>` line before exit, add that name to the skip list, and re-run. Be conservative when wildcarding a family: many `Family_*` fixtures pass even when one member crashes.
+
+**4. Expected pass count.** As of 2026-05-20, an AOT run of the suite produces roughly: 735 fixtures total → 149 skipped, 544 passed, ~42 failed (assertion failures + initialization crashes for fixtures already past the skip filter). The non-AOT run on the same commit is 735/735 pass.
+
 ### 3. E2E tests (`tests/Reactor.AppTests`) — MSTest + WinAppDriver
 
 End-to-end tests that use Appium/WinAppDriver to simulate real user input (clicks, keyboard, tab navigation) through the cross-process UI Automation pipeline. These verify the full input → render → output path and validate that UIA properties are visible to assistive technology.

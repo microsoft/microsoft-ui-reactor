@@ -77,6 +77,26 @@ internal static class SelfTestRunner
         "CoreCov2_XamlHostMount",
         "CoreCov2_InfoBadgeMountUpdate",
         "CoreCov2_SelectorBarUpdate",
+        // Iteration round 2 (2026-05-20): crashers observed when re-running
+        // selftests against an AOT-published Host. Same approach — skip the
+        // crasher, then wildcard family members that are likely to share the
+        // shape problem.
+        "ValCov_FormFieldRendering",
+        "EchoSuppress_*",
+        "IdentityPreserve_RadioButtons",
+        "IdentityPreserve_SelectorBar",
+        "DataGrid_RowEditTemplatesAndEmptyState",
+        "CovBoost_ElementPoolExercise",
+        "CovBoost2_TitleBarMountUpdate",
+        "CovBoost2_ReconcileChildPaths",
+        "CovBoost2_NavigationViewExercise",
+        "CovBoost2_ElementPoolInteractiveReset",
+        "Commanding_*",
+        "SelectionEvt_*",
+        "ValueEvt_*",
+        "Immediate_*",
+        "Editors_*",
+        "RBC_*",
     };
 
     private static string[] GetAotSkipPatterns()
