@@ -35,6 +35,23 @@ public class IntlAccessorTests
     }
 
     [Fact]
+    public void Message_TupleArgs_NullValuesAreSkipped()
+    {
+        // Matches the prior reflection-path behavior: null-valued args are
+        // dropped before the formatter runs, so the placeholder is treated as
+        // missing rather than substituted with "null"/empty.
+        var provider = new InMemoryResourceProvider()
+            .Add("en-US", "Cart", "ItemCount",
+                "{count, plural, =0 {Your cart is empty} one {# item in cart} other {# items in cart}}");
+
+        var t = CreateAccessor("en-US", provider);
+        // No `count` arg → ICU treats the placeholder as missing; the
+        // accessor degrades gracefully to the raw pattern rather than throwing.
+        var result = t.Message(new MessageKey("Cart", "ItemCount"), ("count", (object?)null));
+        Assert.DoesNotContain("null", result);
+    }
+
+    [Fact]
     public void Message_IcuPlurals_SelectsCorrectForm()
     {
         var provider = new InMemoryResourceProvider()

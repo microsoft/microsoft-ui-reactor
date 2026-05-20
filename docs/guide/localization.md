@@ -90,7 +90,10 @@ picks up the new locale automatically.
 
 Call `UseIntl()` in any descendant — it is a [hook](hooks.md) — to get the
 `IntlAccessor`. Use `.Message()` to look up translated strings by key. Pass
-arguments as an anonymous object for interpolation:
+arguments as `("name", value)` tuples for interpolation — the first item is
+the placeholder name as a string literal (matching the `{name}` in the
+`.resw` pattern), the second is the value. This is the compact, AOT-safe
+shape supported by the tuple-params overload:
 
 ```csharp
 class LocalizedContent : Component
@@ -101,7 +104,7 @@ class LocalizedContent : Component
         var title = intl.Message(new MessageKey("App", "title"));
         var greeting = intl.Message(
             new MessageKey("App", "greeting"),
-            new { name = "Alice" });
+            ("name", "Alice"));
 
         return VStack(12,
             TextBlock(title).FontSize(24).Bold(),
@@ -228,7 +231,7 @@ class PseudoLocDemo : Component
                     var title = intl.Message(new MessageKey("App", "title"));
                     var greeting = intl.Message(
                         new MessageKey("App", "greeting"),
-                        new { name = "World" });
+                        ("name", "World"));
                     return VStack(4,
                         TextBlock(title).FontSize(18).Bold(),
                         TextBlock(greeting));

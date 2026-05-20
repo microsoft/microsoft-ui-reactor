@@ -81,14 +81,20 @@ public sealed class IntlAccessor
     /// message with a handful of ICU placeholders. Builds a plain
     /// <see cref="Dictionary{TKey, TValue}"/> in-place — no reflection, AOT-safe.
     /// </summary>
+    /// <remarks>
+    /// Tuples with a null <c>Value</c> are dropped before the dictionary is
+    /// built — this matches the behavior of the prior reflection path, which
+    /// skipped null-valued properties so the formatter saw the placeholder as
+    /// "missing" rather than substituting an empty string.
+    /// </remarks>
     /// <example>
     /// <code>
     /// t.Message(Greeting, ("name", "World"));
     /// t.Message(SearchResults, ("count", 0), ("query", "test"));
     /// </code>
     /// </example>
-    public string Message(MessageKey key, (string Name, object Value) arg1,
-        params (string Name, object Value)[] more)
+    public string Message(MessageKey key, (string Name, object? Value) arg1,
+        params (string Name, object? Value)[] more)
         => Message(key, BuildArgs(arg1, more));
 
     /// <summary>
@@ -144,13 +150,14 @@ public sealed class IntlAccessor
     }
 
     /// <summary>
-    /// Compact tuple-args overload of <see cref="RichMessage(MessageKey, IDictionary{string, object}?, Dictionary{string, Func{string, Element}}?)"/>
-    /// — same allocation profile as the tuple-args <c>Message</c> overload.
+    /// Compact tuple-args overload of the dict-based <c>RichMessage</c> —
+    /// same allocation profile as the tuple-args <c>Message</c> overload.
     /// Tags must be supplied via the dict-based overload; this variant is for
     /// the common case where the developer just wants the formatted text.
+    /// Null-valued tuples are dropped (see the tuple-args <c>Message</c> remarks).
     /// </summary>
-    public Element RichMessage(MessageKey key, (string Name, object Value) arg1,
-        params (string Name, object Value)[] more)
+    public Element RichMessage(MessageKey key, (string Name, object? Value) arg1,
+        params (string Name, object? Value)[] more)
         => RichMessage(key, BuildArgs(arg1, more));
 
     /// <summary>
@@ -350,15 +357,19 @@ public sealed class IntlAccessor
         return null;
     }
 
+    // Null-valued tuples are skipped so the formatter sees a "missing"
+    // placeholder rather than receiving a null arg — preserves the behavior
+    // of the prior reflection path, which dropped null-valued properties.
     private static Dictionary<string, object> BuildArgs(
-        (string Name, object Value) arg1,
-        (string Name, object Value)[] more)
+        (string Name, object? Value) arg1,
+        (string Name, object? Value)[] more)
     {
-        var dict = new Dictionary<string, object>(more.Length + 1)
+        var dict = new Dictionary<string, object>(more.Length + 1);
+        if (arg1.Value is not null) dict[arg1.Name] = arg1.Value;
+        foreach (var (k, v) in more)
         {
-            [arg1.Name] = arg1.Value,
-        };
-        foreach (var (k, v) in more) dict[k] = v;
+            if (v is not null) dict[k] = v;
+        }
         return dict;
     }
 

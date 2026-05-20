@@ -75,10 +75,15 @@ internal static class SourceRewriter
             var argParts = new List<string>();
             foreach (var param in icuParams)
             {
+                // The ICU param name becomes a string literal in the emitted
+                // source, so it has to be C#-escaped. Most ICU params are
+                // identifiers, but the spec doesn't forbid `"` or `\` —
+                // FormatLiteral keeps the emission valid in those cases.
+                var keyLit = SymbolDisplay.FormatLiteral(param, quote: true);
                 if (argMap.TryGetValue(param, out var exprText) && param != exprText)
-                    argParts.Add($"(\"{param}\", {exprText})");
+                    argParts.Add($"({keyLit}, {exprText})");
                 else
-                    argParts.Add($"(\"{param}\", {param})");
+                    argParts.Add($"({keyLit}, {param})");
             }
 
             if (argParts.Count > 0)

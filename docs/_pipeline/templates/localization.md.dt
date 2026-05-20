@@ -56,7 +56,9 @@ picks up the new locale automatically.
 
 Call `UseIntl()` in any descendant — it is a [hook](hooks.md) — to get the
 `IntlAccessor`. Use `.Message()` to look up translated strings by key. Pass
-arguments as `(name, value)` tuples for interpolation — the compact, AOT-safe
+arguments as `("name", value)` tuples for interpolation — the first item is
+the placeholder name as a string literal (matching the `{name}` in the
+`.resw` pattern), the second is the value. This is the compact, AOT-safe
 shape supported by the tuple-params overload:
 
 ```csharp snippet="localization/useintl-messages"
