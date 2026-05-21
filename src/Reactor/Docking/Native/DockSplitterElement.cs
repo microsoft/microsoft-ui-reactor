@@ -22,6 +22,14 @@ internal sealed record DockSplitterElement(
     double KeyboardStep = DockSplitterControl.DefaultKeyboardStepDip)
     : Element
 {
+    /// <summary>
+    /// Optional diagnostic sink fired with a single string per
+    /// splitter pointer event (pressed / moved / released). The host
+    /// hooks this to <see cref="Diagnostics.DockOperationLog"/> so the
+    /// drag's intermediate math lands in the visible log + Debug.WriteLine.
+    /// </summary>
+    public Action<string>? DiagnosticSink { get; init; }
+
     internal override bool HasCallbacks => true;
 }
 
@@ -43,6 +51,7 @@ internal static class DockSplitterReconcilerRegistration
                 {
                     Direction = element.Direction,
                     KeyboardStep = element.KeyboardStep,
+                    DiagnosticSink = element.DiagnosticSink,
                 };
                 Wire(control, element);
                 return control;
@@ -53,6 +62,9 @@ internal static class DockSplitterReconcilerRegistration
                     control.Direction = newEl.Direction;
                 if (Math.Abs(oldEl.KeyboardStep - newEl.KeyboardStep) > double.Epsilon)
                     control.KeyboardStep = newEl.KeyboardStep;
+                // Always re-bind the sink so the closure captures the
+                // latest host render state.
+                control.DiagnosticSink = newEl.DiagnosticSink;
                 if (!ReferenceEquals(oldEl.OnDelta, newEl.OnDelta))
                 {
                     Unwire(control);

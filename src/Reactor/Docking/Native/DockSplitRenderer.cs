@@ -45,7 +45,8 @@ internal static class DockSplitRenderer
         IReadOnlyList<double> ratios,
         Func<Microsoft.UI.Reactor.Docking.DockNode, Element> renderChild,
         Action<int, double, double, bool> onSplitterDelta,
-        FlexLayoutDirection flowDirection = FlexLayoutDirection.LTR)
+        FlexLayoutDirection flowDirection = FlexLayoutDirection.LTR,
+        Action<string>? splitterDiagnosticSink = null)
     {
         ArgumentNullException.ThrowIfNull(split);
         ArgumentNullException.ThrowIfNull(ratios);
@@ -83,10 +84,13 @@ internal static class DockSplitRenderer
             if (i < n - 1)
             {
                 var splitterIndex = i;
-                composed.Add(new DockSplitterElement(
+                composed.Add((new DockSplitterElement(
                     Direction: splitterDir,
                     OnDelta: (delta, hostExtent, isFinal) =>
                         onSplitterDelta(splitterIndex, delta, hostExtent, isFinal))
+                    {
+                        DiagnosticSink = splitterDiagnosticSink,
+                    })
                     .Flex(grow: 0, shrink: 0));
             }
         }

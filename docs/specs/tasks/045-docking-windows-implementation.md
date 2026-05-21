@@ -403,6 +403,22 @@ land.
   model-mutation sequence ordering, split-ratio solver (§2.1),
   split renderer shape (§2.1), tab-group renderer shape (§2.2).
 
+### Phase 2 diagnostic infrastructure (2026-05-21)
+
+Long-lived operation log added under
+`src/Reactor/Docking/Diagnostics/DockOperationLog.cs`. Kept through
+P1–P4 per design discussion — strip only at phase exit if perf
+warrants. 1K ring buffer; emits to `Debug.WriteLine` on every append.
+Records: `Mount`, `DragStart/Hover/Confirm/Cancel/TearOut`,
+`SplitterResize`, `SplitterTrace` (intermediate PRESS/MOVE/RELEASE/
+SOLVE during a splitter drag), `LayoutChange`, `Note`. Cursor-based
+replay API (`Rewind`/`StepForward`/`SeekTo`/`Reset`).
+
+Opt-in via `DockManager.OperationLog` prop. Showcase Scene A's
+right-hand panel has Reset/Rewind/Play/Reset-log/Copy-log buttons —
+used during P2 splitter math iteration to capture full drag traces
+from real WinUI input without rebuilds.
+
 ### Phase 2 native UI checkpoint (2026-05-20, continued)
 
 Reactor-native renderer is live behind `DockingNativeInterop.Register`.

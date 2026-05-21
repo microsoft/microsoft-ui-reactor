@@ -147,6 +147,16 @@ internal sealed partial class DockSplitterControl : Grid
     /// <summary>Per-keystroke resize amount in DIPs. Default 16.</summary>
     public double KeyboardStep { get; set; } = DefaultKeyboardStepDip;
 
+    /// <summary>
+    /// Optional diagnostic sink for the spec 045 operation log — fires
+    /// one entry per pointer event (pressed / moved / released) with
+    /// the snapshot values + clamp math so cursor-tracking regressions
+    /// can be diagnosed without binary debugging.
+    /// </summary>
+    public Action<string>? DiagnosticSink { get; set; }
+
+    private void Trace(string msg) => DiagnosticSink?.Invoke(msg);
+
     private void ApplyDirection()
     {
         switch (_direction)
@@ -208,6 +218,7 @@ internal sealed partial class DockSplitterControl : Grid
             // the drag don't depend on ActualWidth/Height that may lag
             // behind a not-yet-committed layout pass.
             SnapshotPairAtCapture();
+            Trace($"PRESS dir={_direction} origin=({_captureOrigin.X:F1},{_captureOrigin.Y:F1}) leadingDip={_leadingDipAtCapture:F1} pairDip={_pairDipAtCapture:F1} pairGrow={_pairGrowAtCapture:F3}");
             Focus(FocusState.Pointer);
             e.Handled = true;
         }
@@ -226,31 +237,34 @@ internal sealed partial class DockSplitterControl : Grid
         if (panel.Children[idx - 1] is not FrameworkElement leading) return;
         if (panel.Children[idx + 1] is not FrameworkElement trailing) return;
 
-        _leadingDipAtCapture = _direction == DockSplitterDirection.Columns
-            ? leading.ActualWidth
-            : leading.ActualHeight;
-        var trailingDip = _direction == DockSplitterDirection.Columns
-            ? trailing.ActualWidth
-            : trailing.ActualHeight;
-        _pairDipAtCapture = _leadingDipAtCapture + trailingDip;
-        _pairGrowAtCapture = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(leading)
-                           + Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(trailing);
+        var leadingGrow = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(leading);
+        var trailingGrow = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(trailing);
+        _pairGrowAtCapture = leadingGrow + trailingGrow;
 
-        // Pin the splitter's parent panel on the PERPENDICULAR axis so
-        // mutating pane sizes on our axis doesn't ripple into the outer
-        // layout via DesiredSize changes (e.g., resizing column widths
-        // would otherwise reflow TabView content, change topInner's
-        // measured Height, and let the outer Vertical FlexPanel
-        // redistribute — shrinking the bottom row visibly during the
-        // drag).
-        if (_direction == DockSplitterDirection.Columns)
-        {
-            if (panel.ActualHeight > 0) panel.Height = panel.ActualHeight;
-        }
-        else
-        {
-            if (panel.ActualWidth > 0) panel.Width = panel.ActualWidth;
-        }
+        // Compute pairDip in PANEL DISTRIBUTABLE SPACE — the same DIP
+        // budget Yoga's grow algorithm divides among the panes. This is
+        // panel.ActualSize on the main axis minus all sibling splitter
+        // handle sizes. Crucially this is NOT (leading.ActualWidth +
+        // trailing.ActualWidth), which can exceed panel space when
+        // children carry inline sizes (a previous drag's leftover, or
+        // Width hints from the model) and would otherwise produce a
+        // ratio that, after release, lands in a different DIP space
+        // than the cursor — the classic snap-back regression.
+        _pairDipAtCapture = GetHostExtent();
+        _leadingDipAtCapture = _pairGrowAtCapture > 0
+            ? _pairDipAtCapture * (leadingGrow / _pairGrowAtCapture)
+            : _pairDipAtCapture * 0.5;
+
+        // Pin the splitter's parent panel on BOTH axes so neither the
+        // perpendicular reflow (panes' DesiredSize changing as content
+        // re-measures) NOR the main-axis overflow (inline pane Widths
+        // summing to more than the parent's allocation) can change the
+        // panel's own measurement during the drag. Without the main-
+        // axis pin the panel grows to fit the children's inline widths;
+        // after release the panel shrinks back, producing a visible
+        // snap.
+        if (panel.ActualWidth > 0) panel.Width = panel.ActualWidth;
+        if (panel.ActualHeight > 0) panel.Height = panel.ActualHeight;
     }
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
@@ -266,7 +280,16 @@ internal sealed partial class DockSplitterControl : Grid
         // applies them all and the model drifts an order of magnitude
         // past the actual cursor movement. Fire once at drag end with
         // the final pair-size delta via OnPointerReleased.
+        var preLeading = (VTH.GetParent(this) is Microsoft.UI.Reactor.Layout.FlexPanel pp && pp.Children.Count > 0
+            && pp.Children[0] is FrameworkElement fe)
+            ? (_direction == DockSplitterDirection.Columns ? fe.ActualWidth : fe.ActualHeight)
+            : -1;
         ApplyAbsoluteGrowFromCapture(cumDelta);
+        var postLeading = (VTH.GetParent(this) is Microsoft.UI.Reactor.Layout.FlexPanel pp2 && pp2.Children.Count > 0
+            && pp2.Children[0] is FrameworkElement fe2)
+            ? (_direction == DockSplitterDirection.Columns ? fe2.ActualWidth : fe2.ActualHeight)
+            : -1;
+        Trace($"MOVE p=({p.X:F1},{p.Y:F1}) cumDelta={cumDelta:F1} leadingAtCapture={_leadingDipAtCapture:F1} pairDip={_pairDipAtCapture:F1} preLeadingActual={preLeading:F1} postLeadingActual={postLeading:F1}");
         e.Handled = true;
     }
 
@@ -408,10 +431,26 @@ internal sealed partial class DockSplitterControl : Grid
         var cumDelta = _direction == DockSplitterDirection.Columns
             ? p.X - _captureOrigin.X
             : p.Y - _captureOrigin.Y;
+        // Capture pre-restore leading width for diagnostic — what the
+        // drag actually rendered just before we hand off to grow.
+        var preRestoreLeading = (VTH.GetParent(this) is Microsoft.UI.Reactor.Layout.FlexPanel pp && pp.Children.Count > 0
+            && pp.Children[0] is FrameworkElement fe)
+            ? (_direction == DockSplitterDirection.Columns ? fe.ActualWidth : fe.ActualHeight)
+            : -1;
         // Restore panes to grow-based sizing so the host's re-render
         // (triggered by ResizeDelta) lands cleanly via the normal path.
         RestorePairToGrow();
-        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(-cumDelta, _direction, GetHostExtent(), isFinal: true));
+        var hostExtent = GetHostExtent();
+        // Read post-restore leading grow + size for the trace.
+        double postRestoreLeadingGrow = -1, postRestoreLeadingActual = -1;
+        if (VTH.GetParent(this) is Microsoft.UI.Reactor.Layout.FlexPanel pp2 && pp2.Children.Count > 0
+            && pp2.Children[0] is FrameworkElement fe2)
+        {
+            postRestoreLeadingGrow = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(fe2);
+            postRestoreLeadingActual = _direction == DockSplitterDirection.Columns ? fe2.ActualWidth : fe2.ActualHeight;
+        }
+        Trace($"RELEASE p=({p.X:F1},{p.Y:F1}) cumDelta={cumDelta:F1} preRestoreLeading={preRestoreLeading:F1} postRestoreLeadingGrow={postRestoreLeadingGrow:F3} postRestoreLeadingActual={postRestoreLeadingActual:F1} hostExtent={hostExtent:F1}");
+        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(-cumDelta, _direction, hostExtent, isFinal: true));
         e.Handled = true;
     }
 
@@ -477,13 +516,12 @@ internal sealed partial class DockSplitterControl : Grid
             trailing.ClearValue(FrameworkElement.MinHeightProperty);
         }
 
-        // Release the perpendicular-axis pin on the parent panel so
-        // window resize affects it again. Set in SnapshotPairAtCapture
-        // to keep DesiredSize stable during the drag.
-        if (_direction == DockSplitterDirection.Columns)
-            panel.ClearValue(FrameworkElement.HeightProperty);
-        else
-            panel.ClearValue(FrameworkElement.WidthProperty);
+        // Release the panel pin on BOTH axes (SnapshotPair sets both so
+        // the panel can't grow with the children's inline widths during
+        // the drag — see the comment there). Clearing both lets the
+        // parent's allocation drive the panel again on next layout.
+        panel.ClearValue(FrameworkElement.WidthProperty);
+        panel.ClearValue(FrameworkElement.HeightProperty);
     }
 
     private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)

@@ -232,6 +232,16 @@ public sealed record DockManager : Element
     public Action? OnSplitterDragCompleted { get; init; }
 
     /// <summary>
+    /// Optional in-memory operation log. When supplied, the host records
+    /// every state-altering operation (drag begin / hover / confirm /
+    /// cancel / tear-out, splitter resize, layout change) into this log.
+    /// Apps use the log for live debugging + replay scrubbing. Spec 045
+    /// keeps this scaffolding through P1–P4 per design discussion.
+    /// </summary>
+    /// <remarks>Spec 045 diagnostic infrastructure.</remarks>
+    public Diagnostics.DockOperationLog? OperationLog { get; init; }
+
+    /// <summary>
     /// Optional externally-owned ratio store for split-pane sizing. When
     /// supplied, the native renderer uses this dictionary instead of its
     /// internal <see cref="DockSplit"/>-ratio cache. Keys are tree-position

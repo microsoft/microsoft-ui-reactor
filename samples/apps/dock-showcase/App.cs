@@ -19,6 +19,7 @@ using System.Text.Json;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Docking;
+using Microsoft.UI.Reactor.Docking.Diagnostics;
 using Microsoft.UI.Reactor.Docking.Native;
 using Microsoft.UI.Reactor.Docking.Persistence;
 using Microsoft.UI.Reactor.Hooks;
@@ -115,14 +116,43 @@ class SceneAIde : Component
         var ratiosRef = UseRef<Dictionary<string, double[]>>(new Dictionary<string, double[]>());
         var (_, bumpTick) = UseReducer(0);
 
+        // Spec 045 — per-scene operation log + replay cursor. UseRef
+        // holds the log instance across renders. The replay cursor is
+        // tracked separately via UseState so scrubbing forces a
+        // re-render that shows the snapshotted state in the JSON panel.
+        var logRef = UseRef<DockOperationLog>(new DockOperationLog());
+        var log = logRef.Current;
+
         var dock = new DockManager
         {
             PersistenceId = "dock-showcase:ide",
             SplitRatios = ratiosRef.Current,
+            OperationLog = log,
             OnLiveLayoutChanged = newLayout => setLiveLayout(newLayout),
             OnSplitterDragCompleted = () => bumpTick(t => t + 1),
             Layout = liveLayout,
         };
+
+        // Replay helper: apply the cursor's current snapshot back into
+        // local state. The docking renderer will re-render with the
+        // snapshotted layout + ratios.
+        void ApplyCurrent()
+        {
+            var cur = log.Current;
+            if (cur is null) return;
+            // Restore ratios from the snapshot (clone so mutations
+            // by the renderer don't corrupt the recorded one).
+            ratiosRef.Current.Clear();
+            if (cur.Ratios is not null)
+                foreach (var kvp in cur.Ratios)
+                {
+                    var copy = new double[kvp.Value.Length];
+                    Array.Copy(kvp.Value, copy, kvp.Value.Length);
+                    ratiosRef.Current[kvp.Key] = copy;
+                }
+            setLiveLayout(cur.Layout);
+            bumpTick(t => t + 1);
+        }
 
         // Build the JSON viewer panel. Serialize the live layout via
         // the same DockLayoutSerializer used for WindowPersistedScope —
@@ -151,8 +181,32 @@ class SceneAIde : Component
             {
                 setLiveLayout(BuildInitialLayout());
                 ratiosRef.Current.Clear();
+                log.Reset();
                 bumpTick(t => t + 1);
-            }).Margin(0, 12, 0, 0)
+            }).Margin(0, 12, 0, 0),
+
+            // Spec 045 operation log + replay scrubber. Each event from
+            // the dock host (drag, splitter, layout mutation) appends a
+            // snapshot; Rewind/Play move the cursor and re-apply the
+            // snapshot under the cursor so the UI shows the historical
+            // state. Mirrored to Debug.WriteLine — DebugView / VS Output
+            // window captures the live stream.
+            TextBlock("Operation log").SemiBold().Margin(0, 16, 0, 0),
+            TextBlock($"cursor {log.Cursor} / {log.Count}  (last 1K kept)")
+                .FontSize(11).Opacity(0.7),
+            HStack(6,
+                Button("« Rewind", () => { log.Rewind(); ApplyCurrent(); }),
+                Button("Play »",   () => { log.StepForward(); ApplyCurrent(); }),
+                Button("Reset log", () => log.Reset()),
+                Button("Copy log", () => CopyLogToClipboard(log))
+            ),
+            new ScrollViewElement(
+                VStack(2, RecentOpLines(log).ToArray())
+            )
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            }.Height(200)
         ).Padding(12).Width(360);
 
         return Grid(
@@ -306,6 +360,54 @@ class SceneAIde : Component
         catch (Exception ex)
         {
             return $"(serialize failed: {ex.GetType().Name}: {ex.Message})";
+        }
+    }
+
+    /// <summary>
+    /// Serialize the entire operation log as text and put it on the
+    /// system clipboard so users can paste into a bug report / log
+    /// inspector. Includes every kind including SplitterTrace MOVE
+    /// events (so jump-back math is fully visible). Best-effort —
+    /// swallows clipboard exceptions.
+    /// </summary>
+    private static void CopyLogToClipboard(DockOperationLog log)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"# DockOperationLog  count={log.Count}  cursor={log.Cursor}\n");
+        foreach (var op in log.Operations)
+        {
+            var ts = op.TimestampUtc.ToLocalTime().ToString("HH:mm:ss.fff");
+            sb.Append($"{ts}  {op.Kind,-15}  {op.Description}");
+            if (op.PaneKey is not null) sb.Append($"  pane={op.PaneKey}");
+            if (op.Target is not null) sb.Append($"  target={op.Target}");
+            sb.Append('\n');
+        }
+        var pkg = new global::Windows.ApplicationModel.DataTransfer.DataPackage();
+        pkg.SetText(sb.ToString());
+        global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(pkg);
+    }
+
+    /// <summary>
+    /// Render the most-recent operation entries as TextBlocks. The
+    /// entry currently under the cursor gets a marker so the scrubber's
+    /// position is visible. Capped to last 40 entries to keep the
+    /// scroll viewer responsive (the ring still holds 1K).
+    /// </summary>
+    private static IEnumerable<Element> RecentOpLines(DockOperationLog log)
+    {
+        const int Tail = 40;
+        var ops = log.Operations;
+        var start = Math.Max(0, ops.Count - Tail);
+        for (int i = start; i < ops.Count; i++)
+        {
+            var op = ops[i];
+            var ts = op.TimestampUtc.ToLocalTime().ToString("HH:mm:ss.fff");
+            var marker = (i + 1) == log.Cursor ? "▶ " : "   ";
+            var line = $"{marker}{ts}  {op.Kind,-15}  {op.Description}";
+            yield return TextBlock(line)
+                .FontFamily("Consolas, Courier New, monospace")
+                .FontSize(10)
+                .Opacity((i + 1) == log.Cursor ? 1.0 : 0.75);
         }
     }
 

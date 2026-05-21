@@ -98,6 +98,36 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         var activeKey = manager.ActiveDocument?.Key;
         var snapshot = BuildSnapshot(model);
 
+        // ── Spec 045 operation log (Diagnostics.DockOperationLog) ─────────
+        // On first render, append a Mount-kind entry so the initial layout
+        // is captured as the replay anchor. Subsequent operations append
+        // from the various event handlers below.
+        var log = manager.OperationLog;
+        var mountLoggedRef = UseRef(false);
+        if (log is not null && !mountLoggedRef.Current)
+        {
+            mountLoggedRef.Current = true;
+            log.Record(Diagnostics.DockOperationKind.Mount,
+                description: "initial layout mounted",
+                layout: effectiveLayout,
+                ratios: ratioStore);
+        }
+
+        void LogOp(
+            Diagnostics.DockOperationKind kind,
+            string description,
+            string? paneKey = null,
+            DockTarget? target = null,
+            DockNode? layoutOverride = null)
+        {
+            if (log is null) return;
+            log.Record(kind, description,
+                layout: layoutOverride ?? effectiveLayout,
+                ratios: ratioStore,
+                paneKey: paneKey,
+                target: target);
+        }
+
         // §2.4 — tab-drag callbacks fed to every DockTabGroup so any tab
         // in the layout can begin a session. Captures `manager` from the
         // current render closure for OnContentFloating/Floated event
@@ -112,6 +142,9 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             if (args.Cancel) return;
             DockDragSession.Begin(pane, manager, tabIndex);
             setDragActive(true);
+            LogOp(Diagnostics.DockOperationKind.DragStart,
+                $"begin drag pane='{pane.Key}' fromTabIndex={tabIndex}",
+                paneKey: pane.Key?.ToString());
         }
 
         void HandleTabDragCompleted(DockableContent pane, int tabIndex, bool wasOutside)
@@ -138,6 +171,10 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
                     // §2.4 — same as confirm path: surface the new tree.
                     manager.OnLiveLayoutChanged?.Invoke(afterRemove);
+                    LogOp(Diagnostics.DockOperationKind.DragTearOut,
+                        $"tear-out pane='{pane.Key}' to floating window",
+                        paneKey: pane.Key?.ToString(),
+                        layoutOverride: afterRemove);
                 }
             }
 
@@ -145,10 +182,32 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             setDragActive(false);
         }
 
+        // Splitter-final fan-out: wrap the user's optional
+        // OnSplitterDragCompleted with a log-recording side-effect so
+        // every splitter release lands a SplitterResize entry with the
+        // post-drag ratio snapshot.
+        Action splitterFinalWithLog = () =>
+        {
+            LogOp(Diagnostics.DockOperationKind.SplitterResize, "splitter drag completed");
+            manager.OnSplitterDragCompleted?.Invoke();
+        };
+
+        // Splitter pointer-trace sink — every PRESS / MOVE / RELEASE
+        // fires through here so the operation log captures the math
+        // behind cursor tracking + the jump-back regression. Null when
+        // no log is attached (cheap closure inside the splitter).
+        Action<string>? splitterTraceSink = log is null ? null : msg =>
+        {
+            log.Record(Diagnostics.DockOperationKind.SplitterTrace, msg,
+                layout: effectiveLayout,
+                ratios: ratioStore);
+        };
+
         Element BuildNode(DockNode node, string path) => node switch
         {
             DockSplit split => RenderSplit(split, path, ratioStore, RequestRatioRerender, BuildNode,
-                onSplitterFinal: manager.OnSplitterDragCompleted),
+                onSplitterFinal: splitterFinalWithLog,
+                splitterDiagnosticSink: splitterTraceSink),
             DockTabGroup grp => DockTabGroupRenderer.Render(
                 grp,
                 renderLeafContent: doc => WrapLeafWithPaneContext(doc),
@@ -206,6 +265,10 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 {
                     setHoveredTarget(target);
                     manager.OnDropTargetHovered?.Invoke(target);
+                    if (target is DockTarget tgt)
+                        LogOp(Diagnostics.DockOperationKind.DragHover,
+                            $"hover {tgt}", target: tgt,
+                            paneKey: DockDragSession.Current?.Source.Key?.ToString());
                 },
                 OnConfirm: target =>
                 {
@@ -225,6 +288,11 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                         // §2.4 — surface the new whole-tree layout for
                         // apps that want to mirror it (e.g. JSON viewer).
                         manager.OnLiveLayoutChanged?.Invoke(newLayout);
+                        LogOp(Diagnostics.DockOperationKind.DragConfirm,
+                            $"confirm {target} on pane='{session.Source.Key}'",
+                            paneKey: session.Source.Key?.ToString(),
+                            target: target,
+                            layoutOverride: newLayout);
                         session.End();
                     }
                     setDragActive(false);
@@ -234,6 +302,10 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 {
                     manager.OnDropTargetsDismissed?.Invoke();
                     var session = DockDragSession.Current;
+                    if (session is not null)
+                        LogOp(Diagnostics.DockOperationKind.DragCancel,
+                            $"cancel drag pane='{session.Source.Key}'",
+                            paneKey: session.Source.Key?.ToString());
                     session?.Cancel();
                     setDragActive(false);
                     setHoveredTarget(null);
@@ -334,7 +406,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         Dictionary<string, double[]> ratioStore,
         Action requestRerender,
         Func<DockNode, string, Element> renderChild,
-        Action? onSplitterFinal = null)
+        Action? onSplitterFinal = null,
+        Action<string>? splitterDiagnosticSink = null)
     {
         var children = split.Children;
         if (!ratioStore.TryGetValue(path, out var ratios) || ratios is null || ratios.Length != children.Count)
@@ -378,13 +451,22 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 // during the drag (WPF GridSplitter pattern) — re-render
                 // is reserved for the terminal isFinal event so the model
                 // catches up after the drag completes.
+                // Tracing the solver too — captures the input ratios,
+                // delta + totalDip the solver received and the new
+                // ratios it produced. Critical for diagnosing splitter
+                // jump-back (math vs. visual).
+                splitterDiagnosticSink?.Invoke(
+                    $"SOLVE path={path} idx={idx} delta={delta:F1} totalDip={hostExtent:F1} " +
+                    $"oldR=[{string.Join(",", perChild.Select(c => c.Ratio.ToString("F3")))}] " +
+                    $"newR=[{string.Join(",", newRatios.Select(r => r.ToString("F3")))}] isFinal={isFinal}");
                 for (int i = 0; i < ratios.Length; i++) ratios[i] = newRatios[i];
                 if (isFinal)
                 {
                     requestRerender();
                     onSplitterFinal?.Invoke();
                 }
-            });
+            },
+            splitterDiagnosticSink: splitterDiagnosticSink);
     }
 
     private static double[] BootstrapRatios(DockSplit split)
