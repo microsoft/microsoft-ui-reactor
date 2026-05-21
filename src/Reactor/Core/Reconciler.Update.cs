@@ -3528,9 +3528,9 @@ public sealed partial class Reconciler
         if (fa is { Basis: { } basis }) Layout.FlexPanel.SetBasis(ctrl, basis);
         else ctrl.ClearValue(Layout.FlexPanel.BasisProperty);
         if (fa is { MinWidth: { } minWidth }) Layout.FlexPanel.SetMinWidth(ctrl, minWidth);
-        else ctrl.ClearValue(Layout.FlexPanel.MinWidthProperty);
+        else ctrl.ClearValue(Layout.FlexPanel.FlexMinWidthProperty);
         if (fa is { MinHeight: { } minHeight }) Layout.FlexPanel.SetMinHeight(ctrl, minHeight);
-        else ctrl.ClearValue(Layout.FlexPanel.MinHeightProperty);
+        else ctrl.ClearValue(Layout.FlexPanel.FlexMinHeightProperty);
         if (fa is { AlignSelf: { } alignSelf }) Layout.FlexPanel.SetAlignSelf(ctrl, alignSelf);
         else ctrl.ClearValue(Layout.FlexPanel.AlignSelfProperty);
         Layout.FlexPanel.SetPosition(ctrl, fa?.Position ?? Layout.FlexPositionType.Relative);

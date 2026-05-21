@@ -244,8 +244,8 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(Layout.FlexPanel.GrowProperty);
         fe.ClearValue(Layout.FlexPanel.ShrinkProperty);
         fe.ClearValue(Layout.FlexPanel.BasisProperty);
-        fe.ClearValue(Layout.FlexPanel.MinWidthProperty);
-        fe.ClearValue(Layout.FlexPanel.MinHeightProperty);
+        fe.ClearValue(Layout.FlexPanel.FlexMinWidthProperty);
+        fe.ClearValue(Layout.FlexPanel.FlexMinHeightProperty);
         fe.ClearValue(Layout.FlexPanel.AlignSelfProperty);
         fe.ClearValue(Layout.FlexPanel.PositionProperty);
         fe.ClearValue(Layout.FlexPanel.LeftProperty);

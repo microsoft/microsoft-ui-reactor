@@ -181,16 +181,19 @@ public partial class FlexPanel : Panel
     // (including 0) is treated as an explicit point min that suppresses the
     // auto/min-content heuristic.
     //
-    // The `new` modifier intentionally shadows FrameworkElement.MinWidthProperty.
-    // These are attached DPs that drive Yoga's flex distribution; the inherited
-    // properties drive WinUI's own Measure. They coexist on the same control:
-    // FrameworkElement.MinWidth = X forces Measure to return ≥X; this attached
-    // property tells Yoga to clamp the flex-resolved slot to ≥X.
-    public static new readonly DependencyProperty MinWidthProperty =
+    // These are named `FlexMinWidthProperty`/`FlexMinHeightProperty` rather
+    // than `MinWidthProperty`/`MinHeightProperty` to avoid shadowing
+    // `FrameworkElement.MinWidthProperty`/`MinHeightProperty` on this public
+    // type. The inherited WinUI DPs and these attached Yoga DPs coexist on
+    // the same control with different semantics: `FrameworkElement.MinWidth`
+    // forces Measure to return ≥X; this attached property tells Yoga to
+    // clamp the flex-resolved slot to ≥X. Setting one does not affect the
+    // other (see `CssWinUI_NativeMinWidthSeparateFromFlexMinWidth` selftest).
+    public static readonly DependencyProperty FlexMinWidthProperty =
         DependencyProperty.RegisterAttached("FlexMinWidth", typeof(double), typeof(FlexPanel),
             new PropertyMetadata(double.NaN, OnChildPropertyChanged));
 
-    public static new readonly DependencyProperty MinHeightProperty =
+    public static readonly DependencyProperty FlexMinHeightProperty =
         DependencyProperty.RegisterAttached("FlexMinHeight", typeof(double), typeof(FlexPanel),
             new PropertyMetadata(double.NaN, OnChildPropertyChanged));
 
@@ -228,11 +231,11 @@ public partial class FlexPanel : Panel
     public static void SetBasis(UIElement el, double value) => el.SetValue(BasisProperty, value);
     public static double GetBasis(UIElement el) => (double)el.GetValue(BasisProperty);
 
-    public static void SetMinWidth(UIElement el, double value) => el.SetValue(MinWidthProperty, value);
-    public static double GetMinWidth(UIElement el) => (double)el.GetValue(MinWidthProperty);
+    public static void SetMinWidth(UIElement el, double value) => el.SetValue(FlexMinWidthProperty, value);
+    public static double GetMinWidth(UIElement el) => (double)el.GetValue(FlexMinWidthProperty);
 
-    public static void SetMinHeight(UIElement el, double value) => el.SetValue(MinHeightProperty, value);
-    public static double GetMinHeight(UIElement el) => (double)el.GetValue(MinHeightProperty);
+    public static void SetMinHeight(UIElement el, double value) => el.SetValue(FlexMinHeightProperty, value);
+    public static double GetMinHeight(UIElement el) => (double)el.GetValue(FlexMinHeightProperty);
 
     public static void SetAlignSelf(UIElement el, FlexAlign value) => el.SetValue(AlignSelfProperty, value);
     public static FlexAlign GetAlignSelf(UIElement el) => (FlexAlign)el.GetValue(AlignSelfProperty);
@@ -703,8 +706,9 @@ public partial class FlexPanel : Panel
                     // panel itself, defeating flex-grow distribution.
                     //
                     // CSS Flexbox §4.5 min-content floor is enforced separately
-                    // via node.Style.MinDimensions in ApplyAttachedProperties —
-                    // see the auto-min computation there.
+                    // by writing `node.MinWidth` / `node.MinHeight` in
+                    // ApplyAttachedProperties — see ResolveMinDimension and
+                    // ComputeMinContent there.
                     var outW = (float)(capturedChild.DesiredSize.Width - mH);
                     var outH = (float)(capturedChild.DesiredSize.Height - mV);
                     if (wMode == YogaMeasureMode.Exactly) outW = (float)w;

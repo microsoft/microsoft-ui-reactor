@@ -47,7 +47,7 @@ enum types.
 | `ColumnGap` / `RowGap` | container (`with { ... }`) | Spacing between children — applies between wrapped lines too |
 | `FlexPadding` | container (`with { ... }`) | Inside-container padding measured by Yoga (distinct from the `.Padding(...)` modifier) |
 | `.Flex(grow:, shrink:, basis:)` | child | Main-axis sizing |
-| `.Flex(minWidth:, minHeight:)` | child | Override CSS §4.5 auto-min on the main axis (`null` = `min-content` floor; `0` = no floor) |
+| `.Flex(minWidth:, minHeight:)` | child | Override CSS §4.5 auto-min on the main axis (`null` = CSS `auto`; `0` = no floor; positive = hard floor). See the [Min sizing](#min-sizing-css-45) table for how `auto` resolves. |
 | `.Flex(alignSelf:)` | child | Override the container's `AlignItems` for one child |
 
 ## Direction

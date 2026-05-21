@@ -976,7 +976,7 @@ internal static class FlexPanelCssBehaviorFixtures
             // Simulate prior layout that set MinWidth=200.
             Microsoft.UI.Reactor.Layout.FlexPanel.SetMinWidth(paneA, 200);
             // Then a "release to pool" cycle: ClearValue mirrors ElementPool.
-            paneA.ClearValue(Microsoft.UI.Reactor.Layout.FlexPanel.MinWidthProperty);
+            paneA.ClearValue(Microsoft.UI.Reactor.Layout.FlexPanel.FlexMinWidthProperty);
 
             Microsoft.UI.Reactor.Layout.FlexPanel.SetGrow(paneA, 1);
             Microsoft.UI.Reactor.Layout.FlexPanel.SetShrink(paneA, 1);
@@ -1072,7 +1072,7 @@ internal static class FlexPanelCssBehaviorFixtures
 
     /// <summary>
     /// **WinUI divergence**: `FrameworkElement.MinWidth` (inherited DP) and
-    /// `FlexPanel.MinWidth` (our attached DP) are TWO different properties.
+    /// `FlexPanel.FlexMinWidth` (our attached DP) are TWO different properties.
     /// The inherited one applies during WinUI Measure; the attached one is
     /// what Yoga reads as the flex auto-min floor. Setting one does not
     /// affect the other.
