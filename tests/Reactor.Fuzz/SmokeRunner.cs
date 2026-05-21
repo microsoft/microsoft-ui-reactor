@@ -55,7 +55,10 @@ internal static class SmokeRunner
             return 1;
         }
 
+        // Sort by file name so CI logs are deterministic across machines and
+        // filesystems — Directory.GetFiles makes no ordering guarantee.
         var files = Directory.GetFiles(dir);
+        Array.Sort(files, StringComparer.Ordinal);
         if (files.Length == 0)
         {
             Console.Error.WriteLine($"Smoke[{label}]: no seed files in {dir}");

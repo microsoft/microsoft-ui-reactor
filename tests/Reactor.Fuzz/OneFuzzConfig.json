@@ -3,7 +3,7 @@
   "ConfigVersion": 3,
   "Entries": [
     {
-      "JobNotificationEmail": "andersonch@microsoft.com",
+      "JobNotificationEmail": "WinUIReactorTeam@microsoft.com",
       "Skip": false,
       "JobDependencies": [],
       "Fuzzer": {
@@ -15,7 +15,7 @@
         "Org": "microsoft",
         "Project": "OS",
         "AreaPath": "OS\\Windows Client and Services\\WinPD\\DFX-Developer Fundamentals and Experiences",
-        "AssignedTo": "andersonch@microsoft.com",
+        "AssignedTo": "WinUIReactorTeam@microsoft.com",
         "SdlTaskId": 62373203
       },
       "OneFuzzPlatforms": ["Windows"],
