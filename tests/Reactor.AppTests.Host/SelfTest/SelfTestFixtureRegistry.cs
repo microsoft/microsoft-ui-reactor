@@ -904,6 +904,25 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_SplitterProgrammaticVisualDemo",
         "NativeDocking_DropTargetOverlayShowsAndDismisses",
         "NativeDocking_DragSessionConfirmMutatesLayout",
+        // Spec 045 §2.4 drag/drop matrix — exhaustive programmatic-drag
+        // scenarios for each DockTarget value + invariants.
+        "NativeDockingMatrix_DragToCenterSameGroup_NoOp",
+        "NativeDockingMatrix_DragToSplitRight_AddsColumn",
+        "NativeDockingMatrix_DragToSplitLeft_AddsLeadingColumn",
+        "NativeDockingMatrix_DragToSplitTop_AddsRow",
+        "NativeDockingMatrix_DragToSplitBottom_AddsRow",
+        "NativeDockingMatrix_DragLastTabFromGroup_CollapsesGroup",
+        "NativeDockingMatrix_DragToDockLeftEdge_WrapsAtRoot",
+        "NativeDockingMatrix_DragToDockRightEdge_WrapsAtRoot",
+        "NativeDockingMatrix_DragToDockTopEdge_WrapsAtRoot",
+        "NativeDockingMatrix_DragToDockBottomEdge_WrapsAtRoot",
+        "NativeDockingMatrix_SequentialDrags_AccumulateLayout",
+        "NativeDockingMatrix_CancelDrag_LayoutUnchanged",
+        "NativeDockingMatrix_NestedSplitDrag_OuterShapePreserved",
+        "NativeDockingMatrix_DragEveryPaneOut_NoOrphans",
+        "NativeDockingMatrix_WindowResizeAfterSplitterDrag_PanesRedistribute",
+        "NativeDockingMatrix_IdempotentDragSameTarget_StableTree",
+        "NativeDockingMatrix_RowSplitterDragPreservesInnerColumnRatios",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1790,6 +1809,24 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_SplitterProgrammaticVisualDemo" => new NativeDockingSmokeFixtures.SplitterProgrammaticVisualDemo(harness),
         "NativeDocking_DropTargetOverlayShowsAndDismisses" => new NativeDockingSmokeFixtures.DropTargetOverlayShowsAndDismisses(harness),
         "NativeDocking_DragSessionConfirmMutatesLayout" => new NativeDockingSmokeFixtures.DragSessionConfirmMutatesLayout(harness),
+        // Spec 045 §2.4 drag/drop matrix
+        "NativeDockingMatrix_DragToCenterSameGroup_NoOp" => new NativeDockingDragDropMatrixFixtures.DragToCenterSameGroup_NoOp(harness),
+        "NativeDockingMatrix_DragToSplitRight_AddsColumn" => new NativeDockingDragDropMatrixFixtures.DragToSplitRight_AddsColumn(harness),
+        "NativeDockingMatrix_DragToSplitLeft_AddsLeadingColumn" => new NativeDockingDragDropMatrixFixtures.DragToSplitLeft_AddsLeadingColumn(harness),
+        "NativeDockingMatrix_DragToSplitTop_AddsRow" => new NativeDockingDragDropMatrixFixtures.DragToSplitTop_AddsRow(harness),
+        "NativeDockingMatrix_DragToSplitBottom_AddsRow" => new NativeDockingDragDropMatrixFixtures.DragToSplitBottom_AddsRow(harness),
+        "NativeDockingMatrix_DragLastTabFromGroup_CollapsesGroup" => new NativeDockingDragDropMatrixFixtures.DragLastTabFromGroup_CollapsesGroup(harness),
+        "NativeDockingMatrix_DragToDockLeftEdge_WrapsAtRoot" => new NativeDockingDragDropMatrixFixtures.DragToDockLeftEdge_WrapsAtRoot(harness),
+        "NativeDockingMatrix_DragToDockRightEdge_WrapsAtRoot" => new NativeDockingDragDropMatrixFixtures.DragToDockRightEdge_WrapsAtRoot(harness),
+        "NativeDockingMatrix_DragToDockTopEdge_WrapsAtRoot" => new NativeDockingDragDropMatrixFixtures.DragToDockTopEdge_WrapsAtRoot(harness),
+        "NativeDockingMatrix_DragToDockBottomEdge_WrapsAtRoot" => new NativeDockingDragDropMatrixFixtures.DragToDockBottomEdge_WrapsAtRoot(harness),
+        "NativeDockingMatrix_SequentialDrags_AccumulateLayout" => new NativeDockingDragDropMatrixFixtures.SequentialDrags_AccumulateLayout(harness),
+        "NativeDockingMatrix_CancelDrag_LayoutUnchanged" => new NativeDockingDragDropMatrixFixtures.CancelDrag_LayoutUnchanged(harness),
+        "NativeDockingMatrix_NestedSplitDrag_OuterShapePreserved" => new NativeDockingDragDropMatrixFixtures.NestedSplitDrag_OuterShapePreserved(harness),
+        "NativeDockingMatrix_DragEveryPaneOut_NoOrphans" => new NativeDockingDragDropMatrixFixtures.DragEveryPaneOut_NoOrphans(harness),
+        "NativeDockingMatrix_WindowResizeAfterSplitterDrag_PanesRedistribute" => new NativeDockingDragDropMatrixFixtures.WindowResizeAfterSplitterDrag_PanesRedistribute(harness),
+        "NativeDockingMatrix_IdempotentDragSameTarget_StableTree" => new NativeDockingDragDropMatrixFixtures.IdempotentDragSameTarget_StableTree(harness),
+        "NativeDockingMatrix_RowSplitterDragPreservesInnerColumnRatios" => new NativeDockingDragDropMatrixFixtures.RowSplitterDragPreservesInnerColumnRatios(harness),
 
         _ => null,
     };

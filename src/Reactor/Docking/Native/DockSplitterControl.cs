@@ -417,20 +417,73 @@ internal sealed partial class DockSplitterControl : Grid
 
     private void RestorePairToGrow()
     {
-        // Intentionally leave the inline Width/Height set by the drag.
-        // The cursor-driven sizes ARE the source of truth — clearing them
-        // would force the renderer's next pass to flow through Yoga's
-        // grow + basis distribution, which produces a different visual
-        // layout when one pane carries an intrinsic MeasureFunc basis
-        // (TabView etc.). The host still receives a ResizeDelta event
-        // so its ratio model reflects the new proportions for
-        // persistence, but the inline Width/Height takes precedence at
-        // layout time.
+        // Convert the inline Width/Height set during the drag back into
+        // FlexPanel.Grow values, then clear the inline sizes + the
+        // pinned perpendicular-axis Width/Height on the parent panel.
+        // This is what lets a subsequent window resize redistribute
+        // space (Yoga grow flexes to fill the available extent),
+        // while preserving the proportional split the user just
+        // settled on.
         //
-        // Window resizing still works: with grow=0 on each pane and
-        // Width set, Yoga keeps the panes at exactly Width and shrinks
-        // them proportionally only if the panel is shorter than the
-        // pair total + splitter handle.
+        // Pre-fix history: this method intentionally left the inline
+        // sizes set, on the theory that "cursor-driven sizes ARE the
+        // source of truth". That worked for the splitter itself but
+        // froze the panes at absolute DIPs — resizing the window
+        // afterward left the panel with mismatched extent vs child
+        // total. The §2.4 matrix M15 fixture surfaces that regression.
+        if (VTH.GetParent(this) is not Microsoft.UI.Reactor.Layout.FlexPanel panel) return;
+        int idx = -1;
+        for (int i = 0; i < panel.Children.Count; i++)
+            if (ReferenceEquals(panel.Children[i], this)) { idx = i; break; }
+        if (idx <= 0 || idx >= panel.Children.Count - 1) return;
+        if (panel.Children[idx - 1] is not FrameworkElement leading) return;
+        if (panel.Children[idx + 1] is not FrameworkElement trailing) return;
+
+        // Compute new grow values from the current measured pair.
+        var leadingDip = _direction == DockSplitterDirection.Columns
+            ? leading.ActualWidth
+            : leading.ActualHeight;
+        var trailingDip = _direction == DockSplitterDirection.Columns
+            ? trailing.ActualWidth
+            : trailing.ActualHeight;
+        var pairDip = leadingDip + trailingDip;
+        if (pairDip > 0)
+        {
+            // Use the pair-grow total captured at drag start (so we
+            // preserve the same relative weight against any other
+            // panes in an N-way split). Falls back to 1.0 when the
+            // capture snapshot is unavailable.
+            var totalGrow = _pairGrowAtCapture > 0 ? _pairGrowAtCapture : 1.0;
+            var newLeadingGrow = totalGrow * (leadingDip / pairDip);
+            var newTrailingGrow = totalGrow - newLeadingGrow;
+            Microsoft.UI.Reactor.Layout.FlexPanel.SetGrow(leading, newLeadingGrow);
+            Microsoft.UI.Reactor.Layout.FlexPanel.SetGrow(trailing, newTrailingGrow);
+        }
+
+        // Clear the inline absolute sizes so Yoga's grow distribution
+        // resumes on the next layout pass (window resize, DPI change,
+        // sibling reflow). Also clear the forced MinHeight=0 we set
+        // during the drag to allow shrinking.
+        if (_direction == DockSplitterDirection.Columns)
+        {
+            leading.ClearValue(FrameworkElement.WidthProperty);
+            trailing.ClearValue(FrameworkElement.WidthProperty);
+        }
+        else
+        {
+            leading.ClearValue(FrameworkElement.HeightProperty);
+            trailing.ClearValue(FrameworkElement.HeightProperty);
+            leading.ClearValue(FrameworkElement.MinHeightProperty);
+            trailing.ClearValue(FrameworkElement.MinHeightProperty);
+        }
+
+        // Release the perpendicular-axis pin on the parent panel so
+        // window resize affects it again. Set in SnapshotPairAtCapture
+        // to keep DesiredSize stable during the drag.
+        if (_direction == DockSplitterDirection.Columns)
+            panel.ClearValue(FrameworkElement.HeightProperty);
+        else
+            panel.ClearValue(FrameworkElement.WidthProperty);
     }
 
     private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
@@ -448,6 +501,23 @@ internal sealed partial class DockSplitterControl : Grid
     /// programmatic-drag self-test fixture (§2.1).</summary>
     internal void RaiseResizeDeltaForTest(DockSplitterDeltaEventArgs args)
         => ResizeDelta?.Invoke(this, args);
+
+    /// <summary>
+    /// Test hook — simulate a complete pointer drag: snapshot pair +
+    /// apply absolute delta + release + fire <see cref="ResizeDelta"/>.
+    /// Mirrors the side-effects of the production drag path (the same
+    /// order as <c>OnPointerReleased</c>) so test fixtures can exercise
+    /// the post-drag state — including the host's ratio-store sync and
+    /// re-render — without needing real pointer input.
+    /// </summary>
+    internal void SimulatePointerDragForTest(double cumulativeDeltaDip)
+    {
+        SnapshotPairAtCapture();
+        ApplyAbsoluteGrowFromCapture(cumulativeDeltaDip);
+        RestorePairToGrow();
+        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(
+            -cumulativeDeltaDip, _direction, GetHostExtent(), isFinal: true));
+    }
 
     /// <summary>
     /// Walk to the parent panel (the FlexPanel the splitter is interleaved
@@ -487,6 +557,10 @@ internal sealed partial class DockSplitterControl : Grid
         // absolute cursor delta — same code path as the pointer drag.
         SnapshotPairAtCapture();
         ApplyAbsoluteGrowFromCapture(rawDelta);
+        // Same fix as OnPointerReleased: convert inline sizes back into
+        // grow values + release the perpendicular pin so window resize
+        // continues to work after the keyboard nudge.
+        RestorePairToGrow();
         ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(-rawDelta, _direction, GetHostExtent(), isFinal: true));
         Focus(FocusState.Keyboard);
         e.Handled = true;
