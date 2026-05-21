@@ -17,6 +17,10 @@ ReactorApp.Run<DemoApp>("Reactor Demo", width: 1200, height: 800
 #if DEBUG
     , devtools: true
 #endif
+    // Spec 045 — register the native docking renderer once at the
+    // root host. Lets any component in the app (e.g. the DockingDemo
+    // tab) instantiate a `DockManager` element directly.
+    , configure: host => Microsoft.UI.Reactor.Docking.Native.DockingNativeInterop.Register(host.Reconciler)
 );
 
 // ─── Global dev flags ──────────────────────────────────────────────────────────
@@ -31,7 +35,7 @@ static class AppFlags
 
 // ─── Root application component ────────────────────────────────────────────────
 
-enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, ItemsView, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, LayoutCost, Windows }
+enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, ItemsView, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, LayoutCost, Windows, Docking }
 
 class DemoApp : Component
 {
@@ -70,6 +74,7 @@ class DemoApp : Component
             Tab.SpecializedEditors => ("Specialized Editors", "propertygrid"),
             Tab.LayoutCost => ("Layout Cost", "perfstress"),
             Tab.Windows => ("Windows & Tray", "navigation"),
+            Tab.Docking => ("Docking", "flexpanel"),
             _ => (tab.ToString(), "counter")
         }).ToArray();
 
@@ -149,6 +154,7 @@ class DemoApp : Component
                     Tab.SpecializedEditors => Component<SpecializedEditorsDemo>(),
                     Tab.LayoutCost => Component<LayoutCostDemo>(),
                     Tab.Windows => Component<WindowsDemo>(),
+                    Tab.Docking => Component<DockingDemo>(),
                     _ => TextBlock("Select a tab")
                 }
             )
