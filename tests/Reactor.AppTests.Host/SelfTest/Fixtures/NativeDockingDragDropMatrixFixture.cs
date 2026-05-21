@@ -685,6 +685,309 @@ internal static class NativeDockingDragDropMatrixFixtures
         }
     }
 
+    /// <summary>
+    /// Witness for the splitter "jump back" bug: after a pointer-drag
+    /// release, the rendered pane widths should match the cursor-
+    /// committed widths (within a 1 DIP fudge for floating-point
+    /// rounding). Pre-fix the solver used full panel.ActualWidth as
+    /// totalDip while Yoga distributed (panel - splitter.Width), so the
+    /// re-render landed ~handle*ratio DIP off the cursor position.
+    /// </summary>
+    internal class SplitterReleaseNoVisibleJump(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            host.Mount(_ => new DockManager
+            {
+                Layout = new DockSplit(Orientation.Horizontal, new DockNode[]
+                {
+                    MakePane("L", "body-L"),
+                    MakePane("R", "body-R"),
+                }),
+            });
+            await Harness.Render();
+
+            var splitter = H.FindAllControls<DockSplitterControl>(_ => true).FirstOrDefault();
+            if (splitter is null) { H.Check("M18_SplitterFound", false); return; }
+            var panel = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(splitter) as FlexPanel;
+            if (panel is null) { H.Check("M18_FlexPanelFound", false); return; }
+
+            // Drive a big drag where the bug is most visible.
+            splitter.SimulatePointerDragForTest(cumulativeDeltaDip: 200);
+            await Harness.Render();
+
+            var leadingAfter = (panel.Children[0] as FrameworkElement)?.ActualWidth ?? 0;
+            var trailingAfter = (panel.Children[2] as FrameworkElement)?.ActualWidth ?? 0;
+            var splitterW = splitter.ActualWidth;
+            var pairTotal = leadingAfter + trailingAfter;
+            var expectedPair = panel.ActualWidth - splitterW;
+            Console.WriteLine($"# M18 panelW={panel.ActualWidth:F1} splitterW={splitterW:F1} leading={leadingAfter:F1} trailing={trailingAfter:F1}");
+
+            // After release, leading + trailing should equal panel - splitter,
+            // i.e. no overflow and no gap. Pre-fix this was off by a fraction
+            // proportional to the splitter handle's share of the pair (e.g.
+            // ~16 DIP for a 50/50 split). Yoga rounding gives ±1 DIP slack.
+            H.Check("M18_PairFillsPanelMinusSplitter",
+                Math.Abs(pairTotal - expectedPair) <= 2.0);
+        }
+    }
+
+    /// <summary>
+    /// End-to-end IDE-layout fixture. Mounts a Vertical split containing
+    /// two Horizontal splits (editor+tools / output+terminal) and drives:
+    ///   1. column splitter drag — assert top-row ratios shift
+    ///   2. row splitter drag    — assert outer ratios shift AND column
+    ///      ratios are preserved (the row-resets-columns regression)
+    ///   3. container resize     — assert all panes redistribute, ratios
+    ///      unchanged
+    ///
+    /// Also asserts CONTROL IDENTITY across every operation: the host's
+    /// inner component-wrapper Border, every FlexPanel, every TabView,
+    /// and every DockSplitterControl must be the same instance pre- and
+    /// post-operation. The Border-swap regression shows up here as an
+    /// instance change after the first splitter drag.
+    /// </summary>
+    internal class IdeLayoutResizeAndContainerResize_NoControlChurn(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            DockDragSession.ResetForTest();
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            // Use DockTabGroup wrappers like the showcase IDE layout —
+            // bare DockableContent leaves render as Border (no tab strip)
+            // and don't surface the control-identity churn we're hunting.
+            host.Mount(_ => new DockManager
+            {
+                Layout = new DockSplit(Orientation.Vertical, new DockNode[]
+                {
+                    new DockSplit(Orientation.Horizontal, new DockNode[]
+                    {
+                        new DockTabGroup(new[] { MakePane("editor", "body-editor") }),
+                        new DockTabGroup(new[] { MakePane("tools",  "body-tools") }),
+                    }),
+                    new DockSplit(Orientation.Horizontal, new DockNode[]
+                    {
+                        new DockTabGroup(new[] { MakePane("output",   "body-output") }),
+                        new DockTabGroup(new[] { MakePane("terminal", "body-terminal") }),
+                    }),
+                }),
+            });
+            await Harness.Render();
+
+            // ── Snapshot the initial control identity set.
+            var hostBorder = H.FindControl<Border>(b =>
+                Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(b) is Border) as Border;
+            var splittersInit = H.FindAllControls<DockSplitterControl>(_ => true);
+            var rowInit = splittersInit.First(s => s.Direction == DockSplitterDirection.Rows);
+            var colsInit = splittersInit.Where(s => s.Direction == DockSplitterDirection.Columns).ToList();
+            var topColSplitter = colsInit[0];
+            var topColPanel = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(topColSplitter) as FlexPanel;
+            var bottomColSplitter = colsInit[1];
+            var bottomColPanel = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(bottomColSplitter) as FlexPanel;
+            var outerPanel = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(rowInit) as FlexPanel;
+            var tabViewsInit = H.FindAllControls<TabView>(_ => true);
+
+            H.Check("M19_Initial_FourTabViews", tabViewsInit.Count == 4);
+            H.Check("M19_Initial_ThreeSplitters", splittersInit.Count == 3);
+            H.Check("M19_Initial_OuterFlexPanel", outerPanel is not null);
+            H.Check("M19_Initial_TopColParent", topColPanel is not null);
+            H.Check("M19_Initial_BottomColParent", bottomColPanel is not null);
+
+            double GrowOf(UIElement child) => FlexPanel.GetGrow(child);
+            double[] PaneGrows(FlexPanel panel) =>
+                panel.Children.OfType<FrameworkElement>().Where(c => c is not DockSplitterControl)
+                     .Select(c => GrowOf(c)).ToArray();
+
+            // ── Step 1: drag the top column splitter right by 100 DIP.
+            topColSplitter.SimulatePointerDragForTest(cumulativeDeltaDip: 100);
+            await Harness.Render();
+
+            var topAfterCol = PaneGrows(topColPanel!);
+            var outerAfterCol = PaneGrows(outerPanel!);
+            var bottomAfterCol = PaneGrows(bottomColPanel!);
+            Console.WriteLine($"# M19 after-col top=[{string.Join(",", topAfterCol.Select(g => g.ToString("F3")))}] outer=[{string.Join(",", outerAfterCol.Select(g => g.ToString("F3")))}] bottom=[{string.Join(",", bottomAfterCol.Select(g => g.ToString("F3")))}]");
+
+            H.Check("M19_Col_EditorGrew",
+                topAfterCol.Length == 2 && topAfterCol[0] > topAfterCol[1] + 0.01);
+            H.Check("M19_Col_OuterUntouched",
+                outerAfterCol.Length == 2
+                && Math.Abs(outerAfterCol[0] - 0.5) < 0.05
+                && Math.Abs(outerAfterCol[1] - 0.5) < 0.05);
+            H.Check("M19_Col_BottomUntouched",
+                bottomAfterCol.Length == 2
+                && Math.Abs(bottomAfterCol[0] - 0.5) < 0.05
+                && Math.Abs(bottomAfterCol[1] - 0.5) < 0.05);
+
+            // Control identity must NOT change across a splitter drag.
+            var splittersAfterCol = H.FindAllControls<DockSplitterControl>(_ => true);
+            var tabViewsAfterCol = H.FindAllControls<TabView>(_ => true);
+            H.Check("M19_Col_SplitterIdentityPreserved",
+                splittersAfterCol.Count == 3
+                && ReferenceEquals(splittersAfterCol.First(s => s.Direction == DockSplitterDirection.Rows), rowInit)
+                && ReferenceEquals(splittersAfterCol.Where(s => s.Direction == DockSplitterDirection.Columns).ElementAt(0), topColSplitter)
+                && ReferenceEquals(splittersAfterCol.Where(s => s.Direction == DockSplitterDirection.Columns).ElementAt(1), bottomColSplitter));
+            H.Check("M19_Col_TabViewIdentityPreserved",
+                tabViewsAfterCol.Count == 4
+                && tabViewsAfterCol.Zip(tabViewsInit, ReferenceEquals).All(x => x));
+            H.Check("M19_Col_FlexPanelIdentityPreserved",
+                ReferenceEquals(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(topColSplitter), topColPanel)
+                && ReferenceEquals(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(rowInit), outerPanel)
+                && ReferenceEquals(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(bottomColSplitter), bottomColPanel));
+
+            // ── Step 2: drag the row splitter down by 60 DIP.
+            rowInit.SimulatePointerDragForTest(cumulativeDeltaDip: 60);
+            await Harness.Render();
+
+            var topAfterRow = PaneGrows(topColPanel!);
+            var outerAfterRow = PaneGrows(outerPanel!);
+            var bottomAfterRow = PaneGrows(bottomColPanel!);
+            Console.WriteLine($"# M19 after-row top=[{string.Join(",", topAfterRow.Select(g => g.ToString("F3")))}] outer=[{string.Join(",", outerAfterRow.Select(g => g.ToString("F3")))}] bottom=[{string.Join(",", bottomAfterRow.Select(g => g.ToString("F3")))}]");
+
+            H.Check("M19_Row_OuterShifted",
+                outerAfterRow.Length == 2 && outerAfterRow[0] > outerAfterCol[0] + 0.01);
+            // Critical: column ratios PRESERVED across row drag.
+            H.Check("M19_Row_TopColumnsPreserved",
+                Math.Abs(topAfterRow[0] - topAfterCol[0]) < 0.02
+                && Math.Abs(topAfterRow[1] - topAfterCol[1]) < 0.02);
+            H.Check("M19_Row_BottomColumnsPreserved",
+                Math.Abs(bottomAfterRow[0] - bottomAfterCol[0]) < 0.02
+                && Math.Abs(bottomAfterRow[1] - bottomAfterCol[1]) < 0.02);
+
+            var splittersAfterRow = H.FindAllControls<DockSplitterControl>(_ => true);
+            var tabViewsAfterRow = H.FindAllControls<TabView>(_ => true);
+            H.Check("M19_Row_SplitterIdentityPreserved",
+                splittersAfterRow.Count == 3
+                && ReferenceEquals(splittersAfterRow.First(s => s.Direction == DockSplitterDirection.Rows), rowInit));
+            H.Check("M19_Row_TabViewIdentityPreserved",
+                tabViewsAfterRow.Count == 4
+                && tabViewsAfterRow.Zip(tabViewsInit, ReferenceEquals).All(x => x));
+
+            // ── Step 3: shrink the outer panel by 200 DIP on both axes.
+            var outerWBefore = outerPanel!.ActualWidth;
+            var outerHBefore = outerPanel!.ActualHeight;
+            outerPanel.Width = outerWBefore - 200;
+            outerPanel.Height = outerHBefore - 200;
+            await Harness.Render();
+
+            var topAfterResize = PaneGrows(topColPanel!);
+            var outerAfterResize = PaneGrows(outerPanel!);
+            var bottomAfterResize = PaneGrows(bottomColPanel!);
+            Console.WriteLine($"# M19 after-resize panelW={outerPanel.ActualWidth:F1} panelH={outerPanel.ActualHeight:F1} top=[{string.Join(",", topAfterResize.Select(g => g.ToString("F3")))}] outer=[{string.Join(",", outerAfterResize.Select(g => g.ToString("F3")))}] bottom=[{string.Join(",", bottomAfterResize.Select(g => g.ToString("F3")))}]");
+
+            // Ratios MUST be unchanged by container resize — that's the
+            // grow-based-distribution contract. Pre-fix the splitter set
+            // inline Width/Height which froze panes; post-fix grow drives
+            // distribution and ratios are stable.
+            H.Check("M19_Resize_TopRatiosUnchanged",
+                Math.Abs(topAfterResize[0] - topAfterRow[0]) < 0.02
+                && Math.Abs(topAfterResize[1] - topAfterRow[1]) < 0.02);
+            H.Check("M19_Resize_OuterRatiosUnchanged",
+                Math.Abs(outerAfterResize[0] - outerAfterRow[0]) < 0.02
+                && Math.Abs(outerAfterResize[1] - outerAfterRow[1]) < 0.02);
+            H.Check("M19_Resize_BottomRatiosUnchanged",
+                Math.Abs(bottomAfterResize[0] - bottomAfterRow[0]) < 0.02
+                && Math.Abs(bottomAfterResize[1] - bottomAfterRow[1]) < 0.02);
+
+            // After resize the panes should actually have shrunk —
+            // proof that grow is doing real distribution, not just
+            // serving stale inline sizes.
+            var paneWidthAfter = (topColPanel.Children[0] as FrameworkElement)?.ActualWidth ?? 0;
+            H.Check("M19_Resize_PanesRedistributed",
+                paneWidthAfter < outerWBefore * topAfterRow[0]);
+
+            var splittersAfterResize = H.FindAllControls<DockSplitterControl>(_ => true);
+            var tabViewsAfterResize = H.FindAllControls<TabView>(_ => true);
+            H.Check("M19_Resize_SplitterIdentityPreserved",
+                splittersAfterResize.Count == 3
+                && ReferenceEquals(splittersAfterResize.First(s => s.Direction == DockSplitterDirection.Rows), rowInit));
+            H.Check("M19_Resize_TabViewIdentityPreserved",
+                tabViewsAfterResize.Count == 4
+                && tabViewsAfterResize.Zip(tabViewsInit, ReferenceEquals).All(x => x));
+
+            DockDragSession.ResetForTest();
+        }
+    }
+
+    /// <summary>
+    /// Scene-level re-render fixture. Mounts a DockManager inside a
+    /// Component that owns its own UseReducer tick, then forces a re-
+    /// render of the wrapping component. This exercises
+    /// DockingNativeInterop's update path (not just the host
+    /// component's internal re-render path that M19 hits). Surfaces the
+    /// Border swap regression seen in the showcase diagnostic.
+    /// </summary>
+    internal class SceneRerenderPreservesDockHostControls(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            DockDragSession.ResetForTest();
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            // Use a wrapping component with its own state — re-renders
+            // propagate through DockingNativeInterop.update.
+            host.Mount(_ => Component<SceneRerenderWrapper>());
+            await Harness.Render();
+
+            // Capture initial control identities.
+            var splittersBefore = H.FindAllControls<DockSplitterControl>(_ => true);
+            var tabViewsBefore = H.FindAllControls<TabView>(_ => true);
+            var flexPanelsBefore = H.FindAllControls<FlexPanel>(_ => true);
+            var splitterBefore = splittersBefore.FirstOrDefault();
+            H.Check("M20_Initial_SplitterMounted", splitterBefore is not null);
+            H.Check("M20_Initial_TabViewMounted", tabViewsBefore.Count == 2);
+            H.Check("M20_Initial_FlexPanelMounted", flexPanelsBefore.Count == 1);
+
+            // Click the button inside the wrapper to force a re-render.
+            // The wrapper's state change creates a new DockManager element
+            // — DockingNativeInterop.update fires.
+            H.ClickButton("BumpRender");
+            await Harness.Render();
+            H.ClickButton("BumpRender");
+            await Harness.Render();
+            H.ClickButton("BumpRender");
+            await Harness.Render();
+
+            var splittersAfter = H.FindAllControls<DockSplitterControl>(_ => true);
+            var tabViewsAfter = H.FindAllControls<TabView>(_ => true);
+            var flexPanelsAfter = H.FindAllControls<FlexPanel>(_ => true);
+
+            H.Check("M20_SplitterIdentityAcrossSceneRerender",
+                splittersAfter.Count == 1
+                && ReferenceEquals(splittersAfter[0], splitterBefore));
+            H.Check("M20_TabViewIdentityAcrossSceneRerender",
+                tabViewsAfter.Count == 2
+                && tabViewsAfter.Zip(tabViewsBefore, ReferenceEquals).All(x => x));
+            H.Check("M20_FlexPanelIdentityAcrossSceneRerender",
+                flexPanelsAfter.Count == 1
+                && ReferenceEquals(flexPanelsAfter[0], flexPanelsBefore[0]));
+        }
+    }
+
+    internal class SceneRerenderWrapper : Component
+    {
+        public override Element Render()
+        {
+            var (_, bump) = UseReducer(0);
+            return VStack(
+                Button("BumpRender", () => bump(t => t + 1)),
+                new DockManager
+                {
+                    Layout = new DockSplit(Orientation.Horizontal, new DockNode[]
+                    {
+                        new DockTabGroup(new[] { new DockableContent("L", TextBlock("body-L"), Key: "l") }),
+                        new DockTabGroup(new[] { new DockableContent("R", TextBlock("body-R"), Key: "r") }),
+                    }),
+                }.Flex(grow: 1)
+            );
+        }
+    }
+
     internal class IdempotentDragSameTarget_StableTree(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

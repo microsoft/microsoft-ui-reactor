@@ -521,16 +521,49 @@ internal sealed partial class DockSplitterControl : Grid
 
     /// <summary>
     /// Walk to the parent panel (the FlexPanel the splitter is interleaved
-    /// inside) and read its measured extent along the split axis. Returns
-    /// 0 if the parent isn't available yet (control hasn't been laid out)
-    /// — caller treats that as "no delta applied this frame".
+    /// inside) and return the extent USABLE by the panes — the parent's
+    /// measured extent along the split axis minus the total space taken
+    /// by sibling splitter handles. This is what Yoga distributes among
+    /// the pane children via flex.grow, so it's what the solver should
+    /// reason about (otherwise the solver computes ratios against N+16
+    /// DIP of space and the renderer paints into N DIP, producing a
+    /// visible "jump back" at drag-end). Returns 0 if the parent isn't
+    /// available yet — caller treats as "no delta applied this frame".
     /// </summary>
     internal double GetHostExtent()
     {
         if (VTH.GetParent(this) is not FrameworkElement parent) return 0;
-        return _direction == DockSplitterDirection.Columns
+        var totalExtent = _direction == DockSplitterDirection.Columns
             ? parent.ActualWidth
             : parent.ActualHeight;
+        if (totalExtent <= 0) return 0;
+
+        // Subtract every sibling splitter's measured size on the axis so
+        // the solver works in the same DIP space Yoga distributes via
+        // flex.grow (= total minus the splitter handles). When the
+        // parent isn't a FlexPanel we can't enumerate siblings; fall
+        // back to subtracting just this splitter's own size.
+        double splitterAccum;
+        if (parent is Microsoft.UI.Reactor.Layout.FlexPanel flex)
+        {
+            splitterAccum = 0;
+            for (int i = 0; i < flex.Children.Count; i++)
+            {
+                if (flex.Children[i] is DockSplitterControl s && s.Direction == _direction)
+                {
+                    splitterAccum += _direction == DockSplitterDirection.Columns
+                        ? s.ActualWidth
+                        : s.ActualHeight;
+                }
+            }
+        }
+        else
+        {
+            splitterAccum = _direction == DockSplitterDirection.Columns
+                ? this.ActualWidth
+                : this.ActualHeight;
+        }
+        return Math.Max(0, totalExtent - splitterAccum);
     }
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)

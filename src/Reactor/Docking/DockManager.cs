@@ -209,6 +209,29 @@ public sealed record DockManager : Element
     public Action? OnDropTargetsDismissed { get; init; }
 
     /// <summary>
+    /// Fires whenever the host's effective layout mutates as a result
+    /// of a drag/drop operation (§2.4). Carries the new
+    /// <see cref="DockNode"/> root the renderer is now showing — apps
+    /// can sync their own state (e.g. for live JSON inspection or
+    /// undo bookkeeping).
+    /// </summary>
+    /// <remarks>Spec 045 §2.4. The host still also fires the
+    /// canonical <see cref="OnContentDocked"/> for the per-pane event;
+    /// this companion event carries the whole tree.</remarks>
+    public Action<DockNode?>? OnLiveLayoutChanged { get; init; }
+
+    /// <summary>
+    /// Fires after a splitter drag completes (and the host's ratio
+    /// store has been updated). Apps that own
+    /// <see cref="SplitRatios"/> externally can use this to trigger a
+    /// re-render — the dictionary is shared, so re-reading it on the
+    /// next render surfaces the new ratios.
+    /// </summary>
+    /// <remarks>Spec 045 §2.1 — companion to <see cref="SplitRatios"/>
+    /// for live introspection.</remarks>
+    public Action? OnSplitterDragCompleted { get; init; }
+
+    /// <summary>
     /// Optional externally-owned ratio store for split-pane sizing. When
     /// supplied, the native renderer uses this dictionary instead of its
     /// internal <see cref="DockSplit"/>-ratio cache. Keys are tree-position

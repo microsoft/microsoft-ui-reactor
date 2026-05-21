@@ -15,10 +15,12 @@
 // via the side menu without relaunching the app.
 
 using System.Collections.Immutable;
+using System.Text.Json;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Docking;
 using Microsoft.UI.Reactor.Docking.Native;
+using Microsoft.UI.Reactor.Docking.Persistence;
 using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -99,10 +101,79 @@ class SceneAIde : Component
         // (top fills, bottom = 200dip), each half is a horizontal split, each
         // leaf is a DockTabGroup. The bottom row carries TabPosition.Bottom
         // DocumentGroups (Error List + Output/Terminal).
+
+        // Live layout state — mirrors the host's effective layout via
+        // OnLiveLayoutChanged so the JSON viewer panel can serialize it
+        // on every render. The starting tree is the IDE-style layout
+        // below; once the user drops a tab, setLiveLayout fires and
+        // subsequent renders feed the new tree back through the host.
+        var (liveLayout, setLiveLayout) = UseState<DockNode?>(BuildInitialLayout());
+
+        // Shared ratios dict supplied via SplitRatios so the JSON viewer
+        // sees splitter-drag results. The host mutates this in place;
+        // OnSplitterDragCompleted bumps the tick to force a re-render.
+        var ratiosRef = UseRef<Dictionary<string, double[]>>(new Dictionary<string, double[]>());
+        var (_, bumpTick) = UseReducer(0);
+
         var dock = new DockManager
         {
             PersistenceId = "dock-showcase:ide",
-            Layout = new DockSplit(
+            SplitRatios = ratiosRef.Current,
+            OnLiveLayoutChanged = newLayout => setLiveLayout(newLayout),
+            OnSplitterDragCompleted = () => bumpTick(t => t + 1),
+            Layout = liveLayout,
+        };
+
+        // Build the JSON viewer panel. Serialize the live layout via
+        // the same DockLayoutSerializer used for WindowPersistedScope —
+        // so what's shown is byte-identical to what would be saved.
+        var layoutJson = SafeSerialize(liveLayout);
+        var ratiosJson = SerializeRatios(ratiosRef.Current);
+        var jsonPanel = VStack(8,
+            TextBlock("Layout JSON").SemiBold(),
+            TextBlock("(updates on drag / drop / splitter release)")
+                .FontSize(11).Opacity(0.6),
+            new ScrollViewElement(
+                TextBlock(layoutJson)
+                    .FontFamily("Consolas, Courier New, monospace")
+                    .FontSize(11))
+            {
+                HorizontalScrollMode = ScrollMode.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            }.Height(360),
+            TextBlock("Split ratios").SemiBold().Margin(0, 12, 0, 0),
+            TextBlock(ratiosJson)
+                .FontFamily("Consolas, Courier New, monospace")
+                .FontSize(11)
+                .Opacity(0.85),
+            Button("Reset layout", () =>
+            {
+                setLiveLayout(BuildInitialLayout());
+                ratiosRef.Current.Clear();
+                bumpTick(t => t + 1);
+            }).Margin(0, 12, 0, 0)
+        ).Padding(12).Width(360);
+
+        return Grid(
+            new[] { GridSize.Star(1), GridSize.Auto },
+            new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(1) },
+            TextBlock("Scene A — IDE layout").FontSize(20).SemiBold()
+                .Grid(row: 0, column: 0, columnSpan: 2),
+            TextBlock(
+                "Mirrors WinUI.Dock's Example.WinUI/MainView.xaml: vertical split, " +
+                "two horizontal halves, bottom row uses TabPosition.Bottom. Drag tabs " +
+                "between groups; resize splitters; Esc cancels an in-flight drag."
+            ).Opacity(0.8).Margin(0, 0, 0, 8)
+                .Grid(row: 1, column: 0, columnSpan: 2),
+            dock.Grid(row: 2, column: 0),
+            jsonPanel.Grid(row: 2, column: 1)
+        ).Padding(16);
+    }
+
+    private static DockNode BuildInitialLayout()
+    {
+        return new DockSplit(
                 Orientation.Vertical,
                 new DockNode[]
                 {
@@ -218,20 +289,36 @@ class SceneAIde : Component
                                 CompactTabs: true),
                         },
                         Height: 200),
-                }),
-        };
+                });
+    }
 
-        return Grid(
-            new[] { GridSize.Star(1) },
-            new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(1) },
-            TextBlock("Scene A — IDE layout").FontSize(20).SemiBold().Grid(row: 0),
-            TextBlock(
-                "Mirrors WinUI.Dock's Example.WinUI/MainView.xaml: vertical split, " +
-                "two horizontal halves, bottom row uses TabPosition.Bottom. Drag tabs " +
-                "between groups; resize splitters; Esc cancels an in-flight drag."
-            ).Opacity(0.8).Margin(0, 0, 0, 8).Grid(row: 1),
-            dock.Grid(row: 2)
-        ).Padding(16);
+    private static string SafeSerialize(DockNode? root)
+    {
+        if (root is null) return "(empty layout)";
+        try
+        {
+            var json = DockLayoutSerializer.Save(root);
+            // Re-parse + pretty-print so the panel is readable. The
+            // serializer emits compact JSON for storage efficiency.
+            using var doc = JsonDocument.Parse(json);
+            return JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (Exception ex)
+        {
+            return $"(serialize failed: {ex.GetType().Name}: {ex.Message})";
+        }
+    }
+
+    private static string SerializeRatios(Dictionary<string, double[]> ratios)
+    {
+        if (ratios.Count == 0) return "(none — drag a splitter to populate)";
+        var lines = new List<string>(ratios.Count);
+        foreach (var kvp in ratios.OrderBy(k => k.Key))
+        {
+            var formatted = string.Join(", ", kvp.Value.Select(v => v.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)));
+            lines.Add($"\"{kvp.Key}\": [{formatted}]");
+        }
+        return string.Join("\n", lines);
     }
 }
 

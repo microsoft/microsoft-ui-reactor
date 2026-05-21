@@ -136,6 +136,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     try { DockFloatingWindow.Open(pane); }
                     catch { /* tear-out best-effort; surface via OnContentFloated */ }
                     manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
+                    // §2.4 — same as confirm path: surface the new tree.
+                    manager.OnLiveLayoutChanged?.Invoke(afterRemove);
                 }
             }
 
@@ -145,7 +147,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
 
         Element BuildNode(DockNode node, string path) => node switch
         {
-            DockSplit split => RenderSplit(split, path, ratioStore, RequestRatioRerender, BuildNode),
+            DockSplit split => RenderSplit(split, path, ratioStore, RequestRatioRerender, BuildNode,
+                onSplitterFinal: manager.OnSplitterDragCompleted),
             DockTabGroup grp => DockTabGroupRenderer.Render(
                 grp,
                 renderLeafContent: doc => WrapLeafWithPaneContext(doc),
@@ -219,6 +222,9 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                         setLayoutOverride(newLayout);
                         manager.OnContentDocked?.Invoke(
                             new DockContentDockedEventArgs { Content = session.Source, Target = target });
+                        // §2.4 — surface the new whole-tree layout for
+                        // apps that want to mirror it (e.g. JSON viewer).
+                        manager.OnLiveLayoutChanged?.Invoke(newLayout);
                         session.End();
                     }
                     setDragActive(false);
@@ -327,7 +333,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         string path,
         Dictionary<string, double[]> ratioStore,
         Action requestRerender,
-        Func<DockNode, string, Element> renderChild)
+        Func<DockNode, string, Element> renderChild,
+        Action? onSplitterFinal = null)
     {
         var children = split.Children;
         if (!ratioStore.TryGetValue(path, out var ratios) || ratios is null || ratios.Length != children.Count)
@@ -372,7 +379,11 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 // is reserved for the terminal isFinal event so the model
                 // catches up after the drag completes.
                 for (int i = 0; i < ratios.Length; i++) ratios[i] = newRatios[i];
-                if (isFinal) requestRerender();
+                if (isFinal)
+                {
+                    requestRerender();
+                    onSplitterFinal?.Invoke();
+                }
             });
     }
 

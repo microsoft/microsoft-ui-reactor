@@ -923,6 +923,9 @@ internal static class SelfTestFixtureRegistry
         "NativeDockingMatrix_WindowResizeAfterSplitterDrag_PanesRedistribute",
         "NativeDockingMatrix_IdempotentDragSameTarget_StableTree",
         "NativeDockingMatrix_RowSplitterDragPreservesInnerColumnRatios",
+        "NativeDockingMatrix_SplitterReleaseNoVisibleJump",
+        "NativeDockingMatrix_IdeLayoutResizeAndContainerResize_NoControlChurn",
+        "NativeDockingMatrix_SceneRerenderPreservesDockHostControls",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1827,6 +1830,9 @@ internal static class SelfTestFixtureRegistry
         "NativeDockingMatrix_WindowResizeAfterSplitterDrag_PanesRedistribute" => new NativeDockingDragDropMatrixFixtures.WindowResizeAfterSplitterDrag_PanesRedistribute(harness),
         "NativeDockingMatrix_IdempotentDragSameTarget_StableTree" => new NativeDockingDragDropMatrixFixtures.IdempotentDragSameTarget_StableTree(harness),
         "NativeDockingMatrix_RowSplitterDragPreservesInnerColumnRatios" => new NativeDockingDragDropMatrixFixtures.RowSplitterDragPreservesInnerColumnRatios(harness),
+        "NativeDockingMatrix_SplitterReleaseNoVisibleJump" => new NativeDockingDragDropMatrixFixtures.SplitterReleaseNoVisibleJump(harness),
+        "NativeDockingMatrix_IdeLayoutResizeAndContainerResize_NoControlChurn" => new NativeDockingDragDropMatrixFixtures.IdeLayoutResizeAndContainerResize_NoControlChurn(harness),
+        "NativeDockingMatrix_SceneRerenderPreservesDockHostControls" => new NativeDockingDragDropMatrixFixtures.SceneRerenderPreservesDockHostControls(harness),
 
         _ => null,
     };
