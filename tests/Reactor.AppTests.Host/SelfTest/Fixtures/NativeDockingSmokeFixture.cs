@@ -322,6 +322,108 @@ internal static class NativeDockingSmokeFixtures
     }
 
     /// <summary>
+    /// Spec 045 §2.10 — verify that the mounted host component registers
+    /// the chord delegates into <see cref="DockChordBridge"/> on render
+    /// and that the delegates remain invokable without throwing. The
+    /// state-mutation side-effect path (selectedIndexStore → re-render →
+    /// TabView SelectedIndex update) is exercised visually in the
+    /// showcase and locked down by `DockHostKeyboardTests` unit tests;
+    /// the sub-host the fixture mounts doesn't flush internal-state
+    /// re-renders through `Harness.Render`'s primary-host wait, so we
+    /// don't assert observable side effects here.
+    /// </summary>
+    internal class KeyboardChordsRegisteredOnMount(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            var a = new DockableContent("Alpha", TextBlock("body-alpha"), Key: "k:a", CanClose: true);
+            var b = new DockableContent("Beta",  TextBlock("body-beta"),  Key: "k:b", CanClose: true);
+            var managerEl = new DockManager
+            {
+                Layout = new DockTabGroup(new[] { a, b }, SelectedIndex: 0),
+                ActiveDocument = a,
+            };
+            host.Mount(_ => managerEl);
+            await Harness.Render();
+
+            var chords = DockChordBridge.Get(managerEl);
+            H.Check("Chords_BridgeRegistered_OnMount", chords is not null);
+            H.Check("Chords_NextTab_DelegateNonNull", chords?.NextTab is not null);
+            H.Check("Chords_PrevTab_DelegateNonNull", chords?.PrevTab is not null);
+            H.Check("Chords_CloseActive_DelegateNonNull", chords?.CloseActive is not null);
+            H.Check("Chords_EnterDropMode_DelegateNonNull", chords?.EnterDropMode is not null);
+
+            chords?.NextTab();
+            chords?.PrevTab();
+            chords?.EnterDropMode();
+            H.Check("Chords_Invocation_DoesNotThrow", true);
+
+            host.Mount(_ => TextBlock("chords-done"));
+            await Harness.Render();
+        }
+    }
+
+    /// <summary>
+    /// Spec 045 §2.14 — verify the drag-start gate refuses panes whose
+    /// <see cref="DockableContent.CanMove"/> is <c>false</c>. The gate
+    /// lives inside the host component's <c>HandleTabDragStarting</c>
+    /// closure, so this fixture asserts the contract indirectly: it
+    /// confirms that <see cref="DockDragSession.Begin"/> (the production
+    /// session-start path the component calls AFTER the gate) succeeds
+    /// when invoked directly, and documents that the gate's predicate
+    /// is verified via <see cref="DockableContent.CanMove"/> property
+    /// tests in <c>DockApiShapeTests</c> + <c>DocumentToolWindowTests</c>.
+    /// </summary>
+    internal class PermissionGate_PinnedPaneSurfaceCheck(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            // CanMove is an init-only property on the base record, not on
+            // the positional P1 ctor — set it via 'with'.
+            var pinned = new DockableContent(
+                Title: "Pinned",
+                Content: TextBlock("body-pinned"),
+                Key: "k:pinned",
+                CanClose: false) with { CanMove = false };
+            var movable = new DockableContent(
+                Title: "Movable",
+                Content: TextBlock("body-movable"),
+                Key: "k:movable",
+                CanClose: true);
+
+            host.Mount(_ => new DockManager
+            {
+                Layout = new DockTabGroup(new[] { pinned, movable }),
+            });
+            await Harness.Render();
+
+            H.Check("PermGate_Pinned_CanMove_IsFalse", !pinned.CanMove);
+            H.Check("PermGate_Movable_CanMove_IsTrue", movable.CanMove);
+            H.Check("PermGate_Pinned_CanClose_IsFalse", !pinned.CanClose);
+
+            // The §2.4 production path: TabView's TabDragStarting event →
+            // HandleTabDragStarting → CanMove check → DockDragSession.Begin.
+            // We don't fire real TabDragStarting (no programmatic surface
+            // for it), but we verify the post-gate path still works for a
+            // legitimately-movable pane by calling Begin directly.
+            DockDragSession.ResetForTest();
+            DockDragSession.Begin(movable, new DockManager(), sourceTabIndex: 1);
+            H.Check("PermGate_SessionBegin_SucceedsForMovable",
+                DockDragSession.Current is { IsActive: true });
+            DockDragSession.Current?.End();
+
+            host.Mount(_ => TextBlock("permgate-done"));
+            await Harness.Render();
+        }
+    }
+
+    /// <summary>
     /// Spec 045 §2.18 — verifies the "component is the rehydrator" pattern:
     /// app state holds a collection, the render lambda maps it through
     /// <c>.Select</c> into <c>DockableContent</c> records, and adds /
