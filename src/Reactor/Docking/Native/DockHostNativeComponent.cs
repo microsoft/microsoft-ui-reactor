@@ -711,10 +711,31 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // PaneState for a docked leaf in the center tree is always Docked.
         // Floating / AutoHidden states are published by the floating window
         // host (§2.6) and the side-popup host (§2.5) respectively.
-        return padded
+        // Spec 045 §2.22 a11y — stable AutomationId per pane derived from
+        // its Key.ToString() so screen readers + selftests address panes
+        // deterministically across re-renders.
+        var wrapped = padded
             .Padding(16)
             .Provide(DockContexts.Pane, (DockPaneInfo?)info)
             .Provide(DockContexts.PaneState, DockPaneState.Docked);
+        var paneAtId = AutomationIdForPane(leaf);
+        if (!string.IsNullOrEmpty(paneAtId))
+            wrapped = wrapped.AutomationId(paneAtId).AutomationName(leaf.Title ?? paneAtId);
+        return wrapped;
+    }
+
+    /// <summary>
+    /// Spec 045 §2.22 a11y — stable AutomationId derived from the pane's
+    /// Key. The key may be any object; we serialize via ToString() and
+    /// prefix with "pane:" so the AT tree carries an unambiguous
+    /// docking-pane identifier separable from app-supplied ones. Returns
+    /// null when the pane has no key (the AT tree falls back to the
+    /// pane's Title or framework defaults).
+    /// </summary>
+    internal static string? AutomationIdForPane(DockableContent leaf)
+    {
+        var keyText = leaf.Key?.ToString();
+        return string.IsNullOrEmpty(keyText) ? null : $"pane:{keyText}";
     }
 
     private static void SyncModelFromElement(DockHostModel model, DockManager element, DockNode? effectiveLayout)

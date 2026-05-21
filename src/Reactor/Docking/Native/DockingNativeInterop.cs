@@ -1,6 +1,8 @@
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
@@ -55,6 +57,16 @@ public static class DockingNativeInterop
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     VerticalAlignment = VerticalAlignment.Stretch,
                 };
+                // Spec 045 §2.22 — DockHost exposes the docking subtree as
+                // a `Custom` landmark region so AT walkers identify it as
+                // a distinct functional area. The localized name comes
+                // from `Docking.DockHost.Landmark`; apps wire their
+                // resolver to translate (defaults to "Docking area").
+                AutomationProperties.SetLandmarkType(host, AutomationLandmarkType.Custom);
+                AutomationProperties.SetLocalizedLandmarkType(host,
+                    DockingStrings.Get(DockingStringKeys.DockHostLandmark));
+                AutomationProperties.SetName(host,
+                    DockingStrings.Get(DockingStringKeys.DockHostLandmark));
 
                 var content = BuildContent(element);
                 var realized = rec.Reconcile(null, content, null, rerender);

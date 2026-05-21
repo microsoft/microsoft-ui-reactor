@@ -29,6 +29,18 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — §2.22 accessibility baseline.** Every docked
+  pane's wrapper Border now carries a stable
+  `AutomationProperties.AutomationId = "pane:<key>"` derived from
+  `DockableContent.Key`, plus `AutomationProperties.Name` from the
+  pane's app-owned Title — so screen readers and selftests address
+  panes deterministically across re-renders. The DockHost root
+  Border exposes `AutomationLandmarkType.Custom` + a
+  `LocalizedLandmarkType` + `Name` sourced from `DockingStrings`
+  (key `Docking.DockHost.Landmark`; default "Docking area"). New
+  unit suite `DockA11yTests` (5 cases) + selftest fixture
+  `NativeDocking_A11y_HostLandmarkAndPaneAutomationIds` walking
+  the realized control tree.
 - **Spec 045 Phase 2 — §2.21 localization routing.** Every
   docking user-facing string now flows through a static
   `DockingStrings.Get(key)` router with an optional

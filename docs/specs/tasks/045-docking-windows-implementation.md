@@ -1100,14 +1100,35 @@ integration.*
 
 ### 2.22 Accessibility (spec §8.7)
 
-- [ ] **AT roles:** `Document` → `TabItem` inside `DocumentGroup`
+- [~] **AT roles:** `Document` → `TabItem` inside `DocumentGroup`
   (`Tab`); `ToolWindow` → `Pane` with `AccessibleName` from `Title`;
   auto-hidden ToolWindow on side strip → `Button` until expanded,
-  then `Pane`.
-- [ ] Each pane carries stable `AutomationId` derived from
+  then `Pane`. *Tab role for documents is inherited from WinUI
+  `TabView` (Pane element with `Tab` children automatically). Each
+  pane's wrapper Border now carries `AutomationProperties.Name` =
+  `leaf.Title` (`DockHostNativeComponent.WrapLeafWithPaneContext`),
+  which becomes the AT label. The side-strip-button → expanded-Pane
+  transition for an auto-hidden ToolWindow remains a §2.5 follow-up
+  (the popup currently has the implicit `Pane` role, but the
+  explicit AT role transition isn't asserted yet).*
+- [x] Each pane carries stable `AutomationId` derived from
   `Key.ToString()` so AT + selftests address panes deterministically.
-- [ ] `DockHost` itself exposes `LandmarkRegion` with app-supplied
-  localized name.
+  `DockHostNativeComponent.AutomationIdForPane(leaf)` returns
+  `pane:<key>` (or null when key is empty); applied via
+  `.AutomationId(...)` in `WrapLeafWithPaneContext`. Unit-tested
+  in `DockA11yTests` (5 cases — non-null key, stability across
+  equivalent panes, null key, empty-string key, non-string key).
+  Selftest `NativeDocking_A11y_HostLandmarkAndPaneAutomationIds`
+  walks the realized control tree and finds the active pane's
+  wrapper with the expected AutomationId.
+- [x] `DockHost` itself exposes `LandmarkRegion` with app-supplied
+  localized name. `DockingNativeInterop.Register` sets
+  `AutomationProperties.LandmarkType = Custom` +
+  `LocalizedLandmarkType` + `Name` on the host `Border`, sourced
+  from `DockingStrings.Get(DockingStringKeys.DockHostLandmark)`
+  (English default "Docking area"; apps localize via the
+  `DockingStrings.Resolver` delegate). Selftest verifies the
+  landmark type + localized name on the realized Border.
 - [ ] Splitter handles focusable + arrow-key resizable (precedent:
   WPF `GridSplitter`).
 - [ ] Tab strip fully arrow-key navigable.
@@ -1134,8 +1155,14 @@ integration.*
 
 ### 2.23 Globalization / RTL + bidi (spec §8.8)
 
-- [ ] `DockHost` honors `FlowDirection` from `RenderContext` (spec
-  005).
+- [~] `DockHost` honors `FlowDirection` from `RenderContext` (spec
+  005). *WinUI's visual-tree FlowDirection inheritance handles the
+  bulk of the work: when an ancestor sets `FlowDirection.RightToLeft`,
+  the docking Border, TabView, side strips, and drop-target overlay
+  pick it up automatically. The drop-target icon glyph mirror + the
+  custom-drawn splitter direction inversion items below remain
+  open. The invariant-culture JSON path (§2.7) is already proven
+  by `LayoutSerializerTests.RoundTrip_InvariantCulture_AcrossDifferentLocales`.*
 - [ ] **Sidebar order flips** in RTL (left becomes right visually;
   semantics preserved — `LeftSide` is logical "left of reading
   order" per Office/VS convention).

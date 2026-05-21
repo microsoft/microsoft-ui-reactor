@@ -32,6 +32,9 @@ namespace Microsoft.UI.Reactor.Docking;
 /// </summary>
 public static class DockingStringKeys
 {
+    // Host landmark (§2.22).
+    public const string DockHostLandmark = "Docking.DockHost.Landmark";
+
     // Drop-target overlay (§2.3).
     public const string DropTargetCenter = "Docking.DropTarget.Center";
     public const string DropTargetSplitLeft = "Docking.DropTarget.SplitLeft";
@@ -140,6 +143,7 @@ public static class DockingStrings
     /// </summary>
     private static string DefaultEnglish(string key) => key switch
     {
+        DockingStringKeys.DockHostLandmark      => "Docking area",
         DockingStringKeys.DropTargetCenter      => "Add as tab",
         DockingStringKeys.DropTargetSplitLeft   => "Split left",
         DockingStringKeys.DropTargetSplitTop    => "Split top",

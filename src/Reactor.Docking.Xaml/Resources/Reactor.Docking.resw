@@ -48,6 +48,12 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
 
+  <!-- Host landmark (P2 §2.22) ──────────────────────────────────────── -->
+  <data name="Docking.DockHost.Landmark" xml:space="preserve">
+    <value>Docking area</value>
+    <comment>AutomationProperties.LocalizedLandmarkType + Name for the DockHost root. Spec 045 §2.22.</comment>
+  </data>
+
   <!-- Drop-target overlay (P2 §2.3) ────────────────────────────────── -->
   <data name="Docking.DropTarget.Center" xml:space="preserve">
     <value>Add as tab</value>
