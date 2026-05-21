@@ -70,6 +70,9 @@ jobs:
       - name: Install minver-cli
         run: dotnet tool install --global minver-cli --version 5.0.0
 
+      - name: Install BinSkim
+        run: dotnet tool install --global Microsoft.CodeAnalysis.BinSkim
+
       - name: Resolve version
         id: version
         shell: pwsh
@@ -131,6 +134,34 @@ jobs:
           --self-contained false
           -p:Version=${{ steps.version.outputs.version }}
           -o artifacts/mur/arm64
+
+      # Managed-only repo: most native PE-hardening rules no-op against MSIL
+      # assemblies. The run produces a SARIF for SDL compliance attestation
+      # (ADO 62373198). Initial rollout is informational — `continue-on-error`
+      # keeps the release pipeline green while findings are triaged. The
+      # SARIF artifact is uploaded unconditionally so reviewers can attach it
+      # to the work item.
+      - name: Run BinSkim
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/binskim | Out-Null
+          binskim analyze `
+            "artifacts/nupkg/*.nupkg" `
+            "artifacts/mur/x64/*.dll" `
+            "artifacts/mur/x64/*.exe" `
+            "artifacts/mur/arm64/*.dll" `
+            "artifacts/mur/arm64/*.exe" `
+            --output artifacts/binskim/binskim.sarif `
+            --recurse
+
+      - name: Upload BinSkim SARIF
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binskim-${{ steps.version.outputs.version }}
+          path: artifacts/binskim/binskim.sarif
+          retention-days: 30
 
       - name: Assemble skill kit
         shell: pwsh
