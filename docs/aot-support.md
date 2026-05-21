@@ -42,6 +42,7 @@ These subsystems compile cleanly with `IsAotCompatible=true` (the warnings are s
 - **The library compiles AOT-clean.** Builds of `Reactor.csproj` produce zero IL2*/IL3* warnings. New code that reaches for reflection must either be source-generated, annotated with `DynamicallyAccessedMembers`, or — as a last resort — gated behind `[RequiresUnreferencedCode]` / `[RequiresDynamicCode]` so consumers see the warning at the call site.
 - **Suppressions are temporary.** Every `[UnconditionalSuppressMessage("Trimming", ...)]` or `("AOT", ...)` in this repo is a TODO. The justification field names the reflection use; tracking is folded into issue #70.
 - **The benchmark canary.** `tests/stress_perf/StressPerf.Reactor` (and the `StressPerf.Direct`/`ReactorGrid` siblings) set `PublishAot=true`. If they stop publishing, an AOT regression has landed in the framework.
+- **The runtime canary.** CI's `AOT Selftests` job (`.github/workflows/ci.yml`) publishes `tests/Reactor.AppTests.Host` with `PublishAotInternal=true` and runs the full selftest suite against the NativeAOT binary on every PR. `SelfTestRunner.DefaultAotSkipPatterns` mutes the known reflection-bound fixtures (Devtools/MCP, PropertyGrid auto-discovery, Issue142 XAML metadata, plus the two framework cases under investigation); any *new* failure fails the job. If you intentionally need to add a skip, document the bucket in the comment above `DefaultAotSkipPatterns` and re-probe with `tests/Reactor.AppTests.Host/probe-aot-skips.ps1`.
 
 ## Required publish-time workarounds
 

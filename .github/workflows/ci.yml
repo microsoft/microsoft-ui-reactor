@@ -143,6 +143,57 @@ jobs:
       - name: Build
         run: dotnet build Reactor.slnx --no-restore --configuration Release
 
+  aot-selftests:
+    name: AOT Selftests
+    needs: changes
+    if: needs.changes.outputs.non-md == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: 10.0.x
+
+      # Publish the selftest host with NativeAOT. PublishAotInternal=true,
+      # Platform=x64, and rid=win-x64 are the canonical knobs documented in
+      # docs/aot-support.md and used by tests/Reactor.AppTests.Host/probe-aot-skips.ps1.
+      - name: Publish AOT host
+        run: >
+          dotnet publish tests/Reactor.AppTests.Host
+          -p:PublishAotInternal=true
+          -p:Platform=x64
+          -r win-x64
+          -c Release
+          --nologo
+
+      # Run the published exe directly (not via `dotnet test`) so we exercise
+      # the NativeAOT binary. SelfTestRunner.DefaultAotSkipPatterns gates the
+      # known reflection-bound failures (40 fixtures across Devtools/MCP,
+      # PropertyGrid auto-discovery, Issue142 XAML metadata, and two framework
+      # cases); any *new* failure surfaces as exit code 1 and fails the job.
+      # See docs/aot-support.md for the skip-list debugging workflow.
+      - name: Run AOT selftests
+        shell: pwsh
+        run: |
+          $exe = 'tests/Reactor.AppTests.Host/bin/x64/Release/net10.0-windows10.0.22621.0/win-x64/publish/Reactor.AppTests.Host.exe'
+          if (-not (Test-Path $exe)) {
+            Write-Error "AOT-published host not found at $exe"
+            exit 1
+          }
+          & $exe --self-test 2>&1 | Tee-Object -FilePath aot-selftest-output.tap
+          exit $LASTEXITCODE
+
+      - name: Upload TAP output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aot-selftest-tap
+          path: aot-selftest-output.tap
+          if-no-files-found: ignore
+
   docs-check-tier:
     name: Docs tier-drift
     needs: changes
