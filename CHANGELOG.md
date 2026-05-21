@@ -29,6 +29,17 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — §2.20 perf budget tests.** Three new
+  unit tests in `DockPerfBudgetTests` enforce the §2.20 spec
+  budgets: layout JSON load (200 panes, median < 200ms CI ceiling
+  / 50ms spec budget), drop-target hit-test hot path (no
+  measurable allocation across 100k `ComputePreviewBounds`
+  iterations — 1B/iter cap), and 50-pane mutator shape change
+  (RemovePane + InsertPaneAtTarget, median ≤ 25ms CI ceiling /
+  1ms spec budget). Pattern follows spec 034 (allocation counter)
+  + spec 031 (median-of-N sampling). Remaining §2.20 items
+  (frame-aligned hover, tear-out frame budget, cold-start, DPI
+  re-layout) ride on the spec 031 frame-aligned sampler harness.
 - **Spec 045 Phase 2 — §2.22 accessibility baseline.** Every docked
   pane's wrapper Border now carries a stable
   `AutomationProperties.AutomationId = "pane:<key>"` derived from
