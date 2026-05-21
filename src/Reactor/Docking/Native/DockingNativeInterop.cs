@@ -43,6 +43,7 @@ public static class DockingNativeInterop
         ArgumentNullException.ThrowIfNull(reconciler);
 
         DockSplitterReconcilerRegistration.Register(reconciler);
+        DockDropTargetReconcilerRegistration.Register(reconciler);
 
         reconciler.RegisterType<DockManager, Border>(
             mount: static (rec, element, rerender) =>

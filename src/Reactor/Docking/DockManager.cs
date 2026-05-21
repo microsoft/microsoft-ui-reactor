@@ -173,6 +173,42 @@ public sealed record DockManager : Element
     public Action<DockFloatingWindowClosedEventArgs>? OnFloatingWindowClosed { get; init; }
 
     /// <summary>
+    /// When true, the manager renders the drop-target overlay (9 buttons +
+    /// hover preview rectangle) above the docked content. Spec 045 §2.3
+    /// builds the overlay primitive; the §2.4 drag pipeline flips this
+    /// flag mid-gesture to show the overlay during a tab drag. Apps can
+    /// set it directly for testing / keyboard-initiated move (§2.10
+    /// <c>Ctrl+Shift+M</c>).
+    /// </summary>
+    /// <remarks>Spec 045 §2.3.</remarks>
+    public bool ShowDropTargets { get; init; }
+
+    /// <summary>
+    /// Optional callback fired when the overlay's hovered target changes.
+    /// Null while no target is hovered. Fires at pointer-move rate during
+    /// a drag; budget per call is ≤ 2 ms (spec §8.1) and the renderer's
+    /// hot path is allocation-free aside from the args record.
+    /// </summary>
+    /// <remarks>Spec 045 §2.3.</remarks>
+    public Action<DockTarget?>? OnDropTargetHovered { get; init; }
+
+    /// <summary>
+    /// Optional callback fired when the user confirms a drop-target (click,
+    /// Enter, drop). The §2.4 drag pipeline subscribes to apply the dock
+    /// operation; apps may also subscribe for telemetry / undo bookkeeping.
+    /// </summary>
+    /// <remarks>Spec 045 §2.3.</remarks>
+    public Action<DockTarget>? OnDropTargetConfirmed { get; init; }
+
+    /// <summary>
+    /// Optional callback fired when the overlay is dismissed (Esc, drag
+    /// cancel). Apps that opened the overlay via <see cref="ShowDropTargets"/>
+    /// should reset it to <c>false</c> in response.
+    /// </summary>
+    /// <remarks>Spec 045 §2.3.</remarks>
+    public Action? OnDropTargetsDismissed { get; init; }
+
+    /// <summary>
     /// Optional externally-owned ratio store for split-pane sizing. When
     /// supplied, the native renderer uses this dictionary instead of its
     /// internal <see cref="DockSplit"/>-ratio cache. Keys are tree-position

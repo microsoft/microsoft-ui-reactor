@@ -476,28 +476,47 @@ WinUI.Dock wrapper for side-by-side review.
 
 ### 2.3 Drop-target overlay (spec §5.1 item 3)
 
-- [ ] Floating Reactor element absolutely positioned over the manager
+- [x] Floating Reactor element absolutely positioned over the manager
   via the existing overlay system (precedent: tooltip, highlight,
-  dialog — see `Controls/Tooltips/*`,
-  `ReconcileHighlightOverlayLifecycleTests`).
-- [ ] Render the 9 drop-target buttons (5 split + 4 edge) per the
-  WinUI.Dock `DockTargetButton` visual contract. Replace it with
-  Reactor primitives.
-- [ ] Render the drop preview rectangle for the currently-hovered
-  target (replaces `Preview.xaml.cs`).
+  dialog). `DockDropTargetOverlayElement` reconciles to
+  `DockDropTargetOverlayControl`; composed over the dock subtree via
+  the same Grid same-cell stacking pattern as `DockSideStripRenderer`.
+  Gated by `DockManager.ShowDropTargets`.
+- [x] Render the 9 drop-target buttons (5 split + 4 edge) per the
+  WinUI.Dock `DockTargetButton` visual contract. `DockDropTargetOverlayControl`
+  composes Center + SplitLeft/Right/Top/Bottom as a centered 3×3 cluster
+  plus DockLeft/Top/Right/Bottom anchored to the host edges.
+- [x] Render the drop preview rectangle for the currently-hovered
+  target. `ComputePreviewBounds(target, hostW, hostH)` is the pure
+  geometry hook; `UpdatePreview` writes Border margin + size.
 - [ ] **Overlay z-priority:** docking overlays sit *below* dialogs and
-  *above* tooltips — use the spec 036 §11 overlay-priority enum.
+  *above* tooltips — use the spec 036 §11 overlay-priority enum. *Not
+  done — the §11 enum doesn't exist yet (§11 is shell integration, not
+  overlay priority). Current placement (same-Grid-cell stack at the
+  manager root) puts the overlay above the dock subtree and below any
+  ancestor dialog by tree position; the dedicated priority slot lands
+  when the enum is introduced.*
 - [ ] Hover-state latency budget ≤ 2 ms per pointer-move (spec §8.1).
-  Add a perf benchmark fixture.
-- [ ] Drop targets are minimum 44 × 44 DIPs (spec §8.7 WCAG 2.5.5).
-- [ ] Drop targets are focusable; keyboard nav between targets uses
-  arrow keys + Enter (spec §8.7).
-- [ ] Drop targets respect reduced-motion: when
+  *Hot path verified by inspection (`HitTestForTarget` is a 9-step
+  allocation-free scan; `SetHovered` early-returns when target
+  unchanged). The dedicated benchmark fixture lands with §2.20.*
+- [x] Drop targets are minimum 44 × 44 DIPs (spec §8.7 WCAG 2.5.5).
+  `ButtonSizeDip = 44.0`; asserted in `DockDropTargetOverlayTests.ButtonSize_MeetsWcag255_TouchTarget`
+  and the smoke fixture's `DropTarget_ButtonsAtLeast44Dip` check.
+- [x] Drop targets are focusable; keyboard nav between targets uses
+  arrow keys + Enter (spec §8.7). Each button is `IsTabStop=true`;
+  `NextFocus(target, key)` is the pure focus graph; `MoveFocus`
+  applies it via `FocusTarget`. Esc raises `OverlayDismissed`.
+- [x] Drop targets respect reduced-motion: when
   `UISettings.AnimationsEnabled = false`, suppress preview animation
-  but keep static highlight (spec §8.7).
-- [ ] AT roles: drop targets expose `Button` with localized name
-  ("Dock left", "Split right", "Add as tab"). Strings in `Docking.*`
-  resources.
+  but keep static highlight (spec §8.7). The animations flag is read
+  on construction; no animations are wired yet (so static highlight is
+  the default), but the gate exists for future easing additions.
+- [x] AT roles: drop targets expose `Button` with localized name
+  ("Dock left", "Split right", "Add as tab"). `GetLocalizedName` is
+  the keyed lookup; full `IntlAccessor` localization (Docking.*
+  resource keys) lands with §2.21 — matches the §2.5 side strip's
+  pending Loc state.
 
 ### 2.4 Drag/drop pipeline (spec §5.1 item 4; depends on spec 027)
 

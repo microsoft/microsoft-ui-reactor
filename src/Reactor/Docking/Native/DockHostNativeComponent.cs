@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml.Controls;
+using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.Docking.Native;
 
@@ -107,6 +108,25 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         Element composed = hasSides
             ? DockSideStripRenderer.Compose(manager, body, expandedSideKey, setExpandedSideKey)
             : body;
+
+        // §2.3 — drop-target overlay. Composed last so it paints above the
+        // dock subtree (Grid same-cell stacking ⇒ later children on top).
+        // The overlay primitive is built here; the §2.4 drag pipeline
+        // will flip ShowDropTargets mid-gesture once that lands. Apps may
+        // also set it directly (keyboard-initiated move, testing).
+        if (manager.ShowDropTargets)
+        {
+            var overlay = new DockDropTargetOverlayElement(
+                OnHover: manager.OnDropTargetHovered,
+                OnConfirm: manager.OnDropTargetConfirmed,
+                OnDismiss: manager.OnDropTargetsDismissed);
+
+            composed = Grid(
+                new[] { GridSize.Star(1) },
+                new[] { GridSize.Star(1) },
+                composed.Grid(row: 0, column: 0),
+                overlay.Grid(row: 0, column: 0));
+        }
 
         // §2.17 — publish the host model + active-key + layout-snapshot
         // context slots so descendant function components hooked into

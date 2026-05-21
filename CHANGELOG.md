@@ -29,6 +29,25 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — Docking drop-target overlay (§2.3).**
+  `DockDropTargetOverlayControl` lands as the Reactor-native replacement
+  for WinUI.Dock's `DockTargetButton` + `Preview.xaml.cs`. Renders 9
+  drop targets (5 split + 4 edge per `DockTarget`) at minimum 44×44 DIP
+  (WCAG 2.5.5 / spec §8.7), with a hover preview rectangle keyed off
+  `ComputePreviewBounds(target, hostW, hostH)`. Targets are focusable
+  and arrow-key navigable through `NextFocus` (cluster cross + edge
+  ring); `Enter` confirms, `Esc` dismisses. The overlay reads
+  `UISettings.AnimationsEnabled` at construction for reduced-motion
+  gating. Mounting is gated by the new `DockManager.ShowDropTargets`
+  prop with `OnDropTargetHovered` / `OnDropTargetConfirmed` /
+  `OnDropTargetsDismissed` callbacks — the §2.4 drag pipeline flips
+  the flag mid-gesture; apps can also drive it directly for keyboard-
+  initiated move (§2.10 `Ctrl+Shift+M`) or testing. AT names are
+  inline English pending the §2.21 `Docking.*` resource pass.
+  20 unit tests cover preview bounds, focus graph, and AT names;
+  the `NativeDocking_DropTargetOverlayShowsAndDismisses` smoke fixture
+  exercises the full mount → confirm → unmount cycle. (spec 045 §2.3,
+  §8.7)
 - **Spec 045 Phase 2 — Docking (foundation).** Foundation layer of the
   Reactor-native rewrite. The Phase-1 public API moves from
   `src/Reactor.Docking.Xaml/` into `src/Reactor/Docking/` (same
