@@ -5,13 +5,13 @@
 | **Document owner** | Chris Anderson (`andersonch@microsoft.com`) |
 | **Last updated** | 2026-05-21 |
 | **Repository / commit** | `microsoft/microsoft-ui-reactor` @ `main` (`2335e75f` baseline) |
-| **Audience** | MORSE security review, incoming contributors, downstream consumers performing their own threat models |
+| **Audience** | Microsoft internal security review, incoming contributors, downstream consumers performing their own threat models |
 | **Status** | Living document — update on architectural change, new trust boundary, or new external surface |
-| **Related** | [`SECURITY.md`](../../SECURITY.md) (vulnerability reporting), [`docs/specs/`](../specs/) (design specs), |
+| **Related** | [`SECURITY.md`](../../SECURITY.md) (vulnerability reporting), [`docs/specs/`](../specs/) (design specs) |
 
 ## 1. Purpose and scope
 
-This document is the high-level threat model for the Microsoft.UI.Reactor framework. It is intended as the engineering input to MORSE security review and the durable artifact future reviewers reference.
+This document is the high-level threat model for the Microsoft.UI.Reactor framework. It is intended as the engineering input to Microsoft's internal security review and the durable artifact future reviewers reference.
 
 **In scope:** the security posture of the framework as built and shipped from this repo — what Reactor *itself* does at runtime, what surfaces it exposes to the operating system and other processes, and the trust assumptions baked into those surfaces.
 
@@ -29,7 +29,7 @@ The only sockets the framework ever opens are two **opt-in, loopback-only, beare
 
 There is no auto-updater, no telemetry endpoint, no license check, no crypto stored at rest, no key management, and no PKI implementation. `System.Security.Cryptography.RandomNumberGenerator` is used exclusively to generate the per-launch bearer tokens above.
 
-The most attacker-influenced text Reactor parses in-process is CommonMark markdown (`Md4cParser`) and SVG path-data strings (`PathDataParser`). Both run inside the host app's trust level — *not* a trust boundary in the MORSE sense, but practical hardening (memory safety from managed code, planned SharpFuzz coverage) is documented in [§7](#7-attack-surfaces).
+The most attacker-influenced text Reactor parses in-process is CommonMark markdown (`Md4cParser`) and SVG path-data strings (`PathDataParser`). Both run inside the host app's trust level — *not* a formal trust boundary, but practical hardening (memory safety from managed code, in-tree SharpFuzz coverage) is documented in [§7](#7-attack-surfaces).
 
 ## 3. What Reactor is, in one paragraph
 
@@ -225,7 +225,7 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 **Residual risk:**
 
 - A logic defect in the URL sanitizer (e.g., scheme-confusion via tab/newline) could let through a dangerous URL. Mitigation: `SanitizeUrlTests` covers the OWASP XSS filter-evasion cheat sheet entries that apply to URL parsing.
-- A logic defect in `Md4cParser` could cause infinite loop / OOM on adversarial input. Mitigation today: ~2,200 xUnit tests including 590 Yoga-style fixture cases and the upstream md4c spec tests. Mitigation planned: SharpFuzz harness ([compliance ADO 62373203](https://dev.azure.com/microsoft/OS/_workitems/edit/62373203)).
+- A logic defect in `Md4cParser` could cause infinite loop / OOM on adversarial input. Mitigation today: ~2,200 xUnit tests including 590 Yoga-style fixture cases and the upstream md4c spec tests. Mitigation in flight: a SharpFuzz harness (`tests/Reactor.Fuzz/`) covers `MarkdownHtml.Render` on every PR via the `fuzz-smoke` CI job and is being onboarded for continuous fuzzing.
 - Markdown is rendered into the consuming-app's tree; the consuming app decides whether to display attacker-influenced markdown at all. **The threat is the consuming app's choice to render untrusted markdown, not the framework's. Reactor's job is to make the default rendering safe.**
 
 ### 7.5 SVG path data parser
@@ -251,9 +251,9 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 
 **Residual risk:** if `mur` were ever extended to follow URL-style attach targets (e.g., `mur attach https://...`), the threat model expands to cover network identity. **As of the audit date, no such target exists.** Adding one would require revisiting this document.
 
-## 8. Threat enumeration against the MORSE intake answers
+## 8. Threat enumeration against the internal security-review intake
 
-The MORSE intake form (ADO 62380290) gave succinct answers about Reactor's security posture. This section expands each answer with evidence:
+The Microsoft-internal security-review intake form gave succinct answers about Reactor's security posture. This section expands each answer with evidence:
 
 | Intake answer | Verified by | Evidence |
 |---|---|---|
@@ -266,7 +266,7 @@ The MORSE intake form (ADO 62380290) gave succinct answers about Reactor's secur
 
 ## 9. Out-of-scope non-surfaces (with rationale)
 
-The MORSE Security Assessment task ([62373208](https://dev.azure.com/microsoft/OS/_workitems/edit/62373208)) lists six trust-boundary triggers. Reactor matches **none** of them. Each is documented here so future reviewers can verify the scope-down quickly:
+Microsoft's internal Security Assessment policy lists six trust-boundary triggers that escalate a service into in-depth review. Reactor matches **none** of them. Each is documented here so future reviewers can verify the scope-down quickly:
 
 | Trigger | Applicable? | Why not |
 |---|---|---|
@@ -281,19 +281,19 @@ The MORSE Security Assessment task ([62373208](https://dev.azure.com/microsoft/O
 
 | Channel | Risk | Mitigation |
 |---|---|---|
-| `nuget.org` for direct & transitive deps | Compromise of upstream feed → poisoned dep gets pulled at restore | `nuget.config` clears inherited feeds and pins to `nuget.org` + `local-nupkgs/`. Dependabot enabled (`.github/dependabot.yml`). [`dotnet list package --vulnerable`](https://learn.microsoft.com/dotnet/core/tools/dotnet-list-package) gate planned as part of ADO 62373205. |
-| Source-ported OSS (Yoga / md4c / D3) | Upstream defect ported in by hand without notice | `ThirdPartyNoticeText.txt` lists each; planned `cgmanifest.json` (ADO 62373205) registers them with Component Governance so upstream advisories surface internally. |
-| GitHub repo → NuGet publish | Compromised CI builds malicious package | `.github/workflows/release.yml` builds in `windows-latest` runner; planned BinSkim (PR #365, merged) and CodeQL (enabled 2026-05-21) add additional verification before publish. |
+| `nuget.org` for direct & transitive deps | Compromise of upstream feed → poisoned dep gets pulled at restore | `nuget.config` clears inherited feeds and pins to `nuget.org` + `local-nupkgs/`. Dependabot enabled (`.github/dependabot.yml`). CI `vulnerable-packages` job runs [`dotnet list package --vulnerable`](https://learn.microsoft.com/dotnet/core/tools/dotnet-list-package) on every PR and fails on High/Critical findings. |
+| Source-ported OSS (Yoga / md4c / D3) | Upstream defect ported in by hand without notice | `ThirdPartyNoticeText.txt` lists each; `cgmanifest.json` registers them with Component Governance so upstream advisories surface internally. |
+| GitHub repo → NuGet publish | Compromised CI builds malicious package | `.github/workflows/release.yml` builds in `windows-latest` runner; BinSkim (PR #365) and CodeQL provide additional verification before publish. |
 | `GitHub.Copilot.SDK 0.1.32` transitive | Ships a third-party native `copilot.exe` (`runtimes/<rid>/native/`) without Control Flow Guard | Known; tracked under the BinSkim follow-up. Not Reactor-authored. The binary is only present in the `mur` CLI publish artifact, not in the framework NuGet. |
 | Developer-downloaded skill-kit zip | Tampering between Microsoft and developer | Authenticode signing of the zip is a known compliance gap; tracked under the SDL signing workstream. |
 
-## 11. Known open items / asks for MORSE
+## 11. Known open items / questions for internal security review
 
-1. **Authenticode codesigning** of the NuGet package and `mur.exe` is not yet wired into `release.yml`. We'd like MORSE's recommendation on the signing posture for an experimental public NuGet (Microsoft Trusted Signing? per-release manual signing? defer until first stable?).
-2. **`copilot.exe` BinSkim findings** (BA2008, no CFG) are upstream from `GitHub.Copilot.SDK`. We'd appreciate MORSE pointing us at the right channel to escalate inside the Copilot SDK team rather than baselining ourselves.
-3. **SharpFuzz coverage** for `Md4cParser` and `PathDataParser` is committed but not yet implemented. We'd like MORSE's view on whether a SharpFuzz/OneFuzz onboarding is in scope for the *experimental* release or can be deferred to first GA.
-4. **Devtools MCP authorization model.** Today: bearer token, full-tool access. We'd like a sanity check on whether the threat model below it (single-developer-machine, AI agent driving their own running app) needs anything beyond bearer auth (e.g., per-tool capability tokens) before broader adoption.
-5. **Scope-down sign-off.** Confirm that Reactor's runtime profile — no production network surface, no privilege transition — places it outside the six MORSE Security Assessment triggers and that any future surface change requires this document to be re-reviewed.
+1. **Authenticode codesigning** of the NuGet package and `mur.exe` is not yet wired into `release.yml`. Recommendation needed on the signing posture for an experimental public NuGet (Microsoft Trusted Signing? per-release manual signing? defer until first stable?).
+2. **`copilot.exe` BinSkim findings** (BA2008, no CFG) are upstream from `GitHub.Copilot.SDK`. Now scoped out of the BinSkim scan via the `runtimes/<rid>/native/` exclude in `release.yml`. Open question: should we also escalate upstream to the Copilot SDK team for a hardened build?
+3. **Continuous fuzzing.** A SharpFuzz harness for `MarkdownHtml.Render` / `Md4cParser` and `PathDataParser` is in-tree (`tests/Reactor.Fuzz/`) with a smoke-test CI gate. Onboarding to a continuous-fuzzing service is the planned next step; open question is whether onboarding is required for the *experimental* release or can be deferred to first GA.
+4. **Devtools MCP authorization model.** Today: bearer token, full-tool access. Open question is whether the same-user-same-machine threat model below it (single-developer-machine, AI agent driving their own running app) needs anything beyond bearer auth (e.g., per-tool capability tokens) before broader adoption.
+5. **Scope-down sign-off.** Confirm that Reactor's runtime profile — no production network surface, no privilege transition — places it outside the in-depth-review trigger criteria and that any future surface change requires this document to be re-reviewed.
 
 ## 12. References
 
@@ -306,11 +306,10 @@ The MORSE Security Assessment task ([62373208](https://dev.azure.com/microsoft/O
 - [`src/Reactor/Markdown/MarkdownHtml.cs`](../../src/Reactor/Markdown/MarkdownHtml.cs) — Markdown URL sanitizer + safe-mode renderer
 - [`tools/install-skill-kit.ps1`](../../tools/install-skill-kit.ps1) — installer with guard-rails
 - [`tests/Reactor.Tests/Markdown/SanitizeUrlTests.cs`](../../tests/Reactor.Tests/Markdown/SanitizeUrlTests.cs) — URL-sanitizer regression tests
-- ADO MORSE intake: [62380290](https://dev.azure.com/microsoft/OS/_workitems/edit/62380290) — assigned to Jordan Rabet (WARP)
-- ADO Security Assessment parent: [62373208](https://dev.azure.com/microsoft/OS/_workitems/edit/62373208)
+- [`tests/Reactor.Fuzz/`](../../tests/Reactor.Fuzz/) — SharpFuzz harnesses for `MarkdownHtml.Render` and `PathDataParser.ParseTokens`
 
 ## 13. Change log
 
 | Date | Author | Change |
 |---|---|---|
-| 2026-05-21 | Chris Anderson | Initial draft for MORSE intake (ADO 62380290). Captures runtime baseline at commit `2335e75f`. |
+| 2026-05-21 | Chris Anderson | Initial draft for internal security-review intake. Captures runtime baseline at commit `2335e75f`. |
