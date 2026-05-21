@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json.schemastore.org/component-detection-manifest.json",
+  "Version": 1,
+  "Registrations": [
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/facebook/yoga",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/mity/md4c",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-array",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-chord",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-color",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-contour",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-ease",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-force",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-format",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-hierarchy",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-interpolate",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-path",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-polygon",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-random",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-sankey",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-scale",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-shape",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/d3/d3-voronoi",
+          "CommitHash": "0000000000000000000000000000000000000000"
+        }
+      },
+      "DevelopmentDependency": false
+    }
+  ]
+}

@@ -148,23 +148,32 @@ jobs:
 
       # Managed-only repo: most native PE-hardening rules no-op against MSIL
       # assemblies. The run produces a SARIF for SDL compliance attestation
-      # (ADO 62373198). Initial rollout is informational — `continue-on-error`
-      # keeps the release pipeline green while findings are triaged. The
-      # SARIF artifact is uploaded unconditionally so reviewers can attach it
-      # to the work item.
+      # (ADO 62373198). Scope is now Reactor-managed outputs only — the
+      # `runtimes/<rid>/native/` subtree (e.g., `copilot.exe` shipped by
+      # transitive `GitHub.Copilot.SDK`) is excluded since those binaries are
+      # not Reactor-authored. SARIF is uploaded unconditionally so reviewers
+      # can attach it to the work item.
       - name: Run BinSkim
-        continue-on-error: true
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/binskim | Out-Null
-          & $env:BINSKIM_EXE analyze `
-            "artifacts/nupkg/*.nupkg" `
-            "artifacts/mur/x64/*.dll" `
-            "artifacts/mur/x64/*.exe" `
-            "artifacts/mur/arm64/*.dll" `
-            "artifacts/mur/arm64/*.exe" `
-            --output artifacts/binskim/binskim.sarif `
-            --recurse
+          # Enumerate managed assemblies explicitly and filter out
+          # `runtimes/` — BinSkim has no path-exclude flag, so passing a
+          # pre-filtered file list is the cleanest way to scope the scan.
+          $managed = @()
+          foreach ($dir in 'artifacts/mur/x64', 'artifacts/mur/arm64') {
+            $managed += Get-ChildItem $dir -Recurse -File -Include '*.dll', '*.exe' |
+              Where-Object { $_.FullName -notmatch '[\\/]runtimes[\\/]' } |
+              Select-Object -ExpandProperty FullName
+          }
+          $packages = Get-ChildItem artifacts/nupkg -Filter *.nupkg -File |
+            Select-Object -ExpandProperty FullName
+          $targets = @($packages) + @($managed)
+          Write-Host "BinSkim targets: $($packages.Count) nupkg, $($managed.Count) managed binaries"
+          & $env:BINSKIM_EXE analyze @targets --output artifacts/binskim/binskim.sarif
+          if ($LASTEXITCODE -ne 0) {
+            throw "BinSkim reported policy violations (exit $LASTEXITCODE). See SARIF artifact."
+          }
 
       - name: Upload BinSkim SARIF
         if: always()
