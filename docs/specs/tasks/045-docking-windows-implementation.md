@@ -1635,7 +1635,83 @@ re-run with new chrome plus eight visual items.
 - [ ] Composition with spec 036 §8 persistence: persisted Window
   identity is the dockable-window key, not the transient tab content.
 
-### 4.9 P4 risks (spec §7.3)
+### 4.9 Window-drag as docking gesture (spec §7.1.2 extension)
+
+Phase 2 implements cross-window dock-back via *tab* drag — the user
+grabs the tab inside a floating window, drags it onto a `DockHost`
+overlay, drops, the pane re-docks and the floating window closes
+(`DockDragSession.Consumed` signals the source to close). Phase 4
+extends this so the *whole window* is a draggable handle: grabbing
+the title bar (not the tab) and dragging it over a `DockHost` should
+also activate drop targets and dock the pane back on release.
+
+The title-bar drag is OS-handled today (just moves the window); the
+WinUI `TitleBar` control reserves the non-tab background as the
+drag-move region. Hooking it as a docking gesture requires either:
+
+1. A custom `TitleBar`-content adapter that intercepts pointer
+   capture on the drag-move region, suppresses the OS move, and
+   begins a `DockDragSession` against the floating window's pane.
+2. Or: cooperate with the OS move — track the window position
+   during the move (`AppWindow.Changed` / `WM_MOVING`), hit-test
+   the pointer screen-position against every visible `DockHost`'s
+   bounds, and surface drop targets in those hosts. On
+   `WM_EXITSIZEMOVE`, if a drop target was hovered, perform the
+   dock-back and close the floating window; otherwise the window
+   stays at its new position.
+
+Option 2 is closer to the AvalonDock / VS pattern (Snap-Layouts
+adjacency hints fire during a move). It needs WindowsAppSDK
+`AppWindow.Changed` event subscriptions + Win32 message hooks
+(`WM_MOVING` / `WM_EXITSIZEMOVE`) and screen-to-DIP hit-test math.
+
+- [ ] Choose architecture: option 1 (intercept) vs option 2
+  (cooperate). Recommend option 2 — preserves OS-native window
+  move feel; only the *commit* on release is custom.
+- [ ] **Cross-process broadcast?** Decide whether drag-back works
+  across separate Reactor app instances. Default NO (Phase 3 N2
+  carries over — single-process drag only); a future spec covers
+  it if needed.
+- [ ] Hook `AppWindow.Changed` (Position) on floating windows; when
+  Position changes AND no `DockDragSession` is active, treat as
+  the start of a title-bar drag. Begin a synthetic session with
+  the floating's pane + original manager.
+- [ ] On position updates, hit-test the screen point (pointer-
+  position via `Windows.UI.Input.PointerPoint.Properties` or
+  `User32.GetCursorPos`) against every registered `DockHost`'s
+  screen bounds. Surface that host's drop-target overlay
+  (`DockDragSession.SessionChanged` already broadcasts).
+- [ ] On `WM_EXITSIZEMOVE` (end of move), if the pointer is over a
+  drop target, call the same `OnConfirm` path as the tab-drag
+  case — `MarkConsumed()` then `End()`; the floating window
+  closes via `Consumed=true`.
+- [ ] If the move ended outside any drop target, treat as a normal
+  window-position update — no dock-back, session cancelled.
+- [ ] Visual selftest: open a floating window, drag its title bar
+  over the main shell, assert overlay surfaces; release on a
+  per-group Center target, assert pane re-docks and floating
+  closes.
+- [ ] Manual review item: dragging a single-tab floating window's
+  title bar back to the main shell feels equivalent to dragging
+  its tab. Same hit-test latency, same overlay UI.
+- [ ] Multi-tab float interplay: when the title bar is dragged
+  with multiple tabs in the floating window, all tabs travel as a
+  group (whole window dock-back). Document the contract:
+  drag-tab moves one pane, drag-titlebar moves the whole floating
+  window's contents. Decide whether multi-tab dock-back even
+  makes sense (might be intentionally disabled — only single-tab
+  floats support title-bar dock-back).
+- [ ] Reduced-motion: no different from the tab-drag path —
+  overlay preview honors `UISettings.AnimationsEnabled`.
+- [ ] Accessibility: title-bar drag is keyboard-inaccessible by
+  WinUI default. Document that keyboard-only dock-back goes
+  through the tab's chord (Ctrl+Shift+M after Ctrl+Tab to
+  activate the tab) rather than a title-bar gesture.
+- [ ] Cross-display drag during title-bar move — DPI changes
+  mid-drag must not freeze the overlay; reuse the §8.5 DPI re-
+  layout budget.
+
+### 4.10 P4 risks (spec §7.3)
 
 - [ ] WindowsAppSDK `TitleBar` API stability — pin version; if API
   moves before merge, P4 slips (P1–P3 unaffected).
@@ -1647,8 +1723,17 @@ re-run with new chrome plus eight visual items.
   supplies non-tab portion only; doesn't contradict.
 - [ ] Non-Windows-11 graceful degradation — `TitleBar` degrades to
   system-themed-without-tabs on Win10; "looks like P2" is acceptable.
+- [ ] **§4.9 title-bar dock-back** — hit-testing screen
+  coordinates against `DockHost` bounds across multiple windows
+  is sensitive to z-order, DPI, and minimize state; per-frame
+  cost during a window move adds to the input pipeline. Verify
+  via a benchmark that mirrors `SetDragRectangles` debouncing.
+  Win32 message-hook integration is a known-fragile area on
+  WinAppSDK; pin the hook approach against the supported
+  `AppWindow` event surface first, fall back to Win32 only when
+  necessary.
 
-### 4.10 P4 human review gate (spec §7.4) — **mandatory**
+### 4.11 P4 human review gate (spec §7.4) — **mandatory**
 
 P3 script (§6.8), plus:
 
