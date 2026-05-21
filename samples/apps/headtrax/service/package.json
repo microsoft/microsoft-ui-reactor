@@ -12,7 +12,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
-    "@apollo/server": "^4.13.0",
+    "@apollo/server": "^5.5.1",
     "better-sqlite3": "^11.7.0",
     "cors": "^2.8.5",
     "express": "^4.21.0"
