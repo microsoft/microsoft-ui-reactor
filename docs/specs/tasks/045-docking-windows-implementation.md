@@ -1030,12 +1030,21 @@ integration.*
 
 ### 2.19 Phase-2 chrome removal (spec §5.6)
 
-- [ ] Remove `Reactor.Docking.Xaml` from `Reactor.slnx`.
-- [ ] Remove the assembly from any published packages.
-- [ ] **Keep** `third_party/WinUI.Dock/` source in repo — license
-  compliance + reference + regression A/B (§5.6).
-- [ ] Update `third_party/WinUI.Dock/VENDORED.md` documenting the
-  disposition (runtime-unused at P2 exit).
+- [ ] Remove `Reactor.Docking.Xaml` from `Reactor.slnx`. *Deferred
+  to the §2.29 sign-off PR so the human reviewer can drive the
+  XAML version side-by-side via the showcase's
+  `REACTOR_DOCK_XAML=1` flip during the review pass. Once §2.29
+  signs off, the slnx + showcase + tests references drop in a
+  dedicated commit.*
+- [ ] Remove the assembly from any published packages. *Pairs
+  with the slnx removal above.*
+- [x] **Keep** `third_party/WinUI.Dock/` source in repo — license
+  compliance + reference + regression A/B (§5.6). Documented in
+  VENDORED.md "Sunset" section.
+- [x] Update `third_party/WinUI.Dock/VENDORED.md` documenting the
+  disposition (runtime-unused at P2 exit). The §5.6 / §2.19
+  language now covers the staged removal plan + the post-review
+  sequence.
 
 ### 2.20 Performance (spec §8.1, §8.5)
 
@@ -1366,6 +1375,12 @@ integration.*
 ### 2.29 P2 human review gate (spec §5.7) — **mandatory**
 
 Phase-1 review script (§4.7 items 1–8) re-run against P2, plus:
+
+The driving checklist (with build/run instructions + known flakes +
+links into each item's status note) lives at
+`docs/specs/045-docking-p2-review-checklist.md`. Run it through and
+sign off there; copy the sign-off block into the merge PR
+description before merge.
 
 - [ ] **Item 9** — Documents vs tool windows visual distinction matches
   intent.

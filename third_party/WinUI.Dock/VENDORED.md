@@ -59,12 +59,28 @@ then drop it back into this folder.
 
 ## Sunset
 
-Phase 2 exit removes the runtime reference (spec 045 §5.6). The source
-stays here for:
-- license compliance (MIT requires we retain notices for as long as we
-  distributed binary code based on the work);
-- A/B regression checks between the native rewrite and the original;
-- documentation reference.
+Phase 2 has feature parity with the vendored upstream; the native
+renderer at `src/Reactor/Docking/Native/` is the canonical runtime
+path. The vendored sources are now **runtime-unused by default**
+(spec 045 §5.6 / §2.19 disposition):
+
+- Apps consume docking via the native renderer (`DockingNativeInterop.Register`).
+- The wrapper at `src/Reactor.Docking.Xaml/` (consuming this vendored
+  source) is built but no longer the default — apps that flip
+  `REACTOR_DOCK_XAML=1` in their shell still get the P1 chrome for
+  side-by-side comparison during the §2.29 human-review pass.
+- Once §2.29 sign-off lands, the showcase's XAML flip is removed
+  and the `Reactor.Docking.Xaml` project + this `third_party/WinUI.Dock/`
+  source drop out of the default solution. The source stays in
+  the tree for:
+  - license compliance (MIT requires we retain notices for as long
+    as we distributed binary code based on the work);
+  - A/B regression checks between the native rewrite and the original;
+  - documentation reference.
+- The actual `Reactor.slnx` removal is scheduled with the §2.19
+  phase-exit PR after the §2.29 human review gate signs off; this
+  ensures the reviewer can still drive the XAML version side-by-
+  side without a worktree dance.
 
 `ThirdPartyNoticeText.txt` (repo root) records the MIT license block under
 the **WinUI.Dock** heading. Do not remove that block while these sources
