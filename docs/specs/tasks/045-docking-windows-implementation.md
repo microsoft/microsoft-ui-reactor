@@ -885,9 +885,20 @@ integration.*
 - [x] Every `DockableContent` instance tracks last `DockNode` container
   it was inside (internal state — no public field).
   `PreviousContainerTracker` (ConditionalWeakTable-backed).
-- [ ] Hidden → re-shown: lands in remembered container, not default
-  insertion point. *Routing decision made by the native renderer
-  (§2.16 integration).*
+- [x] Hidden → re-shown: lands in remembered container, not default
+  insertion point. Wiring lives in two halves: (a) the close /
+  tear-out paths (`CloseTabViaButton`, `CloseActivePane`, tear-out
+  branch of `HandleTabDragCompleted`) now call
+  `PreviousContainerTracker.Set(pane, container)` via the new
+  `DockLayoutMutator.FindContainer` walk before removing the pane;
+  (b) `DockLayoutMutator.ShowFromHistory(root, pane, fallback)` is
+  the pure-function helper that folds a pane back into its
+  remembered `DockTabGroup` when that group still lives in the
+  tree, falling back to `InsertPaneAtTarget` otherwise. The
+  caller-side wiring (e.g. `DockManager.Show(pane)` programmatic
+  API, drag-back-from-floating-window's "snap to history" hint)
+  lands when the §2.16 model-mutation drain materializes the
+  `Show`/`ShowOp` path.
 - [x] State survives layout serialization (stored as `previousContainer`
   on the JSON content node). `DockLayoutPane.PreviousContainer` field
   reserved + emitted by serializer.

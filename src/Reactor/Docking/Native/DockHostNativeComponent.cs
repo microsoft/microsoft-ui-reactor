@@ -208,6 +208,10 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     setDragActive(false);
                     return;
                 }
+                // §2.15 — record container before tearing out so a later
+                // re-dock can route via PreviousContainer.
+                var container = DockLayoutMutator.FindContainer(effectiveLayout, pane);
+                if (container is not null) PreviousContainerTracker.Set(pane, container);
                 // Tear-out: open a floating window with the dragged pane.
                 // Pane has to be removed from the current layout first so
                 // it doesn't appear in both places.
@@ -304,6 +308,10 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             var closingArgs = new DockDocumentClosingEventArgs { Document = pane };
             manager.OnDocumentClosing?.Invoke(closingArgs);
             if (closingArgs.Cancel) return;
+            // §2.15 — record the pane's container before removing so a
+            // later show-from-history lands it back in the same group.
+            var container = DockLayoutMutator.FindContainer(effectiveLayout, pane);
+            if (container is not null) PreviousContainerTracker.Set(pane, container);
             var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
             if (!removed) return;
             setLayoutOverride(afterRemove);
@@ -483,6 +491,9 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             var closingArgs = new DockDocumentClosingEventArgs { Document = pane };
             manager.OnDocumentClosing?.Invoke(closingArgs);
             if (closingArgs.Cancel) return;
+            // §2.15 — record container for show-from-history.
+            var container = DockLayoutMutator.FindContainer(effectiveLayout, pane);
+            if (container is not null) PreviousContainerTracker.Set(pane, container);
             var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
             if (!removed) return;
             setLayoutOverride(afterRemove);

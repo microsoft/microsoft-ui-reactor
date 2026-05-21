@@ -29,6 +29,22 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — PreviousContainer routing (§2.15).** The close /
+  tear-out paths in `DockHostNativeComponent` (tab close button,
+  `Ctrl+F4` / `Ctrl+W` chord, drag-out tear-out) now record the
+  pane's immediate `DockTabGroup` container into
+  `PreviousContainerTracker` via the new
+  `DockLayoutMutator.FindContainer` walk before removing the pane.
+  A new `DockLayoutMutator.ShowFromHistory(root, pane, fallback)`
+  pure-function helper folds a remembered pane back into its
+  original `DockTabGroup` when that group still lives in the
+  tree (matching VS's "show panel where you left it"); falls back
+  to `InsertPaneAtTarget(root, pane, fallback)` when the
+  remembered group has been torn down. Caller-side wiring
+  (`DockManager.Show` programmatic API, drag-back snap hint)
+  attaches when the §2.16 model-mutation drain materializes the
+  `ShowOp` path. 7 new unit tests cover the `FindContainer` /
+  `ShowFromHistory` matrix. (spec 045 §2.15)
 - **Spec 045 Phase 2 — Document/ToolWindow default tab styling (§2.8).**
   `DockTabGroupRenderer.Render` now auto-resolves tab styling based on
   the group's content type: a group whose documents are all

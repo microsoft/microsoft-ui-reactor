@@ -31,6 +31,43 @@ internal static class DockLayoutMutator
         return RemoveInner(root, pane);
     }
 
+    /// <summary>
+    /// Walks the layout to find the immediate container (a
+    /// <see cref="DockTabGroup"/>, or a bare <see cref="DockableContent"/>
+    /// if the pane IS the root) holding <paramref name="pane"/>. Returns
+    /// null when the pane isn't reachable. Used by the §2.15 PreviousContainer
+    /// tracker to record where a pane lived before close / tear-out so a
+    /// later show-from-history lands it back in the same group.
+    /// </summary>
+    public static DockNode? FindContainer(DockNode? root, DockableContent pane)
+    {
+        ArgumentNullException.ThrowIfNull(pane);
+        if (root is null) return null;
+        return Inner(root, pane);
+
+        static DockNode? Inner(DockNode node, DockableContent target)
+        {
+            switch (node)
+            {
+                case DockableContent leaf:
+                    return ReferenceEquals(leaf, target) ? leaf : null;
+                case DockTabGroup grp:
+                    foreach (var d in grp.Documents)
+                        if (ReferenceEquals(d, target)) return grp;
+                    return null;
+                case DockSplit split:
+                    foreach (var c in split.Children)
+                    {
+                        var r = Inner(c, target);
+                        if (r is not null) return r;
+                    }
+                    return null;
+                default:
+                    return null;
+            }
+        }
+    }
+
     private static (DockNode? Node, bool Found) RemoveInner(DockNode node, DockableContent pane)
     {
         switch (node)
@@ -167,5 +204,70 @@ internal static class DockLayoutMutator
         var (afterRemove, found) = RemovePane(root, pane);
         if (!found) return root;
         return InsertPaneAtTarget(afterRemove, pane, target);
+    }
+
+    /// <summary>
+    /// Spec 045 §2.15. Re-insert <paramref name="pane"/> into the layout
+    /// using <see cref="PreviousContainerTracker"/> history when available.
+    /// When the remembered container is a <see cref="DockTabGroup"/> still
+    /// present in the layout, the pane is folded back as a new tab in that
+    /// group (matching VS's "show panel where you left it" behavior). When
+    /// no history exists or the previous container has been torn down, the
+    /// pane falls back to <paramref name="fallbackTarget"/> at the layout
+    /// root via <see cref="InsertPaneAtTarget"/>.
+    /// </summary>
+    public static DockNode ShowFromHistory(
+        DockNode? root,
+        DockableContent pane,
+        DockTarget fallbackTarget = DockTarget.Center)
+    {
+        ArgumentNullException.ThrowIfNull(pane);
+
+        var remembered = PreviousContainerTracker.GetPrevious(pane);
+        if (remembered is DockTabGroup rememberedGroup && root is not null)
+        {
+            // Walk the current tree looking for the SAME instance — record
+            // references decay when the layout is rebuilt. If the
+            // remembered group still lives in the tree, fold the pane in;
+            // otherwise fall back.
+            var patched = FoldIntoGroup(root, rememberedGroup, pane);
+            if (patched is not null) return patched;
+        }
+        return InsertPaneAtTarget(root, pane, fallbackTarget);
+    }
+
+    private static DockNode? FoldIntoGroup(DockNode node, DockTabGroup target, DockableContent pane)
+    {
+        switch (node)
+        {
+            case DockableContent:
+                return null;
+            case DockTabGroup grp when ReferenceEquals(grp, target):
+            {
+                var docs = grp.Documents;
+                var next = new DockableContent[docs.Count + 1];
+                for (int i = 0; i < docs.Count; i++) next[i] = docs[i];
+                next[docs.Count] = pane;
+                return grp with { Documents = next, SelectedIndex = docs.Count };
+            }
+            case DockTabGroup:
+                return null;
+            case DockSplit split:
+            {
+                var children = split.Children;
+                for (int i = 0; i < children.Count; i++)
+                {
+                    var replaced = FoldIntoGroup(children[i], target, pane);
+                    if (replaced is null) continue;
+                    var next = new DockNode[children.Count];
+                    for (int j = 0; j < children.Count; j++) next[j] = children[j];
+                    next[i] = replaced;
+                    return split with { Children = next };
+                }
+                return null;
+            }
+            default:
+                return null;
+        }
     }
 }

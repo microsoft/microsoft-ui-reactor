@@ -233,4 +233,102 @@ public class DockLayoutMutatorTests
         var result = DockLayoutMutator.MovePaneToTarget(root, other, DockTarget.Center);
         Assert.Same(root, result);
     }
+
+    // ── FindContainer (§2.15 PreviousContainer support) ────────────────
+
+    [Fact]
+    public void FindContainer_LeafIsRoot_ReturnsSelf()
+    {
+        var p = Leaf("p");
+        Assert.Same(p, DockLayoutMutator.FindContainer(p, p));
+    }
+
+    [Fact]
+    public void FindContainer_TabGroupContent_ReturnsGroup()
+    {
+        var p = Leaf("p");
+        var grp = new DockTabGroup(new[] { p });
+        Assert.Same(grp, DockLayoutMutator.FindContainer(grp, p));
+    }
+
+    [Fact]
+    public void FindContainer_NestedSplit_FindsGroupWithoutClimbingFurther()
+    {
+        var p = Leaf("p");
+        var inner = new DockTabGroup(new[] { p });
+        var split = new DockSplit(Orientation.Horizontal, new DockNode[] { Leaf("x"), inner });
+        Assert.Same(inner, DockLayoutMutator.FindContainer(split, p));
+    }
+
+    [Fact]
+    public void FindContainer_NotPresent_ReturnsNull()
+    {
+        var p = Leaf("p");
+        var q = Leaf("q");
+        var grp = new DockTabGroup(new[] { p });
+        Assert.Null(DockLayoutMutator.FindContainer(grp, q));
+    }
+
+    // ── ShowFromHistory ────────────────────────────────────────────────
+
+    [Fact]
+    public void ShowFromHistory_NoHistory_FallsBackToTarget()
+    {
+        var a = Leaf("a");
+        var grp = new DockTabGroup(new[] { a });
+        var newPane = Leaf("new");
+
+        var result = DockLayoutMutator.ShowFromHistory(grp, newPane, DockTarget.SplitRight);
+
+        // No previous container → default insertion at SplitRight wraps
+        // the root and the new pane into a split.
+        var split = Assert.IsType<DockSplit>(result);
+        Assert.Same(grp, split.Children[0]);
+        Assert.Same(newPane, SoleDoc(split.Children[1]));
+    }
+
+    [Fact]
+    public void ShowFromHistory_PreviousGroupStillInTree_FoldsAsTab()
+    {
+        var stayingPane = Leaf("stay");
+        var rememberedGroup = new DockTabGroup(new[] { stayingPane });
+        var sibling = Leaf("sibling");
+        var split = new DockSplit(Orientation.Horizontal,
+            new DockNode[] { rememberedGroup, sibling });
+
+        var hiddenPane = Leaf("hidden");
+        PreviousContainerTracker.Set(hiddenPane, rememberedGroup);
+
+        var result = DockLayoutMutator.ShowFromHistory(split, hiddenPane, DockTarget.Center);
+
+        var s = Assert.IsType<DockSplit>(result);
+        var foldedGroup = Assert.IsType<DockTabGroup>(s.Children[0]);
+        Assert.Equal(2, foldedGroup.Documents.Count);
+        Assert.Same(stayingPane, foldedGroup.Documents[0]);
+        Assert.Same(hiddenPane, foldedGroup.Documents[1]);
+        // Selection lands on the newly-shown pane (VS parity).
+        Assert.Equal(1, foldedGroup.SelectedIndex);
+        // Sibling slot in the split is untouched.
+        Assert.Same(sibling, s.Children[1]);
+    }
+
+    [Fact]
+    public void ShowFromHistory_PreviousGroupTornDown_FallsBackToTarget()
+    {
+        // Pane remembers a group that no longer exists in the layout
+        // (e.g. the group was emptied + collapsed during prior mutations).
+        // The show falls back to the default target instead of crashing.
+        var hiddenPane = Leaf("hidden");
+        var orphanedGroup = new DockTabGroup(new[] { hiddenPane });
+        PreviousContainerTracker.Set(hiddenPane, orphanedGroup);
+
+        var liveRoot = new DockTabGroup(new[] { Leaf("a") });
+
+        var result = DockLayoutMutator.ShowFromHistory(liveRoot, hiddenPane, DockTarget.Center);
+
+        // Fallback Center → fold into the live root group.
+        var folded = Assert.IsType<DockTabGroup>(result);
+        Assert.Equal(2, folded.Documents.Count);
+        Assert.Same(hiddenPane, folded.Documents[1]);
+    }
 }
