@@ -160,6 +160,8 @@ jobs:
       # Publish the selftest host with NativeAOT. PublishAotInternal=true,
       # Platform=x64, and rid=win-x64 are the canonical knobs documented in
       # docs/aot-support.md and used by tests/Reactor.AppTests.Host/probe-aot-skips.ps1.
+      # `-o` pins the publish folder so the run step doesn't depend on the
+      # default TFM/RID/Platform path layout.
       - name: Publish AOT host
         run: >
           dotnet publish tests/Reactor.AppTests.Host
@@ -167,6 +169,7 @@ jobs:
           -p:Platform=x64
           -r win-x64
           -c Release
+          -o ${{ runner.temp }}/aot-publish
           --nologo
 
       # Run the published exe directly (not via `dotnet test`) so we exercise
@@ -178,7 +181,7 @@ jobs:
       - name: Run AOT selftests
         shell: pwsh
         run: |
-          $exe = 'tests/Reactor.AppTests.Host/bin/x64/Release/net10.0-windows10.0.22621.0/win-x64/publish/Reactor.AppTests.Host.exe'
+          $exe = Join-Path '${{ runner.temp }}/aot-publish' 'Reactor.AppTests.Host.exe'
           if (-not (Test-Path $exe)) {
             Write-Error "AOT-published host not found at $exe"
             exit 1
