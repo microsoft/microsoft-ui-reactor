@@ -122,7 +122,7 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         AllowDrop = true;
         // Focus root: arrow-key nav stays inside the overlay until Esc.
         IsTabStop = false;
-        AutomationProperties.SetName(this, "Dock targets");
+        AutomationProperties.SetName(this, DockingStrings.Get(DockingStringKeys.DropTargetHostLandmark));
         AutomationProperties.SetLandmarkType(this, AutomationLandmarkType.Custom);
 
         // Preview rectangle — semi-transparent fill with active border,
@@ -393,21 +393,22 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     }
 
     /// <summary>
-    /// Localized AT name for each target. Resource keys are
-    /// <c>Docking.DropTarget.&lt;Target&gt;</c>; the §2.21 Loc pass moves
-    /// these into the resource file. Spec §8.6.
+    /// Localized AT name for each target. Routes through
+    /// <see cref="DockingStrings.Get"/> so apps that have installed a
+    /// resolver receive their translation; otherwise English defaults
+    /// match the entries in <c>Reactor.Docking.resw</c>. Spec §8.6 / §2.21.
     /// </summary>
     internal static string GetLocalizedName(DockTarget target) => target switch
     {
-        DockTarget.Center       => "Add as tab",
-        DockTarget.SplitLeft    => "Split left",
-        DockTarget.SplitRight   => "Split right",
-        DockTarget.SplitTop     => "Split top",
-        DockTarget.SplitBottom  => "Split bottom",
-        DockTarget.DockLeft     => "Dock left",
-        DockTarget.DockRight    => "Dock right",
-        DockTarget.DockTop      => "Dock top",
-        DockTarget.DockBottom   => "Dock bottom",
+        DockTarget.Center       => DockingStrings.Get(DockingStringKeys.DropTargetCenter),
+        DockTarget.SplitLeft    => DockingStrings.Get(DockingStringKeys.DropTargetSplitLeft),
+        DockTarget.SplitRight   => DockingStrings.Get(DockingStringKeys.DropTargetSplitRight),
+        DockTarget.SplitTop     => DockingStrings.Get(DockingStringKeys.DropTargetSplitTop),
+        DockTarget.SplitBottom  => DockingStrings.Get(DockingStringKeys.DropTargetSplitBottom),
+        DockTarget.DockLeft     => DockingStrings.Get(DockingStringKeys.DropTargetDockLeft),
+        DockTarget.DockRight    => DockingStrings.Get(DockingStringKeys.DropTargetDockRight),
+        DockTarget.DockTop      => DockingStrings.Get(DockingStringKeys.DropTargetDockTop),
+        DockTarget.DockBottom   => DockingStrings.Get(DockingStringKeys.DropTargetDockBottom),
         _ => "Dock target",
     };
 

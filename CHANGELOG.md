@@ -29,6 +29,24 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — §2.21 localization routing.** Every
+  docking user-facing string now flows through a static
+  `DockingStrings.Get(key)` router with an optional
+  `Func<string, string?>? Resolver` apps wire at startup to
+  forward keys to their `IntlAccessor`. The drop-target overlay
+  (`DockDropTargetOverlayControl.GetLocalizedName` + landmark
+  `AutomationProperties.Name`), the side-pin tooltip
+  (`DockSideStripRenderer`), and the floating-window default
+  title (`DockFloatingWindow.Open`) now consult the router. Keys
+  are constants on `DockingStringKeys`, mirrored 1:1 against
+  `src/Reactor.Docking.Xaml/Resources/Reactor.Docking.resw` —
+  drop-target tooltips, navigator headings, per-pane context-menu
+  items (Close/Hide/Float/PinToSide/AutoHide/MoveToNextGroup),
+  side-pin tooltip prefix, floating-window default title,
+  layout-restore error, host landmark. `DockingStrings.SidePinTooltip(title)`
+  performs the placeholder substitution after lookup so
+  translators can rearrange the surrounding text. Unit coverage
+  in `DockingStringsTests` (9 scenarios).
 - **Spec 045 Phase 2 — §2.25 reliability close-out.** Three new
   host-mounted fixtures under `NativeDockingReliabilityFixture`:
   `CrashMidDrag_LeavesPersistedLayoutClean` (mid-drag layout save

@@ -1059,22 +1059,44 @@ integration.*
 
 ### 2.21 Localization (spec §8.6)
 
-- [ ] All docking user-facing strings route through `IntlAccessor`
-  under the `Docking.*` prefix.
-- [ ] Resource keys added for:
-  - [ ] Drop-target tooltips and AT names ("Dock left", "Dock top",
-    "Dock right", "Dock bottom", "Split left", "Split top",
-    "Split right", "Split bottom", "Add as tab").
-  - [ ] `NavigatorWindow` headings ("Documents", "Tool Windows",
-    "Active") and pane-state labels.
-  - [ ] Per-pane context-menu items: "Close", "Hide", "Float",
-    "Pin to side", "Auto-hide", "Move to next group".
-  - [ ] Side-pin sidebar tooltip uses pane `Title` (passthrough).
-  - [ ] Floating-window default fallback title ("Floating Window").
-  - [ ] Error/fallback strings for layout-restore failures.
+- [x] All docking user-facing strings route through a static
+  `DockingStrings.Get(key)` router whose <c>Resolver</c> delegate
+  apps wire at startup to forward keys into their `IntlAccessor`.
+  The delegate indirection is necessary because the drop-target
+  overlay + side-strip + floating-window code paths are realized
+  WinUI `UIElement`s without `UseIntl()` in scope; apps capture
+  the accessor once at app boot and assign a resolver. Without a
+  resolver, callers get the English defaults that mirror
+  `Reactor.Docking.resw`. Spec 045 §2.21 / §8.6.
+- [x] Resource keys defined as constants on `DockingStringKeys` +
+  registered in `Reactor.Docking.resw`:
+  - [x] Drop-target tooltips and AT names (Center, SplitLeft/Right/
+    Top/Bottom, DockLeft/Right/Top/Bottom — 9 keys).
+  - [x] `NavigatorWindow` headings (Documents, ToolWindows, Active).
+  - [x] Per-pane context-menu items (Close, Hide, Float, PinToSide,
+    AutoHide, MoveToNextGroup).
+  - [x] Side-pin sidebar tooltip key + a `SidePinTooltip(paneTitle)`
+    helper that performs the placeholder substitution after lookup.
+  - [x] Floating-window default fallback title (FloatingWindowDefaultTitle).
+  - [x] Layout-restore failure (LayoutRestoreFailed).
+  - [x] Drop-target host landmark name (DropTargetHostLandmark).
+- [x] Call-site wiring: `DockDropTargetOverlayControl.GetLocalizedName`
+  + landmark `AutomationProperties.Name`, `DockSideStripRenderer`
+  tooltip, `DockFloatingWindow.Open` default-title fallback —
+  all route through `DockingStrings`. Verified by
+  `DockingStringsTests` (9 cases: no-resolver default, resolver-
+  forwards-key, null/empty fallback, side-pin substitution
+  with/without resolver, every-DropTarget-key coverage, navigator/
+  menu/error defaults).
 - [ ] `.xlf` pipeline (spec 005) generates downstream loc files.
-- [ ] Docs: clarify that `Document.Title` / `ToolWindow.Title` are
-  app-owned; docking does not localize them.
+  *Wiring `Reactor.Docking.resw` through `Reactor.Localization.Generator`
+  for typed `MessageKey` access is the follow-up; apps localize
+  today via the `Resolver` delegate.*
+- [x] Docs: clarify that `Document.Title` / `ToolWindow.Title` are
+  app-owned; docking does not localize them. Captured in the
+  `DockingStrings` class docstring (the side-pin tooltip uses
+  `paneTitle` placeholder, app-owned) and in the .resw comment on
+  `Docking.SidePin.Tooltip`.
 
 ### 2.22 Accessibility (spec §8.7)
 

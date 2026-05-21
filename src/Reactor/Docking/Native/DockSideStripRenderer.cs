@@ -194,7 +194,7 @@ internal static class DockSideStripRenderer
             .Background(background)
             .Padding(8, 4)
             .CornerRadius(4)
-            .ToolTip($"Show {title}");
+            .ToolTip(DockingStrings.SidePinTooltip(title));
     }
 
     private static Element BuildSidePopup(DockableContent? pane, DockSide side)

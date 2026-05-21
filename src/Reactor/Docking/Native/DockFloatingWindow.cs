@@ -69,7 +69,9 @@ public static class DockFloatingWindow
 
         var spec = new WindowSpec
         {
-            Title = title ?? (string.IsNullOrEmpty(pane.Title) ? "Floating Window" : pane.Title),
+            Title = title ?? (string.IsNullOrEmpty(pane.Title)
+                ? DockingStrings.Get(DockingStringKeys.FloatingWindowDefaultTitle)
+                : pane.Title),
             Width = bounds?.Width ?? width,
             Height = bounds?.Height ?? height,
             Owner = owner,
