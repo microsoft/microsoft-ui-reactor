@@ -826,9 +826,17 @@ native UI pipeline (§2.1–§2.6).*
   `LayoutStrategyTests.Strategy_CanShortCircuitInsertionByReturningTrue`
   + `DockHostModelSequenceTests.ErrorPaneStrategy_RoutesViaModel_QueuesPinToSide`.
 
-*The manager-side dispatch into the strategy (call site that actually
-invokes `BeforeInsertX` during programmatic Dock) lands with the
-reconciler integration in §2.16.*
+*The manager-side dispatch into the strategy is now wired in
+`DockHostModel.Dock` (§2.13 close-out): when `LayoutStrategy` is
+mirrored from the manager onto the model (done each render in
+`SyncModelFromElement`), `Dock(content, target)` dispatches
+`BeforeInsertDocument` / `BeforeInsertToolWindow` first, returns
+early when the strategy claims placement, and otherwise queues the
+default `DockOp` then fires `AfterInsertDocument` / `AfterInsertToolWindow`.
+Bare `DockableContent` (P1 source-compat shape) bypasses the typed
+hooks entirely. The drain side — actually applying the queued
+mutations to the rendered tree — still rides on §2.16 model
+integration.*
 
 ### 2.14 Fine-grained per-pane permissions (spec §5.3.8)
 
@@ -841,10 +849,26 @@ reconciler integration in §2.16.*
   closes (AvalonDock semantic).
 - [x] `ToolWindow.CanAutoHide` (default true).
 - [x] `ToolWindow.CanDockAsDocument` (default true).
-- [ ] Permission gating: drag pipeline checks `CanMove`; floating
+- [x] Permission gating: drag pipeline checks `CanMove`; floating
   gesture checks `CanFloat`; close button checks `CanClose`; pin
   gesture checks `CanAutoHide`. UI cues for disabled permissions.
-  *Gating enforced inside the native drag pipeline (§2.4).*
+  Gating wired in `DockHostNativeComponent`:
+  - `HandleTabDragStarting` refuses drag when `CanMove=false`
+    (logs a Note op; no `DockDragSession.Begin`).
+  - `HandleTabDragCompleted` refuses tear-out when `CanFloat=false`
+    (session ends, layout unchanged).
+  - Drop-target `OnConfirm` re-checks `sourcePane.CanMove` (defensive
+    gate for the Ctrl+Shift+M keyboard mode where the active pane
+    could turn pinned between mode-enter and confirm).
+  - `EnterKeyboardDropMode` no-ops when the active pane is pinned
+    so the overlay never opens with a refused-source.
+  - Tab close button now routes through `CloseTabViaButton` which
+    re-checks `CanClose` and goes through the cancellable
+    `OnDocumentClosing` event.
+  *Pin gesture's `CanAutoHide` check pairs with the §2.4 drag-pin
+  affordance that's still pending (§2.5 sizer follow-up). UI cues
+  for disabled permissions (cursor hint / disabled tab style)
+  ride on the §2.8 tab styling pass.*
 
 ### 2.15 `PreviousContainer` — show-panel-where-you-left-it (spec §5.3.9)
 

@@ -165,6 +165,15 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             // Refuse a second concurrent drag — spec §4.6 single-drag
             // contract carried into P2.
             if (DockDragSession.Current is { IsActive: true }) return;
+            // §2.14 — permission gating. Apps mark CanMove=false on panes
+            // that must stay where they are (e.g. an anchored toolbox).
+            if (!pane.CanMove)
+            {
+                LogOp(Diagnostics.DockOperationKind.Note,
+                    $"refuse drag pane='{pane.Key}' CanMove=false",
+                    paneKey: pane.Key?.ToString());
+                return;
+            }
             var args = new DockContentFloatingEventArgs { Content = pane };
             manager.OnContentFloating?.Invoke(args);
             if (args.Cancel) return;
@@ -187,6 +196,18 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             // covers that case.
             if (wasOutside)
             {
+                // §2.14 — refuse tear-out when the pane can't float. The
+                // drag session ends without mutating the layout; the
+                // dragged tab stays where it is.
+                if (!pane.CanFloat)
+                {
+                    LogOp(Diagnostics.DockOperationKind.Note,
+                        $"refuse tear-out pane='{pane.Key}' CanFloat=false",
+                        paneKey: pane.Key?.ToString());
+                    session.End();
+                    setDragActive(false);
+                    return;
+                }
                 // Tear-out: open a floating window with the dragged pane.
                 // Pane has to be removed from the current layout first so
                 // it doesn't appear in both places.
@@ -253,6 +274,12 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // Tab-click-driven active-key tracking is intentionally omitted
         // from this wrap: the app owns ActiveDocument; chord cycling
         // writes into activePaneKey directly via the chord handler.
+        //
+        // §2.14 permission gating + §2.2 close: onTabClosing fires when
+        // the user clicks a tab's X button. The handler routes through
+        // the cancellable OnDocumentClosing event and the DockLayoutMutator
+        // RemovePane path so the data flow matches the chord-driven
+        // CloseActivePane (and any future programmatic close).
         Element RenderTabGroup(DockTabGroup grp, string path)
         {
             var hasOverride = selectedIndexStore.TryGetValue(path, out var overrideIdx);
@@ -263,9 +290,29 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 effective,
                 renderLeafContent: doc => WrapLeafWithPaneContext(doc),
                 onSelectedIndexChanged: null,
-                onTabClosing: null,
+                onTabClosing: pane => CloseTabViaButton(pane),
                 onTabDragStarting: HandleTabDragStarting,
                 onTabDragCompleted: HandleTabDragCompleted);
+        }
+
+        void CloseTabViaButton(DockableContent pane)
+        {
+            // §2.14 — even though TabView only surfaces an X button when
+            // IsClosable=CanClose, defensively re-check here in case
+            // CanClose was flipped between render and click.
+            if (!pane.CanClose) return;
+            var closingArgs = new DockDocumentClosingEventArgs { Document = pane };
+            manager.OnDocumentClosing?.Invoke(closingArgs);
+            if (closingArgs.Cancel) return;
+            var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
+            if (!removed) return;
+            setLayoutOverride(afterRemove);
+            manager.OnDocumentClosed?.Invoke(new DockDocumentClosedEventArgs { Document = pane });
+            manager.OnLiveLayoutChanged?.Invoke(afterRemove);
+            LogOp(Diagnostics.DockOperationKind.LayoutChange,
+                $"close pane='{pane.Key}' via tab button",
+                paneKey: pane.Key?.ToString(),
+                layoutOverride: afterRemove);
         }
 
         Element body = effectiveLayout is null
@@ -333,6 +380,13 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     // The active pane is the implicit source.
                     if (sourcePane is null && keyboardOverlayActive)
                         sourcePane = ResolvePane(effectiveLayout, activePaneKey ?? appActiveKey);
+                    // §2.14 — refuse the drop when the source pane is
+                    // pinned (CanMove=false). The drag-start path already
+                    // gates this for the mouse-drag case; the keyboard
+                    // path can still arrive here when a CanMove=false
+                    // pane is the active document at the moment of
+                    // Ctrl+Shift+M, so re-check defensively.
+                    if (sourcePane is { CanMove: false }) sourcePane = null;
                     if (sourcePane is not null)
                     {
                         var newLayout = DockLayoutMutator.MovePaneToTarget(
@@ -462,7 +516,11 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             }
             // No-op when there's no active pane to move — the overlay would
             // open with nothing to dock and Enter would fizzle.
-            if (ResolvePane(effectiveLayout, chordTargetKey) is null) return;
+            // §2.14 — same no-op when the active pane is pinned
+            // (CanMove=false). Opening the overlay would just guarantee
+            // a refused drop on Enter.
+            var active = ResolvePane(effectiveLayout, chordTargetKey);
+            if (active is null || !active.CanMove) return;
             setKeyboardOverlayActive(true);
         }
 
@@ -568,6 +626,9 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         model.RightSide = SideSlice(element.RightSide);
         model.BottomSide = SideSlice(element.BottomSide);
         model.ActiveContent = element.ActiveDocument;
+        // §2.13 — mirror the LayoutStrategy onto the model so its Dock()
+        // mutator can route through Before*/After* hooks.
+        model.LayoutStrategy = element.LayoutStrategy;
         // Floating window state survives the §2.6 wire-up; today it stays
         // empty until the floating renderer publishes entries.
     }

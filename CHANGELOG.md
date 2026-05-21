@@ -29,6 +29,39 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — Docking permission gating (§2.14).** The native
+  drag pipeline now honors `DockableContent.CanMove` / `CanFloat` /
+  `CanClose`: `HandleTabDragStarting` refuses to begin a session for
+  a pinned pane (logs a `Note` op); `HandleTabDragCompleted` refuses
+  tear-out when `CanFloat=false` (session ends, layout untouched);
+  the drop-target `OnConfirm` re-checks `CanMove` on the source pane
+  so the keyboard-driven `Ctrl+Shift+M` flow can't drop a pinned
+  pane that turned read-only between mode-enter and confirm;
+  `EnterKeyboardDropMode` skips opening the overlay entirely for a
+  pinned active pane. Tab close button now routes through
+  `CloseTabViaButton` which re-checks `CanClose` and goes through
+  the cancellable `OnDocumentClosing` → `OnDocumentClosed` →
+  `OnLiveLayoutChanged` event chain (matching the `Ctrl+F4` chord
+  path from §2.10). UI cues for disabled permissions (cursor /
+  disabled-tab style) ride on the §2.8 tab styling pass.
+  (spec 045 §2.14)
+- **Spec 045 Phase 2 — Layout strategy dispatch (§2.13).** The
+  manager-side dispatch into `IDockLayoutStrategy` is now wired in
+  `DockHostModel.Dock`: when the host component mirrors
+  `DockManager.LayoutStrategy` onto the model each render,
+  programmatic `Dock(content, target)` calls `BeforeInsertDocument`
+  or `BeforeInsertToolWindow` (subtype-routed) first; a `true`
+  return short-circuits the default insertion (strategy claims
+  placement via the model surface); a `false` return queues the
+  default `PendingMutation.DockOp` and then fires the matching
+  `AfterInsert*` hook so apps can layer dimensions / pinning /
+  activation on top. Bare `DockableContent` (P1 source-compat
+  shape) bypasses the typed hooks since the strategy contract is
+  defined against the §2.8 `Document` / `ToolWindow` subclasses.
+  Six new unit tests under `LayoutStrategyTests` lock down the
+  no-strategy passthrough, document/tool-window short-circuit,
+  pass-through-then-`AfterInsert`, subtype routing, and
+  bare-pane bypass. (spec 045 §2.13)
 - **Spec 045 Phase 2 — Docking keyboard chords (§2.10, initial set).**
   Three chord families land on the Reactor-native dock host:
   `Ctrl+PageUp` / `Ctrl+PageDown` cycle the active tab group with

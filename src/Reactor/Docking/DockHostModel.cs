@@ -110,6 +110,16 @@ public sealed class DockHostModel
     /// <summary>The currently-active content, or null if none.</summary>
     public DockableContent? ActiveContent { get; internal set; }
 
+    /// <summary>
+    /// Insertion-policy hook supplied by the owning <see cref="DockManager"/>
+    /// (mirrored from <see cref="DockManager.LayoutStrategy"/> each render).
+    /// The model dispatches into <see cref="IDockLayoutStrategy.BeforeInsertDocument"/>
+    /// / <see cref="IDockLayoutStrategy.BeforeInsertToolWindow"/> on programmatic
+    /// <see cref="Dock"/>; a <c>true</c> return short-circuits the default insertion.
+    /// </summary>
+    /// <remarks>Spec 045 §5.3.6 / tracking §2.13.</remarks>
+    public IDockLayoutStrategy? LayoutStrategy { get; internal set; }
+
     /// <summary>Enumerates every pane in the model (docked, side, floating). Order is unspecified.</summary>
     public IEnumerable<DockableContent> AllContent()
     {
@@ -161,14 +171,54 @@ public sealed class DockHostModel
     }
 
     /// <summary>Programmatically docks <paramref name="content"/> at <paramref name="target"/>.</summary>
-    /// <remarks>Spec 045 §5.3.10.</remarks>
+    /// <remarks>
+    /// Spec 045 §5.3.10.
+    ///
+    /// <para>
+    /// When <see cref="LayoutStrategy"/> is supplied (§5.3.6 / tracking
+    /// §2.13), the strategy's <c>BeforeInsert*</c> hook runs first.
+    /// Returning <c>true</c> short-circuits the default insertion — the
+    /// strategy is responsible for whatever placement it performed via
+    /// the model surface. Returning <c>false</c> queues the default
+    /// <see cref="PendingMutation.DockOp"/> and then fires the
+    /// <c>AfterInsert*</c> hook so apps can adjust dimensions, activate
+    /// the pane, or pin to a side after the manager's routing.
+    /// </para>
+    /// </remarks>
     public void Dock(DockableContent content, DockTarget target)
     {
         ArgumentNullException.ThrowIfNull(content);
         ThrowIfOffThread();
-        // P2 reconciler hookup happens in §2.16 — the model recording of the
-        // dock event is the source of truth that the native renderer reads.
+
+        // §2.13 — Before* dispatch. The strategy may pin to a side, dock
+        // elsewhere, or skip the operation entirely. Subtype-dispatch
+        // routes Document vs ToolWindow to the right interface method;
+        // bare DockableContent (the P1 source-compat shape) bypasses the
+        // strategy (the contract is typed against the §2.8 subclasses).
+        if (LayoutStrategy is { } strategy)
+        {
+            bool handled = content switch
+            {
+                Document doc => strategy.BeforeInsertDocument(this, doc),
+                ToolWindow tw => strategy.BeforeInsertToolWindow(this, tw),
+                _ => false,
+            };
+            if (handled) return;
+        }
+
         Pending.Add(new PendingMutation.DockOp(content, target));
+
+        // §2.13 — After* dispatch. Runs after the default routing has
+        // been queued so the strategy can layer adjustments on top
+        // (size hints, side pinning, activation).
+        if (LayoutStrategy is { } postStrategy)
+        {
+            switch (content)
+            {
+                case Document doc: postStrategy.AfterInsertDocument(this, doc); break;
+                case ToolWindow tw: postStrategy.AfterInsertToolWindow(this, tw); break;
+            }
+        }
     }
 
     /// <summary>Tears <paramref name="content"/> out into a new floating window.</summary>
