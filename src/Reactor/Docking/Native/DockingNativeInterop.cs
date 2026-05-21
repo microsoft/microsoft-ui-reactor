@@ -99,7 +99,19 @@ public static class DockingNativeInterop
                     catch { /* best-effort unmount cleanup */ }
                 }
                 if (state?.LastElement is { } el)
+                {
+                    // Spec 045 §2.25 — close floating windows opened by
+                    // this host so they don't outlive their DockManager.
+                    // Close fires asynchronously on the OS side; we also
+                    // clear the per-host tracker eagerly so the host can
+                    // be reused / re-mounted without stale references.
+                    foreach (var floating in DockFloatingTracker.SnapshotFor(el))
+                    {
+                        try { floating.Close(); } catch { /* best-effort */ }
+                        DockFloatingTracker.UnregisterFor(el, floating);
+                    }
                     DockChordBridge.Clear(el);
+                }
                 host.Child = null;
                 NativeHostState.SetAttached(host, null);
             });

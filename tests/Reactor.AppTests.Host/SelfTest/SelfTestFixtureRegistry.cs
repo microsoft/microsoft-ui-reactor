@@ -913,6 +913,9 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_Reliability_OffThreadMutation_ThrowsAndDoesNotQueue",
         "NativeDocking_Reliability_UseEffectCleanup_RunsOnPaneClose",
         "NativeDocking_Reliability_DragSessionPayload_ObjectRefsOnly",
+        "NativeDocking_Reliability_CrashMidDrag_LeavesPersistedLayoutClean",
+        "NativeDocking_Reliability_FloatingWindowClosesOnHostUnmount",
+        "NativeDocking_Reliability_EventSubscriptionLeakBaseline",
         // Spec 045 §2.4 drag/drop matrix — exhaustive programmatic-drag
         // scenarios for each DockTarget value + invariants.
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp",
@@ -1829,6 +1832,9 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_Reliability_OffThreadMutation_ThrowsAndDoesNotQueue" => new NativeDockingReliabilityFixtures.OffThreadMutation_ThrowsAndDoesNotQueue(harness),
         "NativeDocking_Reliability_UseEffectCleanup_RunsOnPaneClose" => new NativeDockingReliabilityFixtures.UseEffectCleanup_RunsOnPaneClose(harness),
         "NativeDocking_Reliability_DragSessionPayload_ObjectRefsOnly" => new NativeDockingReliabilityFixtures.DragSessionPayload_ObjectRefsOnly(harness),
+        "NativeDocking_Reliability_CrashMidDrag_LeavesPersistedLayoutClean" => new NativeDockingReliabilityFixtures.CrashMidDrag_LeavesPersistedLayoutClean(harness),
+        "NativeDocking_Reliability_FloatingWindowClosesOnHostUnmount" => new NativeDockingReliabilityFixtures.FloatingWindowClosesOnHostUnmount(harness),
+        "NativeDocking_Reliability_EventSubscriptionLeakBaseline" => new NativeDockingReliabilityFixtures.EventSubscriptionLeakBaseline(harness),
         // Spec 045 §2.4 drag/drop matrix
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp" => new NativeDockingDragDropMatrixFixtures.DragToCenterSameGroup_NoOp(harness),
         "NativeDockingMatrix_DragToSplitRight_AddsColumn" => new NativeDockingDragDropMatrixFixtures.DragToSplitRight_AddsColumn(harness),

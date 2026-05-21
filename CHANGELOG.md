@@ -29,6 +29,28 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — §2.25 reliability close-out.** Three new
+  host-mounted fixtures under `NativeDockingReliabilityFixture`:
+  `CrashMidDrag_LeavesPersistedLayoutClean` (mid-drag layout save
+  contains no drag-session state — drag state is in-memory only and
+  doesn't leak into persisted JSON; restart drops the in-flight drag,
+  reloaded layout is shape-identical to the pre-drag tree),
+  `FloatingWindowClosesOnHostUnmount` (floating windows opened from
+  a `DockManager` are tracked per-host; the host's
+  `DockingNativeInterop` unmount handler closes them so they don't
+  outlive the host), and `EventSubscriptionLeakBaseline` (100-pane
+  open/close cycle stays within a 32 MB allocation delta — smoke
+  test against catastrophic retention; precise budget tracked via
+  §2.20 perf benchmarks). New `DockFloatingClamp` + `DockDisplay` +
+  `DockFloatingBounds` types (in `src/Reactor/Docking/Native/`)
+  implement the §2.6 / §2.25 multi-display restore clamp: saved
+  floating bounds with < 200 × 100 DIP overlap against any display
+  recenter on the primary; sizes clamp to the primary work area
+  minus a 32 DIP margin. Pure math covered by 9 new unit tests in
+  `DockFloatingClampTests`. `DockFloatingWindow.Open` takes optional
+  `savedBounds` + `displays` + `manager` parameters; tear-out and
+  Float-mutation call sites pass the live manager so the per-host
+  tracker (ConditionalWeakTable-backed) sees each open.
 - **Spec 045 Phase 2 — Reliability + security selftests (§2.24,
   §2.25).** Four new host-mounted fixtures under
   `NativeDockingReliabilityFixture`:

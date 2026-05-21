@@ -304,7 +304,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 if (removed)
                 {
                     setLayoutOverride(new LayoutOverride(afterRemove));
-                    try { DockFloatingWindow.Open(pane); }
+                    try { DockFloatingWindow.Open(pane, manager: manager); }
                     catch { /* tear-out best-effort; surface via OnContentFloated */ }
                     manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
                     // §2.4 — same as confirm path: surface the new tree.
@@ -942,7 +942,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     // is swallowed so the model state still converges and
                     // the OnContentFloated observer still fires for apps
                     // that don't need the actual window.
-                    try { DockFloatingWindow.Open(floatOp.Content); }
+                    try { DockFloatingWindow.Open(floatOp.Content, manager: manager); }
                     catch { /* surface via OnContentFloated */ }
                     manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = floatOp.Content });
                     break;

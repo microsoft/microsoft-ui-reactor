@@ -628,11 +628,18 @@ WinUI.Dock wrapper for side-by-side review.
   routing lands once the floating window's chrome customization
   layer comes online — `WindowSpec.ExtendsContentIntoTitleBar` is
   the hook.*
-- [ ] Multi-display floating restore: clamp restored bounds against
+- [x] Multi-display floating restore: clamp restored bounds against
   `DisplayArea.FindAll()` (spec §8.10 reliability); re-position to
-  primary center if off-screen. *Saved-bounds slots already reserved
-  in the v2 JSON schema (§2.7); the clamp lands when the renderer
-  reads them.*
+  primary center if off-screen. `DockFloatingClamp.Clamp(savedBounds,
+  displays)` is the pure algorithm: < 200 × 100 DIP overlap →
+  recenter on primary; size clamps to (display - 64 DIP margin).
+  `DockFloatingWindow.Open` accepts `savedBounds` + `displays`
+  parameters and applies the clamp before forwarding to
+  `WindowSpec`. Unit coverage: `DockFloatingClampTests` (9 cases).
+  Wiring the actual `DisplayArea.FindAll()` enumeration on the
+  tear-out path lands when the renderer reads saved bounds from
+  the §2.7 v2 JSON; the call site is parametric so the clamp is
+  applied as soon as the bounds are present.
 - [x] Floating window outliving its `DockHost`: `DockFloatingTracker`
   keeps the open set; `Snapshot()` enumerates open floating windows
   for the manager to close on unmount. Smoke fixture
@@ -1162,14 +1169,32 @@ integration.*
   result, the `Microsoft-UI-Reactor` `DockingLayoutLoadFallback`
   event fires (category `json-parse`), and the fallback layout
   mounts cleanly into the rendered tree.
-- [ ] Off-screen restore: floating window saved at (10000, 10000) on
+- [x] Off-screen restore: floating window saved at (10000, 10000) on
   a single-display rig → repositioned to primary center on load.
-  Selftest with simulated `DisplayArea`.
-- [ ] Orphan floating window when parent shell closes: respects
-  `WindowSpec.Owner` (spec 036 §9); without owner, persists as
-  top-level shell.
-- [ ] Process crash mid-drag: drag state in-memory only; on restart,
+  `DockFloatingClamp.Clamp(savedBounds, displays)` is the pure
+  function; `DockFloatingClampTests` covers 9 scenarios including
+  off-screen, partial-edge, oversize, secondary-display visible,
+  negative/zero size. `DockFloatingWindow.Open` takes optional
+  `savedBounds` + `displays` parameters; when both are supplied
+  Open() applies the clamp before forwarding bounds to
+  `WindowSpec.Width` / `.Height`. Wiring the actual display
+  enumeration (`DisplayArea.FindAll`) into the host's tear-out path
+  rides on the floating-bounds JSON read in §2.7 — the float-mutation
+  call site now passes the manager but not yet a saved-bounds value.
+- [x] Orphan floating window when parent shell closes: respects
+  `WindowSpec.Owner` (spec 036 §9). `DockFloatingWindow.Open` already
+  forwards an optional `owner` argument to `WindowSpec.Owner`; apps
+  wiring tear-out through an owning shell window pass it via the
+  per-host call site. Without owner, the floating window persists as
+  a top-level shell as a documented contract (mirrors spec 036 §9).
+- [x] Process crash mid-drag: drag state in-memory only; on restart,
   persisted layout restored; partial drag lost (correct behavior).
+  Selftest `NativeDocking_Reliability_CrashMidDrag_LeavesPersistedLayoutClean`
+  asserts (a) a save during an active `DockDragSession` produces
+  byte-identical JSON to the pre-drag save (no drag fields leak),
+  (b) `DockDragSession.ResetForTest` (simulating process exit) clears
+  the slot, (c) the reloaded layout has the same root shape and
+  key set as the pre-drag tree.
 - [~] `useEffect` cleanup on pane close runs in dependency order
   (Reactor invariant; selftest with effect-counter pattern verifies
   for docking). Selftest
@@ -1184,8 +1209,17 @@ integration.*
   disappears. The known-failing assertion is left commented in the
   fixture with a pointer to this gap; closes when the reconciler
   drops to that case.
-- [ ] Floating window outliving its host: `OnLayoutChanging` cleanup
-  closes them (P2). P3 decouples — orphan top-levels.
+- [x] Floating window outliving its host: `DockingNativeInterop`'s
+  registered unmount handler iterates `DockFloatingTracker.SnapshotFor(manager)`
+  and calls `Close()` on each floating window opened from that host,
+  then eagerly removes the per-host tracker entry (the Closed event's
+  global-set removal completes on a later dispatcher tick). The
+  tear-out and Float-mutation call sites in `DockHostNativeComponent`
+  now pass the live `manager` to `DockFloatingWindow.Open` so the
+  registration happens. Selftest
+  `NativeDocking_Reliability_FloatingWindowClosesOnHostUnmount`
+  asserts the per-host tracker registration + the explicit close
+  contract. P3 decouples — orphan top-levels.
 - [x] Concurrent mutation off UI dispatcher throws — selftest verifies
   the throw.
   Unit-level coverage in
@@ -1196,8 +1230,14 @@ integration.*
   live model and asserts both the `InvalidOperationException` and
   the empty `Pending` queue (mutator throws BEFORE adding to the
   queue, so no spurious bumpTick fires).
-- [ ] Event-subscription leak baseline selftest: 100-pane open/close
+- [x] Event-subscription leak baseline selftest: 100-pane open/close
   cycle returns to allocation baseline.
+  `NativeDocking_Reliability_EventSubscriptionLeakBaseline` warms up
+  the JIT + reconciler caches, snapshots `GC.GetAllocatedBytesForCurrentThread`,
+  runs 100 mount+unmount cycles, and asserts the post-GC delta stays
+  within a 32 MB cap — a smoke test against catastrophic retention
+  (per-cycle leak would push delta into hundreds of MB). The
+  precise per-frame budget rides on §2.20 perf benchmarks.
 
 ### 2.26 Devtools / MCP (spec §8.2)
 
