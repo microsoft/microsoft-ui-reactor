@@ -445,10 +445,29 @@ internal sealed class ReactorEventSource : EventSource
             WriteEvent(32, targetType ?? string.Empty, exceptionType ?? string.Empty);
     }
 
+    // ── Docking (spec 045 §2.7) ─────────────────────────────────────────
+
+    [Event(36, Level = EventLevel.Warning, Keywords = Keywords.Errors,
+        Message = "Docking layout load fallback (category={category})")]
+    public void DockingLayoutLoadFallback(string category)
+    {
+        if (IsEnabled(EventLevel.Warning, Keywords.Errors))
+            // SECURITY: like RenderError above, JsonException.Message can
+            // include line/column + a substring of the offending input,
+            // which may carry user-bound title/key strings persisted into
+            // the layout JSON. Emit only a coarse category (empty, oversize,
+            // json-parse, schema-mismatch, validation, null-document) so the
+            // event-stream consumer can triage frequency without seeing PII.
+            // Reactor.Docking's own DockLayoutLoadResult.FailureReason still
+            // surfaces the full message to in-process callers under app ACL.
+            WriteEvent(36, category ?? string.Empty);
+    }
+
     // ── EventId allocation ──────────────────────────────────────────────
     //
     // Used: 1-15 (original surface), 16-17 (spec 044 Phase A generics),
     //       18-32 (spec 044 Phase B subsystem coverage),
-    //       33-35 (spec 044 Phase C §4.2 navigation transition + deep link).
-    // Next free EventId: 36.
+    //       33-35 (spec 044 Phase C §4.2 navigation transition + deep link),
+    //       36    (spec 045 §2.7 docking layout load fallback).
+    // Next free EventId: 37.
 }

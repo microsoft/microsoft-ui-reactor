@@ -105,6 +105,14 @@ public class ReactorEventSourceCoverageTests : IDisposable
     }
 
     [Fact]
+    public void Docking_Layout_Load_Fallback_Emits()
+    {
+        ReactorEventSource.Log.DockingLayoutLoadFallback("json-parse");
+        Assert.Contains(_listener.Events,
+            e => e.EventName == nameof(ReactorEventSource.DockingLayoutLoadFallback));
+    }
+
+    [Fact]
     public void Null_Strings_Are_Coalesced_To_Empty()
     {
         // Exercises the ?? string.Empty branch on every parameter slot.

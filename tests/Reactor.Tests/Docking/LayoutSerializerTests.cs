@@ -1,5 +1,7 @@
+using System.Diagnostics.Tracing;
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Docking;
 using Microsoft.UI.Reactor.Docking.Persistence;
 using Microsoft.UI.Xaml.Controls;
@@ -426,5 +428,78 @@ public class LayoutSerializerTests
         Assert.True(result.Success);
         Assert.True(sw.ElapsedMilliseconds < 250,
             $"200-pane load took {sw.ElapsedMilliseconds}ms — well above the 50ms perf budget (test threshold 250ms to absorb CI jitter; perf bench enforces the actual budget)");
+    }
+
+    // ── §2.7 corrupt-JSON ReactorEventSource emission ────────────────────
+
+    private sealed class DockingFallbackListener : EventListener
+    {
+        private readonly List<string> _categories = new();
+        public IReadOnlyList<string> Categories
+        {
+            get { lock (_categories) return _categories.ToArray(); }
+        }
+        protected override void OnEventWritten(EventWrittenEventArgs e)
+        {
+            if (e.EventName != nameof(ReactorEventSource.DockingLayoutLoadFallback)) return;
+            var payload = e.Payload is { Count: > 0 } ? e.Payload[0]?.ToString() ?? string.Empty : string.Empty;
+            lock (_categories) _categories.Add(payload);
+        }
+    }
+
+    [Theory]
+    [InlineData("",                                  "empty")]
+    [InlineData("    \t\n  ",                        "empty")]
+    [InlineData("{not valid json",                   "json-parse")]
+    [InlineData("null",                              "null-document")]
+    [InlineData("{\"$schema\": 0}",                  "schema-missing")]
+    public void Load_CorruptInput_EmitsReactorEventSourceFallback(string json, string expectedCategory)
+    {
+        // Spec 045 §2.7 / §8.10 — corrupt JSON must (a) return a fallback
+        // result, (b) emit a Microsoft-UI-Reactor ETW event with a
+        // PII-safe coarse category. The in-process FailureReason still
+        // carries the full message for app-level diagnostics.
+        using var listener = new DockingFallbackListener();
+        listener.EnableEvents(ReactorEventSource.Log, EventLevel.Warning, EventKeywords.All);
+
+        var result = DockLayoutSerializer.Load(json);
+
+        Assert.True(result.IsFallback);
+        Assert.False(result.Success);
+        Assert.NotNull(result.FailureReason);
+        Assert.Contains(expectedCategory, listener.Categories);
+    }
+
+    [Fact]
+    public void Load_OversizeInput_EmitsOversizeCategory()
+    {
+        // Craft a string just above the 1 MB ceiling. The exact bytes
+        // matter only to trip the boundary check; payload content is
+        // irrelevant because the size gate fires before parsing.
+        var oversize = new string('a', DockLayoutSerializer.MaxBytes + 8);
+        using var listener = new DockingFallbackListener();
+        listener.EnableEvents(ReactorEventSource.Log, EventLevel.Warning, EventKeywords.All);
+
+        var result = DockLayoutSerializer.Load(oversize);
+
+        Assert.True(result.IsFallback);
+        Assert.Contains("oversize", listener.Categories);
+    }
+
+    [Fact]
+    public void Load_ValidInput_EmitsNoFallbackEvent()
+    {
+        // The success path must stay silent on the ReactorEventSource
+        // fallback channel — only failures emit. Regression guard against
+        // accidentally inverting the Fail() vs success branches.
+        var json = DockLayoutSerializer.Save(new DockTabGroup(
+            new DockableContent[] { new("X", Key: "x") }));
+        using var listener = new DockingFallbackListener();
+        listener.EnableEvents(ReactorEventSource.Log, EventLevel.Warning, EventKeywords.All);
+
+        var result = DockLayoutSerializer.Load(json);
+
+        Assert.True(result.Success);
+        Assert.Empty(listener.Categories);
     }
 }

@@ -664,11 +664,19 @@ WinUI.Dock wrapper for side-by-side review.
   instantiation, no expression evaluation. Layout is structure + identity
   only (spec §8.9). All parsing goes through the source-gen context.
 - [x] **No external schema URLs** — `$schema` is a version integer.
-- [ ] **Failure mode:** corrupt JSON → log via `ReactorEventSource`
+- [x] **Failure mode:** corrupt JSON → log via `ReactorEventSource`
   (spec 044), fall back to default layout, never throw on load path
-  (spec §8.9, §8.10). *Fallback + reason landed; ReactorEventSource
-  emit hooks attach at the native renderer's host-adapter integration
-  point.*
+  (spec §8.9, §8.10). `DockLayoutSerializer.Load` now classifies every
+  failure into one of six PII-safe categories (`empty`, `oversize`,
+  `json-parse`, `unsupported-schema`, `null-document`, `schema-missing`,
+  `validation`) and emits `ReactorEventSource.DockingLayoutLoadFallback`
+  (event id 16, Warning level, `Errors` keyword) with the category as
+  the only payload. The in-process `DockLayoutLoadResult.FailureReason`
+  still carries the full message under app ACL. Verified by
+  `LayoutSerializerTests.Load_CorruptInput_EmitsReactorEventSourceFallback`
+  (theory across 5 inputs), `Load_OversizeInput_EmitsOversizeCategory`,
+  `Load_ValidInput_EmitsNoFallbackEvent`, and
+  `ReactorEventSourceCoverageTests.Docking_Layout_Load_Fallback_Emits`.
 - [x] Sizes stored as **ratios** for splits (not absolute pixels — DPI
   robust). Absolute px reserved for floating x/y/w/h and per-pane
   width/height overrides. JSON shape reserves the `ratio` field; native

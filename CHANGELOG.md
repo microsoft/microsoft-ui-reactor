@@ -29,6 +29,16 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — Corrupt-JSON ETW emission (§2.7).**
+  `DockLayoutSerializer.Load` now classifies every fallback path into a
+  PII-safe category (`empty` / `oversize` / `json-parse` /
+  `unsupported-schema` / `null-document` / `schema-missing` /
+  `validation`) and emits the new
+  `ReactorEventSource.DockingLayoutLoadFallback` event (id 16, Warning,
+  `Errors` keyword) carrying only the category string — the full
+  `DockLayoutLoadResult.FailureReason` continues to surface to
+  in-process callers under app ACL. Closes the last open checklist
+  item on §2.7. (spec 045 §2.7, spec 044)
 - **Spec 045 Phase 2 — Model-mutation drain (§2.16).**
   `DockHostNativeComponent.Render` now drains `DockHostModel.Pending`
   on each render pass: every queued `Dock` / `Float` / `Hide` / `Show`

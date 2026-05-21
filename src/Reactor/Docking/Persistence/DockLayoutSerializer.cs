@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Docking.Persistence;
@@ -84,11 +85,11 @@ public static class DockLayoutSerializer
     public static DockLayoutLoadResult Load(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
-            return DockLayoutLoadResult.Fallback("empty input");
+            return Fail("empty", "empty input");
 
         var byteCount = Encoding.UTF8.GetByteCount(json);
         if (byteCount > MaxBytes)
-            return DockLayoutLoadResult.Fallback($"input exceeds {MaxBytes}-byte limit ({byteCount} bytes)");
+            return Fail("oversize", $"input exceeds {MaxBytes}-byte limit ({byteCount} bytes)");
 
         DockLayoutDoc? doc;
         try
@@ -104,15 +105,15 @@ public static class DockLayoutSerializer
         }
         catch (JsonException ex)
         {
-            return DockLayoutLoadResult.Fallback($"json parse failure: {ex.Message}");
+            return Fail("json-parse", $"json parse failure: {ex.Message}");
         }
         catch (NotSupportedException ex)
         {
-            return DockLayoutLoadResult.Fallback($"unsupported schema: {ex.Message}");
+            return Fail("unsupported-schema", $"unsupported schema: {ex.Message}");
         }
 
         if (doc is null)
-            return DockLayoutLoadResult.Fallback("null document");
+            return Fail("null-document", "null document");
 
         // Forward-tolerant: newer-than-known schemas log a warning but
         // proceed with best-effort. v1 inputs (no $schema marker) would
@@ -120,7 +121,7 @@ public static class DockLayoutSerializer
         // upgrades them before this point. v2 is the only currently-emitted
         // version.
         if (doc.Schema < 1)
-            return DockLayoutLoadResult.Fallback($"missing/invalid $schema (got {doc.Schema})");
+            return Fail("schema-missing", $"missing/invalid $schema (got {doc.Schema})");
 
         try
         {
@@ -148,8 +149,22 @@ public static class DockLayoutSerializer
         }
         catch (InvalidOperationException ex)
         {
-            return DockLayoutLoadResult.Fallback($"validation failure: {ex.Message}");
+            return Fail("validation", $"validation failure: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Build a fallback result + emit a coarse-grained
+    /// <c>Microsoft-UI-Reactor</c> ETW event so on-disk traces capture
+    /// load failures (spec 044 / 045 §2.7). The event payload is the
+    /// <paramref name="category"/> bucket only — PII-safe — while the
+    /// in-process <see cref="DockLayoutLoadResult.FailureReason"/>
+    /// carries the full message for app-level diagnostics.
+    /// </summary>
+    private static DockLayoutLoadResult Fail(string category, string reason)
+    {
+        ReactorEventSource.Log.DockingLayoutLoadFallback(category);
+        return DockLayoutLoadResult.Fallback(reason);
     }
 
     // ── Tree → JSON ─────────────────────────────────────────────────────
