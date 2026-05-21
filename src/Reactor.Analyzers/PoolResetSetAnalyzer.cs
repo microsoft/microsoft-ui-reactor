@@ -94,14 +94,8 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
         if (args.Count != 1)
             return;
 
-        ExpressionSyntax? body = args[0].Expression switch
-        {
-            SimpleLambdaExpressionSyntax simple => simple.ExpressionBody,
-            ParenthesizedLambdaExpressionSyntax paren => paren.ExpressionBody,
-            _ => null,
-        };
-
-        if (body is not AssignmentExpressionSyntax assignment)
+        var assignment = TryGetLambdaAssignment(args[0].Expression);
+        if (assignment is null)
             return;
         if (assignment.Kind() != SyntaxKind.SimpleAssignmentExpression)
             return;
@@ -118,5 +112,30 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
             invocation.GetLocation(),
             propName,
             modifierName));
+    }
+
+    /// <summary>
+    /// Extract the single assignment expression from a lambda passed to <c>.Set(...)</c>.
+    /// Supports both expression-body lambdas (<c>fe =&gt; fe.X = v</c>) and block-body
+    /// lambdas with a single assignment statement (<c>fe =&gt; { fe.X = v; }</c>).
+    /// Multi-statement blocks return <c>null</c> — the codefix can't safely rewrite them.
+    /// </summary>
+    internal static AssignmentExpressionSyntax? TryGetLambdaAssignment(ExpressionSyntax lambdaExpr)
+    {
+        SyntaxNode? exprOrBlock = lambdaExpr switch
+        {
+            SimpleLambdaExpressionSyntax simple => (SyntaxNode?)simple.ExpressionBody ?? simple.Block,
+            ParenthesizedLambdaExpressionSyntax paren => (SyntaxNode?)paren.ExpressionBody ?? paren.Block,
+            _ => null,
+        };
+
+        return exprOrBlock switch
+        {
+            AssignmentExpressionSyntax a => a,
+            BlockSyntax block when block.Statements.Count == 1
+                && block.Statements[0] is ExpressionStatementSyntax es
+                && es.Expression is AssignmentExpressionSyntax ba => ba,
+            _ => null,
+        };
     }
 }

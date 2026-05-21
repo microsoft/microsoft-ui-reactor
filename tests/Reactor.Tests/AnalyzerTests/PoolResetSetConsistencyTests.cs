@@ -176,24 +176,39 @@ class C
         Assert.True(File.Exists(path), $"ElementPool.cs not found at {path}");
         var source = File.ReadAllText(path);
 
-        var start = source.IndexOf("internal static void CleanElement(FrameworkElement fe)", StringComparison.Ordinal);
-        Assert.True(start >= 0, "Could not locate CleanElement signature in ElementPool.cs — has it been renamed?");
-        var braceStart = source.IndexOf('{', start);
-        Assert.True(braceStart > start, "CleanElement opening brace not found");
-        var switchStart = source.IndexOf("switch (fe)", braceStart, StringComparison.Ordinal);
-        Assert.True(switchStart > braceStart, "CleanElement layout changed — could not find 'switch (fe)' boundary");
+        // Locate `(internal|private|...) static void CleanElement(FrameworkElement <param>)`,
+        // capturing the parameter name. Matching by signature shape — not by the
+        // exact `(FrameworkElement fe)` string — keeps the test robust to harmless
+        // renames or spacing changes.
+        var sigMatch = Regex.Match(source,
+            @"static\s+void\s+CleanElement\s*\(\s*FrameworkElement\s+(\w+)\s*\)");
+        Assert.True(sigMatch.Success,
+            "Could not locate CleanElement(FrameworkElement) signature in ElementPool.cs — has it been removed or had its type changed?");
+        var paramName = sigMatch.Groups[1].Value;
 
-        var commonBlock = source.Substring(braceStart, switchStart - braceStart);
+        var braceStart = source.IndexOf('{', sigMatch.Index + sigMatch.Length);
+        Assert.True(braceStart > sigMatch.Index, "CleanElement opening brace not found");
 
-        // ClearValue() is a method call caught separately by the second
-        // regex; filter it out of the direct-assignment match set.
-        var directAssignments = Regex.Matches(commonBlock, @"\bfe\.(\w+)\s*=")
+        // The FE-common block runs from the opening brace up to the first
+        // `switch (<param>)` that starts the type-specific cleanup.
+        var switchRegex = new Regex($@"\bswitch\s*\(\s*{Regex.Escape(paramName)}\s*\)");
+        var switchMatch = switchRegex.Match(source, braceStart);
+        Assert.True(switchMatch.Success,
+            $"CleanElement layout changed — could not find 'switch ({paramName})' boundary after the opening brace.");
+
+        var commonBlock = source.Substring(braceStart, switchMatch.Index - braceStart);
+
+        // ClearValue() is a method call caught separately by the second regex;
+        // filter it out of the direct-assignment match set. Both regexes use
+        // the captured parameter name so renaming `fe` → `element` keeps working.
+        var escapedParam = Regex.Escape(paramName);
+        var directAssignments = Regex.Matches(commonBlock, $@"\b{escapedParam}\.(\w+)\s*=")
             .Cast<Match>()
             .Select(m => m.Groups[1].Value)
             .Where(name => name != "ClearValue");
 
         var clearValueProps = Regex.Matches(commonBlock,
-                @"\bfe\.ClearValue\(\s*FrameworkElement\.(\w+)Property\s*\)")
+                $@"\b{escapedParam}\.ClearValue\(\s*FrameworkElement\.(\w+)Property\s*\)")
             .Cast<Match>()
             .Select(m => m.Groups[1].Value);
 
