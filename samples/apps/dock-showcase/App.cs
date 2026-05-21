@@ -56,7 +56,8 @@ class DockShowcaseRoot : Component
             SceneButton("compact",      "Scene D — Compact / Bottom",  scene, setScene),
             SceneButton("persist",      "Scene E — Persistence",       scene, setScene),
             SceneButton("programmatic", "Scene F — Programmatic Dock", scene, setScene),
-            SceneButton("sliders",      "Scene G — Slider Resize",     scene, setScene)
+            SceneButton("sliders",      "Scene G — Slider Resize",     scene, setScene),
+            SceneButton("droptargets",  "Scene H — Drop Targets",      scene, setScene)
         ).Width(240).Padding(8);
 
         Element body = scene switch
@@ -68,6 +69,7 @@ class DockShowcaseRoot : Component
             "persist"      => Component<SceneEPersistence>(),
             "programmatic" => Component<SceneFProgrammatic>(),
             "sliders"      => Component<SceneGSliders>(),
+            "droptargets"  => Component<SceneHDropTargets>(),
             _              => TextBlock("Unknown scene"),
         };
 
@@ -471,6 +473,126 @@ class SceneFProgrammatic : Component
 //  is exclusively in pointer/capture wiring. If sliders fail too, the
 //  bug is in the ratio→render path.
 // ════════════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════════════
+//  Scene H — Drop Targets (spec 045 §2.3)
+//
+//  Exercises the Reactor-native drop-target overlay end-to-end without
+//  the drag pipeline. The "Show drop targets" button flips
+//  DockManager.ShowDropTargets to true; the overlay paints 9 targets +
+//  preview rectangle over the dock subtree. Hovering each target updates
+//  the preview rect; clicking confirms — the scene reacts by docking a
+//  new pane at the chosen target. Esc dismisses.
+//
+//  Drag-triggered activation lands with §2.4: the gesture recognizer
+//  flips the same flag mid-drag, and the §2.3 overlay you see here is
+//  exactly what's painted at that point.
+// ════════════════════════════════════════════════════════════════════════
+
+class SceneHDropTargets : Component
+{
+    public override Element Render()
+    {
+        var (show, setShow) = UseState(false);
+        var (hoverLabel, setHoverLabel) = UseState("(none)");
+        var (extraPanes, setExtraPanes) = UseState(ImmutableHashSet<DockTarget>.Empty);
+        var (log, setLog) = UseState(ImmutableList<string>.Empty);
+
+        void AddLog(string msg)
+        {
+            // Cap log to 8 lines so the scene doesn't grow unbounded.
+            var next = log.Insert(0, msg);
+            if (next.Count > 8) next = next.RemoveAt(8);
+            setLog(next);
+        }
+
+        // The base pane the overlay paints over. On confirm, we append
+        // a new pane at the chosen target so the layout visibly changes.
+        var basePane = new DockableContent(
+            Title: "Document A",
+            Key: "h:doc-a",
+            Content: VStack(4,
+                TextBlock("Document A — base pane.").SemiBold(),
+                TextBlock("Press 'Show drop targets' below to overlay the 9 targets."),
+                TextBlock("Hover a target to see the preview rectangle."),
+                TextBlock("Click a target to dock a new pane there.")
+            ).Padding(16));
+
+        DockNode layout = basePane;
+        foreach (var target in extraPanes.OrderBy(t => (int)t))
+        {
+            var newPane = new DockableContent(
+                Title: $"Pane @ {target}",
+                Key: $"h:dock-{target}",
+                Content: TextBlock($"Docked at {target} via §2.3 overlay click.")
+                    .Padding(16));
+            layout = target switch
+            {
+                DockTarget.Center        => new DockTabGroup(new[] { (DockableContent)layout, newPane }),
+                DockTarget.SplitLeft     => new DockSplit(Orientation.Horizontal, new DockNode[] { newPane, layout }),
+                DockTarget.SplitRight    => new DockSplit(Orientation.Horizontal, new DockNode[] { layout, newPane }),
+                DockTarget.SplitTop      => new DockSplit(Orientation.Vertical,   new DockNode[] { newPane, layout }),
+                DockTarget.SplitBottom   => new DockSplit(Orientation.Vertical,   new DockNode[] { layout, newPane }),
+                DockTarget.DockLeft      => new DockSplit(Orientation.Horizontal, new DockNode[] { newPane, layout }),
+                DockTarget.DockRight     => new DockSplit(Orientation.Horizontal, new DockNode[] { layout, newPane }),
+                DockTarget.DockTop       => new DockSplit(Orientation.Vertical,   new DockNode[] { newPane, layout }),
+                DockTarget.DockBottom    => new DockSplit(Orientation.Vertical,   new DockNode[] { layout, newPane }),
+                _ => layout,
+            };
+        }
+
+        var dock = new DockManager
+        {
+            Layout = layout,
+            ShowDropTargets = show,
+            OnDropTargetHovered = t =>
+            {
+                setHoverLabel(t?.ToString() ?? "(none)");
+            },
+            OnDropTargetConfirmed = t =>
+            {
+                AddLog($"Confirmed {t} — pane appended.");
+                setExtraPanes(extraPanes.Add(t));
+                setShow(false);
+            },
+            OnDropTargetsDismissed = () =>
+            {
+                AddLog("Dismissed (Esc).");
+                setShow(false);
+            },
+        };
+
+        var logLines = log.Count == 0
+            ? (Element)TextBlock("(no events yet)").Opacity(0.5).FontSize(11)
+            : VStack(2, log.Select(l => (Element)TextBlock(l).FontSize(11).Opacity(0.8)).ToArray());
+
+        return Grid(
+            new[] { GridSize.Star(1) },
+            new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(1) },
+
+            TextBlock("Scene H — Drop Targets (§2.3)").FontSize(20).SemiBold().Grid(row: 0),
+            TextBlock(
+                "The Reactor-native drop-target overlay. Click the button to " +
+                "show the 9 targets (5 split + 4 edge, each ≥ 44×44 DIP). " +
+                "Hover a target to see the preview rectangle; click to dock a " +
+                "new pane there. Esc dismisses. Drag-triggered activation " +
+                "lands with §2.4 (the drag pipeline)."
+            ).Opacity(0.8).Margin(0, 0, 0, 8).Grid(row: 1),
+
+            HStack(8,
+                Button(show ? "Hide drop targets" : "Show drop targets",
+                    () => setShow(!show)),
+                Button("Reset",
+                    () => { setExtraPanes(ImmutableHashSet<DockTarget>.Empty); setLog(ImmutableList<string>.Empty); }),
+                TextBlock($"Hovered: {hoverLabel}").Opacity(0.7).Margin(12, 0, 0, 0)
+            ).Margin(0, 0, 0, 8).Grid(row: 2),
+
+            logLines.Margin(0, 0, 0, 8).Grid(row: 3),
+
+            dock.Grid(row: 4)
+        ).Padding(16);
+    }
+}
 
 class SceneGSliders : Component
 {
