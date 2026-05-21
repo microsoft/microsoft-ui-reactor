@@ -342,8 +342,8 @@ internal sealed class DevtoolsMcpServer : IDisposable
 
         // GET /mcp — self-describing schema endpoint. Returns the tool inventory,
         // selector grammar, schema version, and protocol version in one payload so
-        // an agent can orient itself with a single curl / browser visit without
-        // crafting a JSON-RPC initialize + tools/list dance first.
+        // an agent can discover the server with a single curl / browser visit
+        // without crafting a JSON-RPC initialize + tools/list dance first.
         if (ctx.Request.HttpMethod == "GET")
         {
             var schemaDoc = BuildSchemaDocument();
@@ -559,7 +559,7 @@ internal sealed class DevtoolsMcpServer : IDisposable
     /// <summary>
     /// Builds the self-describing document emitted by GET /mcp — the tool
     /// inventory, selector grammar, and protocol / schema versions in one
-    /// payload so an agent can orient itself without crafting a JSON-RPC
+    /// payload so an agent can discover the server without crafting a JSON-RPC
     /// initialize + tools/list dance first.
     /// </summary>
     private object BuildSchemaDocument()

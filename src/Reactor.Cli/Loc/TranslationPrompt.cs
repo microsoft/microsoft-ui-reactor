@@ -169,7 +169,7 @@ internal static class TranslationPrompt
             "ko" => "- Use formal polite speech level (합쇼체/해요체).\n- Keep translations concise.",
             "zh" => targetLocale.Contains("TW", StringComparison.OrdinalIgnoreCase)
                 ? "- Use Traditional Chinese characters.\n- Use Taiwan-standard terminology."
-                : "- Use Simplified Chinese characters.\n- Use mainland China terminology.",
+                : "- Use Simplified Chinese characters.\n- Use PRC-standard terminology.",
             "ar" => "- Use Modern Standard Arabic (MSA) for UI text.\n- Note: the UI supports RTL layout.",
             "he" => "- Note: the UI supports RTL layout.",
             "es" => targetLocale.Contains("419", StringComparison.OrdinalIgnoreCase)
