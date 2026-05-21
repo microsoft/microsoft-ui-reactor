@@ -71,7 +71,18 @@ jobs:
         run: dotnet tool install --global minver-cli --version 5.0.0
 
       - name: Install BinSkim
-        run: dotnet tool install --global Microsoft.CodeAnalysis.BinSkim
+        # BinSkim ships as a regular NuGet package containing BinSkim.exe,
+        # not as a dotnet global tool. Download the package and resolve the
+        # exe path into an env var for the analyze step.
+        shell: pwsh
+        run: |
+          nuget install Microsoft.CodeAnalysis.BinSkim -OutputDirectory binskim-pkg -ExcludeVersion
+          $exe = Get-ChildItem binskim-pkg -Filter BinSkim.exe -Recurse |
+            Where-Object { $_.FullName -like '*win-x64*' } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) { throw 'BinSkim.exe not found in package' }
+          "BINSKIM_EXE=$exe" >> $env:GITHUB_ENV
+          Write-Host "BinSkim: $exe"
 
       - name: Resolve version
         id: version
@@ -146,7 +157,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/binskim | Out-Null
-          binskim analyze `
+          & $env:BINSKIM_EXE analyze `
             "artifacts/nupkg/*.nupkg" `
             "artifacts/mur/x64/*.dll" `
             "artifacts/mur/x64/*.exe" `
