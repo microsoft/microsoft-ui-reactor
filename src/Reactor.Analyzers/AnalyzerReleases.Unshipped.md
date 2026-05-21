@@ -16,3 +16,4 @@ REACTOR_A11Y_003 | Microsoft.UI.Reactor.Accessibility | Warning | AccessibilityA
 REACTOR_DSL_001 | Reactor.Dsl | Warning | MissingWithKeyAnalyzer - Dynamic list item missing .WithKey
 REACTOR_DOC_001 | Reactor.Documentation | Warning | XmlDocSummaryAnalyzer - Public API missing XML doc summary
 REACTOR_DOC_002 | Reactor.Documentation | Warning | XmlDocCrefAnalyzer - XML doc cref does not resolve
+REACTOR_POOL_001 | Reactor.Pool | Warning | PoolResetSetAnalyzer - .Set assigns to a property reset on pool return; use the surviving Reactor modifier
