@@ -32,19 +32,32 @@ internal static class DockSideStripRenderer
     /// sides have entries. Renders one shared <see cref="PopupElement"/>
     /// at the manager root whose <c>IsOpen</c> tracks <paramref name="expandedPaneKey"/>.
     /// </summary>
+    /// <remarks>
+    /// The four <c>effective*Side</c> arguments are the host's resolved
+    /// side lists — the §2.16 drain feeds in a per-host override when
+    /// programmatic <c>Hide</c> / <c>PinToSide</c> mutations have moved
+    /// panes between the docked tree and a side strip; when no override
+    /// is in flight the caller passes the controlled element's lists
+    /// unchanged.
+    /// </remarks>
     public static Element Compose(
         DockManager manager,
         Element center,
+        IReadOnlyList<DockableContent>? effectiveLeftSide,
+        IReadOnlyList<DockableContent>? effectiveTopSide,
+        IReadOnlyList<DockableContent>? effectiveRightSide,
+        IReadOnlyList<DockableContent>? effectiveBottomSide,
         object? expandedPaneKey,
         Action<object?> setExpandedPaneKey)
     {
+        _ = manager; // reserved for future renderer choices keyed on chrome
         _ = setExpandedPaneKey; // reserved for future light-dismiss wiring
         var allSides = new (IReadOnlyList<DockableContent>? items, DockSide side)[]
         {
-            (manager.LeftSide,   DockSide.Left),
-            (manager.TopSide,    DockSide.Top),
-            (manager.RightSide,  DockSide.Right),
-            (manager.BottomSide, DockSide.Bottom),
+            (effectiveLeftSide,   DockSide.Left),
+            (effectiveTopSide,    DockSide.Top),
+            (effectiveRightSide,  DockSide.Right),
+            (effectiveBottomSide, DockSide.Bottom),
         };
 
         DockableContent? expanded = null;
@@ -64,10 +77,10 @@ internal static class DockSideStripRenderer
             if (expanded is not null) break;
         }
 
-        var leftStrip = BuildVerticalStrip(manager.LeftSide, DockSide.Left, expandedPaneKey, setExpandedPaneKey);
-        var rightStrip = BuildVerticalStrip(manager.RightSide, DockSide.Right, expandedPaneKey, setExpandedPaneKey);
-        var topStrip = BuildHorizontalStrip(manager.TopSide, DockSide.Top, expandedPaneKey, setExpandedPaneKey);
-        var bottomStrip = BuildHorizontalStrip(manager.BottomSide, DockSide.Bottom, expandedPaneKey, setExpandedPaneKey);
+        var leftStrip = BuildVerticalStrip(effectiveLeftSide, DockSide.Left, expandedPaneKey, setExpandedPaneKey);
+        var rightStrip = BuildVerticalStrip(effectiveRightSide, DockSide.Right, expandedPaneKey, setExpandedPaneKey);
+        var topStrip = BuildHorizontalStrip(effectiveTopSide, DockSide.Top, expandedPaneKey, setExpandedPaneKey);
+        var bottomStrip = BuildHorizontalStrip(effectiveBottomSide, DockSide.Bottom, expandedPaneKey, setExpandedPaneKey);
 
         // Middle row: [left | center | right]
         var middleRow = new FlexElement(FilterNonNull(new Element?[]

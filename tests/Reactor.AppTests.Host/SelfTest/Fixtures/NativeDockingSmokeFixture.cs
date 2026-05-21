@@ -1096,4 +1096,121 @@ internal static class NativeDockingSmokeFixtures
             splitter.RaiseResizeDeltaForTest(args);
         }
     }
+
+    /// <summary>
+    /// Spec 045 §2.16 — model-mutation drain. Mounts a host, grabs the live
+    /// <see cref="DockHostModel"/> via <see cref="DockHostModelBridge"/>,
+    /// invokes the public mutators (Dock / Close / Activate / PinToSide),
+    /// and asserts the rendered visual tree updates in the same frame as
+    /// the mutation. This is the headless analogue of "click a button →
+    /// pane appears" — without it, the model surface is a write-only sink.
+    /// </summary>
+    internal class ModelDrain_DockCloseActivatePinAffectsLiveTree(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            var initialDoc = new Document
+            {
+                Title = "Doc1",
+                Key = "drain:doc1",
+                Content = TextBlock("body-drain-doc1"),
+            };
+            var managerEl = new DockManager
+            {
+                Layout = new DockTabGroup(new DockableContent[] { initialDoc }),
+                LeftSide = null,
+            };
+            host.Mount(_ => managerEl);
+            await Harness.Render();
+
+            // The bridge yields the same DockHostModel the component is
+            // syncing into. Apps using DockContexts.Host inside the subtree
+            // would resolve to the same instance.
+            var model = DockHostModelBridge.Get(managerEl);
+            H.Check("Drain_ModelBridge_ResolvesModel", model is not null);
+
+            // ── Dock: program a fresh document into the layout ───────────
+            var addedDoc = new Document
+            {
+                Title = "Doc2",
+                Key = "drain:doc2",
+                Content = TextBlock("body-drain-doc2"),
+            };
+            DockableContent? dockedCallback = null;
+            DockTarget? dockedTarget = null;
+            host.Mount(_ => managerEl with
+            {
+                OnContentDocked = a => { dockedCallback = a.Content; dockedTarget = a.Target; },
+            });
+            await Harness.Render();
+            var modelAfterRemount = DockHostModelBridge.Get(managerEl);
+            modelAfterRemount?.Dock(addedDoc, DockTarget.Center);
+            await Harness.Render();
+            H.Check("Drain_Dock_LiveTreeShowsNewPane",
+                H.FindText("body-drain-doc2") is not null);
+            H.Check("Drain_Dock_FiresOnContentDocked",
+                dockedCallback is not null && ReferenceEquals(dockedCallback, addedDoc));
+            H.Check("Drain_Dock_TargetIsCenter", dockedTarget == DockTarget.Center);
+
+            // ── Close: programmatic close fires OnDocumentClosed + drops
+            // the pane from the rendered tree ────────────────────────────
+            DockableContent? closedCallback = null;
+            host.Mount(_ => managerEl with
+            {
+                OnDocumentClosed = a => closedCallback = a.Document,
+            });
+            await Harness.Render();
+            var model2 = DockHostModelBridge.Get(managerEl);
+            model2?.Close(initialDoc);
+            await Harness.Render();
+            H.Check("Drain_Close_LiveTreeDropsClosedPane",
+                H.FindText("body-drain-doc1") is null);
+            H.Check("Drain_Close_FiresOnDocumentClosed",
+                closedCallback is not null && ReferenceEquals(closedCallback, initialDoc));
+
+            // ── Activate: fires OnActiveContentChanged ───────────────────
+            DockableContent? activatedCallback = null;
+            host.Mount(_ => managerEl with
+            {
+                OnActiveContentChanged = a => activatedCallback = a.ActiveContent,
+            });
+            await Harness.Render();
+            var model3 = DockHostModelBridge.Get(managerEl);
+            model3?.Activate(addedDoc);
+            await Harness.Render();
+            H.Check("Drain_Activate_FiresOnActiveContentChanged",
+                activatedCallback is not null && ReferenceEquals(activatedCallback, addedDoc));
+
+            // ── PinToSide: a ToolWindow moves from the docked tree into
+            // the left side strip. Surface check: the tree no longer holds
+            // the tool's body; a Button with the tool title is mounted by
+            // the strip renderer.
+            var twToPin = new ToolWindow
+            {
+                Title = "PinnedTool",
+                Key = "drain:tw1",
+                Content = TextBlock("body-drain-tw"),
+            };
+            var model4 = DockHostModelBridge.Get(managerEl);
+            model4?.Dock(twToPin, DockTarget.Center);
+            await Harness.Render();
+            H.Check("Drain_PinPrep_ToolPresentBeforePin",
+                H.FindText("body-drain-tw") is not null);
+            model4?.PinToSide(twToPin, DockSide.Left);
+            await Harness.Render();
+            // The pinned tool's body is now in a Popup that's closed by
+            // default, so the body text is not in the visual tree. The
+            // side strip renders a Button captioned with the tool title.
+            var stripButtons = H.FindAllControls<Button>(b =>
+                b.Content is string s && s == "PinnedTool");
+            H.Check("Drain_PinToSide_SideStripShowsButton",
+                stripButtons.Count >= 1);
+
+            host.Mount(_ => TextBlock("model-drain-done"));
+            await Harness.Render();
+        }
+    }
 }

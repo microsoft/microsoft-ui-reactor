@@ -203,7 +203,14 @@ public sealed class DockHostModel
                 ToolWindow tw => strategy.BeforeInsertToolWindow(this, tw),
                 _ => false,
             };
-            if (handled) return;
+            if (handled)
+            {
+                // BeforeInsert* placed the pane (and queued PinToSide / etc.
+                // on its behalf). Notify the host so the drain runs even
+                // when the original Dock() short-circuits.
+                OnMutationQueued?.Invoke();
+                return;
+            }
         }
 
         Pending.Add(new PendingMutation.DockOp(content, target));
@@ -219,6 +226,7 @@ public sealed class DockHostModel
                 case ToolWindow tw: postStrategy.AfterInsertToolWindow(this, tw); break;
             }
         }
+        OnMutationQueued?.Invoke();
     }
 
     /// <summary>Tears <paramref name="content"/> out into a new floating window.</summary>
@@ -227,6 +235,7 @@ public sealed class DockHostModel
         ArgumentNullException.ThrowIfNull(content);
         ThrowIfOffThread();
         Pending.Add(new PendingMutation.FloatOp(content));
+        OnMutationQueued?.Invoke();
     }
 
     /// <summary>Auto-hides <paramref name="toolWindow"/> to its remembered side strip.</summary>
@@ -235,6 +244,7 @@ public sealed class DockHostModel
         ArgumentNullException.ThrowIfNull(toolWindow);
         ThrowIfOffThread();
         Pending.Add(new PendingMutation.HideOp(toolWindow));
+        OnMutationQueued?.Invoke();
     }
 
     /// <summary>Restores <paramref name="content"/> from its hidden state into its previous container.</summary>
@@ -243,6 +253,7 @@ public sealed class DockHostModel
         ArgumentNullException.ThrowIfNull(content);
         ThrowIfOffThread();
         Pending.Add(new PendingMutation.ShowOp(content));
+        OnMutationQueued?.Invoke();
     }
 
     /// <summary>Closes <paramref name="content"/>. For ToolWindows with <c>CanHide</c>, hides instead.</summary>
@@ -251,6 +262,7 @@ public sealed class DockHostModel
         ArgumentNullException.ThrowIfNull(content);
         ThrowIfOffThread();
         Pending.Add(new PendingMutation.CloseOp(content));
+        OnMutationQueued?.Invoke();
     }
 
     /// <summary>Activates (focuses) <paramref name="content"/>.</summary>
@@ -259,6 +271,7 @@ public sealed class DockHostModel
         ArgumentNullException.ThrowIfNull(content);
         ThrowIfOffThread();
         Pending.Add(new PendingMutation.ActivateOp(content));
+        OnMutationQueued?.Invoke();
     }
 
     /// <summary>Pins <paramref name="toolWindow"/> to <paramref name="side"/>.</summary>
@@ -268,11 +281,21 @@ public sealed class DockHostModel
         ArgumentNullException.ThrowIfNull(toolWindow);
         ThrowIfOffThread();
         Pending.Add(new PendingMutation.PinToSideOp(toolWindow, side));
+        OnMutationQueued?.Invoke();
     }
 
     // Pending mutation queue — the reconciler drains it on each render pass.
     // Tests and strategies read this to verify decisions.
     internal List<PendingMutation> Pending { get; } = new();
+
+    /// <summary>
+    /// Invoked synchronously after each mutator queues into <see cref="Pending"/>.
+    /// The Phase-2 native host installs a callback that bumps a re-render
+    /// tick so the reconciler drains the queue on the next render pass.
+    /// Null when the model is detached (unit-test usage or pre-mount).
+    /// </summary>
+    /// <remarks>Spec 045 §2.16 — drain trigger.</remarks>
+    internal Action? OnMutationQueued { get; set; }
 }
 
 /// <summary>

@@ -907,6 +907,7 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_SplitterProgrammaticVisualDemo",
         "NativeDocking_DropTargetOverlayShowsAndDismisses",
         "NativeDocking_DragSessionConfirmMutatesLayout",
+        "NativeDocking_ModelDrain_DockCloseActivatePinAffectsLiveTree",
         // Spec 045 §2.4 drag/drop matrix — exhaustive programmatic-drag
         // scenarios for each DockTarget value + invariants.
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp",
@@ -1818,6 +1819,7 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_SplitterProgrammaticVisualDemo" => new NativeDockingSmokeFixtures.SplitterProgrammaticVisualDemo(harness),
         "NativeDocking_DropTargetOverlayShowsAndDismisses" => new NativeDockingSmokeFixtures.DropTargetOverlayShowsAndDismisses(harness),
         "NativeDocking_DragSessionConfirmMutatesLayout" => new NativeDockingSmokeFixtures.DragSessionConfirmMutatesLayout(harness),
+        "NativeDocking_ModelDrain_DockCloseActivatePinAffectsLiveTree" => new NativeDockingSmokeFixtures.ModelDrain_DockCloseActivatePinAffectsLiveTree(harness),
         // Spec 045 §2.4 drag/drop matrix
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp" => new NativeDockingDragDropMatrixFixtures.DragToCenterSameGroup_NoOp(harness),
         "NativeDockingMatrix_DragToSplitRight_AddsColumn" => new NativeDockingDragDropMatrixFixtures.DragToSplitRight_AddsColumn(harness),

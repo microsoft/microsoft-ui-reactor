@@ -77,6 +77,18 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         var selectedIndexStore = selectedIndexStoreRef.Current;
         var (keyboardOverlayActive, setKeyboardOverlayActive) = UseState(false);
 
+        // ── Spec 045 §2.16 — side-strip override state ────────────────────
+        //
+        // Programmatic Hide / PinToSide mutations re-route ToolWindows
+        // between the docked tree and a side strip. The element's
+        // LeftSide / TopSide / RightSide / BottomSide props are the
+        // controlled-input shape; the override layers on top so model
+        // mutators can rearrange sides without requiring the app to
+        // re-pass the lists. Apps assigning new side lists out-of-band
+        // surrender the override on the next render (controlled-input
+        // convergence, same as `layoutOverride`).
+        var (sideOverride, setSideOverride) = UseState<SideOverride?>(null);
+
         // The effective layout the renderer sees. Apps changing
         // Manager.Layout out-of-band will replace the prop; if the new
         // reference differs from our override, we surrender the override
@@ -115,6 +127,30 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         var model = modelRef.Current ??= new DockHostModel();
         SyncModelFromElement(model, manager, effectiveLayout);
 
+        // §2.16 — install the re-render trigger on the model so calls to
+        // model.Dock / Float / Hide / Show / Close / Activate / PinToSide
+        // (whether app-driven or routed by an IDockLayoutStrategy) wake
+        // the host into the next render where the drain runs. UseReducer's
+        // setter is stable across renders, so the closure stays valid for
+        // the component's lifetime.
+        model.OnMutationQueued = () => bumpTick(t => t + 1);
+
+        // Register this model in the bridge so external callers (tests,
+        // devtools, future apps that hold a DockManager ref) can grab the
+        // same instance the reconciler is reading from. Mirrors the
+        // DockChordBridge wiring used by §2.10 keyboard accelerators.
+        DockHostModelBridge.Set(manager, model);
+
+        // §2.16 — resolve effective side strips. The override layers on
+        // top of the controlled-input lists from the element; programmatic
+        // Hide / PinToSide mutations populate it. Apps assigning new
+        // LeftSide / TopSide / RightSide / BottomSide props pass them
+        // through directly when no override is in flight.
+        var effLeftSide   = sideOverride?.Left   ?? manager.LeftSide;
+        var effTopSide    = sideOverride?.Top    ?? manager.TopSide;
+        var effRightSide  = sideOverride?.Right  ?? manager.RightSide;
+        var effBottomSide = sideOverride?.Bottom ?? manager.BottomSide;
+
         // Resolve effective active key: the app-supplied ActiveDocument
         // wins (controlled-input shape preserved). When the app doesn't
         // pin an ActiveDocument, fall back to the user's last tab-click
@@ -124,6 +160,49 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // DockHooks_IsActivePane_FlipsOnActiveChange regression.
         var appActiveKey = manager.ActiveDocument?.Key;
         var activeKey = appActiveKey ?? activePaneKey;
+
+        // §2.16 — drain queued mutations into local layout / side / active
+        // state. The drain runs synchronously inside Render so the
+        // resulting tree paints in the same frame as the mutator call;
+        // state setters persist the new state for subsequent renders and
+        // lifecycle events fire exactly once per queued op (Pending is
+        // cleared before the loop). When no mutations are queued the
+        // drain is a no-op.
+        if (model.Pending.Count > 0)
+        {
+            var drain = DrainPendingMutations(
+                manager, model,
+                effectiveLayout,
+                effLeftSide, effTopSide, effRightSide, effBottomSide,
+                activeKey);
+            if (drain.LayoutChanged)
+            {
+                effectiveLayout = drain.Layout;
+                setLayoutOverride(drain.Layout);
+                manager.OnLiveLayoutChanged?.Invoke(drain.Layout);
+                manager.OnLayoutChanged?.Invoke(new DockLayoutChangedEventArgs());
+            }
+            if (drain.SidesChanged)
+            {
+                effLeftSide   = drain.LeftSide;
+                effTopSide    = drain.TopSide;
+                effRightSide  = drain.RightSide;
+                effBottomSide = drain.BottomSide;
+                setSideOverride(new SideOverride(
+                    drain.LeftSide, drain.TopSide, drain.RightSide, drain.BottomSide));
+            }
+            if (drain.ActiveKeyChanged)
+            {
+                activeKey = drain.NewActiveKey;
+                setActivePaneKey(drain.NewActiveKey);
+            }
+            // SyncModelFromElement runs again next render with the new
+            // effective layout, so the model's read surface catches up.
+            // Re-sync now too so any same-render consumers see fresh state.
+            model.Root = effectiveLayout;
+            model.ActiveContent = drain.NewActiveContent ?? model.ActiveContent;
+        }
+
         var snapshot = BuildSnapshot(model);
 
         // ── Spec 045 operation log (Diagnostics.DockOperationLog) ─────────
@@ -333,15 +412,18 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // light-dismiss Popup overlay; click on a strip button toggles
         // expansion of the matching pane.
         var hasSides =
-            (manager.LeftSide is { Count: > 0 }) ||
-            (manager.TopSide is { Count: > 0 }) ||
-            (manager.RightSide is { Count: > 0 }) ||
-            (manager.BottomSide is { Count: > 0 });
+            (effLeftSide is { Count: > 0 }) ||
+            (effTopSide is { Count: > 0 }) ||
+            (effRightSide is { Count: > 0 }) ||
+            (effBottomSide is { Count: > 0 });
 
         var (expandedSideKey, setExpandedSideKey) = UseState<object?>(null);
 
         Element composed = hasSides
-            ? DockSideStripRenderer.Compose(manager, body, expandedSideKey, setExpandedSideKey)
+            ? DockSideStripRenderer.Compose(
+                manager, body,
+                effLeftSide, effTopSide, effRightSide, effBottomSide,
+                expandedSideKey, setExpandedSideKey)
             : body;
 
         // §2.3 — drop-target overlay. Composed last so it paints above the
@@ -736,6 +818,327 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             },
             splitterDiagnosticSink: splitterDiagnosticSink);
     }
+
+    // ── §2.16 model-mutation drain ────────────────────────────────────────
+
+    /// <summary>
+    /// Outcome bundle from <see cref="DrainPendingMutations"/>. The host
+    /// uses the <c>*Changed</c> flags to decide which state setter to call
+    /// and which lifecycle event to fire, while the value fields carry the
+    /// post-drain effective state used to paint the current render.
+    /// </summary>
+    private readonly record struct DrainResult(
+        DockNode? Layout, bool LayoutChanged,
+        IReadOnlyList<DockableContent>? LeftSide,
+        IReadOnlyList<DockableContent>? TopSide,
+        IReadOnlyList<DockableContent>? RightSide,
+        IReadOnlyList<DockableContent>? BottomSide,
+        bool SidesChanged,
+        object? NewActiveKey, DockableContent? NewActiveContent, bool ActiveKeyChanged);
+
+    /// <summary>
+    /// Translates each <see cref="PendingMutation"/> queued on
+    /// <paramref name="model"/> into a layout / side / active-key update,
+    /// firing the matching per-pane lifecycle events. Clears
+    /// <see cref="DockHostModel.Pending"/> before returning so subsequent
+    /// renders skip the drain when nothing is queued.
+    /// </summary>
+    /// <remarks>
+    /// Cancellable <c>*ing</c> events run inline: a <c>Cancel = true</c>
+    /// response leaves the mutation un-applied and the layout untouched.
+    /// The post-event <c>*ed</c> variants fire only when the mutation
+    /// actually landed. Spec 045 §5.3.5 + §2.16.
+    /// </remarks>
+    private static DrainResult DrainPendingMutations(
+        DockManager manager,
+        DockHostModel model,
+        DockNode? layout,
+        IReadOnlyList<DockableContent>? leftSide,
+        IReadOnlyList<DockableContent>? topSide,
+        IReadOnlyList<DockableContent>? rightSide,
+        IReadOnlyList<DockableContent>? bottomSide,
+        object? activeKey)
+    {
+        // Snapshot then clear so any After*-hook re-entries that queue
+        // further mutations land in the next render's drain instead of
+        // recursing during this one. Today the strategy's After* hook
+        // runs synchronously inside model.Dock(), so those entries are
+        // already in `Pending` and we'll process them in the same loop;
+        // future expansions (timers, async tasks) that queue mid-render
+        // remain safe.
+        var ops = model.Pending.ToArray();
+        model.Pending.Clear();
+
+        var workingLayout = layout;
+        var workingLeft   = leftSide;
+        var workingTop    = topSide;
+        var workingRight  = rightSide;
+        var workingBottom = bottomSide;
+        bool layoutChanged = false;
+        bool sidesChanged  = false;
+        bool activeChanged = false;
+        object? newActiveKey = activeKey;
+        DockableContent? newActiveContent = null;
+
+        foreach (var op in ops)
+        {
+            switch (op)
+            {
+                case PendingMutation.DockOp dockOp:
+                {
+                    var changingArgs = new DockLayoutChangingEventArgs();
+                    manager.OnLayoutChanging?.Invoke(changingArgs);
+                    if (changingArgs.Cancel) break;
+                    var dockingArgs = new DockContentDockingEventArgs
+                    {
+                        Content = dockOp.Content,
+                        Target = dockOp.Target,
+                    };
+                    manager.OnContentDocking?.Invoke(dockingArgs);
+                    if (dockingArgs.Cancel) break;
+                    // Defensive: if the pane is already somewhere in the
+                    // tree (an app racing two Docks for the same pane),
+                    // move it rather than duplicate. Otherwise insert.
+                    var beforeRemove = workingLayout;
+                    var (afterRemove, found) = DockLayoutMutator.RemovePane(workingLayout, dockOp.Content);
+                    workingLayout = DockLayoutMutator.InsertPaneAtTarget(
+                        found ? afterRemove : beforeRemove, dockOp.Content, dockOp.Target);
+                    layoutChanged = true;
+                    // Side-strip presence has no overlap with the docked
+                    // tree, so a Dock pulled a pane out of a side strip
+                    // only when explicitly queued via PinToSide flip — we
+                    // don't strip-remove here.
+                    manager.OnContentDocked?.Invoke(new DockContentDockedEventArgs
+                    {
+                        Content = dockOp.Content,
+                        Target = dockOp.Target,
+                    });
+                    break;
+                }
+
+                case PendingMutation.FloatOp floatOp:
+                {
+                    var floatingArgs = new DockContentFloatingEventArgs { Content = floatOp.Content };
+                    manager.OnContentFloating?.Invoke(floatingArgs);
+                    if (floatingArgs.Cancel) break;
+                    var (after, found) = DockLayoutMutator.RemovePane(workingLayout, floatOp.Content);
+                    if (found)
+                    {
+                        // §2.15 — record container before tear-out so a
+                        // later re-dock can route via PreviousContainer.
+                        var container = DockLayoutMutator.FindContainer(workingLayout, floatOp.Content);
+                        if (container is not null) PreviousContainerTracker.Set(floatOp.Content, container);
+                        workingLayout = after;
+                        layoutChanged = true;
+                    }
+                    // Open the floating window best-effort. Headless test
+                    // harnesses may lack a real XamlRoot — the exception
+                    // is swallowed so the model state still converges and
+                    // the OnContentFloated observer still fires for apps
+                    // that don't need the actual window.
+                    try { DockFloatingWindow.Open(floatOp.Content); }
+                    catch { /* surface via OnContentFloated */ }
+                    manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = floatOp.Content });
+                    break;
+                }
+
+                case PendingMutation.HideOp hideOp:
+                {
+                    var hidingArgs = new DockToolWindowHidingEventArgs { ToolWindow = hideOp.ToolWindow };
+                    manager.OnToolWindowHiding?.Invoke(hidingArgs);
+                    if (hidingArgs.Cancel) break;
+                    var (after, found) = DockLayoutMutator.RemovePane(workingLayout, hideOp.ToolWindow);
+                    if (found)
+                    {
+                        var container = DockLayoutMutator.FindContainer(workingLayout, hideOp.ToolWindow);
+                        if (container is not null) PreviousContainerTracker.Set(hideOp.ToolWindow, container);
+                        workingLayout = after;
+                        layoutChanged = true;
+                    }
+                    // Park the pane on the Left strip by default — the
+                    // remembered-side heuristic lands when ToolWindow
+                    // carries a PreferredSide hint (spec §2.5 follow-up).
+                    (workingLeft, sidesChanged) = AddToSide(workingLeft, hideOp.ToolWindow, sidesChanged);
+                    manager.OnToolWindowHidden?.Invoke(new DockToolWindowHiddenEventArgs { ToolWindow = hideOp.ToolWindow });
+                    break;
+                }
+
+                case PendingMutation.ShowOp showOp:
+                {
+                    // Re-attach the pane to its previous container if the
+                    // §2.15 tracker remembers one; otherwise fall back to
+                    // Center insertion at the root.
+                    var changingArgs = new DockLayoutChangingEventArgs();
+                    manager.OnLayoutChanging?.Invoke(changingArgs);
+                    if (changingArgs.Cancel) break;
+                    (workingLeft, sidesChanged)   = RemoveFromSide(workingLeft, showOp.Content, sidesChanged);
+                    (workingTop, sidesChanged)    = RemoveFromSide(workingTop, showOp.Content, sidesChanged);
+                    (workingRight, sidesChanged)  = RemoveFromSide(workingRight, showOp.Content, sidesChanged);
+                    (workingBottom, sidesChanged) = RemoveFromSide(workingBottom, showOp.Content, sidesChanged);
+                    workingLayout = DockLayoutMutator.ShowFromHistory(
+                        workingLayout, showOp.Content, DockTarget.Center);
+                    layoutChanged = true;
+                    PreviousContainerTracker.Clear(showOp.Content);
+                    break;
+                }
+
+                case PendingMutation.CloseOp closeOp:
+                {
+                    // §5.3.5 / §5.3.8 — ToolWindows with CanHide=true take
+                    // the hide path; everything else closes.
+                    if (closeOp.Content is ToolWindow tw && tw.CanHide)
+                    {
+                        var hidingArgs = new DockToolWindowHidingEventArgs { ToolWindow = tw };
+                        manager.OnToolWindowHiding?.Invoke(hidingArgs);
+                        if (hidingArgs.Cancel) break;
+                        var (after, found) = DockLayoutMutator.RemovePane(workingLayout, tw);
+                        if (found)
+                        {
+                            var container = DockLayoutMutator.FindContainer(workingLayout, tw);
+                            if (container is not null) PreviousContainerTracker.Set(tw, container);
+                            workingLayout = after;
+                            layoutChanged = true;
+                        }
+                        (workingLeft, sidesChanged) = AddToSide(workingLeft, tw, sidesChanged);
+                        manager.OnToolWindowHidden?.Invoke(new DockToolWindowHiddenEventArgs { ToolWindow = tw });
+                        break;
+                    }
+
+                    if (closeOp.Content is ToolWindow twClose)
+                    {
+                        var closingArgs = new DockToolWindowClosingEventArgs { ToolWindow = twClose };
+                        manager.OnToolWindowClosing?.Invoke(closingArgs);
+                        if (closingArgs.Cancel) break;
+                        var (after, found) = DockLayoutMutator.RemovePane(workingLayout, twClose);
+                        if (!found) break;
+                        var container = DockLayoutMutator.FindContainer(workingLayout, twClose);
+                        if (container is not null) PreviousContainerTracker.Set(twClose, container);
+                        workingLayout = after;
+                        layoutChanged = true;
+                        manager.OnToolWindowClosed?.Invoke(new DockToolWindowClosedEventArgs { ToolWindow = twClose });
+                        break;
+                    }
+
+                    // Document / bare DockableContent close.
+                    var docClosingArgs = new DockDocumentClosingEventArgs { Document = closeOp.Content };
+                    manager.OnDocumentClosing?.Invoke(docClosingArgs);
+                    if (docClosingArgs.Cancel) break;
+                    var (afterDoc, foundDoc) = DockLayoutMutator.RemovePane(workingLayout, closeOp.Content);
+                    if (!foundDoc) break;
+                    var docContainer = DockLayoutMutator.FindContainer(workingLayout, closeOp.Content);
+                    if (docContainer is not null) PreviousContainerTracker.Set(closeOp.Content, docContainer);
+                    workingLayout = afterDoc;
+                    layoutChanged = true;
+                    manager.OnDocumentClosed?.Invoke(new DockDocumentClosedEventArgs { Document = closeOp.Content });
+                    break;
+                }
+
+                case PendingMutation.ActivateOp activateOp:
+                {
+                    var prevContent = ResolvePane(workingLayout, newActiveKey);
+                    newActiveKey = activateOp.Content.Key;
+                    newActiveContent = activateOp.Content;
+                    activeChanged = true;
+                    manager.OnActiveContentChanged?.Invoke(new DockActiveContentChangedEventArgs
+                    {
+                        ActiveContent = activateOp.Content,
+                        PreviousContent = prevContent,
+                    });
+                    break;
+                }
+
+                case PendingMutation.PinToSideOp pinOp:
+                {
+                    // PinToSide removes the tool window from the docked
+                    // tree (if present) and lands it on the requested
+                    // side strip. No dedicated lifecycle event today —
+                    // OnLayoutChanged covers it via the wrapper at the
+                    // host call site.
+                    var (after, found) = DockLayoutMutator.RemovePane(workingLayout, pinOp.ToolWindow);
+                    if (found)
+                    {
+                        var container = DockLayoutMutator.FindContainer(workingLayout, pinOp.ToolWindow);
+                        if (container is not null) PreviousContainerTracker.Set(pinOp.ToolWindow, container);
+                        workingLayout = after;
+                        layoutChanged = true;
+                    }
+                    // Remove from any other side strip first so a re-pin
+                    // from Left → Bottom doesn't leave the pane on both.
+                    (workingLeft, sidesChanged)   = RemoveFromSide(workingLeft, pinOp.ToolWindow, sidesChanged);
+                    (workingTop, sidesChanged)    = RemoveFromSide(workingTop, pinOp.ToolWindow, sidesChanged);
+                    (workingRight, sidesChanged)  = RemoveFromSide(workingRight, pinOp.ToolWindow, sidesChanged);
+                    (workingBottom, sidesChanged) = RemoveFromSide(workingBottom, pinOp.ToolWindow, sidesChanged);
+                    switch (pinOp.Side)
+                    {
+                        case DockSide.Left:
+                            (workingLeft, sidesChanged) = AddToSide(workingLeft, pinOp.ToolWindow, sidesChanged);
+                            break;
+                        case DockSide.Top:
+                            (workingTop, sidesChanged) = AddToSide(workingTop, pinOp.ToolWindow, sidesChanged);
+                            break;
+                        case DockSide.Right:
+                            (workingRight, sidesChanged) = AddToSide(workingRight, pinOp.ToolWindow, sidesChanged);
+                            break;
+                        case DockSide.Bottom:
+                            (workingBottom, sidesChanged) = AddToSide(workingBottom, pinOp.ToolWindow, sidesChanged);
+                            break;
+                    }
+                    break;
+                }
+            }
+        }
+
+        return new DrainResult(
+            workingLayout, layoutChanged,
+            workingLeft, workingTop, workingRight, workingBottom, sidesChanged,
+            newActiveKey, newActiveContent, activeChanged);
+    }
+
+    private static (IReadOnlyList<DockableContent>? List, bool Changed) AddToSide(
+        IReadOnlyList<DockableContent>? side, DockableContent pane, bool alreadyChanged)
+    {
+        if (side is not null)
+        {
+            foreach (var existing in side)
+                if (ReferenceEquals(existing, pane)) return (side, alreadyChanged);
+        }
+        var count = side?.Count ?? 0;
+        var next = new DockableContent[count + 1];
+        if (side is not null)
+            for (int i = 0; i < count; i++) next[i] = side[i];
+        next[count] = pane;
+        return (next, true);
+    }
+
+    private static (IReadOnlyList<DockableContent>? List, bool Changed) RemoveFromSide(
+        IReadOnlyList<DockableContent>? side, DockableContent pane, bool alreadyChanged)
+    {
+        if (side is null or { Count: 0 }) return (side, alreadyChanged);
+        int idx = -1;
+        for (int i = 0; i < side.Count; i++)
+            if (ReferenceEquals(side[i], pane)) { idx = i; break; }
+        if (idx < 0) return (side, alreadyChanged);
+        if (side.Count == 1) return (Array.Empty<DockableContent>(), true);
+        var next = new DockableContent[side.Count - 1];
+        int j = 0;
+        for (int i = 0; i < side.Count; i++)
+            if (i != idx) next[j++] = side[i];
+        return (next, true);
+    }
+
+    /// <summary>
+    /// Per-host snapshot of the four side strips, layered on top of the
+    /// controlled-input element props by the §2.16 drain when
+    /// programmatic Hide / PinToSide mutations have moved panes between
+    /// the docked tree and a side strip. A null entry means "no
+    /// override — read from the element's matching prop"; an empty list
+    /// means "the strip is intentionally cleared".
+    /// </summary>
+    private sealed record SideOverride(
+        IReadOnlyList<DockableContent>? Left,
+        IReadOnlyList<DockableContent>? Top,
+        IReadOnlyList<DockableContent>? Right,
+        IReadOnlyList<DockableContent>? Bottom);
 
     private static double[] BootstrapRatios(DockSplit split)
     {

@@ -143,6 +143,70 @@ public class DockHostModelSequenceTests
         }
     }
 
+    // ── §2.16 OnMutationQueued — re-render trigger contract ─────────────
+
+    [Fact]
+    public void EachMutator_InvokesOnMutationQueued_Once()
+    {
+        // The native host installs a callback that bumps a re-render tick
+        // so the reconciler drains the queue on the next render. The
+        // callback fires exactly once per public mutator call — verifying
+        // here keeps the queue→render edge from regressing.
+        var m = new DockHostModel();
+        var doc = new Document { Title = "X", Key = "x" };
+        var tw  = new ToolWindow { Title = "T", Key = "t" };
+        int count = 0;
+        m.OnMutationQueued = () => count++;
+
+        m.Dock(doc, DockTarget.Center);
+        m.Float(doc);
+        m.Hide(tw);
+        m.Show(doc);
+        m.Close(doc);
+        m.Activate(doc);
+        m.PinToSide(tw, DockSide.Left);
+
+        Assert.Equal(7, count);
+        Assert.Equal(7, m.Pending.Count);
+    }
+
+    [Fact]
+    public void StrategyShortCircuit_StillFiresOnMutationQueued()
+    {
+        // BeforeInsert* returning true skips the default DockOp queue
+        // entry but the strategy may have called other mutators (which
+        // each fire their own OnMutationQueued); the manager-level Dock
+        // call still needs to wake the host so the strategy-queued ops
+        // get drained.
+        var strategy = new ErrorPanePinStrategy();
+        var m = new DockHostModel { LayoutStrategy = strategy };
+        var errorPane = new ToolWindow { Title = "Error List", Key = "err" };
+        int count = 0;
+        m.OnMutationQueued = () => count++;
+
+        m.Dock(errorPane, DockTarget.Center);
+
+        // PinToSide fires once (from inside the strategy) + the outer
+        // Dock() fires once after the short-circuit. Two total.
+        Assert.Equal(2, count);
+        var op = Assert.IsType<PendingMutation.PinToSideOp>(Assert.Single(m.Pending));
+        Assert.Equal(DockSide.Bottom, op.Side);
+    }
+
+    [Fact]
+    public void OnMutationQueued_Null_DoesNotThrow()
+    {
+        // Unit tests construct the model without a host attached; the
+        // null callback path must stay non-fatal so model-only tests
+        // don't need to wire a stub callback.
+        var m = new DockHostModel();
+        Assert.Null(m.OnMutationQueued);
+        var pane = new Document { Title = "X", Key = "x" };
+        m.Dock(pane, DockTarget.Center);
+        m.Activate(pane);
+        Assert.Equal(2, m.Pending.Count);
+    }
+
     // ── PreviousContainer integration: hide→show preserves identity ─────
 
     [Fact]

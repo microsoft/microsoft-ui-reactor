@@ -898,11 +898,13 @@ integration.*
   (b) `DockLayoutMutator.ShowFromHistory(root, pane, fallback)` is
   the pure-function helper that folds a pane back into its
   remembered `DockTabGroup` when that group still lives in the
-  tree, falling back to `InsertPaneAtTarget` otherwise. The
-  caller-side wiring (e.g. `DockManager.Show(pane)` programmatic
-  API, drag-back-from-floating-window's "snap to history" hint)
-  lands when the §2.16 model-mutation drain materializes the
-  `Show`/`ShowOp` path.
+  tree, falling back to `InsertPaneAtTarget` otherwise. Caller-side
+  wiring lands via the §2.16 model-mutation drain:
+  `DockHostModel.Show(content)` queues a `ShowOp`, the drain calls
+  `DockLayoutMutator.ShowFromHistory` (and clears the tracker
+  entry so the next hide→show cycle records the new container).
+  Drag-back-from-floating-window's "snap to history" hint still
+  lands with the floating-window dock-back path.
 - [x] State survives layout serialization (stored as `previousContainer`
   on the JSON content node). `DockLayoutPane.PreviousContainer` field
   reserved + emitted by serializer.
@@ -937,10 +939,24 @@ integration.*
   instance; reconciler reads from it. `DockHostNativeComponent` caches
   a single `DockHostModel` per mount via `UseRef`; each render
   `SyncModelFromElement` mirrors `Layout`/sides/`ActiveDocument` from
-  the controlled element. Apps writing through model mutators (Dock,
-  Float, Hide, …) land when §2.13 strategy dispatch + §2.4 drag
-  pipeline wire to the queue (model already enforces UI-thread affinity
-  + records `PendingMutation`s).
+  the controlled element.
+- [x] **Model-mutation drain wired.** `DockHostNativeComponent.Render`
+  drains `model.Pending` synchronously on each render pass:
+  `DockOp`/`Float`/`Hide`/`Show`/`Close`/`Activate`/`PinToSide` each
+  translate to a layout-override / side-override / active-key update
+  + fire the matching `OnContentDocked` / `OnDocumentClosing+Closed` /
+  `OnToolWindowHiding+Hidden` / `OnContentFloating+Floated` /
+  `OnActiveContentChanged` lifecycle event. The model exposes
+  `OnMutationQueued` so each mutator wakes the host into a re-render
+  via `bumpTick`. External callers (tests, devtools) resolve the live
+  model via `DockHostModelBridge.Get(manager)` — same pattern as
+  `DockChordBridge` (§2.10). Verified by selftest
+  `NativeDocking_ModelDrain_DockCloseActivatePinAffectsLiveTree` (9
+  assertions: Dock+Close+Activate+PinToSide each mutate the rendered
+  tree and fire the matching event) and unit tests
+  `DockHostModelSequenceTests.EachMutator_InvokesOnMutationQueued_Once`,
+  `StrategyShortCircuit_StillFiresOnMutationQueued`,
+  `OnMutationQueued_Null_DoesNotThrow`.
 
 ### 2.17 `DockContext` + property hooks (spec §5.3.11)
 

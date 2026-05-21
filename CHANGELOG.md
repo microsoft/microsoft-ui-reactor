@@ -29,6 +29,27 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — Model-mutation drain (§2.16).**
+  `DockHostNativeComponent.Render` now drains `DockHostModel.Pending`
+  on each render pass: every queued `Dock` / `Float` / `Hide` / `Show`
+  / `Close` / `Activate` / `PinToSide` op translates to a layout
+  override (or side-strip override for the side-affecting ops) and
+  fires the matching lifecycle event (`OnContentDocked`,
+  `OnDocumentClosing`+`Closed`, `OnToolWindowHiding`+`Hidden`,
+  `OnContentFloating`+`Floated`, `OnActiveContentChanged`). The model
+  exposes a new internal `OnMutationQueued` callback that the host
+  wires to `bumpTick` so any mutator wakes the reconciler into a
+  re-render even when called from outside an event handler. A new
+  `DockHostModelBridge` (mirrors `DockChordBridge`) lets tests and
+  devtools grab the live model instance from a `DockManager`
+  reference. Lights up `IDockLayoutStrategy.AfterInsert*` adjustments
+  actually landing on the rendered tree (§2.13), `DockHostModel.Show`
+  using the §2.15 PreviousContainer history, and programmatic
+  Dock/Float/Hide/PinToSide mutations affecting the live layout.
+  Verified by new selftest
+  `NativeDocking_ModelDrain_DockCloseActivatePinAffectsLiveTree` (9
+  assertions) and unit tests for the queue-wake contract. (spec 045
+  §2.16)
 - **Spec 045 Phase 2 — Composition-driven docs selftest (§2.18).** New
   `NativeDocking_CompositionDrivenDocumentsRespectKeyedReconciliation`
   fixture mounts a layout where the documents list is held in app
