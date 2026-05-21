@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Reactor.Markdown;
@@ -14,8 +15,11 @@ internal static class SmokeRunner
 {
     public static int Run()
     {
+        // Path.Join (not Path.Combine) — Combine would silently discard
+        // baseDir if a later segment ever became rooted; Join always
+        // concatenates with a separator.
         string baseDir = AppContext.BaseDirectory;
-        string corpusDir = Path.Combine(baseDir, "corpus");
+        string corpusDir = Path.Join(baseDir, "corpus");
         if (!Directory.Exists(corpusDir))
         {
             Console.Error.WriteLine($"Smoke: corpus directory not found at {corpusDir}");
@@ -25,7 +29,7 @@ internal static class SmokeRunner
         int failures = 0;
         failures += RunCorpus(
             "markdown",
-            Path.Combine(corpusDir, "markdown"),
+            Path.Join(corpusDir, "markdown"),
             text =>
             {
                 var sb = new StringBuilder();
@@ -34,7 +38,7 @@ internal static class SmokeRunner
 
         failures += RunCorpus(
             "pathdata",
-            Path.Combine(corpusDir, "pathdata"),
+            Path.Join(corpusDir, "pathdata"),
             PathDataParser.ParseTokens);
 
         if (failures > 0)
@@ -47,6 +51,13 @@ internal static class SmokeRunner
         return 0;
     }
 
+    // Broad catch is the intended behavior here: the smoke runner's job is to
+    // surface *any* parser exception per seed (FormatException from numeric
+    // tokens, NullReferenceException from a regression, OOM from runaway
+    // allocation — all of them point at a bug we want CI to fail on). Catching
+    // and reporting per seed means one bad seed doesn't mask others.
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types",
+        Justification = "Smoke runner must surface any exception thrown by a parser seed; broad catch is the intended design.")]
     private static int RunCorpus(string label, string dir, Action<string> action)
     {
         if (!Directory.Exists(dir))
@@ -74,7 +85,7 @@ internal static class SmokeRunner
                 action(text);
                 Console.Out.WriteLine($"  ok    [{label}] {Path.GetFileName(file)}");
             }
-            catch (Exception ex)
+            catch (Exception ex) // CodeQL[cs/catch-of-all-exceptions]: intentional — see method-level suppression.
             {
                 failures++;
                 Console.Error.WriteLine($"  THROW [{label}] {Path.GetFileName(file)}: {ex.GetType().Name}: {ex.Message}");
