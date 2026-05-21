@@ -322,6 +322,86 @@ internal static class NativeDockingSmokeFixtures
     }
 
     /// <summary>
+    /// Spec 045 §2.18 — verifies the "component is the rehydrator" pattern:
+    /// app state holds a collection, the render lambda maps it through
+    /// <c>.Select</c> into <c>DockableContent</c> records, and adds /
+    /// removes / reorders propagate via keyed reconciliation. No
+    /// <c>DocumentsSource</c> binding API exists — Reactor's functional
+    /// composition is the data-to-tree mapping.
+    /// </summary>
+    internal class CompositionDrivenDocumentsRespectKeyedReconciliation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            // App-level state: a list of document descriptors. The
+            // wrapper component maps these to DockableContent each render.
+            // Mutating the list + re-mounting demonstrates that the
+            // mapping is just .Select — no separate template / binding
+            // surface is required.
+            var docs = new List<(string Id, string Title, string Body)>
+            {
+                ("d1", "First",  "body-first"),
+                ("d2", "Second", "body-second"),
+            };
+
+            DockManager Build() => new DockManager
+            {
+                Layout = new DockTabGroup(
+                    docs.Select(d => new DockableContent(
+                        Title: d.Title,
+                        Key: d.Id,
+                        Content: TextBlock(d.Body),
+                        CanClose: true)).ToArray()),
+            };
+
+            host.Mount(_ => Build());
+            await Harness.Render();
+
+            // Baseline: two tabs visible, both bodies in the tree.
+            var initialTabs = H.FindAllControls<TabView>(_ => true);
+            H.Check("DocsByComposition_InitialTwoTabs",
+                initialTabs.Count == 1 && initialTabs[0].TabItems.Count == 2);
+            H.Check("DocsByComposition_InitialFirstBodyRendered",
+                H.FindText("body-first") is not null);
+
+            // Capture the TabView reference for identity comparison after
+            // the state change.
+            var tabViewBefore = initialTabs[0];
+
+            // Add a document to app state, re-mount.
+            docs.Add(("d3", "Third", "body-third"));
+            host.Mount(_ => Build());
+            await Harness.Render();
+
+            var afterAddTabs = H.FindAllControls<TabView>(_ => true);
+            H.Check("DocsByComposition_AddedThirdTab",
+                afterAddTabs.Count == 1 && afterAddTabs[0].TabItems.Count == 3);
+            // Keyed reconciliation: same TabView instance preserved.
+            H.Check("DocsByComposition_TabViewIdentityPreservedOnAdd",
+                ReferenceEquals(afterAddTabs[0], tabViewBefore));
+
+            // Remove the middle document — third tab should remain, second's body gone.
+            docs.RemoveAt(1);
+            host.Mount(_ => Build());
+            await Harness.Render();
+
+            var afterRemoveTabs = H.FindAllControls<TabView>(_ => true);
+            H.Check("DocsByComposition_RemovedToTwoTabs",
+                afterRemoveTabs.Count == 1 && afterRemoveTabs[0].TabItems.Count == 2);
+            H.Check("DocsByComposition_RemovedBodyGone",
+                H.FindText("body-second") is null);
+            H.Check("DocsByComposition_SurvivingBodiesRendered",
+                H.FindText("body-first") is not null);
+
+            host.Mount(_ => TextBlock("composition-driven-done"));
+            await Harness.Render();
+        }
+    }
+
+    /// <summary>
     /// Spec 045 §2.1 — programmatic splitter-drag fixture. Mounts an
     /// IDE-style nested layout, fires <c>ResizeDelta</c> events directly
     /// on the splitter controls (simulating a pointer drag), and asserts

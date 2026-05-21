@@ -806,11 +806,15 @@ binding) are deferred to a follow-up pass.
   - [x] `OnContentDocking` / `OnContentDocked`
   - [x] `OnActiveContentChanged`
   - [x] `OnFloatingWindowCreated` / `OnFloatingWindowClosed`
-- [ ] `IDockBehavior` from P1 collapses into these props (its three
+- [x] `IDockBehavior` from P1 collapses into these props (its three
   methods map onto `OnContentDocked`, `OnContentFloating`, and the
-  per-group docked variant). Keep `IDockBehavior` as a `[Obsolete]`
-  forwarder for one release. *Both surfaces coexist now; `[Obsolete]`
-  attribute lands at the wrapper-removal step (§2.19).*
+  per-group docked variant). `[Obsolete]` forwarder now in place on
+  the interface itself + on `DockManager.Behavior` with migration
+  pointers (OnDocked → OnContentDocked; OnFloating →
+  OnContentFloating/OnContentFloated). The P1 wrapper assemblies
+  (`Reactor.Docking.Xaml`) suppress the obsolete warning at file
+  scope while they continue to bridge the interface for source
+  compat. Removal lands one release after Phase 2 ships.
 - [x] **No `+=` accumulation** — each render passes a fresh delegate;
   the reconciler holds only the current one (spec §8.10 memory).
   By construction: `DockManager` is a record with init-only Action
@@ -978,13 +982,20 @@ integration.*
 
 ### 2.18 No `DocumentsSource` / `LayoutItemTemplate` (spec §5.3.7)
 
-- [ ] **Do not add `DocumentsSource`, `LayoutItemTemplate`,
+- [x] **Do not add `DocumentsSource`, `LayoutItemTemplate`,
   `ContentResolver`, or any binding API.** Reactor functional
-  composition is the data-to-tree mapping. Document the rationale in
-  guide docs (spec §3.2 lesson #3, §5.3.7).
-- [ ] Self-host fixture demonstrating
+  composition is the data-to-tree mapping. Rationale captured in
+  `docs/_pipeline/apps/docking/api.md` ("The collection-to-pane
+  mapping is just `.Select` — no `DocumentsSource` binding API
+  needed").
+- [x] Self-host fixture demonstrating
   `documents.Select(d => new Document(Key: d.Id, ...))` reconciliation
   through state changes. Verifies "the component is the rehydrator".
+  Landed as `NativeDocking_CompositionDrivenDocumentsRespectKeyedReconciliation`:
+  mounts a layout where the documents list is held in app state,
+  asserts add / remove cycles update the TabView while keyed
+  reconciliation preserves the TabView control instance (7 ok
+  assertions).
 
 ### 2.19 Phase-2 chrome removal (spec §5.6)
 

@@ -40,6 +40,11 @@ internal static class DockSplitRenderer
     /// LTR/RTL. Reverses child order for row splits in RTL so the visual
     /// reading order matches reading direction (spec §8.8).
     /// </param>
+    /// <param name="splitterDiagnosticSink">
+    /// Optional callback that receives PRESS / MOVE / RELEASE / SOLVE
+    /// trace strings — used by the spec 045 operation log to capture the
+    /// math behind each splitter drag.
+    /// </param>
     public static Element Render(
         Microsoft.UI.Reactor.Docking.DockSplit split,
         IReadOnlyList<double> ratios,

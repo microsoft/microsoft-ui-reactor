@@ -4,6 +4,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WinUIDock = WinUI.Dock;
 
+// P1 wrapper bridges the obsolete IDockBehavior / DockManager.Behavior
+// surface intentionally — see spec 045 §2.12. Suppress at file scope so
+// the warning surfaces in app code that still consumes the bridge.
+#pragma warning disable CS0618
+
 namespace Microsoft.UI.Reactor.Docking;
 
 /// <summary>

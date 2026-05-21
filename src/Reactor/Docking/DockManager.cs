@@ -82,7 +82,14 @@ public sealed record DockManager : Element
     /// interface stays as a one-release <c>[Obsolete]</c> forwarder
     /// (spec 045 §5.3.5).
     /// </summary>
+#pragma warning disable CS0618 // IDockBehavior is obsolete during the §2.12 transition.
+    [global::System.Obsolete(
+        "Behavior is replaced by per-event Action props on DockManager " +
+        "(OnContentDocked / OnContentFloating / OnContentFloated). " +
+        "Slated for removal one release after Phase 2 ships. See spec 045 §5.3.5.",
+        error: false)]
     public IDockBehavior? Behavior { get; init; }
+#pragma warning restore CS0618
 
     /// <summary>
     /// Optional insertion-policy hook applied to programmatic adds. See

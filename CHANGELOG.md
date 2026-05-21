@@ -29,6 +29,26 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — Composition-driven docs selftest (§2.18).** New
+  `NativeDocking_CompositionDrivenDocumentsRespectKeyedReconciliation`
+  fixture mounts a layout where the documents list is held in app
+  state, then runs add / remove cycles to verify the
+  `documents.Select(d => new DockableContent(Key: d.Id, ...))`
+  pattern. Keyed reconciliation preserves the TabView control
+  instance across the structural changes — the fixture asserts
+  `ReferenceEquals` on the TabView between initial mount and the
+  post-add render. Codifies the spec §5.3.7 contract that Reactor's
+  functional composition replaces `DocumentsSource` /
+  `LayoutItemTemplate` / `ContentResolver`. (spec 045 §2.18)
+- **Spec 045 Phase 2 — IDockBehavior obsolete forwarder (§2.12).**
+  `IDockBehavior` (the P1 interface) and `DockManager.Behavior` (the
+  property that consumes it) are now marked `[Obsolete]` with
+  migration pointers to the per-event Action props that landed in
+  Phase 2 (`OnContentDocked` / `OnContentFloating` /
+  `OnContentFloated`). Slated for removal one release after Phase
+  2 ships. The P1 wrapper assemblies (`Reactor.Docking.Xaml`)
+  suppress the obsolete warning at file scope while they continue
+  to bridge the interface for source compat. (spec 045 §2.12)
 - **Spec 045 Phase 2 — PreviousContainer routing (§2.15).** The close /
   tear-out paths in `DockHostNativeComponent` (tab close button,
   `Ctrl+F4` / `Ctrl+W` chord, drag-out tear-out) now record the

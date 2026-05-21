@@ -1,5 +1,11 @@
 using WinUIDock = WinUI.Dock;
 
+// The P1 wrapper bridges the obsolete IDockBehavior surface intentionally —
+// it's the chrome that translates upstream WinUI.Dock events into the
+// Reactor-side interface for source-compat. Suppress the §2.12 obsolete
+// warning at file scope while the bridge ships.
+#pragma warning disable CS0618
+
 namespace Microsoft.UI.Reactor.Docking.Internal;
 
 /// <summary>
