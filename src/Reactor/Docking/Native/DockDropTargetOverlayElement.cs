@@ -15,7 +15,8 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 internal sealed record DockDropTargetOverlayElement(
     Action<DockTarget?>? OnHover,
     Action<DockTarget>? OnConfirm,
-    Action? OnDismiss)
+    Action? OnDismiss,
+    DockDropOverlayMode Mode = DockDropOverlayMode.Host)
     : Element
 {
     internal override bool HasCallbacks => true;
@@ -30,12 +31,13 @@ internal static class DockDropTargetReconcilerRegistration
         reconciler.RegisterType<DockDropTargetOverlayElement, DockDropTargetOverlayControl>(
             mount: static (_, element, _) =>
             {
-                var control = new DockDropTargetOverlayControl();
+                var control = new DockDropTargetOverlayControl { Mode = element.Mode };
                 Wire(control, element);
                 return control;
             },
             update: static (_, oldEl, newEl, control, _) =>
             {
+                if (oldEl.Mode != newEl.Mode) control.Mode = newEl.Mode;
                 if (!ReferenceEquals(oldEl.OnHover, newEl.OnHover)
                     || !ReferenceEquals(oldEl.OnConfirm, newEl.OnConfirm)
                     || !ReferenceEquals(oldEl.OnDismiss, newEl.OnDismiss))

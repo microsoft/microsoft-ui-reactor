@@ -80,7 +80,16 @@ public static class DockFloatingWindow
         // Wrap the pane content with the same DockContext envelope used
         // by the docked tree, but flag PaneState as Floating so
         // UseDockState resolves correctly inside the floating window.
-        var window = ReactorApp.OpenWindow(spec, ctx => BuildFloatingRoot(pane));
+        // A single-element holder lets BuildFloatingRoot find the
+        // window (for tab-close → window.Close, etc.) even though we
+        // can't reference `window` directly before OpenWindow returns.
+        // The holder is captured by both the render closure and the
+        // post-construction assignment; the render closure is invoked
+        // by the host's dispatcher loop after OpenWindow returns, so
+        // the holder is always populated by the time it's read.
+        var windowHolder = new ReactorWindow?[] { null };
+        var window = ReactorApp.OpenWindow(spec, _ => BuildFloatingRoot(pane, windowHolder, manager));
+        windowHolder[0] = window;
         DockFloatingTracker.Register(window);
         if (manager is not null) DockFloatingTracker.RegisterFor(manager, window);
         window.Closed += (_, _) =>
@@ -91,12 +100,71 @@ public static class DockFloatingWindow
         return window;
     }
 
-    private static Element BuildFloatingRoot(DockableContent pane)
+    private static Element BuildFloatingRoot(DockableContent pane, ReactorWindow?[] windowHolder, DockManager? manager)
     {
-        var content = pane.Content ?? (Element)new BorderElement(null);
+        // Spec 045 §2.4 cross-window dock-back. The floating window's
+        // content is a `DockTabGroup`-rendered `TabView` with the pane
+        // as its single tab. The tab carries CanDragTabs=true so the
+        // user can drag it OUT of the floating window — when WinUI
+        // signals wasOutside=true, our handler:
+        //   • If session.Current is null after the drag, the drop was
+        //     consumed by another host's overlay (e.g. the main shell's
+        //     per-group cluster). Close this floating window so the
+        //     pane only lives in the destination.
+        //   • Otherwise the drop landed nowhere (Esc, drop on desktop,
+        //     unrecognised surface). End the session and keep the pane
+        //     here — preserves the user's pane against an accidental
+        //     drag.
+        //
+        // The chrome wrapper also gives the floating window a visible
+        // tab header (Title + close-X), addressing the §2.6 "tab header
+        // missing in floating window" gap that drove this slice.
+        var tabGroup = new DockTabGroup(new DockableContent[] { pane });
         var info = new DockPaneInfo(pane.Key, pane.Title ?? string.Empty, pane);
-        return content
-            .Padding(16)
+        var rendered = DockTabGroupRenderer.Render(
+            tabGroup,
+            renderLeafContent: doc => doc.Content ?? (Element)new BorderElement(null),
+            onSelectedIndexChanged: null,
+            onTabClosing: _ =>
+            {
+                // Closing the last tab closes the window.
+                try { windowHolder[0]?.Close(); } catch { /* best-effort */ }
+            },
+            onTabDragStarting: (doc, _) =>
+            {
+                // Begin a cross-window session. The `manager` reference
+                // is the main host that originally owned this pane —
+                // SourceManager is non-null per the session contract.
+                if (DockDragSession.Current is { IsActive: true }) return;
+                if (manager is null) return;
+                DockDragSession.Begin(doc, manager, 0);
+            },
+            onTabDragCompleted: (_, _, _) =>
+            {
+                // Cross-window dock-back signal: a dock surface
+                // (this app's main host or any other DockHost) set
+                // `DockDragSession.Consumed = true` in its overlay
+                // OnConfirm before ending the session. When we see
+                // that here, the pane has been re-docked into another
+                // host and this floating window should close.
+                //
+                // `wasOutside` is unreliable for this decision because
+                // the receiving overlay accepts the drop with
+                // `DataPackageOperation.Move` to suppress WinUI's
+                // tear-out fallback — that flips wasOutside to false
+                // even though the tab visually left every TabView.
+                if (DockDragSession.Consumed)
+                {
+                    try { windowHolder[0]?.Close(); } catch { /* best-effort */ }
+                    return;
+                }
+                // Drop landed outside any docking surface (or session
+                // is still running). End any in-flight session so the
+                // pane stays put in this floating window.
+                DockDragSession.Current?.Cancel();
+            });
+
+        return rendered
             .Provide(DockContexts.Pane, (DockPaneInfo?)info)
             .Provide(DockContexts.PaneState, DockPaneState.Floating);
     }

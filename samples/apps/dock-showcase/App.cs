@@ -168,9 +168,9 @@ class SceneAIde : Component
                     .FontFamily("Consolas, Courier New, monospace")
                     .FontSize(11))
             {
-                HorizontalScrollMode = ScrollMode.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollMode = ScrollingScrollMode.Auto,
+                HorizontalScrollBarVisibility = ScrollingScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollingScrollBarVisibility.Auto,
             }.Height(360),
             TextBlock("Split ratios").SemiBold().Margin(0, 12, 0, 0),
             TextBlock(ratiosJson)
@@ -204,8 +204,8 @@ class SceneAIde : Component
                 VStack(2, RecentOpLines(log).ToArray())
             )
             {
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollingScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollingScrollBarVisibility.Auto,
             }.Height(200)
         ).Padding(12).Width(360);
 

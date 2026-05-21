@@ -38,6 +38,35 @@ internal sealed class DockDragSession
     /// <summary>The currently-active session, or null when no drag is in flight.</summary>
     public static DockDragSession? Current { get; private set; }
 
+    /// <summary>
+    /// True when the most recently ended session was consumed by a dock
+    /// surface (a host's drop-target overlay called <see cref="MarkConsumed"/>
+    /// before <see cref="End"/>). Cleared on the next <see cref="Begin"/>.
+    /// Distinguishes "drop succeeded somewhere else" (Consumed=true) from
+    /// "drop was cancelled / went nowhere" (Consumed=false) — used by the
+    /// floating-window dock-back path to decide whether to close its
+    /// own window after a tab-drag completes. Cross-window contract:
+    /// the host that confirms the drop owns this flag.
+    /// </summary>
+    public static bool Consumed { get; private set; }
+
+    /// <summary>
+    /// Called by the host's drop-target overlay confirm path immediately
+    /// before <see cref="End"/>. Sets <see cref="Consumed"/> so other
+    /// windows participating in this drag (e.g. the source floating
+    /// window) can distinguish "consumed" from "cancelled".
+    /// </summary>
+    public static void MarkConsumed() => Consumed = true;
+
+    /// <summary>
+    /// Fired on any session state transition (Begin / End / Cancel). Lets
+    /// any <see cref="DockManager"/> in the process subscribe and surface
+    /// drop targets when a drag begins in a different window (the
+    /// floating-window → main-host cross-window dock-back path).
+    /// Subscribers must be UI-thread-affined.
+    /// </summary>
+    public static event Action? SessionChanged;
+
     private DockDragSession(DockableContent source, DockManager sourceManager, int sourceTabIndex)
     {
         Source = source;
@@ -81,6 +110,8 @@ internal sealed class DockDragSession
         if (Current is { IsActive: true }) return null;
         var session = new DockDragSession(source, sourceManager, sourceTabIndex);
         Current = session;
+        Consumed = false; // reset Consumed for the new session
+        RaiseSessionChanged();
         return session;
     }
 
@@ -93,6 +124,13 @@ internal sealed class DockDragSession
         if (!IsActive) return;
         IsActive = false;
         if (ReferenceEquals(Current, this)) Current = null;
+        RaiseSessionChanged();
+    }
+
+    private static void RaiseSessionChanged()
+    {
+        try { SessionChanged?.Invoke(); }
+        catch { /* subscriber best-effort; never let a stale handler break the session */ }
     }
 
     /// <summary>

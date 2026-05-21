@@ -75,6 +75,22 @@ internal sealed class DockDropTargetEventArgs : EventArgs
 }
 
 /// <summary>
+/// Determines which target subset the overlay surfaces.
+/// <see cref="Host"/> is the full 9-target cluster (5 inner splits + 4
+/// outer dock edges) painted at manager scope. <see cref="GroupInner"/>
+/// shows only the 5 inner targets (Center + Split L/T/R/B) — used by
+/// the per-tab-group overlay so the user can drop a tab into a specific
+/// group's center, or split that group on any side.
+/// </summary>
+internal enum DockDropOverlayMode
+{
+    /// <summary>Manager-scope 9-target overlay (5 inner + 4 outer edges).</summary>
+    Host,
+    /// <summary>Tab-group-scope 5-target overlay (Center + 4 splits).</summary>
+    GroupInner,
+}
+
+/// <summary>
 /// Spec 045 §2.3 drop-target overlay — 9 targets + hover preview rectangle.
 /// </summary>
 internal sealed partial class DockDropTargetOverlayControl : Grid
@@ -103,6 +119,24 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     private DockTarget? _hoveredTarget;
     private DockTarget? _focusedTarget;
     private bool _animationsEnabled = true;
+    private DockDropOverlayMode _mode = DockDropOverlayMode.Host;
+
+    /// <summary>
+    /// Spec 045 §2.3 — overlay scope. Changing the mode hides / shows
+    /// the outer dock-edge buttons (DockLeft/Right/Top/Bottom).
+    /// <see cref="DockDropOverlayMode.GroupInner"/> is used by the
+    /// per-tab-group overlay (5 inner targets only).
+    /// </summary>
+    public DockDropOverlayMode Mode
+    {
+        get => _mode;
+        set
+        {
+            if (_mode == value) return;
+            _mode = value;
+            ApplyModeVisibility();
+        }
+    }
     private KeyEventHandler? _globalEscapeHandler;
     private UIElement? _globalEscapeTarget;
 
@@ -154,6 +188,7 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         ];
 
         ReadAnimationsSetting();
+        ApplyModeVisibility();
 
         PointerMoved += OnPointerMoved;
         PointerExited += OnPointerExited;
@@ -190,6 +225,59 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         catch { /* best-effort */ }
         _globalEscapeHandler = null;
         _globalEscapeTarget = null;
+    }
+
+    private void ApplyModeVisibility()
+    {
+        // Two-overlay architecture (spec 045 §2.3):
+        //   • Host mode: only the 4 outer Dock-edge buttons (DockL/T/R/B)
+        //     are visible. The 5 inner cluster buttons (Center + Split
+        //     L/T/R/B) are hidden — per-group overlays handle those at
+        //     each tab group's bounds. The Grid Background is null so
+        //     drag events at non-button positions fall through to the
+        //     underlying per-group overlay.
+        //   • GroupInner mode: only the 5 inner cluster buttons are
+        //     visible, but they start `Collapsed` and only appear once
+        //     the drag pointer enters the overlay (DragEnter). This
+        //     keeps the visual clutter down — only the group the user
+        //     is dragging INTO surfaces its targets. The Grid keeps
+        //     its transparent Background so it can catch DragEnter
+        //     across its full area.
+        if (_buttons is null) return;
+        bool hostMode = _mode == DockDropOverlayMode.Host;
+        foreach (var entry in _buttons)
+        {
+            bool isEdge = entry.Target is DockTarget.DockLeft or DockTarget.DockRight
+                or DockTarget.DockTop or DockTarget.DockBottom;
+            if (hostMode)
+            {
+                // Host: edges always visible (they're the only buttons
+                // surfaced); inner cluster always hidden.
+                entry.Button.Visibility = isEdge ? Visibility.Visible : Visibility.Collapsed;
+            }
+            else
+            {
+                // GroupInner: edges always collapsed; inner cluster
+                // hidden by default — DragEnter unmasks it.
+                entry.Button.Visibility = isEdge
+                    ? Visibility.Collapsed
+                    : (_groupOverlayRevealed ? Visibility.Visible : Visibility.Collapsed);
+            }
+        }
+        // Host mode passes drag events through non-button regions so
+        // the underlying per-group overlay sees DragEnter when the
+        // pointer is over a tab group.
+        Background = hostMode
+            ? null
+            : new SolidColorBrush(Color.FromArgb(0x00, 0, 0, 0));
+    }
+
+    private bool _groupOverlayRevealed;
+    private void SetGroupOverlayRevealed(bool value)
+    {
+        if (_groupOverlayRevealed == value) return;
+        _groupOverlayRevealed = value;
+        ApplyModeVisibility();
     }
 
     private void OnGlobalKeyDown(object sender, KeyRoutedEventArgs e)
@@ -442,6 +530,9 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         for (int i = 0; i < _buttons.Length; i++)
         {
             var btn = _buttons[i].Button;
+            // Skip collapsed buttons — happens when Mode = GroupInner
+            // hides the 4 outer dock-edge targets.
+            if (btn.Visibility != Visibility.Visible) continue;
             // GetBoundsRelativeTo would round-trip through a transform; for
             // the hot path we read Margin + Width directly. Margin is set
             // by UpdateClusterLayout (split cluster) or implicit zero
@@ -505,6 +596,12 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
 
     private void OnDragEnter(object sender, DragEventArgs e)
     {
+        // Per-group overlay: reveal its 5 inner buttons only while the
+        // drag is over THIS group. Reduces visual clutter to a single
+        // overlay at a time. Host-level overlay is unaffected (its
+        // 4 outer Dock-edge buttons are always visible).
+        if (_mode == DockDropOverlayMode.GroupInner)
+            SetGroupOverlayRevealed(true);
         var p = e.GetPosition(this);
         var target = HitTestForTarget(p);
         if (target is not null && target != _hoveredTarget) SetHovered(target);
@@ -517,6 +614,11 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
 
     private void OnDragOver(object sender, DragEventArgs e)
     {
+        // Reveal-while-dragging: in case DragEnter was suppressed by
+        // capture timing (e.g. fast drag entered the area), DragOver
+        // is the safer signal for revealing.
+        if (_mode == DockDropOverlayMode.GroupInner)
+            SetGroupOverlayRevealed(true);
         var p = e.GetPosition(this);
         var target = HitTestForTarget(p);
         if (target != _hoveredTarget) SetHovered(target);
@@ -528,6 +630,8 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
 
     private void OnDragLeave(object sender, DragEventArgs e)
     {
+        if (_mode == DockDropOverlayMode.GroupInner)
+            SetGroupOverlayRevealed(false);
         if (_hoveredTarget is not null) SetHovered(null);
     }
 
@@ -543,6 +647,21 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
             // the tear-out path).
             e.AcceptedOperation = DataPackageOperation.Move;
             ConfirmTarget(t);
+        }
+        else
+        {
+            // Drop landed in the overlay's bounds but missed every
+            // button (e.g. user released on the tab strip or empty
+            // body). Accept the drop so WinUI sees DropResult=Move and
+            // the source TabView's TabDragCompleted does NOT trigger
+            // the tear-out path (otherwise a missed drop turns the
+            // dragged tab into a floating window — surprising and
+            // expensive — instead of cancelling). Fire OverlayDismissed
+            // so the host clears drag state.
+            e.AcceptedOperation = DataPackageOperation.Move;
+            if (_mode == DockDropOverlayMode.GroupInner)
+                SetGroupOverlayRevealed(false);
+            OverlayDismissed?.Invoke(this, EventArgs.Empty);
         }
         e.Handled = true;
     }

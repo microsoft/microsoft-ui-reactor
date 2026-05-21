@@ -147,6 +147,18 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // DockChordBridge wiring used by §2.10 keyboard accelerators.
         DockHostModelBridge.Set(manager, model);
 
+        // Spec 045 §2.4 cross-window drag — subscribe to global drag
+        // session events so this host's drop-target overlays surface
+        // when a drag begins in another window (e.g. the floating
+        // window's tab dragged back here). bumpTick forces a re-render
+        // that re-evaluates `dragActuallyActive` below.
+        UseEffect(() =>
+        {
+            Action onSessionChanged = () => bumpTick(t => t + 1);
+            DockDragSession.SessionChanged += onSessionChanged;
+            return () => DockDragSession.SessionChanged -= onSessionChanged;
+        });
+
         // §2.16 — resolve effective side strips. The override layers on
         // top of the controlled-input lists from the element; programmatic
         // Hide / PinToSide mutations populate it. Apps assigning new
@@ -318,6 +330,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
 
             session.End();
             setDragActive(false);
+            bumpTick(t => t + 1);
         }
 
         // Splitter-final fan-out: wrap the user's optional
@@ -375,13 +388,122 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             var effective = hasOverride
                 ? grp with { SelectedIndex = ClampIndex(overrideIdx, grp.Documents.Count) }
                 : grp;
-            return DockTabGroupRenderer.Render(
+            var tabView = DockTabGroupRenderer.Render(
                 effective,
                 renderLeafContent: doc => WrapLeafWithPaneContext(doc),
                 onSelectedIndexChanged: null,
                 onTabClosing: pane => CloseTabViaButton(pane),
                 onTabDragStarting: HandleTabDragStarting,
                 onTabDragCompleted: HandleTabDragCompleted);
+
+            // §2.3 per-group drop overlay. Activates whenever any drag
+            // session is in flight in the process (local OR cross-window
+            // — see §2.4).
+            var groupDragActive = DockDragSession.Current is { IsActive: true };
+            if (!groupDragActive) return tabView;
+            return BuildPerGroupDropOverlay(grp, tabView);
+        }
+
+        // Composes the per-group inner-target overlay (Center + 4 Splits)
+        // over the supplied tab-view element. Confirm captures the group
+        // reference and routes to MovePaneToGroupTarget so the dropped
+        // pane lands relative to THIS group instead of the layout root.
+        Element BuildPerGroupDropOverlay(DockTabGroup grp, Element tabView)
+        {
+            var overlay = new DockDropTargetOverlayElement(
+                OnHover: target =>
+                {
+                    setHoveredTarget(target);
+                    manager.OnDropTargetHovered?.Invoke(target);
+                },
+                OnConfirm: target =>
+                {
+                    manager.OnDropTargetConfirmed?.Invoke(target);
+                    var session = DockDragSession.Current;
+                    var sourcePane = session is { IsActive: true } ? session.Source : null;
+                    if (sourcePane is { CanMove: false }) sourcePane = null;
+                    if (sourcePane is not null)
+                    {
+                        // Spec 045 §2.4 cross-window drop: when the
+                        // source pane is in another window (not in this
+                        // host's layout), MovePaneToGroupTarget's
+                        // remove step is a no-op (which makes it bail
+                        // and return the original root unchanged); fall
+                        // through to a group-targeted INSERT instead.
+                        bool isLocalSource = DockLayoutMutator.FindContainer(effectiveLayout, sourcePane) is not null;
+                        DockNode? newLayout;
+                        if (isLocalSource)
+                        {
+                            newLayout = DockLayoutMutator.MovePaneToGroupTarget(
+                                effectiveLayout, sourcePane, grp, target);
+                        }
+                        else
+                        {
+                            // Cross-window: insert into the target group
+                            // without trying to remove from this layout.
+                            // The floating window closes itself on
+                            // session-consumed.
+                            newLayout = target switch
+                            {
+                                DockTarget.Center => DockLayoutMutator.InsertPaneIntoGroup(effectiveLayout, sourcePane, grp),
+                                _ => DockLayoutMutator.InsertPaneRelativeToGroup(effectiveLayout, sourcePane, grp, target),
+                            };
+                        }
+                        if (newLayout is not null)
+                        {
+                            setLayoutOverride(new LayoutOverride(newLayout));
+                            manager.OnContentDocked?.Invoke(
+                                new DockContentDockedEventArgs { Content = sourcePane, Target = target });
+                            manager.OnLiveLayoutChanged?.Invoke(newLayout);
+                            LogOp(Diagnostics.DockOperationKind.DragConfirm,
+                                $"confirm group={grp.GetHashCode():X} target={target} pane='{sourcePane.Key}' (cross-window={!isLocalSource})",
+                                paneKey: sourcePane.Key?.ToString(),
+                                target: target,
+                                layoutOverride: newLayout);
+                        }
+                        // Mark the drop as consumed BEFORE ending the
+                        // session so cross-window observers (the source
+                        // floating window's TabDragCompleted handler)
+                        // can distinguish "dropped on a dock surface"
+                        // from "cancelled / went nowhere".
+                        DockDragSession.MarkConsumed();
+                        session?.End();
+                    }
+                    setDragActive(false);
+                    setHoveredTarget(null);
+                    // Spec 045 §2.3 — force a re-render even when the
+                    // setState calls become no-ops (e.g. dragActive was
+                    // already flipping false from a competing path).
+                    // Without this, a stuck-overlay state can persist
+                    // because the reconciler doesn't get a chance to
+                    // diff the new tree.
+                    bumpTick(t => t + 1);
+                },
+                OnDismiss: () =>
+                {
+                    // Spec 045 §2.3 — per-group overlay dismissal path
+                    // (Esc, or a drop in the overlay's bounds that
+                    // missed every button). Cancel the active session
+                    // and clear drag state so the overlays disappear
+                    // without triggering tear-out.
+                    manager.OnDropTargetsDismissed?.Invoke();
+                    var session = DockDragSession.Current;
+                    if (session is not null)
+                        LogOp(Diagnostics.DockOperationKind.DragCancel,
+                            $"per-group cancel pane='{session.Source.Key}'",
+                            paneKey: session.Source.Key?.ToString());
+                    session?.Cancel();
+                    setDragActive(false);
+                    setHoveredTarget(null);
+                    bumpTick(t => t + 1);
+                },
+                Mode: DockDropOverlayMode.GroupInner);
+
+            return Grid(
+                new[] { GridSize.Star(1) },
+                new[] { GridSize.Star(1) },
+                tabView.Grid(row: 0, column: 0),
+                overlay.Grid(row: 0, column: 0));
         }
 
         void CloseTabViaButton(DockableContent pane)
@@ -442,7 +564,14 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // TabDragCompleted didn't fire), hide the overlay anyway so it
         // can't get stuck visible across re-renders. The next render that
         // observes setDragActive(false) catches up.
-        var dragActuallyActive = dragActive && DockDragSession.Current is { IsActive: true };
+        // Spec 045 §2.4 cross-window: the overlay activates whenever
+        // ANY drag is in flight in the process — local-host drags AND
+        // drags initiated in another window (e.g. a floating window's
+        // tab being dragged back home). The previous condition required
+        // dragActive to also be true, which gated out cross-window
+        // sessions started in another DockHostNativeComponent / a
+        // floating window's tab-drag handler.
+        var dragActuallyActive = DockDragSession.Current is { IsActive: true };
         if (dragActive && !dragActuallyActive)
         {
             // Session vanished out from under us — schedule a state clear
@@ -485,8 +614,16 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     if (sourcePane is { CanMove: false }) sourcePane = null;
                     if (sourcePane is not null)
                     {
-                        var newLayout = DockLayoutMutator.MovePaneToTarget(
-                            effectiveLayout, sourcePane, target);
+                        // Spec 045 §2.4 cross-window drop: if the pane
+                        // isn't in this host's layout (it's in a floating
+                        // window's TabView), skip the remove and just
+                        // insert. The floating window's TabDragCompleted
+                        // sees session.Current=null afterwards and closes
+                        // itself.
+                        bool isLocalSource = DockLayoutMutator.FindContainer(effectiveLayout, sourcePane) is not null;
+                        var newLayout = isLocalSource
+                            ? DockLayoutMutator.MovePaneToTarget(effectiveLayout, sourcePane, target)
+                            : DockLayoutMutator.InsertPaneAtTarget(effectiveLayout, sourcePane, target);
                         setLayoutOverride(new LayoutOverride(newLayout));
                         manager.OnContentDocked?.Invoke(
                             new DockContentDockedEventArgs { Content = sourcePane, Target = target });
@@ -494,15 +631,22 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                         // apps that want to mirror it (e.g. JSON viewer).
                         manager.OnLiveLayoutChanged?.Invoke(newLayout);
                         LogOp(Diagnostics.DockOperationKind.DragConfirm,
-                            $"confirm {target} on pane='{sourcePane.Key}'",
+                            $"confirm {target} on pane='{sourcePane.Key}' (cross-window={!isLocalSource})",
                             paneKey: sourcePane.Key?.ToString(),
                             target: target,
                             layoutOverride: newLayout);
+                        // Mark the drop as consumed BEFORE ending the
+                        // session so cross-window observers (the source
+                        // floating window's TabDragCompleted handler)
+                        // can distinguish "dropped on a dock surface"
+                        // from "cancelled / went nowhere".
+                        DockDragSession.MarkConsumed();
                         session?.End();
                     }
                     setDragActive(false);
                     setKeyboardOverlayActive(false);
                     setHoveredTarget(null);
+                    bumpTick(t => t + 1);
                 },
                 OnDismiss: () =>
                 {
@@ -516,6 +660,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     setDragActive(false);
                     setKeyboardOverlayActive(false);
                     setHoveredTarget(null);
+                    bumpTick(t => t + 1);
                 });
 
             composed = Grid(

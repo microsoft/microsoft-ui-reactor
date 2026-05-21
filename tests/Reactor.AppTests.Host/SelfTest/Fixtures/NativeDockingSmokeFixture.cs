@@ -970,6 +970,198 @@ internal static class NativeDockingSmokeFixtures
     /// can watch the panes resize step by step. Asserts the same as the
     /// other splitter fixtures but with ~800 ms gaps between operations.
     /// </summary>
+    /// <summary>
+    /// Spec 045 §2.3 per-group drop overlay visual demo. Mounts a 2×2
+    /// layout of four tab groups (G1..G4) plus a 5th "mover" doc that
+    /// starts inside G1. Walks the mover through every (group × target)
+    /// position — Center / SplitLeft / SplitRight / SplitTop /
+    /// SplitBottom — for each of the four groups (20 moves total),
+    /// resetting between moves so the human observer sees each landing
+    /// clearly. Uses <see cref="DockLayoutMutator.MovePaneToGroupTarget"/>
+    /// directly so the test is independent of the gesture pipeline.
+    /// </summary>
+    internal class PerGroupDropTargetVisualDemo(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            // Five docs. "mover" is the one we relocate; the four
+            // anchor docs stay put inside their own groups so the four
+            // groups remain identifiable across moves.
+            var anchorA = new DockableContent("Anchor A",
+                TextBlock("anchor A — G1 home").SemiBold(),
+                Key: "g:anchorA");
+            var anchorB = new DockableContent("Anchor B",
+                TextBlock("anchor B — G2 home").SemiBold(),
+                Key: "g:anchorB");
+            var anchorC = new DockableContent("Anchor C",
+                TextBlock("anchor C — G3 home").SemiBold(),
+                Key: "g:anchorC");
+            var anchorD = new DockableContent("Anchor D",
+                TextBlock("anchor D — G4 home").SemiBold(),
+                Key: "g:anchorD");
+            var mover = new DockableContent("Mover",
+                VStack(4,
+                    TextBlock("⭐ Mover").SemiBold(),
+                    TextBlock("watch me move through every group + target").FontSize(11)),
+                Key: "g:mover");
+
+            // Initial layout: 2×2 grid of four single-doc groups; mover
+            // starts as a sibling tab inside G1 so step 1 (G1.Center) is
+            // a no-op-ish self-tab; subsequent steps tear it out.
+            DockNode BuildInitial()
+            {
+                var g1 = new DockTabGroup(new DockableContent[] { anchorA, mover });
+                var g2 = new DockTabGroup(new DockableContent[] { anchorB });
+                var g3 = new DockTabGroup(new DockableContent[] { anchorC });
+                var g4 = new DockTabGroup(new DockableContent[] { anchorD });
+                return new DockSplit(Orientation.Vertical, new DockNode[]
+                {
+                    new DockSplit(Orientation.Horizontal, new DockNode[] { g1, g2 }),
+                    new DockSplit(Orientation.Horizontal, new DockNode[] { g3, g4 }),
+                });
+            }
+
+            var liveLayout = BuildInitial();
+            host.Mount(_ => new DockManager { Layout = liveLayout });
+            await Harness.Render();
+            await Task.Delay(400); // let the eye register the 2×2 baseline
+
+            // Targets we walk through in each group.
+            var targets = new[]
+            {
+                DockTarget.Center,
+                DockTarget.SplitLeft,
+                DockTarget.SplitTop,
+                DockTarget.SplitRight,
+                DockTarget.SplitBottom,
+            };
+
+            // For each group, snapshot its identity by the anchor it
+            // contains so we can re-locate the equivalent group across
+            // re-mounts (records compare by value, so reference equality
+            // is stable across BuildInitial()'s repeated calls).
+            var groupAnchors = new[]
+            {
+                ("G1", anchorA),
+                ("G2", anchorB),
+                ("G3", anchorC),
+                ("G4", anchorD),
+            };
+
+            int landed = 0;
+            int splitObserved = 0;
+            foreach (var (groupName, anchor) in groupAnchors)
+            {
+                foreach (var target in targets)
+                {
+                    // Fresh initial layout each step so the user sees
+                    // each result against a clean baseline.
+                    liveLayout = BuildInitial();
+                    host.Mount(_ => new DockManager { Layout = liveLayout });
+                    await Harness.Render();
+                    await Task.Delay(150);
+
+                    // Find the target group in the fresh tree by anchor.
+                    var targetGroup = FindGroupContaining(liveLayout, anchor);
+                    if (targetGroup is null)
+                    {
+                        H.Check($"PerGroupDemo_{groupName}_{target}_TargetGroupFound", false);
+                        continue;
+                    }
+
+                    var newLayout = DockLayoutMutator.MovePaneToGroupTarget(
+                        liveLayout, mover, targetGroup, target);
+                    liveLayout = newLayout ?? liveLayout;
+                    host.Mount(_ => new DockManager { Layout = liveLayout });
+                    await Harness.Render();
+
+                    // Verify: the mover is reachable (somewhere in the
+                    // tree) and the four anchors are also still reachable.
+                    bool moverIn = ContainsPane(liveLayout, mover);
+                    bool allAnchorsIn = ContainsPane(liveLayout, anchorA)
+                        && ContainsPane(liveLayout, anchorB)
+                        && ContainsPane(liveLayout, anchorC)
+                        && ContainsPane(liveLayout, anchorD);
+                    H.Check($"PerGroupDemo_{groupName}_{target}_MoverIsInTree", moverIn);
+                    H.Check($"PerGroupDemo_{groupName}_{target}_AnchorsPreserved", allAnchorsIn);
+                    if (moverIn && allAnchorsIn) landed++;
+
+                    // Count how many splits the tree contains — split
+                    // moves should grow this; center moves shouldn't.
+                    int splits = CountSplits(liveLayout);
+                    if (target != DockTarget.Center && splits > 3) splitObserved++;
+
+                    await Task.Delay(350); // observer pause
+                }
+            }
+
+            // 20 moves total (4 groups × 5 targets); every one should
+            // have landed the mover + preserved the anchors.
+            H.Check("PerGroupDemo_AllTwentyMovesLanded", landed == 20);
+            // 16 of those moves are split-type (4 splits per group ×
+            // 4 groups); each should produce strictly MORE splits than
+            // the baseline 3 (top split + 2 row splits).
+            H.Check("PerGroupDemo_SplitMovesProducedExtraSplits", splitObserved == 16);
+
+            host.Mount(_ => TextBlock("per-group-drop-demo-done"));
+            await Harness.Render();
+        }
+
+        private static DockTabGroup? FindGroupContaining(DockNode? node, DockableContent target)
+        {
+            switch (node)
+            {
+                case DockTabGroup g:
+                    foreach (var d in g.Documents)
+                        if (ReferenceEquals(d, target)) return g;
+                    return null;
+                case DockSplit s:
+                    foreach (var c in s.Children)
+                    {
+                        var r = FindGroupContaining(c, target);
+                        if (r is not null) return r;
+                    }
+                    return null;
+                default: return null;
+            }
+        }
+
+        private static bool ContainsPane(DockNode? node, DockableContent target)
+        {
+            switch (node)
+            {
+                case null: return false;
+                case DockableContent leaf: return ReferenceEquals(leaf, target);
+                case DockTabGroup g:
+                    foreach (var d in g.Documents)
+                        if (ReferenceEquals(d, target)) return true;
+                    return false;
+                case DockSplit s:
+                    foreach (var c in s.Children)
+                        if (ContainsPane(c, target)) return true;
+                    return false;
+                default: return false;
+            }
+        }
+
+        private static int CountSplits(DockNode? node)
+        {
+            switch (node)
+            {
+                case DockSplit s:
+                {
+                    int n = 1;
+                    foreach (var c in s.Children) n += CountSplits(c);
+                    return n;
+                }
+                default: return 0;
+            }
+        }
+    }
+
     internal class SplitterProgrammaticVisualDemo(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

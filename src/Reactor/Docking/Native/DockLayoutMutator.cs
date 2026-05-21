@@ -236,6 +236,216 @@ internal static class DockLayoutMutator
         return InsertPaneAtTarget(root, pane, fallbackTarget);
     }
 
+    /// <summary>
+    /// Spec 045 §2.3 / §2.4 — move <paramref name="pane"/> to a target
+    /// position relative to a SPECIFIC tab group, not the whole layout.
+    /// Drives the per-tab-group drop overlay: the user drags a tab onto
+    /// the Output group's drop targets and the pane folds into Output
+    /// (Center) or splits the Output group on the chosen side. Identifies
+    /// the target group by reference equality — the caller (the renderer)
+    /// captures the group during render and passes it through unchanged.
+    /// When the pane is in a different branch from the target group,
+    /// RemovePane preserves the target group's reference so ReferenceEquals
+    /// continues to match. When the pane was in the target group (drop
+    /// onto its own group), the post-remove group has a rebuilt
+    /// Documents list — we fall back to matching by content-key
+    /// intersection.
+    /// </summary>
+    public static DockNode? MovePaneToGroupTarget(
+        DockNode? root, DockableContent pane, DockTabGroup targetGroup, DockTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(pane);
+        ArgumentNullException.ThrowIfNull(targetGroup);
+        if (root is null) return null;
+
+        var (afterRemove, found) = RemovePane(root, pane);
+        if (!found) return root;
+        if (afterRemove is null) return WrapAsGroup(pane);
+
+        // For Center inside the same group: just add the pane back as a
+        // tab. We need to locate the (possibly-rebuilt) target group in
+        // afterRemove. ReferenceEquals first (fast path for cross-group
+        // drops); then content-key match (covers the same-group case).
+        var resolvedTarget = ResolveTargetGroup(afterRemove, targetGroup);
+        if (resolvedTarget is null)
+        {
+            // Target group has vanished (e.g. it was the source group AND
+            // the dragged pane was its only document). Fall back to the
+            // root-level mutator so the drop still lands somewhere sane.
+            return InsertPaneAtTarget(afterRemove, pane, target);
+        }
+
+        DockNode replacement = target switch
+        {
+            DockTarget.Center => AddToGroup(resolvedTarget, pane),
+            DockTarget.SplitLeft   => new DockSplit(Orientation.Horizontal, new DockNode[] { WrapAsGroup(pane), resolvedTarget }),
+            DockTarget.SplitRight  => new DockSplit(Orientation.Horizontal, new DockNode[] { resolvedTarget, WrapAsGroup(pane) }),
+            DockTarget.SplitTop    => new DockSplit(Orientation.Vertical,   new DockNode[] { WrapAsGroup(pane), resolvedTarget }),
+            DockTarget.SplitBottom => new DockSplit(Orientation.Vertical,   new DockNode[] { resolvedTarget, WrapAsGroup(pane) }),
+            // Edge targets aren't surfaced in GroupInner mode; fall back
+            // to the root-level handling if the caller ever passes them.
+            _ => InsertPaneAtTarget(afterRemove, pane, target),
+        };
+
+        if (replacement is DockSplit split && target is DockTarget.Center)
+            return split; // Shouldn't happen; defensive.
+
+        return ReplaceNode(afterRemove, resolvedTarget, replacement);
+    }
+
+    /// <summary>
+    /// Spec 045 §2.4 cross-window insert: fold <paramref name="pane"/>
+    /// into <paramref name="targetGroup"/> as a new tab without any
+    /// remove step. The pane is assumed to live OUTSIDE
+    /// <paramref name="root"/> (e.g. it's in a floating window's
+    /// TabView) — the caller is responsible for cleaning up the
+    /// source. Returns the new root or the original when the target
+    /// group can't be resolved (matches MovePaneToGroupTarget's
+    /// fallback). When <paramref name="root"/> is null, returns a
+    /// fresh single-tab group containing the pane.
+    /// </summary>
+    public static DockNode? InsertPaneIntoGroup(
+        DockNode? root, DockableContent pane, DockTabGroup targetGroup)
+    {
+        ArgumentNullException.ThrowIfNull(pane);
+        ArgumentNullException.ThrowIfNull(targetGroup);
+        if (root is null) return WrapAsGroup(pane);
+
+        var resolved = ResolveTargetGroup(root, targetGroup);
+        if (resolved is null) return InsertPaneAtTarget(root, pane, DockTarget.Center);
+
+        var folded = AddToGroup(resolved, pane);
+        return ReplaceNode(root, resolved, folded);
+    }
+
+    /// <summary>
+    /// Spec 045 §2.4 cross-window insert: place <paramref name="pane"/>
+    /// adjacent to <paramref name="targetGroup"/> via a new
+    /// <see cref="DockSplit"/>. <paramref name="target"/> must be one
+    /// of the Split* values (Center has a dedicated entry —
+    /// <see cref="InsertPaneIntoGroup"/>). Dock-edge targets fall back
+    /// to the root-level placement via <see cref="InsertPaneAtTarget"/>.
+    /// </summary>
+    public static DockNode? InsertPaneRelativeToGroup(
+        DockNode? root, DockableContent pane, DockTabGroup targetGroup, DockTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(pane);
+        ArgumentNullException.ThrowIfNull(targetGroup);
+        if (root is null) return WrapAsGroup(pane);
+
+        var resolved = ResolveTargetGroup(root, targetGroup);
+        if (resolved is null) return InsertPaneAtTarget(root, pane, target);
+
+        DockNode replacement = target switch
+        {
+            DockTarget.Center => AddToGroup(resolved, pane),
+            DockTarget.SplitLeft   => new DockSplit(Orientation.Horizontal, new DockNode[] { WrapAsGroup(pane), resolved }),
+            DockTarget.SplitRight  => new DockSplit(Orientation.Horizontal, new DockNode[] { resolved, WrapAsGroup(pane) }),
+            DockTarget.SplitTop    => new DockSplit(Orientation.Vertical,   new DockNode[] { WrapAsGroup(pane), resolved }),
+            DockTarget.SplitBottom => new DockSplit(Orientation.Vertical,   new DockNode[] { resolved, WrapAsGroup(pane) }),
+            _ => InsertPaneAtTarget(root, pane, target),
+        };
+        return ReplaceNode(root, resolved, replacement);
+    }
+
+    private static DockTabGroup AddToGroup(DockTabGroup group, DockableContent pane)
+    {
+        var docs = group.Documents;
+        var next = new DockableContent[docs.Count + 1];
+        for (int i = 0; i < docs.Count; i++) next[i] = docs[i];
+        next[docs.Count] = pane;
+        return group with { Documents = next, SelectedIndex = docs.Count };
+    }
+
+    private static DockTabGroup? ResolveTargetGroup(DockNode node, DockTabGroup target)
+    {
+        // Pass 1: reference equality (typical cross-group drop).
+        var byRef = FindGroupByRef(node, target);
+        if (byRef is not null) return byRef;
+        // Pass 2: content-key intersection (same-group drop where the
+        // pane that just got removed was inside the target group).
+        return FindGroupByContent(node, target);
+    }
+
+    private static DockTabGroup? FindGroupByRef(DockNode node, DockTabGroup target)
+    {
+        switch (node)
+        {
+            case DockTabGroup g when ReferenceEquals(g, target): return g;
+            case DockSplit s:
+                foreach (var c in s.Children)
+                {
+                    var r = FindGroupByRef(c, target);
+                    if (r is not null) return r;
+                }
+                return null;
+            default: return null;
+        }
+    }
+
+    private static DockTabGroup? FindGroupByContent(DockNode node, DockTabGroup target)
+    {
+        switch (node)
+        {
+            case DockTabGroup g:
+            {
+                foreach (var d in g.Documents)
+                {
+                    foreach (var t in target.Documents)
+                    {
+                        if (ReferenceEquals(d, t)) return g;
+                    }
+                }
+                return null;
+            }
+            case DockSplit s:
+                foreach (var c in s.Children)
+                {
+                    var r = FindGroupByContent(c, target);
+                    if (r is not null) return r;
+                }
+                return null;
+            default: return null;
+        }
+    }
+
+    private static DockNode ReplaceNode(DockNode root, DockNode oldNode, DockNode newNode)
+    {
+        if (ReferenceEquals(root, oldNode)) return newNode;
+        switch (root)
+        {
+            case DockSplit split:
+            {
+                var children = split.Children;
+                bool replaced = false;
+                var next = new DockNode[children.Count];
+                for (int i = 0; i < children.Count; i++)
+                {
+                    if (!replaced && Contains(children[i], oldNode))
+                    {
+                        next[i] = ReplaceNode(children[i], oldNode, newNode);
+                        replaced = true;
+                    }
+                    else next[i] = children[i];
+                }
+                return replaced ? split with { Children = next } : root;
+            }
+            default:
+                return root;
+        }
+    }
+
+    private static bool Contains(DockNode haystack, DockNode needle)
+    {
+        if (ReferenceEquals(haystack, needle)) return true;
+        if (haystack is DockSplit s)
+        {
+            foreach (var c in s.Children)
+                if (Contains(c, needle)) return true;
+        }
+        return false;
+    }
+
     private static DockNode? FoldIntoGroup(DockNode node, DockTabGroup target, DockableContent pane)
     {
         switch (node)
