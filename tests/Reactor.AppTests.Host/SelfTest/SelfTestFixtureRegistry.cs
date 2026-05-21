@@ -908,6 +908,11 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_DropTargetOverlayShowsAndDismisses",
         "NativeDocking_DragSessionConfirmMutatesLayout",
         "NativeDocking_ModelDrain_DockCloseActivatePinAffectsLiveTree",
+        // Reliability + security (spec 045 §2.24, §2.25).
+        "NativeDocking_Reliability_CorruptLayoutFallback_HostMounted",
+        "NativeDocking_Reliability_OffThreadMutation_ThrowsAndDoesNotQueue",
+        "NativeDocking_Reliability_UseEffectCleanup_RunsOnPaneClose",
+        "NativeDocking_Reliability_DragSessionPayload_ObjectRefsOnly",
         // Spec 045 §2.4 drag/drop matrix — exhaustive programmatic-drag
         // scenarios for each DockTarget value + invariants.
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp",
@@ -1820,6 +1825,10 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_DropTargetOverlayShowsAndDismisses" => new NativeDockingSmokeFixtures.DropTargetOverlayShowsAndDismisses(harness),
         "NativeDocking_DragSessionConfirmMutatesLayout" => new NativeDockingSmokeFixtures.DragSessionConfirmMutatesLayout(harness),
         "NativeDocking_ModelDrain_DockCloseActivatePinAffectsLiveTree" => new NativeDockingSmokeFixtures.ModelDrain_DockCloseActivatePinAffectsLiveTree(harness),
+        "NativeDocking_Reliability_CorruptLayoutFallback_HostMounted" => new NativeDockingReliabilityFixtures.CorruptLayoutFallback_HostMounted(harness),
+        "NativeDocking_Reliability_OffThreadMutation_ThrowsAndDoesNotQueue" => new NativeDockingReliabilityFixtures.OffThreadMutation_ThrowsAndDoesNotQueue(harness),
+        "NativeDocking_Reliability_UseEffectCleanup_RunsOnPaneClose" => new NativeDockingReliabilityFixtures.UseEffectCleanup_RunsOnPaneClose(harness),
+        "NativeDocking_Reliability_DragSessionPayload_ObjectRefsOnly" => new NativeDockingReliabilityFixtures.DragSessionPayload_ObjectRefsOnly(harness),
         // Spec 045 §2.4 drag/drop matrix
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp" => new NativeDockingDragDropMatrixFixtures.DragToCenterSameGroup_NoOp(harness),
         "NativeDockingMatrix_DragToSplitRight_AddsColumn" => new NativeDockingDragDropMatrixFixtures.DragToSplitRight_AddsColumn(harness),

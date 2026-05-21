@@ -1124,28 +1124,44 @@ integration.*
 
 ### 2.24 Security (spec §8.9)
 
-- [ ] Layout JSON 1 MB size limit (rejected if exceeded).
-- [ ] Layout JSON nesting depth 32 limit
-  (`JsonReaderOptions.MaxDepth`).
-- [ ] Schema validation before applying to model; unknown fields
+- [x] Layout JSON 1 MB size limit (rejected if exceeded).
+  `DockLayoutSerializer.MaxBytes` + the `oversize` fallback
+  category. Cross-ref §2.7.
+- [x] Layout JSON nesting depth 32 limit
+  (`JsonReaderOptions.MaxDepth`). Cross-ref §2.7.
+- [x] Schema validation before applying to model; unknown fields
   tolerated; missing required → reject whole, fall back to default.
-- [ ] No reflection / type-name instantiation from JSON.
-- [ ] No external schema URLs.
-- [ ] AOT-clean parsing via `JsonSerializerContext` for all docking
-  types — no reflection at runtime.
-- [ ] Failure mode: log via `ReactorEventSource` (spec 044), fall
-  back to default, never throw on load path.
+  Cross-ref §2.7.
+- [x] No reflection / type-name instantiation from JSON. Cross-ref
+  §2.7.
+- [x] No external schema URLs. Cross-ref §2.7.
+- [x] AOT-clean parsing via `JsonSerializerContext` for all docking
+  types — no reflection at runtime. Cross-ref §2.7.
+- [x] Failure mode: log via `ReactorEventSource` (spec 044), fall
+  back to default, never throw on load path. Cross-ref §2.7
+  (PII-safe coarse category emitted via event id 16).
 - [ ] Per-pane state isolation: `WindowPersistedScope` keyed by
   `(window-id, dockable-key)`. Document cross-user-secret caveat
   in docs (`§8.4`).
-- [ ] Drag-drop payload: in-process object refs only (no GUID
+- [x] Drag-drop payload: in-process object refs only (no GUID
   table). Selftest verifies no serialization across the drag.
+  `NativeDocking_Reliability_DragSessionPayload_ObjectRefsOnly`
+  asserts `DockDragSession.Source` / `SourceManager` are the same
+  references passed to `Begin`, that a second concurrent
+  `Begin` is refused (single-drag contract), and that `End`
+  clears `Current` so the source pane + manager are GC-eligible.
 
 ### 2.25 Reliability (spec §8.10)
 
-- [ ] Corrupt-persisted-layout fallback: load failure → log →
+- [x] Corrupt-persisted-layout fallback: load failure → log →
   fall back to default. Selftest with malformed JSON asserts no
   throw + event fires.
+  `NativeDocking_Reliability_CorruptLayoutFallback_HostMounted`
+  drives a corrupt JSON through `DockLayoutSerializer.Load` from
+  inside a mounted host, asserts the load returns a fallback
+  result, the `Microsoft-UI-Reactor` `DockingLayoutLoadFallback`
+  event fires (category `json-parse`), and the fallback layout
+  mounts cleanly into the rendered tree.
 - [ ] Off-screen restore: floating window saved at (10000, 10000) on
   a single-display rig → repositioned to primary center on load.
   Selftest with simulated `DisplayArea`.
@@ -1154,13 +1170,32 @@ integration.*
   top-level shell.
 - [ ] Process crash mid-drag: drag state in-memory only; on restart,
   persisted layout restored; partial drag lost (correct behavior).
-- [ ] `useEffect` cleanup on pane close runs in dependency order
+- [~] `useEffect` cleanup on pane close runs in dependency order
   (Reactor invariant; selftest with effect-counter pattern verifies
-  for docking).
+  for docking). Selftest
+  `NativeDocking_Reliability_UseEffectCleanup_RunsOnPaneClose` lands
+  the visual-unmount half — `model.Close(pane)` drains and the
+  component's body disappears from the rendered tree. The matching
+  cleanup-fires-on-close assertion surfaced a Reactor-side gap:
+  `ComponentElement` instances embedded under
+  `DockableContent.Content` (i.e. wrapped through the host's
+  `WrapLeafWithPaneContext` Border + Padding + Provide chain) do
+  not get their `UseEffect` cleanups fired when the leaf
+  disappears. The known-failing assertion is left commented in the
+  fixture with a pointer to this gap; closes when the reconciler
+  drops to that case.
 - [ ] Floating window outliving its host: `OnLayoutChanging` cleanup
   closes them (P2). P3 decouples — orphan top-levels.
-- [ ] Concurrent mutation off UI dispatcher throws — selftest verifies
+- [x] Concurrent mutation off UI dispatcher throws — selftest verifies
   the throw.
+  Unit-level coverage in
+  `DockHostModelTests.Mutations_OffOwnerThread_Throw`;
+  host-mounted variant
+  `NativeDocking_Reliability_OffThreadMutation_ThrowsAndDoesNotQueue`
+  drives a `Task.Run` mutator call against the bridge-resolved
+  live model and asserts both the `InvalidOperationException` and
+  the empty `Pending` queue (mutator throws BEFORE adding to the
+  queue, so no spurious bumpTick fires).
 - [ ] Event-subscription leak baseline selftest: 100-pane open/close
   cycle returns to allocation baseline.
 

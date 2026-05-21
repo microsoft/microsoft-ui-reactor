@@ -49,9 +49,15 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // Manager.Layout: when set, it replaces the prop until the app
         // passes a new Layout reference (controlled-input pattern).
         //
+        // We wrap in a sentinel record so a closed-to-empty layout —
+        // `LayoutOverride(Root: null)` — is distinguishable from "no
+        // override at all" (state value null). Without that, closing
+        // the last pane reverts to `manager.Layout` and the pane
+        // reappears next render.
+        //
         // The drag-active flag drives ShowDropTargets — apps don't need
         // to wire that explicitly to enable tab tear-out + dock-by-drop.
-        var (layoutOverride, setLayoutOverride) = UseState<DockNode?>(null);
+        var (layoutOverride, setLayoutOverride) = UseState<LayoutOverride?>(null);
         var (dragActive, setDragActive) = UseState(false);
         var (hoveredTarget, setHoveredTarget) = UseState<DockTarget?>(null);
         var hoveredTargetRef = UseRef<DockTarget?>(null);
@@ -93,7 +99,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // Manager.Layout out-of-band will replace the prop; if the new
         // reference differs from our override, we surrender the override
         // (controlled-input convergence).
-        var effectiveLayout = layoutOverride ?? manager.Layout;
+        var effectiveLayout = layoutOverride is { } lo ? lo.Root : manager.Layout;
 
         // Per-DockSplit ratio state. The store survives renders via UseRef
         // (state participates in equality and silently no-ops on
@@ -178,7 +184,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             if (drain.LayoutChanged)
             {
                 effectiveLayout = drain.Layout;
-                setLayoutOverride(drain.Layout);
+                setLayoutOverride(new LayoutOverride(drain.Layout));
                 manager.OnLiveLayoutChanged?.Invoke(drain.Layout);
                 manager.OnLayoutChanged?.Invoke(new DockLayoutChangedEventArgs());
             }
@@ -297,7 +303,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
                 if (removed)
                 {
-                    setLayoutOverride(afterRemove);
+                    setLayoutOverride(new LayoutOverride(afterRemove));
                     try { DockFloatingWindow.Open(pane); }
                     catch { /* tear-out best-effort; surface via OnContentFloated */ }
                     manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
@@ -393,7 +399,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             if (container is not null) PreviousContainerTracker.Set(pane, container);
             var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
             if (!removed) return;
-            setLayoutOverride(afterRemove);
+            setLayoutOverride(new LayoutOverride(afterRemove));
             manager.OnDocumentClosed?.Invoke(new DockDocumentClosedEventArgs { Document = pane });
             manager.OnLiveLayoutChanged?.Invoke(afterRemove);
             LogOp(Diagnostics.DockOperationKind.LayoutChange,
@@ -481,7 +487,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     {
                         var newLayout = DockLayoutMutator.MovePaneToTarget(
                             effectiveLayout, sourcePane, target);
-                        setLayoutOverride(newLayout);
+                        setLayoutOverride(new LayoutOverride(newLayout));
                         manager.OnContentDocked?.Invoke(
                             new DockContentDockedEventArgs { Content = sourcePane, Target = target });
                         // §2.4 — surface the new whole-tree layout for
@@ -578,7 +584,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             if (container is not null) PreviousContainerTracker.Set(pane, container);
             var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
             if (!removed) return;
-            setLayoutOverride(afterRemove);
+            setLayoutOverride(new LayoutOverride(afterRemove));
             manager.OnDocumentClosed?.Invoke(new DockDocumentClosedEventArgs { Document = pane });
             manager.OnLiveLayoutChanged?.Invoke(afterRemove);
             LogOp(Diagnostics.DockOperationKind.LayoutChange,
@@ -1125,6 +1131,18 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             if (i != idx) next[j++] = side[i];
         return (next, true);
     }
+
+    /// <summary>
+    /// Per-host wrapper around the docked layout root that distinguishes
+    /// "no override — use <see cref="DockManager.Layout"/>" (state value
+    /// is null) from "override with an explicit Root, which may itself be
+    /// null after closing the last pane" (state value is a non-null
+    /// record whose <see cref="Root"/> is null). Without the wrapper,
+    /// closing the only pane sets the override to null and the next
+    /// render falls back to the controlled-input prop, resurrecting the
+    /// closed pane on screen.
+    /// </summary>
+    private sealed record LayoutOverride(DockNode? Root);
 
     /// <summary>
     /// Per-host snapshot of the four side strips, layered on top of the

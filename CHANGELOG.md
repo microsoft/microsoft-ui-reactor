@@ -29,6 +29,32 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — Reliability + security selftests (§2.24,
+  §2.25).** Four new host-mounted fixtures under
+  `NativeDockingReliabilityFixture`:
+  `CorruptLayoutFallback_HostMounted` (corrupt JSON → fallback +
+  event), `OffThreadMutation_ThrowsAndDoesNotQueue` (off-dispatcher
+  mutators throw and don't dirty the queue),
+  `UseEffectCleanup_RunsOnPaneClose` (programmatic close drains
+  through the §2.16 mutator queue and the body unmounts from the
+  visual tree), and `DragSessionPayload_ObjectRefsOnly`
+  (`DockDragSession` holds object refs, refuses a second concurrent
+  drag, clears on End). Cross-ref §2.24 / §2.25 close-out items.
+  The cleanup test surfaced a Reactor-side gap where
+  `ComponentElement` instances embedded inside
+  `DockableContent.Content` don't run their `UseEffect` cleanups
+  when the leaf disappears — tracked as a known limitation in the
+  fixture's docstring.
+- **Spec 045 Phase 2 — Closed-to-empty layout fix.** A subtle bug
+  in the drag/close/drain paths caused `setLayoutOverride(null)`
+  to revert to the controlled-input prop, resurrecting a closed
+  pane. The internal state is now a `LayoutOverride(DockNode?)`
+  wrapper so the renderer can distinguish "no override" from
+  "override is intentionally empty". All five
+  `setLayoutOverride` call sites (drain, tear-out, tab close,
+  drag confirm, chord close) updated. Caught by the
+  `Reliability_Effect_BodyGoneFromTree` assertion in the new
+  reliability fixture.
 - **Spec 045 Phase 2 — Corrupt-JSON ETW emission (§2.7).**
   `DockLayoutSerializer.Load` now classifies every fallback path into a
   PII-safe category (`empty` / `oversize` / `json-parse` /
