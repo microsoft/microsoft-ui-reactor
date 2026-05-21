@@ -138,8 +138,7 @@ public class JumpListUpdateValidationTests : IDisposable
 
     // ══════════════════════════════════════════════════════════════
     //  UpdateAsync happy(-ish) path — items pass validation, the
-    //  COM call inside Task.Run fails, the catch swallows. The
-    //  outer Task completes without throwing.
+    //  COM call inside Task.Run fails, the exception propagates.
     // ══════════════════════════════════════════════════════════════
 
     [Fact]
@@ -155,8 +154,11 @@ public class JumpListUpdateValidationTests : IDisposable
             new JumpListItem("Open", "open --doc /path"),
             new JumpListItem("Help", "help"),
         };
-        // In unit test context, the platform call fails — exception must propagate.
-        await Assert.ThrowsAnyAsync<Exception>(
+        // In unit test context, the platform call fails — must be a platform
+        // exception (COM/EntryPoint/DllNotFound), NOT a validation exception.
+        var ex = await Assert.ThrowsAnyAsync<Exception>(
             async () => await JumpList.UpdateAsync(items));
+        Assert.False(ex is ArgumentException or InvalidOperationException,
+            $"Expected a platform failure, not a validation exception: {ex.GetType().Name}: {ex.Message}");
     }
 }

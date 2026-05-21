@@ -263,9 +263,11 @@ public static class JumpList
     /// <remarks>
     /// Clears any previously-set entries first; the OS-managed Recent and
     /// Frequent categories are unaffected (toggle them via
-    /// <see cref="ShowRecent"/> / <see cref="ShowFrequent"/>). Platform
-    /// failures (downlevel, group-policy lockdown, COM errors) propagate
-    /// as exceptions — callers may catch if fire-and-forget is desired.
+    /// <see cref="ShowRecent"/> / <see cref="ShowFrequent"/>). COM activation
+    /// and marshaling failures propagate as exceptions — callers may catch if
+    /// fire-and-forget is desired. Individual HRESULT failures from shell APIs
+    /// (e.g., <c>BeginList</c>, <c>CommitList</c>) are logged via
+    /// <see cref="Core.Diagnostics.DiagnosticLog"/> but do not throw.
     /// </remarks>
     public static async Task UpdateAsync(IEnumerable<JumpListItem> items)
     {
