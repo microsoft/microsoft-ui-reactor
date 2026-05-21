@@ -215,7 +215,7 @@ public sealed partial class Reconciler
             (ContentDialogElement o, ContentDialogElement n, FrameworkElement cdFe)
                 => UpdateContentDialog(o, n, cdFe, requestRerender),
             (TeachingTipElement o, TeachingTipElement n, WinUI.TeachingTip tip)
-                => UpdateTeachingTip(o, n, tip),
+                => UpdateTeachingTip(o, n, tip, requestRerender),
             (MenuBarElement o, MenuBarElement n, WinUI.MenuBar mb)
                 => UpdateMenuBar(o, n, mb),
             (CommandHostElement o, CommandHostElement n, WinUI.Grid chGrid)
@@ -2665,19 +2665,24 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateTeachingTip(TeachingTipElement o, TeachingTipElement n, WinUI.TeachingTip tip)
+    private UIElement? UpdateTeachingTip(TeachingTipElement o, TeachingTipElement n, WinUI.TeachingTip tip, Action requestRerender)
     {
         tip.Title = n.Title; tip.Subtitle = n.Subtitle ?? ""; tip.IsOpen = n.IsOpen;
         if (tip.PlacementMargin != n.PlacementMargin) tip.PlacementMargin = n.PlacementMargin;
         if (tip.PreferredPlacement != n.PreferredPlacement) tip.PreferredPlacement = n.PreferredPlacement;
         if (!ReferenceEquals(o.IconSource, n.IconSource) && n.IconSource is not null)
             tip.IconSource = ResolveIconSource(n.IconSource);
+        ReconcileChild(o.Content, n.Content,
+            () => tip.Content as UIElement,
+            c => tip.Content = c,
+            () => tip.Content = null,
+            requestRerender);
         // HeroContent is reconciled with a full re-mount on swap — TeachingTip
         // hero content isn't part of a typical hot path, so simple is better.
         if (!ReferenceEquals(o.HeroContent, n.HeroContent))
         {
             if (tip.HeroContent is UIElement stale) Unmount(stale);
-            tip.HeroContent = n.HeroContent is not null ? Mount(n.HeroContent, () => { }) : null;
+            tip.HeroContent = n.HeroContent is not null ? Mount(n.HeroContent, requestRerender) : null;
         }
         SetElementTag(tip, n);
         if (o.OnClosed is null && n.OnClosed is not null)
@@ -3314,6 +3319,12 @@ public sealed partial class Reconciler
         // Update primary commands in-place
         UpdateAppBarItems(cb.PrimaryCommands, n.PrimaryCommands);
         UpdateAppBarItems(cb.SecondaryCommands, n.SecondaryCommands);
+
+        ReconcileChild(o.Content, n.Content,
+            () => cb.Content as UIElement,
+            c => cb.Content = c,
+            () => cb.Content = null,
+            requestRerender);
 
         SetElementTag(cb, n);
         ApplySetters(n.Setters, cb);

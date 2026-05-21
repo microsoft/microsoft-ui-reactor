@@ -560,6 +560,9 @@ internal static class SelfTestFixtureRegistry
         "IdentityPreserve_ListBox",
         "IdentityPreserve_SelectorBar",
         "IdentityPreserve_SplitView",
+        // Issue 343 — CommandBar/TeachingTip Content reconciliation
+        "Issue343_CommandBarContentUpdates",
+        "Issue343_TeachingTipContentUpdates",
         // Hooks coverage — FocusManager, UseFocus
         "HooksCov_FocusManagerRegistration",
         "HooksCov_FocusManagerNavigation",
@@ -1422,6 +1425,9 @@ internal static class SelfTestFixtureRegistry
         "IdentityPreserve_ListBox" => new IdentityPreservationFixtures.ListBoxSurvivesSiblingUpdate(harness),
         "IdentityPreserve_SelectorBar" => new IdentityPreservationFixtures.SelectorBarSurvivesSiblingUpdate(harness),
         "IdentityPreserve_SplitView" => new IdentityPreservationFixtures.SplitViewSurvivesSiblingUpdate(harness),
+        // Issue 343 — CommandBar/TeachingTip Content reconciliation
+        "Issue343_CommandBarContentUpdates" => new Issue343Fixtures.CommandBarContentUpdates(harness),
+        "Issue343_TeachingTipContentUpdates" => new Issue343Fixtures.TeachingTipContentUpdates(harness),
         "ControlsCov_SearchManager" => new ControlsCoverageFixtures.SearchManagerExercise(harness),
         // Hooks coverage
         "HooksCov_FocusManagerRegistration" => new HooksCoverageFixtures.FocusManagerRegistration(harness),
