@@ -17,10 +17,30 @@ public static class PathDataParser
 {
     public static Geometry Parse(string pathData)
     {
-        if (string.IsNullOrWhiteSpace(pathData))
-            return new PathGeometry();
-
         var geometry = new PathGeometry();
+        if (string.IsNullOrWhiteSpace(pathData))
+            return geometry;
+
+        ParseCore(pathData, geometry);
+        return geometry;
+    }
+
+    /// <summary>
+    /// Walks the same parse loop as <see cref="Parse"/> without constructing
+    /// any WinUI types. Used by the SharpFuzz harness in <c>tests/Reactor.Fuzz</c>,
+    /// which runs as a libFuzzer-driven console process without XAML activation.
+    /// Throws the same exceptions <see cref="Parse"/> would throw on malformed
+    /// number tokens (FormatException, OverflowException) so fuzz inputs that
+    /// would break production callers are still surfaced.
+    /// </summary>
+    internal static void ParseTokens(string pathData)
+    {
+        if (string.IsNullOrWhiteSpace(pathData)) return;
+        ParseCore(pathData, geometry: null);
+    }
+
+    private static void ParseCore(string pathData, PathGeometry? geometry)
+    {
         PathFigure? figure = null;
         double cx = 0, cy = 0; // current point
 
@@ -31,7 +51,7 @@ public static class PathDataParser
 
         void Commit()
         {
-            if (figure is not null) geometry.Figures.Add(figure);
+            if (geometry is not null && figure is not null) geometry.Figures.Add(figure);
         }
 
         int i = 0;
@@ -47,8 +67,11 @@ public static class PathDataParser
                     double mx = ReadNumber(pathData, ref i);
                     SkipComma(pathData, ref i);
                     double my = ReadNumber(pathData, ref i);
-                    Commit();
-                    figure = new PathFigure { StartPoint = new Point(mx, my), IsClosed = false };
+                    if (geometry is not null)
+                    {
+                        Commit();
+                        figure = new PathFigure { StartPoint = new Point(mx, my), IsClosed = false };
+                    }
                     cx = mx; cy = my;
                     break;
 
@@ -57,7 +80,8 @@ public static class PathDataParser
                     double lx = ReadNumber(pathData, ref i);
                     SkipComma(pathData, ref i);
                     double ly = ReadNumber(pathData, ref i);
-                    figure?.Segments.Add(new LineSegment { Point = new Point(lx, ly) });
+                    if (geometry is not null)
+                        figure?.Segments.Add(new LineSegment { Point = new Point(lx, ly) });
                     cx = lx; cy = ly;
                     break;
 
@@ -65,14 +89,16 @@ public static class PathDataParser
                     i++;
                     double hdx = ReadNumber(pathData, ref i);
                     cx += hdx;
-                    figure?.Segments.Add(new LineSegment { Point = new Point(cx, cy) });
+                    if (geometry is not null)
+                        figure?.Segments.Add(new LineSegment { Point = new Point(cx, cy) });
                     break;
 
                 case 'v':
                     i++;
                     double vdy = ReadNumber(pathData, ref i);
                     cy += vdy;
-                    figure?.Segments.Add(new LineSegment { Point = new Point(cx, cy) });
+                    if (geometry is not null)
+                        figure?.Segments.Add(new LineSegment { Point = new Point(cx, cy) });
                     break;
 
                 case 'A':
@@ -90,14 +116,17 @@ public static class PathDataParser
                     double ax = ReadNumber(pathData, ref i);
                     SkipComma(pathData, ref i);
                     double ay = ReadNumber(pathData, ref i);
-                    figure?.Segments.Add(new ArcSegment
+                    if (geometry is not null)
                     {
-                        Point = new Point(ax, ay),
-                        Size = new Size(rx, ry),
-                        RotationAngle = rotation,
-                        IsLargeArc = largeArc != 0,
-                        SweepDirection = sweep != 0 ? SweepDirection.Clockwise : SweepDirection.Counterclockwise,
-                    });
+                        figure?.Segments.Add(new ArcSegment
+                        {
+                            Point = new Point(ax, ay),
+                            Size = new Size(rx, ry),
+                            RotationAngle = rotation,
+                            IsLargeArc = largeArc != 0,
+                            SweepDirection = sweep != 0 ? SweepDirection.Clockwise : SweepDirection.Counterclockwise,
+                        });
+                    }
                     cx = ax; cy = ay;
                     break;
 
@@ -110,11 +139,14 @@ public static class PathDataParser
                     double qx = ReadNumber(pathData, ref i);
                     SkipComma(pathData, ref i);
                     double qy = ReadNumber(pathData, ref i);
-                    figure?.Segments.Add(new QuadraticBezierSegment
+                    if (geometry is not null)
                     {
-                        Point1 = new Point(qx1, qy1),
-                        Point2 = new Point(qx, qy),
-                    });
+                        figure?.Segments.Add(new QuadraticBezierSegment
+                        {
+                            Point1 = new Point(qx1, qy1),
+                            Point2 = new Point(qx, qy),
+                        });
+                    }
                     cx = qx; cy = qy;
                     break;
 
@@ -131,18 +163,21 @@ public static class PathDataParser
                     double cex = ReadNumber(pathData, ref i);
                     SkipComma(pathData, ref i);
                     double cey = ReadNumber(pathData, ref i);
-                    figure?.Segments.Add(new BezierSegment
+                    if (geometry is not null)
                     {
-                        Point1 = new Point(cx1, cy1),
-                        Point2 = new Point(cx2, cy2),
-                        Point3 = new Point(cex, cey),
-                    });
+                        figure?.Segments.Add(new BezierSegment
+                        {
+                            Point1 = new Point(cx1, cy1),
+                            Point2 = new Point(cx2, cy2),
+                            Point3 = new Point(cex, cey),
+                        });
+                    }
                     cx = cex; cy = cey;
                     break;
 
                 case 'Z':
                     i++;
-                    if (figure != null) figure.IsClosed = true;
+                    if (geometry is not null && figure != null) figure.IsClosed = true;
                     break;
 
                 default:
@@ -152,8 +187,7 @@ public static class PathDataParser
             }
         }
 
-        Commit();
-        return geometry;
+        if (geometry is not null) Commit();
     }
 
     private static void SkipComma(string s, ref int i)

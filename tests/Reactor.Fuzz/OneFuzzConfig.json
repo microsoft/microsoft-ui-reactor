@@ -1,0 +1,40 @@
+{
+  "$comment": "OneFuzz job configuration for Reactor's managed fuzz harnesses. Tracks SDL work item 62373203 (Applications Security: Apply Fuzzers to Your Code). Two libFuzzer targets share a single host binary (Reactor.Fuzz.exe) and are selected via argv[0]; see Program.cs. SharpFuzz-based managed fuzzing flow per https://aka.ms/onboardasan.",
+  "ConfigVersion": 3,
+  "Entries": [
+    {
+      "JobNotificationEmail": "andersonch@microsoft.com",
+      "Skip": false,
+      "JobDependencies": [],
+      "Fuzzer": {
+        "$type": "libfuzzer",
+        "FuzzingHarnessExecutableName": "Reactor.Fuzz.exe",
+        "CliArgs": "markdown"
+      },
+      "AdoTemplate": {
+        "Org": "microsoft",
+        "Project": "OS",
+        "AreaPath": "OS\\Windows Client and Services\\WinPD\\DFX-Developer Fundamentals and Experiences",
+        "AssignedTo": "andersonch@microsoft.com",
+        "SdlTaskId": 62373203
+      },
+      "OneFuzzPlatforms": ["Windows"],
+      "Targets": [
+        {
+          "TargetName": "Reactor.Fuzz.Markdown",
+          "FuzzingTargetBinaries": ["Reactor.Fuzz.exe"],
+          "InputCorpus": "corpus/markdown",
+          "Tags": ["managed", "sharpfuzz", "md4c", "markdown"],
+          "Description": "Fuzzes Microsoft.UI.Reactor.Markdown.MarkdownHtml.Render which drives Md4cParser (CommonMark + GFM extensions). Inputs are UTF-8 markdown text."
+        },
+        {
+          "TargetName": "Reactor.Fuzz.PathData",
+          "FuzzingTargetBinaries": ["Reactor.Fuzz.exe"],
+          "InputCorpus": "corpus/pathdata",
+          "Tags": ["managed", "sharpfuzz", "svg", "pathdata"],
+          "Description": "Fuzzes Microsoft.UI.Reactor.Charting.PathDataParser.ParseTokens — the WinUI-free parse loop that mirrors the production Parse path (number / whitespace / command-dispatch). Inputs are SVG path-data strings."
+        }
+      ]
+    }
+  ]
+}

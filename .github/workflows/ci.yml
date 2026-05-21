@@ -143,6 +143,40 @@ jobs:
       - name: Build
         run: dotnet build Reactor.slnx --no-restore --configuration Release
 
+  fuzz-smoke:
+    name: Fuzz smoke
+    needs: changes
+    if: needs.changes.outputs.non-md == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore tests/Reactor.Fuzz/Reactor.Fuzz.csproj -p:Platform=x64
+
+      - name: Build
+        run: dotnet build tests/Reactor.Fuzz/Reactor.Fuzz.csproj --no-restore -c Release -p:Platform=x64
+
+      # Fuzz-free pass: walk the seed corpus once through both harness bodies.
+      # Guards against harness rot (parser API drift, broken seed inputs) without
+      # needing the libfuzzer-dotnet driver or SharpFuzz instrumentation tool.
+      # Real fuzzing happens out-of-band via OneFuzz; tracked by SDL 62373203.
+      - name: Smoke run
+        shell: pwsh
+        run: |
+          $exe = "tests/Reactor.Fuzz/bin/x64/Release/net10.0-windows10.0.22621.0/Reactor.Fuzz.exe"
+          if (-not (Test-Path $exe)) {
+            Write-Error "Reactor.Fuzz.exe not found at $exe"
+            exit 1
+          }
+          & $exe smoke
+          exit $LASTEXITCODE
+
   aot-selftests:
     name: AOT Selftests
     needs: changes

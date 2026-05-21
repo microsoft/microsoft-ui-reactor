@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <AssemblyName>Reactor.Fuzz</AssemblyName>
+    <RootNamespace>Microsoft.UI.Reactor.Fuzz</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <IsPackable>false</IsPackable>
+    <!-- SharpFuzz instrumentation is incompatible with NativeAOT and trim analysis. -->
+    <IsAotCompatible>false</IsAotCompatible>
+    <IsTrimmable>false</IsTrimmable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpFuzz" Version="2.1.1" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="corpus\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="OneFuzzConfig.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="README.md" />
+  </ItemGroup>
+
+</Project>
