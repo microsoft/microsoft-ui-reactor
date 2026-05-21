@@ -39,7 +39,7 @@ sealed class App : Component
 {
     // Decorative icon — the surrounding button/label carries the accessible name,
     // so the image itself is hidden from screen readers.
-    static Element Icon(string name) => Image($"ms-appx:///Assets/{name}.png").Size(16, 16).AccessibilityHidden();
+    static Element CreateIcon(Symbol icon) => Icon(icon).AccessibilityHidden();
 
     public override Element Render()
     {
@@ -78,9 +78,9 @@ sealed class App : Component
                     TextBlock("Task Tracker").Bold().FontSize(24).HeadingLevel(AutomationHeadingLevel.Level1),
 
                     HStack(4,
-                        Button(Icon("settings"), () => { }).AutomationName("Settings"),
-                        Button(Icon("people"), () => { }).AutomationName("Manage team"),
-                        Button(Icon("refresh"), () =>
+                        Button(CreateIcon(Symbol.Setting), () => { }).AutomationName("Settings"),
+                        Button(CreateIcon(Symbol.People), () => { }).AutomationName("Manage team"),
+                        Button(CreateIcon(Symbol.Refresh), () =>
                         {
                             setStatusMsg("Tasks refreshed");
                         }).AutomationName("Refresh tasks")
@@ -102,7 +102,7 @@ sealed class App : Component
                     TextField(newTitle, setNewTitle, placeholder: "New task...", header: "New task")
                         .Width(280),
 
-                    Button(Icon("add"), () =>
+                    Button(CreateIcon(Symbol.Add), () =>
                     {
                         if (!string.IsNullOrWhiteSpace(newTitle))
                         {
@@ -203,11 +203,11 @@ sealed class App : Component
                 HStack(4,
                     PriorityBadge(task.Priority),
 
-                    Button(Icon("edit"), () =>
+                    Button(CreateIcon(Symbol.Edit), () =>
                     {
                         setStatusMsg($"Editing: {task.Title}");
                     }).AutomationName($"Edit {task.Title}"),
-                    Button(Icon("delete"), () =>
+                    Button(CreateIcon(Symbol.Delete), () =>
                     {
                         updateTasks(list => list.Where(t => t.Id != task.Id).ToList());
                         setStatusMsg($"Deleted: {task.Title}");
