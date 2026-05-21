@@ -357,7 +357,106 @@ internal static class HostingCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  9. PreviewCaptureServer — HTTP/auth/CORS/component endpoints
+    //  9. ReactorHostControl — reparent (issue #344)
+    //     A raw-WinUI reparent (slotA.Child = null; slotB.Child = host) fires
+    //     Unloaded on the host. Before the fix, OnUnloaded called Dispose(),
+    //     blanking the tree permanently. After the fix, the Reactor tree
+    //     survives the reparent and remains interactive in its new slot.
+    // ════════════════════════════════════════════════════════════════════════
+
+    private class ReparentCounter : Microsoft.UI.Reactor.Core.Component
+    {
+        public override Element Render()
+        {
+            var (count, setCount) = UseState(0);
+            return VStack(
+                TextBlock($"Reparent:{count}"),
+                Button("ReparentBump", () => setCount(count + 1))
+            );
+        }
+    }
+
+    internal class HostControlReparentSurvives(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var hostControl = new ReactorHostControl();
+            hostControl.Mount(new ReparentCounter());
+
+            var slotA = new Border();
+            var slotB = new Border();
+            var root = new StackPanel();
+            root.Children.Add(slotA);
+            root.Children.Add(slotB);
+            slotA.Child = hostControl;
+            H.SetContent(root);
+            await Harness.Render(200);
+
+            // Initial mount in slot A renders + reacts to clicks.
+            var text = FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("Reparent:") == true);
+            H.Check("HostCtrlReparent_InitialMount", text?.Text == "Reparent:0");
+
+            var btn = FindInContainer<Button>(hostControl, b => b.Content is string s && s == "ReparentBump");
+            if (btn is not null)
+            {
+                var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(btn);
+                ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
+                    peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+            }
+            await Harness.Render(200);
+            text = FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("Reparent:") == true);
+            H.Check("HostCtrlReparent_PreReparentInteractive", text?.Text == "Reparent:1");
+
+            // Raw-WinUI reparent A -> B (drag between dock groups, TabView pivot, etc.)
+            slotA.Child = null;
+            slotB.Child = hostControl;
+            await Harness.Render(200);
+
+            // Tree must still be present and reflect the prior state (count == 1).
+            text = FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("Reparent:") == true);
+            H.Check("HostCtrlReparent_SurvivesReparent", text is not null);
+            H.Check("HostCtrlReparent_StatePreserved", text?.Text == "Reparent:1");
+
+            // And still interactive in the new slot.
+            btn = FindInContainer<Button>(hostControl, b => b.Content is string s && s == "ReparentBump");
+            if (btn is not null)
+            {
+                var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(btn);
+                ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
+                    peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+            }
+            await Harness.Render(200);
+            text = FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("Reparent:") == true);
+            H.Check("HostCtrlReparent_InteractiveAfterReparent", text?.Text == "Reparent:2");
+
+            // Reparent back B -> A: state persists, still interactive.
+            slotB.Child = null;
+            slotA.Child = hostControl;
+            await Harness.Render(200);
+
+            text = FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("Reparent:") == true);
+            H.Check("HostCtrlReparent_StatePreservedRoundTrip", text?.Text == "Reparent:2");
+
+            btn = FindInContainer<Button>(hostControl, b => b.Content is string s && s == "ReparentBump");
+            if (btn is not null)
+            {
+                var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(btn);
+                ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
+                    peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+            }
+            await Harness.Render(200);
+            text = FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("Reparent:") == true);
+            H.Check("HostCtrlReparent_InteractiveRoundTrip", text?.Text == "Reparent:3");
+
+            // Consumer-driven Dispose still works after a reparent cycle.
+            hostControl.Dispose();
+            H.Check("HostCtrlReparent_DisposeAfterReparent", true);
+            H.SetContent(null);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  10. PreviewCaptureServer — HTTP/auth/CORS/component endpoints
     //     Targets: PreviewCaptureServer request handling without external tools.
     // ════════════════════════════════════════════════════════════════════════
 

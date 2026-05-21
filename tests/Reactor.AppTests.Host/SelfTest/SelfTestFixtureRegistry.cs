@@ -498,6 +498,7 @@ internal static class SelfTestFixtureRegistry
         "Hosting_HostDispose",
         "Hosting_PageHelperExercise",
         "Hosting_XamlInteropRegister",
+        "Hosting_HostControlReparentSurvives",
         "Hosting_PreviewCaptureServerEndpoints",
         // Navigation coverage — advanced handle ops, serialization, deep links, transitions
         "NavCov_HandleAdvancedOps",
@@ -1364,6 +1365,7 @@ internal static class SelfTestFixtureRegistry
         "Hosting_HostDispose" => new HostingCoverageFixtures.HostDispose(harness),
         "Hosting_PageHelperExercise" => new HostingCoverageFixtures.PageHelperExercise(harness),
         "Hosting_XamlInteropRegister" => new HostingCoverageFixtures.XamlInteropRegister(harness),
+        "Hosting_HostControlReparentSurvives" => new HostingCoverageFixtures.HostControlReparentSurvives(harness),
         "Hosting_PreviewCaptureServerEndpoints" => new HostingCoverageFixtures.PreviewCaptureServerEndpoints(harness),
         // Navigation coverage
         "NavCov_HandleAdvancedOps" => new NavigationCoverageFixtures.NavHandleAdvancedOps(harness),

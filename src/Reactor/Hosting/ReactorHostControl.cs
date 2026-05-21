@@ -279,7 +279,17 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        Dispose();
+        // WinUI fires Unloaded on *any* reparent — transient (drag between
+        // TabView pivots, WinUI.Dock document moves, NavigationView header
+        // swap, ContentPresenter content swap, theme reload) as well as
+        // terminal teardown. There is no signal at this moment to tell the
+        // two cases apart, and disposing here makes a transient reparent
+        // permanently destroy the Reactor tree (issue #344).
+        //
+        // Treat Dispose() as consumer-driven (the IDisposable contract):
+        // the hosting app calls Dispose when it's truly done with the
+        // control. Until then we keep _rootComponent / _reconciler /
+        // Content alive so the tree survives reparenting.
     }
 
     /// <summary>
