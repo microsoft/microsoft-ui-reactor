@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI;
@@ -102,6 +103,8 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     private DockTarget? _hoveredTarget;
     private DockTarget? _focusedTarget;
     private bool _animationsEnabled = true;
+    private KeyEventHandler? _globalEscapeHandler;
+    private UIElement? _globalEscapeTarget;
 
     public event EventHandler<DockDropTargetEventArgs>? TargetHovered;
     public event EventHandler<DockDropTargetEventArgs>? TargetConfirmed;
@@ -111,6 +114,12 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     {
         Background = new SolidColorBrush(Color.FromArgb(0x00, 0, 0, 0));
         IsHitTestVisible = true;
+        // AllowDrop so DragEnter/DragOver/Drop fire on us during a WinUI
+        // drag operation. During a tab drag, PointerMoved/Tapped on
+        // unrelated elements do NOT fire — the pointer is captured by
+        // the drag operation and only AllowDrop=true elements under the
+        // pointer receive drag events. Matches upstream DockTargetButton.
+        AllowDrop = true;
         // Focus root: arrow-key nav stays inside the overlay until Esc.
         IsTabStop = false;
         AutomationProperties.SetName(this, "Dock targets");
@@ -148,8 +157,50 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
 
         PointerMoved += OnPointerMoved;
         PointerExited += OnPointerExited;
+        // Spec 045 §2.4 — drag-aware events. Fire during a WinUI tab
+        // drag where pointer events are captured by the drag operation
+        // and would otherwise never reach this control.
+        DragEnter += OnDragEnter;
+        DragOver += OnDragOver;
+        DragLeave += OnDragLeave;
+        Drop += OnDrop;
         AddHandler(KeyDownEvent, new KeyEventHandler(OnKeyDown), handledEventsToo: true);
         SizeChanged += (_, _) => UpdateClusterLayout();
+        // Window-level Esc listener (§2.4). The overlay's own KeyDown
+        // doesn't fire during a TabView tab drag — focus stays with the
+        // dragged TabViewItem. Hook the XamlRoot's content KeyDown so
+        // Esc always reaches us. Attached on Loaded so XamlRoot exists.
+        Loaded += (_, _) => HookGlobalEscape();
+        Unloaded += (_, _) => UnhookGlobalEscape();
+    }
+
+    private void HookGlobalEscape()
+    {
+        if (_globalEscapeHandler is not null) return;
+        if (XamlRoot?.Content is not UIElement root) return;
+        _globalEscapeTarget = root;
+        _globalEscapeHandler = OnGlobalKeyDown;
+        root.AddHandler(KeyDownEvent, _globalEscapeHandler, handledEventsToo: true);
+    }
+
+    private void UnhookGlobalEscape()
+    {
+        if (_globalEscapeHandler is null || _globalEscapeTarget is null) return;
+        try { _globalEscapeTarget.RemoveHandler(KeyDownEvent, _globalEscapeHandler); }
+        catch { /* best-effort */ }
+        _globalEscapeHandler = null;
+        _globalEscapeTarget = null;
+    }
+
+    private void OnGlobalKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Escape) return;
+        // Drag is in flight if our state still flags a session — fire
+        // OverlayDismissed which the host's OnDismiss handler routes
+        // through DockDragSession.Cancel() + clears dragActive. The
+        // subsequent TabDragCompleted with DropResult=None then sees
+        // session.IsActive == false and skips the tear-out path.
+        OverlayDismissed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>The target currently under the pointer (null = none).</summary>
@@ -441,6 +492,58 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     private void OnPointerExited(object sender, PointerRoutedEventArgs e)
     {
         if (_hoveredTarget is not null) SetHovered(null);
+    }
+
+    // ── Drag-mode handlers (spec 045 §2.4) ─────────────────────────────
+    //
+    // During a TabView tab drag, WinUI captures the pointer and routes
+    // events as Drag* on AllowDrop=true elements under it. Plain
+    // PointerMoved/Tapped do not fire on the overlay — so the hover
+    // preview, target highlight, and click-to-confirm all need a
+    // drag-aware path.
+
+    private void OnDragEnter(object sender, DragEventArgs e)
+    {
+        var p = e.GetPosition(this);
+        var target = HitTestForTarget(p);
+        if (target is not null && target != _hoveredTarget) SetHovered(target);
+        // Move signals to WinUI that this surface is a willing drop site;
+        // without it the cursor stays "no drop" and Drop never fires.
+        e.AcceptedOperation = DataPackageOperation.Move;
+        e.DragUIOverride.IsCaptionVisible = false;
+        e.DragUIOverride.IsGlyphVisible = false;
+    }
+
+    private void OnDragOver(object sender, DragEventArgs e)
+    {
+        var p = e.GetPosition(this);
+        var target = HitTestForTarget(p);
+        if (target != _hoveredTarget) SetHovered(target);
+        e.AcceptedOperation = DataPackageOperation.Move;
+        e.DragUIOverride.IsCaptionVisible = false;
+        e.DragUIOverride.IsGlyphVisible = false;
+        e.Handled = true;
+    }
+
+    private void OnDragLeave(object sender, DragEventArgs e)
+    {
+        if (_hoveredTarget is not null) SetHovered(null);
+    }
+
+    private void OnDrop(object sender, DragEventArgs e)
+    {
+        var p = e.GetPosition(this);
+        var target = HitTestForTarget(p);
+        if (target is DockTarget t)
+        {
+            // Mark the drop as accepted BEFORE invoking the confirm
+            // callback so the TabView's TabDragCompleted sees
+            // DropResult=Move (and the host's wasOutside check skips
+            // the tear-out path).
+            e.AcceptedOperation = DataPackageOperation.Move;
+            ConfirmTarget(t);
+        }
+        e.Handled = true;
     }
 
     private void SetHovered(DockTarget? target)

@@ -29,6 +29,24 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — Docking drag pipeline (§2.4).** Tab tear-out
+  + drop-target dock now works end-to-end on the Reactor-native
+  renderer. `DockDragSession` is the object-ref payload (replaces
+  upstream WinUI.Dock's static GUID→object dict that spec §8.9
+  flagged as a security/reliability anti-pattern). Tab drag wires
+  through new `TabViewElement.OnTabDragStarting` /
+  `OnTabDragCompleted` events: dragstart begins a session + flips
+  the §2.3 overlay; confirm rebuilds the layout via
+  `DockLayoutMutator` and fires `OnContentDocked`; drop-outside
+  opens a floating window (`OnContentFloated`); Esc cancels via
+  `OverlayDismissed`. The host component shadows `Manager.Layout`
+  with a `layoutOverride` state so drag results stick until the
+  app explicitly syncs through `OnContentDocked`. 23 new unit
+  tests (6 for `DockDragSession`, 17 for `DockLayoutMutator`) plus
+  `NativeDocking_DragSessionConfirmMutatesLayout` smoke fixture
+  cover the state machine + layout-mutation algebra. Keyboard-
+  initiated move (`Ctrl+Shift+M`) and the standalone `.OnPan`
+  recognizer remain on the §2.10 / follow-up list. (spec 045 §2.4)
 - **Spec 045 Phase 2 — Docking drop-target overlay (§2.3).**
   `DockDropTargetOverlayControl` lands as the Reactor-native replacement
   for WinUI.Dock's `DockTargetButton` + `Preview.xaml.cs`. Renders 9

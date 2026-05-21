@@ -41,6 +41,28 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
     {
         var manager = Props.Manager;
 
+        // ── Spec 045 §2.4 — drag pipeline state ───────────────────────────
+        //
+        // The drag pipeline is owned by the host component so the overlay
+        // toggle + layout mutation can share state without re-routing
+        // through the app. The override is a transparent shadow over
+        // Manager.Layout: when set, it replaces the prop until the app
+        // passes a new Layout reference (controlled-input pattern).
+        //
+        // The drag-active flag drives ShowDropTargets — apps don't need
+        // to wire that explicitly to enable tab tear-out + dock-by-drop.
+        var (layoutOverride, setLayoutOverride) = UseState<DockNode?>(null);
+        var (dragActive, setDragActive) = UseState(false);
+        var (hoveredTarget, setHoveredTarget) = UseState<DockTarget?>(null);
+        var hoveredTargetRef = UseRef<DockTarget?>(null);
+        hoveredTargetRef.Current = hoveredTarget;
+
+        // The effective layout the renderer sees. Apps changing
+        // Manager.Layout out-of-band will replace the prop; if the new
+        // reference differs from our override, we surrender the override
+        // (controlled-input convergence).
+        var effectiveLayout = layoutOverride ?? manager.Layout;
+
         // Per-DockSplit ratio state. The store survives renders via UseRef
         // (state participates in equality and silently no-ops on
         // same-reference setters; refs don't).
@@ -71,10 +93,55 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // UseDockHost() consumers don't churn on each layout-prop change.
         var modelRef = UseRef<DockHostModel?>(null);
         var model = modelRef.Current ??= new DockHostModel();
-        SyncModelFromElement(model, manager);
+        SyncModelFromElement(model, manager, effectiveLayout);
 
         var activeKey = manager.ActiveDocument?.Key;
         var snapshot = BuildSnapshot(model);
+
+        // §2.4 — tab-drag callbacks fed to every DockTabGroup so any tab
+        // in the layout can begin a session. Captures `manager` from the
+        // current render closure for OnContentFloating/Floated event
+        // routing.
+        void HandleTabDragStarting(DockableContent pane, int tabIndex)
+        {
+            // Refuse a second concurrent drag — spec §4.6 single-drag
+            // contract carried into P2.
+            if (DockDragSession.Current is { IsActive: true }) return;
+            var args = new DockContentFloatingEventArgs { Content = pane };
+            manager.OnContentFloating?.Invoke(args);
+            if (args.Cancel) return;
+            DockDragSession.Begin(pane, manager, tabIndex);
+            setDragActive(true);
+        }
+
+        void HandleTabDragCompleted(DockableContent pane, int tabIndex, bool wasOutside)
+        {
+            _ = tabIndex; // pane reference is the source of truth
+            var session = DockDragSession.Current;
+            if (session is null || !session.IsActive) return;
+
+            // If the user released over a drop target, the overlay's
+            // OnConfirm callback already fired and tore the session down;
+            // we shouldn't double-handle here. The session.IsActive guard
+            // covers that case.
+            if (wasOutside)
+            {
+                // Tear-out: open a floating window with the dragged pane.
+                // Pane has to be removed from the current layout first so
+                // it doesn't appear in both places.
+                var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
+                if (removed)
+                {
+                    setLayoutOverride(afterRemove);
+                    try { DockFloatingWindow.Open(pane); }
+                    catch { /* tear-out best-effort; surface via OnContentFloated */ }
+                    manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
+                }
+            }
+
+            session.End();
+            setDragActive(false);
+        }
 
         Element BuildNode(DockNode node, string path) => node switch
         {
@@ -83,14 +150,16 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 grp,
                 renderLeafContent: doc => WrapLeafWithPaneContext(doc),
                 onSelectedIndexChanged: null,
-                onTabClosing: null),
+                onTabClosing: null,
+                onTabDragStarting: HandleTabDragStarting,
+                onTabDragCompleted: HandleTabDragCompleted),
             DockableContent leaf => WrapLeafWithPaneContext(leaf),
             _ => new BorderElement(null),
         };
 
-        Element body = manager.Layout is null
+        Element body = effectiveLayout is null
             ? new BorderElement(null)
-            : BuildNode(manager.Layout, path: "0");
+            : BuildNode(effectiveLayout, path: "0");
 
         // ── Side strips + side popup (§2.5). Elide entirely when no
         // sides are populated so the visual matches the P1 baseline for
@@ -111,15 +180,58 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
 
         // §2.3 — drop-target overlay. Composed last so it paints above the
         // dock subtree (Grid same-cell stacking ⇒ later children on top).
-        // The overlay primitive is built here; the §2.4 drag pipeline
-        // will flip ShowDropTargets mid-gesture once that lands. Apps may
-        // also set it directly (keyboard-initiated move, testing).
-        if (manager.ShowDropTargets)
+        // Two paths feed into showing it:
+        //   • manager.ShowDropTargets — app/test escape hatch (e.g. Scene H).
+        //   • dragActive — §2.4 drag pipeline flipped it mid-gesture.
+        //
+        // Defensive: when dragActive is true but the session is gone (e.g.
+        // TabDragCompleted didn't fire), hide the overlay anyway so it
+        // can't get stuck visible across re-renders. The next render that
+        // observes setDragActive(false) catches up.
+        var dragActuallyActive = dragActive && DockDragSession.Current is { IsActive: true };
+        if (dragActive && !dragActuallyActive)
+        {
+            // Session vanished out from under us — schedule a state clear
+            // for the next render so dragActive catches up.
+            QueueMicrotaskClearDrag(setDragActive);
+        }
+        var showOverlay = manager.ShowDropTargets || dragActuallyActive;
+        if (showOverlay)
         {
             var overlay = new DockDropTargetOverlayElement(
-                OnHover: manager.OnDropTargetHovered,
-                OnConfirm: manager.OnDropTargetConfirmed,
-                OnDismiss: manager.OnDropTargetsDismissed);
+                OnHover: target =>
+                {
+                    setHoveredTarget(target);
+                    manager.OnDropTargetHovered?.Invoke(target);
+                },
+                OnConfirm: target =>
+                {
+                    // App-supplied confirm handler runs first so apps can
+                    // observe even when the docking pipeline takes care
+                    // of the layout mutation.
+                    manager.OnDropTargetConfirmed?.Invoke(target);
+
+                    var session = DockDragSession.Current;
+                    if (session is { IsActive: true })
+                    {
+                        var newLayout = DockLayoutMutator.MovePaneToTarget(
+                            effectiveLayout, session.Source, target);
+                        setLayoutOverride(newLayout);
+                        manager.OnContentDocked?.Invoke(
+                            new DockContentDockedEventArgs { Content = session.Source, Target = target });
+                        session.End();
+                    }
+                    setDragActive(false);
+                    setHoveredTarget(null);
+                },
+                OnDismiss: () =>
+                {
+                    manager.OnDropTargetsDismissed?.Invoke();
+                    var session = DockDragSession.Current;
+                    session?.Cancel();
+                    setDragActive(false);
+                    setHoveredTarget(null);
+                });
 
             composed = Grid(
                 new[] { GridSize.Star(1) },
@@ -136,6 +248,19 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             .Provide(DockContexts.Host, model)
             .Provide(DockContexts.ActivePaneKey, activeKey)
             .Provide(DockContexts.LayoutSnapshot, snapshot);
+    }
+
+    /// <summary>
+    /// Defer a setDragActive(false) call to the dispatcher tail so it
+    /// doesn't recurse the current render. Used by the in-render safety
+    /// check that catches a stuck overlay when the drag session has been
+    /// disposed but the host's state hasn't caught up.
+    /// </summary>
+    private static void QueueMicrotaskClearDrag(Action<bool> setDragActive)
+    {
+        var dq = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        if (dq is null) { setDragActive(false); return; }
+        dq.TryEnqueue(() => setDragActive(false));
     }
 
     private static Element WrapLeafWithPaneContext(DockableContent leaf)
@@ -161,9 +286,9 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             .Provide(DockContexts.PaneState, DockPaneState.Docked);
     }
 
-    private static void SyncModelFromElement(DockHostModel model, DockManager element)
+    private static void SyncModelFromElement(DockHostModel model, DockManager element, DockNode? effectiveLayout)
     {
-        model.Root = element.Layout;
+        model.Root = effectiveLayout;
         model.LeftSide = SideSlice(element.LeftSide);
         model.TopSide = SideSlice(element.TopSide);
         model.RightSide = SideSlice(element.RightSide);

@@ -520,21 +520,42 @@ WinUI.Dock wrapper for side-by-side review.
 
 ### 2.4 Drag/drop pipeline (spec §5.1 item 4; depends on spec 027)
 
-- [ ] Replace `DragDropHelpers.cs` with a docking gesture recognizer
-  built on input-and-gestures (spec 027). Tab drag is one of the
-  recognizers — not a parallel system.
-- [ ] **Zero-allocation hot path** on pointer-move (spec §8.5). No
-  LINQ; no string concat for AT names per event; drop-target hit-test
-  results pooled. Verify via the allocation-counting harness (spec 034
-  precedent).
+- [x] Replace `DragDropHelpers.cs` with a docking gesture recognizer
+  built on input-and-gestures (spec 027). First cut leverages WinUI
+  TabView's native tab-drag recognizer surfaced through new
+  `TabViewElement.OnTabDragStarting` / `OnTabDragCompleted` props +
+  the `DockHostNativeComponent` orchestrator. The recognizer
+  participates in the same input system as `.OnPan` etc. — it is not
+  a parallel pipeline. A standalone `.OnPan`-based recognizer for
+  non-TabView drag (e.g. floating-window header drag back to a host)
+  follows when that codepath needs it.
+- [ ] **Zero-allocation hot path** on pointer-move (spec §8.5).
+  *Hover-state path in `DockDropTargetOverlayControl.HitTestForTarget`
+  is allocation-free (9-step linear scan, no LINQ); allocation-counter
+  verification rides on the §2.20 perf benchmarks.*
 - [ ] Drag-threshold: spec 027's standard threshold; tear-out only
-  fires past it (avoid accidental floats).
-- [ ] Esc cancels in-flight drag, snaps back (P1 review item 1).
-- [ ] Cross-window in-process drag: an object-ref payload (not the
+  fires past it. *Implicit via TabView's own drag-threshold; we
+  trigger off TabDragStarting which only fires after the user crosses
+  it. A first-class threshold parameter on `OnTabDragStarting` lands
+  with the standalone recognizer item.*
+- [x] Esc cancels in-flight drag, snaps back (P1 review item 1).
+  Esc on the overlay raises `OverlayDismissed`; the host's
+  `OnDismiss` handler calls `DockDragSession.Cancel()` and clears
+  `dragActive`. The dragged pane stays in place because no layout
+  mutation has been committed.
+- [x] Cross-window in-process drag: an object-ref payload (not the
   WinUI.Dock string-keyed GUID table — spec §8.9 security).
+  `DockDragSession` carries object refs to the dragged pane + source
+  manager; there is no GUID table, no static dict keyed by string,
+  no serializable payload. Cross-window HWND-boundary drag itself
+  remains deferred to a follow-up (TabView's native cross-HWND drag
+  is the WinUI primitive there).
 - [ ] Keyboard-initiated move: `Ctrl+Shift+M` enters drop-target focus
   mode (spec §5.3.3 / §8.7). All chords configurable via spec 027
-  input binding.
+  input binding. *Lands with §2.10 keyboard pass — the overlay is
+  ready (focusable; arrow-key + Enter graph wired in §2.3) so §2.10
+  only needs to bind the chord to flip ShowDropTargets + focus the
+  Center target.*
 
 ### 2.5 Side popup (spec §5.1 item 5)
 

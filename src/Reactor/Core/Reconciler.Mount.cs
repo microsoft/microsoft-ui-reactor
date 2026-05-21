@@ -1563,6 +1563,41 @@ public sealed partial class Reconciler
             };
         if (tab.OnAddTabButtonClick is not null)
             tv.AddTabButtonClick += (s, _) => (GetElementTag((UIElement)s!) as TabViewElement)?.OnAddTabButtonClick?.Invoke();
+        // Spec 045 §2.4 docking drag pipeline hooks. Always wire — element-tag
+        // closures resolve to the current TabViewElement at fire time, so
+        // updates that add/remove the handler don't need a reattach.
+        tv.TabDragStarting += (s, args) =>
+        {
+            var t = (WinUI.TabView)s!;
+            if (GetElementTag(t) is not TabViewElement el || el.OnTabDragStarting is null) return;
+            var idx = t.TabItems.IndexOf(args.Tab);
+            if (idx < 0) return;
+            // WinUI requires a non-empty DataPackage for external
+            // AllowDrop=true targets (e.g. the docking drop-target overlay)
+            // to accept a drop. Without this, Drop simply never fires and
+            // the drag is silently rejected. The actual payload identity
+            // lives in object-ref state (DockDragSession per spec §8.9);
+            // the sentinel text only unblocks WinUI's drop acceptance.
+            try
+            {
+                args.Data.RequestedOperation = global::Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
+                args.Data.SetText("reactor-tabview-tab");
+            }
+            catch { /* best-effort */ }
+            el.OnTabDragStarting(idx);
+        };
+        tv.TabDragCompleted += (s, args) =>
+        {
+            var t = (WinUI.TabView)s!;
+            if (GetElementTag(t) is not TabViewElement el || el.OnTabDragCompleted is null) return;
+            // Tab may have been removed from TabItems by WinUI during the
+            // drag (tear-out path) — IndexOf returns -1 there. Fire the
+            // callback with idx=-1 anyway so the consumer can clean up
+            // drag state (otherwise the overlay stays "locked on").
+            var idx = t.TabItems.IndexOf(args.Tab);
+            var wasOutside = args.DropResult == global::Windows.ApplicationModel.DataTransfer.DataPackageOperation.None;
+            el.OnTabDragCompleted(idx, wasOutside);
+        };
         ApplySetters(tab.Setters, tv);
         return tv;
     }

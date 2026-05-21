@@ -698,6 +698,91 @@ internal static class NativeDockingSmokeFixtures
     }
 
     /// <summary>
+    /// Spec 045 §2.4 — smoke fixture for the drag pipeline. Simulates a
+    /// tab drag by directly beginning a <see cref="DockDragSession"/> and
+    /// then confirming a target on the overlay (using the §2.3 control's
+    /// test hook). Asserts the host mutates its layout per the target and
+    /// fires <c>OnContentDocked</c>. Bypasses real pointer events since
+    /// the headless harness doesn't deliver them.
+    /// </summary>
+    internal class DragSessionConfirmMutatesLayout(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            DockDragSession.ResetForTest();
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            DockableContent? docked = null;
+            DockTarget? dockedAt = null;
+
+            var paneA = new DockableContent("Tab A", TextBlock("body-a"), Key: "h:a", CanClose: true);
+            var paneB = new DockableContent("Tab B", TextBlock("body-b"), Key: "h:b", CanClose: true);
+
+            host.Mount(_ => new DockManager
+            {
+                Layout = new DockTabGroup(new[] { paneA, paneB }),
+                OnContentDocked = args => { docked = args.Content; dockedAt = args.Target; },
+            });
+            await Harness.Render();
+
+            H.Check("DragMutate_TabViewMounted",
+                H.FindAllControls<TabView>(_ => true).Count == 1);
+
+            // ── Simulate drag begin (what TabDragStarting would fire).
+            var manager = new DockManager
+            {
+                Layout = new DockTabGroup(new[] { paneA, paneB }),
+            };
+            var session = DockDragSession.Begin(paneA, manager, sourceTabIndex: 0);
+            H.Check("DragMutate_SessionBegan", session is { IsActive: true });
+            H.Check("DragMutate_SourcePane", ReferenceEquals(session!.Source, paneA));
+
+            // Force overlay to appear by re-mounting with ShowDropTargets
+            // = true. (The §2.4 path flips this internally via dragActive
+            // state; the smoke harness can't deliver a real drag, so we
+            // exercise the overlay via the manager prop instead.)
+            host.Mount(_ => new DockManager
+            {
+                Layout = new DockTabGroup(new[] { paneA, paneB }),
+                ShowDropTargets = true,
+                OnContentDocked = args => { docked = args.Content; dockedAt = args.Target; },
+            });
+            await Harness.Render();
+
+            var overlay = H.FindAllControls<DockDropTargetOverlayControl>(_ => true).FirstOrDefault();
+            H.Check("DragMutate_OverlayMounted", overlay is not null);
+
+            // ── Confirm SplitRight. The host's OnConfirm closure looks at
+            // DockDragSession.Current and mutates the layout via override.
+            overlay!.ConfirmTargetForTest(DockTarget.SplitRight);
+            await Harness.Render();
+
+            H.Check("DragMutate_OnContentDocked_Fired", docked is not null);
+            H.Check("DragMutate_OnContentDocked_PaneMatches",
+                ReferenceEquals(docked, paneA));
+            H.Check("DragMutate_OnContentDocked_TargetMatches",
+                dockedAt == DockTarget.SplitRight);
+
+            // Session should be torn down after confirm.
+            H.Check("DragMutate_SessionEnded",
+                DockDragSession.Current is null || !DockDragSession.Current.IsActive);
+
+            // The host's effective layout (visible in the visual tree)
+            // should now be a horizontal split (the original group on the
+            // left + paneA on the right since the mutator moved it). The
+            // tab strip is still present for the remaining group.
+            await Harness.Render();
+            var flexes = H.FindAllControls<Microsoft.UI.Reactor.Layout.FlexPanel>(_ => true);
+            H.Check("DragMutate_LayoutBecameSplit", flexes.Count >= 1);
+
+            host.Mount(_ => TextBlock("drag-pipeline-done"));
+            await Harness.Render();
+            DockDragSession.ResetForTest();
+        }
+    }
+
+    /// <summary>
     /// Visual demo fixture — mounts an IDE-style layout and drives each
     /// splitter programmatically with paced delays so a human observer
     /// can watch the panes resize step by step. Asserts the same as the

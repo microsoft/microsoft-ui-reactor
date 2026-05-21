@@ -1,0 +1,111 @@
+namespace Microsoft.UI.Reactor.Docking.Native;
+
+// ════════════════════════════════════════════════════════════════════════
+//  Spec 045 §2.4 — Reactor-native drag session.
+//
+//  Replaces upstream WinUI.Dock's static GUID→DockManager / GUID→Document
+//  dictionaries (Helpers/DragDropHelpers.cs). Spec §8.9 calls those out as
+//  a security/reliability anti-pattern (process-wide string-keyed payload
+//  surface; cross-window string trust); the Reactor port uses object refs
+//  via a single in-flight session.
+//
+//  Contract:
+//   • At most one active session per process — matches upstream's
+//     single-drag interaction model and spec §4.6 (drag-out restricted
+//     to a single manager in P1, retained in P2 until cross-window
+//     pipeline lands separately).
+//   • UI-thread-affined: Begin / Confirm / Cancel run on the dispatcher
+//     thread that owns the originating DockManager. Off-thread access is
+//     undefined (matches DockHostModel contract per spec §8.10).
+//   • No GC retention of completed sessions — End / Cancel null out
+//     references so a closed pane / unmounted manager can be collected
+//     immediately.
+//
+//  The session is purely a state holder. Layout mutation on confirm is
+//  the host's responsibility (DockHostNativeComponent applies it via the
+//  immutable-Layout-rebuild pattern).
+// ════════════════════════════════════════════════════════════════════════
+
+/// <summary>
+/// In-flight tab-drag bookkeeping. Holds object references — never
+/// serializable identifiers — so the drag payload can't be spoofed by an
+/// untrusted code path and so a closed pane / unmounted host can be
+/// collected the moment the session ends.
+/// </summary>
+/// <remarks>Spec 045 §2.4.</remarks>
+internal sealed class DockDragSession
+{
+    /// <summary>The currently-active session, or null when no drag is in flight.</summary>
+    public static DockDragSession? Current { get; private set; }
+
+    private DockDragSession(DockableContent source, DockManager sourceManager, int sourceTabIndex)
+    {
+        Source = source;
+        SourceManager = sourceManager;
+        SourceTabIndex = sourceTabIndex;
+        StartedAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>The pane being dragged.</summary>
+    public DockableContent Source { get; }
+
+    /// <summary>The originating <see cref="DockManager"/>.</summary>
+    public DockManager SourceManager { get; }
+
+    /// <summary>
+    /// Index of the dragged tab in its originating group. Used by the
+    /// host's layout rebuild to remove the source pane before re-inserting
+    /// it at the target slot.
+    /// </summary>
+    public int SourceTabIndex { get; }
+
+    /// <summary>When the session started (UTC). Diagnostic / telemetry.</summary>
+    public DateTime StartedAtUtc { get; }
+
+    /// <summary>True from <see cref="Begin"/> until <see cref="End"/> / <see cref="Cancel"/>.</summary>
+    public bool IsActive { get; private set; } = true;
+
+    /// <summary>
+    /// Begin a new session. Returns the session if one was started, or null
+    /// if another session is already in flight (the spec's "single drag at
+    /// a time" contract). Caller is responsible for raising
+    /// <see cref="DockManager.OnContentFloating"/> etc.
+    /// </summary>
+    public static DockDragSession? Begin(
+        DockableContent source,
+        DockManager sourceManager,
+        int sourceTabIndex)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(sourceManager);
+        if (Current is { IsActive: true }) return null;
+        var session = new DockDragSession(source, sourceManager, sourceTabIndex);
+        Current = session;
+        return session;
+    }
+
+    /// <summary>
+    /// End the session normally (e.g. after confirming a drop target or
+    /// completing a tear-out). Idempotent.
+    /// </summary>
+    public void End()
+    {
+        if (!IsActive) return;
+        IsActive = false;
+        if (ReferenceEquals(Current, this)) Current = null;
+    }
+
+    /// <summary>
+    /// Cancel the session (Esc, capture loss, manager unmounted). Idempotent.
+    /// Functionally identical to <see cref="End"/> — the distinction lives
+    /// in the caller's event surface (OnContentDocked vs no-op).
+    /// </summary>
+    public void Cancel() => End();
+
+    /// <summary>Test hook — forcibly reset the static slot. Internal-only.</summary>
+    internal static void ResetForTest()
+    {
+        if (Current is { IsActive: true }) Current.Cancel();
+        Current = null;
+    }
+}

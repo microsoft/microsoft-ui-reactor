@@ -903,6 +903,7 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_SplitterRapidFireDragSurvivesRerender",
         "NativeDocking_SplitterProgrammaticVisualDemo",
         "NativeDocking_DropTargetOverlayShowsAndDismisses",
+        "NativeDocking_DragSessionConfirmMutatesLayout",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1788,6 +1789,7 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_SplitterRapidFireDragSurvivesRerender" => new NativeDockingSmokeFixtures.SplitterRapidFireDragSurvivesRerender(harness),
         "NativeDocking_SplitterProgrammaticVisualDemo" => new NativeDockingSmokeFixtures.SplitterProgrammaticVisualDemo(harness),
         "NativeDocking_DropTargetOverlayShowsAndDismisses" => new NativeDockingSmokeFixtures.DropTargetOverlayShowsAndDismisses(harness),
+        "NativeDocking_DragSessionConfirmMutatesLayout" => new NativeDockingSmokeFixtures.DragSessionConfirmMutatesLayout(harness),
 
         _ => null,
     };

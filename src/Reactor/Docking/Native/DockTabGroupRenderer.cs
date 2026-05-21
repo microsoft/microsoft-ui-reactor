@@ -46,11 +46,26 @@ internal static class DockTabGroupRenderer
     /// responsible for firing <c>OnDocumentClosing</c> / removing the
     /// pane from the model.
     /// </param>
+    /// <param name="onTabDragStarting">
+    /// Spec 045 §2.4. Invoked when the user starts dragging a tab; the
+    /// pane reference + tab index are passed so the host can begin a
+    /// <see cref="DockDragSession"/>. When null, tab tear-out is
+    /// disabled (CanDragTabs = false on the underlying TabView).
+    /// </param>
+    /// <param name="onTabDragCompleted">
+    /// Spec 045 §2.4. Invoked when a tab drag completes. The
+    /// <c>wasOutside</c> flag distinguishes a drop on another TabView
+    /// (false) from a drop outside any TabView (true — the tear-out
+    /// signal). Caller is responsible for opening a floating window
+    /// and removing the pane from the source layout on tear-out.
+    /// </param>
     public static Element Render(
         DockTabGroup group,
         Func<DockableContent, Element?> renderLeafContent,
         Action<int>? onSelectedIndexChanged,
-        Action<DockableContent>? onTabClosing)
+        Action<DockableContent>? onTabClosing,
+        Action<DockableContent, int>? onTabDragStarting = null,
+        Action<DockableContent, int, bool>? onTabDragCompleted = null)
     {
         ArgumentNullException.ThrowIfNull(group);
         ArgumentNullException.ThrowIfNull(renderLeafContent);
@@ -97,8 +112,29 @@ internal static class DockTabGroupRenderer
                 ? TabViewWidthMode.Compact
                 : TabViewWidthMode.Equal,
             CanReorderTabs = true,
-            CanDragTabs = false, // tab-tearout lands with §2.4 drag pipeline
+            // Spec 045 §2.4: enable tab tear-out when a drag callback is
+            // supplied so the host can begin a DockDragSession. Off by
+            // default to preserve P1 behavior when the host hasn't opted in.
+            CanDragTabs = onTabDragStarting is not null || onTabDragCompleted is not null,
             AllowDropTabs = false,
+            OnTabDragStarting = onTabDragStarting is null ? null : (int idx) =>
+            {
+                if (idx >= 0 && idx < documents.Count)
+                    onTabDragStarting(documents[idx], idx);
+            },
+            OnTabDragCompleted = onTabDragCompleted is null ? null : (int idx, bool wasOutside) =>
+            {
+                // The tab may already have left this group's list by the
+                // time TabDragCompleted fires (tear-out path: WinUI yanks
+                // the TabViewItem out before notifying). Fall back to the
+                // active drag session's source pane so cleanup still runs.
+                DockableContent? pane =
+                    idx >= 0 && idx < documents.Count
+                        ? documents[idx]
+                        : DockDragSession.Current?.Source;
+                if (pane is not null)
+                    onTabDragCompleted(pane, idx, wasOutside);
+            },
             Setters = BuildSetters(group),
         };
         return element;
