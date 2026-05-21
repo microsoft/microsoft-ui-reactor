@@ -79,7 +79,16 @@ internal static class DockSplitRenderer
             var rawRatio = ratios[i];
             var grow = rawRatio < 0 || double.IsNaN(rawRatio) ? 0 : rawRatio;
             var child = renderChild(children[i]);
-            composed.Add(child.Flex(grow: grow, shrink: 1));
+            // basis: 0 is the CSS-flexbox-equivalent of WinUI Grid's
+            // `GridUnitType.Star`. Without it, each pane's basis defaults
+            // to its intrinsic content size, and grow only distributes
+            // FREE space beyond basis — so a pane with heavy content
+            // (TabView with many tabs + body) hoards width and grow
+            // changes do nothing visible. With basis=0, grow drives the
+            // ENTIRE pane size proportionally — splitter drags move
+            // panes 1:1 with the cursor and the ratios actually mean
+            // what they say.
+            composed.Add(child.Flex(grow: grow, shrink: 1, basis: 0));
 
             if (i < n - 1)
             {
