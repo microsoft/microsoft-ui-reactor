@@ -723,20 +723,49 @@ WinUI.Dock wrapper for side-by-side review.
 ### 2.10 Keyboard navigation (spec §5.3.3, §8.7)
 
 - [ ] **`Ctrl+Tab`** opens VS-style pane navigator overlay listing all
-  open panes.
-- [ ] **`Ctrl+F4`** closes active pane if `CanClose`.
-- [ ] **`Ctrl+Shift+M`** enters keyboard-initiated drag: focus the
-  drop-target overlay; arrow keys navigate; Enter confirms; Esc cancels.
+  open panes. *Deferred — needs a dedicated overlay element + state
+  machine for the "release-Ctrl-to-commit" gesture. The chord bridge
+  in `DockingNativeInterop.AttachChordAccelerators` already routes
+  three chords (PageUp/Down, F4/W, M); Ctrl+Tab will add a fourth
+  handler that toggles a host-side `navigatorActive` state.*
+- [x] **`Ctrl+F4`** closes active pane if `CanClose`. Fires
+  `OnDocumentClosing` (cancellable) → `OnDocumentClosed` →
+  `OnLiveLayoutChanged`. **`Ctrl+W`** is wired as an alias on the
+  same handler. Implementation: `DockHostNativeComponent.CloseActivePane`
+  via `DockChordBridge`.
+- [x] **`Ctrl+Shift+M`** enters keyboard-initiated drag: flips the host
+  `keyboardOverlayActive` state which drives the same drop-target
+  overlay used by mouse drag. Arrow-key nav + Enter confirm + Esc
+  dismiss are inherited from §2.3's focusable overlay; pressing the
+  chord while the overlay is up dismisses it (toggle). The implicit
+  source pane is the chord-cycle target (`activePaneKey`) or the
+  app's `ActiveDocument`.
 - [ ] **`Alt+F7`** opens hidden-pane picker (re-show closed-but-remembered
-  tool windows; pairs with `PreviousContainer` in §5.3.9).
-- [ ] **`Ctrl+PageUp`** / **`Ctrl+PageDown`** previous/next tab in
-  group (VS parity).
+  tool windows; pairs with `PreviousContainer` in §5.3.9). *Deferred
+  with Ctrl+Tab — both need overlay primitives that aren't strictly
+  needed for the chord-bridge MVP.*
+- [x] **`Ctrl+PageUp`** / **`Ctrl+PageDown`** previous/next tab in
+  group (VS parity). Cycles `selectedIndexStore[path]` for the group
+  containing `activePaneKey ?? ActiveDocument.Key`; wraps at both
+  ends. Re-renders via `RequestRatioRerender`. Fires
+  `OnActiveContentChanged` when the resolved pane changes.
+
+**§2.10 chord slice — human-validated** 2026-05-21 against showcase
+Scene A by user (Chris Anderson). PageUp/Down cycling, F4/W close,
+and Ctrl+Shift+M keyboard drop-mode all behave as expected. Remaining
+§2.10 items (Ctrl+Tab navigator, Alt+F7 picker, live-region, spec-027
+binding) are deferred to a follow-up pass.
 - [ ] Live-region announcements via UIA `LiveSetting=Polite` for layout
   state transitions ("MainView.xaml moved to right pane", "Output
   pinned to bottom", "Properties window torn out"). One shared live
   region per `DockHost`, registered via `Reactor.Hosting`'s AT bridge
-  (spec §8.7).
-- [ ] All chords configurable via spec 027 input binding.
+  (spec §8.7). *Deferred — needs the UIA live-region pattern wired
+  on the dock host Border; pairs with §2.22 a11y pass.*
+- [ ] All chords configurable via spec 027 input binding. *Today the
+  chord set is hard-coded in
+  `DockingNativeInterop.AttachChordAccelerators`. Configurable binding
+  lands when spec 027's `IInputBindingResolver` covers app-scoped
+  accelerators.*
 
 ### 2.11 Layout versioning (spec §5.3.4, §8.11)
 

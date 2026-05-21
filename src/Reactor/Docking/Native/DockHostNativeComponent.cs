@@ -57,6 +57,26 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         var hoveredTargetRef = UseRef<DockTarget?>(null);
         hoveredTargetRef.Current = hoveredTarget;
 
+        // ── Spec 045 §2.10 — keyboard navigation state ─────────────────────
+        //
+        // Active pane key tracks the user's last tab selection so chords
+        // like Ctrl+PageUp/Down + Ctrl+F4 can act on the right group. Seeds
+        // from the app-supplied ActiveDocument; user tab clicks override.
+        //
+        // The selected-index store mirrors the ratio store: per-path int
+        // overrides for tab group SelectedIndex. Writes happen via tab
+        // clicks (OnSelectedIndexChanged) and chord-driven cycling. The
+        // store reverts to the group's own SelectedIndex when a path is
+        // absent — controlled-input convergence with the immutable model.
+        //
+        // The keyboard-overlay flag mirrors dragActive: Ctrl+Shift+M flips
+        // it true to show the drop-target overlay without an in-flight
+        // drag; Esc / OnDismiss clears it.
+        var (activePaneKey, setActivePaneKey) = UseState<object?>(null);
+        var selectedIndexStoreRef = UseRef<Dictionary<string, int>>(new Dictionary<string, int>());
+        var selectedIndexStore = selectedIndexStoreRef.Current;
+        var (keyboardOverlayActive, setKeyboardOverlayActive) = UseState(false);
+
         // The effective layout the renderer sees. Apps changing
         // Manager.Layout out-of-band will replace the prop; if the new
         // reference differs from our override, we surrender the override
@@ -95,7 +115,15 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         var model = modelRef.Current ??= new DockHostModel();
         SyncModelFromElement(model, manager, effectiveLayout);
 
-        var activeKey = manager.ActiveDocument?.Key;
+        // Resolve effective active key: the app-supplied ActiveDocument
+        // wins (controlled-input shape preserved). When the app doesn't
+        // pin an ActiveDocument, fall back to the user's last tab-click
+        // / chord-cycle target so Ctrl+PageUp/Down + Ctrl+F4 have a
+        // sensible target. Reversing this order would let a stale
+        // activePaneKey shadow a fresh ActiveDocument prop — the
+        // DockHooks_IsActivePane_FlipsOnActiveChange regression.
+        var appActiveKey = manager.ActiveDocument?.Key;
+        var activeKey = appActiveKey ?? activePaneKey;
         var snapshot = BuildSnapshot(model);
 
         // ── Spec 045 operation log (Diagnostics.DockOperationLog) ─────────
@@ -208,16 +236,37 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             DockSplit split => RenderSplit(split, path, ratioStore, RequestRatioRerender, BuildNode,
                 onSplitterFinal: splitterFinalWithLog,
                 splitterDiagnosticSink: splitterTraceSink),
-            DockTabGroup grp => DockTabGroupRenderer.Render(
-                grp,
+            DockTabGroup grp => RenderTabGroup(grp, path),
+            DockableContent leaf => WrapLeafWithPaneContext(leaf),
+            _ => new BorderElement(null),
+        };
+
+        // §2.10 — tab-group render wrapper. Applies the selected-index
+        // store override (chord-cycled) so Ctrl+PageUp/Down can target a
+        // group that the app hasn't otherwise selected. The override is
+        // ABSENT for groups that haven't been chord-cycled, in which case
+        // the wrapper passes the original group through and the call is
+        // shape-identical to the baseline DockTabGroupRenderer.Render
+        // path (avoids regressions in TabView reconciliation / side-popup
+        // click handling that triggered on a non-null callback).
+        //
+        // Tab-click-driven active-key tracking is intentionally omitted
+        // from this wrap: the app owns ActiveDocument; chord cycling
+        // writes into activePaneKey directly via the chord handler.
+        Element RenderTabGroup(DockTabGroup grp, string path)
+        {
+            var hasOverride = selectedIndexStore.TryGetValue(path, out var overrideIdx);
+            var effective = hasOverride
+                ? grp with { SelectedIndex = ClampIndex(overrideIdx, grp.Documents.Count) }
+                : grp;
+            return DockTabGroupRenderer.Render(
+                effective,
                 renderLeafContent: doc => WrapLeafWithPaneContext(doc),
                 onSelectedIndexChanged: null,
                 onTabClosing: null,
                 onTabDragStarting: HandleTabDragStarting,
-                onTabDragCompleted: HandleTabDragCompleted),
-            DockableContent leaf => WrapLeafWithPaneContext(leaf),
-            _ => new BorderElement(null),
-        };
+                onTabDragCompleted: HandleTabDragCompleted);
+        }
 
         Element body = effectiveLayout is null
             ? new BorderElement(null)
@@ -257,7 +306,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             // for the next render so dragActive catches up.
             QueueMicrotaskClearDrag(setDragActive);
         }
-        var showOverlay = manager.ShowDropTargets || dragActuallyActive;
+        var showOverlay = manager.ShowDropTargets || dragActuallyActive || keyboardOverlayActive;
         if (showOverlay)
         {
             var overlay = new DockDropTargetOverlayElement(
@@ -278,24 +327,31 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     manager.OnDropTargetConfirmed?.Invoke(target);
 
                     var session = DockDragSession.Current;
-                    if (session is { IsActive: true })
+                    DockableContent? sourcePane = session is { IsActive: true } ? session.Source : null;
+                    // §2.10 keyboard-initiated mode: no drag session, but
+                    // the user has chosen a target via arrow keys + Enter.
+                    // The active pane is the implicit source.
+                    if (sourcePane is null && keyboardOverlayActive)
+                        sourcePane = ResolvePane(effectiveLayout, activePaneKey ?? appActiveKey);
+                    if (sourcePane is not null)
                     {
                         var newLayout = DockLayoutMutator.MovePaneToTarget(
-                            effectiveLayout, session.Source, target);
+                            effectiveLayout, sourcePane, target);
                         setLayoutOverride(newLayout);
                         manager.OnContentDocked?.Invoke(
-                            new DockContentDockedEventArgs { Content = session.Source, Target = target });
+                            new DockContentDockedEventArgs { Content = sourcePane, Target = target });
                         // §2.4 — surface the new whole-tree layout for
                         // apps that want to mirror it (e.g. JSON viewer).
                         manager.OnLiveLayoutChanged?.Invoke(newLayout);
                         LogOp(Diagnostics.DockOperationKind.DragConfirm,
-                            $"confirm {target} on pane='{session.Source.Key}'",
-                            paneKey: session.Source.Key?.ToString(),
+                            $"confirm {target} on pane='{sourcePane.Key}'",
+                            paneKey: sourcePane.Key?.ToString(),
                             target: target,
                             layoutOverride: newLayout);
-                        session.End();
+                        session?.End();
                     }
                     setDragActive(false);
+                    setKeyboardOverlayActive(false);
                     setHoveredTarget(null);
                 },
                 OnDismiss: () =>
@@ -308,6 +364,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                             paneKey: session.Source.Key?.ToString());
                     session?.Cancel();
                     setDragActive(false);
+                    setKeyboardOverlayActive(false);
                     setHoveredTarget(null);
                 });
 
@@ -318,6 +375,110 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 overlay.Grid(row: 0, column: 0));
         }
 
+        // §2.10 — keyboard chord wiring. Bridges chord-handler delegates
+        // into DockChordBridge per render so the mount-time KeyboardAccelerators
+        // (registered in DockingNativeInterop.AttachChordAccelerators) can
+        // invoke the right closures for the current state. The chord lookup
+        // for "which group has the active pane" prefers the user-driven
+        // activePaneKey (chord-cycled or future tab-focus) over the
+        // app-supplied ActiveDocument, so successive chord cycles target
+        // the group the user just navigated into.
+        var chordTargetKey = activePaneKey ?? appActiveKey;
+        void CycleActiveTab(int delta)
+        {
+            var (group, path, idx) = DockHostKeyboard.FindGroupContainingKey(effectiveLayout, chordTargetKey);
+            if (group is null || path is null)
+            {
+                var first = DockHostKeyboard.FindFirstGroup(effectiveLayout);
+                if (first.Group is null || first.Path is null || first.Group.Documents.Count == 0) return;
+                group = first.Group;
+                path = first.Path;
+                idx = ClampIndex(selectedIndexStore.TryGetValue(first.Path, out var stored) ? stored : group.SelectedIndex, group.Documents.Count);
+            }
+            var next = DockHostKeyboard.CycleIndex(idx, delta, group.Documents.Count);
+            if (next == idx) return;
+            selectedIndexStore[path] = next;
+            var newActive = group.Documents[next];
+            var prev = ResolvePane(effectiveLayout, chordTargetKey);
+            if (!ReferenceEquals(prev, newActive))
+            {
+                manager.OnActiveContentChanged?.Invoke(
+                    new DockActiveContentChangedEventArgs
+                    {
+                        ActiveContent = newActive,
+                        PreviousContent = prev,
+                    });
+            }
+            setActivePaneKey((object?)newActive.Key);
+            RequestRatioRerender();
+        }
+
+        void CloseActivePane()
+        {
+            var pane = ResolvePane(effectiveLayout, chordTargetKey);
+            if (pane is null)
+            {
+                // Fall back to the first document under the layout root.
+                var first = DockHostKeyboard.FindFirstGroup(effectiveLayout);
+                if (first.Group is null || first.Group.Documents.Count == 0) return;
+                pane = first.Group.Documents[first.Group.SelectedIndex >= 0 && first.Group.SelectedIndex < first.Group.Documents.Count
+                    ? first.Group.SelectedIndex : 0];
+            }
+            if (!pane.CanClose) return;
+            // Fire the cancellable Closing event before mutating.
+            var closingArgs = new DockDocumentClosingEventArgs { Document = pane };
+            manager.OnDocumentClosing?.Invoke(closingArgs);
+            if (closingArgs.Cancel) return;
+            var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
+            if (!removed) return;
+            setLayoutOverride(afterRemove);
+            manager.OnDocumentClosed?.Invoke(new DockDocumentClosedEventArgs { Document = pane });
+            manager.OnLiveLayoutChanged?.Invoke(afterRemove);
+            LogOp(Diagnostics.DockOperationKind.LayoutChange,
+                $"close pane='{pane.Key}' via keyboard",
+                paneKey: pane.Key?.ToString(),
+                layoutOverride: afterRemove);
+            // Re-anchor the active key on a sibling so subsequent chords
+            // have a sensible target.
+            var firstAfter = DockHostKeyboard.FindFirstGroup(afterRemove);
+            object? newActiveKey = null;
+            if (firstAfter.Group is { } g && g.Documents.Count > 0)
+            {
+                var clamped = g.SelectedIndex >= 0 && g.SelectedIndex < g.Documents.Count ? g.SelectedIndex : 0;
+                newActiveKey = g.Documents[clamped].Key;
+            }
+            setActivePaneKey(newActiveKey);
+        }
+
+        void EnterKeyboardDropMode()
+        {
+            // Toggle: hitting Ctrl+Shift+M while the overlay is up dismisses
+            // it (parity with Esc) so a fat-fingered second press doesn't
+            // strand the user.
+            if (keyboardOverlayActive)
+            {
+                setKeyboardOverlayActive(false);
+                return;
+            }
+            // No-op when there's no active pane to move — the overlay would
+            // open with nothing to dock and Enter would fizzle.
+            if (ResolvePane(effectiveLayout, chordTargetKey) is null) return;
+            setKeyboardOverlayActive(true);
+        }
+
+        // §2.10 — register the keyboard chord handlers in the host bridge
+        // slot. The DockingNativeInterop mount handler attaches a single
+        // set of KeyboardAccelerators on the Border once (mount-time) and
+        // each Invoked event looks up the live delegates here. This avoids
+        // adding a CommandHost layer (a fresh Grid every render perturbs
+        // M19's outer FlexPanel ActualWidth and identity tests).
+        DockChordBridge.Set(manager,
+            new DockChordBridge.Handlers(
+                NextTab: () => CycleActiveTab(+1),
+                PrevTab: () => CycleActiveTab(-1),
+                CloseActive: CloseActivePane,
+                EnterDropMode: EnterKeyboardDropMode));
+
         // §2.17 — publish the host model + active-key + layout-snapshot
         // context slots so descendant function components hooked into
         // DockContexts.Host / ActivePaneKey / LayoutSnapshot resolve to
@@ -326,6 +487,41 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             .Provide(DockContexts.Host, model)
             .Provide(DockContexts.ActivePaneKey, activeKey)
             .Provide(DockContexts.LayoutSnapshot, snapshot);
+    }
+
+    private static int ClampIndex(int idx, int count)
+    {
+        if (count <= 0) return 0;
+        if (idx < 0) return 0;
+        if (idx >= count) return count - 1;
+        return idx;
+    }
+
+    private static DockableContent? ResolvePane(DockNode? root, object? key)
+    {
+        if (root is null || key is null) return null;
+        return Walk(root, key);
+
+        static DockableContent? Walk(DockNode node, object key)
+        {
+            switch (node)
+            {
+                case DockableContent leaf:
+                    return Equals(leaf.Key, key) ? leaf : null;
+                case DockTabGroup grp:
+                    foreach (var d in grp.Documents)
+                        if (Equals(d.Key, key)) return d;
+                    return null;
+                case DockSplit split:
+                    foreach (var c in split.Children)
+                    {
+                        var r = Walk(c, key);
+                        if (r is not null) return r;
+                    }
+                    return null;
+                default: return null;
+            }
+        }
     }
 
     /// <summary>

@@ -2,6 +2,8 @@ using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Windows.System;
 
 namespace Microsoft.UI.Reactor.Docking.Native;
 
@@ -64,10 +66,14 @@ public static class DockingNativeInterop
                     LastContent = content,
                 };
                 NativeHostState.SetAttached(host, state);
-                // Live model integration (§2.16 "reconciler reads from
-                // model") lands separately — the immutable element is the
-                // source of truth in this first cut; DockHooks resolve to
-                // defaults until the model is wired through.
+
+                // Spec 045 §2.10 — wire keyboard chord accelerators once
+                // at mount. Each accelerator's Invoked handler resolves the
+                // current chord delegates via DockChordBridge keyed by the
+                // *current* DockManager element (NativeHostState.LastElement).
+                // The component registers fresh delegates each render; the
+                // bridge entry's identity tracks the live element ref.
+                AttachChordAccelerators(host);
                 return host;
             },
             update: static (rec, oldEl, newEl, host, rerender) =>
@@ -92,9 +98,43 @@ public static class DockingNativeInterop
                     try { rec.Reconcile(state.LastContent, null, realized, static () => { }); }
                     catch { /* best-effort unmount cleanup */ }
                 }
+                if (state?.LastElement is { } el)
+                    DockChordBridge.Clear(el);
                 host.Child = null;
                 NativeHostState.SetAttached(host, null);
             });
+    }
+
+    private static void AttachChordAccelerators(Border host)
+    {
+        // Suppress WinUI's chord tooltip propagation (matches CommandHost).
+        host.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
+
+        AddAccel(host, VirtualKey.PageDown, VirtualKeyModifiers.Control,
+            (h) => h.NextTab());
+        AddAccel(host, VirtualKey.PageUp, VirtualKeyModifiers.Control,
+            (h) => h.PrevTab());
+        AddAccel(host, VirtualKey.F4, VirtualKeyModifiers.Control,
+            (h) => h.CloseActive());
+        AddAccel(host, VirtualKey.W, VirtualKeyModifiers.Control,
+            (h) => h.CloseActive());
+        AddAccel(host, VirtualKey.M, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift,
+            (h) => h.EnterDropMode());
+    }
+
+    private static void AddAccel(Border host, VirtualKey key, VirtualKeyModifiers mods,
+        Action<DockChordBridge.Handlers> invoke)
+    {
+        var ka = new KeyboardAccelerator { Key = key, Modifiers = mods };
+        ka.Invoked += (s, e) =>
+        {
+            var state = NativeHostState.GetAttached(host);
+            var handlers = DockChordBridge.Get(state?.LastElement);
+            if (handlers is null) return;
+            e.Handled = true;
+            invoke(handlers);
+        };
+        host.KeyboardAccelerators.Add(ka);
     }
 
     private static Element BuildContent(DockManager element)

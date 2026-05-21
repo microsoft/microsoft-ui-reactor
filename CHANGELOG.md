@@ -29,6 +29,31 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — Docking keyboard chords (§2.10, initial set).**
+  Three chord families land on the Reactor-native dock host:
+  `Ctrl+PageUp` / `Ctrl+PageDown` cycle the active tab group with
+  wrap (VS parity); `Ctrl+F4` / `Ctrl+W` close the active document
+  via the cancellable `OnDocumentClosing` → `OnDocumentClosed` path;
+  `Ctrl+Shift+M` flips the §2.3 drop-target overlay into a
+  keyboard-initiated drag mode (arrow keys + Enter to confirm,
+  Esc / repeat-chord to dismiss) with the active pane as the
+  implicit source. Wiring goes through a new `DockChordBridge`
+  (ConditionalWeakTable keyed by `DockManager` instance) so the
+  mount-time `KeyboardAccelerator` set on the dock host `Border`
+  picks up live chord delegates from the component each render —
+  no extra layout layer (a `CommandHost` Grid wrapper perturbed
+  M19's outer-FlexPanel ActualWidth and was abandoned). Selected-
+  index per `DockTabGroup` is now host-tracked via a path-keyed
+  `selectedIndexStore` (mirrors the §2.1 ratio store) so chord
+  cycling sticks across re-renders without breaking the
+  controlled-input shape — apps that pin `ActiveDocument` still
+  win for `UseIsActivePane` / context propagation. Deferred to a
+  follow-up pass: `Ctrl+Tab` pane navigator overlay, `Alt+F7`
+  hidden-pane picker, UIA `LiveSetting=Polite` announcements, and
+  spec-027-driven configurable binding. 16 new unit tests cover
+  the pure helpers (`DockHostKeyboard.{FindGroupContainingKey,
+  FindFirstGroup, CycleIndex, BuildChords}`) plus the
+  `DockChordBridge` round-trip. (spec 045 §2.10)
 - **Spec 045 Phase 2 — Docking drag pipeline (§2.4).** Tab tear-out
   + drop-target dock now works end-to-end on the Reactor-native
   renderer. `DockDragSession` is the object-ref payload (replaces
