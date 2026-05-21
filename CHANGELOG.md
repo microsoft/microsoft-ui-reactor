@@ -29,6 +29,21 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — Document/ToolWindow default tab styling (§2.8).**
+  `DockTabGroupRenderer.Render` now auto-resolves tab styling based on
+  the group's content type: a group whose documents are all
+  `ToolWindow` (and where the user hasn't customized
+  `TabPosition` / `CompactTabs` beyond the record's defaults) flips
+  to bottom-position + compact tabs (matches Office / VS tool-pane
+  convention). All-`Document` and mixed groups stay at the top
+  position + full-width default — a tool window dragged into an
+  editor strip doesn't collapse the whole strip to compact. The
+  `TabPosition.Bottom` visual still renders as top-strip per the
+  §2.2 limitation (no WinUI TabView bottom mode), but the resolved
+  value flows through so future bottom-strip support picks it up.
+  5 new unit tests lock down the resolution matrix
+  (all-tool / all-doc / mixed / explicit-defaults-on-tool /
+  explicit-compact-on-tool). (spec 045 §2.8)
 - **Spec 045 Phase 2 — Docking permission gating (§2.14).** The native
   drag pipeline now honors `DockableContent.CanMove` / `CanFloat` /
   `CanClose`: `HandleTabDragStarting` refuses to begin a session for

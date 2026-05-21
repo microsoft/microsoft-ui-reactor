@@ -81,6 +81,26 @@ internal static class DockTabGroupRenderer
             return new BorderElement(null);
         }
 
+        // §2.8 — apply default tab styling based on content type when the
+        // user hasn't overridden it. All-ToolWindow groups switch to
+        // bottom-position + compact tabs (matches Office / VS tool pane
+        // convention); all-Document or mixed groups stay at the
+        // top-position + full-width default. "User hasn't overridden"
+        // means the group's TabPosition + CompactTabs match the record's
+        // own defaults (Top + non-compact) — apps that pass explicit
+        // values (even if same as defaults) on a ToolWindow group still
+        // get flipped, which is the desired behavior because the typed
+        // contract is that ToolWindow-only groups SHOULD look like a
+        // tool pane.
+        bool allToolWindow = true;
+        for (int i = 0; i < documents.Count; i++)
+        {
+            if (documents[i] is not ToolWindow) { allToolWindow = false; break; }
+        }
+        var atDefaults = group.TabPosition == TabPosition.Top && !group.CompactTabs;
+        var resolvedPosition = allToolWindow && atDefaults ? TabPosition.Bottom : group.TabPosition;
+        var resolvedCompact = allToolWindow && atDefaults ? true : group.CompactTabs;
+
         var tabs = new TabViewItemData[documents.Count];
         for (int i = 0; i < documents.Count; i++)
         {
@@ -105,10 +125,12 @@ internal static class DockTabGroupRenderer
                 if (idx >= 0 && idx < documents.Count)
                     onTabClosing(documents[idx]);
             },
-            // §2.2: configurable tab width follows the model's CompactTabs
-            // flag — Equal is the WinUI default for editor groups; Compact
-            // matches the upstream DocumentGroup style for tool groups.
-            TabWidthMode = group.CompactTabs
+            // §2.2 / §2.8: configurable tab width follows the resolved
+            // CompactTabs flag (Equal is the WinUI default for editor
+            // groups; Compact matches the upstream DocumentGroup style
+            // for tool groups). All-ToolWindow groups auto-resolve to
+            // Compact unless the user set explicit non-default values.
+            TabWidthMode = resolvedCompact
                 ? TabViewWidthMode.Compact
                 : TabViewWidthMode.Equal,
             CanReorderTabs = true,

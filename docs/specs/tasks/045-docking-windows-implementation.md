@@ -694,9 +694,19 @@ WinUI.Dock wrapper for side-by-side review.
 - [x] `public sealed record ToolWindow(...)` — hideable, lives in
   `ToolPane`, pinnable to a side; `CanHide` defaults to `true`,
   `CanAutoHide` defaults to `true`, `CanDockAsDocument` defaults to `true`.
-- [ ] `ToolWindow` default tab styling: bottom-position compact. *Tab
-  styling wires through the native tab-group renderer (§2.2).*
-- [ ] `Document` default tab styling: top-position full. *Same — §2.2.*
+- [x] `ToolWindow` default tab styling: bottom-position compact.
+  `DockTabGroupRenderer.Render` now auto-flips a group whose
+  documents are all `ToolWindow` (and where the user hasn't
+  customized `TabPosition` / `CompactTabs` beyond the record's
+  defaults) to `TabPosition.Bottom` + `CompactTabs=true`. Mixed
+  groups stay at the Document defaults so a tool window dragged
+  into an editor strip doesn't collapse the whole strip to compact.
+  The `TabPosition.Bottom` visual is still rendered as top-strip
+  per the §2.2 limitation (no WinUI TabView bottom mode), but the
+  resolved value flows through so future bottom-strip support
+  picks it up. 5 new unit tests cover the resolution matrix.
+- [x] `Document` default tab styling: top-position full. Same path,
+  fall-through case in `DockTabGroupRenderer.Render`'s auto-resolve.
 - [ ] **Drag-pin gesture** offered only for `ToolWindow`. *Lands with
   drag pipeline (§2.4).*
 - [ ] **Non-breaking deprecation** of the closed-shape

@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Docking;
 using Microsoft.UI.Reactor.Docking.Native;
+using Microsoft.UI.Xaml.Controls;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.Docking.Native;
@@ -113,5 +114,110 @@ public class DockTabGroupRendererTests
             onSelectedIndexChanged: null,
             onTabClosing: null);
         Assert.IsType<BorderElement>(tab.Tabs[0].Content);
+    }
+
+    // ── §2.8: default tab styling derived from content type ────────────
+
+    [Fact]
+    public void Render_AllToolWindow_DefaultsToCompactTabs()
+    {
+        var docs = new DockableContent[]
+        {
+            new ToolWindow { Title = "Solution Explorer", Key = "se" },
+            new ToolWindow { Title = "Properties",        Key = "pr" },
+        };
+        var group = new DockTabGroup(docs); // record defaults: Top, !Compact
+
+        var tab = (TabViewElement)DockTabGroupRenderer.Render(
+            group,
+            d => d.Content,
+            onSelectedIndexChanged: null,
+            onTabClosing: null);
+
+        Assert.Equal(TabViewWidthMode.Compact, tab.TabWidthMode);
+    }
+
+    [Fact]
+    public void Render_AllDocument_StaysEqualWidth()
+    {
+        var docs = new DockableContent[]
+        {
+            new Document { Title = "Main.cs",    Key = "m" },
+            new Document { Title = "Program.cs", Key = "p" },
+        };
+        var group = new DockTabGroup(docs);
+
+        var tab = (TabViewElement)DockTabGroupRenderer.Render(
+            group,
+            d => d.Content,
+            onSelectedIndexChanged: null,
+            onTabClosing: null);
+
+        Assert.Equal(TabViewWidthMode.Equal, tab.TabWidthMode);
+    }
+
+    [Fact]
+    public void Render_MixedDocumentAndToolWindow_StaysEqualWidth()
+    {
+        // A mixed group (e.g. tool window dragged into editor strip)
+        // doesn't auto-switch to tool-pane styling — the document
+        // shape wins so the editor's tab strip stays consistent.
+        var docs = new DockableContent[]
+        {
+            new Document { Title = "Editor", Key = "e" },
+            new ToolWindow { Title = "Tool", Key = "t" },
+        };
+        var group = new DockTabGroup(docs);
+
+        var tab = (TabViewElement)DockTabGroupRenderer.Render(
+            group,
+            d => d.Content,
+            onSelectedIndexChanged: null,
+            onTabClosing: null);
+
+        Assert.Equal(TabViewWidthMode.Equal, tab.TabWidthMode);
+    }
+
+    [Fact]
+    public void Render_AllToolWindow_ExplicitNonCompact_HonorsHeuristic()
+    {
+        // Documenting the heuristic's behavior: a ToolWindow group that
+        // passes the *literal* default values still gets the auto-flip.
+        // Apps wanting a wide-tabs ToolWindow group must distinguish via
+        // some other dimension (e.g. CompactTabs=true is fine and is
+        // honored; an "explicit Top/non-compact" group with only tools
+        // is interpreted as "use the typed default", flipping to
+        // compact). This locks down the contract.
+        var docs = new DockableContent[]
+        {
+            new ToolWindow { Title = "T1", Key = "1" },
+        };
+        var explicitDefaults = new DockTabGroup(docs, TabPosition.Top, CompactTabs: false);
+
+        var tab = (TabViewElement)DockTabGroupRenderer.Render(
+            explicitDefaults,
+            d => d.Content,
+            onSelectedIndexChanged: null,
+            onTabClosing: null);
+
+        Assert.Equal(TabViewWidthMode.Compact, tab.TabWidthMode);
+    }
+
+    [Fact]
+    public void Render_AllToolWindow_ExplicitCompact_RemainsCompact()
+    {
+        var docs = new DockableContent[]
+        {
+            new ToolWindow { Title = "T1", Key = "1" },
+        };
+        var group = new DockTabGroup(docs, TabPosition.Bottom, CompactTabs: true);
+
+        var tab = (TabViewElement)DockTabGroupRenderer.Render(
+            group,
+            d => d.Content,
+            onSelectedIndexChanged: null,
+            onTabClosing: null);
+
+        Assert.Equal(TabViewWidthMode.Compact, tab.TabWidthMode);
     }
 }
