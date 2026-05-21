@@ -176,6 +176,24 @@ public partial class FlexPanel : Panel
         DependencyProperty.RegisterAttached("Basis", typeof(double), typeof(FlexPanel),
             new PropertyMetadata(double.NaN, OnChildPropertyChanged));
 
+    // CSS `min-width` / `min-height` on a flex item. Sentinel NaN = `auto`
+    // (CSS Flexbox §4.5 automatic minimum size); any non-negative finite value
+    // (including 0) is treated as an explicit point min that suppresses the
+    // auto/min-content heuristic.
+    //
+    // The `new` modifier intentionally shadows FrameworkElement.MinWidthProperty.
+    // These are attached DPs that drive Yoga's flex distribution; the inherited
+    // properties drive WinUI's own Measure. They coexist on the same control:
+    // FrameworkElement.MinWidth = X forces Measure to return ≥X; this attached
+    // property tells Yoga to clamp the flex-resolved slot to ≥X.
+    public static new readonly DependencyProperty MinWidthProperty =
+        DependencyProperty.RegisterAttached("FlexMinWidth", typeof(double), typeof(FlexPanel),
+            new PropertyMetadata(double.NaN, OnChildPropertyChanged));
+
+    public static new readonly DependencyProperty MinHeightProperty =
+        DependencyProperty.RegisterAttached("FlexMinHeight", typeof(double), typeof(FlexPanel),
+            new PropertyMetadata(double.NaN, OnChildPropertyChanged));
+
     public static readonly DependencyProperty AlignSelfProperty =
         DependencyProperty.RegisterAttached("AlignSelf", typeof(FlexAlign), typeof(FlexPanel),
             new PropertyMetadata(FlexAlign.Auto, OnChildPropertyChanged));
@@ -209,6 +227,12 @@ public partial class FlexPanel : Panel
 
     public static void SetBasis(UIElement el, double value) => el.SetValue(BasisProperty, value);
     public static double GetBasis(UIElement el) => (double)el.GetValue(BasisProperty);
+
+    public static void SetMinWidth(UIElement el, double value) => el.SetValue(MinWidthProperty, value);
+    public static double GetMinWidth(UIElement el) => (double)el.GetValue(MinWidthProperty);
+
+    public static void SetMinHeight(UIElement el, double value) => el.SetValue(MinHeightProperty, value);
+    public static double GetMinHeight(UIElement el) => (double)el.GetValue(MinHeightProperty);
 
     public static void SetAlignSelf(UIElement el, FlexAlign value) => el.SetValue(AlignSelfProperty, value);
     public static FlexAlign GetAlignSelf(UIElement el) => (FlexAlign)el.GetValue(AlignSelfProperty);
@@ -623,9 +647,19 @@ public partial class FlexPanel : Panel
                     double mV = m.Top + m.Bottom;
 
                     if (panel._arranging)
-                        return new YogaSize(
-                            Math.Max(0, (float)(capturedChild.DesiredSize.Width - mH)),
-                            Math.Max(0, (float)(capturedChild.DesiredSize.Height - mV)));
+                    {
+                        // Cached DesiredSize fallback during arrange — Yoga is not
+                        // supposed to run a fresh layout here (Measure during
+                        // Arrange triggers LayoutCycleException). Clamp to the
+                        // Exactly slot for the same CSS-spec reason as below so a
+                        // stale oversized DesiredSize from a previous pass does
+                        // not re-expand the layout box.
+                        var aOutW = (float)(capturedChild.DesiredSize.Width - mH);
+                        var aOutH = (float)(capturedChild.DesiredSize.Height - mV);
+                        if (wMode == YogaMeasureMode.Exactly) aOutW = (float)w;
+                        if (hMode == YogaMeasureMode.Exactly) aOutH = (float)h;
+                        return new YogaSize(Math.Max(0, aOutW), Math.Max(0, aOutH));
+                    }
 
                     // Yoga's constraints are content-area (excluding margin).
                     // Add margin so WinUI's subtraction yields the correct content area.
@@ -657,10 +691,25 @@ public partial class FlexPanel : Panel
                         _outerYogaHeightMode = prevYogaH;
                     }
                     panel._measuredThisPass.Add(capturedChild);
-                    // Return content size (without margin) since Yoga tracks margins separately
-                    return new YogaSize(
-                        Math.Max(0, (float)(capturedChild.DesiredSize.Width - mH)),
-                        Math.Max(0, (float)(capturedChild.DesiredSize.Height - mV)));
+
+                    // CSS Flexbox: Yoga is the authority for the resolved
+                    // slot size in Exactly mode. The child's DesiredSize may
+                    // exceed `w` for controls that ignore their Measure
+                    // constraint (TabView with oversized content, Image with
+                    // Stretch=None) — but per CSS the layout box is `w`; the
+                    // content paints into the slot and overflows visually
+                    // (CSS overflow: visible). Without this clamp, Yoga would
+                    // treat the item as DesiredSize-wide and overflow the
+                    // panel itself, defeating flex-grow distribution.
+                    //
+                    // CSS Flexbox §4.5 min-content floor is enforced separately
+                    // via node.Style.MinDimensions in ApplyAttachedProperties —
+                    // see the auto-min computation there.
+                    var outW = (float)(capturedChild.DesiredSize.Width - mH);
+                    var outH = (float)(capturedChild.DesiredSize.Height - mV);
+                    if (wMode == YogaMeasureMode.Exactly) outW = (float)w;
+                    if (hMode == YogaMeasureMode.Exactly) outH = (float)h;
+                    return new YogaSize(Math.Max(0, outW), Math.Max(0, outH));
                 };
             }
 
@@ -699,19 +748,40 @@ public partial class FlexPanel : Panel
         }
     }
 
-    private static void ApplyAttachedProperties(UIElement el, YogaNode node)
+    private void ApplyAttachedProperties(UIElement el, YogaNode node)
     {
         var grow = GetGrow(el);
         var shrink = GetShrink(el);
         var basis = GetBasis(el);
         var alignSelf = GetAlignSelf(el);
         var position = GetPosition(el);
+        var minWidthExplicit = GetMinWidth(el);
+        var minHeightExplicit = GetMinHeight(el);
 
         node.Style.FlexGrow = (float)grow;
         node.Style.FlexShrink = (float)shrink;
         node.Style.FlexBasis = double.IsNaN(basis) ? YogaValue.Auto : YogaValue.Point((float)basis);
         node.Style.AlignSelf = alignSelf;
         node.Style.PositionType = position;
+
+        // ── CSS Flexbox §4.5 automatic minimum size ──
+        // Compute effective MinWidth / MinHeight per CSS spec:
+        //   • User-set explicit value (not NaN) wins, even 0.
+        //   • Auto-min applies only on the main axis (per CSS spec). The
+        //     cross-axis floor defaults to 0 unless explicitly set.
+        //   • Main-axis auto = min(specified-size suggestion, content-size suggestion)
+        //         specified-size = explicit `basis` if definite, else +∞
+        //         content-size   = min-content (approximated via Measure(0,∞))
+        //   • Short-circuit: basis==0 → 0 (no pre-measure needed).
+        //   • Short-circuit: ScrollViewer/ScrollView → 0 (don't realize
+        //     virtualized content during a sizing-only pre-measure).
+        var mainAxisIsRow = FlexDirectionHelper.IsRow(Direction);
+        node.MinWidth = ResolveMinDimension(
+            el, axisIsMain: mainAxisIsRow,
+            explicitMin: minWidthExplicit, basis: basis, isWidth: true);
+        node.MinHeight = ResolveMinDimension(
+            el, axisIsMain: !mainAxisIsRow,
+            explicitMin: minHeightExplicit, basis: basis, isWidth: false);
 
         // Position insets
         var left = GetLeft(el);
@@ -747,5 +817,78 @@ public partial class FlexPanel : Panel
                 node.SetMargin(YogaEdge.Bottom, YogaValue.Undefined);
             }
         }
+    }
+
+    // Resolves CSS Flexbox §4.5 automatic minimum size for one axis. See
+    // ApplyAttachedProperties for the full algorithm; this helper handles the
+    // per-axis decision tree.
+    private YogaValue ResolveMinDimension(
+        UIElement el, bool axisIsMain, double explicitMin, double basis, bool isWidth)
+    {
+        // 1. User-set explicit min wins (including 0).
+        if (!double.IsNaN(explicitMin))
+            return YogaValue.Point((float)Math.Max(0, explicitMin));
+
+        // 2. Cross axis: CSS default is 0 (Undefined → no floor).
+        if (!axisIsMain)
+            return YogaValue.Undefined;
+
+        // 3. Main axis, basis explicitly 0: specified-size = 0, so
+        //    min(0, min-content) = 0. Short-circuit, no pre-measure.
+        if (!double.IsNaN(basis) && basis <= 0)
+            return YogaValue.Point(0);
+
+        // 4. Main axis, child is a virtualizing/scrolling container: skip
+        //    min-content pre-measure to avoid realizing virtualized content.
+        //    Documented opt-out — user can still set explicit minWidth/minHeight.
+        if (IsScrollLikeContainer(el))
+            return YogaValue.Point(0);
+
+        // 5. Main axis, compute min-content via Measure with content cap = margin
+        //    (Yoga content-area constraint of 0 → WinUI total constraint of margin).
+        //    Approximation: WinUI Measure does not expose CSS min-content directly;
+        //    Measure(0, ∞) returns the widest unbreakable content for text and the
+        //    natural size for fixed-size controls.
+        var minContent = ComputeMinContent(el, isWidth);
+
+        // 6. If basis is definite and positive, automatic min = min(basis, min-content).
+        if (!double.IsNaN(basis))
+            return YogaValue.Point((float)Math.Max(0, Math.Min(basis, minContent)));
+
+        // 7. basis == auto: automatic min = min-content.
+        return YogaValue.Point((float)Math.Max(0, minContent));
+    }
+
+    private static bool IsScrollLikeContainer(UIElement el)
+    {
+        // ScrollViewer / ScrollView naturally allow content to be larger than
+        // their viewport; their CSS-equivalent overflow is scroll, which per
+        // §4.5 makes the automatic minimum size 0.
+        return el is ScrollViewer
+            || el is Microsoft.UI.Xaml.Controls.ScrollView;
+    }
+
+    private double ComputeMinContent(UIElement el, bool isWidth)
+    {
+        // Measure with a 0-content constraint on the target axis to force the
+        // child to report its tightest natural size. Margin is added so the
+        // WinUI Measure subtraction yields the correct content area (matches
+        // the MeasureFunc bridge convention).
+        var fe = el as FrameworkElement;
+        var margin = fe?.Margin ?? default;
+        double mH = margin.Left + margin.Right;
+        double mV = margin.Top + margin.Bottom;
+
+        // Calling Measure here pollutes the child's cached DesiredSize, but
+        // the subsequent Yoga MeasureFunc pass (or the final MeasureOverride
+        // sweep) re-measures with the real constraint. No restore-measure is
+        // needed and would itself perturb layout.
+        var constraint = isWidth
+            ? new Size(mH, double.PositiveInfinity)
+            : new Size(double.PositiveInfinity, mV);
+        el.Measure(constraint);
+        return isWidth
+            ? Math.Max(0, el.DesiredSize.Width - mH)
+            : Math.Max(0, el.DesiredSize.Height - mV);
     }
 }

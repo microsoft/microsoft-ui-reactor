@@ -1612,6 +1612,8 @@ public record FlexAttached(
     double Grow = 0,
     double Shrink = 1,
     double? Basis = null,
+    double? MinWidth = null,
+    double? MinHeight = null,
     Layout.FlexAlign? AlignSelf = null,
     Layout.FlexPositionType Position = Layout.FlexPositionType.Relative,
     double? Left = null,

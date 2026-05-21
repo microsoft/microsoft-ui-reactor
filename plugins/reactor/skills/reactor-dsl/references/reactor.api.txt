@@ -511,7 +511,7 @@ T.ConnectedAnimation<T>(string key) → T
 T.CornerRadius<T>(double radius) → T
 T.CornerRadius<T>(double topLeft, double topRight, double bottomRight, double bottomLeft) → T
 T.DraggableWhen<T>(Func<bool> canDrag) → T
-T.Flex<T>(double grow = 0, double shrink = 1, double? basis = null, FlexAlign? alignSelf = null, FlexPositionType position = FlexPositionType.Relative, double? left = null, double? top = null, double? right = null, double? bottom = null) → T
+T.Flex<T>(double grow = 0, double shrink = 1, double? basis = null, double? minWidth = null, double? minHeight = null, FlexAlign? alignSelf = null, FlexPositionType position = FlexPositionType.Relative, double? left = null, double? top = null, double? right = null, double? bottom = null) → T
 T.FocusMeta<T>(FocusManager fm, string fieldName, bool autoFocus = false) → T
 T.FocusTrap<T>(FocusTrapHandle handle) → T
 T.FontFamily<T>(FontFamily family) → T

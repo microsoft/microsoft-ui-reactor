@@ -103,4 +103,80 @@ public class AttachedExtensionsCoverageTests
         Assert.NotNull(attached);
         Assert.True(attached!.ContainsKey(typeof(FlexAttached)));
     }
+
+    // ── min-width / min-height validation ─────────────────────────────
+
+    [Fact]
+    public void Flex_Negative_MinWidth_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => TextBlock("x").Flex(minWidth: -1));
+    }
+
+    [Fact]
+    public void Flex_NaN_MinWidth_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => TextBlock("x").Flex(minWidth: double.NaN));
+    }
+
+    [Fact]
+    public void Flex_Infinite_MinWidth_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => TextBlock("x").Flex(minWidth: double.PositiveInfinity));
+    }
+
+    [Fact]
+    public void Flex_Negative_MinHeight_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => TextBlock("x").Flex(minHeight: -1));
+    }
+
+    [Fact]
+    public void Flex_NaN_MinHeight_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => TextBlock("x").Flex(minHeight: double.NaN));
+    }
+
+    [Fact]
+    public void Flex_Infinite_MinHeight_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => TextBlock("x").Flex(minHeight: double.PositiveInfinity));
+    }
+
+    [Fact]
+    public void Flex_MinWidth_Zero_Is_Valid()
+    {
+        var el = TextBlock("x").Flex(minWidth: 0);
+        var attached = ((Element)el).Attached;
+        Assert.NotNull(attached);
+        var fa = (FlexAttached)attached![typeof(FlexAttached)];
+        Assert.Equal(0, fa.MinWidth);
+    }
+
+    [Fact]
+    public void Flex_MinWidth_And_MinHeight_Round_Trip()
+    {
+        var el = TextBlock("x").Flex(minWidth: 50, minHeight: 25);
+        var attached = ((Element)el).Attached;
+        Assert.NotNull(attached);
+        var fa = (FlexAttached)attached![typeof(FlexAttached)];
+        Assert.Equal(50, fa.MinWidth);
+        Assert.Equal(25, fa.MinHeight);
+    }
+
+    [Fact]
+    public void Flex_Default_MinWidth_And_MinHeight_Are_Null()
+    {
+        var el = TextBlock("x").Flex(grow: 1);
+        var attached = ((Element)el).Attached;
+        Assert.NotNull(attached);
+        var fa = (FlexAttached)attached![typeof(FlexAttached)];
+        Assert.Null(fa.MinWidth);
+        Assert.Null(fa.MinHeight);
+    }
 }

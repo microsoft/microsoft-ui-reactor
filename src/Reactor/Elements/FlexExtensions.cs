@@ -13,6 +13,8 @@ public static class FlexExtensions
         double grow = 0,
         double shrink = 1,
         double? basis = null,
+        double? minWidth = null,
+        double? minHeight = null,
         FlexAlign? alignSelf = null,
         FlexPositionType position = FlexPositionType.Relative,
         double? left = null,
@@ -27,7 +29,13 @@ public static class FlexExtensions
         if (shrink < 0 || double.IsNaN(shrink) || double.IsInfinity(shrink))
             throw new ArgumentOutOfRangeException(nameof(shrink), "Shrink must be a non-negative, finite value.");
 
-        return (T)el.SetAttached(new FlexAttached(grow, shrink, basis, alignSelf, position, left, top, right, bottom));
+        if (minWidth is { } mw && (mw < 0 || double.IsNaN(mw) || double.IsInfinity(mw)))
+            throw new ArgumentOutOfRangeException(nameof(minWidth), "MinWidth must be a non-negative, finite value (or null for CSS `min-width: auto`).");
+
+        if (minHeight is { } mh && (mh < 0 || double.IsNaN(mh) || double.IsInfinity(mh)))
+            throw new ArgumentOutOfRangeException(nameof(minHeight), "MinHeight must be a non-negative, finite value (or null for CSS `min-height: auto`).");
+
+        return (T)el.SetAttached(new FlexAttached(grow, shrink, basis, minWidth, minHeight, alignSelf, position, left, top, right, bottom));
     }
     // </snippet:flex-modifier>
 }
