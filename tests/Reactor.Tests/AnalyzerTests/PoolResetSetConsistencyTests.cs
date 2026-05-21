@@ -104,14 +104,12 @@ public class PoolResetSetConsistencyTests
         var modifierNames = ReadModifierNames();
         var tracked = PoolResetSetAnalyzer.TrappedProperties.Keys;
 
-        var missing = new List<string>();
-        foreach (var prop in resetProps)
-        {
-            if (IntentionallyExcluded.ContainsKey(prop)) continue;
-            if (!modifierNames.Contains(prop)) continue;
-            if (tracked.Contains(prop)) continue;
-            missing.Add(prop);
-        }
+        var missing = resetProps
+            .Where(prop =>
+                !IntentionallyExcluded.ContainsKey(prop) &&
+                modifierNames.Contains(prop) &&
+                !tracked.Contains(prop))
+            .ToList();
 
         Assert.True(
             missing.Count == 0,
@@ -169,7 +167,12 @@ class C
     {
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
-        var path = Path.Combine(root!, "src", "Reactor", "Core", "ElementPool.cs");
+        // Path.Join (vs Path.Combine) avoids the "rooted segment silently
+        // discards the base path" behavior flagged by CodeQL cs/path-combine.
+        // All segments here are hardcoded literals, so the warning is a
+        // false positive — but the equivalent Path.Join keeps the analyzer
+        // quiet and is otherwise identical for non-rooted segments.
+        var path = Path.Join(root!, "src", "Reactor", "Core", "ElementPool.cs");
         Assert.True(File.Exists(path), $"ElementPool.cs not found at {path}");
         var source = File.ReadAllText(path);
 
@@ -182,19 +185,19 @@ class C
 
         var commonBlock = source.Substring(braceStart, switchStart - braceStart);
 
-        var props = new HashSet<string>(StringComparer.Ordinal);
-        foreach (Match m in Regex.Matches(commonBlock, @"\bfe\.(\w+)\s*="))
-        {
-            var name = m.Groups[1].Value;
-            // ClearValue() is a method call, not a property reset — caught by the second regex below.
-            if (name != "ClearValue") props.Add(name);
-        }
-        foreach (Match m in Regex.Matches(commonBlock,
-            @"\bfe\.ClearValue\(\s*FrameworkElement\.(\w+)Property\s*\)"))
-        {
-            props.Add(m.Groups[1].Value);
-        }
-        return props;
+        // ClearValue() is a method call caught separately by the second
+        // regex; filter it out of the direct-assignment match set.
+        var directAssignments = Regex.Matches(commonBlock, @"\bfe\.(\w+)\s*=")
+            .Cast<Match>()
+            .Select(m => m.Groups[1].Value)
+            .Where(name => name != "ClearValue");
+
+        var clearValueProps = Regex.Matches(commonBlock,
+                @"\bfe\.ClearValue\(\s*FrameworkElement\.(\w+)Property\s*\)")
+            .Cast<Match>()
+            .Select(m => m.Groups[1].Value);
+
+        return new HashSet<string>(directAssignments.Concat(clearValueProps), StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -205,17 +208,16 @@ class C
     {
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
-        var path = Path.Combine(root!, "src", "Reactor", "Elements", "ElementExtensions.cs");
+        // Path.Join — see ReadResetProperties for the cs/path-combine rationale.
+        var path = Path.Join(root!, "src", "Reactor", "Elements", "ElementExtensions.cs");
         Assert.True(File.Exists(path), $"ElementExtensions.cs not found at {path}");
         var source = File.ReadAllText(path);
 
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (Match m in Regex.Matches(source,
-            @"public\s+static\s+T\s+(\w+)\s*<T>\s*\(\s*this\s+T\s+\w+"))
-        {
-            names.Add(m.Groups[1].Value);
-        }
-        return names;
+        var names = Regex.Matches(source, @"public\s+static\s+T\s+(\w+)\s*<T>\s*\(\s*this\s+T\s+\w+")
+            .Cast<Match>()
+            .Select(m => m.Groups[1].Value);
+
+        return new HashSet<string>(names, StringComparer.Ordinal);
     }
 
     /// <summary>
