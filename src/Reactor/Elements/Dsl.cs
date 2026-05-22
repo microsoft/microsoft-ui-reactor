@@ -1149,6 +1149,17 @@ public static partial class Factories
     public static FrameElement Frame(Type? sourcePageType = null, object? navigationParameter = null) =>
         new() { SourcePageType = sourcePageType, NavigationParameter = navigationParameter };
 
+    // ── ItemContainer ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Wraps a child element in a WinUI <c>ItemContainer</c>. Required as
+    /// the root element returned from an <see cref="ItemsViewElement{T}"/>
+    /// view builder — ItemsView's selection / focus / animation
+    /// infrastructure depends on it.
+    /// </summary>
+    public static ItemContainerElement ItemContainer(Element? child) =>
+        new(child);
+
     // ── ItemsView ───────────────────────────────────────────────────
 
     public static ItemsViewElement<T> ItemsView<T>(

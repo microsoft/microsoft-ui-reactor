@@ -415,6 +415,16 @@ public abstract record Element
                 && ReferenceEquals(ba.Child, bb.Child)
                 && ReferenceEquals(ba.Setters, bb.Setters),
 
+            // ItemContainer is the ItemsView item-root wrapper. Selection
+            // state is framework-driven (so the Reactor element's
+            // IsSelected stays at its declared default across re-renders
+            // unless the user explicitly drives it), making this skip
+            // path the common case during selection-triggered reconciles.
+            (ItemContainerElement ica, ItemContainerElement icb) =>
+                ica.IsSelected == icb.IsSelected
+                && ReferenceEquals(ica.Child, icb.Child)
+                && ReferenceEquals(ica.Setters, icb.Setters),
+
             (GridElement ga, GridElement gb) =>
                 ga.RowSpacing == gb.RowSpacing
                 && ga.ColumnSpacing == gb.ColumnSpacing
@@ -520,6 +530,14 @@ public abstract record Element
                 && ba.Padding == bb.Padding
                 && ba.BorderThickness == bb.BorderThickness
                 && ReferenceEquals(ba.Setters, bb.Setters),
+
+            // ItemContainer: own props (excluding Child) match when
+            // IsSelected and Setters agree. The reconcile-highlight gate
+            // checks this to avoid marking every realized item yellow
+            // when the only changes are inside the user-supplied subtree.
+            (ItemContainerElement ica, ItemContainerElement icb) =>
+                ica.IsSelected == icb.IsSelected
+                && ReferenceEquals(ica.Setters, icb.Setters),
 
             (ScrollViewerElement sva, ScrollViewerElement svb) =>
                 sva.Orientation == svb.Orientation
@@ -3515,6 +3533,25 @@ public record FrameElement() : Element
 }
 
 // ════════════════════════════════════════════════════════════════════════
+//  ItemContainer — required wrapper for ItemsView item realizations.
+//  ItemsView's selection / focus / animation infrastructure assumes its
+//  ItemTemplate produces ItemContainer roots (see
+//  microsoft-ui-xaml-lift/controls/dev/ItemsView/ItemsView.cpp:317). The
+//  inner ItemsRepeater enters an infinite measure cycle on non-container
+//  roots. A user's <see cref="ItemsViewElement{T}"/> viewBuilder therefore
+//  must return an <see cref="ItemContainerElement"/> at the root —
+//  enforced at mount time with a clear exception rather than the hang
+//  WinUI would otherwise hit.
+// ════════════════════════════════════════════════════════════════════════
+
+public record ItemContainerElement(Element? Child) : Element
+{
+    /// <summary>Selection state as exposed by <c>ItemContainer.IsSelected</c>.</summary>
+    public bool IsSelected { get; init; }
+    internal Action<WinUI.ItemContainer>[] Setters { get; init; } = [];
+}
+
+// ════════════════════════════════════════════════════════════════════════
 //  ItemsView
 // ════════════════════════════════════════════════════════════════════════
 
@@ -3525,23 +3562,130 @@ public enum ItemsViewLayoutKind
     UniformGridLayout,
 }
 
-public record ItemsViewElement<T>(
-    IReadOnlyList<T> Items,
-    Func<T, string> KeySelector,
-    Func<T, int, Element> ViewBuilder
-) : Element
+/// <summary>
+/// Non-generic base so <see cref="Reconciler"/> can pattern-match an
+/// ItemsView element without knowing the user's item type. Mirrors the
+/// <see cref="LazyStackElementBase"/> / <see cref="TemplatedListElementBase"/>
+/// shape: virtual hooks for factory creation, in-place update,
+/// per-row reconcile, and event callback dispatch.
+/// </summary>
+public abstract record ItemsViewElementBase : Element
 {
     public ItemsViewLayoutKind LayoutKind { get; init; } = ItemsViewLayoutKind.StackLayout;
     public ItemsViewSelectionMode SelectionMode { get; init; } = ItemsViewSelectionMode.Single;
     public bool IsItemInvokedEnabled { get; init; }
+    /// <summary>Total number of items in the source list.</summary>
+    public abstract int ItemCount { get; }
+    /// <summary>Stable key for the item at <paramref name="index"/>.</summary>
+    internal abstract string GetKeyAt(int index);
+    public abstract IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool);
+    public abstract bool TryUpdateFactory(IElementFactory existingFactory);
+    public abstract void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater);
+    internal abstract void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState);
+    /// <summary>Dispatch an <c>ItemInvoked</c> event to the typed callback.</summary>
+    public abstract void InvokeItemInvoked(int index);
+    /// <summary>Dispatch a <c>SelectionChanged</c> snapshot to the typed callback.</summary>
+    public abstract void InvokeSelectionChanged(IReadOnlyList<int> indices);
+    /// <summary>
+    /// Synchronously validate that the user's viewBuilder returns an
+    /// <see cref="ItemContainerElement"/> root. Called by
+    /// <c>MountItemsView</c> before the factory is handed to WinUI, so
+    /// the exception lands on the user's call stack instead of deep
+    /// inside the dispatcher-driven realize loop (where it would either
+    /// crash the process or hang the framework's measure pass).
+    /// No-op on empty <see cref="ItemCount"/>.
+    /// </summary>
+    internal abstract void PreflightFirstItem();
+    internal Action<WinUI.ItemsView>[] Setters { get; init; } = [];
+}
+
+public record ItemsViewElement<T>(
+    IReadOnlyList<T> Items,
+    Func<T, string> KeySelector,
+    Func<T, int, Element> ViewBuilder
+) : ItemsViewElementBase
+{
     public Action<T>? OnItemInvoked { get; init; }
     /// <summary>
     /// Multi-select snapshot callback. Receives the full list of currently
-    /// selected items. Use this when <see cref="SelectionMode"/> is Multiple
-    /// or Extended.
+    /// selected items. Use this when <see cref="ItemsViewElementBase.SelectionMode"/>
+    /// is Multiple or Extended.
     /// </summary>
     public Action<IReadOnlyList<T>>? OnSelectionChanged { get; init; }
-    internal Action<WinUI.ItemsView>[] Setters { get; init; } = [];
+
+    public override int ItemCount => Items.Count;
+
+    internal override string GetKeyAt(int index) =>
+        (uint)index < (uint)Items.Count
+            ? (KeySelector(Items[index]) ?? $"__iv_{index}")
+            : $"__iv_{index}";
+
+    /// <summary>
+    /// Wraps the user-supplied viewBuilder with a guard that asserts the
+    /// returned root is an <see cref="ItemContainerElement"/>. WinUI's
+    /// ItemsView hangs in an infinite measure cycle if the factory hands
+    /// back non-ItemContainer roots (see
+    /// <c>microsoft-ui-xaml-lift/controls/dev/ItemsView/ItemsView.cpp:317</c>),
+    /// so converting that into a clear ArgumentException at the call site
+    /// saves users a baffling debugging session.
+    /// </summary>
+    private Element GuardedViewBuilder(T item, int index)
+    {
+        var built = ViewBuilder(item, index);
+        if (built is not ItemContainerElement)
+        {
+            throw new global::System.InvalidOperationException(
+                $"ItemsView viewBuilder at index {index} returned {built.GetType().Name}; " +
+                $"ItemsView requires an ItemContainer root — wrap with ItemContainer(...).");
+        }
+        return built;
+    }
+
+    internal override void PreflightFirstItem()
+    {
+        if (Items.Count == 0) return;
+        // Just invoke the guard; any non-container root throws.
+        _ = GuardedViewBuilder(Items[0], 0);
+    }
+
+    public override IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool) =>
+        new ElementFactory<T>(Items, GuardedViewBuilder, reconciler, requestRerender, pool);
+
+    public override bool TryUpdateFactory(IElementFactory existingFactory)
+    {
+        if (existingFactory is ElementFactory<T> f) { f.UpdateInPlace(Items, GuardedViewBuilder); return true; }
+        return false;
+    }
+
+    public override void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater)
+    {
+        if (factory is ElementFactory<T> f) f.RefreshRealizedItems(repeater);
+    }
+
+    internal override void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState)
+    {
+        if (factory is ElementFactory<T> f) f.AttachListState(listState);
+    }
+
+    public override void InvokeItemInvoked(int index)
+    {
+        if (OnItemInvoked is null) return;
+        if ((uint)index < (uint)Items.Count) OnItemInvoked(Items[index]);
+    }
+
+    public override void InvokeSelectionChanged(IReadOnlyList<int> indices)
+    {
+        if (OnSelectionChanged is null) return;
+        if (indices.Count == 0) { OnSelectionChanged(global::System.Array.Empty<T>()); return; }
+        var picked = new List<T>(indices.Count);
+        for (int i = 0; i < indices.Count; i++)
+        {
+            var idx = indices[i];
+            if ((uint)idx < (uint)Items.Count) picked.Add(Items[idx]);
+        }
+        OnSelectionChanged(picked);
+    }
+
     internal override bool HasCallbacks =>
         OnItemInvoked is not null || OnSelectionChanged is not null;
 }

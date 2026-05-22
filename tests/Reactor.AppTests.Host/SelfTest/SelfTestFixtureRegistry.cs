@@ -142,6 +142,14 @@ internal static class SelfTestFixtureRegistry
         "MdHtml_HtmlGeneration",
         "MdHtml_HtmlInWebView2",
         "ListView_TypedRendering",
+        // ItemsView reconciler arm — mount / update / layout-kind / selection.
+        "ItemsView_Mount",
+        "ItemsView_Layout_UniformGrid",
+        "ItemsView_Layout_LinedFlow",
+        "ItemsView_Update_ReflectsNewItems",
+        "ItemsView_SelectionMode_Applied",
+        "ItemsView_Selection_SurvivesRerender",
+        "ItemsView_Rerender_DoesNotMarkContainersModified",
         // Spec 042 Phase 1 — keyed-list reconciliation end-to-end fixtures.
         "KLR_ListView_MountsOcSource",
         "KLR_ListView_InsertAtZero_EmitsSingleAdd",
@@ -1019,6 +1027,13 @@ internal static class SelfTestFixtureRegistry
         "MdHtml_HtmlGeneration" => new MarkdownHtmlFixtures.HtmlGeneration(harness),
         "MdHtml_HtmlInWebView2" => new MarkdownHtmlFixtures.HtmlInWebView2(harness),
         "ListView_TypedRendering" => new CollectionFixtures.ListViewTyped(harness),
+        "ItemsView_Mount" => new ItemsViewFixtures.ItemsView_BasicMount(harness),
+        "ItemsView_Layout_UniformGrid" => new ItemsViewFixtures.ItemsView_LayoutKind_AppliesUniformGrid(harness),
+        "ItemsView_Layout_LinedFlow" => new ItemsViewFixtures.ItemsView_LayoutKind_AppliesLinedFlow(harness),
+        "ItemsView_Update_ReflectsNewItems" => new ItemsViewFixtures.ItemsView_Update_ReflectsNewItems(harness),
+        "ItemsView_SelectionMode_Applied" => new ItemsViewFixtures.ItemsView_SelectionMode_Applied(harness),
+        "ItemsView_Selection_SurvivesRerender" => new ItemsViewFixtures.ItemsView_Selection_SurvivesRerender(harness),
+        "ItemsView_Rerender_DoesNotMarkContainersModified" => new ItemsViewFixtures.ItemsView_Rerender_DoesNotMarkContainersModified(harness),
         // Spec 042 Phase 1 — keyed-list reconciliation end-to-end.
         "KLR_ListView_MountsOcSource" => new KeyedListReconciliationFixtures.ListView_MountsOcSource(harness),
         "KLR_ListView_InsertAtZero_EmitsSingleAdd" => new KeyedListReconciliationFixtures.ListView_InsertAtZero_EmitsSingleAdd(harness),

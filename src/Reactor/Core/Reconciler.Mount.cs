@@ -128,6 +128,8 @@ public sealed partial class Reconciler
             MenuFlyoutElement mfEl => MountMenuFlyout(mfEl, requestRerender),
             TemplatedListElementBase tl => MountTemplatedList(tl, requestRerender),
             LazyStackElementBase lazy => MountLazyStack(lazy, requestRerender),
+            ItemsViewElementBase iv => MountItemsView(iv, requestRerender),
+            ItemContainerElement ic => MountItemContainer(ic, requestRerender),
             RectangleElement rect => MountRectangle(rect),
             EllipseElement ell => MountEllipse(ell),
             LineElement ln => MountLine(ln),
@@ -2991,6 +2993,125 @@ public sealed partial class Reconciler
         ApplySetters(lazy.ScrollViewerSetters, sv);
 
         return sv;
+    }
+
+    // ── ItemsView ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Translate the user-facing layout-kind enum to a real WinUI
+    /// <see cref="WinUI.Layout"/>. All three layouts live under
+    /// <c>Microsoft.UI.Xaml.Controls</c>; <c>StackLayout</c> here is the
+    /// virtualizing layout (not the panel of the same name).
+    /// </summary>
+    private static WinUI.Layout BuildItemsViewLayout(ItemsViewLayoutKind kind) => kind switch
+    {
+        ItemsViewLayoutKind.LinedFlowLayout => new WinUI.LinedFlowLayout
+        {
+            LineSpacing = 4,
+            MinItemSpacing = 4,
+        },
+        ItemsViewLayoutKind.UniformGridLayout => new WinUI.UniformGridLayout
+        {
+            MinItemWidth = 160,
+            MinItemHeight = 96,
+            MinRowSpacing = 4,
+            MinColumnSpacing = 4,
+        },
+        _ => new WinUI.StackLayout { Spacing = 4 },
+    };
+
+    private UIElement MountItemsView(ItemsViewElementBase iv, Action requestRerender)
+    {
+        // Run the user's viewBuilder for index 0 up front so a missing
+        // ItemContainer wrap surfaces here — on the caller's stack —
+        // instead of inside WinUI's realize loop where it would hang the
+        // measure pass.
+        iv.PreflightFirstItem();
+
+        var control = new WinUI.ItemsView
+        {
+            Layout = BuildItemsViewLayout(iv.LayoutKind),
+            SelectionMode = iv.SelectionMode,
+            IsItemInvokedEnabled = iv.IsItemInvokedEnabled,
+        };
+
+        // ItemsView is a ScrollView + ItemsRepeater under the hood. We feed
+        // it the same OC<ReactorRow> source / ElementFactory<T> pair used
+        // by LazyVStack — the framework drives realize/recycle through
+        // GetElement/RecycleElement, the factory mounts/unmounts via the
+        // reconciler. See ElementFactory.cs for the bridge contract.
+        //
+        // Caller contract: the user's viewBuilder MUST return an
+        // <see cref="ItemContainerElement"/> at the root. MountItemContainer
+        // is the only Mount path that produces a WinUI ItemContainer,
+        // which ItemsView's selection / focus / animation infrastructure
+        // requires (without it, the inner ItemsRepeater enters an infinite
+        // measure cycle — see microsoft-ui-xaml-lift/controls/dev/
+        // ItemsView/ItemsView.cpp:317).
+        var listState = BuildListStateForItemsView(iv);
+        SetListState(control, listState);
+        control.ItemsSource = listState.Source;
+        var factory = iv.CreateFactory(this, requestRerender, _pool);
+        iv.AttachListStateToFactory(factory, listState);
+        control.ItemTemplate = factory;
+
+        SetElementTag(control, iv);
+
+        // ItemsView raises ItemInvoked/SelectionChanged with ReactorRow
+        // payloads (because ItemsSource is OC<ReactorRow>). Translate the
+        // row → original-list index inside the trampoline so the user's
+        // handler sees their own T.
+        control.ItemInvoked += (s, e) =>
+        {
+            var c = (WinUI.ItemsView)s!;
+            if (GetElementTag(c) is not ItemsViewElementBase current) return;
+            if (e.InvokedItem is ReactorRow row)
+                current.InvokeItemInvoked(row.Index);
+        };
+        control.SelectionChanged += (s, e) =>
+        {
+            var c = (WinUI.ItemsView)s!;
+            if (GetElementTag(c) is not ItemsViewElementBase current) return;
+            var selected = c.SelectedItems;
+            if (selected is null || selected.Count == 0)
+            {
+                current.InvokeSelectionChanged(global::System.Array.Empty<int>());
+                return;
+            }
+            var indices = new List<int>(selected.Count);
+            for (int i = 0; i < selected.Count; i++)
+            {
+                if (selected[i] is ReactorRow row) indices.Add(row.Index);
+            }
+            current.InvokeSelectionChanged(indices);
+        };
+
+        ApplySetters(iv.Setters, control);
+        return control;
+    }
+
+    private UIElement MountItemContainer(ItemContainerElement ic, Action requestRerender)
+    {
+        var container = new WinUI.ItemContainer { IsSelected = ic.IsSelected };
+        if (ic.Child is not null)
+        {
+            var childCtrl = Mount(ic.Child, requestRerender);
+            container.Child = childCtrl;
+        }
+        SetElementTag(container, ic);
+        ApplySetters(ic.Setters, container);
+        return container;
+    }
+
+    private static ReactorListState BuildListStateForItemsView(ItemsViewElementBase iv)
+    {
+        var state = new ReactorListState();
+        int n = iv.ItemCount;
+        var seeded = new (int Index, string Key)[n];
+        for (int i = 0; i < n; i++)
+            seeded[i] = (i, iv.GetKeyAt(i) ?? $"__null_{i}");
+        state.Reset(seeded);
+        return state;
     }
 
     // ── Shape elements ──────────────────────────────────────────────────

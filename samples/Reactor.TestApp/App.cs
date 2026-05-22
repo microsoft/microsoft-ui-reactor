@@ -31,7 +31,7 @@ static class AppFlags
 
 // ─── Root application component ────────────────────────────────────────────────
 
-enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, LayoutCost, Windows }
+enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, ItemsView, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, LayoutCost, Windows }
 
 class DemoApp : Component
 {
@@ -50,6 +50,7 @@ class DemoApp : Component
             Tab.DynamicList => ("Dynamic List", "dynamiclist"),
             Tab.PerfStress => ("Perf Stress", "perfstress"),
             Tab.Virtualization => ("Virtualization", "virtualization"),
+            Tab.ItemsView => ("ItemsView", "virtualization"),
             Tab.Flyout => ("Flyout", "flyout"),
             Tab.DataTemplate => ("DataTemplate", "datatemplate"),
             Tab.FlexPanel => ("FlexPanel", "flexpanel"),
@@ -128,6 +129,7 @@ class DemoApp : Component
                     Tab.DynamicList => Component<DynamicListDemo>(),
                     Tab.PerfStress => Component<PerfStressDemo>(),
                     Tab.Virtualization => Component<VirtualizationDemo>(),
+                    Tab.ItemsView => Component<ItemsViewDemo>(),
                     Tab.Flyout => Component<FlyoutDemo>(),
                     Tab.DataTemplate => Component<DataTemplateDemo>(),
                     Tab.FlexPanel => Component<FlexPanelDemo>(),

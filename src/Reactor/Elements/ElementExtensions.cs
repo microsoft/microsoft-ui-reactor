@@ -1816,6 +1816,10 @@ public static partial class ElementExtensions
     public static ItemsViewElement<T> Set<T>(this ItemsViewElement<T> el, Action<WinUI.ItemsView> configure) =>
         el with { Setters = [.. el.Setters, configure] };
 
+    // ItemContainer (required root of ItemsView's view builder)
+    public static ItemContainerElement Set(this ItemContainerElement el, Action<WinUI.ItemContainer> configure) =>
+        el with { Setters = [.. el.Setters, configure] };
+
     // Typed templated collections
     public static TemplatedListViewElement<T> Set<T>(this TemplatedListViewElement<T> el, Action<WinUI.ListView> configure) =>
         el with { Setters = [.. el.Setters, configure] };

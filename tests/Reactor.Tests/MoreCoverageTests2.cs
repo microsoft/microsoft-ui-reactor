@@ -4,6 +4,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
+using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Tests;
 
@@ -1081,5 +1082,49 @@ public class MoreCoverageTests2
         Assert.Equal(ItemsViewLayoutKind.StackLayout, el.LayoutKind);
         Assert.Equal(Microsoft.UI.Xaml.Controls.ItemsViewSelectionMode.Single, el.SelectionMode);
         Assert.False(el.IsItemInvokedEnabled);
+    }
+
+    [Fact]
+    public void ItemsView_Preflight_RejectsNonContainerBuilder()
+    {
+        // Bad builder: returns a bare TextBlock instead of an
+        // ItemContainer wrap. The preflight check (called by
+        // MountItemsView before the factory is handed to WinUI) runs the
+        // builder for index 0 and throws when the root isn't an
+        // ItemContainerElement — turning what would otherwise be an
+        // infinite measure-loop hang into a synchronous error on the
+        // user's call stack.
+        ItemsViewElementBase bad = new ItemsViewElement<string>(
+            new[] { "x" },
+            KeySelector: s => s,
+            ViewBuilder: (s, _) => TextBlock(s));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => bad.PreflightFirstItem());
+        Assert.Contains("ItemContainer", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ItemsView_Preflight_AcceptsItemContainerBuilder()
+    {
+        ItemsViewElementBase good = new ItemsViewElement<string>(
+            new[] { "x" },
+            KeySelector: s => s,
+            ViewBuilder: (s, _) => ItemContainer(TextBlock(s)));
+
+        // Should not throw.
+        good.PreflightFirstItem();
+    }
+
+    [Fact]
+    public void ItemsView_Preflight_EmptyItems_NoOp()
+    {
+        ItemsViewElementBase empty = new ItemsViewElement<string>(
+            Array.Empty<string>(),
+            KeySelector: s => s,
+            // Builder never gets called for an empty list, so an "invalid"
+            // builder is also acceptable — preflight short-circuits.
+            ViewBuilder: (s, _) => TextBlock(s));
+
+        empty.PreflightFirstItem();
     }
 }

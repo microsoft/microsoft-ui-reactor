@@ -236,6 +236,10 @@ public sealed partial class Reconciler
                 => UpdateTemplatedFlipView(o, n, fv, requestRerender),
             (LazyStackElementBase, LazyStackElementBase n, WinUI.ScrollViewer sv)
                 => UpdateLazyStack(n, sv, requestRerender),
+            (ItemsViewElementBase, ItemsViewElementBase n, WinUI.ItemsView iv)
+                => UpdateItemsView(n, iv, requestRerender),
+            (ItemContainerElement o, ItemContainerElement n, WinUI.ItemContainer ic)
+                => UpdateItemContainer(o, n, ic, newEl, requestRerender),
             (RectangleElement, RectangleElement n, WinShapes.Rectangle r)
                 => UpdateRectangle(n, r),
             (EllipseElement, EllipseElement n, WinShapes.Ellipse e)
@@ -3040,6 +3044,170 @@ public sealed partial class Reconciler
         SetElementTag(sv, n);
         ApplySetters(n.ScrollViewerSetters, sv);
         return null;
+    }
+
+    // ── ItemContainer ───────────────────────────────────────────────────
+
+    private UIElement? UpdateItemContainer(ItemContainerElement o, ItemContainerElement n, WinUI.ItemContainer ic, Element newEl, Action requestRerender)
+    {
+        if (o.Child is null && n.Child is null)
+        {
+            // Both null — nothing to reconcile.
+        }
+        else if (n.Child is null)
+        {
+            if (ic.Child is not null) UnmountRecursive(ic.Child);
+            ic.Child = null;
+        }
+        else if (o.Child is null)
+        {
+            ic.Child = Mount(n.Child, requestRerender);
+        }
+        else if (CanUpdate(o.Child, n.Child))
+        {
+            if (ic.Child is not null)
+            {
+                var childRepl = Update(o.Child, n.Child, ic.Child, requestRerender);
+                if (childRepl is not null) return Mount(newEl, requestRerender);
+            }
+        }
+        else return Mount(newEl, requestRerender);
+
+        // CAREFUL: don't mirror IsSelected from element → control on every
+        // reconcile. ItemsView drives selection via user clicks, which
+        // updates ic.IsSelected directly. If we wrote n.IsSelected (which
+        // stays at its declared default of false unless the user wired
+        // it into their element with .With(IsSelected: ...)) we'd undo
+        // the framework's selection on the very next render — triggering
+        // another SelectionChanged → setState → render loop visible as a
+        // double "yellow flash" with selection cleared after each click.
+        // Only push when the user actually changed the element's value.
+        if (o.IsSelected != n.IsSelected) ic.IsSelected = n.IsSelected;
+        SetElementTag(ic, n);
+        ApplySetters(n.Setters, ic);
+        return null;
+    }
+
+    // ── ItemsView ───────────────────────────────────────────────────────
+
+    private UIElement? UpdateItemsView(ItemsViewElementBase n, WinUI.ItemsView iv, Action requestRerender)
+    {
+        // ItemsView is templated; the actual realization host is the
+        // ItemsRepeater inside PART_ScrollView. The ScrollView property
+        // is the inner ScrollView (xaml part PART_ScrollView), and its
+        // Content is the ItemsRepeater (xaml part PART_ItemsRepeater).
+        // If the template hasn't been applied yet (rare — only true if
+        // the control was constructed but never measured), fall through
+        // to a full ItemsSource/ItemTemplate replacement on the
+        // ItemsView itself; the template bindings will propagate down.
+        var repeater = iv.ScrollView?.Content as WinUI.ItemsRepeater;
+
+        // Selection-mode / IsItemInvokedEnabled: guard against no-op
+        // writes. Assigning SelectionMode unconditionally — even to the
+        // same value — was enough to make WinUI re-evaluate the
+        // SelectedItems set, which collapsed the user's live selection
+        // back to empty and fired SelectionChanged → setState →
+        // re-render in a feedback loop.
+        if (iv.SelectionMode != n.SelectionMode) iv.SelectionMode = n.SelectionMode;
+        if (iv.IsItemInvokedEnabled != n.IsItemInvokedEnabled) iv.IsItemInvokedEnabled = n.IsItemInvokedEnabled;
+
+        // Layout kind changes are rare and the WinUI cost of swapping the
+        // Layout object includes a re-measure of the entire ItemsRepeater,
+        // so guard against churn — only assign when the kind actually
+        // changes vs. what the live control already has.
+        var wantedLayoutKind = n.LayoutKind;
+        var hasMatchingLayout = (wantedLayoutKind, iv.Layout) switch
+        {
+            (ItemsViewLayoutKind.StackLayout, WinUI.StackLayout) => true,
+            (ItemsViewLayoutKind.LinedFlowLayout, WinUI.LinedFlowLayout) => true,
+            (ItemsViewLayoutKind.UniformGridLayout, WinUI.UniformGridLayout) => true,
+            _ => false,
+        };
+        if (!hasMatchingLayout)
+            iv.Layout = BuildItemsViewLayout(wantedLayoutKind);
+
+        if (repeater is not null && repeater.ItemTemplate is IElementFactory existingFactory && n.TryUpdateFactory(existingFactory))
+        {
+            ApplyItemsViewKeyedDiffOrFallback(iv, repeater, n, existingFactory);
+            n.RefreshRealizedItems(existingFactory, repeater);
+        }
+        else
+        {
+            // First update before the template has materialized the inner
+            // repeater, or factory type mismatch (e.g. element re-keyed to
+            // a different T). Replace the whole binding on the ItemsView
+            // itself — TemplateBinding fans it through to PART_ItemsRepeater
+            // once layout runs.
+            var fresh = BuildListStateForItemsViewFromUpdate(n);
+            SetListState(iv, fresh);
+            iv.ItemsSource = fresh.Source;
+            var factory = n.CreateFactory(this, requestRerender, _pool);
+            n.AttachListStateToFactory(factory, fresh);
+            iv.ItemTemplate = factory;
+        }
+
+        SetElementTag(iv, n);
+        ApplySetters(n.Setters, iv);
+        return null;
+    }
+
+    private void ApplyItemsViewKeyedDiffOrFallback(
+        WinUI.ItemsView iv,
+        WinUI.ItemsRepeater repeater,
+        ItemsViewElementBase n,
+        IElementFactory factory)
+    {
+        // ListState lives on the outer ItemsView (set at mount time), but
+        // the framework's incremental change events are wired through the
+        // ItemsRepeater. Either side of the TemplateBinding is fine — read
+        // from the ItemsView, write back there too.
+        var state = GetListState(iv);
+        if (state is null || !ReferenceEquals(iv.ItemsSource, state.Source))
+        {
+            var fresh = BuildListStateForItemsViewFromUpdate(n);
+            SetListState(iv, fresh);
+            iv.ItemsSource = fresh.Source;
+            n.AttachListStateToFactory(factory, fresh);
+            return;
+        }
+
+        var ambient = AnimationAmbient.Current;
+        var stats = KeyedListDiff.Apply(
+            state,
+            new ItemsViewKeyAdapter(n),
+            static (item, _) => item.Key,
+            _logger,
+            iv.GetType().Name,
+            ambient,
+            controlInstance: repeater);
+
+        if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
+            ApplyMoveAnimationsRepeater(repeater, movedRows, ambient.Kind);
+    }
+
+    private readonly struct ItemsViewKeyAdapter : IReadOnlyList<ItemsViewKeyAdapter.KeyOnly>
+    {
+        private readonly ItemsViewElementBase _el;
+        public ItemsViewKeyAdapter(ItemsViewElementBase el) => _el = el;
+        public KeyOnly this[int index] => new(_el.GetKeyAt(index) ?? $"__null_{index}");
+        public int Count => _el.ItemCount;
+        public IEnumerator<KeyOnly> GetEnumerator()
+        {
+            for (int i = 0; i < _el.ItemCount; i++) yield return this[i];
+        }
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        public readonly record struct KeyOnly(string Key);
+    }
+
+    private static ReactorListState BuildListStateForItemsViewFromUpdate(ItemsViewElementBase iv)
+    {
+        var state = new ReactorListState();
+        int n = iv.ItemCount;
+        var seeded = new (int Index, string Key)[n];
+        for (int i = 0; i < n; i++)
+            seeded[i] = (i, iv.GetKeyAt(i) ?? $"__null_{i}");
+        state.Reset(seeded);
+        return state;
     }
 
     private void ApplyLazyKeyedDiffOrFallback(WinUI.ItemsRepeater repeater, LazyStackElementBase n, IElementFactory factory)
