@@ -104,11 +104,14 @@ public static class DockingNativeInterop
                 var newChild = rec.Reconcile(state.LastContent, newContent, host.Child, rerender);
                 host.Child = newChild;
 
-                // Refresh live-region binding when the DockManager element
-                // reference rotates (apps that rebuild `new DockManager`
-                // each render); silent no-op when the ref is unchanged.
-                if (state.LastElement is { } old && !ReferenceEquals(old, newEl))
-                    DockHostLiveAnnouncer.Clear(old);
+                // Refresh live-region binding to point at the new element
+                // ref. We do NOT clear the old ref's entry — apps that
+                // rebuild `new DockManager` each render leave a chain of
+                // refs that the ConditionalWeakTable reclaims as the GC
+                // collects each old element. Mirrors DockChordBridge /
+                // DockHostModelBridge so callers holding any past element
+                // ref can still resolve the host (matches the bridge
+                // contract sibling fixtures rely on).
                 DockHostLiveAnnouncer.Register(newEl, host);
 
                 state.LastElement = newEl;

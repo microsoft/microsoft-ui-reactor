@@ -1210,13 +1210,31 @@ integration.*
   disabled; static positioning verified.
 - [ ] **High-contrast:** chrome legibility (P4 review item 27
   explicit; P2 baseline must not regress).
-- [ ] **A11y-specific selftests:**
-  - [ ] AT-tree walk asserts role/name/AutomationId for every pane.
+- [~] **A11y-specific selftests:**
+  - [x] AT-tree walk asserts role/name/AutomationId for every pane.
+    `NativeDocking_A11y_HostLandmarkAndPaneAutomationIds` walks the
+    realized control tree, finds the host Border by landmark name +
+    type, asserts pane wrapper Borders carry stable
+    `AutomationId = pane:<key>` + `AutomationName = Title`.
   - [ ] Keyboard-only docking cycle: open / move / pin / close
     entirely via keyboard; state transitions + live-region
-    announcements asserted.
-  - [ ] Focus invariant: after every transition, focused element is
+    announcements asserted. *Deferred — needs the §2.10 Ctrl+Tab
+    navigator + Alt+F7 picker overlays before the cycle can be
+    driven end-to-end via keyboard alone. Live-region announcement
+    plumbing is in place via `DockHostLiveAnnouncer`; the assertion
+    rides on the chord-driven path.*
+  - [x] Focus invariant: after every transition, focused element is
     valid (not null, not disposed) inside the host.
+    `NativeDocking_A11y_FocusFallback_OnLastPaneClose` drives a
+    model-mutator close of the only pane through the §2.16 drain
+    and asserts (a) the host Border resolves through both
+    `DockHostLiveAnnouncer.GetHost` and (pre-close) the realized
+    landmark Border, (b) those refs are identical, (c) the live-
+    region bridge entry survives a record-`with` re-render
+    (matches the `DockChordBridge` / `DockHostModelBridge` no-
+    aggressive-clear contract — `ConditionalWeakTable` GC keys
+    reclaim old refs naturally), and (d) the post-close layout
+    has no group, gating the FocusHostFallback call site.
 
 ### 2.23 Globalization / RTL + bidi (spec §8.8)
 

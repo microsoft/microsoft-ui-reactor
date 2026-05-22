@@ -94,4 +94,94 @@ internal static class NativeDockingA11yFixtures
             await Harness.Render();
         }
     }
+
+    /// <summary>
+    /// Spec 045 §2.22 — focus invariant: after the last pane in a host
+    /// closes, focus lands on the host element so chord targets stay
+    /// reachable. The model-mutator close path (CloseOp drain) is the
+    /// chord-equivalent code path; we use it here so the assertion is
+    /// independent of the keyboard chord wiring (covered by
+    /// `DockHostKeyboardTests`).
+    /// </summary>
+    internal class A11y_FocusFallback_OnLastPaneClose(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            var docA = new Document
+            {
+                Title = "Editor",
+                Key = "focusfx:editor",
+                Content = TextBlock("body-editor"),
+                CanClose = true,
+            };
+            // Stable manager ref so the bridges resolve consistently across
+            // the close-then-re-render cycle (matches the
+            // `Reliability_Effect_*` fixture pattern).
+            var managerEl = new DockManager
+            {
+                Layout = new DockTabGroup(new DockableContent[] { docA }),
+            };
+            host.Mount(_ => managerEl);
+            await Harness.Render();
+
+            // Find the host Border before the close so we can compare
+            // identity against the post-close registered host.
+            var allBorders = H.FindAllControls<Border>(_ => true);
+            Border? hostBorder = null;
+            foreach (var b in allBorders)
+            {
+                if (AutomationProperties.GetLandmarkType(b) == AutomationLandmarkType.Custom
+                    && AutomationProperties.GetName(b) == DockingStrings.Get(DockingStringKeys.DockHostLandmark))
+                {
+                    hostBorder = b;
+                    break;
+                }
+            }
+            H.Check("A11y_FocusFallback_HostBorderFound", hostBorder is not null);
+
+            // The live-region bridge registers the same host element. If the
+            // pre-close walk found one, the bridge must point at it too.
+            var registered = DockHostLiveAnnouncer.GetHost(managerEl);
+            H.Check("A11y_FocusFallback_AnnouncerRegistered", registered is not null);
+            if (hostBorder is not null && registered is not null)
+            {
+                H.Check("A11y_FocusFallback_AnnouncerHostMatchesBorder",
+                    ReferenceEquals(hostBorder, registered));
+            }
+
+            // Drive the close through the model-mutator path so the drain
+            // runs synchronously inside Render (no chord plumbing needed).
+            // Bridging via the registered host model — the bridge entry
+            // is set in DockHostNativeComponent on every render.
+            var model = DockHostModelBridge.Get(managerEl);
+            H.Check("A11y_FocusFallback_ModelBridgeResolved", model is not null);
+            if (model is null) return;
+
+            model.Close(docA);
+            // Force a re-render via a fresh element ref so the drain runs
+            // even without a parent state mutation.
+            host.Mount(_ => managerEl! with { });
+            await Harness.Render();
+
+            // The last-pane close drain calls FocusHostFallback. We can't
+            // synchronously assert FocusManager.GetFocusedElement under
+            // the headless harness (no XamlRoot dispatcher tick after the
+            // best-effort focus call), so we verify the contract proxy:
+            // the host element is still alive AND still registered with
+            // the live announcer, AND the post-close layout has no group.
+            var postRegistered = DockHostLiveAnnouncer.GetHost(managerEl);
+            H.Check("A11y_FocusFallback_HostStillRegisteredAfterClose",
+                postRegistered is not null);
+            H.Check("A11y_FocusFallback_NoPanesLeft",
+                model.Root is null
+                || DockHostKeyboard.FindFirstGroup(model.Root).Group is null
+                || DockHostKeyboard.FindFirstGroup(model.Root).Group!.Documents.Count == 0);
+
+            host.Mount(_ => TextBlock("focusfx-done"));
+            await Harness.Render();
+        }
+    }
 }
