@@ -308,4 +308,383 @@ internal static class NativeDockingDynamicContentFixtures
             return ctl?.Text ?? string.Empty;
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Pix gallery — the actual real-world shape (mirrors
+    //  C:\Users\andersonch\Code\pix\winui-port\src\Pix.Controls.Gallery\
+    //  GalleryShell.cs + WelcomePage.cs + SampleControl.cs).
+    //
+    //  Key difference from <see cref="DynamicallyDockedContent_IsInteractive"/>
+    //  above: the Document's Content is NOT the counter component
+    //  directly — it's an outer "page" Component whose body contains
+    //  the counter Component nested deeper (wrapped in
+    //  ScrollViewer + VStack + Border per the Pix WelcomePage). The
+    //  user reported that the previous repro doesn't surface their
+    //  bug — clicks on the inner counter inside the docked WelcomePage
+    //  still don't update its state. This fixture mirrors the
+    //  structure exactly so we can drive the remaining failure mode.
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Inner counter component — same shape as
+    /// <c>Pix.Controls.SampleControl</c>: own UseState, button bumps
+    /// the count, TextBlock reflects.
+    /// </summary>
+    private sealed class PixSampleControl : Component
+    {
+        public override Element Render()
+        {
+            var (count, setCount) = UseState(0);
+            return VStack(
+                TextBlock($"Pix.Controls Sample — Count: {count}")
+                    .Set(t => t.Name = "PixDoc_SampleCount"),
+                Button("Increment", () =>
+                {
+                    PixSampleClickFiredCount++;
+                    setCount(count + 1);
+                }).Set(b => b.Name = "PixDoc_SampleIncrement")
+            );
+        }
+    }
+
+    // Static click probe lets the fixture tell "click never reached"
+    // from "click reached but Component state slot didn't update" from
+    // "state updated but TextBlock didn't re-render."
+    private static int PixSampleClickFiredCount;
+
+    /// <summary>
+    /// Outer page Component — same shape as
+    /// <c>Pix.Controls.Gallery.WelcomePage</c>: wraps the inner
+    /// counter Component in ScrollViewer + VStack + Border.
+    /// </summary>
+    private sealed class PixWelcomePage : Component
+    {
+        public override Element Render()
+        {
+            return ScrollViewer(
+                VStack(16,
+                    TextBlock("Pix Controls Gallery").SemiBold(),
+                    TextBlock("This gallery demonstrates custom controls."),
+                    TextBlock("Sample component:"),
+                    Border(
+                        Component<PixSampleControl>()
+                    ).CornerRadius(8).Background("#f5f5f5").Padding(16)
+                ).Padding(24)
+            );
+        }
+    }
+
+    private static DockableContent BuildPixWelcomeDoc() =>
+        new Document
+        {
+            Title = "Welcome",
+            Key = "pixdoc:welcome",
+            Content = Component<PixWelcomePage>(),
+        };
+
+    /// <summary>
+    /// Props for the gallery's left-side toolbar — mirrors
+    /// <c>Pix.Controls.Gallery.GalleryItemsListProps</c>.
+    /// </summary>
+    private sealed record PixGalleryToolbarProps(Ref<DockHostModel?> ModelRef);
+
+    /// <summary>
+    /// Renders the gallery toolbar — captures the live DockHostModel
+    /// via <c>UseContext(DockContexts.Host)</c>, publishes it to a Ref,
+    /// and dispatches <c>model.Dock(BuildPixWelcomeDoc())</c> on click.
+    /// Same shape as <c>Pix.Controls.Gallery.GalleryItemsList</c>.
+    /// </summary>
+    private sealed class PixGalleryToolbar : Component<PixGalleryToolbarProps>
+    {
+        public override Element Render()
+        {
+            var host = UseContext(DockContexts.Host);
+            Props.ModelRef.Current = host;
+            return VStack(4,
+                Button("Welcome", () =>
+                {
+                    var model = Props.ModelRef.Current;
+                    if (model is null) return;
+                    model.Dock(BuildPixWelcomeDoc(), DockTarget.Center);
+                }).Set(b => b.Name = "PixDoc_ToolbarOpenWelcome")
+            ).Padding(8);
+        }
+    }
+
+    /// <summary>
+    /// End-to-end repro of the Pix gallery scenario: dock a Document
+    /// whose Content is <c>Component&lt;WelcomePage&gt;()</c> (which
+    /// itself nests <c>Component&lt;SampleControl&gt;()</c>), then
+    /// click the inner counter button. The inner Component's UseState
+    /// slot must update AND the displayed Count text must follow.
+    /// </summary>
+    internal class DynamicallyDockedComponentPage_InnerCounterUpdates(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            PixSampleClickFiredCount = 0;
+
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            var modelRef = new Ref<DockHostModel?>(null);
+
+            var toolbar = new ToolWindow
+            {
+                Title = "Gallery Items",
+                Key = "pixdoc:toolbar",
+                Content = Component<PixGalleryToolbar, PixGalleryToolbarProps>(
+                    new PixGalleryToolbarProps(modelRef)),
+                CanFloat = false,
+                CanMove = false,
+                CanHide = false,
+            };
+
+            var managerEl = new DockManager
+            {
+                PersistenceId = "selftest:pixdoc",
+                Layout = new DockSplit(
+                    Orientation.Horizontal,
+                    new DockNode[]
+                    {
+                        new DockTabGroup(
+                            new DockableContent[] { toolbar },
+                            ShowWhenEmpty: true,
+                            Width: 200),
+                        new DockTabGroup(
+                            Array.Empty<DockableContent>(),
+                            ShowWhenEmpty: true),
+                    }),
+            };
+
+            host.Mount(_ => managerEl);
+            await Harness.Render();
+            H.Check("PixDoc_ToolbarMounted",
+                H.FindControl<Button>(b => b.Name == "PixDoc_ToolbarOpenWelcome") is not null);
+            H.Check("PixDoc_ModelRefPublished", modelRef.Current is not null);
+
+            // Dispatch the Dock as the gallery does — through the
+            // model captured by the toolbar component. The host.Mount
+            // re-render forces the docking sub-host to drain the
+            // queue (same selftest-only workaround as the
+            // DynamicallyDockedContent_IsInteractive fixture).
+            var bridgeModel = DockHostModelBridge.Get(managerEl);
+            bridgeModel?.Dock(BuildPixWelcomeDoc(), DockTarget.Center);
+            host.Mount(_ => managerEl with { });
+            await Harness.Render();
+
+            H.Check("PixDoc_WelcomeMountedInModel",
+                bridgeModel?.AllContent().Any(c => c.Key as string == "pixdoc:welcome") == true);
+            H.Check("PixDoc_SampleCountMounted",
+                H.FindControl<Microsoft.UI.Xaml.Controls.TextBlock>(t => t.Name == "PixDoc_SampleCount") is not null);
+            H.Check("PixDoc_SampleCountBaseline",
+                FindSampleStateText() == "Pix.Controls Sample — Count: 0");
+
+            // Click the inner counter button via UIA Invoke.
+            var sampleBtn = H.FindControl<Button>(b => b.Name == "PixDoc_SampleIncrement");
+            H.Check("PixDoc_SampleButtonMounted", sampleBtn is not null);
+            InvokePeer(sampleBtn);
+            await Harness.Render();
+
+            H.Check("PixDoc_SampleClickHandlerFired",
+                PixSampleClickFiredCount == 1);
+            H.Check("PixDoc_SampleCountAfterClick",
+                FindSampleStateText() == "Pix.Controls Sample — Count: 1");
+
+            InvokePeer(sampleBtn);
+            await Harness.Render();
+            H.Check("PixDoc_SampleClickHandlerFiredTwice",
+                PixSampleClickFiredCount == 2);
+            H.Check("PixDoc_SampleCountAfterSecondClick",
+                FindSampleStateText() == "Pix.Controls Sample — Count: 2");
+
+            host.Mount(_ => TextBlock("pixdoc-done"));
+            await Harness.Render();
+        }
+
+        private static void InvokePeer(Button? btn)
+        {
+            if (btn is null) return;
+            var peer = FrameworkElementAutomationPeer.CreatePeerForElement(btn);
+            (peer.GetPattern(PatternInterface.Invoke) as IInvokeProvider)?.Invoke();
+        }
+
+        private string FindSampleStateText()
+        {
+            var ctl = H.FindControl<Microsoft.UI.Xaml.Controls.TextBlock>(t =>
+                t.Name == "PixDoc_SampleCount");
+            return ctl?.Text ?? string.Empty;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Full Pix gallery mirror: outer shell Component with UseState
+    //  wired to DockManager's OnActiveContentChanged / OnDocumentClosed
+    //  + .WithKey($"gallery-dock-{resetTick}") + Grid wrapping. The
+    //  previous Pix-mirror selftest passes — but the user reports the
+    //  actual gallery still doesn't update the inner counter, so the
+    //  remaining failure must come from the outer-shell state-setter
+    //  interaction.
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Renders the entire dock host inside an outer Component
+    /// (mirroring <c>Pix.Controls.Gallery.GalleryShell</c>) whose
+    /// state setters are wired to the DockManager's event callbacks
+    /// (OnActiveContentChanged → setActiveTag, etc.). The active-tag
+    /// state setter fires on the click that opens the WelcomePage,
+    /// causing the outer shell to re-render concurrent with the
+    /// model.Dock drain. The fixture then verifies that the inner
+    /// counter inside the docked WelcomePage still updates on click.
+    /// </summary>
+    private sealed class PixGalleryShell : Component
+    {
+        public override Element Render()
+        {
+            // Same shape as GalleryShell.cs lines 60-130.
+            var (activeTag, setActiveTag) = UseState<string?>(null);
+            var (resetTick, _) = UseState(0);
+            var modelRef = UseRef<DockHostModel?>(null);
+            var activeTagRef = UseRef<string?>(activeTag);
+            activeTagRef.Current = activeTag;
+
+            var toolbar = new ToolWindow
+            {
+                Title = "Gallery Items",
+                Key = "pixshell:toolbar",
+                Content = Component<PixGalleryToolbar, PixGalleryToolbarProps>(
+                    new PixGalleryToolbarProps(modelRef)),
+                CanFloat = false,
+                CanMove = false,
+                CanHide = false,
+            };
+
+            // Mirrors GalleryShell.BuildInitialLayout: horizontal split,
+            // toolbar on left, empty doc area on right.
+            var initialLayout = new DockSplit(
+                Orientation.Horizontal,
+                new DockNode[]
+                {
+                    new DockTabGroup(
+                        new DockableContent[] { toolbar },
+                        ShowWhenEmpty: true,
+                        Width: 200),
+                    new DockTabGroup(
+                        Array.Empty<DockableContent>(),
+                        ShowWhenEmpty: true),
+                });
+
+            var dock = new DockManager
+            {
+                PersistenceId = "selftest:pixshell",
+                Layout = initialLayout,
+                OnDocumentClosed = e =>
+                {
+                    if (e.Document.Key is string key && key.StartsWith("pixdoc:"))
+                    {
+                        var closedTag = key.Substring("pixdoc:".Length);
+                        if (activeTagRef.Current == closedTag) setActiveTag(null);
+                    }
+                },
+                OnActiveContentChanged = e =>
+                {
+                    if (e.ActiveContent?.Key is string key && key.StartsWith("pixdoc:"))
+                    {
+                        // This is the interesting state-setter — fires
+                        // during the same render pass that mounts the
+                        // dynamically-docked Document. The setActiveTag
+                        // call triggers an OUTER re-render that races
+                        // with the docking sub-host's drain re-render,
+                        // and may interleave with the inner counter's
+                        // state-update render in ways that the
+                        // standalone-toolbar fixture above didn't
+                        // exercise.
+                        setActiveTag(key.Substring("pixdoc:".Length));
+                    }
+                },
+            }.WithKey($"pixshell-dock-{resetTick}");
+
+            return dock;
+        }
+    }
+
+    /// <summary>
+    /// Outer-shell repro: mirrors <c>Pix.Controls.Gallery.GalleryShell</c>
+    /// exactly — outer Component with UseState setActiveTag wired to
+    /// OnActiveContentChanged, <c>.WithKey($"…-{resetTick}")</c> on the
+    /// DockManager, model.Dock dispatched from a Component nested
+    /// inside the dock subtree. The previous fixture passes against
+    /// the dirty-ancestor-path fix; if THIS fixture fails, the outer
+    /// state-setter interaction is the remaining failure mode the
+    /// Pix user is hitting.
+    /// </summary>
+    internal class DynamicallyDockedComponentPage_WithOuterShellState(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            PixSampleClickFiredCount = 0;
+
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            host.Mount(_ => Component<PixGalleryShell>());
+            await Harness.Render();
+            H.Check("PixShell_ToolbarMounted",
+                H.FindControl<Button>(b => b.Name == "PixDoc_ToolbarOpenWelcome") is not null);
+
+            // Click the toolbar "Welcome" button — this dispatches
+            // model.Dock(BuildPixWelcomeDoc()) through the toolbar
+            // Component's UseContext-resolved DockHostModel. The
+            // OnContentDocked → OnActiveContentChanged → setActiveTag
+            // chain fires DURING the drain, triggering an outer
+            // shell re-render.
+            var openWelcome = H.FindControl<Button>(b => b.Name == "PixDoc_ToolbarOpenWelcome");
+            InvokePeer(openWelcome);
+            // Multiple pumps: drain → outer shell re-render →
+            // docking sub-host re-render.
+            for (int i = 0; i < 6; i++) await Harness.Render();
+
+            H.Check("PixShell_SampleCountMounted",
+                H.FindControl<Microsoft.UI.Xaml.Controls.TextBlock>(t => t.Name == "PixDoc_SampleCount") is not null);
+            H.Check("PixShell_SampleCountBaseline",
+                FindSampleStateText() == "Pix.Controls Sample — Count: 0");
+
+            // Click the inner counter button. This is the assertion
+            // the Pix user reports failing — the click is visible
+            // but the displayed count stays at 0.
+            var sampleBtn = H.FindControl<Button>(b => b.Name == "PixDoc_SampleIncrement");
+            H.Check("PixShell_SampleButtonMounted", sampleBtn is not null);
+            InvokePeer(sampleBtn);
+            for (int i = 0; i < 4; i++) await Harness.Render();
+
+            H.Check("PixShell_SampleClickHandlerFired",
+                PixSampleClickFiredCount == 1);
+            H.Check("PixShell_SampleCountAfterClick",
+                FindSampleStateText() == "Pix.Controls Sample — Count: 1");
+
+            InvokePeer(sampleBtn);
+            for (int i = 0; i < 4; i++) await Harness.Render();
+            H.Check("PixShell_SampleClickHandlerFiredTwice",
+                PixSampleClickFiredCount == 2);
+            H.Check("PixShell_SampleCountAfterSecondClick",
+                FindSampleStateText() == "Pix.Controls Sample — Count: 2");
+
+            host.Mount(_ => TextBlock("pixshell-done"));
+            await Harness.Render();
+        }
+
+        private static void InvokePeer(Button? btn)
+        {
+            if (btn is null) return;
+            var peer = FrameworkElementAutomationPeer.CreatePeerForElement(btn);
+            (peer.GetPattern(PatternInterface.Invoke) as IInvokeProvider)?.Invoke();
+        }
+
+        private string FindSampleStateText()
+        {
+            var ctl = H.FindControl<Microsoft.UI.Xaml.Controls.TextBlock>(t =>
+                t.Name == "PixDoc_SampleCount");
+            return ctl?.Text ?? string.Empty;
+        }
+    }
 }
