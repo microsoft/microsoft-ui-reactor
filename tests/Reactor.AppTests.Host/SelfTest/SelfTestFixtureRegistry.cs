@@ -920,6 +920,10 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_A11y_HostLandmarkAndPaneAutomationIds",
         "NativeDocking_A11y_FocusFallback_OnLastPaneClose",
         "NativeDocking_Rtl_FlowDirectionAndSplitterSign",
+        "NativeDocking_A11y_KeyboardCycle_NavigatorCommitsActive",
+        "NativeDocking_Composition_ContentMutationFlowsToActivePane",
+        "NativeDocking_Composition_SiblingMutation_PreservesActivePaneIdentity",
+        "NativeDocking_Composition_Rehydration_ContentMatchesByKey",
         // Spec 045 §2.4 drag/drop matrix — exhaustive programmatic-drag
         // scenarios for each DockTarget value + invariants.
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp",
@@ -1843,6 +1847,10 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_A11y_HostLandmarkAndPaneAutomationIds" => new NativeDockingA11yFixtures.A11y_HostLandmarkAndPaneAutomationIds(harness),
         "NativeDocking_A11y_FocusFallback_OnLastPaneClose" => new NativeDockingA11yFixtures.A11y_FocusFallback_OnLastPaneClose(harness),
         "NativeDocking_Rtl_FlowDirectionAndSplitterSign" => new NativeDockingRtlFixtures.Rtl_FlowDirectionAndSplitterSign(harness),
+        "NativeDocking_A11y_KeyboardCycle_NavigatorCommitsActive" => new NativeDockingA11yFixtures.A11y_KeyboardCycle_NavigatorCommitsActive(harness),
+        "NativeDocking_Composition_ContentMutationFlowsToActivePane" => new NativeDockingCompositionFixtures.Composition_ContentMutationFlowsToActivePane(harness),
+        "NativeDocking_Composition_SiblingMutation_PreservesActivePaneIdentity" => new NativeDockingCompositionFixtures.Composition_SiblingMutation_PreservesActivePaneIdentity(harness),
+        "NativeDocking_Composition_Rehydration_ContentMatchesByKey" => new NativeDockingCompositionFixtures.Composition_Rehydration_ContentMatchesByKey(harness),
         // Spec 045 §2.4 drag/drop matrix
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp" => new NativeDockingDragDropMatrixFixtures.DragToCenterSameGroup_NoOp(harness),
         "NativeDockingMatrix_DragToSplitRight_AddsColumn" => new NativeDockingDragDropMatrixFixtures.DragToSplitRight_AddsColumn(harness),

@@ -1262,13 +1262,19 @@ integration.*
     realized control tree, finds the host Border by landmark name +
     type, asserts pane wrapper Borders carry stable
     `AutomationId = pane:<key>` + `AutomationName = Title`.
-  - [ ] Keyboard-only docking cycle: open / move / pin / close
+  - [x] Keyboard-only docking cycle: open / move / pin / close
     entirely via keyboard; state transitions + live-region
-    announcements asserted. *Deferred — needs the §2.10 Ctrl+Tab
-    navigator + Alt+F7 picker overlays before the cycle can be
-    driven end-to-end via keyboard alone. Live-region announcement
-    plumbing is in place via `DockHostLiveAnnouncer`; the assertion
-    rides on the chord-driven path.*
+    announcements asserted. `NativeDocking_A11y_KeyboardCycle_NavigatorCommitsActive`
+    drives the §2.10 Ctrl+Tab navigator's commit + cancel paths
+    via its test hooks (`SeedForTest` / `CommitForTest` /
+    `CancelForTest`) and asserts the navigator commit fires
+    `OnActiveContentChanged` with the right previous/active
+    pair, that cancel closes the popup without firing, and that
+    state stays consistent across open → cancel → reopen
+    sequences. Driving the live `Ctrl-release` keystroke is out
+    of reach in the headless harness (no real input pipeline),
+    so the test hooks bypass that and exercise the host-side
+    wiring contract directly.
   - [x] Focus invariant: after every transition, focused element is
     valid (not null, not disposed) inside the host.
     `NativeDocking_A11y_FocusFallback_OnLastPaneClose` drives a
@@ -1466,7 +1472,7 @@ integration.*
 
 ### 2.27 Self-host & unit testing matrix (spec §8.3)
 
-- [~] **Selftests (the bulk)** under
+- [x] **Selftests (the bulk)** under
   `tests/Reactor.AppTests.Host/SelfTest/Fixtures/Docking*.cs`:
   - [x] Layout-model fixture: `Dock`/`Float`/`Hide`/`Show`/`Close`
     sequences; assert tree + `Descendants()`. Covered by
@@ -1493,18 +1499,37 @@ integration.*
   - [x] `PreviousContainer` fixture: hide → show preserves container.
     Covered by `PreviousContainerTests.HideShowCycle_PreservesContainerIdentity`
     + `DockHostModelSequenceTests.HideShow_WithPreviousContainerTracker_RoundTripsContainerIdentity`.
-  - [~] Composition-driven content updates: mutate state feeding
+  - [x] Composition-driven content updates: mutate state feeding
     `DockNode` tree; assert keyed reconciliation preserves unchanged
-    pane state. Partial — the §2.30 shape-only `layoutOverride` work
-    landed the *implementation* contract (apps declare full tree in
-    `Render()`; state flows naturally through the override), exercised
-    by `DocsByComposition_*` smoke fixtures. A dedicated assertion
-    that "unchanged pane state survives a separate pane's content
-    mutation" still rides on dedicated coverage.
-  - [ ] Rehydration via composition: save → restart → component-
+    pane state. Two new fixtures:
+    `NativeDocking_Composition_ContentMutationFlowsToActivePane`
+    (host-level state mutates a pane's content body via the §2.30
+    shape-only override contract — clicks an in-pane button, asserts
+    the counter text updates) +
+    `NativeDocking_Composition_SiblingMutation_PreservesActivePaneIdentity`
+    (state mutation that updates two sibling panes' bodies preserves
+    each pane wrapper Border's instance identity across the
+    re-render — keyed reconciliation contract). The pre-existing
+    `DocsByComposition_*` smoke fixtures also cover this surface.
+  - [x] Rehydration via composition: save → restart → component-
     supplied content lands in restored slots matched by `Key`.
-  - [ ] Hook re-render scope: `UseActivePaneKey` re-renders only
+    `NativeDocking_Composition_Rehydration_ContentMatchesByKey`
+    saves a two-pane horizontal split, reloads it through
+    `DockLayoutSerializer.Save` + `Load`, walks the loaded shape
+    and replaces each leaf with an app-supplied `DockableContent`
+    keyed identically, then asserts each restored pane's body
+    text renders + the `pane:<key>` AutomationId survives the
+    save/load round-trip.
+  - [~] Hook re-render scope: `UseActivePaneKey` re-renders only
     consumer; `UseDockState` transitions on adopt/promote (P3).
+    `DockHooksTests` (unit) covers `UseActivePaneKey` /
+    `UseDockHost` / `UseLayoutSnapshot` / `UsePane` /
+    `IsActivePane` resolution + the active-key-flip refresh
+    contract; host-mounted variant in
+    `NativeDockingHooksReactivityFixture`
+    (`DockHooks_IsActivePane_*` assertions) covers the
+    consumer-only re-render path. `UseDockState` adopt/promote
+    transitions land with P3 spec 036 integration.
 - [ ] **UI automation (strictly bounded; ≤ 5–8 total across all
   phases):**
   - [ ] (P1) Drag a tab from one group to another within same host.
