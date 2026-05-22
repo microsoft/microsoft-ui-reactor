@@ -50,6 +50,49 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — §2.26 `docking.snapshot` building blocks.**
+  New `DockHostRegistry` (process-wide `WeakReference<DockManager>`
+  registry with stable `dh:{n}` ids) wired through
+  `DockingNativeInterop`'s mount/update/unmount handlers alongside
+  the existing bridges. `DockSnapshot` shape + `DockSnapshotBuilder`
+  pure transform surface a content-ref-free layout tree
+  (`DockSnapshotSplit` / `DockSnapshotTabGroup` / `DockSnapshotLeaf`
+  + `DockSnapshotPane` for identity + role + permissions). 13 new
+  unit tests in `DockSnapshotBuilderTests`. The JSON-RPC tool
+  registration on the internal `DevtoolsMcpServer` rides on the
+  shape being stable.
+- **Spec 045 Phase 2 — §2.10 Alt+F7 hidden-pane picker.** Re-uses
+  the `DockNavigatorPopup` primitive to pick a side-stripped tool
+  window for re-show. Enumerates `effLeftSide` / `effTopSide` /
+  `effRightSide` / `effBottomSide` (where hidden ToolWindows end
+  up after `Hide` / `CanHide=true` close via the §2.16 drain).
+  Commit calls `model.Show(pane)` which routes through
+  `DockLayoutMutator.ShowFromHistory` (§2.15) — and now consults
+  `IDockLayoutStrategy.BeforeInsertToolWindow` first so apps can
+  override the remembered-container route. No-ops on an empty
+  side-strip set.
+- **Spec 045 Phase 2 — §2.23 RTL selftest fixture.**
+  `NativeDocking_Rtl_FlowDirectionAndSplitterSign` mounts a
+  two-pane docking host, applies `FlowDirection.RightToLeft` on
+  the realized host Border, and asserts every realized
+  `DockSplitterControl` + `TabView` inherits RTL + the pointer-
+  drag remains RTL-correct (WinUI coord-space transform).
+  Validates the "WinUI FlowDirection inheritance handles it"
+  claim across §2.23's sidebar / tab-order / splitter / glyph
+  bullets.
+- **Spec 045 Phase 2 — §2.27 composition fixtures.** Three new
+  host-mounted selftests:
+  `Composition_ContentMutationFlowsToActivePane` (in-pane state
+  flows into pane body), `Composition_SiblingMutation_PreservesActivePaneIdentity`
+  (sibling state change preserves pane wrapper Border identity),
+  and `Composition_Rehydration_ContentMatchesByKey` (save / load
+  round-trip + app-supplied content lands in restored slots by
+  Key, AutomationId survives).
+- **Spec 045 Phase 2 — §2.22 keyboard-only docking cycle fixture.**
+  `NativeDocking_A11y_KeyboardCycle_NavigatorCommitsActive` drives
+  the navigator commit + cancel paths via test hooks and asserts
+  the host-side wiring contract (chord → popup → active pane →
+  `OnActiveContentChanged`) end to end.
 - **Spec 045 Phase 2 — §2.10 Ctrl+Tab pane navigator overlay.**
   VS-style navigator: Ctrl+Tab opens a Popup over the host Border
   listing all open panes (depth-first leaf enumeration via the new

@@ -965,9 +965,14 @@ integration.*
 - [x] State survives layout serialization (stored as `previousContainer`
   on the JSON content node). `DockLayoutPane.PreviousContainer` field
   reserved + emitted by serializer.
-- [ ] `IDockLayoutStrategy.BeforeInsertToolWindow` can override.
-  *Override applies inside the manager's strategy-dispatch step (§2.13
-  integration).*
+- [x] `IDockLayoutStrategy.BeforeInsertToolWindow` can override.
+  The §2.16 ShowOp drain in `DockHostNativeComponent.DrainPendingMutations`
+  consults `model.LayoutStrategy.BeforeInsertToolWindow` before
+  falling back to `DockLayoutMutator.ShowFromHistory`. Apps that
+  want to route a re-shown tool window somewhere other than its
+  remembered container return `true` from the strategy hook (and
+  place the pane themselves via the model's public mutators).
+  Strategy exceptions are swallowed so the drain stays alive.
 - [x] Selftest: hide → show → assert container identity preserved.
   `PreviousContainerTests.HideShowCycle_PreservesContainerIdentity` +
   `DockHostModelSequenceTests.HideShow_WithPreviousContainerTracker_RoundTripsContainerIdentity`.

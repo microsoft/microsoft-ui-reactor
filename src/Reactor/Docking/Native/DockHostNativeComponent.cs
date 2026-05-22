@@ -1292,9 +1292,25 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     (workingTop, sidesChanged)    = RemoveFromSide(workingTop, showOp.Content, sidesChanged);
                     (workingRight, sidesChanged)  = RemoveFromSide(workingRight, showOp.Content, sidesChanged);
                     (workingBottom, sidesChanged) = RemoveFromSide(workingBottom, showOp.Content, sidesChanged);
-                    workingLayout = DockLayoutMutator.ShowFromHistory(
-                        workingLayout, showOp.Content, DockTarget.Center);
-                    layoutChanged = true;
+                    // §2.15 — IDockLayoutStrategy.BeforeInsertToolWindow
+                    // override path. Apps that want to route a re-shown
+                    // tool window somewhere other than its remembered
+                    // container return `true` from the strategy hook
+                    // (and place the pane themselves via the model's
+                    // public mutators). The strategy short-circuits the
+                    // ShowFromHistory fallback.
+                    bool strategyHandled = false;
+                    if (model.LayoutStrategy is { } strategy && showOp.Content is ToolWindow tw)
+                    {
+                        try { strategyHandled = strategy.BeforeInsertToolWindow(model, tw); }
+                        catch { /* strategy is app code — swallow to keep drain alive */ }
+                    }
+                    if (!strategyHandled)
+                    {
+                        workingLayout = DockLayoutMutator.ShowFromHistory(
+                            workingLayout, showOp.Content, DockTarget.Center);
+                        layoutChanged = true;
+                    }
                     PreviousContainerTracker.Clear(showOp.Content);
                     DockHostLiveAnnouncer.Announce(manager,
                         DockingStrings.LiveAnnouncement(DockingStringKeys.LiveShown, showOp.Content.Title));
