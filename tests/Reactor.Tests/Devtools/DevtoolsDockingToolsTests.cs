@@ -75,6 +75,20 @@ public class DevtoolsDockingToolsTests : IDisposable
         var props = result.GetType().GetProperties().ToDictionary(p => p.Name, p => p.GetValue(result));
         Assert.Equal(record.Id, props["hostId"]);
         Assert.NotNull(props["root"]);
+
+        // Round-trip the payload through the JSON serializer so a
+        // shape regression — e.g. a snapshot that drops pane keys, or a
+        // tree-builder that emits an empty root — surfaces here rather
+        // than as a silent gap in MCP consumers.
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("\"m\"", json);
+        Assert.Contains("\"o\"", json);
+        // §2.26 — the snapshot exposes a discriminator field describing
+        // the node kind (leaf / tabGroup / split). Both panes carry a
+        // role marker; the root tabGroup carries one too. We don't pin
+        // the exact role string (interface evolution) but we require at
+        // least one role discriminator key to be present.
+        Assert.Contains("role", json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

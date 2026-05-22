@@ -10,6 +10,7 @@ namespace Microsoft.UI.Reactor.Tests.Docking.Native;
 /// Surface used by the <c>docking.snapshot</c> MCP tool to surface a
 /// live layout tree to headless clients.
 /// </summary>
+[Collection("DockingGlobals")]
 public sealed class DockSnapshotBuilderTests : IDisposable
 {
     public DockSnapshotBuilderTests()

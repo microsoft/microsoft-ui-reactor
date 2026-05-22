@@ -113,9 +113,21 @@ public sealed class DockOperationLog
     private readonly List<DockOperation> _ops = new(64);
     private int _cursor;
     private bool _emitToDebug = true;
+    private readonly int _ownerThreadId = Environment.CurrentManagedThreadId;
+
+    private void ThrowIfOffThread()
+    {
+        if (Environment.CurrentManagedThreadId != _ownerThreadId)
+            throw new InvalidOperationException(
+                "DockOperationLog must be called on the owning UI dispatcher. " +
+                "Spec 045 §8.10 — docking subsystem is UI-thread-affined.");
+    }
 
     /// <summary>All operations currently held, oldest first.</summary>
-    public IReadOnlyList<DockOperation> Operations => _ops;
+    public IReadOnlyList<DockOperation> Operations
+    {
+        get { ThrowIfOffThread(); return _ops; }
+    }
 
     /// <summary>Current count of recorded operations (≤ <see cref="MaxOperations"/>).</summary>
     public int Count => _ops.Count;
@@ -147,6 +159,7 @@ public sealed class DockOperationLog
     public void Append(DockOperation op)
     {
         ArgumentNullException.ThrowIfNull(op);
+        ThrowIfOffThread();
         // Drop the oldest if we're at capacity.
         if (_ops.Count >= MaxOperations)
         {
@@ -171,6 +184,7 @@ public sealed class DockOperationLog
         string? paneKey = null,
         DockTarget? target = null)
     {
+        ThrowIfOffThread();
         var op = new DockOperation
         {
             TimestampUtc = DateTime.UtcNow,
@@ -189,6 +203,7 @@ public sealed class DockOperationLog
     /// <summary>Clear the log and reset the cursor.</summary>
     public void Reset()
     {
+        ThrowIfOffThread();
         _ops.Clear();
         _cursor = 0;
     }
@@ -199,6 +214,7 @@ public sealed class DockOperationLog
     /// </summary>
     public DockOperation? Rewind()
     {
+        ThrowIfOffThread();
         if (_cursor <= 0) return null;
         _cursor--;
         return Current;
@@ -210,6 +226,7 @@ public sealed class DockOperationLog
     /// </summary>
     public DockOperation? StepForward()
     {
+        ThrowIfOffThread();
         if (_cursor >= _ops.Count) return null;
         _cursor++;
         return Current;
@@ -218,6 +235,7 @@ public sealed class DockOperationLog
     /// <summary>Jump the cursor to a specific index (clamped).</summary>
     public DockOperation? SeekTo(int index)
     {
+        ThrowIfOffThread();
         _cursor = Math.Clamp(index, 0, _ops.Count);
         return Current;
     }
@@ -225,6 +243,7 @@ public sealed class DockOperationLog
     /// <summary>Drop every entry after the cursor — used when re-recording from a replay point.</summary>
     public void TruncateAfterCursor()
     {
+        ThrowIfOffThread();
         if (_cursor < _ops.Count) _ops.RemoveRange(_cursor, _ops.Count - _cursor);
     }
 
@@ -243,7 +262,17 @@ public sealed class DockOperationLog
     private static string? SafeSaveJson(DockNode root)
     {
         try { return DockLayoutSerializer.Save(root); }
-        catch (Exception ex) { return $"(save failed: {ex.GetType().Name}: {ex.Message})"; }
+        catch (Exception ex)
+        {
+            // LayoutJson is documented as "JSON via DockLayoutSerializer"
+            // and is read by devtools / telemetry consumers that may
+            // parse it with JsonNode.Parse. Returning English diagnostic
+            // text would break parsers and leak exception details into
+            // shipped telemetry. Route the failure to Debug and return
+            // null (the field is already nullable).
+            Debug.WriteLine($"[DockOps] LayoutJson serialization failed: {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
     }
 
     private static string FormatForDebug(DockOperation op)

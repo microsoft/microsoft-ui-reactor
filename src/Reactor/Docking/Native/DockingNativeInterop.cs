@@ -149,6 +149,12 @@ public static class DockingNativeInterop
                     DockChordBridge.Clear(el);
                     DockHostLiveAnnouncer.Clear(el);
                     DockHostRegistry.Unregister(el);
+                    // §2.10 — close any in-flight Ctrl+Tab navigator. The
+                    // popup's global KeyUp/KeyDown handlers are attached
+                    // to XamlRoot.Content and root the host Border via
+                    // the captured `_host` field; without this cleanup an
+                    // unmount-during-chord leaks the entire subtree.
+                    DockNavigatorPopup.CleanupFor(host);
                 }
                 host.Child = null;
                 NativeHostState.SetAttached(host, null);

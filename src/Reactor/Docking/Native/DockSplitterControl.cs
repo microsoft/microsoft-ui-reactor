@@ -290,16 +290,26 @@ internal sealed partial class DockSplitterControl : Grid
         // applies them all and the model drifts an order of magnitude
         // past the actual cursor movement. Fire once at drag end with
         // the final pair-size delta via OnPointerReleased.
-        var preLeading = (VTH.GetParent(this) is Microsoft.UI.Reactor.Layout.FlexPanel pp && pp.Children.Count > 0
-            && pp.Children[0] is FrameworkElement fe)
-            ? (_direction == DockSplitterDirection.Columns ? fe.ActualWidth : fe.ActualHeight)
-            : -1;
+        // Diagnostic-only pre-snapshot. Skip the visual-tree walk when no
+        // sink is wired (hot path — fires at input rate during drag).
+        var diagSink = DiagnosticSink;
+        double preLeading = -1;
+        if (diagSink is not null)
+        {
+            preLeading = (VTH.GetParent(this) is Microsoft.UI.Reactor.Layout.FlexPanel pp && pp.Children.Count > 0
+                && pp.Children[0] is FrameworkElement fe)
+                ? (_direction == DockSplitterDirection.Columns ? fe.ActualWidth : fe.ActualHeight)
+                : -1;
+        }
         ApplyAbsoluteGrowFromCapture(cumDelta);
-        var postLeading = (VTH.GetParent(this) is Microsoft.UI.Reactor.Layout.FlexPanel pp2 && pp2.Children.Count > 0
-            && pp2.Children[0] is FrameworkElement fe2)
-            ? (_direction == DockSplitterDirection.Columns ? fe2.ActualWidth : fe2.ActualHeight)
-            : -1;
-        Trace($"MOVE p=({p.X:F1},{p.Y:F1}) cumDelta={cumDelta:F1} leadingAtCapture={_leadingDipAtCapture:F1} pairDip={_pairDipAtCapture:F1} preLeadingActual={preLeading:F1} postLeadingActual={postLeading:F1}");
+        if (diagSink is not null)
+        {
+            var postLeading = (VTH.GetParent(this) is Microsoft.UI.Reactor.Layout.FlexPanel pp2 && pp2.Children.Count > 0
+                && pp2.Children[0] is FrameworkElement fe2)
+                ? (_direction == DockSplitterDirection.Columns ? fe2.ActualWidth : fe2.ActualHeight)
+                : -1;
+            diagSink($"MOVE p=({p.X:F1},{p.Y:F1}) cumDelta={cumDelta:F1} leadingAtCapture={_leadingDipAtCapture:F1} pairDip={_pairDipAtCapture:F1} preLeadingActual={preLeading:F1} postLeadingActual={postLeading:F1}");
+        }
         e.Handled = true;
     }
 
@@ -349,59 +359,6 @@ internal sealed partial class DockSplitterControl : Grid
         var totalGrow = _pairGrowAtCapture > 0 ? _pairGrowAtCapture : 1.0;
         var newLeadingGrow = totalGrow * (newLeading / _pairDipAtCapture);
         var newTrailingGrow = totalGrow - newLeadingGrow;
-        Microsoft.UI.Reactor.Layout.FlexPanel.SetGrow(leading, newLeadingGrow);
-        Microsoft.UI.Reactor.Layout.FlexPanel.SetGrow(trailing, newTrailingGrow);
-    }
-
-    private void ApplyDirectGrowMutation(double rawDeltaDip)
-    {
-        if (VTH.GetParent(this) is not Microsoft.UI.Reactor.Layout.FlexPanel panel) return;
-
-        // Locate self in the panel's children list, and grab the leading
-        // (idx-1) + trailing (idx+1) siblings.
-        int splitterIdx = -1;
-        for (int i = 0; i < panel.Children.Count; i++)
-        {
-            if (ReferenceEquals(panel.Children[i], this)) { splitterIdx = i; break; }
-        }
-        if (splitterIdx <= 0 || splitterIdx >= panel.Children.Count - 1) return;
-        if (panel.Children[splitterIdx - 1] is not FrameworkElement leading) return;
-        if (panel.Children[splitterIdx + 1] is not FrameworkElement trailing) return;
-
-        var extent = _direction == DockSplitterDirection.Columns
-            ? panel.ActualWidth
-            : panel.ActualHeight;
-        if (extent < 1) return;
-
-        var leadingGrow = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(leading);
-        var trailingGrow = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(trailing);
-        var pair = leadingGrow + trailingGrow;
-        if (pair <= 0) return;
-
-        // Read the actual rendered sizes of the pair along the split
-        // axis — that's the true DIP budget shared between them, which
-        // excludes the splitter handle's 16 DIP slice and any sibling
-        // panes (in N-way splits). Using `panel.ActualWidth` directly
-        // would smear the splitter handle's width into the pair's share
-        // and produce sub-pixel cursor lag during drag.
-        var leadingDip = _direction == DockSplitterDirection.Columns
-            ? leading.ActualWidth
-            : leading.ActualHeight;
-        var trailingDip = _direction == DockSplitterDirection.Columns
-            ? trailing.ActualWidth
-            : trailing.ActualHeight;
-        var pairDip = leadingDip + trailingDip;
-        if (pairDip < 1) return;
-
-        const double minDip = 60.0;
-        var newLeading = Math.Clamp(leadingDip + rawDeltaDip, minDip, pairDip - minDip);
-        if (newLeading <= 0 || double.IsNaN(newLeading)) return;
-        var newTrailing = pairDip - newLeading;
-        if (newTrailing < minDip) return;
-
-        var newLeadingGrow = pair * (newLeading / pairDip);
-        var newTrailingGrow = pair - newLeadingGrow;
-
         Microsoft.UI.Reactor.Layout.FlexPanel.SetGrow(leading, newLeadingGrow);
         Microsoft.UI.Reactor.Layout.FlexPanel.SetGrow(trailing, newTrailingGrow);
     }

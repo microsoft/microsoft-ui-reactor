@@ -356,8 +356,18 @@ internal static class NativeDockingSmokeFixtures
             H.Check("Chords_CloseActive_DelegateNonNull", chords?.CloseActive is not null);
             H.Check("Chords_EnterDropMode_DelegateNonNull", chords?.EnterDropMode is not null);
 
+            // Observable side-effects on TabView.SelectedIndex live in
+            // selectedIndexStore (UseRef captured inside the host's
+            // Render closure). The harness's Render flushes the primary
+            // host's reconcile pass but does not flush the sub-host's
+            // bumpTick-driven re-render that NextTab/PrevTab schedule —
+            // the dictionary update path is locked down by
+            // DockHostKeyboardTests at the unit tier. Here we assert
+            // the harness-observable contract: chord delegates are
+            // wired and invocable without throwing.
             chords?.NextTab();
             chords?.PrevTab();
+            chords?.CloseActive();
             chords?.EnterDropMode();
             H.Check("Chords_Invocation_DoesNotThrow", true);
 
@@ -397,26 +407,36 @@ internal static class NativeDockingSmokeFixtures
                 Key: "k:movable",
                 CanClose: true);
 
-            host.Mount(_ => new DockManager
+            var managerEl = new DockManager
             {
                 Layout = new DockTabGroup(new[] { pinned, movable }),
-            });
+            };
+            host.Mount(_ => managerEl);
             await Harness.Render();
 
-            H.Check("PermGate_Pinned_CanMove_IsFalse", !pinned.CanMove);
-            H.Check("PermGate_Movable_CanMove_IsTrue", movable.CanMove);
-            H.Check("PermGate_Pinned_CanClose_IsFalse", !pinned.CanClose);
+            // Exercise the *production* drag-start gate via the bridge
+            // the host registers each render. This is the same predicate
+            // HandleTabDragStarting applies — refuses CanMove=false,
+            // accepts CanMove=true. The prior version of this fixture
+            // only asserted record-field values it constructed itself,
+            // never invoking the gate.
+            var gate = DockDragGateBridge.Get(managerEl);
+            H.Check("PermGate_BridgeRegistered", gate is not null);
+            if (gate is not null)
+            {
+                DockDragSession.ResetForTest();
+                bool acceptedPinned = gate(pinned, sourceTabIndex: 0);
+                H.Check("PermGate_RefusesPinnedPane", !acceptedPinned);
+                H.Check("PermGate_PinnedRefusal_NoSessionStarted",
+                    DockDragSession.Current is null or { IsActive: false });
 
-            // The §2.4 production path: TabView's TabDragStarting event →
-            // HandleTabDragStarting → CanMove check → DockDragSession.Begin.
-            // We don't fire real TabDragStarting (no programmatic surface
-            // for it), but we verify the post-gate path still works for a
-            // legitimately-movable pane by calling Begin directly.
-            DockDragSession.ResetForTest();
-            DockDragSession.Begin(movable, new DockManager(), sourceTabIndex: 1);
-            H.Check("PermGate_SessionBegin_SucceedsForMovable",
-                DockDragSession.Current is { IsActive: true });
-            DockDragSession.Current?.End();
+                DockDragSession.ResetForTest();
+                bool acceptedMovable = gate(movable, sourceTabIndex: 1);
+                H.Check("PermGate_AcceptsMovablePane", acceptedMovable);
+                H.Check("PermGate_MovableAccept_StartsSession",
+                    DockDragSession.Current is { IsActive: true });
+                DockDragSession.Current?.End();
+            }
 
             host.Mount(_ => TextBlock("permgate-done"));
             await Harness.Render();

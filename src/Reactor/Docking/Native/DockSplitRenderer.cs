@@ -36,21 +36,22 @@ internal static class DockSplitRenderer
     /// the split axis at the moment of the event, so the consumer can convert
     /// pixel deltas into ratio space without assuming a synthetic total.
     /// </param>
-    /// <param name="flowDirection">
-    /// LTR/RTL. Reverses child order for row splits in RTL so the visual
-    /// reading order matches reading direction (spec §8.8).
-    /// </param>
     /// <param name="splitterDiagnosticSink">
     /// Optional callback that receives PRESS / MOVE / RELEASE / SOLVE
     /// trace strings — used by the spec 045 operation log to capture the
     /// math behind each splitter drag.
     /// </param>
+    /// <remarks>
+    /// RTL is resolved upstream by Yoga via <c>FlexPanel.LayoutDirection</c>
+    /// (see <c>FlexDirectionHelper.ResolveDirection</c>), so this renderer
+    /// emits children in document order and lets the panel flip row layouts
+    /// at measure time.
+    /// </remarks>
     public static Element Render(
         Microsoft.UI.Reactor.Docking.DockSplit split,
         IReadOnlyList<double> ratios,
         Func<Microsoft.UI.Reactor.Docking.DockNode, Element> renderChild,
         Action<int, double, double, bool> onSplitterDelta,
-        FlexLayoutDirection flowDirection = FlexLayoutDirection.LTR,
         Action<string>? splitterDiagnosticSink = null)
     {
         ArgumentNullException.ThrowIfNull(split);

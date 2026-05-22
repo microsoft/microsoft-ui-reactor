@@ -913,7 +913,7 @@ internal static class SelfTestFixtureRegistry
         // Reliability + security (spec 045 §2.24, §2.25).
         "NativeDocking_Reliability_CorruptLayoutFallback_HostMounted",
         "NativeDocking_Reliability_OffThreadMutation_ThrowsAndDoesNotQueue",
-        "NativeDocking_Reliability_UseEffectCleanup_RunsOnPaneClose",
+        "NativeDocking_Reliability_UseEffectCleanup_BodyRemovedOnPaneClose",
         "NativeDocking_Reliability_DragSessionPayload_ObjectRefsOnly",
         "NativeDocking_Reliability_CrashMidDrag_LeavesPersistedLayoutClean",
         "NativeDocking_Reliability_FloatingWindowClosesOnHostUnmount",
@@ -1841,7 +1841,7 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_ModelDrain_DockCloseActivatePinAffectsLiveTree" => new NativeDockingSmokeFixtures.ModelDrain_DockCloseActivatePinAffectsLiveTree(harness),
         "NativeDocking_Reliability_CorruptLayoutFallback_HostMounted" => new NativeDockingReliabilityFixtures.CorruptLayoutFallback_HostMounted(harness),
         "NativeDocking_Reliability_OffThreadMutation_ThrowsAndDoesNotQueue" => new NativeDockingReliabilityFixtures.OffThreadMutation_ThrowsAndDoesNotQueue(harness),
-        "NativeDocking_Reliability_UseEffectCleanup_RunsOnPaneClose" => new NativeDockingReliabilityFixtures.UseEffectCleanup_RunsOnPaneClose(harness),
+        "NativeDocking_Reliability_UseEffectCleanup_BodyRemovedOnPaneClose" => new NativeDockingReliabilityFixtures.UseEffectCleanup_BodyRemovedOnPaneClose(harness),
         "NativeDocking_Reliability_DragSessionPayload_ObjectRefsOnly" => new NativeDockingReliabilityFixtures.DragSessionPayload_ObjectRefsOnly(harness),
         "NativeDocking_Reliability_CrashMidDrag_LeavesPersistedLayoutClean" => new NativeDockingReliabilityFixtures.CrashMidDrag_LeavesPersistedLayoutClean(harness),
         "NativeDocking_Reliability_FloatingWindowClosesOnHostUnmount" => new NativeDockingReliabilityFixtures.FloatingWindowClosesOnHostUnmount(harness),

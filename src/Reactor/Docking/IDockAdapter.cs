@@ -3,9 +3,9 @@ using Microsoft.UI.Reactor.Core;
 namespace Microsoft.UI.Reactor.Docking;
 
 /// <summary>
-/// Context for an <see cref="IDockAdapter.OnGroupCreated"/> callback. Carries
-/// the freshly-created group's identity and the dragged-out source pane
-/// (if the group was created by a tear-out, otherwise null).
+/// Context for an <see cref="IDockAdapter.OnGroupCreated"/> callback.
+/// Carries the dragged-out source pane (if the group was created by a
+/// tear-out, otherwise null).
 /// </summary>
 /// <remarks>
 /// Spec 045 §4.3. Phase 1 is intentionally minimal — Phase 2's
@@ -39,12 +39,11 @@ public interface IDockAdapter
     /// <summary>
     /// Called when the manager creates a new <c>DocumentGroup</c> at the
     /// tail end of a tear-out drag. Apps may use this to wire group-level
-    /// chrome (e.g., a custom tab-strip toolbar).
+    /// chrome (e.g., a custom tab-strip toolbar). Read the dragged source
+    /// (when applicable) from <see cref="DockTabGroupContext.DraggedSource"/>.
     /// </summary>
     /// <param name="group">The freshly-created group's context.</param>
-    /// <param name="draggedSource">The pane the tear-out originated from,
-    /// or null if the group was created from layout JSON.</param>
-    void OnGroupCreated(DockTabGroupContext group, DockableContent? draggedSource);
+    void OnGroupCreated(DockTabGroupContext group);
 
     /// <summary>
     /// Returns an optional Reactor element to render as the title bar of a

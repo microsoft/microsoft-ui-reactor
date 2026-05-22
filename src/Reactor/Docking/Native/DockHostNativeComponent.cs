@@ -886,15 +886,20 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             var hostElement = DockHostLiveAnnouncer.GetHost(manager);
             if (hostElement is null) return;
             var hidden = new List<ToolWindow>();
-            void AddSide(IReadOnlyList<ToolWindow>? side)
+            // §2.16 drain populates side overrides as DockableContent[] at
+            // runtime (see AddToSide). IReadOnlyList<T> is covariant in T —
+            // a DockableContent[] cannot be `as`-cast to IReadOnlyList<ToolWindow>,
+            // so filter by element type instead, matching SideSlice.
+            void AddSide(IReadOnlyList<DockableContent>? side)
             {
                 if (side is null) return;
-                foreach (var tw in side) hidden.Add(tw);
+                foreach (var item in side)
+                    if (item is ToolWindow tw) hidden.Add(tw);
             }
-            AddSide(effLeftSide as IReadOnlyList<ToolWindow>);
-            AddSide(effTopSide as IReadOnlyList<ToolWindow>);
-            AddSide(effRightSide as IReadOnlyList<ToolWindow>);
-            AddSide(effBottomSide as IReadOnlyList<ToolWindow>);
+            AddSide(effLeftSide);
+            AddSide(effTopSide);
+            AddSide(effRightSide);
+            AddSide(effBottomSide);
             if (hidden.Count == 0) return; // nothing to re-show
             var nav = DockNavigatorPopup.For(hostElement);
             var entries = new DockNavigatorPopup.Entry[hidden.Count];
@@ -963,6 +968,17 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 EnterDropMode: EnterKeyboardDropMode,
                 OpenNavigator: OpenNavigator,
                 OpenHiddenPicker: OpenHiddenPicker));
+
+        // §2.14 — test seam for the drag-start permission gate. Mirrors
+        // HandleTabDragStarting: returns false when the gate refuses (no
+        // session started) and true when DockDragSession.Begin succeeded.
+        // Used by the headless self-test harness, which has no
+        // programmatic TabView.TabDragStarting surface.
+        DockDragGateBridge.Set(manager, (pane, tabIndex) =>
+        {
+            HandleTabDragStarting(pane, tabIndex);
+            return DockDragSession.Current is { IsActive: true };
+        });
 
         // §2.17 — publish the host model + active-key + layout-snapshot
         // context slots so descendant function components hooked into

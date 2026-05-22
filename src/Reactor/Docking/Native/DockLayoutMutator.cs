@@ -44,13 +44,25 @@ internal static class DockLayoutMutator
     /// tab-group structure, and pane identity, but carries no
     /// Content / Title / CanClose / other app-owned fields.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// A <see cref="DockableContent"/> leaf is encountered with a
+    /// <c>null</c> Key. Spec 045 §4.2 requires every docked pane to
+    /// carry a non-null Key — without one, the resolve step in
+    /// <see cref="ResolveContents(DockNode?, DockNode?)"/> cannot
+    /// substitute fresh app state and the override would silently
+    /// freeze stale Content / Title.
+    /// </exception>
     public static DockNode? StripContent(DockNode? node)
     {
         if (node is null) return null;
         switch (node)
         {
             case DockableContent leaf:
-                if (leaf.Key is null) return leaf; // can't strip safely; preserve as-is
+                if (leaf.Key is null)
+                    throw new InvalidOperationException(
+                        "DockableContent in a docked tree must carry a non-null Key. " +
+                        "Spec 045 §4.2 — shape-only overrides resolve by Key. " +
+                        $"Offending leaf has Title='{leaf.Title}'.");
                 return new DockableContent(string.Empty, Key: leaf.Key);
             case DockTabGroup grp:
             {

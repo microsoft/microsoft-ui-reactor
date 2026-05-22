@@ -452,7 +452,7 @@ class SceneBFloating : Component
     sealed class ShowcaseAdapter : IDockAdapter
     {
         public Element? OnContentCreated(DockableContent content) => null;
-        public void OnGroupCreated(DockTabGroupContext g, DockableContent? src) { }
+        public void OnGroupCreated(DockTabGroupContext g) { }
         public Element? GetFloatingWindowTitleBar(DockableContent? draggedSource) =>
             HStack(8,
                 TextBlock("📌").Opacity(0.7),

@@ -63,6 +63,20 @@ internal sealed class DockNavigatorPopup
         return created;
     }
 
+    /// <summary>
+    /// Close any in-flight navigator popup attached to <paramref name="host"/>
+    /// and drop the CWT entry. Called by <c>DockingNativeInterop</c>'s unmount
+    /// path so global Ctrl/Esc handlers attached to <c>XamlRoot.Content</c>
+    /// release their strong reference to this popup (and transitively to
+    /// the host Border) when the host unmounts mid-chord.
+    /// </summary>
+    public static void CleanupFor(FrameworkElement host)
+    {
+        if (!_table.TryGetValue(host, out var existing)) return;
+        existing.Close(commit: false);
+        _table.Remove(host);
+    }
+
     private DockNavigatorPopup(FrameworkElement host)
     {
         _host = host;

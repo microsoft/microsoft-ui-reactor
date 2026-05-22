@@ -105,19 +105,31 @@ internal static class NativeDockingRtlFixtures
             // the direction the test driver pushes — same contract as
             // LTR Columns, which is what "RTL-correct by construction"
             // means.
+            // Preconditions promoted to their own Checks: a missing
+            // precondition is now a visible failure, not a silent
+            // no-op. The previous nested-if pattern would skip the
+            // headline assertion below without leaving any signal in
+            // the TAP output.
             var topColSplitter = splitters.Count > 0 ? splitters[0] : null;
-            if (topColSplitter is { Direction: DockSplitterDirection.Columns })
+            H.Check("RTL_TopSplitterPresent", topColSplitter is not null);
+            H.Check("RTL_TopSplitterIsColumns",
+                topColSplitter is { Direction: DockSplitterDirection.Columns });
+            var panel = topColSplitter is null
+                ? null
+                : Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(topColSplitter) as Microsoft.UI.Reactor.Layout.FlexPanel;
+            H.Check("RTL_TopSplitterParentIsFlexPanel", panel is not null);
+            H.Check("RTL_PanelHasLeadingPlusTrailingChildren",
+                panel is { Children.Count: > 2 });
+
+            if (topColSplitter is { Direction: DockSplitterDirection.Columns }
+                && panel is { Children.Count: > 2 })
             {
-                var panel = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(topColSplitter) as Microsoft.UI.Reactor.Layout.FlexPanel;
-                if (panel is not null && panel.Children.Count > 2)
-                {
-                    var leadingBefore = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow((FrameworkElement)panel.Children[0]);
-                    topColSplitter.SimulatePointerDragForTest(cumulativeDeltaDip: 80);
-                    await Harness.Render();
-                    var leadingAfter = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow((FrameworkElement)panel.Children[0]);
-                    H.Check("RTL_PointerDragChangesLeadingGrow",
-                        Math.Abs(leadingAfter - leadingBefore) > 0.01);
-                }
+                var leadingBefore = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow((FrameworkElement)panel.Children[0]);
+                topColSplitter.SimulatePointerDragForTest(cumulativeDeltaDip: 80);
+                await Harness.Render();
+                var leadingAfter = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow((FrameworkElement)panel.Children[0]);
+                H.Check("RTL_PointerDragChangesLeadingGrow",
+                    Math.Abs(leadingAfter - leadingBefore) > 0.01);
             }
 
             host.Mount(_ => TextBlock("rtl-done"));

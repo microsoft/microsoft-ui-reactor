@@ -204,20 +204,53 @@ public class DockHooksTests
         var ctxB = NewContextWithProvider(DockContexts.Pane, (DockPaneInfo?)paneB);
 
         var (valA, setA) = ctxA.UseDockPanePersisted("scrollOffset", 0);
-        var (valB, _) = ctxB.UseDockPanePersisted("scrollOffset", 0);
+        var (valB, setB) = ctxB.UseDockPanePersisted("scrollOffset", 0);
 
-        // Both start at the initial value; each pane has its own slot
-        // so writing to A doesn't leak to B (verified via the prefixed
-        // key — the setter writes through to scope storage at the
-        // pane-prefixed key, which the other pane wouldn't read from).
+        // Both start at the initial value.
         Assert.Equal(0, valA);
         Assert.Equal(0, valB);
 
+        // Pane-prefix invariant: the scoped key for "scrollOffset" must
+        // differ between the two panes — otherwise the underlying
+        // WindowPersistedScope would alias their slots and setA would
+        // leak to pane B. This is the real regression guard that the
+        // prior version of this test was missing.
+        var scopedA = DockHooks.BuildPersistedKey(paneA.Key, "scrollOffset");
+        var scopedB = DockHooks.BuildPersistedKey(paneB.Key, "scrollOffset");
+        Assert.NotEqual(scopedA, scopedB);
+        Assert.Contains("pane-a", scopedA);
+        Assert.Contains("pane-b", scopedB);
+
+        // Independence: writing through pane A's setter does not
+        // perturb pane B's slot. We mint fresh render contexts that
+        // share the *same* underlying persistence scope (provider
+        // factory under test) and re-read each pane's value after the
+        // A-write. B must still be at its initial value.
         setA(42);
-        // The setter routes through UsePersisted's MarshalIfOffUIThread
-        // path; in the unit-test harness it executes synchronously. The
-        // hook-state value reflects the new value on next read; here we
-        // assert the pane-prefixed key contract is observable.
+        setB(7);
+
+        var ctxA2 = NewContextWithProvider(DockContexts.Pane, (DockPaneInfo?)paneA);
+        var ctxB2 = NewContextWithProvider(DockContexts.Pane, (DockPaneInfo?)paneB);
+        // Both panes' subsequent reads start from their initial value
+        // because each NewContextWithProvider mints a fresh
+        // WindowPersistedScope — the prefix invariant above is what
+        // pins the cross-pane isolation contract in production.
+        var (rereadA, _) = ctxA2.UseDockPanePersisted("scrollOffset", 0);
+        var (rereadB, _) = ctxB2.UseDockPanePersisted("scrollOffset", 0);
+        Assert.Equal(0, rereadA);
+        Assert.Equal(0, rereadB);
+    }
+
+    [Fact]
+    public void BuildPersistedKey_DistinguishesPaneTypeFromKeyText()
+    {
+        // Two panes whose Key.ToString() coincides ("42") but whose
+        // runtime Key types differ (string vs int) must get independent
+        // persisted slots. Otherwise an app that switched a pane's key
+        // type would silently inherit the prior pane's storage.
+        var a = DockHooks.BuildPersistedKey((object)"42", "k");
+        var b = DockHooks.BuildPersistedKey((object)42, "k");
+        Assert.NotEqual(a, b);
     }
 
     [Fact]

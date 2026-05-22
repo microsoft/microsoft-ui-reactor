@@ -18,7 +18,7 @@ namespace Microsoft.UI.Reactor.Docking;
 /// the new permission flags additively.
 /// </para>
 /// </remarks>
-public sealed record Document : DockableContent
+public record Document : DockableContent
 {
     /// <summary>
     /// Whether this document can also be docked as a tool window (side-pinnable).
@@ -96,18 +96,8 @@ public sealed record ToolWindow : DockableContent
 /// <typeparam name="TState">App-defined per-pane state envelope. Must be
 /// JSON-serializable through the app's configured
 /// <c>System.Text.Json.JsonSerializerOptions</c>.</typeparam>
-public sealed record Document<TState> : DockableContent
+public sealed record Document<TState> : Document
 {
-    /// <summary>Whether this document can also be docked as a tool window.</summary>
-    public bool CanDockAsToolWindow { get; init; } = false;
-
     /// <summary>The typed pane state envelope. Round-trips through layout JSON.</summary>
     public TState? State { get; init; }
-
-    /// <summary>Parameterless ctor — overrides base permission defaults to Document semantics.</summary>
-    public Document()
-    {
-        CanClose = true;
-        CanPin   = false;
-    }
 }

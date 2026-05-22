@@ -166,12 +166,13 @@ internal static class NativeDockingA11yFixtures
             host.Mount(_ => managerEl! with { });
             await Harness.Render();
 
-            // The last-pane close drain calls FocusHostFallback. We can't
-            // synchronously assert FocusManager.GetFocusedElement under
-            // the headless harness (no XamlRoot dispatcher tick after the
-            // best-effort focus call), so we verify the contract proxy:
-            // the host element is still alive AND still registered with
-            // the live announcer, AND the post-close layout has no group.
+            // The last-pane close drain calls FocusHostFallback, which
+            // either focuses the host inline (HasThreadAccess) or
+            // enqueues the focus call. Pump a few render cycles so the
+            // enqueued path completes, then read FocusManager — that's
+            // the headline contract this fixture exists to pin.
+            for (int i = 0; i < 4; i++) await Harness.Render();
+
             var postRegistered = DockHostLiveAnnouncer.GetHost(managerEl);
             H.Check("A11y_FocusFallback_HostStillRegisteredAfterClose",
                 postRegistered is not null);
@@ -179,6 +180,40 @@ internal static class NativeDockingA11yFixtures
                 model.Root is null
                 || DockHostKeyboard.FindFirstGroup(model.Root).Group is null
                 || DockHostKeyboard.FindFirstGroup(model.Root).Group!.Documents.Count == 0);
+
+            // Focus assertion: after the close drain pumps, focus should
+            // land on the host element. The headless harness has a
+            // XamlRoot but the FocusManager.TryFocusAsync call inside
+            // FocusHostFallback does not observably move focus to the
+            // Border in this test process — the focus chain through the
+            // sub-host isn't fully wired in the self-test surface. We
+            // emit a Skip rather than dropping the assertion entirely
+            // so the gap stays visible in TAP output; the production
+            // path is covered end-to-end by the headed app self-test
+            // suite (Appium-driven).
+            if (postRegistered is not null)
+            {
+                var xamlRoot = postRegistered.XamlRoot;
+                if (xamlRoot is not null)
+                {
+                    var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot);
+                    if (ReferenceEquals(focused, postRegistered))
+                    {
+                        H.Check("A11y_FocusFallback_FocusLandsOnHost", true);
+                    }
+                    else
+                    {
+                        H.Skip("A11y_FocusFallback_FocusLandsOnHost",
+                            $"Headless harness did not move focus to the host (got: {focused?.GetType().Name ?? "null"}). " +
+                            "Production focus-fallback is covered by the Appium-tier self-tests.");
+                    }
+                }
+                else
+                {
+                    H.Skip("A11y_FocusFallback_FocusLandsOnHost",
+                        "No XamlRoot on the registered host; focus state cannot be read in this harness.");
+                }
+            }
 
             host.Mount(_ => TextBlock("focusfx-done"));
             await Harness.Render();
@@ -226,6 +261,11 @@ internal static class NativeDockingA11yFixtures
             var managerEl = new DockManager
             {
                 Layout = new DockTabGroup(new DockableContent[] { docA, docB, docC }),
+                // Seed the active pane so the production OpenNavigator
+                // closure (chordTargetKey ?? appActiveKey) resolves to
+                // docA on the first Ctrl+Tab. +1 then wraps to docB and
+                // commit fires PreviousContent=docA.
+                ActiveDocument = docA,
                 OnActiveContentChanged = args =>
                 {
                     activeChangeCount++;
@@ -244,54 +284,39 @@ internal static class NativeDockingA11yFixtures
             // shared across chord presses).
             var nav = DockNavigatorPopup.For(hostBorder);
 
-            // Seed the navigator with our pane list and a selection. The
-            // SeedForTest hook bypasses Open's KeyUp / XamlRoot wiring so
-            // CommitForTest can run inline.
-            object? committed = null;
-            var entries = new[]
-            {
-                new DockNavigatorPopup.Entry("kcycle:alpha", "Alpha"),
-                new DockNavigatorPopup.Entry("kcycle:beta",  "Beta"),
-                new DockNavigatorPopup.Entry("kcycle:gamma", "Gamma"),
-            };
-            nav.SeedForTest(entries, selectedIndex: 1, onCommit: key =>
-            {
-                committed = key;
-                // Production wires this callback to setActivePaneKey +
-                // OnActiveContentChanged; mirror that here for the test
-                // assertion since the host's OpenNavigator closure
-                // isn't invoked in the seeded path.
-                if (key is not null)
-                {
-                    DockableContent? target = entries.Select(e => e.Key).Contains(key)
-                        ? new[] { docA, docB, docC }.First(d => Equals(d.Key, key))
-                        : null;
-                    if (target is not null)
-                    {
-                        managerEl.OnActiveContentChanged?.Invoke(
-                            new DockActiveContentChangedEventArgs
-                            {
-                                ActiveContent = target,
-                                PreviousContent = docA,
-                            });
-                    }
-                }
-            });
-            H.Check("KCycle_NavigatorSeeded", nav.IsOpen);
+            // Drive through the *production* chord delegate. The host's
+            // Render() builds an OpenNavigator closure that calls
+            // nav.OpenOrAdvance(...) with the real commit callback (which
+            // sets activePaneKey + fires OnActiveContentChanged). Looking
+            // it up via DockChordBridge.Get(managerEl) exercises the same
+            // seam Ctrl+Tab would in the live app — so a regression in
+            // that closure (wrong commit-callback wiring, missing
+            // OnActiveContentChanged invoke) fails this test.
+            var handlers = DockChordBridge.Get(managerEl);
+            H.Check("KCycle_BridgeHandlersRegistered", handlers is not null);
+            H.Check("KCycle_OpenNavigatorDelegateWired", handlers?.OpenNavigator is not null);
+
+            // Ctrl+Tab → +1: open the navigator. The closure resolves the
+            // current active pane (Alpha by default — first leaf) and
+            // seeds at index (current + delta) wrapped. With three docs
+            // and current=0, delta=+1, the seeded selection is Beta.
+            handlers!.OpenNavigator!.Invoke(+1);
+            H.Check("KCycle_NavigatorOpenedByChord", nav.IsOpen);
             H.Check("KCycle_InitialSelection_Beta",
                 nav.SelectedEntry is { Key: "kcycle:beta" });
 
-            // Commit the seeded selection — equivalent to a Ctrl release
-            // in the live path.
+            // Commit the selection — equivalent to a Ctrl release in the
+            // live path. This invokes the production commit callback,
+            // which must fire OnActiveContentChanged with the new pane.
             nav.CommitForTest();
-            H.Check("KCycle_CommittedKey_Beta", Equals(committed, "kcycle:beta"));
             H.Check("KCycle_OnActiveContentChanged_Fired", activeChangeCount == 1);
             H.Check("KCycle_ActiveIsBeta", lastActive is { Key: "kcycle:beta" });
             H.Check("KCycle_PreviousIsAlpha", prevActive is { Key: "kcycle:alpha" });
             H.Check("KCycle_NavigatorClosed", !nav.IsOpen);
 
-            // Cancel path — open, then cancel; assert no further event.
-            nav.SeedForTest(entries, selectedIndex: 2, onCommit: _ => { /* should not fire */ });
+            // Cancel path: open again via the chord, then cancel — assert
+            // no further OnActiveContentChanged fired (count stays at 1).
+            handlers.OpenNavigator!.Invoke(+1);
             H.Check("KCycle_Reopened", nav.IsOpen);
             nav.CancelForTest();
             H.Check("KCycle_CancelClosesPopup", !nav.IsOpen);

@@ -72,6 +72,29 @@ internal static class NativeDockingDragDropMatrixFixtures
     private static int TabViewCount(Harness h) =>
         h.FindAllControls<TabView>(_ => true).Count;
 
+    /// <summary>
+    /// Root FlexPanel produced by the §2.1 split renderer. Tests that
+    /// assert orientation/placement read this to verify the split shape
+    /// (not just split presence).
+    /// </summary>
+    private static FlexPanel? RootSplitPanel(Harness h) =>
+        h.FindAllControls<FlexPanel>(_ => true).FirstOrDefault();
+
+    /// <summary>
+    /// True if <paramref name="panel"/>'s child at <paramref name="index"/>
+    /// is a TabView whose first tab carries header text equal to
+    /// <paramref name="header"/>. The split renderer's child layout is
+    /// [TabView, DockSplitter, TabView, ...] — only even indices are
+    /// pane slots.
+    /// </summary>
+    private static bool PaneAt(FlexPanel panel, int index, string header)
+    {
+        if (panel.Children.Count <= index) return false;
+        if (panel.Children[index] is not TabView tv) return false;
+        if (tv.TabItems.Count == 0) return false;
+        return tv.TabItems[0] is TabViewItem tvi && (tvi.Header as string) == header;
+    }
+
     // ── Scenarios ──────────────────────────────────────────────────────
 
     /// <summary>
@@ -101,10 +124,10 @@ internal static class NativeDockingDragDropMatrixFixtures
             await Harness.Render();
 
             // Center adds-as-tab to the first group; with 'a' as source it
-            // would duplicate. Acceptable result: 2 unique panes still
-            // visible (no orphan, no crash). The mutator's MovePane removes
-            // first then inserts, so net stays 2.
-            H.Check("M01_TabCountStable", TabCount(H) is >= 2 and <= 3);
+            // would duplicate. The mutator's MovePane removes-then-inserts,
+            // so the net is exactly 2 — a duplicate-pane regression would
+            // produce 3 tabs.
+            H.Check("M01_TabCountStable_NoDuplicate", TabCount(H) == 2);
             // WinUI TabView only mounts the selected tab's body in the
             // visual tree; check tab headers instead of body text.
             var tabs = H.FindAllControls<TabView>(_ => true).FirstOrDefault();
@@ -143,6 +166,16 @@ internal static class NativeDockingDragDropMatrixFixtures
             H.Check("M02_TwoTabViews", TabViewCount(H) == 2);
             H.Check("M02_BothPanesReachable",
                 H.FindText("body-a") is not null && H.FindText("body-b") is not null);
+
+            var panel = RootSplitPanel(H);
+            H.Check("M02_FlexPanelIsRow",
+                panel is { Direction: FlexDirection.Row });
+            // SplitRight: 'a' is moved into a new trailing group. 'b' stays
+            // in the original (leading) group.
+            H.Check("M02_LeadingGroupContainsB",
+                panel is not null && PaneAt(panel, 0, "b"));
+            H.Check("M02_TrailingGroupContainsA",
+                panel is not null && PaneAt(panel, 2, "a"));
             DockDragSession.ResetForTest();
         }
     }
@@ -169,6 +202,16 @@ internal static class NativeDockingDragDropMatrixFixtures
 
             H.Check("M03_HorizontalSplitAppeared", SplitCount(H) == 1);
             H.Check("M03_BodyBReachable", H.FindText("body-b") is not null);
+
+            var panel = RootSplitPanel(H);
+            H.Check("M03_FlexPanelIsRow",
+                panel is { Direction: FlexDirection.Row });
+            // SplitLeft: 'b' is moved into a new leading group. 'a' stays
+            // in the original (trailing) group.
+            H.Check("M03_LeadingGroupContainsB",
+                panel is not null && PaneAt(panel, 0, "b"));
+            H.Check("M03_TrailingGroupContainsA",
+                panel is not null && PaneAt(panel, 2, "a"));
             DockDragSession.ResetForTest();
         }
     }
@@ -195,6 +238,15 @@ internal static class NativeDockingDragDropMatrixFixtures
 
             H.Check("M04_VerticalSplitAppeared", SplitCount(H) == 1);
             H.Check("M04_TwoTabViews", TabViewCount(H) == 2);
+
+            var panel = RootSplitPanel(H);
+            H.Check("M04_FlexPanelIsColumn",
+                panel is { Direction: FlexDirection.Column });
+            // SplitTop: 'a' moves into a new leading group above 'b'.
+            H.Check("M04_LeadingGroupContainsA",
+                panel is not null && PaneAt(panel, 0, "a"));
+            H.Check("M04_TrailingGroupContainsB",
+                panel is not null && PaneAt(panel, 2, "b"));
             DockDragSession.ResetForTest();
         }
     }
@@ -222,6 +274,15 @@ internal static class NativeDockingDragDropMatrixFixtures
             H.Check("M05_VerticalSplitAppeared", SplitCount(H) == 1);
             H.Check("M05_BothBodiesReachable",
                 H.FindText("body-a") is not null && H.FindText("body-b") is not null);
+
+            var panel = RootSplitPanel(H);
+            H.Check("M05_FlexPanelIsColumn",
+                panel is { Direction: FlexDirection.Column });
+            // SplitBottom: 'b' moves into a new trailing group below 'a'.
+            H.Check("M05_LeadingGroupContainsA",
+                panel is not null && PaneAt(panel, 0, "a"));
+            H.Check("M05_TrailingGroupContainsB",
+                panel is not null && PaneAt(panel, 2, "b"));
             DockDragSession.ResetForTest();
         }
     }
@@ -290,6 +351,13 @@ internal static class NativeDockingDragDropMatrixFixtures
 
             H.Check("M07_HorizontalSplitAtRoot", SplitCount(H) == 1);
             H.Check("M07_TwoTabViews", TabViewCount(H) == 2);
+
+            var panel = RootSplitPanel(H);
+            H.Check("M07_FlexPanelIsRow",
+                panel is { Direction: FlexDirection.Row });
+            // DockLeft wraps 'a' to the leading edge of the root split.
+            H.Check("M07_LeadingGroupContainsA",
+                panel is not null && PaneAt(panel, 0, "a"));
             DockDragSession.ResetForTest();
         }
     }
@@ -316,6 +384,13 @@ internal static class NativeDockingDragDropMatrixFixtures
 
             H.Check("M08_HorizontalSplitAtRoot", SplitCount(H) == 1);
             H.Check("M08_TwoTabViews", TabViewCount(H) == 2);
+
+            var panel = RootSplitPanel(H);
+            H.Check("M08_FlexPanelIsRow",
+                panel is { Direction: FlexDirection.Row });
+            // DockRight wraps 'a' to the trailing edge of the root split.
+            H.Check("M08_TrailingGroupContainsA",
+                panel is not null && PaneAt(panel, 2, "a"));
             DockDragSession.ResetForTest();
         }
     }
@@ -341,6 +416,13 @@ internal static class NativeDockingDragDropMatrixFixtures
             await Harness.Render();
 
             H.Check("M09_VerticalSplitAtRoot", SplitCount(H) == 1);
+
+            var panel = RootSplitPanel(H);
+            H.Check("M09_FlexPanelIsColumn",
+                panel is { Direction: FlexDirection.Column });
+            // DockTop wraps 'b' above the existing layout.
+            H.Check("M09_LeadingGroupContainsB",
+                panel is not null && PaneAt(panel, 0, "b"));
             DockDragSession.ResetForTest();
         }
     }
@@ -366,6 +448,13 @@ internal static class NativeDockingDragDropMatrixFixtures
             await Harness.Render();
 
             H.Check("M10_VerticalSplitAtRoot", SplitCount(H) == 1);
+
+            var panel = RootSplitPanel(H);
+            H.Check("M10_FlexPanelIsColumn",
+                panel is { Direction: FlexDirection.Column });
+            // DockBottom wraps 'b' below the existing layout.
+            H.Check("M10_TrailingGroupContainsB",
+                panel is not null && PaneAt(panel, 2, "b"));
             DockDragSession.ResetForTest();
         }
     }

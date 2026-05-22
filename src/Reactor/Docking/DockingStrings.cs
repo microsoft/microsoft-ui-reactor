@@ -116,9 +116,23 @@ public static class DockingStrings
     /// the key.
     /// </summary>
     /// <param name="key">A constant from <see cref="DockingStringKeys"/>.</param>
+    /// <remarks>
+    /// A thrown resolver is swallowed and falls back to the English
+    /// default. The docking subsystem calls <see cref="Get"/> from
+    /// hot paths (drop-target overlay hit-test, side-strip tooltip,
+    /// live-region announcer) where an unhandled exception would crash
+    /// the host. Resolver authors that need failure observability
+    /// should log inside their resolver before throwing — matches
+    /// <c>ReactorTrace</c>'s subscriber-isolation posture.
+    /// </remarks>
     public static string Get(string key)
     {
-        var resolved = Resolver?.Invoke(key);
+        string? resolved = null;
+        if (Resolver is { } r)
+        {
+            try { resolved = r.Invoke(key); }
+            catch { /* see remarks — never propagate a buggy resolver into the host. */ }
+        }
         if (!string.IsNullOrEmpty(resolved)) return resolved;
         return DefaultEnglish(key);
     }

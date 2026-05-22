@@ -70,7 +70,7 @@ public class DockApiShapeTests
     }
 
     [Fact]
-    public void DockSplit_StructuralEquality_HoldsForIdenticalTrees()
+    public void DockSplit_StructuralEquality_DoesNotHoldAcrossDistinctArrayInstances()
     {
         var leaf1a = new DockableContent("L1", Key: "k1");
         var leaf1b = new DockableContent("L1", Key: "k1");
@@ -80,8 +80,9 @@ public class DockApiShapeTests
 
         // IReadOnlyList comparison on a record is reference-based by default
         // (record equality calls EqualityComparer<>.Default which uses the
-        // collection's own Equals). Different array instances → not equal.
-        // This is the documented Reactor convention; we verify it holds.
+        // collection's own Equals). Different array instances → not equal,
+        // even when their element values match. This is the documented
+        // Reactor convention; we verify it holds.
         Assert.NotEqual(split1, split2);
     }
 
@@ -187,7 +188,7 @@ public class DockApiShapeTests
     private sealed class TestAdapter : IDockAdapter
     {
         public Element? OnContentCreated(DockableContent content) => null;
-        public void OnGroupCreated(DockTabGroupContext group, DockableContent? draggedSource) { }
+        public void OnGroupCreated(DockTabGroupContext group) { }
         public Element? GetFloatingWindowTitleBar(DockableContent? draggedSource) => null;
     }
 

@@ -202,7 +202,7 @@ public enum DockTarget { Center, SplitLeft, SplitTop, SplitRight, SplitBottom,
 public interface IDockAdapter
 {
     Element OnContentCreated(DockableContent content);
-    void OnGroupCreated(DockTabGroupContext group, DockableContent? draggedSource);
+    void OnGroupCreated(DockTabGroupContext group);
     Element? GetFloatingWindowTitleBar(DockableContent? draggedSource);
 }
 

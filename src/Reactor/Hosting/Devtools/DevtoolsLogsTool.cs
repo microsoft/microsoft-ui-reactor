@@ -80,9 +80,14 @@ internal static class DevtoolsLogsTool
 
         if (waitMs > 0)
         {
-            // Clamp so a buggy agent can't pin an HTTP worker forever. We
-            // never touch the UI thread here, so dispatcher-timeout is not
-            // the guard.
+            // Clamp so a buggy agent can't pin an HTTP worker forever. The
+            // McpToolHandler delegate is synchronous (McpToolRegistry,
+            // McpDispatcher), so we cannot `await` here without a wholesale
+            // devtools-dispatcher refactor — instead we block the calling
+            // worker for at most 30s. Cap on concurrent long-polls is
+            // therefore `30s × N HTTP workers`; if that becomes a
+            // bottleneck the right fix is to make McpToolHandler return
+            // Task<object?> and propagate async through the dispatcher.
             var clamped = Math.Min(waitMs, 30_000);
             buf.WaitForNewAsync(since, clamped).GetAwaiter().GetResult();
         }
