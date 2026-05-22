@@ -92,10 +92,36 @@ public static class DockFloatingWindow
         windowHolder[0] = window;
         DockFloatingTracker.Register(window);
         if (manager is not null) DockFloatingTracker.RegisterFor(manager, window);
+        // Spec 045 §2.6 — fire OnFloatingWindowCreated so apps can
+        // observe the new top-level for telemetry / persistence /
+        // window-grouping bookkeeping. Best-effort: subscriber throws
+        // do not block the Open call.
+        try
+        {
+            manager?.OnFloatingWindowCreated?.Invoke(new DockFloatingWindowCreatedEventArgs
+            {
+                DraggedSource = pane,
+            });
+        }
+        catch { /* observer should not break tear-out */ }
         window.Closed += (_, _) =>
         {
             DockFloatingTracker.Unregister(window);
             if (manager is not null) DockFloatingTracker.UnregisterFor(manager, window);
+            // Spec 045 §2.6 — paired OnFloatingWindowClosed event. Fires
+            // for both user-initiated close and host-unmount close
+            // (DockingNativeInterop iterates DockFloatingTracker.SnapshotFor
+            // and calls Close() on each); the pane content reference is
+            // best-effort and may be stale after a cross-window dock-back
+            // already migrated it to another host.
+            try
+            {
+                manager?.OnFloatingWindowClosed?.Invoke(new DockFloatingWindowClosedEventArgs
+                {
+                    Content = pane,
+                });
+            }
+            catch { /* observer should not break window cleanup */ }
         };
         return window;
     }

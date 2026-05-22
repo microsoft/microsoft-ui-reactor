@@ -491,7 +491,7 @@ public class DockLayoutMutatorTests
         {
             new DockableContent(string.Empty, Key: "a"),
         });
-        var resolved = DockLayoutMutator.ResolveContents(shape, null);
+        var resolved = DockLayoutMutator.ResolveContents(shape, (DockNode?)null);
         Assert.Same(shape, resolved);
     }
 

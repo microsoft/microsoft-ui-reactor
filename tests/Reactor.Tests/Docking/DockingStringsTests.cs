@@ -102,4 +102,47 @@ public sealed class DockingStringsTests : IDisposable
         Assert.Equal("Float", DockingStrings.Get(DockingStringKeys.MenuFloat));
         Assert.StartsWith("Could not restore", DockingStrings.Get(DockingStringKeys.LayoutRestoreFailed));
     }
+
+    // ── §2.10 live-region announcement templates ──────────────────────────
+
+    [Theory]
+    [InlineData(DockingStringKeys.LiveDocked,  "Output", "Output docked")]
+    [InlineData(DockingStringKeys.LiveFloated, "Output", "Output torn out")]
+    [InlineData(DockingStringKeys.LivePinned,  "Output", "Output pinned")]
+    [InlineData(DockingStringKeys.LiveClosed,  "Output", "Output closed")]
+    [InlineData(DockingStringKeys.LiveHidden,  "Output", "Output hidden")]
+    [InlineData(DockingStringKeys.LiveShown,   "Output", "Output shown")]
+    public void LiveAnnouncement_NoResolver_FillsPlaceholder(string key, string title, string expected)
+    {
+        DockingStrings.Resolver = null;
+        Assert.Equal(expected, DockingStrings.LiveAnnouncement(key, title));
+    }
+
+    [Fact]
+    public void LiveAnnouncement_WithResolver_SubstitutesAfterLookup()
+    {
+        DockingStrings.Resolver = k => k == DockingStringKeys.LiveDocked
+            ? "{paneTitle} ancré"
+            : null;
+        Assert.Equal("Properties ancré",
+            DockingStrings.LiveAnnouncement(DockingStringKeys.LiveDocked, "Properties"));
+    }
+
+    [Fact]
+    public void LiveAnnouncement_NullPaneTitle_ReplacedWithEmpty()
+    {
+        DockingStrings.Resolver = null;
+        Assert.Equal(" closed", DockingStrings.LiveAnnouncement(DockingStringKeys.LiveClosed, null));
+    }
+
+    [Fact]
+    public void LiveAnnouncement_UnknownKey_ReturnsEmpty()
+    {
+        DockingStrings.Resolver = null;
+        // Unknown keys fall through to `key` itself in DefaultEnglish;
+        // LiveAnnouncement detects that and returns empty so callers
+        // can no-op silently rather than announce a raw key string.
+        Assert.Equal(string.Empty,
+            DockingStrings.LiveAnnouncement("Docking.LiveRegion.NotARealKey", "Output"));
+    }
 }

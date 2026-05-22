@@ -618,11 +618,18 @@ WinUI.Dock wrapper for side-by-side review.
   *`ReactorApp.OpenWindow` already mounts content before showing the
   HWND; the explicit Border-host warm-up lands once spec 036's
   window-create perf budget is tracked end-to-end.*
-- [ ] Floating window emits the spec-036 `WindowOpened` /
-  `WindowClosed` events. *Reactor windows already raise these via
-  `ReactorApp.WindowOpened` / `ReactorApp.WindowClosed`; the docking
-  pipeline subscribes via `DockFloatingTracker` for its own
-  bookkeeping.*
+- [x] Floating window emits the spec-036 `WindowOpened` /
+  `WindowClosed` events (carried on the underlying `ReactorWindow`
+  via `ReactorApp.WindowOpened` / `WindowClosed` — Reactor's normal
+  window lifecycle). The docking-side
+  `OnFloatingWindowCreated` / `OnFloatingWindowClosed` events on
+  `DockManager` now also fire from `DockFloatingWindow.Open`:
+  `OnFloatingWindowCreated` immediately after registration, carrying
+  the dragged source pane; `OnFloatingWindowClosed` from the
+  window's `Closed` event, carrying the best-effort pane reference
+  (may be stale after a cross-window dock-back already migrated
+  it). Observer exceptions are swallowed so tear-out / cleanup
+  cannot be broken by a buggy subscriber.
 - [ ] Custom title bar slot: `IDockAdapter.GetFloatingWindowTitleBar`
   returns the content; P1 contract preserved. *Adapter title-bar
   routing lands once the floating window's chrome customization
