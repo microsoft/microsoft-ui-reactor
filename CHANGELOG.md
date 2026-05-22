@@ -27,6 +27,27 @@ to land under these conventions; subsequent specs follow this shape.
 
 ## [Unreleased]
 
+### Changed
+
+- **Spec 045 Phase 2 — §2.30 shape-only `layoutOverride`.** The
+  docking host's internal `layoutOverride` previously stored the
+  full user-mutated `DockNode` tree (with each leaf's `Content` /
+  `Title` / `CanClose` snapshotted at drag-end). That broke the
+  controlled-input contract: app re-renders couldn't push fresh
+  pane bodies because the override always won. Apps had to walk
+  the override and refresh leaf bodies manually. Now the host
+  stores SHAPE-only (leaf records stripped to just `Key`) and
+  resolves pane content per render via
+  `DockLayoutMutator.ResolveContents(shape, manager.Layout)`,
+  matching shape leaves to the app's full records by Key. Apps
+  declare the full tree idiomatically in `Render()`; state flows
+  naturally even after a user drag. New helpers
+  `DockLayoutMutator.StripContent` + `ResolveContents`. 6 new
+  unit tests. M19/M20 drag matrix selftests still pass.
+  `samples/Reactor.TestApp/Demos/DockingDemo.cs` drops its
+  `RefreshContents` walker / `OnLiveLayoutChanged` plumbing — the
+  demo is now plain Reactor.
+
 ### Added
 
 - **Spec 045 Phase 2 — §2.20 perf budget tests.** Three new

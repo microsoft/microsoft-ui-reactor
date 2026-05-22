@@ -18,6 +18,124 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 
 internal static class DockLayoutMutator
 {
+    // ── Shape-only override helpers (spec 045 §2.30) ────────────────────
+    //
+    // The host's internal `layoutOverride` stores just the SHAPE of the
+    // user's drag-modified tree — splits, tab groups, pane Keys — not
+    // the full `DockableContent` records (which carry Content, Title,
+    // CanClose, etc.). Storing full records would freeze a snapshot of
+    // app state at drag-time; subsequent app re-renders couldn't push
+    // fresh Content through because the override always wins.
+    //
+    // The shape tree is a `DockNode` with leaf `DockableContent` records
+    // stripped down to just `Key` (every other field defaulted). At
+    // render time, the host resolves the effective layout by walking
+    // the shape and substituting each leaf with the corresponding
+    // pane from `manager.Layout` (matched by Key). This gives apps the
+    // idiomatic "declare full tree in Render(), state updates flow
+    // naturally" pattern WHILE letting user drags persist as
+    // shape-only state inside the host.
+
+    /// <summary>
+    /// Strip <see cref="DockableContent"/> records down to just their
+    /// <see cref="DockableContent.Key"/> — used by the host before
+    /// storing a user-mutated tree in <c>layoutOverride</c>. The
+    /// resulting tree is "shape-only": preserves split orientations,
+    /// tab-group structure, and pane identity, but carries no
+    /// Content / Title / CanClose / other app-owned fields.
+    /// </summary>
+    public static DockNode? StripContent(DockNode? node)
+    {
+        if (node is null) return null;
+        switch (node)
+        {
+            case DockableContent leaf:
+                if (leaf.Key is null) return leaf; // can't strip safely; preserve as-is
+                return new DockableContent(string.Empty, Key: leaf.Key);
+            case DockTabGroup grp:
+            {
+                var docs = new DockableContent[grp.Documents.Count];
+                for (int i = 0; i < grp.Documents.Count; i++)
+                    docs[i] = (DockableContent)StripContent(grp.Documents[i])!;
+                return grp with { Documents = docs };
+            }
+            case DockSplit split:
+            {
+                var kids = new DockNode[split.Children.Count];
+                for (int i = 0; i < split.Children.Count; i++)
+                    kids[i] = StripContent(split.Children[i])!;
+                return split with { Children = kids };
+            }
+            default:
+                return node;
+        }
+    }
+
+    /// <summary>
+    /// Resolve a shape-only tree against an app-supplied "source" tree
+    /// (typically <c>manager.Layout</c>). Walks <paramref name="shape"/>
+    /// and substitutes each leaf with the equivalent leaf from
+    /// <paramref name="source"/> (matched by
+    /// <see cref="DockableContent.Key"/>). Splits and tab groups carry
+    /// their orientations / selected-index from the shape — those are
+    /// host-owned state. Leaves whose key isn't found in
+    /// <paramref name="source"/> remain as the shape's key-only record;
+    /// callers can use this to detect orphans (e.g. panes the app
+    /// removed while still in the override).
+    /// </summary>
+    public static DockNode? ResolveContents(DockNode? shape, DockNode? source)
+    {
+        if (shape is null) return null;
+        if (source is null) return shape;
+        var index = new Dictionary<object, DockableContent>();
+        IndexLeaves(source, index);
+        return ResolveInner(shape, index);
+    }
+
+    private static void IndexLeaves(DockNode node, Dictionary<object, DockableContent> index)
+    {
+        switch (node)
+        {
+            case DockableContent leaf when leaf.Key is not null:
+                index[leaf.Key] = leaf;
+                break;
+            case DockTabGroup grp:
+                foreach (var d in grp.Documents) IndexLeaves(d, index);
+                break;
+            case DockSplit split:
+                foreach (var c in split.Children) IndexLeaves(c, index);
+                break;
+        }
+    }
+
+    private static DockNode ResolveInner(DockNode shape, Dictionary<object, DockableContent> index)
+    {
+        switch (shape)
+        {
+            case DockableContent leaf:
+                if (leaf.Key is not null && index.TryGetValue(leaf.Key, out var fresh))
+                    return fresh;
+                return leaf;
+            case DockTabGroup grp:
+            {
+                var docs = new DockableContent[grp.Documents.Count];
+                for (int i = 0; i < grp.Documents.Count; i++)
+                    docs[i] = (DockableContent)ResolveInner(grp.Documents[i], index);
+                return grp with { Documents = docs };
+            }
+            case DockSplit split:
+            {
+                var kids = new DockNode[split.Children.Count];
+                for (int i = 0; i < split.Children.Count; i++)
+                    kids[i] = ResolveInner(split.Children[i], index);
+                return split with { Children = kids };
+            }
+            default:
+                return shape;
+        }
+    }
+
+
     /// <summary>
     /// Remove a pane identified by reference from a layout tree. Returns
     /// (newRoot, found). Collapses empty parent containers (a DockSplit

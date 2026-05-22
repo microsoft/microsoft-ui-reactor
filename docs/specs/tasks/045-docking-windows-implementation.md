@@ -1406,6 +1406,47 @@ description before merge.
 - [ ] Sign-off recorded in PR description. **Do not merge** P2 without
   these green.
 
+### 2.30 Shape-only `layoutOverride` (controlled-input contract)
+
+The host's internal `layoutOverride` originally stored the full
+user-mutated `DockNode` tree — including every leaf's `Content`,
+`Title`, `CanClose`, etc., captured at drag-end time. That broke the
+controlled-input contract: subsequent app re-renders couldn't push
+fresh `Content` into pane bodies because the override always won. Apps
+had to manually walk the override and replace leaf bodies per render
+(a "RefreshContents"-style workaround) to get idiomatic state flow.
+
+- [x] `DockLayoutMutator.StripContent(node)` — returns a tree where
+  each leaf `DockableContent` retains only its `Key` (all other fields
+  defaulted).
+- [x] `DockLayoutMutator.ResolveContents(shape, source)` — walks
+  `shape`, looks up each leaf's `Key` in `source` (typically
+  `manager.Layout`), substitutes the full `DockableContent` record.
+  Leaves whose key isn't in source remain as key-only orphans (rare;
+  app-error case detectable by callers).
+- [x] `DockHostNativeComponent` now stores shape-only override (every
+  `setLayoutOverride(new LayoutOverride(...))` call site wraps the
+  tree in `StripContent`). `effectiveLayout` is
+  `ResolveContents(layoutOverride.Root, manager.Layout)` per render.
+- [x] Removed the prop-change convergence kludge — no longer needed
+  because the shape is independent of the app's content tree.
+- [x] App-side contract: declare the full tree in `Render()` per state;
+  the host owns shape, the app owns content. Reset = remount via
+  `.WithKey(...)` bump.
+- [x] Unit coverage: 6 new tests in `DockLayoutMutatorTests`
+  (StripContent_LeafKeepsOnlyKey, StripContent_PreservesShapeStructure,
+  ResolveContents_SubstitutesFullPanesByKey,
+  ResolveContents_LeafMissingFromSource_RemainsKeyOnly,
+  ResolveContents_NullShape_ReturnsNull,
+  ResolveContents_NullSource_ReturnsShapeUnchanged).
+- [x] M19/M20 drag matrix selftests pass end-to-end against the
+  shape-only override path (no regression in control identity or
+  drag-pipeline shape).
+- [x] `samples/Reactor.TestApp/Demos/DockingDemo.cs` simplified
+  accordingly — no more `RefreshContents` walker, no
+  `OnLiveLayoutChanged` plumbing, no shape state in the app. Plain
+  idiomatic Reactor.
+
 ---
 
 ## Phase 3 — fold into the Window primitive

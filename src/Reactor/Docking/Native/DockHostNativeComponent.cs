@@ -95,31 +95,23 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // convergence, same as `layoutOverride`).
         var (sideOverride, setSideOverride) = UseState<SideOverride?>(null);
 
-        // Controlled-input convergence (spec 045 §2.16). The app's
-        // `manager.Layout` is the source of truth; `layoutOverride`
-        // tracks user-driven changes (drag / drop / close) between
-        // renders so the host doesn't lose them when the app's
-        // OnLiveLayoutChanged hasn't yet rebroadcast. When the app
-        // PUSHES a new layout (reference changes from what we last
-        // observed), we surrender the override and use the new prop.
-        // This is the convergence point that lets external state
-        // (selection, reset, bound layouts) flow into the host even
-        // after a user has dragged.
-        var prevLayoutPropRef = UseRef<DockNode?>(manager.Layout);
-        bool layoutPropChanged = !ReferenceEquals(prevLayoutPropRef.Current, manager.Layout);
-        prevLayoutPropRef.Current = manager.Layout;
-        if (layoutPropChanged && layoutOverride is not null)
-        {
-            // Schedule clearing the override so the NEXT render is
-            // fully driven by manager.Layout. The CURRENT render
-            // already uses manager.Layout via the branch below — the
-            // setter call here is a tail microtask via Reactor's
-            // dispatcher-marshalled setState path.
-            setLayoutOverride(null);
-        }
-        var effectiveLayout = (layoutPropChanged || layoutOverride is null)
-            ? manager.Layout
-            : layoutOverride.Root;
+        // Spec 045 §2.30 — shape-only layoutOverride. The override
+        // stores ONLY the user's drag-modified shape (split orientations,
+        // tab-group structure, pane Keys). Per render we resolve the
+        // effective layout by walking the shape and pulling each leaf's
+        // full DockableContent (Title, Content, CanClose, …) from the
+        // app's freshly-supplied `manager.Layout` (matched by Key).
+        // This is what lets app state flow into pane bodies idiomatically
+        // even after the user has dragged — the host owns shape, the
+        // app owns content, the contract is honest.
+        //
+        // Reset / programmatic-layout-push: apps that want to discard
+        // user drag state remount via `.WithKey(...)` bump on the
+        // DockManager element — that fully unmounts and re-mounts the
+        // host, clearing the override.
+        var effectiveLayout = layoutOverride is { Root: not null } lo
+            ? DockLayoutMutator.ResolveContents(lo.Root, manager.Layout)
+            : manager.Layout;
 
         // Per-DockSplit ratio state. The store survives renders via UseRef
         // (state participates in equality and silently no-ops on
@@ -216,7 +208,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             if (drain.LayoutChanged)
             {
                 effectiveLayout = drain.Layout;
-                setLayoutOverride(new LayoutOverride(drain.Layout));
+                setLayoutOverride(new LayoutOverride(DockLayoutMutator.StripContent(drain.Layout)));
                 manager.OnLiveLayoutChanged?.Invoke(drain.Layout);
                 manager.OnLayoutChanged?.Invoke(new DockLayoutChangedEventArgs());
             }
@@ -335,7 +327,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
                 if (removed)
                 {
-                    setLayoutOverride(new LayoutOverride(afterRemove));
+                    setLayoutOverride(new LayoutOverride(DockLayoutMutator.StripContent(afterRemove)));
                     try { DockFloatingWindow.Open(pane, manager: manager); }
                     catch { /* tear-out best-effort; surface via OnContentFloated */ }
                     manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
@@ -471,7 +463,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                         }
                         if (newLayout is not null)
                         {
-                            setLayoutOverride(new LayoutOverride(newLayout));
+                            setLayoutOverride(new LayoutOverride(DockLayoutMutator.StripContent(newLayout)));
                             manager.OnContentDocked?.Invoke(
                                 new DockContentDockedEventArgs { Content = sourcePane, Target = target });
                             manager.OnLiveLayoutChanged?.Invoke(newLayout);
@@ -541,7 +533,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             if (container is not null) PreviousContainerTracker.Set(pane, container);
             var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
             if (!removed) return;
-            setLayoutOverride(new LayoutOverride(afterRemove));
+            setLayoutOverride(new LayoutOverride(DockLayoutMutator.StripContent(afterRemove)));
             manager.OnDocumentClosed?.Invoke(new DockDocumentClosedEventArgs { Document = pane });
             manager.OnLiveLayoutChanged?.Invoke(afterRemove);
             LogOp(Diagnostics.DockOperationKind.LayoutChange,
@@ -644,7 +636,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                         var newLayout = isLocalSource
                             ? DockLayoutMutator.MovePaneToTarget(effectiveLayout, sourcePane, target)
                             : DockLayoutMutator.InsertPaneAtTarget(effectiveLayout, sourcePane, target);
-                        setLayoutOverride(new LayoutOverride(newLayout));
+                        setLayoutOverride(new LayoutOverride(DockLayoutMutator.StripContent(newLayout)));
                         manager.OnContentDocked?.Invoke(
                             new DockContentDockedEventArgs { Content = sourcePane, Target = target });
                         // §2.4 — surface the new whole-tree layout for
@@ -749,7 +741,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             if (container is not null) PreviousContainerTracker.Set(pane, container);
             var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
             if (!removed) return;
-            setLayoutOverride(new LayoutOverride(afterRemove));
+            setLayoutOverride(new LayoutOverride(DockLayoutMutator.StripContent(afterRemove)));
             manager.OnDocumentClosed?.Invoke(new DockDocumentClosedEventArgs { Document = pane });
             manager.OnLiveLayoutChanged?.Invoke(afterRemove);
             LogOp(Diagnostics.DockOperationKind.LayoutChange,
@@ -1328,6 +1320,19 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
     /// render falls back to the controlled-input prop, resurrecting the
     /// closed pane on screen.
     /// </summary>
+    /// <remarks>
+    /// Spec 045 §2.30 — <c>Root</c> is shape-only: leaf
+    /// <see cref="DockableContent"/> records have only their
+    /// <see cref="DockableContent.Key"/> retained (no Content / Title /
+    /// CanClose / etc.). The host resolves the effective layout per
+    /// render by calling <c>DockLayoutMutator.ResolveContents(Root,
+    /// manager.Layout)</c>, which substitutes each shape leaf with the
+    /// full <see cref="DockableContent"/> record from the app's prop
+    /// (matched by Key). This is what lets app state (selection, etc.)
+    /// flow into pane bodies AFTER a user-driven drag has set the
+    /// override — without the app having to walk + refresh the tree
+    /// itself.
+    /// </remarks>
     private sealed record LayoutOverride(DockNode? Root);
 
     /// <summary>

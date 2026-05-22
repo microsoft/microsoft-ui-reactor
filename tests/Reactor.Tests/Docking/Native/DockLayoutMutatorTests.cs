@@ -373,6 +373,128 @@ public class DockLayoutMutatorTests
         Assert.Same(other, group.Documents[0]);
     }
 
+    // ── Shape-only override (§2.30) ────────────────────────────────────
+
+    [Fact]
+    public void StripContent_LeafKeepsOnlyKey()
+    {
+        var leaf = new DockableContent(
+            Title: "A",
+            Content: new Microsoft.UI.Reactor.Core.TextBlockElement("body-a"),
+            Key: "a",
+            CanClose: true,
+            CanPin: true);
+        var stripped = (DockableContent)DockLayoutMutator.StripContent(leaf)!;
+        Assert.Equal("a", stripped.Key);
+        Assert.Equal(string.Empty, stripped.Title);
+        Assert.Null(stripped.Content);
+        Assert.False(stripped.CanClose);
+        Assert.False(stripped.CanPin);
+    }
+
+    [Fact]
+    public void StripContent_PreservesShapeStructure()
+    {
+        var source = new DockSplit(Orientation.Horizontal, new DockNode[]
+        {
+            new DockTabGroup(new DockableContent[]
+            {
+                new DockableContent("A", Content: new Microsoft.UI.Reactor.Core.TextBlockElement("body-a"), Key: "a"),
+                new DockableContent("B", Content: new Microsoft.UI.Reactor.Core.TextBlockElement("body-b"), Key: "b"),
+            }, SelectedIndex: 1),
+            new DockTabGroup(new DockableContent[]
+            {
+                new DockableContent("C", Content: new Microsoft.UI.Reactor.Core.TextBlockElement("body-c"), Key: "c"),
+            }),
+        });
+        var shape = (DockSplit)DockLayoutMutator.StripContent(source)!;
+        Assert.Equal(Orientation.Horizontal, shape.Orientation);
+        Assert.Equal(2, shape.Children.Count);
+        var leftGrp = Assert.IsType<DockTabGroup>(shape.Children[0]);
+        Assert.Equal(2, leftGrp.Documents.Count);
+        Assert.Equal(1, leftGrp.SelectedIndex);
+        Assert.Equal("a", leftGrp.Documents[0].Key);
+        Assert.Null(leftGrp.Documents[0].Content);
+        Assert.Equal("b", leftGrp.Documents[1].Key);
+        var rightGrp = Assert.IsType<DockTabGroup>(shape.Children[1]);
+        Assert.Equal("c", rightGrp.Documents[0].Key);
+    }
+
+    [Fact]
+    public void ResolveContents_SubstitutesFullPanesByKey()
+    {
+        var shape = new DockSplit(Orientation.Horizontal, new DockNode[]
+        {
+            new DockTabGroup(new DockableContent[]
+            {
+                new DockableContent(string.Empty, Key: "a"),
+            }),
+            new DockTabGroup(new DockableContent[]
+            {
+                new DockableContent(string.Empty, Key: "b"),
+            }),
+        });
+        var freshA = new DockableContent("Alpha", Content: new Microsoft.UI.Reactor.Core.TextBlockElement("alpha-body"), Key: "a", CanClose: true);
+        var freshB = new DockableContent("Bravo", Content: new Microsoft.UI.Reactor.Core.TextBlockElement("bravo-body"), Key: "b");
+        // Source order is intentionally different from shape order — the
+        // resolve should match by key, not by position.
+        var source = new DockSplit(Orientation.Vertical, new DockNode[]
+        {
+            new DockTabGroup(new DockableContent[] { freshB, freshA }),
+        });
+
+        var resolved = (DockSplit)DockLayoutMutator.ResolveContents(shape, source)!;
+        // Resolved tree keeps the SHAPE (horizontal, two groups) from
+        // `shape`, but each leaf has the full record from `source`.
+        Assert.Equal(Orientation.Horizontal, resolved.Orientation);
+        Assert.Equal(2, resolved.Children.Count);
+        var leftGrp = Assert.IsType<DockTabGroup>(resolved.Children[0]);
+        Assert.Same(freshA, leftGrp.Documents[0]);
+        var rightGrp = Assert.IsType<DockTabGroup>(resolved.Children[1]);
+        Assert.Same(freshB, rightGrp.Documents[0]);
+    }
+
+    [Fact]
+    public void ResolveContents_LeafMissingFromSource_RemainsKeyOnly()
+    {
+        var shape = new DockTabGroup(new DockableContent[]
+        {
+            new DockableContent(string.Empty, Key: "missing"),
+        });
+        var source = new DockTabGroup(new DockableContent[]
+        {
+            new DockableContent("Other", Key: "other"),
+        });
+        var resolved = (DockTabGroup)DockLayoutMutator.ResolveContents(shape, source)!;
+        // The "missing" leaf has no match in source — it stays as the
+        // key-only record from the shape (orphan; app can detect and
+        // remove via WithKey-remount).
+        Assert.Single(resolved.Documents);
+        Assert.Equal("missing", resolved.Documents[0].Key);
+        Assert.Null(resolved.Documents[0].Content);
+    }
+
+    [Fact]
+    public void ResolveContents_NullShape_ReturnsNull()
+    {
+        var source = new DockTabGroup(new DockableContent[]
+        {
+            new DockableContent("A", Key: "a"),
+        });
+        Assert.Null(DockLayoutMutator.ResolveContents(null, source));
+    }
+
+    [Fact]
+    public void ResolveContents_NullSource_ReturnsShapeUnchanged()
+    {
+        var shape = new DockTabGroup(new DockableContent[]
+        {
+            new DockableContent(string.Empty, Key: "a"),
+        });
+        var resolved = DockLayoutMutator.ResolveContents(shape, null);
+        Assert.Same(shape, resolved);
+    }
+
     [Fact]
     public void MovePaneToTarget_PreservesIdentityAcrossRebuild_NoDuplicate()
     {
