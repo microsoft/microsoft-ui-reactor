@@ -14,7 +14,7 @@ goal: |
 tier: comprehensive
 ---
 
-Reactor is a declarative shell over WinUI. You write a `Component` whose
+Microsoft.UI.Reactor (Reactor) is a declarative shell over WinUI. You write a `Component` whose
 `Render()` method returns an immutable tree of element records — value
 types that describe what you want on screen, not the WinUI controls that
 implement it. A single reconciler diffs the new tree against the previous

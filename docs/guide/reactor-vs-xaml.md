@@ -1,7 +1,7 @@
 > **WinUI reference:** For the full property surface and design guidance, see [Winui3](https://learn.microsoft.com/en-us/windows/apps/winui/winui3/).
 
 If you've spent years inside XAML, the question that keeps coming back
-is "where did my bindings go?" Reactor renders the same WinUI controls
+is "where did my bindings go?" Microsoft.UI.Reactor (Reactor) renders the same WinUI controls
 your XAML pages renders — `Button`, `TextBox`, `TabView`,
 `ItemsRepeater` — and lays them out through the same panels.
 What changes is the source of truth for property values. In XAML, a

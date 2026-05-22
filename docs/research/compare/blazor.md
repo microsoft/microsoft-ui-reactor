@@ -1,6 +1,6 @@
 # Blazor — Framework Analysis
 
-**Purpose:** Critical technical analysis for comparison against the other Microsoft UI frameworks (WinForms, WPF, WinUI 3, Reactor) and the competitor lineup (SwiftUI, Compose, React, Flutter, Avalonia).
+**Purpose:** Critical technical analysis for comparison against the other Microsoft UI frameworks (WinForms, WPF, WinUI 3, Microsoft.UI.Reactor) and the competitor lineup (SwiftUI, Compose, React, Flutter, Avalonia).
 
 **Version analyzed:** Blazor in .NET 9 (Nov 2024) and .NET 10 (Nov 2025), part of ASP.NET Core.
 

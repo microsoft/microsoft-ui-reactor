@@ -139,7 +139,7 @@ Re-exports `Microsoft.UI.Xaml.GridUnitType` directly — no parallel enum.
 
 Three constraints decided this:
 
-1. **Naming collision.** Reactor users routinely `using Microsoft.UI.Xaml;`
+1. **Naming collision.** Microsoft.UI.Reactor (Reactor) users routinely `using Microsoft.UI.Xaml;`
    for `Thickness`/`Visibility`/`Window`/etc. Introducing
    `Microsoft.UI.Reactor.GridLength` produces `CS0104: ambiguous reference`
    in those files.

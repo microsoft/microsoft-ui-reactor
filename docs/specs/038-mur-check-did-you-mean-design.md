@@ -4,7 +4,7 @@
 
 **Proposed** — 2026-05-09. No code yet.
 
-This spec proposes extending the existing `mur check` command (a thin MSBuild wrapper at `src/Reactor.Cli/Check/CheckCommand.cs`) into a **diagnostic-aware coach** that augments C# compiler errors landing on Reactor types with concrete *did-you-mean* suggestions. Today `mur check` parses MSBuild output into one-line diagnostics and looks up skill-file pointers for the 12 known `REACTOR_*` analyzer codes. This spec adds three further tiers — Roslyn semantic suggestions, induced pattern rules, and an optional learned ranker — driven by data the harness in [037 — Reactor Eval Trace Mining](./037-eval-trace-mining-design.md) produces.
+This spec proposes extending the existing `mur check` command (a thin MSBuild wrapper at `src/Reactor.Cli/Check/CheckCommand.cs`) into a **diagnostic-aware coach** that augments C# compiler errors landing on Microsoft.UI.Reactor (Reactor) types with concrete *did-you-mean* suggestions. Today `mur check` parses MSBuild output into one-line diagnostics and looks up skill-file pointers for the 12 known `REACTOR_*` analyzer codes. This spec adds three further tiers — Roslyn semantic suggestions, induced pattern rules, and an optional learned ranker — driven by data the harness in [037 — Reactor Eval Trace Mining](./037-eval-trace-mining-design.md) produces.
 
 The motivating example, from agent-eval traces summarized in [#226](https://github.com/microsoft/microsoft-ui-reactor/issues/226):
 

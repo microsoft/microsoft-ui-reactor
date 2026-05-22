@@ -11,7 +11,7 @@
 
 ## Overview
 
-A new devtool overlay that shows, for each mounted Reactor `Component`
+A new devtool overlay that shows, for each mounted Microsoft.UI.Reactor (Reactor) `Component`
 subtree, three live numbers: **layout time**, **authored element count**,
 and **rendered element count**. Data comes from the existing
 `Microsoft-Windows-XAML` ETW provider — no WinUI source changes required.

@@ -212,7 +212,7 @@ pattern in depth; reach for it once the bridge gets non-trivial.
 ## Conflict resolution
 
 Two components writing to the same key is a programming bug, not a
-framework feature — Reactor doesn't merge concurrent updates. The
+framework feature — Microsoft.UI.Reactor (Reactor) doesn't merge concurrent updates. The
 last writer wins. If you find two components writing to the same key,
 the right move is to lift state up to a [context](context.md) value
 shared by both rather than coordinating through the cache. The cache

@@ -4,7 +4,7 @@ Derived from: `docs/specs/036-window-design.md`
 
 Scope reminder: promote `Window` from "internal hosting wiring" inside
 `ReactorApp.OnLaunched` (`src/Reactor/Hosting/ReactorApp.cs`) into a
-first-class Reactor primitive — `WindowSpec`, `ReactorWindow`, multi-window
+first-class Microsoft.UI.Reactor (Reactor) primitive — `WindowSpec`, `ReactorWindow`, multi-window
 topology, DPI awareness, persistence, hooks, devtools/MCP integration, and
 the Windows shell surfaces (taskbar progress / overlay / jump list / tray /
 thumbnail toolbar). The work is structured into the eight phases the spec

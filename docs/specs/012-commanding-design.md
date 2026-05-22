@@ -12,7 +12,7 @@ The [critical review](../critical-review.md) §11 and scorecard grades Commands 
 the joint-lowest score in the entire framework alongside Navigation:
 
 > **No command abstraction.** WinUI's `ICommand` bundles execute + canExecute +
-> change notification. Reactor has bare `Action` callbacks. This means:
+> change notification. Microsoft.UI.Reactor (Reactor) has bare `Action` callbacks. This means:
 > - No automatic button disabling when a command can't execute
 > - No reusable command objects (label + icon + accelerator + action)
 > - No `StandardUICommand` equivalents (Cut/Copy/Paste)

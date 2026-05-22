@@ -1,6 +1,6 @@
 # Jetpack Compose — Framework Analysis
 
-**Purpose:** Critical technical analysis for comparison against Microsoft UI frameworks (WinForms, WPF, WinUI 3, Reactor).
+**Purpose:** Critical technical analysis for comparison against Microsoft UI frameworks (WinForms, WPF, WinUI 3, Microsoft.UI.Reactor).
 
 **Version analyzed:** Jetpack Compose 1.7+ / Compose Multiplatform 1.8-1.9 (2025-2026 era)
 

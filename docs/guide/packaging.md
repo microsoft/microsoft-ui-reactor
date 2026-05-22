@@ -1,7 +1,7 @@
 
 # Packaging
 
-A Reactor app is a normal WinUI 3 / Windows App SDK executable —
+A Microsoft.UI.Reactor (Reactor) app is a normal WinUI 3 / Windows App SDK executable —
 `dotnet publish` produces the deployable artifact and the framework
 itself adds nothing exotic to the project file. What you choose at
 publish time is the **shape** of that artifact: an unpackaged folder

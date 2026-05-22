@@ -2,7 +2,7 @@
 
 ## Problem
 
-Reactor's documentation contains code examples and screenshots that go stale as the framework evolves. When APIs change, docs show code that no longer compiles and screenshots that no longer match reality. Keeping them in sync manually is unsustainable.
+Microsoft.UI.Reactor's documentation contains code examples and screenshots that go stale as the framework evolves. When APIs change, docs show code that no longer compiles and screenshots that no longer match reality. Keeping them in sync manually is unsustainable.
 
 ## Goal
 

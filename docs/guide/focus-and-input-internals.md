@@ -1,5 +1,5 @@
 
-Reactor's focus and input surfaces are thin wrappers over WinUI's
+Microsoft.UI.Reactor (Reactor)'s focus and input surfaces are thin wrappers over WinUI's
 routed-event system — every pointer event, every key press, every
 gesture starts in WinUI's hit-test, walks the visual tree as a routed
 event, and lands at a Reactor element modifier like

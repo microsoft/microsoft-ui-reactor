@@ -18,7 +18,7 @@ framework areas that block an "A" grade:
 | **Local State** | B+ | A | Boxing in HookState, synchronous effect cleanup, no state persistence |
 
 These are the foundation of any declarative UI framework. React, SwiftUI, and Compose
-all score A across the board here. Closing these gaps is prerequisite to Reactor being
+all score A across the board here. Closing these gaps is prerequisite to Microsoft.UI.Reactor (Reactor) being
 taken seriously as a production framework.
 
 ---

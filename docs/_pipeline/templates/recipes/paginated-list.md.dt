@@ -16,7 +16,7 @@ tier: solid
 A paginated list is four states sharing one source of truth: an initial
 load, a populated list, a "load the next page" affordance, and a terminal
 "no more results." [`UseInfiniteResource`](../async-resources.md) owns
-all four — the component below pattern-matches on `LoadState` and reads
+all four in Microsoft.UI.Reactor (Reactor) — the component below pattern-matches on `LoadState` and reads
 `Items` directly; there is no local `UseState` for loading or errors.
 
 ## Primitives

@@ -9,7 +9,7 @@
 
 ## 1. Summary
 
-Add a **discovery-side** tool to the `mur` CLI — `mur find "<intent>"` — that returns a ranked list of canonical Reactor scenarios for the agent to study **before** writing code, then `mur get <id>` to retrieve the full compilable example plus its pitfall notes. The corpus is a hand-curated library of ~200+ scenarios authored as real, mur-check-clean `.cs` files inside the Reactor repository, with sidecar JSON metadata, extracted into an embedded snapshot at build time.
+Add a **discovery-side** tool to the `mur` CLI — `mur find "<intent>"` — that returns a ranked list of canonical Microsoft.UI.Reactor (Reactor) scenarios for the agent to study **before** writing code, then `mur get <id>` to retrieve the full compilable example plus its pitfall notes. The corpus is a hand-curated library of ~200+ scenarios authored as real, mur-check-clean `.cs` files inside the Reactor repository, with sidecar JSON metadata, extracted into an embedded snapshot at build time.
 
 This closes the workflow gap between Reactor and WinUI 3 agent tooling: `winui-search.exe` gives WinUI agents BM25-ranked Gallery + Toolkit samples and curated pitfall notes; `mur check` gives Reactor agents post-write fuzzy correction but no pre-write discovery. With `mur find`, the loop becomes **intent → find → get → write → check** instead of **guess → check → re-guess**.
 

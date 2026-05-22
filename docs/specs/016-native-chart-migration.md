@@ -2,7 +2,7 @@
 
 Migrate the high-level chart DSL (`LineChart`, `BarChart`, `AreaChart`,
 `PieChart`, `TreeChart`, `ForceGraph`) from imperative `XamlHostElement`
-rendering to native Reactor element trees using the existing D3 drawing
+rendering to native Microsoft.UI.Reactor (Reactor) element trees using the existing D3 drawing
 primitives.
 
 ---

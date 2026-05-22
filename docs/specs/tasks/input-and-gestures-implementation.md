@@ -456,7 +456,7 @@ Ships in three sub-phases so the 80% case lands before the full protocol.
 - [x] Subscribe once (trampoline) to `DragEnter`, `DragOver`, `DragLeave`, `Drop`
 
 #### 6a.5 Drag-visual rendering
-- [ ] `dragVisual` callback → Reactor mounts the returned `Element` in a
+- [ ] `dragVisual` callback → Microsoft.UI.Reactor (Reactor) mounts the returned `Element` in a
       detached subtree, renders via `RenderTargetBitmap.RenderAsync`, converts
       to `SoftwareBitmap`, assigns to `DragStartingEventArgs.DragUI.SetContentFromSoftwareBitmap`
       (deferred — non-trivial: requires mounting Reactor Element in a hidden

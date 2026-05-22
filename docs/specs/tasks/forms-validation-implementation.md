@@ -60,7 +60,7 @@ Derived from: `docs/proposals/forms-data-entry-ideas.md`
 
 #### 1A.5 `.Validate()` Extension Method
 - [x] Create `Reactor/Validation/ValidateExtensions.cs`
-- [x] Implement `.Validate(params IValidator[] validators)` extension on Reactor element builder types
+- [x] Implement `.Validate(params IValidator[] validators)` extension on Microsoft.UI.Reactor (Reactor) element builder types
 - [x] Wire `.Validate()` to register the control + validators with the nearest `ValidationContext`
 - [x] Run validators on every render/state change, push results to context
 - [x] Handle async validators: debounce, cancellation of in-flight async checks

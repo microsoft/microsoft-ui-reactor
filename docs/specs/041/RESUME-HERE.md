@@ -14,7 +14,7 @@
 |-------|--------|-------|
 | 0. Scaffolding | ✅ Complete | Companion files, audit, source map, branching strategy |
 | 1. Foundation (pipeline + tooling) | ✅ Complete | 14 commits; pipeline supports tiers, lint, source snippets, SVG/Mermaid, ref-gen, link injection, analyzers |
-| 2. Reactor-unique gaps | ✅ Complete (5 of 9 recipes shipped) | 10 commits; 4 recipes deferred to "recipes promotion mini-phase" |
+| 2. Microsoft.UI.Reactor (Reactor)-unique gaps | ✅ Complete (5 of 9 recipes shipped) | 10 commits; 4 recipes deferred to "recipes promotion mini-phase" |
 | 3. Controls catalog | ✅ Complete | 5 commits + review (text-and-media / status-and-info / dialogs-and-flyouts / forms expand / collections expand). InkCanvas flagged as not wrapped. |
 | 3.5. Under-the-hood | ✅ Complete | 1 setup + 15 page + 2 review commits; 14 internals pages + reactor-vs-xaml at target tier. Wave-A TIER_004 lint relaxation kept; wave-C placeholder shells dropped. |
 | 4. Polish & process | ✅ Complete | 21 promotions + 3 new pages + cross-link analyzer + sweep + 4.6 final review. Tier: 36 Comprehensive · 22 Solid · 5 Stub. |

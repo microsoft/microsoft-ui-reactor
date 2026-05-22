@@ -8,7 +8,7 @@
 
 ## Motivation
 
-Reactor's current API is built on **fluent method chaining**: factory methods return immutable records, and
+Microsoft.UI.Reactor's current API is built on **fluent method chaining**: factory methods return immutable records, and
 extension methods return modified copies via `el with { ... }`. This model is clean for simple
 cases but introduces friction at scale:
 

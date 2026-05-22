@@ -28,7 +28,7 @@ The doc covers what's shipped through **Phase 0 (instrumentation)**, **Phase 1 (
 
 ## 1. The problem in one paragraph
 
-When an AI agent writes a Reactor app, it usually compiles, finds a build error, reads the error, edits the file, and tries again. Each of those round-trips costs time, tokens, and money. The biggest single bucket of that cost on agent-eval runs is the **build/fix loop**: roughly 150K tokens and 2–4 turns per run, mostly spent pasting MSBuild output into context and inferring what to do next. `mur check` is a thin wrapper around `dotnet build` that compresses each diagnostic into one short line. The "did-you-mean" engine in this PR goes further — it tries to answer *the agent's next question* in the same line, so the agent can fix the bug without an extra inspection turn.
+When an AI agent writes a Microsoft.UI.Reactor (Reactor) app, it usually compiles, finds a build error, reads the error, edits the file, and tries again. Each of those round-trips costs time, tokens, and money. The biggest single bucket of that cost on agent-eval runs is the **build/fix loop**: roughly 150K tokens and 2–4 turns per run, mostly spent pasting MSBuild output into context and inferring what to do next. `mur check` is a thin wrapper around `dotnet build` that compresses each diagnostic into one short line. The "did-you-mean" engine in this PR goes further — it tries to answer *the agent's next question* in the same line, so the agent can fix the bug without an extra inspection turn.
 
 **Concrete example.** Before:
 

@@ -14,7 +14,7 @@ winui-ref: https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/xaml
 ---
 
 `XamlIslandControl` is a single WinForms control that hosts a complete
-Reactor [component](components.md) tree. The rest of the form stays
+Microsoft.UI.Reactor (Reactor) [component](components.md) tree. The rest of the form stays
 WinForms — labels, panels, menus, the existing message loop — and
 your Reactor subtree renders into a `DesktopWindowXamlSource` rooted
 at the control's client area. Data flow across the boundary is

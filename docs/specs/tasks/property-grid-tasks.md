@@ -84,7 +84,7 @@ Derived from: `docs/specs/004-property-grid.md`
   - [x] Cache results per type
 - [x] Implement `CreateDescriptor(PropertyInfo, int defaultOrder)` — read all recognized attributes
 - [x] Support `System.ComponentModel` fallback: `[Category]`, `[Description]`, `[DisplayName]`, `[Browsable]`, `[ReadOnly]`
-- [x] Reactor attributes take precedence over System.ComponentModel when both present
+- [x] Microsoft.UI.Reactor (Reactor) attributes take precedence over System.ComponentModel when both present
 
 ### 2.5 Mutability Detection & Compose Generation
 - [x] Detect property mutability: public set = mutable, init-only/no set = immutable

@@ -1,5 +1,5 @@
 
-When Reactor swallows an exception, returns past an HRESULT, or
+When Microsoft.UI.Reactor (Reactor) swallows an exception, returns past an HRESULT, or
 otherwise chooses to continue rather than throw, the framework has
 historically dropped a `Debug.WriteLine` and moved on. That worked for
 the contributor — the message landed in Visual Studio's Output window
@@ -323,7 +323,7 @@ trace shrinks by an order of magnitude.
 ### Computing the diagnostic payload outside the IsEnabled gate
 
 ```csharp
-public static void SwallowedError(LogCategory category, string operation, Exception ex)
+public static void SwallowedError(LogCategory category, string? operation, Exception? ex)
 {
     // Cost-of-disabled: when no consumer enables Keywords.Errors at
     // Warning the entire branch is skipped — no enum-to-string, no
@@ -362,17 +362,26 @@ public void HResultFailed(string category, string operation, int hr)
 ### Forwarding `ex.Message` through `ReactorTrace.Subscribe`
 
 ```csharp
-// Don't:
+// Don't — capturing the exception and forwarding its message defeats the strip:
+Exception? lastEx = null;
+try { /* ... */ }
+catch (Exception caught)
+{
+    lastEx = caught;
+    DiagnosticLog.SwallowedError(LogCategory.Hosting, "MyOp", caught);
+}
+
 ReactorTrace.Subscribe(evt =>
 {
-    _logger.Warn(evt.EventName + ": " + string.Join(",", evt.Payload) + " " + ex.Message);
+    // BAD: re-injects PII that the ETW payload deliberately excluded.
+    _logger.Warn(evt.EventName + ": " + string.Join(",", evt.Payload) + " " + lastEx?.Message);
 });
 ```
 
 The framework already stripped `ex.Message` from the payload —
 re-adding it from a captured local is exactly the PII leak the strip
-prevented. If a sink needs the message, build it inside the `catch`
-block (where the message is in scope and the sink's ACL applies),
+prevented. If a sink needs the message, log it inside the `catch`
+block (where the exception is in scope and the sink's ACL applies),
 not at the `ReactorTrace.Subscribe` boundary.
 
 ## Tips

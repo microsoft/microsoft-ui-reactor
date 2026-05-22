@@ -1,7 +1,7 @@
 
 # Recipe: Master-detail
 
-Master-detail is the canonical multi-pane shape: a list of records on
+Master-detail in Microsoft.UI.Reactor (Reactor) is the canonical multi-pane shape: a list of records on
 one side, the selected record's details on the other. The whole thing
 is one `UseState` for the selected id and two slots in an `HStack`.
 

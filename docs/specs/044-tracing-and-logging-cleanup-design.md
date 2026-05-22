@@ -8,7 +8,7 @@
 
 ## 1. Summary
 
-Reactor today has three working logging surfaces — `Microsoft-UI-Reactor` (managed ETW/EventPipe), `Debug.WriteLine`, and devtools log capture (`reactor.logs` MCP tool) — but no rule for which to use where. The result is **~150 `Debug.WriteLine` call sites** spread across 47 files, most of which carry information end-developers would benefit from in production but which are stripped from Release builds because `Debug.WriteLine` is `[Conditional("DEBUG")]`.
+Microsoft.UI.Reactor (Reactor) today has three working logging surfaces — `Microsoft-UI-Reactor` (managed ETW/EventPipe), `Debug.WriteLine`, and devtools log capture (`reactor.logs` MCP tool) — but no rule for which to use where. The result is **~150 `Debug.WriteLine` call sites** spread across 47 files, most of which carry information end-developers would benefit from in production but which are stripped from Release builds because `Debug.WriteLine` is `[Conditional("DEBUG")]`.
 
 This spec establishes the rule, classifies the existing call sites, fills the ETW coverage gaps, and ships the connective tissue (a one-call in-process capture API, a Visual Studio workflow, an `ILogger` adapter) so that an app developer can see Reactor's diagnostics without a custom `EventListener` subclass and a PerfView install.
 

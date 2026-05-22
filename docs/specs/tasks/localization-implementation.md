@@ -39,7 +39,7 @@ Reference: [docs/specs/005-localization-design.md](../005-localization-design.md
 - [x] Add debug-mode logging for missing keys: `[Reactor.Intl] Missing key '{ns}.{key}' for locale '{locale}', falling back to en-US`
 
 ### 1.5 LocaleProvider Element
-- [x] Create `Reactor/Elements/LocaleProviderElement.cs` — Reactor element that:
+- [x] Create `Reactor/Elements/LocaleProviderElement.cs` — Microsoft.UI.Reactor (Reactor) element that:
   - Stores locale string in context
   - Creates/caches `IntlAccessor` for the active locale
   - Sets `FlowDirection` on the root WinUI element when locale changes

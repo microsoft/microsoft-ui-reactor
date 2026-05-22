@@ -276,7 +276,7 @@ etc. Property names are unchanged.
 
 ### 3.2 `Frame.Navigated/.Navigating/.NavigationFailed`
 
-- [x] Model the three events on `FrameElement` as Reactor-shaped
+- [x] Model the three events on `FrameElement` as Microsoft.UI.Reactor (Reactor)-shaped
       substitutes (matching the rest of the codebase, which doesn't
       surface raw WinUI EventArgs in user-facing callbacks):
       `Action<Type>? OnNavigated`, `Action<Type>? OnNavigating`,

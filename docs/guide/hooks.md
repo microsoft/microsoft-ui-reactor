@@ -1,6 +1,6 @@
 
 Hooks are the reactivity contract for a [component](components.md). A hook is a
-positional slot — when `Render()` runs, Reactor walks each `Use*` call in order
+positional slot — when `Render()` runs, Microsoft.UI.Reactor (Reactor) walks each `Use*` call in order
 and looks up the matching cell in a per-component slot table held on the
 [`RenderContext`](hooks-internals.md). The first [UseState](reference/hooks/UseState.md) call is
 slot 0, the second is slot 1, and so on; the setter the hook returns closes

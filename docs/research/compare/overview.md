@@ -35,7 +35,7 @@ functionality is missing.
 
 The Microsoft frameworks (WinForms, WPF, WinUI 2, WinUI 3, Reactor) are rated
 using the same scale, then compared against the competitor median to identify
-where they lead, match, or lag. Reactor grades come from the existing
+where they lead, match, or lag. Microsoft.UI.Reactor (Reactor) grades come from the existing
 [critical-review.md](../critical-review.md).
 
 **Important context:** The competitors are cross-platform or single-vendor-

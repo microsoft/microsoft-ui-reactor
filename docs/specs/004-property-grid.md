@@ -14,7 +14,7 @@
 
 ## INPC Support in Reactor (Phase 1)
 
-The PropertyGrid needs to observe live mutable objects and re-render when they change. This phase audits the existing observable hooks, identifies gaps, and adds what's needed — as general Reactor infrastructure, not PropertyGrid-specific.
+The PropertyGrid needs to observe live mutable objects and re-render when they change. This phase audits the existing observable hooks, identifies gaps, and adds what's needed — as general Microsoft.UI.Reactor (Reactor) infrastructure, not PropertyGrid-specific.
 
 ### Existing Hooks (Audit)
 

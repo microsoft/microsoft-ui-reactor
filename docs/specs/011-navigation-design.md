@@ -1,6 +1,6 @@
 # Reactor Navigation — Design Spec
 
-Declarative, type-safe navigation for Reactor: a developer-owned navigation stack
+Declarative, type-safe navigation for Microsoft.UI.Reactor (Reactor): a developer-owned navigation stack
 with Composition-layer transitions, built entirely in C# with no XAML dependency.
 
 ---

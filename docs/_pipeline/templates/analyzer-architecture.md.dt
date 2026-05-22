@@ -14,7 +14,7 @@ goal: |
 tier: comprehensive
 ---
 
-Reactor ships a small Roslyn analyzer suite that catches mistakes the
+Microsoft.UI.Reactor (Reactor) ships a small Roslyn analyzer suite that catches mistakes the
 type system can't — conditional hook calls, missing list keys,
 hardcoded colors, icon buttons with no accessible name, stale closure
 captures in `UseMemoCells`, and missing XML docs on public API. The

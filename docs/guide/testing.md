@@ -1,7 +1,7 @@
 
 # Testing
 
-Reactor's render loop is deterministic and synchronous. A `Component`
+Microsoft.UI.Reactor (Reactor)'s render loop is deterministic and synchronous. A `Component`
 mounted in a unit test renders, runs effects, accepts state updates,
 re-renders, and disposes through the same code path the WinUI host
 uses — minus the WinUI tree at the bottom. That makes the unit layer

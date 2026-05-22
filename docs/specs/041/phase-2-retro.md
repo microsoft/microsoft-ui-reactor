@@ -1,6 +1,6 @@
 # Phase 2 — Retro
 
-Captured 2026-05-17. Phase 2 took the Phase 1 stub set for the seven Reactor-unique pages and promoted them to their target tiers (1 Comprehensive + 6 Solid + 5 recipes), plus the recipes index. Eleven commits, ~3,500 lines of template + doc-app code, no rework.
+Captured 2026-05-17. Phase 2 took the Phase 1 stub set for the seven Microsoft.UI.Reactor (Reactor)-unique pages and promoted them to their target tiers (1 Comprehensive + 6 Solid + 5 recipes), plus the recipes index. Eleven commits, ~3,500 lines of template + doc-app code, no rework.
 
 ## What surprised us
 

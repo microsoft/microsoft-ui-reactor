@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implemented (2026-05-17)** — Phases 0 through 6.3 landed on `feat/042-keyed-list-reconciliation`; Phase 6.4 issue close-out happens when the PR merges. Open questions answered (see §9). Perf gate captured at `tests/stress_perf/baselines/keyed-list-vs-winui-2026-05-17-104102/` — paired Reactor vs. WinUI vanilla virtualizing-list matrix; reconciler matches WinUI within 0.3 % P50 at 1 k items, no measurable per-edit overhead. Implementation task list with detailed completion marks: [`docs/specs/tasks/042-keyed-list-reconciliation-implementation.md`](tasks/042-keyed-list-reconciliation-implementation.md).
+**Implemented (2026-05-17)** — Phases 0 through 6.3 landed on `feat/042-keyed-list-reconciliation`; Phase 6.4 issue close-out happens when the PR merges. Open questions answered (see §9). Perf gate captured at `tests/stress_perf/baselines/keyed-list-vs-winui-2026-05-17-104102/` — paired Microsoft.UI.Reactor (Reactor) vs. WinUI vanilla virtualizing-list matrix; reconciler matches WinUI within 0.3 % P50 at 1 k items, no measurable per-edit overhead. Implementation task list with detailed completion marks: [`docs/specs/tasks/042-keyed-list-reconciliation-implementation.md`](tasks/042-keyed-list-reconciliation-implementation.md).
 
 Tracking bug: [microsoft/microsoft-ui-reactor#198](https://github.com/microsoft/microsoft-ui-reactor/issues/198) — *feat(ListView): route ObservableCollection to WinUI ItemsSource for incremental add/remove animation*.
 

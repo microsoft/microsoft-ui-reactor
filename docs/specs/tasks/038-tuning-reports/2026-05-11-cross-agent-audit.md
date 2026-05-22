@@ -58,7 +58,7 @@ The Phase-3 priority list in spec 038 §"Data Checkpoint C" called out three tar
 
 ### Tier 2 — author next, lower priority
 
-4. **`TextBlockElementMemberRule`** — `(CS1061/CS0117, TextBlockElement, *)` cross-agent reproducible after collapsing the `renamed_member`/`other` fix_kind classifier divergence (gpt-5.5 14 events, sonnet 4 events). Rule shape: lookup-table for common WinUI 3 → Reactor text-styling member renames. The fix_kind divergence between corpora is a classifier artifact, not a real semantic split.
+4. **`TextBlockElementMemberRule`** — `(CS1061/CS0117, TextBlockElement, *)` cross-agent reproducible after collapsing the `renamed_member`/`other` fix_kind classifier divergence (gpt-5.5 14 events, sonnet 4 events). Rule shape: lookup-table for common WinUI 3 → Microsoft.UI.Reactor (Reactor) text-styling member renames. The fix_kind divergence between corpora is a classifier artifact, not a real semantic split.
 5. **`TemplatedListViewWithKeyRule`** — `(CS1929, TemplatedListViewElement<_>, *)` cross-agent STRONG when generalized over the type parameter. Rule must match the open generic; closed-generic literal matching fails the test. Lower priority on count alone, but it's the "missing `.WithKey()`" pitfall that the harness already classifies as a distinct `missing_with_key` fix_kind — worth a rule when the design is straightforward.
 
 ### Tier 3 — defer until third corpus drop

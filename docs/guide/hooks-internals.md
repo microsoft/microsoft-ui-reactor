@@ -1,5 +1,5 @@
 
-A hook in Reactor is a position. When `Render()` runs, the framework
+A hook in Microsoft.UI.Reactor (Reactor) is a position. When `Render()` runs, the framework
 counts each hook call in order — `UseState` is slot 0, then `UseEffect`
 is slot 1, then `UseMemo` is slot 2 — and stores whatever each hook
 needs in a `List<HookState>` on the owning `RenderContext`. The next

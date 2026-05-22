@@ -1,7 +1,7 @@
 
 # Windows
 
-Most Reactor apps start with a single window — the one `ReactorApp.Run` opens
+Most Microsoft.UI.Reactor (Reactor) apps start with a single window — the one `ReactorApp.Run` opens
 for you. When you need more (a settings dialog, a multi-document app, a tray
 flyout), the `ReactorApp` static surface and a handful of hooks give you a
 declarative way to manage every top-level window in the process.

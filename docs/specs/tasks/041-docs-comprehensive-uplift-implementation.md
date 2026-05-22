@@ -297,7 +297,7 @@ infrastructure to unblock content phases.
 - [x] `REACTOR_DOC_002`: `cref` in any XML doc fails to resolve.
       *`src/Reactor.Analyzers/XmlDocCrefAnalyzer.cs`. Hooks
       Roslyn's `GetSymbolInfo` on `CrefSyntax` nodes; emits at
-      Warning severity. Mirrors CS1574 under a Reactor code so
+      Warning severity. Mirrors CS1574 under a Microsoft.UI.Reactor (Reactor) code so
       doc PRs can elevate independently.*
 - [x] Configure severity in `.editorconfig` so the rules light up
       across `src/Reactor*` projects only (not samples / tests /

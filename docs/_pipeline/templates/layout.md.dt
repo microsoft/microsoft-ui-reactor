@@ -15,7 +15,7 @@ tier: comprehensive
 winui-ref: https://learn.microsoft.com/en-us/windows/apps/design/layout/
 ---
 
-Every Reactor layout is a composition of single-responsibility panels —
+Every Microsoft.UI.Reactor (Reactor) layout is a composition of single-responsibility panels —
 you pick by *direction* (`HStack` for a row, `VStack` for a column),
 *wrap behavior* (`WrapGrid` when items should flow into new rows), or
 *grid axes* (`Grid` when you want explicit rows × columns). The panels

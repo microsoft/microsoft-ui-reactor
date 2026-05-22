@@ -1,7 +1,7 @@
 
 # Performance
 
-A Reactor app emits a structured account of its own work — one event at
+A Microsoft.UI.Reactor (Reactor) app emits a structured account of its own work — one event at
 the start and end of every reconcile pass, every component render,
 every effect flush, every state write, every WinUI routed-event hop —
 through one managed `EventSource` named `Microsoft-UI-Reactor`. You
@@ -46,6 +46,15 @@ public static class Keywords
     public const EventKeywords Lifecycle = (EventKeywords)0x10;
     public const EventKeywords Errors = (EventKeywords)0x20;
     public const EventKeywords EventDispatch = (EventKeywords)0x40;
+    // Spec 044 — subsystem coverage gaps. Each gets its own bit so a
+    // consumer (dotnet-trace, EventListener, ReactorTrace.Subscribe) can
+    // pick exactly the area it cares about without paying for the rest.
+    public const EventKeywords Hosting = (EventKeywords)0x80;       // Window/HWND/DPI/Backdrop
+    public const EventKeywords Persistence = (EventKeywords)0x100;  // settings store, placement
+    public const EventKeywords Navigation = (EventKeywords)0x200;   // route push, cache, transitions
+    public const EventKeywords Intl = (EventKeywords)0x400;         // missing keys, fallback, format
+    public const EventKeywords Theme = (EventKeywords)0x800;        // theme apply, bindings
+    public const EventKeywords Shell = (EventKeywords)0x1000;       // JumpList/Tray/ThumbnailToolbar
 }
 ```
 

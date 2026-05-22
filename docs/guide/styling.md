@@ -1,6 +1,6 @@
 > **WinUI reference:** For the full property surface and design guidance, see [Style](https://learn.microsoft.com/en-us/windows/apps/design/style/).
 
-Styling in Reactor is a layered modifier chain. The bottom layer is the
+Styling in Microsoft.UI.Reactor (Reactor) is a layered modifier chain. The bottom layer is the
 WinUI theme system — every visible color is ultimately a brush resource
 that resolves against the effective `Light` / `Dark` / `HighContrast`
 theme dictionary at render time. The next layer up is `ThemeRef`, a

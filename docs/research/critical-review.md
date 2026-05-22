@@ -13,7 +13,7 @@ mature declarative UI frameworks, not WinUI XAML.
 
 ## Executive Summary
 
-Reactor is an ambitious React-style declarative UI framework over WinUI 3
+Microsoft.UI.Reactor (Reactor) is an ambitious React-style declarative UI framework over WinUI 3
 that has matured well past "impressive demo." It now ships a coherent
 component model, a navigation system, a commanding surface, an async data
 subsystem, an accessible charting sub-framework, an MCP-based devtools

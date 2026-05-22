@@ -17,7 +17,7 @@ tier: solid
 ```csharp snippet="controls/lead"
 ```
 
-Every visible thing on screen is a control. In Reactor a control is the
+Every visible thing on screen is a control. In Microsoft.UI.Reactor (Reactor) a control is the
 return value of a factory like `TextBlock(...)` or `Button(...)` — a
 plain element you compose, chain modifiers onto, and return from
 `Render()`. The seven categories below cover the full set Reactor

@@ -1,6 +1,6 @@
 # Flutter — Framework Analysis
 
-**Purpose:** Critical technical analysis for comparison against Microsoft UI frameworks (WinForms, WPF, WinUI 3, Reactor).
+**Purpose:** Critical technical analysis for comparison against Microsoft UI frameworks (WinForms, WPF, WinUI 3, Microsoft.UI.Reactor).
 
 **Version analyzed:** Flutter 3.x / Dart 3.x (2025-2026 era)
 

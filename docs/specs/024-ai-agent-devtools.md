@@ -31,7 +31,7 @@
 
 ## 1. Problem Statement
 
-When an AI agent authors a Reactor app, the build → view → iterate loop is lopsided. The agent writes code fluently but has no effective way to *see* what the running app looks like or behaves like. Today the `--preview` feature launches the app, captures frames, and hands them to the VS Code extension — but a single JPEG is not enough signal for an agent to reason about layout, overflow, state transitions, or the outcome of an interaction. The loop "make a change → verify visually → correct" still requires a human in the middle, which defeats the point of agentic coding.
+When an AI agent authors a Microsoft.UI.Reactor (Reactor) app, the build → view → iterate loop is lopsided. The agent writes code fluently but has no effective way to *see* what the running app looks like or behaves like. Today the `--preview` feature launches the app, captures frames, and hands them to the VS Code extension — but a single JPEG is not enough signal for an agent to reason about layout, overflow, state transitions, or the outcome of an interaction. The loop "make a change → verify visually → correct" still requires a human in the middle, which defeats the point of agentic coding.
 
 The right fix is not a richer image feed. It is a structured, stateful, agent-native surface that exposes what a WinUI app *is* — the rendered visual tree with real post-layout sizes, the state behind it, and a set of verbs to drive it — as a live session the agent can query and act on over many turns without paying cold-start cost per question.
 

@@ -1,7 +1,7 @@
 # Reactor Framework vs WinUI 3 — Comprehensive Gap Analysis
 
 How every WinUI 3 application-programming feature is exposed, replaced, augmented,
-hidden, or blocked by the Reactor framework design.
+hidden, or blocked by the Microsoft.UI.Reactor (Reactor) framework design.
 
 ## Legend
 

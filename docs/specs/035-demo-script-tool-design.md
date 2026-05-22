@@ -2,7 +2,7 @@
 
 ## Overview
 
-Demo Script Tool is a WinUI 3 desktop sample app built on Reactor. It lets a
+Demo Script Tool is a WinUI 3 desktop sample app built on Microsoft.UI.Reactor (Reactor). It lets a
 presenter author a code demo as a Markdown file (`demo-script.md`), generate
 runnable .NET code and speaker notes for each step via the GitHub Models AI
 SDK, and execute individual steps directly from the UI through `dotnet run`.

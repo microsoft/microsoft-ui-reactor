@@ -1,7 +1,7 @@
 
 # Rules of Reactor
 
-Reactor's render loop has a small set of invariants. Most are
+Microsoft.UI.Reactor (Reactor)'s render loop has a small set of invariants. Most are
 enforced by analyzers, so a violation surfaces at build time with a
 specific code; the rest are conventions that the framework expects.
 This page lists them, names the analyzer where one exists, and shows

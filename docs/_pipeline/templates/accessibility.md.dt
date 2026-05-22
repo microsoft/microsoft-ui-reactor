@@ -12,7 +12,7 @@ goal: |
 tier: comprehensive
 ---
 
-Reactor's accessibility surface is two layers: modifiers that map to
+Microsoft.UI.Reactor (Reactor)'s accessibility surface is two layers: modifiers that map to
 WinUI automation properties (`.AutomationName`, `.HeadingLevel`,
 `.Landmark`, `.LiveRegion`, `.TabIndex`, `.AccessKey`) and hooks that
 add runtime behavior (`UseFocusTrap` for modal focus trapping,

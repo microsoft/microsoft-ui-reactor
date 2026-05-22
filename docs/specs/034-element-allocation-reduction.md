@@ -29,7 +29,7 @@
 
 ## Overview
 
-Reactor's reconciler is fast; its allocator throughput is not. At a 10 %
+Microsoft.UI.Reactor's reconciler is fast; its allocator throughput is not. At a 10 %
 mutation 4,900-cell grid running on a 33 ms tick, unmodified Reactor
 allocates ~22 MB per render — driving ~5 gen0 + ~1.7 gen1 GCs **per tick**
 and gen2 (full-STW) collections every ~6 s. Reconcile time fits the budget

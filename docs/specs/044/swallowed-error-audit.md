@@ -3,7 +3,7 @@
 Companion to [`docs/specs/044-tracing-and-logging-cleanup-design.md`](../044-tracing-and-logging-cleanup-design.md)
 and the implementation task list at [`docs/specs/tasks/044-tracing-and-logging-cleanup-implementation.md`](../tasks/044-tracing-and-logging-cleanup-implementation.md).
 
-This file is the permanent record of the spec §6.7 decision Reactor
+This file is the permanent record of the spec §6.7 decision Microsoft.UI.Reactor (Reactor)
 made at each `catch (Exception ex) { Debug.WriteLine(...); }` site
 when the framework's diagnostics surfaces were migrated from
 contributor-only `Debug.WriteLine` to release-visible

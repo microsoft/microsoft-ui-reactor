@@ -1,6 +1,6 @@
 # Async Resources — Implementation Reference
 
-**Scope:** This paper walks the actual implementation of Reactor's async-resource
+**Scope:** This paper walks the actual implementation of Microsoft.UI.Reactor (Reactor)'s async-resource
 system as it exists on `feat/async-resources-phase1`. It is the companion to the
 design spec at [`docs/specs/020-async-resources-design.md`](../specs/020-async-resources-design.md):
 the spec defines *what* the system should do and *why*; this paper documents

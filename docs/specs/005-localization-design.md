@@ -2,7 +2,7 @@
 
 ## 1. Background & Motivation
 
-Reactor is a React-inspired declarative UI framework over WinUI 3, using pure C# with no XAML.
+Microsoft.UI.Reactor (Reactor) is a React-inspired declarative UI framework over WinUI 3, using pure C# with no XAML.
 Today, text is passed as raw strings in `Render()`:
 
 ```csharp

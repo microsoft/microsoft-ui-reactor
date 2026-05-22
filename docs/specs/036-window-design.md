@@ -4,7 +4,7 @@
 
 **Proposed** — 2026-05-07. No code yet.
 
-This spec proposes a first-class **Window** model for Reactor. Today the
+This spec proposes a first-class **Window** model for Microsoft.UI.Reactor (Reactor). Today the
 framework hides Window creation behind `ReactorApp.Run`'s `OnLaunched` path
 and assumes a single primary window for the lifetime of the process. That
 shortcut has aged into a hard ceiling: app authors can't open a second

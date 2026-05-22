@@ -1,6 +1,6 @@
 # Demo Script Tool
 
-A WinUI 3 desktop sample app built on Reactor. Author a coding demo as a
+A WinUI 3 desktop sample app built on Microsoft.UI.Reactor (Reactor). Author a coding demo as a
 single Markdown file (`demo-script.md`) and let the GitHub Copilot SDK
 generate runnable .NET code for each step plus speaker notes you can paste
 into your slides.

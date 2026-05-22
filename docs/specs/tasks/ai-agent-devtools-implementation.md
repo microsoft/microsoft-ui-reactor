@@ -63,7 +63,7 @@ Tests for this feature are classified by the infrastructure they require. Every 
 ### 1.4 Update VS Code extension
 
 - [x] `src/vscode-reactor/src/extension.ts`: change the spawn args from `--preview --vscode` to `--devtools run --vscode`.
-- [x] Keep one-release compat: if the target Reactor package is older, fall back to `--preview --vscode`. Detect by first-line stdout sniff (`[devtools] ready` vs `[preview] …`).
+- [x] Keep one-release compat: if the target Microsoft.UI.Reactor (Reactor) package is older, fall back to `--preview --vscode`. Detect by first-line stdout sniff (`[devtools] ready` vs `[preview] …`).
 - [x] Update extension's user-facing labels ("Reactor Preview" panel title is unchanged; internal telemetry event names get a `_devtools` variant with the old name kept as an alias for one release). *(Telemetry transport is a stub `outputChannel.appendLine` — the event-name pair is in place for when a real transport is wired.)*
 
 ### 1.5 Phase 1 tests — Unit

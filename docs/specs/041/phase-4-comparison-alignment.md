@@ -2,7 +2,7 @@
 
 Captured 2026-05-17. Verifies spec §13 "Comparison alignment" success
 criterion: every category in `docs/research/compare/overview.md` maps
-to ≥1 Reactor doc page, and the mental-model paragraph on each page
+to ≥1 Microsoft.UI.Reactor (Reactor) doc page, and the mental-model paragraph on each page
 aligns with the comparison's Reactor rating commentary.
 
 ## Source

@@ -146,7 +146,7 @@ New reactive hook allowing components to observe the effective color scheme
 ## Phase 4: Lightweight Styling (Proposal 2 — P0)
 
 New API surface exposing WinUI's lightweight styling (per-control resource
-overrides) through an ergonomic fluent builder. This is Reactor's unique
+overrides) through an ergonomic fluent builder. This is Microsoft.UI.Reactor's unique
 competitive advantage — no other C# declarative framework surfaces this.
 
 ### 4.1 — ResourceBuilder type

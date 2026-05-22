@@ -13,7 +13,7 @@
 
 ## 1. Problem
 
-Reactor has 26 pages of user-facing documentation in `docs/guide/` (~8,800
+Microsoft.UI.Reactor (Reactor) has 26 pages of user-facing documentation in `docs/guide/` (~8,800
 lines). Quality is uneven and several pages are stubs. Cross-cutting topics
 that are first-class in competitor docsets — testing, persistence, a
 controls catalog, theming tokens, error handling, packaging — are

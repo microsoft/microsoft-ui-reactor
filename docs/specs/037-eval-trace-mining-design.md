@@ -4,7 +4,7 @@
 
 **Proposed** — 2026-05-09. No code yet.
 
-This spec describes a **standalone harness** that drives a coding agent to author small Reactor apps from natural-language prompts, captures the full build/fix loop the agent runs through, and emits a structured corpus of `(broken_source, diagnostic, fixed_source)` triples. The corpus seeds the pattern rules in spec [038 — `mur check` Did-You-Mean Engine](./038-mur-check-did-you-mean-design.md).
+This spec describes a **standalone harness** that drives a coding agent to author small Microsoft.UI.Reactor (Reactor) apps from natural-language prompts, captures the full build/fix loop the agent runs through, and emits a structured corpus of `(broken_source, diagnostic, fixed_source)` triples. The corpus seeds the pattern rules in spec [038 — `mur check` Did-You-Mean Engine](./038-mur-check-did-you-mean-design.md).
 
 The harness is deliberately built to run **outside** the `microsoft-ui-reactor` source tree. The agent it drives must not have file-system access to the Reactor source, samples, or internal skills — only what a real downstream consumer would have (the public NuGet feed, the `mur` CLI binary, whatever public docs ship with the package). This is not a packaging accident; it is the **point** of the harness. We want the agent to struggle in the same ways a real first-time Reactor user / agent would, so the failures we capture reflect real prediction needs and not artifacts of source-code peeking.
 

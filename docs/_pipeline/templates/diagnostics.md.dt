@@ -15,7 +15,7 @@ goal: |
 tier: comprehensive
 ---
 
-When Reactor swallows an exception, returns past an HRESULT, or
+When Microsoft.UI.Reactor (Reactor) swallows an exception, returns past an HRESULT, or
 otherwise chooses to continue rather than throw, the framework has
 historically dropped a `Debug.WriteLine` and moved on. That worked for
 the contributor — the message landed in Visual Studio's Output window

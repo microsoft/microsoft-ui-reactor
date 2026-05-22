@@ -11,7 +11,7 @@ Machine: ARM64 Release, 10s duration per run.
 
 ## Goal
 
-Identify and validate performance optimizations for Reactor's reconciler, element
+Identify and validate performance optimizations for Microsoft.UI.Reactor's reconciler, element
 creation, and render loop. Each experiment follows the same methodology:
 
 1. **Baseline (vanilla WinUI3)** — Direct control manipulation or data binding

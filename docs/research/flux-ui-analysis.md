@@ -9,7 +9,7 @@ approaches Reactor should consider adopting.
 ## Executive Summary
 
 Flux.UI is a compile-time declarative UI framework for .NET that takes a
-fundamentally different approach than Reactor. Where Reactor follows React's model
+fundamentally different approach than Microsoft.UI.Reactor (Reactor). Where Reactor follows React's model
 (virtual tree + reconciliation), Flux follows a reactive subscription model
 (build once, subscribe to changes). Where Reactor uses CsWinRT managed objects for
 WinUI interop, Flux bypasses the managed layer entirely with a custom C++/WinRT

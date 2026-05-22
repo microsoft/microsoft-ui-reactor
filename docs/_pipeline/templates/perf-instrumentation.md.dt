@@ -15,7 +15,7 @@ goal: |
 tier: comprehensive
 ---
 
-Reactor publishes a structured account of its internal work — every
+Microsoft.UI.Reactor (Reactor) publishes a structured account of its internal work — every
 reconcile pass, every component render, every state write, every MCP
 tool call, every effect flush — through one managed
 `EventSource` named `Microsoft-UI-Reactor`. Consumers can subscribe to

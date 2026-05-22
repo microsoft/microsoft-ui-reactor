@@ -2,7 +2,7 @@
 
 ## Overview
 
-A first-party "gallery" system for Reactor: a runnable WinUI 3 app that showcases Reactor framework features (hooks, commanding, navigation, styling, data, input/gestures, devtools, etc.) through small, isolated, interactive samples backed by markdown documentation.
+A first-party "gallery" system for Microsoft.UI.Reactor (Reactor): a runnable WinUI 3 app that showcases Reactor framework features (hooks, commanding, navigation, styling, data, input/gestures, devtools, etc.) through small, isolated, interactive samples backed by markdown documentation.
 
 The design borrows heavily from the [Windows Community Toolkit sample-generator system](https://github.com/CommunityToolkit/Tooling-Windows-Submodule), which has powered the CT Labs and CT 8.x galleries for several years. We adopt its **compile-time attribute discovery + markdown frontmatter + generated registry** model, and adapt the pieces that are XAML-specific (XAML/`UserControl` validation, `ms-appx:///` XAML loading, `MarkdownTextBlock`-based rendering) to Reactor's pure-C# component model.
 

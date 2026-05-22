@@ -2,7 +2,7 @@
 
 **Started:** 2026-05-02
 **Workload:** `tests/stress_perf` StocksGrid, 4,900 cells, 33 ms tick, **10% mutation, ≥10 s run**.
-**Goal:** identify why Reactor underperforms `Direct` at light load and propose a fix path.
+**Goal:** identify why Microsoft.UI.Reactor (Reactor) underperforms `Direct` at light load and propose a fix path.
 
 ## Handoff — for the next session
 

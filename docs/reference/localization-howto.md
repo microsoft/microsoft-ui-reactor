@@ -1,6 +1,6 @@
 # How to Localize a Reactor App
 
-A step-by-step guide for taking an existing Reactor application with hardcoded
+A step-by-step guide for taking an existing Microsoft.UI.Reactor (Reactor) application with hardcoded
 English strings and making it fully localizable.
 
 ## Prerequisites

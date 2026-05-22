@@ -1,7 +1,7 @@
 
 # Reactor
 
-Reactor is a declarative UI framework for building native Windows desktop apps in
+Microsoft.UI.Reactor (Reactor) is a declarative UI framework for building native Windows desktop apps in
 pure C#. No XAML. No data binding. No view models. You describe your UI as a
 function of state, and Reactor keeps the screen in sync.
 

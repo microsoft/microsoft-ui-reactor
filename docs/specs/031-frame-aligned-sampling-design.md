@@ -4,7 +4,7 @@
 
 A new hook, `UseSample`, that lets a component consume a high-frequency data source but re-render at most every N display frames. Intended for live-telemetry scenarios: a 50 Hz stream feeding a readout that only needs to tick at ~20 Hz, where the user would rather wait for the next data point than thrash the UIElement tree at producer rate.
 
-The contract is **frame-aligned** ("at most every N frames"), not wall-clock ("at most N Hz"). Frame-aligned cadence is visually stable on a compositor-paced renderer and falls out cleanly from Reactor's existing render loop (`ReactorHost.cs:218–240`), which is already dispatcher- and priority-driven. Wall-clock throttles introduce jitter because 20 Hz doesn't cleanly divide 60 Hz.
+The contract is **frame-aligned** ("at most every N frames"), not wall-clock ("at most N Hz"). Frame-aligned cadence is visually stable on a compositor-paced renderer and falls out cleanly from Microsoft.UI.Reactor's existing render loop (`ReactorHost.cs:218–240`), which is already dispatcher- and priority-driven. Wall-clock throttles introduce jitter because 20 Hz doesn't cleanly divide 60 Hz.
 
 Semantics: **most recent value wins** (eventual consistency). Intermediate values are dropped, not queued. Producer-thread sampling avoids paying a dispatcher hop per dropped event.
 

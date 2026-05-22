@@ -1103,7 +1103,7 @@ frameworks), the DataGrid separates into:
 
 1. **DataGridState** — headless state machine (sort, filter, selection, editing, column
    order/sizing/visibility, scroll position). Pure logic, fully testable without UI.
-2. **DataGridComponent** — Reactor component that renders the grid using VirtualList
+2. **DataGridComponent** — Microsoft.UI.Reactor (Reactor) component that renders the grid using VirtualList
    composition, consuming DataGridState for all logic.
 
 ### 6.2 DataGrid DSL

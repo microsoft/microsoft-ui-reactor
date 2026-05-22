@@ -1,5 +1,5 @@
 
-The reconciler is the only thing in Reactor that writes to WinUI.
+The reconciler is the only thing in Microsoft.UI.Reactor (Reactor) that writes to WinUI.
 Every visual change you see on screen — a property update on a Button,
 a new row in a list, a TabView item that just animated in — passes
 through one method, `Reconciler.Reconcile`, that takes the previous

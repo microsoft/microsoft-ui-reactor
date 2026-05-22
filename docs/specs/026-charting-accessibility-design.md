@@ -24,7 +24,7 @@ Related specs: [006 Accessibility Design](006-accessibility-design.md),
 
 ## Problem Statement
 
-Spec 016 migrated Reactor's chart DSL to native element trees. That unlocked reconciliation,
+Spec 016 migrated Microsoft.UI.Reactor's chart DSL to native element trees. That unlocked reconciliation,
 theming, and animation — but accessibility was **explicitly left for a follow-up**. Today:
 
 - `src/Reactor/Charting/` contains **zero** references to `AutomationPeer`, `AutomationProperties`,

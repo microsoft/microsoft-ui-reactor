@@ -13,7 +13,7 @@ goal: |
 tier: comprehensive
 ---
 
-A Reactor `Command` is the unit of "what the user can do" in a Reactor
+A Microsoft.UI.Reactor (Reactor) `Command` is the unit of "what the user can do" in a Reactor
 app. It bundles the action, its label, icon, keyboard accelerator,
 description, and enabled state into a single immutable record that you
 bind from multiple call sites simultaneously. The button that runs the

@@ -1,6 +1,6 @@
 # Chat Sample
 
-This sample demonstrates a native Windows chat experience built with Reactor and WinUI.
+This sample demonstrates a native Windows chat experience built with Microsoft.UI.Reactor (Reactor) and WinUI.
 
 The app uses an in-memory data provider so the sample can run on its own. It does not require a server, API key, or external chat service. The reusable model and UI projects are intentionally separated so another app can replace the local provider with a service-backed implementation.
 

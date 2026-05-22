@@ -1,7 +1,7 @@
 # Reactor Animation — Design Spec
 
 Eight compositor-layer animation features that close the gaps identified in the
-[critical review](../critical-review.md) section 10, lifting Reactor's animation
+[critical review](../critical-review.md) section 10, lifting Microsoft.UI.Reactor's animation
 grade from C toward A. Every feature follows the same design principle as
 layout-to-layout animations: simple declarative API, compositor-thread execution,
 zero per-frame managed code.

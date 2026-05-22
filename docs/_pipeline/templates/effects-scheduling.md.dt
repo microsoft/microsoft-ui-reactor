@@ -13,7 +13,7 @@ goal: |
 tier: comprehensive
 ---
 
-The thing that trips up most readers is the order. `UseEffect` does
+The thing that trips up most readers in Microsoft.UI.Reactor (Reactor) is the order. `UseEffect` does
 not run during render — it runs *after* the reconciler has finished
 committing the new tree to WinUI, on the UI thread, in hook-declaration
 order, with the cleanup from the previous round of the same effect

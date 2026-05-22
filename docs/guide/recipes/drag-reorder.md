@@ -2,7 +2,7 @@
 # Recipe: Drag to Reorder
 
 Drag-reorder is a `UseState<List<T>>` plus a function that splices
-one item from one index to another. Reactor's keyed reconciler does
+one item from one index to another. Microsoft.UI.Reactor (Reactor)'s keyed reconciler does
 the rest — moves preserve identity, so the same row element keeps
 its focus, its hover state, and its place in the visual tree.
 Pointer drag is one entry point; an Alt+Up / Alt+Down keyboard

@@ -1,6 +1,6 @@
 # AOT support matrix
 
-Reactor's core framework targets .NET native AOT. The repo sets `IsAotCompatible=true` and treats the IL2*/IL3* analyzer warnings as errors on the core library, so trimming/AOT regressions can't merge silently. The `tests/stress_perf/StressPerf.Reactor` benchmark harness publishes Reactor with `PublishAot=true` on every CI build that runs perf — that's the canary for the framework's AOT viability.
+Microsoft.UI.Reactor (Reactor)'s core framework targets .NET native AOT. The repo sets `IsAotCompatible=true` and treats the IL2*/IL3* analyzer warnings as errors on the core library, so trimming/AOT regressions can't merge silently. The `tests/stress_perf/StressPerf.Reactor` benchmark harness publishes Reactor with `PublishAot=true` on every CI build that runs perf — that's the canary for the framework's AOT viability.
 
 But not every subsystem is AOT-clean. Some features rely on reflection in ways that can't yet be expressed without a source generator, and they sit behind unconditional trim suppressions. The suppressions silence the analyzer; at runtime, the affected code paths will throw under AOT if they're invoked.
 

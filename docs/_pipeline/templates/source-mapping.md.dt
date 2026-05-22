@@ -15,7 +15,7 @@ tier: solid
 
 # Source Mapping
 
-"Source mapping" in Reactor is the chain that ties a runtime artifact —
+"Source mapping" in Microsoft.UI.Reactor (Reactor) is the chain that ties a runtime artifact —
 an ETW event, a `--preview` overlay highlight, a thrown exception —
 back to the C# source that produced it. Today, attribution is at the
 *component* granularity: every render emits an ETW event carrying the

@@ -27,7 +27,7 @@
 
 ## 1. Problem Statement
 
-Today, anyone who wants to use Reactor in their own WinUI 3 app has to clone `microsoft/reactor3`, add a `<ProjectReference>` to `src/Reactor/Reactor.csproj`, and keep their consumer repo in sync with our source tree. This is fine for contributors but a hard blocker for evaluators — we want a developer to be able to write:
+Today, anyone who wants to use Microsoft.UI.Reactor (Reactor) in their own WinUI 3 app has to clone `microsoft/reactor3`, add a `<ProjectReference>` to `src/Reactor/Reactor.csproj`, and keep their consumer repo in sync with our source tree. This is fine for contributors but a hard blocker for evaluators — we want a developer to be able to write:
 
 ```xml
 <PackageReference Include="Microsoft.UI.Reactor" Version="1.0.0-preview.42" />

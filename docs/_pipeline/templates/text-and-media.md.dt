@@ -13,7 +13,7 @@ tier: comprehensive
 winui-ref: https://learn.microsoft.com/en-us/windows/apps/design/controls/text-controls
 ---
 
-Text and media controls are the read-only-display half of the Reactor
+Text and media controls are the read-only-display half of the Microsoft.UI.Reactor (Reactor)
 catalog: surfaces that show content the user is reading, watching, or
 inspecting rather than editing. Most of them are thin wrappers over the
 WinUI text and media surface, so the modifier names and accessibility

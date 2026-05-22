@@ -1,5 +1,5 @@
 
-A modifier in Reactor is not an operation — it is a value-bearing
+A modifier in Microsoft.UI.Reactor (Reactor) is not an operation — it is a value-bearing
 function `T -> T` that returns a new [`Element`](components.md) record
 with its `Modifiers` slot replaced. `.Bold().Margin(8).Background(Theme.Accent)`
 allocates one `TextBlockElement` and folds three small `ElementModifiers`
@@ -117,6 +117,8 @@ public static T Flex<T>(this T el,
     double grow = 0,
     double shrink = 1,
     double? basis = null,
+    double? minWidth = null,
+    double? minHeight = null,
     FlexAlign? alignSelf = null,
     FlexPositionType position = FlexPositionType.Relative,
     double? left = null,
@@ -131,7 +133,13 @@ public static T Flex<T>(this T el,
     if (shrink < 0 || double.IsNaN(shrink) || double.IsInfinity(shrink))
         throw new ArgumentOutOfRangeException(nameof(shrink), "Shrink must be a non-negative, finite value.");
 
-    return (T)el.SetAttached(new FlexAttached(grow, shrink, basis, alignSelf, position, left, top, right, bottom));
+    if (minWidth is { } mw && (mw < 0 || double.IsNaN(mw) || double.IsInfinity(mw)))
+        throw new ArgumentOutOfRangeException(nameof(minWidth), "MinWidth must be a non-negative, finite value (or null for CSS `min-width: auto`).");
+
+    if (minHeight is { } mh && (mh < 0 || double.IsNaN(mh) || double.IsInfinity(mh)))
+        throw new ArgumentOutOfRangeException(nameof(minHeight), "MinHeight must be a non-negative, finite value (or null for CSS `min-height: auto`).");
+
+    return (T)el.SetAttached(new FlexAttached(grow, shrink, basis, minWidth, minHeight, alignSelf, position, left, top, right, bottom));
 }
 ```
 

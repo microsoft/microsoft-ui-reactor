@@ -6,7 +6,7 @@ Tracking bug: [microsoft/microsoft-ui-reactor#198](https://github.com/microsoft/
 > **Status (2026-05-17):** Phase 0 + Phase 1 + Phase 2 + Phase 3 (3.1
 > through 3.7) + Phase 4 + Phase 5 + Phase 6.1 / 6.2 / 6.3 complete on
 > `feat/042-keyed-list-reconciliation`. Phase 1 perf gate (1.12) closed
-> via a paired Reactor-vs-WinUI-vanilla baseline rather than a pre/post
+> via a paired Microsoft.UI.Reactor (Reactor)-vs-WinUI-vanilla baseline rather than a pre/post
 > Reactor capture — captured at
 > `tests/stress_perf/baselines/keyed-list-vs-winui-2026-05-17-104102/`
 > (6-cell matrix × 5 reps × 2 apps; verdict in `summary.md`). The

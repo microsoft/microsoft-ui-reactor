@@ -2,7 +2,7 @@
 
 **Status:** Brainstorm / Proposal Draft  
 **Date:** 2026-04-04  
-**Goal:** Identify the smallest set of C# language changes that would make Reactor (and declarative UI frameworks generally) dramatically better. Each proposal includes current syntax, proposed syntax, a rough feature definition, and references to prior art.
+**Goal:** Identify the smallest set of C# language changes that would make Microsoft.UI.Reactor (Reactor) (and declarative UI frameworks generally) dramatically better. Each proposal includes current syntax, proposed syntax, a rough feature definition, and references to prior art.
 
 ### Tier Ratings
 

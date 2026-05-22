@@ -1,6 +1,6 @@
 > **WinUI reference:** For the full property surface and design guidance, see [Navigation Basics](https://learn.microsoft.com/en-us/windows/apps/design/basics/navigation-basics).
 
-Reactor's navigation is a stack of typed routes that lives in a hook. You
+Microsoft.UI.Reactor (Reactor)'s navigation is a stack of typed routes that lives in a hook. You
 call `UseNavigation(initialRoute)` once, in a root component, and you get
 back a `NavigationHandle<TRoute>` whose `Navigate`, `GoBack`, `Replace`,
 and `Reset` methods mutate the stack. A `NavigationHost` reads the

@@ -1,7 +1,7 @@
 
 # WPF Interop
 
-**Status: coming soon.** A first-class WPF host control
+**Status: coming soon.** A first-class Microsoft.UI.Reactor (Reactor) WPF host control
 (`Reactor.Interop.Wpf`) is on the roadmap but not yet shipped. The only
 host wrapper in the box today is `Reactor.Interop.WinForms`.
 

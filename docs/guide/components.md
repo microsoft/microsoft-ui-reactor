@@ -1,5 +1,5 @@
 
-A component in Reactor is a pure function from (state + props) to an element
+A component in Microsoft.UI.Reactor (Reactor) is a pure function from (state + props) to an element
 tree. `Render()` is called every time the component's state changes or its
 parent's render produces new props, and its only job is to return what the
 UI should look like *right now*. Reactor takes that return value, diffs it

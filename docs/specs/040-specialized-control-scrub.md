@@ -3,7 +3,7 @@
 ## Status
 
 **Draft.** This spec runs the same three-checks-per-control audit as
-[spec 039](039-property-and-event-scrub.md) against the Reactor-original
+[spec 039](039-property-and-event-scrub.md) against the Microsoft.UI.Reactor (Reactor)-original
 controls under `src/Reactor/Controls/**`. Spec 039 deliberately scoped
 these out (see 039 §13) and scheduled this follow-up; spec 039 Phase 7.1
 created this draft. Outline only — no answers yet. A companion task list

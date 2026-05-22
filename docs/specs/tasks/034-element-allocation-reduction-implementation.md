@@ -323,7 +323,7 @@ will accumulate Components B + C through Phases 2–4.
 - [x] Add `StressPerf.ReactorOptimized.csproj` to `Reactor.sln`
       following the existing `StressPerf.Reactor` pattern (project
       GUID, solution config rows for Debug/Release × x64/ARM64).
-      Use a fresh GUID — do not reuse Reactor's.
+      Use a fresh GUID — do not reuse Microsoft.UI.Reactor's.
 - [x] Add `ReactorOptimized` to the variant table in
       `tests/stress_perf/run_stocks_grid_baseline.ps1` (after the
       existing `Reactor` row), using the same `IsRN=$false` /

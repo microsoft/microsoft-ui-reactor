@@ -13,7 +13,7 @@
 
 This document is the high-level threat model for the Microsoft.UI.Reactor framework. It is intended as the engineering input to Microsoft's internal security review and the durable artifact future reviewers reference.
 
-**In scope:** the security posture of the framework as built and shipped from this repo — what Reactor *itself* does at runtime, what surfaces it exposes to the operating system and other processes, and the trust assumptions baked into those surfaces.
+**In scope:** the security posture of the framework as built and shipped from this repo — what Microsoft.UI.Reactor (Reactor) *itself* does at runtime, what surfaces it exposes to the operating system and other processes, and the trust assumptions baked into those surfaces.
 
 **Out of scope:**
 

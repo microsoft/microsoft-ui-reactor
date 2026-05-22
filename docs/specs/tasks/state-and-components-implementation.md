@@ -377,7 +377,7 @@ unmount, and remount components.
   - Component Model: C → A-
   - Local State: B+ → A
 - [ ] Update Executive Summary to reflect new capabilities
-- [ ] Update Conclusion "What prevents Reactor from being production-ready" — remove global state, update component model language
+- [ ] Update Conclusion "What prevents Microsoft.UI.Reactor (Reactor) from being production-ready" — remove global state, update component model language
 
 ### 5.3 Update spec status
 - [x] Change spec status from "Proposal — pending review" to "Implemented" with date

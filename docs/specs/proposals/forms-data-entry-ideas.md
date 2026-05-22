@@ -2,7 +2,7 @@
 
 **Date:** April 2026
 **Status:** Proposal
-**Context:** Reactor is graded C+ on Forms & Data Entry (overview scorecard). WPF is
+**Context:** Microsoft.UI.Reactor (Reactor) is graded C+ on Forms & Data Entry (overview scorecard). WPF is
 A — the richest validation system of any framework. WinUI 3 is B — missing a
 validation framework entirely. LOB forms are the primary use case for Windows
 desktop apps.

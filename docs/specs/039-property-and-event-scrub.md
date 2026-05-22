@@ -9,7 +9,7 @@ branch. The task list with the per-section breakdown and tracker lives at
 
 Phase 0–8 commit history: `git log feat/039-property-event-scrub --grep='Phase '`.
 
-This spec catalogs every control Reactor currently exposes through
+This spec catalogs every control Microsoft.UI.Reactor (Reactor) currently exposes through
 `Microsoft.UI.Reactor.Factories` and audits each against three criteria.
 
 ### Decisions locked (from §15 open questions — final, will not change mid-implementation)

@@ -105,7 +105,7 @@ All Phase 1 tests are **unit tests** (`Reactor.Tests`). No reconciler, no WinUI 
 
 ## Phase 2: UseNavigation Hook & NavigationHost Element
 
-Scope: Wire navigation into Reactor's hook system, element tree, and reconciler. Depends on Phase 1.
+Scope: Wire navigation into Microsoft.UI.Reactor's hook system, element tree, and reconciler. Depends on Phase 1.
 
 ### 2.1 NavigationContext for Context
 - [x] Create `NavigationContext<TRoute>` as a `Context<NavigationHandle<TRoute>>` instance

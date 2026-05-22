@@ -1,5 +1,5 @@
 
-Reactor's development workflow is built around fast feedback. The
+Microsoft.UI.Reactor (Reactor)'s development workflow is built around fast feedback. The
 runtime is designed to surface the work it is doing — every render,
 every reconcile, every effect, every dispatcher hop — through a small
 set of dedicated tools so you can see, attribute, and reason about

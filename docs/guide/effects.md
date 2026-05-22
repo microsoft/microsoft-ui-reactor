@@ -1,5 +1,5 @@
 
-Effects are commit-phase side effects with dependency tracking. After Reactor
+Effects are commit-phase side effects with dependency tracking. After Microsoft.UI.Reactor (Reactor)
 finishes [reconciling](reconciliation.md) the element tree and patching the
 WinUI controls for a render, it walks the effect queue for that render and
 runs every [UseEffect](reference/hooks/UseEffect.md) body whose dependency array has changed

@@ -1,6 +1,6 @@
 # Avalonia — Framework Analysis
 
-**Purpose:** Critical technical analysis for comparison against Microsoft UI frameworks (WinForms, WPF, WinUI 3, Reactor).
+**Purpose:** Critical technical analysis for comparison against Microsoft UI frameworks (WinForms, WPF, WinUI 3, Microsoft.UI.Reactor).
 
 **Version analyzed:** Avalonia 11.x–12.0 (2024-2026 era)
 

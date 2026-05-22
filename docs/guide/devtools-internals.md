@@ -1,5 +1,5 @@
 
-The Reactor devtools surface is two subsystems that share a single
+The Microsoft.UI.Reactor (Reactor) devtools surface is two subsystems that share a single
 gate. The MCP server speaks JSON-RPC over either HTTP loopback or
 stdio, exposing a fixed inventory of tools (`tools/list`, `tools/call`)
 that an external CLI, editor, or agent harness drives against the

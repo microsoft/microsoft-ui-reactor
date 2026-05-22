@@ -12,7 +12,7 @@ goal: |
 tier: comprehensive
 ---
 
-Reactor's render-from-state model has a clean 1:1 translation table to XAML
+Microsoft.UI.Reactor (Reactor)'s render-from-state model has a clean 1:1 translation table to XAML
 that an experienced XAML developer can hold in their head. Where XAML
 describes *bindings* between view-model properties and control DPs and lets
 the binding engine pull values on change-notification, Reactor describes the

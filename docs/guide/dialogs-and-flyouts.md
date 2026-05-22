@@ -3,7 +3,7 @@
 Dialog and flyout surfaces interrupt the user. That makes them the most
 costly UI primitive in the app's attention budget — every modal dialog
 steals focus, every flyout dismisses on outside click, every popup
-arrives without a route back. Reactor treats dialogs and flyouts as
+arrives without a route back. Microsoft.UI.Reactor (Reactor) treats dialogs and flyouts as
 controlled components: you own the open/closed boolean, the component
 tree always contains the dialog element, and the visibility is a state
 flag the user-driven event handlers flip back. That is the same shape as

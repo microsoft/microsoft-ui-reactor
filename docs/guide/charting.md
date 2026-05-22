@@ -19,7 +19,7 @@ drop into D3 only when the higher-level surface refuses what you need.
 
 # Charting
 
-ReactorD3 brings data visualization to Reactor. The chart DSL provides high-level
+ReactorD3 brings data visualization to Microsoft.UI.Reactor (Reactor). The chart DSL provides high-level
 `LineChart`, `BarChart`, `AreaChart`, and `PieChart` factories that produce
 standard Reactor elements. You bind data, configure appearance with a fluent
 API, and the chart renders as native WinUI shapes on a Canvas.

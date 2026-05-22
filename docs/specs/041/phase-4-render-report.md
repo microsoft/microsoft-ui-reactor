@@ -191,7 +191,7 @@ wait until the docs/041-uplift branch is pushed:
    `phase-4-retro.md`.
 
 2. **The `getting-started.md` manual-setup walkthrough.** The page
-   opens with a multi-paragraph warning that Reactor doesn't yet ship
+   opens with a multi-paragraph warning that Microsoft.UI.Reactor (Reactor) doesn't yet ship
    a signed installer and walks the source-clone bootstrap. This
    reads cleanly locally; the PowerShell code-fence rendering on
    GitHub for the four `mur` commands should be eyeball-checked

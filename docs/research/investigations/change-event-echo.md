@@ -18,7 +18,7 @@ Because the echo fires on every programmatic write where the tag hasn't been swa
 
 ## The class of bug
 
-Every Reactor updater for a WinUI control whose change event fires from a programmatic property write is vulnerable:
+Every Microsoft.UI.Reactor (Reactor) updater for a WinUI control whose change event fires from a programmatic property write is vulnerable:
 
 | Control | Change event fired by programmatic set |
 |---|---|

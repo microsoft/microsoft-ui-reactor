@@ -37,7 +37,7 @@ We do not yet know which surface wins. Rather than argue about it, we ship both 
 ### Goals
 
 - **Feature parity.** Every MCP tool has a CLI equivalent. No capability is reachable only through MCP.
-- **Zero-ceremony connection.** `mur devtools tree` works in a terminal where a Reactor devtools session is running, with no configuration, no env vars, no flags. The discovery mechanism is the feature.
+- **Zero-ceremony connection.** `mur devtools tree` works in a terminal where a Microsoft.UI.Reactor (Reactor) devtools session is running, with no configuration, no env vars, no flags. The discovery mechanism is the feature.
 - **Auditability.** CLI invocations, their arguments, and their outputs are trivially logged by the shell the agent already uses. No extra protocol.
 - **Composability.** Output is structured JSON by default; every verb is pipeable.
 - **Stability under the experiment.** We can remove the CLI surface after the experiment without touching the MCP server, and vice versa. No shared state beyond the lockfile contract and the JSON-RPC wire the CLI speaks as a client.

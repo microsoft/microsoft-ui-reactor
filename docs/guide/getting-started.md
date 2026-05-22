@@ -1,5 +1,5 @@
 
-A Reactor app is a tree of [components](components.md) driven by
+A Microsoft.UI.Reactor (Reactor) app is a tree of [components](components.md) driven by
 [hooks](hooks.md), hosted in a WinUI window that the framework opens and
 manages for you. You write one C# file, call `ReactorApp.Run<T>`, and your
 component's `Render()` method returns the element tree that becomes the

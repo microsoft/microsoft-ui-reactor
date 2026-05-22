@@ -1,5 +1,5 @@
 
-Flex layout reasons about two axes at once. The main axis distributes
+Microsoft.UI.Reactor (Reactor)'s flex layout reasons about two axes at once. The main axis distributes
 children across available space — that's where `JustifyContent`,
 `Flex(grow:)`, `Flex(shrink:)`, and `Flex(basis:)` apply. The cross
 axis aligns each child against the container's other dimension — that's
@@ -34,6 +34,7 @@ enum types.
 | `ColumnGap` / `RowGap` | container (`with { ... }`) | Spacing between children — applies between wrapped lines too |
 | `FlexPadding` | container (`with { ... }`) | Inside-container padding measured by Yoga (distinct from the `.Padding(...)` modifier) |
 | `.Flex(grow:, shrink:, basis:)` | child | Main-axis sizing |
+| `.Flex(minWidth:, minHeight:)` | child | Override CSS §4.5 auto-min on the main axis (`null` = CSS `auto`; `0` = no floor; positive = hard floor). See the [Min sizing](#min-sizing-css-45) table for how `auto` resolves. |
 | `.Flex(alignSelf:)` | child | Override the container's `AlignItems` for one child |
 
 ## Direction
@@ -181,6 +182,9 @@ shares main-axis space with its siblings:
   proportionally).
 - **`basis`** — the starting size in pixels before grow/shrink apply.
   `null` means "measure my content first" (Yoga's `auto`).
+- **`minWidth` / `minHeight`** — explicit floor for the child's main-axis
+  size. `null` (default) means *auto* — see "Min sizing (CSS §4.5)"
+  below.
 
 ```csharp
 class GrowShrinkDemo : Component
@@ -224,6 +228,72 @@ gives every child `grow: 1` so the available space splits evenly.
 > one: distribution alone, no content measurement. The difference is
 > invisible on a 5-button toolbar and load-bearing on a 200-row table
 > header that rebuilds on every column resize.
+
+## Min sizing (CSS §4.5)
+
+By default, a flex child with `basis: auto` will not shrink below its
+**min-content** size — the smallest size it can occupy without
+overflowing its own content. This matches the [CSS Flexbox
+specification §4.5](https://www.w3.org/TR/css-flexbox-1/#min-size-auto)
+("Automatic Minimum Size of Flex Items") and is what most developers
+intuitively expect when laying out a row of cards or a column of
+sections: items don't squish smaller than their text or icons.
+
+Reactor's FlexPanel implements the auto-min rule as follows:
+
+| basis | minWidth / minHeight | Resulting floor |
+|---|---|---|
+| `auto` (default) | `null` (default) | `min-content` |
+| `0` | `null` | `0` (short-circuit — basis already opts out of content) |
+| pixel value `N > 0` | `null` | `min(N, min-content)` |
+| any | explicit `0` | `0` (you opt out of the floor) |
+| any | explicit `N > 0` | `N` (your hard floor) |
+
+The auto-min rule applies **only to the main axis** (width for
+`Direction.Row`, height for `Direction.Column`). On the cross axis,
+items shrink freely to 0 unless you set `minWidth`/`minHeight`
+explicitly.
+
+```csharp
+// Default behavior — items keep their min-content size:
+FlexPanel(
+    Border("Long text that won't truncate").Flex(shrink: 1),
+    Border("Short").Flex(shrink: 1),
+).Direction(FlexDirection.Row);
+
+// Opt out — let items shrink below content (text will clip):
+FlexPanel(
+    Border("Long text that may be clipped").Flex(shrink: 1, minWidth: 0),
+    Border("Short").Flex(shrink: 1, minWidth: 0),
+).Direction(FlexDirection.Row);
+
+// Explicit floor — never below 80px regardless of content:
+Border(content).Flex(shrink: 1, minWidth: 80)
+```
+
+> **Caveat:** **Performance:** computing `min-content` requires a WinUI
+> `Measure(width: marginH, height: ∞)` pass on each affected child before
+> the main flex algorithm runs. This is fine for typical UIs but can
+> matter for very large lists. Two ways to skip the pre-measure:
+> 
+> - Set `basis: 0` explicitly — the auto-min collapses to 0 with no
+>   measurement.
+> - Set `minWidth: 0` (or `minHeight: 0`) explicitly — you've opted out
+>   of the floor.
+> 
+> Children that are `ScrollView` or `ScrollViewer` always get a `0`
+> floor: their min-content would force their virtualized contents to
+> realize, which defeats the point of virtualization.
+
+> **Caveat:** **CSS vs WinUI mismatch on explicit `Width`.** In CSS, an item with
+> `width: 200px; flex-shrink: 1; min-width: 0` is allowed to shrink
+> below 200. In WinUI, `FrameworkElement.Width = 200` is a hard size
+> constraint — the control will report `DesiredSize.Width = 200`
+> regardless of available space and will arrange at 200 inside its
+> allocated slot. Inside a FlexPanel, prefer `.Flex(basis: 200, ...)`
+> over `.Width(200)` for any item you want to shrink. Yoga reads the
+> basis; WinUI's `Width` doesn't participate in flex distribution the
+> way CSS's `width` does.
 
 ## Practical example: toolbar with flexible spacer
 

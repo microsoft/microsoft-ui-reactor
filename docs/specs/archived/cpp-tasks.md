@@ -1,6 +1,6 @@
 # ReactorCpp Implementation Tasks
 
-Detailed task checklist for implementing the C++ version of Reactor per [cpp-native-reconciler.md](cpp-native-reconciler.md).
+Detailed task checklist for implementing the C++ version of Microsoft.UI.Reactor (Reactor) per [cpp-native-reconciler.md](cpp-native-reconciler.md).
 
 All work lives under the top-level `ReactorCpp/` directory, fully isolated from the C# `Reactor/` codebase.
 

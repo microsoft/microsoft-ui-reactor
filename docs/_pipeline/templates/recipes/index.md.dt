@@ -14,7 +14,7 @@ tier: solid
 
 # Recipes
 
-A recipe is a small composition of Reactor primitives that solves a
+A recipe is a small composition of Microsoft.UI.Reactor (Reactor) primitives that solves a
 real UI problem — login, master-detail, settings, modal confirmation,
 search-with-suggestions. The recipes here are not exhaustive apps;
 each is a single screen showing the pattern, and each ships a tiny

@@ -1,6 +1,6 @@
 # Reactor + WinUI3 Integration Proposals
 
-> Analysis of how Reactor's declarative reconciler could integrate more deeply with the WinUI3 native framework to unlock performance, correctness, and developer experience improvements.
+> Analysis of how Microsoft.UI.Reactor's declarative reconciler could integrate more deeply with the WinUI3 native framework to unlock performance, correctness, and developer experience improvements.
 
 > **Note (2026):** Several of the proposals below assume the existence of a native Rust differ that was prototyped early in the project's life. That experiment was retired and Reactor today ships a single pure-C# reconciler. Proposals that depend on the Rust path (notably §16, §18, §19, and parts of §20) would require re-introducing native diffing first; treat the Rust-differ language in those sections as historical context, not a current implementation. Other proposals in this document remain on the table.
 

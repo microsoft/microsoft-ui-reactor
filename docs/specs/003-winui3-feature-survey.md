@@ -1,7 +1,7 @@
 # WinUI 3 Application Programming Feature Survey
 
 A comprehensive inventory of WinUI 3 / Windows App SDK features relevant to application
-development, organized for gap analysis against the Reactor framework.
+development, organized for gap analysis against the Microsoft.UI.Reactor (Reactor) framework.
 
 ---
 

@@ -1,5 +1,5 @@
 
-Advanced is the layer where Reactor's declarative ceiling meets the
+Advanced is the layer where Microsoft.UI.Reactor (Reactor)'s declarative ceiling meets the
 imperative WinUI runtime underneath. Most of the framework is shaped to
 make the declarative path the right path — render is a function of
 state, the reconciler turns the next element record into a control

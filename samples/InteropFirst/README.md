@@ -1,6 +1,6 @@
 # InteropFirst sample (spec 033 §7)
 
-A vanilla WinUI 3 application that hosts a Reactor component inside a XAML
+A vanilla WinUI 3 application that hosts a Microsoft.UI.Reactor (Reactor) component inside a XAML
 page. Demonstrates the side-by-side interop story for XAML/MVVM teams adopting
 Reactor incrementally.
 

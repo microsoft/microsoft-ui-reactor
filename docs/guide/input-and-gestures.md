@@ -1,6 +1,6 @@
 > **WinUI reference:** For the full property surface and design guidance, see [Input](https://learn.microsoft.com/en-us/windows/apps/design/input/).
 
-Input flows from raw pointer and keyboard events through Reactor's
+Input flows from raw pointer and keyboard events through Microsoft.UI.Reactor (Reactor)'s
 modifier tower into your component's render logic, with gesture
 recognizers and focus state stacked on top. The bottom layer is the
 raw `.OnPointerPressed` / `.OnKeyDown` / `.OnGotFocus` etc. surface,

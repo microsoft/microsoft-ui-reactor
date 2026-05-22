@@ -1,7 +1,7 @@
 > **WinUI reference:** For the full property surface and design guidance, see [Items Collections](https://learn.microsoft.com/en-us/windows/apps/design/controls/items-collections).
 
 Collections are the highest-leverage primitive in any non-trivial app —
-a contacts list, a feed, a settings tree, an editor's gutter. Reactor
+a contacts list, a feed, a settings tree, an editor's gutter. Microsoft.UI.Reactor (Reactor)
 ships three typed bound collections (`ListView<T>`, `GridView<T>`,
 `LazyVStack<T>`) and one count-based virtualization primitive
 (`VirtualList`), plus the inline `ForEach` helper for non-scrolling

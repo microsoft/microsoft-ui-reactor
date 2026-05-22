@@ -1,5 +1,5 @@
 
-Reactor publishes a structured account of its internal work — every
+Microsoft.UI.Reactor (Reactor) publishes a structured account of its internal work — every
 reconcile pass, every component render, every state write, every MCP
 tool call, every effect flush — through one managed
 `EventSource` named `Microsoft-UI-Reactor`. Consumers can subscribe to
@@ -66,6 +66,15 @@ public static class Keywords
     public const EventKeywords Lifecycle = (EventKeywords)0x10;
     public const EventKeywords Errors = (EventKeywords)0x20;
     public const EventKeywords EventDispatch = (EventKeywords)0x40;
+    // Spec 044 — subsystem coverage gaps. Each gets its own bit so a
+    // consumer (dotnet-trace, EventListener, ReactorTrace.Subscribe) can
+    // pick exactly the area it cares about without paying for the rest.
+    public const EventKeywords Hosting = (EventKeywords)0x80;       // Window/HWND/DPI/Backdrop
+    public const EventKeywords Persistence = (EventKeywords)0x100;  // settings store, placement
+    public const EventKeywords Navigation = (EventKeywords)0x200;   // route push, cache, transitions
+    public const EventKeywords Intl = (EventKeywords)0x400;         // missing keys, fallback, format
+    public const EventKeywords Theme = (EventKeywords)0x800;        // theme apply, bindings
+    public const EventKeywords Shell = (EventKeywords)0x1000;       // JumpList/Tray/ThumbnailToolbar
 }
 ```
 
@@ -265,6 +274,7 @@ in the band's event payload.
 
 ## Next Steps
 
+- **[Diagnostics](diagnostics.md)** — How to capture, filter, and read the error / HR / subsystem events Reactor emits in Release builds, plus `ReactorTrace.Subscribe` and `reactor.logs source=event`.
 - **[DevTools Internals](devtools-internals.md)** — Where the overlays consume these events.
 - **[Reconciliation](reconciliation.md)** — What the reconcile-stop counters describe.
 - **[Hooks Internals](hooks-internals.md)** — Why `StateChange` fires from inside the slot table.

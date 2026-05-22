@@ -122,7 +122,7 @@ The Mermaid sources exist for all 15 topics; SVG render is a follow-up
    structure cleanly.
 
 5. **The reactor-vs-xaml comparison table.** Side-by-side XAML vs.
-   Reactor snippets. Some readers will hit this on mobile, where
+   Microsoft.UI.Reactor (Reactor) snippets. Some readers will hit this on mobile, where
    the two columns stack. Confirm the alignment doesn't lose context.
 
 6. **Diagram contrast on the source-mapping flow.** It uses both

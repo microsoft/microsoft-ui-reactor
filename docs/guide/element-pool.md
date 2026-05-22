@@ -1,7 +1,7 @@
 
 # Element Pool
 
-The element pool recycles unmounted WinUI controls so a scroll-heavy
+The Microsoft.UI.Reactor (Reactor) element pool recycles unmounted WinUI controls so a scroll-heavy
 list or fast-mounting subtree doesn't allocate a fresh `TextBlock` /
 `Button` / `Border` on every render. Each WinUI type gets its own
 fixed-size stack (cap 32) inside `ElementPool`; the

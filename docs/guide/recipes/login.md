@@ -1,7 +1,7 @@
 
 # Recipe: Login
 
-A login form is four pieces working together: validated input,
+A Microsoft.UI.Reactor (Reactor) login form is four pieces working together: validated input,
 submit-gated state, an async call, and an error-display surface. The
 recipe below wires them with three `UseState` hooks and a `Task` —
 no view model, no event handler classes.

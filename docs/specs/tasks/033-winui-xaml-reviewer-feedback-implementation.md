@@ -248,7 +248,7 @@ this spec's pattern (release notes, PR template, analyzer-release files).
 
 - [x] `public sealed class OrdersDataGrid : Component<OrdersDataGridProps>`.
 - [x] `OrdersDataGridProps` carries `ObservableCollection<Order> Items`, optional `Action<Order?> OnSelect`, optional `Brush? AccentBrush` and `SubtleBrush` (resolved from `Application.Current.Resources` by `MainWindow`), and optional `ICommand AddCommand` / `DeleteCommand` for the shared-commanding row.
-- [x] Renders a Reactor `VStack` of header + rows (deliberately not the full `DataGrid<T>` factory — the spec calls for a "Reactor DataGrid" as a panel, not a column-virtualized grid; rows are simple `HStack`s of `TextBlock`s plus selection background. Production apps use `Factories.DataGrid<T>(...)` with `FieldDescriptor` columns.).
+- [x] Renders a Microsoft.UI.Reactor (Reactor) `VStack` of header + rows (deliberately not the full `DataGrid<T>` factory — the spec calls for a "Reactor DataGrid" as a panel, not a column-virtualized grid; rows are simple `HStack`s of `TextBlock`s plus selection background. Production apps use `Factories.DataGrid<T>(...)` with `FieldDescriptor` columns.).
 - [x] `UseEffect` with cleanup subscribes to `Items.CollectionChanged` on mount and unsubscribes on unmount, mirroring the host's collection into local hook state on every change.
 
 ### 4.5 Page composition — collapsed into `MainWindow.xaml`

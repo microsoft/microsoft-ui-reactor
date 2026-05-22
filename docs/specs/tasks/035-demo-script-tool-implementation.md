@@ -2,7 +2,7 @@
 
 Derived from: `docs/specs/035-demo-script-tool-design.md`
 
-Scope reminder: this is an internal sample app, but it doubles as a Reactor
+Scope reminder: this is an internal sample app, but it doubles as a Microsoft.UI.Reactor (Reactor)
 exemplar for streaming, file-watching, async commands, packaging, and Windows 11
 design. Tasks are sized to be paused/resumed; complete top-to-bottom within a
 phase. Cross-phase ordering matters (don't wire UI before models/services exist;

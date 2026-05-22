@@ -1,5 +1,5 @@
 
-`DataGrid<T>` is a virtualized table that renders rows lazily from an
+Microsoft.UI.Reactor (Reactor)'s `DataGrid<T>` is a virtualized table that renders rows lazily from an
 `IDataSource<T>`. The source is the contract, not the data: it returns
 pages keyed by sort, filter, and search state, declares its
 `Capabilities` (server-side sort? mutate?), and yields a stable

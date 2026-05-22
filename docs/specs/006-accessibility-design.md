@@ -10,7 +10,7 @@
 
 The [gap analysis](002-winui3-gap-analysis.md) §16 identifies accessibility as **"the largest
 gap for production apps."** Today, only `AutomationProperties.Name` and
-`AutomationProperties.AutomationId` have first-class Reactor modifiers. Nine WinUI accessibility
+`AutomationProperties.AutomationId` have first-class Microsoft.UI.Reactor (Reactor) modifiers. Nine WinUI accessibility
 features are **Missing**, one is **Blocked** (custom `AutomationPeer`), and everything else
 requires the `.Set()` escape hatch. This blocks WCAG AA compliance for any production Reactor
 application.

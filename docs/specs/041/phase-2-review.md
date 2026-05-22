@@ -49,7 +49,7 @@ Inline link audit (manual walk through each new Phase 2 page):
 
 ## Phase 2 exit-gate per spec §9 Phase 2
 
-> Every Reactor-original concept that lives only in `ai-author-skill.md` also has a user-facing page.
+> Every Microsoft.UI.Reactor (Reactor)-original concept that lives only in `ai-author-skill.md` also has a user-facing page.
 
 Walking the AI Author Skill's API reference (`docs/_pipeline/ai-author-skill.md` §"Reactor API Quick Reference"):
 

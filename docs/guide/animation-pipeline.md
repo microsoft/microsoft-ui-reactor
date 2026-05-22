@@ -1,5 +1,5 @@
 
-Reactor's animation surface looks deceptively simple — set
+Microsoft.UI.Reactor (Reactor)'s animation surface looks deceptively simple — set
 `.Opacity(visible ? 1 : 0)` and attach `.OpacityTransition()`, and the
 property change animates on next render. Underneath, four distinct
 systems route into the same compositor layer: declaration-site implicit

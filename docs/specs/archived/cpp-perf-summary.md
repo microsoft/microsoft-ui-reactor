@@ -5,7 +5,7 @@
 
 ## Overview
 
-ReactorCpp was a fully native C++20 port of the Reactor framework — element model, hooks, reconciler, and WinUI bridge — designed to test whether a fully native stack could avoid managed/unmanaged transition costs and show measurable FPS and memory improvements.
+ReactorCpp was a fully native C++20 port of the Microsoft.UI.Reactor (Reactor) framework — element model, hooks, reconciler, and WinUI bridge — designed to test whether a fully native stack could avoid managed/unmanaged transition costs and show measurable FPS and memory improvements.
 
 ## Benchmark Results
 

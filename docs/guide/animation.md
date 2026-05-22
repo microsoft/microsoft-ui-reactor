@@ -1,6 +1,6 @@
 > **WinUI reference:** For the full property surface and design guidance, see [Motion](https://learn.microsoft.com/en-us/windows/apps/design/motion/).
 
-Reactor exposes four animation systems and one rule about which to pick.
+Microsoft.UI.Reactor (Reactor) exposes four animation systems and one rule about which to pick.
 The rule first: the **compositor** can only animate five properties —
 Opacity, Offset (Translation), Scale, Rotation, and CenterPoint — and
 when it does, the managed render thread is not involved and the

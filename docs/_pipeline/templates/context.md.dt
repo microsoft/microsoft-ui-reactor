@@ -13,7 +13,7 @@ goal: |
 tier: comprehensive
 ---
 
-A Reactor `Context<T>` is namespaced dependency injection scoped to the
+A Microsoft.UI.Reactor (Reactor) `Context<T>` is namespaced dependency injection scoped to the
 element tree, with reactivity. Define a context once as a static field,
 publish a value to any element's subtree with the `.Provide(ctx, value)`
 modifier, and any descendant component reads the current value with

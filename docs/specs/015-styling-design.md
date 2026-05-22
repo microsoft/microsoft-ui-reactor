@@ -21,7 +21,7 @@ Theming at **C+** — among the weakest scores in the framework:
 > element, per render cycle. This is correct but slow.
 
 > **No lightweight styling.** WinUI's most powerful customization feature —
-> per-control resource overrides like `ButtonBackgroundPointerOver` — has no Reactor
+> per-control resource overrides like `ButtonBackgroundPointerOver` — has no Microsoft.UI.Reactor (Reactor)
 > surface.
 
 > **No color-scheme hooks.** Components that need to vary non-brush content by

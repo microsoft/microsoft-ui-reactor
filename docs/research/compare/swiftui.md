@@ -1,6 +1,6 @@
 # SwiftUI — Framework Analysis
 
-**Purpose:** Critical technical analysis for comparison against Microsoft UI frameworks (WinForms, WPF, WinUI 3, Reactor).
+**Purpose:** Critical technical analysis for comparison against Microsoft UI frameworks (WinForms, WPF, WinUI 3, Microsoft.UI.Reactor).
 
 **Version analyzed:** SwiftUI as of iOS 18 / macOS 15 (WWDC 2024-2025 era)
 

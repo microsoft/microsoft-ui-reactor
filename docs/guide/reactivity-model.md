@@ -1,5 +1,5 @@
 
-Reactivity in Reactor is one direction and one verb: a setter writes a
+Reactivity in Microsoft.UI.Reactor (Reactor) is one direction and one verb: a setter writes a
 slot, the framework asks the owning component to describe the next
 tree, the reconciler diffs and commits. There is no observer graph
 between properties, no dependency tracker watching reads, no binding

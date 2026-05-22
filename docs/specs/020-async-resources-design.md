@@ -31,7 +31,7 @@
 
 ## 1. Problem Statement
 
-Reactor apps overwhelmingly follow a single shape:
+Microsoft.UI.Reactor (Reactor) apps overwhelmingly follow a single shape:
 
 ```
 UI action → async HTTP call → update UI state

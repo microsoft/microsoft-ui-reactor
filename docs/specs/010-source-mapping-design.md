@@ -7,7 +7,7 @@ Map every running UI element back to the C# source that created it, enabling
 
 ## Problem
 
-When inspecting a live Reactor app (via `--preview` mode or a future element
+When inspecting a live Microsoft.UI.Reactor (Reactor) app (via `--preview` mode or a future element
 inspector), there is no way to know *which line of user code* caused a given
 `TextBlock`, `Button`, or `Grid` to appear. The reconciler creates WinUI
 controls, but the connection to the DSL call site is lost. Developers need to

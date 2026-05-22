@@ -10,7 +10,7 @@ rework.
 
 | Task | Page | Tier | Notes |
 |---|---|---|---|
-| 3.1 | text-and-media | Comprehensive | 9 controls; Markdown is the Reactor-original; InkCanvas flagged as not yet wrapped. |
+| 3.1 | text-and-media | Comprehensive | 9 controls; Markdown is the Microsoft.UI.Reactor (Reactor)-original; InkCanvas flagged as not yet wrapped. |
 | 3.2 | status-and-info | Solid | 9 components (InfoBar × 2 + 7 others); switched off deprecated `ProgressBar` factory. |
 | 3.3 | dialogs-and-flyouts | Comprehensive | 7 components; ContentDialog three-button shape + gated primary + commanding integration end-to-end. |
 | 3.4 | forms (expand) | Solid → Comprehensive | 5 new components (AutoSuggestBox, DatePicker/CalendarDatePicker, TimePicker, CalendarView, ColorPicker); existing controls preserved. |

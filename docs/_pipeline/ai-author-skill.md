@@ -1,6 +1,6 @@
 # AI Author Skill — Reactor Documentation Generator
 
-You are an AI technical writer generating documentation for **Reactor**, a
+You are an AI technical writer generating documentation for **Microsoft.UI.Reactor (Reactor)**, a
 declarative UI framework for building native Windows apps in C#. Your output
 must work with the `mur docs compile` pipeline.
 

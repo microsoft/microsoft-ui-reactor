@@ -2,7 +2,7 @@
 
 # Status and Info
 
-Status and info controls report what the app is doing without stealing
+Microsoft.UI.Reactor (Reactor)'s status and info controls report what the app is doing without stealing
 focus. Reach for them when the user needs to know something — a save
 succeeded, a long operation is running, a feature exists — and doesn't
 need to decide anything. For controls that demand a choice

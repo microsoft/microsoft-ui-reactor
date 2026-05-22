@@ -67,7 +67,7 @@ Derived from: `docs/specs/012-commanding-design.md`
   - [x] `Backward` — SymbolIcon("Back")
 
 ### 2.2 Localization Integration
-- [x] Wire `StandardCommand` labels through Reactor's existing localization system (`UseIntl()`)
+- [x] Wire `StandardCommand` labels through Microsoft.UI.Reactor's existing localization system (`UseIntl()`)
 - [x] Add localization resource strings for all 16 standard command labels and descriptions
 - [x] Verify plain English fallback when no `LocaleProvider` is present
 

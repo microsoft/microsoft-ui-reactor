@@ -15,7 +15,7 @@ tier: comprehensive
 winui-ref: https://learn.microsoft.com/en-us/windows/apps/design/controls/forms
 ---
 
-Forms are the Reactor surface most apps spend most of their UI time inside.
+Forms are the Microsoft.UI.Reactor (Reactor) surface most apps spend most of their UI time inside.
 Every input control on this page follows the same controlled-input
 contract: you own the current value, you provide a change handler, the
 control renders what you pass and calls your handler when the user edits.

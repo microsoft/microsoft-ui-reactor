@@ -8,7 +8,7 @@
 
 ## Problem Statement
 
-Reactor today has a strong external devtools story — the MCP server, VS Code
+Microsoft.UI.Reactor (Reactor) today has a strong external devtools story — the MCP server, VS Code
 preview panel, component switching, property inspection (#63) — all driven by
 `--devtools run` launching the process in a preview harness. What it does not
 have is a story for **devtools UX that lives inside a running app**:

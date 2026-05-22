@@ -19,7 +19,7 @@ The review identifies five gaps:
 
 1. **No gesture system.** SwiftUI has `DragGesture`, `TapGesture`,
    `LongPressGesture`, and composition operators. Compose has
-   `Modifier.pointerInput { detectDragGestures {} }`. Reactor has individual
+   `Modifier.pointerInput { detectDragGestures {} }`. Microsoft.UI.Reactor (Reactor) has individual
    pointer events with no higher-level abstraction — users fall back to manual
    hit testing and pointer-state bookkeeping for anything richer than a single
    tap.

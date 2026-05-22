@@ -1,6 +1,6 @@
 # ReactorCpp: Native C++ Reconciler and Language Binding
 
-This document specifies a fully native C++ implementation of the Reactor framework — element model, hooks, reconciler, and WinUI bridge — designed so that an existing C++ program can adopt WinUI declaratively without a ground-up rewrite.
+This document specifies a fully native C++ implementation of the Microsoft.UI.Reactor (Reactor) framework — element model, hooks, reconciler, and WinUI bridge — designed so that an existing C++ program can adopt WinUI declaratively without a ground-up rewrite.
 
 ---
 

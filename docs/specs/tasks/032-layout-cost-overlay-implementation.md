@@ -45,7 +45,7 @@ Conventions:
 
 ### 1.1 ETW session wrapper
 
-- [x] Create `src/Reactor/Hosting/Etw/LayoutEtwConsumer.cs` with a single public class `LayoutEtwConsumer : IDisposable`. (Kept `internal` to match Reactor's library boundary — samples/tests already use `InternalsVisibleTo`.)
+- [x] Create `src/Reactor/Hosting/Etw/LayoutEtwConsumer.cs` with a single public class `LayoutEtwConsumer : IDisposable`. (Kept `internal` to match Microsoft.UI.Reactor's library boundary — samples/tests already use `InternalsVisibleTo`.)
 - [x] Expose `Start()`, `Stop()`, `IsRunning`, and an `event Action<RawLayoutEvent> EventReceived`.
 - [x] Define `RawLayoutEvent` record: `ElementId (ulong)`, `Kind (Measure|Arrange)`, `Phase (Begin|End)`, `TimestampTicks (long, 100ns)`, `ThreadId (int)`, `Rect (float x, y, w, h)` for Arrange events. (Available/Desired dropped from v1 — Measure bounds are not used by the attribution path and adding them widened the struct to no effect. Revisit if Phase-5 detailed-view pin needs them.)
 - [x] Build session name as `Reactor.LayoutCost.{pid}`; expose session base prefix as a const.

@@ -14,7 +14,7 @@ tier: solid
 
 # Performance
 
-A Reactor app emits a structured account of its own work — one event at
+A Microsoft.UI.Reactor (Reactor) app emits a structured account of its own work — one event at
 the start and end of every reconcile pass, every component render,
 every effect flush, every state write, every WinUI routed-event hop —
 through one managed `EventSource` named `Microsoft-UI-Reactor`. You

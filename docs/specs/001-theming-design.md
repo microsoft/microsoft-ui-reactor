@@ -862,7 +862,7 @@ public class MainPage : Component
    it walks the resource tree: control → parent → ... → Application. It finds our
    overridden brush in the Application's ThemeDictionaries.
 
-3. Standard controls get lime green without Reactor setting ANY local values. The properties
+3. Standard controls get lime green without Microsoft.UI.Reactor (Reactor) setting ANY local values. The properties
    stay at Tier 3 (unset), so WinUI's full style system — including PointerOver, Pressed,
    Disabled visual states — works perfectly.
 

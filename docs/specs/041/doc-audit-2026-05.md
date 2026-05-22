@@ -105,7 +105,7 @@ Controls listed in `ai-author-skill.md` or shipping under
 
 Concepts missing entirely:
 
-- Testing Reactor apps (→ Phase 2.2)
+- Testing Microsoft.UI.Reactor (Reactor) apps (→ Phase 2.2)
 - `UsePersisted` (→ Phase 2.4)
 - Theming token reference (→ Phase 2.3)
 - Backdrop / Mica / Acrylic narrative (→ Phase 4 styling expand)

@@ -340,7 +340,7 @@ constraint was honored.
 - **The TIER_W001 warning class continues to be informational
   noise.** 24 templates fire `REACTOR_DOC_TIER_W001`
   (winui-ref-not-declared). Every one is intentional — these are
-  internals pages, meta pages, or original Reactor surfaces. The
+  internals pages, meta pages, or original Microsoft.UI.Reactor (Reactor) surfaces. The
   warning was useful in Phase 1 (where it flagged the actual
   wrapper-pages missing their reference); in Phase 4 it's the
   expected baseline. Consider downgrading to info severity, or

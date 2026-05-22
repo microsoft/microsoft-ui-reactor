@@ -12,7 +12,7 @@ goal: |
 tier: comprehensive
 ---
 
-Flex layout reasons about two axes at once. The main axis distributes
+Microsoft.UI.Reactor (Reactor)'s flex layout reasons about two axes at once. The main axis distributes
 children across available space — that's where `JustifyContent`,
 `Flex(grow:)`, `Flex(shrink:)`, and `Flex(basis:)` apply. The cross
 axis aligns each child against the container's other dimension — that's

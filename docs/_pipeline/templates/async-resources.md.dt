@@ -14,7 +14,7 @@ tier: solid
 
 # Async Resources
 
-Reactor's async hooks — `UseResource`, `UseInfiniteResource`, and
+Microsoft.UI.Reactor (Reactor)'s async hooks — `UseResource`, `UseInfiniteResource`, and
 `UseMutation` — replace the "one `UseState` for data, one for loading, one
 for error, one `UseEffect` to tie them together" pattern. They own the
 fetch lifecycle: cancellation on deps-change, drop late results after

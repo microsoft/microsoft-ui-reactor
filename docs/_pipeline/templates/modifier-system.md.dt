@@ -14,7 +14,7 @@ goal: |
 tier: comprehensive
 ---
 
-A modifier in Reactor is not an operation — it is a value-bearing
+A modifier in Microsoft.UI.Reactor (Reactor) is not an operation — it is a value-bearing
 function `T -> T` that returns a new [`Element`](components.md) record
 with its `Modifiers` slot replaced. `.Bold().Margin(8).Background(Theme.Accent)`
 allocates one `TextBlockElement` and folds three small `ElementModifiers`

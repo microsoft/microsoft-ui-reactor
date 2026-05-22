@@ -1,6 +1,6 @@
 # Chat Sample App
 
-This project is a native Windows chat sample built with Reactor.
+This project is a native Windows chat sample built with Microsoft.UI.Reactor (Reactor).
 
 ## Responsibilities
 

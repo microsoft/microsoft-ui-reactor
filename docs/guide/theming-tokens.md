@@ -1,6 +1,6 @@
 > **WinUI reference:** For the full property surface and design guidance, see [Colors](https://learn.microsoft.com/en-us/windows/apps/design/style/colors).
 
-A theme token is a name for a color that the system resolves at render
+A Microsoft.UI.Reactor (Reactor) theme token is a name for a color that the system resolves at render
 time. The same token (`Theme.Accent`) emits a different `Brush`
 depending on whether the app is in light mode, dark mode, or high
 contrast — and switches without a re-render when the user flips
