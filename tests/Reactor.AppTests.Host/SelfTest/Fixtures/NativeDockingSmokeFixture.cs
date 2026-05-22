@@ -1210,7 +1210,16 @@ internal static class NativeDockingSmokeFixtures
 
             host.Mount(_ => Build());
             await Harness.Render();
-            await Task.Delay(1200); // settle on initial layout so the eye registers it
+            // Timing budget (must fit under SelfTestRunner.FixtureTimeout = 15s):
+            //   initial settle:      700ms
+            //   5 loops × (5 nudges × 200ms + after-final 400ms): 7000ms
+            //   total delay budget:  ~7.7s
+            //   render overhead (~80ms × ~26 renders): ~2s
+            //   grand total:         ~9.7s → comfortable margin under 15s
+            // The fixture is meant as a paced visual demo — 200ms per
+            // nudge is still humanly observable (5 frames/sec); the prior
+            // 400ms × 25 nudges + extras blew past the timeout by ~1s.
+            await Task.Delay(700);
 
             var splitters = H.FindAllControls<DockSplitterControl>(_ => true);
             var rowSplitter = splitters.FirstOrDefault(s => s.Direction == DockSplitterDirection.Rows);
@@ -1224,55 +1233,55 @@ internal static class NativeDockingSmokeFixtures
             {
                 FireResizeDelta(rowSplitter!, delta: 40, isFinal: false);
                 await Harness.Render();
-                await Task.Delay(400);
+                await Task.Delay(200);
             }
             FireResizeDelta(rowSplitter!, delta: 0, isFinal: true);
             await Harness.Render();
-            await Task.Delay(800);
+            await Task.Delay(400);
 
             // 2) Grow the top row back — five -40-DIP nudges.
             for (int i = 0; i < 5; i++)
             {
                 FireResizeDelta(rowSplitter!, delta: -40, isFinal: false);
                 await Harness.Render();
-                await Task.Delay(400);
+                await Task.Delay(200);
             }
             FireResizeDelta(rowSplitter!, delta: 0, isFinal: true);
             await Harness.Render();
-            await Task.Delay(800);
+            await Task.Delay(400);
 
             // 3) Shrink the top-row's left column (editor) — five 40 DIP.
             for (int i = 0; i < 5; i++)
             {
                 FireResizeDelta(colSplitters[0], delta: 40, isFinal: false);
                 await Harness.Render();
-                await Task.Delay(400);
+                await Task.Delay(200);
             }
             FireResizeDelta(colSplitters[0], delta: 0, isFinal: true);
             await Harness.Render();
-            await Task.Delay(800);
+            await Task.Delay(400);
 
             // 4) Restore the top-row's left column — five -40 DIP.
             for (int i = 0; i < 5; i++)
             {
                 FireResizeDelta(colSplitters[0], delta: -40, isFinal: false);
                 await Harness.Render();
-                await Task.Delay(400);
+                await Task.Delay(200);
             }
             FireResizeDelta(colSplitters[0], delta: 0, isFinal: true);
             await Harness.Render();
-            await Task.Delay(800);
+            await Task.Delay(400);
 
             // 5) Shrink the bottom-row's left column (output) — five 40 DIP.
             for (int i = 0; i < 5; i++)
             {
                 FireResizeDelta(colSplitters[1], delta: 40, isFinal: false);
                 await Harness.Render();
-                await Task.Delay(400);
+                await Task.Delay(200);
             }
             FireResizeDelta(colSplitters[1], delta: 0, isFinal: true);
             await Harness.Render();
-            await Task.Delay(1500);
+            await Task.Delay(400);
 
             H.Check("VizDemo_CompletedAllFourQuadrants", true);
 
