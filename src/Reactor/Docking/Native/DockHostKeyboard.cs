@@ -15,9 +15,15 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 //    • Ctrl+F4 / Ctrl+W — close active document if CanClose
 //    • Ctrl+Shift+M — enter keyboard drop-target mode (flips ShowDropTargets)
 //
-//  Chords deferred to a follow-up pass (separate overlays + state machine):
-//    • Ctrl+Tab — VS-style pane navigator
-//    • Alt+F7 — hidden-pane picker
+//  Additional chords driving the §2.10 navigator overlay:
+//    • Ctrl+Tab — VS-style pane navigator (forward cycle)
+//    • Ctrl+Shift+Tab — pane navigator (reverse cycle)
+//  Both route through DockChordBridge.Handlers.OpenNavigator(±1); the
+//  DockNavigatorPopup primitive handles the popup + Ctrl-release commit
+//  + Esc cancel state machine outside the reconciler render tree.
+//
+//  Chord still deferred:
+//    • Alt+F7 — hidden-pane picker (uses the same overlay primitive)
 //
 //  All chords scope to the dock host subtree via CommandHostElement's
 //  IsDescendantOf focus check (Reconciler.Mount.cs).
@@ -86,6 +92,50 @@ internal static class DockHostKeyboard
                 default: return (null, null);
             }
         }
+    }
+
+    /// <summary>
+    /// Flatten the layout into a depth-first list of leaf panes. Used by
+    /// the §2.10 Ctrl+Tab navigator to populate the picker list. Returns
+    /// every <see cref="DockableContent"/> reachable from the root,
+    /// excluding side strips (those are surfaced via the side popup).
+    /// </summary>
+    public static IReadOnlyList<DockableContent> EnumerateLeaves(DockNode? root)
+    {
+        if (root is null) return Array.Empty<DockableContent>();
+        var result = new List<DockableContent>();
+        Walk(root, result);
+        return result;
+
+        static void Walk(DockNode node, List<DockableContent> acc)
+        {
+            switch (node)
+            {
+                case DockableContent leaf:
+                    acc.Add(leaf);
+                    break;
+                case DockTabGroup grp:
+                    foreach (var d in grp.Documents) acc.Add(d);
+                    break;
+                case DockSplit split:
+                    foreach (var c in split.Children) Walk(c, acc);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Index of <paramref name="key"/> in the enumeration produced by
+    /// <see cref="EnumerateLeaves"/>. Returns -1 when not present.
+    /// </summary>
+    public static int IndexOfKey(IReadOnlyList<DockableContent> leaves, object? key)
+    {
+        if (key is null) return -1;
+        for (int i = 0; i < leaves.Count; i++)
+        {
+            if (Equals(leaves[i].Key, key)) return i;
+        }
+        return -1;
     }
 
     /// <summary>

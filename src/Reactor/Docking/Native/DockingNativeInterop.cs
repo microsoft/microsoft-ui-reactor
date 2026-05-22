@@ -162,6 +162,14 @@ public static class DockingNativeInterop
             (h) => h.CloseActive());
         AddAccel(host, VirtualKey.M, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift,
             (h) => h.EnterDropMode());
+        // Spec 045 §2.10 — Ctrl+Tab opens the VS-style pane navigator.
+        // Successive presses while it's open cycle ±1; Ctrl release
+        // commits the selection (DockNavigatorPopup owns that state
+        // machine). Ctrl+Shift+Tab seeds the cycle in reverse.
+        AddAccel(host, VirtualKey.Tab, VirtualKeyModifiers.Control,
+            (h) => h.OpenNavigator?.Invoke(+1));
+        AddAccel(host, VirtualKey.Tab, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift,
+            (h) => h.OpenNavigator?.Invoke(-1));
     }
 
     private static void AddAccel(Border host, VirtualKey key, VirtualKeyModifiers mods,

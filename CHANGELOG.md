@@ -50,6 +50,21 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — §2.10 Ctrl+Tab pane navigator overlay.**
+  VS-style navigator: Ctrl+Tab opens a Popup over the host Border
+  listing all open panes (depth-first leaf enumeration via the new
+  `DockHostKeyboard.EnumerateLeaves`); subsequent Ctrl+Tab /
+  Ctrl+Shift+Tab presses cycle the selection ±1; Ctrl release
+  commits and switches `activePaneKey` + fires
+  `OnActiveContentChanged`; Esc cancels. The new
+  `DockNavigatorPopup` primitive lives outside the Reactor
+  reconciler (per-host `Popup` instance keyed via a
+  `ConditionalWeakTable<FrameworkElement, DockNavigatorPopup>`) so
+  opening it doesn't perturb the render tree (M19 / M20 control-
+  identity assertions stay green). The chord bridge gains an
+  optional `OpenNavigator(int delta)` slot; `DockingNativeInterop`
+  attaches the two new accelerators alongside the existing chord
+  set. Unit coverage in `DockNavigatorTests` (9 cases).
 - **Spec 045 Phase 2 — §2.10 UIA live-region announcements.** Layout-
   state transitions (close, tear-out / float, dock-confirm, pin-to-
   side, hide, show) now raise polite UIA notifications against the

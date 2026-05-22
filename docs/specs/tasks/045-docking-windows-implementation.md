@@ -754,12 +754,27 @@ WinUI.Dock wrapper for side-by-side review.
 
 ### 2.10 Keyboard navigation (spec §5.3.3, §8.7)
 
-- [ ] **`Ctrl+Tab`** opens VS-style pane navigator overlay listing all
-  open panes. *Deferred — needs a dedicated overlay element + state
-  machine for the "release-Ctrl-to-commit" gesture. The chord bridge
-  in `DockingNativeInterop.AttachChordAccelerators` already routes
-  three chords (PageUp/Down, F4/W, M); Ctrl+Tab will add a fourth
-  handler that toggles a host-side `navigatorActive` state.*
+- [x] **`Ctrl+Tab`** opens VS-style pane navigator overlay listing all
+  open panes. Implementation: `DockNavigatorPopup` is a per-host
+  `Popup`-based overlay (one instance per host `Border` via a
+  `ConditionalWeakTable`) carrying a list of pane titles + a
+  highlighted selection. Mount attaches Ctrl+Tab / Ctrl+Shift+Tab
+  accelerators (`DockingNativeInterop.AttachChordAccelerators`) that
+  route through a new `DockChordBridge.Handlers.OpenNavigator(int
+  delta)`. The host component's `OpenNavigator` closure enumerates
+  the layout's leaves via `DockHostKeyboard.EnumerateLeaves`,
+  computes the start index from the current chord-target key, and
+  calls `nav.OpenOrAdvance`. Successive chord presses while open
+  cycle ±1; Ctrl release commits the selection (a global
+  `KeyUpEvent` listener on the host's `XamlRoot.Content` watches
+  `VirtualKey.Control`); Esc cancels. The commit callback sets
+  `activePaneKey` + fires `OnActiveContentChanged` so apps observe
+  the switch the same way as the chord-cycled tab. Lives outside
+  the Reactor reconciler so opening it doesn't perturb the render
+  tree (M19 / M20 control-identity contract preserved). Unit
+  coverage in `DockNavigatorTests` (9 cases covering
+  `EnumerateLeaves` / `IndexOfKey` math + the chord-bridge
+  `Handlers.OpenNavigator` round-trip).
 - [x] **`Ctrl+F4`** closes active pane if `CanClose`. Fires
   `OnDocumentClosing` (cancellable) → `OnDocumentClosed` →
   `OnLiveLayoutChanged`. **`Ctrl+W`** is wired as an alias on the

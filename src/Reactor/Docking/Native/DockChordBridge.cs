@@ -28,11 +28,23 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 internal static class DockChordBridge
 {
     /// <summary>Chord delegates supplied by the host component each render.</summary>
+    /// <remarks>
+    /// Spec 045 §2.10. <see cref="OpenNavigator"/> wakes the VS-style
+    /// pane navigator overlay; the delta argument seeds the initial
+    /// selection (Ctrl+Tab → +1, Ctrl+Shift+Tab → -1). Subsequent
+    /// presses while the overlay is open cycle the selection; the
+    /// overlay commits on Ctrl release (the chord modifier) and
+    /// cancels on Esc. <see cref="OpenHiddenPicker"/> opens the
+    /// Alt+F7 hidden-pane picker that lets the user re-show a closed-
+    /// but-remembered tool window (§5.3.9 PreviousContainer pairing).
+    /// </remarks>
     public sealed record Handlers(
         Action NextTab,
         Action PrevTab,
         Action CloseActive,
-        Action EnterDropMode);
+        Action EnterDropMode,
+        Action<int>? OpenNavigator = null,
+        Action? OpenHiddenPicker = null);
 
     private static readonly ConditionalWeakTable<DockManager, Handlers> _table = new();
 

@@ -831,6 +831,40 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             setKeyboardOverlayActive(true);
         }
 
+        // §2.10 navigator — Ctrl+Tab opens the VS-style pane picker. The
+        // popup primitive lives outside the Reactor reconciler so it
+        // doesn't perturb the render tree; we just need to resolve the
+        // host element and supply the pane list + commit callback.
+        void OpenNavigator(int delta)
+        {
+            var leaves = DockHostKeyboard.EnumerateLeaves(effectiveLayout);
+            if (leaves.Count == 0) return;
+            var host = DockHostLiveAnnouncer.GetHost(manager);
+            if (host is null) return;
+            var nav = DockNavigatorPopup.For(host);
+            var entries = new DockNavigatorPopup.Entry[leaves.Count];
+            for (int i = 0; i < leaves.Count; i++)
+                entries[i] = new DockNavigatorPopup.Entry(leaves[i].Key, leaves[i].Title ?? string.Empty);
+            int currentIdx = DockHostKeyboard.IndexOfKey(leaves, chordTargetKey);
+            nav.OpenOrAdvance(entries, currentIdx, delta, committedKey =>
+            {
+                if (committedKey is null) return;
+                var newPane = ResolvePane(effectiveLayout, committedKey);
+                if (newPane is null) return;
+                var prev = ResolvePane(effectiveLayout, chordTargetKey);
+                if (!ReferenceEquals(prev, newPane))
+                {
+                    manager.OnActiveContentChanged?.Invoke(new DockActiveContentChangedEventArgs
+                    {
+                        ActiveContent = newPane,
+                        PreviousContent = prev,
+                    });
+                }
+                setActivePaneKey((object?)newPane.Key);
+                bumpTick(t => t + 1);
+            });
+        }
+
         // §2.10 — register the keyboard chord handlers in the host bridge
         // slot. The DockingNativeInterop mount handler attaches a single
         // set of KeyboardAccelerators on the Border once (mount-time) and
@@ -842,7 +876,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 NextTab: () => CycleActiveTab(+1),
                 PrevTab: () => CycleActiveTab(-1),
                 CloseActive: CloseActivePane,
-                EnterDropMode: EnterKeyboardDropMode));
+                EnterDropMode: EnterKeyboardDropMode,
+                OpenNavigator: OpenNavigator));
 
         // §2.17 — publish the host model + active-key + layout-snapshot
         // context slots so descendant function components hooked into
