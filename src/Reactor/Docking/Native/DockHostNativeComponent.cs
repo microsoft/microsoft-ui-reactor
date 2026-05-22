@@ -1162,7 +1162,10 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             },
             onSplitterDelta: (idx, delta, hostExtent, isFinal) =>
             {
-                if (delta == 0 && !isFinal) return;
+                // Tolerance-based zero check: pointer drag can deliver
+                // sub-pixel deltas under HiDPI / fractional DIPs.
+                // 0.01 DIP is well below any user-visible threshold.
+                if (Math.Abs(delta) < 0.01 && !isFinal) return;
                 if (hostExtent < 1) return;
 
                 var perChild = new DockSplitChild[children.Count];

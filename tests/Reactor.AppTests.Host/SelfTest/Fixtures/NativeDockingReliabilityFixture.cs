@@ -189,7 +189,6 @@ internal static class NativeDockingReliabilityFixtures
             // run, and concurrent fixtures don't trample each other.
             int mountedCount = 0;
             int cleanupCount = 0;
-            var trace = new List<string>();
 
             var host = H.CreateHost();
             DockingNativeInterop.Register(host.Reconciler);
@@ -200,8 +199,8 @@ internal static class NativeDockingReliabilityFixtures
                 Key = "effect:pane",
                 Content = Component<EffectCounterComponent, EffectCounterProps>(new EffectCounterProps(
                     "p1",
-                    OnMount: m => { mountedCount++; trace.Add($"mount:{m}"); },
-                    OnCleanup: m => { cleanupCount++; trace.Add($"cleanup:{m}"); })),
+                    OnMount: _ => mountedCount++,
+                    OnCleanup: _ => cleanupCount++)),
                 CanClose = true,
             };
             var managerEl = new DockManager
@@ -238,9 +237,9 @@ internal static class NativeDockingReliabilityFixtures
 
             // The matching cleanup-fires-on-close assertion is
             // deliberately not emitted here. See class docstring for
-            // the §2.25 follow-up.
-            _ = cleanupCount; // silence unused-variable inspector; counter is wired for future fix.
-            _ = trace;
+            // the §2.25 follow-up; cleanupCount stays wired so a fresh
+            // assertion can land here without reshape.
+            _ = cleanupCount;
 
             host.Mount(_ => TextBlock("effect-cleanup-done"));
             await Harness.Render();
