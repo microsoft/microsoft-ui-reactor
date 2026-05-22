@@ -85,7 +85,21 @@ to land under these conventions; subsequent specs follow this shape.
   pane (no group with documents remains). Sibling-pane focus carry
   on partial close is inherited from TabView's selection-change
   focus shift on the next render. Tear-out path keeps WinUI's
-  default focus shift to the new floating window.
+  default focus shift to the new floating window. Selftest
+  `NativeDocking_A11y_FocusFallback_OnLastPaneClose` drives a
+  model-mutator close through the §2.16 drain, verifies the bridge
+  registration survives the re-render cycle, and gates the
+  `FocusHostFallback` call site against the no-group-left layout
+  state.
+- **Spec 045 Phase 2 — §2.6 floating-window lifecycle events.**
+  `DockFloatingWindow.Open` now fires
+  `DockManager.OnFloatingWindowCreated` immediately after window
+  registration (carrying the dragged source pane) and
+  `OnFloatingWindowClosed` from the underlying `ReactorWindow.Closed`
+  event (carrying the best-effort pane reference; may be stale
+  after a cross-window dock-back already migrated it). Subscriber
+  exceptions are swallowed so a buggy observer cannot break
+  tear-out or cleanup paths.
 - **Spec 045 Phase 2 — §2.20 perf budget tests.** Three new
   unit tests in `DockPerfBudgetTests` enforce the §2.20 spec
   budgets: layout JSON load (200 panes, median < 200ms CI ceiling

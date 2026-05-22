@@ -1397,22 +1397,41 @@ integration.*
 
 ### 2.27 Self-host & unit testing matrix (spec §8.3)
 
-- [ ] **Selftests (the bulk)** under
+- [~] **Selftests (the bulk)** under
   `tests/Reactor.AppTests.Host/SelfTest/Fixtures/Docking*.cs`:
-  - [ ] Layout-model fixture: `Dock`/`Float`/`Hide`/`Show`/`Close`
-    sequences; assert tree + `Descendants()`.
-  - [ ] Reconciler fixture: mount `DockHost`, mutate inputs, assert
-    rendered visual-tree shape.
-  - [ ] Serialization fixture: SaveJson → LoadJson round-trips;
+  - [x] Layout-model fixture: `Dock`/`Float`/`Hide`/`Show`/`Close`
+    sequences; assert tree + `Descendants()`. Covered by
+    `DockHostModelSequenceTests` (unit) +
+    `NativeDocking_ModelDrain_DockCloseActivatePinAffectsLiveTree`
+    (host-mounted).
+  - [x] Reconciler fixture: mount `DockHost`, mutate inputs, assert
+    rendered visual-tree shape. Covered by the M01–M20 series in
+    `NativeDockingDragDropMatrixFixture` + the §2.30 demo path.
+  - [x] Serialization fixture: SaveJson → LoadJson round-trips;
     structural + identity equivalence; v1 fixture loads in v2.
-  - [ ] `IDockLayoutStrategy` fixture: assert `BeforeInsert*`
-    decisions land where expected.
-  - [ ] Cancellable-events fixture: setting `Cancel = true` on every
-    `*ing` event aborts transition; state unchanged.
-  - [ ] `PreviousContainer` fixture: hide → show preserves container.
-  - [ ] Composition-driven content updates: mutate state feeding
+    Covered by `LayoutSerializerTests` (15+ scenarios including the
+    invariant-culture round-trip + v1→v2 migration).
+  - [x] `IDockLayoutStrategy` fixture: assert `BeforeInsert*`
+    decisions land where expected. Covered by
+    `LayoutStrategyTests.Strategy_CanShortCircuitInsertionByReturningTrue`
+    + `DockHostModelSequenceTests.ErrorPaneStrategy_RoutesViaModel_QueuesPinToSide`.
+  - [x] Cancellable-events fixture: setting `Cancel = true` on every
+    `*ing` event aborts transition; state unchanged. Covered by
+    `DockHostModelSequenceTests.Cancel_*` (per-event cancellation
+    coverage across `OnLayoutChanging`, `OnDocumentClosing`,
+    `OnToolWindowHiding`, `OnToolWindowClosing`, `OnContentFloating`,
+    `OnContentDocking`).
+  - [x] `PreviousContainer` fixture: hide → show preserves container.
+    Covered by `PreviousContainerTests.HideShowCycle_PreservesContainerIdentity`
+    + `DockHostModelSequenceTests.HideShow_WithPreviousContainerTracker_RoundTripsContainerIdentity`.
+  - [~] Composition-driven content updates: mutate state feeding
     `DockNode` tree; assert keyed reconciliation preserves unchanged
-    pane state.
+    pane state. Partial — the §2.30 shape-only `layoutOverride` work
+    landed the *implementation* contract (apps declare full tree in
+    `Render()`; state flows naturally through the override), exercised
+    by `DocsByComposition_*` smoke fixtures. A dedicated assertion
+    that "unchanged pane state survives a separate pane's content
+    mutation" still rides on dedicated coverage.
   - [ ] Rehydration via composition: save → restart → component-
     supplied content lands in restored slots matched by `Key`.
   - [ ] Hook re-render scope: `UseActivePaneKey` re-renders only
