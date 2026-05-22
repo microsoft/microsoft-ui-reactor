@@ -333,6 +333,8 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         int clusterRow,
         int clusterCol)
     {
+        // Outer outlined rectangle — the button face. Stroke + fill are
+        // applied by ApplyVisualState.
         var visual = new Rectangle
         {
             Width = ButtonSizeDip - 8,
@@ -345,6 +347,22 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         };
         ApplyVisualState(visual, target);
 
+        // Inner directional indicator — a small filled rectangle pinned to
+        // the edge that matches the dock direction. HorizontalAlignment /
+        // VerticalAlignment carry FlowDirection inheritance, so under
+        // RTL the Left-anchored indicator auto-mirrors to the right edge
+        // and DockLeft / SplitLeft glyphs read correctly (spec §2.23
+        // drop-target overlay mirror).
+        var indicator = BuildDirectionIndicator(target);
+
+        var glyph = new Grid
+        {
+            Width = ButtonSizeDip - 8,
+            Height = ButtonSizeDip - 8,
+        };
+        glyph.Children.Add(visual);
+        if (indicator is not null) glyph.Children.Add(indicator);
+
         var button = new Border
         {
             Width = ButtonSizeDip,
@@ -352,7 +370,7 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
             HorizontalAlignment = hAlign,
             VerticalAlignment = vAlign,
             Background = new SolidColorBrush(Color.FromArgb(0x00, 0, 0, 0)),
-            Child = visual,
+            Child = glyph,
             IsTabStop = true,
             UseSystemFocusVisuals = true,
         };
@@ -416,6 +434,51 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         // rect so it tracks the new layout.
         if (_hoveredTarget is DockTarget t) UpdatePreview(t);
         else _previewRect.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Builds the directional indicator overlay for a target — a small
+    /// filled rectangle pinned to the edge that corresponds to where the
+    /// dragged pane will land. Returns null for Center (the outer fill
+    /// alone conveys "drop as a tab here"). Spec §2.3 + §2.23 (RTL mirror).
+    /// </summary>
+    /// <remarks>
+    /// The indicator is positioned via <see cref="HorizontalAlignment"/> /
+    /// <see cref="VerticalAlignment"/> so WinUI's FlowDirection inheritance
+    /// auto-mirrors it under RTL: a <c>HorizontalAlignment.Left</c>
+    /// indicator on the DockLeft glyph paints at the right edge of the
+    /// button when the overlay's FlowDirection resolves to RightToLeft.
+    /// </remarks>
+    private static Rectangle? BuildDirectionIndicator(DockTarget target)
+    {
+        // Indicator color matches the active stroke so the side-stripe
+        // reads as a continuation of the outline.
+        var fill = new SolidColorBrush(Color.FromArgb(0xFF, 0x33, 0x99, 0xFF));
+        const double thin = 10.0;   // narrow axis (side-stripe thickness)
+        const double full = ButtonSizeDip - 8;
+        return target switch
+        {
+            // Inner-cluster splits — thin stripe on the matching edge.
+            DockTarget.SplitLeft   => new Rectangle { Width = thin, Height = full, Fill = fill,
+                HorizontalAlignment = HorizontalAlignment.Left,  VerticalAlignment = VerticalAlignment.Stretch },
+            DockTarget.SplitRight  => new Rectangle { Width = thin, Height = full, Fill = fill,
+                HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Stretch },
+            DockTarget.SplitTop    => new Rectangle { Width = full, Height = thin, Fill = fill,
+                HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Top },
+            DockTarget.SplitBottom => new Rectangle { Width = full, Height = thin, Fill = fill,
+                HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Bottom },
+            // Edge docks — same alignment, slightly wider stripe so they
+            // visually outrank the inner-cluster targets at a glance.
+            DockTarget.DockLeft    => new Rectangle { Width = thin + 2, Height = full, Fill = fill,
+                HorizontalAlignment = HorizontalAlignment.Left,  VerticalAlignment = VerticalAlignment.Stretch },
+            DockTarget.DockRight   => new Rectangle { Width = thin + 2, Height = full, Fill = fill,
+                HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Stretch },
+            DockTarget.DockTop     => new Rectangle { Width = full, Height = thin + 2, Fill = fill,
+                HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Top },
+            DockTarget.DockBottom  => new Rectangle { Width = full, Height = thin + 2, Fill = fill,
+                HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Bottom },
+            _ => null,
+        };
     }
 
     /// <summary>

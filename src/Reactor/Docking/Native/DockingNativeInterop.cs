@@ -79,6 +79,13 @@ public static class DockingNativeInterop
                 };
                 NativeHostState.SetAttached(host, state);
 
+                // Spec 045 §2.10 — register the host Border with the
+                // live-region announcer so layout-state transitions
+                // (Close, Float, Pin, Dock) raise UIA notifications
+                // against this element. Re-registers on each
+                // DockManager-element instance change in `update`.
+                DockHostLiveAnnouncer.Register(element, host);
+
                 // Spec 045 §2.10 — wire keyboard chord accelerators once
                 // at mount. Each accelerator's Invoked handler resolves the
                 // current chord delegates via DockChordBridge keyed by the
@@ -96,6 +103,13 @@ public static class DockingNativeInterop
                 var newContent = BuildContent(newEl);
                 var newChild = rec.Reconcile(state.LastContent, newContent, host.Child, rerender);
                 host.Child = newChild;
+
+                // Refresh live-region binding when the DockManager element
+                // reference rotates (apps that rebuild `new DockManager`
+                // each render); silent no-op when the ref is unchanged.
+                if (state.LastElement is { } old && !ReferenceEquals(old, newEl))
+                    DockHostLiveAnnouncer.Clear(old);
+                DockHostLiveAnnouncer.Register(newEl, host);
 
                 state.LastElement = newEl;
                 state.LastContent = newContent;
@@ -123,6 +137,7 @@ public static class DockingNativeInterop
                         DockFloatingTracker.UnregisterFor(el, floating);
                     }
                     DockChordBridge.Clear(el);
+                    DockHostLiveAnnouncer.Clear(el);
                 }
                 host.Child = null;
                 NativeHostState.SetAttached(host, null);

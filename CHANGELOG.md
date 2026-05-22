@@ -50,6 +50,42 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — §2.10 UIA live-region announcements.** Layout-
+  state transitions (close, tear-out / float, dock-confirm, pin-to-
+  side, hide, show) now raise polite UIA notifications against the
+  dock-host element via WinUI's `RaiseNotificationEvent` API. The
+  new `DockHostLiveAnnouncer` is a `ConditionalWeakTable<DockManager,
+  FrameworkElement>` bridge paralleling `DockChordBridge` /
+  `DockHostModelBridge`; `DockingNativeInterop` registers the host
+  Border at mount and clears it on unmount. Announcement templates
+  live under `Docking.LiveRegion.*` (`LiveDocked`, `LiveFloated`,
+  `LivePinned`, `LiveClosed`, `LiveHidden`, `LiveShown`),
+  parameterized by `{paneTitle}` via `DockingStrings.LiveAnnouncement`.
+  Notification API is used in place of a visible
+  `TextBlock`+`LiveSetting=Polite` region so the visual tree is
+  unchanged (M19 / M20 control-identity assertions stay green).
+- **Spec 045 Phase 2 — §2.22 splitter keyboard resizable + RTL.**
+  `DockSplitterControl` is now tab-focusable (`IsTabStop=true`,
+  `UseSystemFocusVisuals=true`) with arrow-key resize through the
+  same direct-mutation path the pointer drag uses; default
+  `KeyboardStep` = 16 DIP. Under `FlowDirection.RightToLeft` the
+  Columns-direction Left/Right mapping inverts so a Right press
+  grows the visually-right pane.
+- **Spec 045 Phase 2 — §2.23 RTL drop-target glyph mirror.**
+  `DockDropTargetOverlayControl` now emits a directional side-
+  stripe overlay on each Split / Dock target (filled rectangle
+  pinned to the matching edge via
+  `HorizontalAlignment`/`VerticalAlignment`). FlowDirection
+  inheritance auto-mirrors the Left-anchored indicators to the
+  right edge under RTL, so DockLeft / SplitLeft glyphs visually
+  flip to match the also-mirrored button positions.
+- **Spec 045 Phase 2 — §2.22 focus invariants on close.**
+  `DockHostLiveAnnouncer.FocusHostFallback(manager)` programmatically
+  hands focus to the host element when a close removes the last
+  pane (no group with documents remains). Sibling-pane focus carry
+  on partial close is inherited from TabView's selection-change
+  focus shift on the next render. Tear-out path keeps WinUI's
+  default focus shift to the new floating window.
 - **Spec 045 Phase 2 — §2.20 perf budget tests.** Three new
   unit tests in `DockPerfBudgetTests` enforce the §2.20 spec
   budgets: layout JSON load (200 panes, median < 200ms CI ceiling

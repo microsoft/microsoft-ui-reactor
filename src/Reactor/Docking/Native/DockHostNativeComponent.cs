@@ -364,6 +364,9 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                         $"tear-out pane='{pane.Key}' to floating window",
                         paneKey: pane.Key?.ToString(),
                         layoutOverride: afterRemove);
+                    // §2.10 — UIA polite announcement.
+                    DockHostLiveAnnouncer.Announce(manager,
+                        DockingStrings.LiveAnnouncement(DockingStringKeys.LiveFloated, pane.Title));
                 }
             }
 
@@ -499,6 +502,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                                 paneKey: sourcePane.Key?.ToString(),
                                 target: target,
                                 layoutOverride: newLayout);
+                            DockHostLiveAnnouncer.Announce(manager,
+                                DockingStrings.LiveAnnouncement(DockingStringKeys.LiveDocked, sourcePane.Title));
                         }
                         // Mark the drop as consumed BEFORE ending the
                         // session so cross-window observers (the source
@@ -567,6 +572,14 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 $"close pane='{pane.Key}' via tab button",
                 paneKey: pane.Key?.ToString(),
                 layoutOverride: afterRemove);
+            DockHostLiveAnnouncer.Announce(manager,
+                DockingStrings.LiveAnnouncement(DockingStringKeys.LiveClosed, pane.Title));
+            // Spec 045 §2.22 focus invariant — fall back to the host
+            // when the close leaves no pane to receive focus. Sibling-
+            // pane focus is carried by the TabView's selection-change
+            // path on the next render.
+            if (afterRemove is null || DockHostKeyboard.FindFirstGroup(afterRemove).Group is null)
+                DockHostLiveAnnouncer.FocusHostFallback(manager);
         }
 
         Element body = effectiveLayout is null
@@ -674,6 +687,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                             paneKey: sourcePane.Key?.ToString(),
                             target: target,
                             layoutOverride: newLayout);
+                        DockHostLiveAnnouncer.Announce(manager,
+                            DockingStrings.LiveAnnouncement(DockingStringKeys.LiveDocked, sourcePane.Title));
                         // Mark the drop as consumed BEFORE ending the
                         // session so cross-window observers (the source
                         // floating window's TabDragCompleted handler)
@@ -775,6 +790,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 $"close pane='{pane.Key}' via keyboard",
                 paneKey: pane.Key?.ToString(),
                 layoutOverride: afterRemove);
+            DockHostLiveAnnouncer.Announce(manager,
+                DockingStrings.LiveAnnouncement(DockingStringKeys.LiveClosed, pane.Title));
             // Re-anchor the active key on a sibling so subsequent chords
             // have a sensible target.
             var firstAfter = DockHostKeyboard.FindFirstGroup(afterRemove);
@@ -785,6 +802,13 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 newActiveKey = g.Documents[clamped].Key;
             }
             setActivePaneKey(newActiveKey);
+            // Spec 045 §2.22 — focus invariant: when no pane is left to
+            // receive focus, hand focus to the host so keyboard events
+            // (Ctrl+Tab, Esc, Alt+F4) stay reachable. When a sibling
+            // pane remains, its TabView selection change carries focus
+            // automatically on the next render.
+            if (newActiveKey is null)
+                DockHostLiveAnnouncer.FocusHostFallback(manager);
         }
 
         void EnterKeyboardDropMode()
@@ -1124,6 +1148,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                         Content = dockOp.Content,
                         Target = dockOp.Target,
                     });
+                    DockHostLiveAnnouncer.Announce(manager,
+                        DockingStrings.LiveAnnouncement(DockingStringKeys.LiveDocked, dockOp.Content.Title));
                     break;
                 }
 
@@ -1150,6 +1176,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     try { DockFloatingWindow.Open(floatOp.Content, manager: manager); }
                     catch { /* surface via OnContentFloated */ }
                     manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = floatOp.Content });
+                    DockHostLiveAnnouncer.Announce(manager,
+                        DockingStrings.LiveAnnouncement(DockingStringKeys.LiveFloated, floatOp.Content.Title));
                     break;
                 }
 
@@ -1171,6 +1199,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     // carries a PreferredSide hint (spec §2.5 follow-up).
                     (workingLeft, sidesChanged) = AddToSide(workingLeft, hideOp.ToolWindow, sidesChanged);
                     manager.OnToolWindowHidden?.Invoke(new DockToolWindowHiddenEventArgs { ToolWindow = hideOp.ToolWindow });
+                    DockHostLiveAnnouncer.Announce(manager,
+                        DockingStrings.LiveAnnouncement(DockingStringKeys.LiveHidden, hideOp.ToolWindow.Title));
                     break;
                 }
 
@@ -1190,6 +1220,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                         workingLayout, showOp.Content, DockTarget.Center);
                     layoutChanged = true;
                     PreviousContainerTracker.Clear(showOp.Content);
+                    DockHostLiveAnnouncer.Announce(manager,
+                        DockingStrings.LiveAnnouncement(DockingStringKeys.LiveShown, showOp.Content.Title));
                     break;
                 }
 
@@ -1212,6 +1244,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                         }
                         (workingLeft, sidesChanged) = AddToSide(workingLeft, tw, sidesChanged);
                         manager.OnToolWindowHidden?.Invoke(new DockToolWindowHiddenEventArgs { ToolWindow = tw });
+                        DockHostLiveAnnouncer.Announce(manager,
+                            DockingStrings.LiveAnnouncement(DockingStringKeys.LiveHidden, tw.Title));
                         break;
                     }
 
@@ -1227,6 +1261,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                         workingLayout = after;
                         layoutChanged = true;
                         manager.OnToolWindowClosed?.Invoke(new DockToolWindowClosedEventArgs { ToolWindow = twClose });
+                        DockHostLiveAnnouncer.Announce(manager,
+                            DockingStrings.LiveAnnouncement(DockingStringKeys.LiveClosed, twClose.Title));
                         break;
                     }
 
@@ -1241,6 +1277,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     workingLayout = afterDoc;
                     layoutChanged = true;
                     manager.OnDocumentClosed?.Invoke(new DockDocumentClosedEventArgs { Document = closeOp.Content });
+                    DockHostLiveAnnouncer.Announce(manager,
+                        DockingStrings.LiveAnnouncement(DockingStringKeys.LiveClosed, closeOp.Content.Title));
                     break;
                 }
 
@@ -1294,6 +1332,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                             (workingBottom, sidesChanged) = AddToSide(workingBottom, pinOp.ToolWindow, sidesChanged);
                             break;
                     }
+                    DockHostLiveAnnouncer.Announce(manager,
+                        DockingStrings.LiveAnnouncement(DockingStringKeys.LivePinned, pinOp.ToolWindow.Title));
                     break;
                 }
             }

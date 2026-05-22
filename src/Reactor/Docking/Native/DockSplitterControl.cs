@@ -559,13 +559,27 @@ internal sealed partial class DockSplitterControl : Grid
         // Direct-mutate path: positive raw delta = grow leading (cursor
         // direction). Right/Down → +step; Left/Up → -step. The fired
         // ResizeDelta event uses the solver convention (negated).
+        //
+        // Spec 045 §2.23 — under FlowDirection.RightToLeft the visual
+        // "leading" pane (index 0 in the FlexPanel children list) paints
+        // on the right edge instead of the left. The pointer-drag path
+        // is RTL-correct by construction because WinUI reflects the
+        // pointer coordinate space inside RTL containers (cursor moving
+        // screen-right reports negative ΔX under RTL). Arrow keys are
+        // physical (`VirtualKey.Left` is always the physical Left arrow
+        // regardless of FlowDirection), so we invert the Left/Right
+        // mapping under RTL so a Right press still grows the screen-
+        // right pane visually. Vertical (Rows) splitters are unaffected.
+        bool invertHorizontal =
+            _direction == DockSplitterDirection.Columns
+            && FlowDirection == FlowDirection.RightToLeft;
         double rawDelta;
         switch (e.Key)
         {
             case VirtualKey.Left when _direction == DockSplitterDirection.Columns:
-                rawDelta = -step; break;
+                rawDelta = invertHorizontal ? step : -step; break;
             case VirtualKey.Right when _direction == DockSplitterDirection.Columns:
-                rawDelta = step; break;
+                rawDelta = invertHorizontal ? -step : step; break;
             case VirtualKey.Up when _direction == DockSplitterDirection.Rows:
                 rawDelta = -step; break;
             case VirtualKey.Down when _direction == DockSplitterDirection.Rows:

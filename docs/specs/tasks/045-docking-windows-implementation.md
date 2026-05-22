@@ -780,12 +780,23 @@ Scene A by user (Chris Anderson). PageUp/Down cycling, F4/W close,
 and Ctrl+Shift+M keyboard drop-mode all behave as expected. Remaining
 §2.10 items (Ctrl+Tab navigator, Alt+F7 picker, live-region, spec-027
 binding) are deferred to a follow-up pass.
-- [ ] Live-region announcements via UIA `LiveSetting=Polite` for layout
+- [x] Live-region announcements via UIA `LiveSetting=Polite` for layout
   state transitions ("MainView.xaml moved to right pane", "Output
-  pinned to bottom", "Properties window torn out"). One shared live
-  region per `DockHost`, registered via `Reactor.Hosting`'s AT bridge
-  (spec §8.7). *Deferred — needs the UIA live-region pattern wired
-  on the dock host Border; pairs with §2.22 a11y pass.*
+  pinned to bottom", "Properties window torn out"). Implementation
+  routes through `DockHostLiveAnnouncer` (a `ConditionalWeakTable<DockManager,
+  FrameworkElement>` bridge paralleling `DockChordBridge` /
+  `DockHostModelBridge`). `DockingNativeInterop` registers the host
+  Border at mount; the renderer calls `RaiseNotificationEvent` on
+  the registered element's `AutomationPeer` (WinUI's supported UIA
+  Notification API — no visual-tree changes required, so M19 / M20
+  control-identity tests stay green). Announcement templates live
+  under `Docking.LiveRegion.*` keys
+  (`LiveDocked`, `LiveFloated`, `LivePinned`, `LiveClosed`,
+  `LiveHidden`, `LiveShown`), parameterized by `{paneTitle}` via
+  `DockingStrings.LiveAnnouncement`. Wire points: tab-button close,
+  Ctrl+F4/W close, tear-out, dock-confirm (host + per-group overlay
+  paths), and every drain mutation (DockOp / FloatOp / HideOp /
+  ShowOp / CloseOp / PinToSideOp).
 - [ ] All chords configurable via spec 027 input binding. *Today the
   chord set is hard-coded in
   `DockingNativeInterop.AttachChordAccelerators`. Configurable binding
@@ -1162,13 +1173,27 @@ integration.*
   (English default "Docking area"; apps localize via the
   `DockingStrings.Resolver` delegate). Selftest verifies the
   landmark type + localized name on the realized Border.
-- [ ] Splitter handles focusable + arrow-key resizable (precedent:
-  WPF `GridSplitter`).
+- [x] Splitter handles focusable + arrow-key resizable (precedent:
+  WPF `GridSplitter`). `DockSplitterControl` sets `IsTabStop=true`,
+  `UseSystemFocusVisuals=true`, and routes Left/Right (Columns) or
+  Up/Down (Rows) through the same direct-mutation path as the
+  pointer drag with a 16 DIP default `KeyboardStep`. RTL inversion
+  for Columns: Left/Right swap when the splitter's `FlowDirection`
+  resolves to RightToLeft so the visually-right pane still grows on
+  a Right press (§2.23 splitter inversion close-out).
 - [ ] Tab strip fully arrow-key navigable.
-- [ ] **Focus invariants:** after close, focus moves to next-active
+- [~] **Focus invariants:** after close, focus moves to next-active
   pane in same group; if group empty, to the host. After tear-out,
   focus moves to new floating window's active pane. After re-adoption
-  (P3), focus moves to adopted pane in its new home.
+  (P3), focus moves to adopted pane in its new home. Partial: the
+  sibling-pane path is carried automatically by TabView's
+  selection-change focus carry on the next render; the empty-host
+  fallback is explicit via
+  `DockHostLiveAnnouncer.FocusHostFallback(manager)` invoked from
+  `CloseActivePane` and `CloseTabViaButton` when the post-remove
+  layout has no group with documents. Tear-out path inherits WinUI's
+  default focus shift to the new floating window. Selftests for the
+  AT-tree-walk + keyboard-only docking cycle remain open.
 - [ ] **Touch targets:** drop-target buttons ≥ 44 × 44 DIPs;
   splitter handles 8/16 DIPs visual/hit.
 - [ ] **Tab-strip hit-test** extends 4 DIPs past visual border for
@@ -1200,8 +1225,24 @@ integration.*
   semantics preserved — `LeftSide` is logical "left of reading
   order" per Office/VS convention).
 - [ ] **Tab order in `DocumentGroup`** flips (first tab on right).
-- [ ] **Drop-target overlay** mirrors (DockLeft icon at right edge).
-- [ ] **Splitter drag direction** inverts for RTL.
+- [x] **Drop-target overlay** mirrors (DockLeft icon at right edge).
+  `DockDropTargetOverlayControl.BuildDirectionIndicator` emits a
+  thin filled "side stripe" overlay on each directional target
+  (SplitL/T/R/B, DockL/T/R/B) positioned via
+  `HorizontalAlignment`/`VerticalAlignment` so WinUI's FlowDirection
+  inheritance auto-mirrors the Left-anchored indicators to the
+  right edge under RTL. Button positions themselves already mirror
+  via FlowDirection inheritance on the overlay's Grid.
+- [x] **Splitter drag direction** inverts for RTL. Pointer-drag is
+  RTL-correct by construction (WinUI reports pointer coordinates in
+  the FlowDirection-transformed space, so positive ΔX always
+  corresponds to cursor-moving-visually-leftward under RTL — the
+  existing grow math falls out correct). Keyboard nudge needs an
+  explicit swap because `VirtualKey.Left` / `Right` are physical;
+  `DockSplitterControl.OnKeyDown` inverts the Left/Right mapping for
+  Columns direction when `FlowDirection==RightToLeft`. Rows
+  splitters are unaffected (top-to-bottom is not flipped by
+  FlowDirection).
 - [ ] Floating-window screen-coord math is RTL-invariant (no flip).
 - [ ] Bidi text in titles passes through the WinUI `TextBlock` bidi
   pipeline; no docking-specific handling.

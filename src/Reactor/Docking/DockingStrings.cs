@@ -68,6 +68,15 @@ public static class DockingStringKeys
 
     // Error / fallback strings (§2.21).
     public const string LayoutRestoreFailed = "Docking.Error.LayoutRestoreFailed";
+
+    // UIA live-region announcements (§2.10, §2.22). Each template carries
+    // the `{paneTitle}` placeholder substituted at announcement time.
+    public const string LiveDocked  = "Docking.LiveRegion.Docked";
+    public const string LiveFloated = "Docking.LiveRegion.Floated";
+    public const string LivePinned  = "Docking.LiveRegion.Pinned";
+    public const string LiveClosed  = "Docking.LiveRegion.Closed";
+    public const string LiveHidden  = "Docking.LiveRegion.Hidden";
+    public const string LiveShown   = "Docking.LiveRegion.Shown";
 }
 
 /// <summary>
@@ -137,6 +146,22 @@ public static class DockingStrings
     }
 
     /// <summary>
+    /// Resolves a live-region announcement template via <see cref="Resolver"/>
+    /// and substitutes the `{paneTitle}` placeholder. Returns empty when
+    /// the key is unknown so callers can no-op silently.
+    /// </summary>
+    /// <remarks>
+    /// Spec 045 §2.10. Keys are `Docking.LiveRegion.*` constants on
+    /// <see cref="DockingStringKeys"/>.
+    /// </remarks>
+    public static string LiveAnnouncement(string key, string? paneTitle)
+    {
+        var template = Get(key);
+        if (string.IsNullOrEmpty(template) || ReferenceEquals(template, key)) return string.Empty;
+        return template.Replace("{paneTitle}", paneTitle ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// English default for each known key. Kept in sync with
     /// <c>Reactor.Docking.resw</c> — every key here MUST exist in the
     /// .resw with the same value, and vice versa.
@@ -166,6 +191,12 @@ public static class DockingStrings
         DockingStringKeys.MenuAutoHide          => "Auto-hide",
         DockingStringKeys.MenuMoveToNextGroup   => "Move to next group",
         DockingStringKeys.LayoutRestoreFailed   => "Could not restore the saved layout. Default layout applied.",
+        DockingStringKeys.LiveDocked            => "{paneTitle} docked",
+        DockingStringKeys.LiveFloated           => "{paneTitle} torn out",
+        DockingStringKeys.LivePinned            => "{paneTitle} pinned",
+        DockingStringKeys.LiveClosed            => "{paneTitle} closed",
+        DockingStringKeys.LiveHidden            => "{paneTitle} hidden",
+        DockingStringKeys.LiveShown             => "{paneTitle} shown",
         _ => key,
     };
 }
