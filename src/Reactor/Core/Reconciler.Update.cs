@@ -1869,7 +1869,20 @@ public sealed partial class Reconciler
             var newTab = n.Tabs[i];
             if (items[i] is not WinUI.TabViewItem tvi) continue;
 
-            if (tvi.Header as string != newTab.Header) tvi.Header = newTab.Header;
+            // Spec 045 §2.2 — pin button. Rebuild the Header whenever a
+            // pin-related field flips (most apps treat IsPinned as a
+            // static visual state per render, but the OnPinRequested
+            // closure typically updates per render to capture state).
+            // When IsPinnable is false on both sides, keep the cheap
+            // string-header path.
+            if (newTab.IsPinnable || oldTab.IsPinnable)
+            {
+                tvi.Header = BuildTabHeader(newTab);
+            }
+            else if (tvi.Header as string != newTab.Header)
+            {
+                tvi.Header = newTab.Header;
+            }
             if (tvi.IsClosable != newTab.IsClosable) tvi.IsClosable = newTab.IsClosable;
             if (newTab.Icon != oldTab.Icon)
                 tvi.IconSource = ResolveIconSource(newTab.Icon);

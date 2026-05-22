@@ -436,7 +436,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 onSelectedIndexChanged: null,
                 onTabClosing: pane => CloseTabViaButton(pane),
                 onTabDragStarting: HandleTabDragStarting,
-                onTabDragCompleted: HandleTabDragCompleted);
+                onTabDragCompleted: HandleTabDragCompleted,
+                onPinRequested: PinToSideViaTabButton);
 
             // §2.3 per-group drop overlay. Activates whenever any drag
             // session is in flight in the process (local OR cross-window
@@ -548,6 +549,25 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 new[] { GridSize.Star(1) },
                 tabView.Grid(row: 0, column: 0),
                 overlay.Grid(row: 0, column: 0));
+        }
+
+        // Spec 045 §2.2 — pin button click handler. Routes through the
+        // model's PinToSide mutator (§2.16) so the drain rebuilds the
+        // layout + side strips and fires OnContentDocked / live-region
+        // announcements per the documented contract. Re-checks
+        // CanAutoHide defensively (matches CloseTabViaButton's
+        // CanClose re-check).
+        void PinToSideViaTabButton(ToolWindow tw)
+        {
+            if (!tw.CanAutoHide) return;
+            // Default to the tool window's remembered side; otherwise
+            // bias to left, matching upstream WinUI.Dock convention.
+            // (PinToSide is the public-API verb; the side here is the
+            // user-intended destination, not a guarantee about visual
+            // layout after RTL flip.)
+            var model = DockHostModelBridge.Get(manager);
+            if (model is null) return;
+            model.PinToSide(tw, DockSide.Left);
         }
 
         void CloseTabViaButton(DockableContent pane)

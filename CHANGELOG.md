@@ -50,6 +50,21 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — §2.2 per-tab pin button on ToolWindow tabs.**
+  `TabViewItemData` gains optional `IsPinnable` / `IsPinned` /
+  `PinAutomationName` / `PinAutomationId` / `OnPinRequested` fields.
+  The `TabViewElement` reconciler builds the tab Header as a
+  StackPanel (title TextBlock + Segoe Fluent Icons pin Button)
+  when `IsPinnable=true`; otherwise the cheap string-header path
+  is preserved verbatim. `DockTabGroupRenderer.Render` accepts a
+  new `onPinRequested: Action<ToolWindow>?` callback and
+  auto-enables the affordance on ToolWindow tabs whose
+  `CanAutoHide=true`. `DockHostNativeComponent.PinToSideViaTabButton`
+  routes clicks through `DockHostModel.PinToSide(tw, DockSide.Left)`
+  so the §2.16 drain + live-region announcement contract fires
+  identically to a programmatic pin. AT name + tooltip use the
+  localized `Docking.Menu.PinToSide` string; AutomationId is
+  `pin:<paneKey>`. 3 new `DockTabGroupRendererTests` cases.
 - **Spec 045 Phase 2 — §2.26 `docking.snapshot` building blocks.**
   New `DockHostRegistry` (process-wide `WeakReference<DockManager>`
   registry with stable `dh:{n}` ids) wired through

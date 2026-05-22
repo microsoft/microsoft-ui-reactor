@@ -1689,6 +1689,39 @@ public record TabViewItemData(string Header, Element Content)
 {
     public string? Icon { get; init; }
     public bool IsClosable { get; init; } = true;
+
+    /// <summary>
+    /// Spec 045 §2.2 — when true, the reconciler renders a small "pin"
+    /// affordance in the tab header chrome alongside the close X. Used
+    /// by the docking pipeline for ToolWindow tabs whose CanAutoHide=true.
+    /// </summary>
+    public bool IsPinnable { get; init; }
+
+    /// <summary>
+    /// Indicates whether the pin button should render as already-pinned
+    /// (glyph &#xE840;) or unpinned (&#xE842;). Only consulted when
+    /// IsPinnable is true.
+    /// </summary>
+    public bool IsPinned { get; init; }
+
+    /// <summary>
+    /// Tooltip + AT name applied to the pin button when IsPinnable is
+    /// true. Caller supplies the localized string.
+    /// </summary>
+    public string? PinAutomationName { get; init; }
+
+    /// <summary>
+    /// Stable AutomationId for the pin button. Selftests address the
+    /// per-tab pin via this id.
+    /// </summary>
+    public string? PinAutomationId { get; init; }
+
+    /// <summary>
+    /// Invoked when the user clicks the pin button. Caller is
+    /// responsible for routing through the docking model
+    /// (DockHostModel.PinToSide / Hide).
+    /// </summary>
+    public Action? OnPinRequested { get; init; }
 }
 
 public record PivotItemData(string Header, Element Content);

@@ -1541,7 +1541,8 @@ public sealed partial class Reconciler
         {
             var tvi = new WinUI.TabViewItem
             {
-                Header = tabItem.Header, IsClosable = tabItem.IsClosable,
+                Header = BuildTabHeader(tabItem),
+                IsClosable = tabItem.IsClosable,
                 Content = Mount(tabItem.Content, requestRerender),
             };
             if (tabItem.Icon is not null) tvi.IconSource = ResolveIconSource(tabItem.Icon);
@@ -1600,6 +1601,65 @@ public sealed partial class Reconciler
         };
         ApplySetters(tab.Setters, tv);
         return tv;
+    }
+
+    // Spec 045 §2.2 — pin button for ToolWindow tabs. When IsPinnable is
+    // true the header becomes a StackPanel { TextBlock(title) , pin Button };
+    // otherwise the existing string header path is preserved verbatim so
+    // tabs without pin affordance are visually identical to baseline.
+    private static object BuildTabHeader(TabViewItemData tabItem)
+    {
+        if (!tabItem.IsPinnable) return tabItem.Header;
+        var sp = new WinUI.StackPanel
+        {
+            Orientation = WinUI.Orientation.Horizontal,
+            VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
+        };
+        var text = new WinUI.TextBlock
+        {
+            Text = tabItem.Header,
+            VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
+        };
+        sp.Children.Add(text);
+        sp.Children.Add(BuildPinButton(tabItem));
+        return sp;
+    }
+
+    private static WinUI.Button BuildPinButton(TabViewItemData tabItem)
+    {
+        var btn = new WinUI.Button
+        {
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(global::Windows.UI.Color.FromArgb(0, 0, 0, 0)),
+            BorderThickness = new Microsoft.UI.Xaml.Thickness(0),
+            Padding = new Microsoft.UI.Xaml.Thickness(4, 0, 4, 0),
+            Margin = new Microsoft.UI.Xaml.Thickness(6, 0, 0, 0),
+            MinWidth = 0,
+            MinHeight = 0,
+            Content = new WinUI.FontIcon
+            {
+                FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
+                Glyph = tabItem.IsPinned ? "" : "",
+                FontSize = 12,
+            },
+        };
+        if (!string.IsNullOrEmpty(tabItem.PinAutomationName))
+        {
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(btn, tabItem.PinAutomationName);
+            Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(btn, tabItem.PinAutomationName);
+        }
+        if (!string.IsNullOrEmpty(tabItem.PinAutomationId))
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(btn, tabItem.PinAutomationId);
+        // Tag with the TabViewItemData so updates can re-resolve the live
+        // OnPinRequested closure (handler is captured at mount; if the
+        // closure changes between renders the tag-based lookup picks up
+        // the new one via the Header rebuild path).
+        btn.Tag = tabItem;
+        btn.Click += (s, _) =>
+        {
+            if (s is WinUI.Button b && b.Tag is TabViewItemData td)
+                td.OnPinRequested?.Invoke();
+        };
+        return btn;
     }
 
     private WinUI.BreadcrumbBar MountBreadcrumbBar(BreadcrumbBarElement bcb)

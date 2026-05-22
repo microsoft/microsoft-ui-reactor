@@ -220,4 +220,71 @@ public class DockTabGroupRendererTests
 
         Assert.Equal(TabViewWidthMode.Compact, tab.TabWidthMode);
     }
+
+    // ── §2.2: per-tab pin button on ToolWindow ─────────────────────────
+
+    [Fact]
+    public void Render_ToolWindowWithAutoHide_GetsPinButton_WhenCallbackProvided()
+    {
+        var docs = new DockableContent[]
+        {
+            new Document   { Title = "Main.cs", Key = "m" },
+            new ToolWindow { Title = "Output",  Key = "o" }, // CanAutoHide default true
+        };
+        var group = new DockTabGroup(docs);
+
+        ToolWindow? pinned = null;
+        var tab = (TabViewElement)DockTabGroupRenderer.Render(
+            group,
+            d => d.Content,
+            onSelectedIndexChanged: null,
+            onTabClosing: null,
+            onPinRequested: tw => pinned = tw);
+
+        Assert.False(tab.Tabs[0].IsPinnable, "Document tab should not get pin button");
+        Assert.True(tab.Tabs[1].IsPinnable, "ToolWindow tab should get pin button");
+        Assert.Equal("pin:o", tab.Tabs[1].PinAutomationId);
+        Assert.NotNull(tab.Tabs[1].OnPinRequested);
+        tab.Tabs[1].OnPinRequested!();
+        Assert.NotNull(pinned);
+        Assert.Equal("o", pinned!.Key);
+    }
+
+    [Fact]
+    public void Render_NoPinCallback_NoPinButton()
+    {
+        var docs = new DockableContent[]
+        {
+            new ToolWindow { Title = "Output", Key = "o" },
+        };
+        var group = new DockTabGroup(docs);
+
+        var tab = (TabViewElement)DockTabGroupRenderer.Render(
+            group,
+            d => d.Content,
+            onSelectedIndexChanged: null,
+            onTabClosing: null,
+            onPinRequested: null);
+
+        Assert.False(tab.Tabs[0].IsPinnable);
+    }
+
+    [Fact]
+    public void Render_ToolWindowWithoutAutoHide_NoPinButton()
+    {
+        var docs = new DockableContent[]
+        {
+            new ToolWindow { Title = "Pinned-Only", Key = "p", CanAutoHide = false },
+        };
+        var group = new DockTabGroup(docs);
+
+        var tab = (TabViewElement)DockTabGroupRenderer.Render(
+            group,
+            d => d.Content,
+            onSelectedIndexChanged: null,
+            onTabClosing: null,
+            onPinRequested: _ => { });
+
+        Assert.False(tab.Tabs[0].IsPinnable);
+    }
 }

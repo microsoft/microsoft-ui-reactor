@@ -52,6 +52,13 @@ internal static class DockTabGroupRenderer
     /// <see cref="DockDragSession"/>. When null, tab tear-out is
     /// disabled (CanDragTabs = false on the underlying TabView).
     /// </param>
+    /// <param name="onPinRequested">
+    /// Spec 045 §2.2. Invoked when the user clicks the per-tab pin
+    /// button. Only ToolWindow tabs whose <c>CanAutoHide</c> is true
+    /// get the affordance; the typed <c>ToolWindow</c> is passed so
+    /// the caller can route through <c>DockHostModel.PinToSide</c> or
+    /// <c>Hide</c>.
+    /// </param>
     /// <param name="onTabDragCompleted">
     /// Spec 045 §2.4. Invoked when a tab drag completes. The
     /// <c>wasOutside</c> flag distinguishes a drop on another TabView
@@ -65,7 +72,8 @@ internal static class DockTabGroupRenderer
         Action<int>? onSelectedIndexChanged,
         Action<DockableContent>? onTabClosing,
         Action<DockableContent, int>? onTabDragStarting = null,
-        Action<DockableContent, int, bool>? onTabDragCompleted = null)
+        Action<DockableContent, int, bool>? onTabDragCompleted = null,
+        Action<ToolWindow>? onPinRequested = null)
     {
         ArgumentNullException.ThrowIfNull(group);
         ArgumentNullException.ThrowIfNull(renderLeafContent);
@@ -106,10 +114,31 @@ internal static class DockTabGroupRenderer
         {
             var doc = documents[i];
             var body = renderLeafContent(doc) ?? new BorderElement(null);
-            tabs[i] = new TabViewItemData(doc.Title ?? string.Empty, body)
+            var data = new TabViewItemData(doc.Title ?? string.Empty, body)
             {
                 IsClosable = doc.CanClose,
             };
+            // §2.2 — render a pin affordance on ToolWindow tabs whose
+            // CanAutoHide is true. The handler receives the typed
+            // ToolWindow so the caller can route through
+            // DockHostModel.PinToSide / Hide. Mixed groups (a Document
+            // sibling alongside a ToolWindow) still render the pin
+            // only on the ToolWindow tab.
+            if (doc is ToolWindow tw && tw.CanAutoHide && onPinRequested is not null)
+            {
+                var pinName = DockingStrings.Get(DockingStringKeys.MenuPinToSide);
+                var pinAtId = DockHostNativeComponent.AutomationIdForPane(doc) is { } at
+                    ? $"pin:{at[("pane:".Length)..]}"
+                    : null;
+                data = data with
+                {
+                    IsPinnable = true,
+                    PinAutomationName = pinName,
+                    PinAutomationId = pinAtId,
+                    OnPinRequested = () => onPinRequested(tw),
+                };
+            }
+            tabs[i] = data;
         }
 
         var selected = group.SelectedIndex >= 0 && group.SelectedIndex < documents.Count

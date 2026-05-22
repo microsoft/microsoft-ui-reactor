@@ -486,9 +486,27 @@ WinUI.Dock wrapper for side-by-side review.
   *Lands with §2.10 chord wiring on the host renderer.*
 - [x] Per-tab close button uses the TabView affordance with localized
   AT name. `IsClosable` maps from `DockableContent.CanClose`.
-- [ ] Per-tab pin button (icon + AT name + tooltip — localized).
-  *Rides on TabView's secondary-affordance API; lands with §2.4 drag
-  pipeline (pin gesture).*
+- [x] Per-tab pin button (icon + AT name + tooltip — localized).
+  Implementation extends `TabViewItemData` with optional
+  `IsPinnable` / `IsPinned` / `PinAutomationName` / `PinAutomationId`
+  / `OnPinRequested` fields. When `IsPinnable=true`, the
+  `TabViewElement` reconciler builds a horizontal StackPanel
+  containing the title TextBlock + a small Button rendering the
+  Segoe Fluent Icons pin glyph (`&#xE840;` Pinned / `&#xE842;`
+  Unpinned). `DockTabGroupRenderer.Render` accepts an
+  `onPinRequested: Action<ToolWindow>?` callback; it auto-enables
+  the affordance on ToolWindow tabs whose `CanAutoHide=true` and
+  forwards the click to the supplied handler.
+  `DockHostNativeComponent.PinToSideViaTabButton` routes the click
+  through `DockHostModel.PinToSide(tw, DockSide.Left)` so the
+  §2.16 drain + live-region announcement contract fires
+  identically to a programmatic pin. AT name + tooltip use the
+  localized `Docking.Menu.PinToSide` string via `DockingStrings`;
+  AutomationId is `pin:<paneKey>` mirroring the `pane:<paneKey>`
+  AutomationId pattern. Coverage: 3 new `DockTabGroupRendererTests`
+  cases (`Render_ToolWindowWithAutoHide_GetsPinButton_WhenCallbackProvided`,
+  `Render_NoPinCallback_NoPinButton`,
+  `Render_ToolWindowWithoutAutoHide_NoPinButton`).
 
 ### 2.3 Drop-target overlay (spec §5.1 item 3)
 
