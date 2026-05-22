@@ -72,7 +72,8 @@ public sealed partial class Reconciler
         if (Element.ShallowEquals(oldEl, newEl)
             && Element.ModifiersEqual(oldModifiers, modifiers)
             && oldEl.HasCallbacks == newEl.HasCallbacks
-            && !ForceRenderThroughWrapper(newEl))
+            && !ForceRenderThroughWrapper(newEl)
+            && !IsOnDirtyAncestorPath(control))
         {
             DebugElementsSkipped++;
             // Refresh Tag so the event trampoline dispatches into the new element's
@@ -670,7 +671,7 @@ public sealed partial class Reconciler
         if (n.ContentElement is not null && o.ContentElement is not null && b.Content is UIElement existingContent)
         {
             var replacement = UpdateChild(o.ContentElement, n.ContentElement, existingContent, requestRerender);
-            if (replacement is not null)
+            if (replacement is not null && !ReferenceEquals(b.Content, replacement))
             {
                 UnmountChild(existingContent);
                 b.Content = replacement;
@@ -1466,7 +1467,7 @@ public sealed partial class Reconciler
         if (exp.Content is UIElement existingContent && CanUpdate(o.Content, n.Content))
         {
             var replacement = Update(o.Content, n.Content, existingContent, requestRerender);
-            if (replacement is not null)
+            if (replacement is not null && !ReferenceEquals(exp.Content, replacement))
                 exp.Content = replacement;
         }
         else
@@ -1745,7 +1746,7 @@ public sealed partial class Reconciler
             && nv.Content is UIElement existingContent && CanUpdate(o.Content, n.Content))
         {
             var replacement = Update(o.Content, n.Content, existingContent, requestRerender);
-            if (replacement is not null)
+            if (replacement is not null && !ReferenceEquals(nv.Content, replacement))
                 nv.Content = replacement;
         }
         else if (n.Content is not null)
@@ -1902,7 +1903,16 @@ public sealed partial class Reconciler
             if (tvi.Content is UIElement existingContent && CanUpdate(oldTab.Content, newTab.Content))
             {
                 var replacement = Update(oldTab.Content, newTab.Content, existingContent, requestRerender);
-                if (replacement is not null) tvi.Content = replacement;
+                // Only reassign Content when the realized control actually
+                // changed. Re-assigning to the same UIElement instance
+                // triggers WinUI's logical-tree detach→reattach cycle on
+                // the entire tab subtree, which wipes any setState
+                // updates queued by a click handler on a descendant
+                // control before they land. Reproduced by the
+                // NativeDocking_DynamicallyDockedContent_IsInteractive
+                // fixture (counter inside a docked Document).
+                if (replacement is not null && !ReferenceEquals(tvi.Content, replacement))
+                    tvi.Content = replacement;
             }
             else
             {
@@ -1990,7 +2000,8 @@ public sealed partial class Reconciler
             if (pi.Content is UIElement existing && CanUpdate(oldItem.Content, newItem.Content))
             {
                 var replacement = Update(oldItem.Content, newItem.Content, existing, requestRerender);
-                if (replacement is not null) pi.Content = replacement;
+                if (replacement is not null && !ReferenceEquals(pi.Content, replacement))
+                    pi.Content = replacement;
             }
             else
             {
@@ -2278,7 +2289,7 @@ public sealed partial class Reconciler
             if (CanUpdate(o.Children[i], n.Children[i]))
             {
                 var replacement = Update(o.Children[i], n.Children[i], existingCtrl, requestRerender);
-                if (replacement is not null)
+                if (replacement is not null && !ReferenceEquals(rp.Children[i], replacement))
                 {
                     rp.Children[i] = replacement;
                     updated = replacement;
@@ -2358,7 +2369,8 @@ public sealed partial class Reconciler
         if (popup.Child is UIElement existing && CanUpdate(o.Child, n.Child))
         {
             var replacement = Update(o.Child, n.Child, existing, requestRerender);
-            if (replacement is not null) popup.Child = replacement;
+            if (replacement is not null && !ReferenceEquals(popup.Child, replacement))
+                popup.Child = replacement;
         }
         else
         {
@@ -2375,7 +2387,8 @@ public sealed partial class Reconciler
         if (rc.Content is UIElement existing && CanUpdate(o.Content, n.Content))
         {
             var replacement = Update(o.Content, n.Content, existing, requestRerender);
-            if (replacement is not null) rc.Content = replacement;
+            if (replacement is not null && !ReferenceEquals(rc.Content, replacement))
+                rc.Content = replacement;
         }
         else
         {
@@ -2587,7 +2600,8 @@ public sealed partial class Reconciler
         if (sc.Content is UIElement existing && CanUpdate(o.Content, n.Content))
         {
             var replacement = Update(o.Content, n.Content, existing, requestRerender);
-            if (replacement is not null) sc.Content = replacement;
+            if (replacement is not null && !ReferenceEquals(sc.Content, replacement))
+                sc.Content = replacement;
         }
         else
         {
@@ -2633,7 +2647,8 @@ public sealed partial class Reconciler
         if (pv.Child is UIElement existing && CanUpdate(o.Child, n.Child))
         {
             var replacement = Update(o.Child, n.Child, existing, requestRerender);
-            if (replacement is not null) pv.Child = replacement as UIElement;
+            if (replacement is not null && !ReferenceEquals(pv.Child, replacement))
+                pv.Child = replacement as UIElement;
         }
         else
         {
@@ -2860,7 +2875,7 @@ public sealed partial class Reconciler
             if (oldItemElement is not null && cc.Content is UIElement existingCtrl && CanUpdate(oldItemElement, newItemElement))
             {
                 var replacement = Update(oldItemElement, newItemElement, existingCtrl, requestRerender);
-                if (replacement is not null)
+                if (replacement is not null && !ReferenceEquals(cc.Content, replacement))
                     cc.Content = replacement;
             }
             else
@@ -3910,7 +3925,7 @@ public sealed partial class Reconciler
         {
             // Reconcile in place
             var replacement = Update(oldContentEl, newContentEl, existingCtrl, requestRerender);
-            if (replacement is not null)
+            if (replacement is not null && !ReferenceEquals(liveNode.Content, replacement))
                 liveNode.Content = replacement;
         }
         else if (newContentEl is not null)

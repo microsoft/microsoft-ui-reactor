@@ -136,6 +136,25 @@ public sealed partial class Reconciler : IDisposable
     internal bool ForceRenderThroughWrapper(Element el) =>
         _forceFullRenderActive && el is ComponentElement or MemoElement or FuncElement;
 
+    // Set of realized UIElements that lie on the path from the root to a
+    // ComponentNode whose <see cref="ComponentNode.SelfTriggered"/> is true.
+    // Populated at the start of each top-level Reconcile pass by walking
+    // up the visual tree from each self-triggered node, and consumed by
+    // <see cref="Update"/> to bypass its shallow-equality short-circuit
+    // so the render-pass can reach the self-triggered descendant.
+    //
+    // Without this, a setState inside a Component whose ancestor elements
+    // are structurally unchanged (e.g. a dynamically-docked pane whose
+    // wrapper Border/Provide chain has stable fields) gets its render
+    // swallowed by the parent's shallow-equality skip — the new state
+    // never lands in the visual tree. Reproduced by
+    // NativeDocking_DynamicallyDockedContent_IsInteractive (counter
+    // inside a docked Document — click fires, setCount marks
+    // node.SelfTriggered, but the TextBlock never advances past 0).
+    private HashSet<UIElement>? _dirtyAncestorPath;
+    internal bool IsOnDirtyAncestorPath(UIElement? control) =>
+        control is not null && _dirtyAncestorPath is { } set && set.Contains(control);
+
     // ── Reconcile-highlight capture (gated by ReactorFeatureFlags.HighlightReconcileChanges) ──
     private List<UIElement>? _highlightMounted;
     private List<UIElement>? _highlightModified;
@@ -611,6 +630,14 @@ public sealed partial class Reconciler : IDisposable
             // every component re-runs Render() even when props/deps are unchanged.
             _forceFullRenderActive = ForceFullRenderPending;
             ForceFullRenderPending = false;
+
+            // Build the dirty-ancestor path. For every component node
+            // whose SelfTriggered is true, walk up the realized visual
+            // tree and add each ancestor control. Consumed by Update's
+            // shallow-equality short-circuit so the walk can reach the
+            // self-triggered descendant even when its ancestor element
+            // records are structurally unchanged.
+            PopulateDirtyAncestorPath();
         }
         try {
         try
@@ -641,8 +668,35 @@ public sealed partial class Reconciler : IDisposable
         } finally
         {
             if (--_debugReconcileDepth == 0)
+            {
                 _forceFullRenderActive = false;
+                _dirtyAncestorPath?.Clear();
+            }
         }
+    }
+
+    private void PopulateDirtyAncestorPath()
+    {
+        // Hot path — most renders have zero self-triggered nodes (the
+        // pass was triggered by a prop change higher up). Avoid the
+        // HashSet allocation entirely until we find one.
+        HashSet<UIElement>? set = null;
+        foreach (var (control, node) in _componentNodes)
+        {
+            if (!node.SelfTriggered) continue;
+            set ??= _dirtyAncestorPath ?? new HashSet<UIElement>();
+            // Add the control itself first — Update on the wrapper
+            // element that owns this control needs to bypass too so it
+            // reaches the Component's UpdateComponent path.
+            set.Add(control);
+            var cursor = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(control) as UIElement;
+            while (cursor is not null)
+            {
+                if (!set.Add(cursor)) break; // already on a previously-walked path
+                cursor = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(cursor) as UIElement;
+            }
+        }
+        _dirtyAncestorPath = set;
     }
 
     // Tracks top-level Reconcile() entries so trace start/stop only fires once
@@ -3445,7 +3499,7 @@ public sealed partial class Reconciler : IDisposable
             if (oldContent is not null && flyout.Content is UIElement existingContent && CanUpdate(oldContent, newCf.Content))
             {
                 var replacement = Update(oldContent, newCf.Content, existingContent, requestRerender);
-                if (replacement is not null)
+                if (replacement is not null && !ReferenceEquals(flyout.Content, replacement))
                     flyout.Content = replacement;
             }
             else
@@ -3473,7 +3527,7 @@ public sealed partial class Reconciler : IDisposable
             if (CanUpdate(oldEl, newEl))
             {
                 var replacement = Update(oldEl, newEl, existingCtrl, requestRerender);
-                if (replacement is not null)
+                if (replacement is not null && !ReferenceEquals(plainFlyout.Content, replacement))
                     plainFlyout.Content = replacement;
             }
             else
