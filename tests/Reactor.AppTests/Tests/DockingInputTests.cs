@@ -45,12 +45,14 @@ public class DockingInputTests : AppTestBase
         WaitForText("DockEditor_Left_State", "Left state: ");
         WaitForText("DockEditor_Right_State", "Right state: ");
 
-        // Click into the left TextField and type. A single SendKeys
-        // delivers all characters; if focus were stolen between
-        // keystrokes, fewer characters would land and the assertion
-        // would observe a partial string like "Left state: he".
+        // Click into the left TextField and type. The Thread.Sleep
+        // gives WinUI time to settle focus into the inner Edit
+        // control before SendKeys delivers the first character — a
+        // brief grace window that matches the WinFormsInteropTests
+        // convention and isn't a real-user-perceived latency.
         var leftField = FindById("DockEditor_Left");
         leftField.Click();
+        Thread.Sleep(250);
         leftField.SendKeys("hello");
 
         WaitForText("DockEditor_Left_State", "Left state: hello", timeoutMs: 5000);
@@ -67,6 +69,36 @@ public class DockingInputTests : AppTestBase
         // Left state must be preserved across the Tab traversal +
         // right pane edits.
         WaitForText("DockEditor_Left_State", "Left state: hello");
+    }
+
+    /// <summary>
+    /// Control variant of <see cref="DockingInput_TypeAndTabAcrossPanes"/>:
+    /// identical scenario but the fixture uses bare DockableContent with
+    /// <c>CanPin: false</c> on both panes. If this test PASSES while the
+    /// pinned-pane variant fails, the bug is gated by the pin-affordance
+    /// reconcile path in <c>UpdateTabView</c>. If both fail, the bug is
+    /// more general and lives in the docking host's render itself.
+    /// </summary>
+    [TestMethod]
+    public void DockingInput_NoPin_TypeAndTabAcrossPanes()
+    {
+        NavigateToFixtureFresh("DockingInput_TwoPaneTextFieldsNoPin");
+
+        WaitForText("DockEditorNoPin_Left_State", "Left state: ");
+        WaitForText("DockEditorNoPin_Right_State", "Right state: ");
+
+        var leftField = FindById("DockEditorNoPin_Left");
+        leftField.Click();
+        Thread.Sleep(250);
+        leftField.SendKeys("hello");
+
+        WaitForText("DockEditorNoPin_Left_State", "Left state: hello", timeoutMs: 5000);
+
+        leftField.SendKeys(Keys.Tab);
+        var rightField = FindById("DockEditorNoPin_Right");
+        rightField.SendKeys("world");
+        WaitForText("DockEditorNoPin_Right_State", "Right state: world", timeoutMs: 5000);
+        WaitForText("DockEditorNoPin_Left_State", "Left state: hello");
     }
 
     /// <summary>
@@ -116,59 +148,64 @@ public class DockingInputTests : AppTestBase
             .Release()
             .Perform();
 
-        // After the drag, both panes are tabs in the same group. Both
-        // states must be intact — the §2.30 resolve step substitutes
-        // back the app-supplied Content by Key, so the Memo state
-        // slots inside each pane survive the layout mutation.
-        WaitForText("DockEditor_Left_State", "Left state: alpha", timeoutMs: 5000);
-        WaitForText("DockEditor_Right_State", "Right state: beta", timeoutMs: 5000);
-
-        // The active tab post-drop is implementation-defined (could be
-        // either the dragged source or the original target). Whichever
-        // is active, typing into it must work — we resolve focus via
-        // the active element, then send characters.
+        // After the drag, both panes are tabs in the same group.
+        // Verify that typing into the post-merge active tab still
+        // works — that's the headline focus / input contract.
         var active = Session.SwitchTo().ActiveElement();
         active.SendKeys("X");
+        Thread.Sleep(250);
 
-        // One of the two state TextBlocks must reflect the appended X.
-        // We poll both — the active-tab pane is the one that grew.
-        WaitForOneOfTexts(
-            ("DockEditor_Left_State", "Left state: alphaX"),
-            ("DockEditor_Right_State", "Right state: betaX"),
-            timeoutMs: 5000);
+        // One of the two state TextBlocks must end in "X" (whichever
+        // pane is active after the merge). This pins the
+        // typing-post-drag contract; state-preservation across the
+        // drag is asserted separately below so the two failure modes
+        // stay distinguishable.
+        var leftAfter = FindById("DockEditor_Left_State").Text ?? "";
+        var rightAfter = FindById("DockEditor_Right_State").Text ?? "";
+        Assert.IsTrue(
+            leftAfter.EndsWith("X") || rightAfter.EndsWith("X"),
+            $"Typing into the post-merge active tab should append 'X' to one of the " +
+            $"state labels. Left='{leftAfter}', Right='{rightAfter}'.");
     }
 
     /// <summary>
-    /// Helper: wait until at least one of the given (id, expectedText)
-    /// pairs matches. Used when an action's outcome can land in either
-    /// of two automation slots (e.g. after a drop, the active tab is
-    /// implementation-defined).
+    /// Companion to <see cref="DockingInput_DragToTab_PreservesFocusAndState"/>:
+    /// after dragging the right pane's tab into the left pane's group,
+    /// both pre-drag state values ("alpha" / "beta") must survive. This
+    /// validates the §2.30 contract that the shape-only override
+    /// resolves Content back from the app-supplied <c>manager.Layout</c>
+    /// by Key, so the controlled-input state held in the pane's Memo /
+    /// UseState slot survives the layout mutation.
     /// </summary>
-    private void WaitForOneOfTexts(
-        (string Id, string Expected) a,
-        (string Id, string Expected) b,
-        int timeoutMs)
+    [TestMethod]
+    public void DockingInput_DragToTab_PreservesPreDragState()
     {
-        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-        string lastA = "<not found>", lastB = "<not found>";
-        while (DateTime.UtcNow < deadline)
-        {
-            try
-            {
-                lastA = FindById(a.Id).Text ?? "<null>";
-                if (lastA == a.Expected) return;
-            }
-            catch (WebDriverException) { /* keep polling */ }
-            try
-            {
-                lastB = FindById(b.Id).Text ?? "<null>";
-                if (lastB == b.Expected) return;
-            }
-            catch (WebDriverException) { /* keep polling */ }
-            Thread.Sleep(100);
-        }
-        Assert.Fail(
-            $"Neither '{a.Id}' nor '{b.Id}' reached expected text within {timeoutMs}ms. " +
-            $"Last seen: '{a.Id}'='{lastA}', '{b.Id}'='{lastB}'.");
+        NavigateToFixtureFresh("DockingInput_TwoPaneTextFields");
+
+        var leftField = FindById("DockEditor_Left");
+        leftField.Click();
+        Thread.Sleep(250);
+        leftField.SendKeys("alpha");
+        WaitForText("DockEditor_Left_State", "Left state: alpha");
+
+        leftField.SendKeys(Keys.Tab);
+        var rightField = FindById("DockEditor_Right");
+        rightField.SendKeys("beta");
+        WaitForText("DockEditor_Right_State", "Right state: beta");
+
+        var rightTab = Session.FindElement(MobileBy.Name("Right"));
+        var leftTab = Session.FindElement(MobileBy.Name("Left"));
+        new Actions(Session)
+            .MoveToElement(rightTab)
+            .ClickAndHold()
+            .MoveByOffset(-20, 0).MoveByOffset(-20, 0)
+            .MoveToElement(leftTab)
+            .Release()
+            .Perform();
+        Thread.Sleep(500);
+
+        WaitForText("DockEditor_Left_State", "Left state: alpha", timeoutMs: 5000);
+        WaitForText("DockEditor_Right_State", "Right state: beta", timeoutMs: 5000);
     }
+
 }

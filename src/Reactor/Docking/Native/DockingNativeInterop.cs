@@ -108,7 +108,14 @@ public static class DockingNativeInterop
 
                 var newContent = BuildContent(newEl);
                 var newChild = rec.Reconcile(state.LastContent, newContent, host.Child, rerender);
-                host.Child = newChild;
+                // Only reassign Border.Child when the reconciler swapped the
+                // realized control out. Reassigning to the same UIElement
+                // looks like a no-op, but WinUI's logical-tree machinery
+                // can still cycle through detach→reattach internally,
+                // which steals keyboard focus from any descendant
+                // TextBox mid-edit (the keystroke-loses-focus bug).
+                if (!ReferenceEquals(host.Child, newChild))
+                    host.Child = newChild;
 
                 // Refresh live-region binding to point at the new element
                 // ref. We do NOT clear the old ref's entry — apps that

@@ -147,6 +147,7 @@ internal static class FixtureRegistry
         // Docking input (spec 045 — E2E validation of keyboard focus
         // across docking layout mutations)
         "DockingInput_TwoPaneTextFields",
+        "DockingInput_TwoPaneTextFieldsNoPin",
     ];
 
     public static Element? Build(string name, RenderContext ctx) => name switch
@@ -284,6 +285,7 @@ internal static class FixtureRegistry
 
         // Docking input (spec 045 — E2E validation)
         "DockingInput_TwoPaneTextFields" => DockingInputE2EFixtures.TwoPaneTextFieldTest(ctx),
+        "DockingInput_TwoPaneTextFieldsNoPin" => DockingInputE2EFixtures.TwoPaneTextFieldNoPinTest(ctx),
 
         _ => null,
     };

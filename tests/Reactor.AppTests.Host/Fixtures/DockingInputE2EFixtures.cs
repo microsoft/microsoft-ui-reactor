@@ -84,4 +84,57 @@ internal static class DockingInputE2EFixtures
 
     internal static Element TwoPaneTextFieldTest(RenderContext ctx) =>
         Component<TwoPaneTextFieldComponent>();
+
+    /// <summary>
+    /// Control variant of <see cref="TwoPaneTextFieldComponent"/>: identical
+    /// layout but the panes are bare <see cref="DockableContent"/>s (not
+    /// <see cref="ToolWindow"/>s) and <c>CanPin: false</c> on both. Used to
+    /// isolate whether the keystroke-loses-focus bug is gated by the pin-
+    /// affordance code paths in <c>UpdateTabView</c> or by something more
+    /// general about docking-host reconciles.
+    /// </summary>
+    internal class TwoPaneTextFieldNoPinComponent : Component
+    {
+        public override Element Render()
+        {
+            var (left, setLeft) = UseState(string.Empty);
+            var (right, setRight) = UseState(string.Empty);
+
+            var leftPane = new DockableContent(
+                Title: "Left",
+                Key: "dock-input-nopin:left",
+                CanClose: true,
+                Content: VStack(6,
+                    TextField(left, setLeft, placeholder: "left input")
+                        .AutomationId("DockEditorNoPin_Left"),
+                    TextBlock($"Left state: {left}").AutomationId("DockEditorNoPin_Left_State")
+                ).Padding(12));
+            var rightPane = new DockableContent(
+                Title: "Right",
+                Key: "dock-input-nopin:right",
+                CanClose: true,
+                Content: VStack(6,
+                    TextField(right, setRight, placeholder: "right input")
+                        .AutomationId("DockEditorNoPin_Right"),
+                    TextBlock($"Right state: {right}").AutomationId("DockEditorNoPin_Right_State")
+                ).Padding(12));
+
+            var initialLayout = new DockSplit(
+                Microsoft.UI.Xaml.Controls.Orientation.Horizontal,
+                new DockNode[]
+                {
+                    new DockTabGroup(new DockableContent[] { leftPane }),
+                    new DockTabGroup(new DockableContent[] { rightPane }),
+                });
+
+            return new DockManager
+            {
+                PersistenceId = "apptest:docking-input-twopane-nopin",
+                Layout = initialLayout,
+            };
+        }
+    }
+
+    internal static Element TwoPaneTextFieldNoPinTest(RenderContext ctx) =>
+        Component<TwoPaneTextFieldNoPinComponent>();
 }
