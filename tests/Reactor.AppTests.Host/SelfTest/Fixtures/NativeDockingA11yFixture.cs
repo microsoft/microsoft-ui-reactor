@@ -316,7 +316,7 @@ internal static class NativeDockingA11yFixtures
 
             // Cancel path: open again via the chord, then cancel — assert
             // no further OnActiveContentChanged fired (count stays at 1).
-            handlers.OpenNavigator!.Invoke(+1);
+            handlers!.OpenNavigator!.Invoke(+1);
             H.Check("KCycle_Reopened", nav.IsOpen);
             nav.CancelForTest();
             H.Check("KCycle_CancelClosesPopup", !nav.IsOpen);

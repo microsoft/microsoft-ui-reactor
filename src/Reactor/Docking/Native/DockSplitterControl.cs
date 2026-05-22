@@ -350,12 +350,12 @@ internal sealed partial class DockSplitterControl : Grid
             minDip,
             _pairDipAtCapture - minDip);
         if (newLeading <= 0 || double.IsNaN(newLeading)) return;
-        var newTrailing = _pairDipAtCapture - newLeading;
 
         // Pure-grow path: distribute pairGrow proportionally to the
-        // target (newLeading, newTrailing) DIP split. Inline Width/Height
-        // is NOT touched — the panel stays at its parent allocation
-        // throughout the drag.
+        // target DIP split. Trailing share = totalGrow - leadingGrow, so
+        // newTrailing in DIPs is not needed explicitly. Inline
+        // Width/Height is NOT touched — the panel stays at its parent
+        // allocation throughout the drag.
         var totalGrow = _pairGrowAtCapture > 0 ? _pairGrowAtCapture : 1.0;
         var newLeadingGrow = totalGrow * (newLeading / _pairDipAtCapture);
         var newTrailingGrow = totalGrow - newLeadingGrow;
