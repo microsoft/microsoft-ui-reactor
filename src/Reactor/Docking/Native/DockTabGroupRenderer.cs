@@ -105,8 +105,10 @@ internal static class DockTabGroupRenderer
         {
             if (documents[i] is not ToolWindow) { allToolWindow = false; break; }
         }
+        // TabPosition.Bottom isn't wired through TabViewElement yet — when a
+        // TabStripPlacement property lands, the all-ToolWindow flip applies
+        // here. For now only the CompactTabs flag is auto-resolved.
         var atDefaults = group.TabPosition == TabPosition.Top && !group.CompactTabs;
-        var resolvedPosition = allToolWindow && atDefaults ? TabPosition.Bottom : group.TabPosition;
         var resolvedCompact = allToolWindow && atDefaults ? true : group.CompactTabs;
 
         var tabs = new TabViewItemData[documents.Count];

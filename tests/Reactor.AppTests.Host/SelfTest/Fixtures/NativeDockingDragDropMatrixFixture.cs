@@ -869,8 +869,6 @@ internal static class NativeDockingDragDropMatrixFixtures
             await Harness.Render();
 
             // ── Snapshot the initial control identity set.
-            var hostBorder = H.FindControl<Border>(b =>
-                Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(b) is Border) as Border;
             var splittersInit = H.FindAllControls<DockSplitterControl>(_ => true);
             var rowInit = splittersInit.First(s => s.Direction == DockSplitterDirection.Rows);
             var colsInit = splittersInit.Where(s => s.Direction == DockSplitterDirection.Columns).ToList();
@@ -959,14 +957,14 @@ internal static class NativeDockingDragDropMatrixFixtures
             // ── Step 3: shrink the outer panel by 200 DIP on both axes.
             var outerWBefore = outerPanel!.ActualWidth;
             var outerHBefore = outerPanel!.ActualHeight;
-            outerPanel.Width = outerWBefore - 200;
-            outerPanel.Height = outerHBefore - 200;
+            outerPanel!.Width = outerWBefore - 200;
+            outerPanel!.Height = outerHBefore - 200;
             await Harness.Render();
 
             var topAfterResize = PaneGrows(topColPanel!);
             var outerAfterResize = PaneGrows(outerPanel!);
             var bottomAfterResize = PaneGrows(bottomColPanel!);
-            Console.WriteLine($"# M19 after-resize panelW={outerPanel.ActualWidth:F1} panelH={outerPanel.ActualHeight:F1} top=[{string.Join(",", topAfterResize.Select(g => g.ToString("F3")))}] outer=[{string.Join(",", outerAfterResize.Select(g => g.ToString("F3")))}] bottom=[{string.Join(",", bottomAfterResize.Select(g => g.ToString("F3")))}]");
+            Console.WriteLine($"# M19 after-resize panelW={outerPanel!.ActualWidth:F1} panelH={outerPanel!.ActualHeight:F1} top=[{string.Join(",", topAfterResize.Select(g => g.ToString("F3")))}] outer=[{string.Join(",", outerAfterResize.Select(g => g.ToString("F3")))}] bottom=[{string.Join(",", bottomAfterResize.Select(g => g.ToString("F3")))}]");
 
             // Ratios MUST be unchanged by container resize — that's the
             // grow-based-distribution contract. Pre-fix the splitter set
@@ -985,7 +983,7 @@ internal static class NativeDockingDragDropMatrixFixtures
             // After resize the panes should actually have shrunk —
             // proof that grow is doing real distribution, not just
             // serving stale inline sizes.
-            var paneWidthAfter = (topColPanel.Children[0] as FrameworkElement)?.ActualWidth ?? 0;
+            var paneWidthAfter = (topColPanel!.Children[0] as FrameworkElement)?.ActualWidth ?? 0;
             H.Check("M19_Resize_PanesRedistributed",
                 paneWidthAfter < outerWBefore * topAfterRow[0]);
 

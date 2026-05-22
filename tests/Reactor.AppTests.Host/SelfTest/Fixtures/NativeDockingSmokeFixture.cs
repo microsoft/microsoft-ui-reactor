@@ -147,7 +147,7 @@ internal static class NativeDockingSmokeFixtures
                 var alpha = new DockableContent(
                     Title: "Alpha",
                     Key: "k:alpha",
-                    Content: Func(ctx =>
+                    Content: Memo(ctx =>
                     {
                         var dockHost = ctx.UseDockHost();
                         var pane = ctx.UsePane();
@@ -161,7 +161,7 @@ internal static class NativeDockingSmokeFixtures
                 var beta = new DockableContent(
                     Title: "Beta",
                     Key: "k:beta",
-                    Content: Func(ctx =>
+                    Content: Memo(ctx =>
                     {
                         var isActive = ctx.UseIsActivePane();
                         return TextBlock($"beta-active:{isActive}");
