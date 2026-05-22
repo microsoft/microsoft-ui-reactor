@@ -95,11 +95,31 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // convergence, same as `layoutOverride`).
         var (sideOverride, setSideOverride) = UseState<SideOverride?>(null);
 
-        // The effective layout the renderer sees. Apps changing
-        // Manager.Layout out-of-band will replace the prop; if the new
-        // reference differs from our override, we surrender the override
-        // (controlled-input convergence).
-        var effectiveLayout = layoutOverride is { } lo ? lo.Root : manager.Layout;
+        // Controlled-input convergence (spec 045 §2.16). The app's
+        // `manager.Layout` is the source of truth; `layoutOverride`
+        // tracks user-driven changes (drag / drop / close) between
+        // renders so the host doesn't lose them when the app's
+        // OnLiveLayoutChanged hasn't yet rebroadcast. When the app
+        // PUSHES a new layout (reference changes from what we last
+        // observed), we surrender the override and use the new prop.
+        // This is the convergence point that lets external state
+        // (selection, reset, bound layouts) flow into the host even
+        // after a user has dragged.
+        var prevLayoutPropRef = UseRef<DockNode?>(manager.Layout);
+        bool layoutPropChanged = !ReferenceEquals(prevLayoutPropRef.Current, manager.Layout);
+        prevLayoutPropRef.Current = manager.Layout;
+        if (layoutPropChanged && layoutOverride is not null)
+        {
+            // Schedule clearing the override so the NEXT render is
+            // fully driven by manager.Layout. The CURRENT render
+            // already uses manager.Layout via the branch below — the
+            // setter call here is a tail microtask via Reactor's
+            // dispatcher-marshalled setState path.
+            setLayoutOverride(null);
+        }
+        var effectiveLayout = (layoutPropChanged || layoutOverride is null)
+            ? manager.Layout
+            : layoutOverride.Root;
 
         // Per-DockSplit ratio state. The store survives renders via UseRef
         // (state participates in equality and silently no-ops on

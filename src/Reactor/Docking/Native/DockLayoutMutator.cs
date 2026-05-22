@@ -50,10 +50,10 @@ internal static class DockLayoutMutator
             switch (node)
             {
                 case DockableContent leaf:
-                    return ReferenceEquals(leaf, target) ? leaf : null;
+                    return IsSamePane(leaf, target) ? leaf : null;
                 case DockTabGroup grp:
                     foreach (var d in grp.Documents)
-                        if (ReferenceEquals(d, target)) return grp;
+                        if (IsSamePane(d, target)) return grp;
                     return null;
                 case DockSplit split:
                     foreach (var c in split.Children)
@@ -68,12 +68,32 @@ internal static class DockLayoutMutator
         }
     }
 
+    /// <summary>
+    /// Spec 045 §2.4 — pane-identity comparison used by every layout-
+    /// walking helper. <c>ReferenceEquals</c> is the fast path; when
+    /// both panes carry a non-null <see cref="DockableContent.Key"/>,
+    /// key equality is a fallback so a render-time rebuild that
+    /// preserves keys but creates new <see cref="DockableContent"/>
+    /// instances doesn't break the drag-session lookup
+    /// (`session.Source` captures a ref at drag start; the layout the
+    /// confirm fires against may have rebuilt records). Apps that
+    /// reuse a Key for two distinct panes have a contract violation
+    /// regardless — keys are spec-required to be unique within a
+    /// host's tree.
+    /// </summary>
+    private static bool IsSamePane(DockableContent a, DockableContent b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a.Key is null || b.Key is null) return false;
+        return a.Key.Equals(b.Key);
+    }
+
     private static (DockNode? Node, bool Found) RemoveInner(DockNode node, DockableContent pane)
     {
         switch (node)
         {
             case DockableContent leaf:
-                return ReferenceEquals(leaf, pane)
+                return IsSamePane(leaf, pane)
                     ? ((DockNode?)null, true)
                     : (node, false);
 
@@ -82,7 +102,7 @@ internal static class DockLayoutMutator
                 var docs = group.Documents;
                 for (int i = 0; i < docs.Count; i++)
                 {
-                    if (!ReferenceEquals(docs[i], pane)) continue;
+                    if (!IsSamePane(docs[i], pane)) continue;
                     if (docs.Count == 1) return ((DockNode?)null, true);
                     var next = new DockableContent[docs.Count - 1];
                     int j = 0;
@@ -393,7 +413,7 @@ internal static class DockLayoutMutator
                 {
                     foreach (var t in target.Documents)
                     {
-                        if (ReferenceEquals(d, t)) return g;
+                        if (IsSamePane(d, t)) return g;
                     }
                 }
                 return null;

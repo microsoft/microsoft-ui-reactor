@@ -710,6 +710,23 @@ public abstract record Element
                 && ReferenceEquals(la.ScrollViewerSetters, lb.ScrollViewerSetters)
                 && ReferenceEquals(la.RepeaterSetters, lb.RepeaterSetters),
 
+            // Spec 045 §2.1 / §2.3 — docking elements use closures for
+            // their callbacks (OnDelta, OnHover, etc.) that are freshly
+            // captured on every parent render. The closures don't touch
+            // the realized WinUI control's visible properties — only
+            // structural fields (Direction, Mode) do — so for the
+            // highlight overlay's purposes these are "equal" when the
+            // structural fields match. Without these arms, every parent
+            // re-render flashes the splitter handles + drop overlay
+            // yellow even though nothing visible changed.
+            (Microsoft.UI.Reactor.Docking.Native.DockSplitterElement da,
+             Microsoft.UI.Reactor.Docking.Native.DockSplitterElement db) =>
+                da.Direction == db.Direction,
+
+            (Microsoft.UI.Reactor.Docking.Native.DockDropTargetOverlayElement oa,
+             Microsoft.UI.Reactor.Docking.Native.DockDropTargetOverlayElement ob) =>
+                oa.Mode == ob.Mode,
+
             // Non-container / leaf types: return false → always captured
             _ => false,
         };

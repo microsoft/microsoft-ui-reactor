@@ -331,4 +331,68 @@ public class DockLayoutMutatorTests
         Assert.Equal(2, folded.Documents.Count);
         Assert.Same(hiddenPane, folded.Documents[1]);
     }
+
+    // ── Key-based pane identity (§2.4 — drag survives rebuild) ─────────
+
+    /// <summary>
+    /// When a drag session captures a pane reference at drag-start, and
+    /// the parent re-renders before drop (creating a fresh DockableContent
+    /// record with the same Key), MovePaneToTarget must still find +
+    /// remove the source pane in the new tree. Without key-based lookup
+    /// the source-pane lookup fails ⇒ insert-only ⇒ duplicate tab.
+    /// </summary>
+    [Fact]
+    public void FindContainer_MatchesByKey_WhenReferenceDiffers()
+    {
+        var keyed1 = new DockableContent("Items", Key: "items");
+        var keyed2 = new DockableContent("Items", Key: "items"); // same key, different ref
+        Assert.False(ReferenceEquals(keyed1, keyed2));
+
+        var root = new DockTabGroup(new DockableContent[] { keyed1 });
+        var container = DockLayoutMutator.FindContainer(root, keyed2);
+        Assert.NotNull(container);
+        Assert.Same(root, container);
+    }
+
+    [Fact]
+    public void RemovePane_MatchesByKey_WhenReferenceDiffers()
+    {
+        var keyed1 = new DockableContent("Items", Key: "items");
+        var keyed2 = new DockableContent("Items", Key: "items");
+        var other = new DockableContent("Detail", Key: "detail");
+        var root = new DockSplit(Orientation.Horizontal, new DockNode[]
+        {
+            new DockTabGroup(new[] { keyed1 }),
+            new DockTabGroup(new[] { other }),
+        });
+
+        var (after, found) = DockLayoutMutator.RemovePane(root, keyed2);
+        Assert.True(found);
+        // Left group collapses (last pane removed); only right remains.
+        var group = Assert.IsType<DockTabGroup>(after);
+        Assert.Same(other, group.Documents[0]);
+    }
+
+    [Fact]
+    public void MovePaneToTarget_PreservesIdentityAcrossRebuild_NoDuplicate()
+    {
+        var items1 = new DockableContent("Items", Key: "items");
+        var items2 = new DockableContent("Items", Key: "items"); // post-rebuild reference
+        var detail = new DockableContent("Detail", Key: "detail");
+        var root = new DockSplit(Orientation.Horizontal, new DockNode[]
+        {
+            new DockTabGroup(new[] { items1 }),
+            new DockTabGroup(new[] { detail }),
+        });
+
+        // Simulate drag-start captured items1, drop fires against items2.
+        var result = DockLayoutMutator.MovePaneToTarget(root, items2, DockTarget.Center);
+        Assert.NotNull(result);
+        // Result should be ONE tab group containing both detail + items (the moved one).
+        // No duplicate of items.
+        var folded = Assert.IsType<DockTabGroup>(result);
+        Assert.Equal(2, folded.Documents.Count);
+        Assert.Equal("detail", folded.Documents[0].Key);
+        Assert.Equal("items", folded.Documents[1].Key);
+    }
 }
