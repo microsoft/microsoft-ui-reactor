@@ -1560,19 +1560,30 @@ integration.*
   the snapshot shape being stable. 13 unit tests in
   `DockSnapshotBuilderTests` cover the snapshot + registry
   contracts.
-- [~] `docking.dock` MCP tool: moves a pane programmatically for
-  headless test driving. New in P2. Building blocks present:
-  `DockHostRegistry.Get(id)` resolves a manager from a snapshot's
-  host id, and `DockHostModelBridge.Get(manager)` returns the
-  live model so any call site can invoke `model.Dock(content,
-  target)` / `model.Float(content)` / `model.Hide(toolWindow)` /
-  `model.Show(content)` / `model.Close(content)` /
-  `model.Activate(content)` / `model.PinToSide(toolWindow, side)`.
-  The remaining work is the MCP tool registration wiring on
-  `DevtoolsMcpServer` so a JSON-RPC client can address the
-  mutators by `(hostId, paneKey, target)`. Mutator surface is
-  unit-tested via `DockHostModelTests` + drained host-mounted
-  via `NativeDocking_ModelDrain_DockCloseActivatePinAffectsLiveTree`.
+- [x] `docking.dock` MCP tool: moves a pane programmatically for
+  headless test driving. New in P2. `DevtoolsDockingTools.Register`
+  in `src/Reactor/Hosting/Devtools/DevtoolsDockingTools.cs` wires
+  three tools onto the live `DevtoolsMcpServer`:
+  `docking.list` (enumerates hosts via `DockHostRegistry.Snapshot()`
+  with pane count + active key + side counts per host),
+  `docking.snapshot` (returns the full `DockSnapshot` shape via
+  the existing `DockSnapshotBuilder.FromRecord` path), and
+  `docking.dock` (params `{ hostId, paneKey, action, target?, side? }`).
+  The dock tool resolves the manager via `DockHostRegistry.Get(hostId)`
+  → live model via `DockHostModelBridge.Get(manager)` → matching
+  pane via `model.AllContent()` stringified-key match (matches
+  `DockSnapshotPane.Key` so snapshot keys round-trip back to
+  panes). Actions: `dock` (requires `target`), `float`, `hide`
+  (requires ToolWindow), `show`, `close`, `activate`,
+  `pinToSide` (requires ToolWindow + `side`). All tools execute
+  on the UI dispatcher via `server.OnDispatcher<T>(...)`. Tool
+  registration is wired into `ReactorApp.cs:997` right after
+  `DevtoolsLogsTool.Register`. JSON shape uses anonymous-object
+  conversion (`ToJsonShape` / `NodeToJson` / `PaneToJson`) so the
+  AOT path goes through the framework's existing serializer
+  surface without new entries in `DevtoolsJsonContext`. Coverage:
+  11 unit tests in `DevtoolsDockingToolsTests` (each tool's
+  happy path + every error code).
 - [x] No mid-flight drag introspection — spec N6 explicit non-goal.
   The snapshot shape (`DockSnapshot`) intentionally surfaces only
   the persisted layout tree + side strips; no `DockDragSession`

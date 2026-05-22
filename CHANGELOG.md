@@ -77,6 +77,21 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — §2.26 `docking.list` / `docking.snapshot` /
+  `docking.dock` MCP tools.** New
+  `DevtoolsDockingTools.Register(server)` wires three tools onto
+  the live `DevtoolsMcpServer`. `docking.list` enumerates hosts
+  via `DockHostRegistry.Snapshot()` (pane count + active key +
+  side counts per host). `docking.snapshot` returns the
+  `DockSnapshot` for a single host through the existing
+  `DockSnapshotBuilder.FromRecord` path. `docking.dock` accepts
+  `{ hostId, paneKey, action, target?, side? }` and routes through
+  `DockHostModelBridge.Get(manager)` to call the matching
+  `DockHostModel` mutator (dock / float / hide / show / close /
+  activate / pinToSide). All tools execute on the UI dispatcher
+  via `server.OnDispatcher<T>(...)`. Wired into
+  `ReactorApp.cs:1012` next to the existing devtools tools.
+  11 new unit tests in `DevtoolsDockingToolsTests`.
 - **Spec 045 Phase 2 — §2.24 / §2.9 per-pane WindowPersistedScope.**
   New `DockHooks.UseDockPanePersisted<T>(string key, T initial)`
   extension on `RenderContext`. Auto-prefixes the supplied key with

@@ -1010,6 +1010,11 @@ public static class ReactorApp
                 DevtoolsFireTool.Register(mcp, () => host.RootComponent);
                 DevtoolsStateTool.Register(mcp, () => host.RootComponent);
                 DevtoolsLogsTool.Register(mcp, () => LogCaptureInstall.Shared);
+                // Spec 045 §2.26 — docking.list / docking.snapshot / docking.dock.
+                // Backs onto DockHostRegistry + DockSnapshotBuilder + the
+                // DockHostModel mutator queue. Idempotent re-registration is
+                // safe (mcp.Tools.Register replaces by name).
+                DevtoolsDockingTools.Register(mcp);
 
                 mcp.Start();
                 // Ready line fires after the first render — subscribe once to the host.
