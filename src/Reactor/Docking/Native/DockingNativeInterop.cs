@@ -85,6 +85,12 @@ public static class DockingNativeInterop
                 // against this element. Re-registers on each
                 // DockManager-element instance change in `update`.
                 DockHostLiveAnnouncer.Register(element, host);
+                // Spec 045 §2.26 — register the host in the process-
+                // wide registry so MCP tools + devtools introspection
+                // can enumerate live hosts. The registry weak-refs the
+                // element so it doesn't keep mounted layouts alive
+                // after unmount.
+                DockHostRegistry.Register(element);
 
                 // Spec 045 §2.10 — wire keyboard chord accelerators once
                 // at mount. Each accelerator's Invoked handler resolves the
@@ -113,6 +119,7 @@ public static class DockingNativeInterop
                 // ref can still resolve the host (matches the bridge
                 // contract sibling fixtures rely on).
                 DockHostLiveAnnouncer.Register(newEl, host);
+                DockHostRegistry.Register(newEl);
 
                 state.LastElement = newEl;
                 state.LastContent = newContent;
@@ -141,6 +148,7 @@ public static class DockingNativeInterop
                     }
                     DockChordBridge.Clear(el);
                     DockHostLiveAnnouncer.Clear(el);
+                    DockHostRegistry.Unregister(el);
                 }
                 host.Child = null;
                 NativeHostState.SetAttached(host, null);

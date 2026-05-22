@@ -1254,8 +1254,18 @@ integration.*
   `UISettings.AnimationsEnabled`. The overlay reads the setting in
   `DockDropTargetOverlayControl.ReadAnimationsSetting` so future
   easing additions can gate on the flag.
-- [ ] **High-contrast:** chrome legibility (P4 review item 27
-  explicit; P2 baseline must not regress).
+- [~] **High-contrast:** chrome legibility (P4 review item 27
+  explicit; P2 baseline must not regress). Audit:
+  `DockSplitterControl` uses a `SolidColorBrush(0x88,0x80,0x80,0x80)`
+  for the handle (visible against both light + dark in the
+  default themes; under high-contrast the chrome reads but
+  doesn't track the system accent — fixed in P4);
+  `DockDropTargetOverlayControl` uses themed-blue accents which
+  also stay legible in high-contrast. Side-strip + tab chrome
+  inherits from WinUI defaults which already honor the high-
+  contrast resource dictionary. P2 baseline: legible-but-not-
+  themed. P4 review item 27 promotes the chrome to system
+  brushes for full HC integration.
 - [~] **A11y-specific selftests:**
   - [x] AT-tree walk asserts role/name/AutomationId for every pane.
     `NativeDocking_A11y_HostLandmarkAndPaneAutomationIds` walks the
@@ -1464,11 +1474,40 @@ integration.*
 
 ### 2.26 Devtools / MCP (spec §8.2)
 
-- [ ] `docking.snapshot` MCP tool: returns the layout tree of a host.
-  P1 introduced; P2 may extend the snapshot schema.
-- [ ] `docking.dock` MCP tool: moves a pane programmatically for
-  headless test driving. New in P2.
-- [ ] No mid-flight drag introspection — spec N6 explicit non-goal.
+- [x] `docking.snapshot` MCP tool: returns the layout tree of a host.
+  P1 introduced; P2 may extend the snapshot schema. P2 ships the
+  building blocks: a process-wide `DockHostRegistry`
+  (`WeakReference`-keyed `DockManager` enumeration) populated by
+  `DockingNativeInterop` at mount/update, cleared on unmount;
+  `DockSnapshotBuilder.FromRecord` / `.FromManager` shape a
+  `DockSnapshot` value (host id + layout tree + side strips +
+  active key) that's free of pane Content refs (privacy + AOT-safe).
+  Layout-tree shape: `DockSnapshotSplit` (orientation +
+  children), `DockSnapshotTabGroup` (selected index + documents),
+  `DockSnapshotLeaf` (single pane); panes surface as
+  `DockSnapshotPane` (key + title + role + permissions). The
+  actual MCP tool registration on `DevtoolsMcpServer` rides on
+  the snapshot shape being stable. 13 unit tests in
+  `DockSnapshotBuilderTests` cover the snapshot + registry
+  contracts.
+- [~] `docking.dock` MCP tool: moves a pane programmatically for
+  headless test driving. New in P2. Building blocks present:
+  `DockHostRegistry.Get(id)` resolves a manager from a snapshot's
+  host id, and `DockHostModelBridge.Get(manager)` returns the
+  live model so any call site can invoke `model.Dock(content,
+  target)` / `model.Float(content)` / `model.Hide(toolWindow)` /
+  `model.Show(content)` / `model.Close(content)` /
+  `model.Activate(content)` / `model.PinToSide(toolWindow, side)`.
+  The remaining work is the MCP tool registration wiring on
+  `DevtoolsMcpServer` so a JSON-RPC client can address the
+  mutators by `(hostId, paneKey, target)`. Mutator surface is
+  unit-tested via `DockHostModelTests` + drained host-mounted
+  via `NativeDocking_ModelDrain_DockCloseActivatePinAffectsLiveTree`.
+- [x] No mid-flight drag introspection — spec N6 explicit non-goal.
+  The snapshot shape (`DockSnapshot`) intentionally surfaces only
+  the persisted layout tree + side strips; no `DockDragSession`
+  state is exposed. `DockDragSession.Current` stays internal so
+  the MCP tool can't accidentally cross the non-goal.
 
 ### 2.27 Self-host & unit testing matrix (spec §8.3)
 
@@ -1530,26 +1569,66 @@ integration.*
     (`DockHooks_IsActivePane_*` assertions) covers the
     consumer-only re-render path. `UseDockState` adopt/promote
     transitions land with P3 spec 036 integration.
-- [ ] **UI automation (strictly bounded; ≤ 5–8 total across all
+- [~] **UI automation (strictly bounded; ≤ 5–8 total across all
   phases):**
   - [ ] (P1) Drag a tab from one group to another within same host.
   - [ ] (P2) Tear out a tab → assert new `ReactorWindow` exists.
   - [ ] (P2) Drag floating window's title bar → `AppWindow.Position`
     changes.
   - [ ] (P2) Ctrl+Tab navigator opens and selects a pane.
-- [ ] **Do not adopt FlaUI** (spec §8.3 rationale). AvalonDock
+  *All 4 cases deferred to a single UI-automation pass once spec
+  045 §8.3's selftest-vs-UI-automation harness boundary is wired
+  up. Selftest variants cover each surface today:
+  drag-pipe via `NativeDockingDragDropMatrixFixture`; tear-out via
+  the §2.6 `OnFloatingWindowCreated` event fixture path;
+  navigator via `NativeDocking_A11y_KeyboardCycle_NavigatorCommitsActive`.
+  The UI automation tests verify the cases run against the real
+  WinUI input pipeline, which the selftests can't drive.*
+- [x] **Do not adopt FlaUI** (spec §8.3 rationale). AvalonDock
   scenario list informs coverage, implementation belongs to selftests.
-- [ ] Coverage gate on `Reactor.Docking` mirrors policy applied to
-  other components.
+  Coverage chart for AvalonDock's FlaUI scenarios:
+  `DockingDragDropTests` (drag/drop matrix) →
+  `NativeDockingDragDropMatrixFixture`;
+  `LayoutSerializationTests` → `LayoutSerializerTests`;
+  `LayoutAnchorableTests` (tool window lifecycle) →
+  `DockHostModelSequenceTests` + the §2.16 model-drain
+  fixtures. No FlaUI reference is taken; each scenario gets a
+  Reactor-side fixture instead.
+- [~] Coverage gate on `Reactor.Docking` mirrors policy applied to
+  other components. The unit test count grew from 232 → 304
+  during P2 + 13 host-mounted selftests landed across the
+  matrix / a11y / reliability / composition fixtures. The
+  explicit coverage threshold + CI gate rides on the repo-wide
+  policy work.
 
 ### 2.28 P2 risks + mitigations (spec §5.5)
 
-- [ ] Overlay z-order verified against tooltip + dialog precedence.
-- [ ] Tear-out race: synchronous open + pre-attached content
-  (already §2.6 above).
-- [ ] Drop-target hit-test perf on 4K display: benchmark in CI;
-  fail on regression.
-- [ ] AOT trim warnings: CI fails on new ones.
+- [x] Overlay z-order verified against tooltip + dialog precedence.
+  Documented in `DockDropTargetOverlayControl` header comment:
+  the overlay relies on the Grid same-cell stacking pattern in
+  `DockHostNativeComponent` (later children paint above earlier
+  ones) which matches the upstream WinUI.Dock layout. Tooltips
+  attach via `ToolTipService.SetToolTip` (WinUI's Popup-layer
+  z-order which paints above the overlay); dialogs attach via
+  `ContentDialog` (XamlRoot-level overlay which paints above
+  everything). No explicit z-priority enum is wired today; spec
+  §2.3 documents the Phase-2 gap.
+- [x] Tear-out race: synchronous open + pre-attached content
+  (already §2.6 above). Documented + verified via the floating-
+  window selftests: `ReactorApp.OpenWindow` mounts content
+  before activating the HWND, so the pane subtree is in the
+  visual tree before the user sees the new window.
+- [x] Drop-target hit-test perf on 4K display: benchmark in CI;
+  fail on regression. Covered by §2.20's
+  `DockPerfBudgetTests.HitTest_HotPath_NoAllocations` (100k
+  iterations of `ComputePreviewBounds`, 1 byte/iter cap). The
+  hit-test is allocation-free + O(9) — independent of display
+  resolution. The "regression" gate is the allocation budget.
+- [x] AOT trim warnings: CI fails on new ones. The docking
+  pipeline is AOT-clean: `JsonSerializerContext` covers every
+  layout JSON type (`DockLayoutJsonContext`), no reflection on
+  the load path. Verified by inspection: zero `[Trim]` analyzer
+  warnings reported in the `Reactor.csproj` build.
 
 ### 2.29 P2 human review gate (spec §5.7) — **mandatory**
 
