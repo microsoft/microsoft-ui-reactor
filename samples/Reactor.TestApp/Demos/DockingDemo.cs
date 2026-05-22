@@ -44,18 +44,15 @@ class DockingDemo : Component
 
             new DockManager
             {
-                Layout = new DockSplit(Orientation.Horizontal, new DockNode[]
-                {
-                    new DockTabGroup(new DockableContent[]
-                    {
+                Layout = new DockSplit(Orientation.Horizontal, [
+                    new DockTabGroup([
                         new DockableContent(
                             Title: "Items",
                             Content: ListBox(Items, selected, setSelected).Padding(8),
                             Key: "items",
                             CanClose: true),
-                    }, Width: 240),
-                    new DockTabGroup(new DockableContent[]
-                    {
+                    ], Width: 240),
+                    new DockTabGroup([
                         new DockableContent(
                             Title: "Detail",
                             Content: VStack(8,
@@ -69,8 +66,8 @@ class DockingDemo : Component
                             ).Padding(16),
                             Key: "detail",
                             CanClose: true),
-                    }),
-                }),
+                    ]),
+                ]),
             }.WithKey($"dock-{layoutKey}").Flex(grow: 1)
         );
     }
