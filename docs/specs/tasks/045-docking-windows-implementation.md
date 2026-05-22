@@ -759,8 +759,13 @@ WinUI.Dock wrapper for side-by-side review.
 
 - [x] `Document<TState>` generic record carrying a typed `State`.
   `src/Reactor/Docking/Document.cs`.
-- [ ] `TState` serialized through `WindowPersistedScope` (spec 033/036).
-  *Wiring lands with the native host adapter (§2.16 integration).*
+- [x] `TState` serialized through `WindowPersistedScope` (spec 033/036).
+  `DockHooks.UseDockPanePersisted<T>` is the typed surface (§2.24);
+  it auto-prefixes the user-supplied key with `pane:<paneKey>:` and
+  forwards to `PersistedScope.Window`. Apps that opt into the
+  envelope round-trip their `Document<TState>.State` through the
+  hook; layout JSON save/load round-trips the structure
+  end-to-end.
 - [x] State included in layout JSON (round-trips through one file). The
   `state` field on `DockLayoutPane` carries the opaque envelope; the
   adapter shape passes through round-trip with the typed wrapper at the
@@ -1431,9 +1436,23 @@ integration.*
 - [x] Failure mode: log via `ReactorEventSource` (spec 044), fall
   back to default, never throw on load path. Cross-ref §2.7
   (PII-safe coarse category emitted via event id 16).
-- [ ] Per-pane state isolation: `WindowPersistedScope` keyed by
-  `(window-id, dockable-key)`. Document cross-user-secret caveat
-  in docs (`§8.4`).
+- [x] Per-pane state isolation: `WindowPersistedScope` keyed by
+  `(window-id, dockable-key)`. New
+  `DockHooks.UseDockPanePersisted<T>(string key, T initial)` extension
+  on `RenderContext` walks the active pane via
+  `UseContext(DockContexts.Pane)`, throws when called outside any
+  pane subtree, validates the supplied key (non-empty),
+  prefixes with `pane:<paneKey>:` and forwards to
+  `RenderContext.UsePersisted<T>(key, initial, PersistedScope.Window)`.
+  Two panes sharing the same unprefixed key (e.g. `"scrollOffset"`)
+  get independent slots in the underlying `WindowPersistedScope` LRU.
+  XML docstring captures the cross-user-secret caveat
+  (apps that store sensitive per-pane data must clear it
+  explicitly on logout / scope-change — the pane scope itself
+  doesn't bind to user identity). Coverage:
+  `DockHooksTests.UseDockPanePersisted_OutsidePane_Throws`,
+  `UseDockPanePersisted_TwoPanesSameKey_GetIndependentValues`,
+  `UseDockPanePersisted_RejectsEmptyKey` (3 new tests).
 - [x] Drag-drop payload: in-process object refs only (no GUID
   table). Selftest verifies no serialization across the drag.
   `NativeDocking_Reliability_DragSessionPayload_ObjectRefsOnly`

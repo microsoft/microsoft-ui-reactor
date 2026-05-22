@@ -114,4 +114,40 @@ public static class DockHooks
         ArgumentNullException.ThrowIfNull(ctx);
         return ctx.UseContext(DockContexts.LayoutSnapshot);
     }
+
+    /// <summary>
+    /// Per-pane persisted state. Auto-prefixes the supplied key with
+    /// <c>pane:&lt;paneKey&gt;:</c> so two panes that share a key name (e.g.
+    /// <c>"scrollOffset"</c>) get independent stored values instead of
+    /// trampling each other in the underlying <see cref="WindowPersistedScope"/>.
+    /// </summary>
+    /// <remarks>
+    /// Spec 045 §2.9 + §2.24. Resolves the enclosing pane via
+    /// <see cref="UsePane"/>; throws when called outside a pane subtree
+    /// (same contract as <c>UsePane</c>). Internally forwards to
+    /// <see cref="RenderContext.UsePersisted{T}(string, T, PersistedScope)"/>
+    /// with <see cref="PersistedScope.Window"/> so state lives for the
+    /// duration of the host window and is dropped on window unload.
+    /// <para>
+    /// Cross-user-secret caveat (spec §8.4 / §8.9): apps storing sensitive
+    /// per-pane data should clear it explicitly on logout / scope change.
+    /// The pane scope itself does not bind to user identity.
+    /// </para>
+    /// </remarks>
+    public static (T Value, Action<T> Set) UseDockPanePersisted<T>(
+        this RenderContext ctx, string key, T initialValue)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+        ArgumentNullException.ThrowIfNull(key);
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Per-pane persistence key must be non-empty.", nameof(key));
+        var pane = ctx.UseContext(DockContexts.Pane);
+        if (pane is null)
+            throw new InvalidOperationException(
+                "UseDockPanePersisted() must be called from a component rendered inside a docked pane. " +
+                "See spec 045 §2.9 / §5.3.11.");
+        var paneKeyText = pane.Value.Key?.ToString() ?? string.Empty;
+        var scopedKey = $"pane:{paneKeyText}:{key}";
+        return ctx.UsePersisted(scopedKey, initialValue, PersistedScope.Window);
+    }
 }

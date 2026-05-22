@@ -77,6 +77,16 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Added
 
+- **Spec 045 Phase 2 — §2.24 / §2.9 per-pane WindowPersistedScope.**
+  New `DockHooks.UseDockPanePersisted<T>(string key, T initial)`
+  extension on `RenderContext`. Auto-prefixes the supplied key with
+  `pane:<paneKey>:` and forwards to
+  `RenderContext.UsePersisted<T>(key, initial, PersistedScope.Window)`
+  so two panes sharing the same unprefixed key get independent
+  WindowPersistedScope slots. Throws when called outside any
+  pane subtree (same contract as `UsePane`). XML docstring carries
+  the cross-user-secret caveat (apps must clear sensitive per-pane
+  data on logout / scope change). 3 new `DockHooksTests` cases.
 - **Spec 045 Phase 2 — §2.2 per-tab pin button on ToolWindow tabs.**
   `TabViewItemData` gains optional `IsPinnable` / `IsPinned` /
   `PinAutomationName` / `PinAutomationId` / `OnPinRequested` fields.
