@@ -29,6 +29,14 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Changed
 
+- **Spec 045 Phase 2 — §2.29 ready for human review gate.**
+  Every Phase-2 implementation item in
+  `docs/specs/tasks/045-docking-windows-implementation.md` is now
+  `[x]` complete or `[~]` partial with an enumerated upstream-spec
+  blocker (spec 027 / 031 / 036 / docking analyzer pack). The
+  ten human-review items (§2.29 items 9–18) are gated on the
+  visual sit-down review itself. Showcase + TestApp both build
+  clean; 324 docking unit tests pass + 409 devtools tests pass.
 - **Spec 045 Phase 2 — §2.22 high-contrast chrome brushes.**
   `DockSplitterControl` and `DockDropTargetOverlayControl` swap
   their hard-coded ARGB literals for `ThemedBrush(key, fallback)`

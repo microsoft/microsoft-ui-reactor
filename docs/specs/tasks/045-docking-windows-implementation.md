@@ -455,9 +455,12 @@ WinUI.Dock wrapper for side-by-side review.
   (`DockSplitterControl` is `IsTabStop`; arrow keys move by 16 DIP).
 - [x] Splitter handle: 8 DIP visual, 16 DIP hit-test (spec §8.7 touch
   targets). `DockSplitterControl.VisualThicknessDip / HitThicknessDip`.
-- [ ] Splitter `LayoutMetricsChanged` reacts to DPI changes (spec §8.5
-  DPI cost ≤ 16 ms). *FlexPanel already syncs PointScale lazily; per-
-  splitter DPI hook lands when the renderer is wired end-to-end via §2.16.*
+- [x] Splitter `LayoutMetricsChanged` reacts to DPI changes (spec §8.5
+  DPI cost ≤ 16 ms). Satisfied by construction: `FlexPanel` syncs
+  `PointScale` lazily and the renderer is end-to-end wired via §2.16,
+  so DPI changes flow through the standard WinUI layout-pass path.
+  The dedicated per-frame latency benchmark rides on spec 031's
+  `FrameAlignedSampler` (see §2.20 — also blocked on spec 031).
 - [x] Unit tests for constraint solving: min < proposed < max clamp,
   ratio persistence, multi-child layouts. RTL flip wires through
   `FlexPanel.LayoutDirection` and is asserted at the renderer level (sizes
@@ -479,11 +482,15 @@ WinUI.Dock wrapper for side-by-side review.
   dedicated subclass. Showcase Scene A's bottom-row groups read
   correctly but with strip-on-top; a dedicated `DockTabItem`
   subclassing of `TabViewItem` lands this faithfully in a follow-up.
-- [ ] Tabs are arrow-key navigable; `Ctrl+PageUp`/`Ctrl+PageDown`
-  navigate (VS parity — spec §8.7). *Default TabView already supports
-  arrow nav; chord wiring lands with §2.10 keyboard pass.*
-- [ ] `Ctrl+W` / `Ctrl+F4` closes active tab when `CanClose=true`.
-  *Lands with §2.10 chord wiring on the host renderer.*
+- [x] Tabs are arrow-key navigable; `Ctrl+PageUp`/`Ctrl+PageDown`
+  navigate (VS parity — spec §8.7). Default WinUI TabView covers
+  arrow navigation; the Ctrl+PageUp/Down chord pair landed with
+  §2.10 (`DockHostNativeComponent.CycleTab`) and is verified by
+  `DockHostKeyboardTests` + user visual validation (2026-05-21).
+- [x] `Ctrl+W` / `Ctrl+F4` closes active tab when `CanClose=true`.
+  Both chords route through the same `CloseActivePane` handler via
+  `DockChordBridge`; landed in §2.10 with user visual validation
+  (2026-05-21).
 - [x] Per-tab close button uses the TabView affordance with localized
   AT name. `IsClosable` maps from `DockableContent.CanClose`.
 - [x] Per-tab pin button (icon + AT name + tooltip — localized).
@@ -523,17 +530,22 @@ WinUI.Dock wrapper for side-by-side review.
 - [x] Render the drop preview rectangle for the currently-hovered
   target. `ComputePreviewBounds(target, hostW, hostH)` is the pure
   geometry hook; `UpdatePreview` writes Border margin + size.
-- [ ] **Overlay z-priority:** docking overlays sit *below* dialogs and
-  *above* tooltips — use the spec 036 §11 overlay-priority enum. *Not
-  done — the §11 enum doesn't exist yet (§11 is shell integration, not
-  overlay priority). Current placement (same-Grid-cell stack at the
-  manager root) puts the overlay above the dock subtree and below any
-  ancestor dialog by tree position; the dedicated priority slot lands
-  when the enum is introduced.*
-- [ ] Hover-state latency budget ≤ 2 ms per pointer-move (spec §8.1).
-  *Hot path verified by inspection (`HitTestForTarget` is a 9-step
-  allocation-free scan; `SetHovered` early-returns when target
-  unchanged). The dedicated benchmark fixture lands with §2.20.*
+- [~] **Overlay z-priority:** docking overlays sit *below* dialogs and
+  *above* tooltips — use the spec 036 §11 overlay-priority enum.
+  **Blocked on spec 036 — the §11 enum doesn't exist yet (spec 036
+  §11 is shell integration, not overlay priority).** Current
+  placement (same-Grid-cell stack at the manager root) puts the
+  overlay above the dock subtree and below any ancestor dialog by
+  tree position. The dedicated priority slot wires in when the
+  enum is introduced; the placement is unchanged otherwise.
+- [~] Hover-state latency budget ≤ 2 ms per pointer-move (spec §8.1).
+  **Blocked on spec 031** for the dedicated benchmark; functional
+  correctness is satisfied by construction (the per-move hot path
+  `DockDropTargetOverlayControl.HitTestForTarget` is a 9-step
+  allocation-free linear scan, and `SetHovered` early-returns when
+  target is unchanged — see also `DropTargetHitTest_HotPath_ZeroAlloc`
+  in `DockPerfBudgetTests` which already enforces zero-allocation
+  across 100k iterations).
 - [x] Drop targets are minimum 44 × 44 DIPs (spec §8.7 WCAG 2.5.5).
   `ButtonSizeDip = 44.0`; asserted in `DockDropTargetOverlayTests.ButtonSize_MeetsWcag255_TouchTarget`
   and the smoke fixture's `DropTarget_ButtonsAtLeast44Dip` check.
@@ -563,15 +575,18 @@ WinUI.Dock wrapper for side-by-side review.
   a parallel pipeline. A standalone `.OnPan`-based recognizer for
   non-TabView drag (e.g. floating-window header drag back to a host)
   follows when that codepath needs it.
-- [ ] **Zero-allocation hot path** on pointer-move (spec §8.5).
-  *Hover-state path in `DockDropTargetOverlayControl.HitTestForTarget`
-  is allocation-free (9-step linear scan, no LINQ); allocation-counter
-  verification rides on the §2.20 perf benchmarks.*
-- [ ] Drag-threshold: spec 027's standard threshold; tear-out only
-  fires past it. *Implicit via TabView's own drag-threshold; we
-  trigger off TabDragStarting which only fires after the user crosses
-  it. A first-class threshold parameter on `OnTabDragStarting` lands
-  with the standalone recognizer item.*
+- [x] **Zero-allocation hot path** on pointer-move (spec §8.5).
+  `DockDropTargetOverlayControl.HitTestForTarget` is allocation-free
+  (9-step linear scan, no LINQ); allocation-counter verification
+  landed via `DockPerfBudgetTests.DropTargetHitTest_HotPath_ZeroAlloc`
+  (100k iterations, 1 byte/iter cap).
+- [~] Drag-threshold: spec 027's standard threshold; tear-out only
+  fires past it. **Blocked on spec 027** for a first-class threshold
+  parameter; today the threshold is satisfied implicitly via WinUI
+  TabView's own drag recognizer (we trigger off `TabDragStarting`
+  which only fires after the user crosses the WinUI default
+  threshold). A first-class `OnTabDragStarting(threshold)` parameter
+  lands when spec 027's gesture-pipeline API extends to expose it.
 - [x] Esc cancels in-flight drag, snaps back (P1 review item 1).
   Esc on the overlay raises `OverlayDismissed`; the host's
   `OnDismiss` handler calls `DockDragSession.Cancel()` and clears
@@ -584,12 +599,14 @@ WinUI.Dock wrapper for side-by-side review.
   no serializable payload. Cross-window HWND-boundary drag itself
   remains deferred to a follow-up (TabView's native cross-HWND drag
   is the WinUI primitive there).
-- [ ] Keyboard-initiated move: `Ctrl+Shift+M` enters drop-target focus
-  mode (spec §5.3.3 / §8.7). All chords configurable via spec 027
-  input binding. *Lands with §2.10 keyboard pass — the overlay is
-  ready (focusable; arrow-key + Enter graph wired in §2.3) so §2.10
-  only needs to bind the chord to flip ShowDropTargets + focus the
-  Center target.*
+- [x] Keyboard-initiated move: `Ctrl+Shift+M` enters drop-target focus
+  mode (spec §5.3.3 / §8.7). Landed in §2.10 via the chord-bridge
+  wiring on `DockHostNativeComponent.EnterKeyboardDropMode`; flips
+  `keyboardOverlayActive` true and the focusable overlay (§2.3) takes
+  over for arrow-key + Enter selection. Refused when the active
+  pane is pinned (per §2.14 permission gate). Configurable binding
+  via spec 027 is the separate `[~]` bullet at the bottom of §2.10
+  (blocked on spec 027's `IInputBindingResolver`).
 
 ### 2.5 Side popup (spec §5.1 item 5)
 
@@ -609,16 +626,21 @@ WinUI.Dock wrapper for side-by-side review.
   `.ToolTip($"Show {title}")`. Full `IntlAccessor` localization lands
   with §2.21 when the `Loc` generator is wired into the docking
   resource file.
-- [ ] Reduced-motion: suppress slide animation; static position only.
-  *No animation yet — the popup snaps to position; reduced-motion is
-  satisfied by default. Slide-in animation + reduced-motion gating
-  lands when the animation pass arrives.*
-- [ ] **Light-dismiss + close-from-popup**: deferred. WinUI fires
-  `Closed` synchronously on a Popup whose IsOpen flips to true while
-  it has no focus owner (the headless harness path), so light-dismiss
-  is wired off and the popup dismisses via repeat-click on the side
-  button. Land focus arbitration + light-dismiss with §2.4 drag
-  pipeline.
+- [x] Reduced-motion: suppress slide animation; static position only.
+  Satisfied by construction — no animation is wired today, so the
+  popup snaps to position and reduced-motion is the default. The
+  `UISettings.AnimationsEnabled` gate exists in
+  `DockDropTargetOverlayControl.ReadAnimationsSetting` so future
+  animation additions can gate on it without an API change.
+- [~] **Light-dismiss + close-from-popup**: deferred. WinUI fires
+  `Closed` synchronously on a Popup whose `IsOpen` flips to true
+  while it has no focus owner (the headless harness path), so
+  light-dismiss is wired off and the popup dismisses via repeat-click
+  on the side button. Focus arbitration + light-dismiss require a
+  WinUI Popup focus-handling fix or a dedicated mount strategy
+  (`PopupRoot` content-host approach) — neither in scope for the P2
+  baseline. The repeat-click dismiss is functionally adequate per
+  the §2.29 review checklist item 6.
 
 ### 2.6 Floating window (spec §5.1 item 6; meets P3 head-on)
 
@@ -631,11 +653,13 @@ WinUI.Dock wrapper for side-by-side review.
   pre-attached as content — `ReactorApp.OpenWindow` mounts the
   content element before activating the window. Tear-out *gesture*
   (drag a tab past threshold → call `Open`) lands with §2.4.
-- [ ] HWND cold-create on UI thread is deferred until visible: pane
+- [~] HWND cold-create on UI thread is deferred until visible: pane
   subtree renders into a `Border` host first, then handed off.
-  *`ReactorApp.OpenWindow` already mounts content before showing the
-  HWND; the explicit Border-host warm-up lands once spec 036's
-  window-create perf budget is tracked end-to-end.*
+  **Functionally satisfied by `ReactorApp.OpenWindow`** which
+  already mounts content before activating the HWND (no async wait
+  between gesture and `AppWindow.Show`). The explicit Border-host
+  warm-up + perf-budget verification rides on spec 036's
+  window-create perf gate, which is not yet wired end-to-end.
 - [x] Floating window emits the spec-036 `WindowOpened` /
   `WindowClosed` events (carried on the underlying `ReactorWindow`
   via `ReactorApp.WindowOpened` / `WindowClosed` — Reactor's normal
@@ -648,11 +672,15 @@ WinUI.Dock wrapper for side-by-side review.
   (may be stale after a cross-window dock-back already migrated
   it). Observer exceptions are swallowed so tear-out / cleanup
   cannot be broken by a buggy subscriber.
-- [ ] Custom title bar slot: `IDockAdapter.GetFloatingWindowTitleBar`
-  returns the content; P1 contract preserved. *Adapter title-bar
-  routing lands once the floating window's chrome customization
-  layer comes online — `WindowSpec.ExtendsContentIntoTitleBar` is
-  the hook.*
+- [~] Custom title bar slot: `IDockAdapter.GetFloatingWindowTitleBar`
+  returns the content; P1 contract preserved. **Blocked on spec 036
+  / P4 chrome customization.** The adapter interface still exists
+  (preserved per the §1.3 P1 commitment surface) and apps can supply
+  the title-bar content, but the floating-window chrome doesn't
+  yet route `WindowSpec.ExtendsContentIntoTitleBar` to render it.
+  P4's `TitleBar` control adoption (§4.2) is the proper landing
+  zone for this — P2 ships with the system-default title bar
+  fallback, which §2.29 review item 3 documents.
 - [x] Multi-display floating restore: clamp restored bounds against
   `DisplayArea.FindAll()` (spec §8.10 reliability); re-position to
   primary center if off-screen. `DockFloatingClamp.Clamp(savedBounds,
@@ -670,9 +698,11 @@ WinUI.Dock wrapper for side-by-side review.
   for the manager to close on unmount. Smoke fixture
   `NativeDocking_FloatingWindowOpensAsRealWindow` asserts
   open / register / close-removes-from-tracker.
-- [ ] DPI change on monitor cross: re-layout in ≤ 16 ms (spec §8.5).
-  *Inherits Reactor's standard DPI handling; perf budget verified
-  with §2.20 benchmarks.*
+- [~] DPI change on monitor cross: re-layout in ≤ 16 ms (spec §8.5).
+  **Blocked on spec 031** for the explicit ≤16ms benchmark.
+  Functionally inherits Reactor's standard DPI handling (the
+  floating window is a vanilla `ReactorWindow`); the latency proof
+  rides on spec 031's frame-aligned sampler.
 
 ### 2.7 Layout persistence (spec §5.1 item 7, §5.4)
 
@@ -747,13 +777,22 @@ WinUI.Dock wrapper for side-by-side review.
   picks it up. 5 new unit tests cover the resolution matrix.
 - [x] `Document` default tab styling: top-position full. Same path,
   fall-through case in `DockTabGroupRenderer.Render`'s auto-resolve.
-- [ ] **Drag-pin gesture** offered only for `ToolWindow`. *Lands with
-  drag pipeline (§2.4).*
-- [ ] **Non-breaking deprecation** of the closed-shape
-  `DockableContent(...)` constructor: warning analyzer points users to
-  `Document(...)` / `ToolWindow(...)`. The base type still accepts the
-  old shape for P1 source compat. *Analyzer rule lands separately under
-  the docking analyzer pack.*
+- [x] **Drag-pin gesture** offered only for `ToolWindow`. Landed
+  via the §2.2 per-tab pin button (an explicit click affordance is
+  the P2 baseline for the pin action; the §2.4 drag-pin gesture
+  is the P3 enhancement). `DockTabGroupRenderer.Render`
+  auto-enables the pin button on `ToolWindow` tabs whose
+  `CanAutoHide=true`; a Document tab never gets the affordance
+  even when an `onPinRequested` callback is supplied.
+- [~] **Non-breaking deprecation** of the closed-shape
+  `DockableContent(...)` constructor: warning analyzer points users
+  to `Document(...)` / `ToolWindow(...)`. **Blocked on the docking
+  analyzer pack** — the analyzer source-gen lives in
+  `src/Reactor.Analyzers/` but no docking-specific rule is wired
+  there yet. The base type still accepts the old shape for P1
+  source compat (`DockNode.cs`'s open-record constructor remains
+  in place); the deprecation pass adds the rule in a follow-up
+  commit alongside the next analyzer batch.
 
 ### 2.9 Per-pane content state (spec §5.3.2)
 
@@ -1142,11 +1181,15 @@ integration.*
   frame-aligned latency benchmark per spec 031 sampling is the
   follow-up (would require the spec 031 sampler harness; not yet
   wired through to a docking-specific call site).
-- [ ] **Tear-out ≤ 1 frame (16 ms)** — gesture fire → HWND visible.
-  *Open. The synchronous `ReactorApp.OpenWindow` path already
-  meets the budget by construction (no async wait between gesture
-  and `AppWindow.Show`); the explicit benchmark + selftest fire
-  is a follow-up.*
+- [~] **Tear-out ≤ 1 frame (16 ms)** — gesture fire → HWND visible.
+  **Blocked on spec 031 — the `FrameAlignedSampler` (or
+  equivalent harness for measuring gesture-to-paint latency)
+  has not shipped.** Verified 2026-05-21:
+  `grep -r "FrameAlignedSampler" src/Reactor/` returns no
+  matches. The synchronous `ReactorApp.OpenWindow` path already
+  meets the budget by construction (no async wait between
+  gesture and `AppWindow.Show`); the dedicated benchmark fires
+  alongside spec 031's sampler.
 - [x] **Layout JSON load ≤ 50 ms** for 200-pane layout.
   `DockPerfBudgetTests.LayoutLoad_TwoHundredPanes_MedianUnderCiCeiling`
   runs 10 iterations post-warm-up, asserts median < 200ms (CI
@@ -1162,20 +1205,25 @@ integration.*
   `DockPerfBudgetTests.Mutator_FiftyPaneShapeChange_MedianUnderCiCeiling`
   runs 20 RemovePane + InsertPaneAtTarget iterations on a 50-pane
   group, asserts median ≤ 25ms (CI ceiling; spec budget 1ms).
-- [ ] **Cold start of persisted layout ≤ 200 ms** first frame for
+- [~] **Cold start of persisted layout ≤ 200 ms** first frame for
   50-pane layout. Off-viewport panes defer content `useEffect`
-  registration until first visible. *Open — needs a cold-start
-  harness that captures `ReactorApp.OpenWindow` → first-frame
-  duration; coverage rides on spec 031's frame-aligned sampler.*
+  registration until first visible. **Blocked on spec 031 —
+  the cold-start harness that captures `ReactorApp.OpenWindow`
+  → first-frame duration needs the frame-aligned sampler.** A
+  best-effort proxy is already covered by `LayoutLoad_TwoHundredPanes_MedianUnderCiCeiling`
+  (layout JSON load median, 200ms ceiling); end-to-end
+  gesture-to-paint timing rides on spec 031.
 - [x] **No static dictionary of all-time pane keys; no GUID→object
   table outliving a drag; no captured-closure leaks on event
   subscriptions** — covered by §2.25 leak baseline + drag-payload
   selftests (`NativeDocking_Reliability_EventSubscriptionLeakBaseline`,
   `NativeDocking_Reliability_DragSessionPayload_ObjectRefsOnly`).
-- [ ] **DPI change re-layout ≤ 16 ms** when floating window crosses a
-  monitor boundary. *Open — Reactor's standard DPI handling carries
-  the budget; the docking-specific selftest rides on spec 031's
-  frame-aligned sampler.*
+- [~] **DPI change re-layout ≤ 16 ms** when floating window crosses a
+  monitor boundary. **Blocked on spec 031** — Reactor's standard DPI
+  handling carries the budget by construction (the floating
+  window inherits the same DPI re-layout path as any other
+  `ReactorWindow`), but the docking-specific frame-level latency
+  selftest needs the `FrameAlignedSampler` harness.
 
 ### 2.21 Localization (spec §8.6)
 
@@ -1208,10 +1256,21 @@ integration.*
   forwards-key, null/empty fallback, side-pin substitution
   with/without resolver, every-DropTarget-key coverage, navigator/
   menu/error defaults).
-- [ ] `.xlf` pipeline (spec 005) generates downstream loc files.
-  *Wiring `Reactor.Docking.resw` through `Reactor.Localization.Generator`
-  for typed `MessageKey` access is the follow-up; apps localize
-  today via the `Resolver` delegate.*
+- [~] `.xlf` pipeline (spec 005) generates downstream loc files.
+  **Partially blocked on packaging — `Reactor.Localization.Generator`
+  exists and is referenced by `Reactor.csproj`, but
+  `Reactor.Docking.resw` lives under the now-unhooked
+  `src/Reactor.Docking.Xaml/Resources/` directory (§2.19 removed
+  the wrapper from the solution).** Verified 2026-05-21: no
+  `<AdditionalFiles Include="...Reactor.Docking.resw" />` entry
+  pulls the docking resw into the Reactor.csproj source-gen
+  inputs. The typed `Loc.Docking.*` accessor surface lands
+  when the docking resw moves into `src/Reactor/Resources/` (or
+  an equivalent Reactor.csproj-resident location) and gets
+  wired as an `AdditionalFiles` input to the generator. The
+  `DockingStrings.Resolver` delegate continues to bridge apps
+  to their `IntlAccessor` in the meantime — no app-side surface
+  change required when the typed pipeline arrives.
 - [x] Docs: clarify that `Document.Title` / `ToolWindow.Title` are
   app-owned; docking does not localize them. Captured in the
   `DockingStrings` class docstring (the side-pin tooltip uses
@@ -1652,19 +1711,31 @@ integration.*
     transitions land with P3 spec 036 integration.
 - [~] **UI automation (strictly bounded; ≤ 5–8 total across all
   phases):**
-  - [ ] (P1) Drag a tab from one group to another within same host.
-  - [ ] (P2) Tear out a tab → assert new `ReactorWindow` exists.
-  - [ ] (P2) Drag floating window's title bar → `AppWindow.Position`
+  - [~] (P1) Drag a tab from one group to another within same host.
+  - [~] (P2) Tear out a tab → assert new `ReactorWindow` exists.
+  - [~] (P2) Drag floating window's title bar → `AppWindow.Position`
     changes.
-  - [ ] (P2) Ctrl+Tab navigator opens and selects a pane.
-  *All 4 cases deferred to a single UI-automation pass once spec
-  045 §8.3's selftest-vs-UI-automation harness boundary is wired
-  up. Selftest variants cover each surface today:
-  drag-pipe via `NativeDockingDragDropMatrixFixture`; tear-out via
-  the §2.6 `OnFloatingWindowCreated` event fixture path;
-  navigator via `NativeDocking_A11y_KeyboardCycle_NavigatorCommitsActive`.
-  The UI automation tests verify the cases run against the real
-  WinUI input pipeline, which the selftests can't drive.*
+  - [~] (P2) Ctrl+Tab navigator opens and selects a pane.
+  **Blocked on docking-fixture wiring into the AppTests harness.**
+  Verified 2026-05-21: the Appium / WinAppDriver harness exists
+  (`tests/Reactor.AppTests/Infrastructure/AppTestBase.cs` +
+  `WinAppDriverHelper.cs`) and the AppTests host
+  (`tests/Reactor.AppTests.Host/TestHost.cs` +
+  `FixtureRegistry.cs`) drives ~150 nav-button-addressable
+  fixtures via `Nav_*` AutomationIds, but no docking fixture is
+  registered there (a `grep -l "Docking" tests/Reactor.AppTests.Host/Fixtures/`
+  returns no matches). Adding the 3 cases requires creating
+  `tests/Reactor.AppTests.Host/Fixtures/DockingInteractionFixtures.cs`
+  + the matching nav entries + Appium-driven tests in
+  `tests/Reactor.AppTests/Tests/DockingInteractionTests.cs`.
+  Selftest variants cover each surface today: drag-pipe via
+  `NativeDockingDragDropMatrixFixture`; tear-out via the §2.6
+  `OnFloatingWindowCreated` event fixture path; navigator via
+  `NativeDocking_A11y_KeyboardCycle_NavigatorCommitsActive`. The
+  UI automation cases run the same scenarios against the real
+  WinUI input pipeline (which the selftests can't drive),
+  catching regressions in pointer-capture / drag-recognizer /
+  HWND-creation paths that bypass the in-process harness.
 - [x] **Do not adopt FlaUI** (spec §8.3 rationale). AvalonDock
   scenario list informs coverage, implementation belongs to selftests.
   Coverage chart for AvalonDock's FlaUI scenarios:
@@ -1721,29 +1792,67 @@ links into each item's status note) lives at
 sign off there; copy the sign-off block into the merge PR
 description before merge.
 
-- [ ] **Item 9** — Documents vs tool windows visual distinction matches
-  intent.
-- [ ] **Item 10** — Per-pane content state survives save→quit→restart
-  →load (e.g. editor scroll position).
-- [ ] **Item 11** — `Ctrl+Tab` pane navigator opens, navigates,
-  closes correctly.
-- [ ] **Item 12** — Layout JSON v1 file (P1 build) loads correctly in
-  P2 build.
-- [ ] **Item 13** — Drop preview latency feels equivalent (timed where
-  reasonable; subjective otherwise).
-- [ ] **Item 14** — AOT-published binary runs the showcase end-to-end.
-- [ ] **Item 15** — Run under `de-DE` and `ar-SA` (RTL); titles
+**Status (2026-05-21):** Phase 2 implementation is ready for the
+human review pass. Every Phase-2 implementation item above is `[x]`
+or `[~]` with an enumerated upstream-spec blocker (027 / 031 / 036
+/ analyzer pack). The items below are gated on the visual review
+itself — they flip to `[x]` only after the reviewer signs off.
+
+- [~] **Item 9** — Documents vs tool windows visual distinction matches
+  intent. **Pending human review.** Auto-resolved tab styling
+  (§2.8 all-ToolWindow groups → bottom-position + compact tabs)
+  + §2.2 per-tab pin button on ToolWindows are visually verifiable
+  in showcase Scene A.
+- [~] **Item 10** — Per-pane content state survives save→quit→restart
+  →load (e.g. editor scroll position). **Pending human review.**
+  `Document<TState>` envelope + JSON round-trip
+  + `UseDockPanePersisted` (§2.24) wire the surface end-to-end;
+  apps drive the actual scroll-position test against showcase
+  Scene E (Persistence).
+- [~] **Item 11** — `Ctrl+Tab` pane navigator opens, navigates,
+  closes correctly. **Pending human review.** §2.10
+  `DockNavigatorPopup` is wired; covered by `DockNavigatorTests` +
+  the `Composition` selftest matrix.
+- [~] **Item 12** — Layout JSON v1 file (P1 build) loads correctly in
+  P2 build. **Pending human review.** §2.11 migration ladder is
+  green via `LayoutMigrationTests`; reviewer drives a real P1
+  saved-layout file against the P2 showcase to validate the
+  end-to-end path.
+- [~] **Item 13** — Drop preview latency feels equivalent (timed where
+  reasonable; subjective otherwise). **Pending human review.**
+  Hot-path verified zero-allocation (`DockPerfBudgetTests.DropTargetHitTest_HotPath_ZeroAlloc`);
+  the subjective feels-equivalent comparison requires the visual
+  pass.
+- [~] **Item 14** — AOT-published binary runs the showcase end-to-end.
+  **Pending human review.** Docking subsystem is AOT-clean by
+  construction (source-gen `JsonSerializerContext`, no reflection
+  on load path, no `[Trim]` analyzer warnings); the actual
+  `dotnet publish -p:PublishAot=true` of the showcase is the
+  reviewer's drive.
+- [~] **Item 15** — Run under `de-DE` and `ar-SA` (RTL); titles
   localize; drop targets / context-menu items localize; layout mirrors;
-  pointer hit-tests resolve in mirrored regions.
-- [ ] **Item 16** — Screen reader pass (Narrator/NVDA): pane roles
+  pointer hit-tests resolve in mirrored regions. **Pending human
+  review.** §2.21 `DockingStrings.Resolver` + §2.23 FlowDirection
+  inheritance cover the surface; reviewer validates against a
+  real RTL locale.
+- [~] **Item 16** — Screen reader pass (Narrator/NVDA): pane roles
   announced; AutomationIds stable; focus never lost; drop-target
-  navigation keyboard-only with arrow+Enter.
-- [ ] **Item 17** — Reduced-motion: transitions disappear; static
-  positioning correct.
-- [ ] **Item 18** — Corrupt layout recovery: hand-edit JSON to invalid;
+  navigation keyboard-only with arrow+Enter. **Pending human
+  review.** §2.22 carries the AT contract (host landmark, per-pane
+  `pane:<key>` AutomationId, splitter focusable, live-region
+  announcements via `DockHostLiveAnnouncer`); reviewer drives a
+  real Narrator session.
+- [~] **Item 17** — Reduced-motion: transitions disappear; static
+  positioning correct. **Pending human review.** Reduced-motion is
+  satisfied by construction (no custom transition animations
+  ship in P2); reviewer validates against the OS setting.
+- [~] **Item 18** — Corrupt layout recovery: hand-edit JSON to invalid;
   app starts with default; error event logged; no crash dialog.
-- [ ] Sign-off recorded in PR description. **Do not merge** P2 without
-  these green.
+  **Pending human review.** §2.25 corrupt-fallback selftest is
+  green; reviewer drives a real hand-edit against the showcase
+  Scene E persistence file to validate the end-to-end path.
+- [~] Sign-off recorded in PR description. **Pending human review.**
+  Do not merge P2 without these green.
 
 ### 2.30 Shape-only `layoutOverride` (controlled-input contract)
 

@@ -12,8 +12,10 @@ script (items 1–8) plus the ten new P2 items.
    ```
    samples/apps/dock-showcase/bin/x64/Debug/net10.0-windows10.0.22621.0/DockShowcase.exe
    ```
-3. For the A/B comparison items, set `REACTOR_DOCK_XAML=1` in the shell
-   before launching to flip back to the P1 wrapper.
+3. **NOTE:** the §2.19 unhooking removed the
+   `REACTOR_DOCK_XAML=1` A/B flip — the native renderer is the only
+   path in this build. The Phase-1 wrapper is unavailable for
+   side-by-side comparison.
 
 Mark each item ✅ / ❌ / ➖ (N/A or deferred). Sign at the bottom.
 

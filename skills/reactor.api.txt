@@ -773,6 +773,7 @@ RenderContext.UseDataSource<T>(IDataSource<T> source, DataRequest request, Query
 RenderContext.UseDevtools() → bool
 RenderContext.UseDockHost() → DockHostModel
 RenderContext.UseDockLayout() → DockLayoutSnapshot
+RenderContext.UseDockPanePersisted<T>(string key, T initialValue) → ValueTuple<T, Action<T>>
 RenderContext.UseDockState() → DockPaneState
 RenderContext.UseDpi() → UInt32
 RenderContext.UseEffect(Action effect, object[] dependencies) → void
