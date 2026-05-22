@@ -1869,13 +1869,25 @@ public sealed partial class Reconciler
             var newTab = n.Tabs[i];
             if (items[i] is not WinUI.TabViewItem tvi) continue;
 
-            // Spec 045 §2.2 — pin button. Rebuild the Header whenever a
-            // pin-related field flips (most apps treat IsPinned as a
-            // static visual state per render, but the OnPinRequested
-            // closure typically updates per render to capture state).
-            // When IsPinnable is false on both sides, keep the cheap
-            // string-header path.
-            if (newTab.IsPinnable || oldTab.IsPinnable)
+            // Spec 045 §2.2 — pin button. When both sides are pinnable
+            // AND the visible/identity fields match, update the existing
+            // header in place: refresh the pin button's Tag so the
+            // captured Click handler picks up the new OnPinRequested
+            // closure, refresh the glyph for IsPinned state, and
+            // overwrite the TextBlock text. Unconditionally calling
+            // BuildTabHeader here replaces the entire StackPanel +
+            // TextBlock + Button visual tree on every reconcile pass,
+            // which steals focus from any control in a sibling tab when
+            // a parent component's setState triggers a full-tree
+            // re-render (e.g. typing in an editor that lives in a
+            // different tab group from a pinnable tool window).
+            if (newTab.IsPinnable && oldTab.IsPinnable
+                && tvi.Header is WinUI.StackPanel existingHeader
+                && TryUpdatePinHeaderInPlace(existingHeader, oldTab, newTab))
+            {
+                // In-place succeeded; nothing else to do.
+            }
+            else if (newTab.IsPinnable || oldTab.IsPinnable)
             {
                 tvi.Header = BuildTabHeader(newTab);
             }

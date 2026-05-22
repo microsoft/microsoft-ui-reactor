@@ -34,6 +34,7 @@ ReactorApp.Run<DockShowcaseRoot>(
     title: "Reactor Docking Showcase",
     width: 1200,
     height: 800,
+    devtools: true,
     configure: host => DockingNativeInterop.Register(host.Reconciler));
 
 // ════════════════════════════════════════════════════════════════════════
@@ -47,7 +48,14 @@ class DockShowcaseRoot : Component
         var (scene, setScene) = UseState("ide");
 
         var menu = VStack(0,
-            TextBlock("Reactor Docking Showcase").SemiBold().Margin(8, 8, 8, 12),
+            // Title row with the devtools ⚡ trigger. Click ⚡ → flyout with
+            // "Highlight reconcile changes" toggle (red = mounted,
+            // yellow = modified). Built into ReactorApp when
+            // devtools:true is passed at startup.
+            HStack(6,
+                TextBlock("Reactor Docking Showcase").SemiBold().Flex(grow: 1),
+                DevtoolsMenu()
+            ).Margin(8, 8, 8, 12),
             SceneButton("ide",          "Scene A — IDE Layout",        scene, setScene),
             SceneButton("floating",     "Scene B — Floating Tear-Out", scene, setScene),
             SceneButton("sidepin",      "Scene C — Side Pin",          scene, setScene),
@@ -237,23 +245,16 @@ class SceneAIde : Component
                                     new DockableContent(
                                         Title: "MainView.xaml",
                                         Key: "doc:mainview-xaml",
-                                        Content: VStack(4,
-                                            TextBlock("// MainView.xaml").SemiBold(),
-                                            TextBlock("<Page xmlns=...>").Opacity(0.7),
-                                            TextBlock("  <Grid>").Opacity(0.7),
-                                            TextBlock("    <!-- … -->").Opacity(0.7),
-                                            TextBlock("  </Grid>").Opacity(0.7),
-                                            TextBlock("</Page>").Opacity(0.7)
-                                        ).Padding(12),
+                                        Content: EditorPane(
+                                            "// MainView.xaml",
+                                            "<Page xmlns=\"...\">\n  <Grid>\n    <!-- edit me -->\n  </Grid>\n</Page>"),
                                         CanClose: true),
                                     new DockableContent(
                                         Title: "MainViewModel.cs",
                                         Key: "doc:mainviewmodel-cs",
-                                        Content: VStack(4,
-                                            TextBlock("// MainViewModel.cs").SemiBold(),
-                                            TextBlock("public sealed class MainViewModel").Opacity(0.7),
-                                            TextBlock("{ … }").Opacity(0.7)
-                                        ).Padding(12),
+                                        Content: EditorPane(
+                                            "// MainViewModel.cs",
+                                            "public sealed class MainViewModel\n{\n    // type here\n}"),
                                         CanClose: true),
                                 },
                                 ShowWhenEmpty: true),
@@ -264,22 +265,16 @@ class SceneAIde : Component
                                     new DockableContent(
                                         Title: "Solution Explorer",
                                         Key: "tool:solution-explorer",
-                                        Content: VStack(2,
-                                            TextBlock("📁 MyApp.sln").SemiBold(),
-                                            TextBlock("  📂 src").Margin(8, 0, 0, 0),
-                                            TextBlock("    📄 main.cs").Margin(16, 0, 0, 0),
-                                            TextBlock("    📄 App.razor").Margin(16, 0, 0, 0)
-                                        ).Padding(8),
+                                        Content: FilterPane(
+                                            "📁 MyApp.sln",
+                                            "Filter (Ctrl+;)",
+                                            new[] { "📂 src", "    📄 main.cs", "    📄 App.razor" }),
                                         CanClose: true,
                                         CanPin: true),
                                     new DockableContent(
                                         Title: "Git Changes",
                                         Key: "tool:git-changes",
-                                        Content: VStack(2,
-                                            TextBlock("Branch: feat/045-docking-windows-p1").Opacity(0.8),
-                                            TextBlock("  M  samples/apps/dock-showcase/App.cs"),
-                                            TextBlock("   M src/Reactor/Docking/Native/DockHostNativeComponent.cs")
-                                        ).Padding(8),
+                                        Content: GitChangesPane(),
                                         CanClose: true,
                                         CanPin: true),
                                 },
@@ -301,11 +296,7 @@ class SceneAIde : Component
                                     new DockableContent(
                                         Title: "Error List",
                                         Key: "tool:error-list",
-                                        Content: VStack(2,
-                                            TextBlock("⚠ 0 Errors    ⚠ 2 Warnings    ℹ 1 Message").Opacity(0.8),
-                                            TextBlock("CS8602  Possible null dereference  ViewModel.cs(42,17)"),
-                                            TextBlock("CS0618  'Foo' is obsolete           Bar.cs(13,5)")
-                                        ).Padding(8),
+                                        Content: ErrorListPane(),
                                         CanClose: true,
                                         CanPin: true),
                                 },
@@ -317,20 +308,13 @@ class SceneAIde : Component
                                     new DockableContent(
                                         Title: "Output",
                                         Key: "tool:output",
-                                        Content: VStack(2,
-                                            TextBlock("[12:34:01] Build started.").Opacity(0.8),
-                                            TextBlock("[12:34:18] Build succeeded.").Opacity(0.8)
-                                        ).Padding(8),
+                                        Content: OutputPane(),
                                         CanClose: true,
                                         CanPin: true),
                                     new DockableContent(
                                         Title: "Terminal",
                                         Key: "tool:terminal",
-                                        Content: VStack(2,
-                                            TextBlock("PS C:\\code\\reactor2&gt;").SemiBold(),
-                                            TextBlock("  git status").Opacity(0.7),
-                                            TextBlock("On branch feat/045-docking-windows-p1").Opacity(0.7)
-                                        ).Padding(8),
+                                        Content: TerminalPane(),
                                         CanClose: true,
                                         CanPin: true),
                                 },
@@ -340,6 +324,198 @@ class SceneAIde : Component
                         Height: 200),
                 });
     }
+
+    // ── Editable pane content factories ────────────────────────────────
+    //
+    // Each docked pane gets a TextField (or AcceptsReturn=multiline) so
+    // we can observe keyboard focus / input routing through the docking
+    // host. Spec 045 §2.10 + §2.14 invariants we're stressing here:
+    //   • Clicking a TextField inside a pane gives it keyboard focus.
+    //   • Typing into the focused TextField does NOT trigger chord
+    //     accelerators (Ctrl+Tab / Ctrl+W must reach the editor when it
+    //     owns focus, not the host's KeyboardAccelerator surface).
+    //   • Tab inside a TextField should advance focus within the pane,
+    //     not skip to the next docked group.
+    //   • A drag of the pane preserves the TextField's current value
+    //     (controlled-input pattern through the §2.30 shape-only
+    //     override + Memo-component state slot).
+    //
+    // Each pane uses Memo(ctx => …) so it holds its own UseState slot;
+    // local edits survive parent re-renders + docking layout swaps.
+
+    private static Element EditorPane(string banner, string initial) =>
+        Memo(ctx =>
+        {
+            var (text, setText) = ctx.UseState(initial);
+            // INTENTIONALLY MINIMAL: a single-line controlled TextField,
+            // no .Set, no AcceptsReturn, no typography modifiers. This
+            // isolates whether the focus-loss-on-keystroke bug is in
+            // the controlled-TextField/Memo-state base case or in one
+            // of the optional modifiers / multi-line config.
+            return VStack(6,
+                TextBlock(banner).SemiBold(),
+                TextField(text, setText, placeholder: "edit me…")
+            ).Padding(12);
+        });
+
+    private static Element FilterPane(string banner, string filterPlaceholder, string[] items) =>
+        Memo(ctx =>
+        {
+            var (filter, setFilter) = ctx.UseState(string.Empty);
+            var rows = filter.Length == 0
+                ? items
+                : items.Where(s => s.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var rowElements = rows
+                .Select(r => (Element)TextBlock(r).Margin(8, 0, 0, 0))
+                .ToArray();
+            return VStack(4,
+                TextBlock(banner).SemiBold(),
+                TextField(filter, setFilter, placeholder: filterPlaceholder),
+                VStack(2, rowElements)
+            ).Padding(8);
+        });
+
+    private static Element GitChangesPane() =>
+        Memo(ctx =>
+        {
+            var (message, setMessage) = ctx.UseState(string.Empty);
+            var (history, setHistory) = ctx.UseState<List<string>>(new List<string>());
+            void Commit()
+            {
+                if (string.IsNullOrWhiteSpace(message)) return;
+                setHistory(new List<string>(history) { message.Trim() });
+                setMessage(string.Empty);
+            }
+            var changes = new[]
+            {
+                "  M  samples/apps/dock-showcase/App.cs",
+                "   M src/Reactor/Docking/Native/DockHostNativeComponent.cs",
+            };
+            var changeElements = changes
+                .Select(c => (Element)TextBlock(c).FontFamily("Consolas, Courier New, monospace").FontSize(11))
+                .ToArray();
+            var historyElements = history.Count == 0
+                ? new Element[] { TextBlock("(no commits yet)").Opacity(0.5).FontSize(10) }
+                : history.Select(h => (Element)TextBlock($"✓ {h}").Opacity(0.75).FontSize(11)).ToArray();
+            return VStack(6,
+                TextBlock("Branch: feat/045-docking-windows-p2").Opacity(0.8),
+                VStack(2, changeElements),
+                TextBlock("Commit message").SemiBold().Margin(0, 8, 0, 0),
+                TextField(message, setMessage, placeholder: "Describe the change…")
+                    .Set(tb => { tb.AcceptsReturn = true; tb.MinHeight = 60; }),
+                Button("Commit", Commit),
+                TextBlock("History").SemiBold().Margin(0, 8, 0, 0),
+                VStack(2, historyElements)
+            ).Padding(8);
+        });
+
+    private static Element ErrorListPane() =>
+        Memo(ctx =>
+        {
+            var (filter, setFilter) = ctx.UseState(string.Empty);
+            var entries = new[]
+            {
+                "CS8602  Possible null dereference  ViewModel.cs(42,17)",
+                "CS0618  'Foo' is obsolete           Bar.cs(13,5)",
+                "IL2080  Reflection mismatch         PreviewCaptureServerTests.cs(297,21)",
+            };
+            var visible = filter.Length == 0
+                ? entries
+                : entries.Where(e => e.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var rowElements = visible
+                .Select(e => (Element)TextBlock(e).FontFamily("Consolas, Courier New, monospace").FontSize(11))
+                .ToArray();
+            return VStack(6,
+                TextBlock($"⚠ 0 Errors    ⚠ {entries.Length} Warnings    ℹ 1 Message").Opacity(0.8),
+                TextField(filter, setFilter, placeholder: "Filter by code, file, or message…"),
+                VStack(2, rowElements)
+            ).Padding(8);
+        });
+
+    private static Element OutputPane() =>
+        Memo(ctx =>
+        {
+            var (log, setLog) = ctx.UseState<List<string>>(new List<string>
+            {
+                "[12:34:01] Build started.",
+                "[12:34:18] Build succeeded.",
+            });
+            var (entry, setEntry) = ctx.UseState(string.Empty);
+            void Append()
+            {
+                if (string.IsNullOrWhiteSpace(entry)) return;
+                setLog(new List<string>(log) { $"[{DateTime.Now:HH:mm:ss}] {entry}" });
+                setEntry(string.Empty);
+            }
+            var lines = log
+                .Select(l => (Element)TextBlock(l).FontFamily("Consolas, Courier New, monospace").FontSize(11).Opacity(0.85))
+                .ToArray();
+            return VStack(6,
+                VStack(2, lines),
+                HStack(6,
+                    TextField(entry, setEntry, placeholder: "Append output line… (Enter)")
+                        .Set(tb =>
+                        {
+                            tb.KeyDown += (s, e) =>
+                            {
+                                if (e.Key == Windows.System.VirtualKey.Enter)
+                                {
+                                    e.Handled = true;
+                                    Append();
+                                }
+                            };
+                        })
+                        .Flex(grow: 1),
+                    Button("Append", Append)
+                )
+            ).Padding(8);
+        });
+
+    private static Element TerminalPane() =>
+        Memo(ctx =>
+        {
+            var (history, setHistory) = ctx.UseState<List<string>>(new List<string>
+            {
+                "PS C:\\code\\reactor2> git status",
+                "On branch feat/045-docking-windows-p2",
+                "nothing to commit, working tree clean",
+            });
+            var (input, setInput) = ctx.UseState(string.Empty);
+            void RunCommand()
+            {
+                if (string.IsNullOrWhiteSpace(input)) return;
+                var next = new List<string>(history)
+                {
+                    $"PS C:\\code\\reactor2> {input}",
+                    $"(simulated output for: {input.Trim()})",
+                };
+                setHistory(next);
+                setInput(string.Empty);
+            }
+            var lines = history
+                .Select(l => (Element)TextBlock(l).FontFamily("Consolas, Courier New, monospace").FontSize(11))
+                .ToArray();
+            return VStack(4,
+                VStack(2, lines),
+                HStack(6,
+                    TextBlock("PS&gt;").FontFamily("Consolas, Courier New, monospace").SemiBold(),
+                    TextField(input, setInput, placeholder: "Type a command and press Enter…")
+                        .Set(tb =>
+                        {
+                            tb.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas, Courier New, monospace");
+                            tb.KeyDown += (s, e) =>
+                            {
+                                if (e.Key == Windows.System.VirtualKey.Enter)
+                                {
+                                    e.Handled = true;
+                                    RunCommand();
+                                }
+                            };
+                        })
+                        .Flex(grow: 1)
+                )
+            ).Padding(8);
+        });
 
     private static string SafeSerialize(DockNode? root)
     {

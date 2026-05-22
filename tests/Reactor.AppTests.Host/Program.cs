@@ -45,4 +45,10 @@ else if (args.Contains("--stress-child"))
         "Stress Child", width: 320, height: 160, devtools: true);
 }
 else
-    ReactorApp.Run<TestHost>("Reactor Test Host", width: 1200, height: 800);
+    ReactorApp.Run<TestHost>(
+        "Reactor Test Host",
+        width: 1200,
+        height: 800,
+        // Spec 045 — register the native docking interop so docking E2E
+        // fixtures (DockingInput_*) realize their tab/splitter chrome.
+        configure: host => Microsoft.UI.Reactor.Docking.Native.DockingNativeInterop.Register(host.Reconciler));

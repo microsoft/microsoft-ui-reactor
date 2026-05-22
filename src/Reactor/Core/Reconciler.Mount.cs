@@ -1625,6 +1625,56 @@ public sealed partial class Reconciler
         return sp;
     }
 
+    /// <summary>
+    /// In-place refresh of a pinnable tab header built by
+    /// <see cref="BuildTabHeader"/>. Updates the embedded TextBlock + pin
+    /// Button's Tag (so the captured Click handler resolves to the new
+    /// OnPinRequested closure) + the FontIcon glyph for IsPinned state.
+    /// Returns <c>false</c> when the existing StackPanel doesn't match
+    /// the expected shape — the caller should fall back to a full
+    /// rebuild. Spec 045 §2.2; called by <c>UpdateTabView</c>.
+    /// </summary>
+    private static bool TryUpdatePinHeaderInPlace(
+        WinUI.StackPanel existing,
+        TabViewItemData oldTab,
+        TabViewItemData newTab)
+    {
+        if (existing.Children.Count != 2) return false;
+        if (existing.Children[0] is not WinUI.TextBlock label) return false;
+        if (existing.Children[1] is not WinUI.Button pinBtn) return false;
+        if (pinBtn.Content is not WinUI.FontIcon icon) return false;
+
+        if (label.Text != newTab.Header) label.Text = newTab.Header;
+
+        // Tag carries the live TabViewItemData; the Click handler reads
+        // .OnPinRequested off the Tag. Swapping the Tag swaps the
+        // closure without touching the visual tree.
+        pinBtn.Tag = newTab;
+
+        var newGlyph = newTab.IsPinned ? "" : "";
+        if (icon.Glyph != newGlyph) icon.Glyph = newGlyph;
+
+        if (oldTab.PinAutomationName != newTab.PinAutomationName)
+        {
+            if (!string.IsNullOrEmpty(newTab.PinAutomationName))
+            {
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(pinBtn, newTab.PinAutomationName);
+                Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(pinBtn, newTab.PinAutomationName);
+            }
+            else
+            {
+                pinBtn.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.NameProperty);
+                Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(pinBtn, null);
+            }
+        }
+        if (oldTab.PinAutomationId != newTab.PinAutomationId
+            && !string.IsNullOrEmpty(newTab.PinAutomationId))
+        {
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(pinBtn, newTab.PinAutomationId);
+        }
+        return true;
+    }
+
     private static WinUI.Button BuildPinButton(TabViewItemData tabItem)
     {
         var btn = new WinUI.Button

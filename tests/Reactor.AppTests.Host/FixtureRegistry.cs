@@ -143,6 +143,10 @@ internal static class FixtureRegistry
 
         // Devtools UX (spec 028 — E2E validation)
         "DevtoolsUx_MenuAndToggle",
+
+        // Docking input (spec 045 — E2E validation of keyboard focus
+        // across docking layout mutations)
+        "DockingInput_TwoPaneTextFields",
     ];
 
     public static Element? Build(string name, RenderContext ctx) => name switch
@@ -277,6 +281,9 @@ internal static class FixtureRegistry
         "Gesture_LongPress" => GestureE2EFixtures.LongPressTest(ctx),
         "DragDrop_TypedReorder" => DragDropE2EFixtures.TypedReorderTest(ctx),
         "DragDrop_TextFormat" => DragDropE2EFixtures.TextFormatTest(ctx),
+
+        // Docking input (spec 045 — E2E validation)
+        "DockingInput_TwoPaneTextFields" => DockingInputE2EFixtures.TwoPaneTextFieldTest(ctx),
 
         _ => null,
     };
