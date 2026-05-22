@@ -890,9 +890,10 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_TrayIconRoundTrip",
         "WindowModel_UseOpenWindowReusesByKey",
         "WindowModel_MutatorsOwnerAndGuards",
-        // Docking smoke (spec 045 §1.7)
-        "Docking_TwoPaneMountUpdateUnmount",
-        "Docking_KeyedPanePreservation",
+        // Spec 045 §2.19 — Phase-1 wrapper-based Docking_* smoke fixtures
+        // were retired with the XAML wrapper at the §2.29 review gate.
+        // NativeDocking_* below covers the same surface against the P2
+        // native renderer.
         // Native (P2) docking smoke (spec 045 §2.1, §2.2, §2.5, §2.6, §2.16, §2.17)
         "NativeDocking_TwoPaneMountUpdateUnmount",
         "NativeDocking_TabGroupRendersToTabView",

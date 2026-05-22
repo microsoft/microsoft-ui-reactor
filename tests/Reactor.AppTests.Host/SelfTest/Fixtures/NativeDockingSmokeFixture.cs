@@ -1027,7 +1027,10 @@ internal static class NativeDockingSmokeFixtures
             var liveLayout = BuildInitial();
             host.Mount(_ => new DockManager { Layout = liveLayout });
             await Harness.Render();
-            await Task.Delay(400); // let the eye register the 2×2 baseline
+            // Visual-demo "let the eye register" pauses kept short so the
+            // 20-step walk stays well inside the §SelfTestRunner.FixtureTimeout
+            // (15s) under CI load. Bump back up locally for slow-motion runs.
+            await Task.Delay(50);
 
             // Targets we walk through in each group.
             var targets = new[]
@@ -1062,7 +1065,7 @@ internal static class NativeDockingSmokeFixtures
                     liveLayout = BuildInitial();
                     host.Mount(_ => new DockManager { Layout = liveLayout });
                     await Harness.Render();
-                    await Task.Delay(150);
+                    await Task.Delay(20);
 
                     // Find the target group in the fresh tree by anchor.
                     var targetGroup = FindGroupContaining(liveLayout, anchor);
@@ -1094,7 +1097,7 @@ internal static class NativeDockingSmokeFixtures
                     int splits = CountSplits(liveLayout);
                     if (target != DockTarget.Center && splits > 3) splitObserved++;
 
-                    await Task.Delay(350); // observer pause
+                    await Task.Delay(30); // observer pause — minimal for CI; bump for manual demo
                 }
             }
 

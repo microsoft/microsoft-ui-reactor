@@ -146,8 +146,45 @@ public static class DockHooks
             throw new InvalidOperationException(
                 "UseDockPanePersisted() must be called from a component rendered inside a docked pane. " +
                 "See spec 045 §2.9 / §5.3.11.");
-        var paneKeyText = pane.Value.Key?.ToString() ?? string.Empty;
-        var scopedKey = $"pane:{paneKeyText}:{key}";
+        var scopedKey = BuildPersistedKey(pane.Value.Key, key);
         return ctx.UsePersisted(scopedKey, initialValue, PersistedScope.Window);
+    }
+
+    /// <summary>
+    /// Encodes the per-pane persisted key as
+    /// <c>pane:&lt;typeName&gt;|&lt;paneKey&gt;:&lt;userKey&gt;</c>, escaping
+    /// colons in the user-supplied portions so two panes whose
+    /// <see cref="DockableContent.Key"/> values share a string
+    /// representation but differ in runtime type (e.g. <c>"42"</c> vs.
+    /// <c>42</c>) get independent persisted slots — and so user keys
+    /// containing <c>:</c> can't construct ambiguous scopes. Spec §2.9.
+    /// </summary>
+    /// <remarks>
+    /// Internal-but-test-visible for collision regression tests.
+    /// </remarks>
+    internal static string BuildPersistedKey(object? paneKey, string userKey)
+    {
+        var paneType = paneKey?.GetType().FullName ?? "null";
+        var paneKeyText = paneKey?.ToString() ?? string.Empty;
+        return string.Concat(
+            "pane:",
+            EscapeKeySegment(paneType),
+            "|",
+            EscapeKeySegment(paneKeyText),
+            ":",
+            EscapeKeySegment(userKey));
+    }
+
+    // Escape `%` first (otherwise it would double-escape), then `:` and
+    // `|` which are the structural separators. Allocation-light — only
+    // copies the string when an escape is actually required.
+    private static string EscapeKeySegment(string segment)
+    {
+        if (string.IsNullOrEmpty(segment)) return string.Empty;
+        if (segment.AsSpan().IndexOfAny('%', ':', '|') < 0) return segment;
+        return segment
+            .Replace("%", "%25", StringComparison.Ordinal)
+            .Replace(":", "%3A", StringComparison.Ordinal)
+            .Replace("|", "%7C", StringComparison.Ordinal);
     }
 }

@@ -127,30 +127,32 @@ internal static class NativeDockingReliabilityFixtures
 
     // ── §2.25 useEffect cleanup on pane close ───────────────────────────
 
-    internal sealed record EffectCounterProps(string Marker);
+    /// <summary>
+    /// Props for the effect-counter component. Mount / cleanup callbacks
+    /// are passed in by the owning fixture so the counters live in
+    /// fixture-scoped state instead of static fields — fixtures can run
+    /// in parallel (or be aborted mid-run) without leaking state into
+    /// the next fixture's run.
+    /// </summary>
+    internal sealed record EffectCounterProps(
+        string Marker,
+        Action<string>? OnMount = null,
+        Action<string>? OnCleanup = null);
 
     /// <summary>
-    /// Component whose mount registers an effect + cleanup. Static
-    /// counters let the fixture observe mount/unmount ordering without
-    /// reaching into Reactor internals.
+    /// Component whose mount registers an effect + cleanup. The owning
+    /// fixture supplies <see cref="EffectCounterProps.OnMount"/> /
+    /// <see cref="EffectCounterProps.OnCleanup"/> closures that update
+    /// per-run counters.
     /// </summary>
     internal sealed class EffectCounterComponent : Component<EffectCounterProps>
     {
-        public static int MountedCount;
-        public static int CleanupCount;
-        public static readonly List<string> Trace = new();
-
         public override Element Render()
         {
             UseEffect(() =>
             {
-                MountedCount++;
-                Trace.Add($"mount:{Props.Marker}");
-                return () =>
-                {
-                    CleanupCount++;
-                    Trace.Add($"cleanup:{Props.Marker}");
-                };
+                Props.OnMount?.Invoke(Props.Marker);
+                return () => Props.OnCleanup?.Invoke(Props.Marker);
             });
             return TextBlock($"effect-body-{Props.Marker}");
         }
@@ -184,10 +186,12 @@ internal static class NativeDockingReliabilityFixtures
     {
         public override async Task RunAsync()
         {
-            // Reset static counters in case a prior fixture left state.
-            EffectCounterComponent.MountedCount = 0;
-            EffectCounterComponent.CleanupCount = 0;
-            EffectCounterComponent.Trace.Clear();
+            // Fixture-owned counters — moved off static fields so a prior
+            // fixture that aborts mid-run can't leak state into the next
+            // run, and concurrent fixtures don't trample each other.
+            int mountedCount = 0;
+            int cleanupCount = 0;
+            var trace = new List<string>();
 
             var host = H.CreateHost();
             DockingNativeInterop.Register(host.Reconciler);
@@ -196,7 +200,10 @@ internal static class NativeDockingReliabilityFixtures
             {
                 Title = "EffectPane",
                 Key = "effect:pane",
-                Content = Component<EffectCounterComponent, EffectCounterProps>(new EffectCounterProps("p1")),
+                Content = Component<EffectCounterComponent, EffectCounterProps>(new EffectCounterProps(
+                    "p1",
+                    OnMount: m => { mountedCount++; trace.Add($"mount:{m}"); },
+                    OnCleanup: m => { cleanupCount++; trace.Add($"cleanup:{m}"); })),
                 CanClose = true,
             };
             var managerEl = new DockManager
@@ -206,8 +213,8 @@ internal static class NativeDockingReliabilityFixtures
             host.Mount(_ => managerEl);
             await Harness.Render();
 
-            H.Check("Reliability_Effect_MountedOnce", EffectCounterComponent.MountedCount == 1);
-            H.Check("Reliability_Effect_NoCleanupBeforeClose", EffectCounterComponent.CleanupCount == 0);
+            H.Check("Reliability_Effect_MountedOnce", mountedCount == 1);
+            H.Check("Reliability_Effect_NoCleanupBeforeClose", cleanupCount == 0);
             H.Check("Reliability_Effect_BodyRendered",
                 H.FindText("effect-body-p1") is not null);
 
@@ -231,12 +238,24 @@ internal static class NativeDockingReliabilityFixtures
             H.Check("Reliability_Effect_BodyGoneFromTree",
                 H.FindText("effect-body-p1") is null);
 
-            // NOTE: the matching `CleanupCount == 1` assertion is the
-            // known-failing line documented in the class docstring. It's
-            // omitted here on purpose so the suite stays green until the
-            // ComponentElement-under-DockableContent cleanup gap is
-            // resolved. When that lands, add:
-            //   H.Check("Reliability_Effect_CleanupRanOnClose", CleanupCount == 1);
+            // Known cleanup gap — see the class docstring. The product
+            // bug is tracked under §2.25 (ComponentElement under
+            // DockableContent doesn't fire UseEffect cleanup on pane
+            // close). The check is emitted as TAP "# SKIP" rather than
+            // dropped entirely so the log makes the gap visible and the
+            // assertion turns back into a real Check the moment the gap
+            // closes (flip Skip → Check, drop the explanatory reason).
+            if (cleanupCount == 1)
+            {
+                // If the gap was fixed since the last run, surface that
+                // immediately as a pass so the SKIP doesn't linger.
+                H.Check("Reliability_Effect_CleanupRanOnClose", true);
+            }
+            else
+            {
+                H.Skip("Reliability_Effect_CleanupRanOnClose",
+                    $"§2.25 ComponentElement-under-DockableContent cleanup gap (CleanupCount={cleanupCount})");
+            }
 
             host.Mount(_ => TextBlock("effect-cleanup-done"));
             await Harness.Render();

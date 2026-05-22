@@ -278,7 +278,7 @@ class SceneAIde : Component
                                         Content: VStack(2,
                                             TextBlock("Branch: feat/045-docking-windows-p1").Opacity(0.8),
                                             TextBlock("  M  samples/apps/dock-showcase/App.cs"),
-                                            TextBlock("  ?? src/Reactor.Docking.Xaml/Resources/")
+                                            TextBlock("   M src/Reactor/Docking/Native/DockHostNativeComponent.cs")
                                         ).Padding(8),
                                         CanClose: true,
                                         CanPin: true),

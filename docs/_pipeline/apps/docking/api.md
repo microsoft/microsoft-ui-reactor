@@ -1,4 +1,4 @@
-# Docking — API surface (Phase 1)
+# Docking — API surface
 
 > Source authoring notes for the docking API reference. The rendered
 > `docs/guide/docking.md` is generated; edit this file and the
@@ -10,10 +10,12 @@
 using Microsoft.UI.Reactor.Docking;
 ```
 
-Ship vehicle: `Microsoft.UI.Reactor.Docking.Xaml` NuGet package
-(separate from the core `Microsoft.UI.Reactor` package so apps that
-don't need docking aren't forced to take the vendored XAML
-dependency).
+Ship vehicle: the docking subsystem ships in the core
+`Microsoft.UI.Reactor` NuGet package (`Reactor.dll`). The Phase-1
+`Microsoft.UI.Reactor.Docking.Xaml` wrapper (built on a vendored
+`WinUI.Dock` XAML control) was unhooked at the §2.29 review gate and
+its source removed; apps using docking only need to reference the
+core package.
 
 ## `DockManager` — the host element
 
@@ -33,11 +35,12 @@ public sealed record DockManager : Element
 }
 ```
 
-Inherits `Element`. Reconciles to a single vendored
-`WinUI.Dock.DockManager` XAML control in Phase 1. Re-renders that
-produce a new `DockManager` instance with a structurally different
-`Layout` cause the wrapper to diff the previous tree against the new
-one and apply minimum mutations to the underlying control.
+Inherits `Element`. Reconciles to a native Reactor docking host
+(`DockHostNativeComponent`) — no vendored XAML controls; the host
+composes WinUI primitives directly. Re-renders that produce a new
+`DockManager` instance with a structurally different `Layout` cause
+the host to diff the previous tree against the new one and apply
+minimum mutations to the underlying visual tree.
 
 ## `DockNode` — the algebra
 

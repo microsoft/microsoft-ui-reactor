@@ -47,7 +47,14 @@ internal static class DockDropTargetReconcilerRegistration
                 }
                 return null;
             },
-            unmount: static (_, control) => Unwire(control));
+            unmount: static (_, control) =>
+            {
+                Unwire(control);
+                // Reactor unmount is the reliable lifecycle boundary —
+                // the WinUI Unloaded path can miss the root-level Esc
+                // handler when the visual tree is replaced mid-drag.
+                control.DetachGlobalHandlers();
+            });
     }
 
     private static void Wire(DockDropTargetOverlayControl control, DockDropTargetOverlayElement element)

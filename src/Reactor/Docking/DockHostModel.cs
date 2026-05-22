@@ -104,7 +104,19 @@ public sealed class DockHostModel
     /// <summary>Tool windows currently pinned to the bottom side strip.</summary>
     public IReadOnlyList<ToolWindow> BottomSide { get; internal set; } = Array.Empty<ToolWindow>();
 
-    /// <summary>Floating-window state for torn-out panes.</summary>
+    /// <summary>
+    /// Floating-window state for torn-out panes. Populated by the host
+    /// renderer from the docking subsystem's per-manager floating-window
+    /// tracker, so live snapshots include what's currently floating.
+    /// </summary>
+    /// <remarks>
+    /// Each entry carries the pane + best-effort bounds: today the
+    /// dimensions reflect the spec values captured when the window
+    /// opened, and <c>X</c>/<c>Y</c> are <c>0</c>. Live position /
+    /// size tracking is a §2.6 follow-up — callers that depend on
+    /// current bounds should read off the underlying window rather
+    /// than trusting this snapshot.
+    /// </remarks>
     public IReadOnlyList<FloatingDockWindow> Floating { get; internal set; } = Array.Empty<FloatingDockWindow>();
 
     /// <summary>The currently-active content, or null if none.</summary>

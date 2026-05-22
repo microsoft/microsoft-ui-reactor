@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -235,6 +236,14 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         _globalEscapeHandler = null;
         _globalEscapeTarget = null;
     }
+
+    /// <summary>
+    /// Reconciler-unmount hook — Reactor unmount is the reliable lifecycle
+    /// boundary; relying on WinUI <c>Unloaded</c> alone can leak the global
+    /// Esc handler when the visual tree is replaced under a drag/popup.
+    /// Idempotent.
+    /// </summary>
+    internal void DetachGlobalHandlers() => UnhookGlobalEscape();
 
     private void ApplyModeVisibility()
     {
@@ -894,7 +903,19 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
                 v is Brush b)
                 return b;
         }
-        catch { /* headless harness — no Application instance */ }
+        catch (InvalidOperationException)
+        {
+            // Headless harness — no Application instance / no UI thread.
+        }
+        catch (COMException ex)
+        {
+            // Resource dictionary lookup can fail with WinUI's COM
+            // wrappers when called before XAML is fully initialized; the
+            // fallback brush still renders. Surface the unexpected case
+            // so future regressions are debuggable.
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[Docking] ThemedBrush('{key}') COMException — using fallback. HRESULT=0x{ex.HResult:X8}");
+        }
         return new SolidColorBrush(fallback);
     }
 }

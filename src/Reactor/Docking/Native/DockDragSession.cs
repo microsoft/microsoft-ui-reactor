@@ -129,8 +129,23 @@ internal sealed class DockDragSession
 
     private static void RaiseSessionChanged()
     {
-        try { SessionChanged?.Invoke(); }
-        catch { /* subscriber best-effort; never let a stale handler break the session */ }
+        // Iterate subscribers individually so one stale handler cannot
+        // suppress later subscribers (a busted floating-window listener
+        // would otherwise hide a cross-window dock surface from the
+        // session-change broadcast). Failures are surfaced via Debug —
+        // a stuck overlay caused by a thrown handler should be
+        // debuggable, not silently swallowed.
+        var subscribers = SessionChanged?.GetInvocationList();
+        if (subscribers is null) return;
+        foreach (var subscriber in subscribers)
+        {
+            try { ((Action)subscriber).Invoke(); }
+            catch (Exception ex)
+            {
+                global::System.Diagnostics.Debug.WriteLine(
+                    $"[Docking] DockDragSession.SessionChanged subscriber threw: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
     }
 
     /// <summary>

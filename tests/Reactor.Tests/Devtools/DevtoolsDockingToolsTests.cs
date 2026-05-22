@@ -13,6 +13,7 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// <c>BuildDockPayload</c> directly so the contract is testable without
 /// spinning up an MCP server.
 /// </summary>
+[Collection("DockingGlobals")]
 public class DevtoolsDockingToolsTests : IDisposable
 {
     public DevtoolsDockingToolsTests() => DockHostRegistry.ResetForTest();

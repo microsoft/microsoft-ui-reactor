@@ -261,11 +261,22 @@ internal sealed class DockNavigatorPopup
         if (commit && _selected >= 0 && _selected < _entries.Length)
         {
             try { _onCommit?.Invoke(_entries[_selected].Key); }
-            catch { /* best-effort */ }
+            catch (Exception ex)
+            {
+                // Commit callback is app code; surface the failure for
+                // debugging rather than swallowing it silently.
+                global::System.Diagnostics.Debug.WriteLine(
+                    $"[Docking] DockNavigatorPopup commit callback threw: {ex.GetType().Name}: {ex.Message}");
+            }
         }
         _onCommit = null;
         _entries = Array.Empty<Entry>();
         _selected = -1;
+        // Drop the transient row visuals so closed-but-cached popup
+        // instances don't retain row TextBlocks / Border refs and the
+        // pane keys they captured. The next OpenOrAdvance rebuilds the
+        // list from fresh entries.
+        _list.Children.Clear();
     }
 
     /// <summary>

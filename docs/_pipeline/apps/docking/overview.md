@@ -20,12 +20,16 @@ The first-class element is `DockManager` (Phase 1) / `DockHost`
 tree describing the desired layout. The reconciler turns that tree
 into:
 
-- **Phase 1 (this release):** a single
+- **Phase 1 (historical):** a single
   [vendored WinUI.Dock](https://github.com/qian-o/WinUI.Dock) XAML
-  control. The wrapper is in `src/Reactor.Docking.Xaml/` and ships as
-  the `Microsoft.UI.Reactor.Docking.Xaml` NuGet package.
-- **Phase 2:** a Reactor-native pane stack. Public API stays
-  identical — the implementation is swapped underneath.
+  control wrapped by `src/Reactor.Docking.Xaml/`. The wrapper +
+  vendored control were retired at the §2.29 review gate; both source
+  trees are removed in this branch.
+- **Phase 2 (this release):** a Reactor-native pane stack shipping in
+  the core `Microsoft.UI.Reactor` package. Public API stays identical
+  to Phase 1 (same `DockManager`/`DockNode`/`DockableContent`); the
+  underlying renderer is `DockHostNativeComponent` composing WinUI
+  primitives directly.
 - **Phase 3:** any `ReactorWindow` becomes adoptable into a
   `DockHost`. Tear-outs are real top-level Reactor windows.
 - **Phase 4:** floating windows use the WinUI 11 `TitleBar` control
@@ -53,9 +57,11 @@ What works today against the wrapper:
   FloatingWindow appears at the pointer with a custom title bar from
   `IDockAdapter.GetFloatingWindowTitleBar(…)`. Drop back into any tab
   group to re-dock.
-- **Programmatic dock.** Call `Document.DockTo(target, DockTarget)`
-  on a vendored Document to move panes via code. The wrapper exposes
-  this through `DockableContent.Key`-keyed lookup.
+- **Programmatic dock.** Mutate the `DockManager.Layout` tree to
+  move panes via code. Phase 2 also exposes the `DockHostModel`
+  surface (`Dock`/`Float`/`Hide`/`Show`/`Close`/`Activate`/`PinToSide`)
+  for app-driven mutations that route through the same lifecycle
+  event pipeline as user-driven drags.
 - **Persistence.** `manager.SaveLayout()` → JSON; `LoadLayout(json)`
   restores. The wrapper auto-routes through
   `WindowPersistedScope["docking:<PersistenceId>"]` when
@@ -98,9 +104,10 @@ the showcase commit). The six scenes mirror the
 
 ## Registration
 
-The wrapper isn't auto-registered with Reactor's reconciler — apps
-opt in by calling `DockingXamlInterop.Register(host.Reconciler)` at
-host construction time (same pattern as `XamlInterop.Register`):
+The native docking host isn't auto-registered with Reactor's
+reconciler — apps opt in by calling
+`DockingNativeInterop.Register(host.Reconciler)` at host construction
+time (same pattern as `XamlInterop.Register`):
 
 ```csharp
 public class App : ReactorApplication
@@ -109,7 +116,7 @@ public class App : ReactorApplication
     {
         var window = new ReactorWindow();
         var host = window.Host;
-        DockingXamlInterop.Register(host.Reconciler);
+        DockingNativeInterop.Register(host.Reconciler);
         host.Mount(_ => new MyShell());
         window.Activate();
     }
@@ -126,5 +133,3 @@ recognized.
 - [Spec 045](../../../specs/045-docking-windows-design.md) — the
   full design, including non-goals, prior-art matrix, and the
   four-phase plan.
-- [Vendored WinUI.Dock](../../../../third_party/WinUI.Dock/VENDORED.md) —
-  light-edit log, re-snapshot checklist, sunset plan.

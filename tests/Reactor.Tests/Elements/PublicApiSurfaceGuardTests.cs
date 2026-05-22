@@ -63,6 +63,12 @@ public class PublicApiSurfaceGuardTests
             .Where(t => t.IsClass && !t.IsAbstract && typeof(Element).IsAssignableFrom(t))
             // Records produce nested compiler types; filter those out.
             .Where(t => t.FullName is not null && !t.FullName.Contains('+'))
+            // Public-API surface guard — only walk publicly-visible element
+            // records. Internal element shapes (overlay primitives, splitter
+            // wires, etc.) drive UI through the public elements that compose
+            // them, so callers can't bind to their callbacks directly and
+            // don't need fluent extensions.
+            .Where(t => t.IsPublic)
             .ToList();
 
         // Index of every public static extension method in the Reactor assembly,

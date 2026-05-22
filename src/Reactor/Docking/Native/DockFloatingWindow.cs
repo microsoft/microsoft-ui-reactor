@@ -91,11 +91,14 @@ public static class DockFloatingWindow
         var window = ReactorApp.OpenWindow(spec, _ => BuildFloatingRoot(pane, windowHolder, manager));
         windowHolder[0] = window;
         DockFloatingTracker.Register(window);
+        DockFloatingTracker.RegisterEntry(window, pane, spec.Width, spec.Height);
         if (manager is not null) DockFloatingTracker.RegisterFor(manager, window);
         // Spec 045 §2.6 — fire OnFloatingWindowCreated so apps can
         // observe the new top-level for telemetry / persistence /
-        // window-grouping bookkeeping. Best-effort: subscriber throws
-        // do not block the Open call.
+        // window-grouping bookkeeping. Subscriber exceptions are
+        // surfaced via Debug so they don't disappear silently, but
+        // they don't block the Open call — a busted telemetry sink
+        // shouldn't strand a torn-out pane without its window.
         try
         {
             manager?.OnFloatingWindowCreated?.Invoke(new DockFloatingWindowCreatedEventArgs
@@ -103,7 +106,11 @@ public static class DockFloatingWindow
                 DraggedSource = pane,
             });
         }
-        catch { /* observer should not break tear-out */ }
+        catch (Exception ex)
+        {
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[Docking] OnFloatingWindowCreated observer threw: {ex.GetType().Name}: {ex.Message}");
+        }
         window.Closed += (_, _) =>
         {
             DockFloatingTracker.Unregister(window);
@@ -113,7 +120,9 @@ public static class DockFloatingWindow
             // (DockingNativeInterop iterates DockFloatingTracker.SnapshotFor
             // and calls Close() on each); the pane content reference is
             // best-effort and may be stale after a cross-window dock-back
-            // already migrated it to another host.
+            // already migrated it to another host. Observer exceptions
+            // are logged rather than swallowed so cleanup-handler bugs
+            // are debuggable.
             try
             {
                 manager?.OnFloatingWindowClosed?.Invoke(new DockFloatingWindowClosedEventArgs
@@ -121,7 +130,11 @@ public static class DockFloatingWindow
                     Content = pane,
                 });
             }
-            catch { /* observer should not break window cleanup */ }
+            catch (Exception ex)
+            {
+                global::System.Diagnostics.Debug.WriteLine(
+                    $"[Docking] OnFloatingWindowClosed observer threw: {ex.GetType().Name}: {ex.Message}");
+            }
         };
         return window;
     }
@@ -205,8 +218,17 @@ public static class DockFloatingWindow
 /// </summary>
 internal static class DockFloatingTracker
 {
+    /// <summary>
+    /// Per-window tracking record. <see cref="Pane"/> is the pane currently
+    /// hosted in the floating window; the initial size is captured at Open
+    /// time so <see cref="DockHostModel.Floating"/> snapshots can include
+    /// at least the spec dimensions until live bounds tracking is wired.
+    /// </summary>
+    internal sealed record Entry(ReactorWindow Window, DockableContent Pane, double InitialWidth, double InitialHeight);
+
     private static readonly object _lock = new();
     private static readonly HashSet<ReactorWindow> _open = new();
+    private static readonly Dictionary<ReactorWindow, Entry> _entries = new();
     private static readonly ConditionalWeakTable<DockManager, HashSet<ReactorWindow>> _byManager = new();
 
     public static void Register(ReactorWindow window)
@@ -215,10 +237,30 @@ internal static class DockFloatingTracker
         lock (_lock) { _open.Add(window); }
     }
 
+    /// <summary>
+    /// Records pane + spec bounds for a freshly-opened floating window so
+    /// snapshots (model.Floating, serialization) can surface what's
+    /// currently floating. Bounds are the initial spec values — live
+    /// position/size tracking is a future refinement (§2.6 follow-up).
+    /// </summary>
+    public static void RegisterEntry(ReactorWindow window, DockableContent pane, double initialWidth, double initialHeight)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        ArgumentNullException.ThrowIfNull(pane);
+        lock (_lock)
+        {
+            _entries[window] = new Entry(window, pane, initialWidth, initialHeight);
+        }
+    }
+
     public static void Unregister(ReactorWindow window)
     {
         ArgumentNullException.ThrowIfNull(window);
-        lock (_lock) { _open.Remove(window); }
+        lock (_lock)
+        {
+            _open.Remove(window);
+            _entries.Remove(window);
+        }
     }
 
     public static void RegisterFor(DockManager manager, ReactorWindow window)
@@ -252,6 +294,38 @@ internal static class DockFloatingTracker
         lock (_lock)
         {
             return _byManager.TryGetValue(manager, out var set) ? set.ToArray() : Array.Empty<ReactorWindow>();
+        }
+    }
+
+    /// <summary>
+    /// Builds the read-only snapshot consumed by <see cref="DockHostModel.Floating"/>.
+    /// Each entry carries the pane + best-effort bounds (initial spec
+    /// dimensions today; live x/y/w/h tracking is the §2.6 follow-up).
+    /// </summary>
+    public static IReadOnlyList<FloatingDockWindow> SnapshotPanesFor(DockManager manager)
+    {
+        ArgumentNullException.ThrowIfNull(manager);
+        lock (_lock)
+        {
+            if (!_byManager.TryGetValue(manager, out var set) || set.Count == 0)
+                return Array.Empty<FloatingDockWindow>();
+            var list = new List<FloatingDockWindow>(set.Count);
+            foreach (var window in set)
+            {
+                if (!_entries.TryGetValue(window, out var entry)) continue;
+                list.Add(new FloatingDockWindow
+                {
+                    // Window object identity is the stable id — survives
+                    // re-render cycles within the host's lifetime.
+                    Id = window,
+                    Contents = new[] { entry.Pane },
+                    Width = entry.InitialWidth,
+                    Height = entry.InitialHeight,
+                    // X/Y aren't tracked yet; snapshot reports 0 until the
+                    // §2.6 live-bounds follow-up lands.
+                });
+            }
+            return list;
         }
     }
 

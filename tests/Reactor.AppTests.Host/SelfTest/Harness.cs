@@ -183,6 +183,17 @@ internal sealed class Harness
         }
     }
 
+    /// <summary>
+    /// Emits a TAP "skipped" line for a known-failing or deferred check
+    /// without counting it as a pass OR a failure. Use for documented
+    /// gaps that have a tracking item — the assertion is explicit in
+    /// the log instead of being silently dropped.
+    /// </summary>
+    public void Skip(string name, string reason)
+    {
+        Console.WriteLine($"ok {name} # SKIP {reason}");
+    }
+
     public void Check(string name, Func<bool> test)
     {
         try { Check(name, test()); }

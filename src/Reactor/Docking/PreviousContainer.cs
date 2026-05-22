@@ -24,7 +24,8 @@ namespace Microsoft.UI.Reactor.Docking;
 /// </remarks>
 internal static class PreviousContainerTracker
 {
-    private static readonly ConditionalWeakTable<DockableContent, ContainerRef> Table = new();
+    private static readonly object _lock = new();
+    private static ConditionalWeakTable<DockableContent, ContainerRef> _table = new();
 
     /// <summary>
     /// Records that <paramref name="pane"/> last lived inside
@@ -39,13 +40,16 @@ internal static class PreviousContainerTracker
         // ConditionalWeakTable uses reference equality on the key; we WANT
         // that — the tracker is keyed by the pane's specific instance, so
         // a new pane with the same Key won't accidentally inherit history.
-        if (Table.TryGetValue(pane, out var existing))
+        lock (_lock)
         {
-            existing.Container = container;
-        }
-        else
-        {
-            Table.Add(pane, new ContainerRef { Container = container });
+            if (_table.TryGetValue(pane, out var existing))
+            {
+                existing.Container = container;
+            }
+            else
+            {
+                _table.Add(pane, new ContainerRef { Container = container });
+            }
         }
     }
 
@@ -57,7 +61,10 @@ internal static class PreviousContainerTracker
     public static DockNode? GetPrevious(DockableContent pane)
     {
         ArgumentNullException.ThrowIfNull(pane);
-        return Table.TryGetValue(pane, out var existing) ? existing.Container : null;
+        lock (_lock)
+        {
+            return _table.TryGetValue(pane, out var existing) ? existing.Container : null;
+        }
     }
 
     /// <summary>
@@ -68,15 +75,24 @@ internal static class PreviousContainerTracker
     public static void Clear(DockableContent pane)
     {
         ArgumentNullException.ThrowIfNull(pane);
-        Table.Remove(pane);
+        lock (_lock)
+        {
+            _table.Remove(pane);
+        }
     }
 
-    /// <summary>Removes every tracking entry — used by tests for isolation.</summary>
+    /// <summary>
+    /// Removes every tracking entry. Used by tests for isolation —
+    /// <see cref="ConditionalWeakTable{TKey, TValue}"/> has no Clear()
+    /// operation, so we swap in a fresh table under the lock. The old
+    /// table's references decay with normal GC.
+    /// </summary>
     internal static void ClearAll()
     {
-        // ConditionalWeakTable has no Clear() — the live entries decay with
-        // their key references. This method exists to document intent; tests
-        // should use fresh DockableContent instances per case.
+        lock (_lock)
+        {
+            _table = new ConditionalWeakTable<DockableContent, ContainerRef>();
+        }
     }
 
     // Indirection so we can update Container in place without a re-add.

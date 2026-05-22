@@ -45,12 +45,11 @@
     <InternalsVisibleTo Include="Reactor.Tests" />
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
-    <!-- Spec 045 §2.19: the Phase-1 WinUI.Dock XAML wrapper was unhooked
-         from the solution at the §2.29 review gate. The
-         InternalsVisibleTo entry retires with the wrapper assembly.
-         The source under src/Reactor.Docking.Xaml/ stays on disk for
-         reference per §5.6; a follow-up commit removes the directory
-         entirely. -->
+    <!-- Spec 045 §2.19: the Phase-1 WinUI.Dock XAML wrapper
+         (src/Reactor.Docking.Xaml/) and its vendored WinUI.Dock
+         dependency were removed at the §2.29 review gate. The docking
+         subsystem now lives entirely in this assembly under
+         src/Reactor/Docking/. -->
   </ItemGroup>
 
   <ItemGroup>

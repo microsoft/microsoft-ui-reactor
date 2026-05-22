@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -82,7 +81,18 @@ public static class DockLayoutSerializer
     /// emit via <see cref="DockLayoutLoadResult.FailureReason"/>).
     /// </summary>
     /// <remarks>Spec 045 §5.4, §8.9, §8.10.</remarks>
-    public static DockLayoutLoadResult Load(string? json)
+    public static DockLayoutLoadResult Load(string? json) =>
+        Load(json, migrations: null);
+
+    /// <summary>
+    /// Parses a persisted layout JSON string, routing pre-v<see cref="CurrentSchemaVersion"/>
+    /// payloads through the supplied <see cref="DockLayoutMigrationRegistry"/>
+    /// (§5.4.4 / §8.11). When <paramref name="migrations"/> is null, a fresh
+    /// registry with the built-in v1→v2 step is used so the common case —
+    /// loading a P1 file with no <c>$schema</c> marker — succeeds without
+    /// requiring callers to pre-build a registry.
+    /// </summary>
+    public static DockLayoutLoadResult Load(string? json, DockLayoutMigrationRegistry? migrations)
     {
         if (string.IsNullOrWhiteSpace(json))
             return Fail("empty", "empty input");
@@ -91,21 +101,54 @@ public static class DockLayoutSerializer
         if (byteCount > MaxBytes)
             return Fail("oversize", $"input exceeds {MaxBytes}-byte limit ({byteCount} bytes)");
 
-        DockLayoutDoc? doc;
+        // Parse to a mutable JsonNode tree so the migration ladder can
+        // upgrade pre-current-schema documents in place. Enforce
+        // MaxDepth at the parse boundary (spec §8.9 security limit).
+        JsonNode? rootNode;
         try
         {
-            var options = new JsonReaderOptions { MaxDepth = MaxDepth };
-            // Use Utf8JsonReader path to enforce MaxDepth (the source-gen
-            // context's deserialize honors JsonSerializerOptions.MaxDepth,
-            // but we set it explicitly via a JsonDocument round-trip so we
-            // can also catch leading-whitespace shenanigans and unknown roots.
-            var bytes = Encoding.UTF8.GetBytes(json);
-            using var jsonDoc = JsonDocument.Parse(bytes, new JsonDocumentOptions { MaxDepth = MaxDepth });
-            doc = JsonSerializer.Deserialize(jsonDoc.RootElement, DockLayoutJsonContext.Default.DockLayoutDoc);
+            rootNode = JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { MaxDepth = MaxDepth });
         }
         catch (JsonException ex)
         {
             return Fail("json-parse", $"json parse failure: {ex.Message}");
+        }
+
+        if (rootNode is null)
+            return Fail("null-document", "null document");
+
+        // §5.4.4 — detect the source schema. Absent $schema means v1 (the
+        // P1 wrapper's vendored format). The registry's DetectSchema
+        // encodes that convention.
+        int sourceSchema = DockLayoutMigrationRegistry.DetectSchema(rootNode);
+        var registry = migrations ?? new DockLayoutMigrationRegistry();
+
+        JsonNode? migratedRoot;
+        string? migrationWarning;
+        bool upgraded = registry.TryUpgrade(rootNode, sourceSchema, CurrentSchemaVersion, out migratedRoot, out migrationWarning);
+        if (!upgraded || migratedRoot is null)
+        {
+            return Fail("schema-missing",
+                migrationWarning ?? $"unable to migrate schema v{sourceSchema} → v{CurrentSchemaVersion}");
+        }
+
+        // Forward tolerance (§8.11): the registry returns success-with-warning
+        // when the source schema is newer than CurrentSchemaVersion. Emit a
+        // PII-safe "schema-newer" event so on-disk traces still capture the
+        // case (the load itself proceeds best-effort).
+        if (sourceSchema > CurrentSchemaVersion)
+        {
+            ReactorEventSource.Log.DockingLayoutLoadFallback("schema-newer");
+        }
+
+        DockLayoutDoc? doc;
+        try
+        {
+            doc = JsonSerializer.Deserialize(migratedRoot, DockLayoutJsonContext.Default.DockLayoutDoc);
+        }
+        catch (JsonException ex)
+        {
+            return Fail("json-parse", $"json parse failure post-migration: {ex.Message}");
         }
         catch (NotSupportedException ex)
         {
@@ -115,13 +158,12 @@ public static class DockLayoutSerializer
         if (doc is null)
             return Fail("null-document", "null document");
 
-        // Forward-tolerant: newer-than-known schemas log a warning but
-        // proceed with best-effort. v1 inputs (no $schema marker) would
-        // arrive as Schema=0 here from the default; the migration ladder
-        // upgrades them before this point. v2 is the only currently-emitted
-        // version.
+        // After migration the document carries the post-upgrade $schema.
+        // Treat a missing/invalid marker post-migration as a genuine
+        // schema-missing failure (the migration ladder is supposed to
+        // stamp it).
         if (doc.Schema < 1)
-            return Fail("schema-missing", $"missing/invalid $schema (got {doc.Schema})");
+            return Fail("schema-missing", $"missing/invalid $schema after migration (got {doc.Schema}, source v{sourceSchema})");
 
         try
         {
@@ -144,7 +186,7 @@ public static class DockLayoutSerializer
                 Floating   = floating,
                 ActiveKey  = doc.ActiveKey,
                 IsFallback = false,
-                FailureReason = null,
+                FailureReason = migrationWarning,
             };
         }
         catch (InvalidOperationException ex)
@@ -352,7 +394,7 @@ public static class DockLayoutSerializer
 }
 
 /// <summary>
-/// Result envelope returned by <see cref="DockLayoutSerializer.Load"/>.
+/// Result envelope returned by <see cref="DockLayoutSerializer.Load(string?)"/>.
 /// Always non-null; <see cref="IsFallback"/> indicates whether the input
 /// was usable.
 /// </summary>

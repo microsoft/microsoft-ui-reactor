@@ -9,6 +9,7 @@ namespace Microsoft.UI.Reactor.Tests.Docking;
 /// into their <c>IntlAccessor</c>; without a resolver, callers get
 /// the English default that mirrors <c>Reactor.Docking.resw</c>.
 /// </summary>
+[Collection("DockingGlobals")]
 public sealed class DockingStringsTests : IDisposable
 {
     private readonly Func<string, string?>? _saved = DockingStrings.Resolver;

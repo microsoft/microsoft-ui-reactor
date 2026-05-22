@@ -1,3 +1,4 @@
+using System.Threading;
 using Microsoft.UI.Reactor.Docking;
 using Microsoft.UI.Xaml.Controls;
 using Xunit;
@@ -167,17 +168,33 @@ public class DockHostModelTests
     // ── Off-thread contract enforcement ────────────────────────────────
 
     [Fact]
-    public async Task Mutations_OffOwnerThread_Throw()
+    public void Mutations_OffOwnerThread_Throw()
     {
         var m = new DockHostModel(); // captures current thread id
         var pane = new DockableContent("X", Key: "x");
 
-        // Force the mutation onto a worker thread.
-        await Task.Run(() =>
+        // Force the mutation onto a guaranteed-different thread. Using
+        // `Task.Run` here previously hit the test's thread-id check by
+        // chance when xUnit reused a worker as the test thread; an
+        // explicit `new Thread()` cannot share ManagedThreadId with the
+        // constructing thread.
+        Exception? caught = null;
+        var worker = new Thread(() =>
         {
-            Assert.Throws<InvalidOperationException>(() => m.Dock(pane, DockTarget.Center));
-            Assert.Throws<InvalidOperationException>(() => m.Float(pane));
-            Assert.Throws<InvalidOperationException>(() => m.Close(pane));
-        });
+            try
+            {
+                Assert.Throws<InvalidOperationException>(() => m.Dock(pane, DockTarget.Center));
+                Assert.Throws<InvalidOperationException>(() => m.Float(pane));
+                Assert.Throws<InvalidOperationException>(() => m.Close(pane));
+            }
+            catch (Exception ex)
+            {
+                caught = ex;
+            }
+        })
+        { IsBackground = true };
+        worker.Start();
+        worker.Join();
+        if (caught is not null) throw caught;
     }
 }

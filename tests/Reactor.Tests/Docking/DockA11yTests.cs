@@ -11,8 +11,13 @@ namespace Microsoft.UI.Reactor.Tests.Docking;
 /// AT-tree walking + UIA role assertions live in self-host fixtures
 /// because they require a realized control tree.
 /// </summary>
-public sealed class DockA11yTests
+[Collection("DockingGlobals")]
+public sealed class DockA11yTests : IDisposable
 {
+    private readonly Func<string, string?>? _savedResolver = DockingStrings.Resolver;
+
+    public void Dispose() => DockingStrings.Resolver = _savedResolver;
+
     [Fact]
     public void AutomationIdForPane_NonNullKey_PrefixedWithPane()
     {

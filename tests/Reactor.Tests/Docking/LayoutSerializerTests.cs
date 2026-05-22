@@ -243,12 +243,17 @@ public class LayoutSerializerTests
     }
 
     [Fact]
-    public void Load_MissingSchemaField_FallsBack()
+    public void Load_MissingSchemaField_TreatedAsV1AndMigrated()
     {
-        // Schema field absent = inferred as 0 by our serializer's default
-        // (it's an int, not int?). The loader expects >= 1.
+        // §5.4.4 — absent `$schema` is the convention for P1's vendored
+        // save format. After integrating the migration registry into
+        // Load (review Fix #9), an empty object is interpreted as a
+        // v1 layout that migrates to v2 with no panes.
         var result = DockLayoutSerializer.Load("{}");
-        Assert.True(result.IsFallback);
+        Assert.True(result.Success);
+        Assert.False(result.IsFallback);
+        Assert.Equal(2, result.Schema);
+        Assert.Null(result.Root);
     }
 
     [Fact]
@@ -406,6 +411,66 @@ public class LayoutSerializerTests
         }
     }
 
+    // ── Load integration: actual `Load` path runs the migration ladder ──
+
+    [Fact]
+    public void Load_V1NoSchema_SynthesizesKeysAndUpgrades()
+    {
+        // P1's wrapper saved layouts without a $schema marker and used
+        // `title` as the persisted key. The Load path must route those
+        // through the built-in v1→v2 migration before deserialization
+        // (§5.4.4), so a v1 file produces a usable result with keys
+        // synthesized from titles.
+        var v1Json = """
+            {
+              "root": {
+                "kind": "pane",
+                "pane": { "title": "MainView", "role": "document" }
+              }
+            }
+            """;
+        var result = DockLayoutSerializer.Load(v1Json);
+
+        Assert.True(result.Success, $"expected success, got failure: {result.FailureReason}");
+        Assert.Equal(2, result.Schema);
+        var doc = Assert.IsType<Document>(result.Root);
+        Assert.Equal("MainView", doc.Title);
+        Assert.Equal("MainView", doc.Key);
+    }
+
+    [Fact]
+    public void Load_SchemaNewerThanCurrent_EmitsForwardToleranceCategory()
+    {
+        // §8.11 — newer-than-known schemas log a category but still
+        // return a best-effort result. The event has to land via the
+        // actual Load path (the registry exposes the warning, but it's
+        // the serializer that emits the ETW event).
+        var futureJson = """
+            { "$schema": 99, "root": null }
+            """;
+        using var listener = new DockingFallbackListener();
+        listener.EnableEvents(ReactorEventSource.Log, EventLevel.Warning, EventKeywords.All);
+
+        var result = DockLayoutSerializer.Load(futureJson);
+
+        Assert.True(result.Success);
+        Assert.Contains("schema-newer", listener.WaitForCategory("schema-newer"));
+    }
+
+    [Fact]
+    public void Load_V0Schema_FallsBackWithNoMigration()
+    {
+        // A schema=0 marker can't be migrated (no v0→v2 registered) and
+        // is treated as a hard failure rather than being silently passed
+        // through as v0.
+        var v0Json = """{ "$schema": 0 }""";
+        var result = DockLayoutSerializer.Load(v0Json);
+
+        Assert.True(result.IsFallback);
+        Assert.False(result.Success);
+        Assert.NotNull(result.FailureReason);
+    }
+
     // ── Load latency budget (spec §8.1 — ≤ 50 ms for 200 panes) ────────
 
     [Fact]
@@ -439,6 +504,26 @@ public class LayoutSerializerTests
         {
             get { lock (_categories) return _categories.ToArray(); }
         }
+
+        /// <summary>
+        /// Waits for at least one category matching <paramref name="expected"/>
+        /// to land before returning the current snapshot. EventListener
+        /// dispatch is normally synchronous for in-process EventSource,
+        /// but a tight retry absorbs CI environments where dispatch is
+        /// queued on a background thread.
+        /// </summary>
+        public IReadOnlyList<string> WaitForCategory(string expected, int timeoutMs = 250)
+        {
+            var sw = global::System.Diagnostics.Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                var snapshot = Categories;
+                if (snapshot.Contains(expected)) return snapshot;
+                global::System.Threading.Thread.Sleep(5);
+            }
+            return Categories;
+        }
+
         protected override void OnEventWritten(EventWrittenEventArgs e)
         {
             if (e.EventName != nameof(ReactorEventSource.DockingLayoutLoadFallback)) return;
@@ -467,7 +552,7 @@ public class LayoutSerializerTests
         Assert.True(result.IsFallback);
         Assert.False(result.Success);
         Assert.NotNull(result.FailureReason);
-        Assert.Contains(expectedCategory, listener.Categories);
+        Assert.Contains(expectedCategory, listener.WaitForCategory(expectedCategory));
     }
 
     [Fact]
@@ -483,7 +568,7 @@ public class LayoutSerializerTests
         var result = DockLayoutSerializer.Load(oversize);
 
         Assert.True(result.IsFallback);
-        Assert.Contains("oversize", listener.Categories);
+        Assert.Contains("oversize", listener.WaitForCategory("oversize"));
     }
 
     [Fact]

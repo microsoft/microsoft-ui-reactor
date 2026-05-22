@@ -5,10 +5,10 @@ namespace Microsoft.UI.Reactor.Docking;
 //
 //  Every user-facing string the docking subsystem renders flows through
 //  `DockingStrings.Get(key)`. The default implementation returns the
-//  English string; apps wire up localization by assigning
-//  `DockingStrings.Resolver` to a delegate that consults their
-//  `IntlAccessor` (typically obtained via `UseIntl()` and captured into
-//  a static at app startup).
+//  English string from `DefaultEnglish` below; apps wire up localization
+//  by assigning `DockingStrings.Resolver` to a delegate that consults
+//  their `IntlAccessor` (typically obtained via `UseIntl()` and
+//  captured into a static at app startup).
 //
 //  Why a delegate rather than direct `IntlAccessor` use?
 //   • The drop-target overlay + side-strip controls are realized
@@ -16,19 +16,18 @@ namespace Microsoft.UI.Reactor.Docking;
 //     `UseIntl()` in scope.
 //   • The same docking subsystem is consumed by tests + tooling
 //     contexts where no `LocaleContext` exists.
-//   • Reactor's typed `Loc` generator hasn't yet wired
-//     `src/Reactor.Docking.Xaml/Resources/Reactor.Docking.resw`
-//     (spec 045 §0.3 status note); the delegate is the bridge that
-//     lets apps localize today and remains the public route after
-//     the generator wires up.
-//
-//  The keys mirror entries in `Reactor.Docking.resw`. Keep this list
-//  + that file synchronized.
+//   • The native docking host has no built-in `.resw` resource — the
+//     Phase-1 `src/Reactor.Docking.Xaml/Resources/Reactor.Docking.resw`
+//     file was retired with the wrapper assembly at the §2.29 review
+//     gate. The delegate is the only localization route today; apps
+//     plug their `.resw` / catalog into the resolver.
 // ════════════════════════════════════════════════════════════════════════
 
 /// <summary>
-/// String keys for the docking subsystem. Mirrored 1:1 against
-/// `src/Reactor.Docking.Xaml/Resources/Reactor.Docking.resw`.
+/// String keys for the docking subsystem. The English defaults below
+/// are the source of truth — apps localize by wiring
+/// <see cref="DockingStrings.Resolver"/> to consult their own catalog
+/// against these key strings.
 /// </summary>
 public static class DockingStringKeys
 {
@@ -162,9 +161,10 @@ public static class DockingStrings
     }
 
     /// <summary>
-    /// English default for each known key. Kept in sync with
-    /// <c>Reactor.Docking.resw</c> — every key here MUST exist in the
-    /// .resw with the same value, and vice versa.
+    /// English default for each known key. Source of truth — apps
+    /// localize by routing the same key strings through
+    /// <see cref="Resolver"/>. No built-in `.resw` ships with the
+    /// docking subsystem today.
     /// </summary>
     private static string DefaultEnglish(string key) => key switch
     {

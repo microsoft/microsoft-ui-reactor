@@ -487,6 +487,13 @@ internal sealed partial class DockSplitterControl : Grid
         if (!_isCapturing) return;
         _isCapturing = false;
         _capturePointerId = 0;
+        // Mirror the normal release path: clear any defensive inline
+        // width/height/min-height state before the final ResizeDelta so
+        // a capture-loss mid-drag converges to the same cleanup as a
+        // pointer release. Skipping this left leading/trailing panes
+        // pinned by inline size values that the host's re-render then
+        // had to undo via grow.
+        RestorePairToGrow();
         ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(0, _direction, GetHostExtent(), isFinal: true));
         _handle.Fill = ThemedBrush(
             "SystemControlForegroundBaseMediumLowBrush",
@@ -507,7 +514,17 @@ internal sealed partial class DockSplitterControl : Grid
                 v is Brush b)
                 return b;
         }
-        catch { /* headless harness — no Application instance */ }
+        catch (InvalidOperationException)
+        {
+            // Headless harness — no Application instance / no UI thread.
+        }
+        catch (global::System.Runtime.InteropServices.COMException ex)
+        {
+            // Resource dictionary lookup can fail with WinUI's COM
+            // wrappers when called before XAML is fully initialized.
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[Docking] DockSplitter ThemedBrush('{key}') COMException — using fallback. HRESULT=0x{ex.HResult:X8}");
+        }
         return new SolidColorBrush(fallback);
     }
 

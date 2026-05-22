@@ -270,6 +270,26 @@ DatePickerElement.MonthFormat(string format) → DatePickerElement
 DatePickerElement.Orientation(Orientation orientation) → DatePickerElement
 DatePickerElement.Set(Action<DatePicker> configure) → DatePickerElement
 DatePickerElement.YearFormat(string format) → DatePickerElement
+DockManager.ActiveContentChanged(Action<DockActiveContentChangedEventArgs> handler) → DockManager
+DockManager.ContentDocked(Action<DockContentDockedEventArgs> handler) → DockManager
+DockManager.ContentDocking(Action<DockContentDockingEventArgs> handler) → DockManager
+DockManager.ContentFloated(Action<DockContentFloatedEventArgs> handler) → DockManager
+DockManager.ContentFloating(Action<DockContentFloatingEventArgs> handler) → DockManager
+DockManager.DocumentClosed(Action<DockDocumentClosedEventArgs> handler) → DockManager
+DockManager.DocumentClosing(Action<DockDocumentClosingEventArgs> handler) → DockManager
+DockManager.DropTargetConfirmed(Action<DockTarget> handler) → DockManager
+DockManager.DropTargetHovered(Action<DockTarget?> handler) → DockManager
+DockManager.DropTargetsDismissed(Action handler) → DockManager
+DockManager.FloatingWindowClosed(Action<DockFloatingWindowClosedEventArgs> handler) → DockManager
+DockManager.FloatingWindowCreated(Action<DockFloatingWindowCreatedEventArgs> handler) → DockManager
+DockManager.LayoutChanged(Action<DockLayoutChangedEventArgs> handler) → DockManager
+DockManager.LayoutChanging(Action<DockLayoutChangingEventArgs> handler) → DockManager
+DockManager.LiveLayoutChanged(Action<DockNode> handler) → DockManager
+DockManager.SplitterDragCompleted(Action handler) → DockManager
+DockManager.ToolWindowClosed(Action<DockToolWindowClosedEventArgs> handler) → DockManager
+DockManager.ToolWindowClosing(Action<DockToolWindowClosingEventArgs> handler) → DockManager
+DockManager.ToolWindowHidden(Action<DockToolWindowHiddenEventArgs> handler) → DockManager
+DockManager.ToolWindowHiding(Action<DockToolWindowHidingEventArgs> handler) → DockManager
 DropDownButtonElement.AccentButton() → DropDownButtonElement
 DropDownButtonElement.Set(Action<DropDownButton> configure) → DropDownButtonElement
 DropDownButtonElement.SubtleButton() → DropDownButtonElement
@@ -656,6 +676,8 @@ TabViewElement.IsAddTabButtonVisible(bool visible = true) → TabViewElement
 TabViewElement.SelectedIndexChanged(Action<int> handler) → TabViewElement
 TabViewElement.Set(Action<TabView> configure) → TabViewElement
 TabViewElement.TabCloseRequested(Action<int> handler) → TabViewElement
+TabViewElement.TabDragCompleted(Action<int, bool> handler) → TabViewElement
+TabViewElement.TabDragStarting(Action<int> handler) → TabViewElement
 TabViewElement.TabStripFooter(Element footer) → TabViewElement
 TabViewElement.TabStripHeader(Element header) → TabViewElement
 TabViewElement.TabWidthMode(TabViewWidthMode mode) → TabViewElement

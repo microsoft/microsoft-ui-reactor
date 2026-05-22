@@ -181,16 +181,21 @@ internal static class DevtoolsDockingTools
                 new { code = "no-model", hostId });
 
         // Resolve the pane via the model's enumeration so we match docked,
-        // side-stripped, and floating panes alike. Stringified-key comparison
-        // matches DockSnapshotPane.Key, so a snapshot's pane key always
-        // resolves back to the same pane here.
+        // side-stripped, and floating panes alike. Stringified-key
+        // comparison matches DockSnapshotPane.Key, so a snapshot's pane
+        // key always resolves back to the same pane here. Two panes with
+        // distinct Key objects whose ToString() collide are an ambiguous
+        // mutation target — surface that as a clear failure rather than
+        // silently mutating the first match.
         DockableContent? pane = null;
+        int matchCount = 0;
         foreach (var p in model.AllContent())
         {
             if (string.Equals(p.Key?.ToString(), paneKey, StringComparison.Ordinal))
             {
-                pane = p;
-                break;
+                pane ??= p;
+                matchCount++;
+                if (matchCount > 1) break;
             }
         }
         if (pane is null)
@@ -198,6 +203,13 @@ internal static class DevtoolsDockingTools
                 $"No pane with key '{paneKey}' on host '{hostId}'.",
                 JsonRpcErrorCodes.ToolExecution,
                 new { code = "unknown-pane", hostId, paneKey });
+        if (matchCount > 1)
+            throw new McpToolException(
+                $"Pane key '{paneKey}' is ambiguous on host '{hostId}' ({matchCount} matches). " +
+                "Distinct DockableContent.Key objects whose ToString() collide cannot be addressed by docking.dock today; " +
+                "give the panes unique stringified keys (spec §2.9 / §2.26 follow-up: stable pane-id field).",
+                JsonRpcErrorCodes.ToolExecution,
+                new { code = "ambiguous-pane", hostId, paneKey, matchCount });
 
         switch (action.ToLowerInvariant())
         {
