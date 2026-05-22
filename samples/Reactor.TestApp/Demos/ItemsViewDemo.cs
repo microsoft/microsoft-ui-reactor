@@ -40,6 +40,16 @@ class ItemsViewDemo : Component
         var (itemCount, setItemCount) = UseState(60);
         var (lastInvoked, setLastInvoked) = UseState("(none)");
         var (lastSelection, setLastSelection) = UseState(global::System.Array.Empty<int>());
+        // sliderValue is captured by BuildItem below. Moving the slider
+        // triggers a Component re-render which builds a new viewBuilder
+        // closure capturing the new value — that closure-capture is the
+        // signal we want ElementFactory<T>.UpdateInPlace to honor by
+        // invalidating its viewBuilder cache. With the cache cleared,
+        // every realized row re-runs viewBuilder; the inner Reactor
+        // reconcile then walks the tree and only the "count: N" TextBlock
+        // actually has its Text DP written, because Reactor.ShallowEquals
+        // on the other (unchanged) TextBlocks short-circuits the Update.
+        var (sliderValue, setSliderValue) = UseState(0);
 
         var (items, updateItems) = UseReducer(Enumerable.Range(0, itemCount)
             .Select(i => new Card(
@@ -57,7 +67,15 @@ class ItemsViewDemo : Component
                     ).Background(PaletteBrushes[c.Id % PaletteBrushes.Length])
                      .CornerRadius(4).Padding(horizontal: 8, vertical: 4),
                     TextBlock(c.Title).SemiBold(),
-                    Caption(c.Body).Foreground(SecondaryText)
+                    Caption(c.Body).Foreground(SecondaryText),
+                    // Captures sliderValue from the enclosing render scope.
+                    // Each render reconstructs BuildItem (and the closure)
+                    // with the new value; the cache invalidation in
+                    // ElementFactory<T>.UpdateInPlace forces a fresh
+                    // viewBuilder call per row so this line picks up the
+                    // change. Watch the reconcile-highlight overlay: only
+                    // this TextBlock should flash on slider moves.
+                    Caption($"count: {sliderValue}").Foreground(AccentText)
                 ).Padding(8)
             );
 
@@ -106,6 +124,14 @@ class ItemsViewDemo : Component
                 TextBlock($"Last invoked: {lastInvoked}").Foreground(SecondaryText),
                 TextBlock($"Selected: {(lastSelection.Length == 0 ? "(none)" : string.Join(", ", lastSelection))}")
                     .Foreground(SecondaryText)
+            ),
+
+            // Slider whose value feeds every item's "count: N" line via
+            // a closure-captured render-local value. Drag and watch only
+            // the count line update on each realized row.
+            HStack(12,
+                TextBlock($"count: {sliderValue}").Width(110),
+                Slider(sliderValue, 0, 100, v => setSliderValue((int)v)).Width(260)
             ),
 
             Border(

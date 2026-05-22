@@ -3010,10 +3010,14 @@ public sealed partial class Reconciler
             LineSpacing = 4,
             MinItemSpacing = 4,
         },
+        // Leave MinItemWidth / MinItemHeight at the WinUI default of 0.
+        // The layout then measures the first realized item and applies
+        // that size uniformly to the rest — far less likely to clip
+        // user content than picking arbitrary minimums. Users who want
+        // explicit cell sizing can override via .Set(iv => iv.Layout =
+        // new UniformGridLayout { MinItemWidth = ..., MinItemHeight = ... }).
         ItemsViewLayoutKind.UniformGridLayout => new WinUI.UniformGridLayout
         {
-            MinItemWidth = 160,
-            MinItemHeight = 96,
             MinRowSpacing = 4,
             MinColumnSpacing = 4,
         },

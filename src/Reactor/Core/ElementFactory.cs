@@ -70,6 +70,50 @@ public sealed partial class ElementFactory<T> : IElementFactory
     internal bool DebugTryGetLastElementByControl(UIElement control, out Element? element)
         => _lastElementByControl.TryGetValue(control, out element!);
 
+    // Per-key memoization of the last viewBuilder result. Critical for
+    // WinUI ItemsView under <see cref="WinUI.UniformGridLayout"/>: window
+    // resize causes the framework to recycle most realized containers
+    // and immediately re-realize the same indices with the same item
+    // refs. Without memoization, every realize calls the user's
+    // viewBuilder afresh, producing a new ItemContainerElement(VStack(...))
+    // tree whose Child ref differs from the previously bound Element →
+    // <see cref="Element.ShallowEquals"/> returns false → the reconcile
+    // fast-path skip never fires → the entire subtree's Update methods
+    // walk and write WinUI properties on every resize tick. By returning
+    // the same Element instance for the same (key, item ref, index)
+    // tuple, Reconcile hits its ReferenceEquals(a, b) shortcut and the
+    // Update entry returns null without descending. Net: zero per-row
+    // work for resize-driven realize cycles, as long as the user's data
+    // follows the standard "new object for new state" pattern (records,
+    // immutable updates, etc.).
+    private readonly Dictionary<string, ViewBuilderCacheEntry> _viewBuilderCache = new(global::System.StringComparer.Ordinal);
+    private readonly struct ViewBuilderCacheEntry
+    {
+        public readonly T Item;
+        public readonly int Index;
+        public readonly Element Built;
+        public ViewBuilderCacheEntry(T item, int index, Element built)
+        { Item = item; Index = index; Built = built; }
+    }
+
+    /// <summary>
+    /// Resolve the viewBuilder output for a (key, item, index) tuple,
+    /// memoized by reference identity of <paramref name="item"/>. See
+    /// <see cref="_viewBuilderCache"/> for the rationale.
+    /// </summary>
+    private Element BuildOrCache(string key, T item, int index)
+    {
+        if (_viewBuilderCache.TryGetValue(key, out var cached)
+            && ReferenceEquals(cached.Item, item)
+            && cached.Index == index)
+        {
+            return cached.Built;
+        }
+        var built = _viewBuilder(item, index);
+        _viewBuilderCache[key] = new ViewBuilderCacheEntry(item, index, built);
+        return built;
+    }
+
     public ElementFactory(
         IReadOnlyList<T> items,
         Func<T, int, Element> viewBuilder,
@@ -95,6 +139,14 @@ public sealed partial class ElementFactory<T> : IElementFactory
     {
         _items = items;
         _viewBuilder = viewBuilder;
+        // A new viewBuilder closure may capture different external state
+        // (UseState cells, Observable subscriptions, theme, etc.) than
+        // the one that produced the cached <see cref="ViewBuilderCacheEntry.Built"/>
+        // entries. We can't see through delegate captures cheaply, so
+        // invalidate conservatively here. Resize-driven recycle/realize
+        // cycles still hit the cache because window resize doesn't run
+        // the component render path → UpdateInPlace doesn't fire.
+        _viewBuilderCache.Clear();
     }
 
     /// <summary>
@@ -156,12 +208,27 @@ public sealed partial class ElementFactory<T> : IElementFactory
             }
 
             var child = repeater.TryGetElement(currentIndex);
-            if (child is null) { _mountedElements.Remove(key); continue; }
+            if (child is null)
+            {
+                // The framework can return null from TryGetElement during
+                // transient layout passes — e.g., the inner ItemsRepeater
+                // is mid-relayout when an unrelated re-render (slider
+                // scrub, theme change) walks down here. Permanently
+                // dropping the key from <see cref="_mountedElements"/> in
+                // that case used to strand row 0 (which UniformGridLayout
+                // anchors and never recycles): RecycleElement never fires
+                // for it, so once dropped it stays invisible to every
+                // subsequent refresh and the row's content freezes at
+                // whatever state value the user landed on at the moment
+                // of the transient null. Skip this iteration but keep
+                // the entry so the next refresh pass can pick it back up.
+                continue;
+            }
 
             if (!_mountedElements.TryGetValue(key, out var oldElement)) continue;
             if (currentIndex < 0 || currentIndex >= _items.Count) continue;
 
-            var newElement = _viewBuilder(_items[currentIndex], currentIndex);
+            var newElement = BuildOrCache(key, _items[currentIndex], currentIndex);
             _mountedElements[key] = newElement;
             // Keep the per-control "last element" tracking in lockstep with
             // _mountedElements. Without this, a later RecycleElement→GetElement
@@ -203,7 +270,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
             return new TextBlock { Text = "" };
 
         var item = _items[index];
-        var element = _viewBuilder(item, index);
+        var element = BuildOrCache(key, item, index);
 
         UIElement? control;
         if (_recyclePool.Count > 0)
@@ -283,7 +350,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
         // Drop the mounted-element tracking for this container so a later
         // RefreshRealizedItems can't run Reconcile against a stale Element
         // paired with a now-foreign realized child.
-        if (_keyByControl.Remove(args.Element, out var stashedKey))
+        if (_keyByControl.Remove(args.Element, out var stashedKey) && stashedKey is not null)
             _mountedElements.Remove(stashedKey);
 
         // DON'T UnmountChild — the WinUI tree stays alive and is reused on
