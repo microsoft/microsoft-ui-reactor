@@ -88,22 +88,43 @@ internal static class DockLayoutMutator
         if (shape is null) return null;
         if (source is null) return shape;
         var index = new Dictionary<object, DockableContent>();
-        IndexLeaves(source, index);
+        IndexLeavesInto(source, index);
         return ResolveInner(shape, index);
     }
 
-    private static void IndexLeaves(DockNode node, Dictionary<object, DockableContent> index)
+    /// <summary>
+    /// Resolve a shape against a pre-built dictionary of known panes.
+    /// Used by the host when it needs to merge multiple sources of
+    /// pane records — e.g. <c>manager.Layout</c> (app-supplied) +
+    /// model-mutator additions (panes added via
+    /// <c>DockHostModel.Dock</c> that don't yet live in the app's
+    /// tree). The host populates the dict and passes it in.
+    /// </summary>
+    public static DockNode? ResolveContents(DockNode? shape, Dictionary<object, DockableContent> index)
     {
+        if (shape is null) return null;
+        return ResolveInner(shape, index);
+    }
+
+    /// <summary>
+    /// Walk <paramref name="node"/> and write each leaf into
+    /// <paramref name="index"/> by <see cref="DockableContent.Key"/>.
+    /// Leaves with null Key are skipped. Public so the host can
+    /// maintain a long-lived "known panes" dictionary across renders.
+    /// </summary>
+    public static void IndexLeavesInto(DockNode? node, Dictionary<object, DockableContent> index)
+    {
+        if (node is null) return;
         switch (node)
         {
             case DockableContent leaf when leaf.Key is not null:
                 index[leaf.Key] = leaf;
                 break;
             case DockTabGroup grp:
-                foreach (var d in grp.Documents) IndexLeaves(d, index);
+                foreach (var d in grp.Documents) IndexLeavesInto(d, index);
                 break;
             case DockSplit split:
-                foreach (var c in split.Children) IndexLeaves(c, index);
+                foreach (var c in split.Children) IndexLeavesInto(c, index);
                 break;
         }
     }
