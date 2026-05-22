@@ -170,6 +170,9 @@ public static class DockingNativeInterop
             (h) => h.OpenNavigator?.Invoke(+1));
         AddAccel(host, VirtualKey.Tab, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift,
             (h) => h.OpenNavigator?.Invoke(-1));
+        // Spec 045 §2.10 — Alt+F7 opens the hidden-pane picker.
+        AddAccel(host, VirtualKey.F7, VirtualKeyModifiers.Menu,
+            (h) => h.OpenHiddenPicker?.Invoke());
     }
 
     private static void AddAccel(Border host, VirtualKey key, VirtualKeyModifiers mods,

@@ -919,6 +919,7 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_Reliability_EventSubscriptionLeakBaseline",
         "NativeDocking_A11y_HostLandmarkAndPaneAutomationIds",
         "NativeDocking_A11y_FocusFallback_OnLastPaneClose",
+        "NativeDocking_Rtl_FlowDirectionAndSplitterSign",
         // Spec 045 §2.4 drag/drop matrix — exhaustive programmatic-drag
         // scenarios for each DockTarget value + invariants.
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp",
@@ -1841,6 +1842,7 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_Reliability_EventSubscriptionLeakBaseline" => new NativeDockingReliabilityFixtures.EventSubscriptionLeakBaseline(harness),
         "NativeDocking_A11y_HostLandmarkAndPaneAutomationIds" => new NativeDockingA11yFixtures.A11y_HostLandmarkAndPaneAutomationIds(harness),
         "NativeDocking_A11y_FocusFallback_OnLastPaneClose" => new NativeDockingA11yFixtures.A11y_FocusFallback_OnLastPaneClose(harness),
+        "NativeDocking_Rtl_FlowDirectionAndSplitterSign" => new NativeDockingRtlFixtures.Rtl_FlowDirectionAndSplitterSign(harness),
         // Spec 045 §2.4 drag/drop matrix
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp" => new NativeDockingDragDropMatrixFixtures.DragToCenterSameGroup_NoOp(harness),
         "NativeDockingMatrix_DragToSplitRight_AddsColumn" => new NativeDockingDragDropMatrixFixtures.DragToSplitRight_AddsColumn(harness),

@@ -831,6 +831,46 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             setKeyboardOverlayActive(true);
         }
 
+        // §2.10 — Alt+F7 hidden-pane picker. Re-opens the navigator
+        // primitive with the union of side-stripped panes (panes that
+        // were hidden via `Hide` / closed via `Close` on a CanHide=true
+        // ToolWindow → routed to a side strip in the §2.16 drain).
+        // Selecting an entry triggers `model.Show(pane)` which re-attaches
+        // it to its previous container via §2.15.
+        void OpenHiddenPicker()
+        {
+            var hostElement = DockHostLiveAnnouncer.GetHost(manager);
+            if (hostElement is null) return;
+            var hidden = new List<ToolWindow>();
+            void AddSide(IReadOnlyList<ToolWindow>? side)
+            {
+                if (side is null) return;
+                foreach (var tw in side) hidden.Add(tw);
+            }
+            AddSide(effLeftSide as IReadOnlyList<ToolWindow>);
+            AddSide(effTopSide as IReadOnlyList<ToolWindow>);
+            AddSide(effRightSide as IReadOnlyList<ToolWindow>);
+            AddSide(effBottomSide as IReadOnlyList<ToolWindow>);
+            if (hidden.Count == 0) return; // nothing to re-show
+            var nav = DockNavigatorPopup.For(hostElement);
+            var entries = new DockNavigatorPopup.Entry[hidden.Count];
+            for (int i = 0; i < hidden.Count; i++)
+                entries[i] = new DockNavigatorPopup.Entry(hidden[i].Key, hidden[i].Title ?? string.Empty);
+            nav.OpenOrAdvance(entries, currentIndex: -1, delta: +1, committedKey =>
+            {
+                if (committedKey is null) return;
+                ToolWindow? target = null;
+                foreach (var tw in hidden)
+                {
+                    if (Equals(tw.Key, committedKey)) { target = tw; break; }
+                }
+                if (target is null) return;
+                // Show via the model so the §2.16 drain routes back to
+                // the previous container and clears the §2.15 tracker.
+                model.Show(target);
+            });
+        }
+
         // §2.10 navigator — Ctrl+Tab opens the VS-style pane picker. The
         // popup primitive lives outside the Reactor reconciler so it
         // doesn't perturb the render tree; we just need to resolve the
@@ -877,7 +917,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 PrevTab: () => CycleActiveTab(-1),
                 CloseActive: CloseActivePane,
                 EnterDropMode: EnterKeyboardDropMode,
-                OpenNavigator: OpenNavigator));
+                OpenNavigator: OpenNavigator,
+                OpenHiddenPicker: OpenHiddenPicker));
 
         // §2.17 — publish the host model + active-key + layout-snapshot
         // context slots so descendant function components hooked into
