@@ -160,13 +160,22 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         AutomationProperties.SetLandmarkType(this, AutomationLandmarkType.Custom);
 
         // Preview rectangle — semi-transparent fill with active border,
-        // matching upstream WinUI.Dock's PreviewStyle.
+        // matching upstream WinUI.Dock's PreviewStyle. Spec 045 §2.22 —
+        // chrome resolves theme brushes so high-contrast keeps the
+        // preview legible (system accent for border + accent-fill with
+        // explicit Opacity for the body). Falls back to literal ARGB
+        // when no Application instance is available.
         _previewRect = new Border
         {
-            Background = new SolidColorBrush(Color.FromArgb(0x55, 0x33, 0x99, 0xFF)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x33, 0x99, 0xFF)),
+            Background = ThemedBrush(
+                "SystemControlBackgroundAccentBrush",
+                Color.FromArgb(0xFF, 0x33, 0x99, 0xFF)),
+            BorderBrush = ThemedBrush(
+                "SystemControlHighlightAccentBrush",
+                Color.FromArgb(0xFF, 0x33, 0x99, 0xFF)),
             BorderThickness = new Thickness(2),
             CornerRadius = new CornerRadius(2),
+            Opacity = 0.30,
             Visibility = Visibility.Collapsed,
             IsHitTestVisible = false,
             HorizontalAlignment = HorizontalAlignment.Left,
@@ -334,13 +343,20 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         int clusterCol)
     {
         // Outer outlined rectangle — the button face. Stroke + fill are
-        // applied by ApplyVisualState.
+        // applied by ApplyVisualState. Spec 045 §2.22 — themed brushes
+        // so high-contrast renders the button against a clearly
+        // differentiated background; literal-ARGB fallback only when
+        // no Application instance is available.
         var visual = new Rectangle
         {
             Width = ButtonSizeDip - 8,
             Height = ButtonSizeDip - 8,
-            Fill = new SolidColorBrush(Color.FromArgb(0xCC, 0x20, 0x20, 0x20)),
-            Stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x80, 0xBB, 0xFF)),
+            Fill = ThemedBrush(
+                "SystemControlBackgroundChromeMediumLowBrush",
+                Color.FromArgb(0xCC, 0x20, 0x20, 0x20)),
+            Stroke = ThemedBrush(
+                "SystemControlHighlightAccentBrush",
+                Color.FromArgb(0xFF, 0x80, 0xBB, 0xFF)),
             StrokeThickness = 1,
             RadiusX = 4,
             RadiusY = 4,
@@ -452,8 +468,12 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     private static Rectangle? BuildDirectionIndicator(DockTarget target)
     {
         // Indicator color matches the active stroke so the side-stripe
-        // reads as a continuation of the outline.
-        var fill = new SolidColorBrush(Color.FromArgb(0xFF, 0x33, 0x99, 0xFF));
+        // reads as a continuation of the outline. Spec 045 §2.22 —
+        // themed accent brush for HC legibility; ARGB fallback only
+        // when no Application instance is available.
+        var fill = ThemedBrush(
+            "SystemControlHighlightAccentBrush",
+            Color.FromArgb(0xFF, 0x33, 0x99, 0xFF));
         const double thin = 10.0;   // narrow axis (side-stripe thickness)
         const double full = ButtonSizeDip - 8;
         return target switch
@@ -495,26 +515,36 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         switch (target)
         {
             case DockTarget.Center:
-                visual.Fill = new SolidColorBrush(Color.FromArgb(0xCC, 0x33, 0x77, 0xCC));
+                visual.Fill = ThemedBrush(
+                    "SystemControlBackgroundAccentBrush",
+                    Color.FromArgb(0xCC, 0x33, 0x77, 0xCC));
                 break;
             case DockTarget.SplitLeft:
             case DockTarget.DockLeft:
-                visual.Stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x33, 0x99, 0xFF));
+                visual.Stroke = ThemedBrush(
+                    "SystemControlHighlightAccentBrush",
+                    Color.FromArgb(0xFF, 0x33, 0x99, 0xFF));
                 visual.StrokeDashArray = new Microsoft.UI.Xaml.Media.DoubleCollection { 3, 1 };
                 break;
             case DockTarget.SplitRight:
             case DockTarget.DockRight:
-                visual.Stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x33, 0x99, 0xFF));
+                visual.Stroke = ThemedBrush(
+                    "SystemControlHighlightAccentBrush",
+                    Color.FromArgb(0xFF, 0x33, 0x99, 0xFF));
                 visual.StrokeDashArray = new Microsoft.UI.Xaml.Media.DoubleCollection { 3, 1 };
                 break;
             case DockTarget.SplitTop:
             case DockTarget.DockTop:
-                visual.Stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x33, 0x99, 0xFF));
+                visual.Stroke = ThemedBrush(
+                    "SystemControlHighlightAccentBrush",
+                    Color.FromArgb(0xFF, 0x33, 0x99, 0xFF));
                 visual.StrokeDashArray = new Microsoft.UI.Xaml.Media.DoubleCollection { 3, 1 };
                 break;
             case DockTarget.SplitBottom:
             case DockTarget.DockBottom:
-                visual.Stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x33, 0x99, 0xFF));
+                visual.Stroke = ThemedBrush(
+                    "SystemControlHighlightAccentBrush",
+                    Color.FromArgb(0xFF, 0x33, 0x99, 0xFF));
                 visual.StrokeDashArray = new Microsoft.UI.Xaml.Media.DoubleCollection { 3, 1 };
                 break;
         }
@@ -847,4 +877,24 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     }
 
     private readonly record struct ClusterSlot(int Row, int Col);
+
+    // Spec 045 §2.22 — resolve a theme resource brush with a literal
+    // ARGB fallback. The lookup walks `Application.Current.Resources`
+    // which is the same dictionary high-contrast theme swaps populate,
+    // so the overlay chrome updates on a system HC toggle without
+    // bespoke wiring. Allocation-free for the cache-hit path
+    // (TryGetValue + cast); the fallback only allocates the
+    // SolidColorBrush when running under the headless harness.
+    private static Brush ThemedBrush(string key, global::Windows.UI.Color fallback)
+    {
+        try
+        {
+            if (Application.Current?.Resources is { } res &&
+                res.TryGetValue(key, out var v) &&
+                v is Brush b)
+                return b;
+        }
+        catch { /* headless harness — no Application instance */ }
+        return new SolidColorBrush(fallback);
+    }
 }

@@ -104,12 +104,16 @@ internal sealed partial class DockSplitterControl : Grid
         UseSystemFocusVisuals = true;
         Background = new SolidColorBrush(Colors.Transparent);
 
-        // ~50% opaque gray handle so the splitter is visible against both
-        // light and dark backgrounds. Hover transitions to a stronger shade
-        // via OnPointerEntered.
+        // Spec 045 §2.22 high-contrast — handle Fill resolves to a
+        // theme brush so HC keeps the splitter legible against the
+        // system accent. Falls back to a ~50% gray ARGB literal when
+        // the theme resources aren't available (e.g. headless tests
+        // running without an Application instance).
         _handle = new Rectangle
         {
-            Fill = new SolidColorBrush(Color.FromArgb(0x88, 0x80, 0x80, 0x80)),
+            Fill = ThemedBrush(
+                "SystemControlForegroundBaseMediumLowBrush",
+                Color.FromArgb(0x88, 0x80, 0x80, 0x80)),
             RadiusX = 1,
             RadiusY = 1,
         };
@@ -193,15 +197,20 @@ internal sealed partial class DockSplitterControl : Grid
 
     private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        if (_handle.Fill is SolidColorBrush brush)
-            brush.Color = Color.FromArgb(0xAA, 0x80, 0x80, 0x80);
+        // Spec 045 §2.22 — hover state uses the system accent brush so
+        // HC themes show a clearly differentiated splitter under
+        // pointer; falls back to a darker gray when no theme.
+        _handle.Fill = ThemedBrush(
+            "SystemControlHighlightAccentBrush",
+            Color.FromArgb(0xAA, 0x80, 0x80, 0x80));
     }
 
     private void OnPointerExited(object sender, PointerRoutedEventArgs e)
     {
         if (_isCapturing) return;
-        if (_handle.Fill is SolidColorBrush brush)
-            brush.Color = Color.FromArgb(0x33, 0x80, 0x80, 0x80);
+        _handle.Fill = ThemedBrush(
+            "SystemControlForegroundBaseMediumLowBrush",
+            Color.FromArgb(0x33, 0x80, 0x80, 0x80));
     }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -479,8 +488,27 @@ internal sealed partial class DockSplitterControl : Grid
         _isCapturing = false;
         _capturePointerId = 0;
         ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(0, _direction, GetHostExtent(), isFinal: true));
-        if (_handle.Fill is SolidColorBrush brush)
-            brush.Color = Color.FromArgb(0x88, 0x80, 0x80, 0x80);
+        _handle.Fill = ThemedBrush(
+            "SystemControlForegroundBaseMediumLowBrush",
+            Color.FromArgb(0x88, 0x80, 0x80, 0x80));
+    }
+
+    // Spec 045 §2.22 — resolve a theme resource brush with a literal
+    // ARGB fallback. The lookup walks `Application.Current.Resources`
+    // which is the same dictionary high-contrast theme swaps populate,
+    // so the splitter chrome updates on a system HC toggle without
+    // bespoke wiring.
+    private static Brush ThemedBrush(string key, Color fallback)
+    {
+        try
+        {
+            if (Application.Current?.Resources is { } res &&
+                res.TryGetValue(key, out var v) &&
+                v is Brush b)
+                return b;
+        }
+        catch { /* headless harness — no Application instance */ }
+        return new SolidColorBrush(fallback);
     }
 
     /// <summary>Test hook — fires the <see cref="ResizeDelta"/> event with

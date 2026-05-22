@@ -29,6 +29,20 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Changed
 
+- **Spec 045 Phase 2 — §2.22 high-contrast chrome brushes.**
+  `DockSplitterControl` and `DockDropTargetOverlayControl` swap
+  their hard-coded ARGB literals for `ThemedBrush(key, fallback)`
+  lookups against `Application.Current.Resources`. HC themes now
+  retheme the docking chrome via the same dictionary path WinUI
+  defaults rely on. ARGB fallbacks remain for the headless-harness
+  no-Application case. System brushes: splitter handle →
+  `SystemControlForegroundBaseMediumLowBrush`; splitter hover +
+  drop-target Stroke + preview Border + indicator fill →
+  `SystemControlHighlightAccentBrush`; drop-target outer Fill →
+  `SystemControlBackgroundChromeMediumLowBrush`; preview body +
+  Center fill → `SystemControlBackgroundAccentBrush` (the preview
+  Border carries an explicit `Opacity=0.30` for the transparent
+  overlay).
 - **Spec 045 Phase 2 — §2.19 XAML wrapper unhooked from the
   solution.** The Phase-1 `Reactor.Docking.Xaml` wrapper assembly
   was removed from `Reactor.slnx` ahead of the §2.29 human-review

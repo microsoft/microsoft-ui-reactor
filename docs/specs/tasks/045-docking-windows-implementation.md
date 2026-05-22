@@ -1294,18 +1294,29 @@ integration.*
   `UISettings.AnimationsEnabled`. The overlay reads the setting in
   `DockDropTargetOverlayControl.ReadAnimationsSetting` so future
   easing additions can gate on the flag.
-- [~] **High-contrast:** chrome legibility (P4 review item 27
-  explicit; P2 baseline must not regress). Audit:
-  `DockSplitterControl` uses a `SolidColorBrush(0x88,0x80,0x80,0x80)`
-  for the handle (visible against both light + dark in the
-  default themes; under high-contrast the chrome reads but
-  doesn't track the system accent — fixed in P4);
-  `DockDropTargetOverlayControl` uses themed-blue accents which
-  also stay legible in high-contrast. Side-strip + tab chrome
-  inherits from WinUI defaults which already honor the high-
-  contrast resource dictionary. P2 baseline: legible-but-not-
-  themed. P4 review item 27 promotes the chrome to system
-  brushes for full HC integration.
+- [x] **High-contrast:** chrome legibility (P4 review item 27
+  explicit; P2 baseline must not regress). All hard-coded ARGB
+  literals in `DockSplitterControl` (handle Fill + hover/exit
+  transitions + pointer-capture-lost reset) and
+  `DockDropTargetOverlayControl` (preview-rect Background +
+  BorderBrush, button Fill + Stroke, direction-indicator side
+  stripes, Center fill) are now resolved via a `ThemedBrush(key,
+  fallback)` helper that walks `Application.Current.Resources`
+  for the named system brush and falls back to the original
+  ARGB literal only when no Application instance is in scope
+  (headless harness). Brush map:
+  splitter handle Fill →
+  `SystemControlForegroundBaseMediumLowBrush`; splitter hover →
+  `SystemControlHighlightAccentBrush`; drop-target outer Fill →
+  `SystemControlBackgroundChromeMediumLowBrush`; drop-target
+  Stroke + indicator fill + preview Border →
+  `SystemControlHighlightAccentBrush`; preview Background +
+  Center fill → `SystemControlBackgroundAccentBrush` (the
+  preview Border uses an explicit `Opacity=0.30` to preserve
+  the transparent-overlay feel). HC themes now swap the chrome
+  via the same dictionary path that WinUI defaults rely on; no
+  custom HC code path needed. Animation gating already in place
+  (§2.22 reduced-motion bullet).
 - [~] **A11y-specific selftests:**
   - [x] AT-tree walk asserts role/name/AutomationId for every pane.
     `NativeDocking_A11y_HostLandmarkAndPaneAutomationIds` walks the
