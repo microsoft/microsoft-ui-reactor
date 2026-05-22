@@ -29,6 +29,19 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Changed
 
+- **Spec 045 Phase 2 — §2.19 XAML wrapper unhooked from the
+  solution.** The Phase-1 `Reactor.Docking.Xaml` wrapper assembly
+  was removed from `Reactor.slnx` ahead of the §2.29 human-review
+  gate: ProjectReferences dropped from `DockShowcase.csproj`,
+  `Reactor.AppTests.Host.csproj`, `Reactor.Tests.csproj`;
+  `InternalsVisibleTo("Microsoft.UI.Reactor.Docking.Xaml")` dropped
+  from `Reactor.csproj`; showcase entry point dropped the
+  `REACTOR_DOCK_XAML=1` A/B flip — the native renderer (§5.1) is
+  the only path. Phase-1-specific `DockingSmokeFixtures` +
+  `BehaviorBridgeMappingTests` retire alongside;
+  `NativeDockingSmokeFixtures` cover the same surface. Source
+  under `src/Reactor.Docking.Xaml/` stays on disk per the §5.6
+  reference contract; a follow-up commit removes the directory.
 - **Spec 045 Phase 2 — §2.30 shape-only `layoutOverride`.** The
   docking host's internal `layoutOverride` previously stored the
   full user-mutated `DockNode` tree (with each leaf's `Content` /

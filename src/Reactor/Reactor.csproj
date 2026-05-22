@@ -45,11 +45,12 @@
     <InternalsVisibleTo Include="Reactor.Tests" />
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
-    <!-- The first-party docking wrapper (spec 045 Phase 1) calls Reconciler
-         helpers like SetElementTag / DetachReactorState that are internal
-         to Reactor. The wrapper is a first-party Microsoft assembly that
-         ships alongside Reactor itself, not a third-party consumer. -->
-    <InternalsVisibleTo Include="Microsoft.UI.Reactor.Docking.Xaml" />
+    <!-- Spec 045 §2.19: the Phase-1 WinUI.Dock XAML wrapper was unhooked
+         from the solution at the §2.29 review gate. The
+         InternalsVisibleTo entry retires with the wrapper assembly.
+         The source under src/Reactor.Docking.Xaml/ stays on disk for
+         reference per §5.6; a follow-up commit removes the directory
+         entirely. -->
   </ItemGroup>
 
   <ItemGroup>

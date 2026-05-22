@@ -13,6 +13,5 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
-    <ProjectReference Include="..\..\..\src\Reactor.Docking.Xaml\Reactor.Docking.Xaml.csproj" />
   </ItemGroup>
 </Project>

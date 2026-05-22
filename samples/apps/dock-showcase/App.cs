@@ -27,19 +27,14 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 
-// Default: Phase 2 native renderer (spec 045 §5.1 / §2.16). Set
-// REACTOR_DOCK_XAML=1 to fall back to the Phase 1 WinUI.Dock wrapper for
-// side-by-side review.
+// Phase 2 native renderer (spec 045 §5.1 / §2.16). The Phase-1
+// WinUI.Dock A/B flip was removed at the §2.19 chrome-removal pass —
+// the native renderer is now the only path.
 ReactorApp.Run<DockShowcaseRoot>(
     title: "Reactor Docking Showcase",
     width: 1200,
     height: 800,
-    configure: host =>
-    {
-        var useXaml = Environment.GetEnvironmentVariable("REACTOR_DOCK_XAML") == "1";
-        if (useXaml) DockingXamlInterop.Register(host.Reconciler);
-        else DockingNativeInterop.Register(host.Reconciler);
-    });
+    configure: host => DockingNativeInterop.Register(host.Reconciler));
 
 // ════════════════════════════════════════════════════════════════════════
 //  Root — side menu to switch between scenes

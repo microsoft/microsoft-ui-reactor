@@ -846,11 +846,20 @@ binding) are deferred to a follow-up pass.
   Ctrl+F4/W close, tear-out, dock-confirm (host + per-group overlay
   paths), and every drain mutation (DockOp / FloatOp / HideOp /
   ShowOp / CloseOp / PinToSideOp).
-- [ ] All chords configurable via spec 027 input binding. *Today the
-  chord set is hard-coded in
-  `DockingNativeInterop.AttachChordAccelerators`. Configurable binding
-  lands when spec 027's `IInputBindingResolver` covers app-scoped
-  accelerators.*
+- [~] All chords configurable via spec 027 input binding. **Blocked
+  on spec 027 — the `IInputBindingResolver` (or equivalent
+  app-scoped accelerator-binding surface) has not shipped.** Verified
+  2026-05-21: `grep -r "IInputBindingResolver" src/Reactor/` returns
+  no matches; spec 027 itself does not currently describe a typed
+  resolver for chord remapping. Until that lands, the docking chord
+  set is hard-coded in
+  `DockingNativeInterop.AttachChordAccelerators`
+  (Ctrl+PageUp / Ctrl+PageDown / Ctrl+F4 / Ctrl+W / Ctrl+Shift+M /
+  Ctrl+Tab / Ctrl+Shift+Tab / Alt+F7), all of which match Visual
+  Studio defaults. Resolver-keyed identifiers will live next to
+  `DockingStringKeys` in a `DockingChordKeys` static class when the
+  upstream resolver arrives; the bind site is small (single static
+  method) and the resolver wiring is mechanical.
 
 ### 2.11 Layout versioning (spec §5.3.4, §8.11)
 
@@ -1095,14 +1104,22 @@ integration.*
 
 ### 2.19 Phase-2 chrome removal (spec §5.6)
 
-- [ ] Remove `Reactor.Docking.Xaml` from `Reactor.slnx`. *Deferred
-  to the §2.29 sign-off PR so the human reviewer can drive the
-  XAML version side-by-side via the showcase's
-  `REACTOR_DOCK_XAML=1` flip during the review pass. Once §2.29
-  signs off, the slnx + showcase + tests references drop in a
-  dedicated commit.*
-- [ ] Remove the assembly from any published packages. *Pairs
-  with the slnx removal above.*
+- [x] Remove `Reactor.Docking.Xaml` from `Reactor.slnx`. Done
+  alongside the §2.29 prep pass: project node dropped from
+  `Reactor.slnx`, `ProjectReference`s removed from
+  `DockShowcase.csproj` / `Reactor.AppTests.Host.csproj` /
+  `Reactor.Tests.csproj`, `InternalsVisibleTo("Microsoft.UI.Reactor.Docking.Xaml")`
+  removed from `Reactor.csproj`. Showcase entry point dropped
+  the `REACTOR_DOCK_XAML=1` A/B flip — the native renderer is
+  now the only path. Phase-1-specific
+  `DockingSmokeFixtures` + `BehaviorBridgeMappingTests` retire
+  alongside (NativeDockingSmokeFixtures cover the same
+  mount/update/unmount surface against the native renderer).
+  Source under `src/Reactor.Docking.Xaml/` stays on disk per the
+  spec §5.6 reference contract; a follow-up commit removes the
+  directory.
+- [x] Remove the assembly from any published packages. Same pass
+  — no published-package surface remains.
 - [x] **Keep** `third_party/WinUI.Dock/` source in repo — license
   compliance + reference + regression A/B (§5.6). Documented in
   VENDORED.md "Sunset" section.

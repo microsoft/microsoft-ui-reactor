@@ -34,10 +34,10 @@
     <ProjectReference Include="..\..\src\Reactor.Localization.Generator\Reactor.Localization.Generator.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Cli\Reactor.Cli.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Analyzers\Reactor.Analyzers.csproj" />
-    <ProjectReference Include="..\..\src\Reactor.Docking.Xaml\Reactor.Docking.Xaml.csproj" />
-    <!-- Vendored WinUI.Dock — needed by Docking/BehaviorBridgeMappingTests
-         which guards against upstream DockTarget enum drift on re-snapshot. -->
-    <ProjectReference Include="..\..\third_party\WinUI.Dock\WinUI.Dock.csproj" />
+    <!-- spec 045 §2.19: XAML wrapper unhooked at P2 review gate; the
+         BehaviorBridgeMappingTests + DockingSmokeFixture tests retire
+         alongside. WinUI.Dock vendored source stays in repo per §5.6 for
+         license + reference; no test consumes it post-§2.19. -->
     <ProjectReference Include="..\..\samples\apps\minesweeper\Minesweeper.csproj" />
     <ProjectReference Include="..\..\tools\Reactor.MurCheckGuardrail\Reactor.MurCheckGuardrail.csproj" />
   </ItemGroup>
