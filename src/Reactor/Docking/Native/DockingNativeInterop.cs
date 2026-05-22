@@ -138,8 +138,7 @@ public static class DockingNativeInterop
                 var state = NativeHostState.GetAttached(host);
                 if (state?.LastContent is not null && host.Child is UIElement realized)
                 {
-                    try { rec.Reconcile(state.LastContent, null, realized, static () => { }); }
-                    catch { /* best-effort unmount cleanup */ }
+                    rec.Reconcile(state.LastContent, null, realized, static () => { });
                 }
                 if (state?.LastElement is { } el)
                 {
@@ -150,7 +149,7 @@ public static class DockingNativeInterop
                     // be reused / re-mounted without stale references.
                     foreach (var floating in DockFloatingTracker.SnapshotFor(el))
                     {
-                        try { floating.Close(); } catch { /* best-effort */ }
+                        floating.Close();
                         DockFloatingTracker.UnregisterFor(el, floating);
                     }
                     DockChordBridge.Clear(el);

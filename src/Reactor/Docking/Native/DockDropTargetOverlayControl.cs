@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -231,8 +230,7 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     private void UnhookGlobalEscape()
     {
         if (_globalEscapeHandler is null || _globalEscapeTarget is null) return;
-        try { _globalEscapeTarget.RemoveHandler(KeyDownEvent, _globalEscapeHandler); }
-        catch { /* best-effort */ }
+        _globalEscapeTarget.RemoveHandler(KeyDownEvent, _globalEscapeHandler);
         _globalEscapeHandler = null;
         _globalEscapeTarget = null;
     }
@@ -340,8 +338,7 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     /// </summary>
     private void ReadAnimationsSetting()
     {
-        try { _animationsEnabled = new UISettings().AnimationsEnabled; }
-        catch { _animationsEnabled = true; }
+        _animationsEnabled = new UISettings().AnimationsEnabled;
     }
 
     private (DockTarget Target, Border Button, Rectangle Visual) BuildButton(
@@ -891,31 +888,13 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     // ARGB fallback. The lookup walks `Application.Current.Resources`
     // which is the same dictionary high-contrast theme swaps populate,
     // so the overlay chrome updates on a system HC toggle without
-    // bespoke wiring. Allocation-free for the cache-hit path
-    // (TryGetValue + cast); the fallback only allocates the
-    // SolidColorBrush when running under the headless harness.
+    // bespoke wiring.
     private static Brush ThemedBrush(string key, global::Windows.UI.Color fallback)
     {
-        try
-        {
-            if (Application.Current?.Resources is { } res &&
-                res.TryGetValue(key, out var v) &&
-                v is Brush b)
-                return b;
-        }
-        catch (InvalidOperationException)
-        {
-            // Headless harness — no Application instance / no UI thread.
-        }
-        catch (COMException ex)
-        {
-            // Resource dictionary lookup can fail with WinUI's COM
-            // wrappers when called before XAML is fully initialized; the
-            // fallback brush still renders. Surface the unexpected case
-            // so future regressions are debuggable.
-            global::System.Diagnostics.Debug.WriteLine(
-                $"[Docking] ThemedBrush('{key}') COMException — using fallback. HRESULT=0x{ex.HResult:X8}");
-        }
+        if (Application.Current?.Resources is { } res &&
+            res.TryGetValue(key, out var v) &&
+            v is Brush b)
+            return b;
         return new SolidColorBrush(fallback);
     }
 }

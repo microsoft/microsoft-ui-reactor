@@ -91,48 +91,32 @@ internal static class DockHostLiveAnnouncer
 
     private static void TryFocus(FrameworkElement host)
     {
-        try
+        if (host is Microsoft.UI.Xaml.Controls.Control control)
         {
-            if (host is Microsoft.UI.Xaml.Controls.Control control)
+            control.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            return;
+        }
+        // Border / Panel — focus the nearest focusable child via the
+        // FocusManager's automatic walk so a tab group inside still
+        // gets focus when its container hands off. Fire-and-forget:
+        // the focus shift completes asynchronously but its outcome
+        // doesn't gate any caller — we don't need the IAsyncOp.
+        _ = Microsoft.UI.Xaml.Input.FocusManager.TryMoveFocusAsync(
+            Microsoft.UI.Xaml.Input.FocusNavigationDirection.Next,
+            new Microsoft.UI.Xaml.Input.FindNextElementOptions
             {
-                control.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
-                return;
-            }
-            // Border / Panel — focus the nearest focusable child via the
-            // FocusManager's automatic walk so a tab group inside still
-            // gets focus when its container hands off. Fire-and-forget:
-            // the focus shift completes asynchronously but its outcome
-            // doesn't gate any caller — we don't need the IAsyncOp.
-            _ = Microsoft.UI.Xaml.Input.FocusManager.TryMoveFocusAsync(
-                Microsoft.UI.Xaml.Input.FocusNavigationDirection.Next,
-                new Microsoft.UI.Xaml.Input.FindNextElementOptions
-                {
-                    SearchRoot = host,
-                });
-        }
-        catch
-        {
-            // Best-effort — focus restoration is non-critical, swallow
-            // anything thrown by the focus subsystem (e.g. detached host).
-        }
+                SearchRoot = host,
+            });
     }
 
     private static void RaiseNotification(FrameworkElement host, string message)
     {
-        try
-        {
-            var peer = FrameworkElementAutomationPeer.FromElement(host)
-                ?? FrameworkElementAutomationPeer.CreatePeerForElement(host);
-            peer?.RaiseNotificationEvent(
-                AutomationNotificationKind.ActionCompleted,
-                AutomationNotificationProcessing.ImportantMostRecent,
-                message,
-                "DockingLayoutTransition");
-        }
-        catch
-        {
-            // Best-effort — AT bridge unavailable in headless/test
-            // contexts. Silent fallback is preferable to throwing.
-        }
+        var peer = FrameworkElementAutomationPeer.FromElement(host)
+            ?? FrameworkElementAutomationPeer.CreatePeerForElement(host);
+        peer?.RaiseNotificationEvent(
+            AutomationNotificationKind.ActionCompleted,
+            AutomationNotificationProcessing.ImportantMostRecent,
+            message,
+            "DockingLayoutTransition");
     }
 }

@@ -194,7 +194,7 @@ public sealed class DockOperationLog
             Target = target,
             Layout = layout,
             Ratios = ratios is null ? null : CloneRatios(ratios),
-            LayoutJson = layout is null ? null : SafeSaveJson(layout),
+            LayoutJson = layout is null ? null : DockLayoutSerializer.Save(layout),
         };
         Append(op);
         return op;
@@ -257,22 +257,6 @@ public sealed class DockOperationLog
             clone[kvp.Key] = arr;
         }
         return clone;
-    }
-
-    private static string? SafeSaveJson(DockNode root)
-    {
-        try { return DockLayoutSerializer.Save(root); }
-        catch (Exception ex)
-        {
-            // LayoutJson is documented as "JSON via DockLayoutSerializer"
-            // and is read by devtools / telemetry consumers that may
-            // parse it with JsonNode.Parse. Returning English diagnostic
-            // text would break parsers and leak exception details into
-            // shipped telemetry. Route the failure to Debug and return
-            // null (the field is already nullable).
-            Debug.WriteLine($"[DockOps] LayoutJson serialization failed: {ex.GetType().Name}: {ex.Message}");
-            return null;
-        }
     }
 
     private static string FormatForDebug(DockOperation op)

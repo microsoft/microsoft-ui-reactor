@@ -354,43 +354,22 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
                 if (removed)
                 {
-                    // Open the floating window FIRST. Only commit the layout
-                    // mutation + fire OnContentFloated when a real window
-                    // was created — a broad catch around Open would convert
-                    // a failed state transition into a success-shaped event
-                    // (pane removed from docked tree, observer notified, no
-                    // floating window visible). On failure, leave the layout
-                    // untouched and log via the operation log.
-                    ReactorWindow? floatingWindow = null;
-                    Exception? openError = null;
-                    try { floatingWindow = DockFloatingWindow.Open(pane, manager: manager); }
-                    catch (Exception ex) { openError = ex; }
-
-                    if (floatingWindow is not null)
-                    {
-                        StoreOverride(afterRemove);
-                        manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
-                        // §2.4 — same as confirm path: surface the new tree.
-                        manager.OnLiveLayoutChanged?.Invoke(afterRemove);
-                        LogOp(Diagnostics.DockOperationKind.DragTearOut,
-                            $"tear-out pane='{pane.Key}' to floating window",
-                            paneKey: pane.Key?.ToString(),
-                            layoutOverride: afterRemove);
-                        // §2.10 — UIA polite announcement.
-                        DockHostLiveAnnouncer.Announce(manager,
-                            DockingStrings.LiveAnnouncement(DockingStringKeys.LiveFloated, pane.Title));
-                    }
-                    else
-                    {
-                        // Float-open failed (no XamlRoot, WinUI init failure,
-                        // etc.). Pane stays in its docked location; no event
-                        // fires. Headless tests that need to assert tear-out
-                        // semantics without a real window should use the
-                        // model API directly rather than the drag path.
-                        LogOp(Diagnostics.DockOperationKind.Note,
-                            $"tear-out aborted pane='{pane.Key}' DockFloatingWindow.Open failed: {openError?.GetType().Name}: {openError?.Message}",
-                            paneKey: pane.Key?.ToString());
-                    }
+                    // Open the floating window FIRST so the layout mutation
+                    // only commits when a real window was created. If Open
+                    // throws (no XamlRoot, WinUI init failure), the process
+                    // tears down and no half-mutated state survives.
+                    DockFloatingWindow.Open(pane, manager: manager);
+                    StoreOverride(afterRemove);
+                    manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
+                    // §2.4 — same as confirm path: surface the new tree.
+                    manager.OnLiveLayoutChanged?.Invoke(afterRemove);
+                    LogOp(Diagnostics.DockOperationKind.DragTearOut,
+                        $"tear-out pane='{pane.Key}' to floating window",
+                        paneKey: pane.Key?.ToString(),
+                        layoutOverride: afterRemove);
+                    // §2.10 — UIA polite announcement.
+                    DockHostLiveAnnouncer.Announce(manager,
+                        DockingStrings.LiveAnnouncement(DockingStringKeys.LiveFloated, pane.Title));
                 }
             }
 
@@ -1302,42 +1281,24 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     var floatingArgs = new DockContentFloatingEventArgs { Content = floatOp.Content };
                     manager.OnContentFloating?.Invoke(floatingArgs);
                     if (floatingArgs.Cancel) break;
-                    // Open the floating window FIRST. The previous behavior
-                    // mutated the layout and then swallowed Open exceptions,
-                    // which turned a failed transition into a success-shaped
-                    // event (pane removed, OnContentFloated fired, no window).
-                    // Now we only commit the layout mutation + fire events
-                    // when a real ReactorWindow was produced.
-                    ReactorWindow? floatingWindow = null;
-                    Exception? openError = null;
-                    try { floatingWindow = DockFloatingWindow.Open(floatOp.Content, manager: manager); }
-                    catch (Exception ex) { openError = ex; }
-
-                    if (floatingWindow is not null)
+                    // Open the floating window FIRST so the layout mutation
+                    // only commits when a real window was produced. If Open
+                    // throws, the process tears down and no half-mutated
+                    // state survives.
+                    DockFloatingWindow.Open(floatOp.Content, manager: manager);
+                    var (after, found) = DockLayoutMutator.RemovePane(workingLayout, floatOp.Content);
+                    if (found)
                     {
-                        var (after, found) = DockLayoutMutator.RemovePane(workingLayout, floatOp.Content);
-                        if (found)
-                        {
-                            // §2.15 — record container before tear-out so a
-                            // later re-dock can route via PreviousContainer.
-                            var container = DockLayoutMutator.FindContainer(workingLayout, floatOp.Content);
-                            if (container is not null) PreviousContainerTracker.Set(floatOp.Content, container);
-                            workingLayout = after;
-                            layoutChanged = true;
-                        }
-                        manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = floatOp.Content });
-                        DockHostLiveAnnouncer.Announce(manager,
-                            DockingStrings.LiveAnnouncement(DockingStringKeys.LiveFloated, floatOp.Content.Title));
+                        // §2.15 — record container before tear-out so a
+                        // later re-dock can route via PreviousContainer.
+                        var container = DockLayoutMutator.FindContainer(workingLayout, floatOp.Content);
+                        if (container is not null) PreviousContainerTracker.Set(floatOp.Content, container);
+                        workingLayout = after;
+                        layoutChanged = true;
                     }
-                    else
-                    {
-                        // Open failed — keep the pane docked; fire no event.
-                        // Mirror the diagnostic to Debug for traceability;
-                        // the operation log is owned by the render closure
-                        // and not reachable from the drain.
-                        global::System.Diagnostics.Debug.WriteLine(
-                            $"[Docking] FloatOp aborted for pane='{floatOp.Content.Key}' DockFloatingWindow.Open failed: {openError?.GetType().Name}: {openError?.Message}");
-                    }
+                    manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = floatOp.Content });
+                    DockHostLiveAnnouncer.Announce(manager,
+                        DockingStrings.LiveAnnouncement(DockingStringKeys.LiveFloated, floatOp.Content.Title));
                     break;
                 }
 
@@ -1386,17 +1347,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     bool strategyHandled = false;
                     if (model.LayoutStrategy is { } strategy && showOp.Content is ToolWindow tw)
                     {
-                        try { strategyHandled = strategy.BeforeInsertToolWindow(model, tw); }
-                        catch (Exception ex)
-                        {
-                            // Strategy is app code; keep the drain alive so
-                            // a buggy strategy doesn't strand later queued
-                            // mutations, but surface the failure so the bug
-                            // is debuggable. Falls through to the default
-                            // ShowFromHistory placement.
-                            global::System.Diagnostics.Debug.WriteLine(
-                                $"[Docking] IDockLayoutStrategy.BeforeInsertToolWindow threw for pane='{tw.Key}' (strategy={strategy.GetType().Name}): {ex.GetType().Name}: {ex.Message}");
-                        }
+                        strategyHandled = strategy.BeforeInsertToolWindow(model, tw);
                     }
                     if (!strategyHandled)
                     {

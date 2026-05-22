@@ -95,22 +95,11 @@ public static class DockFloatingWindow
         if (manager is not null) DockFloatingTracker.RegisterFor(manager, window);
         // Spec 045 §2.6 — fire OnFloatingWindowCreated so apps can
         // observe the new top-level for telemetry / persistence /
-        // window-grouping bookkeeping. Subscriber exceptions are
-        // surfaced via Debug so they don't disappear silently, but
-        // they don't block the Open call — a busted telemetry sink
-        // shouldn't strand a torn-out pane without its window.
-        try
+        // window-grouping bookkeeping.
+        manager?.OnFloatingWindowCreated?.Invoke(new DockFloatingWindowCreatedEventArgs
         {
-            manager?.OnFloatingWindowCreated?.Invoke(new DockFloatingWindowCreatedEventArgs
-            {
-                DraggedSource = pane,
-            });
-        }
-        catch (Exception ex)
-        {
-            global::System.Diagnostics.Debug.WriteLine(
-                $"[Docking] OnFloatingWindowCreated observer threw: {ex.GetType().Name}: {ex.Message}");
-        }
+            DraggedSource = pane,
+        });
         window.Closed += (_, _) =>
         {
             DockFloatingTracker.Unregister(window);
@@ -118,23 +107,13 @@ public static class DockFloatingWindow
             // Spec 045 §2.6 — paired OnFloatingWindowClosed event. Fires
             // for both user-initiated close and host-unmount close
             // (DockingNativeInterop iterates DockFloatingTracker.SnapshotFor
-            // and calls Close() on each); the pane content reference is
-            // best-effort and may be stale after a cross-window dock-back
-            // already migrated it to another host. Observer exceptions
-            // are logged rather than swallowed so cleanup-handler bugs
-            // are debuggable.
-            try
+            // and calls Close() on each); the pane content reference may
+            // be stale after a cross-window dock-back already migrated it
+            // to another host.
+            manager?.OnFloatingWindowClosed?.Invoke(new DockFloatingWindowClosedEventArgs
             {
-                manager?.OnFloatingWindowClosed?.Invoke(new DockFloatingWindowClosedEventArgs
-                {
-                    Content = pane,
-                });
-            }
-            catch (Exception ex)
-            {
-                global::System.Diagnostics.Debug.WriteLine(
-                    $"[Docking] OnFloatingWindowClosed observer threw: {ex.GetType().Name}: {ex.Message}");
-            }
+                Content = pane,
+            });
         };
         return window;
     }
@@ -167,7 +146,7 @@ public static class DockFloatingWindow
             onTabClosing: _ =>
             {
                 // Closing the last tab closes the window.
-                try { windowHolder[0]?.Close(); } catch { /* best-effort */ }
+                windowHolder[0]?.Close();
             },
             onTabDragStarting: (doc, _) =>
             {
@@ -194,7 +173,7 @@ public static class DockFloatingWindow
                 // even though the tab visually left every TabView.
                 if (DockDragSession.Consumed)
                 {
-                    try { windowHolder[0]?.Close(); } catch { /* best-effort */ }
+                    windowHolder[0]?.Close();
                     return;
                 }
                 // Drop landed outside any docking surface (or session

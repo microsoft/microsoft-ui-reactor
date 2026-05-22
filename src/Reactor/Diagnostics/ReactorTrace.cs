@@ -34,11 +34,9 @@ public static class ReactorTrace
     /// The callback fires on the emission thread — typically the UI
     /// dispatcher when an event originates from reconcile / render, or a
     /// thread-pool thread otherwise. Keep the callback work minimal and
-    /// never let it throw across the framework boundary; the
-    /// implementation wraps every invocation in a <c>try/catch</c> so a
-    /// buggy subscriber cannot deadlock the dispatcher or break other
-    /// subscribers, but exceptions are silently dropped (a faulty sink
-    /// should not turn into an ETW failure mode).
+    /// never let it throw across the framework boundary — a throwing
+    /// subscriber propagates into <see cref="EventSource"/>'s emit path
+    /// and surfaces as an ETW failure.
     /// </para>
     ///
     /// <para>
@@ -172,62 +170,30 @@ public static class ReactorTrace
                 return;
             }
 
-            ReactorEvent reactorEvent;
-            try
-            {
-                reactorEvent = new ReactorEvent(
-                    EventId: eventData.EventId,
-                    EventName: eventData.EventName ?? string.Empty,
-                    Level: eventData.Level,
-                    Keywords: eventData.Keywords,
-                    TimestampUtc: DateTime.UtcNow,
-                    ThreadId: Environment.CurrentManagedThreadId,
-                    Payload: (IReadOnlyList<object?>?)eventData.Payload ?? Array.Empty<object?>(),
-                    PayloadNames: (IReadOnlyList<string>?)eventData.PayloadNames ?? Array.Empty<string>());
-            }
-            catch
-            {
-                // Defensive: don't let a malformed event break the
-                // EventSource.WriteEvent path. The framework's own emit
-                // sites are well-behaved, but custom EventSource methods
-                // added later could conceivably push a null Payload.
-                return;
-            }
+            var reactorEvent = new ReactorEvent(
+                EventId: eventData.EventId,
+                EventName: eventData.EventName ?? string.Empty,
+                Level: eventData.Level,
+                Keywords: eventData.Keywords,
+                TimestampUtc: DateTime.UtcNow,
+                ThreadId: Environment.CurrentManagedThreadId,
+                Payload: (IReadOnlyList<object?>?)eventData.Payload ?? Array.Empty<object?>(),
+                PayloadNames: (IReadOnlyList<string>?)eventData.PayloadNames ?? Array.Empty<string>());
 
-            try
-            {
-                _callback(reactorEvent);
-            }
-            catch
-            {
-                // Per the doc contract: a buggy subscriber must not
-                // propagate to EventSource.WriteEvent (which would
-                // surface as an ETW emission failure) or to other
-                // subscribers. Swallow silently here.
-            }
+            _callback(reactorEvent);
         }
 
         public override void Dispose()
         {
-            // EventListener.Dispose is idempotent per its docs, but we
-            // guard the DisableEvents call to be safe across racing
-            // disposes from the user side.
+            // EventListener.Dispose is idempotent per its docs.
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
             {
                 base.Dispose();
                 return;
             }
 
-            try
-            {
-                if (_source is not null)
-                    DisableEvents(_source);
-            }
-            catch
-            {
-                // EventSource has already been disposed by the runtime
-                // (process shutdown). Nothing to do.
-            }
+            if (_source is not null)
+                DisableEvents(_source);
 
             base.Dispose();
         }

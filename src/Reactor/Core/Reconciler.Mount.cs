@@ -1579,12 +1579,8 @@ public sealed partial class Reconciler
             // the drag is silently rejected. The actual payload identity
             // lives in object-ref state (DockDragSession per spec §8.9);
             // the sentinel text only unblocks WinUI's drop acceptance.
-            try
-            {
-                args.Data.RequestedOperation = global::Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
-                args.Data.SetText("reactor-tabview-tab");
-            }
-            catch { /* best-effort */ }
+            args.Data.RequestedOperation = global::Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
+            args.Data.SetText("reactor-tabview-tab");
             el.OnTabDragStarting(idx);
         };
         tv.TabDragCompleted += (s, args) =>

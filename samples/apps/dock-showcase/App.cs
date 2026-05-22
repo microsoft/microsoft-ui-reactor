@@ -520,26 +520,18 @@ class SceneAIde : Component
     private static string SafeSerialize(DockNode? root)
     {
         if (root is null) return "(empty layout)";
-        try
-        {
-            var json = DockLayoutSerializer.Save(root);
-            // Re-parse + pretty-print so the panel is readable. The
-            // serializer emits compact JSON for storage efficiency.
-            using var doc = JsonDocument.Parse(json);
-            return JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
-        }
-        catch (Exception ex)
-        {
-            return $"(serialize failed: {ex.GetType().Name}: {ex.Message})";
-        }
+        var json = DockLayoutSerializer.Save(root);
+        // Re-parse + pretty-print so the panel is readable. The
+        // serializer emits compact JSON for storage efficiency.
+        using var doc = JsonDocument.Parse(json);
+        return JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
     }
 
     /// <summary>
     /// Serialize the entire operation log as text and put it on the
     /// system clipboard so users can paste into a bug report / log
     /// inspector. Includes every kind including SplitterTrace MOVE
-    /// events (so jump-back math is fully visible). Best-effort —
-    /// swallows clipboard exceptions.
+    /// events (so jump-back math is fully visible).
     /// </summary>
     private static void CopyLogToClipboard(DockOperationLog log)
     {
