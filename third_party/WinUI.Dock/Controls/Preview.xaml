@@ -1,8 +1,0 @@
-﻿<UserControl x:Class="WinUI.Dock.Preview"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-
-    <Border x:Name="Main"
-            Style="{StaticResource PreviewStyle}" />
-
-</UserControl>

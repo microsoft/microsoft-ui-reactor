@@ -351,12 +351,6 @@
   <Folder Name="/tools/Templates/">
     <Project Path="tools/Templates/Microsoft.UI.Reactor.Templates.csproj" />
   </Folder>
-  <Folder Name="/third_party/">
-    <Project Path="third_party/WinUI.Dock/WinUI.Dock.csproj">
-      <Platform Solution="*|ARM64" Project="ARM64" />
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
-  </Folder>
   <Project Path="src/Reactor.Analyzers/Reactor.Analyzers.csproj" />
   <Project Path="src/Reactor.Cli/Reactor.Cli.csproj">
     <Platform Solution="*|ARM64" Project="ARM64" />

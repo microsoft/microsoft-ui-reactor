@@ -1164,13 +1164,19 @@ integration.*
   directory.
 - [x] Remove the assembly from any published packages. Same pass
   — no published-package surface remains.
-- [x] **Keep** `third_party/WinUI.Dock/` source in repo — license
-  compliance + reference + regression A/B (§5.6). Documented in
-  VENDORED.md "Sunset" section.
-- [x] Update `third_party/WinUI.Dock/VENDORED.md` documenting the
-  disposition (runtime-unused at P2 exit). The §5.6 / §2.19
-  language now covers the staged removal plan + the post-review
-  sequence.
+- [x] **`third_party/WinUI.Dock/` deleted entirely** alongside the
+  P2 review-gate pass (2026-05-22). The reference + regression-A/B
+  justifications retired with the §2.19 unhooking: the A/B
+  `REACTOR_DOCK_XAML=1` flip is gone (removed in the same commit)
+  and the architecture reference has been fully absorbed into the
+  native renderer + this spec. License compliance for MIT requires
+  the notice only "in all copies or substantial portions of the
+  software" — with the code no longer shipped, the notice block
+  retires from `ThirdPartyNoticeText.txt` too. The §5.6 "keep
+  source" language is superseded by this deletion.
+- [x] **`src/Reactor.Docking.Xaml/` deleted entirely** in the same
+  pass. The §2.19 staged removal contemplated this as a follow-up
+  commit; landed here.
 
 ### 2.20 Performance (spec §8.1, §8.5)
 
