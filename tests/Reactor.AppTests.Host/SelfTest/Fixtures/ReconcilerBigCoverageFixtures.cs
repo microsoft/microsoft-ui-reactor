@@ -145,9 +145,9 @@ internal static class ReconcilerBigCoverageFixtures
                 Element nb = phase == 0
                     ? NumberBox(5, header: "wire-nb")
                     : NumberBox(5, onValueChanged: v => nbHits++, header: "wire-nb");
-                Element tf = phase == 0
-                    ? TextBox("wire-tf-text", placeholder: "tf")
-                    : TextBox("wire-tf-text", onChanged: v => textHits++, placeholder: "tf");
+                Element textBoxInput = phase == 0
+                    ? TextBox("wire-tb-text", placeholder: "tb")
+                    : TextBox("wire-tb-text", onChanged: v => textHits++, placeholder: "tb");
                 Element pw = phase == 0
                     ? PasswordBox("init")
                     : PasswordBox("init", onPasswordChanged: v => pwHits++);
@@ -157,7 +157,7 @@ internal static class ReconcilerBigCoverageFixtures
 
                 return VStack(
                     Button("WirePhase", () => set(1)),
-                    cb, rb, sl, ts, nb, tf, pw, reb
+                    cb, rb, sl, ts, nb, textBoxInput, pw, reb
                 );
             });
 

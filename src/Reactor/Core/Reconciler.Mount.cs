@@ -77,7 +77,7 @@ public sealed partial class Reconciler
             SplitButtonElement spBtn => MountSplitButton(spBtn, requestRerender),
             ToggleSplitButtonElement tspBtn => MountToggleSplitButton(tspBtn, requestRerender),
             RichEditBoxElement reb => MountRichEditBox(reb),
-            TextBoxElement tf => MountTextBox(tf, requestRerender),
+            TextBoxElement textBoxElement => MountTextBox(textBoxElement, requestRerender),
             PasswordBoxElement pw => MountPasswordBox(pw),
             NumberBoxElement nb => MountNumberBox(nb),
             AutoSuggestBoxElement asb => MountAutoSuggestBox(asb),
@@ -482,7 +482,7 @@ public sealed partial class Reconciler
         return tsb;
     }
 
-    private TextBox MountTextBox(TextBoxElement tf, Action requestRerender)
+    private TextBox MountTextBox(TextBoxElement textBoxElement, Action requestRerender)
     {
         var rented = _pool.TryRent(typeof(TextBox));
         var textBox = rented as TextBox ?? new TextBox();
@@ -491,29 +491,29 @@ public sealed partial class Reconciler
         // event handler. Setting the new tag first ensures the handler reads
         // this mount's element, not the pool's last owner. The BeginSuppress
         // guard below is additional belt-and-suspenders against echo.
-        SetElementTag(textBox, tf);
+        SetElementTag(textBox, textBoxElement);
         // AcceptsReturn and TextWrapping must be set BEFORE Text. WinUI TextBox
         // defaults to single-line mode (AcceptsReturn=false); assigning Text
         // with embedded \r\n while in single-line mode silently strips the
         // newlines, keeping only the first paragraph. Setting these first
         // ensures multi-line content round-trips correctly on mount.
-        if (tf.AcceptsReturn == true) textBox.AcceptsReturn = true;
-        if (tf.TextWrapping.HasValue) textBox.TextWrapping = tf.TextWrapping.Value;
-        if (rented is not null && textBox.Text != tf.Value)
+        if (textBoxElement.AcceptsReturn == true) textBox.AcceptsReturn = true;
+        if (textBoxElement.TextWrapping.HasValue) textBox.TextWrapping = textBoxElement.TextWrapping.Value;
+        if (rented is not null && textBox.Text != textBoxElement.Value)
             ChangeEchoSuppressor.BeginSuppress(textBox);
-        textBox.Text = tf.Value;
-        textBox.PlaceholderText = tf.Placeholder ?? "";
-        if (tf.Header is not null) textBox.Header = tf.Header;
-        if (tf.IsReadOnly == true) textBox.IsReadOnly = true;
-        if (tf.SelectionStart.HasValue) textBox.SelectionStart = tf.SelectionStart.Value;
-        if (tf.SelectionLength.HasValue) textBox.SelectionLength = tf.SelectionLength.Value;
-        if (tf.MaxLength != 0) textBox.MaxLength = tf.MaxLength;
-        if (tf.IsSpellCheckEnabled.HasValue) textBox.IsSpellCheckEnabled = tf.IsSpellCheckEnabled.Value;
-        if (tf.CharacterCasing != CharacterCasing.Normal) textBox.CharacterCasing = tf.CharacterCasing;
-        if (tf.TextAlignment != TextAlignment.Left) textBox.TextAlignment = tf.TextAlignment;
-        if (tf.Description is not null) textBox.Description = tf.Description;
-        EnsureTextBoxWiring(textBox, tf, requestRerender);
-        ApplySetters(tf.Setters, textBox);
+        textBox.Text = textBoxElement.Value;
+        textBox.PlaceholderText = textBoxElement.Placeholder ?? "";
+        if (textBoxElement.Header is not null) textBox.Header = textBoxElement.Header;
+        if (textBoxElement.IsReadOnly == true) textBox.IsReadOnly = true;
+        if (textBoxElement.SelectionStart.HasValue) textBox.SelectionStart = textBoxElement.SelectionStart.Value;
+        if (textBoxElement.SelectionLength.HasValue) textBox.SelectionLength = textBoxElement.SelectionLength.Value;
+        if (textBoxElement.MaxLength != 0) textBox.MaxLength = textBoxElement.MaxLength;
+        if (textBoxElement.IsSpellCheckEnabled.HasValue) textBox.IsSpellCheckEnabled = textBoxElement.IsSpellCheckEnabled.Value;
+        if (textBoxElement.CharacterCasing != CharacterCasing.Normal) textBox.CharacterCasing = textBoxElement.CharacterCasing;
+        if (textBoxElement.TextAlignment != TextAlignment.Left) textBox.TextAlignment = textBoxElement.TextAlignment;
+        if (textBoxElement.Description is not null) textBox.Description = textBoxElement.Description;
+        EnsureTextBoxWiring(textBox, textBoxElement, requestRerender);
+        ApplySetters(textBoxElement.Setters, textBox);
         return textBox;
     }
 
@@ -523,11 +523,11 @@ public sealed partial class Reconciler
     /// yet. Called from both Mount (fresh or pooled) and Update (null→non-null
     /// transition). The CWT flags survive pool round-trips.
     /// </summary>
-    internal static void EnsureTextBoxWiring(TextBox textBox, TextBoxElement tf, Action requestRerender)
+    internal static void EnsureTextBoxWiring(TextBox textBox, TextBoxElement textBoxElement, Action requestRerender)
     {
-        if (tf.OnChanged is null && tf.OnSelectionChanged is null) return;
+        if (textBoxElement.OnChanged is null && textBoxElement.OnSelectionChanged is null) return;
         var flags = GetPoolableWireFlags(textBox);
-        if (tf.OnChanged is not null && !flags.TextBoxTextChanged)
+        if (textBoxElement.OnChanged is not null && !flags.TextBoxTextChanged)
         {
             flags.TextBoxTextChanged = true;
             textBox.TextChanged += (_, _) =>
@@ -543,7 +543,7 @@ public sealed partial class Reconciler
                     requestRerender();
             };
         }
-        if (tf.OnSelectionChanged is not null && !flags.TextBoxSelectionChanged)
+        if (textBoxElement.OnSelectionChanged is not null && !flags.TextBoxSelectionChanged)
         {
             flags.TextBoxSelectionChanged = true;
             textBox.SelectionChanged += (_, _) => (GetElementTag(textBox) as TextBoxElement)?.OnSelectionChanged?.Invoke(textBox.SelectedText, textBox.SelectionStart, textBox.SelectionLength);

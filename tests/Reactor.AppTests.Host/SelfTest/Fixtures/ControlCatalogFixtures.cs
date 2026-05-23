@@ -89,7 +89,7 @@ internal static class ControlCatalogFixtures
             Add("ToggleSplitButton", ToggleSplitButton("CatalogTSB"), "CatalogTSB");
 
             // ── Input controls ──
-            Add("TextBox", TextBox("CatalogTF"), null);
+            Add("TextBox", TextBox("CatalogTB"), null);
             Add("PasswordBox", PasswordBox("pw"), null);
             Add("NumberBox", NumberBox(42, header: "CatalogNB"), "CatalogNB");
             Add("AutoSuggestBox", AutoSuggestBox("CatalogASB"), null);

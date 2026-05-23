@@ -35,15 +35,15 @@ internal static class TextBoxMountFixtures
             await Harness.Render();
 
             var tb = H.FindControl<TextBox>(t => t.PlaceholderText == "ml-test");
-            H.Check("TF_MultiLine_Mounted", tb is not null);
+            H.Check("TB_MultiLine_Mounted", tb is not null);
 
             // All three lines must be present. WinUI normalizes \r\n → \r internally,
             // so we check for \r rather than \r\n.
             var text = tb?.Text ?? "";
-            H.Check("TF_MultiLine_Line1Present", text.Contains("Line one"));
-            H.Check("TF_MultiLine_Line2Present", text.Contains("Line two"));
-            H.Check("TF_MultiLine_Line3Present", text.Contains("Line three"));
-            H.Check("TF_MultiLine_AcceptsReturn", tb?.AcceptsReturn == true);
+            H.Check("TB_MultiLine_Line1Present", text.Contains("Line one"));
+            H.Check("TB_MultiLine_Line2Present", text.Contains("Line two"));
+            H.Check("TB_MultiLine_Line3Present", text.Contains("Line three"));
+            H.Check("TB_MultiLine_AcceptsReturn", tb?.AcceptsReturn == true);
         }
     }
 
@@ -64,9 +64,9 @@ internal static class TextBoxMountFixtures
             await Harness.Render();
 
             var tb = H.FindControl<TextBox>(t => t.PlaceholderText == "sl-test");
-            H.Check("TF_SingleLine_Mounted", tb is not null);
-            H.Check("TF_SingleLine_TextCorrect", tb?.Text == "hello world");
-            H.Check("TF_SingleLine_AcceptsReturnFalse", tb?.AcceptsReturn == false);
+            H.Check("TB_SingleLine_Mounted", tb is not null);
+            H.Check("TB_SingleLine_TextCorrect", tb?.Text == "hello world");
+            H.Check("TB_SingleLine_AcceptsReturnFalse", tb?.AcceptsReturn == false);
         }
     }
 
@@ -84,7 +84,7 @@ internal static class TextBoxMountFixtures
                 var (phase, set) = ctx.UseState(0);
                 var value = phase == 0 ? "First" : MultiLine;
                 return VStack(
-                    Button("TF_ML_Upd", () => set(1)),
+                    Button("TB_ML_Upd", () => set(1)),
                     (TextBox(value, placeholder: "ml-upd-test")
                         with { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap })
                     .MinHeight(80));
@@ -92,15 +92,15 @@ internal static class TextBoxMountFixtures
 
             await Harness.Render();
             var tb = H.FindControl<TextBox>(t => t.PlaceholderText == "ml-upd-test");
-            H.Check("TF_MLUpd_InitialText", tb?.Text == "First");
+            H.Check("TB_MLUpd_InitialText", tb?.Text == "First");
 
-            H.ClickButton("TF_ML_Upd");
+            H.ClickButton("TB_ML_Upd");
             await Harness.Render();
 
             var text = tb?.Text ?? "";
-            H.Check("TF_MLUpd_Line1", text.Contains("Line one"));
-            H.Check("TF_MLUpd_Line2", text.Contains("Line two"));
-            H.Check("TF_MLUpd_Line3", text.Contains("Line three"));
+            H.Check("TB_MLUpd_Line1", text.Contains("Line one"));
+            H.Check("TB_MLUpd_Line2", text.Contains("Line two"));
+            H.Check("TB_MLUpd_Line3", text.Contains("Line three"));
         }
     }
 }

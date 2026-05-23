@@ -12,7 +12,7 @@ namespace Microsoft.UI.Reactor.WinFormsTests.Host;
 ///   Bottom bar (WinForms):  WF_TextBox3 — Tab stop AFTER the island
 ///
 /// Tab order is controlled by TabIndex on the container panels:
-///   leftPanel (TabIndex=0) → island (TabIndex=1) → bottomBar (TabIndex=2)
+///   leftPanel (TabIndex=0) -> island (TabIndex=1) -> bottomBar (TabIndex=2)
 ///
 /// Expected forward Tab order:
 ///   WF_TextBox1 -> WF_Button1 -> WF_TextBox2 -> [Island] -> Reactor_TextBox1 ->

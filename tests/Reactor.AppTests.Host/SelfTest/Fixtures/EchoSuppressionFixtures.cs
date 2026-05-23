@@ -476,14 +476,14 @@ internal static class EchoSuppressionFixtures
                 var (phase, setPhase) = ctx.UseState(0);
                 var t = phase == 0 ? "initial" : "next";
                 return VStack(
-                    Button("Go_TF", () => setPhase(1)),
+                    Button("Go_TB", () => setPhase(1)),
                     TextBox(t, s => calls.Add(s), placeholder: "test")
                 );
             });
             await Harness.Render();
             H.Check("EchoSuppress_TextBox_MountNoFire", calls.Count == 0);
 
-            H.ClickButton("Go_TF");
+            H.ClickButton("Go_TB");
             await Harness.Render();
 
             var tb = H.FindControl<TextBox>(t => t.PlaceholderText == "test");
