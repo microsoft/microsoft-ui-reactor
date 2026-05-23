@@ -25,22 +25,22 @@ internal static class AccessibilityInteractionFixtures
                 .HeadingLevel(AutomationHeadingLevel.Level1)
                 .AutomationId("A11yNav_Title"),
 
-            TextField("", _ => { }, placeholder: "First")
+            TextBox("", _ => { }, placeholder: "First")
                 .AutomationName("First field")
                 .TabIndex(1)
                 .AutomationId("A11yNav_Field1"),
 
-            TextField("", _ => { }, placeholder: "Second")
+            TextBox("", _ => { }, placeholder: "Second")
                 .AutomationName("Second field")
                 .TabIndex(2)
                 .AutomationId("A11yNav_Field2"),
 
-            TextField("", _ => { }, placeholder: "Third")
+            TextBox("", _ => { }, placeholder: "Third")
                 .AutomationName("Third field")
                 .TabIndex(3)
                 .AutomationId("A11yNav_Field3"),
 
-            TextField("", _ => { }, placeholder: "Fourth")
+            TextBox("", _ => { }, placeholder: "Fourth")
                 .AutomationName("Fourth field")
                 .TabIndex(4)
                 .AutomationId("A11yNav_Field4"),
@@ -243,12 +243,12 @@ internal static class AccessibilityInteractionFixtures
                 .AutomationId("A11yLbl_EmailLabel"),
 
             // Field referencing the label
-            TextField("user@example.com")
+            TextBox("user@example.com")
                 .LabeledBy("A11yLbl_EmailLabel")
                 .AutomationId("A11yLbl_EmailField"),
 
             // Self-labeled field (uses AutomationName instead)
-            TextField("")
+            TextBox("")
                 .AutomationName("Phone number")
                 .AutomationId("A11yLbl_PhoneField")
 
@@ -268,7 +268,7 @@ internal static class AccessibilityInteractionFixtures
                 .AutomationId("A11yTabNav_Title"),
 
             // Regular field before toolbar
-            TextField("", _ => { })
+            TextBox("", _ => { })
                 .AutomationName("Before toolbar")
                 .AutomationId("A11yTabNav_Before"),
 
@@ -285,7 +285,7 @@ internal static class AccessibilityInteractionFixtures
              .AutomationId("A11yTabNav_Toolbar"),
 
             // Regular field after toolbar
-            TextField("", _ => { })
+            TextBox("", _ => { })
                 .AutomationName("After toolbar")
                 .AutomationId("A11yTabNav_After")
         ).Landmark(AutomationLandmarkType.Main)

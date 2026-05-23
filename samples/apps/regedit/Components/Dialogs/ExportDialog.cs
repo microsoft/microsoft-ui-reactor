@@ -33,7 +33,7 @@ internal sealed class ExportDialog : Component<ExportDialogProps>
                         "exportRange")
                 ),
                 When(!Props.ExportAll, () =>
-                    TextField(Props.SelectedBranch, _ => { })
+                    TextBox(Props.SelectedBranch, _ => { })
                         .IsReadOnly()
                 )
             ).Width(400),

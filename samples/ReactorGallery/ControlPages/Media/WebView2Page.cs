@@ -20,7 +20,7 @@ class WebView2Page : Component
 
                 SampleCard("Load URL",
                     VStack(8,
-                        TextField(url, s => setUrl(s), placeholder: "Enter URL").Width(400),
+                        TextBox(url, s => setUrl(s), placeholder: "Enter URL").Width(400),
                         WebView2(new Uri(url)).Width(600).Height(400)
                     ),
                     @"WebView2(new Uri(""https://learn.microsoft.com""))

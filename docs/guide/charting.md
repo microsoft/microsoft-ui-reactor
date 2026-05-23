@@ -471,7 +471,7 @@ DSL. Import `using static Microsoft.UI.Reactor.Charting.D3.D3Charts` for:
 > `PieChart` — a fresh `new[] { … }` on every render makes each slice
 > remount, the `.Transition()` enter/exit fires for slices that haven't
 > moved, and the chart "redraws itself" on every keystroke into an
-> unrelated `TextField`.
+> unrelated `TextBox`.
 
 ## Patterns
 

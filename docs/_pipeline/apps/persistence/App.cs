@@ -35,7 +35,7 @@ class NotesEditor : Component
 
         return VStack(8,
             SubHeading("Notes"),
-            TextField(text, setText, placeholder: "Start typing…").Width(380),
+            TextBox(text, setText, placeholder: "Start typing…").Width(380),
             TextBlock($"{text.Length} characters").Opacity(0.6)
         ).Padding(16);
     }
@@ -59,9 +59,9 @@ class VersionedNotesEditor : Component
             scope: PersistedScope.Application);
 
         return VStack(8,
-            TextField(state.Title, t => setState(state with { Title = t }),
+            TextBox(state.Title, t => setState(state with { Title = t }),
                 placeholder: "Title"),
-            TextField(state.Body, b => setState(state with { Body = b, LastEdit = DateTimeOffset.Now }),
+            TextBox(state.Body, b => setState(state with { Body = b, LastEdit = DateTimeOffset.Now }),
                 placeholder: "Body")
         );
     }

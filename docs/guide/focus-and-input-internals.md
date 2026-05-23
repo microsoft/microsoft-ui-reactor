@@ -83,7 +83,7 @@ public void FocusNext(string? currentField = null)
 focus system. Components call `useFocus.Register(name)` on each input
 during render, and the manager keeps a `List<string>` of field names
 in order. `FocusNext` and `FocusPrevious` walk that list — the
-common pattern is `<TextField>.OnEnter(() => fm.FocusNext(name))` so
+common pattern is `<TextBox>.OnEnter(() => fm.FocusNext(name))` so
 pressing Enter on a field advances to the next one, and Enter on the
 last field calls the registered submit handler. The `_controls`
 dictionary maps each field name to the live WinUI `Control`; when

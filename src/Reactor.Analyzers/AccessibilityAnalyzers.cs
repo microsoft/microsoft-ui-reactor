@@ -197,7 +197,7 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         description: Description);
 
     private static readonly ImmutableHashSet<string> FormFieldMethods =
-        ImmutableHashSet.Create("TextField", "NumberBox", "PasswordBox", "AutoSuggestBox");
+        ImmutableHashSet.Create("TextBox", "TextField", "NumberBox", "PasswordBox", "AutoSuggestBox");
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(Rule);

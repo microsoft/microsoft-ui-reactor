@@ -81,7 +81,7 @@ a single render check; a guard inside `Submit()` runs after the user
 already pressed it and the UI looked ready. Both layers are good
 hygiene but the button gate is the load-bearing one.
 
-**Use [`PasswordBox`](../forms.md), not `TextField` with a hex style.**
+**Use [`PasswordBox`](../forms.md), not `TextBox` with a hex style.**
 The control implements paste-without-reveal, autofill, and the
 accessibility peer; reinventing it in user code drops those.
 

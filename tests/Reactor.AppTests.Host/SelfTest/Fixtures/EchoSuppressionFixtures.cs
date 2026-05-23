@@ -477,7 +477,7 @@ internal static class EchoSuppressionFixtures
                 var t = phase == 0 ? "initial" : "next";
                 return VStack(
                     Button("Go_TF", () => setPhase(1)),
-                    TextField(t, s => calls.Add(s), placeholder: "test")
+                    TextBox(t, s => calls.Add(s), placeholder: "test")
                 );
             });
             await Harness.Render();

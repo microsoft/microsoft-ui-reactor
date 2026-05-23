@@ -76,7 +76,7 @@ class BasicValidationDemo : Component
                 // FormField auto-renders label, content, and description/error area.
                 // .Validate() with value triggers automatic validation — no manual calls.
                 FormField(
-                    TextField(email, v => { setEmail(v); ctx.MarkTouched("email"); setInfoDismissed(false); },
+                    TextBox(email, v => { setEmail(v); ctx.MarkTouched("email"); setInfoDismissed(false); },
                             placeholder: "user@example.com")
                         .Validate("email", email,
                             Validate.Required("Email is required"),
@@ -97,7 +97,7 @@ class BasicValidationDemo : Component
                     showWhen: sw),
 
                 FormField(
-                    TextField(website, v => { setWebsite(v); ctx.MarkTouched("website"); setInfoDismissed(false); },
+                    TextBox(website, v => { setWebsite(v); ctx.MarkTouched("website"); setInfoDismissed(false); },
                             placeholder: "https://example.com")
                         .Validate("website", website,
                             Validate.Url("Enter a valid URL (https://...)"))
@@ -234,7 +234,7 @@ class MaskedInputDemo : Component
 
             VStack(8,
                 TextBlock("Phone (US) — digits only").Foreground(Theme.SecondaryText),
-                TextField(phone, v => setPhone(new string(v.Where(char.IsDigit).ToArray())),
+                TextBox(phone, v => setPhone(new string(v.Where(char.IsDigit).ToArray())),
                     placeholder: "5551234567"),
                 When(phone.Length > 0, () =>
                     HStack(8,
@@ -247,7 +247,7 @@ class MaskedInputDemo : Component
 
             VStack(8,
                 TextBlock("SSN — digits only").Foreground(Theme.SecondaryText),
-                TextField(ssn, v => setSsn(new string(v.Where(char.IsDigit).ToArray())),
+                TextBox(ssn, v => setSsn(new string(v.Where(char.IsDigit).ToArray())),
                     placeholder: "123456789"),
                 When(ssn.Length > 0, () =>
                     TextBlock($"Formatted: {ssnFormatted}").Foreground(Theme.SecondaryText))
@@ -255,7 +255,7 @@ class MaskedInputDemo : Component
 
             VStack(8,
                 TextBlock("ZIP Code — digits only").Foreground(Theme.SecondaryText),
-                TextField(zip, v => setZip(new string(v.Where(char.IsDigit).ToArray())),
+                TextBox(zip, v => setZip(new string(v.Where(char.IsDigit).ToArray())),
                     placeholder: "90210"),
                 When(zip.Length > 0, () =>
                     TextBlock($"Formatted: {zipFormatted}").Foreground(Theme.SecondaryText))
@@ -263,7 +263,7 @@ class MaskedInputDemo : Component
 
             VStack(8,
                 TextBlock("Currency (InputFormatter)").Foreground(Theme.SecondaryText),
-                TextField(amount,
+                TextBox(amount,
                     v => setAmount(new string(v.Where(c => char.IsDigit(c) || c == '.').ToArray())),
                     placeholder: "1234.56"),
                 When(amount.Length > 0, () =>
@@ -273,7 +273,7 @@ class MaskedInputDemo : Component
 
             VStack(8,
                 TextBlock("Uppercase Formatter").Foreground(Theme.SecondaryText),
-                TextField(shout, v => setShout(v.ToUpperInvariant()),
+                TextBox(shout, v => setShout(v.ToUpperInvariant()),
                     placeholder: "auto uppercased")
                     .Set(tb => tb.CharacterCasing = CharacterCasing.Upper)
             )
@@ -312,7 +312,7 @@ class DirtyResetDemo : Component
             VStack(4,
                 TextBlock("Name")
                     .Set(t => t.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold),
-                TextField(name, v => { setName(v); ctx.MarkTouched("name"); }),
+                TextBox(name, v => { setName(v); ctx.MarkTouched("name"); }),
                 TextBlock("Initial: \"John Doe\"").Foreground(Theme.SecondaryText)
             ),
 
@@ -370,11 +370,11 @@ class FocusDemo : Component
             SubHeading("Focus Management"),
             Caption("UseFocus provides programmatic focus control and enter-to-advance."),
 
-            TextField(f1, setF1, placeholder: "First field", header: "First Name")
+            TextBox(f1, setF1, placeholder: "First field", header: "First Name")
                 .Focus(fm, "first"),
-            TextField(f2, setF2, placeholder: "Second field", header: "Last Name")
+            TextBox(f2, setF2, placeholder: "Second field", header: "Last Name")
                 .Focus(fm, "last"),
-            TextField(f3, setF3, placeholder: "Third (last) field", header: "Nickname")
+            TextBox(f3, setF3, placeholder: "Third (last) field", header: "Nickname")
                 .Focus(fm, "nick"),
 
             HStack(8,

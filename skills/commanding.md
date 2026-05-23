@@ -119,7 +119,7 @@ var undo = StandardCommand.Undo(() => UndoAction());
 CommandHost([save, undo],
     VStack(
         TextBlock("Ctrl+S / Ctrl+Z only fire inside this region"),
-        TextField(value, onChange)))
+        TextBox(value, onChange)))
 ```
 
 Commands without an `Accelerator` are ignored by `CommandHost`.
@@ -138,7 +138,7 @@ class Editor : Component
     {
         var save = UseCommand(StandardCommand.Save(async () => await SaveAsync()));
         var undo = StandardCommand.Undo(() => Undo());
-        return TextField(text, onChange)
+        return TextBox(text, onChange)
             .Provide(EditorCtx, new EditorCommands(save, undo, redo));
     }
 }

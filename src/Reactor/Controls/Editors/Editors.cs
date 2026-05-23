@@ -29,7 +29,7 @@ public static class Editors
         int? maxLength = null)
         => (value, onChange) =>
         {
-            var el = TextField((string?)value ?? string.Empty, s => onChange(s), placeholder: placeholder);
+            var el = TextBox((string?)value ?? string.Empty, s => onChange(s), placeholder: placeholder);
             return maxLength is { } max
                 ? el.Set(tb => tb.MaxLength = max)
                 : el;
@@ -177,7 +177,7 @@ public static class Editors
                 null => string.Empty,
                 _ => value.ToString() ?? string.Empty,
             };
-            return TextField(text, s =>
+            return TextBox(text, s =>
             {
                 // Only commit valid Uris; leave the field alone for partial input.
                 if (global::System.Uri.TryCreate(s, UriKind.RelativeOrAbsolute, out var uri))
@@ -232,7 +232,7 @@ public static class Editors
                     .Width(20).Height(20)
                     .CornerRadius(3)
                     .WithBorder("#80000000", 1),
-                TextField(hex, s =>
+                TextBox(hex, s =>
                 {
                     if (TryParseHexColor(s, out var parsed))
                         onChange(parsed);

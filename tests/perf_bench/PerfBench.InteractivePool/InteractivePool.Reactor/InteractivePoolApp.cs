@@ -81,7 +81,7 @@ public class InteractivePoolApp : Component
                 item => item.ButtonLabel,
                 (item, i) => HStack(8,
                     Button(item.ButtonLabel, () => { }),
-                    TextField(item.TextValue, _ => { }),
+                    TextBox(item.TextValue, _ => { }),
                     ToggleSwitch(item.IsToggled, _ => { })
                 ).Padding(2)
             ).Set(sv => scrollRef.Current = sv).Height(800)

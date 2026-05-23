@@ -59,7 +59,7 @@ public class A11yShowcaseScannerTest
                 Button("Active", null),
 
                 // A11Y_003: TextField without header, AutomationName, or LabeledBy
-                TextField("", null, placeholder: "New task..."),
+                TextBox("", null, placeholder: "New task..."),
 
                 // A11Y_001: Another icon-only button
                 IconBtn("add")
@@ -86,7 +86,7 @@ public class A11yShowcaseScannerTest
             HStack(12,
                 TextBlock("Quick note:"),
                 // A11Y_003: TextField with mistyped LabeledBy → A11Y_008
-                TextField("", null).LabeledBy("FooterNoteLabel_TYPO")
+                TextBox("", null).LabeledBy("FooterNoteLabel_TYPO")
             )
         );
         // NOTE: No .Landmark(Main) on any element → A11Y_006

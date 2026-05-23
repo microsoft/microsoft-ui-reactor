@@ -14,7 +14,7 @@ declarative `.Validate()` modifiers.
 
 | API | Purpose |
 |-----|---------|
-| `TextField(value, setValue)` | Controlled text input |
+| `TextBox(value, setValue)` | Controlled text input |
 | `UseValidationContext()` | Track validation messages, touched/dirty state |
 | `.Validate(...)` | Attach built-in validators to an input |
 | `FormField(input, label: ...)` | Wraps input with label, error display, required marker |
@@ -31,7 +31,7 @@ var (age, setAge) = UseState(0);
 var (agreed, setAgreed) = UseState(false);
 
 return VStack(12,
-    TextField(name, setName, placeholder: "Name"),
+    TextBox(name, setName, placeholder: "Name"),
     NumberBox(age, setAge),
     CheckBox(agreed, setAgreed, label: "I agree"),
     Button("Submit", onSubmit).IsEnabled(!(string.IsNullOrEmpty(name) || !agreed))
@@ -42,7 +42,7 @@ return VStack(12,
 
 | Factory | Value type | Common modifiers |
 |---------|-----------|------------------|
-| `TextField(value, setValue, placeholder, header)` | `string` | `.Header()`, `.IsReadOnly()`, `.AcceptsReturn()`, `.TextWrapping()`, `.MaxLength(n)`, `.NumericInput()`, `.EmailInput()`, `.Changed(handler)` |
+| `TextBox(value, setValue, placeholder, header)` | `string` | `.Header()`, `.IsReadOnly()`, `.AcceptsReturn()`, `.TextWrapping()`, `.MaxLength(n)`, `.NumericInput()`, `.EmailInput()`, `.Changed(handler)` |
 | `PasswordBox(password, setPassword, placeholder)` | `string` | `.Header(text)`, `.MaxLength(n)`, `.PasswordChanged(handler)` |
 | `NumberBox(value, setValue, placeholder, header)` | `double` | `.Range(min, max)`, `.SpinButtons(...)` |
 | `Slider(value, min, max, setValue)` | `double` | `.Header()`, `.StepFrequency()` |
@@ -61,7 +61,7 @@ preconfigure `InputScope` and IME hints so on-screen / soft keyboards open
 in the right mode. Stack them with validators:
 
 ```csharp
-TextField(email, setEmail, placeholder: "you@example.com")
+TextBox(email, setEmail, placeholder: "you@example.com")
     .EmailInput()
     .MaxLength(254)
     .Validate("email", email, Validate.Required(), Validate.Email())
@@ -80,7 +80,7 @@ var (email, setEmail) = UseState("");
 var isValid = email.Contains('@') && email.Length > 3;
 
 return VStack(12,
-    TextField(email, setEmail, placeholder: "Email"),
+    TextBox(email, setEmail, placeholder: "Email"),
     Button("Submit", onSubmit).IsEnabled(isValid)
 );
 ```
@@ -98,12 +98,12 @@ var (name, setName) = UseState("");
 var (email, setEmail) = UseState("");
 
 return VStack(12,
-    TextField(name, setName, placeholder: "Name")
+    TextBox(name, setName, placeholder: "Name")
         .Validate("name", name,
             Validate.Required("Name is required"),
             Validate.MinLength(2, "Name too short")),
 
-    TextField(email, setEmail, placeholder: "Email")
+    TextBox(email, setEmail, placeholder: "Email")
         .Validate("email", email,
             Validate.Required("Email is required"),
             Validate.Email("Invalid email")),
@@ -165,7 +165,7 @@ var validation = UseValidationContext();
 var (name, setName) = UseState("");
 
 return FormField(
-    TextField(name, setName, placeholder: "Enter your name")
+    TextBox(name, setName, placeholder: "Enter your name")
         .Validate("name", name, Validate.Required("Required")),
     label: "Full Name",
     required: true,
@@ -188,7 +188,7 @@ return FormField(
 var mask = UseMemo(() => new MaskEngine(MaskPreset.PhoneUS));
 var (phone, setPhone) = UseState("");
 
-return TextField(phone, v => setPhone(mask.Apply(v)),
+return TextBox(phone, v => setPhone(mask.Apply(v)),
     placeholder: "(555) 555-0123");
 ```
 
@@ -213,7 +213,7 @@ Custom masks: `new MaskEngine("AA-####")` where `A` = letter,
 ```csharp
 var (amount, setAmount) = UseState("");
 
-return TextField(amount,
+return TextBox(amount,
     v => setAmount(InputFormatter.Currency(symbol: "$").Format(v)),
     placeholder: "$0.00");
 ```

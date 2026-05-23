@@ -247,7 +247,7 @@ public class LocalizableStringScannerTests
         var source = """
             class Settings : Component {
                 public override Element Render() {
-                    return TextField("", OnChanged).Header("User Name");
+                    return TextBox("", OnChanged).Header("User Name");
                 }
             }
             """;
@@ -382,7 +382,7 @@ public class LocalizableStringScannerTests
         var source = """
             class CatalogPage : Component {
                 public override Element Render() {
-                    return TextField("", null, placeholder: "Search products...");
+                    return TextBox("", null, placeholder: "Search products...");
                 }
             }
             """;

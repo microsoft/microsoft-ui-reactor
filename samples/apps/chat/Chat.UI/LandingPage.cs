@@ -76,7 +76,7 @@ public class LandingPage : Component<LandingPageProps>
                 Grid([GridSize.Auto, GridSize.Star(), GridSize.Auto], [GridSize.Star()],
                     Caption("+").Foreground(SecondaryText).VAlign(VerticalAlignment.Center)
                         .Padding(8, 0, 0, 0).Grid(row: 0, column: 0),
-                    TextField(inputState.Value, v => inputState.Set(v))
+                    TextBox(inputState.Value, v => inputState.Set(v))
                         .Set(tb =>
                         {
                             tb.PlaceholderText = "Ask the sample assistant...";

@@ -37,11 +37,11 @@ class PersonPicturePage : Component
                 SampleCard("Interactive Display Name",
                     VStack(8,
                         PersonPicture().DisplayName(name).Width(72).Height(72),
-                        TextField(name, s => setName(s), placeholder: "Enter name").Width(250)
+                        TextBox(name, s => setName(s), placeholder: "Enter name").Width(250)
                     ),
                     @"var (name, setName) = UseState(""Jane Doe"");
 PersonPicture().DisplayName(name).Width(72).Height(72)
-TextField(name, s => setName(s))")
+TextBox(name, s => setName(s))")
             ).Margin(36, 24, 36, 36)
         );
     }

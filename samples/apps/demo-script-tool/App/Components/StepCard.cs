@@ -112,7 +112,7 @@ public sealed class StepCard : Component<StepCardProps>
         // OwnPropsEqual short-circuit (it requires Setters.Length == 0). We
         // reach for typed modifiers and `with { … }` everywhere we can — the
         // values diff structurally and the WinUI control isn't re-poked.
-        var promptField = (TextField(localPrompt,
+        var promptField = (TextBox(localPrompt,
                 v =>
                 {
                     setLocalPrompt(v);
@@ -291,7 +291,7 @@ public sealed class StepCard : Component<StepCardProps>
         // the FlexRow's center baseline then shifts with it, which reads
         // as a "bobbling" title. 36px = FontSize 18 + default vertical
         // padding (~9px each side); the explicit value freezes the metric.
-        var titleField = (TextField(localTitle,
+        var titleField = (TextBox(localTitle,
                 v =>
                 {
                     setLocalTitle(v);

@@ -88,7 +88,7 @@ was set — otherwise hit-testing would miss the unfilled shape entirely.
 ### Keyboard events
 
 ```csharp
-TextField(value, setValue)
+TextBox(value, setValue)
     .OnKeyDown((_, e) => { if (e.Key == VirtualKey.Enter) Submit(); })
     .OnPreviewKeyDown((_, e) => Trace("preview"))
     .OnCharacterReceived((_, e) => Validate(e.Character));
@@ -101,7 +101,7 @@ shortcut interception that needs to suppress further routing.
 ### Focus events
 
 ```csharp
-TextField(value, setValue)
+TextBox(value, setValue)
     .OnGotFocus((_, _) => ShowValidationHint())
     .OnLostFocus((_, _) => HideValidationHint());
 ```
@@ -325,7 +325,7 @@ class UseElementFocusExample : Component
 
         return VStack(12,
             TextBlock("The field below auto-focuses on mount via UseElementFocus()."),
-            TextField(name, setName, placeholder: "name").Width(280).Ref(inputRef)
+            TextBox(name, setName, placeholder: "name").Width(280).Ref(inputRef)
         ).Padding(24);
     }
 }
@@ -355,7 +355,7 @@ public class SearchBox : Component
 
         Context.UseEffect(() => inputRef.Current?.SelectAll(), Array.Empty<object>());
 
-        return TextField(query, setQuery).Ref(inputRef);
+        return TextBox(query, setQuery).Ref(inputRef);
     }
 }
 ```
@@ -622,7 +622,7 @@ If a parent needs to see the press before children consume it, use
 ### Using `.OnKeyDown` for accelerator chords
 
 `.OnKeyDown` fires per element on focus — a `Ctrl+S` handler attached
-to a `TextField` only fires while that field has focus. For app-wide
+to a `TextBox` only fires while that field has focus. For app-wide
 accelerators (Save, Find, Run), use Reactor's
 [commanding](commanding.md) system: `new Command { ..., AccessKey =
 "S", AccessKeyModifiers = VirtualKeyModifiers.Control }` registers

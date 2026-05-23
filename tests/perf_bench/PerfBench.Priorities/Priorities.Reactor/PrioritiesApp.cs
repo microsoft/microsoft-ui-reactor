@@ -90,7 +90,7 @@ public class PrioritiesApp : Component
 
         var children = new List<Element?>
         {
-            TextField(searchText, text =>
+            TextBox(searchText, text =>
             {
                 _tracker.BeginUpdate();
                 setSearchText(text);

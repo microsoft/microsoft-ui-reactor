@@ -101,7 +101,7 @@ Grid(
     rows: [GridSize.Auto, GridSize.Star()],
 
     TextBlock("Label").Grid(row: 0, column: 0),
-    TextField(value, setValue).Grid(row: 0, column: 1),
+    TextBox(value, setValue).Grid(row: 0, column: 1),
     Button("Go", onClick).Grid(row: 0, column: 2),
 
     ScrollView(
@@ -197,11 +197,11 @@ VStack(
 // Correct: flexible sizing
 Button("Submit").MinHeight(40)
 VStack(content).MinWidth(200).MaxWidth(600)
-TextField(value, setValue).MinHeight(32)
+TextBox(value, setValue).MinHeight(32)
 
 // Wrong: fixed sizing clips at larger text scales
 Button("Submit").Height(32)
-TextField(value, setValue).Height(30).Width(200)
+TextBox(value, setValue).Height(30).Width(200)
 ```
 
 ### No Fixed Widths on Buttons

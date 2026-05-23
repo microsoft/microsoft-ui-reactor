@@ -121,7 +121,7 @@ internal static class EventHandlerFixtures
             var (text, setText) = UseState("");
 
             return VStack(8,
-                TextField(text, v => setText(v), placeholder: "Type here")
+                TextBox(text, v => setText(v), placeholder: "Type here")
                     .Width(300)
                     .OnKeyDown((s, e) =>
                     {

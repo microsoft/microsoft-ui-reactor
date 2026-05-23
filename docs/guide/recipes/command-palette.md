@@ -131,7 +131,7 @@ void OnPaletteKey(object _, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
 ```
 
 `OnPreviewKeyDown` tunnels — it fires before the bubbling pair, so
-Up / Down move the selection instead of the `TextField` caret, and
+Up / Down move the selection instead of the `TextBox` caret, and
 Enter fires the highlighted command rather than inserting a newline.
 Setting `e.Handled = true` stops further routing so the underlying
 control stays out of the way. The same handler closes the palette on
@@ -155,7 +155,7 @@ var page = VStack(12,
 
 Element palette = Border(
     VStack(0,
-        TextField(query, v => { setQuery(v); setIndex(0); },
+        TextBox(query, v => { setQuery(v); setIndex(0); },
             placeholder: "Type a command…").Width(420),
         matches.Length == 0
             ? TextBlock("No commands match.").Padding(12).Opacity(0.6)

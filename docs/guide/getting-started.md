@@ -144,7 +144,7 @@ class GettingStartedApp : Component
 
         return VStack(16,
             TextBlock($"Hello, {name}!").FontSize(24).Bold(),
-            TextField(name, setName, placeholder: "Enter your name").Width(250)
+            TextBox(name, setName, placeholder: "Enter your name").Width(250)
         ).Padding(24);
     }
 }
@@ -228,8 +228,8 @@ class MultipleStateExample : Component
 
         return VStack(12,
             TextBlock($"Hello, {fullName}!").FontSize(fontSize).Bold(),
-            TextField(firstName, setFirstName, placeholder: "First name").Width(200),
-            TextField(lastName, setLastName, placeholder: "Last name").Width(200),
+            TextBox(firstName, setFirstName, placeholder: "First name").Width(200),
+            TextBox(lastName, setLastName, placeholder: "Last name").Width(200),
             HStack(8,
                 TextBlock("Font size:"),
                 Slider(fontSize, 10, 40, setFontSize).Width(200),
@@ -338,7 +338,7 @@ class TodoApp : Component
 
             // Input row
             HStack(8,
-                TextField(newText, setNewText, placeholder: "What needs to be done?")
+                TextBox(newText, setNewText, placeholder: "What needs to be done?")
                     .Width(300),
                 Button("Add", () =>
                 {
@@ -539,7 +539,7 @@ survive hot reload.
 Every Reactor app eventually has the same two ingredients: an event
 handler that calls a setter, and a value rendered from the setter's
 state slot. The hello-world snippet above wires `setName` to
-`TextField`'s change handler and reads `name` back in the
+`TextBox`'s change handler and reads `name` back in the
 `Text("Hello, ...")` line — that round trip is the entire reactivity
 contract. Once it feels routine, every other [hook](hooks.md) is just
 a specialization (`UseReducer` for derived updates, `UseEffect` for

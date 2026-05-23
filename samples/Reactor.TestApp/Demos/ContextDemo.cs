@@ -35,7 +35,7 @@ class ContextDemo : Component
             ),
             HStack(8,
                 TextBlock("User name:"),
-                TextField(userName, setUserName, placeholder: "Enter name").Width(200)
+                TextBox(userName, setUserName, placeholder: "Enter name").Width(200)
             ),
 
             // 2. Consumers

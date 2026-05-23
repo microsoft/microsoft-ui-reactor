@@ -38,7 +38,7 @@ internal static class ImmediateAndDisabledFocusableFixtures
             var formValid = emailValid && ageValid;
 
             return VStack(8,
-                TextField(email, setEmail)
+                TextBox(email, setEmail)
                     .AutomationId("ValImmediate_Email"),
 
                 NumberBox(age, v =>

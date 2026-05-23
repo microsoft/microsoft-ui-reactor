@@ -621,9 +621,9 @@ class ProfilePage : Component<string>
 
                 VStack(8,
                     TextBlock("Display Name"),
-                    TextField(displayName, v => { setDisplayName(v); setSaved(false); }).Width(300),
+                    TextBox(displayName, v => { setDisplayName(v); setSaved(false); }).Width(300),
                     TextBlock("Bio"),
-                    TextField(bio, v => { setBio(v); setSaved(false); }).Width(300),
+                    TextBox(bio, v => { setBio(v); setSaved(false); }).Width(300),
                     When(hasUnsavedChanges, () =>
                         TextBlock("You have unsaved changes. Navigation is blocked until you save or discard.")
                             .Foreground(SystemCritical)),

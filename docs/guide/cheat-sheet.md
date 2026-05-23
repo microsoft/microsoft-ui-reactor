@@ -79,7 +79,7 @@ Full coverage on [Hooks](hooks.md).
 |---|---|
 | `TextBlock(s)` / `Heading(s)` / `SubHeading(s)` / `Caption(s)` | Read-only text. |
 | `Button(label, onClick)` | The click control. |
-| `TextField(value, set, placeholder?, header?)` | Single-line input. |
+| `TextBox(value, set, placeholder?, header?)` | Single-line input. |
 | `PasswordBox(pwd, set, placeholderText?)` | Obscured input. |
 | `NumberBox(value, set, header?)` | Numeric input. |
 | `CheckBox(checked, set, label?)` | Two-state checkbox. |
@@ -152,7 +152,7 @@ Full 35-token catalog on [Theming Tokens](theming-tokens.md).
 ## Patterns at a glance
 
 **Controlled input.** `var (v, set) = UseState("")` →
-`TextField(v, set)`.
+`TextBox(v, set)`.
 
 **Effect with cleanup.** Return a `Func<void>` from the effect lambda;
 Reactor calls it before the next run and on unmount.

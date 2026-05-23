@@ -37,9 +37,9 @@ internal static class FocusFixtures
         {
             var host = H.CreateHost();
             host.Mount(ctx => VStack(
-                TextField("a", _ => { }).Set(tb => tb.Name = "ts1"),
-                TextField("b", _ => { }).Set(tb => tb.Name = "ts2").IsTabStop(false),
-                TextField("c", _ => { }).Set(tb => tb.Name = "ts3")));
+                TextBox("a", _ => { }).Set(tb => tb.Name = "ts1"),
+                TextBox("b", _ => { }).Set(tb => tb.Name = "ts2").IsTabStop(false),
+                TextBox("c", _ => { }).Set(tb => tb.Name = "ts3")));
             await Harness.Render();
 
             var middle = H.FindControl<TextBox>(tb => tb.Name == "ts2");
@@ -53,7 +53,7 @@ internal static class FocusFixtures
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
-            host.Mount(ctx => TextField("xyf", _ => { })
+            host.Mount(ctx => TextBox("xyf", _ => { })
                 .Set(tb => tb.Name = "xyfTarget")
                 .XYFocusKeyboardNavigation(Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Enabled));
             await Harness.Render();
@@ -71,7 +71,7 @@ internal static class FocusFixtures
         {
             var host = H.CreateHost();
             var elRef = new ElementRef();
-            host.Mount(ctx => TextField("refTest", _ => { })
+            host.Mount(ctx => TextBox("refTest", _ => { })
                 .Set(tb => tb.Name = "refTarget")
                 .Ref(elRef));
             await Harness.Render();
@@ -88,7 +88,7 @@ internal static class FocusFixtures
         {
             var host = H.CreateHost();
             var elRef = new ElementRef();
-            host.Mount(ctx => TextField("focusMe", _ => { })
+            host.Mount(ctx => TextBox("focusMe", _ => { })
                 .Set(tb => tb.Name = "focusTarget")
                 .Ref(elRef));
             await Harness.Render();
@@ -116,7 +116,7 @@ internal static class FocusFixtures
             host.Mount(ctx =>
             {
                 typed = ctx.UseElementRef<TextBox>();
-                return TextField("typedRefTest", _ => { })
+                return TextBox("typedRefTest", _ => { })
                     .Set(tb => tb.Name = "typedRefTarget")
                     .Ref(typed);
             });
@@ -143,7 +143,7 @@ internal static class FocusFixtures
                 seenRefs.Add(r);
                 var (_, set) = ctx.UseState(0);
                 bump = () => { trigger++; set(trigger); };
-                return TextField("identTest", _ => { })
+                return TextBox("identTest", _ => { })
                     .Set(tb => tb.Name = "identTarget")
                     .Ref(r);
             });
@@ -175,8 +175,8 @@ internal static class FocusFixtures
                 a = ctx.UseElementRef<TextBox>();
                 b = ctx.UseElementRef<TextBox>();
                 return VStack(
-                    TextField("ma", _ => { }).Set(tb => tb.Name = "mra").Ref(a),
-                    TextField("mb", _ => { }).Set(tb => tb.Name = "mrb").Ref(b));
+                    TextBox("ma", _ => { }).Set(tb => tb.Name = "mra").Ref(a),
+                    TextBox("mb", _ => { }).Set(tb => tb.Name = "mrb").Ref(b));
             });
             await Harness.Render();
 

@@ -191,19 +191,19 @@ public class ValidationVisualizerTests
     [Fact]
     public void ShowErrors_Creates_Inline_Visualizer()
     {
-        var el = TextField("test")
+        var el = TextBox("test")
             .Validate("email", Validate.Required())
             .ShowErrors();
 
         Assert.IsType<ValidationVisualizerElement>(el);
         Assert.Equal(VisualizerStyle.Inline, el.Style);
-        Assert.IsType<TextFieldElement>(el.Content);
+        Assert.IsType<TextBoxElement>(el.Content);
     }
 
     [Fact]
     public void ShowErrors_Respects_ShowWhen()
     {
-        var el = TextField("test").ShowErrors(ShowWhen.WhenTouched);
+        var el = TextBox("test").ShowErrors(ShowWhen.WhenTouched);
         Assert.Equal(ShowWhen.WhenTouched, el.ShowWhen);
     }
 
@@ -216,7 +216,7 @@ public class ValidationVisualizerTests
     {
         var el = ValidationVisualizer(
             VisualizerStyle.Summary,
-            VStack(TextField("a"), TextField("b")),
+            VStack(TextBox("a"), TextBox("b")),
             title: "Please fix:");
 
         Assert.Equal(VisualizerStyle.Summary, el.Style);
@@ -244,7 +244,7 @@ public class ValidationVisualizerTests
     {
         var el = ValidationVisualizer(
             VisualizerStyle.InfoBar,
-            VStack(TextField("a")));
+            VStack(TextBox("a")));
 
         Assert.Equal(VisualizerStyle.InfoBar, el.Style);
     }
@@ -271,7 +271,7 @@ public class ValidationVisualizerTests
 
         var el = ValidationVisualizer(
             render: msgs => { receivedMessages = msgs; return TextBlock("errors"); },
-            content: TextField("a"));
+            content: TextBox("a"));
 
         Assert.Equal(VisualizerStyle.Custom, el.Style);
         Assert.NotNull(el.CustomRender);

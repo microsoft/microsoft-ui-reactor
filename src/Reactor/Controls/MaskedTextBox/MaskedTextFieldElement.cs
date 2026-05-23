@@ -50,11 +50,9 @@ public static class MaskedTextFieldDsl
     /// no first-party equivalent).
     /// </summary>
     /// <remarks>
-    /// Named for parity with the sibling <c>TextField</c> rather than
-    /// <c>MaskedTextBox</c>; the deviation is deliberate and matches the
-    /// <c>TextField</c> naming choice (see spec 039 §13 / §16.3). If
-    /// <c>TextField</c> is ever renamed to <c>TextBox</c>, this is bundled
-    /// in the same change.
+    /// <c>TextField</c> has been renamed to <c>TextBox</c> (see Dsl.cs);
+    /// this masked sibling still uses the legacy <c>TextField</c> name
+    /// and is slated to be renamed to <c>MaskedTextBox</c> in a follow-up PR.
     /// </remarks>
     public static MaskedTextFieldElement MaskedTextField(
         string value,

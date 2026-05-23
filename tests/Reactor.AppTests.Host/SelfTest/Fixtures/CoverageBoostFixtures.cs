@@ -205,7 +205,7 @@ internal static class CoverageBoostFixtures
                     0 => VStack(
                         TextBlock("PoolTest"),
                         Button("PoolBtn", () => { }),
-                        TextField("initial", _ => { }),
+                        TextBox("initial", _ => { }),
                         ToggleSwitch(false, _ => { }),
                         Progress(50),
                         ProgressRing(50.0),
@@ -223,7 +223,7 @@ internal static class CoverageBoostFixtures
                     _ => VStack(
                         TextBlock("Remounted"),
                         Button("Reuse", () => { }),
-                        TextField("reused", _ => { }),
+                        TextBox("reused", _ => { }),
                         ToggleSwitch(true, _ => { }),
                         Progress(75),
                         ProgressRing(75.0),

@@ -247,7 +247,7 @@ public class EditorsBehaviorTests
     {
         // Bug: factory((string?)null, _) would NRE without the ?? "" guard.
         var factory = Editors.Text();
-        var el = (TextFieldElement)factory(null!, _ => { });
+        var el = (TextBoxElement)factory(null!, _ => { });
         Assert.Equal(string.Empty, el.Value);
     }
 
@@ -255,7 +255,7 @@ public class EditorsBehaviorTests
     public void Text_Value_Pass_Through()
     {
         var factory = Editors.Text();
-        var el = (TextFieldElement)factory("hello", _ => { });
+        var el = (TextBoxElement)factory("hello", _ => { });
         Assert.Equal("hello", el.Value);
     }
 
@@ -263,7 +263,7 @@ public class EditorsBehaviorTests
     public void Text_Placeholder_Propagates()
     {
         var factory = Editors.Text(placeholder: "type here");
-        var el = (TextFieldElement)factory("", _ => { });
+        var el = (TextBoxElement)factory("", _ => { });
         Assert.Equal("type here", el.Placeholder);
     }
 
@@ -272,7 +272,7 @@ public class EditorsBehaviorTests
     {
         // Branch coverage: the `maxLength is { } max` ternary's false arm.
         var factory = Editors.Text();
-        var el = (TextFieldElement)factory("x", _ => { });
+        var el = (TextBoxElement)factory("x", _ => { });
         Assert.Empty(el.Setters);
     }
 
@@ -283,7 +283,7 @@ public class EditorsBehaviorTests
         // we can't invoke it without a TextBox — counting setters is enough
         // to catch a regression that drops the .Set call.
         var factory = Editors.Text(maxLength: 50);
-        var el = (TextFieldElement)factory("x", _ => { });
+        var el = (TextBoxElement)factory("x", _ => { });
         Assert.Single(el.Setters);
     }
 
@@ -292,7 +292,7 @@ public class EditorsBehaviorTests
     {
         object? captured = null;
         var factory = Editors.Text();
-        var el = (TextFieldElement)factory("", v => captured = v);
+        var el = (TextBoxElement)factory("", v => captured = v);
         el.OnChanged!.Invoke("typed");
         Assert.Equal("typed", captured);
     }
@@ -580,7 +580,7 @@ public class EditorsBehaviorTests
     public void Uri_Uri_Object_Stringifies()
     {
         var factory = Editors.Uri();
-        var el = (TextFieldElement)factory(new global::System.Uri("https://example.com/path"), _ => { });
+        var el = (TextBoxElement)factory(new global::System.Uri("https://example.com/path"), _ => { });
         Assert.Equal("https://example.com/path", el.Value.TrimEnd('/'));
     }
 
@@ -588,7 +588,7 @@ public class EditorsBehaviorTests
     public void Uri_Null_Defaults_To_Empty_String()
     {
         var factory = Editors.Uri();
-        var el = (TextFieldElement)factory(null!, _ => { });
+        var el = (TextBoxElement)factory(null!, _ => { });
         Assert.Equal(string.Empty, el.Value);
     }
 
@@ -596,7 +596,7 @@ public class EditorsBehaviorTests
     public void Uri_Non_Uri_Object_ToStrings()
     {
         var factory = Editors.Uri();
-        var el = (TextFieldElement)factory(42, _ => { });
+        var el = (TextBoxElement)factory(42, _ => { });
         Assert.Equal("42", el.Value);
     }
 
@@ -607,7 +607,7 @@ public class EditorsBehaviorTests
         // garbage strings as Uri instances, breaking model invariants.
         object? captured = null;
         var factory = Editors.Uri();
-        var el = (TextFieldElement)factory("", v => captured = v);
+        var el = (TextBoxElement)factory("", v => captured = v);
         el.OnChanged!.Invoke("https://docs.microsoft.com");
         Assert.IsType<global::System.Uri>(captured);
         Assert.Equal("https://docs.microsoft.com/", ((global::System.Uri)captured!).ToString());
@@ -620,7 +620,7 @@ public class EditorsBehaviorTests
         // tightened it to Absolute would silently drop relative inputs.
         object? captured = null;
         var factory = Editors.Uri();
-        var el = (TextFieldElement)factory("", v => captured = v);
+        var el = (TextBoxElement)factory("", v => captured = v);
         el.OnChanged!.Invoke("/relative/path");
         Assert.IsType<global::System.Uri>(captured);
     }
@@ -634,7 +634,7 @@ public class EditorsBehaviorTests
         object? captured = null;
         bool changed = false;
         var factory = Editors.Uri();
-        var el = (TextFieldElement)factory("", v => { captured = v; changed = true; });
+        var el = (TextBoxElement)factory("", v => { captured = v; changed = true; });
         // Use explicit \x## escapes for the control characters so the test
         // input is visible in source (embedded raw bytes get mangled by
         // editors and are invisible in reviews).

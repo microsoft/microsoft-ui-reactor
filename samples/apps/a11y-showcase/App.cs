@@ -99,7 +99,7 @@ sealed class App : Component
 
                     // header: associates the visible label with the input for
                     // screen readers and meets REACTOR_A11Y_003.
-                    TextField(newTitle, setNewTitle, placeholder: "New task...", header: "New task")
+                    TextBox(newTitle, setNewTitle, placeholder: "New task...", header: "New task")
                         .Width(280),
 
                     Button(CreateIcon(Symbol.Add), () =>
@@ -140,7 +140,7 @@ sealed class App : Component
             // ── Footer ──────────────────────────────────────────────
             Border(
                 HStack(12,
-                    TextField("", _ => { }, header: "Quick note")
+                    TextBox("", _ => { }, header: "Quick note")
                         .Width(300),
 
                     Caption("v1.0.0 — A11y Showcase").Opacity(0.5)

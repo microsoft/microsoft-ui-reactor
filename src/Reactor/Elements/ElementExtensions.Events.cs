@@ -69,11 +69,11 @@ public static partial class ElementExtensions
     // ── §3 Input ───────────────────────────────────────────────────────
 
     /// <summary>Wires the text-changed handler. Receives the new text. Passing <c>null</c> clears.</summary>
-    public static TextFieldElement Changed(this TextFieldElement el, Action<string>? handler) =>
+    public static TextBoxElement Changed(this TextBoxElement el, Action<string>? handler) =>
         el with { OnChanged = handler };
 
     /// <summary>Wires the selection-changed handler. Receives (selectedText, selectionStart, selectionLength). Passing <c>null</c> clears.</summary>
-    public static TextFieldElement SelectionChanged(this TextFieldElement el, Action<string, int, int>? handler) =>
+    public static TextBoxElement SelectionChanged(this TextBoxElement el, Action<string, int, int>? handler) =>
         el with { OnSelectionChanged = handler };
 
     /// <summary>Wires the password-changed handler. Passing <c>null</c> clears.</summary>

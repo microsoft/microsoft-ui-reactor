@@ -45,8 +45,8 @@ class TutorialFormPage : Component
 
         return VStack(12,
             SubHeading("Customer"),
-            TextField(name, setName, header: "Name"),
-            TextField(email, setEmail, header: "Email"),
+            TextBox(name, setName, header: "Name"),
+            TextBox(email, setEmail, header: "Email"),
             CheckBox(wantsUpdates, setWantsUpdates, label: "Email me updates"),
             HStack(8,
                 Button("Save", () => { }).IsEnabled(canSave),
@@ -67,9 +67,9 @@ class GridTranslationPage : Component
             columns: [GridSize.Auto, GridSize.Star()],
             rows: [GridSize.Auto, GridSize.Auto],
             TextBlock("First name").Bold().Grid(row: 0, column: 0),
-            TextField("", _ => { }).Grid(row: 0, column: 1),
+            TextBox("", _ => { }).Grid(row: 0, column: 1),
             TextBlock("Last name").Bold().Grid(row: 1, column: 0),
-            TextField("", _ => { }).Grid(row: 1, column: 1)
+            TextBox("", _ => { }).Grid(row: 1, column: 1)
         ) with
         {
             ColumnSpacing = 12,

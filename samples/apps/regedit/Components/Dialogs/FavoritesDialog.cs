@@ -23,7 +23,7 @@ internal sealed class AddFavoriteDialog : Component<AddFavoriteDialogProps>
             Strings.AddFavoriteTitle,
             VStack(8,
                 TextBlock(Strings.FavoriteName),
-                TextField(Props.FavoriteName, Props.OnNameChanged)
+                TextBox(Props.FavoriteName, Props.OnNameChanged)
             ).Width(350),
             Strings.OK
         ) with

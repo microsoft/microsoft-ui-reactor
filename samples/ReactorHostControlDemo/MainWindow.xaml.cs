@@ -29,7 +29,7 @@ public sealed partial class MainWindow : Window
                 TextBlock("Todo List").FontSize(20).Bold().Margin(16, 16, 16, 0),
 
                 HStack(8,
-                    TextField(draft, onChanged: setDraft, placeholder: "What needs doing?"),
+                    TextBox(draft, onChanged: setDraft, placeholder: "What needs doing?"),
                     Button("Add", () =>
                     {
                         if (string.IsNullOrWhiteSpace(draft)) return;

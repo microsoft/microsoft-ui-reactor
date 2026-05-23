@@ -141,7 +141,7 @@ class ObservableTreeDemo : Component
 
         return VStack(12,
             SubHeading("UseObservableTree"),
-            TextField(vm.UserName, v => vm.UserName = v,
+            TextBox(vm.UserName, v => vm.UserName = v,
                 header: "User Name"),
             ToggleSwitch(vm.DarkMode, v => vm.DarkMode = v,
                 header: "Dark Mode"),
@@ -167,7 +167,7 @@ class ObservableCollectionDemo : Component
         return VStack(12,
             SubHeading("UseCollection"),
             HStack(8,
-                TextField(input, setInput, placeholder: "New task")
+                TextBox(input, setInput, placeholder: "New task")
                     .Width(200),
                 Button("Add", () => {
                     if (!string.IsNullOrWhiteSpace(input))
@@ -196,7 +196,7 @@ class ElementRefFocusDemo : Component
 
         return VStack(12,
             SubHeading("Imperative focus via ElementRef<T>"),
-            TextField(name, setName, placeholder: "Name").Ref(fieldRef),
+            TextBox(name, setName, placeholder: "Name").Ref(fieldRef),
             Button("Focus the field", () =>
                 fieldRef.Current?.Focus(FocusState.Programmatic))
         ).Padding(24);

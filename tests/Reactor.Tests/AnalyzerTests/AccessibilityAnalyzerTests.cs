@@ -169,11 +169,11 @@ public class FormFieldLabelAnalyzerTests
         var test = @"
 class C
 {
-    static dynamic TextField(dynamic value, string header = null) => null;
+    static dynamic TextBox(dynamic value, string header = null) => null;
 
     void M(dynamic value)
     {
-        TextField(value);
+        TextBox(value);
     }
 }";
         var expected = Diagnostic(FormFieldLabelAnalyzer.DiagnosticId)
@@ -193,11 +193,11 @@ class C
         var test = @"
 class C
 {
-    static dynamic TextField(dynamic value, string header = null) => null;
+    static dynamic TextBox(dynamic value, string header = null) => null;
 
     void M(dynamic value)
     {
-        TextField(value, header: ""Name"");
+        TextBox(value, header: ""Name"");
     }
 }";
         var analyzerTest = new CSharpAnalyzerTest<FormFieldLabelAnalyzer, DefaultVerifier>
@@ -213,11 +213,11 @@ class C
         var test = @"
 class C
 {
-    static dynamic TextField(dynamic value, string header = null) => null;
+    static dynamic TextBox(dynamic value, string header = null) => null;
 
     void M(dynamic value)
     {
-        TextField(value).AutomationName(""Search"");
+        TextBox(value).AutomationName(""Search"");
     }
 }";
         var analyzerTest = new CSharpAnalyzerTest<FormFieldLabelAnalyzer, DefaultVerifier>
@@ -233,11 +233,11 @@ class C
         var test = @"
 class C
 {
-    static dynamic TextField(dynamic value, string header = null) => null;
+    static dynamic TextBox(dynamic value, string header = null) => null;
 
     void M(dynamic value, dynamic label)
     {
-        TextField(value).LabeledBy(label);
+        TextBox(value).LabeledBy(label);
     }
 }";
         var analyzerTest = new CSharpAnalyzerTest<FormFieldLabelAnalyzer, DefaultVerifier>

@@ -31,7 +31,7 @@ Think of Reactor as "WinUI controls, but expressed like a function of state."
 |---------|------------|
 | `Page`, `UserControl`, `Window` markup | A `Component` with `Render()` |
 | `{Binding Name}` | Plain C# variable usage: `TextBlock(name)` |
-| `Mode=TwoWay` | Controlled input: `TextField(name, setName)` |
+| `Mode=TwoWay` | Controlled input: `TextBox(name, setName)` |
 | `DataContext` | Local hook state, typed props, or [context](context.md) |
 | `ICommand` | Lambdas, methods, or [commands](commanding.md) |
 | `StackPanel` | [`VStack`](layout.md) or [`HStack`](layout.md) |
@@ -79,8 +79,8 @@ class TutorialFormPage : Component
 
         return VStack(12,
             SubHeading("Customer"),
-            TextField(name, setName, header: "Name"),
-            TextField(email, setEmail, header: "Email"),
+            TextBox(name, setName, header: "Name"),
+            TextBox(email, setEmail, header: "Email"),
             CheckBox(wantsUpdates, setWantsUpdates, label: "Email me updates"),
             HStack(8,
                 Button("Save", () => { }).IsEnabled(canSave),
@@ -95,7 +95,7 @@ class TutorialFormPage : Component
 What changed:
 
 - **Bindings became state variables.** `Name`, `Email`, and `WantsUpdates` live in `UseState`.
-- **Two-way input became explicit.** `TextField(name, setName)` makes data flow obvious.
+- **Two-way input became explicit.** `TextBox(name, setName)` makes data flow obvious.
 - **The command became normal C#.** The save button uses a lambda instead of XAML command wiring.
 - **Derived UI stayed inline.** `canSave` is just a local expression, not a converter or extra property.
 
@@ -148,9 +148,9 @@ class GridTranslationPage : Component
             columns: [GridSize.Auto, GridSize.Star()],
             rows: [GridSize.Auto, GridSize.Auto],
             TextBlock("First name").Bold().Grid(row: 0, column: 0),
-            TextField("", _ => { }).Grid(row: 0, column: 1),
+            TextBox("", _ => { }).Grid(row: 0, column: 1),
             TextBlock("Last name").Bold().Grid(row: 1, column: 0),
-            TextField("", _ => { }).Grid(row: 1, column: 1)
+            TextBox("", _ => { }).Grid(row: 1, column: 1)
         ) with
         {
             ColumnSpacing = 12,
@@ -182,10 +182,10 @@ That is why Reactor code often looks simpler than XAML. A label like
 re-runs whenever the relevant state changes.
 
 > **Caveat:** A XAML `Binding` with `Mode=TwoWay` becomes a Reactor controlled-input
-> pattern (`TextField(name, setName)`), not a binding-with-mode. There is
+> pattern (`TextBox(name, setName)`), not a binding-with-mode. There is
 > **no** Reactor analogue to `Mode=OneWay` / `Mode=OneTime` / `Mode=TwoWay`
 > because state IS the binding — every render re-reads from state, every
-> edit calls a setter. If you write `TextField(name, _ => { })` and never
+> edit calls a setter. If you write `TextBox(name, _ => { })` and never
 > call a setter, the field is read-only (effectively `Mode=OneWay`); if
 > you wire both, it round-trips (effectively `Mode=TwoWay`). The trap is
 > "reach for the binding mode for OneTime" — there is no equivalent.
@@ -193,7 +193,7 @@ re-runs whenever the relevant state changes.
 > want to capture-and-freeze, or call a function once in a
 > `UseEffect(() => …, Array.Empty<object>())` so it runs only on mount.
 > The Reactor analyzer doesn't emit a specific diagnostic for "missing
-> setter" — passing `null` to a `TextField` change handler is a
+> setter" — passing `null` to a `TextBox` change handler is a
 > `CS8625` "Cannot convert null literal" instead.
 
 ## Events and Commands Are Just C#
@@ -202,7 +202,7 @@ You do not need a special command layer for every button click.
 
 - `Button("Save", Save)` is the direct equivalent of a button command.
 - `Button("Refresh", async () => await ReloadAsync())` works for async actions.
-- `TextField(text, setText)` replaces both `TextChanged` wiring and two-way binding.
+- `TextBox(text, setText)` replaces both `TextChanged` wiring and two-way binding.
 
 If you want richer busy/error behavior, Reactor also has a dedicated
 [Commanding](commanding.md) API. But the default is deliberately small: use a
@@ -220,7 +220,7 @@ a single `IsCheckedChanged` callback):
 | WinUI XAML event | Reactor fluent |
 |------------------|----------------|
 | `<Button Click="OnClick"/>` | `Button("…").Click(handler)` |
-| `<TextBox TextChanged="OnTextChanged"/>` | `TextField(text, setText).Changed(handler)` |
+| `<TextBox TextChanged="OnTextChanged"/>` | `TextBox(text, setText).Changed(handler)` |
 | `<ListView SelectionChanged="OnSelectionChanged"/>` | `ListView<T>(...).SelectionChanged(handler)` |
 | `<ComboBox SelectionChanged="OnSelectionChanged"/>` | `ComboBox(...).SelectedIndexChanged(handler)` — Reactor reports the selected index, not the args |
 | `<CheckBox Checked="…" Unchecked="…"/>` | `CheckBox(value, setValue).IsCheckedChanged(handler)` — Reactor collapses the three XAML events into a single bool callback |
@@ -316,7 +316,7 @@ class ObservableTreeDemo : Component
 
         return VStack(12,
             SubHeading("UseObservableTree"),
-            TextField(vm.UserName, v => vm.UserName = v,
+            TextBox(vm.UserName, v => vm.UserName = v,
                 header: "User Name"),
             ToggleSwitch(vm.DarkMode, v => vm.DarkMode = v,
                 header: "Dark Mode"),

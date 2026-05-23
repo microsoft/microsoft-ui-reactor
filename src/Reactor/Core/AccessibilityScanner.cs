@@ -88,10 +88,10 @@ public record A11yContext
     /// <summary>Type names of immediate children.</summary>
     public string[]? ChildTypes { get; init; }
 
-    /// <summary>Header property value (for TextFieldElement etc.).</summary>
+    /// <summary>Header property value (for TextBoxElement etc.).</summary>
     public string? Header { get; init; }
 
-    /// <summary>Placeholder text (for TextFieldElement etc.).</summary>
+    /// <summary>Placeholder text (for TextBoxElement etc.).</summary>
     public string? PlaceholderText { get; init; }
 }
 
@@ -309,7 +309,7 @@ public static partial class AccessibilityScanner
         string? placeholder = null;
         switch (el)
         {
-            case TextFieldElement tf:
+            case TextBoxElement tf:
                 header = tf.Header;
                 placeholder = tf.Placeholder;
                 break;
@@ -403,7 +403,7 @@ public static partial class AccessibilityScanner
     private static void CheckConcreteBrushOnInteractive(Element el, ScanContext ctx, List<A11yDiagnostic> findings)
     {
         // Only flag interactive controls
-        bool isInteractive = el is ButtonElement or TextFieldElement or NumberBoxElement
+        bool isInteractive = el is ButtonElement or TextBoxElement or NumberBoxElement
             or PasswordBoxElement or CheckBoxElement or RadioButtonElement
             or ComboBoxElement or SliderElement or ToggleSwitchElement
             or ToggleButtonElement;

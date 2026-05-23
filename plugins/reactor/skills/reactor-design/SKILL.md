@@ -342,13 +342,13 @@ Border(child).Margin(3)
 
 **Margin** pushes an element away from its neighbors. It works on every Reactor element.
 
-**Padding** adds space between a container's edge and its content. It only works on `Border` and `Control`-based elements (`Button`, `TextField`, etc.). Layout panels like `VStack`, `HStack`, and `Grid` do not support `.Padding()` — wrap content in a `Border` if you need inner padding on a stack.
+**Padding** adds space between a container's edge and its content. It only works on `Border` and `Control`-based elements (`Button`, `TextBox`, etc.). Layout panels like `VStack`, `HStack`, and `Grid` do not support `.Padding()` — wrap content in a `Border` if you need inner padding on a stack.
 
 | Element | `.Margin()` | `.Padding()` |
 |---------|-------------|-------------|
 | `Border` | ✓ | ✓ |
 | `Button` | ✓ | ✓ |
-| `TextField` | ✓ | ✓ |
+| `TextBox` | ✓ | ✓ |
 | `TextBlock` | ✓ | — |
 | `VStack` | ✓ | — |
 | `HStack` | ✓ | — |
@@ -361,7 +361,7 @@ TextBlock("Hello").Margin(8)
 VStack(children).Margin(16)
 Border(child).Margin(12)
 
-// Padding — only on Border and Control (Button, TextField, etc.)
+// Padding — only on Border and Control (Button, TextBox, etc.)
 Border(child).Padding(16)    // ✓ works
 Button("Go").Padding(12)     // ✓ works
 
@@ -420,7 +420,7 @@ var or = ThemeResource.CornerRadius("OverlayCornerRadius");
 // Dialog with control-radius inner elements
 Border(
     VStack(12,
-        TextField("", placeholder: "Username").CornerRadius(cr.TopLeft),
+        TextBox("", placeholder: "Username").CornerRadius(cr.TopLeft),
         Button("Sign In", onClick)
             .Background(Theme.Accent)
             .CornerRadius(cr.TopLeft)
@@ -440,7 +440,7 @@ VStack(children).MinWidth(200)
 
 // Wrong: fixed Height clips at larger text scales
 Button("Action").Height(32)
-TextField(text, setText).Height(30)
+TextBox(text, setText).Height(30)
 ```
 
 - Prefer `MinHeight`/`MinWidth` over fixed `Height`/`Width`.
@@ -572,7 +572,7 @@ var filtered = UseMemo(() =>
     items, filter);
 
 return VStack(
-    TextField(filter, setFilter, placeholder: "Filter..."),
+    TextBox(filter, setFilter, placeholder: "Filter..."),
     VStack(filtered.Select(item =>
         TextBlock(item.Name).WithKey(item.Id)
     ).ToArray()));
@@ -641,7 +641,7 @@ Button("Save", onSave).IsTabStop(true).TabIndex(0).AccessKey("S")
 These allocate an `AutomationProperties` peer only when set:
 
 ```csharp
-TextField(name, setName)
+TextBox(name, setName)
     .HelpText("Enter your full legal name")
     .Required()
 
@@ -784,7 +784,7 @@ Three compile-time analyzers catch accessibility issues:
 |----------|--------|
 | `REACTOR_A11Y_001` | Icon-only Button/ToggleButton missing `.AutomationName()` |
 | `REACTOR_A11Y_002` | Image missing `.AutomationName()` or `.AccessibilityHidden()` |
-| `REACTOR_A11Y_003` | Form field (TextField/NumberBox/PasswordBox) missing label |
+| `REACTOR_A11Y_003` | Form field (TextBox/NumberBox/PasswordBox) missing label |
 
 These run as warnings by default. Promote to errors in CI:
 
@@ -801,7 +801,7 @@ var validation = UseValidationContext();
 var (email, setEmail) = UseState("");
 
 return FormField(
-    TextField(email, setEmail)
+    TextBox(email, setEmail)
         .Validate("email", email, Validate.Required(), Validate.Email())
         .Required()
         .HelpText("We'll send a confirmation to this address"),

@@ -429,7 +429,7 @@ class PageCachingDemo : Component
     static Element CachedPage(string name) =>
         VStack(8,
             TextBlock(name).FontSize(20).Bold(),
-            TextField("", _ => { }, placeholder: "Type here — state persists")
+            TextBox("", _ => { }, placeholder: "Type here — state persists")
         ).Padding(16);
 }
 ```

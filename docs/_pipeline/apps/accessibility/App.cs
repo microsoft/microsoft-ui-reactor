@@ -23,7 +23,7 @@ class Tier1Demo : Component
             TextBlock("Profile")
                 .FontSize(18).SemiBold()
                 .HeadingLevel(AutomationHeadingLevel.Level2),
-            TextField("", _ => { }, placeholder: "Display name")
+            TextBox("", _ => { }, placeholder: "Display name")
                 .AutomationName("Display name")
                 .TabIndex(1)
                 .AccessKey("N"),
@@ -42,7 +42,7 @@ class Tier2Demo : Component
     public override Element Render()
     {
         return VStack(12,
-            TextField("", _ => { }, placeholder: "Search...")
+            TextBox("", _ => { }, placeholder: "Search...")
                 .AutomationName("Search products")
                 .HelpText("Type a product name or SKU to filter results")
                 .Width(300),
@@ -75,9 +75,9 @@ class AccessibleFormDemo : Component
         return VStack(12,
             TextBlock("Create Account").FontSize(24).Bold()
                 .HeadingLevel(AutomationHeadingLevel.Level1),
-            TextField(name, setName, header: "Full Name")
+            TextBox(name, setName, header: "Full Name")
                 .AutomationName("Full name").Required().TabIndex(1),
-            TextField(email, setEmail, header: "Email")
+            TextBox(email, setEmail, header: "Email")
                 .AutomationName("Email address").Required().TabIndex(2)
                 .HelpText("We'll send a verification link"),
             CheckBox(agree, setAgree, label: "I accept the terms")
@@ -110,7 +110,7 @@ class LandmarksDemo : Component
             ).Landmark(AutomationLandmarkType.Main)
              .AutomationName("Main content"),
 
-            TextField("", _ => { }, placeholder: "Search...")
+            TextBox("", _ => { }, placeholder: "Search...")
                 .AutomationName("Site search")
                 .Landmark(AutomationLandmarkType.Search)
         ).Padding(24);
@@ -159,7 +159,7 @@ class FocusTrapDemo : Component
                     VStack(12,
                         TextBlock("Modal Dialog").FontSize(18).Bold(),
                         TextBlock("Tab/Shift+Tab stays inside this panel."),
-                        TextField("", _ => { }, placeholder: "Name")
+                        TextBox("", _ => { }, placeholder: "Name")
                             .TabIndex(0),
                         Button("Close", () => setShowModal(false))
                             .TabIndex(1)

@@ -14,7 +14,7 @@ public class ValidateExtensionTests
     [Fact]
     public void Validate_On_TextField_Attaches_Validators()
     {
-        var el = TextField("test")
+        var el = TextBox("test")
             .Validate("email", Validate.Required(), Validate.Email());
 
         var attached = el.GetValidation();
@@ -26,10 +26,10 @@ public class ValidateExtensionTests
     [Fact]
     public void Validate_On_TextField_Preserves_Element_Type()
     {
-        var el = TextField("test")
+        var el = TextBox("test")
             .Validate("email", Validate.Required());
 
-        Assert.IsType<TextFieldElement>(el);
+        Assert.IsType<TextBoxElement>(el);
         Assert.Equal("test", el.Value);
     }
 
@@ -71,12 +71,12 @@ public class ValidateExtensionTests
     [Fact]
     public void Validate_Can_Chain_With_Other_Modifiers()
     {
-        var el = TextField("test")
+        var el = TextBox("test")
             .Validate("email", Validate.Required())
             .Margin(10)
             .Width(200);
 
-        Assert.IsType<TextFieldElement>(el);
+        Assert.IsType<TextBoxElement>(el);
         Assert.NotNull(el.GetValidation());
         Assert.NotNull(el.Modifiers);
         Assert.Equal(200, el.Modifiers!.Width);
@@ -85,7 +85,7 @@ public class ValidateExtensionTests
     [Fact]
     public void Validate_Merges_When_Called_Twice()
     {
-        var el = TextField("test")
+        var el = TextBox("test")
             .Validate("email", Validate.Required())
             .Validate("email", Validate.Email());
 
@@ -106,7 +106,7 @@ public class ValidateExtensionTests
             return s.Length > 0;
         }, "Required");
 
-        var el = TextField("test")
+        var el = TextBox("test")
             .ValidateAsync("email", asyncValidator);
 
         var attached = el.GetValidation();
@@ -124,7 +124,7 @@ public class ValidateExtensionTests
             return true;
         }, "Async check");
 
-        var el = TextField("test")
+        var el = TextBox("test")
             .Validate("email", Validate.Required())
             .ValidateAsync("email", asyncValidator);
 
@@ -243,7 +243,7 @@ public class ValidateExtensionTests
     [Fact]
     public void GetValidation_Returns_Null_When_No_Validators()
     {
-        var el = TextField("test");
+        var el = TextBox("test");
         Assert.Null(el.GetValidation());
     }
 }

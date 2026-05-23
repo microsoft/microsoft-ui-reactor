@@ -22,7 +22,7 @@ public static class UseElementFocusExtensions
     /// <example>
     /// var (inputRef, requestFocus) = ctx.UseElementFocus();
     /// ctx.UseEffect(() => requestFocus(), Array.Empty&lt;object&gt;()); // focus on first render
-    /// return TextField(value, setValue).Ref(inputRef);
+    /// return TextBox(value, setValue).Ref(inputRef);
     /// </example>
     public static (ElementRef Ref, Action RequestFocus) UseElementFocus(this RenderContext ctx,
         FocusState state = FocusState.Programmatic)

@@ -394,7 +394,7 @@ Grid(columns: [GridSize.Star(), GridSize.Px(200)],
 TitleBar("App") with { Subtitle = "Home", Content = ..., RightHeader = ... }
 
 // Controls
-Button("Click", () => ...)      TextField(value, setValue, placeholder)
+Button("Click", () => ...)      TextBox(value, setValue, placeholder)
 CheckBox(isChecked, setChecked) ToggleSwitch(on, setOn)
 Slider(v, 0, 100, setV)         ComboBox(items, index, setIndex)
 
@@ -544,7 +544,7 @@ release you depend on.
 | `<div>` | `FlexColumn() / FlexRow() / Border()` (prefer over `VStack`/`HStack`) |
 | `<span>text</span>` | `TextBlock("text")` |
 | `<button onClick={fn}>` | `Button("label", fn)` |
-| `<input value={v} onChange={fn}>` | `TextField(v, fn)` |
+| `<input value={v} onChange={fn}>` | `TextBox(v, fn)` |
 | `{cond && <X/>}` | `cond ? X() : null` |
 | `{items.map(i => <X/>)}` | `items.Select(i => X()).ToArray()` |
 | `<Component />` | `Component<MyComponent>()` |

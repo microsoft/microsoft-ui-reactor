@@ -251,7 +251,7 @@ class IntegratedDataDemo : Microsoft.UI.Reactor.Core.Component
                         .Where(m => m is not null).ToList();
                     var allErrors = nameErrors.Concat(priorityErrors).Concat(budgetErrors).ToList();
 
-                    var nameEditor = TextField(selectedItem.Name, v =>
+                    var nameEditor = TextBox(selectedItem.Name, v =>
                     {
                         selectedItem.Name = (string)v;
                     }, placeholder: "Task name...");

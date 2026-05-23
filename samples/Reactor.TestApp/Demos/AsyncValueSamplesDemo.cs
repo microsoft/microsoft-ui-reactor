@@ -167,7 +167,7 @@ class DepsChangeCancelScenario : Component
         return VStack(8,
             SubHeading("1c. Deps-change cancellation"),
             TextBlock("Each keystroke cancels the previous fetch and starts a new one — only the last lands."),
-            TextField(query, v => setQuery(v ?? ""), placeholder: "type here…"),
+            TextBox(query, v => setQuery(v ?? ""), placeholder: "type here…"),
             TextBlock(result switch
             {
                 AsyncValue<string>.Loading => "⏳ Loading…",
@@ -388,7 +388,7 @@ class SearchInfiniteScenario : Component
         return VStack(8,
             SubHeading("2b. Search-as-you-type"),
             TextBlock("Type to filter. Each keystroke cancels the pending fetch; only the matching deps' pages land."),
-            TextField(query, v => setQuery(v ?? ""), placeholder: "e.g. Seattle"),
+            TextBox(query, v => setQuery(v ?? ""), placeholder: "e.g. Seattle"),
             TextBlock($"Matches: {resource.TotalCount?.ToString() ?? "…"}  /  LoadState: {SearchInfiniteLabel(resource.LoadState)}"),
 
             Border(
@@ -548,7 +548,7 @@ class DataSourceAdapterScenario : Component
         return VStack(8,
             SubHeading("2d. UseDataSource (IDataSource adapter)"),
             TextBlock("UseDataSource projects any IDataSource<T> into an InfiniteResource<T> — existing data-ecosystem interfaces work with the hook surface."),
-            TextField(search, v => setSearch(v ?? ""), placeholder: "search rows…"),
+            TextBox(search, v => setSearch(v ?? ""), placeholder: "search rows…"),
             TextBlock($"Matches: {resource.TotalCount?.ToString() ?? "…"}"),
 
             Border(

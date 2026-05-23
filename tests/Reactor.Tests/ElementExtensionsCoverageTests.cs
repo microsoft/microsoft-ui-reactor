@@ -245,7 +245,7 @@ public class ElementExtensionsCoverageTests
     [Fact]
     public void TextField_Sugar()
     {
-        var el = TextField("x", _ => { })
+        var el = TextBox("x", _ => { })
             .IsReadOnly()
             .AcceptsReturn()
             .TextWrapping()
@@ -262,7 +262,7 @@ public class ElementExtensionsCoverageTests
     [Obsolete("Tests the deprecated ReadOnly shim for TextField")]
     public void TextField_ReadOnly_Shim()
     {
-        var el = TextField("x", _ => { }).ReadOnly();
+        var el = TextBox("x", _ => { }).ReadOnly();
         Assert.True(el.IsReadOnly);
     }
 
@@ -493,7 +493,7 @@ public class ElementExtensionsCoverageTests
         var b = Button("Y").Set(btn => btn.Width = 50);
         Assert.Single(b.Setters);
 
-        var tf = TextField("x", _ => { }).Set(tb => tb.MaxLength = 5);
+        var tf = TextBox("x", _ => { }).Set(tb => tb.MaxLength = 5);
         Assert.Single(tf.Setters);
 
         var s = VStack().Set(sp => sp.Spacing = 4);

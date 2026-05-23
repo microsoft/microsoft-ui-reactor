@@ -47,7 +47,7 @@ All factories live on `Microsoft.UI.Reactor.Factories` — use
 
 | Factory | Signature |
 |---------|-----------|
-| `TextField(value, onChanged?, placeholder?)` | `(string, Action<string>?, string?)` |
+| `TextBox(value, onChanged?, placeholder?)` | `(string, Action<string>?, string?)` |
 | `PasswordBox(password, onPasswordChanged?, placeholderText?)` | `(string, Action<string>?, string?)` |
 | `NumberBox(value, onValueChanged?, header?)` | `(double, Action<double>?, string?)` |
 | `AutoSuggestBox(text, onTextChanged?, onQuerySubmitted?)` | `(string, Action<string>?, Action<string>?)` |
@@ -173,7 +173,7 @@ Border(ListView(items, ...)).Flex(grow: 1, basis: 0)
 // 2. Put shrink: 0 on every fixed-size sibling.
 FlexColumn(
     Heading("Title").Flex(shrink: 0),
-    TextField(name, setName).Flex(shrink: 0),
+    TextBox(name, setName).Flex(shrink: 0),
     Border(ListView(items, ...)).Flex(grow: 1))
 ```
 
@@ -388,7 +388,7 @@ Rectangle().Fill(brush) / Ellipse().Fill(brush)
 Popup(c, open).IsLightDismissEnabled(true).Offset(h, v)
 ScrollView(c).ZoomMode(...).HorizontalScrollMode(...).VerticalScrollMode(...)         // modern; enums under WinUI.Scrolling*
 ScrollViewer(c).ZoomMode(...).HorizontalScrollMode(...).VerticalScrollMode(...)        // classic; enums under WinUI.ScrollMode / .ZoomMode
-TextField(v, setV).Header("...")
+TextBox(v, setV).Header("...")
 element.WithKey("stable-id")  // always last
 ```
 

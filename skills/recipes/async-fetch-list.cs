@@ -52,7 +52,7 @@ class App : Component
 
         return VStack(12,
             HStack(8,
-                TextField(owner, setOwner, placeholder: "GitHub owner").Flex(grow: 1),
+                TextBox(owner, setOwner, placeholder: "GitHub owner").Flex(grow: 1),
                 Caption("(try \"fail\" to see error state)").VAlign(VerticalAlignment.Center)),
 
             repos.Match<Element>(

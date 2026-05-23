@@ -146,8 +146,8 @@ internal static class ReconcilerBigCoverageFixtures
                     ? NumberBox(5, header: "wire-nb")
                     : NumberBox(5, onValueChanged: v => nbHits++, header: "wire-nb");
                 Element tf = phase == 0
-                    ? TextField("wire-tf-text", placeholder: "tf")
-                    : TextField("wire-tf-text", onChanged: v => textHits++, placeholder: "tf");
+                    ? TextBox("wire-tf-text", placeholder: "tf")
+                    : TextBox("wire-tf-text", onChanged: v => textHits++, placeholder: "tf");
                 Element pw = phase == 0
                     ? PasswordBox("init")
                     : PasswordBox("init", onPasswordChanged: v => pwHits++);
@@ -649,7 +649,7 @@ internal static class ReconcilerBigCoverageFixtures
             var host = H.CreateHost();
             host.Mount(ctx => VStack(
                 TextBlock("EmailLabel").AutomationId("EmailLabelId"),
-                TextField("user@example.com").LabeledBy("EmailLabelId")
+                TextBox("user@example.com").LabeledBy("EmailLabelId")
             ));
 
             await Harness.Render();
@@ -904,20 +904,20 @@ internal static class ReconcilerBigCoverageFixtures
                     ValidationVisualizer(
                         VisualizerStyle.Summary,
                         VStack(
-                            FormField(TextField("").Validate("email", "", Validate.Required()), label: "Email"),
-                            FormField(TextField("a").Validate("name", "a", Validate.MinLength(3)), label: "Name")
+                            FormField(TextBox("").Validate("email", "", Validate.Required()), label: "Email"),
+                            FormField(TextBox("a").Validate("name", "a", Validate.MinLength(3)), label: "Name")
                         ),
                         title: "Summary errors").Provide(ValidationContexts.Current, valCtx),
                     ValidationVisualizer(
                         VisualizerStyle.InfoBar,
                         VStack(
-                            FormField(TextField("").Validate("ib1", "", Validate.Required()), label: "IB1")
+                            FormField(TextBox("").Validate("ib1", "", Validate.Required()), label: "IB1")
                         ),
                         title: "InfoBar errors").Provide(ValidationContexts.Current, valCtx),
                     ValidationVisualizer(
                         caught => TextBlock($"Custom: {caught.Count} errors"),
                         VStack(
-                            FormField(TextField("").Validate("c1", "", Validate.Required()), label: "C1")
+                            FormField(TextBox("").Validate("c1", "", Validate.Required()), label: "C1")
                         )).Provide(ValidationContexts.Current, valCtx)
                 );
             });

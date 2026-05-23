@@ -130,7 +130,7 @@ class VirtualListRefDemo : Component
         return VStack(12,
             SubHeading("VirtualListRef — Imperative Scroll"),
             HStack(8,
-                TextField(targetIndex, setTargetIndex,
+                TextBox(targetIndex, setTargetIndex,
                     placeholder: "Index"),
                 Button("Scroll To", () =>
                 {
@@ -219,7 +219,7 @@ class WithKeyDemo : Component
         return VStack(12,
             SubHeading("Stable Identity with WithKey"),
             HStack(8,
-                TextField(newItem, setNewItem, placeholder: "New item"),
+                TextBox(newItem, setNewItem, placeholder: "New item"),
                 Button("Add", () => {
                     if (!string.IsNullOrWhiteSpace(newItem)) {
                         updateItems(l => [.. l, newItem.Trim()]);

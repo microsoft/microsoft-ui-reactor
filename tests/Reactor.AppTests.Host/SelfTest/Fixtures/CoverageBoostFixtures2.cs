@@ -88,7 +88,7 @@ internal static class CoverageBoostFixtures2
                         VisualizerStyle.InfoBar,
                         VStack(
                             TextBlock("InfoBarViz"),
-                            TextField("", _ => { })
+                            TextBox("", _ => { })
                                 .Validate("testField", "", Validate.Required("Required"))
                         ),
                         title: "Validation Errors",
@@ -102,7 +102,7 @@ internal static class CoverageBoostFixtures2
                         VisualizerStyle.Summary,
                         VStack(
                             TextBlock("SummaryViz"),
-                            TextField("", _ => { })
+                            TextBox("", _ => { })
                                 .Validate("testField2", "", Validate.Required("Required"))
                         ),
                         title: "Validation Summary",
@@ -116,7 +116,7 @@ internal static class CoverageBoostFixtures2
                         msgs => TextBlock($"Custom:{msgs.Count} errors"),
                         VStack(
                             TextBlock("CustomViz"),
-                            TextField("", _ => { })
+                            TextBox("", _ => { })
                                 .Validate("testField3", "", Validate.Required("Required"))
                         ),
                         showWhen: ShowWhen.Always
@@ -493,7 +493,7 @@ internal static class CoverageBoostFixtures2
                 {
                     0 => VStack(
                         Button("PoolBtn1", () => { }),
-                        TextField("text1", _ => { }),
+                        TextBox("text1", _ => { }),
                         ToggleSwitch(true, _ => { }, header: "Toggle1"),
                         CheckBox(true, _ => { }, label: "Check1"),
                         Slider(50, onValueChanged: _ => { }),
@@ -506,7 +506,7 @@ internal static class CoverageBoostFixtures2
                     ),
                     _ => VStack(
                         Button("PoolBtn2", () => { }),
-                        TextField("text2", _ => { }),
+                        TextBox("text2", _ => { }),
                         ToggleSwitch(false, _ => { }),
                         CheckBox(false, _ => { }, label: "Check2"),
                         Slider(75, onValueChanged: _ => { }),

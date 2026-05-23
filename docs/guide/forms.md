@@ -40,7 +40,7 @@ class ControlledInputDemo : Component
 
         return VStack(12,
             SubHeading("Controlled Input"),
-            TextField(name, setName, placeholder: "Type your name"),
+            TextBox(name, setName, placeholder: "Type your name"),
             TextBlock($"You typed: {name}").Opacity(0.6)
         ).Padding(24);
     }
@@ -73,7 +73,7 @@ class InputTypesDemo : Component
         var (priority, setPriority) = UseState(0);
 
         return VStack(12,
-            TextField(text, setText, placeholder: "Email",
+            TextBox(text, setText, placeholder: "Email",
                 header: "Email"),
             PasswordBox(password, setPassword,
                 placeholderText: "Enter password"),
@@ -95,7 +95,7 @@ class InputTypesDemo : Component
 
 | Control | Value type | Change handler |
 |---------|-----------|---------------|
-| `TextField` | `string` | `Action<string>` |
+| `TextBox` | `string` | `Action<string>` |
 | `PasswordBox` | `string` | `Action<string>` |
 | `Slider` | `double` | `Action<double>` |
 | `NumberBox` | `double` | `Action<double>` |
@@ -107,44 +107,13 @@ class InputTypesDemo : Component
 All controls accept optional parameters for labels, headers, and placeholder
 text. Check the API reference for each control's full signature.
 
-## Configuring TextField
+## Configuring TextBox
 
-`TextField` covers the common WinUI `TextBox` knobs through dedicated fluents
+`TextBox` covers the common WinUI `TextBox` knobs through dedicated fluents
 so you rarely need `.Set(...)`. The named-input shapes set the appropriate
 `InputScope` for soft-keyboard and IME hinting:
 
-```csharp
-class TextFieldConfigDemo : Component
-{
-    public override Element Render()
-    {
-        var (qty, setQty) = UseState("");
-        var (email, setEmail) = UseState("");
-        var (url, setUrl) = UseState("");
-        var (phone, setPhone) = UseState("");
-        var (search, setSearch) = UseState("");
-        var (note, setNote) = UseState("");
-
-        return VStack(12,
-            TextField(qty, setQty, header: "Quantity")
-                .NumericInput(),
-            TextField(email, setEmail, header: "Email")
-                .EmailInput(),
-            TextField(url, setUrl, header: "URL")
-                .UrlInput(),
-            TextField(phone, setPhone, header: "Phone")
-                .PhoneInput(),
-            TextField(search, setSearch, placeholder: "Search…")
-                .SearchInput(),
-            TextField(note, setNote, header: "Reference code")
-                .MaxLength(8)
-                .CharacterCasing(CharacterCasing.Upper)
-                .TextAlignment(TextAlignment.Center)
-                .IsSpellCheckEnabled(false)
-                .Description("Eight characters, automatically uppercased.")
-        ).Padding(24);
-    }
-}
+```csharp snippet="forms/TextBox-config"
 ```
 
 | Fluent | Effect |
@@ -187,7 +156,7 @@ class ValidationDemo : Component
 
         return VStack(12,
             SubHeading("Simple Validation"),
-            TextField(email, setEmail, placeholder: "user@example.com",
+            TextBox(email, setEmail, placeholder: "user@example.com",
                 header: "Email"),
             When(!string.IsNullOrEmpty(email) && !emailValid, () =>
                 TextBlock("Enter a valid email address")
@@ -239,7 +208,7 @@ class KeepSubmitReachableDemo : Component
 
         return VStack(12,
             SubHeading("Keeping Submit Reachable"),
-            TextField(email, setEmail, header: "Email",
+            TextBox(email, setEmail, header: "Email",
                 placeholder: "user@example.com"),
 
             // .Immediate() switches NumberBox from commit-on-blur to
@@ -281,7 +250,7 @@ when validity is gated on async checks, required-but-untouched fields,
 cross-field rules, or any derived condition that can't be made instantaneous.
 
 > **Where not to use `.IsDisabledFocusable()`:** only buttons. For data-entry
-> controls (`TextField`, `NumberBox`, `CheckBox`, etc.), `IsEnabled=false`
+> controls (`TextBox`, `NumberBox`, `CheckBox`, etc.), `IsEnabled=false`
 > usually means "this field isn't part of your current task" (cascading
 > from another input), and tab-skipping is the correct UX. Use
 > `IsReadOnly` if you need a visible-but-non-editable text control.
@@ -304,7 +273,7 @@ class ValidationContextDemo : Component
 
         return VStack(12,
             SubHeading("Validation Context"),
-            TextField(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); },
+            TextBox(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); },
                 placeholder: "user@example.com", header: "Email")
                 .Validate("email", email,
                     Validate.Required(),
@@ -360,13 +329,13 @@ class FormFieldDemo : Component
         return VStack(12,
             SubHeading("FormField Helper"),
             FormField(
-                TextField(name, v => { setName(v); ctx.NotifyValueChanged("name", v); })
+                TextBox(name, v => { setName(v); ctx.NotifyValueChanged("name", v); })
                     .Validate("name", name, Validate.Required()),
                 label: "Full Name",
                 required: true,
                 description: "As it appears on your ID"),
             FormField(
-                TextField(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); })
+                TextBox(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); })
                     .Validate("email", email,
                         Validate.Required(), Validate.Email()),
                 label: "Email Address",
@@ -418,10 +387,10 @@ class MaskedInputDemo : Component
 
         return VStack(12,
             SubHeading("Masked Input"),
-            TextField(phoneMask.Apply(phone), v => setPhone(phoneMask.GetRawValue(v)),
+            TextBox(phoneMask.Apply(phone), v => setPhone(phoneMask.GetRawValue(v)),
                 placeholder: "(___) ___-____", header: "Phone"),
             TextBlock($"Raw: {phone}").FontSize(12).Opacity(0.6),
-            TextField(dateMask.Apply(date), v => setDate(dateMask.GetRawValue(v)),
+            TextBox(dateMask.Apply(date), v => setDate(dateMask.GetRawValue(v)),
                 placeholder: "__/__/____", header: "Date"),
             TextBlock($"Raw: {date}").FontSize(12).Opacity(0.6)
         ).Padding(24);
@@ -462,10 +431,10 @@ class InputFormattersDemo : Component
 
         return VStack(12,
             SubHeading("Input Formatters"),
-            TextField(currencyFmt.Format(currency, 0).Output,
+            TextBox(currencyFmt.Format(currency, 0).Output,
                 v => setCurrency(currencyFmt.Parse(v)),
                 placeholder: "$0.00", header: "Amount"),
-            TextField(upperFmt.Format(upper, 0).Output,
+            TextBox(upperFmt.Format(upper, 0).Output,
                 v => setUpper(upperFmt.Parse(v)),
                 placeholder: "UPPERCASE", header: "Code")
         ).Padding(24);
@@ -722,7 +691,7 @@ per page.
 
 For a single-field form (search box, comment input), wire submission
 to Enter rather than a Submit button. `AutoSuggestBox` does this
-automatically via `onQuerySubmitted`. For `TextField`, route through
+automatically via `onQuerySubmitted`. For `TextBox`, route through
 `.KeyDown` or wrap the field in an `[ai:lock]` form panel; see
 [input-and-gestures](input-and-gestures.md) for the routed-events
 surface.
@@ -742,7 +711,7 @@ concern as [Keeping Submit Reachable](#keeping-submit-reachable).
 
 ```csharp
 // Don't:
-TextField(initial: "default value")
+TextBox(initial: "default value")
 ```
 
 ```csharp
@@ -754,7 +723,7 @@ class ControlledInputDemo : Component
 
         return VStack(12,
             SubHeading("Controlled Input"),
-            TextField(name, setName, placeholder: "Type your name"),
+            TextBox(name, setName, placeholder: "Type your name"),
             TextBlock($"You typed: {name}").Opacity(0.6)
         ).Padding(24);
     }

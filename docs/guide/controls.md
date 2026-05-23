@@ -62,7 +62,7 @@ class FormsGroup : Component
         var (volume, setVolume) = UseState(60.0);
 
         return VStack(8,
-            TextField(name, setName, placeholder: "Name").Width(200),
+            TextBox(name, setName, placeholder: "Name").Width(200),
             CheckBox(agree, setAgree, label: "I agree"),
             Slider(volume, 0, 100, setVolume).Width(200),
             Button("Submit", () => { })
@@ -75,7 +75,7 @@ class FormsGroup : Component
 
 | Control | Description |
 |---|---|
-| `TextField` | Single-line text input with placeholder + header. |
+| `TextBox` | Single-line text input with placeholder + header. |
 | `PasswordBox` | Obscured text input. |
 | `NumberBox` | Numeric input with up/down spinner. |
 | `CheckBox` | Two-state checkbox with optional label. |

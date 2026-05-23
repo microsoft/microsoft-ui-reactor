@@ -210,18 +210,21 @@ public static partial class Factories
     // ── Input controls ──────────────────────────────────────────────
 
     /// <summary>
-    /// Creates a <see cref="TextFieldElement"/> — the Reactor name for WinUI's
+    /// Creates a <see cref="TextBoxElement"/> wrapping WinUI's
     /// <c>Microsoft.UI.Xaml.Controls.TextBox</c>.
     /// </summary>
-    /// <remarks>
-    /// Reactor uses <c>TextField</c> (HTML / iOS / Android / SwiftUI vocabulary)
-    /// rather than WinUI's legacy WinForms-era <c>TextBox</c>. The deviation
-    /// is deliberate — see spec 039 §3.1 / §16 for the impact analysis and
-    /// §16.5 for the decision (keep as-is). The reconciler still maps this to
-    /// a real WinUI <c>TextBox</c> internally. (spec 039 §3.1 / §16)
-    /// </remarks>
-    public static TextFieldElement TextField(string value, Action<string>? onChanged = null, string? placeholder = null, string? header = null) =>
+    public static TextBoxElement TextBox(string value, Action<string>? onChanged = null, string? placeholder = null, string? header = null) =>
         new(value, onChanged, placeholder) { Header = header };
+
+    /// <summary>
+    /// Deprecated forwarding alias for <see cref="TextBox(string, Action{string}?, string?, string?)"/>.
+    /// </summary>
+    [global::System.Obsolete(
+        "Renamed to TextBox for parity with WinUI's Microsoft.UI.Xaml.Controls.TextBox. " +
+        "TextField will be removed in a future release.",
+        error: false)]
+    public static TextBoxElement TextField(string value, Action<string>? onChanged = null, string? placeholder = null, string? header = null) =>
+        TextBox(value, onChanged, placeholder, header);
 
     public static PasswordBoxElement PasswordBox(string password, Action<string>? onPasswordChanged = null, string? placeholderText = null) =>
         new(password, onPasswordChanged, placeholderText);

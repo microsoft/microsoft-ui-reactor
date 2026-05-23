@@ -307,9 +307,9 @@ container.
 ```csharp
 // Don't — two-dimensional alignment between rows is not what Flex does.
 FlexColumn(
-    FlexRow(TextBlock("Name:"), TextField(name, setName)) with { ColumnGap = 8 },
-    FlexRow(TextBlock("Email:"), TextField(email, setEmail)) with { ColumnGap = 8 },
-    FlexRow(TextBlock("Phone:"), TextField(phone, setPhone)) with { ColumnGap = 8 }
+    FlexRow(TextBlock("Name:"), TextBox(name, setName)) with { ColumnGap = 8 },
+    FlexRow(TextBlock("Email:"), TextBox(email, setEmail)) with { ColumnGap = 8 },
+    FlexRow(TextBlock("Phone:"), TextBox(phone, setPhone)) with { ColumnGap = 8 }
 )
 ```
 

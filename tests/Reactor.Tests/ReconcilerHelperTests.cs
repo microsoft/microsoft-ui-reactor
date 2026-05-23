@@ -141,14 +141,14 @@ public class ReconcilerHelperTests
     [Fact]
     public void ResolveCaptionForElement_TextField_Prefers_Header()
     {
-        var tf = new TextFieldElement("", Placeholder: "Enter name") { Header = "Name" };
+        var tf = new TextBoxElement("", Placeholder: "Enter name") { Header = "Name" };
         Assert.Equal("Name", Reconciler.ResolveCaptionForElement(tf));
     }
 
     [Fact]
     public void ResolveCaptionForElement_TextField_Falls_Back_To_Placeholder()
     {
-        var tf = new TextFieldElement("", Placeholder: "Enter name") { Header = null };
+        var tf = new TextBoxElement("", Placeholder: "Enter name") { Header = null };
         Assert.Equal("Enter name", Reconciler.ResolveCaptionForElement(tf));
     }
 

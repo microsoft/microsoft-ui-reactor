@@ -89,6 +89,7 @@ InfoBadge() → InfoBadgeElement
 InfoBadge(int value) → InfoBadgeElement
 InfoBar(string title = null, string message = null) → InfoBarElement
 InterspersedGrid(Orientation orientation, Element[] items, double[] proportions, double separatorSize, Func<int, Element> separatorFactory) → GridElement
+ItemContainer(Element child) → ItemContainerElement
 ItemsView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → ItemsViewElement<T>
 LazyHStack<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
 LazyHStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
@@ -166,7 +167,7 @@ Tab(string header, Element content) → TabViewItemData
 TabView(TabViewItemData[] tabs) → TabViewElement
 TeachingTip(string title, string subtitle = null) → TeachingTipElement
 TextBlock(string content) → TextBlockElement
-TextField(string value, Action<string> onChanged = null, string placeholder = null, string header = null) → TextFieldElement
+TextBox(string value, Action<string> onChanged = null, string placeholder = null, string header = null) → TextBoxElement
 Thick(double horizontal, double vertical) → Thickness
 Thick(double left, double top, double right, double bottom) → Thickness
 Thick(double uniform) → Thickness
@@ -346,6 +347,7 @@ InfoBarElement.Set(Action<InfoBar> configure) → InfoBarElement
 InfoBarElement.Severity(InfoBarSeverity severity) → InfoBarElement
 InfoBarElement.Success() → InfoBarElement
 InfoBarElement.Warning() → InfoBarElement
+ItemContainerElement.Set(Action<ItemContainer> configure) → ItemContainerElement
 ItemsViewElement<T>.ItemInvoked<T>(Action<T> handler) → ItemsViewElement<T>
 ItemsViewElement<T>.SelectionChanged<T>(Action<IReadOnlyList<T>> handler) → ItemsViewElement<T>
 ItemsViewElement<T>.Set<T>(Action<ItemsView> configure) → ItemsViewElement<T>
@@ -713,25 +715,25 @@ TextBlockElement.TextAlignment(TextAlignment alignment) → TextBlockElement
 TextBlockElement.TextDecorations(TextDecorations decorations) → TextBlockElement
 TextBlockElement.TextTrimming(TextTrimming trimming) → TextBlockElement
 TextBlockElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextBlockElement
-TextFieldElement.AcceptsReturn(bool accepts = true) → TextFieldElement
-TextFieldElement.Changed(Action<string> handler) → TextFieldElement
-TextFieldElement.CharacterCasing(CharacterCasing casing) → TextFieldElement
-TextFieldElement.Description(string description) → TextFieldElement
-TextFieldElement.EmailInput() → TextFieldElement
-TextFieldElement.Focus(FocusManager fm, string fieldName, bool autoFocus = false) → TextFieldElement
-TextFieldElement.Header(string header) → TextFieldElement
-TextFieldElement.InputScope(InputScopeNameValue scope) → TextFieldElement
-TextFieldElement.IsReadOnly(bool readOnly = true) → TextFieldElement
-TextFieldElement.IsSpellCheckEnabled(bool enabled = true) → TextFieldElement
-TextFieldElement.MaxLength(int maxLength) → TextFieldElement
-TextFieldElement.NumericInput() → TextFieldElement
-TextFieldElement.PhoneInput() → TextFieldElement
-TextFieldElement.SearchInput() → TextFieldElement
-TextFieldElement.SelectionChanged(Action<string, int, int> handler) → TextFieldElement
-TextFieldElement.Set(Action<TextBox> configure) → TextFieldElement
-TextFieldElement.TextAlignment(TextAlignment alignment) → TextFieldElement
-TextFieldElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextFieldElement
-TextFieldElement.UrlInput() → TextFieldElement
+TextBoxElement.AcceptsReturn(bool accepts = true) → TextBoxElement
+TextBoxElement.Changed(Action<string> handler) → TextBoxElement
+TextBoxElement.CharacterCasing(CharacterCasing casing) → TextBoxElement
+TextBoxElement.Description(string description) → TextBoxElement
+TextBoxElement.EmailInput() → TextBoxElement
+TextBoxElement.Focus(FocusManager fm, string fieldName, bool autoFocus = false) → TextBoxElement
+TextBoxElement.Header(string header) → TextBoxElement
+TextBoxElement.InputScope(InputScopeNameValue scope) → TextBoxElement
+TextBoxElement.IsReadOnly(bool readOnly = true) → TextBoxElement
+TextBoxElement.IsSpellCheckEnabled(bool enabled = true) → TextBoxElement
+TextBoxElement.MaxLength(int maxLength) → TextBoxElement
+TextBoxElement.NumericInput() → TextBoxElement
+TextBoxElement.PhoneInput() → TextBoxElement
+TextBoxElement.SearchInput() → TextBoxElement
+TextBoxElement.SelectionChanged(Action<string, int, int> handler) → TextBoxElement
+TextBoxElement.Set(Action<TextBox> configure) → TextBoxElement
+TextBoxElement.TextAlignment(TextAlignment alignment) → TextBoxElement
+TextBoxElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextBoxElement
+TextBoxElement.UrlInput() → TextBoxElement
 TimePickerElement.Set(Action<TimePicker> configure) → TimePickerElement
 TimePickerElement.TimeChanged(Action<TimeSpan> handler) → TimePickerElement
 TitleBarElement.BackButtonEnabled(bool enabled) → TitleBarElement

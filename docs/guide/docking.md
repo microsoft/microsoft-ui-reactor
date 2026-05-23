@@ -237,7 +237,7 @@ Reactor subtree to mount inside it, keyed off `content.Key`.
 ## Tips
 
 **Always set `Key` on panes with stateful content.** A controlled
-`TextField` inside a pane without a `Key` will lose its draft text the
+`TextBox` inside a pane without a `Key` will lose its draft text the
 moment a user drags the tab — the reconciler can't tell it's the
 "same" pane, so it remounts the subtree. Keys can be strings, GUIDs,
 enums, or any equatable domain identifier.

@@ -15,7 +15,7 @@ visible slot changes.
 | Per-field state | `UseState<string>` / `UseState<int>` / `UseState<bool>` |
 | Step branching | `switch` on the step index returning `Element` |
 | Advance gating | `.IsEnabled(canAdvance)` on the Next button |
-| Input controls | [`TextField`](../forms.md), [`RadioButtons`](../forms.md), [`CheckBox`](../forms.md) |
+| Input controls | [`TextBox`](../forms.md), [`RadioButtons`](../forms.md), [`CheckBox`](../forms.md) |
 
 ### State
 
@@ -64,9 +64,9 @@ forward action is Submit.
 ```csharp
 Element StepAccount() => VStack(10,
     SubHeading("Step 1 of 3 — Account"),
-    TextField(name, setName, placeholder: "Your name",
+    TextBox(name, setName, placeholder: "Your name",
         header: "Name").Width(340),
-    TextField(email, setEmail, placeholder: "you@example.com",
+    TextBox(email, setEmail, placeholder: "you@example.com",
         header: "Email").Width(340)
 );
 ```

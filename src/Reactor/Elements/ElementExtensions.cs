@@ -641,41 +641,41 @@ public static partial class ElementExtensions
     public static RichEditBoxElement SelectionHighlightColor(this RichEditBoxElement el, Microsoft.UI.Xaml.Media.SolidColorBrush brush) =>
         el with { SelectionHighlightColor = brush };
 
-    // ── TextField sugar ────────────────────────────────────────────────
+    // ── TextBox sugar ────────────────────────────────────────────────
 
     /// <summary>Sets whether the text field is read-only.</summary>
-    public static TextFieldElement IsReadOnly(this TextFieldElement el, bool readOnly = true) =>
+    public static TextBoxElement IsReadOnly(this TextBoxElement el, bool readOnly = true) =>
         el with { IsReadOnly = readOnly };
 
-    /// <inheritdoc cref="IsReadOnly(TextFieldElement, bool)"/>
+    /// <inheritdoc cref="IsReadOnly(TextBoxElement, bool)"/>
     [Obsolete("Use IsReadOnly() — aligns with WinUI naming (see #268).")]
-    public static TextFieldElement ReadOnly(this TextFieldElement el, bool readOnly = true) =>
+    public static TextBoxElement ReadOnly(this TextBoxElement el, bool readOnly = true) =>
         el.IsReadOnly(readOnly);
 
-    public static TextFieldElement AcceptsReturn(this TextFieldElement el, bool accepts = true) =>
+    public static TextBoxElement AcceptsReturn(this TextBoxElement el, bool accepts = true) =>
         el with { AcceptsReturn = accepts };
 
-    public static TextFieldElement TextWrapping(this TextFieldElement el, TextWrapping wrapping = Microsoft.UI.Xaml.TextWrapping.Wrap) =>
+    public static TextBoxElement TextWrapping(this TextBoxElement el, TextWrapping wrapping = Microsoft.UI.Xaml.TextWrapping.Wrap) =>
         el with { TextWrapping = wrapping };
 
     /// <summary>Maximum number of characters allowed in the box. Use <c>0</c> for no limit.</summary>
-    public static TextFieldElement MaxLength(this TextFieldElement el, int maxLength) =>
+    public static TextBoxElement MaxLength(this TextBoxElement el, int maxLength) =>
         el with { MaxLength = maxLength };
 
     /// <summary>Enable or disable built-in spell-check.</summary>
-    public static TextFieldElement IsSpellCheckEnabled(this TextFieldElement el, bool enabled = true) =>
+    public static TextBoxElement IsSpellCheckEnabled(this TextBoxElement el, bool enabled = true) =>
         el with { IsSpellCheckEnabled = enabled };
 
     /// <summary>Forces input to upper/lower-case as the user types.</summary>
-    public static TextFieldElement CharacterCasing(this TextFieldElement el, CharacterCasing casing) =>
+    public static TextBoxElement CharacterCasing(this TextBoxElement el, CharacterCasing casing) =>
         el with { CharacterCasing = casing };
 
     /// <summary>Sets horizontal text alignment within the box.</summary>
-    public static TextFieldElement TextAlignment(this TextFieldElement el, TextAlignment alignment) =>
+    public static TextBoxElement TextAlignment(this TextBoxElement el, TextAlignment alignment) =>
         el with { TextAlignment = alignment };
 
     /// <summary>Sets the help/description text rendered below the box.</summary>
-    public static TextFieldElement Description(this TextFieldElement el, string description) =>
+    public static TextBoxElement Description(this TextBoxElement el, string description) =>
         el with { Description = description };
 
     // ── Path sugar ─────────────────────────────────────────────────────
@@ -915,9 +915,9 @@ public static partial class ElementExtensions
     public static StackElement Spacing(this StackElement el, double spacing) =>
         el with { Spacing = spacing };
 
-    // ── TextField sugar ─────────────────────────────────────────────
+    // ── TextBox sugar ─────────────────────────────────────────────
 
-    public static TextFieldElement Header(this TextFieldElement el, string header) =>
+    public static TextBoxElement Header(this TextBoxElement el, string header) =>
         el with { Header = header };
 
     // ── ComboBox sugar ──────────────────────────────────────────────
@@ -1578,7 +1578,7 @@ public static partial class ElementExtensions
         el with { Setters = [.. el.Setters, configure] };
 
     // Input
-    public static TextFieldElement Set(this TextFieldElement el, Action<WinUI.TextBox> configure) =>
+    public static TextBoxElement Set(this TextBoxElement el, Action<WinUI.TextBox> configure) =>
         el with { Setters = [.. el.Setters, configure] };
 
     public static PasswordBoxElement Set(this PasswordBoxElement el, Action<WinUI.PasswordBox> configure) =>
@@ -2170,7 +2170,7 @@ public static partial class ElementExtensions
     /// </summary>
     /// <example>
     /// var (inputRef, requestFocus) = ctx.UseElementFocus();
-    /// return TextField(value, setValue).Ref(inputRef);
+    /// return TextBox(value, setValue).Ref(inputRef);
     /// </example>
     public static T Ref<T>(this T el, Microsoft.UI.Reactor.Input.ElementRef target) where T : Element =>
         Modify(el, new ElementModifiers { Ref = target });
@@ -2198,7 +2198,7 @@ public static partial class ElementExtensions
     /// Sets AutomationProperties.HelpText — supplemental text read by screen readers
     /// after the Name. Analogous to SwiftUI's .accessibilityHint().
     /// </summary>
-    /// <example>TextField(email, setEmail).HelpText("Enter your work email address")</example>
+    /// <example>TextBox(email, setEmail).HelpText("Enter your work email address")</example>
     public static T HelpText<T>(this T el, string text) where T : Element =>
         ModifyA11y(el, new AccessibilityModifiers { HelpText = text });
 
@@ -2236,7 +2236,7 @@ public static partial class ElementExtensions
     /// <summary>
     /// Sets AutomationProperties.IsRequiredForForm. Screen readers announce "required".
     /// </summary>
-    /// <example>TextField(name, setName).Required()</example>
+    /// <example>TextBox(name, setName).Required()</example>
     public static T Required<T>(this T el) where T : Element =>
         ModifyA11y(el, new AccessibilityModifiers { IsRequiredForForm = true });
 
@@ -2273,7 +2273,7 @@ public static partial class ElementExtensions
     /// Associates this element with a labelling element via its AutomationId.
     /// The reconciler resolves the reference at mount time.
     /// </summary>
-    /// <example>TextField(email, setEmail).LabeledBy("EmailLabel")</example>
+    /// <example>TextBox(email, setEmail).LabeledBy("EmailLabel")</example>
     public static T LabeledBy<T>(this T el, string labelAutomationId) where T : Element =>
         ModifyA11y(el, new AccessibilityModifiers { LabeledBy = labelAutomationId });
 

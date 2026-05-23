@@ -316,7 +316,7 @@ public abstract record Element
                 && ReferenceEquals(ca.ItemElements, cb.ItemElements)
                 && ReferenceEquals(ca.Setters, cb.Setters),
 
-            (TextFieldElement ta, TextFieldElement tb) =>
+            (TextBoxElement ta, TextBoxElement tb) =>
                 ta.Value == tb.Value
                 && ta.Placeholder == tb.Placeholder
                 && ta.Header == tb.Header
@@ -1993,7 +1993,7 @@ public record ToggleSplitButtonElement(string Label, bool IsChecked = false, Act
 //  Input elements
 // ════════════════════════════════════════════════════════════════════════
 
-public record TextFieldElement(
+public record TextBoxElement(
     string Value,
     Action<string>? OnChanged = null,
     string? Placeholder = null

@@ -173,9 +173,9 @@ public sealed record FocusAttached(
 public static class FocusExtensions
 {
     /// <summary>
-    /// Registers this TextField with a FocusManager for programmatic focus control.
+    /// Registers this TextBox with a FocusManager for programmatic focus control.
     /// </summary>
-    public static TextFieldElement Focus(this TextFieldElement el, FocusManager fm, string fieldName, bool autoFocus = false)
+    public static TextBoxElement Focus(this TextBoxElement el, FocusManager fm, string fieldName, bool autoFocus = false)
     {
         fm.Register(fieldName);
         return el.Set(tb =>

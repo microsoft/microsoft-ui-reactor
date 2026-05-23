@@ -59,7 +59,7 @@ Border(child)
 ## 3. Keyboard events
 
 ```csharp
-TextField(text, setText)
+TextBox(text, setText)
     .OnKeyDown((s, e) =>
     {
         if (e.Key == VirtualKey.Enter)
@@ -167,7 +167,7 @@ Border(child)
 var focusRef = UseElementFocus();
 
 return VStack(12,
-    TextField(text, setText).Ref(focusRef.Ref),
+    TextBox(text, setText).Ref(focusRef.Ref),
     Button("Focus the field", () => focusRef.RequestFocus())
 );
 ```
@@ -186,7 +186,7 @@ var inputRef = UseElementRef<TextBox>();
 
 UseEffect(() => inputRef.Current?.SelectAll(), Array.Empty<object>());
 
-return TextField(query, setQuery).Ref(inputRef);
+return TextBox(query, setQuery).Ref(inputRef);
 ```
 
 The constraint is `T : FrameworkElement`. In `DEBUG` builds Reactor asserts
@@ -196,7 +196,7 @@ the actual mounted element is a `T`; in release the mismatch is silent and
 ### Focus events
 
 ```csharp
-TextField(text, setText)
+TextBox(text, setText)
     .OnGotFocus((s, e) => ShowSuggestions())
     .OnLostFocus((s, e) => HideSuggestions())
 ```
@@ -210,8 +210,8 @@ Button("Save", onSave).AccessKey("S")  // Alt+S
 ### Tab order
 
 ```csharp
-TextField(name, setName).IsTabStop(true).TabIndex(1)
-TextField(email, setEmail).IsTabStop(true).TabIndex(2)
+TextBox(name, setName).IsTabStop(true).TabIndex(1)
+TextBox(email, setEmail).IsTabStop(true).TabIndex(2)
 Button("Submit", onSubmit).IsTabStop(true).TabIndex(3)
 ```
 

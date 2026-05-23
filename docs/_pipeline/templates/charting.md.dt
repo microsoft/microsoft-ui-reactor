@@ -262,7 +262,7 @@ whatever actually changes. The pattern is most obvious with
 `PieChart` — a fresh `new[] { … }` on every render makes each slice
 remount, the `.Transition()` enter/exit fires for slices that haven't
 moved, and the chart "redraws itself" on every keystroke into an
-unrelated `TextField`.
+unrelated `TextBox`.
 <!-- /ai:caveat -->
 
 ## Patterns

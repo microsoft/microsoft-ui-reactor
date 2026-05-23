@@ -29,12 +29,12 @@ class TitleBarPage : Component
                         Border(
                             TitleBar("My App").Subtitle(subtitle)
                         ).Background(Theme.LayerFill).CornerRadius(4).Height(48),
-                        TextField(subtitle, s => setSubtitle(s), placeholder: "Enter subtitle")
+                        TextBox(subtitle, s => setSubtitle(s), placeholder: "Enter subtitle")
                             .Width(250)
                     ),
                     @"TitleBar(""My App"").Subtitle(""Preview"")",
                     options: OptionPanel(
-                        TextField(subtitle, s => setSubtitle(s), header: "Subtitle")
+                        TextBox(subtitle, s => setSubtitle(s), header: "Subtitle")
                     )),
 
                 SampleCard("TitleBar with Content",

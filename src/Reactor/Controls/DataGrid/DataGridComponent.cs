@@ -255,7 +255,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         {
             var searchQuery = state.SearchQuery ?? "";
             gridChildren.Add(
-                TextField(searchQuery, q =>
+                TextBox(searchQuery, q =>
                 {
                     Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                     {
@@ -336,7 +336,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     {
                         if (!state.IsEditing && !state.IsRowEditing) return;
                         // Defer the entire check to the next tick. During DOM transitions
-                        // (e.g., cell switching from TextBlock to TextField), the old element
+                        // (e.g., cell switching from TextBlock to TextBox), the old element
                         // fires LostFocus before the new element receives GotFocus. Checking
                         // synchronously would falsely conclude that focus left the grid.
                         Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
@@ -852,7 +852,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         if (editor is not null)
             return editor(currentValue!, v => state.UpdateEditingValue(v)).Padding(2);
 
-        return TextField(currentValue?.ToString() ?? "", s => state.UpdateEditingValue(s)).Padding(2);
+        return TextBox(currentValue?.ToString() ?? "", s => state.UpdateEditingValue(s)).Padding(2);
     }
 
     private static Element RenderRowEditingCell(
@@ -870,7 +870,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         if (editor is not null)
             return editor(currentValue!, v => state.UpdateRowEditValue(colName, v)).Padding(2);
 
-        return TextField(currentValue?.ToString() ?? "", s => state.UpdateRowEditValue(colName, s)).Padding(2);
+        return TextBox(currentValue?.ToString() ?? "", s => state.UpdateRowEditValue(colName, s)).Padding(2);
     }
 
     // ── Header rendering ────────────────────────────────────────────

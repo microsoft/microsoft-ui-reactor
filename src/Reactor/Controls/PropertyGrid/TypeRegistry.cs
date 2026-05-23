@@ -129,7 +129,7 @@ public class TypeRegistry
             metadata = new TypeMetadata
             {
                 Editor = (value, onChange) =>
-                    TextField((string)(value ?? ""), s => onChange(s))
+                    TextBox((string)(value ?? ""), s => onChange(s))
             };
             return true;
         }

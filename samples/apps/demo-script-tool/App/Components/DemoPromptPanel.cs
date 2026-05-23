@@ -48,7 +48,7 @@ public sealed class DemoPromptPanel : Component<DemoPromptPanelProps>
             setPrompt(Props.Model.DemoPrompt);
         }, Props.Model);
 
-        var titleField = (TextField(title, v =>
+        var titleField = (TextBox(title, v =>
         {
             setTitle(v);
             Props.OnTitleChanged(v);
@@ -58,7 +58,7 @@ public sealed class DemoPromptPanel : Component<DemoPromptPanelProps>
             .FontWeight(Microsoft.UI.Text.FontWeights.SemiBold)
             .AutomationName("Demo title");
 
-        var promptField = (TextField(prompt, v =>
+        var promptField = (TextBox(prompt, v =>
         {
             setPrompt(v);
             Props.OnPromptChanged(v);

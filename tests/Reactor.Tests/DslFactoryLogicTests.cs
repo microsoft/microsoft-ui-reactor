@@ -97,7 +97,7 @@ public class DslFactoryLogicTests
     [Fact]
     public void TextField_With_All_Parameters()
     {
-        var el = TextField("val", s => { }, "hint", "Header");
+        var el = TextBox("val", s => { }, "hint", "Header");
         Assert.Equal("val", el.Value);
         Assert.Equal("hint", el.Placeholder);
         Assert.Equal("Header", el.Header);

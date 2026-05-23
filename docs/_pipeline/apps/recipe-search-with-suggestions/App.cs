@@ -45,7 +45,7 @@ class SearchBox : Component
 
         // <snippet:render>
         return VStack(8,
-            TextField(query, setQuery, placeholder: "Search topics…").Width(300),
+            TextBox(query, setQuery, placeholder: "Search topics…").Width(300),
             suggestions.Length == 0
                 ? Empty()
                 : Border(

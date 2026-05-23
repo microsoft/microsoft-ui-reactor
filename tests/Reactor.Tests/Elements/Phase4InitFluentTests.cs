@@ -345,36 +345,36 @@ public class Phase4InitFluentTests
     [Fact]
     public void TextField_MaxLength_Sets()
     {
-        var el = TextField("").MaxLength(32);
+        var el = TextBox("").MaxLength(32);
         Assert.Equal(32, el.MaxLength);
     }
 
     [Fact]
     public void TextField_IsSpellCheckEnabled_Sets()
     {
-        var el = TextField("").IsSpellCheckEnabled();
+        var el = TextBox("").IsSpellCheckEnabled();
         Assert.True(el.IsSpellCheckEnabled);
-        Assert.False(TextField("").IsSpellCheckEnabled(false).IsSpellCheckEnabled);
+        Assert.False(TextBox("").IsSpellCheckEnabled(false).IsSpellCheckEnabled);
     }
 
     [Fact]
     public void TextField_CharacterCasing_Sets()
     {
-        var el = TextField("").CharacterCasing(Microsoft.UI.Xaml.Controls.CharacterCasing.Upper);
+        var el = TextBox("").CharacterCasing(Microsoft.UI.Xaml.Controls.CharacterCasing.Upper);
         Assert.Equal(Microsoft.UI.Xaml.Controls.CharacterCasing.Upper, el.CharacterCasing);
     }
 
     [Fact]
     public void TextField_TextAlignment_Sets()
     {
-        var el = TextField("").TextAlignment(Microsoft.UI.Xaml.TextAlignment.Right);
+        var el = TextBox("").TextAlignment(Microsoft.UI.Xaml.TextAlignment.Right);
         Assert.Equal(Microsoft.UI.Xaml.TextAlignment.Right, el.TextAlignment);
     }
 
     [Fact]
     public void TextField_Description_Sets()
     {
-        var el = TextField("").Description("enter your name");
+        var el = TextBox("").Description("enter your name");
         Assert.Equal("enter your name", el.Description);
     }
 

@@ -133,7 +133,7 @@ public sealed partial class Reconciler
                 => UpdateToggleSplitButton(o, n, tsb),
             (RichEditBoxElement o, RichEditBoxElement n, WinUI.RichEditBox reb)
                 => UpdateRichEditBox(o, n, reb),
-            (TextFieldElement o, TextFieldElement n, TextBox tb)
+            (TextBoxElement o, TextBoxElement n, TextBox tb)
                 => UpdateTextField(o, n, tb, requestRerender),
             (PasswordBoxElement o, PasswordBoxElement n, WinUI.PasswordBox pb)
                 => UpdatePasswordBox(o, n, pb),
@@ -778,7 +778,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateTextField(TextFieldElement o, TextFieldElement n, TextBox tb, Action requestRerender)
+    private UIElement? UpdateTextField(TextBoxElement o, TextBoxElement n, TextBox tb, Action requestRerender)
     {
         // Tag first so any echoed TextChanged sees this element.
         SetElementTag(tb, n);
@@ -807,7 +807,7 @@ public sealed partial class Reconciler
             // Uncontrolled divergence: value is set but no onChange to reconcile.
             // Log once per field to help developers catch mismatched bindings.
             _logger?.LogWarning(
-                "TextField value diverged from controlled value with no OnChanged handler. " +
+                "TextBox value diverged from controlled value with no OnChanged handler. " +
                 "Controlled: \"{ControlledValue}\", Actual: \"{ActualValue}\". " +
                 "Wire up OnChanged to keep state in sync, or this field won't reflect user edits after re-renders.",
                 Truncate(n.Value, 20), Truncate(tb.Text, 20));

@@ -102,7 +102,7 @@ class NavDetailPage : Component<int>
         return VStack(8,
             SubHeading($"Detail Page — Item #{id}"),
             TextBlock($"Viewing details for item {id}."),
-            TextField(notes, setNotes)
+            TextBox(notes, setNotes)
                 .Set(t => t.PlaceholderText = "Notes (persisted via UsePersisted)"),
             HStack(8,
                 Button("Home", () => nav.Reset(new NavHome())),

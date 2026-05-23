@@ -7,7 +7,7 @@ arrives without a route back. Microsoft.UI.Reactor (Reactor) treats dialogs and 
 controlled components: you own the open/closed boolean, the component
 tree always contains the dialog element, and the visibility is a state
 flag the user-driven event handlers flip back. That is the same shape as
-`TextField` from [Forms](forms.md), and it makes the dialog testable —
+`TextBox` from [Forms](forms.md), and it makes the dialog testable —
 the dialog is open if and only if its driving state says so. Read this
 page when you are reaching for `ContentDialog` for a Save/Discard choice,
 `MenuFlyout` for a right-click menu, `CommandBarFlyout` for a selection
@@ -153,7 +153,7 @@ class DialogGatedPrimaryDemo : Component
                 "Rename file",
                 VStack(8,
                     TextBlock("New filename:"),
-                    TextField(name, setName, placeholder: "untitled.txt")
+                    TextBox(name, setName, placeholder: "untitled.txt")
                         .Width(280)),
                 primaryButtonText: "Rename") with
             {
@@ -169,7 +169,7 @@ class DialogGatedPrimaryDemo : Component
 }
 ```
 
-![Dialog with TextField; primary disabled until non-empty](images/dialogs-and-flyouts/dialog-gated-primary.png)
+![Dialog with TextBox; primary disabled until non-empty](images/dialogs-and-flyouts/dialog-gated-primary.png)
 
 > **Caveat:** `ContentDialog.ShowAsync` is single-instance per `XamlRoot` — the WinUI
 > control raises `Show another ContentDialog before closing the previous`

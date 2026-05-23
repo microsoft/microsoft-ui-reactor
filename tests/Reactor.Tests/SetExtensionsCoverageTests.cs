@@ -18,7 +18,7 @@ public class SetExtensionsCoverageTests
     [Fact]
     public void Set_TextField_Appends_Setter()
     {
-        var el = TextField("val").Set(tb => tb.IsEnabled = false);
+        var el = TextBox("val").Set(tb => tb.IsEnabled = false);
         Assert.Single(el.Setters);
     }
 

@@ -123,7 +123,7 @@ public class PropertyGridComponent : Component<PropertyGridElement>
         if (el.ShowSearch)
         {
             return FlexColumn(
-                TextField(searchText, setSearchText, placeholder: "Filter properties...")
+                TextBox(searchText, setSearchText, placeholder: "Filter properties...")
                     .Width(300),
                 content.Flex(grow: 1)
             ) with { RowGap = 8 };
@@ -271,7 +271,7 @@ public class PropertyGridComponent : Component<PropertyGridElement>
         if (type == typeof(bool))
             return ToggleSwitch((bool)(value ?? false), null).IsEnabled(false);
         if (type == typeof(string))
-            return TextField((string)(value ?? ""), null).IsEnabled(false);
+            return TextBox((string)(value ?? ""), null).IsEnabled(false);
         return TextBlock(value?.ToString() ?? "(null)");
     }
 

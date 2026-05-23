@@ -121,7 +121,7 @@ public class ErrorStylingTests
         var ctx = new ValidationContext();
         ctx.Add("email", "Required", Severity.Error);
 
-        var el = TextField("").WithErrorStyling(ctx, "email", ShowWhen.Always);
+        var el = TextBox("").WithErrorStyling(ctx, "email", ShowWhen.Always);
 
         Assert.NotNull(el.Modifiers);
         Assert.Equal(ErrorStyling.ErrorBorderThickness, el.Modifiers!.BorderThickness);
@@ -135,7 +135,7 @@ public class ErrorStylingTests
     {
         var ctx = new ValidationContext();
 
-        var el = TextField("").WithErrorStyling(ctx, "email", ShowWhen.Always);
+        var el = TextBox("").WithErrorStyling(ctx, "email", ShowWhen.Always);
 
         Assert.Null(el.ThemeBindings);
     }
@@ -146,7 +146,7 @@ public class ErrorStylingTests
         var ctx = new ValidationContext();
         ctx.Add("f", "warning", Severity.Warning);
 
-        var el = TextField("").WithErrorStyling(ctx, "f", ShowWhen.Always);
+        var el = TextBox("").WithErrorStyling(ctx, "f", ShowWhen.Always);
 
         Assert.NotNull(el.ThemeBindings);
         Assert.Equal("SystemFillColorCautionBrush", el.ThemeBindings!["BorderBrush"].ResourceKey);
@@ -159,12 +159,12 @@ public class ErrorStylingTests
         ctx.Add("email", "Required");
 
         // With error
-        var el1 = TextField("").WithErrorStyling(ctx, "email", ShowWhen.Always);
+        var el1 = TextBox("").WithErrorStyling(ctx, "email", ShowWhen.Always);
         Assert.NotNull(el1.ThemeBindings);
 
         // Clear error
         ctx.Clear("email");
-        var el2 = TextField("").WithErrorStyling(ctx, "email", ShowWhen.Always);
+        var el2 = TextBox("").WithErrorStyling(ctx, "email", ShowWhen.Always);
         Assert.Null(el2.ThemeBindings);
     }
 
@@ -179,7 +179,7 @@ public class ErrorStylingTests
         ctx.Add("email", "Required");
 
         // Default is WhenTouched, field not touched
-        var el = TextField("").WithErrorStyling(ctx, "email");
+        var el = TextBox("").WithErrorStyling(ctx, "email");
         Assert.Null(el.ThemeBindings);
     }
 
@@ -190,7 +190,7 @@ public class ErrorStylingTests
         ctx.Add("email", "Required");
         ctx.MarkTouched("email");
 
-        var el = TextField("").WithErrorStyling(ctx, "email");
+        var el = TextBox("").WithErrorStyling(ctx, "email");
         Assert.NotNull(el.ThemeBindings);
     }
 
@@ -224,7 +224,7 @@ public class ErrorStylingTests
         var ctx = new ValidationContext();
         ctx.Add("email", "Required");
 
-        var el = TextField("")
+        var el = TextBox("")
             .OnError(e => e.Margin(99))
             .WithErrorStyling(ctx, "email", ShowWhen.Always);
 
@@ -238,7 +238,7 @@ public class ErrorStylingTests
         var ctx = new ValidationContext();
         ctx.Add("f", "hint", Severity.Warning);
 
-        var el = TextField("")
+        var el = TextBox("")
             .OnWarning(e => e.Opacity(0.5))
             .WithErrorStyling(ctx, "f", ShowWhen.Always);
 
@@ -253,14 +253,14 @@ public class ErrorStylingTests
         ctx.Add("f", "error");
 
         // With error: custom styling applied
-        var el1 = TextField("")
+        var el1 = TextBox("")
             .OnError(e => e.Margin(99))
             .WithErrorStyling(ctx, "f", ShowWhen.Always);
         Assert.Equal(new Microsoft.UI.Xaml.Thickness(99), el1.Modifiers!.Margin);
 
         // Clear error
         ctx.Clear("f");
-        var el2 = TextField("")
+        var el2 = TextBox("")
             .OnError(e => e.Margin(99))
             .WithErrorStyling(ctx, "f", ShowWhen.Always);
         // No custom styling applied since no error
@@ -278,7 +278,7 @@ public class ErrorStylingTests
         ctx.Add("f", "info", Severity.Info);
         ctx.Add("f", "warning", Severity.Warning);
 
-        var el = TextField("").WithErrorStyling(ctx, "f", ShowWhen.Always);
+        var el = TextBox("").WithErrorStyling(ctx, "f", ShowWhen.Always);
         Assert.Equal("SystemFillColorCautionBrush", el.ThemeBindings!["BorderBrush"].ResourceKey);
     }
 
@@ -289,7 +289,7 @@ public class ErrorStylingTests
         ctx.Add("f", "info", Severity.Info);
         ctx.Add("f", "error", Severity.Error);
 
-        var el = TextField("").WithErrorStyling(ctx, "f", ShowWhen.Always);
+        var el = TextBox("").WithErrorStyling(ctx, "f", ShowWhen.Always);
         Assert.Equal("SystemFillColorCriticalBrush", el.ThemeBindings!["BorderBrush"].ResourceKey);
     }
 }

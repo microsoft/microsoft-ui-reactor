@@ -16,34 +16,34 @@ public class FormFieldTests
     public void FormField_Creates_With_Label_And_Content()
     {
         var el = FormField(
-            TextField("test"),
+            TextBox("test"),
             label: "Email",
             description: "Enter your email address");
 
         Assert.IsType<FormFieldElement>(el);
         Assert.Equal("Email", el.Label);
         Assert.Equal("Enter your email address", el.Description);
-        Assert.IsType<TextFieldElement>(el.Content);
+        Assert.IsType<TextBoxElement>(el.Content);
     }
 
     [Fact]
     public void FormField_Required_True()
     {
-        var el = FormField(TextField(""), label: "Name", required: true);
+        var el = FormField(TextBox(""), label: "Name", required: true);
         Assert.True(el.Required);
     }
 
     [Fact]
     public void FormField_Default_ShowWhen_Is_WhenTouched()
     {
-        var el = FormField(TextField(""), label: "Name");
+        var el = FormField(TextBox(""), label: "Name");
         Assert.Equal(ShowWhen.WhenTouched, el.ShowWhen);
     }
 
     [Fact]
     public void FormField_Explicit_FieldName()
     {
-        var el = FormField(TextField(""), fieldName: "email");
+        var el = FormField(TextBox(""), fieldName: "email");
         Assert.Equal("email", el.FieldName);
     }
 
@@ -215,7 +215,7 @@ public class FormFieldTests
     [Fact]
     public void DetectFieldName_From_ValidationAttached()
     {
-        var el = TextField("test")
+        var el = TextBox("test")
             .Validate("email", Validate.Required());
 
         Assert.Equal("email", FormFieldHelpers.DetectFieldName(el));
@@ -224,14 +224,14 @@ public class FormFieldTests
     [Fact]
     public void DetectFieldName_Returns_Null_Without_Validation()
     {
-        var el = TextField("test");
+        var el = TextBox("test");
         Assert.Null(FormFieldHelpers.DetectFieldName(el));
     }
 
     [Fact]
     public void ResolveFieldName_Prefers_Explicit()
     {
-        var el = TextField("test")
+        var el = TextBox("test")
             .Validate("auto", Validate.Required());
 
         Assert.Equal("explicit", FormFieldHelpers.ResolveFieldName("explicit", el));
@@ -240,7 +240,7 @@ public class FormFieldTests
     [Fact]
     public void ResolveFieldName_Falls_Back_To_Auto()
     {
-        var el = TextField("test")
+        var el = TextBox("test")
             .Validate("auto", Validate.Required());
 
         Assert.Equal("auto", FormFieldHelpers.ResolveFieldName(null, el));
@@ -253,7 +253,7 @@ public class FormFieldTests
     [Fact]
     public void Validate_With_Value_Stores_Value_On_Attached()
     {
-        var el = TextField("hello")
+        var el = TextBox("hello")
             .Validate("email", "hello", Validate.Required());
 
         var attached = el.GetValidation();
@@ -266,7 +266,7 @@ public class FormFieldTests
     [Fact]
     public void Validate_With_Value_Merges_Validators()
     {
-        var el = TextField("test")
+        var el = TextBox("test")
             .Validate("email", "test", Validate.Required())
             .Validate("email", "test", Validate.Email());
 
@@ -278,7 +278,7 @@ public class FormFieldTests
     [Fact]
     public void Validate_Without_Value_Has_Null_Value()
     {
-        var el = TextField("test")
+        var el = TextBox("test")
             .Validate("email", Validate.Required());
 
         var attached = el.GetValidation();
@@ -289,7 +289,7 @@ public class FormFieldTests
     [Fact]
     public void FormField_With_Validated_Content_Auto_Detects_FieldName()
     {
-        var content = TextField("test")
+        var content = TextBox("test")
             .Validate("email", "test", Validate.Required());
 
         var ff = FormField(content, label: "Email");

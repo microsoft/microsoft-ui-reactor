@@ -53,9 +53,9 @@ public class GallerySampleConstructionSmokeTests
     public void TextFieldPage_FluentChains_Construct()
     {
         // Mirrors the InputScope + Description chains in TextFieldPage.cs.
-        var numeric = TextField("", _ => { }, "0").Header("Qty").NumericInput().Description("hint");
-        var email = TextField("", _ => { }, "you@x.com").Header("Email").EmailInput();
-        var url = TextField("", _ => { }, "https://").Header("URL").UrlInput();
+        var numeric = TextBox("", _ => { }, "0").Header("Qty").NumericInput().Description("hint");
+        var email = TextBox("", _ => { }, "you@x.com").Header("Email").EmailInput();
+        var url = TextBox("", _ => { }, "https://").Header("URL").UrlInput();
         Assert.NotNull(numeric);
         Assert.NotNull(email);
         Assert.NotNull(url);

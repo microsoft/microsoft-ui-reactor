@@ -33,7 +33,7 @@ prose, then jump to the control you need.
 # Text and Media
 
 This page covers every read-only-display and inline-rich-text control in
-Reactor. For input controls (`TextField`, `PasswordBox`, `RichEditBox`),
+Reactor. For input controls (`TextBox`, `PasswordBox`, `RichEditBox`),
 see [Forms](forms.md). For data-bound collections, see
 [Collections](collections.md).
 
@@ -153,7 +153,7 @@ text with paste-from-formatted-source, spell-check, IME composition, and
 selection. The change handler fires with the plain text content; for
 formatted output you read `RichEditBox.Document` through `.Set(...)` and
 serialize the text range yourself. Single-line text input belongs in
-[`TextField`](forms.md), not here.
+[`TextBox`](forms.md), not here.
 
 | Fluent | Effect |
 |---|---|

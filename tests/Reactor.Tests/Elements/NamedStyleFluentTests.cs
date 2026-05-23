@@ -72,42 +72,42 @@ public class NamedStyleFluentTests
     [Fact]
     public void NumericInput_Adds_Setter()
     {
-        var el = TextField("").NumericInput();
+        var el = TextBox("").NumericInput();
         Assert.NotEmpty(GetSetters(el));
     }
 
     [Fact]
     public void EmailInput_Adds_Setter()
     {
-        var el = TextField("").EmailInput();
+        var el = TextBox("").EmailInput();
         Assert.NotEmpty(GetSetters(el));
     }
 
     [Fact]
     public void UrlInput_Adds_Setter()
     {
-        var el = TextField("").UrlInput();
+        var el = TextBox("").UrlInput();
         Assert.NotEmpty(GetSetters(el));
     }
 
     [Fact]
     public void PhoneInput_Adds_Setter()
     {
-        var el = TextField("").PhoneInput();
+        var el = TextBox("").PhoneInput();
         Assert.NotEmpty(GetSetters(el));
     }
 
     [Fact]
     public void SearchInput_Adds_Setter()
     {
-        var el = TextField("").SearchInput();
+        var el = TextBox("").SearchInput();
         Assert.NotEmpty(GetSetters(el));
     }
 
     [Fact]
     public void Generic_InputScope_Adds_Setter()
     {
-        var el = TextField("").InputScope(Microsoft.UI.Xaml.Input.InputScopeNameValue.Chat);
+        var el = TextBox("").InputScope(Microsoft.UI.Xaml.Input.InputScopeNameValue.Chat);
         Assert.NotEmpty(GetSetters(el));
     }
 
@@ -206,8 +206,8 @@ public class NamedStyleFluentTests
 
     // ─────────────────────────────────────────────────────────────────
 
-    private static global::System.Collections.IEnumerable GetSetters(TextFieldElement el) =>
-        (global::System.Collections.IEnumerable)typeof(TextFieldElement)
+    private static global::System.Collections.IEnumerable GetSetters(TextBoxElement el) =>
+        (global::System.Collections.IEnumerable)typeof(TextBoxElement)
             .GetProperty("Setters", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.NonPublic)!
             .GetValue(el)!;
 }

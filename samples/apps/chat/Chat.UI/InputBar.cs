@@ -51,7 +51,7 @@ public class InputBar : Component<InputBarProps>
                     b.MinWidth = 0; b.MinHeight = 0;
                     b.CornerRadius = new CornerRadius(4);
                 }).VAlign(VerticalAlignment.Bottom).Grid(row: 0, column: 0),
-                TextField(inputState.Value, v => inputState.Set(v))
+                TextBox(inputState.Value, v => inputState.Set(v))
                     .Set(tb =>
                     {
                         tb.PlaceholderText = placeholder;

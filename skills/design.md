@@ -85,7 +85,7 @@ Pick each control by what it does, not by what looks similar. Defaults match the
 
 **Data display:** Vertical list → `ListView`. Tiles / image grid → `GridView`. Hierarchy → `TreeView`. Tabular → `ListView` with `Grid` rows. Master–detail → `ListView` + detail panel. Carousel → `FlipView`.
 
-**Input:** Text → `TextField`. Number → `NumberBox`. Search → `AutoSuggestBox`. Date → `CalendarDatePicker`. Time → `TimePicker`. Boolean → `ToggleSwitch`. Pick 1 of 2–3 → `RadioButtons`. Pick 1 of 4+ → `ComboBox`. Continuous value → `Slider`. Password → `PasswordBox`.
+**Input:** Text → `TextBox`. Number → `NumberBox`. Search → `AutoSuggestBox`. Date → `CalendarDatePicker`. Time → `TimePicker`. Boolean → `ToggleSwitch`. Pick 1 of 2–3 → `RadioButtons`. Pick 1 of 4+ → `ComboBox`. Continuous value → `Slider`. Password → `PasswordBox`.
 
 **Feedback:** Blocking decision → `ContentDialog`. Contextual action → `Flyout` / `MenuFlyout`. Onboarding callout → `TeachingTip`. Inline status banner → `InfoBar`. Non-blocking screen-reader announcement → `UseAnnounce()` — the returned handle exposes a `Region` element that must be rendered somewhere in the component tree, or announcements no-op.
 
@@ -130,7 +130,7 @@ These are the specific mistakes that make a Reactor app look like a port from an
 | Custom toggle-button row for "Light / Dark / Auto" mode | `SelectorBar(...)` or `RadioButtons(...)` | Step 2 |
 | Clickable `Border` or `TextBlock` for primary actions | Real `Button` / `HyperlinkButton` — needed for AT, keyboard, focus | §7 Accessibility |
 | Icon-only `Button` without `.AutomationName("...")` | Always set `.AutomationName()` on icon-only buttons — required by `REACTOR_A11Y_001` | §7 Accessibility |
-| `TextField` without a label (relying on `placeholder` alone) | `FormField(TextField(...), label: "Name")` — wires label and automation name | Step 2 |
+| `TextBox` without a label (relying on `placeholder` alone) | `FormField(TextBox(...), label: "Name")` — wires label and automation name | Step 2 |
 | Spacer `Border` element used for layout gaps | `VStack(spacing, ...)` / `HStack(spacing, ...)` / `FlexColumn(...) with { RowGap = n }` | §5 Spacing |
 | Unkeyed children in a dynamic list | `.WithKey(item.Id)` on every list item | §10 Reconciliation |
 | `ScrollView` wrapping a `ListView` | `ListView` already scrolls — wrap content, not list controls | §5 ScrollView |
@@ -444,13 +444,13 @@ Border(child).Margin(3)
 
 **Margin** pushes an element away from its neighbors. It works on every Reactor element.
 
-**Padding** adds space between a container's edge and its content. It only works on `Border` and `Control`-based elements (`Button`, `TextField`, etc.). Layout panels like `VStack`, `HStack`, and `Grid` do not support `.Padding()` — wrap content in a `Border` if you need inner padding on a stack.
+**Padding** adds space between a container's edge and its content. It only works on `Border` and `Control`-based elements (`Button`, `TextBox`, etc.). Layout panels like `VStack`, `HStack`, and `Grid` do not support `.Padding()` — wrap content in a `Border` if you need inner padding on a stack.
 
 | Element | `.Margin()` | `.Padding()` |
 |---------|-------------|-------------|
 | `Border` | ✓ | ✓ |
 | `Button` | ✓ | ✓ |
-| `TextField` | ✓ | ✓ |
+| `TextBox` | ✓ | ✓ |
 | `TextBlock` | ✓ | — |
 | `VStack` | ✓ | — |
 | `HStack` | ✓ | — |
@@ -463,7 +463,7 @@ TextBlock("Hello").Margin(8)
 VStack(children).Margin(16)
 Border(child).Margin(12)
 
-// Padding — only on Border and Control (Button, TextField, etc.)
+// Padding — only on Border and Control (Button, TextBox, etc.)
 Border(child).Padding(16)    // ✓ works
 Button("Go").Padding(12)     // ✓ works
 
@@ -522,7 +522,7 @@ var or = ThemeResource.CornerRadius("OverlayCornerRadius");
 // Dialog with control-radius inner elements
 Border(
     VStack(12,
-        TextField("", placeholder: "Username").CornerRadius(cr.TopLeft),
+        TextBox("", placeholder: "Username").CornerRadius(cr.TopLeft),
         Button("Sign In", onClick)
             .Background(Theme.Accent)
             .CornerRadius(cr.TopLeft)
@@ -542,7 +542,7 @@ VStack(children).MinWidth(200)
 
 // Wrong: fixed Height clips at larger text scales
 Button("Action").Height(32)
-TextField(text, setText).Height(30)
+TextBox(text, setText).Height(30)
 ```
 
 - Prefer `MinHeight`/`MinWidth` over fixed `Height`/`Width`.
@@ -676,7 +676,7 @@ var filtered = UseMemo(() =>
     items, filter);
 
 return VStack(
-    TextField(filter, setFilter, placeholder: "Filter..."),
+    TextBox(filter, setFilter, placeholder: "Filter..."),
     VStack(filtered.Select(item =>
         TextBlock(item.Name).WithKey(item.Id)
     ).ToArray()));
@@ -745,7 +745,7 @@ Button("Save", onSave).IsTabStop(true).TabIndex(0).AccessKey("S")
 These allocate an `AutomationProperties` peer only when set:
 
 ```csharp
-TextField(name, setName)
+TextBox(name, setName)
     .HelpText("Enter your full legal name")
     .Required()
 
@@ -888,7 +888,7 @@ Three compile-time analyzers catch accessibility issues:
 |----------|--------|
 | `REACTOR_A11Y_001` | Icon-only Button/ToggleButton missing `.AutomationName()` |
 | `REACTOR_A11Y_002` | Image missing `.AutomationName()` or `.AccessibilityHidden()` |
-| `REACTOR_A11Y_003` | Form field (TextField/NumberBox/PasswordBox) missing label |
+| `REACTOR_A11Y_003` | Form field (TextBox/NumberBox/PasswordBox) missing label |
 
 These run as warnings by default. Promote to errors in CI:
 
@@ -905,7 +905,7 @@ var validation = UseValidationContext();
 var (email, setEmail) = UseState("");
 
 return FormField("Email",
-    TextField(email, setEmail)
+    TextBox(email, setEmail)
         .Validate(validation, "email", Validators.Required(), Validators.Email())
         .Required(true)
         .HelpText("We'll send a confirmation to this address"),

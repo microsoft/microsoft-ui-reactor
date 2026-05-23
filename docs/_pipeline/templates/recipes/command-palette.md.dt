@@ -72,7 +72,7 @@ out from under the old selection.
 ```
 
 `OnPreviewKeyDown` tunnels — it fires before the bubbling pair, so
-Up / Down move the selection instead of the `TextField` caret, and
+Up / Down move the selection instead of the `TextBox` caret, and
 Enter fires the highlighted command rather than inserting a newline.
 Setting `e.Handled = true` stops further routing so the underlying
 control stays out of the way. The same handler closes the palette on

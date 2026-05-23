@@ -27,7 +27,7 @@ visible slot changes.
 | Per-field state | `UseState<string>` / `UseState<int>` / `UseState<bool>` |
 | Step branching | `switch` on the step index returning `Element` |
 | Advance gating | `.IsEnabled(canAdvance)` on the Next button |
-| Input controls | [`TextField`](../forms.md), [`RadioButtons`](../forms.md), [`CheckBox`](../forms.md) |
+| Input controls | [`TextBox`](../forms.md), [`RadioButtons`](../forms.md), [`CheckBox`](../forms.md) |
 
 ### State
 

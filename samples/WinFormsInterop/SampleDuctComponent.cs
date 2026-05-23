@@ -43,7 +43,7 @@ class SampleReactorComponent : Component
             HStack(
                 TextBlock("Name: ")
                     .VAlign(Microsoft.UI.Xaml.VerticalAlignment.Center),
-                TextField(name, setName)
+                TextBox(name, setName)
                     .Width(200)
             ).Margin(0, 0, 0, 8),
 

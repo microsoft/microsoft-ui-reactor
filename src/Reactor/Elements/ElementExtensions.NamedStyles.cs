@@ -68,29 +68,29 @@ public static partial class ElementExtensions
 
     /// <summary>Sets <c>InputScope = Number</c>. Drives the soft-keyboard
     /// layout and IME hints on platforms that respect it.</summary>
-    public static TextFieldElement NumericInput(this TextFieldElement el) =>
+    public static TextBoxElement NumericInput(this TextBoxElement el) =>
         el.InputScope(InputScopeNameValue.Number);
 
     /// <summary>Sets <c>InputScope = EmailSmtpAddress</c>.</summary>
-    public static TextFieldElement EmailInput(this TextFieldElement el) =>
+    public static TextBoxElement EmailInput(this TextBoxElement el) =>
         el.InputScope(InputScopeNameValue.EmailSmtpAddress);
 
     /// <summary>Sets <c>InputScope = Url</c>.</summary>
-    public static TextFieldElement UrlInput(this TextFieldElement el) =>
+    public static TextBoxElement UrlInput(this TextBoxElement el) =>
         el.InputScope(InputScopeNameValue.Url);
 
     /// <summary>Sets <c>InputScope = TelephoneNumber</c>.</summary>
-    public static TextFieldElement PhoneInput(this TextFieldElement el) =>
+    public static TextBoxElement PhoneInput(this TextBoxElement el) =>
         el.InputScope(InputScopeNameValue.TelephoneNumber);
 
     /// <summary>Sets <c>InputScope = Search</c>.</summary>
-    public static TextFieldElement SearchInput(this TextFieldElement el) =>
+    public static TextBoxElement SearchInput(this TextBoxElement el) =>
         el.InputScope(InputScopeNameValue.Search);
 
     /// <summary>Sets a specific <see cref="InputScopeNameValue"/>. Escape hatch
     /// for input scopes outside the named helpers above (e.g. <c>Chat</c>,
     /// <c>FormulaNumber</c>, <c>AlphanumericFullWidth</c>).</summary>
-    public static TextFieldElement InputScope(this TextFieldElement el, InputScopeNameValue scope) =>
+    public static TextBoxElement InputScope(this TextBoxElement el, InputScopeNameValue scope) =>
         el.Set(tb =>
         {
             var s = new InputScope();

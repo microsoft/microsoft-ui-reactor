@@ -95,7 +95,7 @@ public class AccessibilityScannerTests
     public void A11Y_003_TextField_Without_Label()
     {
         var tree = VStack(
-            TextField("", null, placeholder: "Enter email")
+            TextBox("", null, placeholder: "Enter email")
         );
 
         var findings = AccessibilityScanner.Scan(tree);
@@ -106,7 +106,7 @@ public class AccessibilityScannerTests
     public void A11Y_003_TextField_With_Header_Passes()
     {
         var tree = VStack(
-            TextField("", null, header: "Email address")
+            TextBox("", null, header: "Email address")
         );
 
         var findings = AccessibilityScanner.Scan(tree);
@@ -117,7 +117,7 @@ public class AccessibilityScannerTests
     public void A11Y_003_TextField_With_AutomationName_Passes()
     {
         var tree = VStack(
-            TextField("", null).AutomationName("Email address")
+            TextBox("", null).AutomationName("Email address")
         );
 
         var findings = AccessibilityScanner.Scan(tree);
@@ -129,7 +129,7 @@ public class AccessibilityScannerTests
     {
         var tree = VStack(
             TextBlock("Email").AutomationId("EmailLabel"),
-            TextField("", null).LabeledBy("EmailLabel")
+            TextBox("", null).LabeledBy("EmailLabel")
         );
 
         var findings = AccessibilityScanner.Scan(tree);
@@ -211,7 +211,7 @@ public class AccessibilityScannerTests
     public void A11Y_008_LabeledBy_Missing_AutomationId()
     {
         var tree = VStack(
-            TextField("", null).LabeledBy("NonExistentLabel")
+            TextBox("", null).LabeledBy("NonExistentLabel")
                 .AutomationName("Email") // prevent A11Y_003
         );
 
@@ -224,7 +224,7 @@ public class AccessibilityScannerTests
     {
         var tree = VStack(
             TextBlock("Email").AutomationId("EmailLabel"),
-            TextField("", null).LabeledBy("EmailLabel")
+            TextBox("", null).LabeledBy("EmailLabel")
                 .AutomationName("Email") // prevent A11Y_003
         );
 
@@ -241,7 +241,7 @@ public class AccessibilityScannerTests
     {
         var tree = VStack(
             Heading("Settings"),
-            TextField("", null, header: "Name"),
+            TextBox("", null, header: "Name"),
             Button("Save", null)
         ).Landmark(AutomationLandmarkType.Main);
 
@@ -258,7 +258,7 @@ public class AccessibilityScannerTests
     {
         var tree = VStack(
             Image("test.png"), // triggers A11Y_002
-            TextField("", null) // triggers A11Y_003
+            TextBox("", null) // triggers A11Y_003
         );
 
         var findings = AccessibilityScanner.Scan(tree);

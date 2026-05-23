@@ -23,7 +23,7 @@ description: "Reactor essentials in one place — React-to-Reactor mental model,
 | `<span>text</span>` | `TextBlock("text")` |
 | `<h1>` / `<h2>` / small caption | `Heading(...)` / `SubHeading(...)` / `Caption(...)` |
 | `<button onClick={fn}>` | `Button("label", fn)` |
-| `<input value={v} onChange={e=>…}>` | `TextField(v, setV)` |
+| `<input value={v} onChange={e=>…}>` | `TextBox(v, setV)` |
 | `<select>` | `ComboBox(items, index, setIndex)` |
 | `<input type="checkbox">` | `CheckBox(checked, setChecked)` |
 | `{cond && <X/>}` | `cond ? X() : null` (null children are filtered) |
@@ -192,7 +192,7 @@ Button("Save", onClick: handler).Background(Theme.Accent)     // named-arg form 
 // `onClick` is a Button ctor parameter — NOT a chained `.OnClick(...)` /
 // `.OnTapped(...)`. `.OnTapped` is a gesture event with different input
 // semantics (long-press, touch, pen) and is the wrong fix for click intent.
-TextField(value, setValue, placeholder: "...")
+TextBox(value, setValue, placeholder: "...")
 CheckBox(isChecked, onChanged: setChecked, label: "label")
 ToggleSwitch(on, setOn)
 Slider(v, 0, 100, setV)

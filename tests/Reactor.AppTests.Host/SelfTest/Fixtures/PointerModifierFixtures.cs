@@ -112,11 +112,11 @@ internal static class PointerModifierFixtures
             int gotA = 0, lostA = 0, gotB = 0;
             var host = H.CreateHost();
             host.Mount(ctx => VStack(
-                TextField("a")
+                TextBox("a")
                     .Set(tb => tb.Name = "tbA")
                     .OnGotFocus((_, _) => gotA++)
                     .OnLostFocus((_, _) => lostA++),
-                TextField("b")
+                TextBox("b")
                     .Set(tb => tb.Name = "tbB")
                     .OnGotFocus((_, _) => gotB++)
             ));

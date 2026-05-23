@@ -73,6 +73,14 @@ public UIElement? Reconcile(
         // every component re-runs Render() even when props/deps are unchanged.
         _forceFullRenderActive = ForceFullRenderPending;
         ForceFullRenderPending = false;
+
+        // Build the dirty-ancestor path. For every component node
+        // whose SelfTriggered is true, walk up the realized visual
+        // tree and add each ancestor control. Consumed by Update's
+        // shallow-equality short-circuit so the walk can reach the
+        // self-triggered descendant even when its ancestor element
+        // records are structurally unchanged.
+        PopulateDirtyAncestorPath();
     }
     try {
     try
@@ -186,6 +194,14 @@ public UIElement? Reconcile(
         // every component re-runs Render() even when props/deps are unchanged.
         _forceFullRenderActive = ForceFullRenderPending;
         ForceFullRenderPending = false;
+
+        // Build the dirty-ancestor path. For every component node
+        // whose SelfTriggered is true, walk up the realized visual
+        // tree and add each ancestor control. Consumed by Update's
+        // shallow-equality short-circuit so the walk can reach the
+        // self-triggered descendant even when its ancestor element
+        // records are structurally unchanged.
+        PopulateDirtyAncestorPath();
     }
     try {
     try

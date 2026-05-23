@@ -24,12 +24,12 @@ internal sealed class EditMultiStringDialog : Component<EditMultiStringDialogPro
             VStack(12,
                 VStack(4,
                     TextBlock(Strings.ValueName),
-                    TextField(Props.ValueName, _ => { })
+                    TextBox(Props.ValueName, _ => { })
                         .IsReadOnly()
                 ),
                 VStack(4,
                     TextBlock(Strings.ValueData),
-                    TextField(Props.ValueData, Props.OnValueDataChanged)
+                    TextBox(Props.ValueData, Props.OnValueDataChanged)
                         .Set(tb =>
                         {
                             tb.AcceptsReturn = true;

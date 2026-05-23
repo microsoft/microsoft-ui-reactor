@@ -91,7 +91,7 @@ public class TypedColumnsBehaviorTests
         object? captured = null;
         var factory = new TypeRegistry().ResolveEditor(typeof(global::System.Uri), EditorTier.Standard);
         var input = new global::System.Uri("https://example.com");
-        var el = (TextFieldElement)factory!(input, v => captured = v);
+        var el = (TextBoxElement)factory!(input, v => captured = v);
         Assert.Contains("example.com", el.Value);
         el.OnChanged!.Invoke("https://docs.microsoft.com");
         Assert.IsType<global::System.Uri>(captured);
@@ -158,7 +158,7 @@ public class TypedColumnsBehaviorTests
         var desc = ReflectionTypeMetadataProvider.CreateDescriptor(prop, 0);
 
         object? captured = null;
-        var el = (TextFieldElement)desc.Editor!("https://example.com", v => captured = v);
+        var el = (TextBoxElement)desc.Editor!("https://example.com", v => captured = v);
         Assert.Equal("https://...", el.Placeholder);
         el.OnChanged!.Invoke("https://docs.microsoft.com");
         Assert.IsType<string>(captured);
@@ -176,7 +176,7 @@ public class TypedColumnsBehaviorTests
         var desc = ReflectionTypeMetadataProvider.CreateDescriptor(prop, 0);
 
         object? captured = null;
-        var el = (TextFieldElement)desc.Editor!(new global::System.Uri("https://x"), v => captured = v);
+        var el = (TextBoxElement)desc.Editor!(new global::System.Uri("https://x"), v => captured = v);
         el.OnChanged!.Invoke("https://docs.microsoft.com");
         Assert.IsType<global::System.Uri>(captured);
     }
@@ -367,7 +367,7 @@ public class TypedColumnsBehaviorTests
             nameof(Row.UriField), r => r.UriField);
 
         object? captured = null;
-        var el = (TextFieldElement)col.Editor!(new global::System.Uri("https://x"), v => captured = v);
+        var el = (TextBoxElement)col.Editor!(new global::System.Uri("https://x"), v => captured = v);
         el.OnChanged!.Invoke("https://docs.microsoft.com");
         Assert.IsType<global::System.Uri>(captured);
     }
@@ -384,7 +384,7 @@ public class TypedColumnsBehaviorTests
             nameof(Row.UrlString), r => r.UrlString);
 
         object? captured = null;
-        var el = (TextFieldElement)col.Editor!("https://x", v => captured = v);
+        var el = (TextBoxElement)col.Editor!("https://x", v => captured = v);
         Assert.Equal("https://...", el.Placeholder);
         el.OnChanged!.Invoke("partial input that is not a valid uri");
         Assert.IsType<string>(captured);

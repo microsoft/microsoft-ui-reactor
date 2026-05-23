@@ -116,7 +116,7 @@ Border(dialog).CornerRadius(overlayRadius.TopLeft)");
 
                 // Text inputs
                 TextBlock("Text Input").SemiBold().Foreground(Theme.PrimaryText),
-                TextField("", placeholder: "Type here...")
+                TextBox("", placeholder: "Type here...")
                     .Width(280)
                     .CornerRadius(cr.TopLeft),
 
@@ -159,7 +159,7 @@ Border(dialog).CornerRadius(overlayRadius.TopLeft)");
 Button(""Standard"", () => { }).CornerRadius(cr.TopLeft)
 
 // Text input
-TextField(""Placeholder"", value, onChange).CornerRadius(cr.TopLeft)
+TextBox(""Placeholder"", value, onChange).CornerRadius(cr.TopLeft)
 
 // Card
 Border(content)
@@ -279,9 +279,9 @@ Border(tipContent)
                     VStack(12,
                         TextBlock("Sign In")
                             .FontSize(16).SemiBold().Foreground(Theme.PrimaryText),
-                        TextField("", placeholder: "Username")
+                        TextBox("", placeholder: "Username")
                             .CornerRadius(cr.TopLeft),
-                        TextField("", placeholder: "Password")
+                        TextBox("", placeholder: "Password")
                             .CornerRadius(cr.TopLeft),
                         Button("Sign In", () => { })
                             .Background(Theme.Accent)
@@ -317,7 +317,7 @@ var or = ThemeResource.CornerRadius(""OverlayCornerRadius"");
 // Overlay container with control-radius inner elements
 Border(
     VStack(12,
-        TextField(""Username"", value, onChange).CornerRadius(cr.TopLeft),
+        TextBox(""Username"", value, onChange).CornerRadius(cr.TopLeft),
         Button(""Sign In"", onClick)
             .Background(Theme.Accent)
             .CornerRadius(cr.TopLeft)

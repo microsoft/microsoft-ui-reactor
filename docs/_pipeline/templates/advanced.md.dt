@@ -370,7 +370,7 @@ static TextBox? _passwordField;
 public override Element Render()
 {
     var (pwd, setPwd) = UseState("");
-    return TextField(pwd, setPwd).Set(c => _passwordField = c);
+    return TextBox(pwd, setPwd).Set(c => _passwordField = c);
 }
 
 // Elsewhere:

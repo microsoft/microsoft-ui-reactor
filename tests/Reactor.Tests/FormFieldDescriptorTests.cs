@@ -85,7 +85,7 @@ public class FormFieldDescriptorTests
         };
 
         var el = FormField(fd, "test", _ => { }, registry);
-        Assert.IsType<TextFieldElement>(el.Content);
+        Assert.IsType<TextBoxElement>(el.Content);
     }
 
     [Fact]

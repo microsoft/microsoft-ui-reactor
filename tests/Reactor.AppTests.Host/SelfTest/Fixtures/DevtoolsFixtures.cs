@@ -129,7 +129,7 @@ internal static class DevtoolsFixtures
             return VStack(
                 TextBlock($"count:{count}").AutomationId("count-label"),
                 Button("Increment", () => setCount(count + 1)).AutomationId("btn-increment"),
-                TextField(text, setText).AutomationId("txt-input"),
+                TextBox(text, setText).AutomationId("txt-input"),
                 CheckBox(toggled, setToggled, label: "Accept").AutomationId("chk-accept"),
                 // Delayed-update button: used by waitFor.
                 Button("DelayedBump", async () =>
@@ -767,11 +767,11 @@ internal static class DevtoolsFixtures
         public override Element Render() => VStack(
             VStack(
                 TextBlock("Name").AutomationId("lbl-name"),
-                TextField("a", _ => { }).AutomationId("tb-name")
+                TextBox("a", _ => { }).AutomationId("tb-name")
             ),
             VStack(
                 TextBlock("Email").AutomationId("lbl-email"),
-                TextField("b", _ => { }).AutomationId("tb-email")
+                TextBox("b", _ => { }).AutomationId("tb-email")
             )
         );
     }

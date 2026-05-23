@@ -380,7 +380,7 @@ class DataSourceDemo : Microsoft.UI.Reactor.Core.Component
                 ComboBox(departments, Math.Max(0, Array.IndexOf(departments, filterDept)),
                     i => { setToken(null); setFilterDept(departments[i]); }).Width(140),
                 TextBlock("Search:"),
-                TextField(searchQuery, s => { setToken(null); setSearchQuery(s); }, placeholder: "Search...").Width(180)
+                TextBox(searchQuery, s => { setToken(null); setSearchQuery(s); }, placeholder: "Search...").Width(180)
             ).Flex(shrink: 0),
 
             loading

@@ -745,7 +745,7 @@ class RegeditApp : Component
             Strings.RenameKeyTitle,
             VStack(8,
                 TextBlock(Strings.NewKeyName),
-                TextField(editValueData, setEditValueData)
+                TextBox(editValueData, setEditValueData)
             ).Width(350),
             Strings.OK
         ) with
@@ -766,7 +766,7 @@ class RegeditApp : Component
             Strings.RenameValueTitle,
             VStack(8,
                 TextBlock(Strings.NewKeyName),
-                TextField(editValueData, setEditValueData)
+                TextBox(editValueData, setEditValueData)
             ).Width(350),
             Strings.OK
         ) with

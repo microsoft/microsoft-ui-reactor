@@ -77,7 +77,7 @@ public sealed partial class Reconciler
             SplitButtonElement spBtn => MountSplitButton(spBtn, requestRerender),
             ToggleSplitButtonElement tspBtn => MountToggleSplitButton(tspBtn, requestRerender),
             RichEditBoxElement reb => MountRichEditBox(reb),
-            TextFieldElement tf => MountTextField(tf, requestRerender),
+            TextBoxElement tf => MountTextField(tf, requestRerender),
             PasswordBoxElement pw => MountPasswordBox(pw),
             NumberBoxElement nb => MountNumberBox(nb),
             AutoSuggestBoxElement asb => MountAutoSuggestBox(asb),
@@ -482,7 +482,7 @@ public sealed partial class Reconciler
         return tsb;
     }
 
-    private TextBox MountTextField(TextFieldElement tf, Action requestRerender)
+    private TextBox MountTextField(TextBoxElement tf, Action requestRerender)
     {
         var rented = _pool.TryRent(typeof(TextBox));
         var textBox = rented as TextBox ?? new TextBox();
@@ -518,12 +518,12 @@ public sealed partial class Reconciler
     }
 
     /// <summary>
-    /// Wires TextField's TextChanged/SelectionChanged trampolines only when the
+    /// Wires TextBox's TextChanged/SelectionChanged trampolines only when the
     /// element has a corresponding handler AND the control hasn't been wired
     /// yet. Called from both Mount (fresh or pooled) and Update (null→non-null
     /// transition). The CWT flags survive pool round-trips.
     /// </summary>
-    internal static void EnsureTextFieldWiring(TextBox textBox, TextFieldElement tf, Action requestRerender)
+    internal static void EnsureTextFieldWiring(TextBox textBox, TextBoxElement tf, Action requestRerender)
     {
         if (tf.OnChanged is null && tf.OnSelectionChanged is null) return;
         var flags = GetPoolableWireFlags(textBox);
@@ -533,7 +533,7 @@ public sealed partial class Reconciler
             textBox.TextChanged += (_, _) =>
             {
                 if (ChangeEchoSuppressor.ShouldSuppress(textBox)) return;
-                var tag = GetElementTag(textBox) as TextFieldElement;
+                var tag = GetElementTag(textBox) as TextBoxElement;
                 tag?.OnChanged?.Invoke(textBox.Text);
                 // Controlled input: when onChange is wired, always request a
                 // re-render so UpdateTextField can enforce the controlled value.
@@ -546,7 +546,7 @@ public sealed partial class Reconciler
         if (tf.OnSelectionChanged is not null && !flags.TextBoxSelectionChanged)
         {
             flags.TextBoxSelectionChanged = true;
-            textBox.SelectionChanged += (_, _) => (GetElementTag(textBox) as TextFieldElement)?.OnSelectionChanged?.Invoke(textBox.SelectedText, textBox.SelectionStart, textBox.SelectionLength);
+            textBox.SelectionChanged += (_, _) => (GetElementTag(textBox) as TextBoxElement)?.OnSelectionChanged?.Invoke(textBox.SelectedText, textBox.SelectionStart, textBox.SelectionLength);
         }
     }
 

@@ -265,7 +265,7 @@ as you type in your IDE:
 |--------------|------|
 | `REACTOR_A11Y_001` | Icon-only `Button(icon, action)` calls without `.AutomationName()` |
 | `REACTOR_A11Y_002` | `Image()` without `.AutomationName()` or `.AccessibilityHidden()` |
-| `REACTOR_A11Y_003` | `TextField`/`NumberBox`/`PasswordBox` without `header:` arg or label modifier |
+| `REACTOR_A11Y_003` | `TextBox`/`NumberBox`/`PasswordBox` without `header:` arg or label modifier |
 
 These analyzers run automatically when you reference the `Reactor.Analyzers`
 package. They complement the runtime `AccessibilityScanner` by catching the

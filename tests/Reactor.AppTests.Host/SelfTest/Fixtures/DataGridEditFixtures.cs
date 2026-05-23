@@ -496,7 +496,7 @@ internal static class DataGridEditFixtures
                 // Four children matching the DataGrid row layout: [Id][Name][Cat][Price].
                 // Middle child flips between Text and TextField based on `editing`.
                 var nameCell = editing
-                    ? (Element)TextField("Alice", _ => { }).Padding(2)
+                    ? (Element)TextBox("Alice", _ => { }).Padding(2)
                     : (Element)TextBlock("Alice").Padding(horizontal: 8, vertical: 4);
 
                 return Grid(

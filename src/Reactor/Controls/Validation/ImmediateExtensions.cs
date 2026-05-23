@@ -21,7 +21,7 @@ public static class ImmediateExtensions
     /// <summary>
     /// Requests that the control commit its value on every keystroke instead
     /// of on blur. Has no effect on controls whose default already fires
-    /// per-keystroke (TextField, PasswordBox, AutoSuggestBox, etc.).
+    /// per-keystroke (TextBox, PasswordBox, AutoSuggestBox, etc.).
     /// </summary>
     public static T Immediate<T>(this T el) where T : Element
         => (T)el.SetAttached(new ImmediateValueAttached());

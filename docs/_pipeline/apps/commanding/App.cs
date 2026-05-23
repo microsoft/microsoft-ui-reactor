@@ -28,7 +28,7 @@ class BasicCommandExample : Component
         };
 
         return VStack(12,
-            TextField(text, v => { setText(v); setSaved(false); })
+            TextBox(text, v => { setText(v); setSaved(false); })
                 .Width(400),
             HStack(8,
                 Button(saveCmd),
@@ -114,7 +114,7 @@ class CommandBarExample : Component
                 secondaryCommands: new[] {
                     AppBarButton(delete) }
             ),
-            TextField(text, setText).Margin(16)
+            TextBox(text, setText).Margin(16)
         );
     }
 }

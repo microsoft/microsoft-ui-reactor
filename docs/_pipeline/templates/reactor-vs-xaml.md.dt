@@ -125,7 +125,7 @@ the reconciler writes the new `Text` value onto the existing
 `TextBlock`. There is no binding object — the closure that produces
 the element is the binding.
 
-`TwoWay` shows up as the controlled-input pattern. A `TextField` takes
+`TwoWay` shows up as the controlled-input pattern. A `TextBox` takes
 the current value and a setter callback; the user's input fires the
 callback, which writes the slot, which re-renders, which writes the
 new value back into the `TextBox`. Mode is implicit in whether you

@@ -4,7 +4,7 @@ app: forms
 order: 7
 audience: intermediate
 goal: |
-  Cover every input control (TextField, PasswordBox, NumberBox, ComboBox,
+  Cover every input control (TextBox, PasswordBox, NumberBox, ComboBox,
   RadioButtons, CheckBox, Slider, ToggleSwitch, AutoSuggestBox, DatePicker,
   TimePicker, CalendarDatePicker, CalendarView, ColorPicker), the
   controlled-input pattern, the validation system (ValidationContext,
@@ -67,7 +67,7 @@ pattern: current value in, change handler out.
 
 | Control | Value type | Change handler |
 |---------|-----------|---------------|
-| `TextField` | `string` | `Action<string>` |
+| `TextBox` | `string` | `Action<string>` |
 | `PasswordBox` | `string` | `Action<string>` |
 | `Slider` | `double` | `Action<double>` |
 | `NumberBox` | `double` | `Action<double>` |
@@ -79,13 +79,13 @@ pattern: current value in, change handler out.
 All controls accept optional parameters for labels, headers, and placeholder
 text. Check the API reference for each control's full signature.
 
-## Configuring TextField
+## Configuring TextBox
 
-`TextField` covers the common WinUI `TextBox` knobs through dedicated fluents
+`TextBox` covers the common WinUI `TextBox` knobs through dedicated fluents
 so you rarely need `.Set(...)`. The named-input shapes set the appropriate
 `InputScope` for soft-keyboard and IME hinting:
 
-```csharp snippet="forms/textfield-config"
+```csharp snippet="forms/TextBox-config"
 ```
 
 | Fluent | Effect |
@@ -160,7 +160,7 @@ when validity is gated on async checks, required-but-untouched fields,
 cross-field rules, or any derived condition that can't be made instantaneous.
 
 > **Where not to use `.IsDisabledFocusable()`:** only buttons. For data-entry
-> controls (`TextField`, `NumberBox`, `CheckBox`, etc.), `IsEnabled=false`
+> controls (`TextBox`, `NumberBox`, `CheckBox`, etc.), `IsEnabled=false`
 > usually means "this field isn't part of your current task" (cascading
 > from another input), and tab-skipping is the correct UX. Use
 > `IsReadOnly` if you need a visible-but-non-editable text control.
@@ -384,7 +384,7 @@ per page.
 
 For a single-field form (search box, comment input), wire submission
 to Enter rather than a Submit button. `AutoSuggestBox` does this
-automatically via `onQuerySubmitted`. For `TextField`, route through
+automatically via `onQuerySubmitted`. For `TextBox`, route through
 `.KeyDown` or wrap the field in an `[ai:lock]` form panel; see
 [input-and-gestures](input-and-gestures.md) for the routed-events
 surface.
@@ -404,7 +404,7 @@ concern as [Keeping Submit Reachable](#keeping-submit-reachable).
 
 ```csharp
 // Don't:
-TextField(initial: "default value")
+TextBox(initial: "default value")
 ```
 
 ```csharp snippet="forms/controlled-input"

@@ -26,7 +26,7 @@ internal static class TextFieldMountFixtures
         {
             var host = H.CreateHost();
             host.Mount(_ =>
-                (TextField(MultiLine, placeholder: "ml-test")
+                (TextBox(MultiLine, placeholder: "ml-test")
                     with { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap })
                 .MinHeight(80)
                 .AutomationName("ml-target")
@@ -57,7 +57,7 @@ internal static class TextFieldMountFixtures
         {
             var host = H.CreateHost();
             host.Mount(_ =>
-                TextField("hello world", placeholder: "sl-test")
+                TextBox("hello world", placeholder: "sl-test")
                     .AutomationName("sl-target")
             );
 
@@ -85,7 +85,7 @@ internal static class TextFieldMountFixtures
                 var value = phase == 0 ? "First" : MultiLine;
                 return VStack(
                     Button("TF_ML_Upd", () => set(1)),
-                    (TextField(value, placeholder: "ml-upd-test")
+                    (TextBox(value, placeholder: "ml-upd-test")
                         with { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap })
                     .MinHeight(80));
             });

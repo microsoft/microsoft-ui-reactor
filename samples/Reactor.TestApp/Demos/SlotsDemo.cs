@@ -89,7 +89,7 @@ class SlotsDemo : Component
 
             // 3. Dynamic slot content
             SubHeading("3. Dynamic slot content"),
-            TextField(name, setName, placeholder: "Type a name...").Width(220),
+            TextBox(name, setName, placeholder: "Type a name...").Width(220),
             Component<Card, CardProps>(new(
                 Header: HStack(8,
                     Border(Empty()).Background(Accent).CornerRadius(12).Size(24, 24),

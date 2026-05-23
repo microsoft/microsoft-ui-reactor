@@ -51,7 +51,7 @@ class LoginForm : Component
         // <snippet:render>
         return VStack(12,
             Heading("Sign in"),
-            TextField(email, setEmail, placeholder: "you@example.com",
+            TextBox(email, setEmail, placeholder: "you@example.com",
                 header: "Email").Width(280),
             PasswordBox(pwd, setPwd, placeholderText: "8+ characters"),
             error is null

@@ -24,7 +24,7 @@ class DevToolingApp : Component
                 Button("Click me", () => setCount(count + 1)),
                 TextBlock($"Clicked {count} times").SemiBold()
             ),
-            TextField(message, setMessage, placeholder: "Type something")
+            TextBox(message, setMessage, placeholder: "Type something")
                 .Width(300)
         ).Padding(24);
     }
@@ -68,7 +68,7 @@ class IterationDemo : Component
             Heading("Iteration Cycle Demo"),
             TextBlock("Add items, then edit this code and save to see hot reload."),
             HStack(8,
-                TextField(input, setInput, placeholder: "New item")
+                TextBox(input, setInput, placeholder: "New item")
                     .Width(200),
                 Button("Add", () =>
                 {

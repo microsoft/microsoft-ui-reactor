@@ -98,7 +98,7 @@ public class PropertyGridDefaultsTests
     {
         var desc = Field("x");
         var label = (Element)Microsoft.UI.Reactor.Factories.TextBlock("L");
-        var editor = (Element)Microsoft.UI.Reactor.Factories.TextField("v");
+        var editor = (Element)Microsoft.UI.Reactor.Factories.TextBox("v");
         var row = PropertyGridDefaults.PropertyRowTemplate(desc, label, editor, 0);
 
         var flex = Assert.IsType<FlexElement>(row);
@@ -115,7 +115,7 @@ public class PropertyGridDefaultsTests
         // two prefixes never collide.
         var desc = Field("x", displayName: "Counter");
         var label = (Element)Microsoft.UI.Reactor.Factories.TextBlock("L");
-        var editor = (Element)Microsoft.UI.Reactor.Factories.TextField("v");
+        var editor = (Element)Microsoft.UI.Reactor.Factories.TextBox("v");
         var row = PropertyGridDefaults.PropertyRowTemplate(desc, label, editor, 0);
 
         // Children[1] is the editor, with AutomationName modifier applied.
@@ -130,7 +130,7 @@ public class PropertyGridDefaultsTests
         // label slot — this is the visible nesting indent in the grid.
         var desc = Field("x");
         var label = (Element)Microsoft.UI.Reactor.Factories.TextBlock("L");
-        var editor = (Element)Microsoft.UI.Reactor.Factories.TextField("v");
+        var editor = (Element)Microsoft.UI.Reactor.Factories.TextBox("v");
         var row = PropertyGridDefaults.PropertyRowTemplate(desc, label, editor, 2);
 
         var labelOut = ((FlexElement)row).Children[0];

@@ -22,7 +22,7 @@ class ControlledInputDemo : Component
 
         return VStack(12,
             SubHeading("Controlled Input"),
-            TextField(name, setName, placeholder: "Type your name"),
+            TextBox(name, setName, placeholder: "Type your name"),
             TextBlock($"You typed: {name}").Opacity(0.6)
         ).Padding(24);
     }
@@ -44,7 +44,7 @@ class InputTypesDemo : Component
         var (priority, setPriority) = UseState(0);
 
         return VStack(12,
-            TextField(text, setText, placeholder: "Email",
+            TextBox(text, setText, placeholder: "Email",
                 header: "Email"),
             PasswordBox(password, setPassword,
                 placeholderText: "Enter password"),
@@ -78,7 +78,7 @@ class ValidationDemo : Component
 
         return VStack(12,
             SubHeading("Simple Validation"),
-            TextField(email, setEmail, placeholder: "user@example.com",
+            TextBox(email, setEmail, placeholder: "user@example.com",
                 header: "Email"),
             When(!string.IsNullOrEmpty(email) && !emailValid, () =>
                 TextBlock("Enter a valid email address")
@@ -112,7 +112,7 @@ class KeepSubmitReachableDemo : Component
 
         return VStack(12,
             SubHeading("Keeping Submit Reachable"),
-            TextField(email, setEmail, header: "Email",
+            TextBox(email, setEmail, header: "Email",
                 placeholder: "user@example.com"),
 
             // .Immediate() switches NumberBox from commit-on-blur to
@@ -142,7 +142,7 @@ class ValidationContextDemo : Component
 
         return VStack(12,
             SubHeading("Validation Context"),
-            TextField(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); },
+            TextBox(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); },
                 placeholder: "user@example.com", header: "Email")
                 .Validate("email", email,
                     Validate.Required(),
@@ -183,13 +183,13 @@ class FormFieldDemo : Component
         return VStack(12,
             SubHeading("FormField Helper"),
             FormField(
-                TextField(name, v => { setName(v); ctx.NotifyValueChanged("name", v); })
+                TextBox(name, v => { setName(v); ctx.NotifyValueChanged("name", v); })
                     .Validate("name", name, Validate.Required()),
                 label: "Full Name",
                 required: true,
                 description: "As it appears on your ID"),
             FormField(
-                TextField(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); })
+                TextBox(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); })
                     .Validate("email", email,
                         Validate.Required(), Validate.Email()),
                 label: "Email Address",
@@ -211,10 +211,10 @@ class MaskedInputDemo : Component
 
         return VStack(12,
             SubHeading("Masked Input"),
-            TextField(phoneMask.Apply(phone), v => setPhone(phoneMask.GetRawValue(v)),
+            TextBox(phoneMask.Apply(phone), v => setPhone(phoneMask.GetRawValue(v)),
                 placeholder: "(___) ___-____", header: "Phone"),
             TextBlock($"Raw: {phone}").FontSize(12).Opacity(0.6),
-            TextField(dateMask.Apply(date), v => setDate(dateMask.GetRawValue(v)),
+            TextBox(dateMask.Apply(date), v => setDate(dateMask.GetRawValue(v)),
                 placeholder: "__/__/____", header: "Date"),
             TextBlock($"Raw: {date}").FontSize(12).Opacity(0.6)
         ).Padding(24);
@@ -235,10 +235,10 @@ class InputFormattersDemo : Component
 
         return VStack(12,
             SubHeading("Input Formatters"),
-            TextField(currencyFmt.Format(currency, 0).Output,
+            TextBox(currencyFmt.Format(currency, 0).Output,
                 v => setCurrency(currencyFmt.Parse(v)),
                 placeholder: "$0.00", header: "Amount"),
-            TextField(upperFmt.Format(upper, 0).Output,
+            TextBox(upperFmt.Format(upper, 0).Output,
                 v => setUpper(upperFmt.Parse(v)),
                 placeholder: "UPPERCASE", header: "Code")
         ).Padding(24);
@@ -259,17 +259,17 @@ class TextFieldConfigDemo : Component
         var (note, setNote) = UseState("");
 
         return VStack(12,
-            TextField(qty, setQty, header: "Quantity")
+            TextBox(qty, setQty, header: "Quantity")
                 .NumericInput(),
-            TextField(email, setEmail, header: "Email")
+            TextBox(email, setEmail, header: "Email")
                 .EmailInput(),
-            TextField(url, setUrl, header: "URL")
+            TextBox(url, setUrl, header: "URL")
                 .UrlInput(),
-            TextField(phone, setPhone, header: "Phone")
+            TextBox(phone, setPhone, header: "Phone")
                 .PhoneInput(),
-            TextField(search, setSearch, placeholder: "Search…")
+            TextBox(search, setSearch, placeholder: "Search…")
                 .SearchInput(),
-            TextField(note, setNote, header: "Reference code")
+            TextBox(note, setNote, header: "Reference code")
                 .MaxLength(8)
                 .CharacterCasing(CharacterCasing.Upper)
                 .TextAlignment(TextAlignment.Center)

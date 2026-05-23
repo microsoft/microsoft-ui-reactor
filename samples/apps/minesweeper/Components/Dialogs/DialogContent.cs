@@ -54,9 +54,9 @@ internal static class DialogContent
         string? error)
     {
         return VStack(10,
-            HStack(8, TextBlock("Rows (4–24):").Width(140), TextField(rows, onRowsChanged).Width(80)),
-            HStack(8, TextBlock("Columns (4–30):").Width(140), TextField(columns, onColumnsChanged).Width(80)),
-            HStack(8, TextBlock("Mines:").Width(140), TextField(mines, onMinesChanged).Width(80)),
+            HStack(8, TextBlock("Rows (4–24):").Width(140), TextBox(rows, onRowsChanged).Width(80)),
+            HStack(8, TextBlock("Columns (4–30):").Width(140), TextBox(columns, onColumnsChanged).Width(80)),
+            HStack(8, TextBlock("Mines:").Width(140), TextBox(mines, onMinesChanged).Width(80)),
             error is null
                 ? TextBlock("").Height(0)
                 : TextBlock(error).Foreground(Theme.SystemCritical)

@@ -25,7 +25,7 @@ internal sealed class FindDialog : Component<FindDialogProps>
             VStack(12,
                 VStack(4,
                     TextBlock(Strings.FindWhat),
-                    TextField(Props.SearchText, Props.OnSearchTextChanged)
+                    TextBox(Props.SearchText, Props.OnSearchTextChanged)
                 ),
                 VStack(4,
                     TextBlock(Strings.LookAt),

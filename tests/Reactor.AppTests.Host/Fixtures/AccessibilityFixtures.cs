@@ -55,7 +55,7 @@ internal static class AccessibilityFixtures
             VStack(
                 // ── WCAG 3.3.2: Labels and Instructions ───────
                 // Form field with full accessibility annotations
-                TextField("user@example.com")
+                TextBox("user@example.com")
                     .AutomationName("Email address")
                     .Required()
                     .HelpText("Enter your primary contact email")

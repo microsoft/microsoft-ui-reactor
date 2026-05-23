@@ -274,7 +274,7 @@ survive hot reload.
 Every Reactor app eventually has the same two ingredients: an event
 handler that calls a setter, and a value rendered from the setter's
 state slot. The hello-world snippet above wires `setName` to
-`TextField`'s change handler and reads `name` back in the
+`TextBox`'s change handler and reads `name` back in the
 `Text("Hello, ...")` line — that round trip is the entire reactivity
 contract. Once it feels routine, every other [hook](hooks.md) is just
 a specialization (`UseReducer` for derived updates, `UseEffect` for

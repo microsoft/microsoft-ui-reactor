@@ -207,7 +207,7 @@ class TodoListBad : Component
     public override Element Render() => VStack(4,
         Items.Select(i =>
             // No .WithKey — reorder is destructive.
-            TextField(i.Title, _ => { }, header: i.Id.ToString())
+            TextBox(i.Title, _ => { }, header: i.Id.ToString())
         ).ToArray()
     );
 }
@@ -223,7 +223,7 @@ class TodoListGood : Component
 
     public override Element Render() => VStack(4,
         Items.Select(i =>
-            TextField(i.Title, _ => { }, header: i.Id.ToString())
+            TextBox(i.Title, _ => { }, header: i.Id.ToString())
                 .WithKey(i.Id.ToString())                  // stable identity
         ).ToArray()
     );

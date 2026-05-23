@@ -428,7 +428,7 @@ public class EditChainTests
     {
         var method = GetStatic("RenderReadOnlyValue");
         var el = (Element)method.Invoke(null, new object?[] { "hello", typeof(string) })!;
-        var field = Assert.IsType<TextFieldElement>(el);
+        var field = Assert.IsType<TextBoxElement>(el);
         Assert.Equal("hello", field.Value);
         Assert.Equal(false, field.Modifiers?.IsEnabled);
     }
@@ -438,7 +438,7 @@ public class EditChainTests
     {
         var method = GetStatic("RenderReadOnlyValue");
         var el = (Element)method.Invoke(null, new object?[] { null, typeof(string) })!;
-        var field = Assert.IsType<TextFieldElement>(el);
+        var field = Assert.IsType<TextBoxElement>(el);
         Assert.Equal("", field.Value);
     }
 

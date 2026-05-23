@@ -103,7 +103,7 @@ internal static class ControlUpdateFixtures
                     Button("UpdInputs", () => set(1)),
                     phase == 0
                         ? VStack(
-                            TextField("hello", placeholder: "type here", header: "FieldHdr"),
+                            TextBox("hello", placeholder: "type here", header: "FieldHdr"),
                             CheckBox(false, label: "ChkLabel"),
                             Slider(25, 0, 100),
                             ToggleSwitch(false, header: "TsHdr"),
@@ -115,7 +115,7 @@ internal static class ControlUpdateFixtures
                             ProgressRing(0.5)
                           )
                         : VStack(
-                            TextField("world", placeholder: "changed", header: "FieldHdr2"),
+                            TextBox("world", placeholder: "changed", header: "FieldHdr2"),
                             CheckBox(true, label: "ChkLabel2"),
                             Slider(75, 0, 100),
                             ToggleSwitch(true, header: "TsHdr2"),
