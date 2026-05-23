@@ -12,8 +12,12 @@ namespace Microsoft.UI.Reactor.Tests;
 /// caller-error gates that run synchronously before any platform call.
 ///
 /// Each test uses <c>JumpList.ResetForTests()</c> to isolate the static
-/// state.
+/// state. The <c>JumpListGlobals</c> collection serializes these tests
+/// with <see cref="JumpListStateTests"/> so the shared static
+/// <c>JumpList.AppUserModelId</c> is not clobbered by a concurrent
+/// <c>ResetForTests()</c> in another class.
 /// </summary>
+[Collection("JumpListGlobals")]
 public class JumpListUpdateValidationTests : IDisposable
 {
     public JumpListUpdateValidationTests() => JumpList.ResetForTests();

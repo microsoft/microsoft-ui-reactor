@@ -182,6 +182,7 @@ public class LaunchActivationTests
 /// Spec 036 §11.3 — JumpList static state. We don't exercise the live shell
 /// here (that's a selftest fixture); only the public state surface.
 /// </summary>
+[Collection("JumpListGlobals")]
 public class JumpListStateTests
 {
     [Fact]

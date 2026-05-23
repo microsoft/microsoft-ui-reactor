@@ -19,8 +19,11 @@ public class QueryCacheThreadingTests
     // tests finish in milliseconds; on shared CI runners (virtualized cores,
     // bursty scheduling) flushing the Task scheduler after cancellation can
     // stretch unpredictably. A generous ceiling kills flakes without weakening
-    // the deadlock guarantee.
-    private static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(60);
+    // the deadlock guarantee. Bumped 60s→120s after a 1-in-1000 stress hit on
+    // Concurrent_Subscribe_Unsubscribe_Converges_To_Zero where the workload is
+    // pure lock-bound bookkeeping (no eviction is reachable in 60s given the
+    // 5-minute default CacheTime) — i.e. the timeout was scheduler-induced.
+    private static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(120);
 
     // ════════════════════════════════════════════════════════════════
     //  Concurrent Set + TryGet — no torn reads
