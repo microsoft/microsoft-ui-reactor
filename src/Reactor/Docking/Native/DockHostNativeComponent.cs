@@ -292,6 +292,27 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 target: target);
         }
 
+        // Spec 045 §4.2 cross-window dock-in source hook. Re-installed
+        // every render so the closure captures the latest
+        // `effectiveLayout` / `StoreOverride` / `LogOp` references. A
+        // foreign overlay (the floating window's CenterOnly drop target)
+        // invokes this after it has added the pane into its own group;
+        // we yank the pane out of this host's layout and fire the same
+        // events the tear-out path fires so the app can persist /
+        // observe the change.
+        model.OnExternalCrossWindowDrop = pane =>
+        {
+            var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
+            if (!removed) return;
+            StoreOverride(afterRemove);
+            manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
+            manager.OnLiveLayoutChanged?.Invoke(afterRemove);
+            LogOp(Diagnostics.DockOperationKind.DragConfirm,
+                $"cross-window dock-in: pane='{pane.Key}' removed from source",
+                paneKey: pane.Key?.ToString(),
+                layoutOverride: afterRemove);
+        };
+
         // §2.4 — tab-drag callbacks fed to every DockTabGroup so any tab
         // in the layout can begin a session. Captures `manager` from the
         // current render closure for OnContentFloating/Floated event
@@ -342,6 +363,38 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                         paneKey: pane.Key?.ToString());
                     session.End();
                     setDragActive(false);
+                    return;
+                }
+                // Spec 045 §4.2 cross-window dock-in (Center only):
+                // WinUI's TabView drag pipeline is window-local — the
+                // floating window's overlay never receives DragEnter
+                // because the drag originated in a different XAML
+                // island. So at drop-completion time, hit-test the
+                // cursor against every registered floating window's
+                // HWND rect; if a hit is found, route the pane there
+                // as a new tab instead of tearing out into a new
+                // floating window. Deferred to drop-time only — no
+                // overlay is shown during the drag itself.
+                if (DockFloatingPaneRouter.HasRegisteredWindows
+                    && DockFloatingPaneRouter.TryAppendUnderCursor(pane))
+                {
+                    var (afterRemoveX, removedX) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
+                    if (removedX)
+                    {
+                        StoreOverride(afterRemoveX);
+                        manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
+                        manager.OnLiveLayoutChanged?.Invoke(afterRemoveX);
+                        LogOp(Diagnostics.DockOperationKind.DragTearOut,
+                            $"cross-window dock-in pane='{pane.Key}' to existing floating window",
+                            paneKey: pane.Key?.ToString(),
+                            layoutOverride: afterRemoveX);
+                        DockHostLiveAnnouncer.Announce(manager,
+                            DockingStrings.LiveAnnouncement(DockingStringKeys.LiveDocked, pane.Title));
+                    }
+                    DockDragSession.MarkConsumed();
+                    session.End();
+                    setDragActive(false);
+                    bumpTick(t => t + 1);
                     return;
                 }
                 // §2.15 — record container before tearing out so a later

@@ -308,6 +308,23 @@ public sealed class DockHostModel
     /// </summary>
     /// <remarks>Spec 045 §2.16 — drain trigger.</remarks>
     internal Action? OnMutationQueued { get; set; }
+
+    /// <summary>
+    /// Spec 045 §4.2 cross-window dock-in. Invoked by a different window's
+    /// drop-target overlay (notably <see cref="DockFloatingWindow"/>) when
+    /// a pane belonging to this host's layout was dropped into a tab group
+    /// in that other window. The native host wires a closure that removes
+    /// the pane from this host's effective layout, stores the override,
+    /// fires <c>OnContentFloated</c> / <c>OnLiveLayoutChanged</c>, and
+    /// emits a diagnostics op-log entry. Null when the model is detached.
+    /// </summary>
+    /// <remarks>
+    /// The receiving overlay is responsible for adding the pane into its
+    /// own tab group BEFORE invoking this hook; calling order matters
+    /// only inasmuch as the source removal and destination insertion
+    /// both run synchronously on the UI thread.
+    /// </remarks>
+    internal Action<DockableContent>? OnExternalCrossWindowDrop { get; set; }
 }
 
 /// <summary>

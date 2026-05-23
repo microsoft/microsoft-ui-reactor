@@ -45,7 +45,8 @@ public sealed record DockTabGroup(
     bool ShowWhenEmpty = false,
     int SelectedIndex = -1,
     double? Width = null,
-    double? Height = null) : DockNode;
+    double? Height = null,
+    TabChrome TabChrome = TabChrome.Win11) : DockNode;
 
 /// <summary>
 /// A single dockable pane — the leaf of the dock tree. Carries

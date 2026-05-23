@@ -287,4 +287,44 @@ public class DockTabGroupRendererTests
 
         Assert.False(tab.Tabs[0].IsPinnable);
     }
+
+    // ── §4.6 TabChrome ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_DefaultTabChrome_IsWin11()
+    {
+        var group = new DockTabGroup(new DockableContent[] { new("A") });
+        Assert.Equal(TabChrome.Win11, group.TabChrome);
+    }
+
+    [Theory]
+    [InlineData(TabChrome.Win11,    1)] // blanker only
+    [InlineData(TabChrome.Flat,     2)] // blanker + apply
+    [InlineData(TabChrome.TitleBar, 2)] // blanker + apply
+    public void BuildSetters_HasBlankerPlusOptionalApply(TabChrome chrome, int expectedCount)
+    {
+        // Pool-safety contract per §4.6 — every preset starts with the
+        // shared "clear managed keys" setter so a TabView reused across
+        // chrome flips doesn't leak prior overrides.
+        var group = new DockTabGroup(new DockableContent[] { new("A") }, TabChrome: chrome);
+        var setters = DockTabGroupRenderer.BuildSetters(group);
+        Assert.Equal(expectedCount, setters.Length);
+    }
+
+    [Fact]
+    public void ManagedResourceKeys_AreLocked()
+    {
+        // The exact key set is part of the §4.6 chrome contract: it
+        // defines what gets blanked between chrome flips. Lock the list
+        // so a refactor that drops a key without adjusting consumers
+        // surfaces here.
+        Assert.Equal(new[]
+        {
+            "TabViewItemHeaderCornerRadius",
+            "TabViewItemHeaderPadding",
+            "TabViewItemHeaderBackgroundSelected",
+            "TabViewItemHeaderBackgroundPointerOver",
+            "TabViewBackground",
+        }, DockTabGroupRenderer.ManagedResourceKeys);
+    }
 }

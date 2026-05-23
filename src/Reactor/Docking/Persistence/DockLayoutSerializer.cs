@@ -228,6 +228,14 @@ public static class DockLayoutSerializer
             Documents = grp.Documents.Select(ConvertPane).ToList(),
             TabPosition = grp.TabPosition == Docking.TabPosition.Top ? "top" : "bottom",
             CompactTabs = grp.CompactTabs ? true : null,
+            // §4.6: only emit when non-default. Keeps legacy files unchanged.
+            TabChrome = grp.TabChrome switch
+            {
+                Docking.TabChrome.Win11    => null,
+                Docking.TabChrome.Flat     => "flat",
+                Docking.TabChrome.TitleBar => "titleBar",
+                _ => null,
+            },
             ShowWhenEmpty = grp.ShowWhenEmpty ? true : null,
             SelectedIndex = grp.SelectedIndex >= 0 ? grp.SelectedIndex : null,
             Width = grp.Width, Height = grp.Height,
@@ -332,12 +340,20 @@ public static class DockLayoutSerializer
             "bottom"      => Docking.TabPosition.Bottom,
             _ => throw new InvalidOperationException($"tabGroup node has invalid tabPosition '{node.TabPosition}'"),
         };
+        var chrome = node.TabChrome switch
+        {
+            null or "win11" => Docking.TabChrome.Win11,
+            "flat"          => Docking.TabChrome.Flat,
+            "titleBar"      => Docking.TabChrome.TitleBar,
+            _ => throw new InvalidOperationException($"tabGroup node has invalid tabChrome '{node.TabChrome}'"),
+        };
         return new DockTabGroup(docs,
             TabPosition: tabPos,
             CompactTabs: node.CompactTabs ?? false,
             ShowWhenEmpty: node.ShowWhenEmpty ?? false,
             SelectedIndex: node.SelectedIndex ?? -1,
-            Width: node.Width, Height: node.Height);
+            Width: node.Width, Height: node.Height,
+            TabChrome: chrome);
     }
 
     private static DockableContent ConvertPaneBackAsLeaf(DockLayoutPane pane) =>

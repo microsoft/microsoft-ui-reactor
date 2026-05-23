@@ -89,6 +89,7 @@ InfoBadge() → InfoBadgeElement
 InfoBadge(int value) → InfoBadgeElement
 InfoBar(string title = null, string message = null) → InfoBarElement
 InterspersedGrid(Orientation orientation, Element[] items, double[] proportions, double separatorSize, Func<int, Element> separatorFactory) → GridElement
+ItemContainer(Element child) → ItemContainerElement
 ItemsView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → ItemsViewElement<T>
 LazyHStack<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
 LazyHStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
@@ -346,6 +347,7 @@ InfoBarElement.Set(Action<InfoBar> configure) → InfoBarElement
 InfoBarElement.Severity(InfoBarSeverity severity) → InfoBarElement
 InfoBarElement.Success() → InfoBarElement
 InfoBarElement.Warning() → InfoBarElement
+ItemContainerElement.Set(Action<ItemContainer> configure) → ItemContainerElement
 ItemsViewElement<T>.ItemInvoked<T>(Action<T> handler) → ItemsViewElement<T>
 ItemsViewElement<T>.SelectionChanged<T>(Action<IReadOnlyList<T>> handler) → ItemsViewElement<T>
 ItemsViewElement<T>.Set<T>(Action<ItemsView> configure) → ItemsViewElement<T>
@@ -918,6 +920,7 @@ DockOperationKind { Mount, DragStart, DragHover, DragConfirm, DragCancel, DragTe
 DockPaneState { Docked, Floating, AutoHidden, AutoHiddenExpanded, Hidden }
 DockSide { Left, Top, Right, Bottom }
 DockTarget { Center, SplitLeft, SplitTop, SplitRight, SplitBottom, DockLeft, DockTop, DockRight, DockBottom }
+TabChrome { Win11, Flat, TitleBar }
 TabPosition { Top, Bottom }
 DragOperations { None, Copy, Move, Link, All }
 GesturePhase { Began, Changed, Ended, Cancelled }

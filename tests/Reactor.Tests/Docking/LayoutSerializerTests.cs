@@ -100,6 +100,91 @@ public class LayoutSerializerTests
         Assert.Equal(1, loaded.SelectedIndex);
     }
 
+    // ── TabChrome (spec 045 §4.6) ──────────────────────────────────────
+
+    [Theory]
+    [InlineData(TabChrome.Win11)]
+    [InlineData(TabChrome.Flat)]
+    [InlineData(TabChrome.TitleBar)]
+    public void RoundTrip_TabChrome(TabChrome chrome)
+    {
+        var tabs = new DockTabGroup(
+            new DockableContent[] { new Document { Title = "T1", Key = "t1" } },
+            TabChrome: chrome);
+
+        var json = DockLayoutSerializer.Save(tabs);
+        var loaded = Assert.IsType<DockTabGroup>(DockLayoutSerializer.Load(json).Root);
+        Assert.Equal(chrome, loaded.TabChrome);
+    }
+
+    [Fact]
+    public void Save_OmitsTabChromeFieldWhenDefault()
+    {
+        // §4.6 — Win11 is the back-compat default; serializer keeps JSON
+        // small + legacy files untouched by skipping the field on default.
+        var tabs = new DockTabGroup(
+            new DockableContent[] { new Document { Title = "T1", Key = "t1" } });
+
+        var json = DockLayoutSerializer.Save(tabs);
+        Assert.DoesNotContain("tabChrome", json);
+    }
+
+    [Fact]
+    public void Save_EmitsTabChromeFieldWhenNonDefault()
+    {
+        var tabs = new DockTabGroup(
+            new DockableContent[] { new Document { Title = "T1", Key = "t1" } },
+            TabChrome: TabChrome.Flat);
+
+        var json = DockLayoutSerializer.Save(tabs);
+        Assert.Contains("\"tabChrome\":\"flat\"", json);
+    }
+
+    [Fact]
+    public void Load_LegacyJsonWithoutTabChrome_DefaultsToWin11()
+    {
+        // §4.6 back-compat: layouts written before TabChrome must still
+        // load with the default chrome. Builds a synthetic JSON without
+        // the field to lock in the contract.
+        var json = """
+        {
+          "$schema": 2,
+          "root": {
+            "kind": "tabGroup",
+            "documents": [ { "title": "T1", "key": "t1", "role": "document" } ],
+            "tabPosition": "top"
+          }
+        }
+        """;
+        var loaded = Assert.IsType<DockTabGroup>(DockLayoutSerializer.Load(json).Root);
+        Assert.Equal(TabChrome.Win11, loaded.TabChrome);
+    }
+
+    [Fact]
+    public void Load_UnknownTabChrome_FailsValidationToFallback()
+    {
+        // Load() wraps validation errors into a fallback result rather
+        // than throwing, so callers can recover layout gracefully (§2.7).
+        // We still want the contract: unknown TabChrome strings are
+        // not silently coerced — the load is reported as a failure with
+        // a "tabChrome" mention in the diagnostic message.
+        var json = """
+        {
+          "$schema": 2,
+          "root": {
+            "kind": "tabGroup",
+            "documents": [ { "title": "T1", "key": "t1", "role": "document" } ],
+            "tabPosition": "top",
+            "tabChrome": "neon-pink"
+          }
+        }
+        """;
+        var result = DockLayoutSerializer.Load(json);
+        Assert.True(result.IsFallback);
+        Assert.NotNull(result.FailureReason);
+        Assert.Contains("tabChrome", result.FailureReason);
+    }
+
     [Fact]
     public void RoundTrip_Sides()
     {

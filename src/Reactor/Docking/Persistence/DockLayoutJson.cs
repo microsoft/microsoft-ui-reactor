@@ -101,6 +101,14 @@ internal sealed class DockLayoutNode
     [JsonPropertyName("compactTabs")]
     public bool? CompactTabs { get; set; }
 
+    /// <summary>
+    /// Visual chrome preset for tabGroup nodes ("win11" | "flat" | "titleBar").
+    /// Missing/null = "win11" (back-compat — legacy layout files predate the
+    /// field). Spec 045 §4.6.
+    /// </summary>
+    [JsonPropertyName("tabChrome")]
+    public string? TabChrome { get; set; }
+
     /// <summary>Whether the group renders when empty (tabGroup nodes).</summary>
     [JsonPropertyName("showWhenEmpty")]
     public bool? ShowWhenEmpty { get; set; }

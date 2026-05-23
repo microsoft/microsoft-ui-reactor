@@ -12,6 +12,40 @@ public enum TabPosition
 }
 
 /// <summary>
+/// Visual chrome preset applied to a <see cref="DockTabGroup"/>'s tab strip.
+/// Maps onto WinUI <c>TabView</c> resource-dictionary overrides — the
+/// underlying control and accessibility tree are unchanged across presets.
+/// </summary>
+/// <remarks>
+/// Spec 045 §4.6 — partial close-out. Selecting a preset doesn't replace
+/// the control's template; it scopes a handful of theme-resource overrides
+/// to that one <c>TabView</c>. New presets land additively; default is
+/// <see cref="Win11"/> so existing layouts re-render unchanged.
+/// </remarks>
+public enum TabChrome
+{
+    /// <summary>
+    /// Default Windows 11 TabView look: rounded header corners, theme
+    /// background. No resource overrides applied.
+    /// </summary>
+    Win11,
+
+    /// <summary>
+    /// Sharp, dense IDE chrome: zero corner radius on tab headers, tighter
+    /// header padding. Modeled after the VS Code / classic-Visual-Studio
+    /// document-tab look.
+    /// </summary>
+    Flat,
+
+    /// <summary>
+    /// Tab-strip background uses <c>TitleBarBackgroundFillBrush</c> (when
+    /// available) so the strip blends into the system title bar. Corner
+    /// radius is unchanged from <see cref="Win11"/>. Spec 045 §4.6.
+    /// </summary>
+    TitleBar,
+}
+
+/// <summary>
 /// Where to dock a pane when programmatically issuing
 /// <c>DockTo(target, DockTarget)</c>. Split targets land inside the
 /// current group's split parent; edge targets land at the manager root.

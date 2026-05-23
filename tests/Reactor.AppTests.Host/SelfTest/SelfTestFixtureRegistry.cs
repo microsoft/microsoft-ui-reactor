@@ -910,6 +910,11 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_DropTargetOverlayShowsAndDismisses",
         "NativeDocking_DragSessionConfirmMutatesLayout",
         "NativeDocking_ModelDrain_DockCloseActivatePinAffectsLiveTree",
+        "NativeDocking_TabChromePresetsApplyAndClear",
+        // Floating window TitleBar chrome (spec 045 §4.2 / §4.3 / §4.8).
+        "NativeDocking_FloatingWindow_TitleBarChromeAndTabsInTitleBar",
+        "NativeDocking_FloatingWindow_TitleBarPerWindow_NoCrossWiring",
+        "NativeDocking_FloatingWindow_ClosingLastTabClosesWindow",
         // Reliability + security (spec 045 §2.24, §2.25).
         "NativeDocking_Reliability_CorruptLayoutFallback_HostMounted",
         "NativeDocking_Reliability_OffThreadMutation_ThrowsAndDoesNotQueue",
@@ -1842,6 +1847,10 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_DropTargetOverlayShowsAndDismisses" => new NativeDockingSmokeFixtures.DropTargetOverlayShowsAndDismisses(harness),
         "NativeDocking_DragSessionConfirmMutatesLayout" => new NativeDockingSmokeFixtures.DragSessionConfirmMutatesLayout(harness),
         "NativeDocking_ModelDrain_DockCloseActivatePinAffectsLiveTree" => new NativeDockingSmokeFixtures.ModelDrain_DockCloseActivatePinAffectsLiveTree(harness),
+        "NativeDocking_TabChromePresetsApplyAndClear" => new NativeDockingSmokeFixtures.TabChromePresetsApplyAndClear(harness),
+        "NativeDocking_FloatingWindow_TitleBarChromeAndTabsInTitleBar" => new NativeDockingSmokeFixtures.FloatingWindow_TitleBarChromeAndTabsInTitleBar(harness),
+        "NativeDocking_FloatingWindow_TitleBarPerWindow_NoCrossWiring" => new NativeDockingSmokeFixtures.FloatingWindow_TitleBarPerWindow_NoCrossWiring(harness),
+        "NativeDocking_FloatingWindow_ClosingLastTabClosesWindow" => new NativeDockingSmokeFixtures.FloatingWindow_ClosingLastTabClosesWindow(harness),
         "NativeDocking_Reliability_CorruptLayoutFallback_HostMounted" => new NativeDockingReliabilityFixtures.CorruptLayoutFallback_HostMounted(harness),
         "NativeDocking_Reliability_OffThreadMutation_ThrowsAndDoesNotQueue" => new NativeDockingReliabilityFixtures.OffThreadMutation_ThrowsAndDoesNotQueue(harness),
         "NativeDocking_Reliability_UseEffectCleanup_BodyRemovedOnPaneClose" => new NativeDockingReliabilityFixtures.UseEffectCleanup_BodyRemovedOnPaneClose(harness),

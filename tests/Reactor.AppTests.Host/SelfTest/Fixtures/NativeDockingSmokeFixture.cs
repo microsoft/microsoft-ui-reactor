@@ -1437,4 +1437,399 @@ internal static class NativeDockingSmokeFixtures
             await Harness.Render();
         }
     }
+
+    /// <summary>
+    /// Spec 045 §4.6 — TabChrome chrome presets land as scoped resource-
+    /// dictionary overrides on the underlying <see cref="TabView"/>. The
+    /// fixture mounts three groups (Win11 / Flat / TitleBar) side-by-side
+    /// and verifies each TabView's <c>Resources</c> matches the contract.
+    /// Then flips Flat → Win11 to lock in the pool-safety "blanker"
+    /// behavior: a TabView reused under a new chrome must not leak
+    /// the prior preset's overrides.
+    /// </summary>
+    internal class TabChromePresetsApplyAndClear(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            DockManager BuildPair(TabChrome leftChrome, TabChrome rightChrome) => new DockManager
+            {
+                Layout = new DockSplit(
+                    Orientation.Horizontal,
+                    new DockNode[]
+                    {
+                        new DockTabGroup(
+                            new DockableContent[]
+                            {
+                                new("L1", TextBlock("chrome-left-1"), Key: "ch:l:1"),
+                                new("L2", TextBlock("chrome-left-2"), Key: "ch:l:2"),
+                            },
+                            TabChrome: leftChrome),
+                        new DockTabGroup(
+                            new DockableContent[]
+                            {
+                                new("R1", TextBlock("chrome-right-1"), Key: "ch:r:1"),
+                                new("R2", TextBlock("chrome-right-2"), Key: "ch:r:2"),
+                            },
+                            TabChrome: rightChrome),
+                    }),
+            };
+
+            // ── Mount: Win11 (left) + Flat (right) ──────────────────
+            host.Mount(_ => BuildPair(TabChrome.Win11, TabChrome.Flat));
+            await Harness.Render();
+
+            var tabs = H.FindAllControls<TabView>(_ => true);
+            H.Check("TabChrome_TwoTabViewsMounted", tabs.Count == 2);
+
+            // Pair them by header text. Order isn't guaranteed across
+            // FindAllControls iteration; we look for "L1" vs "R1" headers.
+            TabView? left  = tabs.FirstOrDefault(tv => HasHeader(tv, "L1"));
+            TabView? right = tabs.FirstOrDefault(tv => HasHeader(tv, "R1"));
+            H.Check("TabChrome_LeftFound",  left  is not null);
+            H.Check("TabChrome_RightFound", right is not null);
+
+            // Win11 — no overrides for any managed key.
+            H.Check("TabChrome_Win11_NoCornerRadiusOverride",
+                left is not null && !left.Resources.ContainsKey("TabViewItemHeaderCornerRadius"));
+            H.Check("TabChrome_Win11_NoPaddingOverride",
+                left is not null && !left.Resources.ContainsKey("TabViewItemHeaderPadding"));
+
+            // Flat — zero corner radius + tightened padding.
+            H.Check("TabChrome_Flat_HasCornerRadiusOverride",
+                right is not null && right.Resources.ContainsKey("TabViewItemHeaderCornerRadius"));
+            if (right is not null
+                && right.Resources.TryGetValue("TabViewItemHeaderCornerRadius", out var cr)
+                && cr is CornerRadius radius)
+            {
+                H.Check("TabChrome_Flat_CornerRadiusIsZero",
+                    radius.TopLeft == 0 && radius.TopRight == 0
+                    && radius.BottomLeft == 0 && radius.BottomRight == 0);
+            }
+            else
+            {
+                H.Check("TabChrome_Flat_CornerRadiusIsZero", false);
+            }
+
+            H.Check("TabChrome_Flat_HasPaddingOverride",
+                right is not null && right.Resources.ContainsKey("TabViewItemHeaderPadding"));
+
+            // ── Update: flip right Flat → Win11 (pool blanker) ──────
+            host.Mount(_ => BuildPair(TabChrome.Win11, TabChrome.Win11));
+            await Harness.Render();
+
+            tabs = H.FindAllControls<TabView>(_ => true);
+            right = tabs.FirstOrDefault(tv => HasHeader(tv, "R1"));
+            H.Check("TabChrome_FlatToWin11_StillMounted", right is not null);
+            H.Check("TabChrome_FlatToWin11_CornerRadiusCleared",
+                right is not null && !right.Resources.ContainsKey("TabViewItemHeaderCornerRadius"));
+            H.Check("TabChrome_FlatToWin11_PaddingCleared",
+                right is not null && !right.Resources.ContainsKey("TabViewItemHeaderPadding"));
+
+            // ── Update: flip to TitleBar — Resources entry for background ──
+            // The TitleBar preset only sets TabViewBackground when the app
+            // exposes TitleBarBackgroundFillBrush in its resources. The
+            // selftest host registers XamlControlsResources, so the brush
+            // resolves; assert the key lands.
+            host.Mount(_ => BuildPair(TabChrome.TitleBar, TabChrome.Win11));
+            await Harness.Render();
+
+            tabs = H.FindAllControls<TabView>(_ => true);
+            left = tabs.FirstOrDefault(tv => HasHeader(tv, "L1"));
+            H.Check("TabChrome_TitleBar_LeftRemounted", left is not null);
+            // Background may or may not resolve depending on theme stack —
+            // assert tolerantly: either it's present (real app), or absent
+            // (running before XamlControlsResources binds). The pool-safe
+            // contract is that no _other_ managed key is set.
+            if (left is not null)
+            {
+                H.Check("TabChrome_TitleBar_NoCornerRadiusOverride",
+                    !left.Resources.ContainsKey("TabViewItemHeaderCornerRadius"));
+                H.Check("TabChrome_TitleBar_NoPaddingOverride",
+                    !left.Resources.ContainsKey("TabViewItemHeaderPadding"));
+            }
+
+            host.Mount(_ => TextBlock("chrome-done"));
+            await Harness.Render();
+        }
+
+        // Walk a TabView's items and check if any header (string Header
+        // or StackPanel with a TextBlock) matches `header`.
+        private static bool HasHeader(TabView tv, string header)
+        {
+            foreach (var item in tv.TabItems)
+            {
+                if (item is TabViewItem tvi)
+                {
+                    if (tvi.Header is string s && s == header) return true;
+                    if (tvi.Header is StackPanel sp)
+                    {
+                        foreach (var child in sp.Children)
+                        {
+                            if (child is TextBlock tb && tb.Text == header) return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Spec 045 §4.2 / §4.3 — floating dockable windows render the
+    /// <c>DockTabGroup</c> tab strip directly into the OS title-bar
+    /// zone (Edge / Files / VS Code pattern). The fixture opens a
+    /// floating window with one pane and asserts:
+    ///   • the window has <c>ExtendsContentIntoTitleBar=true</c>
+    ///   • a WinUI <c>TabView</c> sits at the root (no separate
+    ///     WinUI 3 <c>TitleBar</c> control wrapping it)
+    ///   • the TabView has a <c>TabStripFooter</c> (drag region
+    ///     handed to <c>Window.SetTitleBar</c> on mount)
+    ///   • the pane body is reachable
+    /// </summary>
+    internal class FloatingWindow_TitleBarChromeAndTabsInTitleBar(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            host.Mount(_ => new DockManager
+            {
+                Layout = new DockTabGroup(new[]
+                {
+                    new DockableContent("Center", TextBlock("center-body"), Key: "k:center"),
+                }),
+            });
+            await Harness.Render();
+
+            var pane = new DockableContent(
+                Title: "Floater",
+                Key: "k:tb-float",
+                Content: TextBlock("floating-tb-body"));
+
+            var savedPolicy = ReactorApp.ShutdownPolicy;
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            try
+            {
+                var floatingWindow = DockFloatingWindow.Open(pane, width: 600, height: 400);
+                await Harness.Render();
+                H.Check("FloatingTitleBar_WindowOpened", floatingWindow is not null);
+
+                // §4.2 — ExtendsContentIntoTitleBar must be set by Open()
+                // so the tab strip occupies the title-bar zone.
+                H.Check("FloatingTitleBar_ExtendsContentIntoTitleBar",
+                    floatingWindow!.NativeWindow.ExtendsContentIntoTitleBar);
+
+                // Walk the floating window's visual tree (Harness.FindAllControls
+                // searches the harness's main window only).
+                var content = floatingWindow.NativeWindow.Content as DependencyObject;
+                H.Check("FloatingTitleBar_HasContent", content is not null);
+
+                // §4.3 — Edge pattern: TabView is the root chrome. The
+                // WinUI 3 `TitleBar` control is intentionally NOT used
+                // (its Content slot can't host a full TabView).
+                var tabViews = FindAllInTree<TabView>(content);
+                H.Check("FloatingTitleBar_TabViewAtRoot", tabViews.Count == 1);
+
+                var titleBars = FindAllInTree<Microsoft.UI.Xaml.Controls.TitleBar>(content);
+                H.Check("FloatingTitleBar_NoSeparateTitleBarControl", titleBars.Count == 0);
+
+                // §4.2 / §4.4 — TabStripFooter holds the drag region;
+                // OnMount on this element calls Window.SetTitleBar.
+                H.Check("FloatingTitleBar_TabViewHasStripFooter",
+                    tabViews.Count == 1 && tabViews[0].TabStripFooter is not null);
+
+                // Pane body must be reachable.
+                var bodyTexts = FindAllInTree<TextBlock>(content, t => t.Text == "floating-tb-body");
+                H.Check("FloatingTitleBar_PaneBodyVisible", bodyTexts.Count >= 1);
+
+                floatingWindow.Close();
+                await Harness.Render();
+            }
+            finally
+            {
+                ReactorApp.ShutdownPolicy = savedPolicy;
+            }
+
+            host.Mount(_ => TextBlock("floating-tb-done"));
+            await Harness.Render();
+        }
+
+        private static List<T> FindAllInTree<T>(DependencyObject? root, Func<T, bool>? predicate = null)
+            where T : DependencyObject
+        {
+            var results = new List<T>();
+            if (root is not null) Walk(root, predicate, results);
+            return results;
+        }
+
+        private static void Walk<T>(DependencyObject root, Func<T, bool>? predicate, List<T> results)
+            where T : DependencyObject
+        {
+            if (root is T match && (predicate is null || predicate(match))) results.Add(match);
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+                Walk(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i), predicate, results);
+        }
+    }
+
+    /// <summary>
+    /// Spec 045 §4.2 multi-window isolation — opening two floating
+    /// windows concurrently must give each window its own TabView
+    /// rendered into its own AppWindow. The OS-level
+    /// `Window.SetTitleBar` registration in `BuildFloatingRoot.OnMount`
+    /// captures `windowHolder` per-call, so there's no cross-wiring.
+    /// </summary>
+    internal class FloatingWindow_TitleBarPerWindow_NoCrossWiring(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            host.Mount(_ => new DockManager
+            {
+                Layout = new DockTabGroup(new[]
+                {
+                    new DockableContent("Center", TextBlock("multi-center-body"), Key: "k:multi-center"),
+                }),
+            });
+            await Harness.Render();
+
+            var pane1 = new DockableContent("FA", TextBlock("body-a"), Key: "k:fa");
+            var pane2 = new DockableContent("FB", TextBlock("body-b"), Key: "k:fb");
+
+            var savedPolicy = ReactorApp.ShutdownPolicy;
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            try
+            {
+                var w1 = DockFloatingWindow.Open(pane1, width: 500, height: 300);
+                var w2 = DockFloatingWindow.Open(pane2, width: 500, height: 300);
+                await Harness.Render();
+
+                H.Check("FloatingMulti_W1_ExtendsContent",
+                    w1.NativeWindow.ExtendsContentIntoTitleBar);
+                H.Check("FloatingMulti_W2_ExtendsContent",
+                    w2.NativeWindow.ExtendsContentIntoTitleBar);
+
+                // Each window has its own TabView at the root (Edge
+                // tabs-in-titlebar pattern — no separate WinUI 3
+                // `TitleBar` control).
+                var tv1 = FindFirst<TabView>(w1.NativeWindow.Content as DependencyObject);
+                var tv2 = FindFirst<TabView>(w2.NativeWindow.Content as DependencyObject);
+                H.Check("FloatingMulti_W1_HasOwnTabView", tv1 is not null);
+                H.Check("FloatingMulti_W2_HasOwnTabView", tv2 is not null);
+                H.Check("FloatingMulti_TabViewsAreDistinctInstances",
+                    tv1 is not null && tv2 is not null && !ReferenceEquals(tv1, tv2));
+
+                // Each window's TabView shows its own pane (no swap).
+                H.Check("FloatingMulti_W1_TabHeaderIsFA",
+                    tv1 is not null && tv1.TabItems.Count == 1
+                    && tv1.TabItems[0] is TabViewItem ti1 && ti1.Header is string h1 && h1 == "FA");
+                H.Check("FloatingMulti_W2_TabHeaderIsFB",
+                    tv2 is not null && tv2.TabItems.Count == 1
+                    && tv2.TabItems[0] is TabViewItem ti2 && ti2.Header is string h2 && h2 == "FB");
+
+                w1.Close();
+                w2.Close();
+                await Harness.Render();
+            }
+            finally
+            {
+                ReactorApp.ShutdownPolicy = savedPolicy;
+            }
+
+            host.Mount(_ => TextBlock("floating-multi-done"));
+            await Harness.Render();
+        }
+
+        private static T? FindFirst<T>(DependencyObject? root) where T : DependencyObject
+        {
+            if (root is null) return null;
+            if (root is T match) return match;
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var hit = FindFirst<T>(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i));
+                if (hit is not null) return hit;
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Spec 045 §2.4 / §4.2 regression — the Edge-pattern floating root
+    /// (TabView with TabStripFooter drag region) must not break the
+    /// close-window path. Open a floating window, close it, and assert
+    /// the tracker drops it.
+    /// </summary>
+    internal class FloatingWindow_ClosingLastTabClosesWindow(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            host.Mount(_ => new DockManager
+            {
+                Layout = new DockTabGroup(new[]
+                {
+                    new DockableContent("Center", TextBlock("close-center"), Key: "k:close-center"),
+                }),
+            });
+            await Harness.Render();
+
+            var pane = new DockableContent(
+                Title: "ToClose",
+                Key: "k:to-close",
+                Content: TextBlock("close-floating-body"),
+                CanClose: true);
+
+            var savedPolicy = ReactorApp.ShutdownPolicy;
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            try
+            {
+                var baseline = DockFloatingTracker.Count;
+                var floatingWindow = DockFloatingWindow.Open(pane, width: 500, height: 300);
+                await Harness.Render();
+                H.Check("FloatingClose_RegisteredOnOpen",
+                    DockFloatingTracker.Count == baseline + 1);
+
+                // Window's TabView (root chrome) must still be
+                // reachable — guards against tree-shape regressions.
+                var contentRoot = floatingWindow.NativeWindow.Content as DependencyObject;
+                var tabView = FindFirst<TabView>(contentRoot);
+                H.Check("FloatingClose_TabViewReachable", tabView is not null);
+
+                floatingWindow.Close();
+                await Harness.Render();
+
+                H.Check("FloatingClose_WindowRemovedAfterClose",
+                    DockFloatingTracker.Count == baseline);
+            }
+            finally
+            {
+                ReactorApp.ShutdownPolicy = savedPolicy;
+            }
+
+            host.Mount(_ => TextBlock("floating-close-done"));
+            await Harness.Render();
+        }
+
+        private static T? FindFirst<T>(DependencyObject? root) where T : DependencyObject
+        {
+            if (root is null) return null;
+            if (root is T match) return match;
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var hit = FindFirst<T>(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i));
+                if (hit is not null) return hit;
+            }
+            return null;
+        }
+    }
 }

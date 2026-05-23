@@ -194,25 +194,93 @@ internal static class DockTabGroupRenderer
     }
 
     /// <summary>
-    /// Hook for applying <see cref="DockTabGroup.TabPosition"/>-driven
-    /// chrome to the rendered <see cref="TabView"/>. WinUI's
-    /// <see cref="TabView"/> has no native bottom-tab mode; the upstream
-    /// WinUI.Dock workaround composes <c>ScaleY = -1</c> on the outer
-    /// control with counter-scales on every tab header (text + close
-    /// button) AND on every tab body — requiring access to template
-    /// parts of <c>TabViewItem</c> that aren't reachable without
-    /// subclassing.
+    /// Apply <see cref="DockTabGroup.TabChrome"/>-driven chrome to the
+    /// rendered <see cref="TabView"/>. Each preset is implemented as a
+    /// scoped resource-dictionary override on the <c>TabView</c> instance
+    /// — the underlying control template / accessibility tree are
+    /// unchanged across presets (spec 045 §4.6).
     ///
-    /// For P2 the bottom-tab variant intentionally renders as a
-    /// top-tab variant: legible, no upside-down text, but visually it
-    /// doesn't match upstream's bottom-strip placement. A true
-    /// translation lands when a dedicated tab-item subclass (or a
-    /// manual strip+content composition) replaces the shared
+    /// <para>
+    /// Pool-safety: a <c>TabView</c> may be reused across renders with a
+    /// different chrome. Every preset first calls <see cref="ClearManagedKeys"/>
+    /// to remove any keys a previous chrome may have written, then re-adds
+    /// only what the new chrome wants. <c>Win11</c> is the no-override
+    /// baseline — its setters strip prior overrides without adding anything.
+    /// </para>
+    ///
+    /// <para>
+    /// <see cref="DockTabGroup.TabPosition"/> is intentionally NOT wired
+    /// here. WinUI 3's <c>TabView</c> has no <c>TabStripPlacement</c> property
+    /// (microsoft-ui-xaml#7395); the upstream WinUI.Dock workaround composes
+    /// <c>ScaleY = -1</c> on the outer control with counter-scales on every
+    /// tab header (text + close button) AND on every tab body, requiring
+    /// access to template parts of <c>TabViewItem</c> that aren't reachable
+    /// without subclassing. For P2/P4 the bottom-tab variant intentionally
+    /// renders as a top-tab variant: legible, no upside-down text. A true
+    /// translation lands when a dedicated tab-item subclass (or a manual
+    /// strip+content composition) replaces the shared
     /// <see cref="TabViewElement"/>.
+    /// </para>
     /// </summary>
-    private static Action<TabView>[] BuildSetters(DockTabGroup group)
+    internal static Action<TabView>[] BuildSetters(DockTabGroup group) => group.TabChrome switch
     {
-        _ = group;
-        return Array.Empty<Action<TabView>>();
+        TabChrome.Win11    => [ClearManagedKeys],
+        TabChrome.Flat     => [ClearManagedKeys, ApplyFlatChrome],
+        TabChrome.TitleBar => [ClearManagedKeys, ApplyTitleBarChrome],
+        _                  => [ClearManagedKeys],
+    };
+
+    /// <summary>
+    /// Keys this renderer writes into <c>TabView.Resources</c>. Pool-safety
+    /// requires every chrome preset to remove all of these before writing
+    /// its own values; otherwise a Flat → Win11 transition would leak the
+    /// sharp-corner overrides into a control reused under a new chrome.
+    /// </summary>
+    internal static readonly string[] ManagedResourceKeys =
+    {
+        "TabViewItemHeaderCornerRadius",
+        "TabViewItemHeaderPadding",
+        "TabViewItemHeaderBackgroundSelected",
+        "TabViewItemHeaderBackgroundPointerOver",
+        "TabViewBackground",
+    };
+
+    private static void ClearManagedKeys(TabView tabView)
+    {
+        var res = tabView.Resources;
+        for (int i = 0; i < ManagedResourceKeys.Length; i++)
+        {
+            var key = ManagedResourceKeys[i];
+            if (res.ContainsKey(key)) res.Remove(key);
+        }
+    }
+
+    private static void ApplyFlatChrome(TabView tabView)
+    {
+        var res = tabView.Resources;
+        // Zero corner radius on every header state — header rests, pointer-
+        // over, selected, and pressed all share the resource. WinUI's
+        // TabView template reads it through a single ThemeResource key.
+        res["TabViewItemHeaderCornerRadius"] = new global::Microsoft.UI.Xaml.CornerRadius(0);
+        // Tighter padding squares up the IDE / VS Code feel; matches the
+        // density of a true document-tab strip rather than the looser
+        // Win11 default. Numbers chosen against the WinUI 2.0.1 default
+        // (8,0,8,0 horizontal) — drop top/bottom and tighten horizontals.
+        res["TabViewItemHeaderPadding"] = new global::Microsoft.UI.Xaml.Thickness(6, 0, 6, 0);
+    }
+
+    private static void ApplyTitleBarChrome(TabView tabView)
+    {
+        // Spec 045 §4.6 — tab-strip background uses TitleBarBackgroundFillBrush
+        // (when defined). Resolved against the running app's resources at
+        // render time; falls back silently when the brush isn't registered
+        // (e.g. test host with no theme dictionary loaded).
+        var res = tabView.Resources;
+        if (global::Microsoft.UI.Xaml.Application.Current?.Resources is { } appResources
+            && appResources.TryGetValue("TitleBarBackgroundFillBrush", out var brush)
+            && brush is global::Microsoft.UI.Xaml.Media.Brush)
+        {
+            res["TabViewBackground"] = brush;
+        }
     }
 }

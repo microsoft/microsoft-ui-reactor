@@ -63,7 +63,8 @@ class DockShowcaseRoot : Component
             SceneButton("persist",      "Scene E — Persistence",       scene, setScene),
             SceneButton("programmatic", "Scene F — Programmatic Dock", scene, setScene),
             SceneButton("sliders",      "Scene G — Slider Resize",     scene, setScene),
-            SceneButton("droptargets",  "Scene H — Drop Targets",      scene, setScene)
+            SceneButton("droptargets",  "Scene H — Drop Targets",      scene, setScene),
+            SceneButton("tabstyles",    "Scene I — Tab Styles",        scene, setScene)
         ).Width(240).Padding(8);
 
         Element body = scene switch
@@ -76,6 +77,7 @@ class DockShowcaseRoot : Component
             "programmatic" => Component<SceneFProgrammatic>(),
             "sliders"      => Component<SceneGSliders>(),
             "droptargets"  => Component<SceneHDropTargets>(),
+            "tabstyles"    => Component<SceneITabStyles>(),
             _              => TextBlock("Unknown scene"),
         };
 
@@ -1039,4 +1041,126 @@ class SceneGSliders : Component
             dock.Grid(row: 3)
         ).Padding(16);
     }
+}
+
+
+// ════════════════════════════════════════════════════════════════════════
+//  Scene I — Tab Styles (spec 045 §4.6)
+// ════════════════════════════════════════════════════════════════════════
+//
+//  Three tab-chrome presets side-by-side, plus the spec-documented
+//  fallback for TabPosition.Bottom (renders as Top in WinUI 3 — see
+//  microsoft-ui-xaml#7395; the upstream workaround requires subclassing
+//  TabViewItem to counter-scale the template parts).
+
+class SceneITabStyles : Component
+{
+    public override Element Render() => Grid(
+        new[] { GridSize.Star(1), GridSize.Star(1) },
+        new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(1), GridSize.Star(1), GridSize.Auto, GridSize.Auto },
+
+        TextBlock("Scene I — Tab Styles").FontSize(20).SemiBold()
+            .Grid(row: 0, column: 0, columnSpan: 2),
+
+        TextBlock(
+            "Three preset chromes for DockTabGroup.TabChrome. Same underlying " +
+            "WinUI TabView (full accessibility/keyboard parity) — only theme " +
+            "resources differ. Pick whichever matches your app's identity."
+        ).Opacity(0.8).Margin(0, 0, 0, 12)
+            .Grid(row: 1, column: 0, columnSpan: 2),
+
+        // Top-left — Win11 default
+        StyleCard(
+            "Win11 (default)",
+            "Rounded corners, theme background. The shipping Win11 TabView look.",
+            new DockTabGroup(
+                Documents: new[]
+                {
+                    new DockableContent("Welcome.md",  ChromeBody("# Welcome",         "Win11"),  Key: "i:w11:welcome"),
+                    new DockableContent("App.cs",      ChromeBody("class App {…}",     "Win11"),  Key: "i:w11:appcs"),
+                    new DockableContent("README",      ChromeBody("Project readme.",    "Win11"), Key: "i:w11:readme"),
+                },
+                TabChrome: TabChrome.Win11))
+            .Grid(row: 2, column: 0),
+
+        // Top-right — Flat (VS Code-style)
+        StyleCard(
+            "Flat (VS Code style)",
+            "Zero corner radius, tighter header padding. Modeled on the modern IDE document strip.",
+            new DockTabGroup(
+                Documents: new[]
+                {
+                    new DockableContent("Welcome.md",  ChromeBody("# Welcome",         "Flat"),   Key: "i:flat:welcome"),
+                    new DockableContent("App.cs",      ChromeBody("class App {…}",     "Flat"),   Key: "i:flat:appcs"),
+                    new DockableContent("README",      ChromeBody("Project readme.",    "Flat"),  Key: "i:flat:readme"),
+                },
+                TabChrome: TabChrome.Flat))
+            .Grid(row: 2, column: 1),
+
+        // Bottom-left — TitleBar (mica-ish; tab strip uses the title-bar brush)
+        StyleCard(
+            "TitleBar (chromeless feel)",
+            "Tab strip uses the system TitleBarBackgroundFillBrush so the strip " +
+            "blends with the window chrome (effective when ExtendsContentIntoTitleBar is on).",
+            new DockTabGroup(
+                Documents: new[]
+                {
+                    new DockableContent("Welcome.md",  ChromeBody("# Welcome",         "TitleBar"), Key: "i:tb:welcome"),
+                    new DockableContent("App.cs",      ChromeBody("class App {…}",     "TitleBar"), Key: "i:tb:appcs"),
+                    new DockableContent("README",      ChromeBody("Project readme.",    "TitleBar"), Key: "i:tb:readme"),
+                },
+                TabChrome: TabChrome.TitleBar))
+            .Grid(row: 3, column: 0),
+
+        // Bottom-right — Flat + CompactTabs (full classic VS feel)
+        StyleCard(
+            "Flat + CompactTabs",
+            "Same flat chrome paired with tightly-packed tabs — the closest match " +
+            "to the dense tool-window strip in classic Visual Studio.",
+            new DockTabGroup(
+                Documents: new[]
+                {
+                    new DockableContent("Errors",     ChromeBody("0 errors.",           "Flat compact"), Key: "i:flatc:err"),
+                    new DockableContent("Warnings",   ChromeBody("12 warnings.",        "Flat compact"), Key: "i:flatc:warn"),
+                    new DockableContent("Output",     ChromeBody("Build complete.",     "Flat compact"), Key: "i:flatc:out"),
+                    new DockableContent("Terminal",   ChromeBody("PS> _",               "Flat compact"), Key: "i:flatc:term"),
+                },
+                TabChrome: TabChrome.Flat,
+                CompactTabs: true))
+            .Grid(row: 3, column: 1),
+
+        // Position note
+        TextBlock(
+            "Note — TabPosition.Bottom currently renders as Top under WinUI 3. " +
+            "Microsoft.UI.Xaml.Controls.TabView has no TabStripPlacement property " +
+            "(microsoft-ui-xaml#7395). Spec 045 §4.6 / DockTabGroupRenderer line 196 " +
+            "documents the deferral; a real bottom strip lands when a custom " +
+            "TabViewItem subclass replaces the shared WinUI template."
+        ).Opacity(0.65).FontSize(11).Margin(0, 12, 0, 4)
+            .Grid(row: 4, column: 0, columnSpan: 2),
+
+        // Persistence note
+        TextBlock(
+            "Persistence — TabChrome serializes via the DockLayoutSerializer JSON; " +
+            "legacy layouts without the 	abChrome field default to Win11."
+        ).Opacity(0.55).FontSize(11)
+            .Grid(row: 5, column: 0, columnSpan: 2)
+    ).Padding(16);
+
+    // ── helpers ──────────────────────────────────────────────────────────
+
+    static Element StyleCard(string heading, string body, DockTabGroup group)
+        => VStack(6,
+            TextBlock(heading).SemiBold(),
+            TextBlock(body).Opacity(0.7).FontSize(11),
+            new DockManager { Layout = group }
+                .Height(180)
+                .Margin(0, 4, 0, 0)
+        ).Margin(0, 0, 8, 16);
+
+    static Element ChromeBody(string title, string chromeLabel)
+        => VStack(4,
+            TextBlock(title).SemiBold(),
+            TextBlock($"(rendered under TabChrome.{chromeLabel})").Opacity(0.55).FontSize(11)
+        ).Padding(12);
 }

@@ -596,9 +596,22 @@ WinUI.Dock wrapper for side-by-side review.
   WinUI.Dock string-keyed GUID table — spec §8.9 security).
   `DockDragSession` carries object refs to the dragged pane + source
   manager; there is no GUID table, no static dict keyed by string,
-  no serializable payload. Cross-window HWND-boundary drag itself
-  remains deferred to a follow-up (TabView's native cross-HWND drag
-  is the WinUI primitive there).
+  no serializable payload. **Cross-window HWND-boundary dock-in
+  (Center only) lands via a drop-completion cursor hit-test:**
+  `DockFloatingPaneRouter` (`src/Reactor/Docking/Native/`) maintains a
+  global `ReactorWindow → append-as-tab` registry; floating windows
+  self-register on mount (via dispatcher-deferred `UseEffect`) and
+  unregister on close. `HandleTabDragCompleted` (and the equivalent
+  hook on floating windows for floating→floating) Win32-hit-tests
+  `GetCursorPos` against each registered window's
+  `GetWindowRect` *before* falling back to tear-out, so a tab dropped
+  over another window's chrome appends as a new tab in that window's
+  tab group. The WinUI cross-window drag pipeline itself is
+  window-local (drag events do not cross XAML islands), so this
+  drop-completion hit-test is the canonical workaround; live-overlay
+  N/E/S/W targeting across windows remains deferred (the
+  `DockDropOverlayMode.CenterOnly` enum value is reserved for the
+  future overlay UX).
 - [x] Keyboard-initiated move: `Ctrl+Shift+M` enters drop-target focus
   mode (spec §5.3.3 / §8.7). Landed in §2.10 via the chord-bridge
   wiring on `DockHostNativeComponent.EnterKeyboardDropMode`; flips
@@ -2061,44 +2074,73 @@ re-run with new chrome plus eight visual items.
 
 ### 4.2 `TitleBar` control adoption (spec §7.1.1)
 
-- [ ] Floating dockable windows use
-  `Microsoft.UI.Xaml.Controls.TitleBar` as root chrome.
-- [ ] `ReactorWindow.NativeWindow.ExtendsContentIntoTitleBar = true`.
-- [ ] Root content gets `TitleBar` slot at top; docking tab strip lives
-  inside its content area.
-- [ ] Reactor's existing `TitleBar(...)` element (`src/Reactor/Elements/
-  Dsl.cs:610`, `TitleBarElement`) wires through `DockHost` for the
-  floating-window path.
+- [x] Floating dockable windows extend their content into the title-bar
+  zone so the tab strip becomes the visible chrome
+  (`WindowSpec.ExtendsContentIntoTitleBar = true`). *(The WinUI 3
+  `Microsoft.UI.Xaml.Controls.TitleBar` control is intentionally NOT
+  used here — its `Content` slot is a small in-row chrome slot
+  designed for things like Edge's address bar and cannot host a full
+  TabView with bodies. The Edge / Files pattern uses
+  `Window.SetTitleBar(...)` directly on a strip-footer drag region
+  instead. Reactor's `TitleBarElement` remains available for app
+  shells that want the control's distinct row layout.)*
+- [x] `ReactorWindow.NativeWindow.ExtendsContentIntoTitleBar = true`.
+- [x] Root content puts the docking tab strip in the title-bar zone
+  (Edge / Files / VS Code "tabs in title bar" layout).
+- [x] `Window.SetTitleBar(dragRegion)` is wired from a `TabStripFooter`
+  element so the OS reserves caption-button inset and treats the
+  footer area as window drag-move surface.
+
+*(Landed: `DockFloatingWindow.BuildFloatingRoot`
+(`src/Reactor/Docking/Native/DockFloatingWindow.cs`) renders the
+`DockTabGroup` as the floating window's root and adds a transparent
+`BorderElement` to `TabStripFooter` whose `OnMount` calls
+`floatingWindow.NativeWindow.SetTitleBar(self)`. `Open()` sets
+`WindowSpec.ExtendsContentIntoTitleBar = true`. Unit tests in
+`tests/Reactor.Tests/Docking/Native/DockFloatingWindowTests.cs`;
+visual coverage in selftest fixture
+`NativeDocking_FloatingWindow_TitleBarChromeAndTabsInTitleBar`.)*
 
 ### 4.3 Tabs in the title bar (spec §7.1.2) — headline feature
 
-- [ ] **Single-group float:** tab strip renders inside `TitleBar`
-  content slot, flush with caption buttons, active tab styles as
-  window's identity (Edge / Files / modern-VS pattern).
+- [x] **Single-group float:** tab strip occupies the title-bar zone at
+  y=0, flush with OS caption buttons, active tab styles as the
+  window's identity (Edge / Files / modern-VS pattern). *(Implemented
+  via `ExtendsContentIntoTitleBar=true` + TabView at root + drag
+  region in `TabStripFooter` registered via `Window.SetTitleBar`.)*
 - [ ] **Multi-group float:** revert to standard floating title (via
   `IDockAdapter.GetFloatingWindowTitleBar`); tabs render in normal pane
-  position. The same `GetFloatingWindowTitleBar` surface continues to
-  exist — it supplies the non-tab portion (text/branding) in both
-  modes.
+  position. *(Deferred: floating windows are single-pane today; the
+  multi-group float infrastructure itself is a separate slice.)*
 - [ ] Drag semantics:
-  - [ ] Drag a **tab** → tear it out (most-tested case; tab now lives
-    inside OS-managed title-bar hit-test surface).
-  - [ ] Drag **title-bar background** (non-tab, non-caption) → move
-    floating window. OS-handled.
+  - [x] Drag a **tab** → tear it out. *(Existing `onTabDragStarting`
+    path continues to work in the new layout.)*
+  - [x] Drag **title-bar background** (non-tab, non-caption) → move
+    floating window. *(OS-handled via the `TabStripFooter` drag region
+    registered with `Window.SetTitleBar` — `MinWidth(180)` ensures a
+    grabbable region even with many tabs.)*
   - [ ] Drag **active tab when it is the only tab** → moves whole
-    window (single-tab floats behave like normal windows).
+    window. *(Deferred: `onTabDragStarting` currently fires tear-out
+    unconditionally.)*
 - [ ] `AppWindow.TitleBar.SetDragRectangles` integration: hit-test
   regions computed per frame from tab-strip measured geometry; pushed
   to OS so it knows interactive vs drag-region sub-rects.
-- [ ] **Debounce `SetDragRectangles` to layout-measure-change events**
-  (not every-frame). Perf budget per spec §7.3 + §8.5.
+  *(N/A — we hand the OS a single `TabStripFooter` element via
+  `Window.SetTitleBar`, which is the modern WinUI 3 replacement for
+  explicit `SetDragRectangles` plumbing.)*
+- [ ] **Debounce `SetDragRectangles` to layout-measure-change events.**
+  *(N/A — see above.)*
 
 ### 4.4 Caption-button area awareness (spec §7.1.5)
 
-- [ ] Tab strip reserves `AppWindow.TitleBar.RightInset` as
-  right-padding (LeftInset in RTL).
-- [ ] Subscribe to `AppWindowTitleBar.LayoutMetricsChanged`; re-measure
-  on next layout pass (handles theme switch flipping RTL mid-flight).
+- [x] Tab strip reserves caption-button inset automatically — the
+  `Window.SetTitleBar(footer)` registration tells the OS where
+  caption buttons should sit (top-right) and the buttons render over
+  the right edge of the footer drag region.
+- [x] OS handles RTL / theme-switch caption-button placement via the
+  same `SetTitleBar` registration; no manual
+  `LayoutMetricsChanged` subscription required for the current
+  Window-level inset behavior.
 
 ### 4.5 Snap Layouts (spec §7.1.3)
 
@@ -2113,8 +2155,16 @@ re-run with new chrome plus eight visual items.
 - [ ] Floating dockable windows inherit `WindowSpec.Backdrop`
   (spec 036 §4.1, §5).
 - [ ] Splitter gutters semi-transparent under Mica / Acrylic.
-- [ ] Tab-strip background uses `TitleBarBackgroundFillBrush`, not a
-  hard color.
+- [x] Tab-strip background uses `TitleBarBackgroundFillBrush`, not a
+  hard color. *(Phase 4 slice landed: `TabChrome` enum on `DockTabGroup`
+  with `Win11` / `Flat` / `TitleBar` presets, scoped to each TabView's
+  `Resources` via `DockTabGroupRenderer.BuildSetters`. `TitleBar` preset
+  resolves `TitleBarBackgroundFillBrush` from `Application.Current.Resources`
+  and writes to `TabViewBackground`; pool-safe via a "blanker" setter
+  that strips all managed keys before applying a new preset. JSON
+  persistence: optional `tabChrome` field, omitted on `Win11` for
+  legacy-file back-compat. Dock-showcase **Scene I — Tab Styles** is
+  the visual gate input for §4.11 Item 23.)*
 
 ### 4.7 Dark mode / accent color (spec §7.1.6)
 
@@ -2124,9 +2174,15 @@ re-run with new chrome plus eight visual items.
 
 ### 4.8 Floating-window persona (spec §7.1.7)
 
-- [ ] Single-tab float: tab `Title` and `Icon` → `AppWindow.Title` and
-  `AppWindow.SetIcon`. Alt-tab shows the tab title.
-- [ ] Multi-tab float: active tab's title reflected.
+- [x] Single-tab float: tab `Title` → `AppWindow.Title`. Alt-tab shows
+  the tab title. *(Title landed: `DockFloatingWindow.Open` passes
+  `pane.Title` as `WindowSpec.Title`. Icon deferred: `DockableContent`
+  has no `Icon` field yet — adding one is a separate slice.
+  Note: in the Edge tabs-in-titlebar layout the tab itself displays
+  the title text; there is no separate WinUI 3 `TitleBar` widget to
+  also bind to. `AppWindow.Title` still controls taskbar / alt-tab.)*
+- [ ] Multi-tab float: active tab's title reflected. *(Deferred with
+  multi-tab float — see §4.3 above.)*
 - [ ] Composition with spec 036 §8 persistence: persisted Window
   identity is the dockable-window key, not the transient tab content.
 

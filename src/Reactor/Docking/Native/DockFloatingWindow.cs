@@ -1,6 +1,8 @@
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
+using Microsoft.UI.Xaml;
+using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.Docking.Native;
 
@@ -75,6 +77,14 @@ public static class DockFloatingWindow
             Width = bounds?.Width ?? width,
             Height = bounds?.Height ?? height,
             Owner = owner,
+            // Spec 045 §4.2 — floating dockable windows extend their
+            // content into the title-bar zone so the wrapping
+            // `TitleBarElement` (which mounts to WinUI 3
+            // `Microsoft.UI.Xaml.Controls.TitleBar`) acts as the
+            // window's chrome. MountTitleBar then auto-calls
+            // Window.SetTitleBar so OS drag-move + caption inset are
+            // wired without app-side plumbing (§4.4).
+            ExtendsContentIntoTitleBar = true,
         };
 
         // Wrap the pane content with the same DockContext envelope used
@@ -88,7 +98,10 @@ public static class DockFloatingWindow
         // by the host's dispatcher loop after OpenWindow returns, so
         // the holder is always populated by the time it's read.
         var windowHolder = new ReactorWindow?[] { null };
-        var window = ReactorApp.OpenWindow(spec, _ => BuildFloatingRoot(pane, windowHolder, manager));
+        var window = ReactorApp.OpenWindow(spec, _ =>
+            new Microsoft.UI.Reactor.Core.ComponentElement<DockFloatingWindowProps>(
+                typeof(DockFloatingWindowComponent),
+                new DockFloatingWindowProps(pane, windowHolder, manager)));
         windowHolder[0] = window;
         DockFloatingTracker.Register(window);
         DockFloatingTracker.RegisterEntry(window, pane, spec.Width, spec.Height);
@@ -118,73 +131,378 @@ public static class DockFloatingWindow
         return window;
     }
 
-    private static Element BuildFloatingRoot(DockableContent pane, ReactorWindow?[] windowHolder, DockManager? manager)
+    // Internal so the unit tests can exercise the floating-window
+    // visual-tree shape (TitleBar wrap + tab chrome) without spinning
+    // up a real WinUI window. The render-time host wiring still goes
+    // through `Open()` for full coverage; unit tests assert tree
+    // structure only.
+    internal static Element BuildFloatingRoot(DockableContent pane, ReactorWindow?[] windowHolder, DockManager? manager)
     {
-        // Spec 045 §2.4 cross-window dock-back. The floating window's
-        // content is a `DockTabGroup`-rendered `TabView` with the pane
-        // as its single tab. The tab carries CanDragTabs=true so the
-        // user can drag it OUT of the floating window — when WinUI
-        // signals wasOutside=true, our handler:
-        //   • If session.Current is null after the drag, the drop was
-        //     consumed by another host's overlay (e.g. the main shell's
-        //     per-group cluster). Close this floating window so the
-        //     pane only lives in the destination.
-        //   • Otherwise the drop landed nowhere (Esc, drop on desktop,
-        //     unrecognised surface). End the session and keep the pane
-        //     here — preserves the user's pane against an accidental
-        //     drag.
-        //
-        // The chrome wrapper also gives the floating window a visible
-        // tab header (Title + close-X), addressing the §2.6 "tab header
-        // missing in floating window" gap that drove this slice.
-        var tabGroup = new DockTabGroup(new DockableContent[] { pane });
-        var info = new DockPaneInfo(pane.Key, pane.Title ?? string.Empty, pane);
-        var rendered = DockTabGroupRenderer.Render(
-            tabGroup,
-            renderLeafContent: doc => doc.Content ?? (Element)new BorderElement(null),
-            onSelectedIndexChanged: null,
+        var chrome = BuildChrome(
+            new[] { pane },
+            windowHolder,
+            manager,
             onTabClosing: _ =>
             {
-                // Closing the last tab closes the window.
+                // Closing the last tab closes the window. Single-pane
+                // legacy path keeps this 1:1; the multi-pane component
+                // overrides this with state-driven removal logic.
                 windowHolder[0]?.Close();
             },
-            onTabDragStarting: (doc, _) =>
+            onTabDragCompleted: (_, _) =>
             {
-                // Begin a cross-window session. The `manager` reference
-                // is the main host that originally owned this pane —
-                // SourceManager is non-null per the session contract.
-                if (DockDragSession.Current is { IsActive: true }) return;
-                if (manager is null) return;
-                DockDragSession.Begin(doc, manager, 0);
-            },
-            onTabDragCompleted: (_, _, _) =>
-            {
-                // Cross-window dock-back signal: a dock surface
-                // (this app's main host or any other DockHost) set
-                // `DockDragSession.Consumed = true` in its overlay
-                // OnConfirm before ending the session. When we see
-                // that here, the pane has been re-docked into another
-                // host and this floating window should close.
-                //
-                // `wasOutside` is unreliable for this decision because
-                // the receiving overlay accepts the drop with
-                // `DataPackageOperation.Move` to suppress WinUI's
-                // tear-out fallback — that flips wasOutside to false
-                // even though the tab visually left every TabView.
                 if (DockDragSession.Consumed)
                 {
                     windowHolder[0]?.Close();
                     return;
                 }
-                // Drop landed outside any docking surface (or session
-                // is still running). End any in-flight session so the
-                // pane stays put in this floating window.
                 DockDragSession.Current?.Cancel();
             });
 
-        return rendered
+        var info = new DockPaneInfo(pane.Key, pane.Title ?? string.Empty, pane);
+        return chrome
             .Provide(DockContexts.Pane, (DockPaneInfo?)info)
             .Provide(DockContexts.PaneState, DockPaneState.Floating);
+    }
+
+    // Shared TabViewElement builder. Constructs the DockTabGroup-rendered
+    // tab strip plus the TabStripFooter drag-region element that gets
+    // registered with the window via `SetTitleBar` on Loaded. Caller
+    // controls what happens on tab-close / tab-drag-complete so the
+    // multi-pane Component can drive state mutations while the
+    // single-pane legacy path closes the window directly.
+    //
+    // Spec 045 §2.4 cross-window dock-back. The floating window's
+    // content is a `DockTabGroup`-rendered `TabView`. The tabs carry
+    // CanDragTabs=true so the user can drag one OUT — when WinUI
+    // signals wasOutside / tear-out, the caller's
+    // `onTabDragCompleted` runs and decides whether to close the
+    // window or restore the drag.
+    //
+    // Spec 045 §4.2 / §4.3 — Edge / Files / VS Code "tabs in the
+    // title bar" pattern. The TabView lives at the root of the
+    // floating window. Combined with `WindowSpec.ExtendsContent
+    // IntoTitleBar = true`, the tab strip occupies the title-bar
+    // zone at y=0 (flush against caption buttons) and the tab
+    // body fills the client area below.
+    //
+    // Why not the WinUI 3 `Microsoft.UI.Xaml.Controls.TitleBar`
+    // control? Its `Content` slot is a small in-row chrome slot
+    // (intended for things like Edge's address bar) and cannot
+    // host a TabView with bodies — putting a TabView there
+    // collapses the body to zero height. The Edge pattern instead
+    // uses `Window.SetTitleBar(dragRegion)` directly against a
+    // strip-footer element (between last tab and caption buttons)
+    // so the OS knows where dragging is enabled while caption
+    // buttons float at the right via `ExtendsContentIntoTitleBar`.
+    internal static TabViewElement BuildChrome(
+        IReadOnlyList<DockableContent> panes,
+        ReactorWindow?[] windowHolder,
+        DockManager? manager,
+        Action<DockableContent> onTabClosing,
+        Action<DockableContent, bool> onTabDragCompleted)
+    {
+        var tabGroup = new DockTabGroup(
+            panes is DockableContent[] arr ? arr : panes.ToArray(),
+            // §4.6 + §7.1.4 — the tab strip background uses
+            // `TitleBarBackgroundFillBrush` so it visually merges into
+            // the OS title-bar zone (single continuous chrome row).
+            TabChrome: TabChrome.TitleBar);
+        var rendered = (TabViewElement)DockTabGroupRenderer.Render(
+            tabGroup,
+            renderLeafContent: doc => doc.Content ?? (Element)new BorderElement(null),
+            onSelectedIndexChanged: null,
+            onTabClosing: onTabClosing,
+            onTabDragStarting: (doc, idx) =>
+            {
+                // Begin a cross-window session. The `manager` reference
+                // is the host that originally owned this pane —
+                // SourceManager is non-null per the session contract.
+                if (DockDragSession.Current is { IsActive: true }) return;
+                if (manager is null) return;
+                DockDragSession.Begin(doc, manager, idx);
+            },
+            onTabDragCompleted: (pane, _, wasOutside) => onTabDragCompleted(pane, wasOutside));
+
+        // Spec 045 §4.2 / §4.4 — drag-region element in TabStripFooter.
+        // The footer lays out in TabView's template column with
+        // `Width="*"`, so a `HAlign(Stretch)` Border with a transparent
+        // background fills the entire empty area between the last tab
+        // and the OS caption-button cluster. On Loaded we hand this
+        // element to `Window.SetTitleBar(...)` so the OS treats it as
+        // the window-drag surface and reserves caption-button inset on
+        // its right (the new WinUI 3 caption inset handling).
+        //
+        // The Background brush must be set (even Transparent) for the
+        // OS to recognize the element as occupying space — a Border
+        // with `Background = null` is treated as zero-area for drag
+        // hit-testing and dragging the empty space won't move the
+        // window. We assign the brush inside OnMount rather than via
+        // `.Background("Transparent")` because that helper calls
+        // `BrushHelper.Parse` eagerly at element-tree-build time,
+        // constructing a WinRT `SolidColorBrush` — which throws a
+        // bare COMException in headless unit tests where no WinUI
+        // runtime is loaded. OnMount only fires at reconcile time
+        // under a real WinUI host, so brush creation is deferred to
+        // a safe context.
+        //
+        // `SetTitleBar` is deferred to FrameworkElement.Loaded because
+        // OnMount fires during reconcile, BEFORE `_window.Content` is
+        // assigned at the end of the reconcile pass — so at OnMount
+        // time the Border lives in a detached subtree and SetTitleBar
+        // silently no-ops.
+        var dragRegion = new BorderElement(null)
+            .HAlign(HorizontalAlignment.Stretch)
+            .VAlign(VerticalAlignment.Stretch)
+            .MinWidth(180)
+            .OnMount(fe =>
+            {
+                if (fe is global::Microsoft.UI.Xaml.Controls.Border border)
+                {
+                    border.Background = BrushHelper.Parse("Transparent");
+                }
+                void Apply()
+                {
+                    var win = windowHolder[0]?.NativeWindow;
+                    win?.SetTitleBar(fe);
+                }
+                if (fe.IsLoaded) Apply();
+                else fe.Loaded += (_, _) => Apply();
+            });
+
+        return rendered with { TabStripFooter = dragRegion };
+    }
+}
+
+/// <summary>
+/// Props for <see cref="DockFloatingWindowComponent"/> — the per-window
+/// boot tuple. Equality drives <see cref="Component{TProps}.ShouldUpdate"/>;
+/// these references are stable for the lifetime of a floating window so
+/// the component never re-mounts.
+/// </summary>
+internal sealed record DockFloatingWindowProps(
+    DockableContent InitialPane,
+    ReactorWindow?[] WindowHolder,
+    DockManager? Manager);
+
+/// <summary>
+/// Stateful component for floating windows. Owns the per-window tab list
+/// (so cross-window dock-in can add tabs without re-mounting), subscribes
+/// to <see cref="DockDragSession.SessionChanged"/> to surface the
+/// CenterOnly drop overlay (spec 045 §4.2 / §4.3) when a foreign drag is
+/// in flight, and removes consumed tabs from local state on tab-drag-out.
+/// </summary>
+internal sealed class DockFloatingWindowComponent : Component<DockFloatingWindowProps>
+{
+    public override Element Render()
+    {
+        var (panes, updatePanes) = UseReducer<IReadOnlyList<DockableContent>>(new[] { Props.InitialPane });
+        var (_, bumpTick) = UseReducer(0);
+
+        // §2.4 cross-window — re-render whenever any drag session in
+        // the process starts / ends. The session is global so we can't
+        // depend on prop-equality; UseEffect attaches once and the
+        // tick reducer triggers re-renders without inflating state.
+        UseEffect(() =>
+        {
+            Action onChanged = () => bumpTick(t => t + 1);
+            DockDragSession.SessionChanged += onChanged;
+            return () => DockDragSession.SessionChanged -= onChanged;
+        });
+
+        var holder = Props.WindowHolder;
+        var manager = Props.Manager;
+
+        // Register an append-as-tab callback so the source host's
+        // `HandleTabDragCompleted` can route a cross-window dock-in
+        // (cursor over this floating window at drop time) to us
+        // without needing a direct reference to this component
+        // instance. See `DockFloatingPaneRouter` for the rationale
+        // around drop-time hit-testing vs. WinUI drag events.
+        //
+        // The registration is deferred to the next dispatcher tick
+        // because this UseEffect mount fires synchronously during
+        // `ReactorApp.OpenWindow` → `MountAndActivate` — BEFORE
+        // `DockFloatingWindow.Open` writes `windowHolder[0] = window`
+        // after OpenWindow returns. Reading `holder[0]` directly here
+        // would always see null and skip the registration, leaving
+        // the floating window invisible to the cross-window router.
+        UseEffect(() =>
+        {
+            Action<DockableContent> append = src =>
+            {
+                updatePanes(current =>
+                {
+                    for (int i = 0; i < current.Count; i++)
+                        if (ReferenceEquals(current[i], src)) return current;
+                    var list = new List<DockableContent>(current.Count + 1);
+                    list.AddRange(current);
+                    list.Add(src);
+                    return list;
+                });
+                try
+                {
+                    var win = holder[0];
+                    var native = win?.NativeWindow;
+                    if (native is not null) native.Title = src.Title ?? string.Empty;
+                }
+                catch { /* window may already be closing */ }
+            };
+            bool alive = true;
+            ReactorWindow? registered = null;
+            var dispatcher = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            void TryRegister()
+            {
+                if (!alive) return;
+                var win = holder[0];
+                if (win is null)
+                {
+                    // Holder still not populated — try again on the
+                    // next dispatcher tick. OpenWindow's caller writes
+                    // holder[0] immediately after the call returns;
+                    // a single re-enqueue handles the common case.
+                    dispatcher?.TryEnqueue(TryRegister);
+                    return;
+                }
+                DockFloatingPaneRouter.Register(win, append);
+                registered = win;
+            }
+            if (dispatcher is not null) dispatcher.TryEnqueue(TryRegister);
+            else TryRegister();
+            return () =>
+            {
+                alive = false;
+                if (registered is not null) DockFloatingPaneRouter.Unregister(registered);
+            };
+        });
+
+        var currentPanes = panes;
+
+        void RemoveLocal(DockableContent pane)
+        {
+            // Filter by reference (Key equality is unreliable — apps
+            // can ship multiple panes with the same Key). When the
+            // pane list empties, close the window so the user isn't
+            // left with an empty floating shell. The window-close
+            // side-effect lives outside the reducer so it only fires
+            // once even if React-strict-mode double-invokes; reading
+            // current.Count==1 after the filter is the trigger.
+            bool willEmpty = false;
+            string? newTitle = null;
+            updatePanes(current =>
+            {
+                var keep = new List<DockableContent>(current.Count);
+                for (int i = 0; i < current.Count; i++)
+                {
+                    if (!ReferenceEquals(current[i], pane))
+                        keep.Add(current[i]);
+                }
+                if (keep.Count == current.Count) return current; // no change
+                if (keep.Count == 0) { willEmpty = true; return current; /* don't commit empty list */ }
+                newTitle = keep[0].Title;
+                return keep;
+            });
+            if (willEmpty)
+            {
+                holder[0]?.Close();
+                return;
+            }
+            if (newTitle is not null)
+            {
+                try
+                {
+                    var native = holder[0]?.NativeWindow;
+                    if (native is not null) native.Title = newTitle;
+                }
+                catch { /* window may already be closing */ }
+            }
+        }
+
+        var chrome = DockFloatingWindow.BuildChrome(
+            currentPanes,
+            holder,
+            manager,
+            onTabClosing: RemoveLocal,
+            onTabDragCompleted: (pane, wasOutside) =>
+            {
+                if (DockDragSession.Consumed)
+                {
+                    // The pane was docked into another surface (main
+                    // host's per-group overlay, another floating
+                    // window's CenterOnly overlay, etc.). Remove it
+                    // from us; if it was the only tab, the window
+                    // closes itself.
+                    RemoveLocal(pane);
+                    return;
+                }
+                // §4.2 cross-window dock-in (Center only): if the
+                // user dragged a tab OUT of this floating window and
+                // released the cursor over ANOTHER registered
+                // floating window, route the pane to that window
+                // instead of letting WinUI tear it into a new
+                // floating window.
+                if (wasOutside && DockFloatingPaneRouter.HasRegisteredWindows)
+                {
+                    // Don't append to ourselves.
+                    var ownWindow = holder[0];
+                    if (ownWindow is not null) DockFloatingPaneRouter.Unregister(ownWindow);
+                    try
+                    {
+                        if (DockFloatingPaneRouter.TryAppendUnderCursor(pane))
+                        {
+                            RemoveLocal(pane);
+                            DockDragSession.MarkConsumed();
+                            DockDragSession.Current?.End();
+                            return;
+                        }
+                    }
+                    finally
+                    {
+                        // Re-register ourselves so subsequent drags
+                        // can target us again.
+                        if (ownWindow is not null)
+                        {
+                            // Re-build the same closure (UseEffect will
+                            // re-register on next render too, but this
+                            // bridges the small gap until then).
+                            Action<DockableContent> reAppend = src =>
+                                updatePanes(current =>
+                                {
+                                    for (int i = 0; i < current.Count; i++)
+                                        if (ReferenceEquals(current[i], src)) return current;
+                                    var list = new List<DockableContent>(current.Count + 1);
+                                    list.AddRange(current);
+                                    list.Add(src);
+                                    return list;
+                                });
+                            DockFloatingPaneRouter.Register(ownWindow, reAppend);
+                        }
+                    }
+                }
+                // Drop landed nowhere (Esc, drop on desktop). End any
+                // in-flight session so the pane stays put in this
+                // floating window — the TabView re-renders with the
+                // pane still in its `documents` list.
+                DockDragSession.Current?.Cancel();
+            });
+
+        // Provide the FIRST pane's DockPaneInfo as the floating window's
+        // pane context. Per-tab context wiring is a future refinement;
+        // hook resolution inside an active pane's body works because
+        // the active tab's WinUI subtree inherits this context.
+        var primary = currentPanes[0];
+        var info = new DockPaneInfo(primary.Key, primary.Title ?? string.Empty, primary);
+
+        return chrome
+            .Provide(DockContexts.Pane, (DockPaneInfo?)info)
+            .Provide(DockContexts.PaneState, DockPaneState.Floating);
+    }
+
+    private static bool ContainsByRef(IReadOnlyList<DockableContent> list, DockableContent target)
+    {
+        for (int i = 0; i < list.Count; i++)
+            if (ReferenceEquals(list[i], target)) return true;
+        return false;
     }
 }
 

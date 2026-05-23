@@ -88,6 +88,14 @@ internal enum DockDropOverlayMode
     Host,
     /// <summary>Tab-group-scope 5-target overlay (Center + 4 splits).</summary>
     GroupInner,
+    /// <summary>
+    /// Floating-window-scope single-target overlay — only the Center button
+    /// surfaces (add-as-tab). Spec 045 §4.2 / §4.3: floating windows in the
+    /// tabs-in-titlebar layout don't host splits (would require collapsing
+    /// the titlebar pattern back to a standard chrome+content layout), so
+    /// the cross-window dock-in path is intentionally limited to Center.
+    /// </summary>
+    CenterOnly,
 }
 
 /// <summary>
@@ -261,6 +269,7 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         //     across its full area.
         if (_buttons is null) return;
         bool hostMode = _mode == DockDropOverlayMode.Host;
+        bool centerOnly = _mode == DockDropOverlayMode.CenterOnly;
         foreach (var entry in _buttons)
         {
             bool isEdge = entry.Target is DockTarget.DockLeft or DockTarget.DockRight
@@ -270,6 +279,19 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
                 // Host: edges always visible (they're the only buttons
                 // surfaced); inner cluster always hidden.
                 entry.Button.Visibility = isEdge ? Visibility.Visible : Visibility.Collapsed;
+            }
+            else if (centerOnly)
+            {
+                // CenterOnly (spec 045 §4.2/§4.3 floating-window scope):
+                // edges always collapsed; inner cluster except Center
+                // permanently hidden; Center hidden until DragEnter
+                // reveals it.
+                if (isEdge || entry.Target != DockTarget.Center)
+                    entry.Button.Visibility = Visibility.Collapsed;
+                else
+                    entry.Button.Visibility = _groupOverlayRevealed
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
             }
             else
             {
@@ -695,11 +717,11 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
 
     private void OnDragEnter(object sender, DragEventArgs e)
     {
-        // Per-group overlay: reveal its 5 inner buttons only while the
-        // drag is over THIS group. Reduces visual clutter to a single
-        // overlay at a time. Host-level overlay is unaffected (its
-        // 4 outer Dock-edge buttons are always visible).
-        if (_mode == DockDropOverlayMode.GroupInner)
+        // Per-group / center-only overlay: reveal its inner button(s)
+        // only while the drag is over THIS surface. Reduces visual
+        // clutter to a single overlay at a time. Host-level overlay is
+        // unaffected (its 4 outer Dock-edge buttons are always visible).
+        if (_mode == DockDropOverlayMode.GroupInner || _mode == DockDropOverlayMode.CenterOnly)
             SetGroupOverlayRevealed(true);
         var p = e.GetPosition(this);
         var target = HitTestForTarget(p);
@@ -716,7 +738,7 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         // Reveal-while-dragging: in case DragEnter was suppressed by
         // capture timing (e.g. fast drag entered the area), DragOver
         // is the safer signal for revealing.
-        if (_mode == DockDropOverlayMode.GroupInner)
+        if (_mode == DockDropOverlayMode.GroupInner || _mode == DockDropOverlayMode.CenterOnly)
             SetGroupOverlayRevealed(true);
         var p = e.GetPosition(this);
         var target = HitTestForTarget(p);
@@ -729,7 +751,7 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
 
     private void OnDragLeave(object sender, DragEventArgs e)
     {
-        if (_mode == DockDropOverlayMode.GroupInner)
+        if (_mode == DockDropOverlayMode.GroupInner || _mode == DockDropOverlayMode.CenterOnly)
             SetGroupOverlayRevealed(false);
         if (_hoveredTarget is not null) SetHovered(null);
     }
@@ -758,7 +780,7 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
             // expensive — instead of cancelling). Fire OverlayDismissed
             // so the host clears drag state.
             e.AcceptedOperation = DataPackageOperation.Move;
-            if (_mode == DockDropOverlayMode.GroupInner)
+            if (_mode == DockDropOverlayMode.GroupInner || _mode == DockDropOverlayMode.CenterOnly)
                 SetGroupOverlayRevealed(false);
             OverlayDismissed?.Invoke(this, EventArgs.Empty);
         }
