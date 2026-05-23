@@ -246,8 +246,8 @@ class InputFormattersDemo : Component
 }
 // </snippet:input-formatters>
 
-// <snippet:textfield-config>
-class TextFieldConfigDemo : Component
+// <snippet:textbox-config>
+class TextBoxConfigDemo : Component
 {
     public override Element Render()
     {
@@ -278,7 +278,7 @@ class TextFieldConfigDemo : Component
         ).Padding(24);
     }
 }
-// </snippet:textfield-config>
+// </snippet:textbox-config>
 
 // <snippet:auto-suggest>
 class AutoSuggestDemo : Component
@@ -419,7 +419,7 @@ class FormsApp : Component
                 Heading("Forms and Input"),
                 Component<ControlledInputDemo>(),
                 Component<InputTypesDemo>(),
-                Component<TextFieldConfigDemo>(),
+                Component<TextBoxConfigDemo>(),
                 Component<ValidationDemo>(),
                 Component<KeepSubmitReachableDemo>(),
                 Component<ValidationContextDemo>(),

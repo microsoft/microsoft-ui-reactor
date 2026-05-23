@@ -85,7 +85,7 @@ text. Check the API reference for each control's full signature.
 so you rarely need `.Set(...)`. The named-input shapes set the appropriate
 `InputScope` for soft-keyboard and IME hinting:
 
-```csharp snippet="forms/TextBox-config"
+```csharp snippet="forms/textbox-config"
 ```
 
 | Fluent | Effect |
