@@ -133,12 +133,21 @@ internal static class LocalizableStringScanner
             }
 
             // Also check positional arguments that map to localizable params
-            // For TextBox/TextField: placeholder is arg index 2, header is set via property
-            if ((methodName == "TextBox" || methodName == "TextField") && args.Count >= 3 && args[2].NameColon == null)
+            // For TextBox/TextField: placeholder is arg index 2, header is arg index 3
+            if (methodName == "TextBox" || methodName == "TextField")
             {
-                var placeholderArg = args[2].Expression;
-                if (!IsMessageCall(placeholderArg))
-                    ProcessExpression(placeholderArg, className, $"{methodName}.placeholder");
+                if (args.Count >= 3 && args[2].NameColon == null)
+                {
+                    var placeholderArg = args[2].Expression;
+                    if (!IsMessageCall(placeholderArg))
+                        ProcessExpression(placeholderArg, className, $"{methodName}.placeholder");
+                }
+                if (args.Count >= 4 && args[3].NameColon == null)
+                {
+                    var headerArg = args[3].Expression;
+                    if (!IsMessageCall(headerArg))
+                        ProcessExpression(headerArg, className, $"{methodName}.header");
+                }
             }
             if (methodName == "PasswordBox" && args.Count >= 3 && args[2].NameColon == null)
             {

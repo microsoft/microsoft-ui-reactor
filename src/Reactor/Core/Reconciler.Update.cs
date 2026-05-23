@@ -814,6 +814,7 @@ public sealed partial class Reconciler
         }
         tb.PlaceholderText = n.Placeholder ?? "";
         if (n.Header is not null) tb.Header = n.Header;
+        else if (o.Header is not null) tb.ClearValue(TextBox.HeaderProperty);
         if (n.IsReadOnly.HasValue) tb.IsReadOnly = n.IsReadOnly.Value;
         if (n.AcceptsReturn.HasValue) tb.AcceptsReturn = n.AcceptsReturn.Value;
         if (n.TextWrapping.HasValue) tb.TextWrapping = n.TextWrapping.Value;
@@ -823,6 +824,7 @@ public sealed partial class Reconciler
         if (tb.CharacterCasing != n.CharacterCasing) tb.CharacterCasing = n.CharacterCasing;
         if (tb.TextAlignment != n.TextAlignment) tb.TextAlignment = n.TextAlignment;
         if (n.Description is not null) tb.Description = n.Description;
+        else if (o.Description is not null) tb.ClearValue(TextBox.DescriptionProperty);
         // Apply selection position after text — must come after Text is set so the range is valid
         if (n.SelectionStart.HasValue) tb.SelectionStart = Math.Min(n.SelectionStart.Value, tb.Text.Length);
         if (n.SelectionLength.HasValue) tb.SelectionLength = Math.Min(n.SelectionLength.Value, tb.Text.Length - tb.SelectionStart);

@@ -67,7 +67,7 @@ public class UseFocusTests
     public void Focus_Extension_Registers_Field()
     {
         var fm = new FocusManager();
-        var el = TextBox("test").Focus(fm, "email");
+        TextBox("test").Focus(fm, "email");
 
         Assert.Contains("email", fm.Fields);
     }
