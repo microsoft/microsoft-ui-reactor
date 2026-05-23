@@ -155,7 +155,7 @@ only the parent's matching kind gets read.
 
 Event handlers don't ride in `ElementModifiers` either. They are
 typed properties on the concrete leaf record (`ButtonElement.OnClick`,
-`TextFieldElement.OnChanged`), and the `.Click(...)` /
+`TextBoxElement.OnChanged`), and the `.Click(...)` /
 `.Changed(...)` extensions are thin `record with { }` updates:
 
 ```csharp

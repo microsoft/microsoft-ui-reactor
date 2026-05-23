@@ -94,7 +94,7 @@ out from under the old selection.
 ```csharp
 // Esc closes; Up / Down move the selection; Enter invokes the
 // highlighted command. The OnPreviewKeyDown handler intercepts
-// before the TextField gets the keystroke, so arrow keys move
+// before the TextBox gets the keystroke, so arrow keys move
 // the list instead of the caret.
 void OnPaletteKey(object _, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
 {

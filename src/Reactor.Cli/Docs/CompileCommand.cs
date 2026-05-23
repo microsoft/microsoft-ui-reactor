@@ -30,6 +30,16 @@ internal static partial class CompileCommand
         _ = HasFlag(args, "--reference");
         var validateOnly = HasFlag(args, "--validate-only");
         var ci = HasFlag(args, "--ci");
+        IReadOnlySet<string>? screenshotFilter;
+        try
+        {
+            screenshotFilter = ParseScreenshotFilter(args, topic);
+        }
+        catch (ArgumentException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
         var tierFilterRaw = GetOption(args, "--tier");
         DocTier? tierFilter = null;
         if (tierFilterRaw is not null)
@@ -60,6 +70,15 @@ internal static partial class CompileCommand
         Console.WriteLine("═══ Phase 1: Validate ═══");
 
         var apps = DiscoverApps(appsDir, topic);
+        var screenshotTopics = screenshotFilter is null
+            ? null
+            : screenshotFilter
+                .Select(id => id[..id.IndexOf('/')])
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (screenshotTopics is not null && topic is null)
+        {
+            apps = apps.Where(app => screenshotTopics.Contains(app.topicId)).ToList();
+        }
         Console.WriteLine($"  Found {apps.Count} doc app(s)");
         foreach (var (id, dir) in apps)
             Console.WriteLine($"    • {id} → {Path.GetRelativePath(repoRoot, dir)}");
@@ -85,6 +104,17 @@ internal static partial class CompileCommand
                 .Where(t => t.template.TierDeclared && t.template.Tier == filter)
                 .ToList();
             Console.WriteLine($"  --tier={filter.ToString().ToLowerInvariant()} filter: {templates.Count}/{before} template(s)");
+        }
+        if (screenshotTopics is not null && topic is null)
+        {
+            templates = templates
+                .Where(template => screenshotTopics.Contains(template.topicId))
+                .ToList();
+            Console.WriteLine($"  --screenshots filter: {string.Join(", ", screenshotFilter!.OrderBy(id => id, StringComparer.OrdinalIgnoreCase))}");
+        }
+        else if (screenshotFilter is not null)
+        {
+            Console.WriteLine($"  --screenshots filter: {string.Join(", ", screenshotFilter.OrderBy(id => id, StringComparer.OrdinalIgnoreCase))}");
         }
         Console.WriteLine($"  Found {templates.Count} template(s)");
         foreach (var (id, t) in templates)
@@ -127,6 +157,19 @@ internal static partial class CompileCommand
             }
         }
         Console.WriteLine($"  Screenshot definitions: {allScreenshots.Count}");
+        if (screenshotFilter is not null)
+        {
+            var missingScreenshots = screenshotFilter
+                .Where(id => !allScreenshots.ContainsKey(id))
+                .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (missingScreenshots.Count > 0)
+            {
+                foreach (var id in missingScreenshots)
+                    Console.Error.WriteLine($"  ✗ --screenshots requested unknown screenshot '{id}'");
+                return 1;
+            }
+        }
 
         // Validate references
         var hasErrors = false;
@@ -291,9 +334,14 @@ internal static partial class CompileCommand
                 if (!File.Exists(manifestPath)) continue;
                 var manifest = ManifestParser.Parse(manifestPath);
                 if (manifest.Screenshots.Count == 0) continue;
+                if (screenshotFilter is not null &&
+                    !manifest.Screenshots.Any(s => screenshotFilter.Contains($"{topicId}/{s.Id}")))
+                {
+                    continue;
+                }
 
                 Console.WriteLine($"  Capturing for {topicId}...");
-                ScreenshotCapture.CaptureAsync(appDir, topicId, manifest, imagesDir)
+                ScreenshotCapture.CaptureAsync(appDir, topicId, manifest, imagesDir, screenshotFilter)
                     .GetAwaiter().GetResult();
             }
         }
@@ -762,4 +810,61 @@ internal static partial class CompileCommand
 
     internal static bool HasFlag(string[] args, string name) =>
         args.Contains(name, StringComparer.OrdinalIgnoreCase);
+
+    internal static IReadOnlySet<string>? ParseScreenshotFilter(string[] args, string? topic)
+    {
+        var values = GetOptions(args, "--screenshots")
+            .Concat(GetOptions(args, "--screenshot"))
+            .SelectMany(value => value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .ToList();
+
+        if (values.Count == 0)
+            return null;
+
+        var refs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in values)
+        {
+            var normalized = value.Replace('\\', '/').Trim('/');
+            if (string.IsNullOrWhiteSpace(normalized))
+                continue;
+
+            string fullId;
+            if (normalized.Contains('/'))
+            {
+                fullId = normalized;
+            }
+            else if (!string.IsNullOrWhiteSpace(topic))
+            {
+                fullId = $"{topic}/{normalized}";
+            }
+            else
+            {
+                throw new ArgumentException(
+                    $"Screenshot ref '{value}' must include a topic prefix (for example, 'docking/{value}') when --topic is not set.");
+            }
+
+            var slash = fullId.IndexOf('/');
+            if (slash <= 0 || slash == fullId.Length - 1)
+                throw new ArgumentException($"Screenshot ref '{value}' must use '<topic>/<screenshot-id>'.");
+            if (!string.IsNullOrWhiteSpace(topic) &&
+                !fullId[..slash].Equals(topic, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException(
+                    $"Screenshot ref '{value}' does not match --topic {topic}. Use a screenshot from that topic or omit --topic.");
+            }
+
+            refs.Add(fullId);
+        }
+
+        return refs.Count == 0 ? null : refs;
+    }
+
+    private static IEnumerable<string> GetOptions(string[] args, string name)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals(name, StringComparison.OrdinalIgnoreCase))
+                yield return args[i + 1];
+        }
+    }
 }

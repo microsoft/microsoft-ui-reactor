@@ -13,7 +13,7 @@ screenshots:
   - id: forms
     kind: catalog-thumb
     component: FormsGroup
-    description: "Forms category — TextField, CheckBox, Slider, Button."
+    description: "Forms category — TextBox, CheckBox, Slider, Button."
     region: client
     format: png
   - id: collections

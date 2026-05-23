@@ -47,6 +47,7 @@ internal static class DocsCommand
         Console.WriteLine();
         Console.WriteLine("Compile options:");
         Console.WriteLine("  --topic <name>          Compile only a specific topic");
+        Console.WriteLine("  --screenshots <refs>    Capture only comma-separated screenshot refs (topic/id, or id with --topic)");
         Console.WriteLine("  --no-screenshots        Skip screenshot capture (alias: --skip-screenshots)");
         Console.WriteLine("  --skip-diagrams         Skip diagram processing (SVG passthrough + Mermaid)");
         Console.WriteLine("  --no-ai                 Skip AI authoring");

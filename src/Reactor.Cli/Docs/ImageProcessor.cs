@@ -72,10 +72,9 @@ internal static class ImageProcessor
     }
 
     /// <summary>
-    /// Auto-crops whitespace from a captured frame, adds border + drop shadow,
-    /// and returns PNG bytes.
+    /// Processes a captured frame, adds border + drop shadow, and returns PNG bytes.
     /// </summary>
-    public static byte[] Process(byte[] frameBytes)
+    public static byte[] Process(byte[] frameBytes, ScreenshotCropMode cropMode = ScreenshotCropMode.Content)
     {
         // SECURITY (TASK-044): validate magic bytes and size before handing
         // attacker-controllable data to GDI+. GDI+ has a long history of
@@ -93,11 +92,16 @@ internal static class ImageProcessor
         if (source.Width > MaxImageDimension || source.Height > MaxImageDimension)
             throw new ArgumentException($"Image dimensions exceed {MaxImageDimension}px cap.", nameof(frameBytes));
 
-        // 1. Find content bounds (trim white edges)
-        var bounds = FindContentBounds(source, threshold: 248);
-
-        // Add small padding around content so the border isn't flush
-        bounds = InflateClamp(bounds, ContentPadding, source.Width, source.Height);
+        var bounds = cropMode switch
+        {
+            ScreenshotCropMode.Content => InflateClamp(
+                FindContentBounds(source, threshold: 248),
+                ContentPadding,
+                source.Width,
+                source.Height),
+            ScreenshotCropMode.None => new Rectangle(0, 0, source.Width, source.Height),
+            _ => throw new ArgumentOutOfRangeException(nameof(cropMode), cropMode, "Unknown screenshot crop mode.")
+        };
 
         using var cropped = source.Clone(bounds, PixelFormat.Format32bppArgb);
 
@@ -108,6 +112,24 @@ internal static class ImageProcessor
         using var output = new MemoryStream();
         result.Save(output, ImageFormat.Png);
         return output.ToArray();
+    }
+
+    internal static ScreenshotCropMode ParseCropMode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            string.Equals(value, "content", StringComparison.OrdinalIgnoreCase))
+        {
+            return ScreenshotCropMode.Content;
+        }
+
+        if (string.Equals(value, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            return ScreenshotCropMode.None;
+        }
+
+        throw new ArgumentException(
+            $"Unsupported screenshot crop mode '{value}'. Expected 'content' or 'none'.",
+            nameof(value));
     }
 
     private static Rectangle FindContentBounds(Bitmap bmp, int threshold)
@@ -225,4 +247,10 @@ internal static class ImageProcessor
             return true;
         return false;
     }
+}
+
+internal enum ScreenshotCropMode
+{
+    Content,
+    None
 }

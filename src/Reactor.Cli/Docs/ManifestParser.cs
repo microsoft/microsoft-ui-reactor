@@ -25,6 +25,7 @@ internal class ScreenshotConfig
     public string Description { get; set; } = "";
     public string Region { get; set; } = "client";
     public string Format { get; set; } = "png";
+    public string Crop { get; set; } = "content";
     public string? Component { get; set; }
     public string? Theme { get; set; }
     public BoundsConfig? Bounds { get; set; }

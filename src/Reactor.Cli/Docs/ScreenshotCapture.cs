@@ -13,8 +13,19 @@ internal static class ScreenshotCapture
         string appDir,
         string topicId,
         DocManifest manifest,
-        string outputImagesDir)
+        string outputImagesDir,
+        IReadOnlySet<string>? screenshotFilter = null)
     {
+        var screenshots = manifest.Screenshots
+            .Where(s => screenshotFilter is null || screenshotFilter.Contains($"{topicId}/{s.Id}"))
+            .ToList();
+
+        if (screenshots.Count == 0)
+        {
+            Console.WriteLine("    No matching screenshots.");
+            return true;
+        }
+
         var csprojFiles = Directory.GetFiles(appDir, "*.csproj");
         if (csprojFiles.Length == 0)
         {
@@ -80,7 +91,7 @@ internal static class ScreenshotCapture
             // first manifest entry doesn't pay the timer-startup latency.
             await PollForFrame(http, port, TimeSpan.FromSeconds(10));
 
-            foreach (var screenshot in manifest.Screenshots)
+            foreach (var screenshot in screenshots)
             {
                 Console.Write($"    Capturing {screenshot.Id}...");
                 try
@@ -121,7 +132,7 @@ internal static class ScreenshotCapture
                         throw new InvalidOperationException($"Screenshot id '{screenshot.Id}' would escape output directory");
                     var processed = isThumb
                         ? ImageProcessor.ProcessThumb(frameBytes, screenshot.ThumbWidth, screenshot.ThumbHeight)
-                        : ImageProcessor.Process(frameBytes);
+                        : ImageProcessor.Process(frameBytes, ImageProcessor.ParseCropMode(screenshot.Crop));
                     File.WriteAllBytes(outputPath, processed);
                     Console.WriteLine(" ✓");
                 }

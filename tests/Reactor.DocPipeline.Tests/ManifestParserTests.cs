@@ -28,8 +28,27 @@ public class ManifestParserTests
 
         var entry = Assert.Single(manifest.Screenshots);
         Assert.Equal("screenshot", entry.Kind);
+        Assert.Equal("content", entry.Crop);
         Assert.Equal(320, entry.ThumbWidth);
         Assert.Equal(240, entry.ThumbHeight);
+    }
+
+    [Fact]
+    public void Crop_mode_round_trips()
+    {
+        var yaml = """
+            app:
+              title: Sample
+            screenshots:
+              - id: full-frame
+                description: Full frame.
+                crop: none
+            """;
+
+        var manifest = ParseInline(yaml);
+
+        var entry = Assert.Single(manifest.Screenshots);
+        Assert.Equal("none", entry.Crop);
     }
 
     [Fact]

@@ -16,7 +16,7 @@ screenshots:
     region: client
     format: png
   - id: dialog-gated-primary
-    description: "Dialog with TextField input; primary button disabled until input is non-empty."
+    description: "Dialog with TextBox input; primary button disabled until input is non-empty."
     component: DialogGatedPrimaryDemo
     region: client
     format: png

@@ -41,20 +41,40 @@ class TwoPaneDemo : Component
             Orientation.Horizontal,
             new DockNode[]
             {
-                new DockableContent(
-                    Title: "Solution",
-                    Key: "tool:solution",
-                    Content: VStack(4,
-                        TextBlock("📁 MyApp.sln").SemiBold(),
-                        TextBlock("    📄 App.cs"),
-                        TextBlock("    📄 MainView.cs")
-                    ).Padding(12),
-                    Width: 240),
+                new ToolWindow
+                {
+                    Title = "Solution Explorer",
+                    Key = "tool:solution",
+                    Width = 260,
+                    Content = VStack(6,
+                        TextBlock("MyApp.sln").SemiBold(),
+                        TextBlock("  src"),
+                        TextBlock("    App.cs"),
+                        TextBlock("    MainView.cs"),
+                        TextBlock("  tests"),
+                        TextBlock("    MainViewTests.cs")
+                    ).Padding(12)
+                },
 
-                new DockableContent(
-                    Title: "App.cs",
-                    Key: "doc:app-cs",
-                    Content: TextBlock("// editor body").Padding(12)),
+                new DockTabGroup(
+                    Documents: new DockableContent[]
+                    {
+                        new Document
+                        {
+                            Title = "App.cs",
+                            Key = "doc:app-cs",
+                            Content = VStack(4,
+                                TextBlock("// App.cs"),
+                                TextBlock("ReactorApp.Run<MainView>(title: \"MyApp\");"),
+                                TextBlock(""),
+                                TextBlock("class MainView : Component"),
+                                TextBlock("{"),
+                                TextBlock("    public override Element Render() => Text(\"Hello\");"),
+                                TextBlock("}")
+                            ).Padding(16)
+                        }
+                    },
+                    SelectedIndex: 0),
             }),
     };
 }
@@ -62,8 +82,10 @@ class TwoPaneDemo : Component
 
 ![Two-pane docking layout with a Solution tool on the left and an App.cs editor on the right](images/docking/two-pane.png)
 
-The leaves of the tree are `DockableContent` records. Each carries a
-`Title` (shown on the tab / floating window), an optional `Content`
+The leaves of the tree are pane records. Prefer `Document` for closable
+editor-like panes and `ToolWindow` for hideable, side-pinnable tools; both
+derive from the source-compatible `DockableContent` base. Each pane carries
+a `Title` (shown on the tab / floating window), an optional `Content`
 element subtree, and — importantly — a stable `Key`.
 
 **`Key` is required for any pane whose state should survive
@@ -78,7 +100,9 @@ The `DockNode` algebra has three node kinds (all immutable records):
 |------|---------|
 | `DockSplit(Orientation, Children, …)` | Splits children along one axis, with drag-resize splitters between them |
 | `DockTabGroup(Documents, TabPosition, CompactTabs, …)` | Presents children as tabs |
-| `DockableContent(Title, Content, Key, CanClose, CanPin, CanFloat, CanMove, …)` | Leaf pane |
+| `Document` | Closable leaf pane for editor/document surfaces; cannot pin by default |
+| `ToolWindow` | Hideable leaf pane for tool surfaces; can auto-hide/pin by default |
+| `DockableContent` | Base leaf pane kept for older positional-constructor code |
 
 `DockManager` itself accepts these props:
 
@@ -89,6 +113,10 @@ The `DockNode` algebra has three node kinds (all immutable records):
 | `ActiveDocument` | Resolves by `Key` against `Layout`; mismatched keys leave activation alone |
 | `Adapter` | `IDockAdapter` for rehydration and floating chrome |
 | `PersistenceId` | Routes layout JSON through `WindowPersistedScope` |
+| `LayoutStrategy` | Routes programmatic document/tool inserts before default placement |
+| `OnLayoutChanging` / `OnLayoutChanged` and pane lifecycle events | Observe or cancel layout, close, hide, float, and dock transitions |
+| `ShowDropTargets` | Shows the drop-target overlay for drag, keyboard, or test-driven moves |
+| `SplitRatios` / `OperationLog` | Optional diagnostics and externally-owned split sizing |
 
 ## Tab Groups
 
@@ -103,22 +131,31 @@ class TabGroupDemo : Component
         Layout = new DockTabGroup(
             Documents: new[]
             {
-                new DockableContent("App.cs",
-                    VStack(4,
+                new Document
+                {
+                    Title = "App.cs",
+                    Key = "doc:app",
+                    Content = VStack(4,
                         TextBlock("// App.cs"),
                         TextBlock("public sealed class App : Component"),
                         TextBlock("{"),
                         TextBlock("    public override Element Render() =>"),
                         TextBlock("        Text(\"hello, world\");"),
                         TextBlock("}")
-                    ).Padding(16),
-                    Key: "doc:app", CanClose: true),
-                new DockableContent("MainView.cs",
-                    TextBlock("// MainView.cs body").Padding(16),
-                    Key: "doc:main", CanClose: true),
-                new DockableContent("Readme.md",
-                    TextBlock("# Readme").Padding(16),
-                    Key: "doc:readme", CanClose: true),
+                    ).Padding(16)
+                },
+                new Document
+                {
+                    Title = "MainView.cs",
+                    Key = "doc:main",
+                    Content = TextBlock("// MainView.cs body").Padding(16)
+                },
+                new Document
+                {
+                    Title = "Readme.md",
+                    Key = "doc:readme",
+                    Content = TextBlock("# Readme").Padding(16)
+                },
             },
             SelectedIndex: 0),
     };
@@ -128,8 +165,9 @@ class TabGroupDemo : Component
 ![Three editor tabs in a single dock tab group](images/docking/tab-group.png)
 
 `TabPosition.Bottom` combined with `CompactTabs: true` produces
-Office's tool-pane shape. `CanClose: true` shows an X on each tab; the
-reconciler removes the leaf from the tree when the user clicks it.
+Office's tool-pane shape. `Document` panes are closeable by default; a
+closed document raises the document lifecycle callbacks and is removed
+from the native layout.
 
 ## Side Pins (Auto-Hide)
 
@@ -142,26 +180,29 @@ class SidePinDemo : Component
 {
     public override Element Render() => new DockManager
     {
-        Layout = new DockableContent(
-            Title: "Document",
-            Key: "doc:main",
-            Content: VStack(8,
+        Layout = new Document
+        {
+            Title = "Document",
+            Key = "doc:main",
+            Content = VStack(8,
                 TextBlock("Document area").SemiBold(),
                 TextBlock("Click the pinned tab on the right to expand it."),
                 TextBlock("Pin / unpin from inside the popup to toggle.")
-            ).Padding(16)),
+            ).Padding(16)
+        },
 
         RightSide = new[]
         {
-            new DockableContent(
-                Title: "Properties",
-                Key: "tool:properties",
-                Content: VStack(4,
+            new ToolWindow
+            {
+                Title = "Properties",
+                Key = "tool:properties",
+                Content = VStack(4,
                     TextBlock("Name").SemiBold(),
                     TextBlock("Width: 240"),
                     TextBlock("Height: 120")
-                ).Padding(12),
-                CanPin: true),
+                ).Padding(12)
+            },
         },
     };
 }
@@ -169,8 +210,8 @@ class SidePinDemo : Component
 
 ![Editor on the left with a Properties tool pinned to the right edge](images/docking/side-pin.png)
 
-Set `CanPin: true` on a `DockableContent` to enable the pin
-affordance on its tab — users can pin and unpin at runtime, and the
+Use `ToolWindow` for side-pin content. It enables pin and auto-hide
+affordances by default, so users can pin and unpin at runtime, and the
 moved-to-side state round-trips through persistence.
 
 ## Persistence
@@ -184,19 +225,26 @@ class PersistenceDemo : Component
 {
     public override Element Render() => new DockManager
     {
-        // Layout JSON is auto-saved to WindowPersistedScope["docking:my-shell"]
-        // on unmount and restored on next mount.
+        // Layout JSON is auto-saved to WindowPersistedScope["docking:my-shell"].
+        // It is the restore fallback when a later mount leaves Layout null.
         PersistenceId = "my-shell",
         Layout = new DockSplit(
             Orientation.Horizontal,
             new DockNode[]
             {
-                new DockableContent("Pane 1",
-                    TextBlock("Rearrange me, then relaunch.").Padding(12),
-                    Key: "p1", Width: 220),
-                new DockableContent("Pane 2",
-                    TextBlock("Layout restores from PersistenceId.").Padding(12),
-                    Key: "p2"),
+                new ToolWindow
+                {
+                    Title = "Outline",
+                    Key = "tool:outline",
+                    Width = 240,
+                    Content = TextBlock("Rearrange me, then relaunch.").Padding(12)
+                },
+                new Document
+                {
+                    Title = "Editor",
+                    Key = "doc:editor",
+                    Content = TextBlock("Layout restores from PersistenceId when no declarative Layout is supplied.").Padding(12)
+                },
             }),
     };
 }
@@ -204,9 +252,10 @@ class PersistenceDemo : Component
 
 ![Persisted two-pane layout that restores across launches](images/docking/persistence.png)
 
-The persisted layout takes precedence over the declarative `Layout`
-on remount when the IDs match. Re-render with a different
-`PersistenceId` to start fresh.
+The declarative `Layout` remains the source of truth while you provide
+one. Persisted JSON is used as the restore fallback when a later mount
+sets the same `PersistenceId` and leaves `Layout` null. Re-render with a
+different `PersistenceId` to start fresh.
 
 ## Floating Tear-Outs
 
@@ -230,9 +279,27 @@ class FloatingChromeAdapter : IDockAdapter
 }
 ```
 
-Pass the adapter on `DockManager.Adapter`. `OnContentCreated` is also
-called when a pane is rehydrated from persisted JSON — return the
-Reactor subtree to mount inside it, keyed off `content.Key`.
+Pass the adapter on `DockManager.Adapter`. `OnContentCreated` is called
+when a pane is rehydrated from persisted JSON — return the Reactor
+subtree to mount inside it, keyed off `content.Key`. For observation and
+cancellation, prefer the per-event `DockManager` callbacks such as
+`OnContentFloating`, `OnContentDocking`, `OnDocumentClosing`, and
+`OnLayoutChanged`; the older behavior interface is obsolete.
+
+## Pane Hooks
+
+Pane content can read docking context through hooks:
+
+| Hook | Use |
+|------|-----|
+| `ctx.UsePane()` | Stable pane identity (`Key`, title, role) for the current subtree |
+| `ctx.UseDockState()` | Current pane state: docked, floating, auto-hidden, expanded, or hidden |
+| `ctx.UseIsActivePane()` | True only for the active pane |
+| `ctx.UseDockPanePersisted(key, initial)` | Window-scoped persisted state automatically prefixed by pane key |
+
+Use `ctx.UseDockLayout()` sparingly — it re-renders on any structural
+layout change and is intended for devtools and diagnostics, not ordinary
+pane bodies.
 
 ## Tips
 

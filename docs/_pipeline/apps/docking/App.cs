@@ -28,20 +28,40 @@ class TwoPaneDemo : Component
             Orientation.Horizontal,
             new DockNode[]
             {
-                new DockableContent(
-                    Title: "Solution",
-                    Key: "tool:solution",
-                    Content: VStack(4,
-                        TextBlock("📁 MyApp.sln").SemiBold(),
-                        TextBlock("    📄 App.cs"),
-                        TextBlock("    📄 MainView.cs")
-                    ).Padding(12),
-                    Width: 240),
+                new ToolWindow
+                {
+                    Title = "Solution Explorer",
+                    Key = "tool:solution",
+                    Width = 260,
+                    Content = VStack(6,
+                        TextBlock("MyApp.sln").SemiBold(),
+                        TextBlock("  src"),
+                        TextBlock("    App.cs"),
+                        TextBlock("    MainView.cs"),
+                        TextBlock("  tests"),
+                        TextBlock("    MainViewTests.cs")
+                    ).Padding(12)
+                },
 
-                new DockableContent(
-                    Title: "App.cs",
-                    Key: "doc:app-cs",
-                    Content: TextBlock("// editor body").Padding(12)),
+                new DockTabGroup(
+                    Documents: new DockableContent[]
+                    {
+                        new Document
+                        {
+                            Title = "App.cs",
+                            Key = "doc:app-cs",
+                            Content = VStack(4,
+                                TextBlock("// App.cs"),
+                                TextBlock("ReactorApp.Run<MainView>(title: \"MyApp\");"),
+                                TextBlock(""),
+                                TextBlock("class MainView : Component"),
+                                TextBlock("{"),
+                                TextBlock("    public override Element Render() => Text(\"Hello\");"),
+                                TextBlock("}")
+                            ).Padding(16)
+                        }
+                    },
+                    SelectedIndex: 0),
             }),
     };
 }
@@ -55,22 +75,31 @@ class TabGroupDemo : Component
         Layout = new DockTabGroup(
             Documents: new[]
             {
-                new DockableContent("App.cs",
-                    VStack(4,
+                new Document
+                {
+                    Title = "App.cs",
+                    Key = "doc:app",
+                    Content = VStack(4,
                         TextBlock("// App.cs"),
                         TextBlock("public sealed class App : Component"),
                         TextBlock("{"),
                         TextBlock("    public override Element Render() =>"),
                         TextBlock("        Text(\"hello, world\");"),
                         TextBlock("}")
-                    ).Padding(16),
-                    Key: "doc:app", CanClose: true),
-                new DockableContent("MainView.cs",
-                    TextBlock("// MainView.cs body").Padding(16),
-                    Key: "doc:main", CanClose: true),
-                new DockableContent("Readme.md",
-                    TextBlock("# Readme").Padding(16),
-                    Key: "doc:readme", CanClose: true),
+                    ).Padding(16)
+                },
+                new Document
+                {
+                    Title = "MainView.cs",
+                    Key = "doc:main",
+                    Content = TextBlock("// MainView.cs body").Padding(16)
+                },
+                new Document
+                {
+                    Title = "Readme.md",
+                    Key = "doc:readme",
+                    Content = TextBlock("# Readme").Padding(16)
+                },
             },
             SelectedIndex: 0),
     };
@@ -82,26 +111,29 @@ class SidePinDemo : Component
 {
     public override Element Render() => new DockManager
     {
-        Layout = new DockableContent(
-            Title: "Document",
-            Key: "doc:main",
-            Content: VStack(8,
+        Layout = new Document
+        {
+            Title = "Document",
+            Key = "doc:main",
+            Content = VStack(8,
                 TextBlock("Document area").SemiBold(),
                 TextBlock("Click the pinned tab on the right to expand it."),
                 TextBlock("Pin / unpin from inside the popup to toggle.")
-            ).Padding(16)),
+            ).Padding(16)
+        },
 
         RightSide = new[]
         {
-            new DockableContent(
-                Title: "Properties",
-                Key: "tool:properties",
-                Content: VStack(4,
+            new ToolWindow
+            {
+                Title = "Properties",
+                Key = "tool:properties",
+                Content = VStack(4,
                     TextBlock("Name").SemiBold(),
                     TextBlock("Width: 240"),
                     TextBlock("Height: 120")
-                ).Padding(12),
-                CanPin: true),
+                ).Padding(12)
+            },
         },
     };
 }
@@ -112,19 +144,26 @@ class PersistenceDemo : Component
 {
     public override Element Render() => new DockManager
     {
-        // Layout JSON is auto-saved to WindowPersistedScope["docking:my-shell"]
-        // on unmount and restored on next mount.
+        // Layout JSON is auto-saved to WindowPersistedScope["docking:my-shell"].
+        // It is the restore fallback when a later mount leaves Layout null.
         PersistenceId = "my-shell",
         Layout = new DockSplit(
             Orientation.Horizontal,
             new DockNode[]
             {
-                new DockableContent("Pane 1",
-                    TextBlock("Rearrange me, then relaunch.").Padding(12),
-                    Key: "p1", Width: 220),
-                new DockableContent("Pane 2",
-                    TextBlock("Layout restores from PersistenceId.").Padding(12),
-                    Key: "p2"),
+                new ToolWindow
+                {
+                    Title = "Outline",
+                    Key = "tool:outline",
+                    Width = 240,
+                    Content = TextBlock("Rearrange me, then relaunch.").Padding(12)
+                },
+                new Document
+                {
+                    Title = "Editor",
+                    Key = "doc:editor",
+                    Content = TextBlock("Layout restores from PersistenceId when no declarative Layout is supplied.").Padding(12)
+                },
             }),
     };
 }

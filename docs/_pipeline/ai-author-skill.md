@@ -307,10 +307,12 @@ screenshots:
   - id: main-view
     description: "Description of what's shown"
     region: client              # "client" (no title bar) or "window"
+    crop: content               # "content" auto-crops whitespace; use "none" for full-frame layouts
     format: png
   - id: detail-view
     description: "Detailed view after interaction"
     region: client
+    crop: content
     format: png
   # Controls-catalog index thumbnails (spec 041 §6.3, §12 Q7).
   # kind: catalog-thumb downscales the captured frame to 320x240 with
@@ -344,6 +346,8 @@ ReactorApp.Run<MyApp>("Title", width: 600, height: 400, devtools: true);
 - Each component class in the file can be wrapped in snippet markers.
 - The app should display a reasonable default state on launch (the screenshots
   are captured after `startup-delay` ms with no interaction).
+- Use `crop: none` for sparse, layout-heavy screenshots where whitespace or
+  the full client frame is meaningful (for example, docking surfaces).
 
 ---
 
@@ -461,6 +465,9 @@ block (no language tag) — not an SVG.
 - Every major UI example should have a screenshot immediately after the code.
 - Alt text should describe what the screenshot shows, not what it is:
   "Todo list with two items checked off" not "Screenshot of todo app."
+- For fast screenshot-only iteration, run
+  `mur docs compile --topic <topic> --screenshots <id>[,<id>]` or pass full
+  refs such as `--screenshots docking/two-pane,docking/side-pin`.
 
 ### Tips Sections
 
@@ -607,7 +614,7 @@ Apply with `.FocusTrap(handle)` modifier on a container element.
 
 **Text:** `Text(s)`, `Heading(s)`, `SubHeading(s)`, `Caption(s)`
 
-**Input:** `TextField(value, onChange, placeholder?, header?)`,
+**Input:** `TextBox(value, onChange, placeholder?, header?)`,
 `CheckBox(isChecked, onChange, label?)`, `Button(label, onClick)`,
 `Slider(value, min, max, onChange)`, `ToggleSwitch(isOn, onChange)`,
 `NumberBox(value, onChange)`, `ComboBox(items, selectedIndex, onChange)`,
@@ -788,7 +795,7 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 | Order | Page | Tier | Description |
 |-------|------|------|-------------|
 | 6.5 | controls | NEW stub → comprehensive | Thumbnail index linking every catalog page |
-| 7 | forms | solid → comprehensive | TextField, CheckBox, ComboBox, Slider, NumberBox, PasswordBox, RadioButtons, ToggleSwitch, AutoSuggestBox, DatePicker, TimePicker, CalendarView, ColorPicker, validation |
+| 7 | forms | solid → comprehensive | TextBox, CheckBox, ComboBox, Slider, NumberBox, PasswordBox, RadioButtons, ToggleSwitch, AutoSuggestBox, DatePicker, TimePicker, CalendarView, ColorPicker, validation |
 | 8 | collections | solid → comprehensive | ListView, GridView, LazyVStack, VirtualList, grouping, drag-reorder |
 | 8.3 | text-and-media | NEW stub → comprehensive | TextBlock variants, RichTextBlock, RichEditBox, MarkdownTextBlock, Image, MediaPlayerElement, WebView2, InkCanvas, MapControl |
 | 8.5 | status-and-info | NEW stub → solid | InfoBar, InfoBadge, ProgressBar, ProgressRing, TeachingTip, PipsPager, PersonPicture, RatingControl |

@@ -59,6 +59,35 @@ public class ImageProcessorTests
         Assert.Throws<ArgumentException>(() => ImageProcessor.ProcessThumb(bogus));
     }
 
+    [Fact]
+    public void Process_none_crop_preserves_full_frame_before_chrome()
+    {
+        var png = MakePngWithCenteredContent(120, 80, 20, 20);
+
+        var bytes = ImageProcessor.Process(png, ScreenshotCropMode.None);
+
+        using var ms = new MemoryStream(bytes);
+        using var bmp = new Bitmap(ms);
+        Assert.Equal(128, bmp.Width);
+        Assert.Equal(88, bmp.Height);
+    }
+
+    [Theory]
+    [InlineData(null, nameof(ScreenshotCropMode.Content))]
+    [InlineData("", nameof(ScreenshotCropMode.Content))]
+    [InlineData("content", nameof(ScreenshotCropMode.Content))]
+    [InlineData("none", nameof(ScreenshotCropMode.None))]
+    public void ParseCropMode_accepts_supported_values(string? value, string expected)
+    {
+        Assert.Equal(expected, ImageProcessor.ParseCropMode(value).ToString());
+    }
+
+    [Fact]
+    public void ParseCropMode_rejects_unknown_values()
+    {
+        Assert.Throws<ArgumentException>(() => ImageProcessor.ParseCropMode("bounds"));
+    }
+
     private static byte[] MakeSolidPng(int w, int h, Color color)
     {
         using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
@@ -66,6 +95,21 @@ public class ImageProcessorTests
         {
             g.Clear(color);
         }
+        using var ms = new MemoryStream();
+        bmp.Save(ms, ImageFormat.Png);
+        return ms.ToArray();
+    }
+
+    private static byte[] MakePngWithCenteredContent(int w, int h, int contentW, int contentH)
+    {
+        using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.Clear(Color.White);
+            using var brush = new SolidBrush(Color.Black);
+            g.FillRectangle(brush, (w - contentW) / 2, (h - contentH) / 2, contentW, contentH);
+        }
+
         using var ms = new MemoryStream();
         bmp.Save(ms, ImageFormat.Png);
         return ms.ToArray();
