@@ -72,6 +72,24 @@ matches panes by `Key` and preserves the element subtree (and its
 `UseState` slots) across tree rebuilds. There is no implicit
 `Title`-as-key fallback; always supply one.
 
+The `DockNode` algebra has three node kinds (all immutable records):
+
+| Type | Purpose |
+|------|---------|
+| `DockSplit(Orientation, Children, …)` | Splits children along one axis, with drag-resize splitters between them |
+| `DockTabGroup(Documents, TabPosition, CompactTabs, …)` | Presents children as tabs |
+| `DockableContent(Title, Content, Key, CanClose, CanPin, CanFloat, CanMove, …)` | Leaf pane |
+
+`DockManager` itself accepts these props:
+
+| Prop | Purpose |
+|------|---------|
+| `Layout` | Root of the `DockNode` tree |
+| `LeftSide` / `TopSide` / `RightSide` / `BottomSide` | Pinned tool windows along an edge |
+| `ActiveDocument` | Resolves by `Key` against `Layout`; mismatched keys leave activation alone |
+| `Adapter` | `IDockAdapter` for rehydration and floating chrome |
+| `PersistenceId` | Routes layout JSON through `WindowPersistedScope` |
+
 ## Tab Groups
 
 `DockTabGroup` holds N `DockableContent` leaves and presents them as
@@ -215,26 +233,6 @@ class FloatingChromeAdapter : IDockAdapter
 Pass the adapter on `DockManager.Adapter`. `OnContentCreated` is also
 called when a pane is rehydrated from persisted JSON — return the
 Reactor subtree to mount inside it, keyed off `content.Key`.
-
-## Reference
-
-`DockNode` algebra (all immutable records):
-
-| Type | Purpose |
-|------|---------|
-| `DockSplit(Orientation, Children, …)` | Splits children along one axis, with drag-resize splitters between them |
-| `DockTabGroup(Documents, TabPosition, CompactTabs, …)` | Presents children as tabs |
-| `DockableContent(Title, Content, Key, CanClose, CanPin, CanFloat, CanMove, …)` | Leaf pane |
-
-`DockManager` props worth knowing:
-
-| Prop | Purpose |
-|------|---------|
-| `Layout` | Root of the `DockNode` tree |
-| `LeftSide` / `TopSide` / `RightSide` / `BottomSide` | Pinned tool windows |
-| `ActiveDocument` | Resolves by `Key` against `Layout`; mismatched keys leave activation alone |
-| `Adapter` | `IDockAdapter` for rehydration and floating chrome |
-| `PersistenceId` | Routes layout JSON through `WindowPersistedScope` |
 
 ## Tips
 
