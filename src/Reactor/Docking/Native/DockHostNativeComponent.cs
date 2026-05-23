@@ -384,7 +384,13 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                         StoreOverride(afterRemoveX);
                         manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
                         manager.OnLiveLayoutChanged?.Invoke(afterRemoveX);
-                        LogOp(Diagnostics.DockOperationKind.DragTearOut,
+                        // This is a cross-window dock-in (append-as-tab
+                        // into an existing floating window), NOT a
+                        // tear-out into a new floating window. Use
+                        // DragConfirm to keep the operation log /
+                        // replay analysis honest — matches the
+                        // semantics used by OnExternalCrossWindowDrop.
+                        LogOp(Diagnostics.DockOperationKind.DragConfirm,
                             $"cross-window dock-in pane='{pane.Key}' to existing floating window",
                             paneKey: pane.Key?.ToString(),
                             layoutOverride: afterRemoveX);

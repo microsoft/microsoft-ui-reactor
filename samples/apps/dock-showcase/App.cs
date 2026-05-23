@@ -1142,7 +1142,7 @@ class SceneITabStyles : Component
         // Persistence note
         TextBlock(
             "Persistence — TabChrome serializes via the DockLayoutSerializer JSON; " +
-            "legacy layouts without the 	abChrome field default to Win11."
+            "legacy layouts without the tabChrome field default to Win11."
         ).Opacity(0.55).FontSize(11)
             .Grid(row: 5, column: 0, columnSpan: 2)
     ).Padding(16);

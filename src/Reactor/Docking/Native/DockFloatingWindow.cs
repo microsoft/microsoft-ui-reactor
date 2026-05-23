@@ -78,12 +78,17 @@ public static class DockFloatingWindow
             Height = bounds?.Height ?? height,
             Owner = owner,
             // Spec 045 §4.2 — floating dockable windows extend their
-            // content into the title-bar zone so the wrapping
-            // `TitleBarElement` (which mounts to WinUI 3
-            // `Microsoft.UI.Xaml.Controls.TitleBar`) acts as the
-            // window's chrome. MountTitleBar then auto-calls
-            // Window.SetTitleBar so OS drag-move + caption inset are
-            // wired without app-side plumbing (§4.4).
+            // content into the title-bar zone so the docking TabView
+            // (rendered as the window's root by BuildChrome) acts as
+            // the window's visible chrome. The drag region is a
+            // transparent BorderElement placed in the TabView's
+            // TabStripFooter; its OnMount calls Window.SetTitleBar so
+            // the OS reserves the caption-button inset and treats the
+            // footer area as a window drag-move surface (§4.4).
+            // We do NOT use Microsoft.UI.Xaml.Controls.TitleBar /
+            // TitleBarElement here — its Content slot is an in-row
+            // chrome slot (Edge address-bar style) and cannot host a
+            // full TabView with bodies.
             ExtendsContentIntoTitleBar = true,
         };
 
@@ -266,8 +271,24 @@ public static class DockFloatingWindow
                     var win = windowHolder[0]?.NativeWindow;
                     win?.SetTitleBar(fe);
                 }
-                if (fe.IsLoaded) Apply();
-                else fe.Loaded += (_, _) => Apply();
+                if (fe.IsLoaded)
+                {
+                    Apply();
+                }
+                else
+                {
+                    global::Microsoft.UI.Xaml.RoutedEventHandler? handler = null;
+                    handler = (_, _) =>
+                    {
+                        // One-shot: SetTitleBar only needs to be wired
+                        // once, and WinUI Loaded can re-fire on
+                        // reparent/reload. Unsubscribe ourselves so we
+                        // don't leak the delegate or re-call SetTitleBar.
+                        if (handler is not null) fe.Loaded -= handler;
+                        Apply();
+                    };
+                    fe.Loaded += handler;
+                }
             });
 
         return rendered with { TabStripFooter = dragRegion };
@@ -313,6 +334,32 @@ internal sealed class DockFloatingWindowComponent : Component<DockFloatingWindow
         var holder = Props.WindowHolder;
         var manager = Props.Manager;
 
+        // Shared append-as-tab callback. Used by both the UseEffect
+        // router registration AND the floating→floating drag-completed
+        // gap reAppend below — keeping a single implementation
+        // guarantees that any side-effect (notably the AppWindow title
+        // update on first-tab append) stays consistent across both
+        // registration paths.
+        Action<DockableContent> append = src =>
+        {
+            updatePanes(current =>
+            {
+                for (int i = 0; i < current.Count; i++)
+                    if (ReferenceEquals(current[i], src)) return current;
+                var list = new List<DockableContent>(current.Count + 1);
+                list.AddRange(current);
+                list.Add(src);
+                return list;
+            });
+            try
+            {
+                var win = holder[0];
+                var native = win?.NativeWindow;
+                if (native is not null) native.Title = src.Title ?? string.Empty;
+            }
+            catch { /* window may already be closing */ }
+        };
+
         // Register an append-as-tab callback so the source host's
         // `HandleTabDragCompleted` can route a cross-window dock-in
         // (cursor over this floating window at drop time) to us
@@ -329,25 +376,6 @@ internal sealed class DockFloatingWindowComponent : Component<DockFloatingWindow
         // the floating window invisible to the cross-window router.
         UseEffect(() =>
         {
-            Action<DockableContent> append = src =>
-            {
-                updatePanes(current =>
-                {
-                    for (int i = 0; i < current.Count; i++)
-                        if (ReferenceEquals(current[i], src)) return current;
-                    var list = new List<DockableContent>(current.Count + 1);
-                    list.AddRange(current);
-                    list.Add(src);
-                    return list;
-                });
-                try
-                {
-                    var win = holder[0];
-                    var native = win?.NativeWindow;
-                    if (native is not null) native.Title = src.Title ?? string.Empty;
-                }
-                catch { /* window may already be closing */ }
-            };
             bool alive = true;
             ReactorWindow? registered = null;
             var dispatcher = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
@@ -459,23 +487,16 @@ internal sealed class DockFloatingWindowComponent : Component<DockFloatingWindow
                     finally
                     {
                         // Re-register ourselves so subsequent drags
-                        // can target us again.
+                        // can target us again. Reuse the shared
+                        // `append` closure declared above so a pane
+                        // appended via this gap-bridge still updates
+                        // the AppWindow title — the UseEffect
+                        // re-registration on the next render would
+                        // restore that behavior eventually, but the
+                        // window may be a drop target during the gap.
                         if (ownWindow is not null)
                         {
-                            // Re-build the same closure (UseEffect will
-                            // re-register on next render too, but this
-                            // bridges the small gap until then).
-                            Action<DockableContent> reAppend = src =>
-                                updatePanes(current =>
-                                {
-                                    for (int i = 0; i < current.Count; i++)
-                                        if (ReferenceEquals(current[i], src)) return current;
-                                    var list = new List<DockableContent>(current.Count + 1);
-                                    list.AddRange(current);
-                                    list.Add(src);
-                                    return list;
-                                });
-                            DockFloatingPaneRouter.Register(ownWindow, reAppend);
+                            DockFloatingPaneRouter.Register(ownWindow, append);
                         }
                     }
                 }
@@ -496,13 +517,6 @@ internal sealed class DockFloatingWindowComponent : Component<DockFloatingWindow
         return chrome
             .Provide(DockContexts.Pane, (DockPaneInfo?)info)
             .Provide(DockContexts.PaneState, DockPaneState.Floating);
-    }
-
-    private static bool ContainsByRef(IReadOnlyList<DockableContent> list, DockableContent target)
-    {
-        for (int i = 0; i < list.Count; i++)
-            if (ReferenceEquals(list[i], target)) return true;
-        return false;
     }
 }
 
