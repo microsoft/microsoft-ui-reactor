@@ -3092,6 +3092,14 @@ public sealed partial class Reconciler
 
     private UIElement? UpdateItemsView(ItemsViewElementBase n, WinUI.ItemsView iv, Action requestRerender)
     {
+        // Same preflight as Mount. Covers the 0→>0 transition: if
+        // the element initially mounted with an empty Items list, the
+        // mount-time PreflightFirstItem was a no-op, so a missing
+        // ItemContainer root in the viewBuilder would otherwise sneak
+        // past every guard and reach the WinUI infinite-measure cycle
+        // when the framework realizes the first row.
+        n.PreflightFirstItem();
+
         // ItemsView is templated; the actual realization host is the
         // ItemsRepeater inside PART_ScrollView. The ScrollView property
         // is the inner ScrollView (xaml part PART_ScrollView), and its

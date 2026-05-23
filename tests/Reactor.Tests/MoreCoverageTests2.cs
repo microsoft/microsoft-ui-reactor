@@ -4,7 +4,6 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
-using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Tests;
 

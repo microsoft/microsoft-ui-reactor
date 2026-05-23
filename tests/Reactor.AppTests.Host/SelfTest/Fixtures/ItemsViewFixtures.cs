@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml.Controls;
@@ -299,9 +300,7 @@ internal static class ItemsViewFixtures
                 await Harness.Render();
 
                 var modified = host.Reconciler.LastModifiedElements;
-                int flashedContainers = 0;
-                foreach (var c in containersBefore)
-                    if (modified.Contains(c)) flashedContainers++;
+                int flashedContainers = containersBefore.Count(c => modified.Contains(c));
 
                 // Pre-fix: every realized container was in LastModifiedElements.
                 // Post-fix: ItemContainerElement's OwnPropsEqual returns true

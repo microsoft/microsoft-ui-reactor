@@ -51,13 +51,20 @@ class ItemsViewDemo : Component
         // on the other (unchanged) TextBlocks short-circuits the Update.
         var (sliderValue, setSliderValue) = UseState(0);
 
-        var (items, updateItems) = UseReducer(Enumerable.Range(0, itemCount)
+        // Memoized by itemCount so the list reference is stable across
+        // unrelated re-renders (slider scrubs, selection clicks). The
+        // factory's per-key viewBuilder cache hinges on reference
+        // identity of each item, so churning new Card instances every
+        // render would defeat the cache. UseReducer here would NOT work
+        // — it only honors its initial value, so the items count
+        // buttons below wouldn't actually take effect.
+        var items = UseMemo(() => Enumerable.Range(0, itemCount)
             .Select(i => new Card(
                 i,
                 $"Card {i}",
                 $"This is item #{i}. Try switching layouts and selection modes.",
                 Palette[i % Palette.Length]))
-            .ToList());
+            .ToList(), itemCount);
 
         Element BuildItem(Card c, int index) =>
             ItemContainer(

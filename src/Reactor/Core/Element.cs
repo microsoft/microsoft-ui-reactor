@@ -3626,8 +3626,8 @@ public record ItemsViewElement<T>(
     /// ItemsView hangs in an infinite measure cycle if the factory hands
     /// back non-ItemContainer roots (see
     /// <c>microsoft-ui-xaml-lift/controls/dev/ItemsView/ItemsView.cpp:317</c>),
-    /// so converting that into a clear ArgumentException at the call site
-    /// saves users a baffling debugging session.
+    /// so converting that into a clear <see cref="global::System.InvalidOperationException"/>
+    /// at the call site saves users a baffling debugging session.
     /// </summary>
     private Element GuardedViewBuilder(T item, int index)
     {
