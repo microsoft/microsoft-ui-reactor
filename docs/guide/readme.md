@@ -147,6 +147,7 @@ first; everyone else can follow the order.
 
 - **[Navigation](navigation.md)** — NavigationView, TabView, multi-page apps, routing
 - **[Windows](windows.md)** — Top-level windows, tray icons, OpenWindow, shutdown policy
+- **[Docking Windows](docking.md)** — Rearrangeable dock panes: splits, tabs, side pins, floating tear-outs, persistence
 - **[Async Resources](async-resources.md)** — `UseResource`, `UseInfiniteResource`, `UseMutation`, `Pending`
 - **[Persistence](persistence.md)** — UsePersisted, scopes, migration
 - **[Localization](localization.md)** — Multi-language support, resource strings, RTL layouts

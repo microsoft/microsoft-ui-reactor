@@ -1,0 +1,27 @@
+app:
+  title: "Docking"
+  width: 900
+  height: 600
+  startup-delay: 1500
+
+screenshots:
+  - id: two-pane
+    description: "Minimal horizontal split with a tool pane and an editor pane"
+    component: TwoPaneDemo
+    region: client
+    format: png
+  - id: tab-group
+    description: "Single tab group with three closeable document tabs"
+    component: TabGroupDemo
+    region: client
+    format: png
+  - id: side-pin
+    description: "Document area with a pinned tool collapsed to the right edge"
+    component: SidePinDemo
+    region: client
+    format: png
+  - id: persistence
+    description: "Two-pane horizontal split with PersistenceId set"
+    component: PersistenceDemo
+    region: client
+    format: png
