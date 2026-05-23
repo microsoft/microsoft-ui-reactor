@@ -6,6 +6,7 @@ namespace Microsoft.UI.Reactor.Tests;
 /// <summary>
 /// Tests for UseCommand hook — sync passthrough, async lifecycle, re-entrance guards.
 /// </summary>
+[Collection("UnobservedTaskException")]
 public class UseCommandTests
 {
     private static RenderContext CreateContext()
@@ -106,31 +107,60 @@ public class UseCommandTests
     }
 
     [Fact]
+    [Trait("Category", "Threading")]
     public async Task Error_In_ExecuteAsync_Still_Resets_IsExecuting()
     {
         // Use a semaphore to observe re-render requests from setIsExecuting.
         // Task.Yield() doesn't reliably interleave with thread pool work items
         // under xUnit's synchronization context.
-        var stateChanged = new SemaphoreSlim(0);
-        var ctx = new RenderContext();
-        ctx.BeginRender(() => stateChanged.Release());
-        var cmd = new Command
+        int unobserved = 0;
+        EventHandler<UnobservedTaskExceptionEventArgs> handler = (_, e) =>
         {
-            Label = "Save",
-            ExecuteAsync = () => throw new InvalidOperationException("test error")
+            if (e.Exception.InnerExceptions.Any(ex =>
+                ex is InvalidOperationException { Message: "test error" }))
+            {
+                Interlocked.Increment(ref unobserved);
+                e.SetObserved();
+            }
         };
+        TaskScheduler.UnobservedTaskException += handler;
+        var stateChanged = new SemaphoreSlim(0);
+        try
+        {
+            var ctx = new RenderContext();
+            ctx.BeginRender(() => stateChanged.Release());
+            var cmd = new Command
+            {
+                Label = "Save",
+                ExecuteAsync = () => throw new InvalidOperationException("test error")
+            };
 
-        var result = ctx.UseCommand(cmd);
-        result.Execute!();
+            var result = ctx.UseCommand(cmd);
+            result.Execute!();
 
-        // Execute! synchronously sets IsExecuting=true (1st release), then Task.Run
-        // catches the error and sets IsExecuting=false in finally (2nd release).
-        await stateChanged.WaitAsync(TimeSpan.FromSeconds(5));
-        await stateChanged.WaitAsync(TimeSpan.FromSeconds(5));
+            // Execute! synchronously sets IsExecuting=true (1st release), then Task.Run
+            // lets the error fault the background task while still resetting
+            // IsExecuting=false in finally (2nd release).
+            await stateChanged.WaitAsync(TimeSpan.FromSeconds(5));
+            await stateChanged.WaitAsync(TimeSpan.FromSeconds(5));
 
-        Rerender(ctx);
-        var result2 = ctx.UseCommand(cmd);
-        Assert.False(result2.IsExecuting);
+            Rerender(ctx);
+            var result2 = ctx.UseCommand(cmd);
+            Assert.False(result2.IsExecuting);
+
+            for (int i = 0; i < 10 && Volatile.Read(ref unobserved) == 0; i++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                await Task.Delay(10);
+            }
+            Assert.Equal(1, Volatile.Read(ref unobserved));
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= handler;
+            stateChanged.Dispose();
+        }
     }
 
     // ════════════════════════════════════════════════════════════════

@@ -19,3 +19,12 @@ public sealed class ConsoleTestsCollection { }
 /// </summary>
 [CollectionDefinition("UnobservedTaskException", DisableParallelization = true)]
 public sealed class UnobservedTaskExceptionCollection { }
+
+/// <summary>
+/// xUnit collection marker for tests that mutate
+/// <see cref="Microsoft.UI.Reactor.Core.ApplicationPersistedScope.Default"/>.
+/// The singleton is process-wide, so tests that clear or write it must not run
+/// concurrently with other tests that assert values remain present.
+/// </summary>
+[CollectionDefinition("PersistedStateCache", DisableParallelization = true)]
+public sealed class PersistedStateCacheCollection { }

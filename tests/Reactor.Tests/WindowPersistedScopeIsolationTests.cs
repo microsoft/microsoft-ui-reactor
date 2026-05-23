@@ -11,6 +11,7 @@ namespace Microsoft.UI.Reactor.Tests;
 /// type is the same instance <see cref="ReactorWindow.PersistedScope"/>
 /// surfaces, so isolation is a property of the scope object itself.
 /// </summary>
+[Collection("PersistedStateCache")]
 public class WindowPersistedScopeIsolationTests
 {
     [Fact]

@@ -10,9 +10,9 @@ namespace Microsoft.UI.Reactor.Tests;
 /// component lifecycle (BeginRender → Render → FlushEffects → RunCleanups)
 /// through a shared ContextScope.
 /// </summary>
-// Shares the process-wide ApplicationPersistedScope.Default with
-// PersistedStateTests; both Clear() it in setup/teardown, so xUnit must
-// serialize them or a Clear() can race with another class's Set/TryGet.
+// Shares the process-wide ApplicationPersistedScope.Default with other
+// persistence tests; setup/teardown Clear() must not race another class's
+// Set/TryGet against the singleton.
 [Collection("PersistedStateCache")]
 public class ComponentModelIntegrationTests : IDisposable
 {

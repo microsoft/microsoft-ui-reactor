@@ -6,9 +6,9 @@ namespace Microsoft.UI.Reactor.Tests;
 /// <summary>
 /// Phase 4 tests: PersistedStateCache unit tests and UsePersisted hook tests.
 /// </summary>
-// Shares the process-wide ApplicationPersistedScope.Default with
-// ComponentModelIntegrationTests; both Clear() it in setup/teardown, so xUnit
-// must serialize them or a Clear() can race with another class's Set/TryGet.
+// Shares the process-wide ApplicationPersistedScope.Default with other
+// persistence tests; setup/teardown Clear() must not race another class's
+// Set/TryGet against the singleton.
 [Collection("PersistedStateCache")]
 public class PersistedStateTests : IDisposable
 {
