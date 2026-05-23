@@ -286,12 +286,9 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
                 // edges always collapsed; inner cluster except Center
                 // permanently hidden; Center hidden until DragEnter
                 // reveals it.
-                if (isEdge || entry.Target != DockTarget.Center)
-                    entry.Button.Visibility = Visibility.Collapsed;
-                else
-                    entry.Button.Visibility = _groupOverlayRevealed
-                        ? Visibility.Visible
-                        : Visibility.Collapsed;
+                entry.Button.Visibility = (isEdge || entry.Target != DockTarget.Center)
+                    ? Visibility.Collapsed
+                    : (_groupOverlayRevealed ? Visibility.Visible : Visibility.Collapsed);
             }
             else
             {

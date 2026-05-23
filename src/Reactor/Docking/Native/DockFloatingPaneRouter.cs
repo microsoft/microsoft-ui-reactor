@@ -84,12 +84,20 @@ internal static class DockFloatingPaneRouter
         {
             var win = snapshot[i].Key;
             global::Microsoft.UI.Xaml.Window? native;
+            // Typed catches for the recoverable cases we expect when a
+            // floating window is mid-close / disposed / WinRT proxy is
+            // torn down. Anything else propagates so unknown failures
+            // don't get silently swallowed.
             try { native = win.NativeWindow; }
-            catch { continue; }
+            catch (COMException) { continue; }
+            catch (ObjectDisposedException) { continue; }
+            catch (InvalidOperationException) { continue; }
             if (native is null) continue;
             nint hwnd;
             try { hwnd = WinRT.Interop.WindowNative.GetWindowHandle(native); }
-            catch { continue; }
+            catch (COMException) { continue; }
+            catch (ObjectDisposedException) { continue; }
+            catch (InvalidOperationException) { continue; }
             if (hwnd == 0) continue;
             if (!NativeInterop.GetWindowRect(hwnd, out var rect)) continue;
             if (cursor.X < rect.Left || cursor.X >= rect.Right) continue;
@@ -98,7 +106,14 @@ internal static class DockFloatingPaneRouter
             // Bring the window forward so the user has visible
             // confirmation that the pane landed there (matches the
             // perceived UX of "I dropped it on the floating window").
-            try { NativeInterop.SetForegroundWindow(hwnd); } catch { /* best-effort */ }
+            // SetForegroundWindow is best-effort: Windows refuses the
+            // foreground promotion under several documented conditions
+            // (foreground-lock timer, no input focus on caller) — these
+            // surface as a benign Win32 SetLastError, not an exception,
+            // but be defensive about COM/disposed shutdowns regardless.
+            try { NativeInterop.SetForegroundWindow(hwnd); }
+            catch (COMException) { /* best-effort */ }
+            catch (ObjectDisposedException) { /* best-effort */ }
             snapshot[i].Value(pane);
             return true;
         }

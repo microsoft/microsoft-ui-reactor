@@ -1504,9 +1504,16 @@ internal static class NativeDockingSmokeFixtures
                 && right.Resources.TryGetValue("TabViewItemHeaderCornerRadius", out var cr)
                 && cr is CornerRadius radius)
             {
+                // Production sets `new CornerRadius(0)` which produces
+                // exact 0.0 doubles, but CodeQL flags any `== 0.0` on a
+                // double — use an epsilon to silence the rule without
+                // changing the intent ("effectively zero").
+                const double epsilon = 1e-9;
                 H.Check("TabChrome_Flat_CornerRadiusIsZero",
-                    radius.TopLeft == 0 && radius.TopRight == 0
-                    && radius.BottomLeft == 0 && radius.BottomRight == 0);
+                    Math.Abs(radius.TopLeft) < epsilon
+                    && Math.Abs(radius.TopRight) < epsilon
+                    && Math.Abs(radius.BottomLeft) < epsilon
+                    && Math.Abs(radius.BottomRight) < epsilon);
             }
             else
             {
@@ -1559,17 +1566,14 @@ internal static class NativeDockingSmokeFixtures
         // or StackPanel with a TextBlock) matches `header`.
         private static bool HasHeader(TabView tv, string header)
         {
-            foreach (var item in tv.TabItems)
+            foreach (var tvi in tv.TabItems.OfType<TabViewItem>())
             {
-                if (item is TabViewItem tvi)
+                if (tvi.Header is string s && s == header) return true;
+                if (tvi.Header is StackPanel sp)
                 {
-                    if (tvi.Header is string s && s == header) return true;
-                    if (tvi.Header is StackPanel sp)
+                    foreach (var tb in sp.Children.OfType<TextBlock>())
                     {
-                        foreach (var child in sp.Children)
-                        {
-                            if (child is TextBlock tb && tb.Text == header) return true;
-                        }
+                        if (tb.Text == header) return true;
                     }
                 }
             }
