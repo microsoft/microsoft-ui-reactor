@@ -2798,6 +2798,7 @@ public sealed partial class Reconciler : IDisposable
         public RoutedEventHandler? LostFocusTrampoline;
         public RoutedEventHandler? ToggleSwitchToggledTrampoline;
         public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? AccessKeyDisplayRequestedTrampoline;
+        public bool NumberBoxInnerTextChanged;
 
         /// <summary>
         /// Null out every Current* user delegate so trampolines already attached

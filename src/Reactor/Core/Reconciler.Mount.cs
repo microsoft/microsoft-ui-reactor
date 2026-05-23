@@ -598,6 +598,7 @@ public sealed partial class Reconciler
         // without re-mounting — the handler re-checks the marker each fire.
         numBox.RegisterPropertyChangedCallback(WinUI.NumberBox.TextProperty,
             NumberBoxImmediateTextChanged);
+        numBox.Loaded += NumberBoxLoadedEnsureImmediateTextBox;
         ApplySetters(nb.Setters, numBox);
         return numBox;
     }
@@ -606,10 +607,49 @@ public sealed partial class Reconciler
         (sender, _) =>
         {
             if (sender is not WinUI.NumberBox box) return;
+            HandleNumberBoxImmediateTextChanged(box, box.Text);
+        };
+
+    private static void NumberBoxLoadedEnsureImmediateTextBox(object sender, RoutedEventArgs _)
+    {
+        if (sender is not WinUI.NumberBox box) return;
+        if (EnsureNumberBoxImmediateTextBoxWiring(box))
+            box.Loaded -= NumberBoxLoadedEnsureImmediateTextBox;
+    }
+
+    private static bool EnsureNumberBoxImmediateTextBoxWiring(WinUI.NumberBox box)
+    {
+        var events = GetOrCreateEventState(box);
+        if (events.NumberBoxInnerTextChanged) return true;
+
+        box.ApplyTemplate();
+        var input = FindDescendant<TextBox>(box);
+        if (input is null) return false;
+
+        events.NumberBoxInnerTextChanged = true;
+        input.TextChanged += (_, _) => HandleNumberBoxImmediateTextChanged(box, input.Text);
+        return true;
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
+    {
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is T match) return match;
+            var nested = FindDescendant<T>(child);
+            if (nested is not null) return nested;
+        }
+        return null;
+    }
+
+    private static void HandleNumberBoxImmediateTextChanged(WinUI.NumberBox box, string text)
+    {
             if (GetElementTag(box) is not NumberBoxElement el) return;
             if (el.OnValueChanged is null) return;
             if (el.GetAttached<Microsoft.UI.Reactor.Controls.Validation.ImmediateValueAttached>() is null) return;
-            if (!double.TryParse(box.Text,
+            if (!double.TryParse(text,
                 global::System.Globalization.NumberStyles.Float,
                 global::System.Globalization.CultureInfo.CurrentCulture, out var parsed)) return;
             // Reject NaN/±Infinity — double.TryParse accepts the literal strings
@@ -618,8 +658,14 @@ public sealed partial class Reconciler
             if (!double.IsFinite(parsed)) return;
             if (parsed < el.Minimum || parsed > el.Maximum) return;
             if (parsed == el.Value) return; // already in sync; suppresses post-programmatic-write callback
+            if (CanSynchronizeNumberBoxImmediateValueWithoutReformat(el, text, parsed)
+                && box.Value != parsed)
+            {
+                ChangeEchoSuppressor.BeginSuppress(box);
+                box.Value = parsed;
+            }
             el.OnValueChanged.Invoke(parsed);
-        };
+    }
 
     private WinUI.AutoSuggestBox MountAutoSuggestBox(AutoSuggestBoxElement asb)
     {
