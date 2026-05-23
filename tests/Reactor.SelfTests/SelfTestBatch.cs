@@ -44,7 +44,7 @@ public class SelfTestBatch
         if (!string.IsNullOrEmpty(stderr))
             _fullOutput += "\n--- stderr ---\n" + stderr;
 
-        ParseTap(stdout);
+        var tap = ParseTap(stdout);
 
         // Off-dispatcher watchdog in the Host emits a structured signal on
         // dispatcher-starvation hangs. Parse it from stdout *and* stderr (the
@@ -89,6 +89,8 @@ public class SelfTestBatch
             _abortedReason = $"Run aborted by hang on fixture '{hangFixture}'";
         }
 
+        MarkEarlyAbortIfNeeded(exitCode, tap);
+
         _initialized = true;
 
         if (exitCode != 0 && _byFixture.IsEmpty)
@@ -131,7 +133,9 @@ public class SelfTestBatch
         return "..." + s[^maxChars..];
     }
 
-    private static void ParseTap(string stdout)
+    private sealed record TapParseResult(string? LastRunningFixture, bool SawTotalFailures);
+
+    private static TapParseResult ParseTap(string stdout)
     {
         // Two TAP emitter sources:
         //   Harness check:   "ok <checkName>"  /  "not ok <checkName> - <reason>"
@@ -145,10 +149,15 @@ public class SelfTestBatch
         string? current = null;
         var failuresForCurrent = new List<string>();
         var sawChecksForCurrent = false;
+        string? lastRunningFixture = null;
+        var sawTotalFailures = false;
 
         void Flush()
         {
             if (current is null) return;
+            if (_byFixture.TryGetValue(current, out var existing) && !existing.Passed && failuresForCurrent.Count == 0)
+                return;
+
             var passed = failuresForCurrent.Count == 0 && sawChecksForCurrent;
             var detail = failuresForCurrent.Count == 0
                 ? (sawChecksForCurrent ? "" : "fixture emitted no TAP checks")
@@ -163,8 +172,13 @@ public class SelfTestBatch
             {
                 Flush();
                 current = line["# Running: ".Length..].Trim();
+                lastRunningFixture = current;
                 failuresForCurrent = new List<string>();
                 sawChecksForCurrent = false;
+            }
+            else if (line.StartsWith("# Total failures:", StringComparison.Ordinal))
+            {
+                sawTotalFailures = true;
             }
             else if (line.StartsWith("ok "))
             {
@@ -176,9 +190,17 @@ public class SelfTestBatch
                 var rest = line[7..].Trim();
                 if (TryParseRunnerLevelFailure(rest, out var fixtureName, out var detail))
                 {
-                    // Runner-level failure — attribute directly to the fixture name,
-                    // overriding any in-progress `current` bucket.
-                    _byFixture[fixtureName] = (false, detail);
+                    if (string.Equals(fixtureName, current, StringComparison.Ordinal))
+                    {
+                        sawChecksForCurrent = true;
+                        failuresForCurrent.Add(detail);
+                    }
+                    else
+                    {
+                        // Runner-level failure — attribute directly to the fixture name,
+                        // overriding any in-progress `current` bucket.
+                        _byFixture[fixtureName] = (false, detail);
+                    }
                 }
                 else
                 {
@@ -191,6 +213,7 @@ public class SelfTestBatch
             }
         }
         Flush();
+        return new TapParseResult(lastRunningFixture, sawTotalFailures);
     }
 
     private static bool TryParseRunnerLevelFailure(string rest, out string fixtureName, out string detail)
@@ -218,10 +241,55 @@ public class SelfTestBatch
         }
 
         if (namePart.Length == 0) return false;
-        fixtureName = namePart.EndsWith("_CRASH", StringComparison.Ordinal)
-            ? namePart[..^"_CRASH".Length]
-            : namePart;
+        fixtureName = StripRunnerFailureSuffix(namePart);
         return true;
+    }
+
+    private static string StripRunnerFailureSuffix(string namePart)
+    {
+        string[] suffixes = ["_CRASH", "_TIMEOUT"];
+        foreach (var suffix in suffixes)
+        {
+            if (namePart.EndsWith(suffix, StringComparison.Ordinal))
+                return namePart[..^suffix.Length];
+        }
+
+        return namePart;
+    }
+
+    private static void MarkEarlyAbortIfNeeded(int exitCode, TapParseResult tap)
+    {
+        if (_abortedReason is not null || exitCode == 0 && tap.SawTotalFailures)
+            return;
+
+        var fixtureNames = FixtureNames.Value;
+        var firstMissingIndex = Array.FindIndex(fixtureNames, name => !_byFixture.ContainsKey(name));
+        if (firstMissingIndex < 0)
+            return;
+
+        var hasReportedAfterMissing = fixtureNames
+            .Skip(firstMissingIndex + 1)
+            .Any(name => _byFixture.ContainsKey(name));
+        if (hasReportedAfterMissing)
+            return;
+
+        var attributed = tap.LastRunningFixture;
+        if (attributed is not null)
+        {
+            if (!_byFixture.TryGetValue(attributed, out var existing) || existing.Passed)
+            {
+                _byFixture[attributed] = (false,
+                    $"Selftest Host exited before completing fixture '{attributed}'. " +
+                    $"Exit code: {exitCode}. Downstream fixtures were not executed.\n" +
+                    $"--- tail of full output ---\n{Tail(_fullOutput, 4000)}");
+            }
+
+            _abortedReason = $"Run aborted after fixture '{attributed}'";
+        }
+        else
+        {
+            _abortedReason = $"Run aborted before fixture '{fixtureNames[firstMissingIndex]}'";
+        }
     }
 
     public static IEnumerable<object[]> AllFixtures => FixtureNames.Value.Select(n => new object[] { n });

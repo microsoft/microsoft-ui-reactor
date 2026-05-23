@@ -334,9 +334,7 @@ internal static class CoreCoverageFixtures
                 ContentDialog("AutoOpen", TextBlock("dialog-body"), "OK") with { IsOpen = true }
             ));
 
-            await Harness.Render(100);
-
-            var dialog = FindOpenContentDialog(H, "AutoOpen");
+            var dialog = await WaitForOpenContentDialog(H, "AutoOpen");
             H.Check("ContentDialog_OpensAtMount_#246", dialog is not null);
 
             dialog?.Hide();
@@ -364,14 +362,28 @@ internal static class CoreCoverageFixtures
             H.Check("ContentDialog_NotOpenBeforeClick_#246", FindOpenContentDialog(H, "Toggled") is null);
 
             H.ClickButton("Show");
-            await Harness.Render(50);
 
-            var dialog = FindOpenContentDialog(H, "Toggled");
+            var dialog = await WaitForOpenContentDialog(H, "Toggled");
             H.Check("ContentDialog_OpensOnStateFlip_#246", dialog is not null);
 
             dialog?.Hide();
             await Harness.Render(50);
         }
+    }
+
+    private static async Task<Microsoft.UI.Xaml.Controls.ContentDialog?> WaitForOpenContentDialog(
+        Harness h,
+        string title,
+        int timeoutMs = 2_000)
+    {
+        for (var elapsed = 0; elapsed <= timeoutMs; elapsed += 50)
+        {
+            await Harness.Render(elapsed == 0 ? 0 : 34);
+            var dialog = FindOpenContentDialog(h, title);
+            if (dialog is not null) return dialog;
+        }
+
+        return null;
     }
 
     private static Microsoft.UI.Xaml.Controls.ContentDialog? FindOpenContentDialog(Harness h, string title)

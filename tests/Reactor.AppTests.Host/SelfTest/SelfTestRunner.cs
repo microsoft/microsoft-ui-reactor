@@ -25,18 +25,18 @@ internal static class SelfTestRunner
     public static bool SkipAotPatterns { get; set; } = true;
 
     // Per-fixture watchdog. A managed hang used to lock up the whole run; now
-    // we time out, mark it failed, and continue. (Note: native crashes under
-    // AOT terminate the process before this can fire — use AotSkip patterns
-    // to skip known-crashing fixtures.) Selftest fixtures normally complete
-    // in milliseconds — 15s is generous.
-    private static readonly TimeSpan FixtureTimeout = TimeSpan.FromSeconds(15);
+    // we time out, mark it failed, and abort the Host. Continuing in-process is
+    // unsafe because the timed-out fixture task can keep mutating UI and
+    // emitting TAP while later fixtures run. Selftest fixtures normally
+    // complete in milliseconds; long-running reliability fixtures can override
+    // SelfTestFixtureBase.FixtureTimeout explicitly.
 
-    // Off-dispatcher hang watchdog. The in-band FixtureTimeout above relies on
-    // the dispatcher processing a Task.Delay continuation, so it cannot fire
-    // when a fixture synchronously blocks the UI thread. This second watchdog
-    // runs on a background Thread (immune to dispatcher starvation) and
-    // declares a hang after HangTimeout of no progress in the fixture loop.
-    // Threshold is well past FixtureTimeout so it only catches the
+    // Off-dispatcher hang watchdog. The in-band fixture timeout relies on the
+    // dispatcher processing a Task.Delay continuation, so it cannot fire when a
+    // fixture synchronously blocks the UI thread. This second watchdog runs on
+    // a background Thread (immune to dispatcher starvation) and declares a hang
+    // after HangTimeout of no progress in the fixture loop.
+    // Threshold is well past the per-fixture timeout so it only catches the
     // dispatcher-starvation case. Override via REACTOR_SELFTEST_HANG_TIMEOUT_SECONDS;
     // set to 0 or a negative value to disable entirely (useful when attaching
     // a debugger). Also auto-disabled when Debugger.IsAttached.
@@ -258,14 +258,22 @@ internal static class SelfTestRunner
                                 // hang to this fixture by name even if the
                                 // child terminates abruptly afterward.
                                 Console.Out.Flush();
+                                var timeout = fixture.FixtureTimeout;
                                 var runTask = fixture.RunAsync();
-                                var timeoutTask = Task.Delay(FixtureTimeout);
+                                var timeoutTask = Task.Delay(timeout);
                                 var completed = await Task.WhenAny(runTask, timeoutTask);
-                                if (completed == timeoutTask)
+                                if (completed == timeoutTask && !runTask.IsCompleted)
+                                {
+                                    completed = await Task.WhenAny(runTask, Task.Delay(100));
+                                }
+
+                                if (completed != runTask)
                                 {
                                     crashed = true;
-                                    Console.WriteLine($"not ok {testIndex} {fixtureName}_TIMEOUT - exceeded {FixtureTimeout.TotalSeconds:0}s");
+                                    Console.WriteLine($"not ok {testIndex} {fixtureName}_TIMEOUT - exceeded {timeout.TotalSeconds:0}s");
+                                    Console.Out.Flush();
                                     harness.RecordFailure();
+                                    Environment.Exit(1);
                                 }
                                 else
                                 {

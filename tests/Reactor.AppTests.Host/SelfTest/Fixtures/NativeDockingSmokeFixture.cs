@@ -1048,7 +1048,7 @@ internal static class NativeDockingSmokeFixtures
             host.Mount(_ => new DockManager { Layout = liveLayout });
             await Harness.Render();
             // Visual-demo "let the eye register" pauses kept short so the
-            // 20-step walk stays well inside the §SelfTestRunner.FixtureTimeout
+            // 20-step walk stays well inside the default fixture timeout
             // (15s) under CI load. Bump back up locally for slow-motion runs.
             await Task.Delay(50);
 
@@ -1233,7 +1233,7 @@ internal static class NativeDockingSmokeFixtures
 
             host.Mount(_ => Build());
             await Harness.Render();
-            // Timing budget (must fit under SelfTestRunner.FixtureTimeout = 15s):
+            // Timing budget (must fit under the default fixture timeout):
             //   initial settle:      700ms
             //   5 loops × (5 nudges × 200ms + after-final 400ms): 7000ms
             //   total delay budget:  ~7.7s

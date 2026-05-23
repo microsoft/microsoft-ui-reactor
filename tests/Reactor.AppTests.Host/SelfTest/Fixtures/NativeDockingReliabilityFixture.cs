@@ -523,6 +523,8 @@ internal static class NativeDockingReliabilityFixtures
     /// </summary>
     internal class EventSubscriptionLeakBaseline(Harness h) : SelfTestFixtureBase(h)
     {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(30);
+
         public override async Task RunAsync()
         {
             var host = H.CreateHost();

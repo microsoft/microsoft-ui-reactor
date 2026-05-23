@@ -9,5 +9,7 @@ internal abstract class SelfTestFixtureBase
 
     protected SelfTestFixtureBase(Harness harness) => H = harness;
 
+    public virtual TimeSpan FixtureTimeout => TimeSpan.FromSeconds(15);
+
     public abstract Task RunAsync();
 }
