@@ -177,7 +177,7 @@ class C
     }
 }";
         var expected = Diagnostic(FormFieldLabelAnalyzer.DiagnosticId)
-            .WithSpan(8, 9, 8, 25);
+            .WithSpan(8, 9, 8, 23);
 
         var analyzerTest = new CSharpAnalyzerTest<FormFieldLabelAnalyzer, DefaultVerifier>
         {
