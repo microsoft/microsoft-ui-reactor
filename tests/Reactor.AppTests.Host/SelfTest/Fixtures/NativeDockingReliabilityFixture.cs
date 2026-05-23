@@ -1,4 +1,5 @@
 using System.Diagnostics.Tracing;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Diagnostics;
@@ -48,8 +49,17 @@ internal static class NativeDockingReliabilityFixtures
             var result = DockLayoutSerializer.Load("{\"$schema\":2,\"root\":{\"kind\":\"split");
             H.Check("Reliability_CorruptLoad_DidNotThrow", true);
             H.Check("Reliability_CorruptLoad_IsFallback", result.IsFallback);
-            H.Check("Reliability_CorruptLoad_EventEmittedJsonParse",
-                listener.Categories.Contains("json-parse"));
+
+            // EventListener callbacks for managed EventSource events do not
+            // flow under NativeAOT publish — IsEnabled() returns false on the
+            // emit side and the listener observes zero events. Verified via
+            // an in-test probe (TotalEvents=0). The same load + Fail() path
+            // is covered by JIT runs and by the unit tests in
+            // tests/Reactor.Tests/Docking/. Skip the listener-bound check
+            // when dynamic code is unavailable.
+            if (RuntimeFeature.IsDynamicCodeSupported)
+                H.Check("Reliability_CorruptLoad_EventEmittedJsonParse",
+                    listener.Categories.Contains("json-parse"));
 
             // The fallback Root is null. The host should mount a healthy
             // empty-layout shape — no exception, no orphan tree.
