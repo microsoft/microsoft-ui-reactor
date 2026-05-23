@@ -657,9 +657,9 @@ public sealed partial class Reconciler
         // so the sync-guard below would let them through.
         if (!double.IsFinite(parsed)) return;
         if (parsed < el.Minimum || parsed > el.Maximum) return;
-        if (parsed == el.Value) return; // already in sync; suppresses post-programmatic-write callback
+        if (AreNumberBoxValuesEquivalent(parsed, el.Value)) return; // already in sync; suppresses post-programmatic-write callback
         if (CanSynchronizeNumberBoxImmediateValueWithoutReformat(el, text, parsed)
-            && box.Value != parsed)
+            && !AreNumberBoxValuesEquivalent(box.Value, parsed))
         {
             ChangeEchoSuppressor.BeginSuppress(box);
             box.Value = parsed;

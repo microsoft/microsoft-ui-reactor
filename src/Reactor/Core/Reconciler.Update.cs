@@ -883,7 +883,7 @@ public sealed partial class Reconciler
                     global::System.Globalization.NumberStyles.Float,
                     global::System.Globalization.CultureInfo.CurrentCulture, out var typed)
                 && double.IsFinite(typed)   // NaN/Infinity must never defeat the skip and slip through
-                && typed == n.Value
+                && AreNumberBoxValuesEquivalent(typed, n.Value)
                 && !CanSynchronizeNumberBoxImmediateValueWithoutReformat(n, nb.Text, typed);
             if (!skipValueWrite)
             {
@@ -911,6 +911,14 @@ public sealed partial class Reconciler
         if (el.NumberFormatter is not null) return false;
         var canonical = value.ToString("G", global::System.Globalization.CultureInfo.CurrentCulture);
         return string.Equals(text, canonical, StringComparison.Ordinal);
+    }
+
+    private static bool AreNumberBoxValuesEquivalent(double left, double right)
+    {
+        var tolerance = 1e-12 * global::System.Math.Max(
+            1.0,
+            global::System.Math.Max(global::System.Math.Abs(left), global::System.Math.Abs(right)));
+        return global::System.Math.Abs(left - right) <= tolerance;
     }
 
     private UIElement? UpdateAutoSuggestBox(AutoSuggestBoxElement o, AutoSuggestBoxElement n, WinUI.AutoSuggestBox asb)
