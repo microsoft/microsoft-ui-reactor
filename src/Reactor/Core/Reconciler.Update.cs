@@ -910,7 +910,7 @@ public sealed partial class Reconciler
     {
         if (el.NumberFormatter is not null) return false;
         var canonical = value.ToString("G", global::System.Globalization.CultureInfo.CurrentCulture);
-        return string.Equals(text, canonical, StringComparison.CurrentCulture);
+        return string.Equals(text, canonical, StringComparison.Ordinal);
     }
 
     private UIElement? UpdateAutoSuggestBox(AutoSuggestBoxElement o, AutoSuggestBoxElement n, WinUI.AutoSuggestBox asb)

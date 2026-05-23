@@ -646,25 +646,25 @@ public sealed partial class Reconciler
 
     private static void HandleNumberBoxImmediateTextChanged(WinUI.NumberBox box, string text)
     {
-            if (GetElementTag(box) is not NumberBoxElement el) return;
-            if (el.OnValueChanged is null) return;
-            if (el.GetAttached<Microsoft.UI.Reactor.Controls.Validation.ImmediateValueAttached>() is null) return;
-            if (!double.TryParse(text,
-                global::System.Globalization.NumberStyles.Float,
-                global::System.Globalization.CultureInfo.CurrentCulture, out var parsed)) return;
-            // Reject NaN/±Infinity — double.TryParse accepts the literal strings
-            // "NaN"/"Infinity" by default, and NaN comparisons are never equal,
-            // so the sync-guard below would let them through.
-            if (!double.IsFinite(parsed)) return;
-            if (parsed < el.Minimum || parsed > el.Maximum) return;
-            if (parsed == el.Value) return; // already in sync; suppresses post-programmatic-write callback
-            if (CanSynchronizeNumberBoxImmediateValueWithoutReformat(el, text, parsed)
-                && box.Value != parsed)
-            {
-                ChangeEchoSuppressor.BeginSuppress(box);
-                box.Value = parsed;
-            }
-            el.OnValueChanged.Invoke(parsed);
+        if (GetElementTag(box) is not NumberBoxElement el) return;
+        if (el.OnValueChanged is null) return;
+        if (el.GetAttached<Microsoft.UI.Reactor.Controls.Validation.ImmediateValueAttached>() is null) return;
+        if (!double.TryParse(text,
+            global::System.Globalization.NumberStyles.Float,
+            global::System.Globalization.CultureInfo.CurrentCulture, out var parsed)) return;
+        // Reject NaN/±Infinity — double.TryParse accepts the literal strings
+        // "NaN"/"Infinity" by default, and NaN comparisons are never equal,
+        // so the sync-guard below would let them through.
+        if (!double.IsFinite(parsed)) return;
+        if (parsed < el.Minimum || parsed > el.Maximum) return;
+        if (parsed == el.Value) return; // already in sync; suppresses post-programmatic-write callback
+        if (CanSynchronizeNumberBoxImmediateValueWithoutReformat(el, text, parsed)
+            && box.Value != parsed)
+        {
+            ChangeEchoSuppressor.BeginSuppress(box);
+            box.Value = parsed;
+        }
+        el.OnValueChanged.Invoke(parsed);
     }
 
     private WinUI.AutoSuggestBox MountAutoSuggestBox(AutoSuggestBoxElement asb)
