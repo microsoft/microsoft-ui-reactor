@@ -25,7 +25,7 @@ namespace Microsoft.UI.Reactor.Tests.Elements;
 ///
 /// Phase 8 page inventory:
 ///   - ButtonPage           — .Click / .AccentButton / .SubtleButton / .TextLink
-///   - TextFieldPage        — .NumericInput / .EmailInput / .UrlInput / .Description
+///   - TextBoxPage          — .NumericInput / .EmailInput / .UrlInput / .Description
 ///   - InfoBarPage          — .Informational / .Success / .Warning / .Error
 ///   - TypeRampPage         — Title / Subtitle / Body / BodyStrong / BodyLarge
 ///   - CardPage             — Card(child)
@@ -50,9 +50,9 @@ public class GallerySampleConstructionSmokeTests
     }
 
     [Fact]
-    public void TextFieldPage_FluentChains_Construct()
+    public void TextBoxPage_FluentChains_Construct()
     {
-        // Mirrors the InputScope + Description chains in TextFieldPage.cs.
+        // Mirrors the InputScope + Description chains in TextBoxPage.cs.
         var numeric = TextBox("", _ => { }, "0").Header("Qty").NumericInput().Description("hint");
         var email = TextBox("", _ => { }, "you@x.com").Header("Email").EmailInput();
         var url = TextBox("", _ => { }, "https://").Header("URL").UrlInput();

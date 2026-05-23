@@ -340,17 +340,17 @@ public class Phase4InitFluentTests
         Assert.Equal(new Uri("ms-appx:///Assets/Logo.ico"), icon.Source);
     }
 
-    // ── 4.7 TextField ─────────────────────────────────────────────────
+    // ── 4.7 TextBox ───────────────────────────────────────────────────
 
     [Fact]
-    public void TextField_MaxLength_Sets()
+    public void TextBox_MaxLength_Sets()
     {
         var el = TextBox("").MaxLength(32);
         Assert.Equal(32, el.MaxLength);
     }
 
     [Fact]
-    public void TextField_IsSpellCheckEnabled_Sets()
+    public void TextBox_IsSpellCheckEnabled_Sets()
     {
         var el = TextBox("").IsSpellCheckEnabled();
         Assert.True(el.IsSpellCheckEnabled);
@@ -358,21 +358,21 @@ public class Phase4InitFluentTests
     }
 
     [Fact]
-    public void TextField_CharacterCasing_Sets()
+    public void TextBox_CharacterCasing_Sets()
     {
         var el = TextBox("").CharacterCasing(Microsoft.UI.Xaml.Controls.CharacterCasing.Upper);
         Assert.Equal(Microsoft.UI.Xaml.Controls.CharacterCasing.Upper, el.CharacterCasing);
     }
 
     [Fact]
-    public void TextField_TextAlignment_Sets()
+    public void TextBox_TextAlignment_Sets()
     {
         var el = TextBox("").TextAlignment(Microsoft.UI.Xaml.TextAlignment.Right);
         Assert.Equal(Microsoft.UI.Xaml.TextAlignment.Right, el.TextAlignment);
     }
 
     [Fact]
-    public void TextField_Description_Sets()
+    public void TextBox_Description_Sets()
     {
         var el = TextBox("").Description("enter your name");
         Assert.Equal("enter your name", el.Description);

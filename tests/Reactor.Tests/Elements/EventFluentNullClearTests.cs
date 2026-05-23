@@ -159,7 +159,7 @@ public class EventFluentNullClearTests
     // ── §3 Input ──────────────────────────────────────────────────────
 
     [Fact]
-    public void TextField_Changed_NullClears()
+    public void TextBox_Changed_NullClears()
     {
         var el = TextBox("x").Changed(SentinelStr);
         Assert.Same(SentinelStr, el.OnChanged);
@@ -167,7 +167,7 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
-    public void TextField_SelectionChanged_NullClears()
+    public void TextBox_SelectionChanged_NullClears()
     {
         Action<string, int, int> h = (_, _, _) => { };
         var el = TextBox("x").SelectionChanged(h);

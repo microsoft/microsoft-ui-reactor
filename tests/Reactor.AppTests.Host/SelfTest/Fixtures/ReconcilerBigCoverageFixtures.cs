@@ -117,7 +117,7 @@ internal static class ReconcilerBigCoverageFixtures
     /// Mount each input control without any handlers, then re-render with handlers
     /// attached. This hits the once-only handler-wiring code path in Update<XYZ>
     /// for CheckBox, RadioButton, Slider, ToggleSwitch, NumberBox, RichEditBox,
-    /// TextField, PasswordBox, TreeView (handler-only path).
+    /// TextBox, PasswordBox, TreeView (handler-only path).
     /// </summary>
     internal class HandlerWiringOnSecondRender(Harness h) : SelfTestFixtureBase(h)
     {

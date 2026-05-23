@@ -29,17 +29,11 @@ to land under these conventions; subsequent specs follow this shape.
 
 ### Changed
 
-- **`TextField` → `TextBox` rename.** The record type
-  `TextFieldElement` is renamed to `TextBoxElement` for parity with
-  WinUI's `Microsoft.UI.Xaml.Controls.TextBox`. The `TextField(...)`
-  factory remains as a non-erroring `[Obsolete]` forwarding alias for
-  one release; call sites should migrate to `TextBox(...)`. The
-  alias will be removed in a future release.
+- **`TextBox` is now the only text-input factory.** The deprecated
+  `TextField(...)` forwarding alias has been removed after the
+  `TextFieldElement` → `TextBoxElement` rename. Use `TextBox(...)`.
 
 ### Deprecated
-
-- **`Factories.TextField(...)`** — use `Factories.TextBox(...)` instead.
-  Emits `CS0618` warning; will be removed in a future release.
 
 - **Spec 045 Phase 2 — §2.29 ready for human review gate.**
   Every Phase-2 implementation item in

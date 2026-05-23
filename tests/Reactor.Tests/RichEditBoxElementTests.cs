@@ -135,7 +135,7 @@ public class RichEditBoxElementTests
     }
 
     [Fact]
-    public void CanUpdate_RichEditBox_Vs_TextField_Returns_False()
+    public void CanUpdate_RichEditBox_Vs_TextBox_Returns_False()
     {
         var reconciler = new Reconciler();
         Assert.False(reconciler.CanUpdate(RichEditBox("a"), TextBox("a")));

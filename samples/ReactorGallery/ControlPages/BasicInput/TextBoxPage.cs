@@ -7,7 +7,7 @@ using static WinUIGalleryReactor.SamplePageHost;
 
 namespace WinUIGalleryReactor.ControlPages.BasicInput;
 
-class TextFieldPage: Component
+class TextBoxPage: Component
 {
     public override Element Render()
     {
@@ -19,9 +19,9 @@ class TextFieldPage: Component
         var (urlText, setUrlText) = UseState("");
 
         return ScrollView(VStack(16,
-            PageHeader("TextField", "A single-line or multi-line plain text input field."),
+            PageHeader("TextBox", "A single-line or multi-line plain text input field."),
 
-            SampleCard("Basic TextField",
+            SampleCard("Basic TextBox",
                 VStack(8,
                     TextBox(text, v => setText(v), "Type here..."),
                     TextBlock($"Characters: {text.Length}").Foreground(Theme.SecondaryText)),
@@ -29,7 +29,7 @@ class TextFieldPage: Component
 TextBox(text, v => setText(v), ""Type here..."")
 "),
 
-            SampleCard("Multiline TextField",
+            SampleCard("Multiline TextBox",
                 TextBox(multiline, v => setMultiline(v), "Enter multiple lines...")
                     .Set(tb => { tb.AcceptsReturn = true; tb.TextWrapping = TextWrapping.Wrap; })
                     .Height(120),
@@ -39,7 +39,7 @@ TextBox(multiline, v => setMultiline(v), ""Enter multiple lines..."")
     .Height(120)
 "),
 
-            SampleCard("TextField with Header",
+            SampleCard("TextBox with Header",
                 TextBox(headerText, v => setHeaderText(v), "user@example.com").Header("Email"),
                 sourceCode: @"
 TextBox(headerText, v => setHeaderText(v), ""user@example.com"").Header(""Email"")

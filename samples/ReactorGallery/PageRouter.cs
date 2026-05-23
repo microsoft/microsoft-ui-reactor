@@ -25,7 +25,7 @@ static class PageRouter
         "repeat-button" => Component<ControlPages.BasicInput.RepeatButtonPage>(),
         "slider" => Component<ControlPages.BasicInput.SliderPage>(),
         "split-button" => Component<ControlPages.BasicInput.SplitButtonPage>(),
-        "text-field" => Component<ControlPages.BasicInput.TextFieldPage>(),
+        "text-box" => Component<ControlPages.BasicInput.TextBoxPage>(),
         "toggle-button" => Component<ControlPages.BasicInput.ToggleButtonPage>(),
         "toggle-switch" => Component<ControlPages.BasicInput.ToggleSwitchPage>(),
 

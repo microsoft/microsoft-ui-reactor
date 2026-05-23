@@ -84,7 +84,7 @@ public class TypedColumnsBehaviorTests
     [Fact]
     public void Registry_Uri_Editor_Stringifies_Uri_And_Commits_Uri()
     {
-        // The Uri editor uses TextField under the hood but commits Uri objects
+        // The Uri editor uses TextBox under the hood but commits Uri objects
         // through Uri.TryCreate. A regression that resolved Uri to a string
         // editor would commit raw strings to a Uri property → ArgumentException
         // on the model setter.

@@ -477,7 +477,7 @@ internal static class DataGridEditFixtures
     /// sibling's AutomationName carrying the flipped cell's text.
     ///
     /// This fixture mounts a tiny hand-rolled Grid whose middle child flips between
-    /// <c>Text</c> and <c>TextField</c> based on a state bit, then asserts the
+    /// <c>Text</c> and <c>TextBox</c> based on a state bit, then asserts the
     /// Grid's child count and per-child <c>AutomationProperties.Name</c> values
     /// survive the flip and the flip-back.
     /// </summary>
@@ -494,7 +494,7 @@ internal static class DataGridEditFixtures
                 setEditing = setEd;
 
                 // Four children matching the DataGrid row layout: [Id][Name][Cat][Price].
-                // Middle child flips between Text and TextField based on `editing`.
+                // Middle child flips between Text and TextBox based on `editing`.
                 var nameCell = editing
                     ? (Element)TextBox("Alice", _ => { }).Padding(2)
                     : (Element)TextBlock("Alice").Padding(horizontal: 8, vertical: 4);

@@ -77,7 +77,7 @@ public sealed partial class Reconciler
             SplitButtonElement spBtn => MountSplitButton(spBtn, requestRerender),
             ToggleSplitButtonElement tspBtn => MountToggleSplitButton(tspBtn, requestRerender),
             RichEditBoxElement reb => MountRichEditBox(reb),
-            TextBoxElement tf => MountTextField(tf, requestRerender),
+            TextBoxElement tf => MountTextBox(tf, requestRerender),
             PasswordBoxElement pw => MountPasswordBox(pw),
             NumberBoxElement nb => MountNumberBox(nb),
             AutoSuggestBoxElement asb => MountAutoSuggestBox(asb),
@@ -482,7 +482,7 @@ public sealed partial class Reconciler
         return tsb;
     }
 
-    private TextBox MountTextField(TextBoxElement tf, Action requestRerender)
+    private TextBox MountTextBox(TextBoxElement tf, Action requestRerender)
     {
         var rented = _pool.TryRent(typeof(TextBox));
         var textBox = rented as TextBox ?? new TextBox();
@@ -512,7 +512,7 @@ public sealed partial class Reconciler
         if (tf.CharacterCasing != CharacterCasing.Normal) textBox.CharacterCasing = tf.CharacterCasing;
         if (tf.TextAlignment != TextAlignment.Left) textBox.TextAlignment = tf.TextAlignment;
         if (tf.Description is not null) textBox.Description = tf.Description;
-        EnsureTextFieldWiring(textBox, tf, requestRerender);
+        EnsureTextBoxWiring(textBox, tf, requestRerender);
         ApplySetters(tf.Setters, textBox);
         return textBox;
     }
@@ -523,7 +523,7 @@ public sealed partial class Reconciler
     /// yet. Called from both Mount (fresh or pooled) and Update (null→non-null
     /// transition). The CWT flags survive pool round-trips.
     /// </summary>
-    internal static void EnsureTextFieldWiring(TextBox textBox, TextBoxElement tf, Action requestRerender)
+    internal static void EnsureTextBoxWiring(TextBox textBox, TextBoxElement tf, Action requestRerender)
     {
         if (tf.OnChanged is null && tf.OnSelectionChanged is null) return;
         var flags = GetPoolableWireFlags(textBox);
@@ -536,7 +536,7 @@ public sealed partial class Reconciler
                 var tag = GetElementTag(textBox) as TextBoxElement;
                 tag?.OnChanged?.Invoke(textBox.Text);
                 // Controlled input: when onChange is wired, always request a
-                // re-render so UpdateTextField can enforce the controlled value.
+                // re-render so UpdateTextBox can enforce the controlled value.
                 // Coalesces with any setState re-render (CAS gate).
                 // Without onChange the field is uncontrolled — no snap-back.
                 if (tag?.OnChanged is not null)

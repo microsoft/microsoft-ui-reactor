@@ -139,7 +139,7 @@ public class KeyNamerTests
             {
                 FilePath = "CatalogPage.cs",
                 ClassName = "CatalogPage",
-                Context = "TextField.placeholder",
+                Context = "TextBox.placeholder",
                 Value = "Search products...",
                 SpanStart = 100,
                 SpanLength = 20,

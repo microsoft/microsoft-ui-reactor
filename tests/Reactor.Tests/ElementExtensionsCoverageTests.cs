@@ -243,7 +243,7 @@ public class ElementExtensionsCoverageTests
     }
 
     [Fact]
-    public void TextField_Sugar()
+    public void TextBox_Sugar()
     {
         var el = TextBox("x", _ => { })
             .IsReadOnly()
@@ -259,8 +259,8 @@ public class ElementExtensionsCoverageTests
     // Path.StrokeDashArray uses DoubleCollection (WinUI), tested in selftest.
 
     [Fact]
-    [Obsolete("Tests the deprecated ReadOnly shim for TextField")]
-    public void TextField_ReadOnly_Shim()
+    [Obsolete("Tests the deprecated ReadOnly shim for TextBox")]
+    public void TextBox_ReadOnly_Shim()
     {
         var el = TextBox("x", _ => { }).ReadOnly();
         Assert.True(el.IsReadOnly);

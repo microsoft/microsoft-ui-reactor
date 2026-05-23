@@ -108,7 +108,7 @@ internal static class KeyNamer
         // For modifier contexts like "ToolTip", "Header", "Placeholder", append to value hint
         if (context.Contains('.'))
         {
-            // Named param: "TextField.placeholder" → hint from value + "Placeholder"
+            // Named param: "TextBox.placeholder" -> hint from value + "Placeholder"
             var parts = context.Split('.');
             var suffix = ToPascalCase(parts[^1]);
             var valueHint = GenerateHintFromValue(ls.Value);

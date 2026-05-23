@@ -164,7 +164,7 @@ public class FormFieldLabelAnalyzerTests
             .Diagnostic(id);
 
     [Fact]
-    public async Task TextField_Without_Label_Produces_Diagnostic()
+    public async Task TextBox_Without_Label_Produces_Diagnostic()
     {
         var test = @"
 class C
@@ -188,7 +188,7 @@ class C
     }
 
     [Fact]
-    public async Task TextField_With_Header_No_Diagnostic()
+    public async Task TextBox_With_Header_No_Diagnostic()
     {
         var test = @"
 class C
@@ -208,7 +208,7 @@ class C
     }
 
     [Fact]
-    public async Task TextField_With_AutomationName_No_Diagnostic()
+    public async Task TextBox_With_AutomationName_No_Diagnostic()
     {
         var test = @"
 class C
@@ -228,7 +228,7 @@ class C
     }
 
     [Fact]
-    public async Task TextField_With_LabeledBy_No_Diagnostic()
+    public async Task TextBox_With_LabeledBy_No_Diagnostic()
     {
         var test = @"
 class C

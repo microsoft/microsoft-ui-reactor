@@ -247,7 +247,7 @@ sealed class UseFocusSample : Component
         var (name, setName) = UseState("");
         var (inputRef, requestFocus) = this.UseElementFocus();
 
-        // Deliberately NOT auto-focusing on mount in this gallery: a TextField
+        // Deliberately NOT auto-focusing on mount in this gallery: a TextBox
         // deep inside a ScrollView that takes focus pulls the viewport down via
         // WinUI's BringIntoView — and it re-triggers every time the window
         // regains foreground. Real apps that auto-focus a first input (login

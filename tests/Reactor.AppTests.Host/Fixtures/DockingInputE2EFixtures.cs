@@ -7,20 +7,20 @@ using static Microsoft.UI.Reactor.Factories;
 namespace Microsoft.UI.Reactor.AppTests.Host.Fixtures;
 
 /// <summary>
-/// Spec 045 — E2E fixtures that put real editable TextFields inside docked
+/// Spec 045 — E2E fixtures that put real editable TextBoxes inside docked
 /// panes so WinAppDriver/Appium can verify keyboard focus, tab traversal,
 /// and the controlled-input contract across docking layout mutations.
 /// </summary>
 /// <remarks>
 /// The matching tests live in <c>tests/Reactor.AppTests/Tests/DockingInputTests.cs</c>.
-/// Each pane's TextField mirrors its state into a sibling TextBlock with
+/// Each pane's TextBox mirrors its state into a sibling TextBlock with
 /// AutomationId <c>*_State</c> so tests assert against the model rather
 /// than reading the TextBox's runtime <c>Text</c> property (which lags
 /// behind state in the controlled-input cycle).
 /// </remarks>
 internal static class DockingInputE2EFixtures
 {
-    internal class TwoPaneTextFieldComponent : Component
+    internal class TwoPaneTextBoxComponent : Component
     {
         public override Element Render()
         {
@@ -82,18 +82,18 @@ internal static class DockingInputE2EFixtures
         }
     }
 
-    internal static Element TwoPaneTextFieldTest(RenderContext ctx) =>
-        Component<TwoPaneTextFieldComponent>();
+    internal static Element TwoPaneTextBoxTest(RenderContext ctx) =>
+        Component<TwoPaneTextBoxComponent>();
 
     /// <summary>
-    /// Control variant of <see cref="TwoPaneTextFieldComponent"/>: identical
+    /// Control variant of <see cref="TwoPaneTextBoxComponent"/>: identical
     /// layout but the panes are bare <see cref="DockableContent"/>s (not
     /// <see cref="ToolWindow"/>s) and <c>CanPin: false</c> on both. Used to
     /// isolate whether the keystroke-loses-focus bug is gated by the pin-
     /// affordance code paths in <c>UpdateTabView</c> or by something more
     /// general about docking-host reconciles.
     /// </summary>
-    internal class TwoPaneTextFieldNoPinComponent : Component
+    internal class TwoPaneTextBoxNoPinComponent : Component
     {
         public override Element Render()
         {
@@ -135,6 +135,6 @@ internal static class DockingInputE2EFixtures
         }
     }
 
-    internal static Element TwoPaneTextFieldNoPinTest(RenderContext ctx) =>
-        Component<TwoPaneTextFieldNoPinComponent>();
+    internal static Element TwoPaneTextBoxNoPinTest(RenderContext ctx) =>
+        Component<TwoPaneTextBoxNoPinComponent>();
 }

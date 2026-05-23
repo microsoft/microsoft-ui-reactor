@@ -88,7 +88,7 @@ internal static class ControlUpdateFixtures
     // ════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Updates TextField, CheckBox, Slider, ToggleSwitch, NumberBox, PasswordBox,
+    /// Updates TextBox, CheckBox, Slider, ToggleSwitch, NumberBox, PasswordBox,
     /// and RadioButton in a single test to hit all their UpdateXxx methods.
     /// </summary>
     internal class InputControlsUpdate(Harness h) : SelfTestFixtureBase(h)
@@ -135,7 +135,7 @@ internal static class ControlUpdateFixtures
             H.ClickButton("UpdInputs");
             await Harness.Render();
 
-            H.Check("InputUpdate_TextFieldHeader", H.FindText("FieldHdr2") is not null);
+            H.Check("InputUpdate_TextBoxHeader", H.FindText("FieldHdr2") is not null);
             H.Check("InputUpdate_CheckBoxLabel", H.FindText("ChkLabel2") is not null);
             H.Check("InputUpdate_ToggleSwitchHeader", H.FindText("TsHdr2") is not null);
             H.Check("InputUpdate_NumberBoxHeader", H.FindText("NbHdr2") is not null);

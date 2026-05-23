@@ -463,9 +463,9 @@ internal static class EchoSuppressionFixtures
         }
     }
 
-    // ── TextField ─────────────────────────────────────────────────────
+    // ── TextBox ───────────────────────────────────────────────────────
 
-    internal class TextFieldNoEcho(Harness h) : SelfTestFixtureBase(h)
+    internal class TextBoxNoEcho(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
@@ -481,24 +481,24 @@ internal static class EchoSuppressionFixtures
                 );
             });
             await Harness.Render();
-            H.Check("EchoSuppress_TextField_MountNoFire", calls.Count == 0);
+            H.Check("EchoSuppress_TextBox_MountNoFire", calls.Count == 0);
 
             H.ClickButton("Go_TF");
             await Harness.Render();
 
             var tb = H.FindControl<TextBox>(t => t.PlaceholderText == "test");
-            H.Check("EchoSuppress_TextField_UpdateAppliedValue", tb?.Text == "next");
+            H.Check("EchoSuppress_TextBox_UpdateAppliedValue", tb?.Text == "next");
             // Note: after a setState-driven change to "next", the controlled
-            // TextField's onChange MAY receive a trailing call from the
+            // TextBox's onChange MAY receive a trailing call from the
             // re-render snap-back path. We allow at most one non-echo call
             // that equals the current value (not a cross-value echo).
             bool onlyCurrentOrEmpty = calls.All(s => s == "next");
-            H.Check("EchoSuppress_TextField_NoEchoCallCrossValue", onlyCurrentOrEmpty);
+            H.Check("EchoSuppress_TextBox_NoEchoCallCrossValue", onlyCurrentOrEmpty);
 
             var precedingCount = calls.Count;
             if (tb is not null) tb.Text = "typed";
             await Harness.Render();
-            H.Check("EchoSuppress_TextField_UserEditFires",
+            H.Check("EchoSuppress_TextBox_UserEditFires",
                 calls.Count > precedingCount && calls[^1] == "typed");
         }
     }

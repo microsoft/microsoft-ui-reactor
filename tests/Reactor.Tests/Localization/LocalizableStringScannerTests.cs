@@ -254,7 +254,7 @@ public class LocalizableStringScannerTests
 
         var results = Scan(source);
 
-        // TextField value "" is empty (skipped), Header should be found
+        // TextBox value "" is empty (skipped), Header should be found
         Assert.Single(results);
         Assert.Equal("User Name", results[0].Value);
         Assert.Equal("Header", results[0].Context);

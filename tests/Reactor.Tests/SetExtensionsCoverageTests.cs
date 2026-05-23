@@ -16,7 +16,7 @@ public class SetExtensionsCoverageTests
     // ── Input controls ──────────────────────────────────────────────
 
     [Fact]
-    public void Set_TextField_Appends_Setter()
+    public void Set_TextBox_Appends_Setter()
     {
         var el = TextBox("val").Set(tb => tb.IsEnabled = false);
         Assert.Single(el.Setters);

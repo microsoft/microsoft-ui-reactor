@@ -58,7 +58,7 @@ public class A11yShowcaseScannerTest
                 Button("All", null),
                 Button("Active", null),
 
-                // A11Y_003: TextField without header, AutomationName, or LabeledBy
+                // A11Y_003: TextBox without header, AutomationName, or LabeledBy
                 TextBox("", null, placeholder: "New task..."),
 
                 // A11Y_001: Another icon-only button
@@ -85,7 +85,7 @@ public class A11yShowcaseScannerTest
             // Footer
             HStack(12,
                 TextBlock("Quick note:"),
-                // A11Y_003: TextField with mistyped LabeledBy → A11Y_008
+                // A11Y_003: TextBox with mistyped LabeledBy -> A11Y_008
                 TextBox("", null).LabeledBy("FooterNoteLabel_TYPO")
             )
         );

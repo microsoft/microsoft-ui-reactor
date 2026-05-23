@@ -58,7 +58,7 @@ class StandardCommandsDemo : Component
 
         // Tracks a one-shot selection we want to apply after a programmatic
         // text mutation (Cut/Paste/SelectAll). Cleared back to null as soon
-        // as the TextField consumes it, so normal user clicks don't trigger
+        // as the TextBox consumes it, so normal user clicks don't trigger
         // a programmatic selection write.
         var (pendingSelection, setPendingSelection) = UseState<(int Start, int Length)?>(null);
 
@@ -131,7 +131,7 @@ class StandardCommandsDemo : Component
                 SelectionLength = pendingSelection?.Length,
             }).Margin(horizontal: 16, vertical: 8),
 
-            // Clear the pending selection once the TextField has had a chance
+            // Clear the pending selection once the TextBox has had a chance
             // to apply it. Runs after render; no-op when nothing pending.
             PendingSelectionConsumer(pendingSelection, setPendingSelection),
 

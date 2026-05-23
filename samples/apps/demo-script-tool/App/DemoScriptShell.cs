@@ -77,7 +77,7 @@ public sealed class DemoScriptShell : Component
         // file watcher fires for a write WE just made, the disk hash equals
         // this value and we suppress the reload — otherwise our own debounced
         // save round-trips through the watcher, replaces the model with a new
-        // instance, re-syncs every TextField's local buffer, and resets the
+        // instance, re-syncs every TextBox's local buffer, and resets the
         // user's caret to position 0 mid-keystroke.
         var lastSyncedHashRef = UseRef<string?>(null);
         var announce = UseAnnounce();

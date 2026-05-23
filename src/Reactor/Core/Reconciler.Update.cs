@@ -134,7 +134,7 @@ public sealed partial class Reconciler
             (RichEditBoxElement o, RichEditBoxElement n, WinUI.RichEditBox reb)
                 => UpdateRichEditBox(o, n, reb),
             (TextBoxElement o, TextBoxElement n, TextBox tb)
-                => UpdateTextField(o, n, tb, requestRerender),
+                => UpdateTextBox(o, n, tb, requestRerender),
             (PasswordBoxElement o, PasswordBoxElement n, WinUI.PasswordBox pb)
                 => UpdatePasswordBox(o, n, pb),
             (NumberBoxElement o, NumberBoxElement n, WinUI.NumberBox nb)
@@ -778,11 +778,11 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateTextField(TextBoxElement o, TextBoxElement n, TextBox tb, Action requestRerender)
+    private UIElement? UpdateTextBox(TextBoxElement o, TextBoxElement n, TextBox tb, Action requestRerender)
     {
         // Tag first so any echoed TextChanged sees this element.
         SetElementTag(tb, n);
-        EnsureTextFieldWiring(tb, n, requestRerender);
+        EnsureTextBoxWiring(tb, n, requestRerender);
         if (o.Value != n.Value)
         {
             // Element value changed — always enforce

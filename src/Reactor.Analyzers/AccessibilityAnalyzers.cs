@@ -170,7 +170,7 @@ public sealed class ImageAccessibilityAnalyzer : DiagnosticAnalyzer
 
 /// <summary>
 /// REACTOR_A11Y_003: Form fields need a label for screen readers.
-/// Detects <c>TextField(...)</c>, <c>NumberBox(...)</c>, <c>PasswordBox(...)</c>,
+/// Detects <c>TextBox(...)</c>, <c>NumberBox(...)</c>, <c>PasswordBox(...)</c>,
 /// and <c>AutoSuggestBox(...)</c> factory calls without a <c>header:</c> named argument,
 /// <c>.AutomationName()</c>, or <c>.LabeledBy()</c> in the fluent chain.
 /// </summary>
@@ -197,7 +197,7 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         description: Description);
 
     private static readonly ImmutableHashSet<string> FormFieldMethods =
-        ImmutableHashSet.Create("TextBox", "TextField", "NumberBox", "PasswordBox", "AutoSuggestBox");
+        ImmutableHashSet.Create("TextBox", "NumberBox", "PasswordBox", "AutoSuggestBox");
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(Rule);

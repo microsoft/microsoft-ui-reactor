@@ -329,16 +329,16 @@ class SceneAIde : Component
 
     // ── Editable pane content factories ────────────────────────────────
     //
-    // Each docked pane gets a TextField (or AcceptsReturn=multiline) so
+    // Each docked pane gets a TextBox (or AcceptsReturn=multiline) so
     // we can observe keyboard focus / input routing through the docking
     // host. Spec 045 §2.10 + §2.14 invariants we're stressing here:
-    //   • Clicking a TextField inside a pane gives it keyboard focus.
-    //   • Typing into the focused TextField does NOT trigger chord
+    //   • Clicking a TextBox inside a pane gives it keyboard focus.
+    //   • Typing into the focused TextBox does NOT trigger chord
     //     accelerators (Ctrl+Tab / Ctrl+W must reach the editor when it
     //     owns focus, not the host's KeyboardAccelerator surface).
-    //   • Tab inside a TextField should advance focus within the pane,
+    //   • Tab inside a TextBox should advance focus within the pane,
     //     not skip to the next docked group.
-    //   • A drag of the pane preserves the TextField's current value
+    //   • A drag of the pane preserves the TextBox's current value
     //     (controlled-input pattern through the §2.30 shape-only
     //     override + Memo-component state slot).
     //
@@ -349,10 +349,10 @@ class SceneAIde : Component
         Memo(ctx =>
         {
             var (text, setText) = ctx.UseState(initial);
-            // INTENTIONALLY MINIMAL: a single-line controlled TextField,
+            // INTENTIONALLY MINIMAL: a single-line controlled TextBox,
             // no .Set, no AcceptsReturn, no typography modifiers. This
             // isolates whether the focus-loss-on-keystroke bug is in
-            // the controlled-TextField/Memo-state base case or in one
+            // the controlled-TextBox/Memo-state base case or in one
             // of the optional modifiers / multi-line config.
             return VStack(6,
                 TextBlock(banner).SemiBold(),

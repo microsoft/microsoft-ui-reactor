@@ -27,7 +27,7 @@ public static class ControlRegistry
         new("RepeatButton", "A button that raises click events repeatedly while pressed.", "Basic Input", "\uE73A", "repeat-button", "RepeatButton.png"),
         new("Slider", "A control that lets the user select from a range of values by moving a thumb.", "Basic Input", "\uE73A", "slider", "Slider.png"),
         new("SplitButton", "A button with two parts: a primary action and a flyout menu.", "Basic Input", "\uE73A", "split-button", "SplitButton.png"),
-        new("TextField", "A single-line or multi-line plain text input field.", "Basic Input", "\uE73A", "text-field", "TextBox.png"),
+        new("TextBox", "A single-line or multi-line plain text input field.", "Basic Input", "\uE73A", "text-box", "TextBox.png"),
         new("ToggleButton", "A button that can be toggled between two states.", "Basic Input", "\uE73A", "toggle-button", "ToggleButton.png"),
         new("ToggleSwitch", "A switch that toggles between two mutually exclusive states.", "Basic Input", "\uE73A", "toggle-switch", "ToggleSwitch.png"),
 

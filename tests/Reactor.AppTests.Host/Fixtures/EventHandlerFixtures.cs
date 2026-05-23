@@ -110,7 +110,7 @@ internal static class EventHandlerFixtures
         Component<PointerPressedTestComponent>();
 
     // ── OnKeyDown ─────────────────────────────────────────────────
-    // Uses a TextField — it naturally receives focus and key events,
+    // Uses a TextBox - it naturally receives focus and key events,
     // and WinAppDriver can locate it and send keys.
 
     internal class KeyDownTestComponent : Component

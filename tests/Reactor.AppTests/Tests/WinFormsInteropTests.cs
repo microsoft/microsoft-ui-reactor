@@ -17,7 +17,7 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// Test host layout:
 ///   Top bar (WinForms):     WF_TextBox3 (TabIndex=4, after island)
 ///   Left panel (WinForms):  WF_TextBox1, WF_Button1, WF_TextBox2
-///   Right panel (Island):   Reactor_TextField1, Reactor_Button1, Reactor_TextField2
+///   Right panel (Island):   Reactor_TextBox1, Reactor_Button1, Reactor_TextBox2
 /// </summary>
 [TestClass]
 public class WinFormsInteropTests : WinFormsTestBase
@@ -83,11 +83,11 @@ public class WinFormsInteropTests : WinFormsTestBase
     [TestMethod]
     public void Interop_Rendering_TextInputWorks()
     {
-        // Type into the Reactor text field inside the island
-        var textField = FindById("Reactor_TextField1");
-        textField.Click();
-        textField.Clear();
-        textField.SendKeys("hello island");
+        // Type into the Reactor TextBox inside the island
+        var textBox = FindById("Reactor_TextBox1");
+        textBox.Click();
+        textBox.Clear();
+        textBox.SendKeys("hello island");
 
         // Verify the display updates
         WaitForText("Reactor_TextDisplay", "Text: hello island");
@@ -118,9 +118,9 @@ public class WinFormsInteropTests : WinFormsTestBase
         "WF_TextBox1",       // leftPanel child 0
         "WF_Button1",        // leftPanel child 1
         "WF_TextBox2",       // leftPanel child 2
-        "Reactor_TextField1",   // island — first WinUI control
+        "Reactor_TextBox1",     // island - first WinUI control
         "Reactor_Button1",      // island — second WinUI control
-        "Reactor_TextField2",   // island — third WinUI control
+        "Reactor_TextBox2",     // island - third WinUI control
         "WF_TextBox3",       // bottomBar child 0
     ];
 
@@ -178,8 +178,8 @@ public class WinFormsInteropTests : WinFormsTestBase
         var title = FindById("Reactor_Title");
         Assert.IsNotNull(title, "Reactor_Title should be findable by AutomationId through UIA");
 
-        var textField = FindById("Reactor_TextField1");
-        Assert.IsNotNull(textField, "Reactor_TextField1 should be findable by AutomationId");
+        var textBox = FindById("Reactor_TextBox1");
+        Assert.IsNotNull(textBox, "Reactor_TextBox1 should be findable by AutomationId");
 
         var button = FindById("Reactor_Button1");
         Assert.IsNotNull(button, "Reactor_Button1 should be findable by AutomationId");
@@ -189,10 +189,10 @@ public class WinFormsInteropTests : WinFormsTestBase
     public void Interop_A11y_IslandControlsHaveAccessibleNames()
     {
         // Verify accessible names are exposed through UIA
-        var textField = FindById("Reactor_TextField1");
-        var name = textField.GetAttribute("Name");
-        Assert.AreEqual("Island text field", name,
-            "Reactor TextField should expose its AutomationName through UIA");
+        var textBox = FindById("Reactor_TextBox1");
+        var name = textBox.GetAttribute("Name");
+        Assert.AreEqual("Island TextBox", name,
+            "Reactor TextBox should expose its AutomationName through UIA");
 
         var button = FindById("Reactor_Button1");
         var buttonName = button.GetAttribute("Name");
@@ -232,15 +232,15 @@ public class WinFormsInteropTests : WinFormsTestBase
     }
 
     [TestMethod]
-    public void Interop_A11y_TextFieldIsEditable()
+    public void Interop_A11y_TextBoxIsEditable()
     {
-        // Verify the text field inside the island is recognized as editable
-        var textField = FindById("Reactor_TextField1");
-        var controlType = textField.GetAttribute("LocalizedControlType");
+        // Verify the TextBox inside the island is recognized as editable
+        var textBox = FindById("Reactor_TextBox1");
+        var controlType = textBox.GetAttribute("LocalizedControlType");
 
         // WinUI TextBox reports as "edit" in UIA
         Assert.IsTrue(
             controlType != null && controlType.Contains("edit", StringComparison.OrdinalIgnoreCase),
-            $"Island TextField should be an editable control type, got: {controlType}");
+            $"Island TextBox should be an editable control type, got: {controlType}");
     }
 }

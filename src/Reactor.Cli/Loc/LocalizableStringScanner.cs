@@ -25,7 +25,6 @@ internal static class LocalizableStringScanner
     private static readonly Dictionary<string, HashSet<string>> LocalizableNamedParams = new(StringComparer.Ordinal)
     {
         ["TextBox"] = new(StringComparer.Ordinal) { "placeholder", "header" },
-        ["TextField"] = new(StringComparer.Ordinal) { "placeholder", "header" },
         ["PasswordBox"] = new(StringComparer.Ordinal) { "placeholderText" },
         ["NumberBox"] = new(StringComparer.Ordinal) { "header" },
         ["CheckBox"] = new(StringComparer.Ordinal) { "label" },
@@ -85,7 +84,7 @@ internal static class LocalizableStringScanner
                 {
                     ProcessDslFactoryCall(node, methodName);
                 }
-                // Check DSL factory methods with named params: TextField(value, placeholder: "Search")
+                // Check DSL factory methods with named params: TextBox(value, placeholder: "Search")
                 else if (LocalizableNamedParams.TryGetValue(methodName, out var paramNames))
                 {
                     ProcessNamedParamCall(node, methodName, paramNames);
@@ -133,8 +132,8 @@ internal static class LocalizableStringScanner
             }
 
             // Also check positional arguments that map to localizable params
-            // For TextBox/TextField: placeholder is arg index 2, header is arg index 3
-            if (methodName == "TextBox" || methodName == "TextField")
+            // For TextBox: placeholder is arg index 2, header is arg index 3
+            if (methodName == "TextBox")
             {
                 if (args.Count >= 3 && args[2].NameColon == null)
                 {

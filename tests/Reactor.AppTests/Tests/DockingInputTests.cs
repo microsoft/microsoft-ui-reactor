@@ -9,10 +9,10 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// <summary>
 /// Spec 045 — E2E keyboard-input + focus tests across docking layout
 /// mutations. The bug class this guards against: a parent component's
-/// setState (here, a controlled TextField's <c>OnChanged</c> handler)
+/// setState (here, a controlled TextBox's <c>OnChanged</c> handler)
 /// causes the docking host to re-render, and some unconditional
 /// property write deep inside the reconciler's tab-header update steals
-/// focus from the focused TextField on every keystroke. Symptom:
+/// focus from the focused TextBox on every keystroke. Symptom:
 /// "I type one character and have to click back in the textbox to type
 /// another." The fix lives in
 /// <c>Reconciler.Update.UpdateTabView</c> +
@@ -28,7 +28,7 @@ public class DockingInputTests : AppTestBase
     public static void StopAppSession() => TestSession.AssemblyCleanup();
 
     /// <summary>
-    /// Type a multi-character string into the left pane's TextField,
+    /// Type a multi-character string into the left pane's TextBox,
     /// then Tab to the right pane and type another string. Both panes
     /// are pinnable ToolWindows in separate tab groups — the
     /// configuration that previously triggered the
@@ -38,14 +38,14 @@ public class DockingInputTests : AppTestBase
     [TestMethod]
     public void DockingInput_TypeAndTabAcrossPanes()
     {
-        NavigateToFixtureFresh("DockingInput_TwoPaneTextFields");
+        NavigateToFixtureFresh("DockingInput_TwoPaneTextBoxes");
 
         // Baseline: both states empty (the state TextBlocks read
         // "Left state: " / "Right state: " with a trailing space).
         WaitForText("DockEditor_Left_State", "Left state: ");
         WaitForText("DockEditor_Right_State", "Right state: ");
 
-        // Click into the left TextField and type. The Thread.Sleep
+        // Click into the left TextBox and type. The Thread.Sleep
         // gives WinUI time to settle focus into the inner Edit
         // control before SendKeys delivers the first character — a
         // brief grace window that matches the WinFormsInteropTests
@@ -59,7 +59,7 @@ public class DockingInputTests : AppTestBase
 
         // Tab from the focused left field. WinUI's tab traversal should
         // hop out of the left pane (past any tab strip / splitter
-        // chrome) and land on the right pane's TextField.
+        // chrome) and land on the right pane's TextBox.
         leftField.SendKeys(Keys.Tab);
 
         var rightField = FindById("DockEditor_Right");
@@ -82,7 +82,7 @@ public class DockingInputTests : AppTestBase
     [TestMethod]
     public void DockingInput_NoPin_TypeAndTabAcrossPanes()
     {
-        NavigateToFixtureFresh("DockingInput_TwoPaneTextFieldsNoPin");
+        NavigateToFixtureFresh("DockingInput_TwoPaneTextBoxesNoPin");
 
         WaitForText("DockEditorNoPin_Left_State", "Left state: ");
         WaitForText("DockEditorNoPin_Right_State", "Right state: ");
@@ -113,7 +113,7 @@ public class DockingInputTests : AppTestBase
     [TestMethod]
     public void DockingInput_DragToTab_PreservesFocusAndState()
     {
-        NavigateToFixtureFresh("DockingInput_TwoPaneTextFields");
+        NavigateToFixtureFresh("DockingInput_TwoPaneTextBoxes");
 
         // Seed both editors before the layout change so we can verify
         // post-mutation state survival.
@@ -180,7 +180,7 @@ public class DockingInputTests : AppTestBase
     [TestMethod]
     public void DockingInput_DragToTab_PreservesPreDragState()
     {
-        NavigateToFixtureFresh("DockingInput_TwoPaneTextFields");
+        NavigateToFixtureFresh("DockingInput_TwoPaneTextBoxes");
 
         var leftField = FindById("DockEditor_Left");
         leftField.Click();

@@ -92,7 +92,7 @@ public class AccessibilityScannerTests
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void A11Y_003_TextField_Without_Label()
+    public void A11Y_003_TextBox_Without_Label()
     {
         var tree = VStack(
             TextBox("", null, placeholder: "Enter email")
@@ -103,7 +103,7 @@ public class AccessibilityScannerTests
     }
 
     [Fact]
-    public void A11Y_003_TextField_With_Header_Passes()
+    public void A11Y_003_TextBox_With_Header_Passes()
     {
         var tree = VStack(
             TextBox("", null, header: "Email address")
@@ -114,7 +114,7 @@ public class AccessibilityScannerTests
     }
 
     [Fact]
-    public void A11Y_003_TextField_With_AutomationName_Passes()
+    public void A11Y_003_TextBox_With_AutomationName_Passes()
     {
         var tree = VStack(
             TextBox("", null).AutomationName("Email address")
@@ -125,7 +125,7 @@ public class AccessibilityScannerTests
     }
 
     [Fact]
-    public void A11Y_003_TextField_With_LabeledBy_Passes()
+    public void A11Y_003_TextBox_With_LabeledBy_Passes()
     {
         var tree = VStack(
             TextBlock("Email").AutomationId("EmailLabel"),

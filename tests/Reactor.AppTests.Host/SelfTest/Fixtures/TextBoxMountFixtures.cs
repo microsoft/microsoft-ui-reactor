@@ -6,18 +6,18 @@ using static Microsoft.UI.Reactor.Factories;
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
-/// Verifies that TextField mount correctly applies AcceptsReturn / TextWrapping
+/// Verifies that TextBox mount correctly applies AcceptsReturn / TextWrapping
 /// BEFORE setting Text. WinUI TextBox silently strips \r\n when in single-line
-/// mode (AcceptsReturn=false), so the property order in MountTextField matters.
+/// mode (AcceptsReturn=false), so the property order in MountTextBox matters.
 /// </summary>
-internal static class TextFieldMountFixtures
+internal static class TextBoxMountFixtures
 {
     // Multi-paragraph value used across tests.
     const string MultiLine = "Line one\r\nLine two\r\nLine three";
 
     /// <summary>
     /// AcceptsReturn=true with multi-line text: all lines must survive the mount.
-    /// Regression test for the MountTextField property-ordering bug where Text was
+    /// Regression test for the MountTextBox property-ordering bug where Text was
     /// set before AcceptsReturn, causing WinUI to silently drop lines 2+.
     /// </summary>
     internal class MultiLineTextPreserved(Harness h) : SelfTestFixtureBase(h)
@@ -48,7 +48,7 @@ internal static class TextFieldMountFixtures
     }
 
     /// <summary>
-    /// Single-line TextField (AcceptsReturn omitted/false): Text is set in single-line
+    /// Single-line TextBox (AcceptsReturn omitted/false): Text is set in single-line
     /// mode which is correct. Verifies single-line mounts without regression.
     /// </summary>
     internal class SingleLineMountCorrect(Harness h) : SelfTestFixtureBase(h)
@@ -72,7 +72,7 @@ internal static class TextFieldMountFixtures
 
     /// <summary>
     /// Update path: after mount with multi-line text, a state change that updates
-    /// the value preserves all lines via UpdateTextField.
+    /// the value preserves all lines via UpdateTextBox.
     /// </summary>
     internal class MultiLineUpdatePreserved(Harness h) : SelfTestFixtureBase(h)
     {

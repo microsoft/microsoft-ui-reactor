@@ -424,7 +424,7 @@ public class EditChainTests
     }
 
     [Fact]
-    public void RenderReadOnlyValue_String_Returns_Disabled_TextField()
+    public void RenderReadOnlyValue_String_Returns_Disabled_TextBox()
     {
         var method = GetStatic("RenderReadOnlyValue");
         var el = (Element)method.Invoke(null, new object?[] { "hello", typeof(string) })!;

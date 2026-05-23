@@ -21,11 +21,11 @@ class TestReactorComponent : Component
                     .FontSize(16)
                     .AutomationId("Reactor_Title"),
 
-                // Focusable text field — first Tab stop inside the island
+                // Focusable TextBox - first Tab stop inside the island
                 TextBox(text, setText, placeholder: "Type in island")
                     .Width(250)
-                    .AutomationId("Reactor_TextField1")
-                    .AutomationName("Island text field"),
+                    .AutomationId("Reactor_TextBox1")
+                    .AutomationName("Island TextBox"),
 
                 TextBlock($"Text: {text}")
                     .AutomationId("Reactor_TextDisplay"),
@@ -38,11 +38,11 @@ class TestReactorComponent : Component
                 TextBlock($"Count: {count}")
                     .AutomationId("Reactor_CountDisplay"),
 
-                // A second text field — third Tab stop
+                // A second TextBox - third Tab stop
                 TextBox("", _ => { }, placeholder: "Second field")
                     .Width(250)
-                    .AutomationId("Reactor_TextField2")
-                    .AutomationName("Island second field"),
+                    .AutomationId("Reactor_TextBox2")
+                    .AutomationName("Island second TextBox"),
 
                 // Accessibility test targets
                 TextBlock("Status: Ready")

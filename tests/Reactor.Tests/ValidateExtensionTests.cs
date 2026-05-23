@@ -8,11 +8,11 @@ namespace Microsoft.UI.Reactor.Tests;
 public class ValidateExtensionTests
 {
     // ════════════════════════════════════════════════════════════════
-    //  .Validate() on TextField
+    //  .Validate() on TextBox
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void Validate_On_TextField_Attaches_Validators()
+    public void Validate_On_TextBox_Attaches_Validators()
     {
         var el = TextBox("test")
             .Validate("email", Validate.Required(), Validate.Email());
@@ -24,7 +24,7 @@ public class ValidateExtensionTests
     }
 
     [Fact]
-    public void Validate_On_TextField_Preserves_Element_Type()
+    public void Validate_On_TextBox_Preserves_Element_Type()
     {
         var el = TextBox("test")
             .Validate("email", Validate.Required());

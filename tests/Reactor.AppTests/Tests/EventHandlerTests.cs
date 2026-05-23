@@ -82,7 +82,7 @@ public class EventHandlerTests : AppTestBase
     }
 
     /// <summary>
-    /// OnKeyDown: focus a TextField and send a key, verify the key is captured
+    /// OnKeyDown: focus a TextBox and send a key, verify the key is captured
     /// by the declarative .OnKeyDown() handler.
     /// </summary>
     [TestMethod]

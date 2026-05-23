@@ -216,16 +216,6 @@ public static partial class Factories
     public static TextBoxElement TextBox(string value, Action<string>? onChanged = null, string? placeholder = null, string? header = null) =>
         new(value, onChanged, placeholder) { Header = header };
 
-    /// <summary>
-    /// Deprecated forwarding alias for <see cref="TextBox(string, Action{string}?, string?, string?)"/>.
-    /// </summary>
-    [global::System.Obsolete(
-        "Renamed to TextBox for parity with WinUI's Microsoft.UI.Xaml.Controls.TextBox. " +
-        "TextField will be removed in a future release.",
-        error: false)]
-    public static TextBoxElement TextField(string value, Action<string>? onChanged = null, string? placeholder = null, string? header = null) =>
-        TextBox(value, onChanged, placeholder, header);
-
     public static PasswordBoxElement PasswordBox(string password, Action<string>? onPasswordChanged = null, string? placeholderText = null) =>
         new(password, onPasswordChanged, placeholderText);
 

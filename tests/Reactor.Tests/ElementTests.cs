@@ -126,7 +126,7 @@ public class ElementTests
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void TextField_Creates_With_Value_And_Placeholder()
+    public void TextBox_Creates_With_Value_And_Placeholder()
     {
         var el = TextBox("val", placeholder: "hint");
         Assert.Equal("val", el.Value);
