@@ -1002,6 +1002,11 @@ internal static class NativeDockingSmokeFixtures
     /// </summary>
     internal class PerGroupDropTargetVisualDemo(Harness h) : SelfTestFixtureBase(h)
     {
+        // 20 mount cycles × ~700 ms each on loaded CI runners can overshoot the
+        // default 15 s budget; the demo is not pathological, just paced for human
+        // visibility. See INVESTIGATION.md Cluster T1.PerGroup.
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(30);
+
         public override async Task RunAsync()
         {
             var host = H.CreateHost();

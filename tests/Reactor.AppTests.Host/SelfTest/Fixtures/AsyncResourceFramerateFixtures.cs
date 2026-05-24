@@ -417,6 +417,10 @@ internal static class AsyncResourceFramerateFixtures
 
     internal class DataGridEditMutation(Harness h) : SelfTestFixtureBase(h)
     {
+        // 60-frame mutation pump + 30-frame drain; same wall-clock-floor reasoning
+        // as HookPagingFramerateScroll. See INVESTIGATION.md Cluster T2.
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(30);
+
         public override async Task RunAsync()
         {
             await Task.Run(() =>

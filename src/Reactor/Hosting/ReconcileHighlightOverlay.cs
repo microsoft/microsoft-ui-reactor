@@ -141,8 +141,17 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
             existing.Sprite.Opacity = opacity;
             existing.Sprite.Size = size;
             existing.Sprite.Offset = offset;
+            // Dispatcher-queue contract: DispatcherQueueTimer.Stop() does NOT
+            // dequeue a Tick that was already enqueued before the call. If the
+            // original interval elapsed concurrently with this refresh, the old
+            // Tick can fire AFTER Start() and tear down a sprite that the user
+            // still expects to see. Swap in a fresh timer with its own Tick
+            // lambda so the old tick — if it fires — finds the active entry
+            // no longer owns it, and bails (see the identity check below).
             try { existing.Timer.Stop(); } catch { }
-            try { existing.Timer.Start(); } catch { }
+            var refreshedTimer = CreateExpiryTimer(target, existing);
+            existing.Timer = refreshedTimer;
+            refreshedTimer.Start();
             return;
         }
 
@@ -157,17 +166,31 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
         sprite.Brush = brush;
         _container.Children.InsertAtTop(sprite);
 
+        var entry = new ActiveHighlight { Sprite = sprite };
+        var timer = CreateExpiryTimer(target, entry);
+        entry.Timer = timer;
+        _active[target] = entry;
+        timer.Start();
+        newBudget--;
+    }
+
+    private DispatcherQueueTimer CreateExpiryTimer(UIElement capturedTarget, ActiveHighlight owner)
+    {
         var timer = _dispatcherQueue.CreateTimer();
         timer.Interval = TimeSpan.FromMilliseconds(_holdDurationMs);
         timer.IsRepeating = false;
 
-        var capturedTarget = target;
         var container = _container;
         timer.Tick += (s, _) =>
         {
             try
             {
-                if (_active.TryGetValue(capturedTarget, out var ah))
+                // Identity guard: a Refresh between this tick's enqueue and its
+                // dispatch will have swapped in a new timer; the stale tick must
+                // not tear down the sprite that the new timer still owns.
+                if (_active.TryGetValue(capturedTarget, out var ah)
+                    && ReferenceEquals(ah, owner)
+                    && ReferenceEquals(ah.Timer, s))
                 {
                     try { container.Children.Remove(ah.Sprite); } catch { }
                     try { ah.Sprite.Dispose(); } catch { }
@@ -179,10 +202,7 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
                 try { ((DispatcherQueueTimer)s).Stop(); } catch { }
             }
         };
-
-        _active[target] = new ActiveHighlight { Sprite = sprite, Timer = timer };
-        timer.Start();
-        newBudget--;
+        return timer;
     }
 
     // ─────────────────────────────────────────────────────────────────────

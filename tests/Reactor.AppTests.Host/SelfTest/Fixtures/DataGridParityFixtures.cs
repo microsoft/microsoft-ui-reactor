@@ -262,6 +262,11 @@ internal static class DataGridParityFixtures
     /// </summary>
     internal class HookPagingFramerateScroll(Harness h) : SelfTestFixtureBase(h)
     {
+        // 60-frame programmatic scroll has a ~3.4 s mandatory Render(ms) wall-clock
+        // floor; loaded CI runners slow per-frame work 2–4x and trip the default 15 s
+        // budget without anything being wedged. See INVESTIGATION.md Cluster T2.
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(30);
+
         public override Task RunAsync() => WithHookPaging(true, RunInner);
 
         private async Task RunInner()

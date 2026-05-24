@@ -113,15 +113,21 @@ internal static class DataGridScrollFixtures
             H.Check("ScrollPop_ScrollViewerFound", sv is not null);
             if (sv is null) return;
 
-            // 2. Scroll to a position deep in the list (row ~200)
+            // 2. Scroll to a position deep in the list (row ~200).
+            // Baseline wait (preserves the scroll-settle window so the
+            // ScrollPop_MultipleFetches sanity assertion still triggers fetches),
+            // then poll cells in case the realization runs long. The original
+            // fixed 800ms Render flaked as `cells=0` under CI load — see
+            // INVESTIGATION.md Cluster C.
             sv.ChangeView(null, 7200, null, disableAnimation: true);
-            // Wait for: scroll event → EnsureRangeLoaded → async fetch → settle timer → render
             await Harness.Render(800);
-
-            // 3. The key assertion: rows at the scroll target should have real data,
-            //    not placeholders. Look for "Emp-" prefix in visible TextBlocks.
-            var visibleEmpCells = H.FindAllControls<TextBlock>(
-                tb => tb.Text?.StartsWith("Emp-") == true);
+            var visibleEmpCells = H.FindAllControls<TextBlock>(tb => tb.Text?.StartsWith("Emp-") == true);
+            var deadline1 = Environment.TickCount64 + 3_000;
+            while (visibleEmpCells.Count < 4 && Environment.TickCount64 < deadline1)
+            {
+                await Harness.Render(100);
+                visibleEmpCells = H.FindAllControls<TextBlock>(tb => tb.Text?.StartsWith("Emp-") == true);
+            }
 
             H.Check($"ScrollPop_DataVisible (cells={visibleEmpCells.Count})",
                 visibleEmpCells.Count >= 4);
@@ -129,9 +135,13 @@ internal static class DataGridScrollFixtures
             // 4. Scroll to a completely different position
             sv.ChangeView(null, 14400, null, disableAnimation: true);
             await Harness.Render(800);
-
-            var visibleEmpCells2 = H.FindAllControls<TextBlock>(
-                tb => tb.Text?.StartsWith("Emp-") == true);
+            var visibleEmpCells2 = H.FindAllControls<TextBlock>(tb => tb.Text?.StartsWith("Emp-") == true);
+            var deadline2 = Environment.TickCount64 + 3_000;
+            while (visibleEmpCells2.Count < 4 && Environment.TickCount64 < deadline2)
+            {
+                await Harness.Render(100);
+                visibleEmpCells2 = H.FindAllControls<TextBlock>(tb => tb.Text?.StartsWith("Emp-") == true);
+            }
 
             H.Check($"ScrollPop_DataVisibleAfterSecondScroll (cells={visibleEmpCells2.Count})",
                 visibleEmpCells2.Count >= 4);
