@@ -439,7 +439,9 @@ public static class DockLayoutSerializer
         CanHide             = pane.CanHide             ?? true,
         CanAutoHide         = pane.CanAutoHide         ?? true,
         CanDockAsDocument   = pane.CanDockAsDocument   ?? true,
-        // Spec 046 §6.7 — AllowedSides round-trip. Null/empty → default All.
+        // Spec 046 §6.7 — AllowedSides round-trip. null (field omitted) → All;
+        // empty list → None. Symmetric with the writer above, which omits the
+        // field when the mask is All and emits an empty list when None.
         AllowedSides = ParseAllowedSides(pane.AllowedSides),
         PersistenceState = pane.State,
         Width = pane.Width, Height = pane.Height,

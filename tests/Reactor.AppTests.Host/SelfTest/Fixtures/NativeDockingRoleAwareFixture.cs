@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Docking;
@@ -58,11 +59,8 @@ internal static class NativeDockingRoleAwareFixtures
         var tabs = h.FindAllControls<TabView>(_ => true);
         foreach (var tv in tabs)
         {
-            foreach (var item in tv.TabItems)
-            {
-                if (item is TabViewItem tvi && tvi.Header is string s && s == key)
-                    return true;
-            }
+            if (tv.TabItems.OfType<TabViewItem>().Any(tvi => tvi.Header is string s && s == key))
+                return true;
         }
         return false;
     }
@@ -426,13 +424,15 @@ internal static class NativeDockingRoleAwareFixtures
 
             // PinToSide must succeed on an allowed side.
             bool succeeded = false;
+            string? allowedSideError = null;
             try
             {
                 model.PinToSide(bottomOnly, DockSide.Bottom);
                 succeeded = true;
             }
-            catch (InvalidOperationException) { }
+            catch (InvalidOperationException ex) { allowedSideError = ex.Message; }
             H.Check("RoleAware_Mask_PinToSideAllowsBottom", succeeded);
+            H.Check("RoleAware_Mask_PinToSideAllowsBottom_NoError", allowedSideError is null);
         }
     }
 

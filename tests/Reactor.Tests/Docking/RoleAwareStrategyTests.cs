@@ -70,17 +70,8 @@ public class RoleAwareStrategyTests
     {
         // No-op strategy returns false — model uses default Dock(Center)
         // routing, which is role-aware.
-        var model = new DockHostModel
-        {
-            LayoutStrategy = new GroupTargetingStrategy(
-                target: new DockTabGroup(Array.Empty<DockableContent>(), Role: DockGroupRole.General))
-        };
-        // (Even though the strategy IS placed, calling with a different
-        // path — DockOp instead of DockToGroupOp — wouldn't fire since the
-        // strategy intercepts. Build a separate test with a strategy that
-        // returns false.)
         IDockLayoutStrategy passThrough = new PassThroughStrategy();
-        model = new DockHostModel { LayoutStrategy = passThrough };
+        var model = new DockHostModel { LayoutStrategy = passThrough };
         model.Dock(Doc("d1"), DockTarget.Center);
         var op = Assert.Single(model.Pending);
         Assert.IsType<PendingMutation.DockOp>(op);

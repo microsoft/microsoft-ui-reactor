@@ -15,6 +15,7 @@
 // via the side menu without relaunching the app.
 
 using System.Collections.Immutable;
+using System.Linq;
 using System.Text.Json;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
@@ -1345,8 +1346,7 @@ class SceneJRolesAndAllowedSides : Component
                 {
                     case Document d: acc.Add(d); break;
                     case DockTabGroup g:
-                        foreach (var c in g.Documents)
-                            if (c is Document) acc.Add(c);
+                        foreach (var c in g.Documents.OfType<Document>()) acc.Add(c);
                         break;
                     case DockSplit s:
                         foreach (var c in s.Children) CollectDocs(c, acc);

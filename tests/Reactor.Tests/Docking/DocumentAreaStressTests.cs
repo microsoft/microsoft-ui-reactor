@@ -256,11 +256,9 @@ public class DocumentAreaStressTests
         // of DocumentArea arms. Every arm must remain DocumentArea so the
         // splitting invariant holds at depth.
         DockNode root = new DockTabGroup(Array.Empty<DockableContent>(), Role: DockGroupRole.DocumentArea);
-        var docs = new List<Document>();
         for (int i = 0; i < 5; i++)
         {
             var d = Doc($"d{i}");
-            docs.Add(d);
             root = DockLayoutMutator.InsertPaneAtTarget(root, d, DockTarget.Center, out _);
             if (i > 0)
             {

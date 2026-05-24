@@ -130,7 +130,6 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     // hit-test ignored). Bitmask over DockTarget enum values for O(1)
     // checks on the pointer-move hot path.
     private int _disabledTargetMask;
-    private const int DisabledMaskShift = 0; // keep values aligned with DockTarget int values
 
     /// <summary>
     /// Spec 046 §6.6 — host-provided list of targets that should render
