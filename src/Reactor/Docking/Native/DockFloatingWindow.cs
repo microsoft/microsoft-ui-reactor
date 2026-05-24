@@ -207,12 +207,24 @@ public static class DockFloatingWindow
         Action<DockableContent> onTabClosing,
         Action<DockableContent, bool> onTabDragCompleted)
     {
+        // Spec 046 §6.1 — infer the floating internal group's Role from the
+        // payload categories. A floating window whose panes are all
+        // Document → DocumentArea (so the cross-window drop-back into a
+        // host's DocumentArea is symmetric on both sides of the drag).
+        // A floating window with ANY ToolWindow / Untyped pane → General;
+        // strips imply edge attachment which floating windows lack, so
+        // we never promote to ToolWindowStrip here. The cull-pass
+        // reserved-empty rule (spec §6.5) doesn't apply to floating
+        // windows — when the last pane closes the floating window closes
+        // itself, regardless of the group's Role.
+        var role = InferFloatingGroupRole(panes);
         var tabGroup = new DockTabGroup(
             panes is DockableContent[] arr ? arr : panes.ToArray(),
             // §4.6 + §7.1.4 — the tab strip background uses
             // `TitleBarBackgroundFillBrush` so it visually merges into
             // the OS title-bar zone (single continuous chrome row).
-            TabChrome: TabChrome.TitleBar);
+            TabChrome: TabChrome.TitleBar,
+            Role: role);
         var rendered = (TabViewElement)DockTabGroupRenderer.Render(
             tabGroup,
             renderLeafContent: doc => doc.Content ?? (Element)new BorderElement(null),
@@ -292,6 +304,21 @@ public static class DockFloatingWindow
             });
 
         return rendered with { TabStripFooter = dragRegion };
+    }
+
+    /// <summary>
+    /// Spec 046 §6.1 — derive the floating window's internal tab group
+    /// role from its payload. All-Document → <see cref="DockGroupRole.DocumentArea"/>;
+    /// any non-Document pane → <see cref="DockGroupRole.General"/>. Never
+    /// <see cref="DockGroupRole.ToolWindowStrip"/> (floating windows have
+    /// no edges).
+    /// </summary>
+    internal static DockGroupRole InferFloatingGroupRole(IReadOnlyList<DockableContent> panes)
+    {
+        if (panes is null || panes.Count == 0) return DockGroupRole.General;
+        for (int i = 0; i < panes.Count; i++)
+            if (panes[i] is not Document) return DockGroupRole.General;
+        return DockGroupRole.DocumentArea;
     }
 }
 

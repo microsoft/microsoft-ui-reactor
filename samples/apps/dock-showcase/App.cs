@@ -64,7 +64,8 @@ class DockShowcaseRoot : Component
             SceneButton("programmatic", "Scene F — Programmatic Dock", scene, setScene),
             SceneButton("sliders",      "Scene G — Slider Resize",     scene, setScene),
             SceneButton("droptargets",  "Scene H — Drop Targets",      scene, setScene),
-            SceneButton("tabstyles",    "Scene I — Tab Styles",        scene, setScene)
+            SceneButton("tabstyles",    "Scene I — Tab Styles",        scene, setScene),
+            SceneButton("roles",        "Scene J — Roles & Allowed Sides", scene, setScene)
         ).Width(240).Padding(8);
 
         Element body = scene switch
@@ -78,6 +79,7 @@ class DockShowcaseRoot : Component
             "sliders"      => Component<SceneGSliders>(),
             "droptargets"  => Component<SceneHDropTargets>(),
             "tabstyles"    => Component<SceneITabStyles>(),
+            "roles"        => Component<SceneJRolesAndAllowedSides>(),
             _              => TextBlock("Unknown scene"),
         };
 
@@ -1163,4 +1165,277 @@ class SceneITabStyles : Component
             TextBlock(title).SemiBold(),
             TextBlock($"(rendered under TabChrome.{chromeLabel})").Opacity(0.55).FontSize(11)
         ).Padding(12);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  Scene J — Roles & AllowedSides (spec 046)
+//
+//  Demonstrates the spec-046 additions:
+//    • DockGroupRole.DocumentArea  — preferred Center-dock target, survives empty.
+//    • DockGroupRole.ToolWindowStrip — preferred for ToolWindow drops.
+//    • ToolWindow.AllowedSides       — mask that filters drag-drop targets and
+//                                      validates programmatic PinToSide.
+//
+//  The scene builds a VS-shaped layout (tool strip / document well / tool strip),
+//  lets the user open new documents via a button (role-aware routing lands them
+//  in the well, not the leftmost tool strip), close all docs to prove the well
+//  survives empty, and try PinToSide against a Bottom-only tool window to watch
+//  the InvalidOperationException land in the trace panel.
+// ════════════════════════════════════════════════════════════════════════
+
+class SceneJRolesAndAllowedSides : Component
+{
+    // ── Static seed content ──────────────────────────────────────────────
+    // These records are stable across renders so the reconciler matches
+    // them by both reference and Key. The doc panes the user opens are
+    // built lazily inside OpenDoc().
+    static readonly ToolWindow GalleryTool = new()
+    {
+        Title = "Gallery Items",
+        Key   = "j:tool:gallery",
+        Content = VStack(4,
+            TextBlock("Gallery items").SemiBold(),
+            TextBlock("• Layout").Opacity(0.8),
+            TextBlock("• Inputs").Opacity(0.8),
+            TextBlock("• Lists").Opacity(0.8),
+            TextBlock("• Navigation").Opacity(0.8)
+        ).Padding(8),
+    };
+    static readonly ToolWindow ConfigTool = new()
+    {
+        Title = "Configuration",
+        Key   = "j:tool:config",
+        Content = VStack(4,
+            TextBlock("Configuration").SemiBold(),
+            TextBlock("Theme: NightSky").Opacity(0.8),
+            TextBlock("Scaling: 100%").Opacity(0.8),
+            TextBlock("RTL: off").Opacity(0.8)
+        ).Padding(8),
+    };
+    // Spec 046 §6.2 — AllowedSides constraint. Bottom-only means drag
+    // onto Left/Top/Right strips will dim during drag, and a programmatic
+    // PinToSide(Left) throws InvalidOperationException.
+    static readonly ToolWindow ErrorsTool = new()
+    {
+        Title = "Errors",
+        Key   = "j:tool:errors",
+        AllowedSides = DockSides.Bottom,
+        Content = VStack(4,
+            TextBlock("Errors").SemiBold(),
+            TextBlock("0 errors. 0 warnings.").Opacity(0.8),
+            TextBlock("(AllowedSides = Bottom — try dragging this " +
+                "to the left strip and watch the overlay dim.)")
+                .Opacity(0.55).FontSize(11)
+        ).Padding(8),
+    };
+
+    // Initial VS-shaped layout: tool strip | DocumentArea | tool strip.
+    // The DocumentArea is reserved-empty (spec 046 §6.5) so it stays
+    // visible even with no docs open.
+    static DockNode BuildInitialLayout()
+        => new DockSplit(Orientation.Horizontal, new DockNode[]
+        {
+            new DockTabGroup(new DockableContent[] { GalleryTool },
+                Width: 240, Role: DockGroupRole.ToolWindowStrip),
+            new DockTabGroup(Array.Empty<DockableContent>(),
+                Role: DockGroupRole.DocumentArea),
+            new DockTabGroup(new DockableContent[] { ConfigTool },
+                Width: 280, Role: DockGroupRole.ToolWindowStrip),
+        });
+
+    static DockableContent BuildDocPane(int n)
+        => new Document
+        {
+            Title = $"Document {n}.md",
+            Key   = $"j:doc:{n}",
+            CanClose = true,
+            Content = VStack(8,
+                TextBlock($"Document {n}.md").FontSize(18).SemiBold(),
+                TextBlock(
+                    "This is a Document pane. Spec 046 routes " +
+                    "Dock(Center) to the DocumentArea group regardless " +
+                    "of where it sits in tree order. Drag this tab to " +
+                    "the right edge of the well to split it — both " +
+                    "halves stay DocumentArea-roled. Close all the docs " +
+                    "and the well stays visible (reserved-empty)."
+                ).Opacity(0.8)
+            ).Padding(16),
+        };
+
+    public override Element Render()
+    {
+        // Spec 045 §2.30 / spec 046 §6.5 — the layout is owned in state
+        // and updated via OnLiveLayoutChanged. This lets the user's
+        // drag-induced splits and tab moves persist across renders;
+        // rebuilding the layout from scratch each render would discard
+        // the drag-modified shape and reset splitter mid-drag state.
+        var (liveLayout, setLiveLayout) = UseState<DockNode?>(BuildInitialLayout());
+        var (traceLog, setTraceLog) = UseState(ImmutableList<string>.Empty);
+        var (counter, setCounter) = UseState(1);
+
+        void AppendTrace(string line)
+            => setTraceLog(traceLog.Add($"[{DateTime.Now:HH:mm:ss}] {line}"));
+
+        // Operation log so we can show the routing diagnostic when an
+        // unsupported placement degrades.
+        var logRef = UseRef<DockOperationLog>(new DockOperationLog());
+
+        // Externalize the split ratios so the native splitter writes its
+        // mid-drag state to a stable dict; bump a tick on
+        // OnSplitterDragCompleted so the next render reads the final
+        // ratios.
+        var ratiosRef = UseRef<Dictionary<string, double[]>>(new Dictionary<string, double[]>());
+        var (_, bumpTick) = UseReducer(0);
+
+        var dock = new DockManager
+        {
+            Layout = liveLayout,
+            SplitRatios = ratiosRef.Current,
+            OperationLog = logRef.Current,
+            OnLiveLayoutChanged = newLayout => setLiveLayout(newLayout),
+            OnSplitterDragCompleted = () => bumpTick(t => t + 1),
+            OnDocumentClosing = args =>
+            {
+                AppendTrace($"close document '{args.Document.Title}' (key={args.Document.Key})");
+                // Remove from the live layout; DocumentArea survives empty.
+                var (after, _) = DockLayoutOps.RemovePane(liveLayout, args.Document);
+                setLiveLayout(after);
+            },
+        };
+
+        // ── Open Doc / Close All / PinToSide trial buttons ───────────────
+        void OpenDoc()
+        {
+            var n = counter;
+            setCounter(n + 1);
+            var pane = BuildDocPane(n);
+            // Spec 046 §6.3 — role-aware Dock(Center). Lands in the
+            // first DocumentArea group regardless of tree order. The
+            // out-parameter surfaces any fallback (e.g. layout had no
+            // DocumentArea / General groups available).
+            var next = DockLayoutOps.InsertPaneAtTarget(
+                liveLayout, pane, DockTarget.Center, out var fallback);
+            setLiveLayout(next);
+            if (fallback is not null)
+                AppendTrace($"open Document {n}.md — routing fallback: {fallback.Description}");
+            else
+                AppendTrace($"open Document {n}.md — landed in a DocumentArea group (role-aware Center routing).");
+        }
+
+        void CloseAllDocs()
+        {
+            // Walk every DockableContent in liveLayout, pull out Documents,
+            // and remove each one. DocumentArea groups survive the cull
+            // so the well stays a visible drop target.
+            var docKeys = new List<DockableContent>();
+            CollectDocs(liveLayout, docKeys);
+            if (docKeys.Count == 0) { AppendTrace("(no docs to close)"); return; }
+            AppendTrace($"close all {docKeys.Count} documents — DocumentArea survives empty.");
+            var nextLayout = liveLayout;
+            foreach (var doc in docKeys)
+            {
+                var (after, _) = DockLayoutOps.RemovePane(nextLayout, doc);
+                nextLayout = after;
+            }
+            setLiveLayout(nextLayout);
+
+            static void CollectDocs(DockNode? n, List<DockableContent> acc)
+            {
+                switch (n)
+                {
+                    case Document d: acc.Add(d); break;
+                    case DockTabGroup g:
+                        foreach (var c in g.Documents)
+                            if (c is Document) acc.Add(c);
+                        break;
+                    case DockSplit s:
+                        foreach (var c in s.Children) CollectDocs(c, acc);
+                        break;
+                }
+            }
+        }
+
+        // PinToSide is interesting because we want to demonstrate the
+        // mask throw without involving a host. Build an isolated model
+        // on demand and let the exception escape into our trace.
+        void TryPinErrorsLeft()
+        {
+            try
+            {
+                var trial = new DockHostModel();
+                trial.PinToSide(ErrorsTool, DockSide.Left);
+                AppendTrace("PinToSide(Errors, Left) succeeded (unexpected — mask should reject).");
+            }
+            catch (InvalidOperationException ex)
+            {
+                AppendTrace("PinToSide(Errors, Left) threw: " + ex.Message);
+            }
+        }
+
+        void TryPinErrorsBottom()
+        {
+            try
+            {
+                var trial = new DockHostModel();
+                trial.PinToSide(ErrorsTool, DockSide.Bottom);
+                AppendTrace("PinToSide(Errors, Bottom) succeeded — Bottom is in the AllowedSides mask.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                AppendTrace("PinToSide(Errors, Bottom) threw: " + ex.Message);
+            }
+        }
+
+        // ── Trace panel — last few lines of routing diagnostics ──────────
+        var traceLines = traceLog.TakeLast(8).Select(l =>
+            (Element)TextBlock(l).FontFamily("Consolas, Courier New, monospace").FontSize(11));
+        // Tail of the DockOperationLog so we can see splitter PRESS/MOVE/RELEASE
+        // + SOLVE events live while debugging cursor-tracking regressions.
+        var opLines = logRef.Current.Operations.TakeLast(30)
+            .Select(o => (Element)TextBlock(
+                $"{o.TimestampUtc.ToLocalTime():HH:mm:ss.fff}  {o.Kind,-15}  {o.Description}")
+                .FontFamily("Consolas, Courier New, monospace").FontSize(10).Opacity(0.85))
+            .ToArray();
+        var tracePanel = VStack(4,
+            TextBlock("Trace").SemiBold(),
+            traceLog.IsEmpty
+                ? TextBlock("(open a doc to see routing trace)").Opacity(0.55).FontSize(11)
+                : VStack(2, traceLines.ToArray()),
+            TextBlock($"Op log (last 30 of {logRef.Current.Count})").SemiBold().Margin(0, 8, 0, 0),
+            Button("Refresh op log", () => bumpTick(t => t + 1)),
+            new ScrollViewElement(VStack(1, opLines))
+            {
+                VerticalScrollBarVisibility = ScrollingScrollBarVisibility.Auto,
+            }.Height(200)
+        ).Padding(8);
+
+        return Grid(
+            new[] { GridSize.Star(1) },
+            new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(3), GridSize.Star(1) },
+
+            TextBlock("Scene J — Roles & AllowedSides (spec 046)")
+                .FontSize(20).SemiBold().Grid(row: 0),
+
+            TextBlock(
+                "VS-shaped layout: left tool strip (Gallery), center DocumentArea, " +
+                "right tool strip (Configuration). Opening documents routes them to " +
+                "the DocumentArea via role-aware Dock(Center) — not the leftmost group. " +
+                "Close all docs and the well stays visible (reserved-empty). The Errors " +
+                "tool window declares AllowedSides=Bottom; drag it across the side strips " +
+                "to see the overlay dim, and click the PinToSide buttons to see the mask " +
+                "throw on invalid sides."
+            ).Opacity(0.8).Margin(0, 0, 0, 12).Grid(row: 1),
+
+            HStack(8,
+                Button($"Open new Document (next: #{counter})", OpenDoc),
+                Button("Close all documents", CloseAllDocs),
+                Button("Try PinToSide(Errors, Left) — should throw", TryPinErrorsLeft),
+                Button("Try PinToSide(Errors, Bottom) — should succeed", TryPinErrorsBottom)
+            ).Margin(0, 0, 0, 8).Grid(row: 2),
+
+            dock.Grid(row: 3),
+
+            tracePanel.Grid(row: 4)
+        ).Padding(16);
+    }
 }

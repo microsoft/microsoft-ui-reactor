@@ -60,6 +60,25 @@ public sealed record ToolWindow : DockableContent
     /// <summary>Tool window can be docked as a document (promoted into a DocumentPane). Default true.</summary>
     public bool CanDockAsDocument { get; init; } = true;
 
+    /// <summary>
+    /// Edges this tool window may dock to. Affects drag-drop drop-target
+    /// eligibility (filtered targets dim during drag, hit-test ignores
+    /// them) and programmatic <see cref="DockHostModel.PinToSide"/>
+    /// (which throws <see cref="InvalidOperationException"/> on an edge
+    /// the mask forbids). Default <see cref="DockSides.All"/> preserves
+    /// pre-spec-046 unconstrained placement.
+    /// </summary>
+    /// <remarks>
+    /// Spec 046 §6.2 / §6.6 / §9 Q4. Strategies that need to bypass the
+    /// mask (e.g. a custom layout strategy placing a tool window on its
+    /// own terms) should clear the mask via <c>tw with { AllowedSides =
+    /// DockSides.All }</c> before calling <see cref="DockHostModel.PinToSide"/>.
+    /// Setting the mask to <see cref="DockSides.None"/> is allowed and
+    /// means the tool window is float-only — every <see cref="DockHostModel.PinToSide"/>
+    /// call throws.
+    /// </remarks>
+    public DockSides AllowedSides { get; init; } = DockSides.All;
+
     /// <summary>Parameterless ctor — overrides the base permission defaults to ToolWindow semantics.</summary>
     public ToolWindow()
     {

@@ -94,6 +94,83 @@ Office's tool-pane shape. `Document` panes are closeable by default; a
 closed document raises the document lifecycle callbacks and is removed
 from the native layout.
 
+## Shaping a Document Well
+
+Set `Role` on a `DockTabGroup` to declare the IDE-class document-vs-tool
+distinction. Three values:
+
+- `DockGroupRole.General` — the default; accepts every category and
+  culls when emptied. Pre-spec-046 behavior.
+- `DockGroupRole.DocumentArea` — the document well. Preferred target
+  for `Dock(Center)` on `Document` panes; rejects `ToolWindow` drops by
+  default. Survives empty (no per-group `ShowWhenEmpty` needed) so the
+  well stays a visible drop target after the last document closes.
+- `DockGroupRole.ToolWindowStrip` — an edge strip of tool windows.
+  Preferred target for `ToolWindow` panes; rejects `Document` drops.
+
+A Visual-Studio-shaped layout: tool strip on the left, document well in
+the middle, tool strip on the right. `model.Dock(doc, DockTarget.Center)`
+lands in the middle group regardless of where it sits in tree order:
+
+```csharp
+new DockSplit(Orientation.Horizontal, new DockNode[]
+{
+    new DockTabGroup(
+        new[] { galleryItemsToolWindow },
+        Width: 260,
+        Role: DockGroupRole.ToolWindowStrip),
+    new DockTabGroup(
+        Array.Empty<DockableContent>(),
+        Role: DockGroupRole.DocumentArea), // implies ShowWhenEmpty
+    new DockTabGroup(
+        new[] { configurationToolWindow },
+        Width: 320,
+        Role: DockGroupRole.ToolWindowStrip),
+})
+```
+
+> Programmatic `Dock(content, DockTarget.Center)` routes to the first
+> `DockGroupRole.DocumentArea` group, falling back to the first compatible
+> group (and logging a diagnostic if none accepts the payload). To target
+> a specific group regardless of role, use the
+> `Dock(content, DockTabGroup, DockTarget)` overload — the explicit
+> placement is trusted and skips the role compatibility check.
+
+When the user splits a `Document` inside a `DocumentArea` via drag, the
+new sibling group inherits the role — splitting a doc well produces two
+doc wells, not one well plus a `General` group. The same propagation
+fires for `ToolWindowStrip` when the user drops a tool on the layout's
+edge: `DockBottom` with a `ToolWindow` payload creates a new
+`ToolWindowStrip`-roled group at the bottom, even when no strip existed
+before.
+
+## Constraining Tool Window Placement
+
+`ToolWindow.AllowedSides` is a `[Flags]` mask that limits which edges a
+tool window may dock to (Qt's `setAllowedAreas` shape). Default
+`DockSides.All` preserves unconstrained placement. Set it to
+`DockSides.Bottom` to lock an Errors pane to the bottom strip:
+
+```csharp
+var errors = new ToolWindow {
+    Title = "Errors",
+    Key = "tool:errors",
+    AllowedSides = DockSides.Bottom,
+};
+```
+
+Effect:
+
+- The drop-target overlay dims edges the mask excludes during drag, and
+  the hit-test ignores those targets — releasing over a forbidden edge
+  snaps the pane back.
+- `model.PinToSide(tw, DockSide.Left)` throws
+  `InvalidOperationException` when `Left` isn't in the mask. Strategies
+  that need to bypass should clone via `tw with { AllowedSides =
+  DockSides.All }` before calling.
+- `DockSides.None` is allowed and means the tool window is float-only —
+  every `PinToSide` throws and every dock-edge target dims during drag.
+
 ## Side Pins (Auto-Hide)
 
 `LeftSide`, `TopSide`, `RightSide`, and `BottomSide` on `DockManager`

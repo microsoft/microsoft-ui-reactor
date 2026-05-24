@@ -28,6 +28,34 @@ Conventions for contributors:
 
 ### Added
 
+- **Docking content types & reserved document area (spec 046).**
+  Additive amendment to spec 045's `DockNode` algebra so apps can
+  express the IDE-class document-area / tool-window-strip distinction:
+  `DockGroupRole` ({ `General`, `DocumentArea`, `ToolWindowStrip` }) on
+  `DockTabGroup`; `[Flags] DockSides` mask on `ToolWindow.AllowedSides`.
+  `Dock(content, Center)` now prefers `DocumentArea` for documents and
+  `ToolWindowStrip` for tool windows (falls back to any accepting group
+  with a `DockOperationLog` diagnostic). An empty `DocumentArea`
+  survives as a visible reserved well when it's the only one in the
+  tree; empty split arms next to a non-empty sibling cull so split-drag
+  residue collapses cleanly. Drag-drop overlay dims targets that
+  reject the payload's category or violate `AllowedSides`; `PinToSide`
+  validates against the mask. New public `DockLayoutOps` façade
+  (`InsertPaneAtTarget` / `RemovePane` / `MovePaneToTarget` /
+  `FindContainer`) for programmatic open/close that respects the new
+  routing + cull rules. New `DockHostModel.Dock(content, DockTabGroup,
+  target)` overload for explicit group placement. JSON round-trip for
+  `role` and `allowedSides`, omitted at defaults; old layouts
+  deserialize unchanged. Defaults (`Role = General` / `AllowedSides =
+  All`) keep spec-045 behavior for layouts that don't opt in. Bug-fix
+  swept three Scene-J regressions surfaced during manual review:
+  splitter cursor tracking in 3+ child splits (pair extent now uses
+  measured leading + trailing size, not the whole panel), open-doc-
+  after-split losing the new doc (host invalidates the drag-modified
+  shape override when `manager.Layout`'s leaf-key set changes between
+  renders), and close-non-last-in-split leaving an empty arm
+  (refined prune rule above).
+
 - **Docking (spec 045).** First-class window-docking surface under
   `Microsoft.UI.Reactor.Docking`. Phase 1 shipped via a vendored WinUI.Dock
   renderer in the `Microsoft.UI.Reactor.Docking.Xaml` package; Phase 2 replaces

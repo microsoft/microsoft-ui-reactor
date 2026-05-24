@@ -117,6 +117,41 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // state updates (selection-driven Content changes, etc.) are
         // picked up by the next Resolve pass.
         DockLayoutMutator.IndexLeavesInto(manager.Layout, knownPanes);
+        // App-driven layout invalidation (spec 046 §6.4). Track the leaf
+        // KEY SET of the manager.Layout prop observed in the previous
+        // render. When the app passes a Layout whose key set differs from
+        // what we saw last time, the app has added or removed panes —
+        // discard any stale override so manager.Layout drives this
+        // render. Without this, OpenNewDoc / programmatic close / Reset
+        // Layout after a drag are silently dropped because the override's
+        // stripped shape has no leaf for the new pane.
+        //
+        // Why key-set instead of just reference: apps that build
+        // manager.Layout inline inside Render() (the common pattern when
+        // the docking host sits inside another Component) produce a NEW
+        // DockNode reference every render even though the shape is
+        // stable. A reference-change-gated check would also fire on
+        // those re-renders and clobber the model.Dock additions that
+        // live in the override but never appear in manager.Layout.
+        //
+        // The contract: app-driven changes to Layout's content must
+        // manifest as a key-set change between renders. Model-mutator
+        // additions (DockHostModel.Dock, Hide, etc.) preserve the
+        // override because manager.Layout's key set is unchanged from
+        // the app's perspective.
+        var prevLayoutKeysRef = UseRef<HashSet<object>?>(null);
+        var currentLayoutKeys = CollectLeafKeys(manager.Layout);
+        bool appLayoutKeysChanged = prevLayoutKeysRef.Current is { } prev
+            && !SetEquals(prev, currentLayoutKeys);
+        prevLayoutKeysRef.Current = currentLayoutKeys;
+        if (appLayoutKeysChanged
+            && layoutOverride is { Root: not null }
+            && !LeafKeysMatch(layoutOverride.Root, manager.Layout))
+        {
+            layoutOverride = null;
+            setLayoutOverride(null);
+        }
+
         // Override resolution: a null `layoutOverride` means "no
         // override — use the app's prop". A non-null wrapper whose
         // `Root` is null means "intentionally empty layout" (e.g.
@@ -225,6 +260,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // lifecycle events fire exactly once per queued op (Pending is
         // cleared before the loop). When no mutations are queued the
         // drain is a no-op.
+        IReadOnlyList<RoutingFallbackEvent>? pendingRoutingFallbacks = null;
         if (model.Pending.Count > 0)
         {
             var drain = DrainPendingMutations(
@@ -258,6 +294,11 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             // Re-sync now too so any same-render consumers see fresh state.
             model.Root = effectiveLayout;
             model.ActiveContent = drain.NewActiveContent ?? model.ActiveContent;
+            // Spec 046 §6.3 — capture role-aware routing fallbacks here;
+            // emit via LogOp below once it's in scope. We carry the list
+            // out of the drain block so the diagnostic carries the
+            // post-drain effective layout.
+            pendingRoutingFallbacks = drain.RoutingFallbacks;
         }
 
         var snapshot = BuildSnapshot(model);
@@ -290,6 +331,19 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 ratios: ratioStore,
                 paneKey: paneKey,
                 target: target);
+        }
+
+        // Spec 046 §6.3 — drain fallback events out into DockOperationLog
+        // now that LogOp is in scope. Each entry has already been captured
+        // in DrainPendingMutations with the pane key + target; we route
+        // them as Note-kind ops because they don't correspond to a
+        // user-initiated drag (the layout effect IS the user-visible op
+        // and is already logged elsewhere).
+        if (pendingRoutingFallbacks is { Count: > 0 })
+        {
+            foreach (var ev in pendingRoutingFallbacks)
+                LogOp(Diagnostics.DockOperationKind.Note, ev.Description,
+                    paneKey: ev.PaneKey, target: ev.Target);
         }
 
         // Spec 045 §4.2 cross-window dock-in source hook. Re-installed
@@ -509,12 +563,81 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             return BuildPerGroupDropOverlay(grp, tabView);
         }
 
+        // Spec 046 §6.6 — resolve the active drag's payload pane, or null
+        // if no drag is in flight. Keyboard-initiated drop mode also has
+        // an implicit payload (the active pane); we surface it the same
+        // way so the filter applies symmetrically.
+        DockableContent? GetActiveDragPayload()
+        {
+            var session = DockDragSession.Current;
+            if (session is { IsActive: true }) return session.Source;
+            if (keyboardOverlayActive)
+                return ResolvePane(effectiveLayout, activePaneKey ?? appActiveKey);
+            return null;
+        }
+
+        // Spec 046 §6.6 — disabled targets for a per-group GroupInner overlay.
+        // For each of (Center, SplitLeft, SplitTop, SplitRight, SplitBottom):
+        //   • Center: AcceptsCategory(group.Role, payloadCategory).
+        //   • Split*: same role check AND, for ToolWindow payloads, the
+        //     AllowedSides mask is consulted using the logical side.
+        DockTarget[]? ComputeDisabledTargetsForGroup(DockTabGroup grp)
+        {
+            var payload = GetActiveDragPayload();
+            if (payload is null) return null;
+            // Allocate up to 5 slots; the 5 inner-cluster targets are the
+            // candidates. We return null when nothing is filtered to let
+            // the reconciler short-circuit the diff.
+            List<DockTarget>? disabled = null;
+            void Disable(DockTarget t)
+            {
+                disabled ??= new List<DockTarget>(5);
+                disabled.Add(t);
+            }
+            ReadOnlySpan<DockTarget> inner =
+                [DockTarget.Center, DockTarget.SplitLeft, DockTarget.SplitTop,
+                 DockTarget.SplitRight, DockTarget.SplitBottom];
+            for (int i = 0; i < inner.Length; i++)
+            {
+                var t = inner[i];
+                var side = DockDropFilter.SideOf(t);
+                if (!DockDropFilter.CanDropInto(grp, payload, side))
+                    Disable(t);
+            }
+            return disabled?.ToArray();
+        }
+
+        // Spec 046 §6.6 — disabled targets for the root-scope overlay.
+        // Only Dock* edge targets are surfaced in Host mode; filter via
+        // CanDockAtEdge (which only inspects ToolWindow.AllowedSides).
+        DockTarget[]? ComputeDisabledTargetsForRoot()
+        {
+            var payload = GetActiveDragPayload();
+            if (payload is null) return null;
+            List<DockTarget>? disabled = null;
+            void Disable(DockTarget t)
+            {
+                disabled ??= new List<DockTarget>(4);
+                disabled.Add(t);
+            }
+            if (!DockDropFilter.CanDockAtEdge(payload, DockSide.Left))   Disable(DockTarget.DockLeft);
+            if (!DockDropFilter.CanDockAtEdge(payload, DockSide.Top))    Disable(DockTarget.DockTop);
+            if (!DockDropFilter.CanDockAtEdge(payload, DockSide.Right))  Disable(DockTarget.DockRight);
+            if (!DockDropFilter.CanDockAtEdge(payload, DockSide.Bottom)) Disable(DockTarget.DockBottom);
+            return disabled?.ToArray();
+        }
+
         // Composes the per-group inner-target overlay (Center + 4 Splits)
         // over the supplied tab-view element. Confirm captures the group
         // reference and routes to MovePaneToGroupTarget so the dropped
         // pane lands relative to THIS group instead of the layout root.
         Element BuildPerGroupDropOverlay(DockTabGroup grp, Element tabView)
         {
+            // Spec 046 §6.6 — compute the disabled targets for THIS group
+            // against the active drag's payload. Stable across renders
+            // until the source pane changes; the overlay reconciler
+            // diff-checks the array before re-applying.
+            var disabled = ComputeDisabledTargetsForGroup(grp);
             var overlay = new DockDropTargetOverlayElement(
                 OnHover: target =>
                 {
@@ -604,7 +727,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     setHoveredTarget(null);
                     bumpTick(t => t + 1);
                 },
-                Mode: DockDropOverlayMode.GroupInner);
+                Mode: DockDropOverlayMode.GroupInner)
+            { DisabledTargets = disabled };
 
             return Grid(
                 new[] { GridSize.Star(1) },
@@ -715,6 +839,12 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         var showOverlay = manager.ShowDropTargets || dragActuallyActive || keyboardOverlayActive;
         if (showOverlay)
         {
+            // Spec 046 §6.6 — filter the Dock* edge targets at root scope.
+            // Only the AllowedSides mask matters here (no group to consult
+            // for role). Inner-cluster (Center + Split*) buttons are
+            // hidden in Host mode, so they never need filtering at the
+            // root overlay.
+            var rootDisabled = ComputeDisabledTargetsForRoot();
             var overlay = new DockDropTargetOverlayElement(
                 OnHover: target =>
                 {
@@ -797,7 +927,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     setKeyboardOverlayActive(false);
                     setHoveredTarget(null);
                     bumpTick(t => t + 1);
-                });
+                })
+            { DisabledTargets = rootDisabled };
 
             composed = Grid(
                 new[] { GridSize.Star(1) },
@@ -1164,6 +1295,44 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             Floating: model.Floating,
             ActiveContent: model.ActiveContent);
 
+    /// <summary>
+    /// True when the two trees contain the same set of leaf <see cref="DockableContent.Key"/>
+    /// values (order- and shape-independent). Used by the host to detect
+    /// app-driven pane additions/removals that the shape-only override
+    /// can't carry across a render (Scene J open-new-doc-after-split repro).
+    /// </summary>
+    private static bool LeafKeysMatch(DockNode? a, DockNode? b)
+    {
+        var dictA = new Dictionary<object, DockableContent>();
+        var dictB = new Dictionary<object, DockableContent>();
+        DockLayoutMutator.IndexLeavesInto(a, dictA);
+        DockLayoutMutator.IndexLeavesInto(b, dictB);
+        if (dictA.Count != dictB.Count) return false;
+        foreach (var k in dictA.Keys)
+            if (!dictB.ContainsKey(k)) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Collect the leaf <see cref="DockableContent.Key"/> set from a
+    /// layout into a fresh HashSet. Used across renders to detect when
+    /// the app has added or removed panes through manager.Layout.
+    /// </summary>
+    private static HashSet<object> CollectLeafKeys(DockNode? root)
+    {
+        var dict = new Dictionary<object, DockableContent>();
+        DockLayoutMutator.IndexLeavesInto(root, dict);
+        return new HashSet<object>(dict.Keys);
+    }
+
+    private static bool SetEquals(HashSet<object> a, HashSet<object> b)
+    {
+        if (a.Count != b.Count) return false;
+        foreach (var k in a)
+            if (!b.Contains(k)) return false;
+        return true;
+    }
+
     private static Element RenderSplit(
         DockSplit split,
         string path,
@@ -1251,7 +1420,18 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         IReadOnlyList<DockableContent>? RightSide,
         IReadOnlyList<DockableContent>? BottomSide,
         bool SidesChanged,
-        object? NewActiveKey, DockableContent? NewActiveContent, bool ActiveKeyChanged);
+        object? NewActiveKey, DockableContent? NewActiveContent, bool ActiveKeyChanged,
+        // Spec 046 §6.3 — fallback descriptions collected during the drain,
+        // logged to DockOperationLog by the caller (which owns the log
+        // reference). Each entry: (description, paneKey, target).
+        IReadOnlyList<RoutingFallbackEvent>? RoutingFallbacks = null);
+
+    /// <summary>
+    /// Spec 046 §6.3 — packaged routing fallback event collected during
+    /// the §2.16 drain and surfaced through <see cref="DrainResult"/>.
+    /// The render caller logs these via <c>DockOperationLog</c>.
+    /// </summary>
+    private readonly record struct RoutingFallbackEvent(string Description, string? PaneKey, DockTarget Target);
 
     /// <summary>
     /// Translates each <see cref="PendingMutation"/> queued on
@@ -1296,6 +1476,9 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         bool activeChanged = false;
         object? newActiveKey = activeKey;
         DockableContent? newActiveContent = null;
+        // Spec 046 §6.3 — collected fallback events; surfaced via DrainResult
+        // to the render caller which owns the DockOperationLog reference.
+        List<RoutingFallbackEvent>? routingFallbacks = null;
 
         foreach (var op in ops)
         {
@@ -1319,7 +1502,20 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     var beforeRemove = workingLayout;
                     var (afterRemove, found) = DockLayoutMutator.RemovePane(workingLayout, dockOp.Content);
                     workingLayout = DockLayoutMutator.InsertPaneAtTarget(
-                        found ? afterRemove : beforeRemove, dockOp.Content, dockOp.Target);
+                        found ? afterRemove : beforeRemove, dockOp.Content, dockOp.Target,
+                        out var routingFallback);
+                    // Spec 046 §6.3 — when role-aware routing couldn't find an
+                    // accepting group and degraded to leftmost-descendant,
+                    // collect the fallback so the render caller can log it
+                    // through DockOperationLog (which it owns, not us).
+                    if (routingFallback is not null)
+                    {
+                        routingFallbacks ??= new List<RoutingFallbackEvent>(1);
+                        routingFallbacks.Add(new RoutingFallbackEvent(
+                            "spec-046 routing fallback: " + routingFallback.Description,
+                            dockOp.Content.Key?.ToString(),
+                            dockOp.Target));
+                    }
                     layoutChanged = true;
                     // Side-strip presence has no overlap with the docked
                     // tree, so a Dock pulled a pane out of a side strip
@@ -1332,6 +1528,54 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                     });
                     DockHostLiveAnnouncer.Announce(manager,
                         DockingStrings.LiveAnnouncement(DockingStringKeys.LiveDocked, dockOp.Content.Title));
+                    break;
+                }
+
+                case PendingMutation.DockToGroupOp groupOp:
+                {
+                    // Spec 046 §6.4 — group-targeted dock. Trusted insert
+                    // (skips role compatibility checks per spec §9 Q3).
+                    // Lifecycle events still fire so apps see the dock.
+                    var changingArgs = new DockLayoutChangingEventArgs();
+                    manager.OnLayoutChanging?.Invoke(changingArgs);
+                    if (changingArgs.Cancel) break;
+                    var dockingArgs = new DockContentDockingEventArgs
+                    {
+                        Content = groupOp.Content,
+                        Target = groupOp.Target,
+                    };
+                    manager.OnContentDocking?.Invoke(dockingArgs);
+                    if (dockingArgs.Cancel) break;
+
+                    // De-duplicate: remove from wherever the pane lived first.
+                    var (afterRemove, found) = DockLayoutMutator.RemovePane(workingLayout, groupOp.Content);
+                    var sourceLayout = found ? afterRemove : workingLayout;
+                    var result = DockLayoutMutator.TryInsertPaneAtGroupTarget(
+                        sourceLayout, groupOp.Content, groupOp.TargetGroup, groupOp.Target);
+                    if (result is null)
+                    {
+                        // Target group couldn't be resolved against the layout.
+                        // No-op; surface a diagnostic for the caller.
+                        routingFallbacks ??= new List<RoutingFallbackEvent>(1);
+                        routingFallbacks.Add(new RoutingFallbackEvent(
+                            "spec-046 group-target unresolvable: " +
+                            "DockHostModel.Dock(content, group, target) could not match " +
+                            "the supplied DockTabGroup against the current layout " +
+                            "(neither by reference nor by content keys). Operation no-op.",
+                            groupOp.Content.Key?.ToString(),
+                            groupOp.Target));
+                        // Don't fire OnContentDocked when the dock didn't land.
+                        break;
+                    }
+                    workingLayout = result;
+                    layoutChanged = true;
+                    manager.OnContentDocked?.Invoke(new DockContentDockedEventArgs
+                    {
+                        Content = groupOp.Content,
+                        Target = groupOp.Target,
+                    });
+                    DockHostLiveAnnouncer.Announce(manager,
+                        DockingStrings.LiveAnnouncement(DockingStringKeys.LiveDocked, groupOp.Content.Title));
                     break;
                 }
 
@@ -1537,7 +1781,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         return new DrainResult(
             workingLayout, layoutChanged,
             workingLeft, workingTop, workingRight, workingBottom, sidesChanged,
-            newActiveKey, newActiveContent, activeChanged);
+            newActiveKey, newActiveContent, activeChanged,
+            routingFallbacks);
     }
 
     private static (IReadOnlyList<DockableContent>? List, bool Changed) AddToSide(

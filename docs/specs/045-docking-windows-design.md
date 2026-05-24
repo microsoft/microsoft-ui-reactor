@@ -314,6 +314,8 @@ public sealed record ToolWindow(string Title, ...) : DockableContent(...);
 
 This is a non-breaking addition: `DockableContent` becomes the abstract base; phase-1 instantiations using the closed-shape `DockableContent` constructor are obsoleted (warning, not error) in favor of `Document(...)` and `ToolWindow(...)`.
 
+**See also: [spec 046](046-docking-content-types-and-reserved-area.md)** — extends this category split with a `DockGroupRole` tag on `DockTabGroup` (`General` / `DocumentArea` / `ToolWindowStrip`) and a `DockSides` `AllowedSides` mask on `ToolWindow`, so role-aware routing can prefer the document well over the leftmost descendant for `Dock(Center)` and the drop-target overlay can grey incompatible drops.
+
 #### 5.3.2 Per-pane content state
 
 `PersistenceState` on `DockableContent` is upgraded from a plain string to a typed slot:
@@ -749,6 +751,8 @@ public sealed record DockableWindowRef(ReactorWindow Window) : DockNode;
 ```
 
 Where a phase-1/2 layout had a `DockableContent` leaf, a phase-3 layout *can* have a `DockableWindowRef` leaf — i.e. the pane's identity is a Window reference, not an inline record. Migrating phase-2 layouts to phase-3 is seamless: a `DockableContent` becomes a `DockableWindowRef` to a synthetic Window opened at load time.
+
+**See also: [spec 046](046-docking-content-types-and-reserved-area.md)** — additive P3 amendment per this section. Adds two more extension points on the existing algebra (`DockGroupRole` on `DockTabGroup`, `DockSides AllowedSides` on `ToolWindow`) without introducing new node kinds, plus a public `DockHostModel.Dock(content, DockTabGroup, DockTarget)` group-target overload as the explicit-placement escape hatch.
 
 ### 6.5 Shell integration
 

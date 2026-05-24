@@ -250,19 +250,20 @@ internal sealed partial class DockSplitterControl : Grid
         var trailingGrow = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(trailing);
         _pairGrowAtCapture = leadingGrow + trailingGrow;
 
-        // Compute pairDip in PANEL DISTRIBUTABLE SPACE — the same DIP
-        // budget Yoga's grow algorithm divides among the panes. This is
-        // panel.ActualSize on the main axis minus all sibling splitter
-        // handle sizes. Crucially this is NOT (leading.ActualWidth +
-        // trailing.ActualWidth), which can exceed panel space when
-        // children carry inline sizes (a previous drag's leftover, or
-        // Width hints from the model) and would otherwise produce a
-        // ratio that, after release, lands in a different DIP space
-        // than the cursor — the classic snap-back regression.
-        _pairDipAtCapture = GetHostExtent();
-        _leadingDipAtCapture = _pairGrowAtCapture > 0
-            ? _pairDipAtCapture * (leadingGrow / _pairGrowAtCapture)
-            : _pairDipAtCapture * 0.5;
+        // Snapshot the actual measured extents of the pair. For 2-child
+        // splits this happens to equal GetHostExtent() (panel.ActualSize
+        // minus splitter handles); for 3+ child splits it is strictly
+        // smaller because the other siblings consume some panel space.
+        // The drag math distributes pairGrow proportionally to the
+        // target leading-fraction of the PAIR, not the whole panel —
+        // so the snapshot must be in the pair's DIP space or the rendered
+        // splitter drifts away from the cursor (Scene J 3-child repro).
+        var leadingActual = _direction == DockSplitterDirection.Columns
+            ? leading.ActualWidth : leading.ActualHeight;
+        var trailingActual = _direction == DockSplitterDirection.Columns
+            ? trailing.ActualWidth : trailing.ActualHeight;
+        _pairDipAtCapture = leadingActual + trailingActual;
+        _leadingDipAtCapture = leadingActual;
 
         // Direction A drag path no longer writes inline Width/Height
         // on the panes — pair size is entirely driven by grow weight

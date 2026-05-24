@@ -238,6 +238,15 @@ public static class DockLayoutSerializer
             },
             ShowWhenEmpty = grp.ShowWhenEmpty ? true : null,
             SelectedIndex = grp.SelectedIndex >= 0 ? grp.SelectedIndex : null,
+            // Spec 046 §6.7 — group role; emit only when non-default to keep
+            // legacy files unchanged.
+            Role = grp.Role switch
+            {
+                DockGroupRole.General         => null,
+                DockGroupRole.DocumentArea    => "documentArea",
+                DockGroupRole.ToolWindowStrip => "toolWindowStrip",
+                _ => null,
+            },
             Width = grp.Width, Height = grp.Height,
         },
         DockableContent leaf => new DockLayoutNode
@@ -270,9 +279,25 @@ public static class DockLayoutSerializer
         CanAutoHide         = (leaf as ToolWindow) is { } twA && !twA.CanAutoHide ? false : null,
         CanDockAsDocument   = (leaf as ToolWindow) is { } twD && !twD.CanDockAsDocument ? false : null,
         CanDockAsToolWindow = (leaf as Document) is { CanDockAsToolWindow: true } ? true : null,
+        // Spec 046 §6.7 — AllowedSides on ToolWindow panes. Emit only when
+        // the mask is not the default DockSides.All. Sides are lowercase
+        // invariant-culture strings; ordered Left/Top/Right/Bottom for a
+        // stable JSON diff.
+        AllowedSides = leaf is ToolWindow twAllowed && twAllowed.AllowedSides != DockSides.All
+            ? WriteAllowedSides(twAllowed.AllowedSides) : null,
         Width  = leaf.Width,
         Height = leaf.Height,
     };
+
+    private static List<string> WriteAllowedSides(DockSides mask)
+    {
+        var list = new List<string>(4);
+        if (mask.HasFlag(DockSides.Left))   list.Add("left");
+        if (mask.HasFlag(DockSides.Top))    list.Add("top");
+        if (mask.HasFlag(DockSides.Right))  list.Add("right");
+        if (mask.HasFlag(DockSides.Bottom)) list.Add("bottom");
+        return list;
+    }
 
     private static DockLayoutFloatingWindow ConvertFloating(FloatingDockWindow fw) => new()
     {
@@ -347,13 +372,30 @@ public static class DockLayoutSerializer
             "titleBar"      => Docking.TabChrome.TitleBar,
             _ => throw new InvalidOperationException($"tabGroup node has invalid tabChrome '{node.TabChrome}'"),
         };
+        // Spec 046 §6.7 — group role. Unknown strings (forward-compat) fall
+        // back to General and emit a Debug trace so the round-trip surfaces
+        // the issue without failing the load.
+        var role = node.Role switch
+        {
+            null or "general"      => DockGroupRole.General,
+            "documentArea"         => DockGroupRole.DocumentArea,
+            "toolWindowStrip"      => DockGroupRole.ToolWindowStrip,
+            _ => DockGroupRole.General,
+        };
+        if (node.Role is { } gr && role == DockGroupRole.General
+            && gr != "general")
+        {
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[DockLayoutSerializer] Unknown DockTabGroup.role '{gr}' — defaulting to General. Spec 046 §6.7.");
+        }
         return new DockTabGroup(docs,
             TabPosition: tabPos,
             CompactTabs: node.CompactTabs ?? false,
             ShowWhenEmpty: node.ShowWhenEmpty ?? false,
             SelectedIndex: node.SelectedIndex ?? -1,
             Width: node.Width, Height: node.Height,
-            TabChrome: chrome);
+            TabChrome: chrome,
+            Role: role);
     }
 
     private static DockableContent ConvertPaneBackAsLeaf(DockLayoutPane pane) =>
@@ -397,9 +439,32 @@ public static class DockLayoutSerializer
         CanHide             = pane.CanHide             ?? true,
         CanAutoHide         = pane.CanAutoHide         ?? true,
         CanDockAsDocument   = pane.CanDockAsDocument   ?? true,
+        // Spec 046 §6.7 — AllowedSides round-trip. Null/empty → default All.
+        AllowedSides = ParseAllowedSides(pane.AllowedSides),
         PersistenceState = pane.State,
         Width = pane.Width, Height = pane.Height,
     };
+
+    private static DockSides ParseAllowedSides(List<string>? sides)
+    {
+        if (sides is null) return DockSides.All;
+        var mask = DockSides.None;
+        for (int i = 0; i < sides.Count; i++)
+        {
+            switch (sides[i])
+            {
+                case "left":   mask |= DockSides.Left;   break;
+                case "top":    mask |= DockSides.Top;    break;
+                case "right":  mask |= DockSides.Right;  break;
+                case "bottom": mask |= DockSides.Bottom; break;
+                default:
+                    global::System.Diagnostics.Debug.WriteLine(
+                        $"[DockLayoutSerializer] Unknown AllowedSides entry '{sides[i]}' — ignored. Spec 046 §6.7.");
+                    break;
+            }
+        }
+        return mask;
+    }
 
     private static FloatingDockWindow ConvertFloatingBack(DockLayoutFloatingWindow fw) => new()
     {

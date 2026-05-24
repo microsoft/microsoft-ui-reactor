@@ -36,8 +36,20 @@ public sealed record DockSplit(
 /// A group of panes presented as tabs. Panes are reordered by drag inside
 /// the group; the active tab is reported via <see cref="SelectedIndex"/>.
 /// </summary>
-/// <remarks>Spec 045 §4.3. The tab strip uses WinUI <c>TabView</c>; spec
-/// §11 keeps that decision through P2 for accessibility shape.</remarks>
+/// <remarks>
+/// Spec 045 §4.3. The tab strip uses WinUI <c>TabView</c>; spec §11 keeps
+/// that decision through P2 for accessibility shape.
+///
+/// <para>
+/// Spec 046 §6.1 adds the trailing <see cref="Role"/> positional parameter.
+/// It defaults to <see cref="DockGroupRole.General"/> so existing layouts
+/// keep their pre-046 routing and cull behavior. Set to
+/// <see cref="DockGroupRole.DocumentArea"/> to mark a group as the
+/// document well (preferred target for <c>Dock(Center)</c> + reserved
+/// empty) or <see cref="DockGroupRole.ToolWindowStrip"/> for an edge
+/// strip of tool windows.
+/// </para>
+/// </remarks>
 public sealed record DockTabGroup(
     IReadOnlyList<DockableContent> Documents,
     TabPosition TabPosition = TabPosition.Top,
@@ -46,7 +58,8 @@ public sealed record DockTabGroup(
     int SelectedIndex = -1,
     double? Width = null,
     double? Height = null,
-    TabChrome TabChrome = TabChrome.Win11) : DockNode;
+    TabChrome TabChrome = TabChrome.Win11,
+    DockGroupRole Role = DockGroupRole.General) : DockNode;
 
 /// <summary>
 /// A single dockable pane — the leaf of the dock tree. Carries

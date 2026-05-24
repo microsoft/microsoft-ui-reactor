@@ -917,8 +917,10 @@ FilterOperator { Equals, NotEquals, Contains, StartsWith, EndsWith, GreaterThan,
 PinPosition { None, Left, Right }
 SortDirection { Ascending, Descending }
 DockOperationKind { Mount, DragStart, DragHover, DragConfirm, DragCancel, DragTearOut, SplitterResize, SplitterTrace, LayoutChange, Note }
+DockGroupRole { General, DocumentArea, ToolWindowStrip }
 DockPaneState { Docked, Floating, AutoHidden, AutoHiddenExpanded, Hidden }
 DockSide { Left, Top, Right, Bottom }
+DockSides { None, Left, Top, Right, Bottom, All }
 DockTarget { Center, SplitLeft, SplitTop, SplitRight, SplitBottom, DockLeft, DockTop, DockRight, DockBottom }
 TabChrome { Win11, Flat, TitleBar }
 TabPosition { Top, Bottom }

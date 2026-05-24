@@ -127,7 +127,7 @@ public sealed class DockHostModel
     /// (mirrored from <see cref="DockManager.LayoutStrategy"/> each render).
     /// The model dispatches into <see cref="IDockLayoutStrategy.BeforeInsertDocument"/>
     /// / <see cref="IDockLayoutStrategy.BeforeInsertToolWindow"/> on programmatic
-    /// <see cref="Dock"/>; a <c>true</c> return short-circuits the default insertion.
+    /// <see cref="Dock(DockableContent, DockTarget)"/>; a <c>true</c> return short-circuits the default insertion.
     /// </summary>
     /// <remarks>Spec 045 §5.3.6 / tracking §2.13.</remarks>
     public IDockLayoutStrategy? LayoutStrategy { get; internal set; }
@@ -241,6 +241,41 @@ public sealed class DockHostModel
         OnMutationQueued?.Invoke();
     }
 
+    /// <summary>
+    /// Spec 046 §6.4 — group-targeted dock. Inserts <paramref name="content"/>
+    /// into the specific <paramref name="targetGroup"/> at <paramref name="target"/>.
+    /// <paramref name="targetGroup"/> must come from the current layout snapshot
+    /// (e.g. captured at layout-build time, or resolved from <see cref="Root"/>);
+    /// resolution falls back to record equality when reference identity has
+    /// decayed across a render.
+    /// </summary>
+    /// <remarks>
+    /// This is the explicit-control escape hatch for placements the
+    /// role/category routing in <see cref="Dock(DockableContent, DockTarget)"/>
+    /// can't express. The overload is <em>trusted</em>: it does NOT consult
+    /// <see cref="DockTabGroup.Role"/> compatibility (per spec §9 Q3) — the
+    /// caller is taking responsibility for the placement. Pass through
+    /// <see cref="LayoutStrategy"/> hooks is also skipped — strategies that
+    /// want to redirect should override <c>Dock(content, target)</c> via
+    /// <c>BeforeInsert*</c>, possibly calling this overload from inside.
+    ///
+    /// <para>
+    /// If <paramref name="targetGroup"/> can't be resolved against the
+    /// current layout (e.g. the caller passed a stale group), the
+    /// operation is a no-op and a <c>Note</c>-kind diagnostic is queued
+    /// to the <c>DockOperationLog</c> — no exception thrown, matching
+    /// the model's best-effort feel.
+    /// </para>
+    /// </remarks>
+    public void Dock(DockableContent content, DockTabGroup targetGroup, DockTarget target = DockTarget.Center)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(targetGroup);
+        ThrowIfOffThread();
+        Pending.Add(new PendingMutation.DockToGroupOp(content, targetGroup, target));
+        OnMutationQueued?.Invoke();
+    }
+
     /// <summary>Tears <paramref name="content"/> out into a new floating window.</summary>
     public void Float(DockableContent content)
     {
@@ -287,11 +322,32 @@ public sealed class DockHostModel
     }
 
     /// <summary>Pins <paramref name="toolWindow"/> to <paramref name="side"/>.</summary>
-    /// <remarks>Spec 045 §5.3.6 — strategies use this to route by category.</remarks>
+    /// <remarks>
+    /// Spec 045 §5.3.6 — strategies use this to route by category.
+    ///
+    /// <para>
+    /// Spec 046 §6.6 / §9 Q4 — throws <see cref="InvalidOperationException"/>
+    /// when <paramref name="side"/> is not in <paramref name="toolWindow"/>'s
+    /// <see cref="ToolWindow.AllowedSides"/> mask. The exception message
+    /// includes the tool window's title/key and the mask, for diagnostics.
+    /// Strategies that need to bypass the mask should clear it before
+    /// calling — <c>toolWindow with { AllowedSides = DockSides.All }</c>.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="side"/> is excluded by <paramref name="toolWindow"/>'s
+    /// <see cref="ToolWindow.AllowedSides"/> mask. Spec 046 §6.6.
+    /// </exception>
     public void PinToSide(ToolWindow toolWindow, DockSide side)
     {
         ArgumentNullException.ThrowIfNull(toolWindow);
         ThrowIfOffThread();
+        if (!toolWindow.AllowedSides.HasFlag(side.ToFlag()))
+            throw new InvalidOperationException(
+                $"DockHostModel.PinToSide rejected: tool window " +
+                $"Title='{toolWindow.Title}' Key='{toolWindow.Key}' has " +
+                $"AllowedSides={toolWindow.AllowedSides}, which excludes {side}. " +
+                "Clear or widen the AllowedSides mask first. Spec 046 §6.6.");
         Pending.Add(new PendingMutation.PinToSideOp(toolWindow, side));
         OnMutationQueued?.Invoke();
     }
@@ -311,7 +367,7 @@ public sealed class DockHostModel
 
     /// <summary>
     /// Spec 045 §4.2 cross-window dock-in. Invoked by a different window's
-    /// drop-target overlay (notably <see cref="DockFloatingWindow"/>) when
+    /// drop-target overlay (notably the internal <c>DockFloatingWindow</c>) when
     /// a pane belonging to this host's layout was dropped into a tab group
     /// in that other window. The native host wires a closure that removes
     /// the pane from this host's effective layout, stores the override,
@@ -335,6 +391,8 @@ public sealed class DockHostModel
 internal abstract record PendingMutation
 {
     internal sealed record DockOp(DockableContent Content, DockTarget Target) : PendingMutation;
+    /// <summary>Spec 046 §6.4 — group-targeted dock.</summary>
+    internal sealed record DockToGroupOp(DockableContent Content, DockTabGroup TargetGroup, DockTarget Target) : PendingMutation;
     internal sealed record FloatOp(DockableContent Content) : PendingMutation;
     internal sealed record HideOp(ToolWindow ToolWindow) : PendingMutation;
     internal sealed record ShowOp(DockableContent Content) : PendingMutation;

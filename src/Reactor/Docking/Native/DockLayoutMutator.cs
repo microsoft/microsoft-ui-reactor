@@ -1,6 +1,90 @@
+using System.Linq;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Docking.Native;
+
+/// <summary>
+/// Spec 046 §6.3 — payload category used by the role-aware router to
+/// decide which <see cref="DockTabGroup.Role"/> values accept a given
+/// <see cref="DockableContent"/> insert.
+/// </summary>
+internal enum DockContentCategory
+{
+    /// <summary>The pane is a <see cref="Document"/> (or subclass).</summary>
+    Document,
+
+    /// <summary>The pane is a <see cref="ToolWindow"/>.</summary>
+    ToolWindow,
+
+    /// <summary>Base <see cref="DockableContent"/> with no category subclass.
+    /// Spec 045 P1 source-compat shape — accepts every group's role.</summary>
+    Untyped,
+}
+
+// Spec 046 §6.3 — DockRoutingFallback is the public type
+// (Microsoft.UI.Reactor.Docking.DockRoutingFallback) so apps can consume
+// the routing-diagnostic surface via DockLayoutOps. The internal mutator
+// constructs and returns the same record type. See DockLayoutOps.cs.
+
+/// <summary>
+/// Spec 046 §6.6 — drag-drop drop-target filter. Decides whether a given
+/// pane <em>payload</em> can land at a given target on a given group.
+/// </summary>
+internal static class DockDropFilter
+{
+    /// <summary>
+    /// Returns <c>true</c> when the payload may land at the target relative
+    /// to the candidate group. Two reject conditions, evaluated in order:
+    /// (a) the group's <see cref="DockTabGroup.Role"/> rejects the payload's
+    /// category (spec §6.3 matrix); (b) the payload is a <see cref="ToolWindow"/>
+    /// whose <see cref="ToolWindow.AllowedSides"/> mask excludes the
+    /// <em>logical</em> side of the target (RTL: logical side is the
+    /// caller's responsibility per spec 045 §8.8). Untyped panes (P1
+    /// back-compat) accept everywhere.
+    /// </summary>
+    public static bool CanDropInto(DockTabGroup target, DockableContent payload, DockSide? targetSide)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(payload);
+        var cat = DockLayoutMutator.CategoryOf(payload);
+        if (!DockLayoutMutator.AcceptsCategory(target.Role, cat)) return false;
+        if (payload is ToolWindow tw && targetSide is DockSide s
+            && !tw.AllowedSides.HasFlag(s.ToFlag())) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Convenience overload: variant for the layout-root edge targets where
+    /// no specific group exists (the drop attaches to the layout's edge,
+    /// not a group). Only the <see cref="ToolWindow.AllowedSides"/> mask
+    /// matters here — there is no group role to consult.
+    /// </summary>
+    public static bool CanDockAtEdge(DockableContent payload, DockSide side)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        if (payload is ToolWindow tw && !tw.AllowedSides.HasFlag(side.ToFlag()))
+            return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Maps a <see cref="DockTarget"/> to its corresponding logical
+    /// <see cref="DockSide"/> when the target carries an edge meaning
+    /// (Dock* and Split* values), or <c>null</c> for <see cref="DockTarget.Center"/>.
+    /// </summary>
+    public static DockSide? SideOf(DockTarget target) => target switch
+    {
+        DockTarget.SplitLeft   => DockSide.Left,
+        DockTarget.SplitTop    => DockSide.Top,
+        DockTarget.SplitRight  => DockSide.Right,
+        DockTarget.SplitBottom => DockSide.Bottom,
+        DockTarget.DockLeft    => DockSide.Left,
+        DockTarget.DockTop     => DockSide.Top,
+        DockTarget.DockRight   => DockSide.Right,
+        DockTarget.DockBottom  => DockSide.Bottom,
+        _ => null,
+    };
+}
 
 // ════════════════════════════════════════════════════════════════════════
 //  Spec 045 §2.4 — immutable layout mutation for the drag pipeline.
@@ -179,8 +263,79 @@ internal static class DockLayoutMutator
     {
         ArgumentNullException.ThrowIfNull(pane);
         if (root is null) return (null, false);
-        return RemoveInner(root, pane);
+        var (intermediate, found) = RemoveInner(root, pane);
+        if (!found) return (root, false);
+        // Spec 046 §6.5 (refined per app feedback): the reserved-empty
+        // rule applies to the LAST remaining DocumentArea — extra
+        // DocumentArea groups created by split-on-drag cull when they
+        // run dry so the layout doesn't accumulate empty wells. Without
+        // this pass, dragging a doc out of a split DocumentArea and
+        // then closing the remaining docs would leave two empty wells
+        // side-by-side instead of one.
+        return (PruneRedundantEmptyDocumentAreas(intermediate), true);
     }
+
+    /// <summary>
+    /// Spec 046 §6.5 (refined per app feedback): an empty DocumentArea
+    /// survives ONLY when it's the only DocumentArea in the tree (the
+    /// "reserved well" purpose). When at least one non-empty DocumentArea
+    /// exists anywhere in the tree, empty DocumentAreas cull — the
+    /// reserved-well role is fulfilled by the non-empty one, so the
+    /// split arm that just became empty should collapse and let its
+    /// surviving sibling fill the space (Scene J close-doc-in-split repro).
+    /// When all DocumentAreas are empty, keep the first (tree-order) so
+    /// the original reserved well still appears.
+    /// </summary>
+    private static DockNode? PruneRedundantEmptyDocumentAreas(DockNode? node)
+    {
+        if (node is null) return null;
+        bool anyNonEmpty = AnyNonEmptyDocumentArea(node);
+        bool keptFirstEmpty = false;
+        return PruneInner(node, anyNonEmpty, ref keptFirstEmpty);
+    }
+
+    private static DockNode? PruneInner(DockNode node, bool anyNonEmptyExists, ref bool keptFirstEmpty)
+    {
+        switch (node)
+        {
+            // Spec 046 §6.5: `ShowWhenEmpty = true` opts out of the prune
+            // pass — apps that explicitly want every well preserved set
+            // the flag and we honor it. The default rule applies only to
+            // the implicit DocumentArea-implies-ShowWhenEmpty path.
+            case DockTabGroup grp
+                when grp.Role == DockGroupRole.DocumentArea
+                     && grp.Documents.Count == 0
+                     && !grp.ShowWhenEmpty:
+                // If any non-empty DocumentArea exists, this empty one
+                // collapses so the surrounding split can simplify.
+                if (anyNonEmptyExists) return null;
+                // All-empty case: keep the first (tree-order), cull the rest.
+                if (!keptFirstEmpty) { keptFirstEmpty = true; return grp; }
+                return null;
+            case DockSplit s:
+            {
+                var kept = new List<DockNode>(s.Children.Count);
+                for (int i = 0; i < s.Children.Count; i++)
+                {
+                    var child = PruneInner(s.Children[i], anyNonEmptyExists, ref keptFirstEmpty);
+                    if (child is not null) kept.Add(child);
+                }
+                if (kept.Count == 0) return null;
+                if (kept.Count == 1) return kept[0];
+                return s with { Children = kept.ToArray() };
+            }
+            default:
+                return node;
+        }
+    }
+
+    private static bool AnyNonEmptyDocumentArea(DockNode node) => node switch
+    {
+        DockTabGroup g
+            when g.Role == DockGroupRole.DocumentArea && g.Documents.Count > 0 => true,
+        DockSplit s => s.Children.Any(AnyNonEmptyDocumentArea),
+        _ => false,
+    };
 
     /// <summary>
     /// Walks the layout to find the immediate container (a
@@ -254,7 +409,20 @@ internal static class DockLayoutMutator
                 for (int i = 0; i < docs.Count; i++)
                 {
                     if (!IsSamePane(docs[i], pane)) continue;
-                    if (docs.Count == 1) return ((DockNode?)null, true);
+                    if (docs.Count == 1)
+                    {
+                        // Spec 046 §6.5 — DocumentArea groups survive empty
+                        // (reserved well). The cull is skipped here so the
+                        // group remains a visible drop target after the
+                        // last document closes. Other roles cull as before.
+                        if (group.Role == DockGroupRole.DocumentArea)
+                            return (group with
+                            {
+                                Documents = Array.Empty<DockableContent>(),
+                                SelectedIndex = -1,
+                            }, true);
+                        return ((DockNode?)null, true);
+                    }
                     var next = new DockableContent[docs.Count - 1];
                     int j = 0;
                     for (int k = 0; k < docs.Count; k++)
@@ -304,42 +472,229 @@ internal static class DockLayoutMutator
     /// targets land with §2.4 cross-group hit-test (separate pass).
     /// </summary>
     public static DockNode InsertPaneAtTarget(DockNode? root, DockableContent pane, DockTarget target)
+        => InsertPaneAtTarget(root, pane, target, out _);
+
+    /// <summary>
+    /// Spec 046 §6.3 — overload that surfaces any role-aware routing
+    /// fallback the insert took. <paramref name="fallback"/> is non-null
+    /// when a <see cref="DockTarget.Center"/> insert couldn't find a
+    /// group whose <see cref="DockTabGroup.Role"/> accepts the payload
+    /// category and degraded to today's "leftmost descendant" behavior.
+    /// Callers (notably <c>DockHostNativeComponent</c>) route the
+    /// fallback into <c>DockOperationLog</c> as a diagnostic.
+    /// </summary>
+    public static DockNode InsertPaneAtTarget(
+        DockNode? root, DockableContent pane, DockTarget target,
+        out DockRoutingFallback? fallback)
     {
         ArgumentNullException.ThrowIfNull(pane);
-        if (root is null) return WrapAsGroup(pane);
+        fallback = null;
+        if (root is null) return WrapAsGroup(pane, InferWrapRole(pane));
         // For split / edge targets, the inserted pane needs its own tab
         // strip so the user can drag / close / identify it. Wrapping in
         // a single-document DockTabGroup matches upstream WinUI.Dock
         // behavior: every pane lives inside a tab group, even when it's
-        // the only document in that group.
+        // the only document in that group. Spec 046 §2.3 / §6.3:
+        // the new sibling group's role is inferred from the pane's
+        // category and the target's edge-vs-split distinction so the VS
+        // "documents stay documents, tools stay tools" invariant holds.
         return target switch
         {
-            DockTarget.Center => AddAsTab(root, pane),
-            DockTarget.SplitLeft   => new DockSplit(Orientation.Horizontal, new DockNode[] { WrapAsGroup(pane), root }),
-            DockTarget.SplitRight  => new DockSplit(Orientation.Horizontal, new DockNode[] { root, WrapAsGroup(pane) }),
-            DockTarget.SplitTop    => new DockSplit(Orientation.Vertical,   new DockNode[] { WrapAsGroup(pane), root }),
-            DockTarget.SplitBottom => new DockSplit(Orientation.Vertical,   new DockNode[] { root, WrapAsGroup(pane) }),
+            DockTarget.Center => AddAsTab(root, pane, out fallback),
+            DockTarget.SplitLeft   => new DockSplit(Orientation.Horizontal, new DockNode[] { WrapAsGroup(pane, RoleForSplitWrap(pane, root)), root }),
+            DockTarget.SplitRight  => new DockSplit(Orientation.Horizontal, new DockNode[] { root, WrapAsGroup(pane, RoleForSplitWrap(pane, root)) }),
+            DockTarget.SplitTop    => new DockSplit(Orientation.Vertical,   new DockNode[] { WrapAsGroup(pane, RoleForSplitWrap(pane, root)), root }),
+            DockTarget.SplitBottom => new DockSplit(Orientation.Vertical,   new DockNode[] { root, WrapAsGroup(pane, RoleForSplitWrap(pane, root)) }),
             // Edge targets: same split semantic at the root for now. §2.4
             // follow-up: edge targets become side-pin (LeftSide etc.)
             // entries when the spec's Dock* edge meaning is finalised.
-            DockTarget.DockLeft    => new DockSplit(Orientation.Horizontal, new DockNode[] { WrapAsGroup(pane), root }),
-            DockTarget.DockRight   => new DockSplit(Orientation.Horizontal, new DockNode[] { root, WrapAsGroup(pane) }),
-            DockTarget.DockTop     => new DockSplit(Orientation.Vertical,   new DockNode[] { WrapAsGroup(pane), root }),
-            DockTarget.DockBottom  => new DockSplit(Orientation.Vertical,   new DockNode[] { root, WrapAsGroup(pane) }),
+            // Spec 046 §2.3: ToolWindow + Dock* → ToolWindowStrip (the
+            // user dragged the tool to an edge, that IS an edge strip).
+            DockTarget.DockLeft    => new DockSplit(Orientation.Horizontal, new DockNode[] { WrapAsGroup(pane, RoleForEdgeWrap(pane)), root }),
+            DockTarget.DockRight   => new DockSplit(Orientation.Horizontal, new DockNode[] { root, WrapAsGroup(pane, RoleForEdgeWrap(pane)) }),
+            DockTarget.DockTop     => new DockSplit(Orientation.Vertical,   new DockNode[] { WrapAsGroup(pane, RoleForEdgeWrap(pane)), root }),
+            DockTarget.DockBottom  => new DockSplit(Orientation.Vertical,   new DockNode[] { root, WrapAsGroup(pane, RoleForEdgeWrap(pane)) }),
             _ => root,
         };
     }
 
-    private static DockTabGroup WrapAsGroup(DockableContent pane) =>
-        new(new[] { pane }, SelectedIndex: 0);
-
-    private static DockNode AddAsTab(DockNode root, DockableContent pane)
+    /// <summary>
+    /// Spec 046 §6.3 — payload category dispatch. <see cref="Document"/>
+    /// subclasses (including the typed <c>Document&lt;TState&gt;</c>) → <see cref="DockContentCategory.Document"/>;
+    /// <see cref="ToolWindow"/> → <see cref="DockContentCategory.ToolWindow"/>;
+    /// bare <see cref="DockableContent"/> (P1 source-compat shape) → <see cref="DockContentCategory.Untyped"/>.
+    /// </summary>
+    internal static DockContentCategory CategoryOf(DockableContent pane) => pane switch
     {
-        // Folding into the *first* tab group under the root keeps the
-        // single-group case (Layout = DockTabGroup) clean. When the root
-        // is a split, we collapse the leftmost leaf into a new tab group
-        // with the dragged pane. Richer hover-target group resolution
-        // arrives once the §2.4 hit-test localizes the target group.
+        Document => DockContentCategory.Document,
+        ToolWindow => DockContentCategory.ToolWindow,
+        _ => DockContentCategory.Untyped,
+    };
+
+    /// <summary>
+    /// Spec 046 §6.3 — acceptance matrix. Untyped panes accept everywhere
+    /// (P1 back-compat). Documents reject <see cref="DockGroupRole.ToolWindowStrip"/>;
+    /// ToolWindows reject <see cref="DockGroupRole.DocumentArea"/>.
+    /// <see cref="DockGroupRole.General"/> accepts every category.
+    /// </summary>
+    internal static bool AcceptsCategory(DockGroupRole role, DockContentCategory category) => (role, category) switch
+    {
+        (_, DockContentCategory.Untyped) => true,
+        (DockGroupRole.General, _) => true,
+        (DockGroupRole.DocumentArea, DockContentCategory.Document) => true,
+        (DockGroupRole.DocumentArea, DockContentCategory.ToolWindow) => false,
+        (DockGroupRole.ToolWindowStrip, DockContentCategory.ToolWindow) => true,
+        (DockGroupRole.ToolWindowStrip, DockContentCategory.Document) => false,
+        _ => false,
+    };
+
+    /// <summary>
+    /// Spec 046 §6.3 — first-pass preference. <see cref="DockGroupRole.DocumentArea"/>
+    /// is preferred for <see cref="DockContentCategory.Document"/>;
+    /// <see cref="DockGroupRole.ToolWindowStrip"/> is preferred for
+    /// <see cref="DockContentCategory.ToolWindow"/>. Untyped panes have
+    /// no preference (any accepting group wins on second pass).
+    /// </summary>
+    internal static bool PreferredFor(DockGroupRole role, DockContentCategory category) => (role, category) switch
+    {
+        (DockGroupRole.DocumentArea, DockContentCategory.Document) => true,
+        (DockGroupRole.ToolWindowStrip, DockContentCategory.ToolWindow) => true,
+        _ => false,
+    };
+
+    /// <summary>
+    /// Spec 046 §2.2 — wrap-rule. When wrapping a single pane into a new
+    /// <see cref="DockTabGroup"/> (empty root, or single-leaf root),
+    /// infer the group's role from the pane's category: <see cref="Document"/>
+    /// → <see cref="DockGroupRole.DocumentArea"/>; everything else →
+    /// <see cref="DockGroupRole.General"/>. We deliberately do NOT auto-promote
+    /// a lone <see cref="ToolWindow"/> to <see cref="DockGroupRole.ToolWindowStrip"/>
+    /// — strips imply edge attachment, which a free-standing wrap doesn't have.
+    /// </summary>
+    internal static DockGroupRole InferWrapRole(DockableContent pane) =>
+        CategoryOf(pane) == DockContentCategory.Document
+            ? DockGroupRole.DocumentArea
+            : DockGroupRole.General;
+
+    /// <summary>
+    /// Spec 046 §2.3 — role for the new sibling group when a Split* target
+    /// wraps the pane next to <paramref name="root"/>. If the root is a
+    /// single <see cref="DockTabGroup"/> whose role matches the pane's
+    /// category preference, propagate that role to the new sibling (the
+    /// "splitting a Document inside a DocumentArea must produce another
+    /// DocumentArea" rule). Otherwise fall back to <see cref="InferWrapRole"/>.
+    /// </summary>
+    private static DockGroupRole RoleForSplitWrap(DockableContent pane, DockNode root)
+    {
+        var cat = CategoryOf(pane);
+        if (root is DockTabGroup g && PreferredFor(g.Role, cat))
+            return g.Role;
+        return InferWrapRole(pane);
+    }
+
+    /// <summary>
+    /// Spec 046 §2.3 — role for the new sibling group when a Dock* edge
+    /// target attaches the pane to the layout's edge. <see cref="ToolWindow"/>
+    /// → <see cref="DockGroupRole.ToolWindowStrip"/> (the user is creating
+    /// an edge strip); <see cref="Document"/> → <see cref="DockGroupRole.DocumentArea"/>;
+    /// untyped → <see cref="DockGroupRole.General"/>.
+    /// </summary>
+    private static DockGroupRole RoleForEdgeWrap(DockableContent pane) => CategoryOf(pane) switch
+    {
+        DockContentCategory.Document => DockGroupRole.DocumentArea,
+        DockContentCategory.ToolWindow => DockGroupRole.ToolWindowStrip,
+        _ => DockGroupRole.General,
+    };
+
+    private static DockTabGroup WrapAsGroup(DockableContent pane) =>
+        WrapAsGroup(pane, InferWrapRole(pane));
+
+    private static DockTabGroup WrapAsGroup(DockableContent pane, DockGroupRole role) =>
+        new(new[] { pane }, SelectedIndex: 0, Role: role);
+
+    private static DockNode AddAsTab(DockNode root, DockableContent pane, out DockRoutingFallback? fallback)
+    {
+        // Spec 046 §6.3 — role-aware two-pass insert.
+        //   Pass 1: prefer a group whose Role matches the pane's category
+        //           (Document ↔ DocumentArea, ToolWindow ↔ ToolWindowStrip).
+        //   Pass 2: first group anywhere in the subtree whose Role accepts
+        //           the pane's category.
+        //   Fallback: today's leftmost-descendant behavior, with a
+        //             DockRoutingFallback signalled to the caller so a
+        //             DockOperationLog diagnostic can be emitted.
+        var category = CategoryOf(pane);
+        var inserted = InsertInto(root, pane, category, preferOnly: true)
+                    ?? InsertInto(root, pane, category, preferOnly: false);
+        if (inserted is not null)
+        {
+            fallback = null;
+            return inserted;
+        }
+
+        // No group accepted the pane. Degrade to the pre-spec-046
+        // "leftmost descendant" behavior and surface a diagnostic.
+        fallback = new DockRoutingFallback(
+            $"Dock(Center) for category {category} found no accepting group; " +
+            "fell back to leftmost-descendant routing. Spec 046 §6.3.");
+        return AddAsTabLeftmost(root, pane);
+    }
+
+    /// <summary>
+    /// Spec 046 §6.3 — recursive insert. When <paramref name="preferOnly"/>
+    /// is true, only inserts into a group whose role is the category's
+    /// first-pass preference. When false, inserts into the first group
+    /// whose role accepts the category. Returns null when no candidate
+    /// group exists in the subtree.
+    /// </summary>
+    private static DockNode? InsertInto(
+        DockNode node, DockableContent pane, DockContentCategory category, bool preferOnly)
+    {
+        switch (node)
+        {
+            case DockTabGroup g:
+            {
+                bool match = preferOnly
+                    ? PreferredFor(g.Role, category)
+                    : AcceptsCategory(g.Role, category);
+                return match ? AddToGroup(g, pane) : null;
+            }
+            case DockSplit s:
+            {
+                for (int i = 0; i < s.Children.Count; i++)
+                {
+                    var result = InsertInto(s.Children[i], pane, category, preferOnly);
+                    if (result is null) continue;
+                    var next = new DockNode[s.Children.Count];
+                    for (int j = 0; j < s.Children.Count; j++) next[j] = s.Children[j];
+                    next[i] = result;
+                    return s with { Children = next };
+                }
+                return null;
+            }
+            case DockableContent leaf:
+            {
+                // Wrapping a bare leaf is only allowed on the second pass;
+                // the first pass needs an existing role-matched group, and
+                // an unwrapped leaf has no role yet. The wrap rule (§2.2):
+                // the new group's role derives from the leaf's category,
+                // NOT from the inserted pane's category, since the leaf is
+                // the existing context.
+                if (preferOnly) return null;
+                var role = InferWrapRole(leaf);
+                return new DockTabGroup(new[] { leaf, pane }, SelectedIndex: 1, Role: role);
+            }
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Pre-spec-046 fallback: the original "leftmost descendant" insert.
+    /// Kept as a strict last resort when role-aware routing finds no
+    /// acceptor. Diagnostic-logged at the caller.
+    /// </summary>
+    private static DockNode AddAsTabLeftmost(DockNode root, DockableContent pane)
+    {
         switch (root)
         {
             case DockTabGroup g:
@@ -351,13 +706,13 @@ internal static class DockLayoutMutator
                 return g with { Documents = next, SelectedIndex = docs.Count };
             }
             case DockableContent leaf:
-                return new DockTabGroup(new[] { leaf, pane }, SelectedIndex: 1);
+                return new DockTabGroup(new[] { leaf, pane }, SelectedIndex: 1, Role: InferWrapRole(leaf));
             case DockSplit s:
             {
                 if (s.Children.Count == 0) return pane;
                 var newChildren = new DockNode[s.Children.Count];
                 for (int i = 0; i < s.Children.Count; i++) newChildren[i] = s.Children[i];
-                newChildren[0] = AddAsTab(s.Children[0], pane);
+                newChildren[0] = AddAsTabLeftmost(s.Children[0], pane);
                 return s with { Children = newChildren };
             }
             default:
@@ -371,10 +726,24 @@ internal static class DockLayoutMutator
     /// didn't find the pane (no-op safety).
     /// </summary>
     public static DockNode? MovePaneToTarget(DockNode? root, DockableContent pane, DockTarget target)
+        => MovePaneToTarget(root, pane, target, out _);
+
+    /// <summary>
+    /// Spec 046 §6.3 — overload that surfaces any role-aware routing
+    /// fallback the insert took. See
+    /// <see cref="InsertPaneAtTarget(DockNode?, DockableContent, DockTarget, out DockRoutingFallback?)"/>.
+    /// </summary>
+    public static DockNode? MovePaneToTarget(
+        DockNode? root, DockableContent pane, DockTarget target,
+        out DockRoutingFallback? fallback)
     {
         var (afterRemove, found) = RemovePane(root, pane);
-        if (!found) return root;
-        return InsertPaneAtTarget(afterRemove, pane, target);
+        if (!found)
+        {
+            fallback = null;
+            return root;
+        }
+        return InsertPaneAtTarget(afterRemove, pane, target, out fallback);
     }
 
     /// <summary>
@@ -385,7 +754,7 @@ internal static class DockLayoutMutator
     /// group (matching VS's "show panel where you left it" behavior). When
     /// no history exists or the previous container has been torn down, the
     /// pane falls back to <paramref name="fallbackTarget"/> at the layout
-    /// root via <see cref="InsertPaneAtTarget"/>.
+    /// root via <see cref="InsertPaneAtTarget(DockNode?, DockableContent, DockTarget)"/>.
     /// </summary>
     public static DockNode ShowFromHistory(
         DockNode? root,
@@ -446,13 +815,18 @@ internal static class DockLayoutMutator
             return InsertPaneAtTarget(afterRemove, pane, target);
         }
 
+        // Spec 046 §2.3 — when splitting a Document inside a DocumentArea
+        // (or a ToolWindow inside a ToolWindowStrip), the new sibling
+        // group inherits the target group's role. Other category/role
+        // combinations fall back to the pane-derived inference.
+        var siblingRole = RoleForSplitWrapAgainstGroup(pane, resolvedTarget);
         DockNode replacement = target switch
         {
             DockTarget.Center => AddToGroup(resolvedTarget, pane),
-            DockTarget.SplitLeft   => new DockSplit(Orientation.Horizontal, new DockNode[] { WrapAsGroup(pane), resolvedTarget }),
-            DockTarget.SplitRight  => new DockSplit(Orientation.Horizontal, new DockNode[] { resolvedTarget, WrapAsGroup(pane) }),
-            DockTarget.SplitTop    => new DockSplit(Orientation.Vertical,   new DockNode[] { WrapAsGroup(pane), resolvedTarget }),
-            DockTarget.SplitBottom => new DockSplit(Orientation.Vertical,   new DockNode[] { resolvedTarget, WrapAsGroup(pane) }),
+            DockTarget.SplitLeft   => new DockSplit(Orientation.Horizontal, new DockNode[] { WrapAsGroup(pane, siblingRole), resolvedTarget }),
+            DockTarget.SplitRight  => new DockSplit(Orientation.Horizontal, new DockNode[] { resolvedTarget, WrapAsGroup(pane, siblingRole) }),
+            DockTarget.SplitTop    => new DockSplit(Orientation.Vertical,   new DockNode[] { WrapAsGroup(pane, siblingRole), resolvedTarget }),
+            DockTarget.SplitBottom => new DockSplit(Orientation.Vertical,   new DockNode[] { resolvedTarget, WrapAsGroup(pane, siblingRole) }),
             // Edge targets aren't surfaced in GroupInner mode; fall back
             // to the root-level handling if the caller ever passes them.
             _ => InsertPaneAtTarget(afterRemove, pane, target),
@@ -462,6 +836,65 @@ internal static class DockLayoutMutator
             return split; // Shouldn't happen; defensive.
 
         return ReplaceNode(afterRemove, resolvedTarget, replacement);
+    }
+
+    /// <summary>
+    /// Spec 046 §2.3 — when a hit-test driven split lands next to a
+    /// specific target group, the new sibling's role inherits from the
+    /// target group ONLY when that role is the pane category's preferred
+    /// landing (Document ↔ DocumentArea; ToolWindow ↔ ToolWindowStrip).
+    /// Otherwise we infer from the pane category alone via
+    /// <see cref="InferWrapRole"/>.
+    /// </summary>
+    private static DockGroupRole RoleForSplitWrapAgainstGroup(DockableContent pane, DockTabGroup target)
+    {
+        var cat = CategoryOf(pane);
+        if (PreferredFor(target.Role, cat)) return target.Role;
+        return InferWrapRole(pane);
+    }
+
+    /// <summary>
+    /// Spec 046 §6.4 — strict group-targeted insert with no root-level
+    /// fallback. Returns <c>null</c> when <paramref name="targetGroup"/>
+    /// can't be resolved against <paramref name="root"/> (neither by
+    /// reference nor by content keys), so the caller can surface a
+    /// diagnostic instead of silently re-routing.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="InsertPaneIntoGroup"/> / <see cref="InsertPaneRelativeToGroup"/>,
+    /// which fall back to a root-level <c>InsertPaneAtTarget</c> when the
+    /// target group is missing — appropriate for drag-drop (the user did
+    /// SOMETHING, we want to land it SOMEWHERE) but wrong for the
+    /// programmatic <c>DockHostModel.Dock(content, group, target)</c>
+    /// overload (which should no-op + log so the caller learns their
+    /// group reference is stale).
+    /// </remarks>
+    public static DockNode? TryInsertPaneAtGroupTarget(
+        DockNode? root, DockableContent pane, DockTabGroup targetGroup, DockTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(pane);
+        ArgumentNullException.ThrowIfNull(targetGroup);
+        if (root is null) return null;
+
+        var resolved = ResolveTargetGroup(root, targetGroup);
+        if (resolved is null) return null;
+
+        // Spec 046 §2.3 — propagate target group's role to new sibling for
+        // category-preferred splits.
+        var siblingRole = RoleForSplitWrapAgainstGroup(pane, resolved);
+        DockNode replacement = target switch
+        {
+            DockTarget.Center => AddToGroup(resolved, pane),
+            DockTarget.SplitLeft   => new DockSplit(Orientation.Horizontal, new DockNode[] { WrapAsGroup(pane, siblingRole), resolved }),
+            DockTarget.SplitRight  => new DockSplit(Orientation.Horizontal, new DockNode[] { resolved, WrapAsGroup(pane, siblingRole) }),
+            DockTarget.SplitTop    => new DockSplit(Orientation.Vertical,   new DockNode[] { WrapAsGroup(pane, siblingRole), resolved }),
+            DockTarget.SplitBottom => new DockSplit(Orientation.Vertical,   new DockNode[] { resolved, WrapAsGroup(pane, siblingRole) }),
+            // Dock-edge targets aren't meaningful against a specific group
+            // (they target the layout's edge). Treat as Center; the caller
+            // can use Dock(content, target) for edge placement.
+            _ => AddToGroup(resolved, pane),
+        };
+        return ReplaceNode(root, resolved, replacement);
     }
 
     /// <summary>
@@ -495,7 +928,7 @@ internal static class DockLayoutMutator
     /// <see cref="DockSplit"/>. <paramref name="target"/> must be one
     /// of the Split* values (Center has a dedicated entry —
     /// <see cref="InsertPaneIntoGroup"/>). Dock-edge targets fall back
-    /// to the root-level placement via <see cref="InsertPaneAtTarget"/>.
+    /// to the root-level placement via <see cref="InsertPaneAtTarget(DockNode?, DockableContent, DockTarget)"/>.
     /// </summary>
     public static DockNode? InsertPaneRelativeToGroup(
         DockNode? root, DockableContent pane, DockTabGroup targetGroup, DockTarget target)
@@ -507,13 +940,16 @@ internal static class DockLayoutMutator
         var resolved = ResolveTargetGroup(root, targetGroup);
         if (resolved is null) return InsertPaneAtTarget(root, pane, target);
 
+        // Spec 046 §2.3 — propagate target group's role to the new sibling
+        // when category-preferred (Document ↔ DocumentArea, etc.).
+        var siblingRole = RoleForSplitWrapAgainstGroup(pane, resolved);
         DockNode replacement = target switch
         {
             DockTarget.Center => AddToGroup(resolved, pane),
-            DockTarget.SplitLeft   => new DockSplit(Orientation.Horizontal, new DockNode[] { WrapAsGroup(pane), resolved }),
-            DockTarget.SplitRight  => new DockSplit(Orientation.Horizontal, new DockNode[] { resolved, WrapAsGroup(pane) }),
-            DockTarget.SplitTop    => new DockSplit(Orientation.Vertical,   new DockNode[] { WrapAsGroup(pane), resolved }),
-            DockTarget.SplitBottom => new DockSplit(Orientation.Vertical,   new DockNode[] { resolved, WrapAsGroup(pane) }),
+            DockTarget.SplitLeft   => new DockSplit(Orientation.Horizontal, new DockNode[] { WrapAsGroup(pane, siblingRole), resolved }),
+            DockTarget.SplitRight  => new DockSplit(Orientation.Horizontal, new DockNode[] { resolved, WrapAsGroup(pane, siblingRole) }),
+            DockTarget.SplitTop    => new DockSplit(Orientation.Vertical,   new DockNode[] { WrapAsGroup(pane, siblingRole), resolved }),
+            DockTarget.SplitBottom => new DockSplit(Orientation.Vertical,   new DockNode[] { resolved, WrapAsGroup(pane, siblingRole) }),
             _ => InsertPaneAtTarget(root, pane, target),
         };
         return ReplaceNode(root, resolved, replacement);

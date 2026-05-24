@@ -126,6 +126,63 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     private readonly (DockTarget Target, Border Button, Rectangle Visual)[] _buttons;
     private DockTarget? _hoveredTarget;
     private DockTarget? _focusedTarget;
+    // Spec 046 §6.6 — targets the host has rendered as disabled (dimmed,
+    // hit-test ignored). Bitmask over DockTarget enum values for O(1)
+    // checks on the pointer-move hot path.
+    private int _disabledTargetMask;
+    private const int DisabledMaskShift = 0; // keep values aligned with DockTarget int values
+
+    /// <summary>
+    /// Spec 046 §6.6 — host-provided list of targets that should render
+    /// disabled and ignore hover/confirm. Called from the reconciler
+    /// update path. Null clears the disabled set.
+    /// </summary>
+    internal void SetDisabledTargets(DockTarget[]? disabled)
+    {
+        int mask = 0;
+        if (disabled is not null)
+        {
+            for (int i = 0; i < disabled.Length; i++)
+                mask |= 1 << (int)disabled[i];
+        }
+        if (_disabledTargetMask == mask) return;
+        _disabledTargetMask = mask;
+        // Re-apply visual state to each button so dimming flips in place.
+        if (_buttons is null) return;
+        foreach (var entry in _buttons)
+        {
+            ApplyDisabledOpacity(entry.Button, IsDisabled(entry.Target));
+            // If the currently-hovered target became disabled, clear hover
+            // so the preview rect doesn't linger over a forbidden target.
+            if (entry.Target == _hoveredTarget && IsDisabled(entry.Target))
+                SetHovered(null);
+        }
+    }
+
+    private bool IsDisabled(DockTarget t) => (_disabledTargetMask & (1 << (int)t)) != 0;
+
+    private static void ApplyDisabledOpacity(Border button, bool disabled)
+    {
+        // Use opacity for visual dimming; matches the existing focus/hover
+        // visual contract without adding a new theme brush. Spec 045 §2.22
+        // (HC) — opacity is theme-neutral.
+        button.Opacity = disabled ? 0.35 : 1.0;
+        AutomationProperties.SetIsRequiredForForm(button, false);
+        if (disabled)
+        {
+            // §8.9 a11y — announce disabled state so screen readers don't
+            // surface the button as actionable.
+            var baseName = AutomationProperties.GetName(button);
+            if (!string.IsNullOrEmpty(baseName) && !baseName.EndsWith(" (not allowed)", StringComparison.Ordinal))
+                AutomationProperties.SetName(button, baseName + " (not allowed)");
+        }
+        else
+        {
+            var baseName = AutomationProperties.GetName(button);
+            if (baseName is { Length: > 0 } && baseName.EndsWith(" (not allowed)", StringComparison.Ordinal))
+                AutomationProperties.SetName(button, baseName[..^" (not allowed)".Length]);
+        }
+    }
     private bool _animationsEnabled = true;
     private DockDropOverlayMode _mode = DockDropOverlayMode.Host;
 
@@ -786,6 +843,8 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
 
     private void SetHovered(DockTarget? target)
     {
+        // Spec 046 §6.6 — disabled targets don't hover; treat as null.
+        if (target is DockTarget tt && IsDisabled(tt)) target = null;
         if (_hoveredTarget == target) return;
         _hoveredTarget = target;
         if (target is DockTarget t) UpdatePreview(t);
@@ -795,6 +854,9 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
 
     private void ConfirmTarget(DockTarget target)
     {
+        // Spec 046 §6.6 — disabled targets refuse confirms; the drop
+        // snap-backs like releasing outside any target.
+        if (IsDisabled(target)) return;
         TargetConfirmed?.Invoke(this, new DockDropTargetEventArgs(target, confirmed: true));
     }
 

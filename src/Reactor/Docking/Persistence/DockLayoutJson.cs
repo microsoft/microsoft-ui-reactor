@@ -117,6 +117,15 @@ internal sealed class DockLayoutNode
     [JsonPropertyName("selectedIndex")]
     public int? SelectedIndex { get; set; }
 
+    /// <summary>
+    /// Spec 046 §6.7 — group role on tabGroup nodes:
+    /// "general" | "documentArea" | "toolWindowStrip". Omitted when "general"
+    /// (the default for back-compat). Unknown strings round-trip as "general"
+    /// with a serializer warning.
+    /// </summary>
+    [JsonPropertyName("role")]
+    public string? Role { get; set; }
+
     // pane (leaf):
     /// <summary>The pane payload for kind=pane nodes.</summary>
     [JsonPropertyName("pane")]
@@ -190,6 +199,17 @@ internal sealed class DockLayoutPane
     [JsonPropertyName("canDockAsDocument")] public bool? CanDockAsDocument { get; set; }
     /// <summary>Per-pane permission override for Document.</summary>
     [JsonPropertyName("canDockAsToolWindow")] public bool? CanDockAsToolWindow { get; set; }
+
+    /// <summary>
+    /// Spec 046 §6.7 — <see cref="ToolWindow.AllowedSides"/> mask, persisted
+    /// as an array of <c>"left" | "top" | "right" | "bottom"</c> strings.
+    /// Omitted when the value is <see cref="DockSides.All"/> (the default
+    /// for back-compat). Unknown side strings are dropped at read time
+    /// with a serializer warning. Only meaningful when <c>Role == "toolWindow"</c>;
+    /// ignored for other pane kinds.
+    /// </summary>
+    [JsonPropertyName("allowedSides")]
+    public List<string>? AllowedSides { get; set; }
 
     /// <summary>Optional width hint in DIPs.</summary>
     [JsonPropertyName("width")]

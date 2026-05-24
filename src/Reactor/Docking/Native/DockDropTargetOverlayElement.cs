@@ -19,6 +19,15 @@ internal sealed record DockDropTargetOverlayElement(
     DockDropOverlayMode Mode = DockDropOverlayMode.Host)
     : Element
 {
+    /// <summary>
+    /// Spec 046 §6.6 — drop targets the overlay should render in the
+    /// disabled (dimmed) style and ignore at hit-test time. Null or empty
+    /// means every target is enabled (pre-046 behavior). The host computes
+    /// the set per render from the active drag's payload + this overlay's
+    /// group context via <see cref="DockDropFilter"/>.
+    /// </summary>
+    public DockTarget[]? DisabledTargets { get; init; }
+
     internal override bool HasCallbacks => true;
 }
 
@@ -32,12 +41,15 @@ internal static class DockDropTargetReconcilerRegistration
             mount: static (_, element, _) =>
             {
                 var control = new DockDropTargetOverlayControl { Mode = element.Mode };
+                control.SetDisabledTargets(element.DisabledTargets);
                 Wire(control, element);
                 return control;
             },
             update: static (_, oldEl, newEl, control, _) =>
             {
                 if (oldEl.Mode != newEl.Mode) control.Mode = newEl.Mode;
+                if (!DisabledTargetsEqual(oldEl.DisabledTargets, newEl.DisabledTargets))
+                    control.SetDisabledTargets(newEl.DisabledTargets);
                 if (!ReferenceEquals(oldEl.OnHover, newEl.OnHover)
                     || !ReferenceEquals(oldEl.OnConfirm, newEl.OnConfirm)
                     || !ReferenceEquals(oldEl.OnDismiss, newEl.OnDismiss))
@@ -93,4 +105,22 @@ internal static class DockDropTargetReconcilerRegistration
     // Per-control delegate storage — same pattern as DockSplitterElement,
     // dodges the WinRT generic-delegate CCW round-trip.
     private static readonly ConditionalWeakTable<DockDropTargetOverlayControl, HandlerBag> _handlers = new();
+
+    private static bool DisabledTargetsEqual(DockTarget[]? a, DockTarget[]? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        var lenA = a?.Length ?? 0;
+        var lenB = b?.Length ?? 0;
+        if (lenA != lenB) return false;
+        if (lenA == 0) return true;
+        // Small arrays (≤ 9 elements) — O(n²) is cheaper than a HashSet alloc.
+        for (int i = 0; i < lenA; i++)
+        {
+            bool found = false;
+            for (int j = 0; j < lenB; j++)
+                if (a![i] == b![j]) { found = true; break; }
+            if (!found) return false;
+        }
+        return true;
+    }
 }
