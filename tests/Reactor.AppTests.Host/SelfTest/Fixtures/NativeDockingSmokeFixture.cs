@@ -1652,9 +1652,18 @@ internal static class NativeDockingSmokeFixtures
                 H.Check("FloatingTitleBar_TabViewHasStripFooter",
                     tabViews.Count == 1 && tabViews[0].TabStripFooter is not null);
 
-                // Pane body must be reachable.
+                // Pane body must be reachable. Chrome (TabView etc.) materializes on
+                // the first render pump after Open(), but on a loaded CI runner the
+                // inner content TextBlock can lag one or two pumps behind. Poll for
+                // up to 2s — see INVESTIGATION.md Cluster F.
                 var bodyTexts = FindAllInTree<TextBlock>(content, t => t.Text == "floating-tb-body");
-                H.Check("FloatingTitleBar_PaneBodyVisible", bodyTexts.Count >= 1);
+                var deadline = Environment.TickCount64 + 2_000;
+                while (bodyTexts.Count < 1 && Environment.TickCount64 < deadline)
+                {
+                    await Harness.Render(50);
+                    bodyTexts = FindAllInTree<TextBlock>(content, t => t.Text == "floating-tb-body");
+                }
+                H.Check($"FloatingTitleBar_PaneBodyVisible (bodies={bodyTexts.Count})", bodyTexts.Count >= 1);
 
                 floatingWindow.Close();
                 await Harness.Render();

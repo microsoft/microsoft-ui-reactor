@@ -523,7 +523,12 @@ internal static class NativeDockingReliabilityFixtures
     /// </summary>
     internal class EventSubscriptionLeakBaseline(Harness h) : SelfTestFixtureBase(h)
     {
-        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(30);
+        // 100 mount/unmount cycles × 2 Harness.Render() each = 200 renders + 200
+        // reconcile passes. Locally this runs ~15s; CI VMs under contention have
+        // been measured at 2-4× slower per INVESTIGATION.md Cluster T, easily
+        // overshooting the prior 30s budget on a heavy iteration. The cap exists
+        // to catch a hung fixture, not to set a perf target.
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
 
         public override async Task RunAsync()
         {
