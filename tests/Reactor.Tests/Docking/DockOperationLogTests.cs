@@ -387,20 +387,23 @@ public sealed class DockOperationLogTests
     }
 
     [Fact]
-    public void DockOperationKind_AllValues_StableEnumOrder()
+    public void DockOperationKind_IntegralValues_PinnedForWireCompat()
     {
-        // Pin enum order — value-table corruption from reordering would break
-        // serialized DockOperationLog dumps used by triage.
-        var values = Enum.GetValues<DockOperationKind>();
-        Assert.Contains(DockOperationKind.Mount, values);
-        Assert.Contains(DockOperationKind.DragStart, values);
-        Assert.Contains(DockOperationKind.DragHover, values);
-        Assert.Contains(DockOperationKind.DragConfirm, values);
-        Assert.Contains(DockOperationKind.DragCancel, values);
-        Assert.Contains(DockOperationKind.DragTearOut, values);
-        Assert.Contains(DockOperationKind.SplitterResize, values);
-        Assert.Contains(DockOperationKind.SplitterTrace, values);
-        Assert.Contains(DockOperationKind.LayoutChange, values);
-        Assert.Contains(DockOperationKind.Note, values);
+        // Triage tooling that pretty-prints a serialized DockOperationLog
+        // dump expects each kind's integer value to be stable across
+        // releases. Reordering or renumbering would silently misclassify
+        // historical traces — pin the underlying numerics.
+        Assert.Equal(0, (int)DockOperationKind.Mount);
+        Assert.Equal(1, (int)DockOperationKind.DragStart);
+        Assert.Equal(2, (int)DockOperationKind.DragHover);
+        Assert.Equal(3, (int)DockOperationKind.DragConfirm);
+        Assert.Equal(4, (int)DockOperationKind.DragCancel);
+        Assert.Equal(5, (int)DockOperationKind.DragTearOut);
+        Assert.Equal(6, (int)DockOperationKind.SplitterResize);
+        Assert.Equal(7, (int)DockOperationKind.SplitterTrace);
+        Assert.Equal(8, (int)DockOperationKind.LayoutChange);
+        Assert.Equal(9, (int)DockOperationKind.Note);
+        // No unexpected values added without updating this pin.
+        Assert.Equal(10, Enum.GetValues<DockOperationKind>().Length);
     }
 }

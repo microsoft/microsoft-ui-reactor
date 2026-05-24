@@ -11,6 +11,13 @@ namespace Microsoft.UI.Reactor.Tests.Docking;
 /// algebra; these tests exercise the algorithmic branches without spinning
 /// up a host.
 /// </summary>
+/// <remarks>
+/// Joins the <c>DockingGlobals</c> collection because several tests below
+/// mutate process-global state in <see cref="PreviousContainerTracker"/>
+/// via <c>Set</c> / <c>ClearAll</c>; running concurrently with other docking
+/// suites would cross-contaminate the tracker.
+/// </remarks>
+[Collection("DockingGlobals")]
 public sealed class DockLayoutMutatorTests
 {
     private static Document Doc(string key, string title = "T") =>
@@ -334,12 +341,25 @@ public sealed class DockLayoutMutatorTests
         var moved = DockLayoutMutator.MovePaneToTarget(split, a, DockTarget.SplitBottom);
         var newSplit = Assert.IsType<DockSplit>(moved);
         Assert.Equal(Orientation.Vertical, newSplit.Orientation);
-        // Count leaves containing 'a' across the new tree — must be exactly one.
-        int count = 0;
-        var idx = new Dictionary<object, DockableContent>();
-        DockLayoutMutator.IndexLeavesInto(moved, idx);
-        foreach (var kv in idx) if ((string)kv.Key == "a") count++;
-        Assert.Equal(1, count);
+        // Walk every leaf in the moved tree and assert pane 'a' appears
+        // exactly once — guarding against the "removed from one branch but
+        // also appended elsewhere → duplicated" regression. A flat List
+        // (NOT a dict) is required because dict keys would silently
+        // deduplicate the very case we're trying to detect.
+        var leaves = new List<DockableContent>();
+        Walk(moved!, leaves);
+        Assert.Equal(1, leaves.Count(l => (string?)l.Key == "a"));
+        Assert.Equal(1, leaves.Count(l => (string?)l.Key == "b"));
+
+        static void Walk(DockNode node, List<DockableContent> acc)
+        {
+            switch (node)
+            {
+                case DockableContent leaf: acc.Add(leaf); break;
+                case DockTabGroup g: foreach (var d in g.Documents) acc.Add(d); break;
+                case DockSplit s: foreach (var c in s.Children) Walk(c, acc); break;
+            }
+        }
     }
 
     // ── FindContainer ───────────────────────────────────────────────────

@@ -222,49 +222,54 @@ internal static class NativeDockingCoverageOverlayFixtures
         {
             const double w = 1000;
             const double h2 = 600;
+            // ComputePreviewBounds returns Rect with values derived from
+            // floating-point fractions (w/2, h2*0.30); compare with a half-
+            // pixel tolerance so the assertions stay robust.
+            static bool Near(double a, double b) => Math.Abs(a - b) < 0.5;
 
             // Center fills the host.
             var c = DockDropTargetOverlayControl.ComputePreviewBounds(DockTarget.Center, w, h2);
             H.Check("PreviewBounds_Center_FullExtent",
-                c.X == 0 && c.Y == 0 && c.Width == w && c.Height == h2);
+                Near(c.X, 0) && Near(c.Y, 0) && Near(c.Width, w) && Near(c.Height, h2));
 
             // Left/Right halves on split.
             var sl = DockDropTargetOverlayControl.ComputePreviewBounds(DockTarget.SplitLeft, w, h2);
             H.Check("PreviewBounds_SplitLeft_LeftHalf",
-                sl.X == 0 && sl.Y == 0 && Math.Abs(sl.Width - w / 2) < 0.5 && sl.Height == h2);
+                Near(sl.X, 0) && Near(sl.Y, 0) && Near(sl.Width, w / 2) && Near(sl.Height, h2));
 
             var sr = DockDropTargetOverlayControl.ComputePreviewBounds(DockTarget.SplitRight, w, h2);
             H.Check("PreviewBounds_SplitRight_RightHalf",
-                Math.Abs(sr.X - w / 2) < 0.5 && sr.Y == 0 && Math.Abs(sr.Width - w / 2) < 0.5);
+                Near(sr.X, w / 2) && Near(sr.Y, 0) && Near(sr.Width, w / 2));
 
             var st = DockDropTargetOverlayControl.ComputePreviewBounds(DockTarget.SplitTop, w, h2);
             H.Check("PreviewBounds_SplitTop_TopHalf",
-                st.X == 0 && st.Y == 0 && st.Width == w && Math.Abs(st.Height - h2 / 2) < 0.5);
+                Near(st.X, 0) && Near(st.Y, 0) && Near(st.Width, w) && Near(st.Height, h2 / 2));
 
             var sb = DockDropTargetOverlayControl.ComputePreviewBounds(DockTarget.SplitBottom, w, h2);
             H.Check("PreviewBounds_SplitBottom_BottomHalf",
-                sb.X == 0 && Math.Abs(sb.Y - h2 / 2) < 0.5 && sb.Width == w);
+                Near(sb.X, 0) && Near(sb.Y, h2 / 2) && Near(sb.Width, w));
 
             // Edge docks use EdgePreviewFraction (0.30).
             var dl = DockDropTargetOverlayControl.ComputePreviewBounds(DockTarget.DockLeft, w, h2);
             H.Check("PreviewBounds_DockLeft_FractionWidth",
-                dl.X == 0 && Math.Abs(dl.Width - w * 0.30) < 0.5 && dl.Height == h2);
+                Near(dl.X, 0) && Near(dl.Width, w * 0.30) && Near(dl.Height, h2));
 
             var dr = DockDropTargetOverlayControl.ComputePreviewBounds(DockTarget.DockRight, w, h2);
             H.Check("PreviewBounds_DockRight_FractionAnchoredRight",
-                Math.Abs(dr.X - (w - w * 0.30)) < 0.5 && Math.Abs(dr.Width - w * 0.30) < 0.5);
+                Near(dr.X, w - w * 0.30) && Near(dr.Width, w * 0.30));
 
             var dt = DockDropTargetOverlayControl.ComputePreviewBounds(DockTarget.DockTop, w, h2);
             H.Check("PreviewBounds_DockTop_FractionHeight",
-                dt.Y == 0 && Math.Abs(dt.Height - h2 * 0.30) < 0.5);
+                Near(dt.Y, 0) && Near(dt.Height, h2 * 0.30));
 
             var db = DockDropTargetOverlayControl.ComputePreviewBounds(DockTarget.DockBottom, w, h2);
             H.Check("PreviewBounds_DockBottom_FractionAnchoredBottom",
-                Math.Abs(db.Y - (h2 - h2 * 0.30)) < 0.5);
+                Near(db.Y, h2 - h2 * 0.30));
 
             // Zero-extent host — returns Rect.Empty.
             var z = DockDropTargetOverlayControl.ComputePreviewBounds(DockTarget.Center, 0, 0);
-            H.Check("PreviewBounds_ZeroHost_ReturnsEmpty", z.IsEmpty || (z.Width == 0 && z.Height == 0));
+            H.Check("PreviewBounds_ZeroHost_ReturnsEmpty",
+                z.IsEmpty || (Near(z.Width, 0) && Near(z.Height, 0)));
 
             H.SetContent(null);
             await Harness.Render();

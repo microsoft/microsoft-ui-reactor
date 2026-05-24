@@ -25,11 +25,12 @@ internal static class NativeDockingCoverageSplitterFixtures
     {
         public override async Task RunAsync()
         {
+            const double eps = 1e-9;
             var splitter = new DockSplitterControl();
             H.Check("Splitter_DefaultDirection_Columns",
                 splitter.Direction == DockSplitterDirection.Columns);
             H.Check("Splitter_DefaultKeyboardStep",
-                splitter.KeyboardStep == DockSplitterControl.DefaultKeyboardStepDip);
+                Math.Abs(splitter.KeyboardStep - DockSplitterControl.DefaultKeyboardStepDip) < eps);
 
             // Same-value setter — early-return branch.
             splitter.Direction = DockSplitterDirection.Columns;
@@ -39,18 +40,20 @@ internal static class NativeDockingCoverageSplitterFixtures
             // Switch to Rows.
             splitter.Direction = DockSplitterDirection.Rows;
             H.Check("Splitter_SwitchToRows", splitter.Direction == DockSplitterDirection.Rows);
-            H.Check("Splitter_RowsHasHeight", splitter.Height == DockSplitterControl.HitThicknessDip);
+            H.Check("Splitter_RowsHasHeight",
+                Math.Abs(splitter.Height - DockSplitterControl.HitThicknessDip) < eps);
 
             // Back to Columns.
             splitter.Direction = DockSplitterDirection.Columns;
             H.Check("Splitter_SwitchBack_Columns",
                 splitter.Direction == DockSplitterDirection.Columns);
             H.Check("Splitter_ColumnsHasWidth",
-                splitter.Width == DockSplitterControl.HitThicknessDip);
+                Math.Abs(splitter.Width - DockSplitterControl.HitThicknessDip) < eps);
 
             // Custom keyboard step.
             splitter.KeyboardStep = 32.0;
-            H.Check("Splitter_KeyboardStep_Configurable", splitter.KeyboardStep == 32.0);
+            H.Check("Splitter_KeyboardStep_Configurable",
+                Math.Abs(splitter.KeyboardStep - 32.0) < eps);
 
             await Harness.Render();
             H.SetContent(null);
@@ -91,9 +94,10 @@ internal static class NativeDockingCoverageSplitterFixtures
             await Harness.Render();
             await Harness.Render(); // double-pump so ActualWidth populates
 
-            // Trace sink to exercise the DiagnosticSink branch.
-            var traces = new List<string>();
-            splitter.DiagnosticSink = msg => traces.Add(msg);
+            // SimulatePointerDragForTest doesn't fire the DiagnosticSink
+            // (only the real OnPointerPressed/Moved/Released path does),
+            // so we don't wire one — exercising that sink needs a real
+            // pointer drag.
 
             int deltaEvents = 0;
             DockSplitterDeltaEventArgs? last = null;
@@ -113,8 +117,6 @@ internal static class NativeDockingCoverageSplitterFixtures
                 last is { Direction: DockSplitterDirection.Columns });
             H.Check("Splitter_Drag_HostExtentNonNegative",
                 last is { } a2 && a2.HostExtentDip >= 0);
-
-            H.Check("Splitter_DiagnosticSink_FiredAtLeastOnce", traces.Count >= 0);
 
             // Drag the other way to exercise both branches.
             splitter.SimulatePointerDragForTest(cumulativeDeltaDip: -50);
@@ -149,11 +151,12 @@ internal static class NativeDockingCoverageSplitterFixtures
             splitter.RaiseResizeDeltaForTest(args);
 
             H.Check("Splitter_RaiseForTest_Fired", captured is not null);
-            H.Check("Splitter_RaiseForTest_DeltaMatches", captured?.Delta == 24.0);
+            H.Check("Splitter_RaiseForTest_DeltaMatches",
+                captured is { } c1 && Math.Abs(c1.Delta - 24.0) < 1e-9);
             H.Check("Splitter_RaiseForTest_DirectionMatches",
                 captured?.Direction == DockSplitterDirection.Rows);
             H.Check("Splitter_RaiseForTest_HostExtentMatches",
-                captured?.HostExtentDip == 400.0);
+                captured is { } c2 && Math.Abs(c2.HostExtentDip - 400.0) < 1e-9);
             H.Check("Splitter_RaiseForTest_IsFinalMatches", captured?.IsFinal == true);
 
             H.SetContent(null);

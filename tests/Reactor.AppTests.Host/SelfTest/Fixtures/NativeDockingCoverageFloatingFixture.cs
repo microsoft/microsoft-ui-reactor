@@ -233,20 +233,23 @@ internal static class NativeDockingCoverageFloatingFixtures
             ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
             try
             {
-                // Empty registry — TryAppendUnderCursor must return false
-                // without touching cursor APIs.
-                H.Check("FloatRouter_Empty_HasRegistered_False",
-                    !DockFloatingPaneRouter.HasRegisteredWindows ||
-                    DockFloatingPaneRouter.HasRegisteredWindows);
-                // The router persists state between fixtures; capture a
-                // baseline.
-                bool baselineHas = DockFloatingPaneRouter.HasRegisteredWindows;
+                // The router is process-global so an earlier fixture might
+                // have left appenders registered. Capture the baseline
+                // count from a single TryAppendUnderCursor — false return
+                // means cursor isn't over any registered window (true on
+                // an empty registry; possibly true with siblings registered
+                // but cursor outside). We just confirm the call doesn't
+                // throw and returns a bool.
+                bool baselineEmpty = !DockFloatingPaneRouter.HasRegisteredWindows;
+                var baselineHit = DockFloatingPaneRouter.TryAppendUnderCursor(pane);
+                if (baselineEmpty)
+                    H.Check("FloatRouter_EmptyBaseline_HitReturnsFalse", baselineHit == false);
 
                 var floating = DockFloatingWindow.Open(pane, manager: managerEl);
                 try
                 {
                     // The component's UseEffect registers asynchronously on
-                    // the dispatcher; one render should be enough.
+                    // the dispatcher; two render passes should drain.
                     await Harness.Render();
                     await Harness.Render();
                     H.Check("FloatRouter_AfterOpen_HasRegistered_True",
@@ -257,23 +260,27 @@ internal static class NativeDockingCoverageFloatingFixtures
                     // Re-register against our own callback to exercise the
                     // overwrite branch of Register (Dictionary indexer).
                     DockFloatingPaneRouter.Register(floating, append);
-                    H.Check("FloatRouter_Reregister_Survives",
+                    H.Check("FloatRouter_Reregister_HasRegistered_True",
                         DockFloatingPaneRouter.HasRegisteredWindows);
                     // Hit-test won't necessarily land on our window (cursor
                     // could be anywhere), but the method must return a bool
                     // without throwing.
                     var hit = DockFloatingPaneRouter.TryAppendUnderCursor(pane);
-                    H.Check("FloatRouter_TryAppend_DoesNotThrow", true);
-                    _ = hit;
+                    H.Check("FloatRouter_TryAppend_ReturnsBool",
+                        hit == true || hit == false);
+                    // When the hit landed on us, our overwrite-registered
+                    // appender ran exactly once.
+                    if (hit)
+                        H.Check("FloatRouter_TryAppend_HitInvokesOverwriteAppender",
+                            appendCount == 1);
 
+                    // Explicit unregister of our window drops the registration
+                    // count by exactly one (HasRegisteredWindows depends on
+                    // peer registrations from other fixtures, so we can only
+                    // assert "didn't throw" / "second call is no-op").
                     DockFloatingPaneRouter.Unregister(floating);
-                    // After explicit unregister, the appender for this
-                    // window must be gone. (Other floating windows in the
-                    // process may still be registered.)
-                    H.Check("FloatRouter_UnregisterIsIdempotent", true);
-                    DockFloatingPaneRouter.Unregister(floating);
-                    _ = baselineHas;
-                    _ = appendCount;
+                    DockFloatingPaneRouter.Unregister(floating); // idempotent
+                    H.Check("FloatRouter_Unregister_Idempotent", true);
                 }
                 finally { floating?.Close(); }
                 await Harness.Render();
