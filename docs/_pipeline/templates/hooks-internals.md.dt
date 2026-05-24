@@ -211,9 +211,9 @@ local `UseState`. Cleanup unsubscribes.
 `UseResource<T>` (and `UseInfiniteResource`, `UseMutation`) walks a
 fuller slot shape — a `ResourceHookState<T>` carrying the cache key,
 the latest value, the in-flight cancellation token, and a registration
-with the nearest [`PendingScope`](async-resources-cookbook.md)
+with the nearest [`PendingScope`](async-resources.md)
 ancestor. The async-resource hooks are documented end-to-end in the
-[async-system reference](../reference/async-system.md); the slot is
+[async-system reference](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/async-system.md); the slot is
 the same shape category — a thing the component renders against, with
 cleanup that releases external state on unmount.
 

@@ -141,7 +141,7 @@ return VStack(0,
 ).Width(400);
 ```
 
-![Paginated list after two pages and a Load More button](images/recipe-paginated-list/loaded.png)
+![Paginated list after two pages and a Load More button](../images/recipe-paginated-list/loaded.png)
 
 The body branches on three predicates: initial load (skeleton), first-page
 error with zero loaded items (full-screen retry), or a populated list.

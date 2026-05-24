@@ -82,7 +82,7 @@ return VStack(12,
 ).Padding(20).Width(320);
 ```
 
-![Login form with inline validation](images/recipe-login/form.png)
+![Login form with inline validation](../images/recipe-login/form.png)
 
 The `canSubmit` predicate gates the button on a single render —
 disabling the button is enough; an analyzer-flagged guard inside

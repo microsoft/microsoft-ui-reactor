@@ -189,7 +189,7 @@ var root = (open ? Group(page, palette) : page)
 return root;
 ```
 
-![Command palette open with a filtered list](images/recipe-command-palette/palette.png)
+![Command palette open with a filtered list](../images/recipe-command-palette/palette.png)
 
 The page renders normally; the palette is a `Border` wrapping a
 `VStack` returned alongside it in a `Group(page, palette)`. The

@@ -101,9 +101,9 @@ internal static class TierLintOrchestrator
         }
 
         var findings = new List<TierLintFinding>();
-        foreach (var (_, template) in templates)
+        foreach (var (topicId, template) in templates)
         {
-            var (assembled, snipRes, ssRes) = CompileCommand.AssembleForLint(template, allSnippets, allScreenshots);
+            var (assembled, snipRes, ssRes) = CompileCommand.AssembleForLint(template, allSnippets, allScreenshots, topicId);
             findings.AddRange(TierLint.Lint(template, assembled, snipRes, ssRes));
         }
 

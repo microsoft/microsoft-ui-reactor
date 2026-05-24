@@ -309,7 +309,7 @@ The button fluents also overload `DropDownButton`, `SplitButton`, and
 `ToggleSplitButton`. Reach for these before `.Resources(...)` — they
 avoid the six-key hover/pressed/disabled dance and stay in sync with
 system theme updates. See
-[spec 039](../specs/039-property-and-event-scrub.md) §2.1, §2.2, and
+[spec 039](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-property-and-event-scrub.md) §2.1, §2.2, and
 §2.4 for the inventory.
 
 ## Lightweight styling

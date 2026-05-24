@@ -187,4 +187,4 @@ control yourself.
   `WindowPersistedScope` that docking layouts route through.
 - **[Components](components.md)** — `Key` rules and the reconciler
   identity model that `DockableContent.Key` plugs into.
-- **[Reactor](readme.md)** — back to the docset index.
+- **[Reactor](index.md)** — back to the docset index.

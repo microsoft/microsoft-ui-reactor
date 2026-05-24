@@ -377,7 +377,7 @@ receive is the full current selection, not the change since the last call.
 Passing `null` to the fluent clears any previously-set handler.
 
 > `TreeView` multi-select is intentionally deferred — see
-> [spec 039](../specs/039-property-and-event-scrub.md) §5.8 for the
+> [spec 039](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-property-and-event-scrub.md) §5.8 for the
 > rationale. Use single-select `OnItemInvoked` until then.
 
 ## Stable Identity with WithKey

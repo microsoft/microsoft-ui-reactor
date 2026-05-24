@@ -180,7 +180,7 @@ class TypeRampDemo : Component
 | `Body(text)` | `BodyTextBlockStyle` — 14px regular |
 
 These are factories (not fluents) by design — see
-[spec 039](../specs/039-property-and-event-scrub.md) §17.6. Layer
+[spec 039](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-property-and-event-scrub.md) §17.6. Layer
 further modifiers on the result (`Title("…").Foreground(Theme.Accent)`)
 when you need to deviate.
 

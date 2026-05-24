@@ -46,8 +46,9 @@ with a `Render()` method that returns an element tree describing its UI.
 Override `ShouldUpdate(TProps? old, TProps? new)` to make a `Component<TProps>`
 ignore certain prop changes (cosmetic-only label updates, for example). The
 default `Equals()`-based check on records is the right call for most cases.
-The auto-generated [components reference](reference/elements/index.md) covers
-every member; the rest of this page is the narrative.
+The auto-generated components reference covers every member (coming soon —
+see the [Hooks reference](reference/hooks/index.md) for the existing
+prototype); the rest of this page is the narrative.
 
 ## Basic Component
 

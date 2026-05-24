@@ -22,7 +22,7 @@ class RecipesIndexApp : Component
     ).Padding(20);
 ```
 
-![Recipes gallery preview](images/recipes-index/gallery.png)
+![Recipes gallery preview](../images/recipes-index/gallery.png)
 
 The gallery uses the same primitives every recipe page does — a
 `VStack` for the column layout, `TextBlock` for descriptions, `HStack`

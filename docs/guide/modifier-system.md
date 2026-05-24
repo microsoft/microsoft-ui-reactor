@@ -170,7 +170,7 @@ public static HyperlinkButtonElement Click(this HyperlinkButtonElement el, Actio
 
 Two reasons the design split this off from generic modifiers. First,
 [`C# binds `el.OnClick(arg)` to delegate invocation before considering
-extension methods`](../specs/039-fluent-api-uplift.md), so a `.OnClick`
+extension methods`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-fluent-api-uplift.md), so a `.OnClick`
 extension method would be permanently unreachable — the WinUI XAML
 convention (`Click="…"`, drop the `On` prefix) avoids the clash.
 Second, callback identity participates in
@@ -319,7 +319,7 @@ chain still gets the strongly-typed `TextBlock` callback.
 
 **Merge is "later wins" per slot.** Repeating the same modifier
 overrides; it doesn't accumulate. The exception is event-callback
-parity, which the [Fluent API spec §15 Q2](../specs/039-fluent-api-uplift.md)
+parity, which the [Fluent API spec §15 Q2](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-fluent-api-uplift.md)
 documents — passing `null` to a `.Click(null)` clears the handler
 rather than queuing a no-op.
 

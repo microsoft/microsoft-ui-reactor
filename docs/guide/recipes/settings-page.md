@@ -53,7 +53,7 @@ return VStack(16,
 ).Padding(20);
 ```
 
-![Settings page](images/recipe-settings-page/settings.png)
+![Settings page](../images/recipe-settings-page/settings.png)
 
 A `VStack` of `SettingsRow`s; each row is a label + control. Reactor
 re-renders only the row whose state changed — the slider doesn't

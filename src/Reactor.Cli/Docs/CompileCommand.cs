@@ -230,7 +230,7 @@ internal static partial class CompileCommand
         var tierHasErrors = false;
         foreach (var (topicId, template) in templates)
         {
-            var (assembled, snipRes, ssRes) = AssembleForLint(template, allSnippets, allScreenshots);
+            var (assembled, snipRes, ssRes) = AssembleForLint(template, allSnippets, allScreenshots, topicId);
             var findings = TierLint.Lint(template, assembled, snipRes, ssRes);
             foreach (var f in findings)
             {
@@ -262,7 +262,7 @@ internal static partial class CompileCommand
             .Select(t => new CrossLinkTemplate(
                 t.topicId,
                 t.template.FilePath,
-                AssembleForLint(t.template, allSnippets, allScreenshots).body,
+                AssembleForLint(t.template, allSnippets, allScreenshots, t.topicId).body,
                 t.template.Title,
                 t.template.ConceptAliases))
             .ToList();
@@ -428,7 +428,7 @@ internal static partial class CompileCommand
 
             var assembled = DocAssembler.Assemble(
                 template.Body, allSnippets, allScreenshots,
-                out var errors, out var warnings);
+                out var errors, out var warnings, topicId);
 
             // Expand <!-- ref:Member --> markers in the assembled body so
             // hand-authored guide pages can cross-link into the generated
@@ -453,8 +453,20 @@ internal static partial class CompileCommand
 
             var outputPath = Path.Combine(outputDir, $"{topicId}.md");
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-            File.WriteAllText(outputPath, NormalizeLineEndings(assembled));
+            var normalized = NormalizeLineEndings(assembled);
+            File.WriteAllText(outputPath, normalized);
             Console.WriteLine($" ✓ → {Path.GetRelativePath(repoRoot, outputPath)}");
+
+            // The site-root template (topicId "index") also writes README.md
+            // alongside so GitHub's directory browser renders the landing page
+            // when readers browse docs/guide/ on the source repo. The MkDocs
+            // site uses index.md; GitHub's web UI uses README.md.
+            if (string.Equals(topicId, "index", StringComparison.Ordinal))
+            {
+                var readmePath = Path.Combine(Path.GetDirectoryName(outputPath)!, "README.md");
+                File.WriteAllText(readmePath, normalized);
+                Console.WriteLine($"   → {Path.GetRelativePath(repoRoot, readmePath)} (GitHub directory browser)");
+            }
         }
 
         if (hasErrors && ci)
@@ -621,13 +633,14 @@ internal static partial class CompileCommand
     internal static (string body, int resolvedSnippets, int resolvedScreenshots) AssembleForLint(
         DocTemplate template,
         Dictionary<string, SnippetExtractor.Snippet> allSnippets,
-        Dictionary<string, ScreenshotInfo> allScreenshots)
+        Dictionary<string, ScreenshotInfo> allScreenshots,
+        string? topicId = null)
     {
         var snippetRefs = ExtractSnippetRefs(template.Body);
         var resolvedSnippets = snippetRefs.Count(r => allSnippets.ContainsKey(r));
         var screenshotRefs = ExtractScreenshotRefs(template.Body);
         var resolvedScreenshots = screenshotRefs.Count(r => allScreenshots.ContainsKey(r));
-        var assembled = DocAssembler.Assemble(template.Body, allSnippets, allScreenshots, out _, out _);
+        var assembled = DocAssembler.Assemble(template.Body, allSnippets, allScreenshots, out _, out _, topicId);
         return (assembled, resolvedSnippets, resolvedScreenshots);
     }
 

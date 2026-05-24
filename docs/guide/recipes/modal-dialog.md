@@ -59,7 +59,7 @@ Element modal = Border(
 ).Background("#80000000").Padding(40);
 ```
 
-![Delete confirmation modal](images/recipe-modal-dialog/confirm.png)
+![Delete confirmation modal](../images/recipe-modal-dialog/confirm.png)
 
 The panel is a `Border` with a colored scrim background. The two
 buttons close over the same `setOpen` and `setDeleted` setters, so

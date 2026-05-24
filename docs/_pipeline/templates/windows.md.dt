@@ -169,7 +169,7 @@ callback.
 ## Next Steps
 
 - **[WinForms Interop](winforms-interop.md)** — previous topic: hosting Reactor inside WinForms via XAML Islands
-- **[Reactor](readme.md)** — back to the index: overview of the framework and full topic list
+- **[Reactor](index.md)** — back to the index: overview of the framework and full topic list
 - **[Navigation](navigation.md)** — in-window routing with `UseNavigation`, `NavigationView`, deep links
 - **[Effects and Lifecycle](effects.md)** — `UseEffect` patterns for the imperative work that pairs with windows
 - **[Commanding](commanding.md)** — wire keyboard accelerators and tray-menu items to commands

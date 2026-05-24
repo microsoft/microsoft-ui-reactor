@@ -74,7 +74,7 @@ return VStack(8,
 ).Padding(20);
 ```
 
-![Suggestion dropdown](images/recipe-search-with-suggestions/search.png)
+![Suggestion dropdown](../images/recipe-search-with-suggestions/search.png)
 
 The dropdown is a `Border` wrapping a `VStack` — same conditional
 render shape as the [modal-dialog recipe](modal-dialog.md). When

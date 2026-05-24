@@ -113,7 +113,38 @@ text. Check the API reference for each control's full signature.
 so you rarely need `.Set(...)`. The named-input shapes set the appropriate
 `InputScope` for soft-keyboard and IME hinting:
 
-```csharp snippet="forms/TextBox-config"
+```csharp
+class TextBoxConfigDemo : Component
+{
+    public override Element Render()
+    {
+        var (qty, setQty) = UseState("");
+        var (email, setEmail) = UseState("");
+        var (url, setUrl) = UseState("");
+        var (phone, setPhone) = UseState("");
+        var (search, setSearch) = UseState("");
+        var (note, setNote) = UseState("");
+
+        return VStack(12,
+            TextBox(qty, setQty, header: "Quantity")
+                .NumericInput(),
+            TextBox(email, setEmail, header: "Email")
+                .EmailInput(),
+            TextBox(url, setUrl, header: "URL")
+                .UrlInput(),
+            TextBox(phone, setPhone, header: "Phone")
+                .PhoneInput(),
+            TextBox(search, setSearch, placeholder: "Search…")
+                .SearchInput(),
+            TextBox(note, setNote, header: "Reference code")
+                .MaxLength(8)
+                .CharacterCasing(CharacterCasing.Upper)
+                .TextAlignment(TextAlignment.Center)
+                .IsSpellCheckEnabled(false)
+                .Description("Eight characters, automatically uppercased.")
+        ).Padding(24);
+    }
+}
 ```
 
 | Fluent | Effect |
@@ -131,7 +162,7 @@ so you rarely need `.Set(...)`. The named-input shapes set the appropriate
 
 These fluents chain freely; the named-input shapes are the canonical way to
 hint mobile / touch keyboards instead of reaching for `.Set(c => c.InputScope = ...)`.
-See [spec 039](../specs/039-property-and-event-scrub.md) §2.3 and §4.7 for the
+See [spec 039](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-property-and-event-scrub.md) §2.3 and §4.7 for the
 rationale.
 
 ## Simple Validation

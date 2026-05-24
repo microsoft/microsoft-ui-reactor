@@ -138,7 +138,7 @@ subcommands map one-to-one to the workflows below.
 | `mur pack-local` / `mur clean-local` | Package / clean the local NuGet feed for samples that consume `Microsoft.UI.Reactor` as a package | `mur pack-local` |
 
 `mur docs compile` is the workflow you reach for most often. See
-[the doc-pipeline contributor guide](../contributing/doc-pipeline.md)
+[the doc-pipeline contributor guide](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/doc-pipeline.md)
 for the full surface and the `--validate-only`, `--skip-screenshots`,
 `--skip-diagrams`, `--skip-reference`, and `--tier=<stub|solid|comprehensive>`
 flags that make the inner loop fast.
@@ -154,7 +154,7 @@ you launch it explicitly when you want agent integration.
 
 The deeper protocol surface lives in
 [DevTools Internals](devtools-internals.md). The
-[`docs/contributing/devtools.md`](../contributing/devtools.md) guide is
+[`docs/contributing/devtools.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/devtools.md) guide is
 the operational reference (how to plug it into Claude Desktop / VS Code).
 
 ## VS Code Panel
@@ -331,7 +331,7 @@ to a dozen flags without a config UI.
 The same preview-mode plumbing the doc pipeline uses is available to
 your own app: pass `preview: true` to `ReactorApp.Run` and the doc-
 pipeline screenshot harness can capture the window. See
-[`docs/contributing/doc-pipeline.md`](../contributing/doc-pipeline.md)
+[`docs/contributing/doc-pipeline.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/doc-pipeline.md)
 for the harness contract. This is how every page in the docset gets
 its screenshots automatically without an author launching the app by
 hand.

@@ -67,7 +67,7 @@ Element detail = selected is null
 return HStack(0, list, detail);
 ```
 
-![Master-detail layout](images/recipe-master-detail/layout.png)
+![Master-detail layout](../images/recipe-master-detail/layout.png)
 
 The list is a `VStack` of full-width buttons; the selected row gets a
 distinct background. The detail pane is conditional — `selected is null`

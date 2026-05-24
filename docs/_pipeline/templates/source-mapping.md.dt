@@ -29,7 +29,7 @@ how the design layers on top of it.
 > **Status.** Per-element source tagging (`Element.Source`,
 > `SourceInfo.LocationProperty`) is **designed but not implemented**.
 > The reference for the design is
-> [spec 010](../specs/010-source-mapping-design.md). This page treats
+> [spec 010](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/010-source-mapping-design.md). This page treats
 > it as the next-step plan, not current behavior. Component-name
 > attribution via ETW is shipping today and is documented below.
 
@@ -145,4 +145,4 @@ parallel attribution scheme; track the spec.
 - **[Devtools internals](devtools-internals.md)** — Where the preview inspector will consume `SourceLocation` once it lands.
 - **[Perf instrumentation](perf-instrumentation.md)** — Same ETW pipeline, focused on the timing axis.
 - **[Architecture overview](architecture-overview.md)** — How the render-loop produces the events documented here.
-- **[Spec 010 — Source mapping design](../specs/010-source-mapping-design.md)** — The full design reference.
+- **[Spec 010 — Source mapping design](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/010-source-mapping-design.md)** — The full design reference.

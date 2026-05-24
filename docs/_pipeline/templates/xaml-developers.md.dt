@@ -209,7 +209,7 @@ property-init code continues to compile:
 The fluent drops the `On` because C# binds `el.OnClick(arg)` to
 delegate-as-property invocation (`Action?.Invoke(arg)`) and never falls back
 to extension methods — see
-[spec 039](../specs/039-property-and-event-scrub.md) §0.1 for the discovery
+[spec 039](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-property-and-event-scrub.md) §0.1 for the discovery
 and the naming decision. Passing `null` to any of these fluents clears a
 previously-set handler.
 

@@ -24,10 +24,15 @@ internal static partial class DocAssembler
         Dictionary<string, SnippetExtractor.Snippet> snippets,
         Dictionary<string, ScreenshotInfo> screenshots,
         out List<string> errors,
-        out List<string> warnings)
+        out List<string> warnings,
+        string? topicId = null)
     {
         var errs = new List<string>();
         var warns = new List<string>();
+        // Topics whose id contains '/' (e.g. "recipes/login") emit to a
+        // subdirectory; image refs need "../" * depth to reach docs/guide/images.
+        var depth = topicId is null ? 0 : topicId.Count(c => c == '/');
+        var imagePrefix = depth == 0 ? "" : string.Concat(Enumerable.Repeat("../", depth));
         var output = body;
 
         // Replace snippet directives with extracted code
@@ -75,7 +80,7 @@ internal static partial class DocAssembler
                 ? $"{id}-thumb"
                 : id;
 
-            return $"![{altText}](images/{topic}/{fileBase}.{format})";
+            return $"![{altText}]({imagePrefix}images/{topic}/{fileBase}.{format})";
         });
 
         errors = errs;

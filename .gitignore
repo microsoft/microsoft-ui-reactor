@@ -238,3 +238,6 @@ tests/stress_perf/baselines/**/per-rep.csv
 # output, both regenerated on every build.
 tests/stress_perf_rn/**/Bundle/
 tests/stress_perf_rn/**/Generated Files/
+
+# MkDocs build output
+/site/

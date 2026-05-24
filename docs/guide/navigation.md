@@ -587,7 +587,7 @@ class FrameEventsDemo : Component
 The underlying init properties (`OnNavigating`, `OnNavigated`,
 `OnNavigationFailed`) are still available for record-construction syntax.
 The fluent extensions drop the leading `On` — see
-[spec 039](../specs/039-property-and-event-scrub.md) §0.1 for the C# naming
+[spec 039](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-property-and-event-scrub.md) §0.1 for the C# naming
 constraint that drove that convention.
 
 ## NavigationView.SelectedTagChanged

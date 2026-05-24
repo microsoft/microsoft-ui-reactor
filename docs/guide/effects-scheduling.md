@@ -20,7 +20,7 @@ This page is about when [`UseEffect`](hooks.md) fires and why.
 Surface-level usage is on the [Effects](effects.md) page; the
 async-resource pipeline — `UseResource`, `UseInfiniteResource`,
 `Pending`, `QueryCache` — has its own deep walk in the
-[async-system reference](../reference/async-system.md). What
+[async-system reference](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/async-system.md). What
 follows is the render-loop view of the same callbacks.
 
 ## The render → commit → flush sequence
@@ -156,7 +156,7 @@ public sealed class PendingScope
 
 `PendingScope` is one place the cleanup contract is load-bearing. A
 `UseResource` hook registers its token with the nearest ancestor
-[`Pending`](async-resources-cookbook.md) scope at mount, updates
+[`Pending`](async-resources.md) scope at mount, updates
 loading state through its lifecycle, and unregisters in cleanup.
 Skip the unregister and the `Pending` fallback never clears — the
 fallback subtree stays rendered after the resource resolves because
@@ -203,7 +203,7 @@ public sealed class QueryCache : IDisposable
 The async-resource hooks (`UseResource`, `UseInfiniteResource`,
 `UseMutation`) wrap this pattern correctly — they own the cancellation
 token, marshal completions back to the UI thread, and clean up their
-[`QueryCache`](async-resources-cookbook.md) subscription on unmount.
+[`QueryCache`](async-resources.md) subscription on unmount.
 Reach for them before writing async-effect glue by hand. When you do
 need a raw `UseEffect` for an async operation, the cleanup function
 is your only chance to cancel the in-flight task — capture a
@@ -361,7 +361,7 @@ the next render leaks the resource.
 **Don't await directly in the lambda.** `UseEffect(async () => ...)`
 detaches from the flush ordering; capture a `CancellationTokenSource`,
 kick off a `Task.Run`, and cancel in cleanup. Or use
-[`UseResource`](async-resources-cookbook.md), which already does this.
+[`UseResource`](async-resources.md), which already does this.
 
 **Treat the dep array as a value-equality contract.** Records,
 primitives, and stable setter identities are safe. Freshly-allocated
@@ -377,6 +377,6 @@ before my body did?" question.
 
 - **[Effects](effects.md)** — Previous: the surface lifecycle of `UseEffect`.
 - **[Reconciliation](reconciliation.md)** — Next: the commit phase that flush runs after.
-- **[Async resources](async-resources-cookbook.md)** — Hooks built on top of this scheduling.
-- **[async-system reference](../reference/async-system.md)** — Deep walk through cache, refcount, and revalidation.
+- **[Async resources](async-resources.md)** — Hooks built on top of this scheduling.
+- **[async-system reference](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/async-system.md)** — Deep walk through cache, refcount, and revalidation.
 - **[Threading and dispatch](threading-and-dispatch.md)** — Why effect bodies always run on the UI thread.

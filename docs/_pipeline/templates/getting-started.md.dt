@@ -34,7 +34,7 @@ the rest of the docset elaborates.
 > signed NuGet package or a one-click installer. Until those land you build the
 > framework, the `mur` CLI, and the project template from source. The steps
 > below take ~3 minutes and only need to be run once per machine. The signed
-> distribution is tracked in [spec 022](../specs/022-packaging-and-distribution.md).
+> distribution is tracked in [spec 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md).
 
 Reactor is a declarative UI framework for building native Windows apps in pure C#.
 No XAML, no data binding, no view models. You describe your UI as a function of
@@ -96,7 +96,7 @@ New-Item -ItemType SymbolicLink `
 > **Already have a signed package?** Skip steps 1–4. Reference the published
 > `Microsoft.UI.Reactor` package directly and run the consumer-side
 > `install-skill-kit.ps1` shipped in the release archive (covered in [spec
-> 022](../specs/022-packaging-and-distribution.md) §4.4). Until that release
+> 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md) §4.4). Until that release
 > ships, the steps above are the supported path.
 
 <!-- ai:caveat -->

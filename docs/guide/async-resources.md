@@ -15,7 +15,7 @@ unmount, shared caching across siblings, and stale-while-revalidate by default.
 | `PendingFactory.Pending` | Hold a fallback in place until every nested resource leaves `Loading` |
 
 For the full state-machine reference, see
-[async-system.md](../reference/async-system.md). This page is task-oriented:
+[async-system.md](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/async-system.md). This page is task-oriented:
 each section is a recipe you can copy.
 
 ## Porting UseEffect + UseState → UseResource

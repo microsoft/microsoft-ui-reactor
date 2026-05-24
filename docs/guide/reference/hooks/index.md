@@ -23,5 +23,5 @@ Discussion, Examples, Caveats, and See Also.
 > **Heads up.** This index is one of the few hand-authored files
 > under `docs/guide/reference/` — the per-member pages around it are
 > compiler output and should not be hand-edited. See
-> [spec 041 §10.4](../../../specs/041-docs-comprehensive-uplift.md)
+> [spec 041 §10.4](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/041-docs-comprehensive-uplift.md)
 > for the full rationale.

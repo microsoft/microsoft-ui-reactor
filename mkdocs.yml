@@ -1,0 +1,153 @@
+site_name: Microsoft.UI.Reactor
+site_description: Declarative UI framework for native Windows desktop apps in pure C#.
+site_url: https://microsoft.github.io/microsoft-ui-reactor/
+repo_url: https://github.com/microsoft/microsoft-ui-reactor
+repo_name: microsoft/microsoft-ui-reactor
+edit_uri: edit/main/docs/guide/
+
+docs_dir: docs/guide
+site_dir: site
+
+# README.md is emitted by the docs compiler alongside index.md so GitHub's
+# directory browser renders the landing page when browsing docs/guide/ on
+# the source repo. MkDocs uses index.md; exclude README.md to avoid a
+# duplicate /readme/ route.
+exclude_docs: |
+  README.md
+  readme.md
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+validation:
+  nav:
+    omitted_files: ignore
+    not_found: warn
+  links:
+    not_found: warn
+    absolute_links: ignore
+    unrecognized_links: ignore
+
+nav:
+  - Home: index.md
+  - Get Started:
+    - Getting Started: getting-started.md
+    - Thinking in Reactor: thinking-in-reactor.md
+    - Reactor for XAML Developers: xaml-developers.md
+    - Reactor vs XAML: reactor-vs-xaml.md
+  - Learn the Framework:
+    - Components: components.md
+    - Hooks: hooks.md
+    - Effects and Lifecycle: effects.md
+    - Context: context.md
+    - Commanding: commanding.md
+    - Advanced Patterns: advanced.md
+  - UI Surface:
+    - Layout: layout.md
+    - Flex Layout: flex-layout.md
+    - Styling and Theming: styling.md
+    - Animation: animation.md
+    - Input and Gestures: input-and-gestures.md
+  - Controls:
+    - Controls Catalog: controls.md
+    - Forms and Input: forms.md
+    - Collections: collections.md
+    - Text and Media: text-and-media.md
+    - Status and Info: status-and-info.md
+    - Dialogs and Flyouts: dialogs-and-flyouts.md
+    - Data System: data-system.md
+    - Charting: charting.md
+  - App Architecture:
+    - Navigation: navigation.md
+    - Windows: windows.md
+    - Docking Windows: docking.md
+    - Async Resources: async-resources.md
+    - Persistence: persistence.md
+    - Localization: localization.md
+    - Accessibility: accessibility.md
+  - Patterns & Recipes:
+    - Recipes: recipes/index.md
+    - Command Palette: recipes/command-palette.md
+    - Drag Reorder: recipes/drag-reorder.md
+    - Login: recipes/login.md
+    - Master Detail: recipes/master-detail.md
+    - Modal Dialog: recipes/modal-dialog.md
+    - Multi-step Form: recipes/multi-step-form.md
+    - Paginated List: recipes/paginated-list.md
+    - Search with Suggestions: recipes/search-with-suggestions.md
+    - Settings Page: recipes/settings-page.md
+    - Cheat Sheet: cheat-sheet.md
+    - Rules of Reactor: rules-of-reactor.md
+    - Theming Tokens: theming-tokens.md
+  - Tooling & Process:
+    - Dev Tooling: dev-tooling.md
+    - Testing: testing.md
+    - Performance: performance.md
+    - Packaging: packaging.md
+    - Diagnostics: diagnostics.md
+  - Interop:
+    - WinForms Interop: winforms-interop.md
+    - WPF Interop: wpf-interop.md
+  - Under the Hood:
+    - Architecture Overview: architecture-overview.md
+    - Reactivity Model: reactivity-model.md
+    - Hooks Internals: hooks-internals.md
+    - Reconciliation: reconciliation.md
+    - Element Pool: element-pool.md
+    - Effects Scheduling: effects-scheduling.md
+    - Threading and Dispatch: threading-and-dispatch.md
+    - Source Mapping: source-mapping.md
+    - Modifier System: modifier-system.md
+    - Analyzer Architecture: analyzer-architecture.md
+    - DevTools Internals: devtools-internals.md
+    - Animation Pipeline: animation-pipeline.md
+    - Focus and Input Internals: focus-and-input-internals.md
+    - Perf Instrumentation: perf-instrumentation.md
+  - API Reference:
+    - Hooks: reference/hooks/index.md
