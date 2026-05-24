@@ -30,10 +30,15 @@ internal static class AsyncResourceFramerateFixtures
         {
             // Drain any unobserved tasks that earlier fixtures finalized but whose
             // events haven't fired yet — otherwise the test "inherits" unrelated
-            // noise and flakes.
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            // noise and flakes. Marshal off the UI dispatcher: a finalizer that
+            // needs to release a UI-thread-affine RCW would deadlock if the
+            // dispatcher were blocked inside WaitForPendingFinalizers.
+            await Task.Run(() =>
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            });
 
             int unobserved = 0;
             EventHandler<UnobservedTaskExceptionEventArgs> handler = (_, e) =>
@@ -120,9 +125,12 @@ internal static class AsyncResourceFramerateFixtures
                 // cancelled via UseEffect teardown before we drain for unobserved exceptions.
                 host.Dispose();
                 await Harness.Render();
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
+                await Task.Run(() =>
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+                });
                 await Harness.Render();
                 H.Check($"DepsThrashing_NoUnobserved (got {unobserved})", unobserved == 0);
             }
@@ -302,9 +310,12 @@ internal static class AsyncResourceFramerateFixtures
     {
         public override async Task RunAsync()
         {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            await Task.Run(() =>
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            });
 
             int unobserved = 0;
             EventHandler<UnobservedTaskExceptionEventArgs> handler = (_, e) =>
@@ -345,9 +356,12 @@ internal static class AsyncResourceFramerateFixtures
                 // Final unmount and let any cancellation callbacks drain.
                 setVisible!(false);
                 for (int i = 0; i < 4; i++) await Harness.Render();
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
+                await Task.Run(() =>
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+                });
                 await Harness.Render();
 
                 // Every mount should have kicked off a fetch. Every one must be cancelled
@@ -405,9 +419,12 @@ internal static class AsyncResourceFramerateFixtures
     {
         public override async Task RunAsync()
         {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            await Task.Run(() =>
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            });
 
             int unobserved = 0;
             EventHandler<UnobservedTaskExceptionEventArgs> handler = (_, e) =>
@@ -531,9 +548,12 @@ internal static class AsyncResourceFramerateFixtures
                     finalInRange);
 
                 // Invariant 7: no unobserved exceptions leaked from any pending mutator.
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
+                await Task.Run(() =>
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+                });
                 await Harness.Render();
                 H.Check($"DataGridEditMutation_NoUnobserved (got {unobserved})", unobserved == 0);
             }

@@ -306,7 +306,7 @@ internal static class DataGridParityFixtures
                 sv.ChangeView(null, 0, null, disableAnimation: true);
                 await Harness.Render(600);
 
-                GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+                await Task.Run(() => { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); });
 
                 H.Check("HookPaging_Framerate_FinalData",
                     H.FindTextContaining("Emp-") is not null);

@@ -181,9 +181,12 @@ internal static class AsyncInfiniteResourceFramerateFixtures
     {
         public override async Task RunAsync()
         {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            await Task.Run(() =>
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            });
 
             int unobserved = 0;
             EventHandler<UnobservedTaskExceptionEventArgs> handler = (_, e) =>

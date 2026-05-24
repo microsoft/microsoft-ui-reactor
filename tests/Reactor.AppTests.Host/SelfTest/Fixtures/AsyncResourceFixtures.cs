@@ -286,9 +286,12 @@ internal static class AsyncResourceFixtures
                 // Give any lingering continuations one more frame to settle and force a GC
                 // to trigger finalization of any tasks that might throw unobserved.
                 await Harness.Render();
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
+                await Task.Run(() =>
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+                });
                 await Harness.Render();
 
                 H.Check($"AsyncResource_UnmountDuringFetch_NoUnobserved (got {unobserved})",

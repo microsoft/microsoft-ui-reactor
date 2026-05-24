@@ -84,9 +84,13 @@ internal static class AsyncInfiniteResourceFixtures
                 res!.TotalCount == 200);
 
             // Pull next 4 pages by walking ItemAt (simulating virtualized scroll).
+            // Three pumps per page so the 10ms Task.Delay in FetchPageAsync plus
+            // the Apply continuation reliably lands before the next ItemAt — the
+            // 2-pump variant flaked under CI load (got 4 / expected >= 5).
             for (int i = 0; i < 5; i++)
             {
                 _ = res!.ItemAt(25 * i + 12);
+                await Harness.Render();
                 await Harness.Render();
                 await Harness.Render();
             }

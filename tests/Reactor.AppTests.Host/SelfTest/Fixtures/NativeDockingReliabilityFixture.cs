@@ -543,10 +543,15 @@ internal static class NativeDockingReliabilityFixtures
             host.Mount(_ => TextBlock("warmup-done"));
             await Harness.Render();
 
-            // Force GC so the baseline reflects steady state.
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            // Force GC so the baseline reflects steady state. Marshal off
+            // the UI dispatcher to avoid a finalizer-deadlock on UI-thread-
+            // affine RCWs.
+            await Task.Run(() =>
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            });
 
             long baseline = GC.GetAllocatedBytesForCurrentThread();
 
@@ -568,9 +573,12 @@ internal static class NativeDockingReliabilityFixtures
                 await Harness.Render();
             }
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            await Task.Run(() =>
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            });
             long after = GC.GetAllocatedBytesForCurrentThread();
             long delta = after - baseline;
 
