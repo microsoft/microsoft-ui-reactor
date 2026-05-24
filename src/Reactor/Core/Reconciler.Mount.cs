@@ -375,17 +375,17 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// Wires Button.Click trampoline only when the element has a handler AND
-    /// the control hasn't been wired yet. The CWT flag survives pool round-
-    /// trips (Button is a poolable type, and ElementPool intentionally retains
-    /// event subscriptions across rent/return cycles).
+    /// the control hasn't been wired yet. Dedupe key is the EventHandlerState
+    /// trampoline reference, attached on ReactorAttached.StateProperty (native
+    /// DO identity), so two managed RCWs over the same native Button share one
+    /// trampoline. Survives pool round-trips for the same reason.
     /// </summary>
     internal static void EnsureButtonWiring(WinUI.Button button, ButtonElement btn)
     {
         if (btn.OnClick is null) return;
-        var flags = GetPoolableWireFlags(button);
-        if (flags.ButtonClick) return;
-        flags.ButtonClick = true;
-        button.Click += (s, _) =>
+        var state = GetOrCreateEventState(button);
+        if (state.ButtonClickTrampoline is not null) return;
+        state.ButtonClickTrampoline = (s, _) =>
         {
             if (GetElementTag((UIElement)s!) is ButtonElement live)
             {
@@ -393,6 +393,7 @@ public sealed partial class Reconciler
                 live.OnClick?.Invoke();
             }
         };
+        button.Click += state.ButtonClickTrampoline;
     }
 
     private WinUI.HyperlinkButton MountHyperlinkButton(HyperlinkButtonElement hlBtn)
@@ -521,16 +522,16 @@ public sealed partial class Reconciler
     /// Wires TextBox's TextChanged/SelectionChanged trampolines only when the
     /// element has a corresponding handler AND the control hasn't been wired
     /// yet. Called from both Mount (fresh or pooled) and Update (null→non-null
-    /// transition). The CWT flags survive pool round-trips.
+    /// transition). Dedupe through EventHandlerState (native-DO-keyed) so
+    /// pool round-trips and RCW projection both share one trampoline.
     /// </summary>
     internal static void EnsureTextBoxWiring(TextBox textBox, TextBoxElement textBoxElement, Action requestRerender)
     {
         if (textBoxElement.OnChanged is null && textBoxElement.OnSelectionChanged is null) return;
-        var flags = GetPoolableWireFlags(textBox);
-        if (textBoxElement.OnChanged is not null && !flags.TextBoxTextChanged)
+        var state = GetOrCreateEventState(textBox);
+        if (textBoxElement.OnChanged is not null && state.TextBoxTextChangedTrampoline is null)
         {
-            flags.TextBoxTextChanged = true;
-            textBox.TextChanged += (_, _) =>
+            state.TextBoxTextChangedTrampoline = (_, _) =>
             {
                 if (ChangeEchoSuppressor.ShouldSuppress(textBox)) return;
                 var tag = GetElementTag(textBox) as TextBoxElement;
@@ -542,11 +543,14 @@ public sealed partial class Reconciler
                 if (tag?.OnChanged is not null)
                     requestRerender();
             };
+            textBox.TextChanged += state.TextBoxTextChangedTrampoline;
         }
-        if (textBoxElement.OnSelectionChanged is not null && !flags.TextBoxSelectionChanged)
+        if (textBoxElement.OnSelectionChanged is not null && state.TextBoxSelectionChangedTrampoline is null)
         {
-            flags.TextBoxSelectionChanged = true;
-            textBox.SelectionChanged += (_, _) => (GetElementTag(textBox) as TextBoxElement)?.OnSelectionChanged?.Invoke(textBox.SelectedText, textBox.SelectionStart, textBox.SelectionLength);
+            state.TextBoxSelectionChangedTrampoline = (_, _) =>
+                (GetElementTag(textBox) as TextBoxElement)?.OnSelectionChanged?.Invoke(
+                    textBox.SelectedText, textBox.SelectionStart, textBox.SelectionLength);
+            textBox.SelectionChanged += state.TextBoxSelectionChangedTrampoline;
         }
     }
 
@@ -1035,21 +1039,22 @@ public sealed partial class Reconciler
     /// Wires ImageOpened/ImageFailed trampolines once per pooled Image. The
     /// handler resolves the live element via GetElementTag so a later
     /// record-with that attaches a handler picks up without re-subscribing.
+    /// Dedupe through EventHandlerState (native-DO-keyed).
     /// </summary>
     internal static void EnsureImageWiring(WinUI.Image image)
     {
-        var flags = GetPoolableWireFlags(image);
-        if (!flags.ImageOpened)
+        var state = GetOrCreateEventState(image);
+        if (state.ImageOpenedTrampoline is null)
         {
-            flags.ImageOpened = true;
-            image.ImageOpened += (s, _) =>
+            state.ImageOpenedTrampoline = (s, _) =>
                 (GetElementTag((UIElement)s!) as ImageElement)?.OnImageOpened?.Invoke();
+            image.ImageOpened += state.ImageOpenedTrampoline;
         }
-        if (!flags.ImageFailed)
+        if (state.ImageFailedTrampoline is null)
         {
-            flags.ImageFailed = true;
-            image.ImageFailed += (s, args) =>
+            state.ImageFailedTrampoline = (s, args) =>
                 (GetElementTag((UIElement)s!) as ImageElement)?.OnImageFailed?.Invoke(args.ErrorMessage);
+            image.ImageFailed += state.ImageFailedTrampoline;
         }
     }
 
@@ -1224,15 +1229,16 @@ public sealed partial class Reconciler
     {
         // Pooled control: wire the trampoline exactly once. The handler reads
         // the live element via GetElementTag so a later record-with that
-        // attaches OnViewChanged picks up without re-subscribing.
-        var flags = GetPoolableWireFlags(sv);
-        if (flags.ScrollViewerViewChanged) return;
-        flags.ScrollViewerViewChanged = true;
-        sv.ViewChanged += (s, e) =>
+        // attaches OnViewChanged picks up without re-subscribing. Dedupe
+        // through EventHandlerState (native-DO-keyed).
+        var state = GetOrCreateEventState(sv);
+        if (state.ScrollViewerViewChangedTrampoline is not null) return;
+        state.ScrollViewerViewChangedTrampoline = (s, e) =>
         {
             if (GetElementTag((WinUI.ScrollViewer)s!) is ScrollViewerElement el && el.OnViewChanged is { } h)
                 h(e);
         };
+        sv.ViewChanged += state.ScrollViewerViewChangedTrampoline;
     }
 
     private WinUI.ScrollView MountScrollView(ScrollViewElement scroll, Action requestRerender)
@@ -1259,14 +1265,14 @@ public sealed partial class Reconciler
 
     private static void EnsureScrollViewViewChangedWired(WinUI.ScrollView sv)
     {
-        var flags = GetPoolableWireFlags(sv);
-        if (flags.ScrollViewViewChanged) return;
-        flags.ScrollViewViewChanged = true;
-        sv.ViewChanged += (s, _) =>
+        var state = GetOrCreateEventState(sv);
+        if (state.ScrollViewViewChangedTrampoline is not null) return;
+        state.ScrollViewViewChangedTrampoline = (s, _) =>
         {
             if (GetElementTag((WinUI.ScrollView)s!) is ScrollViewElement el && el.OnViewChanged is { } h)
                 h();
         };
+        sv.ViewChanged += state.ScrollViewViewChangedTrampoline;
     }
 
     private WinUI.Border MountBorder(BorderElement border, Action requestRerender)

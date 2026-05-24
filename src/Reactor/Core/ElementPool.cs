@@ -204,7 +204,7 @@ public sealed class ElementPool : IDisposable
         // pool return so a pooled control can't fire the previous component's
         // captured rerender closure into the next mount. The underlying
         // trampoline subscription stays attached — that's intentional, see
-        // the comment block in Reconciler.cs above PoolableWireFlags.
+        // the comment block in Reconciler.cs above EventHandlerState.
         Reconciler.ClearCurrentEventHandlers(fe);
         fe.Tag = null;
         fe.Margin = new Thickness(0);

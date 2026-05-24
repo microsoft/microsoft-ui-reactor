@@ -439,36 +439,17 @@ public sealed partial class Reconciler : IDisposable
     // intentionally retains WinRT event subscriptions across rent/return (see
     // ElementPool.CleanElement), but clears Tag. So "Tag is null" on rent does
     // NOT mean "unwired" — the control may already have a trampoline attached.
-    // We need a per-control flag that survives pool cycles to avoid double-
-    // subscription.
+    // We need a per-control dedupe key that survives pool cycles to avoid
+    // double-subscription.
     //
-    // Two dedupe schemes coexist:
-    //   - Button.Click and TextBox.TextChanged/SelectionChanged use the CWT
-    //     below, keyed by managed FrameworkElement identity. This is fragile
-    //     when WinRT projection produces a second RCW over the same native
-    //     DependencyObject (each RCW gets its own entry, both pass dedupe,
-    //     trampoline subscribed twice). See issue #114 for the migration.
-    //   - ToggleSwitch.Toggled uses EventHandlerState (attached on
-    //     ReactorAttached.StateProperty), which is keyed by native DO identity
-    //     and so is RCW-stable. New poolable wiring should follow this pattern
-    //     — see EnsureToggleSwitchWiring and the EnsureXxxSubscribed helpers
-    //     for the input events.
-
-    internal sealed class PoolableWireFlags
-    {
-        public bool ButtonClick;
-        public bool TextBoxTextChanged;
-        public bool TextBoxSelectionChanged;
-        public bool ScrollViewerViewChanged;
-        public bool ScrollViewViewChanged;
-        public bool ImageOpened;
-        public bool ImageFailed;
-    }
-
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, PoolableWireFlags> _poolableWireFlags = new();
-
-    internal static PoolableWireFlags GetPoolableWireFlags(FrameworkElement fe) =>
-        _poolableWireFlags.GetValue(fe, static _ => new PoolableWireFlags());
+    // All poolable wiring dedupes through EventHandlerState (attached on
+    // ReactorAttached.StateProperty, which is a DependencyProperty keyed by
+    // native DO identity). Two managed RCWs over the same native DependencyObject
+    // resolve to the same EventHandlerState, so the *Trampoline-is-not-null
+    // check correctly short-circuits. This was previously split between an
+    // unsafe managed-FE-keyed CWT (Button, TextBox, Image, ScrollViewer) and
+    // EventHandlerState (ToggleSwitch); issue #114 unified everything onto
+    // EventHandlerState.
 
     // ════════════════════════════════════════════════════════════════════
     //  Canvas anchor positioning
@@ -2852,6 +2833,16 @@ public sealed partial class Reconciler : IDisposable
         public RoutedEventHandler? LostFocusTrampoline;
         public RoutedEventHandler? ToggleSwitchToggledTrampoline;
         public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? AccessKeyDisplayRequestedTrampoline;
+        // Issue #114 — these former PoolableWireFlags entries are now keyed by native DO
+        // identity through ReactorAttached.StateProperty, so two RCWs over the same control
+        // share one trampoline (no double-subscribe).
+        public RoutedEventHandler? ButtonClickTrampoline;
+        public WinUI.TextChangedEventHandler? TextBoxTextChangedTrampoline;
+        public RoutedEventHandler? TextBoxSelectionChangedTrampoline;
+        public RoutedEventHandler? ImageOpenedTrampoline;
+        public Microsoft.UI.Xaml.ExceptionRoutedEventHandler? ImageFailedTrampoline;
+        public global::System.EventHandler<WinUI.ScrollViewerViewChangedEventArgs>? ScrollViewerViewChangedTrampoline;
+        public global::Windows.Foundation.TypedEventHandler<WinUI.ScrollView, object>? ScrollViewViewChangedTrampoline;
         public bool NumberBoxInnerTextChanged;
 
         /// <summary>
