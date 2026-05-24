@@ -955,6 +955,46 @@ internal static class SelfTestFixtureRegistry
         "NativeDockingMatrix_SplitterReleaseNoVisibleJump",
         "NativeDockingMatrix_IdeLayoutResizeAndContainerResize_NoControlChurn",
         "NativeDockingMatrix_SceneRerenderPreservesDockHostControls",
+
+        // Spec 045 — coverage uplift batch for the docking namespace.
+        // Each fixture targets specific previously-uncovered branches in
+        // Native/DockFloatingWindow, Native/DockFloatingPaneRouter,
+        // Native/DockDropTargetOverlayControl, Native/DockSplitterControl,
+        // Native/DockNavigatorPopup, Native/DockHostLiveAnnouncer,
+        // Native/DockSideStripRenderer, Native/DockTabGroupRenderer, and
+        // Native/DockHostNativeComponent.
+        "FloatCov_OpenWithClampedBounds_FiresLifecycleEvents",
+        "FloatCov_OpenWithDefaultSize_TracksDimensions",
+        "FloatCov_OpenWithoutManager_SkipsPerManagerWiring",
+        "FloatCov_Router_RegisterUnregister_AndEmptyHitTest",
+        "FloatCov_BuildFloatingRoot_ProducesTabbedChrome",
+
+        "OverlayCov_HostMode_EdgesVisible_InnerHidden",
+        "OverlayCov_GroupInnerMode_ModeSwitch_AppliesVisibility",
+        "OverlayCov_NextFocus_AllArrowKeyArmsResolve",
+        "OverlayCov_ComputePreviewBounds_ShapeCorrectPerTarget",
+        "OverlayCov_GetLocalizedName_AllTargetsResolve",
+        "OverlayCov_PreviewBounds_TracksHoveredTarget",
+
+        "SplitterCov_DirectionSwitch_AppliesGeometry",
+        "SplitterCov_SimulatedDrag_FiresResizeDeltaAndRedistributesGrow",
+        "SplitterCov_RaiseResizeDelta_PropagatesEventArgs",
+        "SplitterCov_DragWithoutFlexParent_StillFiresEvent",
+        "SplitterCov_AutomationPeer_ReportsThumbAndClassName",
+
+        "NavCov_ForHost_ReturnsCachedInstance",
+        "NavCov_SeedAndCommit_DeliversSelectedKey",
+        "NavCov_OpenAndAdvance_WrapsSelection",
+        "NavCov_SelectedEntry_NullWhenClosed",
+
+        "MiscCov_LiveAnnouncer_RegisterAnnounceAndFocus",
+        "MiscCov_SideStrip_ComposeVariants_RendersWithoutThrow",
+        "MiscCov_TabRenderer_EdgeCases_RenderWithoutThrow",
+
+        "HostCov_OperationLog_RecordsLifecycleEntries",
+        "HostCov_PinToSide_DrainsIntoSideStrip",
+        "HostCov_AutomationIds_PaneIdsWiredOnDocked",
+        "HostCov_ActiveContentChangedCallback_FiresOnActivate",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1889,6 +1929,40 @@ internal static class SelfTestFixtureRegistry
         "NativeDockingMatrix_SplitterReleaseNoVisibleJump" => new NativeDockingDragDropMatrixFixtures.SplitterReleaseNoVisibleJump(harness),
         "NativeDockingMatrix_IdeLayoutResizeAndContainerResize_NoControlChurn" => new NativeDockingDragDropMatrixFixtures.IdeLayoutResizeAndContainerResize_NoControlChurn(harness),
         "NativeDockingMatrix_SceneRerenderPreservesDockHostControls" => new NativeDockingDragDropMatrixFixtures.SceneRerenderPreservesDockHostControls(harness),
+
+        // Spec 045 — coverage uplift fixtures (Native docking layer).
+        "FloatCov_OpenWithClampedBounds_FiresLifecycleEvents" => new NativeDockingCoverageFloatingFixtures.FloatingWindow_OpenWithClampedBounds_FiresLifecycleEvents(harness),
+        "FloatCov_OpenWithDefaultSize_TracksDimensions" => new NativeDockingCoverageFloatingFixtures.FloatingWindow_OpenWithDefaultSize_TracksDimensions(harness),
+        "FloatCov_OpenWithoutManager_SkipsPerManagerWiring" => new NativeDockingCoverageFloatingFixtures.FloatingWindow_OpenWithoutManager_SkipsPerManagerWiring(harness),
+        "FloatCov_Router_RegisterUnregister_AndEmptyHitTest" => new NativeDockingCoverageFloatingFixtures.FloatingRouter_RegisterUnregister_AndEmptyHitTest(harness),
+        "FloatCov_BuildFloatingRoot_ProducesTabbedChrome" => new NativeDockingCoverageFloatingFixtures.FloatingWindow_BuildFloatingRoot_ProducesTabbedChrome(harness),
+
+        "OverlayCov_HostMode_EdgesVisible_InnerHidden" => new NativeDockingCoverageOverlayFixtures.Overlay_HostMode_EdgesVisible_InnerHidden(harness),
+        "OverlayCov_GroupInnerMode_ModeSwitch_AppliesVisibility" => new NativeDockingCoverageOverlayFixtures.Overlay_GroupInnerMode_ModeSwitch_AppliesVisibility(harness),
+        "OverlayCov_NextFocus_AllArrowKeyArmsResolve" => new NativeDockingCoverageOverlayFixtures.Overlay_NextFocus_AllArrowKeyArmsResolve(harness),
+        "OverlayCov_ComputePreviewBounds_ShapeCorrectPerTarget" => new NativeDockingCoverageOverlayFixtures.Overlay_ComputePreviewBounds_ShapeCorrectPerTarget(harness),
+        "OverlayCov_GetLocalizedName_AllTargetsResolve" => new NativeDockingCoverageOverlayFixtures.Overlay_GetLocalizedName_AllTargetsResolve(harness),
+        "OverlayCov_PreviewBounds_TracksHoveredTarget" => new NativeDockingCoverageOverlayFixtures.Overlay_PreviewBounds_TracksHoveredTarget(harness),
+
+        "SplitterCov_DirectionSwitch_AppliesGeometry" => new NativeDockingCoverageSplitterFixtures.Splitter_DirectionSwitch_AppliesGeometry(harness),
+        "SplitterCov_SimulatedDrag_FiresResizeDeltaAndRedistributesGrow" => new NativeDockingCoverageSplitterFixtures.Splitter_SimulatedDrag_FiresResizeDeltaAndRedistributesGrow(harness),
+        "SplitterCov_RaiseResizeDelta_PropagatesEventArgs" => new NativeDockingCoverageSplitterFixtures.Splitter_RaiseResizeDelta_PropagatesEventArgs(harness),
+        "SplitterCov_DragWithoutFlexParent_StillFiresEvent" => new NativeDockingCoverageSplitterFixtures.Splitter_DragWithoutFlexParent_StillFiresEvent(harness),
+        "SplitterCov_AutomationPeer_ReportsThumbAndClassName" => new NativeDockingCoverageSplitterFixtures.Splitter_AutomationPeer_ReportsThumbAndClassName(harness),
+
+        "NavCov_ForHost_ReturnsCachedInstance" => new NativeDockingCoverageNavigatorFixtures.Navigator_ForHost_ReturnsCachedInstance(harness),
+        "NavCov_SeedAndCommit_DeliversSelectedKey" => new NativeDockingCoverageNavigatorFixtures.Navigator_SeedAndCommit_DeliversSelectedKey(harness),
+        "NavCov_OpenAndAdvance_WrapsSelection" => new NativeDockingCoverageNavigatorFixtures.Navigator_OpenAndAdvance_WrapsSelection(harness),
+        "NavCov_SelectedEntry_NullWhenClosed" => new NativeDockingCoverageNavigatorFixtures.Navigator_SelectedEntry_NullWhenClosed(harness),
+
+        "MiscCov_LiveAnnouncer_RegisterAnnounceAndFocus" => new NativeDockingCoverageMiscFixtures.LiveAnnouncer_RegisterAnnounceAndFocus(harness),
+        "MiscCov_SideStrip_ComposeVariants_RendersWithoutThrow" => new NativeDockingCoverageMiscFixtures.SideStrip_ComposeVariants_RendersWithoutThrow(harness),
+        "MiscCov_TabRenderer_EdgeCases_RenderWithoutThrow" => new NativeDockingCoverageMiscFixtures.TabRenderer_EdgeCases_RenderWithoutThrow(harness),
+
+        "HostCov_OperationLog_RecordsLifecycleEntries" => new NativeDockingCoverageHostFixtures.Host_OperationLog_RecordsLifecycleEntries(harness),
+        "HostCov_PinToSide_DrainsIntoSideStrip" => new NativeDockingCoverageHostFixtures.Host_PinToSide_DrainsIntoSideStrip(harness),
+        "HostCov_AutomationIds_PaneIdsWiredOnDocked" => new NativeDockingCoverageHostFixtures.Host_AutomationIds_PaneIdsWiredOnDocked(harness),
+        "HostCov_ActiveContentChangedCallback_FiresOnActivate" => new NativeDockingCoverageHostFixtures.Host_ActiveContentChangedCallback_FiresOnActivate(harness),
 
         _ => null,
     };
