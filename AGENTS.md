@@ -29,6 +29,8 @@ dotnet test tests/Reactor.AppTests --filter "ClassName=Reactor.AppTests.Tests.Ac
 
 CI runs unit tests + selftests + full solution build on every PR. .NET 10 SDK, `windows-latest` runner.
 
+Full testing guide — tier selection, NativeAOT runs, code coverage — in [`TESTING.md`](TESTING.md).
+
 ## Architecture
 
 ### Virtual DOM model
