@@ -14,7 +14,7 @@ class GettingStartedApp : Component
 
         return VStack(16,
             TextBlock($"Hello, {name}!").FontSize(24).Bold(),
-            TextBox(name, setName, placeholder: "Enter your name").Width(250)
+            TextBox(name, setName, placeholderText: "Enter your name").Width(250)
         ).Padding(24);
     }
 }
@@ -101,8 +101,8 @@ class MultipleStateExample : Component
 
         return VStack(12,
             TextBlock($"Hello, {fullName}!").FontSize(fontSize).Bold(),
-            TextBox(firstName, setFirstName, placeholder: "First name").Width(200),
-            TextBox(lastName, setLastName, placeholder: "Last name").Width(200),
+            TextBox(firstName, setFirstName, placeholderText: "First name").Width(200),
+            TextBox(lastName, setLastName, placeholderText: "Last name").Width(200),
             HStack(8,
                 TextBlock("Font size:"),
                 Slider(fontSize, 10, 40, setFontSize).Width(200),

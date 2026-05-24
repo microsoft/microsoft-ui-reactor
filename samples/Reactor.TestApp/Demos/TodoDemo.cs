@@ -33,7 +33,7 @@ class TodoDemo : Component
 
             // Add new item
             HStack(8,
-                TextBox(newText, setNewText, placeholder: "What needs to be done?").Width(300),
+                TextBox(newText, setNewText, placeholderText: "What needs to be done?").Width(300),
                 Button("Add", () =>
                 {
                     if (!string.IsNullOrWhiteSpace(newText))

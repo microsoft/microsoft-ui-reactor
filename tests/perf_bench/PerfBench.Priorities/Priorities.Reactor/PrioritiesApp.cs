@@ -104,7 +104,7 @@ public class PrioritiesApp : Component
 
                 if (!Opts.Headless)
                     setHudText($"FPS: {_tracker.CurrentFps:F0}  Update: {_tracker.LastUpdateMs:F2}ms  Mem: {_tracker.CurrentMemoryMB}MB");
-            }, placeholder: "Search..."),
+            }, placeholderText: "Search..."),
             ScrollView(VStack(listElements))
         };
 

@@ -70,7 +70,7 @@ class ReadmeShowcase : Component
                     return VStack(8,
                         SubHeading("Interactive greeting"),
                         TextBlock($"Hello, {name}!").FontSize(18),
-                        TextBox(name, setName, placeholder: "Your name")
+                        TextBox(name, setName, placeholderText: "Your name")
                             .Width(250)
                     );
                 }),

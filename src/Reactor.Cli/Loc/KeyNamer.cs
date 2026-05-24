@@ -105,17 +105,17 @@ internal static class KeyNamer
     {
         var context = ls.Context;
 
-        // For modifier contexts like "ToolTip", "Header", "Placeholder", append to value hint
+        // For modifier contexts like "ToolTip", "Header", "PlaceholderText", append to value hint
         if (context.Contains('.'))
         {
-            // Named param: "TextBox.placeholder" -> hint from value + "Placeholder"
+            // Named param: "TextBox.placeholderText" -> hint from value + "PlaceholderText"
             var parts = context.Split('.');
             var suffix = ToPascalCase(parts[^1]);
             var valueHint = GenerateHintFromValue(ls.Value);
             return $"{valueHint}{suffix}";
         }
 
-        if (context is "ToolTip" or "Header" or "Placeholder" or "PaneTitle" or "Subtitle")
+        if (context is "ToolTip" or "Header" or "PlaceholderText" or "PaneTitle" or "Subtitle")
         {
             var valueHint = GenerateHintFromValue(ls.Value);
             return $"{valueHint}{context}";
@@ -165,6 +165,13 @@ internal static class KeyNamer
     private static string ToPascalCase(string word)
     {
         if (string.IsNullOrEmpty(word)) return word;
+        // Preserve internal capitalisation for already-camelCase / PascalCase inputs
+        // (e.g. "placeholderText" → "PlaceholderText", not "Placeholdertext").
+        for (int i = 1; i < word.Length; i++)
+        {
+            if (char.IsUpper(word[i]))
+                return char.ToUpperInvariant(word[0]) + word.Substring(1);
+        }
         return char.ToUpperInvariant(word[0]) + word.Substring(1).ToLowerInvariant();
     }
 

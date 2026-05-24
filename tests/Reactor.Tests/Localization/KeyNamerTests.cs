@@ -139,7 +139,7 @@ public class KeyNamerTests
             {
                 FilePath = "CatalogPage.cs",
                 ClassName = "CatalogPage",
-                Context = "TextBox.placeholder",
+                Context = "TextBox.placeholderText",
                 Value = "Search products...",
                 SpanStart = 100,
                 SpanLength = 20,
@@ -150,6 +150,6 @@ public class KeyNamerTests
 
         Assert.Single(keyed);
         Assert.Equal("Catalog", keyed[0].ReswFileName);
-        Assert.Equal("SearchProductsPlaceholder", keyed[0].Key);
+        Assert.Equal("SearchProductsPlaceholderText", keyed[0].Key);
     }
 }

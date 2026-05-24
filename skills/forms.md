@@ -34,7 +34,7 @@ var (age, setAge) = UseState(0);
 var (agreed, setAgreed) = UseState(false);
 
 return VStack(12,
-    TextBox(name, setName, placeholder: "Name"),
+    TextBox(name, setName, placeholderText: "Name"),
     NumberBox(age, setAge),
     CheckBox("I agree", agreed, setAgreed),
     Button("Submit", onSubmit).IsEnabled(!(string.IsNullOrEmpty(name) || !agreed))
@@ -45,14 +45,14 @@ return VStack(12,
 
 | Factory | Value type | Common modifiers |
 |---------|-----------|------------------|
-| `TextBox(text, setText)` | `string` | `.Placeholder()`, `.MaxLength(n)`, `.NumericInput()`, `.EmailInput()`, `.Changed(handler)` |
-| `PasswordBox(text, setText)` | `string` | `.Placeholder()`, `.MaxLength(n)`, `.PasswordRevealMode()`, `.PasswordChanged(handler)` |
+| `TextBox(text, setText)` | `string` | `.PlaceholderText()`, `.MaxLength(n)`, `.NumericInput()`, `.EmailInput()`, `.Changed(handler)` |
+| `PasswordBox(text, setText)` | `string` | `.PlaceholderText()`, `.MaxLength(n)`, `.PasswordRevealMode()`, `.PasswordChanged(handler)` |
 | `NumberBox(value, setValue)` | `double` | `.Min()`, `.Max()`, `.SmallChange()` |
 | `Slider(value, min, max, setValue)` | `double` | `.StepFrequency()` |
 | `ToggleSwitch(isOn, setIsOn)` | `bool` | `.OnContent()`, `.OffContent()` |
 | `CheckBox(label, isChecked, setIsChecked)` | `bool` | — |
 | `RadioButtons(items, selected, setSelected)` | `int` | `.Header()` |
-| `ComboBox(items, selected, setSelected)` | `object` | `.Placeholder()` |
+| `ComboBox(items, selected, setSelected)` | `object` | `.PlaceholderText()` |
 | `DatePicker(date, setDate)` | `DateTimeOffset` | `.MinYear()`, `.MaxYear()` |
 | `TimePicker(time, setTime)` | `TimeSpan` | `.MinuteIncrement()` |
 | `AutoSuggestBox(text, setText)` | `string` | `.ItemsSource()`, `.OnSuggestionChosen()` |
@@ -68,7 +68,7 @@ var (email, setEmail) = UseState("");
 var isValid = email.Contains('@') && email.Length > 3;
 
 return VStack(12,
-    TextBox(email, setEmail, placeholder: "Email"),
+    TextBox(email, setEmail, placeholderText: "Email"),
     Button("Submit", onSubmit).IsEnabled(isValid)
 );
 ```
@@ -86,12 +86,12 @@ var (name, setName) = UseState("");
 var (email, setEmail) = UseState("");
 
 return VStack(12,
-    TextBox(name, setName, placeholder: "Name")
+    TextBox(name, setName, placeholderText: "Name")
         .Validate(validation, "name",
             Validate.Required("Name is required"),
             Validate.MinLength(2, "Name too short")),
 
-    TextBox(email, setEmail, placeholder: "Email")
+    TextBox(email, setEmail, placeholderText: "Email")
         .Validate(validation, "email",
             Validate.Required("Email is required"),
             Validate.Email("Invalid email")),
@@ -143,7 +143,7 @@ var validation = UseValidationContext();
 var (name, setName) = UseState("");
 
 return FormField("Full Name",
-    TextBox(name, setName, placeholder: "Enter your name")
+    TextBox(name, setName, placeholderText: "Enter your name")
         .Validate(validation, "name", Validate.Required("Required")),
     required: true,
     description: "As it appears on your ID",
@@ -166,7 +166,7 @@ var mask = UseMemo(() => new MaskEngine(MaskPreset.PhoneUS));
 var (phone, setPhone) = UseState("");
 
 return TextBox(phone, v => setPhone(mask.Apply(v)),
-    placeholder: "(555) 555-0123");
+    placeholderText: "(555) 555-0123");
 ```
 
 ### Mask presets
@@ -192,7 +192,7 @@ var (amount, setAmount) = UseState("");
 
 return TextBox(amount,
     v => setAmount(InputFormatter.Currency(symbol: "$").Format(v)),
-    placeholder: "$0.00");
+    placeholderText: "$0.00");
 ```
 
 | Formatter | Effect |

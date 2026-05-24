@@ -256,7 +256,7 @@ sealed class UseFocusSample : Component
             "UseElementFocus: imperative focus via ref",
             "Click the button to imperatively focus the input via ctx.UseElementFocus().",
             VStack(8,
-                TextBox(name, setName, placeholder: "name").Width(280).Ref(inputRef),
+                TextBox(name, setName, placeholderText: "name").Width(280).Ref(inputRef),
                 HStack(8,
                     Button("Focus input", () => requestFocus()),
                     TextBlock("wired via UseElementFocus()").FontFamily("Consolas")

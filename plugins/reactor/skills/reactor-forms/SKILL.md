@@ -31,7 +31,7 @@ var (age, setAge) = UseState(0);
 var (agreed, setAgreed) = UseState(false);
 
 return VStack(12,
-    TextBox(name, setName, placeholder: "Name"),
+    TextBox(name, setName, placeholderText: "Name"),
     NumberBox(age, setAge),
     CheckBox(agreed, setAgreed, label: "I agree"),
     Button("Submit", onSubmit).IsEnabled(!(string.IsNullOrEmpty(name) || !agreed))
@@ -42,26 +42,26 @@ return VStack(12,
 
 | Factory | Value type | Common modifiers |
 |---------|-----------|------------------|
-| `TextBox(value, setValue, placeholder, header)` | `string` | `.Header()`, `.IsReadOnly()`, `.AcceptsReturn()`, `.TextWrapping()`, `.MaxLength(n)`, `.NumericInput()`, `.EmailInput()`, `.Changed(handler)` |
-| `PasswordBox(password, setPassword, placeholder)` | `string` | `.Header(text)`, `.MaxLength(n)`, `.PasswordChanged(handler)` |
-| `NumberBox(value, setValue, placeholder, header)` | `double` | `.Range(min, max)`, `.SpinButtons(...)` |
+| `TextBox(value, setValue, placeholderText, header)` | `string` | `.Header()`, `.IsReadOnly()`, `.AcceptsReturn()`, `.TextWrapping()`, `.MaxLength(n)`, `.NumericInput()`, `.EmailInput()`, `.Changed(handler)` |
+| `PasswordBox(password, setPassword, placeholderText)` | `string` | `.Header(text)`, `.MaxLength(n)`, `.PasswordChanged(handler)` |
+| `NumberBox(value, setValue, placeholderText, header)` | `double` | `.Range(min, max)`, `.SpinButtons(...)` |
 | `Slider(value, min, max, setValue)` | `double` | `.Header()`, `.StepFrequency()` |
 | `ToggleSwitch(isOn, setIsOn, header, onContent, offContent)` | `bool` | `.Header()` |
 | `CheckBox(isChecked, setIsChecked, label)` | `bool` | — |
 | `RadioButtons(items, selected, setSelected, header)` | `int` | `.Set(rb => ...)` |
-| `ComboBox(items, selected, setSelected, placeholder)` | `object` | `.Header()`, `.IsEditable()`, `.Placeholder()` |
+| `ComboBox(items, selected, setSelected, placeholderText)` | `object` | `.Header()`, `.IsEditable()`, `.PlaceholderText()` |
 | `DatePicker(date, setDate, header)` | `DateTimeOffset` | `.Set(dp => ...)` |
 | `TimePicker(time, setTime, header)` | `TimeSpan` | `.Set(tp => ...)` |
-| `AutoSuggestBox(text, setText, placeholder, header)` | `string` | `.Set(asb => ...)` |
+| `AutoSuggestBox(text, setText, placeholderText, header)` | `string` | `.Set(asb => ...)` |
 | `RichEditBox(doc, setDoc, header)` | `string` | `.Set(reb => ...)` |
-| `CalendarDatePicker(date, setDate, placeholder, header)` | `DateTimeOffset?` | `.Set(cdp => ...)` |
+| `CalendarDatePicker(date, setDate, placeholderText, header)` | `DateTimeOffset?` | `.Set(cdp => ...)` |
 
 **Named-input shapes** (Spec 039 §17.3): `.NumericInput()` / `.EmailInput()`
 preconfigure `InputScope` and IME hints so on-screen / soft keyboards open
 in the right mode. Stack them with validators:
 
 ```csharp
-TextBox(email, setEmail, placeholder: "you@example.com")
+TextBox(email, setEmail, placeholderText: "you@example.com")
     .EmailInput()
     .MaxLength(254)
     .Validate("email", email, Validate.Required(), Validate.Email())
@@ -80,7 +80,7 @@ var (email, setEmail) = UseState("");
 var isValid = email.Contains('@') && email.Length > 3;
 
 return VStack(12,
-    TextBox(email, setEmail, placeholder: "Email"),
+    TextBox(email, setEmail, placeholderText: "Email"),
     Button("Submit", onSubmit).IsEnabled(isValid)
 );
 ```
@@ -98,12 +98,12 @@ var (name, setName) = UseState("");
 var (email, setEmail) = UseState("");
 
 return VStack(12,
-    TextBox(name, setName, placeholder: "Name")
+    TextBox(name, setName, placeholderText: "Name")
         .Validate("name", name,
             Validate.Required("Name is required"),
             Validate.MinLength(2, "Name too short")),
 
-    TextBox(email, setEmail, placeholder: "Email")
+    TextBox(email, setEmail, placeholderText: "Email")
         .Validate("email", email,
             Validate.Required("Email is required"),
             Validate.Email("Invalid email")),
@@ -165,7 +165,7 @@ var validation = UseValidationContext();
 var (name, setName) = UseState("");
 
 return FormField(
-    TextBox(name, setName, placeholder: "Enter your name")
+    TextBox(name, setName, placeholderText: "Enter your name")
         .Validate("name", name, Validate.Required("Required")),
     label: "Full Name",
     required: true,
@@ -189,7 +189,7 @@ var mask = UseMemo(() => new MaskEngine(MaskPreset.PhoneUS));
 var (phone, setPhone) = UseState("");
 
 return TextBox(phone, v => setPhone(mask.Apply(v)),
-    placeholder: "(555) 555-0123");
+    placeholderText: "(555) 555-0123");
 ```
 
 ### Mask presets
@@ -215,7 +215,7 @@ var (amount, setAmount) = UseState("");
 
 return TextBox(amount,
     v => setAmount(InputFormatter.Currency(symbol: "$").Format(v)),
-    placeholder: "$0.00");
+    placeholderText: "$0.00");
 ```
 
 | Formatter | Effect |

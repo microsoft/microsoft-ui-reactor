@@ -159,7 +159,7 @@ public class TypedColumnsBehaviorTests
 
         object? captured = null;
         var el = (TextBoxElement)desc.Editor!("https://example.com", v => captured = v);
-        Assert.Equal("https://...", el.Placeholder);
+        Assert.Equal("https://...", el.PlaceholderText);
         el.OnChanged!.Invoke("https://docs.microsoft.com");
         Assert.IsType<string>(captured);
         Assert.Equal("https://docs.microsoft.com", captured);
@@ -385,7 +385,7 @@ public class TypedColumnsBehaviorTests
 
         object? captured = null;
         var el = (TextBoxElement)col.Editor!("https://x", v => captured = v);
-        Assert.Equal("https://...", el.Placeholder);
+        Assert.Equal("https://...", el.PlaceholderText);
         el.OnChanged!.Invoke("partial input that is not a valid uri");
         Assert.IsType<string>(captured);
     }

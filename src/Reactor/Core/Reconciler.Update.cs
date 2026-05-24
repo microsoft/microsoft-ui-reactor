@@ -812,7 +812,7 @@ public sealed partial class Reconciler
                 "Wire up OnChanged to keep state in sync, or this field won't reflect user edits after re-renders.",
                 Truncate(n.Value, 20), Truncate(tb.Text, 20));
         }
-        tb.PlaceholderText = n.Placeholder ?? "";
+        tb.PlaceholderText = n.PlaceholderText ?? "";
         if (n.Header is not null) tb.Header = n.Header;
         else if (o.Header is not null) tb.ClearValue(TextBox.HeaderProperty);
         if (n.IsReadOnly.HasValue) tb.IsReadOnly = n.IsReadOnly.Value;

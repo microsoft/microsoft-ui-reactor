@@ -171,7 +171,7 @@ class TodoApp : Component
     static Element InputRow(string text, Command addCmd, Action<TodoAction> dispatch) =>
         (FlexRow(
             TextBox(text, v => dispatch(new SetNewItemText(v)),
-                      placeholder: "What needs to be done?")
+                      placeholderText: "What needs to be done?")
                 .Flex(grow: 1),
             Button(addCmd).Flex(shrink: 0)
         ) with { AlignItems = FlexAlign.Center, ColumnGap = 12 })

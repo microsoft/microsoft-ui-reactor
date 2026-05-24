@@ -62,7 +62,7 @@ class FormsGroup : Component
         var (volume, setVolume) = UseState(60.0);
 
         return VStack(8,
-            TextBox(name, setName, placeholder: "Name").Width(200),
+            TextBox(name, setName, placeholderText: "Name").Width(200),
             CheckBox(agree, setAgree, label: "I agree"),
             Slider(volume, 0, 100, setVolume).Width(200),
             Button("Submit", () => { })

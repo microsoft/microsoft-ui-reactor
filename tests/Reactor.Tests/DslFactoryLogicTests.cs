@@ -99,7 +99,7 @@ public class DslFactoryLogicTests
     {
         var el = TextBox("val", s => { }, "hint", "Header");
         Assert.Equal("val", el.Value);
-        Assert.Equal("hint", el.Placeholder);
+        Assert.Equal("hint", el.PlaceholderText);
         Assert.Equal("Header", el.Header);
         Assert.NotNull(el.OnChanged);
     }

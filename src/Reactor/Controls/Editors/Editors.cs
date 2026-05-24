@@ -25,11 +25,11 @@ public static class Editors
     // ══════════════════════════════════════════════════════════════
 
     public static Func<object, Action<object>, Element> Text(
-        string? placeholder = null,
+        string? placeholderText = null,
         int? maxLength = null)
         => (value, onChange) =>
         {
-            var el = TextBox((string?)value ?? string.Empty, s => onChange(s), placeholder: placeholder);
+            var el = TextBox((string?)value ?? string.Empty, s => onChange(s), placeholderText: placeholderText);
             return maxLength is { } max
                 ? el.Set(tb => tb.MaxLength = max)
                 : el;
@@ -182,7 +182,7 @@ public static class Editors
                 // Only commit valid Uris; leave the field alone for partial input.
                 if (global::System.Uri.TryCreate(s, UriKind.RelativeOrAbsolute, out var uri))
                     onChange(uri);
-            }, placeholder: "https://...");
+            }, placeholderText: "https://...");
         };
 
     // ══════════════════════════════════════════════════════════════

@@ -34,8 +34,8 @@ class PersistedDemo : Component
         {
             return VStack(12,
                 SubHeading(heading),
-                VStack(4, TextBlock("Name"), TextBox(name, setName, placeholder: "Enter name").Width(220)),
-                VStack(4, TextBlock("Email"), TextBox(email, setEmail, placeholder: "you@example.com").Width(220)),
+                VStack(4, TextBlock("Name"), TextBox(name, setName, placeholderText: "Enter name").Width(220)),
+                VStack(4, TextBlock("Email"), TextBox(email, setEmail, placeholderText: "you@example.com").Width(220)),
                 VStack(4,
                     TextBlock("Color"),
                     HStack(4, colors.Select(c =>

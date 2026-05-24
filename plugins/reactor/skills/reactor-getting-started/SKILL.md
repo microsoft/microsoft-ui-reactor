@@ -192,7 +192,7 @@ Button("Save", onClick: handler).Background(Theme.Accent)     // named-arg form 
 // `onClick` is a Button ctor parameter — NOT a chained `.OnClick(...)` /
 // `.OnTapped(...)`. `.OnTapped` is a gesture event with different input
 // semantics (long-press, touch, pen) and is the wrong fix for click intent.
-TextBox(value, setValue, placeholder: "...")
+TextBox(value, setValue, placeholderText: "...")
 CheckBox(isChecked, onChanged: setChecked, label: "label")
 ToggleSwitch(on, setOn)
 Slider(v, 0, 100, setV)

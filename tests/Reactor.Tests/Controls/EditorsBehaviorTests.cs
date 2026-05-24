@@ -262,9 +262,9 @@ public class EditorsBehaviorTests
     [Fact]
     public void Text_Placeholder_Propagates()
     {
-        var factory = Editors.Text(placeholder: "type here");
+        var factory = Editors.Text(placeholderText: "type here");
         var el = (TextBoxElement)factory("", _ => { });
-        Assert.Equal("type here", el.Placeholder);
+        Assert.Equal("type here", el.PlaceholderText);
     }
 
     [Fact]

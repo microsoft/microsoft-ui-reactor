@@ -116,7 +116,7 @@ Border(dialog).CornerRadius(overlayRadius.TopLeft)");
 
                 // Text inputs
                 TextBlock("Text Input").SemiBold().Foreground(Theme.PrimaryText),
-                TextBox("", placeholder: "Type here...")
+                TextBox("", placeholderText: "Type here...")
                     .Width(280)
                     .CornerRadius(cr.TopLeft),
 
@@ -279,9 +279,9 @@ Border(tipContent)
                     VStack(12,
                         TextBlock("Sign In")
                             .FontSize(16).SemiBold().Foreground(Theme.PrimaryText),
-                        TextBox("", placeholder: "Username")
+                        TextBox("", placeholderText: "Username")
                             .CornerRadius(cr.TopLeft),
-                        TextBox("", placeholder: "Password")
+                        TextBox("", placeholderText: "Password")
                             .CornerRadius(cr.TopLeft),
                         Button("Sign In", () => { })
                             .Background(Theme.Accent)

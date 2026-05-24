@@ -128,9 +128,9 @@ public class ElementTests
     [Fact]
     public void TextBox_Creates_With_Value_And_Placeholder()
     {
-        var el = TextBox("val", placeholder: "hint");
+        var el = TextBox("val", placeholderText: "hint");
         Assert.Equal("val", el.Value);
-        Assert.Equal("hint", el.Placeholder);
+        Assert.Equal("hint", el.PlaceholderText);
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class ElementTests
     [Fact]
     public void ComboBox_Placeholder_Extension()
     {
-        var el = ComboBox(["A"]).Placeholder("Pick one");
+        var el = ComboBox(["A"]).PlaceholderText("Pick one");
         Assert.Equal("Pick one", el.PlaceholderText);
     }
 

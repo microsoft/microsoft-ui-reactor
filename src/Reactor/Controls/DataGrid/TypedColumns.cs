@@ -146,7 +146,7 @@ public static class TypedColumns
         var fieldType = ((FieldDescriptor)builder).FieldType;
         var editor = fieldType == typeof(global::System.Uri)
             ? Editors.Uri()
-            : Editors.Text(placeholder: "https://...");
+            : Editors.Text(placeholderText: "https://...");
         return builder
             .WithEditor(editor)
             .CellRenderer(CellRenderers.Hyperlink(displayTextFormat));

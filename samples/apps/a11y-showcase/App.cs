@@ -99,7 +99,7 @@ sealed class App : Component
 
                     // header: associates the visible label with the input for
                     // screen readers and meets REACTOR_A11Y_003.
-                    TextBox(newTitle, setNewTitle, placeholder: "New task...", header: "New task")
+                    TextBox(newTitle, setNewTitle, placeholderText: "New task...", header: "New task")
                         .Width(280),
 
                     Button(CreateIcon(Symbol.Add), () =>

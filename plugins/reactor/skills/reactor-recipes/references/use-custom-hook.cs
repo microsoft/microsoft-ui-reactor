@@ -81,7 +81,7 @@ class App : Component
         var debouncedQuery = this.UseDebouncedValue(query, delayMs: 300);
 
         return VStack(12,
-            TextBox(query, setQuery, placeholder: "Type to search…"),
+            TextBox(query, setQuery, placeholderText: "Type to search…"),
             TextBlock($"Live: {query}").Opacity(0.7),
             TextBlock($"Debounced (300ms): {debouncedQuery}").Bold()
         ).Padding(24);

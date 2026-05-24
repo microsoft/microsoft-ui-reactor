@@ -22,7 +22,7 @@ public sealed record AutoSuggestElement<T>(
     Action<T?>? OnSelected = null,
     Func<string, CancellationToken, Task<IReadOnlyList<T>>>? Search = null,
     Func<T, string>? DisplayText = null,
-    string? Placeholder = null) : Element
+    string? PlaceholderText = null) : Element
 {
     /// <summary>Debounce delay in milliseconds before triggering search. Default: 300ms.</summary>
     public int DebounceMs { get; init; } = 300;
@@ -50,10 +50,10 @@ public static class AutoSuggestDsl
         Action<T?>? onSelected = null,
         Func<string, CancellationToken, Task<IReadOnlyList<T>>>? search = null,
         Func<T, string>? displayText = null,
-        string? placeholder = null,
+        string? placeholderText = null,
         int debounceMs = 300,
         Func<T, Element>? template = null) =>
-        new(selected, onSelected, search, displayText, placeholder)
+        new(selected, onSelected, search, displayText, placeholderText)
         {
             DebounceMs = debounceMs,
             Template = template

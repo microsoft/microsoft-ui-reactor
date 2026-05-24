@@ -22,7 +22,7 @@ class ControlledInputDemo : Component
 
         return VStack(12,
             SubHeading("Controlled Input"),
-            TextBox(name, setName, placeholder: "Type your name"),
+            TextBox(name, setName, placeholderText: "Type your name"),
             TextBlock($"You typed: {name}").Opacity(0.6)
         ).Padding(24);
     }
@@ -44,7 +44,7 @@ class InputTypesDemo : Component
         var (priority, setPriority) = UseState(0);
 
         return VStack(12,
-            TextBox(text, setText, placeholder: "Email",
+            TextBox(text, setText, placeholderText: "Email",
                 header: "Email"),
             PasswordBox(password, setPassword,
                 placeholderText: "Enter password"),
@@ -78,7 +78,7 @@ class ValidationDemo : Component
 
         return VStack(12,
             SubHeading("Simple Validation"),
-            TextBox(email, setEmail, placeholder: "user@example.com",
+            TextBox(email, setEmail, placeholderText: "user@example.com",
                 header: "Email"),
             When(!string.IsNullOrEmpty(email) && !emailValid, () =>
                 TextBlock("Enter a valid email address")
@@ -113,7 +113,7 @@ class KeepSubmitReachableDemo : Component
         return VStack(12,
             SubHeading("Keeping Submit Reachable"),
             TextBox(email, setEmail, header: "Email",
-                placeholder: "user@example.com"),
+                placeholderText: "user@example.com"),
 
             // .Immediate() switches NumberBox from commit-on-blur to
             // commit-on-keystroke, so validation reacts as the user types.
@@ -143,7 +143,7 @@ class ValidationContextDemo : Component
         return VStack(12,
             SubHeading("Validation Context"),
             TextBox(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); },
-                placeholder: "user@example.com", header: "Email")
+                placeholderText: "user@example.com", header: "Email")
                 .Validate("email", email,
                     Validate.Required(),
                     Validate.Email()),
@@ -212,10 +212,10 @@ class MaskedInputDemo : Component
         return VStack(12,
             SubHeading("Masked Input"),
             TextBox(phoneMask.Apply(phone), v => setPhone(phoneMask.GetRawValue(v)),
-                placeholder: "(___) ___-____", header: "Phone"),
+                placeholderText: "(___) ___-____", header: "Phone"),
             TextBlock($"Raw: {phone}").FontSize(12).Opacity(0.6),
             TextBox(dateMask.Apply(date), v => setDate(dateMask.GetRawValue(v)),
-                placeholder: "__/__/____", header: "Date"),
+                placeholderText: "__/__/____", header: "Date"),
             TextBlock($"Raw: {date}").FontSize(12).Opacity(0.6)
         ).Padding(24);
     }
@@ -237,10 +237,10 @@ class InputFormattersDemo : Component
             SubHeading("Input Formatters"),
             TextBox(currencyFmt.Format(currency, 0).Output,
                 v => setCurrency(currencyFmt.Parse(v)),
-                placeholder: "$0.00", header: "Amount"),
+                placeholderText: "$0.00", header: "Amount"),
             TextBox(upperFmt.Format(upper, 0).Output,
                 v => setUpper(upperFmt.Parse(v)),
-                placeholder: "UPPERCASE", header: "Code")
+                placeholderText: "UPPERCASE", header: "Code")
         ).Padding(24);
     }
 }
@@ -267,7 +267,7 @@ class TextBoxConfigDemo : Component
                 .UrlInput(),
             TextBox(phone, setPhone, header: "Phone")
                 .PhoneInput(),
-            TextBox(search, setSearch, placeholder: "Search…")
+            TextBox(search, setSearch, placeholderText: "Search…")
                 .SearchInput(),
             TextBox(note, setNote, header: "Reference code")
                 .MaxLength(8)

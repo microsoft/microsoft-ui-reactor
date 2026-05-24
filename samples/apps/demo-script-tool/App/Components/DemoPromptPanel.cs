@@ -52,7 +52,7 @@ public sealed class DemoPromptPanel : Component<DemoPromptPanelProps>
         {
             setTitle(v);
             Props.OnTitleChanged(v);
-        }, placeholder: "Demo title (rendered as # heading in demo-script.md)")
+        }, placeholderText: "Demo title (rendered as # heading in demo-script.md)")
             with { AcceptsReturn = false })
             .FontSize(18)
             .FontWeight(Microsoft.UI.Text.FontWeights.SemiBold)
@@ -62,7 +62,7 @@ public sealed class DemoPromptPanel : Component<DemoPromptPanelProps>
         {
             setPrompt(v);
             Props.OnPromptChanged(v);
-        }, placeholder: "Describe the demo: tech stack, single-file vs multi-file, audience level, constraints…")
+        }, placeholderText: "Describe the demo: tech stack, single-file vs multi-file, audience level, constraints…")
             with { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap })
             .MinHeight(96)
             .MaxHeight(220)

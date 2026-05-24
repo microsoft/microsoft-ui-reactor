@@ -25,22 +25,22 @@ internal static class AccessibilityInteractionFixtures
                 .HeadingLevel(AutomationHeadingLevel.Level1)
                 .AutomationId("A11yNav_Title"),
 
-            TextBox("", _ => { }, placeholder: "First")
+            TextBox("", _ => { }, placeholderText: "First")
                 .AutomationName("First field")
                 .TabIndex(1)
                 .AutomationId("A11yNav_Field1"),
 
-            TextBox("", _ => { }, placeholder: "Second")
+            TextBox("", _ => { }, placeholderText: "Second")
                 .AutomationName("Second field")
                 .TabIndex(2)
                 .AutomationId("A11yNav_Field2"),
 
-            TextBox("", _ => { }, placeholder: "Third")
+            TextBox("", _ => { }, placeholderText: "Third")
                 .AutomationName("Third field")
                 .TabIndex(3)
                 .AutomationId("A11yNav_Field3"),
 
-            TextBox("", _ => { }, placeholder: "Fourth")
+            TextBox("", _ => { }, placeholderText: "Fourth")
                 .AutomationName("Fourth field")
                 .TabIndex(4)
                 .AutomationId("A11yNav_Field4"),

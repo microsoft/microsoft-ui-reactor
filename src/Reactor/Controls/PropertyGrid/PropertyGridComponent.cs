@@ -123,7 +123,7 @@ public class PropertyGridComponent : Component<PropertyGridElement>
         if (el.ShowSearch)
         {
             return FlexColumn(
-                TextBox(searchText, setSearchText, placeholder: "Filter properties...")
+                TextBox(searchText, setSearchText, placeholderText: "Filter properties...")
                     .Width(300),
                 content.Flex(grow: 1)
             ) with { RowGap = 8 };

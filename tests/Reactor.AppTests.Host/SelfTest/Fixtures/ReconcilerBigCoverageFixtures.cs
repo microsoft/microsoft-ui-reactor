@@ -146,8 +146,8 @@ internal static class ReconcilerBigCoverageFixtures
                     ? NumberBox(5, header: "wire-nb")
                     : NumberBox(5, onValueChanged: v => nbHits++, header: "wire-nb");
                 Element textBoxInput = phase == 0
-                    ? TextBox("wire-tb-text", placeholder: "tb")
-                    : TextBox("wire-tb-text", onChanged: v => textHits++, placeholder: "tb");
+                    ? TextBox("wire-tb-text", placeholderText: "tb")
+                    : TextBox("wire-tb-text", onChanged: v => textHits++, placeholderText: "tb");
                 Element pw = phase == 0
                     ? PasswordBox("init")
                     : PasswordBox("init", onPasswordChanged: v => pwHits++);

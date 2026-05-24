@@ -318,7 +318,7 @@ public abstract record Element
 
             (TextBoxElement ta, TextBoxElement tb) =>
                 ta.Value == tb.Value
-                && ta.Placeholder == tb.Placeholder
+                && ta.PlaceholderText == tb.PlaceholderText
                 && ta.Header == tb.Header
                 && ta.IsReadOnly == tb.IsReadOnly
                 && ta.AcceptsReturn == tb.AcceptsReturn
@@ -1996,7 +1996,7 @@ public record ToggleSplitButtonElement(string Label, bool IsChecked = false, Act
 public record TextBoxElement(
     string Value,
     Action<string>? OnChanged = null,
-    string? Placeholder = null
+    string? PlaceholderText = null
 ) : Element
 {
     public string? Header { get; init; }

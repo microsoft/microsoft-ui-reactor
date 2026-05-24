@@ -45,9 +45,9 @@ class Wizard : Component
         // <snippet:step1>
         Element StepAccount() => VStack(10,
             SubHeading("Step 1 of 3 — Account"),
-            TextBox(name, setName, placeholder: "Your name",
+            TextBox(name, setName, placeholderText: "Your name",
                 header: "Name").Width(340),
-            TextBox(email, setEmail, placeholder: "you@example.com",
+            TextBox(email, setEmail, placeholderText: "you@example.com",
                 header: "Email").Width(340)
         );
         // </snippet:step1>

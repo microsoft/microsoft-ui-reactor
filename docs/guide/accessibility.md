@@ -56,7 +56,7 @@ class Tier1Demo : Component
             TextBlock("Profile")
                 .FontSize(18).SemiBold()
                 .HeadingLevel(AutomationHeadingLevel.Level2),
-            TextBox("", _ => { }, placeholder: "Display name")
+            TextBox("", _ => { }, placeholderText: "Display name")
                 .AutomationName("Display name")
                 .TabIndex(1)
                 .AccessKey("N"),
@@ -95,7 +95,7 @@ class Tier2Demo : Component
     public override Element Render()
     {
         return VStack(12,
-            TextBox("", _ => { }, placeholder: "Search...")
+            TextBox("", _ => { }, placeholderText: "Search...")
                 .AutomationName("Search products")
                 .HelpText("Type a product name or SKU to filter results")
                 .Width(300),
@@ -196,7 +196,7 @@ class LandmarksDemo : Component
             ).Landmark(AutomationLandmarkType.Main)
              .AutomationName("Main content"),
 
-            TextBox("", _ => { }, placeholder: "Search...")
+            TextBox("", _ => { }, placeholderText: "Search...")
                 .AutomationName("Site search")
                 .Landmark(AutomationLandmarkType.Search)
         ).Padding(24);
@@ -269,7 +269,7 @@ class FocusTrapDemo : Component
                     VStack(12,
                         TextBlock("Modal Dialog").FontSize(18).Bold(),
                         TextBlock("Tab/Shift+Tab stays inside this panel."),
-                        TextBox("", _ => { }, placeholder: "Name")
+                        TextBox("", _ => { }, placeholderText: "Name")
                             .TabIndex(0),
                         Button("Close", () => setShowModal(false))
                             .TabIndex(1)

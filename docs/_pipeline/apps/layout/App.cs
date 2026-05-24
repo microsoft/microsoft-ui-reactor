@@ -40,7 +40,7 @@ class GridDemo : Component
                 columns: [GridSize.Px(120), GridSize.Star(), GridSize.Auto],
                 rows: [GridSize.Auto, GridSize.Auto],
                 TextBlock("Label").Bold().Grid(row: 0, column: 0),
-                TextBox("", _ => { }, placeholder: "Input...")
+                TextBox("", _ => { }, placeholderText: "Input...")
                     .Grid(row: 0, column: 1),
                 Button("Go").Grid(row: 0, column: 2),
                 TextBlock("Status").Grid(row: 1, column: 0),

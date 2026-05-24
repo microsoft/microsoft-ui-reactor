@@ -48,7 +48,7 @@ class DataTemplateDemo : Component
 
             // Filter + add/remove controls
             HStack(12,
-                TextBox(filter, setFilter, placeholder: "Filter animals...").Width(200),
+                TextBox(filter, setFilter, placeholderText: "Filter animals...").Width(200),
                 Button("Add Random", () => updateAnimals(list =>
                 {
                     var id = list.Count + 1;

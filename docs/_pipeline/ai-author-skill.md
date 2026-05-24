@@ -614,7 +614,7 @@ Apply with `.FocusTrap(handle)` modifier on a container element.
 
 **Text:** `Text(s)`, `Heading(s)`, `SubHeading(s)`, `Caption(s)`
 
-**Input:** `TextBox(value, onChange, placeholder?, header?)`,
+**Input:** `TextBox(value, onChange, placeholderText?, header?)`,
 `CheckBox(isChecked, onChange, label?)`, `Button(label, onClick)`,
 `Slider(value, min, max, onChange)`, `ToggleSwitch(isOn, onChange)`,
 `NumberBox(value, onChange)`, `ComboBox(items, selectedIndex, onChange)`,

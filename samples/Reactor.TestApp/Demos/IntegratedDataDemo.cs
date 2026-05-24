@@ -254,7 +254,7 @@ class IntegratedDataDemo : Microsoft.UI.Reactor.Core.Component
                     var nameEditor = TextBox(selectedItem.Name, v =>
                     {
                         selectedItem.Name = (string)v;
-                    }, placeholder: "Task name...");
+                    }, placeholderText: "Task name...");
                     if (nameErrors.Count > 0)
                         nameEditor = nameEditor.WithBorder(Theme.Ref("SystemFillColorCriticalBrush"), 1);
 

@@ -56,14 +56,14 @@ class App : Component
             Heading("Sign up"),
 
             FormField(
-                TextBox(name, v => { setName(v); ctx.MarkTouched("name"); }, placeholder: "Your name")
+                TextBox(name, v => { setName(v); ctx.MarkTouched("name"); }, placeholderText: "Your name")
                     .Validate("name", name,
                         Validate.Required("Name is required"),
                         Validate.MinLength(2, "At least 2 characters")),
                 label: "Name", required: true, showWhen: sw),
 
             FormField(
-                TextBox(email, v => { setEmail(v); ctx.MarkTouched("email"); }, placeholder: "you@example.com")
+                TextBox(email, v => { setEmail(v); ctx.MarkTouched("email"); }, placeholderText: "you@example.com")
                     .EmailInput()
                     .Validate("email", email,
                         Validate.Required("Email is required"),
@@ -71,7 +71,7 @@ class App : Component
                 label: "Email", required: true, showWhen: sw),
 
             FormField(
-                TextBox(age, v => { setAge(v); ctx.MarkTouched("age"); }, placeholder: "Age")
+                TextBox(age, v => { setAge(v); ctx.MarkTouched("age"); }, placeholderText: "Age")
                     .NumericInput()
                     .MaxLength(3)
                     .Validate("age", age,

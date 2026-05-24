@@ -59,7 +59,7 @@ public class A11yShowcaseScannerTest
                 Button("Active", null),
 
                 // A11Y_003: TextBox without header, AutomationName, or LabeledBy
-                TextBox("", null, placeholder: "New task..."),
+                TextBox("", null, placeholderText: "New task..."),
 
                 // A11Y_001: Another icon-only button
                 IconBtn("add")

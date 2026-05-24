@@ -503,7 +503,7 @@ public sealed partial class Reconciler
         if (rented is not null && textBox.Text != textBoxElement.Value)
             ChangeEchoSuppressor.BeginSuppress(textBox);
         textBox.Text = textBoxElement.Value;
-        textBox.PlaceholderText = textBoxElement.Placeholder ?? "";
+        textBox.PlaceholderText = textBoxElement.PlaceholderText ?? "";
         if (textBoxElement.Header is not null) textBox.Header = textBoxElement.Header;
         if (textBoxElement.IsReadOnly == true) textBox.IsReadOnly = true;
         if (textBoxElement.SelectionStart.HasValue) textBox.SelectionStart = textBoxElement.SelectionStart.Value;

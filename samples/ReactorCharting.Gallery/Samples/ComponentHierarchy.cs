@@ -38,7 +38,7 @@ public sealed class ComponentHierarchySample : GallerySample
             "Button"       => Button(node.Name, null),
             "ToggleSwitch" => ToggleSwitch(false, null, "On", "Off"),
             "Slider"       => Slider(50, 0, 100).Width(90),
-            "TextBox"      => TextBox("", placeholder: node.Name).Width(90),
+            "TextBox"      => TextBox("", placeholderText: node.Name).Width(90),
             "CheckBox"     => CheckBox(false, label: node.Name),
             _              => HeaderBadge(node.Name),
         };
@@ -102,7 +102,7 @@ public sealed class ComponentHierarchySample : GallerySample
         "Button" => Button(node.Name, null).Set(b => { b.FontSize = 11; b.Padding = new Thickness(10, 4, 10, 4); }),
         "ToggleSwitch" => ToggleSwitch(false, null, "On", "Off").Set(ts => { ts.MinWidth = 0; ts.FontSize = 10; }),
         "Slider" => Slider(50, 0, 100).Width(90).Height(32),
-        "TextBox" => TextBox("", placeholder: node.Name).Width(90).Set(tb => { tb.FontSize = 11; tb.Padding = new Thickness(6, 4, 6, 4); }),
+        "TextBox" => TextBox("", placeholderText: node.Name).Width(90).Set(tb => { tb.FontSize = 11; tb.Padding = new Thickness(6, 4, 6, 4); }),
         "CheckBox" => CheckBox(false, label: node.Name).Set(cb => { cb.FontSize = 10; cb.MinWidth = 0; }),
         _ => HeaderBadge(node.Name),
     };

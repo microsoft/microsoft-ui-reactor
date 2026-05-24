@@ -167,7 +167,7 @@ Tab(string header, Element content) → TabViewItemData
 TabView(TabViewItemData[] tabs) → TabViewElement
 TeachingTip(string title, string subtitle = null) → TeachingTipElement
 TextBlock(string content) → TextBlockElement
-TextBox(string value, Action<string> onChanged = null, string placeholder = null, string header = null) → TextBoxElement
+TextBox(string value, Action<string> onChanged = null, string placeholderText = null, string header = null) → TextBoxElement
 Thick(double horizontal, double vertical) → Thickness
 Thick(double left, double top, double right, double bottom) → Thickness
 Thick(double uniform) → Thickness
@@ -203,11 +203,13 @@ AnimatedVisualPlayerElement.Set(Action<AnimatedVisualPlayer> configure) → Anim
 AnnotatedScrollBarElement.Set(Action<AnnotatedScrollBar> configure) → AnnotatedScrollBarElement
 AutoSuggestBoxElement.Header(string header) → AutoSuggestBoxElement
 AutoSuggestBoxElement.IsSuggestionListOpen(bool open = true) → AutoSuggestBoxElement
+AutoSuggestBoxElement.PlaceholderText(string text) → AutoSuggestBoxElement
 AutoSuggestBoxElement.QueryIcon(IconData icon) → AutoSuggestBoxElement
 AutoSuggestBoxElement.QuerySubmitted(Action<string> handler) → AutoSuggestBoxElement
 AutoSuggestBoxElement.Set(Action<AutoSuggestBox> configure) → AutoSuggestBoxElement
 AutoSuggestBoxElement.SuggestionChosen(Action<string> handler) → AutoSuggestBoxElement
 AutoSuggestBoxElement.TextChanged(Action<string> handler) → AutoSuggestBoxElement
+AutoSuggestElement<T>.PlaceholderText<T>(string text) → AutoSuggestElement<T>
 AutoSuggestElement<T>.Selected<T>(Action<T> handler) → AutoSuggestElement<T>
 BorderElement.Set(Action<Border> configure) → BorderElement
 BreadcrumbBarElement.ItemClicked(Action<BreadcrumbBarItemData> handler) → BreadcrumbBarElement
@@ -223,6 +225,7 @@ CalendarDatePickerElement.DateFormat(string format) → CalendarDatePickerElemen
 CalendarDatePickerElement.IsCalendarOpen(bool open = true) → CalendarDatePickerElement
 CalendarDatePickerElement.IsGroupLabelVisible(bool visible = true) → CalendarDatePickerElement
 CalendarDatePickerElement.IsTodayHighlighted(bool highlighted = true) → CalendarDatePickerElement
+CalendarDatePickerElement.PlaceholderText(string text) → CalendarDatePickerElement
 CalendarDatePickerElement.Set(Action<CalendarDatePicker> configure) → CalendarDatePickerElement
 CalendarViewElement.DisplayMode(CalendarViewDisplayMode mode) → CalendarViewElement
 CalendarViewElement.FirstDayOfWeek(DayOfWeek day) → CalendarViewElement
@@ -254,7 +257,7 @@ ComboBoxElement.DropDownOpened(Action handler) → ComboBoxElement
 ComboBoxElement.Header(string header) → ComboBoxElement
 ComboBoxElement.IsEditable(bool editable = true) → ComboBoxElement
 ComboBoxElement.MaxDropDownHeight(double height) → ComboBoxElement
-ComboBoxElement.Placeholder(string text) → ComboBoxElement
+ComboBoxElement.PlaceholderText(string text) → ComboBoxElement
 ComboBoxElement.SelectedIndexChanged(Action<int> handler) → ComboBoxElement
 ComboBoxElement.Set(Action<ComboBox> configure) → ComboBoxElement
 CommandBarElement.Set(Action<CommandBar> configure) → CommandBarElement
@@ -392,6 +395,7 @@ NumberBoxElement.AcceptsExpression(bool accepts = true) → NumberBoxElement
 NumberBoxElement.Description(string description) → NumberBoxElement
 NumberBoxElement.Focus(FocusManager fm, string fieldName, bool autoFocus = false) → NumberBoxElement
 NumberBoxElement.NumberFormatter(INumberFormatter2 formatter) → NumberBoxElement
+NumberBoxElement.PlaceholderText(string text) → NumberBoxElement
 NumberBoxElement.Range(double min, double max) → NumberBoxElement
 NumberBoxElement.Set(Action<NumberBox> configure) → NumberBoxElement
 NumberBoxElement.SpinButtons(NumberBoxSpinButtonPlacementMode placement = NumberBoxSpinButtonPlacementMode.Inline) → NumberBoxElement
@@ -406,6 +410,7 @@ PasswordBoxElement.MaxLength(int maxLength) → PasswordBoxElement
 PasswordBoxElement.PasswordChanged(Action<string> handler) → PasswordBoxElement
 PasswordBoxElement.PasswordChar(string passwordChar) → PasswordBoxElement
 PasswordBoxElement.PasswordRevealMode(PasswordRevealMode mode) → PasswordBoxElement
+PasswordBoxElement.PlaceholderText(string text) → PasswordBoxElement
 PasswordBoxElement.Set(Action<PasswordBox> configure) → PasswordBoxElement
 PathElement.Fill(Brush brush) → PathElement
 PathElement.FillRule(FillRule rule) → PathElement
@@ -463,6 +468,7 @@ RepeatButtonElement.Set(Action<RepeatButton> configure) → RepeatButtonElement
 RichEditBoxElement.AcceptsReturn(bool accepts = true) → RichEditBoxElement
 RichEditBoxElement.IsSpellCheckEnabled(bool enabled = true) → RichEditBoxElement
 RichEditBoxElement.MaxLength(int maxLength) → RichEditBoxElement
+RichEditBoxElement.PlaceholderText(string text) → RichEditBoxElement
 RichEditBoxElement.SelectionHighlightColor(SolidColorBrush brush) → RichEditBoxElement
 RichEditBoxElement.Set(Action<RichEditBox> configure) → RichEditBoxElement
 RichEditBoxElement.TextChanged(Action<string> handler) → RichEditBoxElement
@@ -728,6 +734,7 @@ TextBoxElement.IsSpellCheckEnabled(bool enabled = true) → TextBoxElement
 TextBoxElement.MaxLength(int maxLength) → TextBoxElement
 TextBoxElement.NumericInput() → TextBoxElement
 TextBoxElement.PhoneInput() → TextBoxElement
+TextBoxElement.PlaceholderText(string text) → TextBoxElement
 TextBoxElement.SearchInput() → TextBoxElement
 TextBoxElement.SelectionChanged(Action<string, int, int> handler) → TextBoxElement
 TextBoxElement.Set(Action<TextBox> configure) → TextBoxElement

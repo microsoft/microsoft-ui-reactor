@@ -95,7 +95,7 @@ public static class ReflectionTypeMetadataProvider
         {
             if (dataType.DataType == DataType.Url && property.PropertyType == typeof(string))
             {
-                editor = Editors.Text(placeholder: "https://...");
+                editor = Editors.Text(placeholderText: "https://...");
                 renderer = CellRenderers.Hyperlink();
             }
             else if (dataType.DataType == DataType.Url && property.PropertyType == typeof(global::System.Uri))

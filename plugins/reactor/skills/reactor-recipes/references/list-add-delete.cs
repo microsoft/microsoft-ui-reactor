@@ -66,7 +66,7 @@ class App : Component
         return CommandHost([add],
             VStack(12,
                 HStack(8,
-                    TextBox(draft, setDraft, placeholder: "What needs doing?")
+                    TextBox(draft, setDraft, placeholderText: "What needs doing?")
                         .Flex(grow: 1),
                     Button(add).Flex(shrink: 0)),
 

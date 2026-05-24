@@ -20,7 +20,7 @@ class StateDemo : Component
         return VStack(12,
             SubHeading("UseState"),
             TextBlock("Sample text").FontSize(size).Foreground(color),
-            TextBox(color, setColor, placeholder: "#hex color")
+            TextBox(color, setColor, placeholderText: "#hex color")
                 .Width(150),
             HStack(8,
                 TextBlock("Size:"),
@@ -42,7 +42,7 @@ class ReducerDemo : Component
         return VStack(12,
             SubHeading("UseReducer"),
             HStack(8,
-                TextBox(input, setInput, placeholder: "Add item")
+                TextBox(input, setInput, placeholderText: "Add item")
                     .Width(180),
                 Button("Add", () =>
                 {
@@ -161,7 +161,7 @@ class RefDemo : Component
         return VStack(8,
             SubHeading("UseRef"),
             TextBlock($"Render count: {renderCount.Current}").SemiBold(),
-            TextBox(value, setValue, placeholder: "Type to trigger renders")
+            TextBox(value, setValue, placeholderText: "Type to trigger renders")
                 .Width(250),
             Caption("UseRef persists across renders without causing them")
         );
@@ -183,7 +183,7 @@ class CallbackDemo : Component
         return VStack(8,
             SubHeading("UseCallback"),
             TextBlock($"Count: {count}").FontSize(18),
-            TextBox(label, setLabel, placeholder: "Button label")
+            TextBox(label, setLabel, placeholderText: "Button label")
                 .Width(200),
             Button(label, stableIncrement),
             Caption("The callback identity stays stable across renders")

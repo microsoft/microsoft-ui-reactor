@@ -382,7 +382,7 @@ public class LocalizableStringScannerTests
         var source = """
             class CatalogPage : Component {
                 public override Element Render() {
-                    return TextBox("", null, placeholder: "Search products...");
+                    return TextBox("", null, placeholderText: "Search products...");
                 }
             }
             """;

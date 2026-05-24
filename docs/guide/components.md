@@ -51,7 +51,7 @@ class Greeting : Component
 
         return VStack(12,
             TextBlock($"Hello, {name}!").FontSize(20).Bold(),
-            TextBox(name, setName, placeholder: "Your name")
+            TextBox(name, setName, placeholderText: "Your name")
                 .Width(200)
         ).Padding(16);
     }

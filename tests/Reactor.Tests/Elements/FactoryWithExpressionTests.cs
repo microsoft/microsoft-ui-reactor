@@ -88,7 +88,7 @@ public class FactoryWithExpressionTests
     // ════════════════════════════════════════════════════════════════
 
     [Fact] public void TextBox_WithExpr_Sets_Property()
-        => Assert.Equal("hint", (TextBox("v") with { Placeholder = "hint" }).Placeholder);
+        => Assert.Equal("hint", (TextBox("v") with { PlaceholderText = "hint" }).PlaceholderText);
 
     [Fact] public void PasswordBox_WithExpr_Sets_Key()
         => Assert.Equal("k", (PasswordBox("p") with { Key = "k" }).Key);

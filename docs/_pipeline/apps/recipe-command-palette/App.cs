@@ -119,7 +119,7 @@ class CommandPalette : Component
         Element palette = Border(
             VStack(0,
                 TextBox(query, v => { setQuery(v); setIndex(0); },
-                    placeholder: "Type a command…").Width(420),
+                    placeholderText: "Type a command…").Width(420),
                 matches.Length == 0
                     ? TextBlock("No commands match.").Padding(12).Opacity(0.6)
                     : VStack(0,

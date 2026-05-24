@@ -522,7 +522,7 @@ var or = ThemeResource.CornerRadius("OverlayCornerRadius");
 // Dialog with control-radius inner elements
 Border(
     VStack(12,
-        TextBox("", placeholder: "Username").CornerRadius(cr.TopLeft),
+        TextBox("", placeholderText: "Username").CornerRadius(cr.TopLeft),
         Button("Sign In", onClick)
             .Background(Theme.Accent)
             .CornerRadius(cr.TopLeft)
@@ -676,7 +676,7 @@ var filtered = UseMemo(() =>
     items, filter);
 
 return VStack(
-    TextBox(filter, setFilter, placeholder: "Filter..."),
+    TextBox(filter, setFilter, placeholderText: "Filter..."),
     VStack(filtered.Select(item =>
         TextBlock(item.Name).WithKey(item.Id)
     ).ToArray()));

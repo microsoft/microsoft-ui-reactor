@@ -115,8 +115,8 @@ internal static class HooksCoverageFixtures
                 fm.Register("second");
 
                 return VStack(
-                    TextBox("", placeholder: "First").Set(tb => fm.SetControl("first", tb)),
-                    TextBox("", placeholder: "Second").Set(tb => fm.SetControl("second", tb))
+                    TextBox("", placeholderText: "First").Set(tb => fm.SetControl("first", tb)),
+                    TextBox("", placeholderText: "Second").Set(tb => fm.SetControl("second", tb))
                 );
             });
 
@@ -157,8 +157,8 @@ internal static class HooksCoverageFixtures
                 fm.Register("password");
 
                 return VStack(
-                    TextBox("", placeholder: "Username").Set(tb => fm.SetControl("username", tb)),
-                    TextBox("", placeholder: "Password").Set(tb => fm.SetControl("password", tb))
+                    TextBox("", placeholderText: "Username").Set(tb => fm.SetControl("username", tb)),
+                    TextBox("", placeholderText: "Password").Set(tb => fm.SetControl("password", tb))
                 );
             });
 

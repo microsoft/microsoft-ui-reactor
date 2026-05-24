@@ -118,7 +118,7 @@ public sealed class StepCard : Component<StepCardProps>
                     setLocalPrompt(v);
                     Props.OnPromptChanged(step.Number, v);
                 },
-                placeholder: "What should this step do?")
+                placeholderText: "What should this step do?")
                 with { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap })
             .MinHeight(140)
             .AutomationName($"Prompt for step {step.Number}");
@@ -297,7 +297,7 @@ public sealed class StepCard : Component<StepCardProps>
                     setLocalTitle(v);
                     Props.OnTitleChanged(step.Number, v);
                 },
-                placeholder: "Step title")
+                placeholderText: "Step title")
                 with { AcceptsReturn = false })
             .FontSize(18)
             .FontWeight(Microsoft.UI.Text.FontWeights.SemiBold)

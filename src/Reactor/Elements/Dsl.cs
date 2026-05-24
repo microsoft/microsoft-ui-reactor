@@ -213,8 +213,8 @@ public static partial class Factories
     /// Creates a <see cref="TextBoxElement"/> wrapping WinUI's
     /// <c>Microsoft.UI.Xaml.Controls.TextBox</c>.
     /// </summary>
-    public static TextBoxElement TextBox(string value, Action<string>? onChanged = null, string? placeholder = null, string? header = null) =>
-        new(value, onChanged, placeholder) { Header = header };
+    public static TextBoxElement TextBox(string value, Action<string>? onChanged = null, string? placeholderText = null, string? header = null) =>
+        new(value, onChanged, placeholderText) { Header = header };
 
     public static PasswordBoxElement PasswordBox(string password, Action<string>? onPasswordChanged = null, string? placeholderText = null) =>
         new(password, onPasswordChanged, placeholderText);

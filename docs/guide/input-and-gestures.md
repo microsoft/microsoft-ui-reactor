@@ -325,7 +325,7 @@ class UseElementFocusExample : Component
 
         return VStack(12,
             TextBlock("The field below auto-focuses on mount via UseElementFocus()."),
-            TextBox(name, setName, placeholder: "name").Width(280).Ref(inputRef)
+            TextBox(name, setName, placeholderText: "name").Width(280).Ref(inputRef)
         ).Padding(24);
     }
 }

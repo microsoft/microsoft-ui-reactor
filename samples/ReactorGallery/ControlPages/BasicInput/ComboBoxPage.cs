@@ -27,9 +27,9 @@ ComboBox(colors, selectedIndex, i => setSelectedIndex(i))
 "),
 
             SampleCard("ComboBox with Placeholder",
-                ComboBox(colors).Placeholder("Pick a color"),
+                ComboBox(colors).PlaceholderText("Pick a color"),
                 sourceCode: @"
-ComboBox(colors).Placeholder(""Pick a color"")
+ComboBox(colors).PlaceholderText(""Pick a color"")
 "),
 
             SampleCard("Editable ComboBox",

@@ -69,7 +69,7 @@ class KeyboardDemo : Component
         // Tab/Shift+Tab cycles through Reactor controls normally.
         // Tab out of the last Reactor control returns focus to WinForms.
         return VStack(12,
-            TextBox(text, setText, placeholder: "Type here...")
+            TextBox(text, setText, placeholderText: "Type here...")
                 .TabIndex(0),
             Button("Submit", () => { })
                 .TabIndex(1)

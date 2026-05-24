@@ -6,7 +6,7 @@ namespace Microsoft.UI.Reactor.Cli.Loc;
 
 /// <summary>
 /// Roslyn-based scanner that walks C# syntax trees to find localizable strings
-/// in Reactor DSL patterns: Text(), Button(), Heading(), .Placeholder(), .Header(),
+/// in Reactor DSL patterns: Text(), Button(), Heading(), .PlaceholderText(), .Header(),
 /// .ToolTip(), .Title(), etc.
 /// </summary>
 internal static class LocalizableStringScanner
@@ -24,7 +24,7 @@ internal static class LocalizableStringScanner
     // DSL factory methods with named string parameters that are localizable
     private static readonly Dictionary<string, HashSet<string>> LocalizableNamedParams = new(StringComparer.Ordinal)
     {
-        ["TextBox"] = new(StringComparer.Ordinal) { "placeholder", "header" },
+        ["TextBox"] = new(StringComparer.Ordinal) { "placeholderText", "header" },
         ["PasswordBox"] = new(StringComparer.Ordinal) { "placeholderText" },
         ["NumberBox"] = new(StringComparer.Ordinal) { "header" },
         ["CheckBox"] = new(StringComparer.Ordinal) { "label" },
@@ -34,7 +34,7 @@ internal static class LocalizableStringScanner
     // Extension/modifier methods whose string argument is localizable
     private static readonly HashSet<string> LocalizableModifiers = new(StringComparer.Ordinal)
     {
-        "ToolTip", "Header", "Placeholder", "PaneTitle", "Subtitle",
+        "ToolTip", "Header", "PlaceholderText", "PaneTitle", "Subtitle",
     };
 
     // Extension methods whose string argument is NOT localizable
@@ -84,7 +84,7 @@ internal static class LocalizableStringScanner
                 {
                     ProcessDslFactoryCall(node, methodName);
                 }
-                // Check DSL factory methods with named params: TextBox(value, placeholder: "Search")
+                // Check DSL factory methods with named params: TextBox(value, placeholderText: "Search")
                 else if (LocalizableNamedParams.TryGetValue(methodName, out var paramNames))
                 {
                     ProcessNamedParamCall(node, methodName, paramNames);
@@ -132,14 +132,14 @@ internal static class LocalizableStringScanner
             }
 
             // Also check positional arguments that map to localizable params
-            // For TextBox: placeholder is arg index 2, header is arg index 3
+            // For TextBox: placeholderText is arg index 2, header is arg index 3
             if (methodName == "TextBox")
             {
                 if (args.Count >= 3 && args[2].NameColon == null)
                 {
                     var placeholderArg = args[2].Expression;
                     if (!IsMessageCall(placeholderArg))
-                        ProcessExpression(placeholderArg, className, $"{methodName}.placeholder");
+                        ProcessExpression(placeholderArg, className, $"{methodName}.placeholderText");
                 }
                 if (args.Count >= 4 && args[3].NameColon == null)
                 {

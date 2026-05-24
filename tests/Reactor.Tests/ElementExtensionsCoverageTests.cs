@@ -301,7 +301,7 @@ public class ElementExtensionsCoverageTests
     public void ComboBox_Sugar()
     {
         var el = ComboBox(new string[] { "a", "b" }, 0, _ => { })
-            .Placeholder("Pick…")
+            .PlaceholderText("Pick…")
             .IsEditable()
             .Header("Lbl");
         Assert.Equal("Pick…", el.PlaceholderText);

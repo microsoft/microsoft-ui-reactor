@@ -359,7 +359,7 @@ class SceneAIde : Component
             // of the optional modifiers / multi-line config.
             return VStack(6,
                 TextBlock(banner).SemiBold(),
-                TextBox(text, setText, placeholder: "edit me…")
+                TextBox(text, setText, placeholderText: "edit me…")
             ).Padding(12);
         });
 
@@ -375,7 +375,7 @@ class SceneAIde : Component
                 .ToArray();
             return VStack(4,
                 TextBlock(banner).SemiBold(),
-                TextBox(filter, setFilter, placeholder: filterPlaceholder),
+                TextBox(filter, setFilter, placeholderText: filterPlaceholder),
                 VStack(2, rowElements)
             ).Padding(8);
         });
@@ -406,7 +406,7 @@ class SceneAIde : Component
                 TextBlock("Branch: feat/045-docking-windows-p2").Opacity(0.8),
                 VStack(2, changeElements),
                 TextBlock("Commit message").SemiBold().Margin(0, 8, 0, 0),
-                TextBox(message, setMessage, placeholder: "Describe the change…")
+                TextBox(message, setMessage, placeholderText: "Describe the change…")
                     .Set(tb => { tb.AcceptsReturn = true; tb.MinHeight = 60; }),
                 Button("Commit", Commit),
                 TextBlock("History").SemiBold().Margin(0, 8, 0, 0),
@@ -432,7 +432,7 @@ class SceneAIde : Component
                 .ToArray();
             return VStack(6,
                 TextBlock($"⚠ 0 Errors    ⚠ {entries.Length} Warnings    ℹ 1 Message").Opacity(0.8),
-                TextBox(filter, setFilter, placeholder: "Filter by code, file, or message…"),
+                TextBox(filter, setFilter, placeholderText: "Filter by code, file, or message…"),
                 VStack(2, rowElements)
             ).Padding(8);
         });
@@ -458,7 +458,7 @@ class SceneAIde : Component
             return VStack(6,
                 VStack(2, lines),
                 HStack(6,
-                    TextBox(entry, setEntry, placeholder: "Append output line… (Enter)")
+                    TextBox(entry, setEntry, placeholderText: "Append output line… (Enter)")
                         .Set(tb =>
                         {
                             tb.KeyDown += (s, e) =>
@@ -504,7 +504,7 @@ class SceneAIde : Component
                 VStack(2, lines),
                 HStack(6,
                     TextBlock("PS&gt;").FontFamily("Consolas, Courier New, monospace").SemiBold(),
-                    TextBox(input, setInput, placeholder: "Type a command and press Enter…")
+                    TextBox(input, setInput, placeholderText: "Type a command and press Enter…")
                         .Set(tb =>
                         {
                             tb.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas, Courier New, monospace");

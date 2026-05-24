@@ -920,10 +920,33 @@ public static partial class ElementExtensions
     public static TextBoxElement Header(this TextBoxElement el, string header) =>
         el with { Header = header };
 
-    // ── ComboBox sugar ──────────────────────────────────────────────
+    // ── PlaceholderText sugar (every input control with PlaceholderText) ────
 
-    public static ComboBoxElement Placeholder(this ComboBoxElement el, string text) =>
+    public static TextBoxElement PlaceholderText(this TextBoxElement el, string text) =>
         el with { PlaceholderText = text };
+
+    public static PasswordBoxElement PlaceholderText(this PasswordBoxElement el, string text) =>
+        el with { PlaceholderText = text };
+
+    public static NumberBoxElement PlaceholderText(this NumberBoxElement el, string text) =>
+        el with { PlaceholderText = text };
+
+    public static ComboBoxElement PlaceholderText(this ComboBoxElement el, string text) =>
+        el with { PlaceholderText = text };
+
+    public static AutoSuggestBoxElement PlaceholderText(this AutoSuggestBoxElement el, string text) =>
+        el with { PlaceholderText = text };
+
+    public static CalendarDatePickerElement PlaceholderText(this CalendarDatePickerElement el, string text) =>
+        el with { PlaceholderText = text };
+
+    public static RichEditBoxElement PlaceholderText(this RichEditBoxElement el, string text) =>
+        el with { PlaceholderText = text };
+
+    public static Microsoft.UI.Reactor.Controls.AutoSuggestElement<T> PlaceholderText<T>(this Microsoft.UI.Reactor.Controls.AutoSuggestElement<T> el, string text) =>
+        el with { PlaceholderText = text };
+
+    // ── ComboBox sugar ──────────────────────────────────────────────
 
     /// <summary>Sets whether the ComboBox is editable.</summary>
     public static ComboBoxElement IsEditable(this ComboBoxElement el, bool editable = true) =>

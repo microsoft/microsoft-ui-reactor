@@ -95,7 +95,7 @@ public class AccessibilityScannerTests
     public void A11Y_003_TextBox_Without_Label()
     {
         var tree = VStack(
-            TextBox("", null, placeholder: "Enter email")
+            TextBox("", null, placeholderText: "Enter email")
         );
 
         var findings = AccessibilityScanner.Scan(tree);

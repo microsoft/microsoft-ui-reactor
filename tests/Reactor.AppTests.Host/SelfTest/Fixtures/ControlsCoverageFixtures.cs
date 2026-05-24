@@ -290,11 +290,11 @@ internal static class ControlsCoverageFixtures
             // Create element via DSL
             var el = AutoSuggestDsl.AutoSuggest<string>(
                 selected: "test",
-                placeholder: "Search...",
+                placeholderText: "Search...",
                 debounceMs: 200);
 
             H.Check("AS_Selected", el.Selected == "test");
-            H.Check("AS_Placeholder", el.Placeholder == "Search...");
+            H.Check("AS_Placeholder", el.PlaceholderText == "Search...");
             H.Check("AS_Debounce", el.DebounceMs == 200);
             H.Check("AS_DefaultError", el.ErrorMessage == "Search failed. Please try again.");
             H.Check("AS_DefaultEmpty", el.EmptyMessage == "No results found.");

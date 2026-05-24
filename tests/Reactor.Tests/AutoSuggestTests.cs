@@ -33,9 +33,9 @@ public class AutoSuggestTests
     [Fact]
     public void AutoSuggest_Creates_With_Defaults()
     {
-        var el = AutoSuggest<string>(null, placeholder: "Search...");
+        var el = AutoSuggest<string>(null, placeholderText: "Search...");
         Assert.Null(el.Selected);
-        Assert.Equal("Search...", el.Placeholder);
+        Assert.Equal("Search...", el.PlaceholderText);
         Assert.Equal(300, el.DebounceMs);
     }
 

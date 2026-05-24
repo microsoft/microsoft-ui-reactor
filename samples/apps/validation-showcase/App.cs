@@ -77,7 +77,7 @@ class BasicValidationDemo : Component
                 // .Validate() with value triggers automatic validation — no manual calls.
                 FormField(
                     TextBox(email, v => { setEmail(v); ctx.MarkTouched("email"); setInfoDismissed(false); },
-                            placeholder: "user@example.com")
+                            placeholderText: "user@example.com")
                         .Validate("email", email,
                             Validate.Required("Email is required"),
                             Validate.Email("Enter a valid email"))
@@ -98,7 +98,7 @@ class BasicValidationDemo : Component
 
                 FormField(
                     TextBox(website, v => { setWebsite(v); ctx.MarkTouched("website"); setInfoDismissed(false); },
-                            placeholder: "https://example.com")
+                            placeholderText: "https://example.com")
                         .Validate("website", website,
                             Validate.Url("Enter a valid URL (https://...)"))
                         .Focus(fm, "website"),
@@ -235,7 +235,7 @@ class MaskedInputDemo : Component
             VStack(8,
                 TextBlock("Phone (US) — digits only").Foreground(Theme.SecondaryText),
                 TextBox(phone, v => setPhone(new string(v.Where(char.IsDigit).ToArray())),
-                    placeholder: "5551234567"),
+                    placeholderText: "5551234567"),
                 When(phone.Length > 0, () =>
                     HStack(8,
                         TextBlock($"Formatted: {phoneFormatted}").Foreground(Theme.SecondaryText),
@@ -248,7 +248,7 @@ class MaskedInputDemo : Component
             VStack(8,
                 TextBlock("SSN — digits only").Foreground(Theme.SecondaryText),
                 TextBox(ssn, v => setSsn(new string(v.Where(char.IsDigit).ToArray())),
-                    placeholder: "123456789"),
+                    placeholderText: "123456789"),
                 When(ssn.Length > 0, () =>
                     TextBlock($"Formatted: {ssnFormatted}").Foreground(Theme.SecondaryText))
             ),
@@ -256,7 +256,7 @@ class MaskedInputDemo : Component
             VStack(8,
                 TextBlock("ZIP Code — digits only").Foreground(Theme.SecondaryText),
                 TextBox(zip, v => setZip(new string(v.Where(char.IsDigit).ToArray())),
-                    placeholder: "90210"),
+                    placeholderText: "90210"),
                 When(zip.Length > 0, () =>
                     TextBlock($"Formatted: {zipFormatted}").Foreground(Theme.SecondaryText))
             ),
@@ -265,7 +265,7 @@ class MaskedInputDemo : Component
                 TextBlock("Currency (InputFormatter)").Foreground(Theme.SecondaryText),
                 TextBox(amount,
                     v => setAmount(new string(v.Where(c => char.IsDigit(c) || c == '.').ToArray())),
-                    placeholder: "1234.56"),
+                    placeholderText: "1234.56"),
                 When(amount.Length > 0, () =>
                     TextBlock($"Display: {currencyResult.Output}  |  Raw: {currencyFmt.Parse(currencyResult.Output)}")
                         .Foreground(Theme.SecondaryText))
@@ -274,7 +274,7 @@ class MaskedInputDemo : Component
             VStack(8,
                 TextBlock("Uppercase Formatter").Foreground(Theme.SecondaryText),
                 TextBox(shout, v => setShout(v.ToUpperInvariant()),
-                    placeholder: "auto uppercased")
+                    placeholderText: "auto uppercased")
                     .Set(tb => tb.CharacterCasing = CharacterCasing.Upper)
             )
         ).Padding(24);
@@ -370,11 +370,11 @@ class FocusDemo : Component
             SubHeading("Focus Management"),
             Caption("UseFocus provides programmatic focus control and enter-to-advance."),
 
-            TextBox(f1, setF1, placeholder: "First field", header: "First Name")
+            TextBox(f1, setF1, placeholderText: "First field", header: "First Name")
                 .Focus(fm, "first"),
-            TextBox(f2, setF2, placeholder: "Second field", header: "Last Name")
+            TextBox(f2, setF2, placeholderText: "Second field", header: "Last Name")
                 .Focus(fm, "last"),
-            TextBox(f3, setF3, placeholder: "Third (last) field", header: "Nickname")
+            TextBox(f3, setF3, placeholderText: "Third (last) field", header: "Nickname")
                 .Focus(fm, "nick"),
 
             HStack(8,

@@ -26,7 +26,7 @@ class TodoApp : Component
 
             // Input row
             HStack(8,
-                TextBox(newText, setNewText, placeholder: "What needs to be done?")
+                TextBox(newText, setNewText, placeholderText: "What needs to be done?")
                     .Width(300),
                 Button("Add", () =>
                 {

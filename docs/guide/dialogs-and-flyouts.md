@@ -153,7 +153,7 @@ class DialogGatedPrimaryDemo : Component
                 "Rename file",
                 VStack(8,
                     TextBlock("New filename:"),
-                    TextBox(name, setName, placeholder: "untitled.txt")
+                    TextBox(name, setName, placeholderText: "untitled.txt")
                         .Width(280)),
                 primaryButtonText: "Rename") with
             {

@@ -191,7 +191,7 @@ class ElementRefFocusDemo : Component
 
         return VStack(12,
             SubHeading("Imperative focus via ElementRef<T>"),
-            TextBox(name, setName, placeholder: "Name").Ref(fieldRef),
+            TextBox(name, setName, placeholderText: "Name").Ref(fieldRef),
             Button("Focus the field", () =>
                 fieldRef.Current?.Focus(FocusState.Programmatic))
         ).Padding(24);
@@ -398,7 +398,7 @@ class ObservableCollectionDemo : Component
         return VStack(12,
             SubHeading("UseCollection"),
             HStack(8,
-                TextBox(input, setInput, placeholder: "New task")
+                TextBox(input, setInput, placeholderText: "New task")
                     .Width(200),
                 Button("Add", () => {
                     if (!string.IsNullOrWhiteSpace(input))

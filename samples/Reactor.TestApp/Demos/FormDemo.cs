@@ -42,12 +42,12 @@ class FormDemo : Component
 
             VStack(8,
                 TextBlock("Name"),
-                TextBox(name, setName, placeholder: "Enter your name").Width(300)
+                TextBox(name, setName, placeholderText: "Enter your name").Width(300)
             ),
 
             VStack(8,
                 TextBlock("Email"),
-                TextBox(email, setEmail, placeholder: "you@example.com").Width(300)
+                TextBox(email, setEmail, placeholderText: "you@example.com").Width(300)
             ),
 
             ToggleSwitch(darkMode, setDarkMode, onContent: "Dark", offContent: "Light"),

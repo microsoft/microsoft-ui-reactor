@@ -81,7 +81,7 @@ class NotePadWindow : Component
             TextBlock(window is null
                 ? "(no owning window)"
                 : $"id={window.Id}  state={state}  dpi={window.Dpi}"),
-            TextBox(text, setText, placeholder: "Type something...")
+            TextBox(text, setText, placeholderText: "Type something...")
                 .Width(360),
             Button("Close", () => window?.Close())
         ).Padding(16);

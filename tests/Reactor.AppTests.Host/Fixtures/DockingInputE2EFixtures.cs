@@ -42,7 +42,7 @@ internal static class DockingInputE2EFixtures
                 CanClose = true,
                 CanPin = true,
                 Content = VStack(6,
-                    TextBox(left, setLeft, placeholder: "left input")
+                    TextBox(left, setLeft, placeholderText: "left input")
                         .AutomationId("DockEditor_Left"),
                     TextBlock($"Left state: {left}").AutomationId("DockEditor_Left_State")
                 ).Padding(12),
@@ -54,7 +54,7 @@ internal static class DockingInputE2EFixtures
                 CanClose = true,
                 CanPin = true,
                 Content = VStack(6,
-                    TextBox(right, setRight, placeholder: "right input")
+                    TextBox(right, setRight, placeholderText: "right input")
                         .AutomationId("DockEditor_Right"),
                     TextBlock($"Right state: {right}").AutomationId("DockEditor_Right_State")
                 ).Padding(12),
@@ -105,7 +105,7 @@ internal static class DockingInputE2EFixtures
                 Key: "dock-input-nopin:left",
                 CanClose: true,
                 Content: VStack(6,
-                    TextBox(left, setLeft, placeholder: "left input")
+                    TextBox(left, setLeft, placeholderText: "left input")
                         .AutomationId("DockEditorNoPin_Left"),
                     TextBlock($"Left state: {left}").AutomationId("DockEditorNoPin_Left_State")
                 ).Padding(12));
@@ -114,7 +114,7 @@ internal static class DockingInputE2EFixtures
                 Key: "dock-input-nopin:right",
                 CanClose: true,
                 Content: VStack(6,
-                    TextBox(right, setRight, placeholder: "right input")
+                    TextBox(right, setRight, placeholderText: "right input")
                         .AutomationId("DockEditorNoPin_Right"),
                     TextBlock($"Right state: {right}").AutomationId("DockEditorNoPin_Right_State")
                 ).Padding(12));

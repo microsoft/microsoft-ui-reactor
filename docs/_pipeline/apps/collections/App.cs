@@ -131,7 +131,7 @@ class VirtualListRefDemo : Component
             SubHeading("VirtualListRef — Imperative Scroll"),
             HStack(8,
                 TextBox(targetIndex, setTargetIndex,
-                    placeholder: "Index"),
+                    placeholderText: "Index"),
                 Button("Scroll To", () =>
                 {
                     if (int.TryParse(targetIndex, out var idx))
@@ -219,7 +219,7 @@ class WithKeyDemo : Component
         return VStack(12,
             SubHeading("Stable Identity with WithKey"),
             HStack(8,
-                TextBox(newItem, setNewItem, placeholder: "New item"),
+                TextBox(newItem, setNewItem, placeholderText: "New item"),
                 Button("Add", () => {
                     if (!string.IsNullOrWhiteSpace(newItem)) {
                         updateItems(l => [.. l, newItem.Trim()]);

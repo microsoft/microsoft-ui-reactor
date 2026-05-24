@@ -311,7 +311,7 @@ public static partial class AccessibilityScanner
         {
             case TextBoxElement tf:
                 header = tf.Header;
-                placeholder = tf.Placeholder;
+                placeholder = tf.PlaceholderText;
                 break;
             case NumberBoxElement nb:
                 header = nb.Header;

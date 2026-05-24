@@ -22,7 +22,7 @@ class TestReactorComponent : Component
                     .AutomationId("Reactor_Title"),
 
                 // Focusable TextBox - first Tab stop inside the island
-                TextBox(text, setText, placeholder: "Type in island")
+                TextBox(text, setText, placeholderText: "Type in island")
                     .Width(250)
                     .AutomationId("Reactor_TextBox1")
                     .AutomationName("Island TextBox"),
@@ -39,7 +39,7 @@ class TestReactorComponent : Component
                     .AutomationId("Reactor_CountDisplay"),
 
                 // A second TextBox - third Tab stop
-                TextBox("", _ => { }, placeholder: "Second field")
+                TextBox("", _ => { }, placeholderText: "Second field")
                     .Width(250)
                     .AutomationId("Reactor_TextBox2")
                     .AutomationName("Island second TextBox"),

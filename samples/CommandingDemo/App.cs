@@ -114,7 +114,7 @@ class StandardCommandsDemo : Component
                     MenuSeparator(),
                     MenuItem(selectAll))),
 
-            (TextBox(text, setText, placeholder: "Type here...") with
+            (TextBox(text, setText, placeholderText: "Type here...") with
             {
                 OnSelectionChanged = (sel, start, len) =>
                 {
@@ -253,7 +253,7 @@ class CommandHostDemo : Component
                 VStack(8,
                     TextBlock("INSIDE CommandHost scope — Ctrl+S / Ctrl+Z / Ctrl+Y fire here:")
                         .Set(tb => tb.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold),
-                    TextBox("", _ => { }, placeholder: "Click here and press Ctrl+S..."),
+                    TextBox("", _ => { }, placeholderText: "Click here and press Ctrl+S..."),
                     Caption(log).Foreground(SecondaryText))
                 .Padding(16)
                 .Background(SystemAttentionBackground)
@@ -263,7 +263,7 @@ class CommandHostDemo : Component
             VStack(8,
                 TextBlock("OUTSIDE CommandHost scope — accelerators do NOT fire here:")
                     .Set(tb => tb.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold),
-                TextBox("", _ => { }, placeholder: "Click here and press Ctrl+S — nothing should happen...")
+                TextBox("", _ => { }, placeholderText: "Click here and press Ctrl+S — nothing should happen...")
             ).Padding(16).Margin(horizontal: 16, vertical: 0).Background(SystemCriticalBackground).CornerRadius(8));
     }
 }

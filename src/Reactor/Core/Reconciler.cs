@@ -1502,7 +1502,7 @@ public sealed partial class Reconciler : IDisposable
         CheckBoxElement cbe => cbe.Label,
         RadioButtonElement rbe => rbe.Label,
         ToggleSwitchElement tse => tse.Header as string ?? tse.OnContent ?? tse.OffContent,
-        TextBoxElement tfe => tfe.Header as string ?? tfe.Placeholder,
+        TextBoxElement tfe => tfe.Header as string ?? tfe.PlaceholderText,
         _ => null,
     };
 

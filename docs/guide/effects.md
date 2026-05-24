@@ -85,7 +85,7 @@ class DependencyEffectExample : Component
         }, query);
 
         return VStack(12,
-            TextBox(query, setQuery, placeholder: "Search...").Width(300),
+            TextBox(query, setQuery, placeholderText: "Search...").Width(300),
             TextBlock(results).Foreground(Theme.SecondaryText)
         ).Padding(24);
     }
