@@ -28,3 +28,14 @@ public sealed class UnobservedTaskExceptionCollection { }
 /// </summary>
 [CollectionDefinition("PersistedStateCache", DisableParallelization = true)]
 public sealed class PersistedStateCacheCollection { }
+
+/// <summary>
+/// xUnit collection marker for tests that mutate
+/// <see cref="Microsoft.UI.Reactor.JumpList"/> static state
+/// (<c>AppUserModelId</c>, <c>ShowRecent</c>, <c>ShowFrequent</c>) or call
+/// <c>JumpList.ResetForTests()</c>. The statics are process-wide, so a concurrent
+/// <c>ResetForTests()</c> from another class can clobber an in-flight test's
+/// configuration mid-execution.
+/// </summary>
+[CollectionDefinition("JumpListGlobals", DisableParallelization = true)]
+public sealed class JumpListGlobalsCollection { }
