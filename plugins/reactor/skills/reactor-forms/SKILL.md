@@ -44,17 +44,17 @@ return VStack(12,
 |---------|-----------|------------------|
 | `TextBox(value, setValue, placeholderText, header)` | `string` | `.Header()`, `.IsReadOnly()`, `.AcceptsReturn()`, `.TextWrapping()`, `.MaxLength(n)`, `.NumericInput()`, `.EmailInput()`, `.Changed(handler)` |
 | `PasswordBox(password, setPassword, placeholderText)` | `string` | `.Header(text)`, `.MaxLength(n)`, `.PasswordChanged(handler)` |
-| `NumberBox(value, setValue, placeholderText, header)` | `double` | `.Range(min, max)`, `.SpinButtons(...)` |
+| `NumberBox(value, setValue, header)` | `double` | `.PlaceholderText(text)`, `.Range(min, max)`, `.SpinButtons(...)` |
 | `Slider(value, min, max, setValue)` | `double` | `.Header()`, `.StepFrequency()` |
 | `ToggleSwitch(isOn, setIsOn, header, onContent, offContent)` | `bool` | `.Header()` |
 | `CheckBox(isChecked, setIsChecked, label)` | `bool` | — |
 | `RadioButtons(items, selected, setSelected, header)` | `int` | `.Set(rb => ...)` |
-| `ComboBox(items, selected, setSelected, placeholderText)` | `object` | `.Header()`, `.IsEditable()`, `.PlaceholderText()` |
+| `ComboBox(items, selected, setSelected)` | `object` | `.Header()`, `.IsEditable()`, `.PlaceholderText(text)` |
 | `DatePicker(date, setDate, header)` | `DateTimeOffset` | `.Set(dp => ...)` |
 | `TimePicker(time, setTime, header)` | `TimeSpan` | `.Set(tp => ...)` |
-| `AutoSuggestBox(text, setText, placeholderText, header)` | `string` | `.Set(asb => ...)` |
-| `RichEditBox(doc, setDoc, header)` | `string` | `.Set(reb => ...)` |
-| `CalendarDatePicker(date, setDate, placeholderText, header)` | `DateTimeOffset?` | `.Set(cdp => ...)` |
+| `AutoSuggestBox(text, setText, onQuerySubmitted)` | `string` | `.PlaceholderText(text)`, `.Set(asb => ...)` |
+| `RichEditBox(doc, setDoc, header)` | `string` | `.PlaceholderText(text)`, `.Set(reb => ...)` |
+| `CalendarDatePicker(date, setDate)` | `DateTimeOffset?` | `.PlaceholderText(text)`, `.Set(cdp => ...)` |
 
 **Named-input shapes** (Spec 039 §17.3): `.NumericInput()` / `.EmailInput()`
 preconfigure `InputScope` and IME hints so on-screen / soft keyboards open

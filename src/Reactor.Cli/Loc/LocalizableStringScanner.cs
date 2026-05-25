@@ -6,7 +6,7 @@ namespace Microsoft.UI.Reactor.Cli.Loc;
 
 /// <summary>
 /// Roslyn-based scanner that walks C# syntax trees to find localizable strings
-/// in Reactor DSL patterns: Text(), Button(), Heading(), .PlaceholderText(), .Header(),
+/// in Reactor DSL patterns: TextBlock(), Button(), Heading(), .PlaceholderText(), .Header(),
 /// .ToolTip(), .Title(), etc.
 /// </summary>
 internal static class LocalizableStringScanner
