@@ -14,6 +14,15 @@
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <!-- Explicit platforms so external consumers (Pix, samples, etc.) that
+         drive ProjectReference handshakes with Release|ARM64 or Debug|x64
+         configurations can resolve a matching Reactor build. AnyCPU stays
+         the default for `dotnet pack`. Without this, VS's solution-level
+         project-ref mapping falls back to AnyCPU on ARM64 hosts and the
+         expected `bin/ARM64/Release/.../Reactor.dll` never appears,
+         leaving downstream projects unable to bind the assembly. Mirrors
+         the same declaration in Reactor.Tests.csproj. -->
+    <Platforms>AnyCPU;x64;ARM64</Platforms>
   </PropertyGroup>
 
   <!-- ═══════════════════════════════════════════════════════════════════

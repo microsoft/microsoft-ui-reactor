@@ -89,11 +89,15 @@ internal sealed partial class DockSplitterControl : Grid
     private bool _isCapturing;
     private Point _captureOrigin;
     private uint _capturePointerId;
-    // Cached at capture time so live mutations don't observe stale
-    // ActualWidth/Height between layout commits. Updated only on
-    // PointerPressed; the drag uses this fixed slice for the entire drag.
-    private double _pairDipAtCapture;
-    private double _leadingDipAtCapture;
+    // Snapshot the pair's GROW values (not DIPs) at capture. ActualWidth /
+    // ActualHeight can be transiently wrong at PointerPressed time — the
+    // first press in a 3+ pane split has been observed reporting half-panel
+    // widths (2-pane shape) before the layout settles into its real shape
+    // on the next MOVE. Locking pair-DIP space at PRESS made the cursor
+    // lag the splitter handle. Grow values are stable: the splitter only
+    // mutates leading+trailing grow during a drag, so the captured pair
+    // grow remains the right total to distribute on every MOVE.
+    private double _leadingGrowAtCapture;
     private double _pairGrowAtCapture;
 
     public event EventHandler<DockSplitterDeltaEventArgs>? ResizeDelta;
@@ -220,23 +224,40 @@ internal sealed partial class DockSplitterControl : Grid
 
         if (CapturePointer(e.Pointer))
         {
-            _isCapturing = true;
-            _captureOrigin = ParentPosition(e);
             _capturePointerId = e.Pointer.PointerId;
-            // Snapshot the pair's current sizes + grows so mutations during
-            // the drag don't depend on ActualWidth/Height that may lag
-            // behind a not-yet-committed layout pass.
-            SnapshotPairAtCapture();
-            Trace($"PRESS dir={_direction} origin=({_captureOrigin.X:F1},{_captureOrigin.Y:F1}) leadingDip={_leadingDipAtCapture:F1} pairDip={_pairDipAtCapture:F1} pairGrow={_pairGrowAtCapture:F3}");
+            BeginDragCore(ParentPosition(e));
             Focus(FocusState.Pointer);
             e.Handled = true;
         }
     }
 
+    // ─── Shared drag lifecycle ──────────────────────────────────────────
+    //
+    //  The real pointer/keyboard handlers and the synthetic
+    //  BeginSimulatedDrag / ContinueSimulatedDrag / EndSimulatedDrag API
+    //  both funnel through these *Core methods so the math, diagnostic
+    //  trace lines, event firing, and state transitions are guaranteed
+    //  identical between the live-input path and the test-input path.
+    //  The real handlers add only WinUI-specific concerns (CapturePointer,
+    //  ReleasePointerCapture, Focus, e.Handled, pointer-id matching).
+
+    /// <summary>
+    /// Begin a drag. Mutates <see cref="_isCapturing"/> /
+    /// <see cref="_captureOrigin"/>, snapshots the pair's grow values,
+    /// and emits the PRESS trace. Called by <see cref="OnPointerPressed"/>
+    /// and <see cref="BeginSimulatedDrag"/>.
+    /// </summary>
+    private void BeginDragCore(Point parentRelativeOrigin)
+    {
+        _isCapturing = true;
+        _captureOrigin = parentRelativeOrigin;
+        SnapshotPairAtCapture();
+        Trace($"PRESS dir={_direction} origin=({_captureOrigin.X:F1},{_captureOrigin.Y:F1}) leadingGrow={_leadingGrowAtCapture:F3} pairGrow={_pairGrowAtCapture:F3}");
+    }
+
     private void SnapshotPairAtCapture()
     {
-        _pairDipAtCapture = 0;
-        _leadingDipAtCapture = 0;
+        _leadingGrowAtCapture = 0;
         _pairGrowAtCapture = 0;
         if (VTH.GetParent(this) is not Microsoft.UI.Reactor.Layout.FlexPanel panel) return;
         int idx = -1;
@@ -246,51 +267,45 @@ internal sealed partial class DockSplitterControl : Grid
         if (panel.Children[idx - 1] is not FrameworkElement leading) return;
         if (panel.Children[idx + 1] is not FrameworkElement trailing) return;
 
-        var leadingGrow = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(leading);
+        // Capture grow only. Each MOVE re-reads panel.ActualWidth /
+        // ActualHeight + the panel's total grow live, so the DIP→grow
+        // conversion always reflects the current layout. The drag never
+        // touches inline Width/Height; pair size is driven entirely by
+        // grow weight against the panel's current allocation.
+        _leadingGrowAtCapture = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(leading);
         var trailingGrow = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(trailing);
-        _pairGrowAtCapture = leadingGrow + trailingGrow;
-
-        // Snapshot the actual measured extents of the pair. For 2-child
-        // splits this happens to equal GetHostExtent() (panel.ActualSize
-        // minus splitter handles); for 3+ child splits it is strictly
-        // smaller because the other siblings consume some panel space.
-        // The drag math distributes pairGrow proportionally to the
-        // target leading-fraction of the PAIR, not the whole panel —
-        // so the snapshot must be in the pair's DIP space or the rendered
-        // splitter drifts away from the cursor (Scene J 3-child repro).
-        var leadingActual = _direction == DockSplitterDirection.Columns
-            ? leading.ActualWidth : leading.ActualHeight;
-        var trailingActual = _direction == DockSplitterDirection.Columns
-            ? trailing.ActualWidth : trailing.ActualHeight;
-        _pairDipAtCapture = leadingActual + trailingActual;
-        _leadingDipAtCapture = leadingActual;
-
-        // Direction A drag path no longer writes inline Width/Height
-        // on the panes — pair size is entirely driven by grow weight
-        // against the panel's (unchanging) parent allocation. No need
-        // to pin the panel: its measured size cannot drift because no
-        // child claims a fixed absolute size during the drag.
-        //
-        // The perpendicular pin is also unnecessary now: panes can
-        // re-measure perpendicular content freely; the panel just lets
-        // its parent's allocation flow through. (If we observe perp-
-        // axis flicker during a drag, we'd reintroduce just the perp
-        // pin here.)
+        _pairGrowAtCapture = _leadingGrowAtCapture + trailingGrow;
     }
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (!_isCapturing || e.Pointer.PointerId != _capturePointerId) return;
-        var p = ParentPosition(e);
+        ContinueDragCore(ParentPosition(e));
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Continue a drag. Computes the cumulative cursor delta against the
+    /// captured origin, emits the MOVE trace (with pre/post leading-pane
+    /// extents for cursor-tracking diagnostics), and applies the new
+    /// grow values via <see cref="ApplyAbsoluteGrowFromCapture"/>. Called
+    /// by <see cref="OnPointerMoved"/> and
+    /// <see cref="ContinueSimulatedDrag"/>. No-op when the splitter
+    /// isn't currently capturing.
+    /// </summary>
+    private void ContinueDragCore(Point parentRelativePoint)
+    {
+        if (!_isCapturing) return;
         var cumDelta = _direction == DockSplitterDirection.Columns
-            ? p.X - _captureOrigin.X
-            : p.Y - _captureOrigin.Y;
+            ? parentRelativePoint.X - _captureOrigin.X
+            : parentRelativePoint.Y - _captureOrigin.Y;
         // Direct-mutate only; don't fire ResizeDelta during the drag.
         // The host accumulates the per-event deltas in its solver — if
         // each event passes a cumulative-from-origin delta, the host
         // applies them all and the model drifts an order of magnitude
         // past the actual cursor movement. Fire once at drag end with
-        // the final pair-size delta via OnPointerReleased.
+        // the final pair-size delta via EndDragCore.
+        //
         // Diagnostic-only pre-snapshot. Skip the visual-tree walk when no
         // sink is wired (hot path — fires at input rate during drag).
         var diagSink = DiagnosticSink;
@@ -309,34 +324,32 @@ internal sealed partial class DockSplitterControl : Grid
                 && pp2.Children[0] is FrameworkElement fe2)
                 ? (_direction == DockSplitterDirection.Columns ? fe2.ActualWidth : fe2.ActualHeight)
                 : -1;
-            diagSink($"MOVE p=({p.X:F1},{p.Y:F1}) cumDelta={cumDelta:F1} leadingAtCapture={_leadingDipAtCapture:F1} pairDip={_pairDipAtCapture:F1} preLeadingActual={preLeading:F1} postLeadingActual={postLeading:F1}");
+            diagSink($"MOVE p=({parentRelativePoint.X:F1},{parentRelativePoint.Y:F1}) cumDelta={cumDelta:F1} leadingGrowAtCapture={_leadingGrowAtCapture:F3} pairGrow={_pairGrowAtCapture:F3} preLeadingActual={preLeading:F1} postLeadingActual={postLeading:F1}");
         }
-        e.Handled = true;
     }
 
     /// <summary>
-    /// Direct-mutation drag path — Direction A (pure-grow).
+    /// Direct-mutation drag path — pure-grow with live panel extent.
     ///
-    /// Pre-2026-05-21-experiment, this method wrote inline
-    /// <c>Width</c>/<c>Height</c> on the panes (absolute DIPs) and
-    /// zeroed Grow. On release, <see cref="RestorePairToGrow"/>
-    /// converted back to grow values and cleared inline sizes. The
-    /// inline-Width detour caused a measurable snap-back on release
-    /// because the panel size during drag (children-sum) differed
-    /// from after release (parent-allocation), so the ratio-space
-    /// re-render landed in a different DIP space than the cursor.
+    /// The cursor delta is translated to a grow delta against the panel's
+    /// LIVE extent (read fresh each call) and the panel's LIVE total grow.
+    /// Earlier revisions cached <c>leading.ActualWidth</c> + the pair's
+    /// summed DIPs at PointerPressed; that locked in stale values when
+    /// the layout hadn't settled into its N-column shape by press time
+    /// (3+ pane splits could report 2-pane widths on the first press),
+    /// which made the splitter handle visually lag the cursor by the
+    /// amount the snapshot was wrong by.
     ///
-    /// Direction A: do NOT touch inline Width during the drag. Instead,
-    /// compute new <c>FlexPanel.Grow</c> values for the pair that
-    /// REPRESENT THE TARGET PROPORTION directly. Yoga redistributes
-    /// the panel's parent-allocated extent across the children by
-    /// grow weight — exactly as WinUI Grid + GridUnitType.Star
-    /// redistributes a Grid's children. Single source of truth; no
-    /// mode-switch at release; no panel-size drift.
+    /// Since cursor follow is exactly "grow such that leading width
+    /// grows by cumulativeDeltaDip DIPs", and Yoga distributes the
+    /// panel's allocated extent by <c>grow / totalPanelGrow</c>, the
+    /// grow delta is <c>cumulativeDelta * totalPanelGrow / panelExtent</c>
+    /// — both factors are live readings, so a layout shift mid-drag
+    /// does not desync the math.
     /// </summary>
     private void ApplyAbsoluteGrowFromCapture(double cumulativeDeltaDip)
     {
-        if (_pairDipAtCapture < 1) return;
+        if (_pairGrowAtCapture <= 0) return;
         if (VTH.GetParent(this) is not Microsoft.UI.Reactor.Layout.FlexPanel panel) return;
         int idx = -1;
         for (int i = 0; i < panel.Children.Count; i++)
@@ -345,21 +358,45 @@ internal sealed partial class DockSplitterControl : Grid
         if (panel.Children[idx - 1] is not FrameworkElement leading) return;
         if (panel.Children[idx + 1] is not FrameworkElement trailing) return;
 
-        const double minDip = 60.0;
-        var newLeading = Math.Clamp(
-            _leadingDipAtCapture + cumulativeDeltaDip,
-            minDip,
-            _pairDipAtCapture - minDip);
-        if (newLeading <= 0 || double.IsNaN(newLeading)) return;
+        // Live panel extent along the split axis. GetHostExtent already
+        // subtracts sibling splitter handles, so it equals what Yoga
+        // distributes across pane children via grow weight.
+        var panelExtent = GetHostExtent();
+        if (panelExtent < 1) return;
 
-        // Pure-grow path: distribute pairGrow proportionally to the
-        // target DIP split. Trailing share = totalGrow - leadingGrow, so
-        // newTrailing in DIPs is not needed explicitly. Inline
-        // Width/Height is NOT touched — the panel stays at its parent
-        // allocation throughout the drag.
-        var totalGrow = _pairGrowAtCapture > 0 ? _pairGrowAtCapture : 1.0;
-        var newLeadingGrow = totalGrow * (newLeading / _pairDipAtCapture);
-        var newTrailingGrow = totalGrow - newLeadingGrow;
+        // Live total grow across the panel's non-splitter children. The
+        // splitter only mutates the pair's grow during a drag, so this
+        // total is effectively stable, but reading it live is cheap and
+        // self-correcting if some other code path adjusts a sibling.
+        double totalPanelGrow = 0;
+        for (int i = 0; i < panel.Children.Count; i++)
+        {
+            if (panel.Children[i] is DockSplitterControl) continue;
+            if (panel.Children[i] is FrameworkElement fe)
+                totalPanelGrow += Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(fe);
+        }
+        if (totalPanelGrow <= 0) totalPanelGrow = _pairGrowAtCapture;
+
+        // Convert the cursor delta (DIPs) into grow space using the live
+        // panel extent + total grow. deltaGrow * (panelExtent / totalGrow)
+        // = cumulativeDeltaDip, so the leading pane's width changes by
+        // exactly cumulativeDeltaDip — the splitter handle tracks the
+        // cursor 1:1.
+        var deltaGrow = totalPanelGrow * (cumulativeDeltaDip / panelExtent);
+
+        // Min-size floor expressed in grow space (60 DIP minimum per pane).
+        const double minDip = 60.0;
+        var minGrow = totalPanelGrow * (minDip / panelExtent);
+        // Pair can't be split below 2*minGrow; clamp the target leading
+        // grow inside [minGrow, pairGrow - minGrow] so neither side
+        // collapses below 60 DIPs.
+        if (_pairGrowAtCapture <= 2 * minGrow) return;
+        var newLeadingGrow = Math.Clamp(
+            _leadingGrowAtCapture + deltaGrow,
+            minGrow,
+            _pairGrowAtCapture - minGrow);
+        var newTrailingGrow = _pairGrowAtCapture - newLeadingGrow;
+
         Microsoft.UI.Reactor.Layout.FlexPanel.SetGrow(leading, newLeadingGrow);
         Microsoft.UI.Reactor.Layout.FlexPanel.SetGrow(trailing, newTrailingGrow);
     }
@@ -381,27 +418,37 @@ internal sealed partial class DockSplitterControl : Grid
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
         if (!_isCapturing || e.Pointer.PointerId != _capturePointerId) return;
-        _isCapturing = false;
         _capturePointerId = 0;
         try { ReleasePointerCapture(e.Pointer); } catch { /* already lost */ }
-        // Compute the final cursor-driven delta and fire ResizeDelta once
-        // so the host's model catches up. The solver convention is
-        // positive=shrink-leading, so negate.
-        var p = ParentPosition(e);
+        EndDragCore(ParentPosition(e));
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// End a drag. Applies the final cumulative delta, restores pair
+    /// state, emits the RELEASE trace, and fires <see cref="ResizeDelta"/>
+    /// with <c>IsFinal=true</c>. The solver convention is positive-delta=
+    /// shrink-leading, so the sign of the cursor delta is negated when
+    /// raising the event. Called by <see cref="OnPointerReleased"/>,
+    /// <see cref="OnKeyDown"/> (via <see cref="KeyboardStepCore"/>), and
+    /// <see cref="EndSimulatedDrag"/>. No-op when not capturing.
+    /// </summary>
+    private void EndDragCore(Point parentRelativePoint)
+    {
+        if (!_isCapturing) return;
         var cumDelta = _direction == DockSplitterDirection.Columns
-            ? p.X - _captureOrigin.X
-            : p.Y - _captureOrigin.Y;
+            ? parentRelativePoint.X - _captureOrigin.X
+            : parentRelativePoint.Y - _captureOrigin.Y;
         // Capture pre-restore leading width for diagnostic — what the
         // drag actually rendered just before we hand off to grow.
         var preRestoreLeading = (VTH.GetParent(this) is Microsoft.UI.Reactor.Layout.FlexPanel pp && pp.Children.Count > 0
             && pp.Children[0] is FrameworkElement fe)
             ? (_direction == DockSplitterDirection.Columns ? fe.ActualWidth : fe.ActualHeight)
             : -1;
-        // Restore panes to grow-based sizing so the host's re-render
-        // (triggered by ResizeDelta) lands cleanly via the normal path.
+        ApplyAbsoluteGrowFromCapture(cumDelta);
+        _isCapturing = false;
         RestorePairToGrow();
         var hostExtent = GetHostExtent();
-        // Read post-restore leading grow + size for the trace.
         double postRestoreLeadingGrow = -1, postRestoreLeadingActual = -1;
         if (VTH.GetParent(this) is Microsoft.UI.Reactor.Layout.FlexPanel pp2 && pp2.Children.Count > 0
             && pp2.Children[0] is FrameworkElement fe2)
@@ -409,53 +456,50 @@ internal sealed partial class DockSplitterControl : Grid
             postRestoreLeadingGrow = Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(fe2);
             postRestoreLeadingActual = _direction == DockSplitterDirection.Columns ? fe2.ActualWidth : fe2.ActualHeight;
         }
-        Trace($"RELEASE p=({p.X:F1},{p.Y:F1}) cumDelta={cumDelta:F1} preRestoreLeading={preRestoreLeading:F1} postRestoreLeadingGrow={postRestoreLeadingGrow:F3} postRestoreLeadingActual={postRestoreLeadingActual:F1} hostExtent={hostExtent:F1}");
+        Trace($"RELEASE p=({parentRelativePoint.X:F1},{parentRelativePoint.Y:F1}) cumDelta={cumDelta:F1} preRestoreLeading={preRestoreLeading:F1} postRestoreLeadingGrow={postRestoreLeadingGrow:F3} postRestoreLeadingActual={postRestoreLeadingActual:F1} hostExtent={hostExtent:F1}");
         ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(-cumDelta, _direction, hostExtent, isFinal: true));
-        e.Handled = true;
     }
 
     private void RestorePairToGrow()
     {
-        // Direction A: the drag path now writes Grow values directly;
-        // there is nothing to "restore" because we never left grow-space.
+        // Direction A (current path): the drag path writes Grow values
+        // directly and never touches inline Width/Height/MinHeight on
+        // the pair OR the panel — so there is no "restore" work to do.
         //
-        // Defensive cleanup: clear any leftover inline Width/Height +
-        // panel pin that an earlier code path (or a future caller) may
-        // have set. Costs nothing when the props are already unset.
-        if (VTH.GetParent(this) is not Microsoft.UI.Reactor.Layout.FlexPanel panel) return;
-        int idx = -1;
-        for (int i = 0; i < panel.Children.Count; i++)
-            if (ReferenceEquals(panel.Children[i], this)) { idx = i; break; }
-        if (idx <= 0 || idx >= panel.Children.Count - 1) return;
-        if (panel.Children[idx - 1] is not FrameworkElement leading) return;
-        if (panel.Children[idx + 1] is not FrameworkElement trailing) return;
-
-        leading.ClearValue(FrameworkElement.WidthProperty);
-        trailing.ClearValue(FrameworkElement.WidthProperty);
-        leading.ClearValue(FrameworkElement.HeightProperty);
-        trailing.ClearValue(FrameworkElement.HeightProperty);
-        leading.ClearValue(FrameworkElement.MinHeightProperty);
-        trailing.ClearValue(FrameworkElement.MinHeightProperty);
-        panel.ClearValue(FrameworkElement.WidthProperty);
-        panel.ClearValue(FrameworkElement.HeightProperty);
+        // Older revisions cleared inline Width/Height defensively here.
+        // That cleanup was destructive: it stomped app-set
+        // DockTabGroup.Width hints + explicit FlexPanel.Width values
+        // after every drag, which the SplitterMatrix_A01 fixture caught.
+        // Intentionally a no-op; kept as a named seam so future callers
+        // that DO pin sizes have a single restore site.
     }
 
     private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
         if (!_isCapturing) return;
-        _isCapturing = false;
         _capturePointerId = 0;
-        // Mirror the normal release path: clear any defensive inline
-        // width/height/min-height state before the final ResizeDelta so
-        // a capture-loss mid-drag converges to the same cleanup as a
-        // pointer release. Skipping this left leading/trailing panes
-        // pinned by inline size values that the host's re-render then
-        // had to undo via grow.
-        RestorePairToGrow();
-        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(0, _direction, GetHostExtent(), isFinal: true));
+        AbortDragCore();
+        // Real-handler-only: fade the handle back to its un-hovered chrome
+        // since we'll get no PointerExited after the capture loss.
         _handle.Fill = ThemedBrush(
             "SystemControlForegroundBaseMediumLowBrush",
             Color.FromArgb(0x88, 0x80, 0x80, 0x80));
+    }
+
+    /// <summary>
+    /// Abort a drag without applying a final delta. Mirrors the normal
+    /// release path's cleanup (state transition + RestorePairToGrow)
+    /// then fires <see cref="ResizeDelta"/> with delta=0 / IsFinal=true
+    /// so the host's solver catches up to the current grow values.
+    /// Called by <see cref="OnPointerCaptureLost"/> and
+    /// <see cref="AbortSimulatedDrag"/>. No-op when not capturing.
+    /// </summary>
+    private void AbortDragCore()
+    {
+        if (!_isCapturing) return;
+        _isCapturing = false;
+        RestorePairToGrow();
+        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(0, _direction, GetHostExtent(), isFinal: true));
     }
 
     // Spec 045 §2.22 — resolve a theme resource brush with a literal
@@ -492,21 +536,108 @@ internal sealed partial class DockSplitterControl : Grid
     internal void RaiseResizeDeltaForTest(DockSplitterDeltaEventArgs args)
         => ResizeDelta?.Invoke(this, args);
 
+    // ─── Synthetic injection API ────────────────────────────────────────
+    //
+    //  Each method below is a thin wrapper over the same *Core method the
+    //  real WinUI event handlers call. The only thing these wrappers add
+    //  is zeroing `_capturePointerId` (no real pointer is in play), so
+    //  every line of meaningful behavior — math, state transitions,
+    //  diagnostic traces, event firing — runs through the shared path.
+    //  That is what makes the matrix fixtures meaningful: a regression
+    //  caught by a synthetic drag is a regression in production code.
+
     /// <summary>
-    /// Test hook — simulate a complete pointer drag: snapshot pair +
-    /// apply absolute delta + release + fire <see cref="ResizeDelta"/>.
-    /// Mirrors the side-effects of the production drag path (the same
-    /// order as <c>OnPointerReleased</c>) so test fixtures can exercise
-    /// the post-drag state — including the host's ratio-store sync and
-    /// re-render — without needing real pointer input.
+    /// Test hook — begin a simulated pointer drag. Calls
+    /// <see cref="BeginDragCore"/> directly, so the resulting state +
+    /// snapshot + PRESS trace is byte-identical to a real pointer press.
+    /// Subsequent <see cref="ContinueSimulatedDrag"/> /
+    /// <see cref="EndSimulatedDrag"/> calls drive the same core methods
+    /// the real handlers use. Pair this with
+    /// <c>InternalsVisibleTo("Reactor.Tests")</c>.
+    /// </summary>
+    /// <param name="parentRelativeOrigin">
+    /// Cursor position in the splitter's parent (the <c>FlexPanel</c>)
+    /// coordinate space at the start of the drag. The real
+    /// <c>OnPointerPressed</c> computes this via
+    /// <c>e.GetCurrentPoint(parent).Position</c>; tests can pass
+    /// arbitrary values since the math depends only on cursor delta.
+    /// </param>
+    internal void BeginSimulatedDrag(Point parentRelativeOrigin)
+    {
+        _capturePointerId = 0;
+        BeginDragCore(parentRelativeOrigin);
+    }
+
+    /// <summary>
+    /// Test hook — continue a simulated drag. Delegates to
+    /// <see cref="ContinueDragCore"/>, the same method
+    /// <see cref="OnPointerMoved"/> calls — so the MOVE trace + grow
+    /// math the production drag uses is exactly what tests exercise.
+    /// No-op if <see cref="BeginSimulatedDrag"/> hasn't been called.
+    /// </summary>
+    /// <param name="parentRelativePoint">
+    /// Current cursor position in the splitter's parent coordinate
+    /// space. The cumulative delta = <c>parentRelativePoint - origin</c>.
+    /// </param>
+    internal void ContinueSimulatedDrag(Point parentRelativePoint)
+        => ContinueDragCore(parentRelativePoint);
+
+    /// <summary>
+    /// Test hook — finish a simulated drag. Delegates to
+    /// <see cref="EndDragCore"/>, the same method
+    /// <see cref="OnPointerReleased"/> calls. Fires
+    /// <see cref="ResizeDelta"/> with <c>IsFinal=true</c>; the solver
+    /// convention is positive-delta=shrink-leading so the sign of
+    /// <paramref name="parentRelativePoint"/> minus the origin is
+    /// negated when raising the event.
+    /// </summary>
+    /// <param name="parentRelativePoint">
+    /// Final cursor position in the splitter's parent coordinate
+    /// space. Determines the cumulative delta for the terminal event.
+    /// </param>
+    internal void EndSimulatedDrag(Point parentRelativePoint)
+        => EndDragCore(parentRelativePoint);
+
+    /// <summary>
+    /// Test hook — abort a simulated drag without applying a final
+    /// delta. Delegates to <see cref="AbortDragCore"/>, the same method
+    /// <see cref="OnPointerCaptureLost"/> calls (minus the handle-fade
+    /// chrome update which is real-pointer-specific). No-op if not
+    /// currently capturing.
+    /// </summary>
+    internal void AbortSimulatedDrag()
+    {
+        _capturePointerId = 0;
+        AbortDragCore();
+    }
+
+    /// <summary>
+    /// Test hook — simulate a single keyboard step. Delegates to
+    /// <see cref="KeyboardStepCore"/>, the same method the arrow-key
+    /// branch of <see cref="OnKeyDown"/> calls — so RTL inversion and
+    /// the snapshot/apply/restore/fire-event sequence run identically.
+    /// <paramref name="forward"/> follows the screen-axis convention
+    /// (Right/Down under LTR), inverted automatically under RTL.
+    /// </summary>
+    internal void SimulateKeyboardStep(bool forward)
+        => KeyboardStepCore(forward);
+
+    /// <summary>
+    /// Test hook — convenience wrapper for fixtures that don't need to
+    /// inspect mid-drag state. Drives the full press/move/release
+    /// lifecycle in one call by chaining
+    /// <see cref="BeginSimulatedDrag"/> + <see cref="EndSimulatedDrag"/>.
+    /// New tests should prefer the granular methods so the rig can read
+    /// pane state between events.
     /// </summary>
     internal void SimulatePointerDragForTest(double cumulativeDeltaDip)
     {
-        SnapshotPairAtCapture();
-        ApplyAbsoluteGrowFromCapture(cumulativeDeltaDip);
-        RestorePairToGrow();
-        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(
-            -cumulativeDeltaDip, _direction, GetHostExtent(), isFinal: true));
+        var origin = new Point(0, 0);
+        var dest = _direction == DockSplitterDirection.Columns
+            ? new Point(cumulativeDeltaDip, 0)
+            : new Point(0, cumulativeDeltaDip);
+        BeginSimulatedDrag(origin);
+        EndSimulatedDrag(dest);
     }
 
     /// <summary>
@@ -558,11 +689,6 @@ internal sealed partial class DockSplitterControl : Grid
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        double step = KeyboardStep;
-        // Direct-mutate path: positive raw delta = grow leading (cursor
-        // direction). Right/Down → +step; Left/Up → -step. The fired
-        // ResizeDelta event uses the solver convention (negated).
-        //
         // Spec 045 §2.23 — under FlowDirection.RightToLeft the visual
         // "leading" pane (index 0 in the FlexPanel children list) paints
         // on the right edge instead of the left. The pointer-drag path
@@ -571,36 +697,58 @@ internal sealed partial class DockSplitterControl : Grid
         // screen-right reports negative ΔX under RTL). Arrow keys are
         // physical (`VirtualKey.Left` is always the physical Left arrow
         // regardless of FlowDirection), so we invert the Left/Right
-        // mapping under RTL so a Right press still grows the screen-
-        // right pane visually. Vertical (Rows) splitters are unaffected.
-        bool invertHorizontal =
-            _direction == DockSplitterDirection.Columns
-            && FlowDirection == FlowDirection.RightToLeft;
-        double rawDelta;
+        // mapping under RTL so a Right press still moves the handle in
+        // the same visual direction. Vertical (Rows) splitters are
+        // unaffected.
+        bool forward;
         switch (e.Key)
         {
             case VirtualKey.Left when _direction == DockSplitterDirection.Columns:
-                rawDelta = invertHorizontal ? step : -step; break;
+                forward = false; break;
             case VirtualKey.Right when _direction == DockSplitterDirection.Columns:
-                rawDelta = invertHorizontal ? -step : step; break;
+                forward = true; break;
             case VirtualKey.Up when _direction == DockSplitterDirection.Rows:
-                rawDelta = -step; break;
+                forward = false; break;
             case VirtualKey.Down when _direction == DockSplitterDirection.Rows:
-                rawDelta = step; break;
+                forward = true; break;
             default: return;
         }
 
-        // Snapshot the current pair, then apply the arrow step as an
-        // absolute cursor delta — same code path as the pointer drag.
-        SnapshotPairAtCapture();
-        ApplyAbsoluteGrowFromCapture(rawDelta);
-        // Same fix as OnPointerReleased: convert inline sizes back into
-        // grow values + release the perpendicular pin so window resize
-        // continues to work after the keyboard nudge.
-        RestorePairToGrow();
-        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(-rawDelta, _direction, GetHostExtent(), isFinal: true));
+        KeyboardStepCore(forward);
         Focus(FocusState.Keyboard);
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Apply a single keyboard step to the splitter. Encapsulates the
+    /// RTL-inversion + snapshot/apply/restore/fire-event sequence shared
+    /// between <see cref="OnKeyDown"/> and
+    /// <see cref="SimulateKeyboardStep"/>. <paramref name="forward"/>
+    /// follows the screen-axis convention: Right/Down on a Columns/Rows
+    /// splitter under LTR; the method inverts horizontal for RTL so
+    /// "forward=true" always moves the splitter handle in the same
+    /// visual direction.
+    /// </summary>
+    private void KeyboardStepCore(bool forward)
+    {
+        double step = KeyboardStep;
+        bool invertHorizontal =
+            _direction == DockSplitterDirection.Columns
+            && FlowDirection == FlowDirection.RightToLeft;
+        var rawDelta = forward
+            ? (invertHorizontal ? -step : step)
+            : (invertHorizontal ? step : -step);
+
+        // A keyboard step is a self-contained press+release: snapshot,
+        // apply, restore, and fire the terminal event in one shot. We
+        // do this inline (rather than calling BeginDragCore + EndDragCore)
+        // because there's no MOVE phase and no cursor coordinate space —
+        // re-using those would require a synthetic Point and the PRESS
+        // trace string would be misleading. The math is identical.
+        SnapshotPairAtCapture();
+        ApplyAbsoluteGrowFromCapture(rawDelta);
+        RestorePairToGrow();
+        ResizeDelta?.Invoke(this, new DockSplitterDeltaEventArgs(-rawDelta, _direction, GetHostExtent(), isFinal: true));
     }
 
     private sealed partial class DockSplitterAutomationPeer : FrameworkElementAutomationPeer
