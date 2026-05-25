@@ -6,6 +6,12 @@
   <Folder Name="/perf_bench/">
     <Project Path="tests/perf_bench/PerfBench.Shared/PerfBench.Shared.csproj" />
   </Folder>
+  <Folder Name="/perf_bench/ControlModel/">
+    <Project Path="tests/perf_bench/PerfBench.ControlModel/PerfBench.ControlModel.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
   <Folder Name="/perf_bench/Allocation/">
     <Project Path="tests/perf_bench/PerfBench.Allocation/Allocation.Bound/Allocation.Bound.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
@@ -319,6 +325,10 @@
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
+    <Project Path="tests/stress_perf/StressPerf.ReactorV2/StressPerf.ReactorV2.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="tests/stress_perf/StressPerf.ReactorGrid/StressPerf.ReactorGrid.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
@@ -338,7 +348,9 @@
     </Project>
     <Project Path="tests/stress_perf/StressPerf.Wpf/StressPerf.Wpf.csproj" />
   </Folder>
-  <Folder Name="/tools/" />
+  <Folder Name="/tools/">
+    <Project Path="tools/spec047-aggregator/Spec047Aggregator.csproj" />
+  </Folder>
   <Folder Name="/tools/Reactor.MurCheckGuardrail/">
     <Project Path="tools/Reactor.MurCheckGuardrail/Reactor.MurCheckGuardrail.csproj" />
   </Folder>

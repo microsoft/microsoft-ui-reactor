@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Spec 047 Phase 0 — V2 startup-perf scaffolding. Mirrors BlankReactor at
+    Phase-0 freeze; only the AppName / assembly name differ. Phase 1+ V2
+    work shows up as the delta against BlankReactor's TTFF.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>BlankReactorV2</RootNamespace>
+    <AssemblyName>BlankReactorV2</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <PublishAot>false</PublishAot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Common\BenchmarkTracing.cs" Link="Common\BenchmarkTracing.cs" />
+    <Compile Include="..\Common\BlankPerfMetrics.cs" Link="Common\BlankPerfMetrics.cs" />
+  </ItemGroup>
+</Project>

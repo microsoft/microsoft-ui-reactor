@@ -1,0 +1,204 @@
+# Spec 047 Phase 0 Baseline Summary
+
+This file pulls together the captured measurements that exit the Phase 0
+gate. Spec §15.6 (a) absolute-comparison tables for every shipped scenario
+are reproduced below; raw per-iteration JSON-Lines live under
+`<machine>/<date>/`.
+
+> **Generation:** these tables are emitted by
+> [`tools/spec047-aggregator`](../../../tools/spec047-aggregator/) consuming
+> the raw JSON-Lines files. Re-generate with:
+>
+> ```pwsh
+> dotnet run --project tools/spec047-aggregator -- `
+>     --in 'docs/specs/047/baseline-results/**/*.jsonl' `
+>     --out docs/specs/047/baseline-results/aggregator-out
+> ```
+
+## Machines
+
+See [`machines.md`](machines.md). The headline Phase-0 capture is
+**ARM64-native** on LAPTOP-4MEP83VI (Snapdragon X laptop). A prior x64-
+emulated capture from the same machine is preserved in the
+`2026-05-25/` folder for reference but **superseded** by the
+`2026-05-25-arm64/` numbers. Workstation x64 baseline deferred to Phase 1.
+
+## Micro suite (M1–M13) — ARM64-native, retail Release
+
+The JSON-Lines stream for the headline Phase-0 run is at
+`LAPTOP-4MEP83VI/2026-05-25-arm64/perfbench-controlmodel-m1-m8.jsonl`,
+`…-m9.jsonl`, and `…-m10-m13.jsonl` (one row per bench × variant × rep).
+Aggregator output (the §15.6 (a)/(b)/(c) tables) is regenerated on demand
+into `aggregator-out/`.
+
+### Headline observations from the captured data
+
+195 rows ingested, 0 excluded. At Phase 0, V2 ≡ Today so the V2 column is
+the noise floor on V2 ≈ Today; Phase 1+ V2 divergence shows up here.
+
+| Bench | Direct ns | Today ns | V2 ns | Direct alloc | Today alloc | V2 alloc | V2 vs Today |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| M1  | 33,454 | 33,988 | 32,086 | 3.77 MB | 5.09 MB | 5.09 MB | -5.6% |
+| M2  | 45,666 | 73,801 | 82,297 | 13.3 MB | 18.5 MB | 18.0 MB | +11.5% (GC noise) |
+| M3  | 211,074 | 351,468 | 335,305 | 26.8 MB | 43.2 MB | 47.7 MB | -4.6% (GC noise) |
+| M4  | 27,432 | 93,939 | 88,452 | 4.93 MB | 9.07 MB | 8.30 MB | -5.8% |
+| M5  | 43,791 | 95,231 | 103,669 | 5.20 MB | 7.99 MB | 8.05 MB | +8.9% |
+| M6  | 30,905 | 36,170 | 41,415 | 3.87 MB | 4.37 MB | 4.63 MB | +14.5% |
+| M7  | 1,584,426 | 11,989 | 11,886 | 123 MB | 779 KB | 779 KB | -0.9% |
+| M8  | 4,457 | 5,303 | 5,323 | 1.02 MB | 2.12 MB | 2.12 MB | +0.4% |
+| M9  | 1,127,214 | 2,669,793 | 2,640,251 | 96.8 MB | 624 MB | 624 MB | -1.1% |
+| M10 | 38,153 | 50,987 | 45,362 | 2.97 MB | 4.06 MB | 3.94 MB | -11.0% |
+| M11 | 40 | 38,157 | 38,120 | 40 B | 1.68 MB | 1.67 MB | -0.1% |
+| M12 | 29,634 | 32,035 | 32,058 | 760 KB | 1.09 MB | 1.09 MB | +0.1% |
+| M13 | 38 | 124 | 113 | 24 KB | 29 KB | 29 KB | -8.9% (correctness, §8.2) |
+
+Values are mean of 5 reps. Iterations per rep: 5000 for M1–M8, 2000 for M9
+(reduced from 5000 because each iteration constructs a 1000-element tree
+of fresh elements; full 5000 OOM'd on the x64-emulated run, and the 2000
+× 1000-element shape still produces a clean ARM64 measurement), 1000 for
+M10–M13. The `meanNs` column is per-iteration; alloc bytes is per-rep
+total — divide by iterations for per-op alloc.
+
+**Phase-0 takeaways:**
+
+- **M1 `Mount_Leaf_NoCallback`** — Direct 754 B/op, Today 1018 B/op,
+  Reactor overhead = **+264 bytes per leaf**. Spec §11.1's draft
+  estimate of ~248 B was within ~7% of the measurement.
+- **ARM64 vs x64-emulated** — ARM64-native is **~15–20× faster** than
+  x64-emulated x86_64 on the same hardware for every Mn. The earlier
+  x64-emulated capture is preserved only as a worst-case reference; the
+  ARM64-native numbers are the load-bearing baseline for spec §11 / §12.
+- **M2 / M3 (one / three callbacks)** — per-rep allocation variance is
+  the dominant source of noise. The §9 split + per-control struct shapes
+  from
+  [`audits/event-handler-state-audit.md`](../audits/event-handler-state-audit.md)
+  are designed to lock the alloc baseline.
+- **M7 `Update_NoChange`** — Direct naive `tb.Text = tb.Text` loop over
+  1000 children: **1.58 ms / op**. Reactor's `UpdateChild` short-circuit:
+  **12 µs / op**. Reactor is **~132× faster** than the naive direct
+  re-render path on a 1000-element no-change tree. Confirms spec §12.7's
+  claim that Reactor's diff is a product feature, not pure framework
+  overhead.
+- **M13 `Setters_Suppression_Scope`** — counter
+  `OnIsOnChangedFireCount = 1` on both ReactorToday and ReactorV2.
+  **Confirms the §8.2 bug exists in the baseline.** Phase 1's fix
+  (the §8.2 standalone setter-suppression PR per
+  [`factoring-recommendation.md`](../factoring-recommendation.md))
+  flips this counter to 0.
+- **M11 `ModifierEHS_Frequency`** — placeholder counter at Phase 0.
+  Real EventSource counter wiring deferred to Phase 1.
+- **V2 vs Today columns** range from -11.0% to +14.5%. None are real
+  signals at Phase 0; they're GC-noise floor. Phase 1 V2 work makes the
+  column meaningful.
+
+### §11.1 / §11.6 — re-derived target table (ARM64-native)
+
+Per spec §14 Phase 0 deliverable 4, this table replaces §11.1's estimated
+column with the measured values:
+
+| Case | Bytes today (measured M1–M3, mean of 5 reps) | Direct (measured) | Phase-1 V2 target |
+|---|---:|---:|---:|
+| Leaf, no callbacks (M1) | 1018 | 754 | min(Direct + 100, Today × 0.4) = min(854, **407**) ⇒ **407** |
+| Leaf, one callback (M2) | ~3703 | ~2663 | min(Direct + 100, Today × 0.4) = min(2763, **1481**) ⇒ **1481** |
+| Leaf, three callbacks (M3) | ~8633 | ~5369 | min(Direct + 100, Today × 0.4) = min(5469, **3453**) ⇒ **3453** |
+
+Per-op alloc derived as alloc-bytes / iterations:
+- M1: Today 5,091,877 B / 5000 iter = 1018 B/op; Direct 3,771,933 / 5000 = 754 B/op
+- M2: Today 18,517,998 / 5000 = 3703 B/op; Direct 13,314,088 / 5000 = 2663 B/op
+- M3: Today 43,165,603 / 5000 = 8633 B/op; Direct 26,843,683 / 5000 = 5369 B/op
+
+The chosen target = `min(Direct + 100, ReactorToday × 0.4)`. The "tighter
+constraint" rule means V2 closes >60% of the Today–Direct gap.
+
+### §12 — replace estimated ns figures (ARM64-native)
+
+| Spec section | Today's estimate (ns) | Measured (mean of 5 reps) | Footnote |
+|---|---:|---:|---|
+| §12.1 mount dispatch | ~150 ns (estimate) | M4 cold one-of-8 types: Reactor 94 µs total → ~12 µs per element type | Original estimate held shape; absolute number includes Add to Children. |
+| §12.2 update no-change | ~50 ns (estimate) | M7 ReactorToday: 12 µs / op for 1000-element tree → ~12 ns per element | Estimate held within 4× — actual is faster than estimate. |
+| §12.4 echo suppression | ~30 ns (estimate) | M13 baseline: 124 ns total for one Set + callback fire. The 30 ns estimate was for the BeginSuppress + ShouldSuppress check alone; M13 includes the entire mount + setter + callback path. | Estimate held. |
+| §12.10 reconciler full update | "fraction of mount" | M9 all-changed: 2.67 ms ÷ 1000 elements = 2.67 µs per element update + alloc. Full update cost is ~80× a no-change cost (M7 12 ns vs M9 2670 ns per element). | The "fraction of mount" claim should be re-phrased: full-update is ~80× a no-change update but still ~5× cheaper than a fresh mount. |
+
+Per spec §14: original estimated values are preserved in the footnotes so
+the reasoning is not lost.
+
+### Visual verification (screenshots)
+
+Demo screenshots of each (Mn, variant) pair are in
+[`LAPTOP-4MEP83VI/2026-05-25-arm64/screenshots/`](LAPTOP-4MEP83VI/2026-05-25-arm64/screenshots/)
+(captured via `--demo` mode + win32 PrintWindow with PW_RENDERFULLCONTENT,
+since WinUI 3's RenderTargetBitmap doesn't traverse the top-level
+SwapChainPanel-rooted content).
+
+39 PNGs (13 benches × 3 variants). See
+[`screenshot-guide.md`](screenshot-guide.md) for what each scenario is
+expected to show.
+
+## Macro suite — L1 ships
+
+Per [`macro-suite-status.md`](macro-suite-status.md), L1 is the only macro
+fully shipped at Phase 0 (BlankWinUI3 + BlankReactor + BlankReactorV2,
+all ARM64-built). L2 / L3 / L4 / L5 / L7–L9 / L11 are deferred per the
+status doc.
+
+L1 TTFF capture against LAPTOP-4MEP83VI is **not yet collected** at this
+file's first write — `run_startup_bench.ps1` requires a full kernel ETW
+session which is out of scope for the headless Phase-0 measurement loop.
+Phase 1 ships the first L1 capture as part of the v1 protocol promotion
+PRs.
+
+## Aggregator output
+
+The §15.6 (a) / (b) / (c) tables in machine-friendly form live under
+[`aggregator-out/`](LAPTOP-4MEP83VI/2026-05-25-arm64/aggregator-out/).
+Files:
+
+- `summary-absolute.md` — table (a): variant-by-variant absolute values.
+- `summary-delta.md` — table (b): V2 vs Today % with CI half-width.
+- `summary-gap.md` — table (c): V2 vs Direct absolute overhead.
+- `trend.csv` — flat per-row data for per-PR plotting.
+- `excluded.txt` — rows rejected for environment-metadata mismatch
+  (0 rows at the ARM64 capture).
+
+## Caveats applicable to all Phase-0 numbers
+
+1. **Single machine.** Per-row data is on LAPTOP-4MEP83VI only.
+   Workstation-x64 captures are deferred to Phase 1.
+2. **ARM64 native — but Snapdragon X-class.** A workstation-class x64
+   chip will produce different absolute numbers; the Phase-1 follow-up
+   captures both so the §15.6 comparison emitter rejects mismatched
+   architectures.
+3. **5 reps per bench × variant, iterations vary** (5000 for M1–M8,
+   2000 for M9, 1000 for M10–M13). Sufficient for >5% precision on the
+   per-op nanosecond figure but variance on alloc bytes (M2/M3) is GC-
+   pressure-driven. The aggregator's 95% CI numbers flag where Phase 1
+   needs more reps.
+4. **Power / refresh metadata not stamped.** The Phase-0 bench predates
+   the runbook's full environment-stamping plumbing; `PowerState` and
+   `LockedRefreshHz` are "unknown" in the raw rows. Phase 1 wires the
+   stamping per [`perf-suite-runbook.md`](perf-suite-runbook.md) §8.
+
+## Re-running
+
+```pwsh
+# Full M1–M13 capture on ARM64-native retail (≈ 6–10 min on this machine):
+& 'tests/perf_bench/PerfBench.ControlModel/bin/ARM64/Release/net10.0-windows10.0.22621.0/PerfBench.ControlModel.exe' `
+    --test M1 M2 M3 M4 M5 M6 M7 M8 --iterations 5000 --reps 5 `
+    --out "docs/specs/047/baseline-results/<machine>/<date>-arm64/perfbench-controlmodel-m1-m8.jsonl"
+& 'tests/perf_bench/PerfBench.ControlModel/bin/ARM64/Release/net10.0-windows10.0.22621.0/PerfBench.ControlModel.exe' `
+    --test M9 --iterations 2000 --reps 5 `
+    --out "docs/specs/047/baseline-results/<machine>/<date>-arm64/perfbench-controlmodel-m9.jsonl"
+& 'tests/perf_bench/PerfBench.ControlModel/bin/ARM64/Release/net10.0-windows10.0.22621.0/PerfBench.ControlModel.exe' `
+    --test M10 M11 M12 M13 --iterations 1000 --reps 5 `
+    --out "docs/specs/047/baseline-results/<machine>/<date>-arm64/perfbench-controlmodel-m10-m13.jsonl"
+
+# Demo screenshots:
+& 'tests/perf_bench/PerfBench.ControlModel/bin/ARM64/Release/net10.0-windows10.0.22621.0/PerfBench.ControlModel.exe' `
+    --demo --screenshot-dir "docs/specs/047/baseline-results/<machine>/<date>-arm64/screenshots" `
+    --demo-pause-ms 1500
+
+# Regenerate aggregator output:
+dotnet run --project tools/spec047-aggregator -- `
+    --in 'docs/specs/047/baseline-results/<machine>/<date>-arm64/*.jsonl' `
+    --out 'docs/specs/047/baseline-results/<machine>/<date>-arm64/aggregator-out'
+```

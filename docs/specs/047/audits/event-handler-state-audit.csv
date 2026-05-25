@@ -1,0 +1,52 @@
+field,winui-event,owning-control,category,target-location,notes
+CurrentSizeChanged,SizeChanged,FrameworkElement (universal),routed-input-modifier,ModifierEventHandlerState,"CLR event (not routed) but universally available on every FrameworkElement — belongs in shared bucket."
+SizeChangedTrampoline,SizeChanged,FrameworkElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentPointerPressed,PointerPressed,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,True routed event.
+PointerPressedTrampoline,PointerPressed,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentPointerMoved,PointerMoved,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+PointerMovedTrampoline,PointerMoved,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentPointerReleased,PointerReleased,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+PointerReleasedTrampoline,PointerReleased,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentPointerEntered,PointerEntered,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+PointerEnteredTrampoline,PointerEntered,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentPointerExited,PointerExited,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+PointerExitedTrampoline,PointerExited,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentPointerCanceled,PointerCanceled,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+PointerCanceledTrampoline,PointerCanceled,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentPointerCaptureLost,PointerCaptureLost,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+PointerCaptureLostTrampoline,PointerCaptureLost,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentPointerWheelChanged,PointerWheelChanged,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+PointerWheelChangedTrampoline,PointerWheelChanged,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentTapped,Tapped,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,"Routed; also toggles IsTapEnabled and IsTabStop on FrameworkElement when handler attached."
+TappedTrampoline,Tapped,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentDoubleTapped,DoubleTapped,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+DoubleTappedTrampoline,DoubleTapped,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentRightTapped,RightTapped,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+RightTappedTrampoline,RightTapped,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentHolding,Holding,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+HoldingTrampoline,Holding,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentKeyDown,KeyDown,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+KeyDownTrampoline,KeyDown,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentKeyUp,KeyUp,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+KeyUpTrampoline,KeyUp,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentPreviewKeyDown,PreviewKeyDown,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+PreviewKeyDownTrampoline,PreviewKeyDown,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentPreviewKeyUp,PreviewKeyUp,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+PreviewKeyUpTrampoline,PreviewKeyUp,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentCharacterReceived,CharacterReceived,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CharacterReceivedTrampoline,CharacterReceived,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentGotFocus,GotFocus,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+GotFocusTrampoline,GotFocus,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentLostFocus,LostFocus,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+LostFocusTrampoline,LostFocus,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+CurrentAccessKeyDisplayRequested,AccessKeyDisplayRequested,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+AccessKeyDisplayRequestedTrampoline,AccessKeyDisplayRequested,UIElement (universal),routed-input-modifier,ModifierEventHandlerState,
+ToggleSwitchToggledTrampoline,Toggled,ToggleSwitch,control-intrinsic,ToggleSwitchControlEventState,"CLR event on ToggleSwitch only. User handler is held by the element (ToggleSwitchElement.OnToggled / OnIsOnChanged), not by Current* field."
+ButtonClickTrampoline,Click,ButtonBase (Button + Hyperlink + Repeat + Toggle + ToggleSplit),control-intrinsic,ButtonControlEventState,"Single trampoline shared across all ButtonBase subclasses. User handler held by the element."
+TextBoxTextChangedTrampoline,TextChanged,TextBox,control-intrinsic,TextBoxControlEventState,"User handler held by element (TextBoxElement.OnChanged)."
+TextBoxSelectionChangedTrampoline,SelectionChanged,TextBox,control-intrinsic,TextBoxControlEventState,"User handler held by element (TextBoxElement.OnSelectionChanged)."
+ImageOpenedTrampoline,ImageOpened,Image,control-intrinsic,ImageControlEventState,"User handler held by element (ImageElement.OnLoaded)."
+ImageFailedTrampoline,ImageFailed,Image,control-intrinsic,ImageControlEventState,"User handler held by element (ImageElement.OnFailed)."
+ScrollViewerViewChangedTrampoline,ViewChanged,ScrollViewer,control-intrinsic,ScrollViewerControlEventState,"User handler held by element (ScrollViewerElement.OnViewChanged)."
+ScrollViewViewChangedTrampoline,ViewChanged,ScrollView,control-intrinsic,ScrollViewControlEventState,"Distinct from ScrollViewer — ScrollView is the newer WinAppSDK control with TypedEventHandler<ScrollView, object> signature."
+NumberBoxInnerTextChanged,(inner TextBox.TextChanged wiring flag),NumberBox,control-intrinsic,NumberBoxControlEventState,"Bool sentinel — not a trampoline. Tracks whether NumberBox's inner TextBox has been re-wired to forward inner-text changes for immediate-mode validation."

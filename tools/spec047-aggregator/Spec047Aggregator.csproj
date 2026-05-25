@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Spec 047 §15.6 reporting aggregator. Consumes the JSON-Lines result
+    streams produced by PerfBench.ControlModel (micro M1–M13) and the
+    StressPerf.* macro variants. Emits the three §15.6 tables:
+
+      (a) absolute comparison Direct / ReactorToday / ReactorV2
+      (b) Reactor delta (V2 vs Today, % with 95% CI)
+      (c) WinUI gap (V2 vs Direct, absolute)
+
+    Plus a per-PR trend output for CI.
+
+    Phase 0: format is locked, local invocation works; CI wiring is
+    deferred to Phase 1 per spec §14.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Spec047Aggregator</RootNamespace>
+    <AssemblyName>spec047-aggregator</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+</Project>

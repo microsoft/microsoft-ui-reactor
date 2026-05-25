@@ -404,6 +404,16 @@ This is the version of the design where the framework gets *smaller*, not larger
 
 ## §8 Simplification direction: eliminate the change-echo suppressor
 
+> Per-call-site classification of every `BeginSuppress` invocation is in
+> [`docs/specs/047/audits/begin-suppress-audit.csv`](047/audits/begin-suppress-audit.csv);
+> the tally and §8 implications are in
+> [`begin-suppress-audit.md`](047/audits/begin-suppress-audit.md). Headline:
+> 14 / 24 sites are `eliminable-tight-diff` (no spec change needed),
+> 8 / 24 are `coercion` + `float-precision` (tractable with per-control
+> tolerance metadata), 1 / 24 (`ColorPicker.Color`) is the only site that
+> needs §8.1's `mostRecentEventCount` round-trip, and 1 / 24 is documented
+> as already redundant.
+
 The echo suppressor exists because the engine writes value-bearing DPs from the update path, the WinUI control fires its change event, the trampoline invokes the user's callback with the value the engine just wrote, and (if user state has moved on between render and event-dispatch) that callback writes the *old* value back into the *new* state. Spec 030, issue #86, the PropertyGrid cross-row-swap bug.
 
 But: **most built-ins already guard with `if (oldEl.Foo != newEl.Foo) ctrl.Foo = newEl.Foo`.** If every value-write is gated by an element-prop diff, the engine only writes when the *element prop changed* — i.e., when the user state genuinely moved. In that case, the resulting change event fires with the *new* value the user just set, which is identical to what their state already says, and the callback is a no-op.
@@ -695,13 +705,30 @@ This is the design target: the per-element overhead for a leaf with no callbacks
 
 ### 11.6 Targets to commit to
 
+> **Phase 0 update:** the byte columns below were estimates at draft time.
+> They are now anchored to measured values from M1–M3 in the Phase 0
+> baseline run on LAPTOP-4MEP83VI (see
+> [`047/baseline-results/summary.md`](047/baseline-results/summary.md)).
+> The targets use the Phase 0 deliverable 4 formula:
+> `Target = min(Direct + 100, ReactorToday × 0.4)`.
+
 If we adopt §7 + §9 + bucketed `Element` base, concrete targets for the design:
 
-| Case | Bytes today | Target | Allocations today | Target |
-|---|---|---|---|---|
-| Leaf, no callbacks (TextBlock) | ~248 | **≤ 100** | 2 | **1** |
-| Leaf, one callback (ToggleSwitch) | ~800 | **≤ 320** | 3–4 | **2** |
-| Leaf, three callbacks (a Button with pointer modifiers) | ~1,200 | **≤ 500** | 5–6 | **2–3** |
+| Case | Bytes today (measured M1–M3) | Direct (measured) | Target (Phase 1 V2) |
+|---|---:|---:|---:|
+| Leaf, no callbacks (TextBlock) | **1018** [M1, mean of 5 reps] | **754** [M1] | **≤ 407** (= Today × 0.4; tighter than Direct + 100 = 854) |
+| Leaf, one callback (ToggleSwitch) | **~3800** [M2, mean of 5 reps; high variance] | **~2660** [M2] | **≤ 1520** (= Today × 0.4; tighter than Direct + 100 = 2760) |
+| Leaf, three callbacks (Button + 2 pointer modifiers) | **~48000** [M3, mean of 5 reps] | **~29000** [M3] | **≤ 19200** (= Today × 0.4; tighter than Direct + 100 = 29100) |
+
+> Footnote — pre-Phase-0 estimates: TextBlock ~248 B, ToggleSwitch ~800 B,
+> Button ~1200 B; targets were ≤100 / ≤320 / ≤500. The estimates were
+> dramatically low because they counted only the Reactor element record's
+> own field bytes, missing the inflated GC-pressure cost of
+> `EventHandlerState` allocation under the actual mount/unmount loop. The
+> measurement uses `GC.GetAllocatedBytesForCurrentThread` over a real
+> mount + unmount cycle in a WinUI hosted process, so it captures the
+> trampoline closure, the per-element `ReactorState` allocation, and the
+> coordinator state too.
 
 These are aggressive but tractable. The §11.3 calculations show the bytes are there to be reclaimed; the design question is whether the source-generator and bucketing complexity is worth the constant factor on a workload where 10,000 elements live in a virtualized list. At 10k elements: ~5 MB saved on a TextBlock-heavy list, ~5 MB saved on an interactive list. That's GC-noticeable.
 
@@ -719,7 +746,16 @@ Both are worth landing regardless of which form (descriptor, source-gen, handler
 
 ## §12 Runtime perf — dispatch, code size, cache, JIT
 
-§11 quantified the memory wins. This section quantifies the costs and benefits of moving to a data-driven model on **runtime axes other than memory**: dispatch cost per mount/update, code size, cache locality, JIT compile time, and the constraints imposed by .NET 9 PGO. Numbers are estimated on .NET 9 / x64 from public docs and existing benches in the tree; spot-check with a microbench before committing.
+§11 quantified the memory wins. This section quantifies the costs and benefits of moving to a data-driven model on **runtime axes other than memory**: dispatch cost per mount/update, code size, cache locality, JIT compile time, and the constraints imposed by .NET 9 PGO.
+
+> **Phase 0 update.** The ns figures in §12.1 / §12.2 / §12.4 / §12.10 were
+> estimates at draft time. They are now anchored to the M4 / M5 / M7 / M9
+> measurements committed under
+> [`047/baseline-results/summary.md`](047/baseline-results/summary.md).
+> See the per-section footnotes; the original estimates are preserved so
+> the reasoning is not lost.
+
+Numbers are estimated on .NET 9 / x64 from public docs and existing benches in the tree where not yet measured; the Phase 0 M-bench data backs the bulleted estimates below.
 
 ### 12.1 Today's dispatch — what does the switch actually compile to?
 
