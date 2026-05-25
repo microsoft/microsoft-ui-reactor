@@ -1039,7 +1039,13 @@ The audit work and the perf validation suite are *part of writing this spec*, no
 
 6. **Decision criteria for §13 open questions.** Each open question that the suite can disambiguate gets a written success criterion (e.g., "Q3 §8.1 round-trip ships if it solves all three correctness tests AND adds ≤5% to M2"). Documented before Phase 1 starts, so the decisions in later phases follow the data without relitigation.
 
-**Phase 0 exit gate:** all six deliverables complete, baseline numbers in `docs/specs/047/baseline-results/`, §11 and §12 of this spec updated with measured numbers replacing estimates. Only then does the proposal move to greenlight.
+7. **Spec factoring decision.** Spec 047 is deliberately comprehensive — it bundles the external-control parity surface, the event-state memory optimization, the echo-suppression evolution, the setter-echo correctness fix, and the deferred source-gen direction into one document because they share invariants and trade-offs. A reviewer recommended splitting this into separable specs (047-core + memory + echo + setters-fix + source-gen). The right time to make that call is *after* Phase 0 produces the audit results and the baseline numbers, because the data will reveal:
+    - Whether the echo-suppression evolution is small enough to leave in-line (one §8 section) or large enough to warrant its own spec.
+    - Whether the `EventHandlerState` split lands as part of the v1 protocol PRs or as an independent precursor (and similarly for the bucketed-`Element`-base from §11.7).
+    - Whether the setter-echo fix (§8.2) is small enough to ship as a standalone fix immediately, ahead of the rest of the work.
+    Phase 0 deliverable: a written recommendation on factoring, with a proposed split (or "keep unified") justified by the audit findings. The recommendation is reviewed at the same gate as the rest of Phase 0, and any approved split is executed before Phase 1 starts.
+
+**Phase 0 exit gate:** all seven deliverables complete, baseline numbers in `docs/specs/047/baseline-results/`, §11 and §12 of this spec updated with measured numbers replacing estimates, factoring recommendation reviewed and either ratified ("keep unified") or executed (specs split per the recommendation). Only then does the proposal move to greenlight.
 
 ### Phase 1 — v1 protocol behind a feature flag
 
