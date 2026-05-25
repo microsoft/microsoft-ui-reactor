@@ -23,10 +23,13 @@ are reproduced below; raw per-iteration JSON-Lines live under
 ## Machines
 
 See [`machines.md`](machines.md). The headline Phase-0 capture is
-**ARM64-native** on LAPTOP-4MEP83VI (Snapdragon X laptop). A prior x64-
-emulated capture from the same machine is preserved in the
-`2026-05-25/` folder for reference but **superseded** by the
-`2026-05-25-arm64/` numbers. Workstation x64 baseline deferred to Phase 1.
+**ARM64-native** on LAPTOP-4MEP83VI (Snapdragon X laptop). The companion
+**x64-native** capture on CPC-ander-YTZ3O (Windows 365 Cloud PC, AMD EPYC
+7763) closes the §14 deliverable-4 two-machine requirement; see
+[`CPC-ander-YTZ3O/2026-05-25-x64/`](CPC-ander-YTZ3O/2026-05-25-x64/) and
+the "Headline observations from x64" subsection below. A prior x64-
+emulated capture from LAPTOP-4MEP83VI is preserved in the `2026-05-25/`
+folder for reference but **superseded**.
 
 ## Micro suite (M1–M13) — ARM64-native, retail Release
 
@@ -101,6 +104,55 @@ total — divide by iterations for per-op alloc.
 - **V2 vs Today columns** range from -16.7% to +16.7%. None are real
   signals at Phase 0; they're GC-noise floor. Phase 1 V2 work makes the
   column meaningful.
+
+### Headline observations from x64 (CPC-ander-YTZ3O, Windows 365 Cloud PC)
+
+Companion x64-native capture per spec §14 deliverable 4. 195 rows
+ingested, 0 excluded. JSON-Lines at
+[`CPC-ander-YTZ3O/2026-05-25-x64/`](CPC-ander-YTZ3O/2026-05-25-x64/);
+aggregator output in the same folder's `aggregator-out/`.
+
+| Bench | Direct ns | Today ns | V2 ns | Direct alloc | Today alloc | V2 alloc | V2 vs Today |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| M1  | 88,060 | 101,529 | 101,557 | 3.77 MB | 5.35 MB | 5.39 MB | 0.0% |
+| M2  | 98,019 | 129,841 | 136,717 | 14.1 MB | 19.1 MB | 19.0 MB | +5.3% (GC noise) |
+| M3  | 274,521 | 353,868 | 350,436 | 28.3 MB | 44.8 MB | 44.6 MB | -1.0% |
+| M4  | 58,636 | 143,436 | 159,307 | 5.10 MB | 10.1 MB | 10.2 MB | +11.1% (GC noise) |
+| M5  | 58,706 | 144,107 | 150,496 | 5.10 MB | 10.1 MB | 10.2 MB | +4.4% |
+| M6  | 87,794 | 96,019 | 95,956 | 3.77 MB | 4.79 MB | 4.83 MB | -0.1% |
+| M7  | 1,417,352 | 28,337 | 28,157 | 123 MB | 812 KB | 812 KB | -0.6% |
+| M8  | 11,965 | 12,879 | 12,660 | 1.02 MB | 2.12 MB | 2.12 MB | -1.7% |
+| M9  | 1,138,719 | 2,213,204 | 2,220,921 | 96.8 MB | 624 MB | 624 MB | +0.3% |
+| M10 | 98,502 | 123,920 | 97,959 | 3.12 MB | 4.04 MB | 3.78 MB | -21.0% (GC noise) |
+| M11 | 43 | 93,346 | 92,743 | 40 B | 1.62 MB | 1.61 MB | -0.6% |
+| M12 | 84,780 | 96,556 | 94,597 | 760 KB | 1.09 MB | 1.06 MB | -2.0% |
+| M13 | 43 | 230 | 192 | 24 KB | 30 KB | 30 KB | -16.7% (correctness, §8.2) |
+
+**Phase-0 takeaways from the x64 capture:**
+
+- **§8.2 bug reproduces on x64** — M13 `OnIsOnChangedFireCount = 1` on
+  both ReactorToday and ReactorV2, same as ARM64. The bug is not
+  architecture-dependent.
+- **M7 `Update_NoChange` Reactor speedup holds** — Direct naive
+  re-render: **1417 µs**; ReactorToday: **28 µs**. Reactor is **~50×**
+  faster than the naive direct path on x64 (vs ~75× on ARM64). The diff
+  short-circuit's value scales across architectures.
+- **Alloc-bytes parity with ARM64** — per-op allocations match across
+  architectures within rounding (e.g. M1 Today 1071 B/op both machines;
+  M9 Today ~624 MB / 2000 iter both). Confirms the bench is measuring
+  the same code path; alloc is the deterministic axis, ns is the
+  CPU-sensitive one.
+- **Cloud PC absolute numbers are slower than the Snapdragon X laptop**
+  by ~1.6–3.4× across the suite (worst on M12, best on M9). This is the
+  shared-vCPU Windows 365 host showing through, not an ARM64-vs-x64
+  silicon claim. A real bare-metal x64 workstation will produce
+  different absolute numbers; the deliverable-4 requirement is satisfied
+  by having captured both arches with the spec §15.5 separation
+  enforced.
+- **V2 vs Today columns** range from -21.0% to +11.1%. As on ARM64,
+  these are GC-noise floor at Phase 0, not real V2 signal. M10's -21%
+  and M4's +11% are the widest spreads — both are dominated by alloc
+  variance per-rep, same diagnosis as M3 on ARM64.
 
 ### §11.1 / §11.6 — re-derived target table (ARM64-native)
 

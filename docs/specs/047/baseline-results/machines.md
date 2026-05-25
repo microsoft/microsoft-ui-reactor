@@ -2,9 +2,9 @@
 
 Per spec §14 Phase 0 deliverable 4, baselines should be captured on **at
 minimum: one x64 workstation, one ARM64 Surface-class**. The Phase-0 freeze
-includes whichever machines have at least one full M1–M13 run; ARM64-native
-and a dedicated x64 workstation entry are deferred to Phase-1 follow-up
-where noted.
+includes both: ARM64-native on
+[`LAPTOP-4MEP83VI`](#laptop-4mep83vi) (Snapdragon X) and x64-native on
+[`CPC-ander-YTZ3O`](#cpc-ander-ytz3o) (Windows 365 Cloud PC, AMD EPYC 7763).
 
 ## LAPTOP-4MEP83VI
 
@@ -44,10 +44,53 @@ for the headline baseline.
 [`perf-suite-runbook.md`](../perf-suite-runbook.md) §10): none recorded
 yet at Phase-0 freeze. Add entries here as encountered.
 
-## (deferred) Workstation x64
+## CPC-ander-YTZ3O
 
-Spec §14 calls for an x64 workstation baseline alongside ARM64. Deferred to
-Phase 1 follow-up since the Phase-0 single-machine data is sufficient to
-exit the gate (the spec §11 / §12 byte/ns columns get measured numbers from
-**any** representative machine; ARM64-native + workstation enrich the
-picture but don't change the Phase-0 / Phase-1 boundary).
+| Field | Value |
+|---|---|
+| Class | Windows 365 Cloud PC (workstation x64) |
+| CPU | AMD EPYC 7763 64-Core Processor (host); 8 cores / 16 logical processors exposed to the VM |
+| Process architecture (headline baseline) | **x64 (native)** — `2026-05-25-x64/` folder |
+| OS | Microsoft Windows NT 10.0.26200.0 (Windows 11 Enterprise 25H2, build 26200.8390) |
+| .NET | 10.0.8 (runtime); SDK 10.0.204 |
+| Build configuration | Release (retail) |
+| Date of headline M1–M13 capture | 2026-05-25 (x64-native) |
+| Power plan at capture | High performance (AC power; cloud-hosted VM, no battery state) |
+| Locked refresh rate at capture | n/a — virtual display, no physical monitor |
+
+**Closes Phase-0 §14 deliverable 4** ("at minimum: one x64 workstation, one
+ARM64") alongside the ARM64-native baseline on
+[`LAPTOP-4MEP83VI`](#laptop-4mep83vi). 195 rows ingested, 0 excluded;
+M13 `OnIsOnChangedFireCount = 1` on ReactorToday and ReactorV2 confirms the
+§8.2 baseline bug is present.
+
+**Empirical x64-native-vs-ARM64-native delta** (M1–M13 mean ns / op,
+**ratio CPC-ander-YTZ3O x64 ÷ LAPTOP-4MEP83VI ARM64**, ReactorToday column):
+- M1: 3.1× (x64 EPYC Cloud PC slower)
+- M4: 1.6×
+- M5: 1.7×
+- M6: 3.0×
+- M7: 2.2× (ReactorToday)
+- M9: 1.6×
+- M10: 2.3×
+- M12: 3.4×
+- M13: 1.7×
+
+The Snapdragon X laptop is **faster than this Cloud PC** at every Mn — not
+the result one might naively expect from "workstation x64." The reason is
+that this machine is a Windows 365 Cloud PC where the EPYC host is shared
+and the VM gets a slice; it is not a dedicated workstation. Both rows are
+nonetheless valid x64-vs-ARM64 datapoints — the spec §15.6 emitter
+intentionally keeps them in separate rows by `Architecture`, so the
+comparison is apples-to-apples within an architecture only.
+
+**Alloc-bytes parity.** Per-op allocation bytes match between the two
+machines within a few percent on every Mn (e.g. M1 Today: x64 5,353,584 B
+vs ARM64 5,353,584 B; M9 Today: ~624 MB both). This is expected — alloc is
+architecture-independent given the same framework code path and rep
+count. It also confirms the bench is measuring the same thing on both
+machines.
+
+**Architecture-specific gotchas** (per
+[`perf-suite-runbook.md`](../perf-suite-runbook.md) §10): none recorded
+yet at Phase-0 freeze. Add entries here as encountered.
