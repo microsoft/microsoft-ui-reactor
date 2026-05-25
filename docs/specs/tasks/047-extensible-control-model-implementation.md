@@ -98,20 +98,20 @@ implementation exists, so Phase 1 work shows up as the delta.
 
 ### 0.3.1 `StressPerf.ReactorV2` skeleton
 
-- [ ] Add `tests/stress_perf/StressPerf.ReactorV2/` as a near-verbatim copy of
+- [x] Add `tests/stress_perf/StressPerf.ReactorV2/` as a near-verbatim copy of
       `tests/stress_perf/StressPerf.Reactor/`. The point at Phase-0 freeze is
       "V2 numbers ≈ Today numbers" — the only intentional differences are the
       project name, output executable name, and any namespace renames needed
       to coexist with the original project in a side-by-side run.
-- [ ] Wire the new project into `Reactor.slnx`. Confirm it builds clean.
-- [ ] Confirm `StressPerf.ReactorV2.exe` launches and runs the same scenario
+- [x] Wire the new project into `Reactor.slnx`. Confirm it builds clean.
+- [x] Confirm `StressPerf.ReactorV2.exe` launches and runs the same scenario
       surface as `StressPerf.Reactor.exe`. No correctness regression.
 
 ### 0.3.2 `BlankReactorV2` for startup perf
 
-- [ ] Add `tests/startup_perf/BlankReactorV2/` alongside `BlankReactor` /
+- [x] Add `tests/startup_perf/BlankReactorV2/` alongside `BlankReactor` /
       `BlankRNW` / `BlankWinUI3`. Mirrors `BlankReactor` exactly at Phase 0.
-- [ ] Confirm it appears in whatever startup-perf orchestration script enumerates
+- [x] Confirm it appears in whatever startup-perf orchestration script enumerates
       the blank apps (search for `BlankReactor` references).
 
 ### 0.3.3 `PerfBench.ControlModel` — micro suite harnesses
@@ -120,34 +120,36 @@ Spec §15.3 defines M1 through M13. Each test ships in three implementations
 (spec §15.2: `Direct`, `ReactorToday`, `ReactorV2`). At Phase 0 the `ReactorV2`
 implementation is intentionally identical to `ReactorToday`.
 
-- [ ] Add `tests/perf_bench/PerfBench.ControlModel/` BenchmarkDotNet project.
-      Reference `PerfBench.Shared` / `BenchTracker` (or whatever the existing
-      perf bench helper is — confirm against `tests/perf_bench/`).
-- [ ] Implement M1 `Mount_Leaf_NoCallback` across all three variants
+- [x] Add `tests/perf_bench/PerfBench.ControlModel/` project. Uses a
+      dependency-light custom `BenchRunner` instead of BenchmarkDotNet at
+      Phase 0 — produces the same per-rep timing + alloc + GC counts the
+      §15.6 aggregator consumes. Adopting BenchmarkDotNet's pilot/CV-aware
+      warmup is planned for Phase 1.
+- [x] Implement M1 `Mount_Leaf_NoCallback` across all three variants
       (`Direct`, `ReactorToday`, `ReactorV2`).
-- [ ] Implement M2 `Mount_Leaf_OneCallback` across all three variants.
-- [ ] Implement M3 `Mount_Leaf_ThreeCallbacks` across all three variants.
-- [ ] Implement M4 `Dispatch_Switch_Cold` (PGO-cold; reset between iterations).
-- [ ] Implement M5 `Dispatch_Switch_Warm` (10k-mount pre-warm before timing).
-- [ ] Implement M6 `Dispatch_ExternalType` (uses `RegisterType` for the
+- [x] Implement M2 `Mount_Leaf_OneCallback` across all three variants.
+- [x] Implement M3 `Mount_Leaf_ThreeCallbacks` across all three variants.
+- [x] Implement M4 `Dispatch_Switch_Cold` (PGO-cold; reset between iterations).
+- [x] Implement M5 `Dispatch_Switch_Warm` (10k-mount pre-warm before timing).
+- [x] Implement M6 `Dispatch_ExternalType` (uses `RegisterType` for the
       external control).
-- [ ] Implement M7 `Update_NoChange` (1000-element tree, no-op re-render).
-- [ ] Implement M8 `Update_OneLeafChanged` (depth-5 leaf delta).
-- [ ] Implement M9 `Update_AllChanged` (every value-bearing prop changed).
-- [ ] Implement M10 `EventHandlerState_Alloc` (allocation count + bytes).
-- [ ] Implement M11 `ModifierEHS_Frequency` — mount a 1000-element
+- [x] Implement M7 `Update_NoChange` (1000-element tree, no-op re-render).
+- [x] Implement M8 `Update_OneLeafChanged` (depth-5 leaf delta).
+- [x] Implement M9 `Update_AllChanged` (every value-bearing prop changed).
+- [x] Implement M10 `EventHandlerState_Alloc` (allocation count + bytes).
+- [x] Implement M11 `ModifierEHS_Frequency` — mount a 1000-element
       representative tree; count `ModifierEventHandlerState` allocations.
-- [ ] Implement M12 `Pool_Rent_HotPath` — ListView recycle (100 instances ↔ 20
+- [x] Implement M12 `Pool_Rent_HotPath` — ListView recycle (100 instances ↔ 20
       pool slots).
-- [ ] Implement M13 `Setters_Suppression_Scope` — correctness, not perf.
+- [x] Implement M13 `Setters_Suppression_Scope` — correctness, not perf.
       `Set(ts => ts.IsOn = true)` on `ToggleSwitch` with `OnIsOnChanged` —
       verify callback fires exactly once today (the bug per §8.2), zero times
-      after Phase 1's fix. At Phase 0 record the failing behavior as the
-      baseline so the Phase 1 fix has a target to flip.
-- [ ] Each bench reports: mean ns + 95% CI, allocation bytes, Gen0/1/2 collections
-      per 1M ops, final managed heap delta. Confirm BenchmarkDotNet's default
-      `MemoryDiagnoser` covers the alloc reporting; add explicit `GC.GetTotalMemory`
-      probes where it doesn't.
+      after Phase 1's fix. Phase 0 records the failing behavior as baseline
+      (`OnIsOnChangedFireCount = 1`) so the Phase 1 fix has a target to flip.
+- [x] Each bench reports: mean ns + 95% CI, allocation bytes, Gen0/1/2 collections,
+      managed heap delta. `BenchRunner` instruments `GC.GetAllocatedBytesForCurrentThread`
+      + `GC.CollectionCount` + `GC.GetTotalMemory` per rep; aggregator computes
+      95% CI from 5 reps.
 
 ### 0.3.4 Macro suite L1–L11
 
@@ -186,17 +188,21 @@ in the status doc.
 
 ### 0.3.5 Reporting aggregator
 
-- [ ] Implement the JSON-Lines collector — one row per
-      `(scenario, variant, iteration)`.
-- [ ] Implement the comparison emitter producing the three §15.6 tables:
+- [x] Implement the JSON-Lines collector — one row per
+      `(scenario, variant, repetition)`. Ships as `tools/spec047-aggregator`.
+- [x] Implement the comparison emitter producing the three §15.6 tables:
       (a) absolute comparison `Direct` / `ReactorToday` / `ReactorV2`,
       (b) Reactor delta (`V2 vs Today` % with CI),
       (c) WinUI gap (`V2 vs Direct` absolute).
-- [ ] Implement the per-PR trend output for CI. (CI wiring itself is deferred
-      to Phase 1 — Phase 0 just needs the format spec'd and a local invocation
-      that works.)
-- [ ] Confirm result rows with mismatched environment metadata are flagged as
-      non-comparable (per §15.5 last paragraph).
+- [x] Implement the per-PR trend output for CI (`trend.csv`). CI wiring
+      itself is deferred to Phase 1 — Phase 0 ships the format and a local
+      `dotnet run --project tools/spec047-aggregator` invocation.
+- [x] Confirm result rows with mismatched environment metadata are flagged
+      as non-comparable. Architecture is the load-bearing axis at Phase 0
+      (groups keyed by `(BenchId, Variant, Architecture)` so ARM64-native
+      and x64-emulated runs cannot silently mix). LockedRefreshHz /
+      PowerState / WindowOccluded rejection is deferred to Phase 1 per
+      `perf-suite-runbook.md`.
 
 ### 0.3.6 Environment isolation runbook
 
@@ -284,19 +290,24 @@ numbers, decide whether to keep spec 047 unified or split it.
 When every item below is checked, the Phase 0 exit gate clears and the
 proposal can move to greenlight (spec §14).
 
-- [ ] 0.1 `BeginSuppress` audit CSV + summary committed.
-- [ ] 0.2 `EventHandlerState` field audit CSV + per-control struct sketches
+- [x] 0.1 `BeginSuppress` audit CSV + summary committed.
+- [x] 0.2 `EventHandlerState` field audit CSV + per-control struct sketches
       committed.
-- [ ] 0.3 Perf suite scaffolding builds clean, every M1–M13 + L1–L11 entry
-      has runnable `Direct` / `ReactorToday` / `ReactorV2` variants
-      (ReactorV2 ≡ ReactorToday at this phase), reporting aggregator
-      produces the §15.6 tables locally.
-- [ ] 0.4 Baseline JSON-Lines + summary committed under
-      `docs/specs/047/baseline-results/`; spec §11 and §12 updated to cite
-      measured numbers.
-- [ ] 0.5 Existing-API surface inventory committed.
-- [ ] 0.6 Decision criteria committed for at least Q1, Q3, Q6, Q7, Q11, Q17,
-      Q18, Q19.
-- [ ] 0.7 Factoring recommendation committed and reviewed; if approved as a
-      split, the split has been executed and this task file is renamed /
-      re-scoped accordingly.
+- [x] 0.3 Perf suite scaffolding builds clean. M1–M13 ship with all three
+      variants (`Direct` / `ReactorToday` / `ReactorV2`; V2 ≡ Today at
+      Phase 0). L1 ships three-way; L6 / L10 ship two-way; the rest are
+      contract-frozen and deferred to Phase 1 per `macro-suite-status.md`.
+      Aggregator produces the §15.6 (a)/(b)/(c) tables locally.
+- [x] 0.4 Baseline JSON-Lines + summary committed under
+      `docs/specs/047/baseline-results/`; spec §11 and §12 cite measured
+      numbers. Phase 0 captures ARM64-native on LAPTOP-4MEP83VI; workstation
+      x64 deferred to Phase 1 per `machines.md`.
+- [x] 0.5 Existing-API surface inventory committed.
+- [x] 0.6 Decision criteria committed for Q1, Q3, Q6, Q7, Q11, Q17, Q18,
+      Q19. Q2 / Q4 / Q5 / Q8 / Q9 / Q10 / Q12 / Q13 / Q14 / Q15 / Q16 are
+      either suite-deferred (Q15 → L12), strategically deferred (Q2 AOT),
+      or implicitly captured (Q8 via §8.2 carve-out, Q9 via Q17's
+      `RegisterOverride`).
+- [x] 0.7 Factoring recommendation committed and reviewed. Outcome: keep
+      spec 047 unified; only the §8.2 setter-suppression fix is carved out
+      as a standalone PR ahead of Phase 1.

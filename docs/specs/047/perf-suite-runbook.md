@@ -11,6 +11,16 @@ M1–M13) and the macro suite (`tests/stress_perf/StressPerf.ReactorV2`,
 > environment-side measurement traps. Future operators should land at the
 > same source of truth — keep this runbook in sync.
 
+> **Implementation status (Phase 0).** Operator-side requirements are
+> enforced **manually** at Phase 0. The harness stamps only the core
+> identifying fields (`MachineSku`, `Cpu`, `OsBuild`, `DotnetVersion`,
+> `Architecture`, `Configuration`) and the aggregator rejects rows missing
+> any of those. Every "Harness assertion" paragraph below describes the
+> **planned** automated check for Phase 1 — at Phase 0 the operator is
+> the harness. Sections explicitly tagged 🟢 are wired; sections tagged
+> 🟡 are planned (the runbook section still applies, just enforced by
+> hand).
+
 ---
 
 ## 1. Window state — foreground + non-occluded
@@ -30,12 +40,11 @@ afterward is the signature.
 - Do **not** switch virtual desktops or alt-tab away mid-run.
 - Do **not** RDP into or out of the test machine while a run is in progress.
 
-**Harness assertion.** Each macro entry-point performs a z-order check
-immediately before the timing phase and aborts if its window is not
-top-most-of-its-process or is fully occluded. The check runs again at the
-end-of-run boundary; a session that lost foreground state mid-run is flagged
-as `WindowOccluded=true` in the JSON-Lines output and excluded from the
-comparison emitter.
+**Harness assertion (🟡 planned).** Phase 1 wires a z-order check
+immediately before the timing phase that aborts if the window is not
+top-most-of-its-process or is fully occluded, plus an end-of-run check
+that stamps `WindowOccluded=true` on any row that lost foreground state
+mid-run. At Phase 0 the operator confirms manually before launching.
 
 **Alternative for headless runs.** Call
 `SetProcessInformation(ProcessInformationClass::ProcessPowerThrottling, …)`
@@ -59,10 +68,10 @@ the app under test rather than a fixed environmental constant.
 - Run every result row on **AC power**. DRR mostly pins to display max on AC.
 - Battery and AC numbers are **separate baselines**. They are not diff-able.
 
-**Harness assertion.** The result-row metadata includes `PowerState`
-(AC/Battery) and `GlobalVsyncPerSec` (sampled before and after the timed
-section). Rows with `PowerState != AC` are flagged as non-comparable by the
-comparison emitter.
+**Harness assertion (🟡 planned).** Phase 1 stamps `PowerState`
+(AC/Battery) and `GlobalVsyncPerSec` on every row and the aggregator
+flags `PowerState != AC` rows as non-comparable. At Phase 0 the operator
+confirms AC before launching.
 
 ---
 
@@ -82,9 +91,10 @@ FPS data.
   `tests/stress_perf/METHODOLOGY.md`) that the panel is reporting the locked
   rate during a 5-second warm-up.
 
-**Harness assertion.** The JSON-Lines result row stamps the observed
-refresh rate captured immediately before the timed section. The comparison
-emitter rejects any two rows whose `LockedRefreshHz` differs.
+**Harness assertion (🟡 planned).** Phase 1 stamps `LockedRefreshHz`
+captured immediately before the timed section and the aggregator rejects
+mismatched rows. At Phase 0 the operator records the refresh rate
+manually in `machines.md` per machine entry.
 
 ---
 
@@ -101,11 +111,12 @@ and CompositionTarget callbacks pause and resume).
 - Do not extend / mirror displays mid-run.
 - Console session only; no RDP-in or RDP-out during a run.
 
-**Harness assertion.** Each macro registers for `WTSRegisterSessionNotification`
-(or its WinUI equivalent) and aborts on `WTS_SESSION_LOCK`,
-`WTS_SESSION_LOGOFF`, `WTS_REMOTE_CONNECT`, or
-`WTS_CONSOLE_DISCONNECT` mid-run. The result row is marked
-`SessionInterrupted=true`.
+**Harness assertion (🟡 planned).** Phase 1 wires
+`WTSRegisterSessionNotification` and aborts on `WTS_SESSION_LOCK`,
+`WTS_SESSION_LOGOFF`, `WTS_REMOTE_CONNECT`, or `WTS_CONSOLE_DISCONNECT`
+mid-run, marking the result row `SessionInterrupted=true`. L5 / L11
+specifically gate on this being wired. At Phase 0 the operator owns
+session integrity manually.
 
 ---
 
@@ -122,9 +133,9 @@ L11 (`LongLived_HeapStability`, 30-minute session) hardest.
 - If a non-High-Performance plan is required for some reason, record the
   plan name in the run metadata (`PowerPlan` field).
 
-**Harness assertion.** `PowerPlan` is stamped on every row. Comparison
-emitter accepts mixed plans but tags the comparison output as
-`PowerPlanMismatch=true`.
+**Harness assertion (🟡 planned).** Phase 1 stamps `PowerPlan` on every
+row and the aggregator tags `PowerPlanMismatch=true` when rows in the
+same comparison group differ. At Phase 0 the operator confirms manually.
 
 ---
 
@@ -140,17 +151,29 @@ managed-code path, not an artificially-isolated micro-environment.
 - `AffinityMask` (hex bitmask of allowed cores).
 - Whether the pinning targets P-cores or E-cores explicitly.
 
-The comparison emitter does not reject mismatched priority/affinity rows,
-but it tags the comparison output as `PriorityMismatch=true`.
+**Harness assertion (🟡 planned).** Phase 1 stamps `ProcessPriority`
+and `AffinityMask` and tags `PriorityMismatch=true` for mismatched
+groups. Phase 0 leaves both at their defaults and does not stamp.
 
 ---
 
 ## 7. Warm-up policy
 
-**Micro suite (BenchmarkDotNet M1–M13).** BenchmarkDotNet's default warm-up
-strategy applies — pilot phase + warmup-count auto-detection. Runs that
-complete with high CV (>5%) are flagged and re-run; results not converging
-after 3 retries are marked unstable.
+**Micro suite (Phase 0 — custom `BenchRunner`, M1–M13).** Phase 0 uses
+a dependency-light custom runner (`tests/perf_bench/PerfBench.ControlModel/Variants/BenchRunner.cs`),
+not BenchmarkDotNet. Policy:
+- `Iterations = 10000`, `Repetitions = 5`, `WarmupReps = 2` (defaults;
+  overridable via `--iterations` / `--reps` CLI).
+- Each timed repetition starts with a forced `GC.Collect()` →
+  `WaitForPendingFinalizers()` → `GC.Collect()` so per-rep allocation /
+  GC counts are attributable to the timed window.
+- Mean ns + Gen0/Gen1/Gen2 counts + allocated bytes + heap delta are
+  emitted per repetition. The aggregator computes 95% CI (z=1.96 ×
+  stderr) across the 5 reps.
+
+Adopting BenchmarkDotNet's pilot-phase / CV-aware warmup is **planned
+for Phase 1** alongside L7–L9 (the FPS-sensitive macros where instability
+detection matters more).
 
 **Macro suite (L1–L11).**
 
@@ -168,33 +191,33 @@ after 3 retries are marked unstable.
 Every JSON-Lines result row stamps the following (per §15.5). Any row
 missing a required field is rejected by the comparison emitter.
 
-| Field | Required | Source |
+| Field | Phase 0 status | Source |
 |---|---|---|
-| `MachineSku` | yes | hard-coded per `machines.md` entry |
-| `Cpu` | yes | `wmic cpu get name` at run start |
-| `OsBuild` | yes | `[Environment]::OSVersion.Version` + UBR |
-| `DotnetVersion` | yes | `RuntimeInformation.FrameworkDescription` |
-| `LockedRefreshHz` | yes | sampled pre-run; rejected if missing |
-| `PowerState` | yes | `GetSystemPowerStatus` |
-| `MonitorConfig` | yes | `EnumDisplayMonitors` snapshot (count + primary resolution) |
-| `WindowOccluded` | yes | z-order check at start and end of timed section |
-| `SessionInterrupted` | yes | WTS notification flag |
-| `PowerPlan` | yes | `powercfg /getactivescheme` GUID |
-| `ProcessPriority` | yes | `Process.PriorityClass` |
-| `AffinityMask` | yes (hex) | `Process.ProcessorAffinity` |
-| `Timestamp` | yes | ISO-8601 UTC at row write |
-| `BenchVariant` | yes | one of `Direct` / `ReactorToday` / `ReactorV2` |
-| `Scenario` | yes | one of M1–M13, L1–L11 |
-| `Iteration` | yes | 0-indexed; `Warmup=true` rows excluded |
-| `Result` | yes | numeric value(s) per scenario contract |
+| `MachineSku` | 🟢 stamped | hard-coded per `machines.md` entry |
+| `Cpu` | 🟢 stamped | `RuntimeInformation.ProcessorArchitecture` + envvar |
+| `OsBuild` | 🟢 stamped | `Environment.OSVersion.Version` |
+| `DotnetVersion` | 🟢 stamped | `RuntimeInformation.FrameworkDescription` |
+| `Architecture` | 🟢 stamped | `RuntimeInformation.OSArchitecture` |
+| `Configuration` | 🟢 stamped | `Debug` / `Release` from build symbol |
+| `LockedRefreshHz` | 🟡 planned (Phase 1) | sampled pre-run from DXGI |
+| `PowerState` | 🟡 planned (Phase 1) | `GetSystemPowerStatus` |
+| `MonitorConfig` | 🟡 planned (Phase 1) | `EnumDisplayMonitors` snapshot |
+| `WindowOccluded` | 🟡 planned (Phase 1) | z-order check start + end |
+| `SessionInterrupted` | 🟡 planned (Phase 1) | WTS notification flag |
+| `PowerPlan` | 🟡 planned (Phase 1) | `powercfg /getactivescheme` GUID |
+| `ProcessPriority` | 🟡 planned (Phase 1) | `Process.PriorityClass` |
+| `AffinityMask` | 🟡 planned (Phase 1) | `Process.ProcessorAffinity` |
+| `BenchVariant` | 🟢 stamped | one of `Direct` / `ReactorToday` / `ReactorV2` |
+| `Scenario` (`BenchId` + `BenchName`) | 🟢 stamped | one of M1–M13, L1–L11 |
+| `Iteration` | 🟢 stamped | 0-indexed; warmup reps not emitted |
+| `Result` (`MeanNs`, `AllocBytes`, `Gen0/1/2`, `HeapDeltaBytes`) | 🟢 stamped | per-repetition |
 
-The comparison emitter's first pass rejects rows missing any required
-field. The second pass groups rows by `(Scenario, BenchVariant, MachineSku)`
-and computes median / p95 within the group. The third pass emits the three
-§15.6 tables. Rows whose environment differs (e.g., different
-`LockedRefreshHz`) inside a single comparison group are flagged as
-**non-comparable** and excluded from the comparison output, with the count
-of excluded rows surfaced in the table footer.
+**At Phase 0** the aggregator rejects rows missing any of the 🟢 fields
+(`MachineSku` / `Cpu` / `OsBuild` / `DotnetVersion` / `Architecture`),
+groups by `(BenchId, BenchVariant, Architecture)` so ARM64-native vs
+x64-emulated runs cannot silently mix, and computes 95% CI from the
+5 reps within each group. The full LockedRefreshHz / WindowOccluded
+rejection pipeline lands in Phase 1.
 
 ---
 

@@ -38,8 +38,12 @@ public sealed class M01_MountLeafNoCallback : IBench
             // ReactorToday and ReactorV2 share the same path at Phase-0 freeze.
             var el = TextBlock("hi");
             var ui = ctx.Reconciler.Mount(el, NoOp);
-            if (ui is not null) ctx.Parent.Children.Add(ui);
-            if (ui is not null) ctx.Parent.Children.Remove(ui);
+            if (ui is not null)
+            {
+                ctx.Parent.Children.Add(ui);
+                ctx.Parent.Children.Remove(ui);
+                ctx.Reconciler.UnmountChild(ui);
+            }
         }
     }
 
@@ -77,8 +81,12 @@ public sealed class M02_MountLeafOneCallback : IBench
         {
             var el = ToggleSwitch(isOn: false, onIsOnChanged: _ => { });
             var ui = ctx.Reconciler.Mount(el, NoOp);
-            if (ui is not null) ctx.Parent.Children.Add(ui);
-            if (ui is not null) ctx.Parent.Children.Remove(ui);
+            if (ui is not null)
+            {
+                ctx.Parent.Children.Add(ui);
+                ctx.Parent.Children.Remove(ui);
+                ctx.Reconciler.UnmountChild(ui);
+            }
         }
     }
 
@@ -130,8 +138,12 @@ public sealed class M03_MountLeafThreeCallbacks : IBench
                 .OnPointerPressed((_, _) => { })
                 .OnTapped((_, _) => { });
             var ui = ctx.Reconciler.Mount(el, NoOp);
-            if (ui is not null) ctx.Parent.Children.Add(ui);
-            if (ui is not null) ctx.Parent.Children.Remove(ui);
+            if (ui is not null)
+            {
+                ctx.Parent.Children.Add(ui);
+                ctx.Parent.Children.Remove(ui);
+                ctx.Reconciler.UnmountChild(ui);
+            }
         }
     }
 
@@ -213,8 +225,12 @@ public sealed class M04_DispatchSwitchCold : IBench
         else
         {
             var ui = ctx.Reconciler.Mount(el, NoOp);
-            if (ui is not null) ctx.Parent.Children.Add(ui);
-            if (ui is not null) ctx.Parent.Children.Remove(ui);
+            if (ui is not null)
+            {
+                ctx.Parent.Children.Add(ui);
+                ctx.Parent.Children.Remove(ui);
+                ctx.Reconciler.UnmountChild(ui);
+            }
         }
     }
 
@@ -295,8 +311,12 @@ public sealed class M06_DispatchExternalType : IBench
         {
             var el = new ExtElement("ext");
             var ui = ctx.Reconciler.Mount(el, NoOp);
-            if (ui is not null) ctx.Parent.Children.Add(ui);
-            if (ui is not null) ctx.Parent.Children.Remove(ui);
+            if (ui is not null)
+            {
+                ctx.Parent.Children.Add(ui);
+                ctx.Parent.Children.Remove(ui);
+                ctx.Reconciler.UnmountChild(ui);
+            }
         }
     }
 
@@ -553,8 +573,12 @@ public sealed class M10_EventHandlerStateAlloc : IBench
             // ReactorV2 should split it (per 0.2 audit) — but at Phase-0 freeze, same as Today.
             var el = ToggleSwitch(false, onIsOnChanged: _ => { });
             var ui = ctx.Reconciler.Mount(el, NoOp);
-            if (ui is not null) ctx.Parent.Children.Add(ui);
-            if (ui is not null) ctx.Parent.Children.Remove(ui);
+            if (ui is not null)
+            {
+                ctx.Parent.Children.Add(ui);
+                ctx.Parent.Children.Remove(ui);
+                ctx.Reconciler.UnmountChild(ui);
+            }
         }
     }
 

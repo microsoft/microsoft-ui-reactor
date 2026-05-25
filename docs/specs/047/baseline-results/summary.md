@@ -11,9 +11,14 @@ are reproduced below; raw per-iteration JSON-Lines live under
 >
 > ```pwsh
 > dotnet run --project tools/spec047-aggregator -- `
->     --in 'docs/specs/047/baseline-results/**/*.jsonl' `
+>     --in 'docs/specs/047/baseline-results/*.jsonl' `
 >     --out docs/specs/047/baseline-results/aggregator-out
 > ```
+>
+> The aggregator's glob expansion recurses through subdirectories
+> automatically (no `**` segment needed). Each output row is keyed by
+> (bench, variant, architecture), so ARM64-native and x64-emulated runs
+> render as separate rows rather than being silently averaged.
 
 ## Machines
 

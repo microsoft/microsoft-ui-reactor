@@ -13,10 +13,6 @@ internal static partial class WindowCapture
 {
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetClientRect(IntPtr hWnd, out RECT lpRect);
-
-    [LibraryImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool PrintWindow(IntPtr hWnd, IntPtr hDC, uint nFlags);
 
     [LibraryImport("user32.dll", SetLastError = true)]

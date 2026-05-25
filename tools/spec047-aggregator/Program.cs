@@ -95,11 +95,15 @@ foreach (var path in ExpandGlobs(inputs))
 
 Console.WriteLine($"[agg] {total} rows read, {rows.Count} retained, {excluded.Count} excluded");
 
-// Group rows by (BenchId, Variant). Detect non-comparable environment
-// mismatches within a group (different LockedRefreshHz, PowerState, etc.)
-// — Phase 0 only checks the basic stamping fields available; LockedRefreshHz
-// is left for Phase 1 once the macro harness stamps it.
-var groups = rows.GroupBy(r => (r.BenchId, r.Variant)).ToList();
+// Group rows by (BenchId, Variant, Architecture). Architecture is the
+// load-bearing axis at Phase 0 — ARM64-native and x64-emulated runs share
+// the same MachineSku (Snapdragon X laptops run both) and silently mixing
+// them produces meaningless means. Spec §15.5 requires non-comparable rows
+// to be flagged.
+//
+// LockedRefreshHz / PowerState stamping is deferred to Phase 1 once the
+// macro harness emits those fields; once available they join this key.
+var groups = rows.GroupBy(r => (r.BenchId, r.Variant, r.Architecture)).ToList();
 
 // Table (a): absolute comparison.
 EmitAbsoluteTable(Path.Combine(outDir, "summary-absolute.md"), groups, minReps);
@@ -178,22 +182,29 @@ static (double mean, double ciHalfWidth) MeanCi95(IEnumerable<double> values)
     return (mean, 1.96 * stderr);
 }
 
-static void EmitAbsoluteTable(string path, List<IGrouping<(string, string), Row>> groups, int minReps)
+// Each row is keyed by (BenchId, Architecture) so ARM64-native and
+// x64-emulated runs render as separate rows. The variant column lookup
+// still works inside each (bench, arch) bucket.
+static IOrderedEnumerable<IGrouping<(string Bench, string Arch), IGrouping<(string, string, string), Row>>>
+    ByBenchArch(List<IGrouping<(string, string, string), Row>> groups)
+    => groups.GroupBy(g => (Bench: g.Key.Item1, Arch: g.Key.Item3))
+             .OrderBy(g => g.Key.Bench).ThenBy(g => g.Key.Arch);
+
+static void EmitAbsoluteTable(string path, List<IGrouping<(string, string, string), Row>> groups, int minReps)
 {
-    var byBench = groups.GroupBy(g => g.Key.Item1).OrderBy(g => g.Key);
     var sb = new StringBuilder();
     sb.AppendLine("# Spec 047 §15.6 (a) — Absolute Comparison");
     sb.AppendLine();
-    sb.AppendLine("Mean ns per op + alloc bytes, per variant. Columns are dashes when a variant has < min-reps repetitions.");
+    sb.AppendLine("Mean ns per op + alloc bytes, per variant. Columns are dashes when a variant has < min-reps repetitions. Architecture column distinguishes ARM64-native from x64-emulated runs (spec §15.5 — non-comparable across architectures).");
     sb.AppendLine();
-    sb.AppendLine("| Bench | Direct ns | Today ns | V2 ns | Direct alloc | Today alloc | V2 alloc |");
-    sb.AppendLine("|---|---:|---:|---:|---:|---:|---:|");
-    foreach (var bench in byBench)
+    sb.AppendLine("| Bench | Arch | Direct ns | Today ns | V2 ns | Direct alloc | Today alloc | V2 alloc |");
+    sb.AppendLine("|---|---|---:|---:|---:|---:|---:|---:|");
+    foreach (var bench in ByBenchArch(groups))
     {
         var direct = bench.FirstOrDefault(g => g.Key.Item2 == "Direct");
         var today = bench.FirstOrDefault(g => g.Key.Item2 == "ReactorToday");
         var v2 = bench.FirstOrDefault(g => g.Key.Item2 == "ReactorV2");
-        sb.Append("| ").Append(bench.Key).Append(' ');
+        sb.Append("| ").Append(bench.Key.Bench).Append(" | ").Append(bench.Key.Arch).Append(' ');
         AppendCell(sb, direct, minReps, r => r.MeanNs, "F1");
         AppendCell(sb, today, minReps, r => r.MeanNs, "F1");
         AppendCell(sb, v2, minReps, r => r.MeanNs, "F1");
@@ -205,17 +216,16 @@ static void EmitAbsoluteTable(string path, List<IGrouping<(string, string), Row>
     File.WriteAllText(path, sb.ToString());
 }
 
-static void EmitDeltaTable(string path, List<IGrouping<(string, string), Row>> groups, int minReps)
+static void EmitDeltaTable(string path, List<IGrouping<(string, string, string), Row>> groups, int minReps)
 {
-    var byBench = groups.GroupBy(g => g.Key.Item1).OrderBy(g => g.Key);
     var sb = new StringBuilder();
     sb.AppendLine("# Spec 047 §15.6 (b) — Reactor Delta (V2 vs Today)");
     sb.AppendLine();
-    sb.AppendLine("Positive % = V2 slower / larger than Today. Negative = improvement.");
+    sb.AppendLine("Positive % = V2 slower / larger than Today. Negative = improvement. One row per (bench, architecture).");
     sb.AppendLine();
-    sb.AppendLine("| Bench | ns delta % | ns 95% CI half-width | alloc delta % |");
-    sb.AppendLine("|---|---:|---:|---:|");
-    foreach (var bench in byBench)
+    sb.AppendLine("| Bench | Arch | ns delta % | ns 95% CI half-width | alloc delta % |");
+    sb.AppendLine("|---|---|---:|---:|---:|");
+    foreach (var bench in ByBenchArch(groups))
     {
         var today = bench.FirstOrDefault(g => g.Key.Item2 == "ReactorToday");
         var v2 = bench.FirstOrDefault(g => g.Key.Item2 == "ReactorV2");
@@ -232,24 +242,24 @@ static void EmitDeltaTable(string path, List<IGrouping<(string, string), Row>> g
         var ciPct = todayNs == 0 ? 0 : v2NsCi / todayNs * 100.0;
 
         sb.AppendLine(
-            $"| {bench.Key} | {nsDeltaPct.ToString("+0.0;-0.0;0.0", CultureInfo.InvariantCulture)}% " +
+            $"| {bench.Key.Bench} | {bench.Key.Arch} " +
+            $"| {nsDeltaPct.ToString("+0.0;-0.0;0.0", CultureInfo.InvariantCulture)}% " +
             $"| ±{ciPct.ToString("F1", CultureInfo.InvariantCulture)}% " +
             $"| {allocDeltaPct.ToString("+0.0;-0.0;0.0", CultureInfo.InvariantCulture)}% |");
     }
     File.WriteAllText(path, sb.ToString());
 }
 
-static void EmitGapTable(string path, List<IGrouping<(string, string), Row>> groups, int minReps)
+static void EmitGapTable(string path, List<IGrouping<(string, string, string), Row>> groups, int minReps)
 {
-    var byBench = groups.GroupBy(g => g.Key.Item1).OrderBy(g => g.Key);
     var sb = new StringBuilder();
     sb.AppendLine("# Spec 047 §15.6 (c) — WinUI Gap (V2 vs Direct)");
     sb.AppendLine();
-    sb.AppendLine("Absolute overhead Reactor still adds on top of raw WinUI.");
+    sb.AppendLine("Absolute overhead Reactor still adds on top of raw WinUI. One row per (bench, architecture).");
     sb.AppendLine();
-    sb.AppendLine("| Bench | V2 ns | Direct ns | V2 - Direct ns | V2 alloc - Direct alloc |");
-    sb.AppendLine("|---|---:|---:|---:|---:|");
-    foreach (var bench in byBench)
+    sb.AppendLine("| Bench | Arch | V2 ns | Direct ns | V2 - Direct ns | V2 alloc - Direct alloc |");
+    sb.AppendLine("|---|---|---:|---:|---:|---:|");
+    foreach (var bench in ByBenchArch(groups))
     {
         var direct = bench.FirstOrDefault(g => g.Key.Item2 == "Direct");
         var v2 = bench.FirstOrDefault(g => g.Key.Item2 == "ReactorV2");
@@ -262,7 +272,8 @@ static void EmitGapTable(string path, List<IGrouping<(string, string), Row>> gro
         var (v2Alloc, _) = MeanCi95(v2.Select(r => (double)r.AllocBytes));
 
         sb.AppendLine(
-            $"| {bench.Key} | {v2Ns.ToString("F1", CultureInfo.InvariantCulture)} " +
+            $"| {bench.Key.Bench} | {bench.Key.Arch} " +
+            $"| {v2Ns.ToString("F1", CultureInfo.InvariantCulture)} " +
             $"| {directNs.ToString("F1", CultureInfo.InvariantCulture)} " +
             $"| {(v2Ns - directNs).ToString("+0.0;-0.0;0.0", CultureInfo.InvariantCulture)} " +
             $"| {(v2Alloc - directAlloc).ToString("+0;-0;0", CultureInfo.InvariantCulture)} |");
@@ -297,7 +308,7 @@ static void EmitTrendCsv(string path, List<Row> rows)
     File.WriteAllText(path, sb.ToString());
 }
 
-static void AppendCell(StringBuilder sb, IGrouping<(string, string), Row>? g, int minReps, Func<Row, double> selector, string format)
+static void AppendCell(StringBuilder sb, IGrouping<(string, string, string), Row>? g, int minReps, Func<Row, double> selector, string format)
 {
     if (g is null || g.Count() < minReps) { sb.Append("| — "); return; }
     var (mean, _) = MeanCi95(g.Select(selector));
