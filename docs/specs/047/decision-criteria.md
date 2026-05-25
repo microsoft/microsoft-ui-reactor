@@ -169,25 +169,39 @@ parent has `.OnKeyDownAny`; verify parent fires.
 ## Q17 — Registry precedence and subtype behavior
 
 **Summary.** Four sub-questions about how `_typeRegistry` lookup behaves
-after the split-library plan. Spec §13 Q17 already proposed answers;
-this doc ratifies them so Phase 1 ships them without re-litigation.
+after the split-library plan. Spec §13 Q17 proposed answers; this doc
+ratifies them, with one revision: **no override mechanism in v1.**
 
-**Ratified recommendations** (copied from spec §13 Q17):
+**Ratified recommendations** (revised from spec §13 Q17):
 
 | Sub-question | Resolved answer |
 |---|---|
 | Element-type lookup exactness | **Exact runtime type only.** No assignable / base-match. Subtype dispatch is a footgun under the split-library plan. |
-| Downstream package registers for a built-in element type | **Downstream wins (today's behavior), with a startup-time diagnostic.** Accidental overrides become visible without breaking the pattern. |
+| Downstream package registers for a built-in element type | **Throw at registration time.** Built-ins are not overridable in v1. Reactor's built-in dispatcher always wins for built-in element types. |
 | Open generic element registrations (e.g., `RegisterType<DataGrid<>, _>`) | **Not supported in v1.** Open generics interact badly with trim. |
-| Duplicate registration | **Throw at registration time** unless `RegisterOverride<TElement, TControl>(handler)` is the explicit verb. The override emits a structured log entry. |
+| Duplicate registration (any element type already registered) | **Throw at registration time.** No `RegisterOverride` verb in v1. |
 
-**Validation test.** One scenario covers all four: register a handler for an
-element type whose base also has one; assert exact-type lookup; register a
-duplicate; assert throw; call `RegisterOverride`; assert success + log
-entry.
+**Rationale for the v1 "no override" stance.** Override-of-handler is a
+foot-gun whose primary use cases (test fakes, A/B handler swaps,
+shadowing a built-in) can be served by:
+- Composing the Reconciler with the desired registry contents from
+  scratch in test setup, or
+- Adding an explicit `RegisterOverride` verb in a later release. That
+  addition is purely additive — existing `RegisterType` callers keep
+  working unchanged — so deferring it is **non-breaking**.
 
-**Spec edit when data lands.** §2 / §6 incorporate the registry rules; the
-public `RegisterType` / `RegisterOverride` signatures are locked in Phase 1.
+Shipping v1 without override means: every registered type's handler is
+known to be unique at startup. Reduces debug surface significantly.
+
+**Validation test.** One scenario covers all four: register a handler
+for an element type whose base also has one (assert exact-type lookup);
+register for a type that already has a built-in handler (assert throw);
+register the same type twice (assert throw).
+
+**Spec edit when data lands.** §2 / §6 incorporate the registry rules;
+the public `RegisterType` signature is locked in Phase 1.
+`RegisterOverride` is not exposed. §13 Q17 is updated with the
+"no override" revision and a footnote linking here.
 
 ---
 
@@ -237,6 +251,105 @@ as a public method backed by today's `ChangeEchoSuppressor.BeginSuppress`.
 
 **Spec edit when data lands.** §4 and §8 both reference `WriteSuppressed`;
 §8's eventual implementation choice changes the body, not the signature.
+
+---
+
+## Q9 — Override semantics for handler swap-out
+
+**Summary.** §13 Q9 asks how an external author swaps in a fake handler
+for testing (e.g., a stub `ButtonHandler`). The original proposal was
+`RegisterOverride<TElement, TControl>(handler)` with a structured log
+entry.
+
+**Ratified decision.** **No override mechanism in v1.** Direct
+consequence of [[Q17]]'s "duplicate registration throws" stance —
+overriding an already-registered handler is the same operation as
+duplicate registration, just with intent to replace.
+
+**Testing strategies that work without an override verb:**
+- **Compose the Reconciler from scratch** in test setup. Tests
+  instantiate a `Reconciler` with the registry contents they need —
+  no shared global state, no override pattern needed.
+- **Inject the handler at construction time** via the test's own DI
+  container. Most existing in-tree tests already do this.
+- **Use a test-only subclass** that wraps the production handler and
+  intercepts the method under test.
+
+**Adding override later is non-breaking.** A future `RegisterOverride<T,C>`
+verb is purely additive — existing `RegisterType` callers keep working,
+and the override case becomes the explicit opt-in. So Phase 1 ships
+without it; if a real consumer scenario surfaces post-Phase-1 that
+truly can't be served by the alternatives above, add the verb in a
+point release.
+
+**Spec edit when data lands.** §13 Q9 marked Resolved with the v1
+"no override" stance + the alternative testing strategies. §4 documents
+that `RegisterType` is the only registry mutation in v1.
+
+---
+
+## Q12 — `Update` return type and substitution semantics
+
+**Summary.** §4's straw-man has `UIElement? Update(ctx, oldEl, newEl, ctrl)`,
+which would let the handler return a *different* control mid-update.
+Substitution requires parent-collection fixup, modifier reapply, and
+`ItemsControl` re-realization — a deep invariants surface to maintain.
+
+**Ratified decision.** **Forbid substitution.** Phase 1 ships
+`void Update(MountContext ctx, TElement oldEl, TElement newEl, TControl control)`.
+Type changes flow through the existing unmount-and-remount path; the
+handler must mutate `control` in place or accept that the engine
+remounts.
+
+**Rationale.** Substitution-mid-update is a bug farm — every consumer
+of the parent collection has to be invalidated, every modifier that
+holds a control reference becomes stale, and the `ItemsControl`
+realized-container caches need to be re-keyed. The existing remount
+path already handles all of this correctly. Adopting the substitution
+shape would re-introduce these failure modes at every `Update` call
+site instead of confining them to type-change boundaries.
+
+**Matches industry shape.** React Native Fabric's `updateProps(oldProps,
+newProps) → void` makes the same call for the same reason.
+
+**Substitution is non-breaking to add later** — `void Update(...)` is a
+strict subset of `UIElement? Update(...)`'s contract. If a real need
+emerges in Phase 3+ the signature can be widened without breaking
+existing handlers.
+
+**Spec edit when data lands.** §4's straw-man is updated to
+`void Update(...)`. §13 Q12 marked Resolved with a pointer here.
+
+---
+
+## Q14 — Concurrency model
+
+**Summary.** §13 Q14 calls out that Reactor is UI-thread-only today,
+but the protocol surface doesn't say so explicitly. WinUI controls
+backed by `DispatcherQueue`-bound resources require UI-thread
+allocation; off-thread mount would surface as a `RPC_E_WRONG_THREAD`
+the first time a property is set.
+
+**Ratified decision.** **UI-thread-only.** All `Mount` / `Update` /
+`Unmount` calls run on the thread that owns the `DispatcherQueue` the
+Reactor instance was created on. Handlers may freely access
+control-state and DPs without synchronization. Handlers that allocate
+WinUI controls do not need to dispatch to the UI thread — the engine
+guarantees they are already on it.
+
+**No thread-affinity flag in v1.** The §13 Q14 hypothetical of
+`ThreadAffinity = Any / UIThread` for off-thread mount (background
+list virtualization) is **deferred** until a real consumer surfaces.
+Adding the flag later is non-breaking (default stays `UIThread`).
+
+**Diagnostic.** Reactor's existing `DispatcherQueue.HasThreadAccess`
+check at `Mount` entry continues to fire in Debug builds. Tightening
+to an unconditional throw in Release is **deferred to Phase 1** —
+needs a measurement pass to confirm no in-tree caller hits it
+unintentionally.
+
+**Spec edit when data lands.** §4 documents the UI-thread guarantee on
+the `MountContext` surface. §13 Q14 marked Resolved.
 
 ---
 

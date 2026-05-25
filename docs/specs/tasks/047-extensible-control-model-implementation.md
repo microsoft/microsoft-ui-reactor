@@ -264,9 +264,13 @@ written success criterion *before* Phase 1, so decisions flow from data rather
 than re-litigation.
 
 - [x] Write `docs/specs/047/decision-criteria.md` covering Q1, Q3, Q6, Q7,
-      Q11, Q17, Q18, Q19. Q17/Q18/Q19 ratified from §13 recommendations;
-      Q3 incorporates the audit findings (recommend ship "delete + tight
-      diff" + per-control tolerance + ColorPicker shim; do NOT build §8.1).
+      Q9, Q11, Q12, Q14, Q17, Q18, Q19. Q17/Q18/Q19 ratified from §13
+      recommendations (Q17 revised: no override mechanism in v1, throw
+      on any duplicate registration). Q3 incorporates the audit findings
+      (recommend ship "delete + tight diff" + per-control tolerance +
+      ColorPicker shim; do NOT build §8.1). Q9 / Q12 / Q14 added during
+      Phase 0 review: no override verb in v1 (Q9), `void Update(...)`
+      forbidding substitution (Q12), UI-thread-only protocol (Q14).
 - [x] For each criterion, link the relevant §15 test(s) and the spec section
       that absorbs the decision when made.
 
@@ -303,11 +307,13 @@ proposal can move to greenlight (spec §14).
       numbers. Phase 0 captures ARM64-native on LAPTOP-4MEP83VI; workstation
       x64 deferred to Phase 1 per `machines.md`.
 - [x] 0.5 Existing-API surface inventory committed.
-- [x] 0.6 Decision criteria committed for Q1, Q3, Q6, Q7, Q11, Q17, Q18,
-      Q19. Q2 / Q4 / Q5 / Q8 / Q9 / Q10 / Q12 / Q13 / Q14 / Q15 / Q16 are
-      either suite-deferred (Q15 → L12), strategically deferred (Q2 AOT),
-      or implicitly captured (Q8 via §8.2 carve-out, Q9 via Q17's
-      `RegisterOverride`).
+- [x] 0.6 Decision criteria committed for Q1, Q3, Q6, Q7, Q9, Q11, Q12,
+      Q14, Q17, Q18, Q19. Q2 / Q4 / Q5 / Q10 / Q13 / Q15 / Q16 are either
+      suite-deferred (Q15 → L12), strategically deferred (Q2 AOT,
+      Q10 compile-time validation, Q13 modifier precedence), or already
+      documented in the spec (Q16 in §16, Q4 / Q5 design questions for
+      Phase 2). Q8 is implicitly captured via the §8.2 carve-out in
+      factoring-recommendation.md.
 - [x] 0.7 Factoring recommendation committed and reviewed. Outcome: keep
       spec 047 unified; only the §8.2 setter-suppression fix is carved out
       as a standalone PR ahead of Phase 1.
