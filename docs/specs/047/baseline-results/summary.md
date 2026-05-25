@@ -43,19 +43,19 @@ the noise floor on V2 ≈ Today; Phase 1+ V2 divergence shows up here.
 
 | Bench | Direct ns | Today ns | V2 ns | Direct alloc | Today alloc | V2 alloc | V2 vs Today |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| M1  | 33,454 | 33,988 | 32,086 | 3.77 MB | 5.09 MB | 5.09 MB | -5.6% |
-| M2  | 45,666 | 73,801 | 82,297 | 13.3 MB | 18.5 MB | 18.0 MB | +11.5% (GC noise) |
-| M3  | 211,074 | 351,468 | 335,305 | 26.8 MB | 43.2 MB | 47.7 MB | -4.6% (GC noise) |
-| M4  | 27,432 | 93,939 | 88,452 | 4.93 MB | 9.07 MB | 8.30 MB | -5.8% |
-| M5  | 43,791 | 95,231 | 103,669 | 5.20 MB | 7.99 MB | 8.05 MB | +8.9% |
-| M6  | 30,905 | 36,170 | 41,415 | 3.87 MB | 4.37 MB | 4.63 MB | +14.5% |
-| M7  | 1,584,426 | 11,989 | 11,886 | 123 MB | 779 KB | 779 KB | -0.9% |
-| M8  | 4,457 | 5,303 | 5,323 | 1.02 MB | 2.12 MB | 2.12 MB | +0.4% |
-| M9  | 1,127,214 | 2,669,793 | 2,640,251 | 96.8 MB | 624 MB | 624 MB | -1.1% |
-| M10 | 38,153 | 50,987 | 45,362 | 2.97 MB | 4.06 MB | 3.94 MB | -11.0% |
-| M11 | 40 | 38,157 | 38,120 | 40 B | 1.68 MB | 1.67 MB | -0.1% |
-| M12 | 29,634 | 32,035 | 32,058 | 760 KB | 1.09 MB | 1.09 MB | +0.1% |
-| M13 | 38 | 124 | 113 | 24 KB | 29 KB | 29 KB | -8.9% (correctness, §8.2) |
+| M1  | 32,803 | 32,688 | 38,140 | 3.77 MB | 5.35 MB | 5.39 MB | +16.7% (GC noise) |
+| M2  | 52,337 | 64,676 | 61,895 | 13.4 MB | 19.4 MB | 19.3 MB | -4.3% |
+| M3  | 176,725 | 210,204 | 237,622 | 26.7 MB | 45.4 MB | 43.2 MB | +13.0% (GC noise) |
+| M4  | 33,208 | 90,659 | 90,746 | 4.94 MB | 9.97 MB | 9.99 MB | +0.1% |
+| M5  | 21,245 | 86,188 | 86,600 | 4.93 MB | 9.96 MB | 11.06 MB | +0.5% |
+| M6  | 30,207 | 32,513 | 31,743 | 3.61 MB | 4.70 MB | 4.70 MB | -2.4% |
+| M7  | 987,029 | 13,138 | 11,985 | 123 MB | 780 KB | 780 KB | -8.8% |
+| M8  | 4,357 | 4,586 | 4,155 | 1.02 MB | 2.12 MB | 2.12 MB | -9.4% |
+| M9  | 815,247 | 1,399,885 | 1,429,733 | 96.8 MB | 624 MB | 624 MB | +2.1% |
+| M10 | 33,633 | 53,173 | 48,915 | 2.97 MB | 4.06 MB | 3.95 MB | -8.0% |
+| M11 | 60 | 39,752 | 33,094 | 40 B | 1.73 MB | 1.67 MB | -16.7% (GC noise) |
+| M12 | 31,376 | 28,046 | 29,943 | 760 KB | 1.09 MB | 1.09 MB | +6.8% |
+| M13 | 27 | 137 | 155 | 24 KB | 29 KB | 29 KB | +13.4% (correctness, §8.2) |
 
 Values are mean of 5 reps. Iterations per rep: 5000 for M1–M8, 2000 for M9
 (reduced from 5000 because each iteration constructs a 1000-element tree
@@ -66,10 +66,16 @@ total — divide by iterations for per-op alloc.
 
 **Phase-0 takeaways:**
 
-- **M1 `Mount_Leaf_NoCallback`** — Direct 754 B/op, Today 1018 B/op,
-  Reactor overhead = **+264 bytes per leaf**. Spec §11.1's draft
-  estimate of ~248 B was within ~7% of the measurement.
-- **ARM64 vs x64-emulated** — ARM64-native is **~15–20× faster** than
+- **Mount/unmount lifecycle** — M1/M2/M3/M4/M6/M10 RunOne now invokes
+  `Reconciler.UnmountChild(ui)` after each iteration so the bench is
+  measuring a true mount+unmount cycle rather than a leaking
+  add-to-tree loop. Spec §15.5 correctness baseline; the original PR
+  #411 numbers were re-captured after the fix.
+- **M1 `Mount_Leaf_NoCallback`** — Direct 754 B/op, Today 1071 B/op,
+  Reactor overhead = **+317 bytes per leaf**. Spec §11.1's draft
+  estimate of ~248 B underestimates by ~28%; the measurement supersedes
+  the estimate per §14 deliverable 4.
+- **ARM64 vs x64-emulated** — ARM64-native is **~10–20× faster** than
   x64-emulated x86_64 on the same hardware for every Mn. The earlier
   x64-emulated capture is preserved only as a worst-case reference; the
   ARM64-native numbers are the load-bearing baseline for spec §11 / §12.
@@ -79,8 +85,8 @@ total — divide by iterations for per-op alloc.
   [`audits/event-handler-state-audit.md`](../audits/event-handler-state-audit.md)
   are designed to lock the alloc baseline.
 - **M7 `Update_NoChange`** — Direct naive `tb.Text = tb.Text` loop over
-  1000 children: **1.58 ms / op**. Reactor's `UpdateChild` short-circuit:
-  **12 µs / op**. Reactor is **~132× faster** than the naive direct
+  1000 children: **987 µs / op**. Reactor's `UpdateChild` short-circuit:
+  **13 µs / op**. Reactor is **~75× faster** than the naive direct
   re-render path on a 1000-element no-change tree. Confirms spec §12.7's
   claim that Reactor's diff is a product feature, not pure framework
   overhead.
@@ -92,7 +98,7 @@ total — divide by iterations for per-op alloc.
   flips this counter to 0.
 - **M11 `ModifierEHS_Frequency`** — placeholder counter at Phase 0.
   Real EventSource counter wiring deferred to Phase 1.
-- **V2 vs Today columns** range from -11.0% to +14.5%. None are real
+- **V2 vs Today columns** range from -16.7% to +16.7%. None are real
   signals at Phase 0; they're GC-noise floor. Phase 1 V2 work makes the
   column meaningful.
 
@@ -103,14 +109,14 @@ column with the measured values:
 
 | Case | Bytes today (measured M1–M3, mean of 5 reps) | Direct (measured) | Phase-1 V2 target |
 |---|---:|---:|---:|
-| Leaf, no callbacks (M1) | 1018 | 754 | min(Direct + 100, Today × 0.4) = min(854, **407**) ⇒ **407** |
-| Leaf, one callback (M2) | ~3703 | ~2663 | min(Direct + 100, Today × 0.4) = min(2763, **1481**) ⇒ **1481** |
-| Leaf, three callbacks (M3) | ~8633 | ~5369 | min(Direct + 100, Today × 0.4) = min(5469, **3453**) ⇒ **3453** |
+| Leaf, no callbacks (M1) | 1071 | 754 | min(Direct + 100, Today × 0.4) = min(854, **428**) ⇒ **428** |
+| Leaf, one callback (M2) | ~3884 | ~2679 | min(Direct + 100, Today × 0.4) = min(2779, **1554**) ⇒ **1554** |
+| Leaf, three callbacks (M3) | ~9075 | ~5343 | min(Direct + 100, Today × 0.4) = min(5443, **3630**) ⇒ **3630** |
 
 Per-op alloc derived as alloc-bytes / iterations:
-- M1: Today 5,091,877 B / 5000 iter = 1018 B/op; Direct 3,771,933 / 5000 = 754 B/op
-- M2: Today 18,517,998 / 5000 = 3703 B/op; Direct 13,314,088 / 5000 = 2663 B/op
-- M3: Today 43,165,603 / 5000 = 8633 B/op; Direct 26,843,683 / 5000 = 5369 B/op
+- M1: Today 5,353,584 B / 5000 iter = 1071 B/op; Direct 3,771,877 / 5000 = 754 B/op
+- M2: Today 19,420,072 / 5000 = 3884 B/op; Direct 13,395,280 / 5000 = 2679 B/op
+- M3: Today 45,372,930 / 5000 = 9075 B/op; Direct 26,714,741 / 5000 = 5343 B/op
 
 The chosen target = `min(Direct + 100, ReactorToday × 0.4)`. The "tighter
 constraint" rule means V2 closes >60% of the Today–Direct gap.
@@ -119,10 +125,10 @@ constraint" rule means V2 closes >60% of the Today–Direct gap.
 
 | Spec section | Today's estimate (ns) | Measured (mean of 5 reps) | Footnote |
 |---|---:|---:|---|
-| §12.1 mount dispatch | ~150 ns (estimate) | M4 cold one-of-8 types: Reactor 94 µs total → ~12 µs per element type | Original estimate held shape; absolute number includes Add to Children. |
-| §12.2 update no-change | ~50 ns (estimate) | M7 ReactorToday: 12 µs / op for 1000-element tree → ~12 ns per element | Estimate held within 4× — actual is faster than estimate. |
-| §12.4 echo suppression | ~30 ns (estimate) | M13 baseline: 124 ns total for one Set + callback fire. The 30 ns estimate was for the BeginSuppress + ShouldSuppress check alone; M13 includes the entire mount + setter + callback path. | Estimate held. |
-| §12.10 reconciler full update | "fraction of mount" | M9 all-changed: 2.67 ms ÷ 1000 elements = 2.67 µs per element update + alloc. Full update cost is ~80× a no-change cost (M7 12 ns vs M9 2670 ns per element). | The "fraction of mount" claim should be re-phrased: full-update is ~80× a no-change update but still ~5× cheaper than a fresh mount. |
+| §12.1 mount dispatch | ~150 ns (estimate) | M4 cold one-of-8 types: Reactor 91 µs total → ~11 µs per element type | Original estimate held shape; absolute number includes Add to Children + UnmountChild round-trip. |
+| §12.2 update no-change | ~50 ns (estimate) | M7 ReactorToday: 13 µs / op for 1000-element tree → ~13 ns per element | Estimate held within 4× — actual is faster than estimate. |
+| §12.4 echo suppression | ~30 ns (estimate) | M13 baseline: 137 ns total for one Set + callback fire. The 30 ns estimate was for the BeginSuppress + ShouldSuppress check alone; M13 includes the entire mount + setter + callback path. | Estimate held. |
+| §12.10 reconciler full update | "fraction of mount" | M9 all-changed: 1.40 ms ÷ 1000 elements = 1.40 µs per element update + alloc. Full update cost is ~110× a no-change cost (M7 13 ns vs M9 1400 ns per element). | The "fraction of mount" claim should be re-phrased: full-update is ~110× a no-change update but still cheaper than a fresh mount. |
 
 Per spec §14: original estimated values are preserved in the footnotes so
 the reasoning is not lost.
