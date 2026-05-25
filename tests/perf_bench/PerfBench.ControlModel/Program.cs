@@ -18,8 +18,6 @@ using Microsoft.UI.Reactor.Core;
 using PerfBench.ControlModel.Benches;
 using PerfBench.ControlModel.Variants;
 
-BenchCliHolder.Args = args;
-
 // The host is a minimal WinUI app — we don't render via Reactor's component
 // pipeline because the benches need direct control over Reconciler mount /
 // unmount cycles. The Application subclass below opens a single Window with
@@ -32,11 +30,6 @@ Application.Start(_ =>
 
 return;
 
-internal static class BenchCliHolder
-{
-    public static string[] Args = Array.Empty<string>();
-}
-
 // ─── Application host ───────────────────────────────────────────────────────
 
 internal sealed partial class BenchHostApp : Microsoft.UI.Xaml.Application
@@ -47,7 +40,10 @@ internal sealed partial class BenchHostApp : Microsoft.UI.Xaml.Application
 
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
-        var cli = BenchCli.Parse(BenchCliHolder.Args);
+        // Top-level statements receive args[] but a partial Application subclass
+    // can't reach that variable, so re-read from the OS-provided command line.
+    var cliArgs = System.Environment.GetCommandLineArgs().Skip(1).ToArray();
+    var cli = BenchCli.Parse(cliArgs);
         _window = new Window { Title = "PerfBench.ControlModel" };
 
         // Two-pane layout: a status TextBlock at the top, the bench Parent
@@ -324,13 +320,14 @@ internal sealed class BenchCli
     }
 }
 
-internal static class ConsoleHelper
+internal static partial class ConsoleHelper
 {
     // Mirrors the PerfBench.Shared ConsoleHelper — attach a console to a
     // WinExe so Console.WriteLine output is visible when the user runs
     // from a shell.
-    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool AttachConsole(int dwProcessId);
+    [System.Runtime.InteropServices.LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static partial bool AttachConsole(int dwProcessId);
 
     public static void EnsureConsole()
     {
