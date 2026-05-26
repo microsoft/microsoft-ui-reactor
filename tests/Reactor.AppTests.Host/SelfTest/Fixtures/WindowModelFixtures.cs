@@ -5,6 +5,7 @@ using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Factories;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -490,6 +491,154 @@ internal static class WindowModelFixtures
             }
 
             H.Check("WindowMut_OwnedRemoved", child is null || !parent.OwnedWindows.Contains(child));
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Layered-window attrs — Opacity / NoActivate / IgnorePointerInput
+    //
+    //  Verifies the Win32 WS_EX_LAYERED / WS_EX_NOACTIVATE / WS_EX_TRANSPARENT
+    //  extended-style bits flip via WindowSpec at construction and via the
+    //  runtime mutators (SetOpacity / SetNoActivate / SetIgnorePointerInput).
+    //  Each fixture reads GWL_EXSTYLE directly to confirm the OS-level flag
+    //  is set; the managed spec mirror is exercised in parallel so the next
+    //  Update() diff sees the live values. (spec 045 §2.6 tear-off
+    //  foundation primitives.)
+    // ════════════════════════════════════════════════════════════════════
+
+    private static class WindowAttrInterop
+    {
+        public const int GWL_EXSTYLE = -20;
+        public const long WS_EX_LAYERED = 0x00080000;
+        public const long WS_EX_NOACTIVATE = 0x08000000;
+        public const long WS_EX_TRANSPARENT = 0x00000020;
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+        public static extern nint GetWindowLongPtr(nint hWnd, int nIndex);
+
+        public static long ExStyle(nint hwnd) => (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        public static bool HasFlag(nint hwnd, long flag) => (ExStyle(hwnd) & flag) != 0;
+    }
+
+    private static nint HwndOf(ReactorWindow win) =>
+        WinRT.Interop.WindowNative.GetWindowHandle(win.NativeWindow);
+
+    internal class WindowOpacityRoundTrip(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            // Spec-set opacity at construction → WS_EX_LAYERED on.
+            var win = await OpenAndSettle(
+                new WindowSpec { Title = "Opacity Test", Width = 320, Height = 200, Opacity = 0.5 },
+                () => new StubComponent());
+            try
+            {
+                var hwnd = HwndOf(win);
+                H.Check("WindowAttr_Opacity_SpecValue", Math.Abs(win.Spec.Opacity - 0.5) < 0.0001);
+                H.Check("WindowAttr_Opacity_LayeredOnAtSpec",
+                    WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_LAYERED));
+
+                // Mutator round-trip to 0.25 → still layered, spec updated.
+                win.SetOpacity(0.25);
+                await Harness.Render();
+                H.Check("WindowAttr_Opacity_SpecAfterMutator", Math.Abs(win.Spec.Opacity - 0.25) < 0.0001);
+                H.Check("WindowAttr_Opacity_LayeredOnAfterMutator",
+                    WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_LAYERED));
+
+                // 1.0 strips WS_EX_LAYERED (compositor fast-path restored).
+                win.SetOpacity(1.0);
+                await Harness.Render();
+                H.Check("WindowAttr_Opacity_LayeredOffAt1",
+                    !WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_LAYERED));
+
+                // Out-of-range throws.
+                bool threw = false;
+                try { win.SetOpacity(1.5); }
+                catch (ArgumentOutOfRangeException) { threw = true; }
+                H.Check("WindowAttr_Opacity_OutOfRangeThrows", threw);
+            }
+            finally
+            {
+                await CloseAndSettle(win);
+            }
+        }
+    }
+
+    internal class WindowNoActivateRoundTrip(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            // Spec-set NoActivate → flag on at first show.
+            var win = await OpenAndSettle(
+                new WindowSpec { Title = "NoActivate Test", Width = 320, Height = 200, NoActivate = true },
+                () => new StubComponent());
+            try
+            {
+                var hwnd = HwndOf(win);
+                H.Check("WindowAttr_NoActivate_SpecValue", win.Spec.NoActivate);
+                H.Check("WindowAttr_NoActivate_FlagOnAtSpec",
+                    WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_NOACTIVATE));
+
+                // Mutator off → flag clears, spec mirrors.
+                win.SetNoActivate(false);
+                H.Check("WindowAttr_NoActivate_SpecAfterMutator", !win.Spec.NoActivate);
+                H.Check("WindowAttr_NoActivate_FlagOffAfterMutator",
+                    !WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_NOACTIVATE));
+
+                // Mutator back on → flag returns.
+                win.SetNoActivate(true);
+                H.Check("WindowAttr_NoActivate_FlagOnAgain",
+                    WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_NOACTIVATE));
+            }
+            finally
+            {
+                await CloseAndSettle(win);
+            }
+        }
+    }
+
+    internal class WindowIgnorePointerInputRoundTrip(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            // Spec-set IgnorePointerInput together with Opacity<1.0 (the OS
+            // only honors transparent on layered windows).
+            var win = await OpenAndSettle(
+                new WindowSpec
+                {
+                    Title = "IgnorePointer Test",
+                    Width = 320,
+                    Height = 200,
+                    Opacity = 0.5,
+                    IgnorePointerInput = true,
+                },
+                () => new StubComponent());
+            try
+            {
+                var hwnd = HwndOf(win);
+                H.Check("WindowAttr_IgnorePointer_SpecValue", win.Spec.IgnorePointerInput);
+                H.Check("WindowAttr_IgnorePointer_FlagOnAtSpec",
+                    WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_TRANSPARENT));
+
+                win.SetIgnorePointerInput(false);
+                H.Check("WindowAttr_IgnorePointer_SpecAfterMutator", !win.Spec.IgnorePointerInput);
+                H.Check("WindowAttr_IgnorePointer_FlagOffAfterMutator",
+                    !WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_TRANSPARENT));
+
+                win.SetIgnorePointerInput(true);
+                H.Check("WindowAttr_IgnorePointer_FlagOnAgain",
+                    WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_TRANSPARENT));
+            }
+            finally
+            {
+                await CloseAndSettle(win);
+            }
         }
     }
 }

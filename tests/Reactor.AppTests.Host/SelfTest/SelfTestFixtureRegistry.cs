@@ -890,6 +890,9 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_TrayIconRoundTrip",
         "WindowModel_UseOpenWindowReusesByKey",
         "WindowModel_MutatorsOwnerAndGuards",
+        "WindowModel_OpacityRoundTrip",
+        "WindowModel_NoActivateRoundTrip",
+        "WindowModel_IgnorePointerInputRoundTrip",
         // Spec 045 §2.19 — Phase-1 wrapper-based Docking_* smoke fixtures
         // were retired with the XAML wrapper at the §2.29 review gate.
         // NativeDocking_* below covers the same surface against the P2
@@ -1939,6 +1942,9 @@ internal static class SelfTestFixtureRegistry
         "WindowModel_TrayIconRoundTrip" => new WindowModelFixtures.TrayIconRoundTrip(harness),
         "WindowModel_UseOpenWindowReusesByKey" => new WindowModelFixtures.UseOpenWindowReusesByKey(harness),
         "WindowModel_MutatorsOwnerAndGuards" => new WindowModelFixtures.WindowMutatorsOwnerAndGuards(harness),
+        "WindowModel_OpacityRoundTrip" => new WindowModelFixtures.WindowOpacityRoundTrip(harness),
+        "WindowModel_NoActivateRoundTrip" => new WindowModelFixtures.WindowNoActivateRoundTrip(harness),
+        "WindowModel_IgnorePointerInputRoundTrip" => new WindowModelFixtures.WindowIgnorePointerInputRoundTrip(harness),
         // Spec 045 §2.19 — Phase-1 DockingSmokeFixtures retired alongside
         // the XAML wrapper unhooking. NativeDockingSmokeFixtures (below)
         // covers the same mount/update/unmount surface against the P2

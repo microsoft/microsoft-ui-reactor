@@ -417,6 +417,12 @@ public sealed class ReactorWindow : IDisposable
         // windows pay zero layering overhead (Windows compositor fast-path).
         ApplyOpacity(spec.Opacity);
 
+        // Spec 045 §2.6 tear-off — NoActivate must be applied before
+        // Activate fires (in MountAndActivate) so the window's first show
+        // observes the flag. Re-applied on Update so flips stick.
+        SetNoActivate(spec.NoActivate);
+        SetIgnorePointerInput(spec.IgnorePointerInput);
+
         // Owner relationship — only meaningful at initial apply time.
         // Subsequent Update calls do not re-parent (changing ownership of a
         // realized window has no AppWindow API and is rarely the right thing
@@ -1014,10 +1020,57 @@ public sealed class ReactorWindow : IDisposable
         _ = NativeOpacity.SetLayeredWindowAttributes(_hwnd, 0, alpha, NativeOpacity.LWA_ALPHA);
     }
 
+    /// <summary>
+    /// Toggle the <c>WS_EX_NOACTIVATE</c> extended style on the underlying
+    /// HWND. When set, the window appears without stealing foreground
+    /// activation (matches VS tool-window / drag-preview behavior).
+    /// UI-thread only. No-op after disposal.
+    /// </summary>
+    public void SetNoActivate(bool noActivate)
+    {
+        ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetNoActivate));
+        if (_disposed) return;
+        var current = NativeOpacity.GetWindowLongPtr(_hwnd, NativeOpacity.GWL_EXSTYLE);
+        long bits = (long)current;
+        long updated = noActivate
+            ? bits | NativeOpacity.WS_EX_NOACTIVATE
+            : bits & ~NativeOpacity.WS_EX_NOACTIVATE;
+        if (updated != bits)
+            _ = NativeOpacity.SetWindowLongPtr(_hwnd, NativeOpacity.GWL_EXSTYLE, (nint)updated);
+        // Mirror into _spec so Update() diffs see the live value.
+        var prev = Volatile.Read(ref _spec);
+        if (prev.NoActivate != noActivate)
+            Volatile.Write(ref _spec, prev with { NoActivate = noActivate });
+    }
+
+    /// <summary>
+    /// Toggle the <c>WS_EX_TRANSPARENT</c> extended style on the underlying
+    /// HWND. When set, mouse events pass THROUGH the window to whatever's
+    /// underneath. Only effective on layered windows (i.e. paired with
+    /// <see cref="SetOpacity"/> &lt; 1.0). UI-thread only. No-op after disposal.
+    /// </summary>
+    public void SetIgnorePointerInput(bool ignore)
+    {
+        ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetIgnorePointerInput));
+        if (_disposed) return;
+        var current = NativeOpacity.GetWindowLongPtr(_hwnd, NativeOpacity.GWL_EXSTYLE);
+        long bits = (long)current;
+        long updated = ignore
+            ? bits | NativeOpacity.WS_EX_TRANSPARENT
+            : bits & ~NativeOpacity.WS_EX_TRANSPARENT;
+        if (updated != bits)
+            _ = NativeOpacity.SetWindowLongPtr(_hwnd, NativeOpacity.GWL_EXSTYLE, (nint)updated);
+        var prev = Volatile.Read(ref _spec);
+        if (prev.IgnorePointerInput != ignore)
+            Volatile.Write(ref _spec, prev with { IgnorePointerInput = ignore });
+    }
+
     private static class NativeOpacity
     {
         public const int GWL_EXSTYLE = -20;
         public const long WS_EX_LAYERED = 0x00080000;
+        public const long WS_EX_NOACTIVATE = 0x08000000;
+        public const long WS_EX_TRANSPARENT = 0x00000020;
         public const uint LWA_ALPHA = 0x00000002;
 
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]

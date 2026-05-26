@@ -116,6 +116,24 @@ public sealed record WindowSpec
     public double Opacity { get; init; } = 1.0;
 
     /// <summary>
+    /// Apply the Win32 <c>WS_EX_NOACTIVATE</c> extended style so the window
+    /// appears without stealing foreground activation. Matches VS tool-window
+    /// / drag-preview behavior. Default false. The flag is applied during
+    /// chrome setup (before Activate) so the first show observes it.
+    /// </summary>
+    public bool NoActivate { get; init; }
+
+    /// <summary>
+    /// Apply the Win32 <c>WS_EX_TRANSPARENT</c> extended style so mouse events
+    /// pass THROUGH the window to whatever's underneath. Requires
+    /// <see cref="Opacity"/> &lt; 1.0 (the OS only honors transparent on
+    /// layered windows). Default false. Used by spec 045 §2.6 tear-off so
+    /// the drag preview doesn't block clicks on drop-target overlays
+    /// below it.
+    /// </summary>
+    public bool IgnorePointerInput { get; init; }
+
+    /// <summary>
     /// Construct with explicit field values. Validation runs after the record
     /// auto-init.
     /// </summary>
