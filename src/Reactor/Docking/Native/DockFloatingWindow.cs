@@ -541,12 +541,18 @@ internal sealed class DockFloatingWindowComponent : Component<DockFloatingWindow
             if (ownWindow is null) return null;
             // Capture the source XamlRoot BEFORE RemoveLocal might close
             // ownWindow (single-tab case → its only pane is the one we're
-            // tearing off, panes goes to empty, ownWindow.Close()). The
-            // tracker reads SourceXamlRoot.RasterizationScale every tick
-            // to convert physical cursor pos to DIPs; accessing it through
-            // a closed window's NativeWindow would NRE.
+            // tearing off, panes goes to empty, ownWindow.Close()).
+            // Accessing it through a closed window's NativeWindow would NRE.
             XamlRoot? sourceXamlRoot = null;
             try { sourceXamlRoot = ownWindow.NativeWindow?.Content?.XamlRoot; } catch { }
+
+            // Whether this tear-off will leave ownWindow with no remaining
+            // panes (→ RemoveLocal closes it). Drives the Z-order strategy
+            // below: when the window is going away we Hide() outright;
+            // when it stays open with other tabs we just stop it from
+            // intercepting pointer events so the host overlays can see
+            // the drag, and restore at confirm/cancel.
+            bool willClose = currentPanes.Count == 1;
 
             // ALWAYS open a NEW preview window — see BeginImmediateTearOff
             // for rationale. The new window is born with the drag styles
@@ -570,21 +576,32 @@ internal sealed class DockFloatingWindowComponent : Component<DockFloatingWindow
                     initialPosition: initialTopLeft);
             }
             catch { return null; }
-            // CRITICAL: Hide ownWindow synchronously so it stops
-            // intercepting pointer events while its async Close() runs.
-            // Without this, ownWindow had foreground focus (user just
-            // clicked it) and stays at top of Z-order; the new
-            // preview F2 was opened with NoActivate so it goes BELOW
-            // ownWindow in Z-order. Pointer events through F2's
-            // WS_EX_TRANSPARENT then hit ownWindow (still opaque),
-            // never reaching the source host's overlays. Op-log proof:
-            // dock→host drags fire Overlay.PointerEntered within 200 ms;
-            // float→host drags fire zero Overlay events across multi-
-            // second drags. AppWindow.Hide is synchronous, so by the
-            // time RemoveLocal triggers the eventual Close, ownWindow
-            // is already invisible to the OS hit-test routing.
-            try { ownWindow.AppWindow.Hide(); }
-            catch { /* window may already be tearing down */ }
+            // CRITICAL: stop ownWindow from intercepting pointer events
+            // before the preview opens. ownWindow has foreground focus
+            // (user just clicked a tab) and sits at the top of Z-order;
+            // the new preview F2 is opened NoActivate so it goes BELOW
+            // ownWindow. Pointer events through F2's WS_EX_TRANSPARENT
+            // would hit ownWindow (still opaque), never reaching the
+            // source host's overlays. Op-log proof: dock→host drags fire
+            // Overlay.PointerEntered within 200 ms; without this guard,
+            // float→host drags fire zero Overlay events.
+            //
+            // Two paths, depending on whether ownWindow is about to close:
+            //   - Single-tab (willClose): AppWindow.Hide() — synchronous,
+            //     and the window closes momentarily anyway.
+            //   - Multi-tab: SetIgnorePointerInput(true) — window stays
+            //     visible with its remaining tabs, but stops absorbing
+            //     drag events; restored in confirm/cancel below.
+            if (willClose)
+            {
+                try { ownWindow.AppWindow.Hide(); }
+                catch { /* window may already be tearing down */ }
+            }
+            else
+            {
+                try { ownWindow.SetIgnorePointerInput(true); }
+                catch { /* window may already be tearing down */ }
+            }
             RemoveLocal(pane);
 
             if (manager is not null)
@@ -595,11 +612,23 @@ internal sealed class DockFloatingWindowComponent : Component<DockFloatingWindow
 
             // Capture for the finalize closures.
             var capturedDragged = draggedWindow;
+            var capturedSource = willClose ? null : ownWindow;
+            void RestoreSourcePointerInput()
+            {
+                // Multi-tab case only — undo the SetIgnorePointerInput
+                // toggle so the user can interact with the source window's
+                // remaining tabs after the drag ends. No-op when the
+                // source closed.
+                if (capturedSource is null) return;
+                try { capturedSource.SetIgnorePointerInput(false); }
+                catch { /* window may have been closed already */ }
+            }
             Action confirm = () =>
             {
                 var target = DockTabTearOff.TryConfirmHoveredTargetFor(manager);
                 if (target is not null)
                 {
+                    RestoreSourcePointerInput();
                     var dq = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
                     bool ok = dq is not null && dq.TryEnqueue(() =>
                     {
@@ -611,11 +640,13 @@ internal sealed class DockFloatingWindowComponent : Component<DockFloatingWindow
                 // No target hit — drop-outside semantics: strip drag styles,
                 // window stays at cursor's release position.
                 RestoreWindowFromDrag(capturedDragged);
+                RestoreSourcePointerInput();
                 DockDragSession.Current?.End();
             };
             Action cancel = () =>
             {
                 RestoreWindowFromDrag(capturedDragged);
+                RestoreSourcePointerInput();
                 DockDragSession.Current?.End();
             };
 

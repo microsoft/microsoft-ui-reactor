@@ -641,8 +641,7 @@ internal static class NativeDockingTearOffFixtures
                 H.Check("T11_PreviewIsNewWindow",
                     previewWindow is not null
                     && !ReferenceEquals(previewWindow, floating));
-                H.Check("T11_SourceFloatingHidden",
-                    floating is not null && !floating.IsVisible);
+                H.Check("T11_SourceFloatingHidden", !floating.IsVisible);
                 H.Check("T11_SessionActiveForPane",
                     DockDragSession.Current is { IsActive: true } s
                     && ReferenceEquals(s.Source, a));

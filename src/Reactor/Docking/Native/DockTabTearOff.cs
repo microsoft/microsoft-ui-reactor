@@ -11,9 +11,8 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 // ════════════════════════════════════════════════════════════════════════
 //  Spec 045 §2.6 — VS-style immediate tab tear-off.
 //
-//  WinUI's TabView CanDragTabs is disabled on host tab views so its OLE
-//  drag pipeline never starts — see C:/temp/spec-045-tear-off-implementation.md
-//  for why running our own floating window alongside WinUI's drag failed.
+//  WinUI's TabView CanDragTabs is disabled on host and floating tab
+//  views so its OLE drag pipeline never competes with this one.
 //
 //  Flow:
 //    1. PointerPressed on a tab header — record candidate (tab item, pane,
@@ -31,11 +30,10 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 //       handlers naturally). Fire the overlay's confirm event or strip
 //       the drag styles and keep the floating window.
 //
-//  Floating windows: the floating window's own tab strip keeps the
-//  WinUI OLE drag (it passes non-null onTabDrag* callbacks to the
-//  renderer, which sets CanDragTabs=true). The new pipeline is for
-//  HOST tabs only; floating-window tabs use the existing cross-window
-//  dock-back path.
+//  Floating windows route through the same press hook via
+//  DockFloatingWindow.BeginFloatingTearOff (the symmetric entry point),
+//  so dragging a tab out of a floating window uses the cursor-poll
+//  pipeline rather than WinUI's OLE drag.
 //
 //  Testability: every state transition runs through *Core methods that
 //  the real PointerPressed/Moved handlers wrap. Tests call

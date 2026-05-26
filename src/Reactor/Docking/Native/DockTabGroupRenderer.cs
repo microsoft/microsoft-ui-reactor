@@ -239,8 +239,9 @@ internal static class DockTabGroupRenderer
     /// spec 045 §2.6 immediate-tear-off pointer-press hook when
     /// <paramref name="onTabImmediateTearOff"/> is non-null. The
     /// closure is supplied by <see cref="DockHostNativeComponent"/>
-    /// only when the experimental custom-drag pipeline is enabled
-    /// (<see cref="DockTabTearOff.Enabled"/>).
+    /// and by <see cref="DockFloatingWindow"/>; renderers that receive
+    /// a non-null callback also disable WinUI's reorder ghost
+    /// (CanReorderTabs=false) so the press hook owns the drag gesture.
     /// </summary>
     internal static Action<TabView>[] BuildSetters(
         DockTabGroup group,
