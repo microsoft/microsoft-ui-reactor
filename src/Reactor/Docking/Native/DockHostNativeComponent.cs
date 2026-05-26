@@ -1,6 +1,9 @@
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hosting;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.Docking.Native;
@@ -246,9 +249,14 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 if (current is { IsActive: true } && ReferenceEquals(current.OwnerToken, model))
                 {
                     current.Cancel();
+                    // §2.6 — the tear-off tracker may also be holding a
+                    // floating window for this drag. Stop it so the
+                    // cursor-poll timer doesn't outlive the unmount.
+                    DockTabTearOffTracker.Stop();
                 }
             };
         });
+
 
         // §2.16 — resolve effective side strips. The override layers on
         // top of the controlled-input lists from the element; programmatic
@@ -350,6 +358,26 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 target: target);
         }
 
+        // §2.6 tear-off diagnostic sink — route DockTabTearOff state
+        // transitions into this host's operation log (when one is
+        // attached). The sink is a process-wide static; multi-host
+        // scenarios chain via the saved-previous restore on unmount.
+        // Wired in a UseEffect (not inline) so unsubscription fires on
+        // host unmount and the next host's mount restores its own sink.
+        UseEffect(() =>
+        {
+            var previous = DockTabTearOff.DiagnosticSink;
+            DockTabTearOff.DiagnosticSink = msg =>
+            {
+                LogOp(Diagnostics.DockOperationKind.Note, $"[tear-off] {msg}");
+                previous?.Invoke(msg);
+            };
+            return () =>
+            {
+                DockTabTearOff.DiagnosticSink = previous;
+            };
+        });
+
         // Spec 046 §6.3 — drain fallback events out into DockOperationLog
         // now that LogOp is in scope. Each entry has already been captured
         // in DrainPendingMutations with the pane key + target; we route
@@ -384,132 +412,206 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 layoutOverride: afterRemove);
         };
 
-        // §2.4 — tab-drag callbacks fed to every DockTabGroup so any tab
-        // in the layout can begin a session. Captures `manager` from the
-        // current render closure for OnContentFloating/Floated event
-        // routing.
-        void HandleTabDragStarting(DockableContent pane, int tabIndex)
+        // Spec 045 §2.6 — VS-style immediate tear-off entry point.
+        // Called by DockTabTearOff when the user crosses the threshold
+        // (mouse-press + ~4 DIP drag) on a tab header. Performs the same
+        // pre-checks as HandleTabDragStarting, then synchronously tears
+        // out the pane and opens a 50%-opacity floating window so the
+        // cursor-poll timer can track it.
+        DockTabTearOff.TearOffActive? BeginImmediateTearOff(DockTabTearOff.TearOffRequest req)
         {
-            // Refuse a second concurrent drag — spec §4.6 single-drag
-            // contract carried into P2.
-            if (DockDragSession.Current is { IsActive: true }) return;
-            // §2.14 — permission gating. Apps mark CanMove=false on panes
-            // that must stay where they are (e.g. an anchored toolbox).
+            // Defensive cleanup — a previous botched drag could have left
+            // the tracker holding a closed floating window or the
+            // process-static session marked IsActive. Force-stop both
+            // before checking pre-conditions so a stuck state doesn't
+            // permanently block tear-offs. See the §2.6 stuck-state
+            // investigation notes.
+            if (DockTabTearOffTracker.IsActive)
+            {
+                LogOp(Diagnostics.DockOperationKind.Note,
+                    "[tear-off] BeginImmediateTearOff found stale tracker → ForceCancel (strips stale floating window's drag styles)");
+                DockTabTearOffTracker.ForceCancel();
+            }
+            if (DockDragSession.Current is { IsActive: true } stale)
+            {
+                LogOp(Diagnostics.DockOperationKind.Note,
+                    $"[tear-off] BeginImmediateTearOff found stale session pane='{stale.Source.Key}' → cancelling");
+                stale.Cancel();
+            }
+            var pane = req.Pane;
             if (!pane.CanMove)
             {
                 LogOp(Diagnostics.DockOperationKind.Note,
-                    $"refuse drag pane='{pane.Key}' CanMove=false",
+                    $"refuse immediate tear-off pane='{pane.Key}' CanMove=false",
                     paneKey: pane.Key?.ToString());
-                return;
+                return null;
             }
-            var args = new DockContentFloatingEventArgs { Content = pane };
-            manager.OnContentFloating?.Invoke(args);
-            if (args.Cancel) return;
-            // Stamp the session with this host's stable model so the
-            // UseEffect cleanup below can identify its own sessions
-            // across renders (DockManager records aren't stable —
-            // they're rebuilt every parent render).
-            DockDragSession.Begin(pane, manager, tabIndex, owner: model);
+            if (!pane.CanFloat)
+            {
+                LogOp(Diagnostics.DockOperationKind.Note,
+                    $"refuse immediate tear-off pane='{pane.Key}' CanFloat=false",
+                    paneKey: pane.Key?.ToString());
+                return null;
+            }
+            var floatingArgs = new DockContentFloatingEventArgs { Content = pane };
+            manager.OnContentFloating?.Invoke(floatingArgs);
+            if (floatingArgs.Cancel) return null;
+
+            // §2.15 — record container before tearing out so a future
+            // re-dock can route via PreviousContainer.
+            var container = DockLayoutMutator.FindContainer(effectiveLayout, pane);
+            if (container is not null) PreviousContainerTracker.Set(pane, container);
+
+            var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
+            if (!removed) return null;
+
+            // Convert the desired physical-pixel top-left back to DIPs
+            // for the WindowSpec.ManualPosition initial placement. This
+            // initial value gets converted at Open() time via the
+            // window's DPI — possibly stale (96) if WM_DPICHANGED hasn't
+            // fired yet, but the tracker's first tick (AppWindow.Move
+            // with absolute physical pixels) corrects within ~16ms.
+            var initialTopLeft = (
+                (double)(req.CursorScreenPhys.X - req.PressOffsetPhys.X) / req.SourceScale,
+                (double)(req.CursorScreenPhys.Y - req.PressOffsetPhys.Y) / req.SourceScale);
+
+            ReactorWindow floatingWindow;
+            try
+            {
+                floatingWindow = DockFloatingWindow.Open(
+                    pane,
+                    manager: manager,
+                    opacity: 0.5,
+                    noActivate: true,
+                    ignorePointerInput: true,
+                    initialPosition: initialTopLeft);
+            }
+            catch
+            {
+                // Failure → no mutation should be visible. We didn't
+                // StoreOverride yet so the layout is still intact.
+                return null;
+            }
+
+            StoreOverride(afterRemove);
+            manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
+            manager.OnLiveLayoutChanged?.Invoke(afterRemove);
+            LogOp(Diagnostics.DockOperationKind.DragTearOut,
+                $"immediate tear-out pane='{pane.Key}' to floating window",
+                paneKey: pane.Key?.ToString(),
+                layoutOverride: afterRemove);
+            DockHostLiveAnnouncer.Announce(manager,
+                DockingStrings.LiveAnnouncement(DockingStringKeys.LiveFloated, pane.Title));
+
+            // Begin the drag session AFTER the layout mutation so a
+            // concurrent observer of SessionChanged sees a consistent
+            // pane-not-in-source-layout state. setDragActive triggers
+            // the drop-target overlays to render on the next render.
+            DockDragSession.Begin(pane, manager, req.TabIndex, owner: model);
             setDragActive(true);
             LogOp(Diagnostics.DockOperationKind.DragStart,
-                $"begin drag pane='{pane.Key}' fromTabIndex={tabIndex}",
+                $"begin immediate-drag pane='{pane.Key}' fromTabIndex={req.TabIndex}",
                 paneKey: pane.Key?.ToString());
+
+            // On commit: walk the source XamlRoot for any visible
+            // DockDropTargetOverlayControl, transform cursor → local
+            // coords, call TryConfirmAt. First non-null wins. The
+            // overlay's TargetConfirmed event raises the host's
+            // OnConfirm closure (already in place from the existing
+            // drop-target wiring) which does the layout mutation.
+            // If no target was hit, leave the floating window in
+            // place with opacity=1.0 (drop-outside semantics).
+            Action confirm = () => FinalizeImmediateDrop(floatingWindow, pane, commit: true);
+            Action cancel  = () => FinalizeImmediateDrop(floatingWindow, pane, commit: false);
+
+            return new DockTabTearOff.TearOffActive
+            {
+                FloatingWindow = floatingWindow,
+                Pane = pane,
+                SourceXamlRoot = req.XamlRoot,
+                ConfirmDropAtCursor = confirm,
+                CancelDrop = cancel,
+                OffsetPhys = req.PressOffsetPhys,
+            };
         }
 
-        void HandleTabDragCompleted(DockableContent pane, int tabIndex, bool wasOutside)
+        // Final step of the immediate-tear-off pipeline. Called by the
+        // cursor-poll tick when LBUTTON releases (commit=true) or Esc
+        // is pressed (commit=false).
+        //
+        // We rely on the floating window being WS_EX_TRANSPARENT (set by
+        // BeginImmediateTearOff via IgnorePointerInput=true) so pointer
+        // events during drag pass through to the underlying source XAML
+        // island. The drop-target overlay's existing PointerEntered /
+        // PointerExited handlers on each button keep `_hoveredTarget`
+        // current as the cursor moves over them. At release time we
+        // simply ask each visible overlay "are you currently hovered?"
+        // and if so, fire its confirm. No screen-DIP coord math needed.
+        //
+        // If no overlay has a latched hover, the cursor was over empty
+        // space — drop-outside semantics. The floating window has its
+        // drag styles stripped (Opacity=1, IgnorePointerInput=false,
+        // NoActivate=false) and becomes a permanent floating pane at
+        // the cursor's release position.
+        void FinalizeImmediateDrop(ReactorWindow floatingWindow, DockableContent pane, bool commit)
         {
-            _ = tabIndex; // pane reference is the source of truth
             var session = DockDragSession.Current;
-            if (session is null || !session.IsActive) return;
-
-            // If the user released over a drop target, the overlay's
-            // OnConfirm callback already fired and tore the session down;
-            // we shouldn't double-handle here. The session.IsActive guard
-            // covers that case.
-            if (wasOutside)
+            DockTarget? confirmedTarget = null;
+            if (commit && session is { IsActive: true })
             {
-                // §2.14 — refuse tear-out when the pane can't float. The
-                // drag session ends without mutating the layout; the
-                // dragged tab stays where it is.
-                if (!pane.CanFloat)
-                {
-                    LogOp(Diagnostics.DockOperationKind.Note,
-                        $"refuse tear-out pane='{pane.Key}' CanFloat=false",
-                        paneKey: pane.Key?.ToString());
-                    session.End();
-                    setDragActive(false);
-                    return;
-                }
-                // Spec 045 §4.2 cross-window dock-in (Center only):
-                // WinUI's TabView drag pipeline is window-local — the
-                // floating window's overlay never receives DragEnter
-                // because the drag originated in a different XAML
-                // island. So at drop-completion time, hit-test the
-                // cursor against every registered floating window's
-                // HWND rect; if a hit is found, route the pane there
-                // as a new tab instead of tearing out into a new
-                // floating window. Deferred to drop-time only — no
-                // overlay is shown during the drag itself.
-                if (DockFloatingPaneRouter.HasRegisteredWindows
-                    && DockFloatingPaneRouter.TryAppendUnderCursor(pane))
-                {
-                    var (afterRemoveX, removedX) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
-                    if (removedX)
-                    {
-                        StoreOverride(afterRemoveX);
-                        manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
-                        manager.OnLiveLayoutChanged?.Invoke(afterRemoveX);
-                        // This is a cross-window dock-in (append-as-tab
-                        // into an existing floating window), NOT a
-                        // tear-out into a new floating window. Use
-                        // DragConfirm to keep the operation log /
-                        // replay analysis honest — matches the
-                        // semantics used by OnExternalCrossWindowDrop.
-                        LogOp(Diagnostics.DockOperationKind.DragConfirm,
-                            $"cross-window dock-in pane='{pane.Key}' to existing floating window",
-                            paneKey: pane.Key?.ToString(),
-                            layoutOverride: afterRemoveX);
-                        DockHostLiveAnnouncer.Announce(manager,
-                            DockingStrings.LiveAnnouncement(DockingStringKeys.LiveDocked, pane.Title));
-                    }
-                    DockDragSession.MarkConsumed();
-                    session.End();
-                    setDragActive(false);
-                    bumpTick(t => t + 1);
-                    return;
-                }
-                // §2.15 — record container before tearing out so a later
-                // re-dock can route via PreviousContainer.
-                var container = DockLayoutMutator.FindContainer(effectiveLayout, pane);
-                if (container is not null) PreviousContainerTracker.Set(pane, container);
-                // Tear-out: open a floating window with the dragged pane.
-                // Pane has to be removed from the current layout first so
-                // it doesn't appear in both places.
-                var (afterRemove, removed) = DockLayoutMutator.RemovePane(effectiveLayout, pane);
-                if (removed)
-                {
-                    // Open the floating window FIRST so the layout mutation
-                    // only commits when a real window was created. If Open
-                    // throws (no XamlRoot, WinUI init failure), the process
-                    // tears down and no half-mutated state survives.
-                    DockFloatingWindow.Open(pane, manager: manager);
-                    StoreOverride(afterRemove);
-                    manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
-                    // §2.4 — same as confirm path: surface the new tree.
-                    manager.OnLiveLayoutChanged?.Invoke(afterRemove);
-                    LogOp(Diagnostics.DockOperationKind.DragTearOut,
-                        $"tear-out pane='{pane.Key}' to floating window",
-                        paneKey: pane.Key?.ToString(),
-                        layoutOverride: afterRemove);
-                    // §2.10 — UIA polite announcement.
-                    DockHostLiveAnnouncer.Announce(manager,
-                        DockingStrings.LiveAnnouncement(DockingStringKeys.LiveFloated, pane.Title));
-                }
+                confirmedTarget = DockTabTearOff.TryConfirmHoveredTargetFor(manager);
             }
 
-            session.End();
+            if (confirmedTarget is not null)
+            {
+                // The overlay's TargetConfirmed event ran the host's
+                // OnConfirm closure, which inserted the pane into the
+                // layout and called session.End(). Close the floating
+                // window — its pane is back in the docked tree.
+                //
+                // We DEFER the close via TryEnqueue: the synchronous
+                // path from TryConfirmCurrentHover ran setState calls
+                // that may already be processing on the dispatcher.
+                // Closing a window during another render's reentry
+                // breaks WinUI's dispatcher (see the spike doc's
+                // "render-time cleanup" gotcha). One queued tick is
+                // enough to let the host's pending re-render flush.
+                var dq = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                bool enqueued = dq is not null && dq.TryEnqueue(() =>
+                {
+                    try { floatingWindow.Close(); }
+                    catch { /* window may already be tearing down */ }
+                });
+                if (!enqueued)
+                {
+                    try { floatingWindow.Close(); } catch { }
+                }
+                return;
+            }
+
+            // No target hit (drop-outside / cancel). Strip the
+            // drag-only window styles so the floating window becomes a
+            // real, interactive floating pane.
+            try
+            {
+                floatingWindow.SetIgnorePointerInput(false);
+                floatingWindow.SetOpacity(1.0);
+                floatingWindow.SetNoActivate(false);
+                floatingWindow.Activate();
+            }
+            catch { }
+
+            session?.End();
             setDragActive(false);
+            setHoveredTarget(null);
             bumpTick(t => t + 1);
+            LogOp(commit
+                    ? Diagnostics.DockOperationKind.DragTearOut
+                    : Diagnostics.DockOperationKind.DragCancel,
+                commit
+                    ? $"drop-outside pane='{pane.Key}' (floating window retained)"
+                    : $"cancel immediate-drag pane='{pane.Key}'",
+                paneKey: pane.Key?.ToString());
         }
 
         // Splitter-final fan-out: wrap the user's optional
@@ -567,14 +669,23 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             var effective = hasOverride
                 ? grp with { SelectedIndex = ClampIndex(overrideIdx, grp.Documents.Count) }
                 : grp;
+            // Spec 045 §2.6 — VS-style immediate tear-off. WinUI's
+            // CanDragTabs is off on host tab views (the renderer maps null
+            // onTabDrag* callbacks to CanDragTabs=false). The custom press
+            // hook installed via Setters drives an immediate tear-off the
+            // moment the cursor crosses the threshold; see DockTabTearOff
+            // for the state machine. Floating windows keep WinUI's OLE
+            // drag for their own tab strips (DockFloatingWindow.BuildChrome
+            // passes non-null onTabDrag* callbacks).
             var tabView = DockTabGroupRenderer.Render(
                 effective,
                 renderLeafContent: doc => WrapLeafWithPaneContext(doc),
                 onSelectedIndexChanged: null,
                 onTabClosing: pane => CloseTabViaButton(pane),
-                onTabDragStarting: HandleTabDragStarting,
-                onTabDragCompleted: HandleTabDragCompleted,
-                onPinRequested: PinToSideViaTabButton);
+                onTabDragStarting: null,
+                onTabDragCompleted: null,
+                onPinRequested: PinToSideViaTabButton,
+                onTabImmediateTearOff: BeginImmediateTearOff);
 
             // §2.3 per-group drop overlay. Activates whenever any drag
             // session is in flight in the process (local OR cross-window
@@ -1166,7 +1277,29 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // programmatic TabView.TabDragStarting surface.
         DockDragGateBridge.Set(manager, (pane, tabIndex) =>
         {
-            HandleTabDragStarting(pane, tabIndex);
+            // Gate-only: this is the same predicate the §2.6 tear-off
+            // path inlines at the top of BeginImmediateTearOff (CanMove
+            // + OnContentFloating). The seam exists so headless fixtures
+            // can exercise the gate without spinning up a real floating
+            // window. A passing gate begins a DockDragSession but does
+            // NOT perform the layout mutation / window open; tests that
+            // need those drive the overlay confirm path separately.
+            if (DockDragSession.Current is { IsActive: true }) return false;
+            if (!pane.CanMove)
+            {
+                LogOp(Diagnostics.DockOperationKind.Note,
+                    $"refuse drag pane='{pane.Key}' CanMove=false",
+                    paneKey: pane.Key?.ToString());
+                return false;
+            }
+            var args = new DockContentFloatingEventArgs { Content = pane };
+            manager.OnContentFloating?.Invoke(args);
+            if (args.Cancel) return false;
+            DockDragSession.Begin(pane, manager, tabIndex, owner: model);
+            setDragActive(true);
+            LogOp(Diagnostics.DockOperationKind.DragStart,
+                $"begin drag pane='{pane.Key}' fromTabIndex={tabIndex}",
+                paneKey: pane.Key?.ToString());
             return DockDragSession.Current is { IsActive: true };
         });
 

@@ -61,13 +61,30 @@ public static class DockFloatingWindow
         ReactorWindow? owner = null,
         DockFloatingBounds? savedBounds = null,
         IReadOnlyList<DockDisplay>? displays = null,
-        DockManager? manager = null)
+        DockManager? manager = null,
+        double opacity = 1.0,
+        bool noActivate = false,
+        bool ignorePointerInput = false,
+        (double X, double Y)? initialPosition = null)
     {
         ArgumentNullException.ThrowIfNull(pane);
 
         var bounds = savedBounds;
         if (bounds is { } b && displays is { Count: > 0 } ds)
             bounds = DockFloatingClamp.Clamp(b, ds);
+
+        // Spec 045 §2.6 tear-off — opacity/noActivate/ignorePointerInput
+        // surface the WindowSpec primitives so the immediate-tear-off
+        // pipeline (DockTabTearOff) can pop a 50%-opacity preview that
+        // tracks the cursor without stealing focus or blocking clicks
+        // on drop-target overlays below.
+        WindowStartPosition startPos = WindowStartPosition.Default;
+        (double X, double Y)? manualPos = null;
+        if (initialPosition is { } ip)
+        {
+            startPos = WindowStartPosition.Manual;
+            manualPos = ip;
+        }
 
         var spec = new WindowSpec
         {
@@ -77,6 +94,11 @@ public static class DockFloatingWindow
             Width = bounds?.Width ?? width,
             Height = bounds?.Height ?? height,
             Owner = owner,
+            Opacity = opacity,
+            NoActivate = noActivate,
+            IgnorePointerInput = ignorePointerInput,
+            StartPosition = startPos,
+            ManualPosition = manualPos,
             // Spec 045 §4.2 — floating dockable windows extend their
             // content into the title-bar zone so the docking TabView
             // (rendered as the window's root by BuildChrome) acts as
@@ -205,7 +227,8 @@ public static class DockFloatingWindow
         ReactorWindow?[] windowHolder,
         DockManager? manager,
         Action<DockableContent> onTabClosing,
-        Action<DockableContent, bool> onTabDragCompleted)
+        Action<DockableContent, bool> onTabDragCompleted,
+        Func<DockTabTearOff.TearOffRequest, DockTabTearOff.TearOffActive?>? onTabImmediateTearOff = null)
     {
         // Spec 046 §6.1 — infer the floating internal group's Role from the
         // payload categories. A floating window whose panes are all
@@ -225,12 +248,18 @@ public static class DockFloatingWindow
             // the OS title-bar zone (single continuous chrome row).
             TabChrome: TabChrome.TitleBar,
             Role: role);
+        // Spec 045 §2.6 — when the immediate tear-off pipeline is wired,
+        // the floating window's tab strip routes through it (consistent
+        // UX with host tab drags: no WinUI OLE ghost; pointer-driven
+        // hover on host overlays). Otherwise (legacy unit-test path /
+        // back-compat for callers that haven't migrated) fall back to
+        // WinUI OLE drag with the cross-window session begin handler.
         var rendered = (TabViewElement)DockTabGroupRenderer.Render(
             tabGroup,
             renderLeafContent: doc => doc.Content ?? (Element)new BorderElement(null),
             onSelectedIndexChanged: null,
             onTabClosing: onTabClosing,
-            onTabDragStarting: (doc, idx) =>
+            onTabDragStarting: onTabImmediateTearOff is null ? (doc, idx) =>
             {
                 // Begin a cross-window session. The `manager` reference
                 // is the host that originally owned this pane —
@@ -238,8 +267,12 @@ public static class DockFloatingWindow
                 if (DockDragSession.Current is { IsActive: true }) return;
                 if (manager is null) return;
                 DockDragSession.Begin(doc, manager, idx);
-            },
-            onTabDragCompleted: (pane, _, wasOutside) => onTabDragCompleted(pane, wasOutside));
+            }
+            : null,
+            onTabDragCompleted: onTabImmediateTearOff is null
+                ? (pane, _, wasOutside) => onTabDragCompleted(pane, wasOutside)
+                : null,
+            onTabImmediateTearOff: onTabImmediateTearOff);
 
         // Spec 045 §4.2 / §4.4 — drag-region element in TabStripFooter.
         // The footer lays out in TabView's template column with
@@ -473,11 +506,154 @@ internal sealed class DockFloatingWindowComponent : Component<DockFloatingWindow
             }
         }
 
+        // Spec 045 §2.6 — floating-window tear-off entry point. Symmetric
+        // with the host's BeginImmediateTearOff: pre-check CanMove /
+        // CanFloat, then either repurpose this window (single-tab case)
+        // as the drag preview by applying drag styles in-place, or open
+        // a NEW floating window with just the dragged pane (multi-tab
+        // case — the remaining tabs stay in this window). Either way the
+        // finalize path is the same: cursor-poll tracker drives the drag,
+        // overlay confirm routes through DockTabTearOff.TryConfirmHoveredTargetFor,
+        // drop-outside restores the drag styles.
+        DockTabTearOff.TearOffActive? BeginFloatingTearOff(DockTabTearOff.TearOffRequest req)
+        {
+            // Defensive cleanup mirrors the host's path so a stuck state
+            // from a previous drag can't block this one.
+            if (DockTabTearOffTracker.IsActive)
+            {
+                DockTabTearOffTracker.ForceCancel();
+            }
+            if (DockDragSession.Current is { IsActive: true } stale)
+            {
+                stale.Cancel();
+            }
+            var pane = req.Pane;
+            if (!pane.CanMove) return null;
+            if (!pane.CanFloat) return null;
+            if (manager is not null)
+            {
+                var args = new DockContentFloatingEventArgs { Content = pane };
+                manager.OnContentFloating?.Invoke(args);
+                if (args.Cancel) return null;
+            }
+
+            var ownWindow = holder[0];
+            if (ownWindow is null) return null;
+            // Capture the source XamlRoot BEFORE RemoveLocal might close
+            // ownWindow (single-tab case → its only pane is the one we're
+            // tearing off, panes goes to empty, ownWindow.Close()). The
+            // tracker reads SourceXamlRoot.RasterizationScale every tick
+            // to convert physical cursor pos to DIPs; accessing it through
+            // a closed window's NativeWindow would NRE.
+            XamlRoot? sourceXamlRoot = null;
+            try { sourceXamlRoot = ownWindow.NativeWindow?.Content?.XamlRoot; } catch { }
+
+            // ALWAYS open a NEW preview window — see BeginImmediateTearOff
+            // for rationale. The new window is born with the drag styles
+            // in its WindowSpec, which WinUI applies during the initial
+            // layered-window setup; that sticks. The tracker then drives
+            // its position via AppWindow.Move in absolute screen
+            // pixels, sidestepping any DIP/DPI uncertainty on a
+            // fresh NoActivate window.
+            var initialTopLeft = (
+                (double)(req.CursorScreenPhys.X - req.PressOffsetPhys.X) / req.SourceScale,
+                (double)(req.CursorScreenPhys.Y - req.PressOffsetPhys.Y) / req.SourceScale);
+            ReactorWindow draggedWindow;
+            try
+            {
+                draggedWindow = DockFloatingWindow.Open(
+                    pane,
+                    manager: manager,
+                    opacity: 0.5,
+                    noActivate: true,
+                    ignorePointerInput: true,
+                    initialPosition: initialTopLeft);
+            }
+            catch { return null; }
+            // CRITICAL: Hide ownWindow synchronously so it stops
+            // intercepting pointer events while its async Close() runs.
+            // Without this, ownWindow had foreground focus (user just
+            // clicked it) and stays at top of Z-order; the new
+            // preview F2 was opened with NoActivate so it goes BELOW
+            // ownWindow in Z-order. Pointer events through F2's
+            // WS_EX_TRANSPARENT then hit ownWindow (still opaque),
+            // never reaching the source host's overlays. Op-log proof:
+            // dock→host drags fire Overlay.PointerEntered within 200 ms;
+            // float→host drags fire zero Overlay events across multi-
+            // second drags. AppWindow.Hide is synchronous, so by the
+            // time RemoveLocal triggers the eventual Close, ownWindow
+            // is already invisible to the OS hit-test routing.
+            try { ownWindow.AppWindow.Hide(); }
+            catch { /* window may already be tearing down */ }
+            RemoveLocal(pane);
+
+            if (manager is not null)
+            {
+                DockDragSession.Begin(pane, manager, req.TabIndex);
+                manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
+            }
+
+            // Capture for the finalize closures.
+            var capturedDragged = draggedWindow;
+            Action confirm = () =>
+            {
+                var target = DockTabTearOff.TryConfirmHoveredTargetFor(manager);
+                if (target is not null)
+                {
+                    var dq = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                    bool ok = dq is not null && dq.TryEnqueue(() =>
+                    {
+                        try { capturedDragged.Close(); } catch { }
+                    });
+                    if (!ok) { try { capturedDragged.Close(); } catch { } }
+                    return;
+                }
+                // No target hit — drop-outside semantics: strip drag styles,
+                // window stays at cursor's release position.
+                RestoreWindowFromDrag(capturedDragged);
+                DockDragSession.Current?.End();
+            };
+            Action cancel = () =>
+            {
+                RestoreWindowFromDrag(capturedDragged);
+                DockDragSession.Current?.End();
+            };
+
+            // If we couldn't capture the source XamlRoot (rare race), fall
+            // back to the dragged window's once it's mounted. Worst case
+            // RasterizationScale is 1.0 default.
+            var xr = sourceXamlRoot;
+            try { xr ??= capturedDragged.NativeWindow?.Content?.XamlRoot; } catch { }
+
+            return new DockTabTearOff.TearOffActive
+            {
+                FloatingWindow = capturedDragged,
+                Pane = pane,
+                SourceXamlRoot = xr!,
+                ConfirmDropAtCursor = confirm,
+                CancelDrop = cancel,
+                OffsetPhys = req.PressOffsetPhys,
+            };
+        }
+
+        static void RestoreWindowFromDrag(ReactorWindow w)
+        {
+            try
+            {
+                w.SetIgnorePointerInput(false);
+                w.SetOpacity(1.0);
+                w.SetNoActivate(false);
+                w.Activate();
+            }
+            catch { /* window may have been closed already */ }
+        }
+
         var chrome = DockFloatingWindow.BuildChrome(
             currentPanes,
             holder,
             manager,
             onTabClosing: RemoveLocal,
+            onTabImmediateTearOff: BeginFloatingTearOff,
             onTabDragCompleted: (pane, wasOutside) =>
             {
                 if (DockDragSession.Consumed)

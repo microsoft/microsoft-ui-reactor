@@ -263,11 +263,19 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         ReadAnimationsSetting();
         ApplyModeVisibility();
 
+        PointerEntered += OnPointerEntered;
         PointerMoved += OnPointerMoved;
         PointerExited += OnPointerExited;
         // Spec 045 §2.4 — drag-aware events. Fire during a WinUI tab
         // drag where pointer events are captured by the drag operation
         // and would otherwise never reach this control.
+        //
+        // §2.6 tear-off pipeline note — DockTabTearOff uses Win32
+        // cursor polling, not WinUI OLE drag, so these Drag* handlers
+        // never fire for our path. The per-group reveal is driven by
+        // PointerEntered/Exited above (the floating preview window is
+        // WS_EX_TRANSPARENT so pointer events fall through to the
+        // overlay's hit-test region).
         DragEnter += OnDragEnter;
         DragOver += OnDragOver;
         DragLeave += OnDragLeave;
@@ -751,13 +759,37 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
     {
         var p = e.GetCurrentPoint(this).Position;
         var newHover = HitTestForTarget(p);
-        if (newHover != _hoveredTarget) SetHovered(newHover);
+        if (newHover != _hoveredTarget)
+        {
+            DockTabTearOff.DiagnosticSink?.Invoke($"Overlay.PointerMoved mode={_mode} hover={newHover} pos=({p.X:F0},{p.Y:F0})");
+            SetHovered(newHover);
+        }
         e.Handled = false;
     }
 
     private void OnPointerExited(object sender, PointerRoutedEventArgs e)
     {
         if (_hoveredTarget is not null) SetHovered(null);
+        // Spec 045 §2.6 — symmetric with OnPointerEntered: hide the
+        // per-group cluster when the cursor leaves so neighboring
+        // groups don't render their buttons over us.
+        if (_mode == DockDropOverlayMode.GroupInner || _mode == DockDropOverlayMode.CenterOnly)
+            SetGroupOverlayRevealed(false);
+    }
+
+    private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        // Spec 045 §2.6 tear-off pipeline — DockTabTearOff drives drops
+        // via Win32 cursor polling, so the WinUI Drag* events never fire.
+        // PointerEntered is the analogous reveal trigger: when the cursor
+        // enters this overlay's bounds (the per-group region in
+        // GroupInner mode, the floating-window's CenterOnly region),
+        // unmask the inner-cluster buttons so the user sees them and
+        // PointerMoved can hit-test against them. Host-mode overlays
+        // have edge buttons that are always visible; no reveal needed.
+        DockTabTearOff.DiagnosticSink?.Invoke($"Overlay.PointerEntered mode={_mode}");
+        if (_mode == DockDropOverlayMode.GroupInner || _mode == DockDropOverlayMode.CenterOnly)
+            SetGroupOverlayRevealed(true);
     }
 
     // ── Drag-mode handlers (spec 045 §2.4) ─────────────────────────────
@@ -859,6 +891,71 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
         TargetConfirmed?.Invoke(this, new DockDropTargetEventArgs(target, confirmed: true));
     }
 
+    // ─── Custom-drag entry points (spec 045 §2.6 tear-off pipeline) ────────
+    //
+    // The pipeline in DockTabTearOff drives drops via Win32 cursor polling,
+    // not WinUI's OLE drag. So OnDragOver / OnDrop never fire on us. These
+    // helpers let that pipeline (a) hit-test the cursor against our buttons
+    // and update hover state, (b) confirm whatever's currently hovered on
+    // release. Both methods consume overlay-local DIP coords.
+
+    /// <summary>
+    /// Update the hovered target by hit-testing the supplied local position.
+    /// Returns the target now under the pointer (null if none). Equivalent
+    /// to <see cref="OnPointerMoved"/> minus the routed-event plumbing.
+    /// </summary>
+    internal DockTarget? UpdateHoverAt(Point local)
+    {
+        var newHover = HitTestForTarget(local);
+        if (newHover != _hoveredTarget) SetHovered(newHover);
+        return newHover;
+    }
+
+    /// <summary>
+    /// Hit-test + confirm in one call. Returns the target that was confirmed,
+    /// or null if the position fell outside every button (or hit a disabled
+    /// target). Used by the tear-off pipeline on pointer-up.
+    /// </summary>
+    internal DockTarget? TryConfirmAt(Point local)
+    {
+        var target = HitTestForTarget(local);
+        if (target is DockTarget t && !IsDisabled(t))
+        {
+            ConfirmTarget(t);
+            return t;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Clear any latched hover state. Called on pointer-up when the cursor
+    /// landed outside all targets — keeps the preview rectangle from
+    /// strobing for one frame before the overlay tears down.
+    /// </summary>
+    internal void ClearHover()
+    {
+        if (_hoveredTarget is not null) SetHovered(null);
+    }
+
+    /// <summary>The currently-hovered target, or null. The overlay's own
+    /// PointerEntered/PointerExited handlers on each button keep this
+    /// up to date as the cursor moves over the buttons. Public surface
+    /// for the spec 045 §2.6 tear-off pipeline.</summary>
+    internal DockTarget? CurrentHoveredTarget => _hoveredTarget;
+
+    /// <summary>Fire the confirm event for whatever target is currently
+    /// hovered, or no-op if nothing is hovered (or hovered target is
+    /// disabled). Returns the target that was confirmed, or null.</summary>
+    internal DockTarget? TryConfirmCurrentHover()
+    {
+        if (_hoveredTarget is DockTarget t && !IsDisabled(t))
+        {
+            ConfirmTarget(t);
+            return t;
+        }
+        return null;
+    }
+
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
         switch (e.Key)
@@ -950,6 +1047,22 @@ internal sealed partial class DockDropTargetOverlayControl : Grid
 
     /// <summary>Test hook — set the hovered target without a pointer event.</summary>
     internal void SetHoveredForTest(DockTarget? target) => SetHovered(target);
+
+    /// <summary>Test hook — inspect the per-group reveal flag. True when
+    /// the inner-cluster buttons are unmasked. Spec 045 §2.6 — the
+    /// tear-off pipeline drives this via OnPointerEntered (the analogue
+    /// to OLE DragEnter in the legacy pipeline).</summary>
+    internal bool IsGroupOverlayRevealedForTest => _groupOverlayRevealed;
+
+    /// <summary>Test hook — fire the same code path
+    /// <see cref="OnPointerEntered"/> uses on a real pointer event,
+    /// bypassing WinUI's routed-event delivery. Pairs with
+    /// <see cref="SimulatePointerExitedForTest"/>.</summary>
+    internal void SimulatePointerEnteredForTest() => OnPointerEntered(this, null!);
+
+    /// <summary>Test hook — fire <see cref="OnPointerExited"/>'s code
+    /// path. Used by fixtures to verify the symmetric hide.</summary>
+    internal void SimulatePointerExitedForTest() => OnPointerExited(this, null!);
 
     protected override AutomationPeer OnCreateAutomationPeer() =>
         new DockDropTargetOverlayAutomationPeer(this);

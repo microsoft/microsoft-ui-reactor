@@ -73,7 +73,8 @@ internal static class DockTabGroupRenderer
         Action<DockableContent>? onTabClosing,
         Action<DockableContent, int>? onTabDragStarting = null,
         Action<DockableContent, int, bool>? onTabDragCompleted = null,
-        Action<ToolWindow>? onPinRequested = null)
+        Action<ToolWindow>? onPinRequested = null,
+        Func<DockTabTearOff.TearOffRequest, DockTabTearOff.TearOffActive?>? onTabImmediateTearOff = null)
     {
         ArgumentNullException.ThrowIfNull(group);
         ArgumentNullException.ThrowIfNull(renderLeafContent);
@@ -164,7 +165,15 @@ internal static class DockTabGroupRenderer
             TabWidthMode = resolvedCompact
                 ? TabViewWidthMode.Compact
                 : TabViewWidthMode.Equal,
-            CanReorderTabs = true,
+            // Spec 045 §2.6 — when the immediate tear-off pipeline is
+            // active on this group, WinUI's intra-strip reorder gesture
+            // would otherwise fight our press hook (CanReorderTabs spawns
+            // a drag-ghost the moment the cursor moves past the OS
+            // threshold). Our pipeline owns the press → move → release
+            // gesture exclusively. Floating-window tab strips don't pass
+            // onTabImmediateTearOff and keep CanReorderTabs=true so
+            // their intra-strip reorder still works.
+            CanReorderTabs = onTabImmediateTearOff is null,
             // Spec 045 §2.4: enable tab tear-out when a drag callback is
             // supplied so the host can begin a DockDragSession. Off by
             // default to preserve P1 behavior when the host hasn't opted in.
@@ -188,7 +197,7 @@ internal static class DockTabGroupRenderer
                 if (pane is not null)
                     onTabDragCompleted(pane, idx, wasOutside);
             },
-            Setters = BuildSetters(group),
+            Setters = BuildSetters(group, documents, onTabImmediateTearOff),
         };
         return element;
     }
@@ -222,13 +231,53 @@ internal static class DockTabGroupRenderer
     /// <see cref="TabViewElement"/>.
     /// </para>
     /// </summary>
-    internal static Action<TabView>[] BuildSetters(DockTabGroup group) => group.TabChrome switch
+    internal static Action<TabView>[] BuildSetters(DockTabGroup group) =>
+        BuildSetters(group, group.Documents, onTabImmediateTearOff: null);
+
+    /// <summary>
+    /// Variant that, in addition to the chrome preset, attaches the
+    /// spec 045 §2.6 immediate-tear-off pointer-press hook when
+    /// <paramref name="onTabImmediateTearOff"/> is non-null. The
+    /// closure is supplied by <see cref="DockHostNativeComponent"/>
+    /// only when the experimental custom-drag pipeline is enabled
+    /// (<see cref="DockTabTearOff.Enabled"/>).
+    /// </summary>
+    internal static Action<TabView>[] BuildSetters(
+        DockTabGroup group,
+        IReadOnlyList<DockableContent> documents,
+        Func<DockTabTearOff.TearOffRequest, DockTabTearOff.TearOffActive?>? onTabImmediateTearOff)
     {
-        TabChrome.Win11    => [ClearManagedKeys],
-        TabChrome.Flat     => [ClearManagedKeys, ApplyFlatChrome],
-        TabChrome.TitleBar => [ClearManagedKeys, ApplyTitleBarChrome],
-        _                  => [ClearManagedKeys],
-    };
+        var chrome = group.TabChrome switch
+        {
+            TabChrome.Win11    => new Action<TabView>[] { ClearManagedKeys },
+            TabChrome.Flat     => new Action<TabView>[] { ClearManagedKeys, ApplyFlatChrome },
+            TabChrome.TitleBar => new Action<TabView>[] { ClearManagedKeys, ApplyTitleBarChrome },
+            _                  => new Action<TabView>[] { ClearManagedKeys },
+        };
+        if (onTabImmediateTearOff is null) return chrome;
+        // Append the tear-off press hook. We capture `documents` at render
+        // time so the tab-index → pane lookup reflects this group's
+        // current contents. AttachPressHook is idempotent per TabView
+        // (ConditionalWeakTable-keyed), so the resolveTab/beginTearOff
+        // closures get refreshed on every render.
+        var docs = documents;
+        Action<TabView> attach = tv =>
+        {
+            DockTabTearOff.AttachPressHook(
+                tv,
+                resolveTab: item =>
+                {
+                    var idx = tv.TabItems.IndexOf(item);
+                    if (idx < 0 || idx >= docs.Count) return (null, -1);
+                    return (docs[idx], idx);
+                },
+                beginTearOff: onTabImmediateTearOff);
+        };
+        var withAttach = new Action<TabView>[chrome.Length + 1];
+        Array.Copy(chrome, withAttach, chrome.Length);
+        withAttach[chrome.Length] = attach;
+        return withAttach;
+    }
 
     /// <summary>
     /// Keys this renderer writes into <c>TabView.Resources</c>. Pool-safety

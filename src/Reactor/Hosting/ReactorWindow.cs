@@ -1081,7 +1081,22 @@ public sealed class ReactorWindow : IDisposable
             ? bits | NativeOpacity.WS_EX_TRANSPARENT
             : bits & ~NativeOpacity.WS_EX_TRANSPARENT;
         if (updated != bits)
+        {
             _ = NativeOpacity.SetWindowLongPtr(_hwnd, NativeOpacity.GWL_EXSTYLE, (nint)updated);
+            // SetWindowLong's frame-style changes are cached until
+            // SetWindowPos with SWP_FRAMECHANGED runs (MSDN: "Certain
+            // window data is cached, so changes you make using
+            // SetWindowLong will not take effect until you call the
+            // SetWindowPos function"). Without this, WS_EX_TRANSPARENT
+            // may be set in the bits but the OS hit-test routing still
+            // treats the window as opaque — explaining why the docked
+            // tab drag worked (new window, no cache yet) but the
+            // floating tab drag didn't reliably (cached opaque state).
+            _ = NativeOpacity.SetWindowPos(_hwnd, nint.Zero, 0, 0, 0, 0,
+                NativeOpacity.SWP_NOMOVE | NativeOpacity.SWP_NOSIZE
+                | NativeOpacity.SWP_NOZORDER | NativeOpacity.SWP_NOACTIVATE
+                | NativeOpacity.SWP_FRAMECHANGED);
+        }
         var prev = Volatile.Read(ref _spec);
         if (prev.IgnorePointerInput != ignore)
             Volatile.Write(ref _spec, prev with { IgnorePointerInput = ignore });
@@ -1095,6 +1110,14 @@ public sealed class ReactorWindow : IDisposable
         public const long WS_EX_TRANSPARENT = 0x00000020;
         public const uint LWA_ALPHA = 0x00000002;
 
+        // SetWindowPos flags — used after SetWindowLong to commit
+        // cached frame-style changes (spec 045 §2.6 tear-off).
+        public const uint SWP_NOSIZE = 0x0001;
+        public const uint SWP_NOMOVE = 0x0002;
+        public const uint SWP_NOZORDER = 0x0004;
+        public const uint SWP_NOACTIVATE = 0x0010;
+        public const uint SWP_FRAMECHANGED = 0x0020;
+
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
         public static extern nint GetWindowLongPtr(nint hWnd, int nIndex);
 
@@ -1104,6 +1127,11 @@ public sealed class ReactorWindow : IDisposable
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetLayeredWindowAttributes(nint hwnd, uint crKey, byte bAlpha, uint dwFlags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter,
+            int X, int Y, int cx, int cy, uint uFlags);
     }
 
     /// <summary>Center on the window's current monitor. UI-thread only.</summary>
