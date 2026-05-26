@@ -664,4 +664,187 @@ internal static class DockingComplexLayoutSplitterFixtures
 
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  11 — Scene-J south-drop end-to-end crash regression
+    //
+    //  Reproduces the user-reported crash: in the dock-showcase Scene J,
+    //  open 2 documents in the middle DocumentArea, drag one to the south
+    //  of the other. The drop's per-group overlay routes through
+    //  MovePaneToGroupTarget(SplitBottom), and the resulting layout is
+    //  fed back to the host via OnLiveLayoutChanged + a parent re-render.
+    //  This fixture drives the full pipeline programmatically: build the
+    //  3-column role-tagged layout, mount it through a real host, apply
+    //  the south-drop transform, re-mount with the new layout, and assert
+    //  the host renders without throwing + produces the nested vertical
+    //  split with both documents addressable.
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class L11_SceneJSouthDrop_LayoutTransformsAndRenders(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var doc1 = new Document { Title = "Document 1.md", Key = "j:doc:1", Content = TextBlock("doc 1 body") };
+            var doc2 = new Document { Title = "Document 2.md", Key = "j:doc:2", Content = TextBlock("doc 2 body") };
+            var galleryTool = new ToolWindow { Title = "Gallery", Key = "j:tool:gallery", Content = TextBlock("gallery") };
+            var configTool  = new ToolWindow { Title = "Config",  Key = "j:tool:config",  Content = TextBlock("config") };
+
+            var documentArea = new DockTabGroup(
+                new DockableContent[] { doc1, doc2 },
+                Role: DockGroupRole.DocumentArea);
+            var initialLayout = new DockSplit(Orientation.Horizontal, new DockNode[]
+            {
+                new DockTabGroup(new DockableContent[] { galleryTool },
+                    Width: 240, Role: DockGroupRole.ToolWindowStrip),
+                documentArea,
+                new DockTabGroup(new DockableContent[] { configTool },
+                    Width: 280, Role: DockGroupRole.ToolWindowStrip),
+            });
+
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            // Use a mutable layout slot the test mounts with; the second
+            // mount uses the transformed layout. Mirrors how Scene J's
+            // OnLiveLayoutChanged + useState combination feeds the
+            // mutator's output back to the host on the next render.
+            DockNode currentLayout = initialLayout;
+            host.Mount(_ => new DockManager { Layout = currentLayout });
+            await Harness.Render();
+            await Harness.Render();
+
+            // Sanity check: 2 documents mounted as 2 tabs in a single TabView.
+            var initialTabs = H.FindAllControls<TabView>(_ => true)
+                .Where(tv => tv.TabItems.Count > 1)
+                .ToList();
+            H.Check("L11_InitialHasMultiTabGroup", initialTabs.Count == 1);
+
+            // Apply the same transform the host's per-group OnConfirm
+            // would: MovePaneToGroupTarget(doc1, documentArea, SplitBottom).
+            var transformed = DockLayoutMutator.MovePaneToGroupTarget(
+                initialLayout, doc1, documentArea, DockTarget.SplitBottom);
+            H.Check("L11_MutatorReturnedNonNull", transformed is not null);
+            if (transformed is null) return;
+
+            // Re-mount with the new layout (simulates the parent re-render
+            // that Scene J triggers via setLiveLayout).
+            currentLayout = transformed;
+            try
+            {
+                host.Mount(_ => new DockManager { Layout = currentLayout });
+                await Harness.Render();
+                await Harness.Render();
+                H.Check("L11_RemountedWithoutThrowing", true);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"# L11 mount-after-transform threw: {ex.GetType().Name}: {ex.Message}");
+                Console.WriteLine($"# L11 stack: {ex.StackTrace}");
+                H.Check("L11_RemountedWithoutThrowing", false);
+                return;
+            }
+
+            // Post-transform structure: two TabViews each with a single
+            // tab (doc1, doc2), plus tabs for the two tool windows.
+            // 4 TabViews total. The middle column has a FlexPanel with 2
+            // TabViews + 1 splitter inside.
+            var tabViews = H.FindAllControls<TabView>(_ => true);
+            H.Check("L11_FourTabViews", tabViews.Count == 4);
+
+            // Doc1 and Doc2 must each be mounted as a tab on its own TabView.
+            int doc1Found = 0, doc2Found = 0;
+            foreach (var tv in tabViews)
+            {
+                foreach (var item in tv.TabItems)
+                {
+                    if (item is TabViewItem ti && ti.Header is string h)
+                    {
+                        if (h == "Document 1.md") doc1Found++;
+                        if (h == "Document 2.md") doc2Found++;
+                    }
+                }
+            }
+            H.Check("L11_Doc1MountedExactlyOnce", doc1Found == 1);
+            H.Check("L11_Doc2MountedExactlyOnce", doc2Found == 1);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  12 — DockDragSession leak across host unmount (scene-switch repro)
+    //
+    //  User-reported pattern: in the dock-showcase, alternate Scene J →
+    //  Scene A → Scene J → Scene A → … After 2-3 cycles, Scene J's tab
+    //  drag stops working — Begin returns null because the static
+    //  DockDragSession.Current.IsActive is still true from a previous
+    //  drag whose host was unmounted before the drag ended.
+    //
+    //  DockDragSession.Current is process-static. DockHostNativeComponent
+    //  registers a SessionChanged subscription via UseEffect, but its
+    //  cleanup only unhooks the handler — it doesn't cancel the session
+    //  itself. So a host that unmounts mid-drag (or with a session in a
+    //  weird intermediate state) leaks the static slot.
+    //
+    //  Fix: cleanup also cancels Current when its SourceManager refers to
+    //  the manager that's being unmounted. This fixture exercises that.
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class L12_HostUnmount_CancelsOwnedDragSession(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // Reset to a known clean state.
+            DockDragSession.ResetForTest();
+
+            var docA = new Document { Title = "A", Key = "L12:a", Content = TextBlock("a") };
+            var docB = new Document { Title = "B", Key = "L12:b", Content = TextBlock("b") };
+            var layoutA = new DockTabGroup(new DockableContent[] { docA, docB });
+
+            // Capture the manager so we can simulate Begin against it
+            // exactly the way HandleTabDragStarting would.
+            DockManager? managerA = null;
+            var hostA = H.CreateHost();
+            DockingNativeInterop.Register(hostA.Reconciler);
+            hostA.Mount(_ => managerA = new DockManager { Layout = layoutA });
+            await Harness.Render();
+            await Harness.Render();
+            H.Check("L12_ManagerCaptured", managerA is not null);
+
+            // Simulate the production drag-start path: HandleTabDragStarting
+            // calls DockDragSession.Begin(pane, manager, tabIndex, owner: model).
+            // We fetch the host's stable model via the bridge so the OwnerToken
+            // matches what the host's UseEffect cleanup looks for.
+            var hostModel = DockHostModelBridge.Get(managerA!);
+            H.Check("L12_HostModelAvailable", hostModel is not null);
+            var session = DockDragSession.Begin(docA, managerA!, 0, owner: hostModel);
+            H.Check("L12_DragBegan", session is { IsActive: true });
+            H.Check("L12_StaticIsActive_BeforeUnmount",
+                DockDragSession.Current is { IsActive: true });
+
+            // User switches scenes — the host is disposed. Simulates Scene
+            // J's component unmounting when the user clicks Scene A.
+            hostA.Dispose();
+            await Harness.Render();
+            await Harness.Render();
+
+            // CONTRACT: the host's UseEffect cleanup must cancel any
+            // session whose SourceManager belongs to it. Without the fix,
+            // Current.IsActive stays true forever, and the next
+            // DockDragSession.Begin call (in any future host) returns null
+            // because the static slot is occupied.
+            H.Check("L12_SessionCancelledOnUnmount",
+                DockDragSession.Current is null || !DockDragSession.Current.IsActive);
+
+            // Concretely demonstrate the user-visible symptom: try to
+            // start a new drag now. Without the fix this returns null
+            // (silently refused); with the fix it returns a fresh
+            // session.
+            var docC = new Document { Title = "C", Key = "L12:c", Content = TextBlock("c") };
+            var managerB = new DockManager { Layout = new DockTabGroup(new DockableContent[] { docC }) };
+            var nextSession = DockDragSession.Begin(docC, managerB, 0);
+            H.Check("L12_NextDragBeginSucceeds", nextSession is { IsActive: true });
+
+            // Cleanup for subsequent fixtures.
+            DockDragSession.ResetForTest();
+        }
+    }
 }

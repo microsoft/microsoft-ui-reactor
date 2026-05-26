@@ -230,7 +230,24 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         {
             Action onSessionChanged = () => bumpTick(t => t + 1);
             DockDragSession.SessionChanged += onSessionChanged;
-            return () => DockDragSession.SessionChanged -= onSessionChanged;
+            return () =>
+            {
+                DockDragSession.SessionChanged -= onSessionChanged;
+                // Scene-switch leak fix: DockDragSession.Current is a
+                // process-static. If this host owned an in-flight drag
+                // when it unmounted, the static slot would stay
+                // IsActive=true forever and HandleTabDragStarting would
+                // silently refuse every future drag. Match by
+                // OwnerToken (the host's stable DockHostModel) —
+                // DockManager records are rebuilt every parent render
+                // so ReferenceEquals on SourceManager always fails.
+                // Caught by L12_HostUnmount_CancelsOwnedDragSession.
+                var current = DockDragSession.Current;
+                if (current is { IsActive: true } && ReferenceEquals(current.OwnerToken, model))
+                {
+                    current.Cancel();
+                }
+            };
         });
 
         // §2.16 — resolve effective side strips. The override layers on
@@ -388,7 +405,11 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
             var args = new DockContentFloatingEventArgs { Content = pane };
             manager.OnContentFloating?.Invoke(args);
             if (args.Cancel) return;
-            DockDragSession.Begin(pane, manager, tabIndex);
+            // Stamp the session with this host's stable model so the
+            // UseEffect cleanup below can identify its own sessions
+            // across renders (DockManager records aren't stable —
+            // they're rebuilt every parent render).
+            DockDragSession.Begin(pane, manager, tabIndex, owner: model);
             setDragActive(true);
             LogOp(Diagnostics.DockOperationKind.DragStart,
                 $"begin drag pane='{pane.Key}' fromTabIndex={tabIndex}",

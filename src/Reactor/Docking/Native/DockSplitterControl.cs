@@ -418,9 +418,25 @@ internal sealed partial class DockSplitterControl : Grid
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
         if (!_isCapturing || e.Pointer.PointerId != _capturePointerId) return;
+        // ─── ORDER MATTERS — see SplitterMatrix_K02/K03 regression tests ──
+        //
+        //  WinUI fires OnPointerCaptureLost SYNCHRONOUSLY inside
+        //  ReleasePointerCapture. If that handler observes _isCapturing
+        //  still true, AbortDragCore runs and fires a destructive
+        //  ResizeDelta(0, IsFinal=true) that the host's solver applies
+        //  as "no change" — snap-back to the pre-drag position. The
+        //  user's drag is lost.
+        //
+        //  EndDragCore must complete its _isCapturing=false transition
+        //  BEFORE ReleasePointerCapture is invoked, so the synchronous
+        //  capture-loss handler observes a non-capturing state and
+        //  early-returns. The legitimate drag-delta event from
+        //  EndDragCore is then the only terminal event the host sees.
+        //
+        //  Keep this order in lock step with SimulateRealReleaseSequence.
         _capturePointerId = 0;
-        try { ReleasePointerCapture(e.Pointer); } catch { /* already lost */ }
         EndDragCore(ParentPosition(e));
+        try { ReleasePointerCapture(e.Pointer); } catch { /* already lost */ }
         e.Handled = true;
     }
 
@@ -638,6 +654,66 @@ internal sealed partial class DockSplitterControl : Grid
             : new Point(0, cumulativeDeltaDip);
         BeginSimulatedDrag(origin);
         EndSimulatedDrag(dest);
+    }
+
+    /// <summary>
+    /// Test hook — true if the splitter is currently in a drag capture.
+    /// Tests read this from inside a <see cref="ResizeDelta"/> handler to
+    /// assert the ordering invariant: the terminal event must fire AFTER
+    /// <c>_isCapturing</c> has flipped to false, so any synchronous
+    /// follow-up capture-loss handler (WinUI's PointerCaptureLost fires
+    /// synchronously during ReleasePointerCapture) early-returns instead
+    /// of firing a destructive <c>ResizeDelta(0, IsFinal=true)</c> that
+    /// would revert the drag.
+    /// </summary>
+    internal bool IsCapturingForTest => _isCapturing;
+
+    /// <summary>
+    /// Test hook — model the WinUI <c>OnPointerReleased</c> handler's
+    /// interaction with the synchronous <c>OnPointerCaptureLost</c> that
+    /// fires inside <c>ReleasePointerCapture</c>. The handler's
+    /// correctness depends on ordering: <see cref="EndDragCore"/> must
+    /// complete its <c>_isCapturing = false</c> transition BEFORE
+    /// <c>ReleasePointerCapture</c> is invoked, otherwise the
+    /// synchronous capture-loss handler observes a live capture and
+    /// runs <see cref="AbortDragCore"/> — which fires a destructive
+    /// <c>ResizeDelta(0, IsFinal=true)</c> the host applies as "no
+    /// change" against the pre-drag ratios, snapping the splitter
+    /// back to its starting position.
+    /// <para>
+    /// This hook MIRRORS the actual order in
+    /// <see cref="OnPointerReleased"/>: every step of the production
+    /// handler (sans the WinUI-specific <c>ReleasePointerCapture</c>
+    /// call, which is modeled by an unconditional
+    /// <see cref="ProduceSyntheticCaptureLost"/>). When OnPointerReleased
+    /// is buggy (ReleasePointerCapture before EndDragCore), this hook
+    /// reproduces the destructive zero-delta event and the K-category
+    /// fixtures fail. After the fix, it produces the legitimate
+    /// drag-delta event and the fixtures pass. Keep this body in lock
+    /// step with <see cref="OnPointerReleased"/>.
+    /// </para>
+    /// </summary>
+    internal void SimulateRealReleaseSequence(Point parentRelativePoint)
+    {
+        if (!_isCapturing) return;
+        // ─── Production-equivalent body — keep in sync with OnPointerReleased ─
+        _capturePointerId = 0;
+        EndDragCore(parentRelativePoint);
+        ProduceSyntheticCaptureLost();   // models ReleasePointerCapture firing sync PointerCaptureLost — must be a no-op now
+        // ─────────────────────────────────────────────────────────────────────
+    }
+
+    /// <summary>
+    /// Inline simulator for the synchronous <c>OnPointerCaptureLost</c>
+    /// callback WinUI invokes during <c>ReleasePointerCapture</c>.
+    /// Identical body to <see cref="OnPointerCaptureLost"/> minus the
+    /// chrome-fade (no real pointer is in play).
+    /// </summary>
+    private void ProduceSyntheticCaptureLost()
+    {
+        if (!_isCapturing) return;
+        _capturePointerId = 0;
+        AbortDragCore();
     }
 
     /// <summary>

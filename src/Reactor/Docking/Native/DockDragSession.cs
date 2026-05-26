@@ -95,20 +95,44 @@ internal sealed class DockDragSession
     public bool IsActive { get; private set; } = true;
 
     /// <summary>
+    /// Opaque stable token identifying the host that owns this session.
+    /// <see cref="DockManager"/> instances are rebuilt every parent render
+    /// (records-by-value with closures that don't compare equal), so they
+    /// can't serve as an identity for cleanup-time matching. The host
+    /// supplies a per-instance stable handle (typically its
+    /// <c>DockHostModel</c>, which is UseRef-backed) so its own UseEffect
+    /// cleanup can identify "this is my session" and cancel it when the
+    /// host unmounts — preventing the process-static
+    /// <see cref="Current"/> slot from leaking across scene switches.
+    /// Caught by SplitterMatrix_L12_HostUnmount_CancelsOwnedDragSession.
+    /// </summary>
+    public object? OwnerToken { get; set; }
+
+    /// <summary>
     /// Begin a new session. Returns the session if one was started, or null
     /// if another session is already in flight (the spec's "single drag at
     /// a time" contract). Caller is responsible for raising
     /// <see cref="DockManager.OnContentFloating"/> etc.
     /// </summary>
+    /// <param name="owner">
+    /// Optional stable per-host token (see <see cref="OwnerToken"/>). The
+    /// host's UseEffect cleanup compares this to identify its own
+    /// sessions on unmount. Older callers (e.g. tests that don't model
+    /// the cross-render lifecycle) may omit it.
+    /// </param>
     public static DockDragSession? Begin(
         DockableContent source,
         DockManager sourceManager,
-        int sourceTabIndex)
+        int sourceTabIndex,
+        object? owner = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(sourceManager);
         if (Current is { IsActive: true }) return null;
-        var session = new DockDragSession(source, sourceManager, sourceTabIndex);
+        var session = new DockDragSession(source, sourceManager, sourceTabIndex)
+        {
+            OwnerToken = owner,
+        };
         Current = session;
         Consumed = false; // reset Consumed for the new session
         RaiseSessionChanged();

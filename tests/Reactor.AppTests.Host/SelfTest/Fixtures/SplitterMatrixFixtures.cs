@@ -1073,4 +1073,119 @@ internal static class SplitterMatrixFixtures
             await TeardownAsync(H);
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  K — Sync-capture-lost-during-release regression coverage
+    //
+    //  The Pix snap-back regression: WinUI fires PointerCaptureLost
+    //  SYNCHRONOUSLY inside ReleasePointerCapture. If the splitter's
+    //  OnPointerReleased handler calls ReleasePointerCapture BEFORE
+    //  EndDragCore has flipped `_isCapturing` to false, the synchronous
+    //  capture-loss handler sees a live drag and runs AbortDragCore,
+    //  which fires the destructive `ResizeDelta(0, IsFinal=true)`. The
+    //  host's solver then computes `oldRatio - 0 = oldRatio`, re-renders
+    //  with the pre-drag values, and the splitter snaps back. Then
+    //  EndDragCore returns to the (now uncapturing) splitter and
+    //  early-returns without firing the legitimate drag delta.
+    //
+    //  These tests model that ordering directly via the
+    //  SimulateRealReleaseSequence + IsCapturingForTest hooks so a
+    //  regression in OnPointerReleased's order lights up red here
+    //  instead of only in manual gallery testing.
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class K01_TerminalEvent_FiresAfterIsCapturingFalse(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rig = new Rig(2, FlexDirection.Row, 600, 200, grows: [1, 1]);
+            await MountAsync(H, rig);
+
+            // Read _isCapturing at the moment the terminal ResizeDelta
+            // event fires. The splitter MUST already be in the
+            // non-capturing state by then; otherwise a synchronous
+            // PointerCaptureLost (which WinUI fires inside
+            // ReleasePointerCapture) would observe `_isCapturing = true`
+            // and run AbortDragCore destructively against the host's
+            // captured ratios. This invariant is what makes
+            // ReleasePointerCapture safe to call AFTER EndDragCore.
+            bool capturingAtEvent = true;
+            rig.Splitters[0].ResizeDelta += (s, _) =>
+            {
+                capturingAtEvent = ((DockSplitterControl)s!).IsCapturingForTest;
+            };
+
+            rig.Splitters[0].BeginSimulatedDrag(rig.Origin);
+            rig.Splitters[0].EndSimulatedDrag(rig.Delta(50));
+
+            H.Check("K01_IsCapturingFalseWhenTerminalEventFires", !capturingAtEvent);
+            await TeardownAsync(H);
+        }
+    }
+
+    internal class K02_RealReleaseSequence_DragCommitsDespiteSyncCaptureLost(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rig = new Rig(2, FlexDirection.Row, 600, 200, grows: [1, 1]);
+            await MountAsync(H, rig);
+
+            var c0Before = rig.PaneExtent(0);
+            var events = new List<DockSplitterDeltaEventArgs>();
+            rig.Splitters[0].ResizeDelta += (_, e) => events.Add(e);
+
+            rig.Splitters[0].BeginSimulatedDrag(rig.Origin);
+            rig.Splitters[0].ContinueSimulatedDrag(rig.Delta(50));
+
+            // SimulateRealReleaseSequence models the production
+            // OnPointerReleased ordering. The hook must order EndDragCore
+            // (which flips _isCapturing to false) BEFORE the synchronous
+            // capture-loss simulator runs; otherwise the splitter fires
+            // a destructive zero-delta event and the legitimate drag is
+            // discarded. This is the Pix snap-back regression.
+            rig.Splitters[0].SimulateRealReleaseSequence(rig.Delta(50));
+            await Harness.Render();
+
+            H.Check("K02_ExactlyOneTerminalEvent", events.Count == 1);
+            H.Check("K02_EventReflectsCumDelta_NotZero",
+                events.Count == 1 && Math.Abs(events[0].Delta + 50) < 0.01);
+            H.Check("K02_LeadingPaneCommittedTo50",
+                ExtentNear(rig.PaneExtent(0), c0Before + 50));
+            await TeardownAsync(H);
+        }
+    }
+
+    internal class K03_RealReleaseSequence_ThreePaneEqualShare(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // The original Pix repro: 3-pane equal-share. Drag the left
+            // splitter by +75; release; verify the host-observable event
+            // and the pane widths reflect the drag, not a snap-back to
+            // the equal-share starting position.
+            var rig = new Rig(3, FlexDirection.Row, 900, 200, grows: [1, 1, 1]);
+            await MountAsync(H, rig);
+
+            var c0Before = rig.PaneExtent(0);
+            var c1Before = rig.PaneExtent(1);
+            var c2Before = rig.PaneExtent(2);
+
+            var events = new List<DockSplitterDeltaEventArgs>();
+            rig.Splitters[0].ResizeDelta += (_, e) => events.Add(e);
+
+            rig.Splitters[0].BeginSimulatedDrag(rig.Origin);
+            rig.Splitters[0].ContinueSimulatedDrag(rig.Delta(40));
+            rig.Splitters[0].ContinueSimulatedDrag(rig.Delta(75));
+            rig.Splitters[0].SimulateRealReleaseSequence(rig.Delta(75));
+            await Harness.Render();
+
+            H.Check("K03_OneEvent", events.Count == 1);
+            H.Check("K03_EventDeltaNegated75",
+                events.Count == 1 && Math.Abs(events[0].Delta + 75) < 0.01);
+            H.Check("K03_C0GrewBy75", ExtentNear(rig.PaneExtent(0), c0Before + 75));
+            H.Check("K03_C1ShrunkBy75", ExtentNear(rig.PaneExtent(1), c1Before - 75));
+            H.Check("K03_C2Untouched", ExtentNear(rig.PaneExtent(2), c2Before));
+            await TeardownAsync(H);
+        }
+    }
 }

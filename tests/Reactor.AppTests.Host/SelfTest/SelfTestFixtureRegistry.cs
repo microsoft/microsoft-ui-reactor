@@ -1035,6 +1035,10 @@ internal static class SelfTestFixtureRegistry
         "SplitterMatrix_J02_AbortImmediately",
         "SplitterMatrix_J03_DoubleBegin",
         "SplitterMatrix_J04_ContinueWithoutBegin",
+        // K — sync-capture-lost-during-release regression coverage (Pix snap-back)
+        "SplitterMatrix_K01_TerminalEvent_AfterIsCapturingFalse",
+        "SplitterMatrix_K02_RealReleaseSequence_DragCommits",
+        "SplitterMatrix_K03_RealReleaseSequence_ThreePaneEqualShare",
 
         // Splitter pointer-drag against complex DockManager layouts.
         "DockSplitter_L01_IDEShape_DragInner",
@@ -1047,6 +1051,8 @@ internal static class SelfTestFixtureRegistry
         "DockSplitter_L08_PointerVsProgrammaticParity",
         "DockSplitter_L09_FourPaneSequentialDrags",
         "DockSplitter_L10_MixedOrient_HorizontalDoesNotAffectVertical",
+        "DockSplitter_L11_SceneJSouthDrop_LayoutTransformsAndRenders",
+        "DockSplitter_L12_HostUnmount_CancelsOwnedDragSession",
 
         "NavCov_ForHost_ReturnsCachedInstance",
         "NavCov_SeedAndCommit_DeliversSelectedKey",
@@ -2066,6 +2072,9 @@ internal static class SelfTestFixtureRegistry
         "SplitterMatrix_J02_AbortImmediately" => new SplitterMatrixFixtures.J02_AbortImmediately_NoChangeToGrow(harness),
         "SplitterMatrix_J03_DoubleBegin" => new SplitterMatrixFixtures.J03_DoubleBegin_ReSnapshots(harness),
         "SplitterMatrix_J04_ContinueWithoutBegin" => new SplitterMatrixFixtures.J04_ContinueWithoutBegin_NoOp(harness),
+        "SplitterMatrix_K01_TerminalEvent_AfterIsCapturingFalse" => new SplitterMatrixFixtures.K01_TerminalEvent_FiresAfterIsCapturingFalse(harness),
+        "SplitterMatrix_K02_RealReleaseSequence_DragCommits" => new SplitterMatrixFixtures.K02_RealReleaseSequence_DragCommitsDespiteSyncCaptureLost(harness),
+        "SplitterMatrix_K03_RealReleaseSequence_ThreePaneEqualShare" => new SplitterMatrixFixtures.K03_RealReleaseSequence_ThreePaneEqualShare(harness),
 
         "DockSplitter_L01_IDEShape_DragInner" => new DockingComplexLayoutSplitterFixtures.L01_IDEShape_DragInnerHorizontalSplitter_OnlyTopPanesResize(harness),
         "DockSplitter_L02_IDEShape_DragOuter" => new DockingComplexLayoutSplitterFixtures.L02_IDEShape_DragOuterVerticalSplitter_OnlyVerticalPanesResize(harness),
@@ -2077,6 +2086,8 @@ internal static class SelfTestFixtureRegistry
         "DockSplitter_L08_PointerVsProgrammaticParity" => new DockingComplexLayoutSplitterFixtures.L08_PointerVsProgrammaticParity_ThreePaneEqualShare(harness),
         "DockSplitter_L09_FourPaneSequentialDrags" => new DockingComplexLayoutSplitterFixtures.L09_FourPaneH_ThreeSequentialDrags_Compose(harness),
         "DockSplitter_L10_MixedOrient_HorizontalDoesNotAffectVertical" => new DockingComplexLayoutSplitterFixtures.L10_MixedOrient_HorizontalDrag_VerticalUnaffected(harness),
+        "DockSplitter_L11_SceneJSouthDrop_LayoutTransformsAndRenders" => new DockingComplexLayoutSplitterFixtures.L11_SceneJSouthDrop_LayoutTransformsAndRenders(harness),
+        "DockSplitter_L12_HostUnmount_CancelsOwnedDragSession" => new DockingComplexLayoutSplitterFixtures.L12_HostUnmount_CancelsOwnedDragSession(harness),
 
         "NavCov_ForHost_ReturnsCachedInstance" => new NativeDockingCoverageNavigatorFixtures.Navigator_ForHost_ReturnsCachedInstance(harness),
         "NavCov_SeedAndCommit_DeliversSelectedKey" => new NativeDockingCoverageNavigatorFixtures.Navigator_SeedAndCommit_DeliversSelectedKey(harness),
