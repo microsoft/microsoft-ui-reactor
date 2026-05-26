@@ -653,8 +653,10 @@ internal static class NativeDockingTearOffFixtures
             }
             finally
             {
-                try { previewWindow?.Close(); } catch { }
-                try { floating?.Close(); } catch { }
+                if (previewWindow is not null) DockFloatingPaneRouter.Unregister(previewWindow);
+                if (floating is not null) DockFloatingPaneRouter.Unregister(floating);
+                previewWindow?.Close();
+                floating?.Close();
                 ReactorApp.ShutdownPolicy = savedPolicy;
                 ResetAll();
             }
@@ -739,8 +741,10 @@ internal static class NativeDockingTearOffFixtures
             }
             finally
             {
-                try { previewWindow?.Close(); } catch { }
-                try { floating?.Close(); } catch { }
+                if (previewWindow is not null) DockFloatingPaneRouter.Unregister(previewWindow);
+                if (floating is not null) DockFloatingPaneRouter.Unregister(floating);
+                previewWindow?.Close();
+                floating?.Close();
                 ReactorApp.ShutdownPolicy = savedPolicy;
                 ResetAll();
             }
@@ -810,8 +814,10 @@ internal static class NativeDockingTearOffFixtures
             }
             finally
             {
-                try { previewWindow?.Close(); } catch { }
-                try { floating?.Close(); } catch { }
+                if (previewWindow is not null) DockFloatingPaneRouter.Unregister(previewWindow);
+                if (floating is not null) DockFloatingPaneRouter.Unregister(floating);
+                previewWindow?.Close();
+                floating?.Close();
                 ReactorApp.ShutdownPolicy = savedPolicy;
                 ResetAll();
             }
@@ -887,9 +893,12 @@ internal static class NativeDockingTearOffFixtures
             }
             finally
             {
-                try { firstPreview?.Close(); } catch { }
-                try { secondPreview?.Close(); } catch { }
-                try { floating?.Close(); } catch { }
+                if (firstPreview is not null) DockFloatingPaneRouter.Unregister(firstPreview);
+                if (secondPreview is not null) DockFloatingPaneRouter.Unregister(secondPreview);
+                if (floating is not null) DockFloatingPaneRouter.Unregister(floating);
+                firstPreview?.Close();
+                secondPreview?.Close();
+                floating?.Close();
                 ReactorApp.ShutdownPolicy = savedPolicy;
                 ResetAll();
             }
