@@ -148,6 +148,11 @@ internal static class FixtureRegistry
         // across docking layout mutations)
         "DockingInput_TwoPaneTextBoxes",
         "DockingInput_TwoPaneTextBoxesNoPin",
+
+        // Docking tear-off (spec 045 §2.6 — E2E validation of the
+        // immediate-tear-off pipeline with real WinAppDriver pointer
+        // input)
+        "DockingTearOff_Flow",
     ];
 
     public static Element? Build(string name, RenderContext ctx) => name switch
@@ -286,6 +291,9 @@ internal static class FixtureRegistry
         // Docking input (spec 045 — E2E validation)
         "DockingInput_TwoPaneTextBoxes" => DockingInputE2EFixtures.TwoPaneTextBoxTest(ctx),
         "DockingInput_TwoPaneTextBoxesNoPin" => DockingInputE2EFixtures.TwoPaneTextBoxNoPinTest(ctx),
+
+        // Docking tear-off (spec 045 §2.6)
+        "DockingTearOff_Flow" => DockingTearOffE2EFixtures.TearOffFlowTest(ctx),
 
         _ => null,
     };
