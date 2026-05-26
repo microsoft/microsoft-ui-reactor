@@ -2,7 +2,9 @@
 
 ## Status
 
-**Proposal — not yet scheduled.** This spec documents a design conversation about removing the asymmetry between *built-in Reactor controls* and *externally-authored controls registered via `Reconciler.RegisterType`*. The conversation started concretely (could a Win2D `CanvasControl` wrapper live downstream in the pix project without Reactor changes?), and ended in a broader question: what would it take for every mechanism Reactor uses to implement its own controls to be available to third-party authors — and could that protocol be smaller, more data-driven, and lower-overhead than what we have today?
+**Phase 0 complete — Phase 1 greenlit.** The seven Phase 0 deliverables in §14 have all shipped (see [`docs/specs/tasks/047-extensible-control-model-implementation.md`](tasks/047-extensible-control-model-implementation.md) for the per-deliverable status). The audits ([`047/audits/`](047/audits/)) reshaped the design space materially: §8 collapsed from a §8 vs §8.1 debate into a small concrete plan, §9 has a clean structural cut, and §13's data-driven open questions have ratified decision criteria in [`047/decision-criteria.md`](047/decision-criteria.md). Baseline numbers are committed under [`047/baseline-results/`](047/baseline-results/); §11.6 and §12 now anchor their targets to measured M1–M13 values from LAPTOP-4MEP83VI (workstation x64 + ARM64-native captures deferred to Phase 1's first promotion PR per [`047/baseline-results/machines.md`](047/baseline-results/machines.md)). The §8.2 setter-suppression carve-out landed ahead of Phase 1 ([`047/factoring-recommendation.md`](047/factoring-recommendation.md)); spec 047 stays unified — no split executed.
+
+This spec documents the design for removing the asymmetry between *built-in Reactor controls* and *externally-authored controls registered via `Reconciler.RegisterType`*. The conversation started concretely (could a Win2D `CanvasControl` wrapper live downstream in the pix project without Reactor changes?), and ended in a broader question: what would it take for every mechanism Reactor uses to implement its own controls to be available to third-party authors — and could that protocol be smaller, more data-driven, and lower-overhead than what we have today?
 
 Companion proposals consider similar questions for child reconciliation ([spec 042](042-keyed-list-reconciliation-design.md)) and modifier bucketing ([spec 034](034-element-allocation-reduction.md)).
 
@@ -91,6 +93,17 @@ The two tiers are:
 
 The gap between the two tiers is everything in §3.
 
+### 2.1 Registry rules — ratified Phase 0
+
+The `_typeRegistry` contract is small and deliberate (ratified per §13 Q17, [`decision-criteria.md`](047/decision-criteria.md#q17)):
+
+- **Exact runtime type only.** Lookup is `_typeRegistry.TryGetValue(element.GetType(), ...)`. No assignable / base-match. Subtype dispatch is a footgun under the split-library plan.
+- **No override.** Duplicate registration (the element type is already registered, including by a built-in dispatcher arm) **throws at registration time**. There is no `RegisterOverride` verb in v1; test fakes compose a `Reconciler` from scratch with the registry contents they need (see §13 Q9). Adding `RegisterOverride` later is non-breaking — existing `RegisterType` callers keep working unchanged.
+- **No open generics.** `RegisterType<DataGrid<>, _>` is not supported in v1; open generic element types interact badly with trim and AOT.
+- **`RegisterType` stays the verb.** No rename, no split between first-party and external registration verbs (see §13 Q5). After the split-library plan (§1.1), first-party `Reactor.Controls.*` packages register through the same surface as downstream consumers — they are equal citizens at runtime, and a single verb is a true reflection of that.
+
+These rules apply to both v1's handler-protocol surface (§4) and any future descriptor surface (§6).
+
 ---
 
 ## §3 What the engine actually does for a built-in control
@@ -120,11 +133,13 @@ public interface IElementHandler<TElement, TControl>
     where TElement : Element where TControl : UIElement
 {
     TControl Mount(MountContext ctx, TElement element);
-    UIElement? Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl control);
+    void Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl control);
     void Unmount(UnmountContext ctx, TControl control) { }
     void ReconcileChildren(ChildReconcileContext ctx, TElement oldEl, TElement newEl, TControl control) { }
 }
 ```
+
+**`Update` returns `void`** (ratified Phase 0, see §13 Q12 and [`decision-criteria.md`](047/decision-criteria.md#q12)). Substitution-mid-update — handler returning a *different* control — is forbidden in v1. Type changes flow through the existing unmount-and-remount path; the handler mutates `control` in place or accepts that the engine remounts. Widening to `UIElement? Update(...)` later is non-breaking if a real need surfaces. Matches React Native Fabric's `updateProps(oldProps, newProps) → void` shape.
 
 The `MountContext` / `UpdateContext` expose the engine's mechanisms as typed operations:
 
@@ -184,12 +199,11 @@ public sealed class ToggleSwitchHandler : IElementHandler<ToggleSwitchElement, T
         return ctrl;
     }
 
-    public UIElement? Update(UpdateContext ctx, ToggleSwitchElement o, ToggleSwitchElement n, ToggleSwitch ctrl)
+    public void Update(UpdateContext ctx, ToggleSwitchElement o, ToggleSwitchElement n, ToggleSwitch ctrl)
     {
         if (o.IsOn != n.IsOn)
             ctx.BindFor(ctrl, n).WriteSuppressed(() => ctrl.IsOn = n.IsOn);
         ctx.ApplySetters(n.Setters, ctrl);
-        return null;
     }
 }
 ```
@@ -273,19 +287,74 @@ What this buys:
   - Writes the prop on diff, suppressing the event for that write.
   - The trampoline reads back the post-event value via `readBack` and invokes `callback`.
 - Setters and modifiers are still per-element; they remain on `ExtensibleElement<TControl>`.
-- `ChildReconciler` integration is a separate descriptor field. The supported strategies must be first-class on the public surface (per §1.1, containers are part of the split-library plan and cannot rely on a private escape hatch):
+- `ChildReconciler` integration is a separate descriptor field. The supported strategies are first-class on the public surface (per §1.1, containers are part of the split-library plan and cannot rely on a private escape hatch). **Resolved (Phase 0 §13 Q4):** the strategy types are concrete C#, not an enum, and ship in Phase 1 as part of the v1 protocol surface so L13 (split-library) has a stable shape to bind to:
 
-  | Strategy | Use case | Example controls |
-  |---|---|---|
-  | `Children.None` | Leaf control, no children at all. | TextBlock, Image, ToggleSwitch |
-  | `Children.SingleContent(set)` | One typed content slot (`object Content { get; set; }`). | Border, ContentPresenter, Button-with-Content |
-  | `Children.Panel(getChildren)` | Flat panel of children written to a `UIElementCollection`. | StackPanel, Grid (plus its row/column attached props), Canvas |
-  | `Children.NamedSlots(getSlot[])` | Multiple named slots — header / content / footer; primary / secondary actions. | NavigationView, Expander, TabViewItem |
-  | `Children.ItemsHost(strategy)` | Templated items host plugged into spec 042 keyed reconciliation. | ListView, ItemsView, TemplatedList |
-  | `Children.Imperative(reconcile)` | Escape hatch for truly irregular containers (`PivotItem`, custom virtualization). |
-  | `AttachedProps` | Per-child attached-DP writes (`Grid.Row`, `Grid.Column`, `Canvas.Left`). Declared on the *container* descriptor so the container is responsible for writing them to child WinUI controls during child reconcile. |
+  ```csharp
+  public abstract record ChildrenStrategy<TElement, TControl>
+      where TElement : Element where TControl : UIElement;
 
-  Every strategy goes through the same engine pipeline — child Mount/Update/Unmount, key matching, pool integration, modifier reapply. A control descriptor picks one strategy; the imperative escape hatch exists only for cases nothing else fits.
+  // Leaf control, no children at all. TextBlock, Image, ToggleSwitch.
+  public sealed record None<TElement, TControl>
+      : ChildrenStrategy<TElement, TControl>;
+
+  // One typed content slot. Border, ContentPresenter, Button-with-Content.
+  public sealed record SingleContent<TElement, TControl>(
+      Func<TElement, Element?> GetChild,
+      Action<TControl, UIElement?> SetChild)
+      : ChildrenStrategy<TElement, TControl>;
+
+  // Flat panel of children written to a UIElementCollection.
+  // StackPanel, Grid, Canvas. Engine handles the spec-042 keyed reconcile.
+  public sealed record Panel<TElement, TControl>(
+      Func<TElement, IReadOnlyList<Element>> GetChildren,
+      Func<TControl, UIElementCollection> GetCollection)
+      : ChildrenStrategy<TElement, TControl>;
+
+  // Multiple named slots: header / content / footer; primary / secondary actions.
+  // NavigationView, Expander, TabViewItem.
+  public sealed record NamedSlots<TElement, TControl>(
+      IReadOnlyList<NamedSlot<TElement, TControl>> Slots)
+      : ChildrenStrategy<TElement, TControl>;
+
+  public sealed record NamedSlot<TElement, TControl>(
+      string Name,
+      Func<TElement, Element?> GetChild,
+      Action<TControl, UIElement?> SetChild);
+
+  // Templated items host. Plugs into spec 042 keyed list reconciliation.
+  // ListView, ItemsView, TemplatedList.
+  public sealed record ItemsHost<TElement, TControl>(
+      Func<TElement, IItemsSource> GetItemsSource,
+      Func<TControl, IItemsContainer> GetContainer,
+      ItemsHostOptions Options)
+      : ChildrenStrategy<TElement, TControl>;
+
+  // Escape hatch for irregular containers (PivotItem, custom virtualization).
+  // Author takes responsibility for pool integration and key matching.
+  public sealed record Imperative<TElement, TControl>(
+      Action<ChildReconcileContext, TElement, TElement, TControl> Reconcile)
+      : ChildrenStrategy<TElement, TControl>;
+  ```
+
+  **Attached props** declared on the *container* descriptor — `Grid.Row`, `Grid.Column`, `Canvas.Left`, `DockPanel.Dock`, etc. The container is responsible for writing them to child WinUI controls during child reconcile:
+
+  ```csharp
+  public sealed record AttachedPropWriter<TChildElement>(
+      string Name,
+      Func<TChildElement, object?> Get,
+      Action<UIElement, object?> Write);
+
+  // On the container descriptor:
+  AttachedProps = [
+      new AttachedPropWriter<Element>(
+          "Grid.Row",
+          e => e.GetAttached(GridAttached.Row),
+          (ui, v) => Grid.SetRow((FrameworkElement)ui, (int)(v ?? 0))),
+      // ...
+  ],
+  ```
+
+  Every strategy goes through the same engine pipeline — child Mount/Update/Unmount, key matching, pool integration, modifier reapply. A control descriptor picks one strategy; `Imperative` exists only for cases nothing else fits.
 
 ### 6.1 Controlled vs uncontrolled vs initial — making the distinction explicit
 
@@ -331,13 +400,24 @@ This subsumes a real fraction of the §8 audit by construction: if an author mar
 
 ### 6.2 Modifier × declarative-prop precedence
 
-A descriptor that declares `Prop.OneWay(e => e.Background, (c,v) => c.Background = v)` and an element whose modifier chain includes `.Background(brush)` both want to write `Background`. Today modifiers run after `MountXxx`, so they win. The descriptor model needs to either preserve that ordering explicitly or change it deliberately:
+A descriptor that declares `Prop.OneWay(e => e.Background, (c,v) => c.Background = v)` and an element whose modifier chain includes `.Background(brush)` both want to write `Background`.
 
-- **Modifiers-after-props (status quo):** modifiers always win, declared props are defaults. Predictable but means descriptors are effectively *defaults*, not control.
-- **Props-after-modifiers:** the descriptor wins; modifiers become defaults overridable by the element's strongly-typed prop. Cleaner semantics for strongly-typed elements, breaking change for existing code.
-- **Last-writer-wins by source order:** harder to predict, easier to surprise.
+**Resolved (Phase 0 §13 Q13).** **Modifier-after-prop.** Descriptor `Prop.OneWay` writes first; `ApplyModifiers` runs after and wins. Element-record props act as defaults; modifiers override. This preserves today's `MountXxx → ApplyModifiers` ordering — existing apps don't shift, and the semantics already-shipped consumers depend on stay intact.
 
-This is an open question (see §13 Q12). Default should remain modifier-after-prop for back-compat, but the choice should be documented per descriptor field at minimum.
+```
+Mount sequence:
+  1. descriptor.Properties[i] writes  c.Background = el.Background
+  2. ApplyModifiers runs            → modifiers can override
+
+Result: modifier always wins.
+Element.Background acts as default; .Background(brush) modifier overrides.
+```
+
+**Per-field opt-in stays as a future, non-breaking extension.** A descriptor entry that wants prop-wins precedence (e.g. a control whose author asserts the element-record field is the authoritative source) can later declare `Prop.OneWay(..., precedence: Precedence.PropWins)` without breaking any existing consumer. Not in v1.
+
+Rejected alternatives:
+- **Props-after-modifiers** as the default — cleaner semantics for new strongly-typed descriptors, but a back-compat break for every shipping app that depends on modifier-final ordering.
+- **Last-writer-wins by source order** — too easy to surprise; the source order of a setters chain isn't visually obvious at the call site.
 
 The handler interface goes away. Mount and Update become **interpreters of the descriptor**. Authors write data, not code. This is closer to how XAML works (DPs + events declared metadata), but resolved against `Element` records instead of XAML markup.
 
@@ -404,55 +484,40 @@ This is the version of the design where the framework gets *smaller*, not larger
 
 ## §8 Simplification direction: eliminate the change-echo suppressor
 
-> Per-call-site classification of every `BeginSuppress` invocation is in
-> [`docs/specs/047/audits/begin-suppress-audit.csv`](047/audits/begin-suppress-audit.csv);
-> the tally and §8 implications are in
-> [`begin-suppress-audit.md`](047/audits/begin-suppress-audit.md). Headline:
-> 14 / 24 sites are `eliminable-tight-diff` (no spec change needed),
-> 8 / 24 are `coercion` + `float-precision` (tractable with per-control
-> tolerance metadata), 1 / 24 (`ColorPicker.Color`) is the only site that
-> needs §8.1's `mostRecentEventCount` round-trip, and 1 / 24 is documented
-> as already redundant.
+> **Resolved (Phase 0 §13 Q3).** Ship "delete + tight diff" for the
+> trivial sites, per-control tolerance metadata for the coercion / float
+> sites, and a one-off imperative shim for ColorPicker. Do **not** build
+> §8.1's `mostRecentEventCount` round-trip — only 1 / 24 sites needed it
+> and that single site is solvable with a per-handler shim. Per-call-site
+> data: [`docs/specs/047/audits/begin-suppress-audit.csv`](047/audits/begin-suppress-audit.csv);
+> tally + reasoning: [`begin-suppress-audit.md`](047/audits/begin-suppress-audit.md);
+> decision: [`decision-criteria.md`](047/decision-criteria.md#q3).
 
 The echo suppressor exists because the engine writes value-bearing DPs from the update path, the WinUI control fires its change event, the trampoline invokes the user's callback with the value the engine just wrote, and (if user state has moved on between render and event-dispatch) that callback writes the *old* value back into the *new* state. Spec 030, issue #86, the PropertyGrid cross-row-swap bug.
 
-But: **most built-ins already guard with `if (oldEl.Foo != newEl.Foo) ctrl.Foo = newEl.Foo`.** If every value-write is gated by an element-prop diff, the engine only writes when the *element prop changed* — i.e., when the user state genuinely moved. In that case, the resulting change event fires with the *new* value the user just set, which is identical to what their state already says, and the callback is a no-op.
+The audit shrunk the problem materially. The headline tally across 24 production `BeginSuppress` call sites:
 
-The remaining echo cases are:
-- Control-internal coercion (e.g., `Slider.Value = 1000` when `Maximum = 100` coerces to 100, and the event fires with 100, not 1000). The user's state says 1000; the engine wrote 1000; the event delivers 100. Without suppression, callback overwrites user state with 100.
-- Float precision (engine writes 0.3, control stores 0.30000001, event fires with 0.30000001).
-- Equality semantics on reference-typed values (engine writes `Color.Red`, control's internal `Color` doesn't `Equals` the same instance, event fires).
-- **Focus-property writes** (engine writes `IsTabStop`/`FocusState`/programmatic `Focus()`; control fires `GotFocus`/`LostFocus`; a focus-tracking callback writes stale focus state back into the user's model).
-- **ItemsControl selection coercion** (engine writes `SelectedIndex = 3` on an `ItemsView` whose collection just shrank to 2 items; control coerces to -1, fires `SelectionChanged`, callback overwrites user's "selected" state with the coerced -1).
-- **Animation interpolation values firing change events mid-storyboard** (engine writes `Value = 0.7` on a `Slider` whose `ValueChanged` callback fires for every interpolation tick during an entrance animation).
+| Category | Count | Treatment |
+|---|---:|---|
+| `eliminable-tight-diff` | 14 | Delete the `BeginSuppress` call. Handler-side `lastFired != tag.X` check (or simply the existing element-prop diff) is sufficient. No new machinery. |
+| `coercion` | 4 | Per-control tolerance metadata on the descriptor / handler. NumberBox/Slider declare `coercedBy: [Minimum, Maximum]`; engine records "expected Y, suppress one echo for Y ± tolerance." |
+| `float-precision` | 4 | Same as coercion, with a numeric tolerance instead of a coercion source. Matches today's `AreNumberBoxValuesEquivalent` discipline. |
+| `items-coercion` | 2 | `CalendarView.SelectedDates` stays as a per-control imperative shim — diff semantics don't generalize. |
+| `user-state-races-render` | 1 | **ColorPicker only.** Per-handler `expectedColor` capture + tolerance comparison. The one site that would have driven §8.1. |
+| `defensive-redundant` | 1 | `AutoSuggestBox.Text` — already documented as unnecessary in its own code comment. Delete outright. |
 
-These are real but **enumerable**. The proposal: audit every `BeginSuppress` call site. Most are likely eliminable by a tighter diff gate or by the §6.1 controlled/uncontrolled/initial classification. The genuinely-needed ones get documented as "this control coerces; use `Prop.Controlled` with explicit coercion handling in the descriptor" — a property of the binding, not a generic suppression mechanism. The ChangeEchoSuppressor module goes away.
+**Phase 4 plan**: 14 trivial deletions + 1 redundant deletion in one PR; the 8 coercion / float-precision sites get tolerance metadata declared by their descriptors; the 1 ColorPicker site gets an imperative shim; `ChangeEchoSuppressor.cs` is deleted at the end. `ReactorBinding<T>.WriteSuppressed` (the public primitive — §13 Q19) keeps its signature throughout; its implementation swaps under the hood without changing the API.
 
-Net effect: one fewer thing on the attached-DP state, one fewer invariant for handler authors to learn, one fewer call-site discipline to maintain. The few coercion-prone controls (Slider, NumberBox, ColorPicker, possibly DatePicker, ItemsView with selection) declare it explicitly in their descriptor.
+The remaining echo cases that *don't* appear in the audit but are worth naming for future controls:
 
-### 8.1 Alternative direction — `mostRecentEventCount` round-tripping
+- **Focus-property writes** (engine writes `IsTabStop`/`FocusState`/programmatic `Focus()`). No current sites; if one appears, it falls into `eliminable-tight-diff`.
+- **Animation interpolation values firing change events mid-storyboard** (e.g., entrance-animated `Slider.Value`). No current sites; would need per-control "suppress during animation" handling if it surfaces.
 
-React Native does not have an echo suppressor. For value-bearing controls (notably `TextInput`), it uses a **monotonic event counter** round-tripped through native:
+Net effect: `ChangeEchoSuppressor` module deleted (Phase 4), echo handling moves into per-control descriptors with explicit tolerance / coercion metadata, the `WriteSuppressed` public primitive is preserved as the stable author-facing surface. One fewer invariant for handler authors to learn — the descriptor declares the echo shape, the engine handles it.
 
-- Every event the native control raises carries an incrementing `mostRecentEventCount` (`AndroidTextInputShadowNode.cpp:124-160`, `RCTBaseTextInputViewManager.mm:128-149`).
-- The JS side tracks the latest counter it has acknowledged.
-- When the framework writes a value back to the control, the write carries the counter value of the last event JS acknowledged.
-- The native side compares the embedded counter to the latest counter it has emitted; if the framework's write is "older" than events native has already fired, native drops the write entirely.
+### 8.1 Considered and rejected — `mostRecentEventCount` round-tripping
 
-The semantic — "if the user has produced events the framework hasn't acknowledged, don't overwrite their state with stale framework state" — is structurally cleaner than `BeginSuppress` because it covers all three echo categories above (coercion, float drift, user-state-races-render) in one mechanism, *and* it doesn't need a per-call-site `BeginSuppress` discipline.
-
-Trade-offs versus the diff-gate-and-delete-suppression direction:
-
-| | Diff gate + delete suppression | `mostRecentEventCount` round-trip |
-|---|---|---|
-| Per-control state | None (just the diff) | One `int` counter per control |
-| Author discipline | Author must remember to diff before write | Engine does it; author writes the descriptor binding |
-| Covers user-state-races-render | No — diff can pass on stale state | Yes — explicit ack |
-| Covers coercion | No — needs explicit `Coerced` mode | Yes — drop write if counter says native is ahead |
-| WinUI-side cost | None | One DP read per write (probably one extra `int` slot on `ReactorState`) |
-| Implementation complexity | Low (delete) | Medium (every value-bearing descriptor needs counter wiring) |
-
-This is the version of the design where the framework gets a *fundamentally different* mechanism rather than a smaller one. Worth spiking in Phase 0 alongside the suppression audit so the design session can compare measured behavior on the same control set, not just hypothesized behavior. The choice between the two is a real open question (§13 Q3), not a foregone conclusion.
+§8.1 originally proposed React Native's monotonic event-counter round-trip as a uniform replacement for `BeginSuppress`. **Rejected** at Phase 0 ([`decision-criteria.md` Q3](047/decision-criteria.md#q3)): only 1 / 24 sites (`ColorPicker.Color`) genuinely required it, and one site is too thin an evidence base for protocol-level machinery (per-control `int` counter slot on `ReactorState`, descriptor-level wiring on every value-bearing prop, native-side ack tracking). The audit collapsed the design space; the §8 direction above plus a per-handler ColorPicker shim covers the same ground. The rejected alternative is preserved in [`decision-criteria.md`](047/decision-criteria.md#q3) for future reference if a *second* `user-state-races-render` site surfaces after the split-library plan.
 
 ### 8.2 Setters precedence — a current correctness hole
 
@@ -552,6 +617,26 @@ For interactive UIs that don't rely heavily on raw pointer/key hooks (most line-
 This compounds with §11.3's bucketing: an element with no callbacks at all pays 0 bytes for event state; an element with one control-intrinsic callback pays ~32; an element with one routed-input modifier additionally pays for `ModifierEventHandlerState` but only that one; an element with everything pays no more than today.
 
 Net effect: `ReactorState` shrinks, per-control event tables are exactly the size they need to be, and the routed-input event state is allocated only when actually needed. The source generator emits the per-control tables mechanically from `[Wire]` attributes or descriptor entries.
+
+### 9.5 `handledEventsToo` — escape hatch, not trampoline doubling
+
+**Resolved (Phase 0 §13 Q11).** Today's modifier API (`.OnPointerPressed(...)`, `.OnKeyDown(...)`, etc.) subscribes via `event +=`, which is equivalent to `UIElement.AddHandler(routedEvent, handler, handledEventsToo: false)`. Adding `.OnPointerPressedAny(...)` / `.OnKeyDownAny(...)` variants — one per routed-input event — would *double* the routed-input slot count in `ModifierEventHandlerState` and walk back a meaningful fraction of the §9 savings.
+
+Phase 1 ships an imperative escape hatch instead:
+
+```csharp
+// On MountContext / UpdateContext. Bypasses the trampoline pattern entirely.
+// Caller is responsible for unsubscribing on Unmount; no pool-survival.
+public void AddRawRoutedHandler(
+    UIElement target,
+    RoutedEvent routedEvent,
+    Delegate handler,
+    bool handledEventsToo);
+```
+
+Authors who need `handledEventsToo: true` (catching a `KeyDown` an inner control already marked Handled, observing `PointerPressed` on a focus scope) take on the same correctness burden today's `RegisterType` lambdas have — no pool survival, no automatic trampoline reattach across re-mount. Acceptable because the use case is rare; the alternative was a permanent ~2× slot inflation paid by every element with a routed-input modifier.
+
+Revisit only if Phase-2 macros (L4 / L8) show the §9 savings have headroom and authors are escaping the hatch frequently enough to be worth a typed surface.
 
 ---
 
@@ -975,9 +1060,9 @@ Things that could surprise us — worth a microbench in Phase 1 before committin
 
 ## §13 Future design-session questions
 
-To revisit before committing to an implementation:
+Phase 0 ratified decision criteria for the data-driven questions in [`decision-criteria.md`](047/decision-criteria.md); each question below carries a **Status** line indicating whether the decision has landed in the spec body, is gated on a later phase's measurement, or remains an open design call for a future session.
 
-1. **Descriptor vs. hand-coded handler — which one ships?** Source-gen is deferred (see §7's revised status). The live question is whether the primary author-facing surface for first-party controls is a hand-coded `IElementHandler<TElement, TControl>` (more code, direct execution, full flexibility) or a declarative `ControlDescriptor<TElement, TControl>` interpreted by a shared engine (less code per control, indirect execution, more discipline). Intuition says imperative C# is faster than interpreted data, but data-driven systems with tight interpreters can match or beat hand-written code when the interpreter is short and predictable. This is not decidable by argument — it needs measurement.
+1. **Descriptor vs. hand-coded handler — which one ships?** **Status: Open — Phase 2 measurement gate.** Decision matrix ratified in [`decision-criteria.md#q1`](047/decision-criteria.md#q1); Phase 2 runs the head-to-head and applies the matrix. Source-gen is deferred (see §7's revised status). The live question is whether the primary author-facing surface for first-party controls is a hand-coded `IElementHandler<TElement, TControl>` (more code, direct execution, full flexibility) or a declarative `ControlDescriptor<TElement, TControl>` interpreted by a shared engine (less code per control, indirect execution, more discipline). Intuition says imperative C# is faster than interpreted data, but data-driven systems with tight interpreters can match or beat hand-written code when the interpreter is short and predictable. This is not decidable by argument — it needs measurement.
 
    **Proposed validation plan** (executed during Phase 2):
    - Implement **three controls** in *both* shapes against the same v1 protocol surface:
@@ -990,7 +1075,8 @@ To revisit before committing to an implementation:
      - **Per-mount ns** and **allocation bytes** — does the descriptor interpreter pay a real cost, or does the JIT specialize it well enough that the cost is in the noise?
      - **LOC per control** — count the lines of authoring code needed to express the control (excluding shared interpreter).
      - **Cognitive load** — have 2-3 engineers read both versions cold and rate which they'd rather write a 4th control in.
-     - **Hot-reload behavior** (per §13 Q15) — does either shape round-trip cleanly?
+     - **Compile-time validation reach** (per Q10) — how much of the surface is C#-compiler-validated for free vs requires the analyzer? A shape whose entire surface is compile-validated by the C# compiler alone wins by a small margin on tooling-cost-over-time.
+     - Hot-reload behavior is explicitly **not** an input — see Q15.
 
    **Decision matrix** to apply to the data, fixed up front so the discussion doesn't relitigate based on whoever's preference is loudest:
    - **Descriptor within 5% of handler on M1/M2/M5/M7:** ship descriptors as the primary first-party surface. The LOC and uniformity wins are real and the perf cost isn't material. Handlers stay as an escape hatch for irregular controls and runtime registration.
@@ -998,42 +1084,31 @@ To revisit before committing to an implementation:
    - **Descriptor >15% slower on any of M1/M2/M5/M7:** ship hand-coded handlers as the primary surface. Descriptors stay available for *late-bound external controls* only (the §16-permanent-fallback path), not as the recommended first-party shape. Revisit when source-gen could collapse the cost (which would mean revisiting §7 too).
 
    This is a measurement-driven gate, not a discussion gate. Phase 2 doesn't conclude until the decision matrix produces an answer.
-2. **What's the AOT story end-to-end?** Source generators are AOT-clean by construction. Runtime descriptor interpretation requires careful avoidance of reflection in the binding evaluators. Runtime handlers are fine. Pick the constraint-set first.
-3. **Can echo suppression be eliminated, and at what cost?** §8 hypothesizes yes for most cases; needs a per-call-site audit of every `BeginSuppress` in the tree, with a measured before/after on the resulting handler code. The audit itself is a worthwhile cleanup regardless of which protocol ships.
-4. **What's the `ReconcileChildren` shape?** The hardest controls (`ListView`, `ItemsView`, `TemplatedList`, `Grid` with attached row/col DPs) need a child-reconciliation hook. The descriptor model handles "I have one child" or "I have a flat list of children" cleanly, but custom keyed reconciliation (per spec 042) needs an escape hatch. Probably: descriptor names a strategy enum, escape hatch via `Imperative` for the few that need it.
-5. **Is `RegisterType` even the right verb?** If the steady-state is "every control is described declaratively and code is generated," then `RegisterType` is a runtime artifact for *late-bound* external controls. First-party controls don't register; they exist statically. External controls register the generated descriptor. Worth designing the registration API around what makes the steady state cleanest.
-6. **Should setters re-run on every update or only when the setters array changed?** Today they re-run unconditionally (idempotent, but wasteful). A reference-equality check on the array would skip most updates. Worth measuring.
-7. **Pool integration with descriptors.** If the generator knows a control is poolable, it can emit `Pool.Rent` vs. `new T()` directly. If not, descriptors need a `Poolable: true/false` field.
-8. **`Set(...)` modifier semantics — and a latent correctness hole.** `ApplySetters` today runs after declarative property writes *and bypasses echo suppression entirely*. A user writing `Set(ts => ts.IsOn = true)` on a `ToggleSwitch` whose `el.IsOn = false` produces an unmasked write that will fire `Toggled` and feed back into state. This is not just an ordering question — it is a current correctness hole the descriptor model has to close (see §8.2). The proposed rule: setters run inside the same suppression / round-trip scope as declared props by default; an opt-in `Set.Raw(...)` exists for cases where the author has audited the write and wants to bypass scoping. Precedence between setters and declared props is the secondary question (likely setters-win, but worth documenting per descriptor field — see Q12).
-9. **Override semantics.** If an external author wants to swap in a fake `ButtonHandler` for testing, what's the API? `RegisterOverride<ButtonElement, Button>(handler)`? With a diagnostic log so accidental overrides are visible? The current `RegisterType` is "last writer wins" silently — under a fully extensible model, it should probably be louder.
-10. **Compile-time validation.** A descriptor where `ChangeEvent: nameof(ToggleSwitch.Toggled)` is misspelled (or the property name is wrong) is a runtime failure today. A source generator can validate at compile time. A runtime descriptor can't, unless we add a registration-time check. Worth designing for compile-time validation from the start.
-11. **`handledEventsToo` overload for routed-event subscription.** Today's modifier API (`.OnPointerPressed(...)`, `.OnTapped(...)`, etc.) attaches via the CLR `event +=` syntax, which is equivalent to `UIElement.AddHandler(routedEvent, handler, handledEventsToo: false)` — i.e., the handler does *not* fire for events that an earlier subscriber already marked `Handled`. There is no surface today for `handledEventsToo: true`, which is occasionally needed (catching a `KeyDown` an inner control already handled, observing `PointerPressed` on a focus scope even after the focused descendant handled it). The §9 split makes this question concrete: `ModifierEventHandlerState`'s pointer/key/focus slots all assume `handledEventsToo: false` today. Options worth considering:
-    - Add `.OnPointerPressedAny(...)` / `.OnKeyDownAny(...)` variants that internally call `AddHandler(..., true)`. These would need their own trampoline slots in `ModifierEventHandlerState` (the handled-too subscription is a separate registration), roughly doubling the size of the routed-input portion of the struct — bad if we're committing to the §9 savings.
-    - Leave `handledEventsToo: true` as an imperative escape hatch (`ctx.AddRawRoutedHandler(...)`) that bypasses the trampoline pattern entirely. Acceptable because the use case is rare; the cost is that those subscriptions aren't pool-survivable, so external authors using the escape hatch take on the same correctness burden `RegisterType` lambdas have today.
-    - Per the §9.4 observation that most elements never wire any routed input subscription at all, even doubling the routed-input slot count is acceptable in absolute bytes — the cost is paid only by elements that opt in. Decide based on API ergonomics, not byte counts.
-12. **`Update` return type and substitution semantics.** §4's straw-man has `UIElement? Update(ctx, oldEl, newEl, ctrl)`, which implies the handler can return a *different* control mid-update. Today, type changes go through unmount-and-remount because the parent's `Children` collection holds the old control by reference; substitution would require parent fixup, modifier reapply, and `ItemsControl` re-realization. Two coherent options:
-    - **Commit to substitution end-to-end** — handler may return a new control, engine takes responsibility for swapping it everywhere it's referenced. Powerful but expands the engine's invariants surface.
-    - **Forbid substitution** — change the signature to `void Update(...)`. Type changes flow through the existing remount path. Matches React Native Fabric's `updateProps(oldProps, newProps) → void` shape.
-    The latter is the safer default; the former should be a deliberate later expansion if a real need emerges.
-13. **Modifier × declarative-prop precedence.** A descriptor that declares `Prop.OneWay(e => e.Background, ...)` and a modifier chain that writes `.Background(...)` both target the same DP. Today modifiers run after `MountXxx` so they win. The descriptor model can preserve that (modifiers-after-props, status-quo), invert it (props-after-modifiers, cleaner per-element source-of-truth), or declare per-field. See §6.2 — likely default is modifier-after-prop for back-compat with explicit per-field opt-in for new descriptors.
-14. **Concurrency model — which thread can `Mount` / `Update` run on?** Reactor today is UI-thread-only; some WinUI controls require UI-thread allocation (anything backed by a `DispatcherQueue`-bound resource). The protocol should state this explicitly. If we ever want to mount off-thread (e.g., preconstructing controls in background for list virtualization), the constraint surfaces as a descriptor flag (`ThreadAffinity = Any / UIThread`), but the default and overwhelming common case is UI-thread.
-15. **Hot-reload behavior across descriptor / source-gen approaches.** Descriptors are runtime data and can be swapped under hot-reload by re-running the registration. Source-generated handler classes require IL replacement, which is more constrained and may not survive incremental edits. Phase 2 should explicitly validate descriptor round-trip under hot-reload before Phase 3 commits to source-gen for the steady state. This may shift the §13 Q1 decision toward keeping descriptors as a co-equal authoring surface rather than a fallback.
-16. **External controls are permanently descriptor-bound.** A third-party assembly that ships an element record cannot, in general, have the Reactor source generator run on it without the author opting in (`[ReactorControl]` annotation + generator package reference). For cooperating third parties, source-gen works; for non-cooperating cases (a control someone wraps at runtime via `RegisterType`-equivalent), the descriptor / runtime-handler path is permanent. This is not a transitional artifact — it should be designed as a permanent surface from day one. See Appendix A clarification.
-17. **Registry precedence and subtype behavior.** Today `_typeRegistry.TryGetValue(element.GetType(), out var reg)` runs *before* the built-in switch, so external registrations win by exact runtime type. After the split-library plan (§1.1), most of the catalog will reach the engine through this same registry — and a generated dispatcher with dynamic-registry fallback could subtly reverse the rule (a pattern arm matching a base type before the registry checks the derived). Concrete questions that need explicit answers, not implicit:
-    - Is element-type lookup exact-type-only, or are assignable/base matches supported? **Recommendation: exact-type only.** Subtype dispatch is a footgun under the split-library plan.
-    - If a downstream package registers for a built-in element type, does the registration win? **Recommendation: yes (today's behavior), but with a startup-time diagnostic** so accidental overrides are visible.
-    - Are open generic element registrations supported (`RegisterType<DataGrid<>, DataGrid>`)? **Recommendation: no for v1.** Generic open types interact badly with trim.
-    - What diagnostic fires on duplicate registration (same element type registered twice)? **Recommendation: throw at registration time** unless the call explicitly opts into override with `RegisterOverride<TElement, TControl>(handler)`. The override case emits a structured log entry.
-18. **Pool policy as a public API, not just `ctx.AllocateControl`.** `MountContext.AllocateControl(factory)` is a necessary primitive but not sufficient. External authors need to know — and the engine needs to enforce — the full pool contract:
-    - **Poolability flag.** Some controls cannot be safely pooled (custom DirectX surfaces, controls with persistent native resources, controls whose state can't be reset). Descriptors / handlers declare `IsPoolable` explicitly.
-    - **Pool key.** Is the key `typeof(TControl)`, or can a control declare a finer key (e.g., `(typeof(TextBlock), styleKey)`)? **Recommendation: `typeof(TControl)` only for v1**, finer keys revisited later.
-    - **Reset contract.** When a control returns to the pool, exactly which state is cleared? — `ControlEventState` (per §9.2), pending event subscriptions, ModifierEHS, attached-DP `Tag`, `DataContext` if Reactor sets one. Anything not cleared is a reuse hazard.
-    - **What survives.** Layout caches, template state, internal control-of-control state (e.g., `ListView`'s realized container reuse) typically should survive. The contract has to enumerate what survives and what doesn't.
-    - **Dual-RCW interaction.** If two managed wrappers exist for the same native control, pool return must be idempotent and not double-clear.
-    - **Diagnostic when a non-resettable property is found dirty on rent** — surfaces external-control reset bugs early.
+2. **What's the AOT story end-to-end?** **Status: Resolved (Phase 0).** Reactor is AOT-compatible today: the AOT test suite runs at ≥ 90% pass rate against the AOT-compiled bits. The full assembly is not yet marked `IsAotCompatible=true` because a small number of features remain unsafe; those land separately. **Commitment for spec 047: no new AOT warnings introduced by the v1 protocol surface, regardless of which Q1 shape wins.** Descriptor lambdas are strongly-typed (no `nameof()`-resolved reflection) precisely so the interpreter remains AOT-clean; hand-coded handlers are AOT-clean by construction. L14 (AOT publish of the split-library scenario) ships as a **regression guard** in Phase 1's exit gate — not an exploratory check. See [`decision-criteria.md#q2`](047/decision-criteria.md#q2).
+3. **Can echo suppression be eliminated, and at what cost?** **Status: Resolved (Phase 0).** Ship "delete + tight diff" for the 14 trivial sites, per-control tolerance metadata for 8 coercion / float-precision sites, and a one-off ColorPicker shim. §8.1 (`mostRecentEventCount`) rejected — only 1 / 24 sites required it. See [`decision-criteria.md#q3`](047/decision-criteria.md#q3) and §8.
+4. **What's the `ReconcileChildren` shape?** **Status: Resolved (Phase 0).** Concrete C# strategy types ship in Phase 1: `None` / `SingleContent` / `Panel` / `NamedSlots` / `ItemsHost` / `Imperative`, plus `AttachedPropWriter` on container descriptors. See §6's ChildrenStrategy block.
+5. **Is `RegisterType` even the right verb?** **Status: Resolved (Phase 0).** Keep `RegisterType`. After the split-library plan, first-party and external registrations travel through the same surface — a single verb reflects that. Phase 1 promotes it to public with Q17's throw-on-duplicate rules. Renames / split verbs were considered and rejected (source-compat + the engine treats both paths identically).
+6. **Should setters re-run on every update or only when the setters array changed?** **Status: Resolved (Phase 0) pending Phase 1 M7 measurement.** Default to skip-on-ref-equality (`oldEl.Setters == newEl.Setters` → no-op); back-compat opt-out via a `SetterRunPolicy.Always` flag on the element record if a real consumer trips on it. See [`decision-criteria.md#q6`](047/decision-criteria.md#q6).
+7. **Pool integration with descriptors.** **Status: Resolved (Phase 0) pending Phase 1 M12 measurement.** Promote `ctx.AllocateControl` as the documented mount path; deprecate direct construction in handlers. M12 gates the perf claim. See [`decision-criteria.md#q7`](047/decision-criteria.md#q7) and Q18.
+8. **`Set(...)` modifier semantics — and a latent correctness hole.** **Status: Resolved (carve-out landed ahead of Phase 1).** `ApplySetters` now runs inside a scope-based suppression scope on the control's `ReactorState`; M13 baseline flipped from `OnIsOnChangedFireCount = 1` to `0`. See §8.2 and [`factoring-recommendation.md`](047/factoring-recommendation.md). An explicit `Set.Raw(...)` opt-out remains a future refinement if needed.
+9. **Override semantics.** **Status: Resolved (Phase 0).** No override mechanism in v1 — duplicate registration throws. Test fakes compose a `Reconciler` from scratch with the registry they need; `RegisterOverride` can be added later as a non-breaking, additive verb if a real consumer scenario surfaces. See [`decision-criteria.md#q9`](047/decision-criteria.md#q9) and §2.1.
+10. **Compile-time validation.** **Status: Resolved (Phase 0).** Compile-time validation of property and event references is **required**. The C# compiler handles it for free where the protocol uses strongly-typed delegates (hand-coded handler bodies, descriptor `get` / `set` / `subscribe` / `unsubscribe` lambdas, and `nameof(Type.Member)` references). For any portion of the protocol surface that would otherwise reduce to a string-form name lookup (e.g. raw `changeEvent: "Toggled"` strings), Phase 1 ships a Roslyn analyzer that flags the mismatch as a compile error. A descriptor with a typo or wrong type is never a runtime failure. See [`decision-criteria.md#q10`](047/decision-criteria.md#q10).
+12. **`Update` return type and substitution semantics.** **Status: Resolved (Phase 0).** `void Update(...)` — substitution forbidden in v1. Type changes flow through unmount-and-remount. Matches React Native Fabric's `updateProps(oldProps, newProps) → void`. Widening to `UIElement? Update(...)` later is non-breaking if a real need surfaces. See §4 and [`decision-criteria.md#q12`](047/decision-criteria.md#q12).
+13. **Modifier × declarative-prop precedence.** **Status: Resolved (Phase 0).** Modifier-after-prop default (status quo, back-compat). Element-record props act as defaults; modifiers override. Per-field opt-in (`Prop.OneWay(..., precedence: Precedence.PropWins)`) stays as a future non-breaking extension. See §6.2.
+14. **Concurrency model — which thread can `Mount` / `Update` run on?** **Status: Resolved (Phase 0).** UI-thread-only. The protocol documents this guarantee on the `MountContext` surface in Phase 1; handlers may freely access control-state without synchronization. No `ThreadAffinity` flag in v1; off-thread mount is non-breaking to add later. See [`decision-criteria.md#q14`](047/decision-criteria.md#q14).
+15. **Hot-reload behavior across descriptor / source-gen approaches.** **Status: Resolved (Phase 0).** Component-definition changes may require a process restart; that is acceptable hot-reload behavior for Reactor. Therefore hot-reload smoothness is **not** an input to Q1's decision matrix — neither shape (descriptor / handler / future source-gen) gets a tiebreaker for "easier hot-reload." L12 still ships as observability in Phase 2 to document actual behavior, but it does not gate any phase or shift Q1's outcome. See [`decision-criteria.md#q15`](047/decision-criteria.md#q15).
+16. **External controls are permanently descriptor-bound.** **Status: Documented in §16 / Appendix A.** A third-party assembly that ships an element record cannot, in general, have the Reactor source generator run on it without the author opting in (`[ReactorControl]` annotation + generator package reference). For cooperating third parties, source-gen works; for non-cooperating cases (a control someone wraps at runtime via `RegisterType`-equivalent), the descriptor / runtime-handler path is permanent. This is not a transitional artifact — it is designed as a permanent surface from day one.
+17. **Registry precedence and subtype behavior.** **Status: Resolved (Phase 0).** Exact-runtime-type lookup only; no assignable / base matches. Duplicate registration (including against a built-in element type) throws at registration time. No open generic registrations in v1. No `RegisterOverride` verb in v1 — additive later if needed. See §2.1 and [`decision-criteria.md#q17`](047/decision-criteria.md#q17).
+18. **Pool policy as a public API, not just `ctx.AllocateControl`.** **Status: Resolved (Phase 0); concrete API design lands in Phase 1.** The contract:
+    - **Poolability flag.** Descriptors / handlers declare `IsPoolable` explicitly. Controls with persistent native resources or non-resettable state opt out.
+    - **Pool key.** `typeof(TControl)` only for v1. Finer keys (e.g., `(typeof(TextBlock), styleKey)`) revisited later.
+    - **Reset contract.** On return: clear `ControlEventState` (§9.2), pending event subscriptions, `ModifierEventHandlerState`, attached-DP `Tag`, `DataContext` if Reactor sets one. Anything not in this list is a reuse hazard.
+    - **What survives.** Layout caches, template state, `ListView` realized-container reuse. Enumerated separately.
+    - **Dual-RCW.** Pool return is idempotent and does not double-clear (matches `ReactorAttached.StateProperty` discipline).
+    - **Diagnostic.** A non-resettable property found dirty on rent emits a structured log entry.
 
-    This is a concrete API design task in Phase 1, not "later." A control that gets pooling wrong is one of the easier ways to introduce a hard-to-diagnose bug post-split.
-19. **Keep `WriteSuppressed` as a public primitive day one, decoupled from suppressor *elimination*.** §8 proposes deleting `ChangeEchoSuppressor`. §8.1 proposes replacing it with `mostRecentEventCount`. Both are speculative cleanups whose decisions depend on Phase 0's audit. But the *extensibility surface* doesn't depend on either decision: it needs to expose a safe primitive (`ReactorBinding<T>.WriteSuppressed(...)` or `Prop.Controlled(...)`-implicit equivalent) that external authors can rely on regardless of the implementation underneath. The primitive's semantics — "this write should not produce an apparent user event" — are stable; the mechanism can change internally later. Don't couple the public API to whichever §8 direction wins. This means Phase 1 ships `WriteSuppressed` as a public method backed by today's `BeginSuppress`, and Phase 3/4 can swap it for round-tripping without an API change.
+    See [`decision-criteria.md#q18`](047/decision-criteria.md#q18). M12 plus a correctness scenario validates the contract in Phase 1.
+19. **Keep `WriteSuppressed` as a public primitive day one, decoupled from suppressor *elimination*.** **Status: Resolved (Phase 0).** Phase 1 ships `ReactorBinding<T>.WriteSuppressed(...)` as a public method backed by today's `ChangeEchoSuppressor.BeginSuppress`. Phase 4's swap to "delete + tight diff + per-control tolerance" (per Q3) changes the body, not the signature. See [`decision-criteria.md#q19`](047/decision-criteria.md#q19).
 
 ## §14 Suggested phasing
 
@@ -1087,10 +1162,11 @@ The audit work and the perf validation suite are *part of writing this spec*, no
 
 ### Phase 1 — v1 protocol behind a feature flag
 
-- Promote `ApplySetters`, `SetElementTag`, `GetElementTag` to public (or to a `RestrictedAccess` namespace if API stability isn't ready to be locked — see §13 Q15 hot-reload + the API-stability note in §14 below).
+- Promote `ApplySetters`, `SetElementTag`, `GetElementTag` to public (or to a `RestrictedAccess` namespace if API stability isn't ready to be locked — see the API-stability note in the exit gate below).
 - Ship `IElementHandler<TElement, TControl>` + `MountContext` / `UpdateContext` / `ReactorBinding<TElement>` from §4. All hand-coded.
 - Ship `WriteSuppressed` as a public primitive (§13 Q19), backed by today's `BeginSuppress` — independent of any §8 cleanup decision.
 - Ship the pool-policy API (§13 Q18) with `IsPoolable`, the reset contract, and the `typeof(TControl)`-keyed pool. External authors get a real, documented pool contract from day one.
+- Ship `Reactor.Compile.Analyzer` (working name) alongside the v1 protocol package, validating any string-form property / event references in descriptors against the control type (§13 Q10).
 
 **Phase 1 minimum representative control set.** Two controls (ToggleSwitch + one external) isn't enough — it risks freezing an API that only works for leaf cases. The minimum set must exercise every load-bearing path the split-library plan will hit:
 
@@ -1225,7 +1301,7 @@ Macrobenchmarks measure realistic workloads in real WinUI processes. Each varian
 | L9 | `GC_PerFrame_AnimatedTree` | Same as L7 but record Gen0/Gen1/Gen2 collection counts per second and max pause time. | Per-frame allocation; detects "we allocated 50 KB this frame" regressions. |
 | L10 | `Mount_Storm` | Construct a 10k-element tree all at once (e.g., expand a tree node). Measure wall time + max GC pause. | Burst-mount throughput. |
 | L11 | `LongLived_HeapStability` | 30-minute synthetic user session: scroll, click, toggle, navigate between tabs. Sample heap every minute. | Heap drift; detects subtle leaks in handler / event-table lifetime. |
-| L12 | `HotReload_Roundtrip` | Edit a descriptor / element record, trigger hot-reload, measure time to re-rendered frame + heap delta. | Validates §13 Q15 hot-reload story. |
+| L12 | `HotReload_Roundtrip` | Edit a descriptor / element record, trigger hot-reload, measure time to re-rendered frame + heap delta. | **Observability only.** Per §13 Q15 (Resolved), component-definition changes may require process restart; L12 documents actual round-trip cost but does not gate any phase or shift Q1. |
 | L13 | `SplitLibrary_MixedTree` | Mount and update a realistic tree where ≥50% of the element types come from a *separate* `Reactor.Controls.*` assembly (registered via public API, no `InternalsVisibleTo`). Compare against the same tree where all elements are in-core. | Validates §1.1's split-library plan. Detects any per-element cost the registry path adds vs. the built-in switch. The post-split future is the production case — measure it directly. |
 | L14 | `SplitLibrary_MixedTree_AOT` | L13 published with `PublishTrimmed=true` + `IsAotCompatible=true`. Same scenario, AOT binary. | Confirms the split-library path doesn't depend on reflection or trim-unsafe constructs that survive in a JIT build but break under AOT. |
 
@@ -1280,7 +1356,7 @@ The §11.6 targets become **hard gates** at Phase 5 cleanup: if `ReactorV2` Moun
 |---|---|---|
 | **Phase 0 (spec process)** | Suite infrastructure builds and runs; `Direct` and `ReactorToday` numbers captured for every M and L test. Results published to `docs/specs/047/baseline-results/`. §11 / §12 updated with measured numbers. | — (this is the data-gathering phase by definition) |
 | Phase 1 (v1 protocol) | M1, M2, M5, M7, L1, L4, **L13** (split-library mixed tree ≤ +10% vs all-in-core), **L14** (AOT build clean) | M10, M11, L6 (data only — informs descriptor design) |
-| Phase 2 (descriptor decision) | M13 (setters correctness). Descriptor-vs-handler micro+macro head-to-head completes and produces a Phase-2 decision per §13 Q1 matrix. | L12 (hot-reload data informs decision but doesn't gate) |
+| Phase 2 (descriptor decision) | M13 (setters correctness). Descriptor-vs-handler micro+macro head-to-head completes and produces a Phase-2 decision per §13 Q1 matrix. | L12 (observability only per Q15 — does not inform Q1) |
 | Phase 3 (controls migration, per-PR) | All Phase 1 gates + the §15.6 regression budgets — the suite is the merge gate, every PR. | — |
 | Phase 4 (cleanup) | §11.6 targets become hard gates: ≤100 B no-callback, ≤320 B one-callback, ≤500 B three-callback. M10 must show the §9 EHS-allocation drop. | — |
 | Future (source-gen, when revisited) | Must match or beat the Phase-4 hand-coded numbers across the entire suite. No regression on any §13 question already settled. | — |
@@ -1291,7 +1367,7 @@ Each significant open question in §13 should have at least one test that disamb
 
 | §13 question | Test |
 |---|---|
-| Q1 (descriptor vs hand-coded handler) | Phase 2 head-to-head: implement `ToggleSwitch` + `Slider` + `Border` in both shapes, run M1/M2/M5/M7/M10/L4/L9/L12 on both, apply the §13 Q1 decision matrix. Winner is decided by the matrix, not opinion. Source-gen is deferred (see §7 status) — not a Phase-2 contender. |
+| Q1 (descriptor vs hand-coded handler) | Phase 2 head-to-head: implement `ToggleSwitch` + `Slider` + `Border` in both shapes, run M1/M2/M5/M7/M10/L4/L9 on both, apply the §13 Q1 decision matrix. Winner is decided by the matrix, not opinion. L12 runs for observability per Q15 but does not feed the matrix. Source-gen is deferred (see §7 status) — not a Phase-2 contender. |
 | Q3 (echo suppression elimination, §8 / §8.1) | A correctness test pair: `Echo_Coercion_Slider` (write Value=1000 with Maximum=100; observe whether callback fires with stale or new value), `Echo_UserStateRacesRender` (queue an SetState between render and event-dispatch; observe state coherency). Run against `delete + tight diff`, `mostRecentEventCount`, and `suppression-as-is` to see which actually works. |
 | Q6 (setters rerun) | M7 with two variants — setters always re-run vs setters skip-on-array-equality. Measure delta. |
 | Q7 (pool integration) | M12 with `ctx.AllocateControl` vs direct `new T()` per-handler. Confirm pool still functions. |

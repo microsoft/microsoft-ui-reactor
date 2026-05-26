@@ -353,6 +353,116 @@ the `MountContext` surface. §13 Q14 marked Resolved.
 
 ---
 
+## Q2 — AOT story end-to-end
+
+**Summary.** §13 Q2 asks how Reactor's AOT story holds up under the v1
+protocol surface — does the chosen authoring shape (descriptor / handler /
+future source-gen) introduce reflection, trim-unsafe constructs, or
+otherwise regress what AOT compatibility we have today?
+
+**Ratified stance (Phase 0).** **Reactor is AOT-compatible today.** The AOT
+test suite runs at ≥ 90% pass rate against the AOT-compiled bits. The full
+assembly is not yet marked `IsAotCompatible=true` because a small number
+of features remain unsafe; those land separately and are not blocked on
+spec 047.
+
+**Commitment for spec 047:** **no new AOT warnings introduced by the v1
+protocol surface, regardless of which Q1 shape wins.** Specifically:
+- Descriptor lambdas (`get: e => e.IsOn`, `set: (c, v) => c.IsOn = v`,
+  `subscribe: (c, h) => c.Toggled += h`) are strongly-typed delegates — no
+  `nameof()`-resolved reflection, no `GetEvent` / `GetProperty` calls.
+- Any `nameof(Type.Member)` reference inside a descriptor is validated by
+  the C# compiler at the call site; it does not survive into runtime
+  reflection.
+- Hand-coded handlers compile to ordinary C# — AOT-clean by construction.
+- The dispatcher (whether built-in switch, generated switch, or dictionary
+  fallback) does not introduce reflection.
+
+**Validation tests.** L14 (`SplitLibrary_MixedTree_AOT`) ships as a Phase 1
+regression guard, not exploratory. Pass condition: the external assembly
+publishes with `PublishTrimmed=true` + `IsAotCompatible=true` and produces
+zero new trim/AOT warnings beyond Reactor's existing baseline. The
+existing in-tree AOT suite continues to run at its current pass rate.
+
+**Spec edit when data lands.** §4 already documents the lambda-typed
+surface; §14 Phase 1 exit gate already requires L14 to pass. No additional
+spec edits — Q2 is captured in §13 as Resolved with a pointer here.
+
+---
+
+## Q10 — Compile-time validation of properties and events
+
+**Summary.** A descriptor that misspells a property or event reference
+should fail at build time, not at runtime. §13 Q10 asks whether
+compile-time validation is achievable across the whole surface or whether
+some portion needs a separate validator.
+
+**Ratified decision.** **Compile-time validation of property and event
+references is required.** Where possible, the C# compiler handles it for
+free; where not, Phase 1 ships a Roslyn analyzer alongside the v1
+protocol package. A misspelled reference is **never** a runtime failure
+in v1.
+
+**Coverage by shape:**
+
+| Surface element | Compile-validated by | Notes |
+|---|---|---|
+| Hand-coded handler bodies (`ctrl.IsOn = el.IsOn`) | C# compiler | If the property doesn't exist, the handler doesn't compile. |
+| Descriptor `get` / `set` / `subscribe` / `unsubscribe` / `readBack` lambdas | C# compiler | Lambda parameter types pin the access — `(c, v) => c.IsOn = v` won't compile against a control without `IsOn`. |
+| `nameof(Type.Member)` references in descriptors | C# compiler | `nameof` validates the symbol at the call site. |
+| Raw string-form references (e.g. `changeEvent: "Toggled"`) | **Roslyn analyzer** | Phase 1 ships `Reactor.Compile.Analyzer` (working name) that resolves the string against the control type and reports a build error on mismatch. |
+| Source-generated handlers (deferred §7) | Generator + C# compiler | Generated code is itself C#-compiler-validated. |
+
+**Analyzer scope (Phase 1).** Minimum capabilities:
+- Resolve string-form event / property references against the control
+  type declared in the descriptor's generic parameters.
+- Validate that the event delegate type matches the `subscribe` /
+  `unsubscribe` lambda signatures.
+- Validate that `Prop.Controlled`'s `readBack` return type matches the
+  `set` lambda's value type.
+- Emit structured diagnostics with the offending source span so the
+  error surfaces at the call site, not in generated code.
+
+**Validation tests.** A Phase 1 test fixture that deliberately misspells
+each validated reference type and asserts the analyzer produces a build
+error. The test runs both `dotnet build` (analyzer fires) and a hand-run
+of the analyzer against a known-bad fixture.
+
+**Spec edit when data lands.** §6 documents which descriptor entries are
+C#-compiler-validated vs analyzer-validated. §14 Phase 1 ships the
+analyzer package as part of the v1 protocol surface.
+
+---
+
+## Q15 — Hot-reload behavior
+
+**Summary.** Phase 2's L12 was originally framed as a measurement that
+could shift Q1's outcome — if descriptors round-trip cleanly under
+hot-reload and handlers don't (EnC bails on signature edits), descriptors
+get a tiebreaker on close perf calls.
+
+**Ratified stance (Phase 0).** **Component-definition changes may require
+a process restart.** That is acceptable hot-reload behavior for Reactor.
+Therefore hot-reload smoothness is **not** an input to Q1's decision
+matrix. Neither shape (descriptor / handler / future source-gen) gets a
+tiebreaker for "easier hot-reload."
+
+**What this changes:**
+- §13 Q1's input list drops "Hot-reload behavior" from the descriptor
+  tiebreaker. Q1's matrix stays as written (perf-driven thresholds), with
+  Q10 added as a small input.
+- L12 remains in §15.4 as an observability bench — Phase 2 still runs it
+  to document actual round-trip cost. It does not gate any phase.
+- Source-gen revisit (§7) is not blocked by hot-reload concerns either.
+  Source-generated handlers requiring a restart on signature changes is
+  acceptable.
+
+**Spec edit when data lands.** §13 Q15 marked Resolved with a pointer
+here. §13 Q1's input list updated. §15.4 L12 stays present but tagged
+"observability, not gate."
+
+---
+
 ## Cross-references
 
 - Audit data: [`audits/begin-suppress-audit.md`](audits/begin-suppress-audit.md)
