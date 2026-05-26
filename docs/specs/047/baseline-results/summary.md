@@ -98,7 +98,12 @@ total — divide by iterations for per-op alloc.
   **Confirms the §8.2 bug exists in the baseline.** Phase 1's fix
   (the §8.2 standalone setter-suppression PR per
   [`factoring-recommendation.md`](../factoring-recommendation.md))
-  flips this counter to 0.
+  flips this counter to 0. **Follow-up:** carve-out PR landed —
+  `ApplySetters` now enters a scope-based suppression scope on the
+  control's `ReactorState`; re-running M13 against the post-fix build
+  shows `OnIsOnChangedFireCount = 0` on every ReactorToday and ReactorV2
+  row. The Phase-0 JSONL above is deliberately left intact as the
+  witness to the failing baseline.
 - **M11 `ModifierEHS_Frequency`** — placeholder counter at Phase 0.
   Real EventSource counter wiring deferred to Phase 1.
 - **V2 vs Today columns** range from -16.7% to +16.7%. None are real

@@ -503,6 +503,88 @@ internal static class EchoSuppressionFixtures
         }
     }
 
+    // ── §8.2 setter-suppression scope ─────────────────────────────────
+    //
+    // Until the §8.2 carve-out, `ApplySetters` ran outside the echo-suppression
+    // scope so a user-authored `.Set(c => c.Value = ...)` write fed back into
+    // the OnXChanged callback the engine had already wired. The fixtures below
+    // pin three properties:
+    //   1. The mount + setter combo does not echo into the callback even when
+    //      the setter writes a value-bearing DP whose change event the engine
+    //      subscribed to (the headline §8.2 case for ToggleSwitch).
+    //   2. After mount completes, a real user-style write to the same DP still
+    //      reaches the callback. This rules out a regression where the scope
+    //      leaks past ApplySetters and silences genuine input.
+    //   3. The behavior covers a representative spread of value-bearing
+    //      controls (ToggleSwitch / Slider / NumberBox) so a future regression
+    //      that re-introduces the bug on one shape is caught.
+
+    internal class SettersScope_ToggleSwitch_NoEcho(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var calls = new List<bool>();
+            var host = H.CreateHost();
+            host.Mount(_ =>
+                ToggleSwitch(isOn: false, onIsOnChanged: v => calls.Add(v))
+                    .Set(ts => ts.IsOn = true));
+            await Harness.Render();
+            H.Check("SettersScope_ToggleSwitch_MountNoFire", calls.Count == 0);
+
+            var ts = H.FindControl<ToggleSwitch>(_ => true);
+            H.Check("SettersScope_ToggleSwitch_SetterAppliedValue", ts?.IsOn == true);
+
+            if (ts is not null) ts.IsOn = false;
+            await Harness.Render();
+            H.Check("SettersScope_ToggleSwitch_UserEditStillFires",
+                calls.Count >= 1 && calls[^1] == false);
+        }
+    }
+
+    internal class SettersScope_Slider_NoEcho(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var calls = new List<double>();
+            var host = H.CreateHost();
+            host.Mount(_ =>
+                Slider(value: 25.0, min: 0.0, max: 100.0, onValueChanged: v => calls.Add(v))
+                    .Set(s => s.Value = 75.0));
+            await Harness.Render();
+            H.Check("SettersScope_Slider_MountNoFire", calls.Count == 0);
+
+            var sl = H.FindControl<Slider>(_ => true);
+            H.Check("SettersScope_Slider_SetterAppliedValue", sl?.Value == 75.0);
+
+            if (sl is not null) sl.Value = 50.0;
+            await Harness.Render();
+            H.Check("SettersScope_Slider_UserEditStillFires",
+                calls.Count >= 1 && calls[^1] == 50.0);
+        }
+    }
+
+    internal class SettersScope_NumberBox_NoEcho(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var calls = new List<double>();
+            var host = H.CreateHost();
+            host.Mount(_ =>
+                NumberBox(value: 10.0, onValueChanged: v => calls.Add(v))
+                    .Set(nb => nb.Value = 42.0));
+            await Harness.Render();
+            H.Check("SettersScope_NumberBox_MountNoFire", calls.Count == 0);
+
+            var nb = H.FindControl<NumberBox>(_ => true);
+            H.Check("SettersScope_NumberBox_SetterAppliedValue", nb?.Value == 42.0);
+
+            if (nb is not null) nb.Value = 77.0;
+            await Harness.Render();
+            H.Check("SettersScope_NumberBox_UserEditStillFires",
+                calls.Count >= 1 && calls[^1] == 77.0);
+        }
+    }
+
     // ── ToggleSplitButton ─────────────────────────────────────────────
 
     internal class ToggleSplitButtonNoEcho(Harness h) : SelfTestFixtureBase(h)

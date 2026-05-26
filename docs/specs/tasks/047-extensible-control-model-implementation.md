@@ -146,6 +146,8 @@ implementation is intentionally identical to `ReactorToday`.
       verify callback fires exactly once today (the bug per §8.2), zero times
       after Phase 1's fix. Phase 0 records the failing behavior as baseline
       (`OnIsOnChangedFireCount = 1`) so the Phase 1 fix has a target to flip.
+      (Carve-out PR flipped this to 0; baseline JSONL preserved as the
+      failing-state witness — see `baseline-results/summary.md` follow-up.)
 - [x] Each bench reports: mean ns + 95% CI, allocation bytes, Gen0/1/2 collections,
       managed heap delta. `BenchRunner` instruments `GC.GetAllocatedBytesForCurrentThread`
       + `GC.CollectionCount` + `GC.GetTotalMemory` per rep; aggregator computes
@@ -316,4 +318,6 @@ proposal can move to greenlight (spec §14).
       factoring-recommendation.md.
 - [x] 0.7 Factoring recommendation committed and reviewed. Outcome: keep
       spec 047 unified; only the §8.2 setter-suppression fix is carved out
-      as a standalone PR ahead of Phase 1.
+      as a standalone PR ahead of Phase 1. (Carve-out landed: `ApplySetters`
+      now runs inside a scope-based suppression scope on the control's
+      `ReactorState`. M13 flipped from `OnIsOnChangedFireCount = 1` to `0`.)

@@ -458,6 +458,8 @@ This is the version of the design where the framework gets a *fundamentally diff
 
 A latent issue worth fixing as part of this work, called out in §13 Q8 below: `ApplySetters` runs after declarative property writes today and bypasses any echo suppression scope. A user writing `Set(ts => ts.IsOn = true)` on a `ToggleSwitch` whose `el.IsOn = false` produces an unmasked write that *will* fire `Toggled` and feed back into state on the next event-loop tick. The descriptor model should require setters to either run inside the same suppression / round-trip scope as declared props, or be opted into an explicit raw-write mode (`Set.Raw(...)`) that the author has audited and accepted responsibility for. Default behavior should match declared props.
 
+**Resolved** as a carve-out ahead of Phase 1 (per [`047/factoring-recommendation.md`](047/factoring-recommendation.md)). `ApplySetters` now enters a scope-based suppression mode on the control's `ReactorState` (a depth counter alongside the existing paired `EchoSuppressCount`) for the duration of the setter chain, so any change event raised by a setter-driven write is dropped without consuming a paired token. The M13 perf-bench check flips from `OnIsOnChangedFireCount = 1` to `0` on both `ReactorToday` and `ReactorV2`. Default behavior now matches declared props as called for above; an explicit raw-write opt-out (`Set.Raw(...)`) is still a future refinement should it become needed.
+
 ---
 
 ## §9 Simplification direction: per-control trampoline tables

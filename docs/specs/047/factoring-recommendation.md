@@ -71,6 +71,13 @@ the §8.2 description in the PR.
   bug. M13's Phase-0 baseline flips from `fires=1` to `fires=0`. ~1
   PR, ~50 lines of change in `Reconciler.cs` to thread `BeginSuppress`
   around `ApplySetters` for value-bearing controls.
+  **Status:** landed via the carve-out PR. `ApplySetters` now enters
+  a scope-based suppression mode on the control's `ReactorState`
+  (a depth counter alongside the existing paired `EchoSuppressCount`)
+  for the duration of the setter chain. M13 re-run confirms
+  `OnIsOnChangedFireCount = 0` on both ReactorToday and ReactorV2.
+  Reactor.Tests + Reactor.SelfTests pass; three new SettersScope_*
+  fixtures lock the behavior under the SelfTest batch.
 
 That's the only one. Everything else stays in spec 047.
 

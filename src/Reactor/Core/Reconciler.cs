@@ -300,6 +300,10 @@ public sealed partial class Reconciler : IDisposable
         // wrapper and ShouldSuppress on a different wrapper for the same native
         // DependencyObject see the same counter. See ChangeEchoSuppressor.cs.
         public int EchoSuppressCount;
+        // §8.2 — depth of the active setter-suppression scope. While > 0, any
+        // change event on this control is dropped without consuming a token
+        // from EchoSuppressCount. See ApplySetters / ChangeEchoSuppressor.
+        public int EchoSuppressScopeDepth;
         // Spec 042 Phase 1 — keyed-list reconciliation state. Set when the
         // host element is a templated items control (ListView/GridView/
         // ItemsRepeater). The internal ObservableCollection<ReactorRow> in
@@ -405,6 +409,7 @@ public sealed partial class Reconciler : IDisposable
         {
             state.Events?.ClearCurrentHandlers();
             state.EchoSuppressCount = 0;
+            state.EchoSuppressScopeDepth = 0;
         }
     }
 
@@ -425,6 +430,7 @@ public sealed partial class Reconciler : IDisposable
         state.Events?.ClearCurrentHandlers();
         state.Events = null;
         state.EchoSuppressCount = 0;
+        state.EchoSuppressScopeDepth = 0;
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -1435,7 +1441,27 @@ public sealed partial class Reconciler : IDisposable
 
     internal static void ApplySetters<T>(Action<T>[] setters, T control) where T : class
     {
-        foreach (var setter in setters) setter(control);
+        if (setters.Length == 0) return;
+        // §8.2 — run setters inside the echo-suppression scope so that a
+        // user-authored `.Set(c => c.IsOn = true)` write does not echo back
+        // through the OnXChanged callback the engine already wired. Only
+        // enters scope when ReactorState already exists; value-bearing mounts
+        // call SetElementTag before ApplySetters, so the state is present for
+        // every control that can fire a suppressed change event. Bare leaves
+        // (TextBlock, RichTextBlock) skip the scope and pay no allocation.
+        ReactorState? state =
+            control is FrameworkElement fe
+            && fe.GetValue(ReactorAttached.StateProperty) is ReactorState rs
+                ? rs : null;
+        if (state is not null) state.EchoSuppressScopeDepth++;
+        try
+        {
+            foreach (var setter in setters) setter(control);
+        }
+        finally
+        {
+            if (state is not null) state.EchoSuppressScopeDepth--;
+        }
     }
 
     // WPF/WinUI auto-populate UIA Name from a control's string Content through the
