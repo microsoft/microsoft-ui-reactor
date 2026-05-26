@@ -1092,6 +1092,25 @@ internal static class SelfTestFixtureRegistry
         "HostCov_PinToSide_DrainsIntoSideStrip",
         "HostCov_AutomationIds_PaneIdsWiredOnDocked",
         "HostCov_ActiveContentChangedCallback_FiresOnActivate",
+
+        // Spec 047 §14 Phase 1 (1.11–1.15) — V1 protocol behavior parity fixtures.
+        "V1_ToggleSwitch_MountUpdate",
+        "V1_Slider_CoercionTolerance",
+        "V1_TextBox_Controlled",
+        "V1_Border_SingleContent",
+        "V1_ListView_MountSelect",
+
+        // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
+        // The MarqueeHandler is authored in tests/external_proof/
+        // Reactor.External.TestControl, references Reactor as a regular
+        // project ref (no InternalsVisibleTo), and proves the public V1
+        // surface is sufficient for external authors.
+        "Spec047ExternalProof_Marquee_MountUpdate",
+        "Spec047ExternalProof_Marquee_WriteSuppressed",
+        "Spec047ExternalProof_Marquee_ModifierChain",
+        "Spec047ExternalProof_Marquee_SetterChain",
+        "Spec047ExternalProof_Marquee_PoolRent",
+        "Spec047ExternalProof_Marquee_PoolResetContract",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2150,6 +2169,21 @@ internal static class SelfTestFixtureRegistry
         "HostCov_PinToSide_DrainsIntoSideStrip" => new NativeDockingCoverageHostFixtures.Host_PinToSide_DrainsIntoSideStrip(harness),
         "HostCov_AutomationIds_PaneIdsWiredOnDocked" => new NativeDockingCoverageHostFixtures.Host_AutomationIds_PaneIdsWiredOnDocked(harness),
         "HostCov_ActiveContentChangedCallback_FiresOnActivate" => new NativeDockingCoverageHostFixtures.Host_ActiveContentChangedCallback_FiresOnActivate(harness),
+
+        // Spec 047 §14 Phase 1 (1.11–1.15) — V1 protocol behavior parity fixtures.
+        "V1_ToggleSwitch_MountUpdate" => new Spec047V1ProtocolFixtures.V1ToggleSwitchMountUpdate(harness),
+        "V1_Slider_CoercionTolerance" => new Spec047V1ProtocolFixtures.V1SliderCoercionTolerance(harness),
+        "V1_TextBox_Controlled" => new Spec047V1ProtocolFixtures.V1TextBoxControlled(harness),
+        "V1_Border_SingleContent" => new Spec047V1ProtocolFixtures.V1BorderSingleContent(harness),
+        "V1_ListView_MountSelect" => new Spec047V1ProtocolFixtures.V1ListViewMountSelect(harness),
+
+        // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
+        "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),
+        "Spec047ExternalProof_Marquee_WriteSuppressed" => new Spec047ExternalProofFixtures.MarqueeWriteSuppressedEcho(harness),
+        "Spec047ExternalProof_Marquee_ModifierChain" => new Spec047ExternalProofFixtures.MarqueeModifierChain(harness),
+        "Spec047ExternalProof_Marquee_SetterChain" => new Spec047ExternalProofFixtures.MarqueeSetterChain(harness),
+        "Spec047ExternalProof_Marquee_PoolRent" => new Spec047ExternalProofFixtures.MarqueePoolRentReturn(harness),
+        "Spec047ExternalProof_Marquee_PoolResetContract" => new Spec047ExternalProofFixtures.MarqueePoolResetContract(harness),
 
         _ => null,
     };

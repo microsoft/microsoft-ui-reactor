@@ -2,10 +2,19 @@
 
 Derived from: `docs/specs/047-extensible-control-model.md`
 
-> **Status:** Phase 0 in progress. Phase 0 is *spec-process* work — audits, suite
-> infrastructure, baseline measurements, and decision criteria. It must clear
-> its exit gate before Phase 1 (v1 protocol) can start. See spec §14 for the
-> phase boundaries and §15 for the perf suite this phase stands up.
+> **Status:** Phase 0 complete (PR #414 — greenlight). **Phase 1 code-complete**
+> in this PR — see [`047-extensible-control-model-phase1-implementation.md`](047-extensible-control-model-phase1-implementation.md)
+> for the per-section tracker and [`../047/phase1-results/`](../047/phase1-results/)
+> for the Phase 1 deliverables, exit-gate deferrals (1.17 AOT publish, 1.18
+> macro catch-up, 1.19 final perf validation — all gated on baseline-machine
+> runs), and the Q14 dispatcher-affinity note.
+>
+> Phase 0 below is *spec-process* work — audits, suite infrastructure, baseline
+> measurements, and decision criteria. It cleared its exit gate (PR #414) and
+> Phase 1 (v1 protocol behind a feature flag, 5 ported controls + external
+> assembly proof, Roslyn analyzer, public author surface) shipped on top.
+> See spec §14 for the phase boundaries and §15 for the perf suite this phase
+> stood up.
 
 This file converts spec 047's Phase 0 deliverables (spec §14) into ship-ready,
 pause/resume-able tasks. Each top-level deliverable maps to one section below.

@@ -47,7 +47,11 @@
     <!-- Suppress missing-XML-doc warnings on public API. The .xml doc file
          still ships whatever comments do exist; we just don't gate the
          build on documenting every public member. -->
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Spec 047 §14 Phase 1 (1.3 / 1.4): suppress the REACTOR_V1_PREVIEW
+         Experimental diagnostic in-tree so the engine itself can keep
+         calling the promoted helpers. External / sample projects do NOT
+         suppress it — they see the provisional-surface signal. -->
+    <NoWarn>$(NoWarn);CS1591;REACTOR_V1_PREVIEW</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

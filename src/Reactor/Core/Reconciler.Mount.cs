@@ -58,8 +58,17 @@ public sealed partial class Reconciler
         try
         {
 
+        // Spec 047 §14 Phase 1 (1.1) — V1 handler registry dispatch.
+        // When the feature flag is ON, ported built-in handlers in
+        // `_v1Handlers` win before the external `_typeRegistry`. When the
+        // flag is OFF, this step is skipped entirely and ported controls
+        // fall through to the legacy MountXxx switch.
+        if (UseV1Protocol && _v1Handlers.TryGet(element.GetType(), out var v1Entry))
+        {
+            control = v1Entry.Mount(element, requestRerender, this);
+        }
         // Registered types checked first
-        if (_typeRegistry.TryGetValue(element.GetType(), out var reg))
+        else if (_typeRegistry.TryGetValue(element.GetType(), out var reg))
         {
             control = reg.Mount(element, requestRerender, this);
         }
@@ -1749,7 +1758,11 @@ public sealed partial class Reconciler
         return pivot;
     }
 
-    private WinUI.ListView MountListView(ListViewElement lv, Action requestRerender)
+    // Internal visibility so V1Protocol.Handlers.ListViewHandler can delegate
+    // to the shared mount body (Path B from spec 047 §14 Phase 1 task 1.15:
+    // delegate + shape declaration rather than full reimplementation, so the
+    // V1 ON and V1 OFF paths execute identical mount bodies).
+    internal WinUI.ListView MountListView(ListViewElement lv, Action requestRerender)
     {
         var listView = new WinUI.ListView
         {

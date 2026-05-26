@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <AssemblyName>Reactor.Compile.Analyzer</AssemblyName>
+    <RootNamespace>Microsoft.UI.Reactor.Compile.Analyzer</RootNamespace>
+
+    <!--
+      Spec 047 §14 Phase 1 (1.10) — Roslyn analyzer that validates the
+      provisional v1 protocol surface (`ReactorBinding<T>.OnCustomEvent`,
+      `Prop.Controlled`, descriptor string-form refs).
+
+      Packaging decision (ship-with-Reactor.dll vs separate NuGet) is
+      deferred to spec 047 §14 Phase 1 (1.18 / 1.20). For now consumers
+      opt in via:
+
+          <PackageReference Include="Reactor.Compile.Analyzer"
+                            PrivateAssets="all" />
+
+      or by direct project reference with `<Analyzer Include=… />`.
+    -->
+    <IsPackable>false</IsPackable>
+    <DevelopmentDependency>true</DevelopmentDependency>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

@@ -277,6 +277,7 @@
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/tests/">
+    <Project Path="tests/Reactor.Compile.Analyzer.Tests/Reactor.Compile.Analyzer.Tests.csproj" />
     <Project Path="tests/Reactor.AppTests.Host/Reactor.AppTests.Host.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
@@ -304,6 +305,16 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
     <Project Path="tests/Reactor.WinFormsTests.Host/Reactor.WinFormsTests.Host.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/tests/external_proof/">
+    <Project Path="tests/external_proof/Reactor.External.TestControl/Reactor.External.TestControl.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/external_proof/Reactor.External.TestControl.Tests/Reactor.External.TestControl.Tests.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
@@ -364,6 +375,7 @@
     <Project Path="tools/Templates/Microsoft.UI.Reactor.Templates.csproj" />
   </Folder>
   <Project Path="src/Reactor.Analyzers/Reactor.Analyzers.csproj" />
+  <Project Path="src/Reactor.Compile.Analyzer/Reactor.Compile.Analyzer.csproj" />
   <Project Path="src/Reactor.Cli/Reactor.Cli.csproj">
     <Platform Solution="*|ARM64" Project="ARM64" />
     <Platform Solution="*|x64" Project="x64" />

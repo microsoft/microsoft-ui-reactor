@@ -104,8 +104,17 @@ public sealed partial class Reconciler
         try
         {
 
+        // Spec 047 §14 Phase 1 (1.1) — V1 handler registry dispatch.
+        // V1 Update returns void (substitution forbidden — §13 Q12); the
+        // control identity is preserved across updates, so `result` stays
+        // null (= keep existing control). Skipped when the flag is OFF.
+        if (UseV1Protocol && _v1Handlers.TryGet(newEl.GetType(), out var v1Entry))
+        {
+            v1Entry.Update(oldEl, newEl, control, requestRerender, this);
+            result = null;
+        }
         // Registered types checked first
-        if (_typeRegistry.TryGetValue(newEl.GetType(), out var reg))
+        else if (_typeRegistry.TryGetValue(newEl.GetType(), out var reg))
         {
             result = reg.Update(oldEl, newEl, control, requestRerender, this);
         }
@@ -2759,7 +2768,8 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateListView(ListViewElement o, ListViewElement n, WinUI.ListView lv, Action requestRerender)
+    // Internal visibility — see comment on MountListView (1.15 Path B).
+    internal UIElement? UpdateListView(ListViewElement o, ListViewElement n, WinUI.ListView lv, Action requestRerender)
     {
         lv.SelectionMode = n.SelectionMode;
         lv.IsItemClickEnabled = n.OnItemClick is not null;

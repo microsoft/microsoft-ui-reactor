@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Spec 047 §14 Phase 1 (1.16) — selftests for the external-assembly proof.
+
+    These tests reference Reactor.dll as a regular project reference (no
+    InternalsVisibleTo from Reactor into this assembly). Tests that require
+    a WinUI dispatcher are gated with [Fact(Skip = …)] and the live
+    equivalents live in tests/Reactor.AppTests.Host as
+    Spec047ExternalProofFixtures — see SelfTestFixtureRegistry.cs.
+
+    The non-WinUI selftests here cover:
+      - RegisterHandler succeeds for an external element type.
+      - Duplicate RegisterHandler throws (V1 v1 semantics, §13 Q17).
+      - Pool rent/return on a non-poolable type is a safe no-op.
+      - Pool rent/return on a poolable WinUI type observes the reset
+        contract through the public surface (ElementTag → null).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <RootNamespace>Reactor.External.TestControl.Tests</RootNamespace>
+    <AssemblyName>Reactor.External.TestControl.Tests</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <Platforms>x64;ARM64</Platforms>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Library</OutputType>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <NoWarn>$(NoWarn);REACTOR_V1_PREVIEW</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+    <ProjectReference Include="..\Reactor.External.TestControl\Reactor.External.TestControl.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core.Diagnostics;
@@ -243,12 +244,77 @@ public sealed partial class Reconciler : IDisposable
         set => _enableBitmaskDiff = value;
     }
 
-    public Reconciler() : this(null) { }
+    public Reconciler() : this(null, useV1Protocol: null) { }
 
-    public Reconciler(ILogger? logger)
+    public Reconciler(ILogger? logger) : this(logger, useV1Protocol: null) { }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 — v1 protocol feature flag (Q1.1).
+    ///
+    /// When <paramref name="useV1Protocol"/> is non-null, that value wins per-instance.
+    /// When null, falls back to <c>AppContext.SetSwitch("Reactor.UseV1Protocol", …)</c>;
+    /// when that is unset, defaults to OFF.
+    ///
+    /// Ports of built-in controls register handlers into the internal
+    /// <see cref="V1HandlerRegistry"/>; external <see cref="RegisterType{TElement,TControl}"/>
+    /// callers continue to populate <c>_typeRegistry</c>. Dispatch order when the
+    /// flag is ON is V1 → external → legacy switch; when OFF, V1 is skipped.
+    /// </summary>
+    public Reconciler(ILogger? logger, bool? useV1Protocol)
     {
         _logger = logger;
+        if (useV1Protocol is bool explicitFlag)
+        {
+            UseV1Protocol = explicitFlag;
+        }
+        else if (AppContext.TryGetSwitch("Reactor.UseV1Protocol", out var switchValue))
+        {
+            UseV1Protocol = switchValue;
+        }
+        else
+        {
+            UseV1Protocol = false;
+        }
+
+        // Spec 047 §14 Phase 1 (1.11–1.15) — register the ported built-in
+        // handlers when the v1 flag is ON for this reconciler instance.
+        // When OFF, ported controls fall through to the legacy MountXxx switch
+        // (unchanged), so V1 ON vs OFF can be diffed on the same binary.
+        if (UseV1Protocol) RegisterV1BuiltInHandlers();
     }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.11–1.15) — register the five Phase 1 built-in
+    /// control ports into <see cref="V1HandlerRegistry"/>. Built-in handler
+    /// types stay internal; this method is the sole registration site.
+    /// </summary>
+    private void RegisterV1BuiltInHandlers()
+    {
+        RegisterHandler<ToggleSwitchElement, Microsoft.UI.Xaml.Controls.ToggleSwitch>(new V1Protocol.Handlers.ToggleSwitchHandler());
+        RegisterHandler<SliderElement, Microsoft.UI.Xaml.Controls.Slider>(new V1Protocol.Handlers.SliderHandler());
+        RegisterHandler<TextBoxElement, Microsoft.UI.Xaml.Controls.TextBox>(new V1Protocol.Handlers.TextBoxHandler());
+        RegisterHandler<BorderElement, Microsoft.UI.Xaml.Controls.Border>(new V1Protocol.Handlers.BorderHandler());
+        RegisterHandler<ListViewElement, Microsoft.UI.Xaml.Controls.ListView>(new V1Protocol.Handlers.ListViewHandler());
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 — v1 protocol feature flag (Q1.1). When true,
+    /// <see cref="V1HandlerRegistry"/> is consulted before the external
+    /// <c>_typeRegistry</c> and the legacy <c>MountXxx</c> switch. Set via the
+    /// <see cref="Reconciler(ILogger?, bool?)"/> ctor or the
+    /// <c>Reactor.UseV1Protocol</c> AppContext switch (ctor wins).
+    /// Provisional surface — see <see cref="ReactorBinding"/> for the
+    /// <c>REACTOR_V1_PREVIEW</c> diagnostic id.
+    /// </summary>
+    public bool UseV1Protocol { get; }
+
+    // ── V1 handler registry (spec 047 §14 Phase 1, Q1.1) ──────────────
+    // Keyed by exact element type, separate from _typeRegistry so that
+    // external RegisterType callers and built-in V1 ports stay isolated.
+    // Add is internal-only for Phase 1; the public author-facing surface
+    // (`RegisterHandler<TElement,TControl>(IElementHandler<…>)`) lands in
+    // sections 1.6 / 1.9.
+    internal readonly V1HandlerRegistry _v1Handlers = new();
 
     /// <summary>
     /// Associates a control with its current element via Tag.
@@ -311,6 +377,15 @@ public sealed partial class Reconciler : IDisposable
         // ops translate into container-level animations rather than full
         // re-realization.
         public Internal.ReactorListState? ListState;
+
+        // Spec 047 §9.2 / §14 Phase 1 (1.7) — per-control event payload box.
+        // Holds a strongly-typed payload struct (e.g. ToggleSwitchEventPayload)
+        // discriminated by HandlerType. Only populated for ported V1 controls
+        // — legacy MountXxx paths keep using the shared EventHandlerState
+        // (Toggled / Click / TextChanged trampolines on Events) until they
+        // migrate. Cleared by Reconciler.ReturnControl per the Q18 pool reset
+        // contract; that's why a stale type is never observable post-rent.
+        public object? ControlEventState;
     }
 
     internal static class ReactorAttached
@@ -332,7 +407,15 @@ public sealed partial class Reconciler : IDisposable
         return state;
     }
 
-    internal static void SetElementTag(FrameworkElement control, Element? element)
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Associates a
+    /// control with its current Reactor element via the
+    /// <see cref="ReactorAttached.StateProperty"/> attached DP so that
+    /// trampolines can resolve the live element on dispatch.
+    /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    public static void SetElementTag(FrameworkElement control, Element? element)
     {
         if (control.GetValue(ReactorAttached.StateProperty) is ReactorState state)
         {
@@ -345,14 +428,22 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Retrieves the element associated with a control, or null.
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Retrieves the
+    /// element associated with a control, or null.
+    /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
-    internal static Element? GetElementTag(UIElement control) =>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    public static Element? GetElementTag(UIElement control) =>
         control is FrameworkElement fe
             ? (fe.GetValue(ReactorAttached.StateProperty) as ReactorState)?.Element
             : null;
 
-    internal static Element? GetElementTag(FrameworkElement fe) =>
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal.
+    /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    public static Element? GetElementTag(FrameworkElement fe) =>
         (fe.GetValue(ReactorAttached.StateProperty) as ReactorState)?.Element;
 
     // ────────────────────────────────────────────────────────────────────
@@ -422,7 +513,12 @@ public sealed partial class Reconciler : IDisposable
     /// holds a reference — without this, captured closures stay reachable
     /// and stale reactor callbacks can still fire.
     /// </summary>
-    internal static void DetachReactorState(FrameworkElement fe)
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal.
+    /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    public static void DetachReactorState(FrameworkElement fe)
     {
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
@@ -521,9 +617,17 @@ public sealed partial class Reconciler : IDisposable
     /// Registers a custom element type so the reconciler knows how to mount, update, and unmount it.
     /// Registered types take priority over built-in types.
     ///
+    /// Spec 047 §13 Q17 / §14 Phase 1 (1.9) — v1 semantics:
+    ///   - Exact-type lookup via <c>element.GetType()</c>; no base-class fallback.
+    ///   - Throws <see cref="InvalidOperationException"/> on duplicate registration,
+    ///     including duplicates against a previously-registered V1 handler
+    ///     (<see cref="V1HandlerRegistry"/>).
+    ///   - Throws on open-generic element types.
+    ///
     /// The mount and update handlers receive the Reconciler instance so they can
     /// recursively mount/update/unmount child elements without capturing external state.
     /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
     public void RegisterType<TElement, TControl>(
         Func<Reconciler, TElement, Action, TControl> mount,
         Func<Reconciler, TElement, TElement, TControl, Action, UIElement?> update,
@@ -531,7 +635,292 @@ public sealed partial class Reconciler : IDisposable
         where TElement : Element
         where TControl : UIElement
     {
-        _typeRegistry[typeof(TElement)] = new TypeRegistration<TElement, TControl>(mount, update, unmount);
+        EnsureRegistrableElementType(typeof(TElement), typeof(TControl), "RegisterType");
+        _typeRegistry.Add(typeof(TElement), new TypeRegistration<TElement, TControl>(mount, update, unmount));
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.9) — shared duplicate / open-generic guard for
+    /// both <see cref="RegisterType{TElement,TControl}"/> and
+    /// <see cref="RegisterHandler{TElement,TControl}"/>. Throws on any
+    /// cross-registry collision; message names both the existing and the new
+    /// TControl types so the author sees what they're shadowing.
+    /// </summary>
+    internal void EnsureRegistrableElementType(Type elementType, Type newControlType, string callerName)
+    {
+        if (elementType.ContainsGenericParameters)
+        {
+            throw new InvalidOperationException(
+                $"{callerName}: open-generic element types (e.g. typeof(DataGrid<>)) are not " +
+                $"supported in v1 (spec 047 §13 Q17). Element type: '{elementType.FullName}'.");
+        }
+        if (_typeRegistry.TryGetValue(elementType, out var existing))
+        {
+            var existingControl = existing.GetType().GetGenericArguments() is { Length: 2 } args
+                ? args[1].FullName
+                : "<unknown>";
+            throw new InvalidOperationException(
+                $"Cannot register handler for '{elementType.FullName}' (-> '{newControlType.FullName}'): " +
+                $"a handler is already registered (-> '{existingControl}'). " +
+                "Duplicate registrations are forbidden in v1 (spec 047 §13 Q17); " +
+                "build a separate Reconciler instance if you need a different mapping.");
+        }
+        if (_v1Handlers.ContainsKey(elementType))
+        {
+            throw new InvalidOperationException(
+                $"Cannot register handler for '{elementType.FullName}' (-> '{newControlType.FullName}'): " +
+                "a V1 element handler is already registered for this element type. " +
+                "Duplicate registrations are forbidden in v1 (spec 047 §13 Q17); " +
+                "build a separate Reconciler instance if you need a different mapping.");
+        }
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.6 / 1.9) — register a v1
+    /// <see cref="V1Protocol.IElementHandler{TElement,TControl}"/> for the
+    /// given element type. Dispatched ahead of <see cref="RegisterType{T,U}"/>
+    /// callbacks when <see cref="UseV1Protocol"/> is ON. Throws on duplicate
+    /// (including across registries) and on open-generic element types
+    /// (spec §13 Q17).
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    public void RegisterHandler<TElement, TControl>(V1Protocol.IElementHandler<TElement, TControl> handler)
+        where TElement : Element
+        where TControl : UIElement
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        EnsureRegistrableElementType(typeof(TElement), typeof(TControl), "RegisterHandler");
+        _v1Handlers.Add(typeof(TElement), new V1Protocol.V1HandlerAdapter<TElement, TControl>(handler));
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Pool rent / return — public author-facing surface (spec 047 §13 Q18)
+    // ════════════════════════════════════════════════════════════════════
+    //
+    // Pool key is typeof(TControl) only (Q18 — finer keys deferred to Phase 3+).
+    // Mount-time allocations route here so external authors get the same
+    // pool behavior as built-in ports.
+    //
+    // TODO(Phase 4): the dirty-rent diagnostic ("structured log entry on
+    // dirty rent") is unimplementable without a way to inspect the control's
+    // state; the engine trusts ElementPool.CleanElement to scrub on return.
+    // When the per-control reset contract becomes declarative (descriptor-
+    // driven, Phase 4), the engine will know what slots to inspect.
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.5) — rent a control instance, either from
+    /// the per-type pool (if poolable and a pooled instance is available)
+    /// or via <paramref name="factory"/> / <c>new T()</c>. Pool key is
+    /// <c>typeof(T)</c> only.
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    public T RentControl<T>(PoolPolicy<T>? policy = null, Func<T>? factory = null) where T : class, new()
+    {
+        // Default = poolable; only skip the pool when the policy explicitly opts out.
+        bool poolable = policy?.IsPoolable != false;
+        if (poolable && typeof(FrameworkElement).IsAssignableFrom(typeof(T)))
+        {
+            var rented = _pool.TryRent(typeof(T));
+            if (rented is T t) return t;
+        }
+        return factory is not null ? factory() : new T();
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.5) — return a control to its per-type pool,
+    /// after running the Q18 reset contract:
+    /// <list type="bullet">
+    ///   <item>Clear <c>ControlEventState</c> (per-control event payload box, §9.2).</item>
+    ///   <item>Clear <c>EventHandlerState</c> (modifier / routed-input handler state).</item>
+    ///   <item>Clear <c>ReactorAttached.StateProperty</c> Tag / DataContext set by Reactor.</item>
+    ///   <item>Invoke <c>policy.Reset</c> last (author-defined extra cleanup).</item>
+    /// </list>
+    /// Double-return is safe: <see cref="ElementPool.Return"/> dedupes via
+    /// the per-type stack cap (<c>MaxPerType</c>).
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    public void ReturnControl<T>(T control, PoolPolicy<T>? policy = null) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(control);
+        if (policy?.IsPoolable == false) return;
+
+        // Engine reset contract (Q18). Order is intentional — clear the
+        // attached-state box BEFORE the pool's CleanElement runs so any
+        // ControlEventState payload is gone before the next rent.
+        if (control is FrameworkElement fe)
+        {
+            if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState rs)
+            {
+                rs.Events?.ClearCurrentHandlers();
+                // Spec 047 §9.2 / Phase 1 KD-3 — typed per-control event
+                // payloads (ToggleSwitch / Slider / TextBox / Button / ...)
+                // are intentionally preserved across pool rent/return cycles.
+                // Their trampolines stay subscribed to native WinUI events for
+                // the control's lifetime and read live state via GetElementTag
+                // — clearing the box would force re-allocation on every rent
+                // and double-subscribe to the native event. Mirrors the legacy
+                // EventHandlerState contract (ClearCurrentHandlers nulls user
+                // delegates only; trampoline slots stay). The generic-anchor
+                // CustomEventAnchorPayload from V1 OnCustomEvent has the same
+                // shape, so it stays too — handlers that use the generic
+                // surface must be idempotent on rent (Phase 1 known caveat
+                // for OnCustomEvent; see Phase 1 task file KD-4).
+                rs.EchoSuppressCount = 0;
+                rs.EchoSuppressScopeDepth = 0;
+                rs.Element = null;
+            }
+            // Clear Reactor-set DataContext (FrameworkElement-only DP).
+            fe.ClearValue(FrameworkElement.DataContextProperty);
+
+            _pool.Return(fe);
+        }
+
+        // Author-defined extra reset runs last (per Q18 contract).
+        policy?.Reset?.Invoke(control);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Internal binding shims for V1 ReactorBinding<TElement> (1.6)
+    // ════════════════════════════════════════════════════════════════════
+    //
+    // Each shim corresponds to an Ensure*Subscribed helper in this file.
+    // They exist so ReactorBinding<TElement>.On<Event>(Action<TElement,…>)
+    // can update the per-control trampoline without exposing the private
+    // EventHandlerState type. Strongly-typed delegates only — no reflection.
+
+    internal static void BindOnPointerPressed(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerPressedSubscribed(fe, GetOrCreateEventState(fe), handler);
+    internal static void BindOnPointerMoved(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerMovedSubscribed(fe, GetOrCreateEventState(fe), handler);
+    internal static void BindOnPointerReleased(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerReleasedSubscribed(fe, GetOrCreateEventState(fe), handler);
+    internal static void BindOnPointerEntered(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerEnteredSubscribed(fe, GetOrCreateEventState(fe), handler);
+    internal static void BindOnPointerExited(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerExitedSubscribed(fe, GetOrCreateEventState(fe), handler);
+    internal static void BindOnPointerCaptureLost(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerCaptureLostSubscribed(fe, GetOrCreateEventState(fe), handler);
+    internal static void BindOnPointerWheelChanged(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerWheelChangedSubscribed(fe, GetOrCreateEventState(fe), handler);
+    internal static void BindOnTapped(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? handler)
+        => EnsureTappedSubscribed(fe, GetOrCreateEventState(fe), handler, oldHandler: null);
+    internal static void BindOnDoubleTapped(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? handler)
+        => EnsureDoubleTappedSubscribed(fe, GetOrCreateEventState(fe), handler, oldHandler: null);
+    internal static void BindOnRightTapped(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? handler)
+        => EnsureRightTappedSubscribed(fe, GetOrCreateEventState(fe), handler, oldHandler: null);
+    internal static void BindOnHolding(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? handler)
+        => EnsureHoldingSubscribed(fe, GetOrCreateEventState(fe), handler, oldHandler: null);
+    internal static void BindOnKeyDown(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+        => EnsureKeyDownSubscribed(fe, GetOrCreateEventState(fe), handler);
+    internal static void BindOnKeyUp(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+        => EnsureKeyUpSubscribed(fe, GetOrCreateEventState(fe), handler);
+    internal static void BindOnGotFocus(FrameworkElement fe, Action<object, RoutedEventArgs>? handler)
+        => EnsureGotFocusSubscribed(fe, GetOrCreateEventState(fe), handler);
+    internal static void BindOnLostFocus(FrameworkElement fe, Action<object, RoutedEventArgs>? handler)
+        => EnsureLostFocusSubscribed(fe, GetOrCreateEventState(fe), handler);
+
+    /// <summary>
+    /// Spec 047 §9.2 / §14 Phase 1 (1.7) — anchor a strongly-typed
+    /// trampoline delegate to the control's per-control event payload box
+    /// so the GC keeps the captured closure alive while WinUI's
+    /// subscription list holds the native side. Pool reset clears the
+    /// box on return.
+    /// </summary>
+    internal static void AnchorCustomEventTrampoline(FrameworkElement fe, Delegate trampoline)
+    {
+        var state = GetOrCreateReactorState(fe);
+        if (state.ControlEventState is not ControlEventStateBox box
+            || box.HandlerType != typeof(V1Protocol.CustomEventAnchorPayload))
+        {
+            box = new ControlEventStateBox
+            {
+                HandlerType = typeof(V1Protocol.CustomEventAnchorPayload),
+                Payload = new V1Protocol.CustomEventAnchorPayload()
+            };
+            state.ControlEventState = box;
+        }
+        ((V1Protocol.CustomEventAnchorPayload)box.Payload).Trampolines.Add(trampoline);
+    }
+
+    /// <summary>
+    /// Spec 047 §9.2 / §14 Phase 1 — get-or-create a typed per-control event
+    /// payload (e.g. <c>ToggleSwitchEventPayload</c>). The payload survives
+    /// pool rent/return cycles so trampolines wired once per control lifetime
+    /// stay alive (mirrors the legacy <c>EventHandlerState</c> "stable
+    /// trampoline + mutable Current* slot" pattern documented in
+    /// <c>Reconciler.cs:3266-3289</c>). Authors of built-in ports use this
+    /// instead of <see cref="V1Protocol.ReactorBinding{TElement}.OnCustomEvent"/>
+    /// for the seven audited control-intrinsic events — see
+    /// <c>ControlEventPayloads.cs</c>.
+    /// </summary>
+    internal static T GetOrCreateControlEventPayload<T>(FrameworkElement fe) where T : class, new()
+    {
+        var state = GetOrCreateReactorState(fe);
+        if (state.ControlEventState is ControlEventStateBox existing
+            && existing.HandlerType == typeof(T))
+        {
+            return (T)existing.Payload;
+        }
+        var payload = new T();
+        state.ControlEventState = new ControlEventStateBox
+        {
+            HandlerType = typeof(T),
+            Payload = payload,
+        };
+        return payload;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Disposable wrappers for V1 MountContext (1.6)
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.6) — typed context push that returns an
+    /// <see cref="IDisposable"/> the handler disposes when its scope ends.
+    /// The underlying scope is the same one used by built-in ContextProvider
+    /// elements.
+    /// </summary>
+    internal IDisposable PushContextDisposable<T>(Context<T> context, T value)
+    {
+        var dict = new Dictionary<ContextBase, object?>(1) { [context] = value };
+        _contextScope.Push(dict);
+        return new PopOnDispose(_contextScope, 1);
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.6) — push a stagger scope for child enter
+    /// transitions. Returns an <see cref="IDisposable"/> that pops the
+    /// scope on dispose.
+    /// </summary>
+    internal IDisposable PushStaggerScopeDisposable(TimeSpan delay)
+    {
+        PushStaggerScope(delay);
+        return new PopStaggerOnDispose();
+    }
+
+    private sealed class PopOnDispose : IDisposable
+    {
+        private ContextScope? _scope;
+        private readonly int _count;
+        public PopOnDispose(ContextScope scope, int count) { _scope = scope; _count = count; }
+        public void Dispose()
+        {
+            var s = _scope;
+            if (s is null) return;
+            _scope = null;
+            s.Pop(_count);
+        }
+    }
+
+    private sealed class PopStaggerOnDispose : IDisposable
+    {
+        private bool _disposed;
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            PopStaggerScope();
+        }
     }
 
     internal interface ITypeRegistration
@@ -1113,6 +1502,16 @@ public sealed partial class Reconciler : IDisposable
             return; // Children already handled above; don't recurse into Grid children again
         }
 
+        // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount dispatch. Only
+        // active when the feature flag is ON for this reconciler instance.
+        if (UseV1Protocol
+            && control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
+            && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
+        {
+            v1Entry.Unmount(control, this);
+            return;
+        }
+
         // Check registered type unmount handlers via the attached element
         if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
             && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount)
@@ -1369,6 +1768,20 @@ public sealed partial class Reconciler : IDisposable
                 RaiseLayoutCostComponentUnmounted(control);
         }
 
+        // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount on the
+        // UnmountAndCollect path. Mirrors the legacy registry behavior:
+        // run the handler's Unmount then collect the host control for
+        // pooling without recursing into children.
+        if (UseV1Protocol
+            && control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
+            && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
+        {
+            v1Entry.Unmount(control, this);
+            if (control is FrameworkElement v1Pool)
+                toPool.Add(v1Pool);
+            return;
+        }
+
         if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
             && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount)
         {
@@ -1425,6 +1838,38 @@ public sealed partial class Reconciler : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Spec 047 §14 Phase 1 — child-slot reconciliation used by the V1
+    /// <c>ChildrenStrategy</c> dispatch (SingleContent, NamedSlots). Mirrors
+    /// legacy <c>ReconcileChild</c> semantics: structural <c>Update</c> when
+    /// <see cref="CanUpdate"/> matches, fresh <c>Mount</c> otherwise, and
+    /// <c>Unmount</c> when the slot is being cleared. Returns the
+    /// <see cref="UIElement"/> the caller should write back into the slot
+    /// (or null when the slot should be cleared).
+    ///
+    /// <para>This exists because the naive replace in early Phase 1
+    /// (<c>MountChild</c> + <c>SetChild</c> without comparing old vs new)
+    /// destroys descendant state slots on every parent re-render — see the
+    /// DynDock / KLR_FlexColumn regressions in
+    /// <c>docs/specs/tasks/047-extensible-control-model-phase1-implementation.md</c>
+    /// (Phase 1 known defects).</para>
+    /// </summary>
+    internal UIElement? ReconcileV1Child(Element? oldChild, Element? newChild, UIElement? existing, Action requestRerender)
+    {
+        if (newChild is null)
+        {
+            if (existing is not null) Unmount(existing);
+            return null;
+        }
+        if (oldChild is not null && existing is not null && CanUpdate(oldChild, newChild))
+        {
+            var replacement = Update(oldChild, newChild, existing, requestRerender);
+            return replacement ?? existing;
+        }
+        if (existing is not null) Unmount(existing);
+        return Mount(newChild, requestRerender);
+    }
+
     // ════════════════════════════════════════════════════════════════════
     //  Shared helpers (used by Mount + Update)
     // ════════════════════════════════════════════════════════════════════
@@ -1439,7 +1884,15 @@ public sealed partial class Reconciler : IDisposable
         return true;
     }
 
-    internal static void ApplySetters<T>(Action<T>[] setters, T control) where T : class
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Runs each setter
+    /// inside the §8.2 echo-suppression scope so user-authored
+    /// <c>.Set(c =&gt; c.IsOn = true)</c> writes don't echo through the
+    /// engine-wired OnXChanged callback. Provisional API;
+    /// see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    public static void ApplySetters<T>(Action<T>[] setters, T control) where T : class
     {
         if (setters.Length == 0) return;
         // §8.2 — run setters inside the echo-suppression scope so that a
@@ -1474,7 +1927,15 @@ public sealed partial class Reconciler : IDisposable
     // click { selector: "[name='+ 1']" } and a screen reader saying "+ 1" both work
     // without the author having to say so twice. Skips when the author already set
     // an AutomationName via modifier or setter — explicit always wins.
-    internal static void ApplyDefaultAutomationName(FrameworkElement fe, string? caption)
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Mirrors a control's
+    /// caption into <c>AutomationProperties.Name</c> when the author has not set
+    /// one explicitly, so UIA clients that read the attached property directly
+    /// (not via the peer) still find the name. Provisional API;
+    /// see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    public static void ApplyDefaultAutomationName(FrameworkElement fe, string? caption)
     {
         if (fe is null) return;
         if (string.IsNullOrWhiteSpace(caption)) return;
@@ -1490,7 +1951,14 @@ public sealed partial class Reconciler : IDisposable
     // provenance, so the rule is: overwrite when the current value is empty or
     // equals the previous caption — any other value means the author intervened
     // (via modifier or setter) and we leave it alone.
-    internal static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Update-time pair
+    /// for <see cref="ApplyDefaultAutomationName"/>; overwrites the
+    /// automation Name only when it matches the previous caption (i.e. the
+    /// author hasn't intervened). Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    public static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
     {
         if (fe is null) return;
         if (string.IsNullOrWhiteSpace(newCaption)) return;
@@ -3327,7 +3795,14 @@ public sealed partial class Reconciler : IDisposable
     /// against the app theme, not per-element RequestedTheme overrides — for subtree theme
     /// overrides, rely on native WinUI control theming instead of ThemeRef bindings.
     /// </summary>
-    private static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from private (per audit
+    /// existing-api-surface.md). Applies <see cref="ThemeRef"/> bindings as
+    /// a synthesized <c>{ThemeResource}</c>-driven Style. Provisional API;
+    /// see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    public static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
     {
         var targetType = GetStyleTargetType(fe);
         if (targetType is null) return;
@@ -3429,7 +3904,13 @@ public sealed partial class Reconciler : IDisposable
     /// <see cref="ThemeRef"/>-based values are resolved from
     /// <c>Application.Current.Resources</c>.
     /// </summary>
-    private static void ApplyResourceOverrides(
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from private (per audit
+    /// existing-api-surface.md). Applies per-control resource overrides
+    /// (lightweight styling). Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    public static void ApplyResourceOverrides(
         FrameworkElement fe,
         Microsoft.UI.Reactor.Elements.ResourceOverrides? oldOverrides,
         Microsoft.UI.Reactor.Elements.ResourceOverrides? newOverrides)

@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Spec 047 §14 Phase 1 (1.16) — external-assembly proof.
+
+    This library lives OUTSIDE of Reactor.dll and references it as a regular
+    NuGet/project reference. There is NO InternalsVisibleTo from Reactor to
+    this assembly — the very fact that this project compiles proves that the
+    public V1 protocol surface is sufficient for an external author to ship
+    a hand-coded handler.
+
+    Phase 1 exit gate item 2: "≥ 1 of the six ported controls lives in a
+    separate assembly, registered via public API, no InternalsVisibleTo."
+
+    The hosted control (MarqueeControl) is a deliberate non-built-in: it
+    has one value-bearing prop and one CLR event, and exercises the same
+    invariants a built-in handler does (RentControl, BindFor.WriteSuppressed,
+    BindFor.OnCustomEvent, ApplySetters). See MarqueeHandler.cs.
+
+    The deliberate test-only path was picked over the Win2D variant
+    because Win2D introduces a heavy native (Microsoft.Graphics.Win2D)
+    dependency that complicates AOT publishing; the L13/L14 macros and
+    the AOT publish gate (1.17) need a hermetic split-library shape.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <RootNamespace>Reactor.External.TestControl</RootNamespace>
+    <AssemblyName>Reactor.External.TestControl</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Platforms>x64;ARM64</Platforms>
+    <IsPackable>false</IsPackable>
+    <!-- Override Directory.Build.props default — a class library does not
+         bundle the WinUI runtime; the consuming app does. -->
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+
+    <!-- 1.17 AOT/trim story: opt into both PublishTrimmed and
+         IsAotCompatible so the trim/AOT analyzers run during build, and
+         this library is ready for the 1.17 publish-gate test. If WinUI's
+         own dependencies fight either flag in a future SDK uplift, the
+         remediation lives in 1.17, not here. -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <IsAotCompatible>true</IsAotCompatible>
+
+    <!-- External authors consciously opt into the provisional V1 surface
+         by suppressing REACTOR_V1_PREVIEW. This is the same pattern the
+         in-tree fixtures use; the diagnostic still fires for consumers
+         that haven't opted in. -->
+    <NoWarn>$(NoWarn);REACTOR_V1_PREVIEW</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Regular project reference — NOT InternalsVisibleTo. Reactor.dll's
+         public surface alone must be sufficient. -->
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+  </ItemGroup>
+
+</Project>

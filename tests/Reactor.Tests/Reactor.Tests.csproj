@@ -11,6 +11,9 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <OutputType>Library</OutputType>
+    <!-- Spec 047 §14 Phase 1 (1.3): suppress REACTOR_V1_PREVIEW so in-tree
+         tests can call the provisional promoted helpers without churn. -->
+    <NoWarn>$(NoWarn);REACTOR_V1_PREVIEW</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

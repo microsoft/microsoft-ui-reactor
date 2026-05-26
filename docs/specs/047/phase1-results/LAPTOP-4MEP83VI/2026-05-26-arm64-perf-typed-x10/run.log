@@ -1,0 +1,105 @@
+=== M4 M5 @ iter=5000 reps=10 ===
+[PerfBench.ControlModel] writing C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-x10\perfbench-m4-m5.jsonl
+[run] M4 Dispatch_Switch_Cold Direct
+  rep=0 mean=34044.1ns alloc=5096824B gen0=1 
+  rep=1 mean=31949.9ns alloc=5096824B gen0=1 
+  rep=2 mean=30881.4ns alloc=5097368B gen0=1 
+  rep=3 mean=32648.5ns alloc=5096824B gen0=1 
+  rep=4 mean=32215.4ns alloc=5096824B gen0=1 
+  rep=5 mean=32164.9ns alloc=5096824B gen0=1 
+  rep=6 mean=35323.8ns alloc=5097088B gen0=1 
+  rep=7 mean=32166.8ns alloc=5096824B gen0=1 
+  rep=8 mean=40013.1ns alloc=5096824B gen0=1 
+  rep=9 mean=37680.0ns alloc=5096824B gen0=1 
+[run] M4 Dispatch_Switch_Cold ReactorToday
+  rep=0 mean=113327.5ns alloc=10207576B gen0=6 
+  rep=1 mean=126384.1ns alloc=10301912B gen0=6 
+  rep=2 mean=145856.3ns alloc=10208144B gen0=6 
+  rep=3 mean=134207.5ns alloc=10281736B gen0=5 
+  rep=4 mean=160234.8ns alloc=10088568B gen0=6 
+  rep=5 mean=178260.8ns alloc=10289384B gen0=6 
+  rep=6 mean=187600.7ns alloc=10104856B gen0=6 
+  rep=7 mean=196813.9ns alloc=10289384B gen0=6 
+  rep=8 mean=209392.8ns alloc=10186984B gen0=6 
+  rep=9 mean=219556.8ns alloc=10289112B gen0=6 
+[run] M4 Dispatch_Switch_Cold ReactorV2
+  rep=0 mean=296966.1ns alloc=12764208B gen0=7 
+  rep=1 mean=270699.3ns alloc=12603320B gen0=6 
+  rep=2 mean=286280.0ns alloc=12735672B gen0=6 
+  rep=3 mean=341904.6ns alloc=12676128B gen0=7 
+  rep=4 mean=314270.5ns alloc=12532576B gen0=6 
+  rep=5 mean=369998.1ns alloc=12655960B gen0=7 
+  rep=6 mean=329359.3ns alloc=12674128B gen0=6 
+  rep=7 mean=411959.2ns alloc=12655544B gen0=7 
+  rep=8 mean=379760.6ns alloc=12592728B gen0=6 
+  rep=9 mean=423608.2ns alloc=12654376B gen0=7 
+[run] M5 Dispatch_Switch_Warm Direct
+  rep=0 mean=22464.1ns alloc=5096744B gen0=1 
+  rep=1 mean=24245.8ns alloc=5096744B gen0=1 
+  rep=2 mean=29137.2ns alloc=5096744B gen0=1 
+  rep=3 mean=26940.6ns alloc=5096744B gen0=1 
+  rep=4 mean=26508.7ns alloc=5096744B gen0=1 
+  rep=5 mean=33177.5ns alloc=5096744B gen0=1 
+  rep=6 mean=30190.9ns alloc=5096744B gen0=1 
+  rep=7 mean=31422.1ns alloc=5096744B gen0=1 
+  rep=8 mean=33276.1ns alloc=5096744B gen0=1 
+  rep=9 mean=35016.7ns alloc=5096744B gen0=1 
+[run] M5 Dispatch_Switch_Warm ReactorToday
+  rep=0 mean=83400.6ns alloc=10448840B gen0=6 
+  rep=1 mean=94923.9ns alloc=10289384B gen0=6 
+  rep=2 mean=112063.6ns alloc=10187400B gen0=6 
+  rep=3 mean=109432.5ns alloc=10281736B gen0=5 
+  rep=4 mean=134119.0ns alloc=10043312B gen0=6 
+  rep=5 mean=143941.5ns alloc=10268800B gen0=6 
+  rep=6 mean=162715.5ns alloc=10125440B gen0=6 
+  rep=7 mean=175815.0ns alloc=10268800B gen0=6 
+  rep=8 mean=193551.1ns alloc=10207568B gen0=6 
+  rep=9 mean=168878.0ns alloc=10282152B gen0=5 
+[run] M5 Dispatch_Switch_Warm ReactorV2
+  rep=0 mean=260660.7ns alloc=12655960B gen0=7 
+  rep=1 mean=253215.8ns alloc=12510184B gen0=6 
+  rep=2 mean=297205.8ns alloc=12655960B gen0=7 
+  rep=3 mean=283421.3ns alloc=12756256B gen0=6 
+  rep=4 mean=281368.0ns alloc=12756256B gen0=6 
+  rep=5 mean=336307.0ns alloc=12491600B gen0=7 
+  rep=6 mean=311815.4ns alloc=12755984B gen0=6 
+  rep=7 mean=324469.1ns alloc=12757088B gen0=6 
+  rep=8 mean=344693.4ns alloc=12653544B gen0=6 
+  rep=9 mean=405504.0ns alloc=12676544B gen0=7 
+[done] C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-x10\perfbench-m4-m5.jsonl
+=== M11 @ iter=1000 reps=10 ===
+[PerfBench.ControlModel] writing C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-x10\perfbench-m11.jsonl
+[run] M11 ModifierEHS_Frequency Direct
+  rep=0 mean=24.5ns alloc=40B gen0=0 
+  rep=1 mean=22.7ns alloc=40B gen0=0 
+  rep=2 mean=22.0ns alloc=40B gen0=0 
+  rep=3 mean=21.9ns alloc=40B gen0=0 
+  rep=4 mean=21.8ns alloc=40B gen0=0 
+  rep=5 mean=21.7ns alloc=40B gen0=0 
+  rep=6 mean=20.3ns alloc=40B gen0=0 
+  rep=7 mean=20.3ns alloc=40B gen0=0 
+  rep=8 mean=25.2ns alloc=40B gen0=0 
+  rep=9 mean=1634.4ns alloc=40B gen0=0 
+[run] M11 ModifierEHS_Frequency ReactorToday
+  rep=0 mean=38779.5ns alloc=1766480B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=1 mean=40512.6ns alloc=1670912B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=2 mean=41026.9ns alloc=1758264B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=3 mean=36696.6ns alloc=1687320B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=4 mean=41058.4ns alloc=1758264B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=5 mean=38054.7ns alloc=1670912B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=6 mean=47573.9ns alloc=1758528B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=7 mean=49530.2ns alloc=1670912B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=8 mean=44521.7ns alloc=1791056B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=9 mean=44808.6ns alloc=1670912B gen0=0 counter[ModifierEHSAllocations]=-1
+[run] M11 ModifierEHS_Frequency ReactorV2
+  rep=0 mean=43338.0ns alloc=2723752B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=1 mean=42931.8ns alloc=2451768B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=2 mean=39268.1ns alloc=2723752B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=3 mean=34611.9ns alloc=2451768B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=4 mean=36495.0ns alloc=2724016B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=5 mean=35990.5ns alloc=2451768B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=6 mean=37431.0ns alloc=2789312B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=7 mean=49763.2ns alloc=2451768B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=8 mean=38131.0ns alloc=2679160B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=9 mean=37291.5ns alloc=2384568B gen0=0 counter[ModifierEHSAllocations]=-1
+[done] C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-x10\perfbench-m11.jsonl

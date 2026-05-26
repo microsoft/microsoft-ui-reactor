@@ -1,0 +1,195 @@
+=== Launch 1 / 5 starting at 0.0017917s ===
+[PerfBench.ControlModel] writing C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-5x5\perfbench-m4-m5-launch1.jsonl
+[run] M4 Dispatch_Switch_Cold Direct
+  rep=0 mean=28221.9ns alloc=5096824B gen0=1 
+  rep=1 mean=28318.6ns alloc=5097088B gen0=1 
+  rep=2 mean=29065.9ns alloc=5096824B gen0=1 
+  rep=3 mean=30068.1ns alloc=5096824B gen0=1 
+  rep=4 mean=31622.4ns alloc=5096824B gen0=1 
+[run] M4 Dispatch_Switch_Cold ReactorToday
+  rep=0 mean=79550.6ns alloc=10462576B gen0=6 
+  rep=1 mean=86593.0ns alloc=10556912B gen0=6 
+  rep=2 mean=105833.6ns alloc=10267432B gen0=6 
+  rep=3 mean=96271.5ns alloc=10286664B gen0=5 
+  rep=4 mean=112078.0ns alloc=10089024B gen0=6 
+[run] M4 Dispatch_Switch_Cold ReactorV2
+  rep=0 mean=151095.8ns alloc=10195808B gen0=6 
+  rep=1 mean=161447.4ns alloc=10257352B gen0=6 
+  rep=2 mean=173460.9ns alloc=10113576B gen0=6 
+  rep=3 mean=183222.2ns alloc=10257352B gen0=6 
+  rep=4 mean=195218.0ns alloc=10244672B gen0=6 
+[run] M5 Dispatch_Switch_Warm Direct
+  rep=0 mean=56070.4ns alloc=5096744B gen0=1 
+  rep=1 mean=59093.9ns alloc=5096744B gen0=1 
+  rep=2 mean=59173.7ns alloc=5096744B gen0=1 
+  rep=3 mean=60974.2ns alloc=5096744B gen0=1 
+  rep=4 mean=63309.0ns alloc=5096744B gen0=1 
+[run] M5 Dispatch_Switch_Warm ReactorToday
+  rep=0 mean=254631.1ns alloc=10207256B gen0=6 
+  rep=1 mean=268360.1ns alloc=10268800B gen0=6 
+  rep=2 mean=278922.2ns alloc=10207984B gen0=6 
+  rep=3 mean=289229.1ns alloc=10289384B gen0=6 
+  rep=4 mean=302711.5ns alloc=10104856B gen0=6 
+[run] M5 Dispatch_Switch_Warm ReactorV2
+  rep=0 mean=328845.8ns alloc=10278352B gen0=6 
+  rep=1 mean=344433.3ns alloc=10256936B gen0=6 
+  rep=2 mean=354454.9ns alloc=10113304B gen0=6 
+  rep=3 mean=364729.5ns alloc=10519104B gen0=6 
+  rep=4 mean=382817.8ns alloc=10113576B gen0=6 
+[done] C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-5x5\perfbench-m4-m5-launch1.jsonl
+=== Launch 2 / 5 starting at 52.8397083s ===
+[PerfBench.ControlModel] writing C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-5x5\perfbench-m4-m5-launch2.jsonl
+[run] M4 Dispatch_Switch_Cold Direct
+  rep=0 mean=27453.3ns alloc=5096824B gen0=1 
+  rep=1 mean=29750.2ns alloc=5097088B gen0=1 
+  rep=2 mean=30324.8ns alloc=5096824B gen0=1 
+  rep=3 mean=32124.7ns alloc=5096824B gen0=1 
+  rep=4 mean=30797.1ns alloc=5096824B gen0=1 
+[run] M4 Dispatch_Switch_Cold ReactorToday
+  rep=0 mean=54723.0ns alloc=10381264B gen0=6 
+  rep=1 mean=65439.7ns alloc=10308656B gen0=6 
+  rep=2 mean=76577.2ns alloc=10208304B gen0=6 
+  rep=3 mean=79058.1ns alloc=10281976B gen0=5 
+  rep=4 mean=99334.8ns alloc=10088608B gen0=6 
+[run] M4 Dispatch_Switch_Cold ReactorV2
+  rep=0 mean=134313.7ns alloc=10195392B gen0=6 
+  rep=1 mean=146231.4ns alloc=10256936B gen0=6 
+  rep=2 mean=157880.4ns alloc=10113576B gen0=6 
+  rep=3 mean=179743.7ns alloc=10257352B gen0=6 
+  rep=4 mean=182329.2ns alloc=10244672B gen0=6 
+[run] M5 Dispatch_Switch_Warm Direct
+  rep=0 mean=53907.2ns alloc=5096744B gen0=1 
+  rep=1 mean=54388.8ns alloc=5096744B gen0=1 
+  rep=2 mean=56710.5ns alloc=5096744B gen0=1 
+  rep=3 mean=58107.8ns alloc=5096744B gen0=1 
+  rep=4 mean=60585.2ns alloc=5096744B gen0=1 
+[run] M5 Dispatch_Switch_Warm ReactorToday
+  rep=0 mean=248690.0ns alloc=10207256B gen0=6 
+  rep=1 mean=257388.9ns alloc=10268800B gen0=6 
+  rep=2 mean=268533.1ns alloc=10207984B gen0=6 
+  rep=3 mean=278771.9ns alloc=10289384B gen0=6 
+  rep=4 mean=295716.6ns alloc=10104856B gen0=6 
+[run] M5 Dispatch_Switch_Warm ReactorV2
+  rep=0 mean=328060.6ns alloc=10277520B gen0=6 
+  rep=1 mean=332982.5ns alloc=10257216B gen0=6 
+  rep=2 mean=343495.0ns alloc=10113304B gen0=6 
+  rep=3 mean=356413.4ns alloc=10519104B gen0=6 
+  rep=4 mean=376535.8ns alloc=10113992B gen0=6 
+[done] C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-5x5\perfbench-m4-m5-launch2.jsonl
+=== Launch 3 / 5 starting at 104.3458008s ===
+[PerfBench.ControlModel] writing C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-5x5\perfbench-m4-m5-launch3.jsonl
+[run] M4 Dispatch_Switch_Cold Direct
+  rep=0 mean=28601.8ns alloc=5096824B gen0=1 
+  rep=1 mean=30656.9ns alloc=5097088B gen0=1 
+  rep=2 mean=30745.7ns alloc=5096824B gen0=1 
+  rep=3 mean=29571.5ns alloc=5096824B gen0=1 
+  rep=4 mean=29556.3ns alloc=5096824B gen0=1 
+[run] M4 Dispatch_Switch_Cold ReactorToday
+  rep=0 mean=73895.2ns alloc=10214272B gen0=6 
+  rep=1 mean=84535.2ns alloc=10301912B gen0=6 
+  rep=2 mean=95282.5ns alloc=10208304B gen0=6 
+  rep=3 mean=93742.8ns alloc=10281976B gen0=5 
+  rep=4 mean=116367.3ns alloc=10088528B gen0=6 
+[run] M4 Dispatch_Switch_Cold ReactorV2
+  rep=0 mean=148143.4ns alloc=10195392B gen0=6 
+  rep=1 mean=170665.5ns alloc=10256936B gen0=6 
+  rep=2 mean=208045.8ns alloc=10113992B gen0=6 
+  rep=3 mean=223520.1ns alloc=10256936B gen0=6 
+  rep=4 mean=240575.6ns alloc=10244672B gen0=6 
+[run] M5 Dispatch_Switch_Warm Direct
+  rep=0 mean=68505.8ns alloc=5096744B gen0=1 
+  rep=1 mean=71152.3ns alloc=5096744B gen0=1 
+  rep=2 mean=69958.4ns alloc=5096744B gen0=1 
+  rep=3 mean=71340.5ns alloc=5096744B gen0=1 
+  rep=4 mean=76680.9ns alloc=5096744B gen0=1 
+[run] M5 Dispatch_Switch_Warm ReactorToday
+  rep=0 mean=262304.8ns alloc=10207256B gen0=6 
+  rep=1 mean=269683.5ns alloc=10268800B gen0=6 
+  rep=2 mean=281534.4ns alloc=10207984B gen0=6 
+  rep=3 mean=293932.7ns alloc=10290216B gen0=6 
+  rep=4 mean=309486.6ns alloc=10104856B gen0=6 
+[run] M5 Dispatch_Switch_Warm ReactorV2
+  rep=0 mean=339209.9ns alloc=10277520B gen0=6 
+  rep=1 mean=351074.9ns alloc=10257352B gen0=6 
+  rep=2 mean=363376.9ns alloc=10113992B gen0=6 
+  rep=3 mean=370402.6ns alloc=10519104B gen0=6 
+  rep=4 mean=386446.4ns alloc=10113304B gen0=6 
+[done] C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-5x5\perfbench-m4-m5-launch3.jsonl
+=== Launch 4 / 5 starting at 162.8759464s ===
+[PerfBench.ControlModel] writing C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-5x5\perfbench-m4-m5-launch4.jsonl
+[run] M4 Dispatch_Switch_Cold Direct
+  rep=0 mean=28301.4ns alloc=5096824B gen0=1 
+  rep=1 mean=29156.6ns alloc=5097088B gen0=1 
+  rep=2 mean=30189.1ns alloc=5096824B gen0=1 
+  rep=3 mean=29609.0ns alloc=5096824B gen0=1 
+  rep=4 mean=29268.1ns alloc=5096824B gen0=1 
+[run] M4 Dispatch_Switch_Cold ReactorToday
+  rep=0 mean=63019.4ns alloc=10288288B gen0=6 
+  rep=1 mean=72288.9ns alloc=10310768B gen0=6 
+  rep=2 mean=83679.8ns alloc=10208304B gen0=6 
+  rep=3 mean=85339.5ns alloc=10281976B gen0=5 
+  rep=4 mean=107221.5ns alloc=10088608B gen0=6 
+[run] M4 Dispatch_Switch_Cold ReactorV2
+  rep=0 mean=106103.3ns alloc=10195392B gen0=6 
+  rep=1 mean=117798.6ns alloc=10256936B gen0=6 
+  rep=2 mean=127806.0ns alloc=10113992B gen0=6 
+  rep=3 mean=142866.9ns alloc=10256936B gen0=6 
+  rep=4 mean=156058.7ns alloc=10244672B gen0=6 
+[run] M5 Dispatch_Switch_Warm Direct
+  rep=0 mean=46571.0ns alloc=5096744B gen0=1 
+  rep=1 mean=47830.8ns alloc=5096744B gen0=1 
+  rep=2 mean=50854.0ns alloc=5096744B gen0=1 
+  rep=3 mean=49752.6ns alloc=5096744B gen0=1 
+  rep=4 mean=52190.3ns alloc=5096744B gen0=1 
+[run] M5 Dispatch_Switch_Warm ReactorToday
+  rep=0 mean=200557.0ns alloc=10207256B gen0=6 
+  rep=1 mean=213330.6ns alloc=10268800B gen0=6 
+  rep=2 mean=223382.1ns alloc=10207984B gen0=6 
+  rep=3 mean=234646.8ns alloc=10289384B gen0=6 
+  rep=4 mean=246533.3ns alloc=10104856B gen0=6 
+[run] M5 Dispatch_Switch_Warm ReactorV2
+  rep=0 mean=47866.9ns alloc=10277520B gen0=6 
+  rep=1 mean=58634.1ns alloc=10256936B gen0=6 
+  rep=2 mean=68306.8ns alloc=10113576B gen0=6 
+  rep=3 mean=82123.8ns alloc=10519104B gen0=6 
+  rep=4 mean=97750.8ns alloc=10113576B gen0=6 
+[done] C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-5x5\perfbench-m4-m5-launch4.jsonl
+=== Launch 5 / 5 starting at 192.0412292s ===
+[PerfBench.ControlModel] writing C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-5x5\perfbench-m4-m5-launch5.jsonl
+[run] M4 Dispatch_Switch_Cold Direct
+  rep=0 mean=28045.3ns alloc=5096824B gen0=1 
+  rep=1 mean=28394.7ns alloc=5097088B gen0=1 
+  rep=2 mean=31745.7ns alloc=5096824B gen0=1 
+  rep=3 mean=32135.8ns alloc=5096824B gen0=1 
+  rep=4 mean=31932.1ns alloc=5096824B gen0=1 
+[run] M4 Dispatch_Switch_Cold ReactorToday
+  rep=0 mean=51443.6ns alloc=10462576B gen0=6 
+  rep=1 mean=64675.1ns alloc=10435376B gen0=6 
+  rep=2 mean=70973.6ns alloc=10212640B gen0=6 
+  rep=3 mean=76192.9ns alloc=10282392B gen0=5 
+  rep=4 mean=94749.0ns alloc=10089024B gen0=6 
+[run] M4 Dispatch_Switch_Cold ReactorV2
+  rep=0 mean=102302.8ns alloc=10195808B gen0=6 
+  rep=1 mean=114349.3ns alloc=10257352B gen0=6 
+  rep=2 mean=130329.5ns alloc=10113576B gen0=6 
+  rep=3 mean=139595.5ns alloc=10257352B gen0=6 
+  rep=4 mean=152552.9ns alloc=10244672B gen0=6 
+[run] M5 Dispatch_Switch_Warm Direct
+  rep=0 mean=52572.4ns alloc=5096744B gen0=1 
+  rep=1 mean=51780.5ns alloc=5096744B gen0=1 
+  rep=2 mean=52409.2ns alloc=5096744B gen0=1 
+  rep=3 mean=52680.1ns alloc=5096744B gen0=1 
+  rep=4 mean=54779.6ns alloc=5096744B gen0=1 
+[run] M5 Dispatch_Switch_Warm ReactorToday
+  rep=0 mean=217469.2ns alloc=10207256B gen0=6 
+  rep=1 mean=230765.4ns alloc=10268800B gen0=6 
+  rep=2 mean=243268.3ns alloc=10207984B gen0=6 
+  rep=3 mean=220605.9ns alloc=10281736B gen0=5 
+  rep=4 mean=265139.8ns alloc=10022728B gen0=6 
+[run] M5 Dispatch_Switch_Warm ReactorV2
+  rep=0 mean=301865.9ns alloc=10195392B gen0=6 
+  rep=1 mean=311194.3ns alloc=10256936B gen0=6 
+  rep=2 mean=329815.2ns alloc=10113992B gen0=6 
+  rep=3 mean=334489.8ns alloc=10519104B gen0=6 
+  rep=4 mean=346172.3ns alloc=10113576B gen0=6 
+[done] C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed-5x5\perfbench-m4-m5-launch5.jsonl

@@ -208,7 +208,13 @@ internal sealed partial class BenchHostApp : Microsoft.UI.Xaml.Application
                 BenchContext Factory()
                 {
                     benchParent.Children.Clear();
-                    var rec = new Reconciler();
+                    // Spec 047 §14 Phase 1 — ReactorV2 now actually exercises
+                    // the V1 protocol path. Explicit ctor flag keeps Today
+                    // pinned to legacy regardless of any ambient AppContext
+                    // switch, so V1=ON vs V1=OFF is a clean apples-to-apples
+                    // single-run comparison.
+                    bool useV1 = variant == BenchVariant.ReactorV2;
+                    var rec = new Reconciler(logger: null, useV1Protocol: useV1);
                     if (bench.Id == "M6")
                     {
                         rec.RegisterType<M06_DispatchExternalType.ExtElement, TextBlock>(

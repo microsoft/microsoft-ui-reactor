@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Spec 047 §14 Phase 1 (1.10) — fixture project for the
+      Reactor.Compile.Analyzer Roslyn analyzer. Hosted on net8.0 (not
+      net10.0-windows) because the analyzer targets netstandard2.0 and
+      its tests don't need WinUI runtime types — every WinUI shape used
+      by REACTOR1002 is stubbed in the test source string passed to
+      `CSharpAnalyzerTest`, the way other Reactor analyzer tests stub
+      their dependencies.
+    -->
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Reactor.Compile.Analyzer.Tests</AssemblyName>
+    <RootNamespace>Microsoft.UI.Reactor.Compile.Analyzer.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.2" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The analyzer is referenced as a normal project — the test harness
+      (`Microsoft.CodeAnalysis.CSharp.Analyzer.Testing`) drives it via
+      reflection over the `DiagnosticAnalyzer`-typed test parameter, so
+      a plain ProjectReference is what we want here. Marked
+      ReferenceOutputAssembly=false / OutputItemType=Analyzer so the
+      analyzer dll doesn't get copied next to the test dll as a runtime
+      assembly. The harness loads the analyzer type from the test assembly's
+      compile-time reference, which works either way; we keep the
+      Analyzer ItemGroup form for shape parity with downstream consumers.
+    -->
+    <ProjectReference Include="..\..\src\Reactor.Compile.Analyzer\Reactor.Compile.Analyzer.csproj" />
+  </ItemGroup>
+
+</Project>
