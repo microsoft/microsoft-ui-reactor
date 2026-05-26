@@ -566,6 +566,77 @@ internal static class WindowModelFixtures
         }
     }
 
+    /// <summary>
+    /// Cross-field invariant: <c>IgnorePointerInput=true</c> with
+    /// <c>Opacity&gt;=1.0</c> is rejected by <c>WindowSpec.Validate</c>
+    /// (the OS only honors WS_EX_TRANSPARENT on layered windows). And
+    /// <c>SetOpacity(1.0)</c> on a window that had IgnorePointerInput
+    /// enabled must strip both WS_EX_LAYERED and WS_EX_TRANSPARENT so
+    /// the extended-style bits don't stay in an inconsistent combo.
+    /// </summary>
+    internal class WindowOpacityIgnorePointerInvariants(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            // Validate() rejects the invalid combo before any HWND is built.
+            bool specThrew = false;
+            try
+            {
+                new WindowSpec { IgnorePointerInput = true, Opacity = 1.0 }.Validate();
+            }
+            catch (ArgumentException) { specThrew = true; }
+            H.Check("WindowAttr_Invariant_SpecValidateThrows", specThrew);
+
+            // Live path: open layered + transparent, then drive Opacity
+            // back to 1.0 and confirm BOTH bits cleared and _spec mirrored.
+            var win = await OpenAndSettle(
+                new WindowSpec
+                {
+                    Title = "Invariants Test",
+                    Width = 320,
+                    Height = 200,
+                    Opacity = 0.5,
+                    IgnorePointerInput = true,
+                },
+                () => new StubComponent());
+            try
+            {
+                var hwnd = HwndOf(win);
+                H.Check("WindowAttr_Invariant_LayeredAndTransparentAtSpec",
+                    WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_LAYERED)
+                    && WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_TRANSPARENT));
+
+                win.SetOpacity(1.0);
+                await Harness.Render();
+                H.Check("WindowAttr_Invariant_LayeredClearedAt1",
+                    !WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_LAYERED));
+                H.Check("WindowAttr_Invariant_TransparentClearedAt1",
+                    !WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_TRANSPARENT));
+                H.Check("WindowAttr_Invariant_SpecIgnorePointerFalse",
+                    !win.Spec.IgnorePointerInput);
+
+                // Now SetIgnorePointerInput(true) on the now-opaque window
+                // must throw — layered is gone.
+                bool mutatorThrew = false;
+                try { win.SetIgnorePointerInput(true); }
+                catch (InvalidOperationException) { mutatorThrew = true; }
+                H.Check("WindowAttr_Invariant_MutatorThrowsWhenNotLayered", mutatorThrew);
+
+                // Re-layer, then SetIgnorePointerInput(true) should succeed.
+                win.SetOpacity(0.5);
+                win.SetIgnorePointerInput(true);
+                H.Check("WindowAttr_Invariant_MutatorWorksAfterRelayer",
+                    WindowAttrInterop.HasFlag(hwnd, WindowAttrInterop.WS_EX_TRANSPARENT));
+            }
+            finally
+            {
+                await CloseAndSettle(win);
+            }
+        }
+    }
+
     internal class WindowNoActivateRoundTrip(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

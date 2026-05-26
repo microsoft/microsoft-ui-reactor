@@ -1002,12 +1002,18 @@ public sealed class ReactorWindow : IDisposable
         if (opacity >= 1.0)
         {
             // Strip WS_EX_LAYERED so the compositor fast-path is restored.
-            // No-op when it wasn't set (the common case).
-            if (isLayered)
-            {
-                nint cleared = (nint)((long)current & ~NativeOpacity.WS_EX_LAYERED);
-                _ = NativeOpacity.SetWindowLongPtr(_hwnd, NativeOpacity.GWL_EXSTYLE, cleared);
-            }
+            // Also strip WS_EX_TRANSPARENT — that style is only meaningful
+            // on layered windows, so leaving it set after un-layering would
+            // wedge the window in an inconsistent extended-style state.
+            // Mirror IgnorePointerInput=false into _spec so Update() diffs
+            // see the live state.
+            long currentBits = (long)current;
+            long strippedBits = currentBits & ~(NativeOpacity.WS_EX_LAYERED | NativeOpacity.WS_EX_TRANSPARENT);
+            if (strippedBits != currentBits)
+                _ = NativeOpacity.SetWindowLongPtr(_hwnd, NativeOpacity.GWL_EXSTYLE, (nint)strippedBits);
+            var prevSpec = Volatile.Read(ref _spec);
+            if (prevSpec.IgnorePointerInput)
+                Volatile.Write(ref _spec, prevSpec with { IgnorePointerInput = false });
             return;
         }
 
@@ -1046,15 +1052,31 @@ public sealed class ReactorWindow : IDisposable
     /// <summary>
     /// Toggle the <c>WS_EX_TRANSPARENT</c> extended style on the underlying
     /// HWND. When set, mouse events pass THROUGH the window to whatever's
-    /// underneath. Only effective on layered windows (i.e. paired with
-    /// <see cref="SetOpacity"/> &lt; 1.0). UI-thread only. No-op after disposal.
+    /// underneath. The window must already be layered (via
+    /// <see cref="SetOpacity"/> with a value &lt; 1.0) when enabling —
+    /// the OS only honors transparent on layered windows. UI-thread only.
+    /// No-op after disposal.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <paramref name="ignore"/> is true but the window is not
+    /// currently layered. Call <see cref="SetOpacity"/> with a value &lt; 1.0
+    /// first.
+    /// </exception>
     public void SetIgnorePointerInput(bool ignore)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetIgnorePointerInput));
         if (_disposed) return;
         var current = NativeOpacity.GetWindowLongPtr(_hwnd, NativeOpacity.GWL_EXSTYLE);
         long bits = (long)current;
+
+        // Enabling transparent on a non-layered window is a silent no-op at
+        // the OS level — reject up front rather than leave the caller with
+        // a flag that doesn't do anything.
+        if (ignore && (bits & NativeOpacity.WS_EX_LAYERED) == 0)
+            throw new InvalidOperationException(
+                "SetIgnorePointerInput(true) requires the window to be layered. " +
+                "Call SetOpacity with a value < 1.0 first.");
+
         long updated = ignore
             ? bits | NativeOpacity.WS_EX_TRANSPARENT
             : bits & ~NativeOpacity.WS_EX_TRANSPARENT;

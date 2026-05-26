@@ -125,12 +125,17 @@ public sealed record WindowSpec
 
     /// <summary>
     /// Apply the Win32 <c>WS_EX_TRANSPARENT</c> extended style so mouse events
-    /// pass THROUGH the window to whatever's underneath. Requires
-    /// <see cref="Opacity"/> &lt; 1.0 (the OS only honors transparent on
-    /// layered windows). Default false. Used by spec 045 §2.6 tear-off so
-    /// the drag preview doesn't block clicks on drop-target overlays
-    /// below it.
+    /// pass THROUGH the window to whatever's underneath. Default false.
+    /// Used by spec 045 §2.6 tear-off so the drag preview doesn't block
+    /// clicks on drop-target overlays below it.
     /// </summary>
+    /// <remarks>
+    /// <para>Requires <see cref="Opacity"/> &lt; 1.0 — the OS only honors
+    /// <c>WS_EX_TRANSPARENT</c> on layered windows. <see cref="Validate"/>
+    /// throws when this field is true with <c>Opacity == 1.0</c>; the
+    /// runtime mutator <c>ReactorWindow.SetIgnorePointerInput(true)</c>
+    /// also throws if the live window is not layered.</para>
+    /// </remarks>
     public bool IgnorePointerInput { get; init; }
 
     /// <summary>
@@ -182,5 +187,14 @@ public sealed record WindowSpec
         if (!(Opacity >= 0.0 && Opacity <= 1.0) || double.IsNaN(Opacity))
             throw new ArgumentException(
                 $"WindowSpec.Opacity ({Opacity}) must be in [0, 1].", nameof(Opacity));
+
+        // WS_EX_TRANSPARENT is only honored by the OS when WS_EX_LAYERED is
+        // also set; a non-layered window with the transparent style is a
+        // silent no-op for click-through. Reject up front rather than ship
+        // a misleading contract.
+        if (IgnorePointerInput && Opacity >= 1.0)
+            throw new ArgumentException(
+                "WindowSpec.IgnorePointerInput requires Opacity < 1.0 (click-through is only effective on layered windows).",
+                nameof(IgnorePointerInput));
     }
 }
