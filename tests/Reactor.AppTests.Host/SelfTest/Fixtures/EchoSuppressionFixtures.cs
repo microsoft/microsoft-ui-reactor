@@ -585,6 +585,45 @@ internal static class EchoSuppressionFixtures
         }
     }
 
+    /// <summary>
+    /// Dispatcher-queued change-event coverage. PasswordBox is the documented
+    /// case where PasswordChanged can be raised via the dispatcher rather than
+    /// synchronously in the setter — see the PasswordBoxNoEcho fixture's double
+    /// pump. The §8.2 setter-suppression scope is synchronous (it exits when
+    /// ApplySetters returns), so a queued PasswordChanged fires after the
+    /// scope has already exited. Pumping the dispatcher between the setter run
+    /// and the assertion gives the queued event a chance to land, so this
+    /// fixture is the canary if a future change reorders PasswordChanged to be
+    /// synchronous and lets the scope catch it implicitly.
+    /// </summary>
+    internal class SettersScope_PasswordBox_NoEcho(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var calls = new List<string>();
+            var host = H.CreateHost();
+            host.Mount(_ =>
+                PasswordBox("initial", onPasswordChanged: s => calls.Add(s))
+                    .Set(pb => pb.Password = "next"));
+            // Pump twice: the second pump lets any dispatcher-queued
+            // PasswordChanged land (matches the EchoSuppress_PasswordBox
+            // fixture's pattern for the same reason).
+            await Harness.Render();
+            await Harness.Render();
+
+            var pb = H.FindControl<PasswordBox>(_ => true);
+            H.Check("SettersScope_PasswordBox_SetterAppliedValue",
+                pb?.Password == "next");
+            H.Check("SettersScope_PasswordBox_MountNoFire", calls.Count == 0);
+
+            if (pb is not null) pb.Password = "typed";
+            await Harness.Render();
+            await Harness.Render();
+            H.Check("SettersScope_PasswordBox_UserEditStillFires",
+                calls.Count >= 1 && calls[^1] == "typed");
+        }
+    }
+
     // ── ToggleSplitButton ─────────────────────────────────────────────
 
     internal class ToggleSplitButtonNoEcho(Harness h) : SelfTestFixtureBase(h)
