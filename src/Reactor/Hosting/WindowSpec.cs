@@ -106,6 +106,16 @@ public sealed record WindowSpec
     public bool ActivateOnOpen { get; init; } = true;
 
     /// <summary>
+    /// Window-wide alpha in [0..1]. 1.0 = fully opaque (default, no layering
+    /// overhead). Values below 1.0 are applied via Win32
+    /// <c>SetLayeredWindowAttributes</c> on the underlying HWND. Used by the
+    /// docking subsystem to render an in-flight tear-off floating window at
+    /// reduced opacity (spec 045 §2.6 tear-off follow-up); apps may also set
+    /// it for HUD overlays etc.
+    /// </summary>
+    public double Opacity { get; init; } = 1.0;
+
+    /// <summary>
     /// Construct with explicit field values. Validation runs after the record
     /// auto-init.
     /// </summary>
@@ -150,5 +160,9 @@ public sealed record WindowSpec
         if (StartPosition != WindowStartPosition.Manual && ManualPosition is not null)
             throw new ArgumentException(
                 "WindowSpec.ManualPosition must be null unless StartPosition == Manual.", nameof(ManualPosition));
+
+        if (!(Opacity >= 0.0 && Opacity <= 1.0) || double.IsNaN(Opacity))
+            throw new ArgumentException(
+                $"WindowSpec.Opacity ({Opacity}) must be in [0, 1].", nameof(Opacity));
     }
 }
