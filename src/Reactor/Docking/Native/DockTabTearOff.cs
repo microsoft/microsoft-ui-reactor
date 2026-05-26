@@ -178,6 +178,18 @@ internal static class DockTabTearOff
             var (pane, idx) = ResolveTab(item);
             if (pane is null || idx < 0) return;
             PressCore(item, pane, idx, pt.Position.X, pt.Position.Y);
+            // Capture the pointer so subsequent PointerMoved events keep
+            // firing on the TabView even after the cursor leaves the
+            // tab-strip bounds. Without this, a fast drag (or a
+            // WinAppDriver-synthesized drag that jumps the cursor past
+            // the strip in one MoveByOffset) gets no MoveCore calls
+            // because PointerMoved is routing to whatever element is
+            // under the cursor. We release the capture at threshold-
+            // crossing in MoveCore (so the cursor-poll tracker takes
+            // over cleanly and the source XAML island stops absorbing
+            // events that should reach the host's overlays).
+            try { TabView.CapturePointer(e.Pointer); }
+            catch { /* capture can fail if pointer state is stale — best-effort */ }
         }
 
         /// <summary>Real-press inner method; also called by test hook.</summary>

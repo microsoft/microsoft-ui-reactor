@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Docking;
+using Microsoft.UI.Reactor.Docking.Native;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
@@ -52,6 +53,43 @@ internal static class DockingTearOffE2EFixtures
             // verify tear-off opened a new window and re-dock closed it.
             var (floatingWindowCount, updateFloatingWindowCount) = UseReducer(0);
 
+            // Diagnostic counters surfaced to UIA so a failing E2E test
+            // can tell us WHICH stage of the pipeline didn't fire.
+            //   - floatingFireCount: OnContentFloating events (gate
+            //     check — fires before any layout mutation).
+            //   - floatedFireCount: OnContentFloated events (post
+            //     mutation — only fires if tear-off committed).
+            //   - dockedFireCount: OnContentDocked events (re-dock).
+            // If a test's summary doesn't change after a drag, these
+            // counters reveal whether the press hook + threshold + gate
+            // ran at all (vs the layout mutation failing downstream).
+            var (floatingFireCount, bumpFloatingFire) = UseReducer(0);
+            var (floatedFireCount, bumpFloatedFire) = UseReducer(0);
+            var (dockedFireCount, bumpDockedFire) = UseReducer(0);
+
+            // Tear-off pipeline diagnostic ring buffer — keep the LAST
+            // few DiagnosticSink messages so a failing E2E test can see
+            // exactly which stage of the pipeline fired (Press / Move /
+            // threshold-crossed / Tracker.Start etc.). The sink is a
+            // process-wide static; we chain via the saved previous so
+            // the host's wiring (which also subscribes) is preserved.
+            var (lastTrace, updateLastTrace) =
+                UseReducer<ImmutableList<string>>(ImmutableList<string>.Empty);
+            UseEffect(() =>
+            {
+                var previous = DockTabTearOff.DiagnosticSink;
+                DockTabTearOff.DiagnosticSink = msg =>
+                {
+                    previous?.Invoke(msg);
+                    updateLastTrace(prev =>
+                    {
+                        var next = prev.Add(msg);
+                        return next.Count > 6 ? next.RemoveRange(0, next.Count - 6) : next;
+                    });
+                };
+                return () => { DockTabTearOff.DiagnosticSink = previous; };
+            });
+
             DockableContent BuildPane(string key, string title, string current, Action<string> setter, string idPrefix) =>
                 new(Title: title, Key: key, CanClose: true,
                     Content: VStack(6,
@@ -90,18 +128,25 @@ internal static class DockingTearOffE2EFixtures
                     })
                     .OrderBy(s => s));
             var summary = $"host:{hostList}  float:{floatList}  windows:{floatingWindowCount}";
+            var counters = $"floating:{floatingFireCount}  floated:{floatedFireCount}  docked:{dockedFireCount}";
+            var traceText = lastTrace.IsEmpty
+                ? "(no trace)"
+                : string.Join(" | ", lastTrace);
 
             var manager = new DockManager
             {
                 PersistenceId = "apptest:tearoff-flow",
                 Layout = new DockTabGroup(new DockableContent[] { paneA, paneB, paneC }),
+                OnContentFloating = _ => bumpFloatingFire(n => n + 1),
                 OnContentFloated = args =>
                 {
+                    bumpFloatedFire(n => n + 1);
                     if (args.Content?.Key is string key)
                         updateFloatingKeys(prev => prev.Add(key));
                 },
                 OnContentDocked = args =>
                 {
+                    bumpDockedFire(n => n + 1);
                     if (args.Content?.Key is string key)
                         updateFloatingKeys(prev => prev.Remove(key));
                 },
@@ -118,18 +163,36 @@ internal static class DockingTearOffE2EFixtures
             return Grid(
                 new[] { GridSize.Auto, GridSize.Star(1), GridSize.Px(300) },
                 new[] { GridSize.Star(1) },
-                TextBlock(summary)
-                    .AutomationId("TearOff_Layout_Summary")
+                VStack(2,
+                    TextBlock(summary)
+                        .AutomationId("TearOff_Layout_Summary"),
+                    TextBlock(counters)
+                        .AutomationId("TearOff_Event_Counters")
+                        .Opacity(0.7).FontSize(11),
+                    TextBlock(traceText)
+                        .AutomationId("TearOff_Trace")
+                        .Opacity(0.6).FontSize(10)
+                )
                     .Padding(12, 6, 12, 6)
-                    .FontFamily("Consolas, Courier New, monospace")
                     .Grid(row: 0),
                 manager.Grid(row: 1),
-                // The "drop-outside" landing zone. Has its own
-                // AutomationId so MoveToElement can target it. Padding
-                // keeps the visual obvious during manual debugging.
-                Border(TextBlock("(drop-outside zone)").Opacity(0.5).Padding(12))
-                    .AutomationId("TearOff_DropOutsideZone")
-                    .Grid(row: 2)
+                // The "drop-outside" landing zone. AutomationId on the
+                // inner TextBlock — BorderElement.AutomationId doesn't
+                // reliably surface through UIA TreeWalker (the Border
+                // peer may be filtered out as "no content" unless we
+                // give the inner element an automation identity). We
+                // wrap with a stretching Grid so MoveToElement lands in
+                // the *middle* of the zone, comfortably outside the
+                // host's bottom Dock-edge button.
+                Grid(
+                    new[] { GridSize.Star(1) },
+                    new[] { GridSize.Star(1) },
+                    TextBlock("(drop-outside zone — drag tabs here to tear off)")
+                        .AutomationId("TearOff_DropOutsideZone")
+                        .HAlign(HorizontalAlignment.Center)
+                        .VAlign(VerticalAlignment.Center)
+                        .Opacity(0.5)
+                ).Grid(row: 2)
             );
         }
     }
