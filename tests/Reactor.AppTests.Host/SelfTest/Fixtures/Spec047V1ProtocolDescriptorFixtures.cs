@@ -359,7 +359,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 await Harness.Render();
 
                 H.Check("Desc_CheckBox_Mounted", true);
-                H.Check("Desc_CheckBox_InitialUnchecked", cb.IsChecked == false);
+                H.Check("Desc_CheckBox_InitialUnchecked", cb.IsChecked is false);
                 H.Check("Desc_CheckBox_Label", (cb.Content as string) == "Accept");
                 H.Check("Desc_CheckBox_MountDidNotFire", fireCount == 0);
 
@@ -369,7 +369,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 rec.UpdateChild(el1, el2, cb, _noOp);
                 await Harness.Render();
 
-                H.Check("Desc_CheckBox_UpdatedChecked", cb.IsChecked == true);
+                H.Check("Desc_CheckBox_UpdatedChecked", cb.IsChecked is true);
                 H.Check("Desc_CheckBox_NoEchoOnProgrammaticFlip", fireCount == 0);
 
                 // Label update.
@@ -417,7 +417,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 await Harness.Render();
 
                 H.Check("Desc_RadioButton_Mounted", true);
-                H.Check("Desc_RadioButton_InitialUnchecked", rb.IsChecked == false);
+                H.Check("Desc_RadioButton_InitialUnchecked", rb.IsChecked is false);
                 H.Check("Desc_RadioButton_Label", (rb.Content as string) == "Option A");
                 H.Check("Desc_RadioButton_GroupName", rb.GroupName == "g1");
                 H.Check("Desc_RadioButton_MountDidNotFire", fireCount == 0);
@@ -426,7 +426,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 rec.UpdateChild(el1, el2, rb, _noOp);
                 await Harness.Render();
 
-                H.Check("Desc_RadioButton_UpdatedChecked", rb.IsChecked == true);
+                H.Check("Desc_RadioButton_UpdatedChecked", rb.IsChecked is true);
                 H.Check("Desc_RadioButton_NoEchoOnProgrammaticFlip", fireCount == 0);
 
                 rec.UnmountChild(rb);
@@ -470,7 +470,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 await Harness.Render();
 
                 H.Check("Desc_RatingControl_Mounted", true);
-                H.Check("Desc_RatingControl_InitialValue", rc.Value == 3);
+                H.Check("Desc_RatingControl_InitialValue", Math.Abs(rc.Value - 3) < 1e-9);
                 H.Check("Desc_RatingControl_MaxRating", rc.MaxRating == 5);
                 H.Check("Desc_RatingControl_Caption", rc.Caption == "Stars");
                 H.Check("Desc_RatingControl_MountDidNotFire", fireCount == 0);
@@ -479,7 +479,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 rec.UpdateChild(el1, el2, rc, _noOp);
                 await Harness.Render();
 
-                H.Check("Desc_RatingControl_UpdatedValue", rc.Value == 4);
+                H.Check("Desc_RatingControl_UpdatedValue", Math.Abs(rc.Value - 4) < 1e-9);
                 H.Check("Desc_RatingControl_NoEchoOnProgrammaticWrite", fireCount == 0);
 
                 rec.UnmountChild(rc);
@@ -520,7 +520,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 await Harness.Render();
 
                 H.Check("Desc_ToggleSplitButton_Mounted", true);
-                H.Check("Desc_ToggleSplitButton_InitialUnchecked", tsb.IsChecked == false);
+                H.Check("Desc_ToggleSplitButton_InitialUnchecked", !tsb.IsChecked);
                 H.Check("Desc_ToggleSplitButton_Label", (tsb.Content as string) == "Run");
                 H.Check("Desc_ToggleSplitButton_MountDidNotFire", fireCount == 0);
 
@@ -528,7 +528,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 rec.UpdateChild(el1, el2, tsb, _noOp);
                 await Harness.Render();
 
-                H.Check("Desc_ToggleSplitButton_UpdatedChecked", tsb.IsChecked == true);
+                H.Check("Desc_ToggleSplitButton_UpdatedChecked", tsb.IsChecked);
                 H.Check("Desc_ToggleSplitButton_NoEchoOnProgrammaticFlip", fireCount == 0);
 
                 rec.UnmountChild(tsb);
@@ -573,7 +573,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
 
                 H.Check("Desc_ColorPicker_Mounted", true);
                 H.Check("Desc_ColorPicker_InitialColor", cp.Color == initial);
-                H.Check("Desc_ColorPicker_IsAlphaEnabled", cp.IsAlphaEnabled == true);
+                H.Check("Desc_ColorPicker_IsAlphaEnabled", cp.IsAlphaEnabled);
                 H.Check("Desc_ColorPicker_MountDidNotFire", fireCount == 0);
 
                 var next = Color.FromArgb(255, 200, 100, 50);
@@ -682,7 +682,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 H.Check("Desc_DatePicker_Mounted", true);
                 H.Check("Desc_DatePicker_InitialDate", dp.Date == initial);
                 H.Check("Desc_DatePicker_Header", (dp.Header as string) == "DOB");
-                H.Check("Desc_DatePicker_DayVisible", dp.DayVisible == true);
+                H.Check("Desc_DatePicker_DayVisible", dp.DayVisible);
                 H.Check("Desc_DatePicker_MountDidNotFire", fireCount == 0);
 
                 var next = initial.AddMonths(2);
