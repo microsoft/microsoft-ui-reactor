@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.UI.Reactor.AppTests.Infrastructure;
 using OpenQA.Selenium;
@@ -29,6 +30,29 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// <para>A large <c>TearOff_DropOutsideZone</c> Border sits below the
 /// dock host so a drag <c>MoveToElement</c> on it lands the cursor
 /// outside every Dock-edge button — the canonical drop-outside path.</para>
+/// <para><b>What this suite covers via real mouse input:</b></para>
+/// <list type="bullet">
+///   <item>E01: single-tab tear-off → floating window (drop-outside).</item>
+///   <item>E02: multiple sequential tear-offs (A then B → two floating windows).</item>
+///   <item>E03: pane content state survives the tear-off layout mutation.</item>
+///   <item>E04: tear-off pipeline reliable across repeated invocations.</item>
+/// </list>
+/// <para><b>Not covered here — see #419 for details and selftest fixtures
+/// for synthetic-event coverage:</b></para>
+/// <list type="bullet">
+///   <item>Float → host dock-back via real mouse drag. When the source
+///   floating window has a single tab, <c>BeginFloatingTearOff</c>
+///   hides it once the 4-DIP threshold crosses; WinAppDriver's Actions
+///   pipeline freezes on the now-vanished session-bound HWND and
+///   subsequent moves / wobbles don't deliver to the host. Selftest
+///   fixtures <c>T04_FloatToHostCenter</c> /
+///   <c>T05_FloatToHostSplit</c> exercise the same code paths via
+///   synthetic <c>Simulate*ForTest</c> calls.</item>
+///   <item>Float → host split. Same root cause.</item>
+///   <item>Esc-mid-drag cancel. Selenium 3 + WinAppDriver can't reliably
+///   hold Esc down across the tracker's 16 ms poll cycle. Synthetic
+///   coverage in <c>T13_EscCancelDuringDrag</c>.</item>
+/// </list>
 /// </remarks>
 [TestClass]
 public class DockingTearOffE2ETests : AppTestBase
@@ -50,27 +74,30 @@ public class DockingTearOffE2ETests : AppTestBase
     }
 
     // ───────────────────────────────────────────────────────────────────
-    // Drag helpers
-    //
-    // The Actions chain here is patterned after DockingInputTests'
-    // drag-to-tab test: multi-step MoveByOffset so WinUI's pointer
-    // pipeline observes continuous motion (a single MoveToElement is too
-    // abrupt for the tear-off's 4-DIP threshold detection to fire reliably
-    // under synthesized Appium events on slow CI VMs).
-    //
-    // After the threshold crosses, the tear-off opens a floating preview
-    // window that tracks the cursor in real-time via the cursor-poll
-    // tracker. Each subsequent MoveByOffset / MoveToElement re-positions
-    // it. On Release, the pipeline finalizes against whatever overlay
-    // (if any) had a latched hover at release time.
+    // P/Invoke + DPI awareness
     // ───────────────────────────────────────────────────────────────────
 
-    // Desktop-rooted driver for cross-window queries. The shared Session is
-    // attached to the host-app top-level window via appTopLevelWindow, so it
-    // can't see floating-window UIA content. After a tear-off, the dragged
-    // pane (and its TabItem header) lives in a separate top-level window;
-    // we need a Desktop-rooted driver to find it. The session is opened
-    // lazily on first use and torn down in [ClassCleanup].
+    [DllImport("user32.dll")]
+    private static extern int SetProcessDpiAwarenessContext(IntPtr dpiContext);
+    private static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = (IntPtr)(-4);
+    private static int _dpiContextSet;
+
+    private static void EnsureDpiAware()
+    {
+        if (System.Threading.Interlocked.CompareExchange(ref _dpiContextSet, 1, 0) != 0) return;
+        try { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2); }
+        catch { /* older Windows / already set — both harmless */ }
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    // Cross-window driver
+    //
+    // The shared Session attached via TestSession.AssemblyInit binds to
+    // the host-app top-level window. After a tear-off, the dragged pane
+    // lives in a separate top-level window; we need a Desktop-rooted
+    // driver to find it. Lazily opened, torn down in [ClassCleanup].
+    // ───────────────────────────────────────────────────────────────────
+
     private const string WinAppDriverUrl = "http://127.0.0.1:4723";
     private static WindowsDriver<WindowsElement>? _desktopSession;
     private static WindowsDriver<WindowsElement> DesktopSession
@@ -94,10 +121,9 @@ public class DockingTearOffE2ETests : AppTestBase
     // originates inside a TabViewItem's visual subtree, so the drag must
     // start ON the tab header — the smaller ControlType.TabItem element.
     //
-    // Search via the Desktop session so we find TabItems in both the host
-    // window and any floating preview windows (the host-bound session sees
-    // only the host's UIA tree). MoveToElement uses screen coordinates so
-    // the resulting element works fine when passed to Actions(Session).
+    // Search via DesktopSession so we find TabItems in both the host
+    // window and any floating preview windows (the host-bound session
+    // sees only the host's UIA tree).
     private WindowsElement FindTabItem(string title)
     {
         return (WindowsElement)DesktopSession.FindElement(
@@ -105,8 +131,8 @@ public class DockingTearOffE2ETests : AppTestBase
     }
 
     // Cross-window WaitForText — for UIA elements that live inside a
-    // floating-window's pane content (e.g. EditorA_State after A is torn
-    // off). The host session sees only the host window's tree.
+    // floating window's pane content (e.g. EditorA_State after A is
+    // torn off). The host-bound Session can't see floating-window UIA.
     private void WaitForTextAcrossWindows(string automationId, string expectedText, int timeoutMs = 5000)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
@@ -127,33 +153,67 @@ public class DockingTearOffE2ETests : AppTestBase
             $"to have text '{expectedText}' (Desktop session). Last-seen: '{lastSeen}'.");
     }
 
-    // Selenium Actions ties the drag to a specific driver's element ID
-    // resolution. The host Session is bound to the host window; the
-    // tear-off tests cross between host and floating windows. Running
-    // Actions through the Desktop-rooted driver lets it resolve elements
-    // from either window — and on WinAppDriver, Actions just translate
-    // to global Win32 cursor / button events anyway, so the resulting
-    // input reaches whichever app window the cursor is over.
+    /// <summary>Dump the fixture's UIA-visible diagnostic surface
+    /// (layout summary, event counters, tear-off pipeline trace) to
+    /// the test log. Use in catch blocks so the failure message points
+    /// at WHICH stage of the pipeline didn't fire.</summary>
+    private void DumpDiagnostics(string label)
+    {
+        string Read(string id)
+        {
+            try { return DesktopSession.FindElement(MobileBy.AccessibilityId(id)).Text ?? "<null>"; }
+            catch { return "<not found>"; }
+        }
+        Console.WriteLine($"[{label}] summary='{Read("TearOff_Layout_Summary")}'");
+        Console.WriteLine($"[{label}] counters='{Read("TearOff_Event_Counters")}'");
+        Console.WriteLine($"[{label}] trace='{Read("TearOff_Trace")}'");
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    // Drag helpers
+    //
+    // All drag scenarios in this suite are "source-stays-visible" —
+    // they're either dock→float drops on a drop-outside zone (E01),
+    // sequential tear-offs from the host (E02, E05), or in-host drags
+    // that don't cross window boundaries. WinAppDriver's Actions chain
+    // drives these reliably as long as we route via DesktopSession.
+    //
+    // Float→host drags (the original E02/E04 scenarios from issue #419)
+    // are blocked by a WinAppDriver limitation: the source floating
+    // window gets hidden mid-drag once threshold crosses, and the
+    // session-bound input pipeline can't continue routing moves to the
+    // target. Those scenarios are covered by selftest fixtures
+    // (NativeDockingTearOffFixture T04/T05) using synthetic events.
+    // ───────────────────────────────────────────────────────────────────
+
+    /// <summary>Drive a real mouse drag from <paramref name="source"/>'s
+    /// center to <paramref name="target"/>'s center via a single
+    /// WinAppDriver Actions chain. Both elements MUST be resolved via
+    /// <see cref="DesktopSession"/> (Actions rejects elements from a
+    /// different driver — see #419). The cursor follows a multi-step
+    /// path so WinUI's 4-DIP drag threshold fires and the overlay
+    /// hover handlers see continuous motion.</summary>
     private void DragFromTo(WindowsElement source, WindowsElement target)
         => DragFromToOffset(source, target, targetXOffset: 0, targetYOffset: 0);
 
     private void DragFromToOffset(WindowsElement source, WindowsElement target, int targetXOffset, int targetYOffset)
     {
+        EnsureDpiAware();
         new Actions(DesktopSession)
             .MoveToElement(source)
             .ClickAndHold()
-            // Two small offsets first — gives the press-down + threshold
-            // detection a couple of pointer-move events before the big
-            // MoveToElement jump (matches the dock-input test's proven
-            // pattern; a single MoveToElement is too abrupt for WinUI's
-            // drag-detection under synthesized Appium events).
-            .MoveByOffset(10, 0)
-            .MoveByOffset(10, 0)
+            // Two small offsets clear the 4-DIP drag threshold so the
+            // tear-off pipeline's BeginTearOff callback fires before
+            // the big MoveToElement teleport. A single MoveToElement
+            // to a target hundreds of pixels away can be emitted as
+            // one input event that "jumps" the cursor past the strip
+            // before the threshold check fires.
+            .MoveByOffset(8, 0)
+            .MoveByOffset(8, 0)
             .MoveToElement(target, targetXOffset, targetYOffset)
             .Release()
             .Perform();
-        // Cursor-poll tick is 16 ms and the host re-render is async after
-        // session.End() — 500 ms is plenty of settle time.
+        // Cursor-poll Finalize + host re-render are async — settle.
         Thread.Sleep(500);
     }
 
@@ -173,17 +233,10 @@ public class DockingTearOffE2ETests : AppTestBase
             "host:A,B,C  float:  windows:0", timeoutMs: 5000);
 
         var tabA = FindTabItem("EditorA");
-        // Resolve via DesktopSession too — the drag runs through Actions
-        // on the desktop driver, which needs both elements from that
-        // driver to resolve their IDs.
         var dropZone = (WindowsElement)DesktopSession.FindElement(
             MobileBy.AccessibilityId("TearOff_DropOutsideZone"));
         DragFromTo(tabA, dropZone);
 
-        // Diagnostic: if the post-drag wait fails, surface the fixture's
-        // event counters + tear-off trace so the failure message tells us
-        // which pipeline stage broke (gate? mutation? re-dock?). Anything
-        // 0 narrows the stage that didn't fire.
         try
         {
             WaitForText("TearOff_Layout_Summary",
@@ -191,12 +244,7 @@ public class DockingTearOffE2ETests : AppTestBase
         }
         catch
         {
-            var counters = FindById("TearOff_Event_Counters").Text;
-            var summary = FindById("TearOff_Layout_Summary").Text;
-            var trace = FindById("TearOff_Trace").Text;
-            Console.WriteLine($"[diagnostic] summary='{summary}'");
-            Console.WriteLine($"[diagnostic] counters='{counters}'");
-            Console.WriteLine($"[diagnostic] trace='{trace}'");
+            DumpDiagnostics("E01 post-drag");
             throw;
         }
     }
@@ -204,63 +252,79 @@ public class DockingTearOffE2ETests : AppTestBase
     // ─── E02 ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Float → host roundtrip: tear off EditorA, then drag it back over
-    /// EditorB's tab header. The float-to-host pipeline (BeginFloatingTearOff
-    /// → AppWindow.Hide() of the source → cursor-poll preview → per-group
-    /// Center overlay confirm) must re-insert A into the host's group.
-    /// Final layout: floating count back to 0, A docked alongside B + C.
+    /// Multiple sequential tear-offs: tear off A, then tear off B. After
+    /// both drags the host retains only C and there are two distinct
+    /// floating windows. Exercises the press-hook reset path (a leaked
+    /// candidate from the first drag would break the second), the
+    /// per-pane DockManager event surface (each tear-off must fire
+    /// OnContentFloating / OnContentFloated independently), and the
+    /// floating-window lifecycle counter (must increment exactly twice).
     /// </summary>
     [TestMethod]
-    [Ignore("Cross-window drag — see #419. Selenium Actions(driver) rejects elements from a different driver, and the floating-window tab requires the Desktop-rooted driver. Pending Win32-mouse drag rewrite.")]
-    public void TearOff_E02_FloatingTabDocksBackToHost()
+    public void TearOff_E02_MultipleSequentialTearOffs()
     {
         NavigateToFixtureFresh("DockingTearOff_Flow");
         WaitForText("TearOff_Layout_Summary",
             "host:A,B,C  float:  windows:0", timeoutMs: 5000);
 
-        // Phase 1 — tear off A.
-        var tabA = FindTabItem("EditorA");
-        var dropZone = FindById("TearOff_DropOutsideZone");
-        DragFromTo(tabA, dropZone);
-        WaitForText("TearOff_Layout_Summary",
-            "host:B,C  float:A  windows:1", timeoutMs: 5000);
+        var dropZone = (WindowsElement)DesktopSession.FindElement(
+            MobileBy.AccessibilityId("TearOff_DropOutsideZone"));
 
-        // Phase 2 — drag A's tab from the floating window back over
-        // EditorB's tab header (Center drop = tabs in the same group).
-        // FindTabItem resolves across all process windows; after Phase 1
-        // there's exactly one TabItem named "EditorA" — in the floating
-        // window.
-        var floatingTabA = FindTabItem("EditorA");
-        var tabB = FindTabItem("EditorB");
-        DragFromTo(floatingTabA, tabB);
+        // First tear-off: A.
+        DragFromTo(FindTabItem("EditorA"), dropZone);
+        try
+        {
+            WaitForText("TearOff_Layout_Summary",
+                "host:B,C  float:A  windows:1", timeoutMs: 5000);
+        }
+        catch
+        {
+            DumpDiagnostics("E02 after-A");
+            throw;
+        }
 
-        // After Center confirm, A is back in the host's group with B + C.
-        // The floating window closes (its only pane just moved out), so
-        // windows:0 again.
-        WaitForText("TearOff_Layout_Summary",
-            "host:A,B,C  float:  windows:0", timeoutMs: 8000);
+        // Second tear-off: B.
+        DragFromTo(FindTabItem("EditorB"), dropZone);
+        try
+        {
+            // Order in float:... is alphabetical by key (see
+            // DockingTearOffE2EFixtures.OrderBy(s)). After tearing
+            // both A and B, host has only C and the floating list
+            // is A,B.
+            WaitForText("TearOff_Layout_Summary",
+                "host:C  float:A,B  windows:2", timeoutMs: 5000);
+        }
+        catch
+        {
+            DumpDiagnostics("E02 after-B");
+            throw;
+        }
+
+        // Event-counter sanity: exactly 2 OnContentFloating + 2
+        // OnContentFloated, 0 OnContentDocked.
+        var counters = FindById("TearOff_Event_Counters").Text;
+        Assert.IsTrue(counters?.StartsWith("floating:2  floated:2") == true,
+            $"Expected 2 floating / 2 floated events, got: '{counters}'");
     }
 
     // ─── E03 ───────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Tear-off state preservation: type into EditorA's TextBox first,
-    /// then tear off the tab. The pane's controlled state is held in the
-    /// host component's <c>useState</c>, NOT inside the TabView's runtime
-    /// state, so the §2.30 shape-only override must resolve back to the
-    /// app-supplied content (carrying the typed value) when the floating
-    /// window re-mounts the pane. Symptom of a regression: typed text
-    /// vanishes when the pane moves between host and floating window.
+    /// then tear off the tab. The pane's controlled state is held in
+    /// the host component's <c>useState</c>, NOT inside the TabView's
+    /// runtime state — so the §2.30 shape-only override must resolve
+    /// back to the app-supplied content (carrying the typed value)
+    /// when the floating window re-mounts the pane.
     /// </summary>
     [TestMethod]
-    [Ignore("Cross-window drag — see #419. The tear-off step works (E01 covers it) but verifying state in the floating window still hits the Selenium cross-driver Actions limitation when re-using the drag helper. Pending Win32-mouse drag rewrite.")]
     public void TearOff_E03_TearOff_PreservesPaneState()
     {
         NavigateToFixtureFresh("DockingTearOff_Flow");
         WaitForText("TearOff_Layout_Summary",
             "host:A,B,C  float:  windows:0", timeoutMs: 5000);
 
-        // Type into A's input. The state mirror should reflect it.
+        // Type into A's input. The state mirror reflects it.
         var inputA = FindById("EditorA_Input");
         inputA.Click();
         Thread.Sleep(250);
@@ -269,53 +333,65 @@ public class DockingTearOffE2ETests : AppTestBase
 
         // Tear A off into a floating window.
         var tabA = FindTabItem("EditorA");
-        var dropZone = FindById("TearOff_DropOutsideZone");
+        var dropZone = (WindowsElement)DesktopSession.FindElement(
+            MobileBy.AccessibilityId("TearOff_DropOutsideZone"));
         DragFromTo(tabA, dropZone);
         WaitForText("TearOff_Layout_Summary",
             "host:B,C  float:A  windows:1", timeoutMs: 5000);
 
-        // EditorA_State now lives inside the floating window's UIA tree.
-        // The host-bound Session can't see it; use the Desktop-rooted
-        // helper instead. The value must still be "preserved" — the state
-        // Component's UseState slot survives the host's RemovePane because
-        // the pane reference is the same and the controlled-input loop
+        // EditorA_State now lives inside the floating window's UIA
+        // tree. Cross-window WaitForText reaches it via the Desktop
+        // session. The value must still be "preserved" — the
+        // Component's UseState slot survives RemovePane because the
+        // pane reference is the same and the controlled-input loop
         // reattaches in the floating mount.
-        WaitForTextAcrossWindows("EditorA_State", "EditorA state: preserved", timeoutMs: 5000);
+        WaitForTextAcrossWindows("EditorA_State",
+            "EditorA state: preserved", timeoutMs: 5000);
     }
 
     // ─── E04 ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Float → host into a SPLIT slot: tear off A, then drop it on the
-    /// SplitRight area of the host (drag to the right edge of EditorB's
-    /// tab area). The host's root overlay's <c>DockRight</c> edge button
-    /// receives the confirm, MovePaneToTarget creates a horizontal split
-    /// with B + C on the left and A on the right. The layout summary
-    /// only tracks pane-to-window membership (not the split shape), so
-    /// the observable outcome is windows:0 + A back in host.
+    /// Tear-off reliability under repeated invocations. Tears off A,
+    /// resets the fixture, tears off A again. If the first drag leaked
+    /// a candidate, a stuck tracker, or a Dock drag session, the second
+    /// drag would fail (no Press fires, or BeginTearOff is refused).
+    /// All iterations must produce identical post-state.
     /// </summary>
+    /// <remarks>
+    /// Esc-mid-drag cancel was attempted as an additional E04 (verifies
+    /// the <c>commit=False</c> path inside <c>Tracker.OnTick</c>'s
+    /// VK_ESCAPE poll) but is too timing-sensitive under WinAppDriver:
+    /// Selenium 3's <c>SendKeys(Keys.Escape)</c> emits a sub-millisecond
+    /// key-down/up pair that the tracker's 16 ms poll regularly misses,
+    /// and <c>Actions.KeyDown</c> only accepts modifier keys. The Esc
+    /// cancel path has synthetic-event coverage in
+    /// <c>NativeDockingTearOffFixture.T13_EscCancelDuringDrag</c>.
+    /// </remarks>
     [TestMethod]
-    [Ignore("Cross-window drag — see #419. Same root cause as E02 — the second drag step originates in the floating window. Pending Win32-mouse drag rewrite.")]
-    public void TearOff_E04_FloatingDocksToHostEdge()
+    public void TearOff_E04_RepeatedTearOffsAreReliable()
     {
-        NavigateToFixtureFresh("DockingTearOff_Flow");
-        WaitForText("TearOff_Layout_Summary",
-            "host:A,B,C  float:  windows:0", timeoutMs: 5000);
+        for (int iter = 1; iter <= 3; iter++)
+        {
+            NavigateToFixtureFresh("DockingTearOff_Flow");
+            WaitForText("TearOff_Layout_Summary",
+                "host:A,B,C  float:  windows:0", timeoutMs: 5000);
 
-        var tabA = FindTabItem("EditorA");
-        var dropZone = FindById("TearOff_DropOutsideZone");
-        DragFromTo(tabA, dropZone);
-        WaitForText("TearOff_Layout_Summary",
-            "host:B,C  float:A  windows:1", timeoutMs: 5000);
+            var tabA = FindTabItem("EditorA");
+            var dropZone = (WindowsElement)DesktopSession.FindElement(
+                MobileBy.AccessibilityId("TearOff_DropOutsideZone"));
+            DragFromTo(tabA, dropZone);
 
-        // Drag A's floating tab to the right edge of EditorB's tab — the
-        // SplitRight target on B's per-group overlay (or DockRight on the
-        // root overlay; either way A ends up back in host).
-        var floatingTabA = FindTabItem("EditorA");
-        var tabB = FindTabItem("EditorB");
-        DragFromToOffset(floatingTabA, tabB, targetXOffset: 300, targetYOffset: 0);
-
-        WaitForText("TearOff_Layout_Summary",
-            "host:A,B,C  float:  windows:0", timeoutMs: 8000);
+            try
+            {
+                WaitForText("TearOff_Layout_Summary",
+                    "host:B,C  float:A  windows:1", timeoutMs: 5000);
+            }
+            catch
+            {
+                DumpDiagnostics($"E04 iter#{iter}");
+                throw;
+            }
+        }
     }
 }

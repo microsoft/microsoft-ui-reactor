@@ -84,7 +84,7 @@ internal static class DockingTearOffE2EFixtures
                     updateLastTrace(prev =>
                     {
                         var next = prev.Add(msg);
-                        return next.Count > 6 ? next.RemoveRange(0, next.Count - 6) : next;
+                        return next.Count > 12 ? next.RemoveRange(0, next.Count - 12) : next;
                     });
                 };
                 return () => { DockTabTearOff.DiagnosticSink = previous; };
