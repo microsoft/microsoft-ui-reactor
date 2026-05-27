@@ -198,7 +198,7 @@ Open a C# file with a Reactor `Component`, run **Reactor: Preview Component** fr
 
 Reactor is on GitHub as an **experimental** project. The label will stay on for 3–6 months as we iterate on the design in the open.
 
-We are not launching with a big public announcement. Instead we're starting with MVPs and trusted community members — gathering feedback, pressure-testing the API surface, and refining the programming model before broadening adoption. We want the design shaped by real developer experience, not just our internal usage.
+We are gathering feedback, pressure-testing the API surface, and refining the programming model before broadening adoption. We want the design shaped by real developer experience.
 
 Everything in the repository — framework code, specs, sample apps, test suites — is available for anyone to read, build, and experiment with. Contributions and feedback are welcome from day one.
 
