@@ -23,12 +23,15 @@
     Build configuration for the CLI nupkg. Default: Release.
 
 .PARAMETER InstallWinAppSdk
-    Tri-state Windows App Runtime 2.0 install. When unspecified (default),
-    prompt interactively (default no). Pass -InstallWinAppSdk to force-install
-    non-interactively (useful for CI / one-shot dev-box setup); pass
-    -InstallWinAppSdk:$false to skip the prompt silently. The framework
-    defaults to self-contained, so the runtime is only required for
-    framework-dependent deployment.
+    Install the Windows App Runtime 2.0 via winget without prompting.
+    Useful for CI / one-shot dev-box automation. Mutually exclusive with
+    -NoWinAppSdk. The framework defaults to self-contained, so the
+    runtime is only required for framework-dependent deployment.
+
+.PARAMETER NoWinAppSdk
+    Skip the Windows App Runtime 2.0 prompt silently. Useful for
+    non-interactive scripts that explicitly don't want the runtime
+    installed. Mutually exclusive with -InstallWinAppSdk.
 
 .EXAMPLE
     ./bootstrap.ps1
@@ -48,14 +51,15 @@ param(
     [switch]$SkipPlugin,
     [switch]$SkipMurInstall,
     [string]$Configuration = 'Release',
-    # Windows App SDK runtime install: tri-state. When unspecified, prompt
-    # interactively (default no) since the framework defaults to
-    # WindowsAppSDKSelfContained=true and the machine runtime is only needed
-    # for framework-dependent deployment. Pass -InstallWinAppSdk to force-
-    # install non-interactively; pass -InstallWinAppSdk:$false to skip the
-    # prompt and continue.
-    [Nullable[bool]]$InstallWinAppSdk = $null
+    [switch]$InstallWinAppSdk,
+    [switch]$NoWinAppSdk
 )
+
+if ($InstallWinAppSdk -and $NoWinAppSdk) {
+    Write-Host ''
+    Write-Host "ERROR: -InstallWinAppSdk and -NoWinAppSdk are mutually exclusive." -ForegroundColor Red
+    exit 1
+}
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = $PSScriptRoot
@@ -157,12 +161,10 @@ function Test-WindowsAppRuntime20 {
 }
 
 if (-not (Test-WindowsAppRuntime20)) {
-    $shouldInstall = $false
-    if ($null -ne $InstallWinAppSdk) {
-        $shouldInstall = [bool]$InstallWinAppSdk
-        if (-not $shouldInstall) {
-            Write-Host '    [skip] Windows App Runtime 2.0 not installed (skipped per -InstallWinAppSdk:$false).' -ForegroundColor Yellow
-        }
+    if ($InstallWinAppSdk) {
+        Install-WithWinget -Id 'Microsoft.WindowsAppRuntime.2.0' -Reason 'Windows App Runtime 2.0'
+    } elseif ($NoWinAppSdk) {
+        Write-Host '    [skip] Windows App Runtime 2.0 not installed (skipped per -NoWinAppSdk).' -ForegroundColor Yellow
     } else {
         Write-Host ''
         Write-Host '    Windows App Runtime 2.0 is not installed on this machine.' -ForegroundColor Yellow
@@ -171,13 +173,11 @@ if (-not (Test-WindowsAppRuntime20)) {
         Write-Host '    deployment (smaller per-app output, faster builds) when you override'
         Write-Host '    WindowsAppSDKSelfContained=false in a consuming project.'
         $answer = Read-Host '    Install Windows App Runtime 2.0 via winget now? [y/N]'
-        $shouldInstall = ($answer -match '^[Yy]')
-        if (-not $shouldInstall) {
+        if ($answer -match '^[Yy]') {
+            Install-WithWinget -Id 'Microsoft.WindowsAppRuntime.2.0' -Reason 'Windows App Runtime 2.0'
+        } else {
             Write-Host "    Skipped. Re-run later with: winget install Microsoft.WindowsAppRuntime.2.0" -ForegroundColor Cyan
         }
-    }
-    if ($shouldInstall) {
-        Install-WithWinget -Id 'Microsoft.WindowsAppRuntime.2.0' -Reason 'Windows App Runtime 2.0'
     }
 } else {
     Write-Ok 'Windows App Runtime 2.0 installed'
