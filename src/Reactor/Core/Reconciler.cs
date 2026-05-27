@@ -638,8 +638,12 @@ public sealed partial class Reconciler : IDisposable
     ///
     /// The mount and update handlers receive the Reconciler instance so they can
     /// recursively mount/update/unmount child elements without capturing external state.
+    ///
+    /// Not part of the <c>REACTOR_V1_PREVIEW</c> surface — this is the legacy
+    /// type-registry path, public since before Spec 047. The §13 Q17 hardening
+    /// (throw on duplicate, no base-class fallback, no open generics) tightens
+    /// previously-undefined behavior; it does not change the shape of this API.
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public void RegisterType<TElement, TControl>(
         Func<Reconciler, TElement, Action, TControl> mount,
         Func<Reconciler, TElement, TElement, TControl, Action, UIElement?> update,

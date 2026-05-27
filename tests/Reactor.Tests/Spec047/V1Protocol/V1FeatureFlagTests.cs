@@ -1,5 +1,6 @@
 using System;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol;
@@ -16,7 +17,15 @@ namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol;
 /// TODO(1.11): when ToggleSwitch is ported, add the "structurally identical
 /// control tree" parity test from the spec task — mount the same element
 /// type with the flag ON and OFF and diff DP values + child counts.
+///
+/// <para>Pinned to <see cref="Spec047V1FlagCollection"/> — these tests mutate
+/// the process-wide AppContext switch <c>Reactor.UseV1Protocol</c>. Without
+/// the collection attribute, xUnit's default per-class parallelism would
+/// race them against each other and against
+/// <see cref="Ports.V1OnRegistrationTests"/>, which already serializes on
+/// the same collection.</para>
 /// </summary>
+[Collection(nameof(Spec047V1FlagCollection))]
 public class V1FeatureFlagTests
 {
     private const string SwitchName = "Reactor.UseV1Protocol";

@@ -63,11 +63,8 @@ internal sealed class ToggleSwitchHandler : IElementHandler<ToggleSwitchElement,
         // V1HandlerAdapter refreshed ElementTag for us; the Toggled
         // subscription from Mount is still live and reads the new element
         // via GetElementTag.
-        if (oldEl.IsOn != newEl.IsOn || ctrl.IsOn != newEl.IsOn)
-        {
-            if (ctrl.IsOn != newEl.IsOn)
-                ctx.BindFor(ctrl, newEl).WriteSuppressed(() => ctrl.IsOn = newEl.IsOn);
-        }
+        if (ctrl.IsOn != newEl.IsOn)
+            ctx.BindFor(ctrl, newEl).WriteSuppressed(() => ctrl.IsOn = newEl.IsOn);
         if (oldEl.OnContent != newEl.OnContent) ctrl.OnContent = newEl.OnContent;
         if (oldEl.OffContent != newEl.OffContent) ctrl.OffContent = newEl.OffContent;
         if (newEl.Header is not null && !ReferenceEquals(oldEl.Header, newEl.Header))

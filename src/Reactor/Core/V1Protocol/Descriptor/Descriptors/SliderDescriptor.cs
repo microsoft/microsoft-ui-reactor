@@ -51,8 +51,9 @@ internal static class SliderDescriptor
         .Controlled<double, RangeBaseValueChangedEventArgs>(
             get:         static e => e.Value,
             set:         static (c, v) => c.Value = v,
+            // See ToggleSwitchDescriptor for the closure / CWT-gate invariant.
             subscribe:   static (fe, h) => ((WinUI.Slider)fe).ValueChanged += (s, e) => h(s, e),
-            unsubscribe: static (fe, h) => { /* trampoline lives for control lifetime */ },
+            unsubscribe: static (fe, h) => { /* trampoline lives for control lifetime — see CWT gate in PropEntry */ },
             callback:    static e => e.OnValueChanged,
             readBack:    static c => c.Value)
         .OneWay(

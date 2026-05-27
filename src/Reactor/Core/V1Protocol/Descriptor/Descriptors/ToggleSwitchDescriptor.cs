@@ -48,8 +48,16 @@ internal static class ToggleSwitchDescriptor
         .Controlled<bool, RoutedEventArgs>(
             get:         static e => e.IsOn,
             set:         static (c, v) => c.IsOn = v,
+            // The inner closure `(s, e) => h(s, e)` bridges
+            // EventHandler<RoutedEventArgs> -> RoutedEventHandler; it cannot
+            // be removed because the two delegate types are unrelated. The
+            // closure is allocated once per Toggled subscription and the
+            // unsubscribe lambda is a no-op, so this is only safe because
+            // PropEntry's CWT-gated DescriptorControlledPayload ensures
+            // subscribe runs exactly once per control lifetime. If that
+            // gate ever changes, this lambda will silently leak handlers.
             subscribe:   static (fe, h) => ((WinUI.ToggleSwitch)fe).Toggled += (s, e) => h(s, e),
-            unsubscribe: static (fe, h) => { /* trampoline lives for control lifetime */ },
+            unsubscribe: static (fe, h) => { /* trampoline lives for control lifetime — see CWT gate in PropEntry */ },
             callback:    static e => e.OnIsOnChanged,
             readBack:    static c => c.IsOn)
         .OneWay(
