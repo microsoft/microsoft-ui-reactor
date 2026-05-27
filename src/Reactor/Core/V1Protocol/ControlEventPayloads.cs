@@ -230,6 +230,48 @@ internal sealed class TeachingTipEventPayload
         object>? ActionButtonClickTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3 batch 11 — PipsPager SelectedPageIndex
+/// round-trip payload. Single slot: <c>SelectedIndexChanged</c> is the only
+/// event we surface; the descriptor uses <see cref="ChangeEchoSuppressor"/>
+/// to drain the programmatic write.</summary>
+internal sealed class PipsPagerEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.PipsPager,
+        Microsoft.UI.Xaml.Controls.PipsPagerSelectedIndexChangedEventArgs>? SelectedIndexChangedTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 batch 11 — ListBox SelectedIndex round-trip
+/// payload. The single <c>SelectionChanged</c> trampoline fires BOTH the
+/// element's <c>OnSelectedIndexChanged</c> and (if present) the
+/// <c>OnSelectionChanged</c> snapshot callback — mirrors the legacy
+/// <c>MountListBox</c> arm's twin-invoke shape.</summary>
+internal sealed class ListBoxEventPayload
+{
+    public Microsoft.UI.Xaml.Controls.SelectionChangedEventHandler? SelectionChangedTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 batch 11 — SelectorBar SelectedIndex
+/// round-trip payload. <c>SelectionChanged</c> trampoline reads the live
+/// SelectedItem reference and converts back to the index via
+/// <c>Items.IndexOf</c> to feed <c>OnSelectedIndexChanged</c>.</summary>
+internal sealed class SelectorBarEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.SelectorBar,
+        Microsoft.UI.Xaml.Controls.SelectorBarSelectionChangedEventArgs>? SelectionChangedTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 batch 11 — BreadcrumbBar ItemClicked
+/// fire-only payload. Trampoline maps <c>args.Index</c> back to the live
+/// element's <c>Items[idx]</c> data — mirrors the legacy arm.</summary>
+internal sealed class BreadcrumbBarEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.BreadcrumbBar,
+        Microsoft.UI.Xaml.Controls.BreadcrumbBarItemClickedEventArgs>? ItemClickedTrampoline;
+}
+
 /// <summary>
 /// Spec 047 §9.2 — open-ended anchor for delegates registered via
 /// <see cref="ReactorBinding{TElement}.OnCustomEvent{TArgs}"/>. Holds a

@@ -1161,6 +1161,11 @@ internal static class SelfTestFixtureRegistry
         "Desc_Line_MountUpdate",
         "Desc_Path_MountUpdate",
         "Desc_AnimatedIcon_MountUpdate",
+        // Spec 047 §14 Phase 3 (batch 11) — Long-tail ports.
+        "Desc_PipsPager_MountUpdate",
+        "Desc_ListBox_MountUpdate",
+        "Desc_SelectorBar_MountUpdate",
+        "Desc_BreadcrumbBar_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2296,6 +2301,11 @@ internal static class SelfTestFixtureRegistry
         "Desc_Line_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescLineMountUpdate(harness),
         "Desc_Path_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescPathMountUpdate(harness),
         "Desc_AnimatedIcon_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescAnimatedIconMountUpdate(harness),
+        // Spec 047 §14 Phase 3 (batch 11) — Long-tail ports.
+        "Desc_PipsPager_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescPipsPagerMountUpdate(harness),
+        "Desc_ListBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescListBoxMountUpdate(harness),
+        "Desc_SelectorBar_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescSelectorBarMountUpdate(harness),
+        "Desc_BreadcrumbBar_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescBreadcrumbBarMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

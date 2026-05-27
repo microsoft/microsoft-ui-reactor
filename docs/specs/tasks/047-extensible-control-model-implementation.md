@@ -700,12 +700,66 @@ shrink lands after V1 ships ON by default.
         every `Update*` write and the element's default zero values; the
         visible output is the same for callers who never set them. No
         behavior delta for non-zero callers.
+- [x] **Batch 11** — Long-tail triage: `PipsPager`, `ListBox`,
+      `SelectorBar`, `BreadcrumbBar` ported. `FrameElement` and
+      `CalendarViewElement` deferred (escape-hatched).
+      Fixtures: `Desc_PipsPager_MountUpdate`, `Desc_ListBox_MountUpdate`,
+      `Desc_SelectorBar_MountUpdate`, `Desc_BreadcrumbBar_MountUpdate` —
+      all pass under V1 ON and V1 OFF.
+      **Ported (4):**
+      - **PipsPager** — `SelectedPageIndex` round-trip via
+        `.HandCodedControlled` against the new `PipsPagerEventPayload`;
+        `NumberOfPages` / `WrapMode` / `MaxVisiblePips` /
+        `PreviousButtonVisibility` / `NextButtonVisibility` as
+        `.OneWay`. Trampoline gates on `ChangeEchoSuppressor`.
+      - **ListBox** — `Items` (non-keyed Clear+Add cycle on sequence
+        delta, mirroring `RadioButtonsDescriptor`) + `SelectedIndex`
+        round-trip. The single `SelectionChanged` trampoline fires
+        BOTH `OnSelectedIndexChanged` and the multi-select snapshot
+        `OnSelectionChanged` — matches the legacy arm's twin-invoke
+        shape, including the `IndexOf`-against-Items snapshot
+        reconstruction.
+      - **SelectorBar** — `Items` cycle (Text + Icon per item) +
+        `SelectedIndex` round-trip mapped through `SelectedItem` ref
+        (SelectorBar exposes `SelectedItem`, not `SelectedIndex`, as
+        the live property). Item icon resolution reuses
+        `Reconciler.ResolveIconForDescriptor` via a
+        `SymbolIconData` wrapper.
+      - **BreadcrumbBar** — `Items` → `ItemsSource` (label list) +
+        `ItemClicked` fire-only event. Trampoline maps
+        `args.Index` back to `el.Items[idx]` per the legacy arm.
+      **Escape-hatched (2) — documented gaps:**
+      - **FrameElement** — `Navigate(SourcePageType, NavigationParameter)`
+        is an imperative API call invoked only at Mount time (the
+        legacy `UpdateFrame` is just `SetElementTag` + `ApplySetters`,
+        no re-navigate). The descriptor builders don't distinguish
+        mount-only writes from update writes — a `.OneWay` for
+        `SourcePageType` would re-Navigate on every update pass.
+        The 3 events (`Navigated`, `Navigating`, `NavigationFailed`)
+        could be ported in isolation, but a descriptor that handles
+        only events while losing the Mount-time navigation would be
+        a regression vs. V1 OFF. Authors who need declarative `Frame`
+        stay on V1 OFF; future work is a mount-only entry shape.
+      - **CalendarViewElement** — `SelectedDates` is an
+        `IObservableVector<DateTimeOffset>` collection that the legacy
+        arm mutates element-by-element with per-mutation
+        `ChangeEchoSuppressor.BeginSuppress` tokens
+        (`UpdateCalendarView` → `SyncSelectedDates`: a hash-set diff
+        with one suppress per Add/Remove). The descriptor builders
+        don't express collection diffs with per-element suppression
+        — a single `.OneWay` write to `SelectedDates` would either
+        echo per element or require a custom collection-aware entry
+        shape. Authors who need declarative multi-date selection stay
+        on V1 OFF.
 - [ ] Batch 3-followup — `NumberBox` (needs Immediate-mode keystroke
       handling + `NumberFormatter` reference-equality semantics that the
       descriptor builders don't yet express — likely needs a new entry
       shape or a `HandCoded*` path). `RichTextBlock` (incremental
       paragraph/inline diffing — needs a child-strategy or new entry
-      shape).
+      shape). `FrameElement` (needs a Mount-only entry shape for
+      imperative `Navigate` calls — see Batch 11). `CalendarViewElement`
+      (needs a collection-diff entry shape with per-element echo
+      suppression — see Batch 11).
 
 **Carry-forward known defects** (from Phase 1):
 

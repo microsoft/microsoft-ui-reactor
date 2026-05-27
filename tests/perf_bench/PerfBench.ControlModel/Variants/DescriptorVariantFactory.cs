@@ -224,6 +224,23 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<AnimatedIconElement, WinUI.AnimatedIcon>(
                 AnimatedIconDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3 (batch 11) — Long-tail ports.
+        rec.RegisterHandler<PipsPagerElement, WinUI.PipsPager>(
+            new DescriptorHandler<PipsPagerElement, WinUI.PipsPager>(
+                PipsPagerDescriptor.Descriptor));
+
+        rec.RegisterHandler<ListBoxElement, WinUI.ListBox>(
+            new DescriptorHandler<ListBoxElement, WinUI.ListBox>(
+                ListBoxDescriptor.Descriptor));
+
+        rec.RegisterHandler<SelectorBarElement, WinUI.SelectorBar>(
+            new DescriptorHandler<SelectorBarElement, WinUI.SelectorBar>(
+                SelectorBarDescriptor.Descriptor));
+
+        rec.RegisterHandler<BreadcrumbBarElement, WinUI.BreadcrumbBar>(
+            new DescriptorHandler<BreadcrumbBarElement, WinUI.BreadcrumbBar>(
+                BreadcrumbBarDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;
