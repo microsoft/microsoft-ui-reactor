@@ -1358,6 +1358,12 @@ See §13 Q1 for the full capture lineage and matrix application. Raw data under 
 - The private `MountXxx` switch shrinks one arm per PR.
 - The §15 suite gates every PR — see §15.6 regression budgets.
 
+**Phase 3 progress** (see `docs/specs/tasks/047-extensible-control-model-implementation.md` for the live tracker):
+
+- Phase 3 prerequisites (`.HandCodedControlled` / `.HandCodedEvent` builders, `TextBoxDescriptor` 2-event proof, x64 advisory bench) — **landed** (PR #424).
+- Value-bearing batch 1 — `CheckBox`, `RadioButton`, `RatingControl`, `ToggleSplitButton` — **landed** (this PR). Documented gaps on `CheckBoxDescriptor` (three-state mode + `OnCheckedStateChanged`) and `ToggleSplitButtonDescriptor` (Flyout child) carried forward to follow-ups.
+- Value-bearing batch 2 — `ColorPicker`, `CalendarDatePicker`, `DatePicker`, `TimePicker` — **landed** (this PR). Date/time/color leaves with clean single-event shapes. `NumberBox` deferred — Immediate-mode keystroke handling and `NumberFormatter` reference-equality aren't expressible through the current builder surface.
+
 **Carry-forward known defects from Phase 1:**
 - **KD-3** — dispatch fast-path for the ported built-ins (M4 +88.9% V1 vs Today). Intersects with descriptor shape; fix during Phase 3 migration.
 - **KD-4** — public typed-event surface for external descriptor authors. Scope narrowed by Phase 2 to external-author-only; in-tree descriptors already use the internal fast path via `DescriptorControlledPayload<T>`.

@@ -394,31 +394,66 @@ these prerequisites must land. They follow from the Phase 2 verdict + the
 single-slot `ControlEventStateBox` constraint identified during the Phase 2
 spec discussion (see §9.2.1).
 
-- [ ] 3.0.1 Ship `.HandCodedControlled<TValue, TArgs>` and
-      `.HandCodedEvent<TArgs>` builder methods on a new
-      `ControlDescriptor<TElement, TControl, TPayload>` overload
-      (`src/Reactor/Core/V1Protocol/Descriptor/ControlDescriptor.cs`).
-      Adds two new `PropEntry` subclasses:
-      `HandCodedControlledPropEntry<TElement, TControl, TPayload, TValue, TArgs>`
-      and `HandCodedEventPropEntry<TElement, TControl, TPayload, TArgs>`
-      (`PropEntry.cs`). Author supplies the static trampoline + typed
-      slot accessors per §6.1.1. ~200 LOC.
-- [ ] 3.0.2 Port `TextBox` as the 2-event proof point (TextChanged +
-      SelectionChanged). Reuses the existing `TextBoxEventPayload` from
-      `src/Reactor/Core/V1Protocol/ControlEventPayloads.cs`. Confirms
-      end-to-end that the per-descriptor TPayload shape composes:
-      one box per control, two trampoline slots, both wire/unwire correctly
-      through pool rent/return. AppTests.Host self-test fixtures
-      (`Desc_TextBox_*`) cover both events independently and together.
-- [ ] 3.0.3 Re-bench M2 / M10 against the TextBox descriptor port (and a
-      single-event reference like the existing `Desc_ToggleSwitch`).
-      Expected: hand-coded-shape descriptor matches hand-coded handler
-      within ±3% on M2 / M10. Document under
-      `docs/specs/047/phase3-results/`.
+- [x] 3.0.1 Shipped `.HandCodedControlled` / `.HandCodedEvent` builders
+      and the `HandCodedControlledPropEntry` / `HandCodedEventPropEntry`
+      classes (PR #424). Author supplies the static trampoline + typed
+      slot accessors per §6.1.1.
+- [x] 3.0.2 Ported `TextBox` as the 2-event proof point (TextChanged +
+      SelectionChanged) using the shared `TextBoxEventPayload` (PR #424).
+      AppTests.Host self-test fixtures (`Desc_TextBox_*`) cover both
+      events independently and together.
+- [x] 3.0.3 Re-benched M2 / M10 against the TextBox descriptor port
+      (PR #424, x64 advisory capture under
+      `docs/specs/047/phase3-results/CPC-ander-YTZ3O-x64-advisory/2026-05-27-textbox-proof-3x5/`).
+      ARM64 stable-AC ratification on LAPTOP-4MEP83VI deferred — protocol
+      captured in the same dir's README.
 - [ ] 3.0.4 Phase 3 author onboarding doc: lift the §6.1.1 classification
       table verbatim, plus a worked example (TextBox descriptor walk-through)
       and the "when to fall through to `IElementHandler<,>`" guidance.
-      Land under `docs/guide/` once the path is committed.
+      Land under `docs/guide/` once the path is committed. **Deferred** —
+      not gating the bulk-port; can land any later session.
+
+---
+
+## Phase 3 bulk-port progress
+
+Tracks per-family descriptor ports against the §14 migration order.
+Each batch is a single PR landing the descriptors + self-test fixtures +
+bench factory registration. Legacy `MountXxx` / `UpdateXxx` arms stay in
+place while V1 is flag-gated (V1-OFF authors still hit the legacy path);
+shrink lands after V1 ships ON by default.
+
+### Value-bearing family
+
+- [x] **Batch 1** — `CheckBox`, `RadioButton`, `RatingControl`,
+      `ToggleSplitButton`. All `.Controlled` single-event ports;
+      `CheckBox`/`RadioButton` wire both `Checked` and `Unchecked` events
+      to the same trampoline in their subscribe lambdas. Fixtures:
+      `Desc_CheckBox_MountUpdate`, `Desc_RadioButton_MountUpdate`,
+      `Desc_RatingControl_MountUpdate`, `Desc_ToggleSplitButton_MountUpdate`
+      — all pass under V1 ON and V1 OFF.
+      **Known gaps** (mirrored on `CheckBoxDescriptor`):
+      `IsThreeState=true` mode (controlled value source is `CheckedState`
+      not `IsChecked`) and the `OnCheckedStateChanged` callback are not
+      yet handled by the descriptor; three-state authors continue on the
+      legacy arm. `ToggleSplitButtonDescriptor` does not yet express the
+      `Flyout` child — author via setters chain for now.
+- [x] **Batch 2** — `ColorPicker`, `CalendarDatePicker`, `DatePicker`,
+      `TimePicker`. All `.Controlled` single-event ports against
+      `TypedEventHandler` / `EventHandler<TArgs>` event signatures.
+      Fixtures: `Desc_ColorPicker_MountUpdate`,
+      `Desc_CalendarDatePicker_MountUpdate`, `Desc_DatePicker_MountUpdate`,
+      `Desc_TimePicker_MountUpdate` — all pass under V1 ON and V1 OFF.
+      **Note on Update parity:** the legacy `UpdateCalendarDatePicker` /
+      `UpdateDatePicker` arms didn't re-write `Header` / `MinDate` /
+      `MaxDate` / format props on subsequent renders; the descriptor's
+      `OneWayConditional` entries do (positive divergence — element
+      changes flow through).
+- [ ] Batch 3 — `NumberBox` (needs Immediate-mode keystroke handling +
+      `NumberFormatter` reference-equality semantics that the descriptor
+      builders don't yet express — likely needs a new entry shape or a
+      `HandCoded*` path). Remaining value-bearing leaves
+      (`PersonPicture`, etc.) to follow.
 
 **Carry-forward known defects** (from Phase 1):
 

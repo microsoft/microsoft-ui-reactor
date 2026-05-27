@@ -1109,6 +1109,16 @@ internal static class SelfTestFixtureRegistry
         "Desc_TextBox_MountUpdate",
         "Desc_TextBox_TwoEventSubscription",
         "Desc_TextBox_CallbackGate",
+        // Spec 047 §14 Phase 3 (batch 1) — value-bearing single-event ports.
+        "Desc_CheckBox_MountUpdate",
+        "Desc_RadioButton_MountUpdate",
+        "Desc_RatingControl_MountUpdate",
+        "Desc_ToggleSplitButton_MountUpdate",
+        // Spec 047 §14 Phase 3 (batch 2) — value-bearing date/time/color ports.
+        "Desc_ColorPicker_MountUpdate",
+        "Desc_CalendarDatePicker_MountUpdate",
+        "Desc_DatePicker_MountUpdate",
+        "Desc_TimePicker_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2194,6 +2204,16 @@ internal static class SelfTestFixtureRegistry
         "Desc_TextBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescTextBoxMountUpdate(harness),
         "Desc_TextBox_TwoEventSubscription" => new Spec047V1ProtocolDescriptorFixtures.DescTextBoxTwoEventSubscription(harness),
         "Desc_TextBox_CallbackGate" => new Spec047V1ProtocolDescriptorFixtures.DescTextBoxCallbackGate(harness),
+        // Spec 047 §14 Phase 3 (batch 1) — value-bearing single-event ports.
+        "Desc_CheckBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescCheckBoxMountUpdate(harness),
+        "Desc_RadioButton_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRadioButtonMountUpdate(harness),
+        "Desc_RatingControl_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRatingControlMountUpdate(harness),
+        "Desc_ToggleSplitButton_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescToggleSplitButtonMountUpdate(harness),
+        // Spec 047 §14 Phase 3 (batch 2) — value-bearing date/time/color ports.
+        "Desc_ColorPicker_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescColorPickerMountUpdate(harness),
+        "Desc_CalendarDatePicker_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescCalendarDatePickerMountUpdate(harness),
+        "Desc_DatePicker_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescDatePickerMountUpdate(harness),
+        "Desc_TimePicker_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescTimePickerMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

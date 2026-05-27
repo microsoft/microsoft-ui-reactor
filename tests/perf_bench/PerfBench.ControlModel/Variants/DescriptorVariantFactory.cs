@@ -46,6 +46,40 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<TextBoxElement, WinUI.TextBox>(
                 TextBoxDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3 (batch 1) — value-bearing single-event ports.
+        rec.RegisterHandler<CheckBoxElement, WinUI.CheckBox>(
+            new DescriptorHandler<CheckBoxElement, WinUI.CheckBox>(
+                CheckBoxDescriptor.Descriptor));
+
+        rec.RegisterHandler<RadioButtonElement, WinUI.RadioButton>(
+            new DescriptorHandler<RadioButtonElement, WinUI.RadioButton>(
+                RadioButtonDescriptor.Descriptor));
+
+        rec.RegisterHandler<RatingControlElement, WinUI.RatingControl>(
+            new DescriptorHandler<RatingControlElement, WinUI.RatingControl>(
+                RatingControlDescriptor.Descriptor));
+
+        rec.RegisterHandler<ToggleSplitButtonElement, WinUI.ToggleSplitButton>(
+            new DescriptorHandler<ToggleSplitButtonElement, WinUI.ToggleSplitButton>(
+                ToggleSplitButtonDescriptor.Descriptor));
+
+        // Spec 047 §14 Phase 3 (batch 2) — value-bearing date/time/color ports.
+        rec.RegisterHandler<ColorPickerElement, WinUI.ColorPicker>(
+            new DescriptorHandler<ColorPickerElement, WinUI.ColorPicker>(
+                ColorPickerDescriptor.Descriptor));
+
+        rec.RegisterHandler<CalendarDatePickerElement, WinUI.CalendarDatePicker>(
+            new DescriptorHandler<CalendarDatePickerElement, WinUI.CalendarDatePicker>(
+                CalendarDatePickerDescriptor.Descriptor));
+
+        rec.RegisterHandler<DatePickerElement, WinUI.DatePicker>(
+            new DescriptorHandler<DatePickerElement, WinUI.DatePicker>(
+                DatePickerDescriptor.Descriptor));
+
+        rec.RegisterHandler<TimePickerElement, WinUI.TimePicker>(
+            new DescriptorHandler<TimePickerElement, WinUI.TimePicker>(
+                TimePickerDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;
