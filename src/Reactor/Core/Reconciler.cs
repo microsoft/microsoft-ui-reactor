@@ -261,6 +261,18 @@ public sealed partial class Reconciler : IDisposable
     /// flag is ON is V1 → external → legacy switch; when OFF, V1 is skipped.
     /// </summary>
     public Reconciler(ILogger? logger, bool? useV1Protocol)
+        : this(logger, useV1Protocol, registerBuiltinHandlers: true) { }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 2 (Q1 spike) — internal ctor used by the
+    /// descriptor-vs-handler A|B harness. <paramref name="registerBuiltinHandlers"/>
+    /// suppresses the automatic Phase 1 handler registration so a test or
+    /// bench can plug a descriptor-driven handler in for the same element
+    /// types via <see cref="RegisterHandler{TElement,TControl}"/>. Not part
+    /// of the production surface — flipping this to <c>false</c> in app code
+    /// leaves no built-in V1 dispatch path for the five ported controls.
+    /// </summary>
+    internal Reconciler(ILogger? logger, bool? useV1Protocol, bool registerBuiltinHandlers)
     {
         _logger = logger;
         if (useV1Protocol is bool explicitFlag)
@@ -280,7 +292,7 @@ public sealed partial class Reconciler : IDisposable
         // handlers when the v1 flag is ON for this reconciler instance.
         // When OFF, ported controls fall through to the legacy MountXxx switch
         // (unchanged), so V1 ON vs OFF can be diffed on the same binary.
-        if (UseV1Protocol) RegisterV1BuiltInHandlers();
+        if (UseV1Protocol && registerBuiltinHandlers) RegisterV1BuiltInHandlers();
     }
 
     /// <summary>

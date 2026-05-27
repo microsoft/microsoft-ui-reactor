@@ -12,10 +12,20 @@ a separate design call.
 
 ## Q1 — Descriptor vs hand-coded handler as the primary first-party surface
 
-**Summary.** §6 proposes declarative `ControlDescriptor<TElement, TControl>`
-as a co-equal authoring surface alongside §4's hand-coded
-`IElementHandler<TElement, TControl>`. Which is the primary first-party
-shape? Source-gen is deferred — not a contender for Phase 2.
+**Status: Resolved (Phase 2, 2026-05-26) — descriptors primary; hand-coded `IElementHandler<,>` as escape hatch.**
+
+See spec §13 Q1 for the full verdict, capture lineage, and matrix
+application. The stable-AC Phase 2 capture
+(`../phase2-results/LAPTOP-4MEP83VI/2026-05-26-q1-fastpath-3x5-stableac/`)
+landed the worst gating bench (M2) at +9.6%, inside the 5-15%
+judgment-call band; LOC (~24% saving at Phase 3 scope) and readability
+(§6.1 classifications) resolved the band to descriptors. Source-gen (§7)
+remains deferred and is the only condition under which Q1 would reopen.
+
+The original disambiguating plan + matrix is preserved below for the
+record.
+
+---
 
 **Disambiguating tests.** Micro M1, M2, M5, M7, M10. Macro L4, L9. Spec §13
 Q1 also calls out L12 (hot-reload), but L12 is deferred to Phase 2, so the
@@ -35,10 +45,19 @@ Phase 2 also produces qualitative inputs that feed the 5–15% branch:
   Slider, Border) in both shapes.
 - **Cognitive load** rating from 2-3 engineers reading both versions cold.
 
-**Spec edit when data lands.** §6 keeps the winning shape as
-"primary first-party surface"; §13 Q1's matrix gets a "**Resolved:** …" line
-citing the Phase-2 measurement. The loser stays documented in §16 (permanent
-fallback path).
+**Phase 2 measurement output** (per the stable-AC capture):
+
+| Bench | Descriptor vs handler | Band |
+|---|---:|---|
+| M1 (mount, no callback) | -1.0% | ≤5% |
+| M2 (mount, one callback) | +9.6% | 5-15% (gating) |
+| M5 (warm dispatch) | -2.3% | ≤5% |
+| M7 (no-change update) | +8.1% | 5-15% |
+| M10 (event-state alloc, informative-only) | +19.3% | >15% (informative) |
+
+Worst gating bench M2 at +9.6% landed in judgment-call band. LOC +
+readability resolved to descriptors (~24% LOC saving at Phase 3's ~60-control
+scope; §6.1 classifications visible at call sites, type-system-enforced).
 
 ---
 

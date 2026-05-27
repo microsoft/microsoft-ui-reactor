@@ -174,7 +174,13 @@ internal sealed partial class BenchHostApp : Microsoft.UI.Xaml.Application
             : BenchCatalog.All.ToList();
         var variants = cli.SelectedVariants is { Count: > 0 } sv
             ? sv.ToList()
-            : new List<BenchVariant> { BenchVariant.Direct, BenchVariant.ReactorToday, BenchVariant.ReactorV2 };
+            : new List<BenchVariant>
+            {
+                BenchVariant.Direct,
+                BenchVariant.ReactorToday,
+                BenchVariant.ReactorV2,
+                BenchVariant.ReactorDescriptors,
+            };
 
         // Flatten into a job list of (bench, variant) pairs.
         var jobs = new List<(IBench Bench, BenchVariant Variant)>();
@@ -208,13 +214,24 @@ internal sealed partial class BenchHostApp : Microsoft.UI.Xaml.Application
                 BenchContext Factory()
                 {
                     benchParent.Children.Clear();
-                    // Spec 047 §14 Phase 1 — ReactorV2 now actually exercises
-                    // the V1 protocol path. Explicit ctor flag keeps Today
-                    // pinned to legacy regardless of any ambient AppContext
-                    // switch, so V1=ON vs V1=OFF is a clean apples-to-apples
-                    // single-run comparison.
-                    bool useV1 = variant == BenchVariant.ReactorV2;
-                    var rec = new Reconciler(logger: null, useV1Protocol: useV1);
+                    // Spec 047 §14 Phase 1 — ReactorV2 exercises the V1 protocol
+                    // path with hand-coded handlers.
+                    // Spec 047 §14 Phase 2 (Q1) — ReactorDescriptors exercises
+                    // V1 with the same three ports re-expressed as descriptors
+                    // (ToggleSwitch / Slider / Border). The remaining ports
+                    // (TextBox / ListView) keep their hand-coded handlers so
+                    // every variant has a working dispatch for every bench;
+                    // M1/M2/M5/M7/M10 land directly on the contested controls.
+                    bool useV1 = variant is BenchVariant.ReactorV2 or BenchVariant.ReactorDescriptors;
+                    Reconciler rec;
+                    if (variant == BenchVariant.ReactorDescriptors)
+                    {
+                        rec = DescriptorVariantFactory.Create();
+                    }
+                    else
+                    {
+                        rec = new Reconciler(logger: null, useV1Protocol: useV1);
+                    }
                     if (bench.Id == "M6")
                     {
                         rec.RegisterType<M06_DispatchExternalType.ExtElement, TextBlock>(

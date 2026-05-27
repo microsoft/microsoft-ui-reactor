@@ -3,11 +3,20 @@
 Derived from: `docs/specs/047-extensible-control-model.md`
 
 > **Status:** Phase 0 complete (PR #414 — greenlight). **Phase 1 code-complete**
-> in this PR — see [`047-extensible-control-model-phase1-implementation.md`](047-extensible-control-model-phase1-implementation.md)
+> in PR #414 — see [`047-extensible-control-model-phase1-implementation.md`](047-extensible-control-model-phase1-implementation.md)
 > for the per-section tracker and [`../047/phase1-results/`](../047/phase1-results/)
 > for the Phase 1 deliverables, exit-gate deferrals (1.17 AOT publish, 1.18
 > macro catch-up, 1.19 final perf validation — all gated on baseline-machine
 > runs), and the Q14 dispatcher-affinity note.
+>
+> **Phase 2 complete (2026-05-26).** §13 Q1 resolved — descriptors are the
+> primary first-party surface; hand-coded `IElementHandler<,>` is the escape
+> hatch. Stable-AC capture landed the worst gating bench (M2) at +9.6%,
+> inside the 5-15% judgment-call band; LOC (~24% saving at Phase 3 scope)
+> and §6.1 readability resolved the call to descriptors. Three captures
+> documented under [`../047/phase2-results/LAPTOP-4MEP83VI/`](../047/phase2-results/LAPTOP-4MEP83VI/);
+> the `2026-05-26-q1-fastpath-3x5-stableac/` capture is authoritative. See
+> "Phase 2 wrap-up" and "Phase 3 prerequisites" sections below.
 >
 > Phase 0 below is *spec-process* work — audits, suite infrastructure, baseline
 > measurements, and decision criteria. It cleared its exit gate (PR #414) and
@@ -330,3 +339,95 @@ proposal can move to greenlight (spec §14).
       as a standalone PR ahead of Phase 1. (Carve-out landed: `ApplySetters`
       now runs inside a scope-based suppression scope on the control's
       `ReactorState`. M13 flipped from `OnIsOnChangedFireCount = 1` to `0`.)
+
+---
+
+## Phase 2 wrap-up — §13 Q1 measurement gate
+
+Phase 2 is the descriptor-vs-handler head-to-head per spec §14. Exit gate:
+the §13 Q1 decision matrix produces an answer.
+
+- [x] 2.1 Build `ControlDescriptor<TElement, TControl>` interpreter under
+      `src/Reactor/Core/V1Protocol/Descriptor/` (fluent builder,
+      `PropEntry` types, `DescriptorHandler<,>`). Internal-access fast path
+      via `Reconciler.GetOrCreateControlEventPayload<DescriptorControlledPayload<…>>`.
+- [x] 2.2 Implement the three Q1 controls as descriptors against the same
+      v1 protocol surface as the hand-coded ports:
+      `ToggleSwitchDescriptor` (1 controlled event), `SliderDescriptor`
+      (1 controlled + 2 coercing one-way), `BorderDescriptor` (zero events).
+      Behavior parity verified by 23/23 `Desc_*` AppTests.Host self-test
+      assertions; Phase 1 `V1_*` fixtures still 20/20.
+- [x] 2.3 Run §15.3 micro suite (M1, M2, M5, M7, M10) across all three
+      variants (`ReactorToday` / `ReactorV2` / `ReactorDescriptors`).
+      Three captures committed under
+      `docs/specs/047/phase2-results/LAPTOP-4MEP83VI/`:
+      - `2026-05-26-q1-spike-5x5/` — pre-fast-path baseline (5×5).
+        Public `OnCustomEvent` path. Verdict at the time: ship hand-coded
+        (M2 +19.1%, M10 +31.5%).
+      - `2026-05-26-q1-fastpath-3x5/` — internal typed-payload fast path
+        (3×5). Capture noisy (M1 +23.5% on a TextBlock that doesn't engage
+        the descriptor path — flagged as suspect at the time).
+      - `2026-05-26-q1-fastpath-3x5-stableac/` — **authoritative.** Same
+        code as the noisy capture, stable AC + foreground, 3×5. M2 +9.6%,
+        no gating bench exceeds 15%.
+- [x] 2.4 Apply the §13 Q1 decision matrix to the authoritative capture.
+      Worst gating bench M2 at +9.6% — judgment-call band. LOC + readability
+      inputs resolved to descriptors (~24% LOC saving at Phase 3 scope;
+      §6.1 classifications visible at call sites).
+- [x] 2.5 Spec edits committed: §13 Q1 status flipped to "Resolved"; §6.1
+      extended with `.HandCodedControlled` / `.HandCodedEvent` classifications
+      (§6.1.1); §9.2 extended with per-descriptor TPayload composition
+      (§9.2.1); §14 Phase 2 marked complete and Phase 3 prerequisites added;
+      `decision-criteria.md` Q1 marked Resolved.
+
+**Phase 2 exit gate met.** Descriptors are the primary first-party surface
+going forward (§6.1). Hand-coded `IElementHandler<,>` stays as escape hatch
+for irregular controls, perf-critical mount paths, and multi-event
+composition (§6.1.1).
+
+---
+
+## Phase 3 prerequisites — multi-event composition + author guidance
+
+Before Phase 3 bulk-ports the ~60 remaining controls (spec §14 Phase 3 order),
+these prerequisites must land. They follow from the Phase 2 verdict + the
+single-slot `ControlEventStateBox` constraint identified during the Phase 2
+spec discussion (see §9.2.1).
+
+- [ ] 3.0.1 Ship `.HandCodedControlled<TValue, TArgs>` and
+      `.HandCodedEvent<TArgs>` builder methods on a new
+      `ControlDescriptor<TElement, TControl, TPayload>` overload
+      (`src/Reactor/Core/V1Protocol/Descriptor/ControlDescriptor.cs`).
+      Adds two new `PropEntry` subclasses:
+      `HandCodedControlledPropEntry<TElement, TControl, TPayload, TValue, TArgs>`
+      and `HandCodedEventPropEntry<TElement, TControl, TPayload, TArgs>`
+      (`PropEntry.cs`). Author supplies the static trampoline + typed
+      slot accessors per §6.1.1. ~200 LOC.
+- [ ] 3.0.2 Port `TextBox` as the 2-event proof point (TextChanged +
+      SelectionChanged). Reuses the existing `TextBoxEventPayload` from
+      `src/Reactor/Core/V1Protocol/ControlEventPayloads.cs`. Confirms
+      end-to-end that the per-descriptor TPayload shape composes:
+      one box per control, two trampoline slots, both wire/unwire correctly
+      through pool rent/return. AppTests.Host self-test fixtures
+      (`Desc_TextBox_*`) cover both events independently and together.
+- [ ] 3.0.3 Re-bench M2 / M10 against the TextBox descriptor port (and a
+      single-event reference like the existing `Desc_ToggleSwitch`).
+      Expected: hand-coded-shape descriptor matches hand-coded handler
+      within ±3% on M2 / M10. Document under
+      `docs/specs/047/phase3-results/`.
+- [ ] 3.0.4 Phase 3 author onboarding doc: lift the §6.1.1 classification
+      table verbatim, plus a worked example (TextBox descriptor walk-through)
+      and the "when to fall through to `IElementHandler<,>`" guidance.
+      Land under `docs/guide/` once the path is committed.
+
+**Carry-forward known defects** (from Phase 1):
+
+- **KD-3** — dispatch fast-path for ported built-ins (M4 +88.9% V1 vs Today).
+  Intersects with descriptor shape; address as part of Phase 3 migration.
+- **KD-4** — public typed-event surface for external descriptor authors.
+  Scope narrowed by Phase 2 to external-author-only (in-tree fast path is
+  shipped via `DescriptorControlledPayload<T>` + the new `.HandCodedControlled`
+  / `.HandCodedEvent` per-descriptor TPayload pattern).
+
+**Phase 3 exit reopen condition for Q1:** none from the in-tree work. The
+only Q1 reopen trigger is source-gen (§7) landing.

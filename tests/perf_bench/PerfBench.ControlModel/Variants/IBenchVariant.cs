@@ -20,6 +20,14 @@ public enum BenchVariant
     Direct,
     ReactorToday,
     ReactorV2,
+    /// <summary>Spec 047 §14 Phase 2 (Q1 spike) — descriptor interpreter
+    /// variant. Same v1 protocol + dispatch shell as <see cref="ReactorV2"/>,
+    /// but the three ported controls (ToggleSwitch / Slider / Border) are
+    /// driven by a declarative <c>ControlDescriptor</c> + interpreter
+    /// instead of hand-coded <c>IElementHandler</c> bodies. Any delta vs.
+    /// <see cref="ReactorV2"/> is the interpreter's tax. Drives the §13 Q1
+    /// decision matrix.</summary>
+    ReactorDescriptors,
 }
 
 /// <summary>

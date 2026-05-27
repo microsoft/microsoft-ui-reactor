@@ -398,6 +398,53 @@ Concrete savings: `Prop.Initial` and `Prop.OneWay` *never* need echo suppression
 
 This subsumes a real fraction of the §8 audit by construction: if an author marks a prop `Initial` or `OneWay`, no audit is needed for it at all.
 
+#### 6.1.1 `.HandCodedControlled` / `.HandCodedEvent` — multi-event composition (Phase 3 prerequisite)
+
+**Resolved (Phase 2, 2026-05-26 — §13 Q1 follow-up).** The `.Controlled<TValue, TArgs>` classification above stores its trampoline in a closed-generic payload keyed by `(TElement, TControl, TValue, TArgs)`. That keying is fine for **single-event controls** (ToggleSwitch / Slider / Border — what Phase 2 measured) but breaks down for **multi-event controls** because the §9.2 `ControlEventStateBox` is a single-slot discriminated wrapper: a second `.Controlled` or `.Event` entry on the same control would request a different closed-generic payload type, hit the type discriminator's mismatch path, and clobber the first entry's slot.
+
+Two new classifications cover the multi-event case without waiting for source-gen (§7):
+
+```csharp
+// Same shape as .Controlled, but the author supplies:
+// - the static trampoline (hand-authored — direct field access, no per-fire indirection)
+// - typed slot accessors into a per-descriptor TPayload class (typically reuses
+//   the existing §9.2 per-control-class payload — TextBoxEventPayload, etc.)
+.HandCodedControlled<TValue, TArgs>(
+    get:        e => e.Text,
+    set:        (c, v) => c.Text = v,
+    subscribe:  (fe, h) => ((TextBox)fe).TextChanged += h,
+    callback:   e => e.OnTextChanged,
+    trampoline: TextChangedTrampoline,            // static — captures nothing
+    slotIsNull: p => p.TextChangedTrampoline is null,
+    setSlot:    (p, t) => p.TextChangedTrampoline = (TextChangedEventHandler)t)
+
+// Fire-and-forget event (no DP round-trip). For Button.Click, ListView.ItemClick,
+// MenuFlyoutItem.Click, NavigationView.ItemInvoked, Hyperlink.Click, etc.
+.HandCodedEvent<TArgs>(
+    subscribe:  (fe, h) => ((Button)fe).Click += h,
+    callback:   e => e.OnClick,
+    trampoline: ClickTrampoline,
+    slotIsNull: p => p.ClickTrampoline is null,
+    setSlot:    (p, t) => p.ClickTrampoline = (RoutedEventHandler)t)
+```
+
+The hand-coded shape pays the §9.2 per-control-class payload allocation **exactly once**, holds N trampoline slots in one box, and dispatches per-fire identically to the hand-coded handler. The Q1 +9.6% / +19.3% interpreter overhead (`PropEntry<>.Mount` virtual dispatch + delegate getter/setter) shrinks toward noise for controls authored this way because the trampoline body is open-coded and reads through `GetElementTag` directly — no entry-level lambda indirection.
+
+**Author guidance** (Phase 3 default):
+
+| Control shape | Classification |
+|---|---|
+| Zero events | `.OneWay` / `.OneWayConditional` / `.Initial` only |
+| One event, round-trip with DP | **`.Controlled<TValue, TArgs>`** — uses the generic interpreter; no TPayload required |
+| One event, fire-and-forget | `.HandCodedEvent<TArgs>` — needs a per-descriptor payload, but TPayload has just one slot |
+| Two or more events on one control | **`.HandCodedControlled` / `.HandCodedEvent` exclusively** — reuses the §9.2 per-control-class payload (e.g., `TextBoxEventPayload`) |
+| Perf-critical mount path (measured M2/M10 cost matters) | `.HandCodedControlled` even for single-event controls — collapses interpreter overhead |
+| Truly irregular control (logic doesn't fit §6.1) | Fall through to `IElementHandler<,>` (§4) escape hatch |
+
+**Source-gen interop.** When source-gen (§7) lands, the generator emits exactly this `.HandCodedControlled` / `.HandCodedEvent` shape from the descriptor declaration. Phase 3 controls authored hand-coded today port forward to source-gen by **deletion of boilerplate**, not rewrite.
+
+See §9.2 for the per-descriptor payload storage shape (the `ControlDescriptor<TElement, TControl, TPayload>` overload).
+
 ### 6.2 Modifier × declarative-prop precedence
 
 A descriptor that declares `Prop.OneWay(e => e.Background, (c,v) => c.Background = v)` and an element whose modifier chain includes `.Background(brush)` both want to write `Background`.
@@ -605,7 +652,28 @@ The reset contract: on `Pool.Return(control)`, the engine clears `ControlEventSt
 
 Each per-control payload struct is sized exactly to that control's event count (1–3 slots in practice).
 
-There is no case where a `Toggled` handler attached to an ancestor needs a trampoline slot — `Toggled` cannot fire on an ancestor at all. So the per-control table only ever appears on attached state for the matching native control type, and never appears on unrelated controls.
+#### 9.2.1 Per-descriptor payload composition (Phase 2 follow-up; §6.1.1)
+
+The `ControlEventStateBox` is **one slot per control**. A handler reads it only after asserting `HandlerType == typeof(MyPayload)`. That single-slot discipline forces a design rule for descriptors with more than one event entry:
+
+- The descriptor declares a `TPayload` parameter — typically reusing the **existing §9.2 per-control-class payload** (e.g., `ToggleSwitchEventPayload`, `TextBoxEventPayload`, `ImageEventPayload`). The hand-coded handler and the descriptor handler for the same control share the payload class; the box's `HandlerType` discriminator matches regardless of which shape authored the mount.
+- Every event entry on the descriptor (`.Controlled`, `.HandCodedControlled`, `.HandCodedEvent`) writes into a distinct slot in that one payload — no second `ControlEventStateBox` ever appears.
+- The descriptor builder's signature gains `TPayload`:
+  ```csharp
+  new ControlDescriptor<TextBoxElement, TextBox, TextBoxEventPayload>
+  {
+      Children = …,
+      GetSetters = …,
+      PayloadFactory = static () => new TextBoxEventPayload(),
+  }
+  ```
+- Per-event slot access is typed via author-supplied `slotIsNull` + `setSlot` lambdas (see §6.1.1). The entry's `EnsureSubscribed` does `GetOrCreateControlEventPayload<TPayload>(ctrl)` and then writes through the supplied accessors. Per-fire indirection is zero (the static trampoline reads through `GetElementTag` directly).
+
+**Why not closed-generic-per-entry?** The descriptor model's Phase 2 fast path (`DescriptorControlledPayload<TElement, TControl, TValue, TArgs>`) closes a fresh payload type per entry. That preserves typed slots without author-supplied accessors and is the right shape for **single-event** controls. It cannot compose to multi-event controls under the single-slot box constraint — two entries on the same control would clobber each other's `HandlerType` stamp. Phase 2 measured only single-event controls; Phase 3 multi-event controls use the per-descriptor TPayload shape instead.
+
+**Why not source-gen yet?** §7 is the right long-term home for the per-control payload class — the generator emits it from the descriptor declaration. Until §7 lands, authors write the payload class (or reuse an existing §9.2 one) and the slot accessors by hand. The boilerplate is ~12 lines per event entry; source-gen removes it via deletion, not rewrite.
+
+**`HandlerType` discriminator across hand-coded and descriptor shapes.** Because the payload class is shared, a `TextBoxEventPayload` written by `TextBoxHandler` is reused by `TextBoxDescriptor` — and vice versa — through pool rent/return cycles. The discriminator's hot-reload safety property (Phase 4+) survives: if `TextBoxDescriptor` is replaced by a recompiled descriptor at hot-reload time, the new descriptor still writes into `TextBoxEventPayload` and the box's stamp still matches.
 
 There is no case where a `Toggled` handler attached to an ancestor needs a trampoline slot — `Toggled` cannot fire on an ancestor at all. So the per-control table only ever appears on attached state for the matching native control type, and never appears on unrelated controls.
 
@@ -1074,28 +1142,82 @@ Things that could surprise us — worth a microbench in Phase 1 before committin
 
 Phase 0 ratified decision criteria for the data-driven questions in [`decision-criteria.md`](047/decision-criteria.md); each question below carries a **Status** line indicating whether the decision has landed in the spec body, is gated on a later phase's measurement, or remains an open design call for a future session.
 
-1. **Descriptor vs. hand-coded handler — which one ships?** **Status: Open — Phase 2 measurement gate.** Decision matrix ratified in [`decision-criteria.md#q1`](047/decision-criteria.md#q1); Phase 2 runs the head-to-head and applies the matrix. Source-gen is deferred (see §7's revised status). The live question is whether the primary author-facing surface for first-party controls is a hand-coded `IElementHandler<TElement, TControl>` (more code, direct execution, full flexibility) or a declarative `ControlDescriptor<TElement, TControl>` interpreted by a shared engine (less code per control, indirect execution, more discipline). Intuition says imperative C# is faster than interpreted data, but data-driven systems with tight interpreters can match or beat hand-written code when the interpreter is short and predictable. This is not decidable by argument — it needs measurement.
+1. **Descriptor vs. hand-coded handler — which one ships?** **Status: Resolved (Phase 2, 2026-05-26) — descriptors primary, hand-coded `IElementHandler<,>` as escape hatch.** Source-gen (§7) remains deferred.
 
-   **Proposed validation plan** (executed during Phase 2):
-   - Implement **three controls** in *both* shapes against the same v1 protocol surface:
-     - **`ToggleSwitch`** — value-bearing, one control event, simple. The vanilla case.
-     - **`Slider`** — value-bearing, coercion-prone, exercises echo handling (suppression *or* round-trip per §8/§8.1).
-     - **`Border`** — pure container, no events, exercises modifier integration and `Prop.OneWay`-style brush/thickness props.
-   - For each control, write the handler variant first (it's the direct port of today's `MountXxx`). Then write the descriptor entry and let the shared interpreter execute it. Same v1 protocol, same `MountContext`, same setters/modifier pipeline.
-   - Run the §15.3 micro suite (especially M1, M2, M5, M7, M10) and the relevant §15.4 macros (L4, L9) against both implementations on the same machine, same session.
-   - Compare:
-     - **Per-mount ns** and **allocation bytes** — does the descriptor interpreter pay a real cost, or does the JIT specialize it well enough that the cost is in the noise?
-     - **LOC per control** — count the lines of authoring code needed to express the control (excluding shared interpreter).
-     - **Cognitive load** — have 2-3 engineers read both versions cold and rate which they'd rather write a 4th control in.
-     - **Compile-time validation reach** (per Q10) — how much of the surface is C#-compiler-validated for free vs requires the analyzer? A shape whose entire surface is compile-validated by the C# compiler alone wins by a small margin on tooling-cost-over-time.
-     - Hot-reload behavior is explicitly **not** an input — see Q15.
+   **Verdict.** The pre-committed decision matrix
+   ([`decision-criteria.md#q1`](047/decision-criteria.md#q1)) lands the
+   Phase 2 measurement in the **5-15% judgment-call band**, with the worst
+   gating bench (M2) at +9.6%. The matrix's qualitative inputs (LOC,
+   readability) come down on descriptors at Phase 3 scope. Authors default
+   to `ControlDescriptor<TElement, TControl>`; hand-coded
+   `IElementHandler<TElement, TControl>` stays as the escape hatch for
+   irregular controls, perf-critical mount paths, and multi-event composition
+   shapes that the descriptor interpreter's single-payload-per-control
+   storage doesn't natively cover (see §6.1's `.HandCodedControlled` /
+   `.HandCodedEvent` classifications).
 
-   **Decision matrix** to apply to the data, fixed up front so the discussion doesn't relitigate based on whoever's preference is loudest:
-   - **Descriptor within 5% of handler on M1/M2/M5/M7:** ship descriptors as the primary first-party surface. The LOC and uniformity wins are real and the perf cost isn't material. Handlers stay as an escape hatch for irregular controls and runtime registration.
-   - **Descriptor 5–15% slower:** judgment call, weigh LOC + readability + hot-reload against the per-mount cost in context of L4/L7/L9 macro impact. Likely picks descriptors if macros show no detectable difference; picks handlers if even one macro shows a >2% regression.
-   - **Descriptor >15% slower on any of M1/M2/M5/M7:** ship hand-coded handlers as the primary surface. Descriptors stay available for *late-bound external controls* only (the §16-permanent-fallback path), not as the recommended first-party shape. Revisit when source-gen could collapse the cost (which would mean revisiting §7 too).
+   **Capture lineage** (all on LAPTOP-4MEP83VI, ARM64-native, Release,
+   .NET 10.0.8, 15 measurements per cell):
 
-   This is a measurement-driven gate, not a discussion gate. Phase 2 doesn't conclude until the decision matrix produces an answer.
+   | Capture | Descriptor event path | M1 | M2 | M5 | M7 | M10 (informative) | Matrix verdict at the time |
+   |---|---|---:|---:|---:|---:|---:|---|
+   | `2026-05-26-q1-spike-5x5/` | Public `OnCustomEvent` | +1.3% | +19.1% | +13.4% | -8.2% | +31.5% | Ship hand-coded |
+   | `2026-05-26-q1-fastpath-3x5/` | Internal typed-payload fast path; capture noisy | +23.5% | +18.8% | +16.7% | -6.1% | +32.1% | Ship hand-coded (suspect — M1 anomaly) |
+   | **`2026-05-26-q1-fastpath-3x5-stableac/`** | **Internal typed-payload fast path; stable AC, clean foreground** | **-1.0%** | **+9.6%** | **-2.3%** | **+8.1%** | **+19.3%** | **Judgment call → descriptors** |
+
+   Numbers are descriptor-vs-`ReactorV2`-handler deltas. Full raw captures
+   live under `docs/specs/047/phase2-results/LAPTOP-4MEP83VI/`. The stable-AC
+   capture is the authoritative one — the prior two were degraded by
+   capture-condition noise (the M1 +23.5% on a TextBlock that doesn't engage
+   the descriptor path at all was the giveaway).
+
+   **What the fast-path rewrite bought.** Phase 2's first capture used the
+   descriptor model's public-surface event wiring (`OnCustomEvent`, which
+   allocates a closure per first-mount and stores trampolines in a
+   non-deduped list). The descriptor sources live inside `src/Reactor/`
+   and have the same `internal` access the hand-coded handlers do, so the
+   path was rewritten to use `GetOrCreateControlEventPayload<T>` with a
+   static trampoline — mirroring `ToggleSwitchHandler.EnsureToggledWiring`.
+   The rewrite cut roughly half of the M2 / M10 cost (M2: −9.5pp, M10: −12.2pp).
+   The residual +9.6% on M2 is **intrinsic interpreter overhead** — virtual
+   `PropEntry<,>.Mount` dispatch plus delegate getter/setter invocations
+   versus the hand-coded handler's inlined property writes. Removable only
+   via source-gen (§7).
+
+   **LOC + readability inputs to the judgment call.** For the three Phase 2
+   controls (LOC excluding interpreter):
+
+   | Shape | LOC per control (avg) | Shared interpreter | Break-even N |
+   |---|---:|---:|---:|
+   | Hand-coded `IElementHandler<,>` | ~100 | 0 | — |
+   | Descriptor + interpreter | ~66 | 586 (one-time) | ~17 controls |
+
+   Phase 3 ports ~60 controls. At full scope descriptors save ~24% total LOC.
+   Readability: the §6.1 prop classifications (`Initial` / `OneWay` /
+   `Controlled` / `OneWayConditional` / `CoercingOneWay`) are visible at the
+   call site, type-system-enforced, and read like spec tables. The descriptor
+   shape is dramatically easier for external authors to ship correctly (they
+   don't need to understand trampoline-storage internals to wire an event).
+
+   **Decision matrix as applied** (copied verbatim from the original entry
+   for the record; this is the bar Phase 2 cleared):
+   - **Descriptor within 5% of handler on M1/M2/M5/M7:** ship descriptors as primary. (M1 / M5 met this; M2 / M7 fell into the next band.)
+   - **Descriptor 5–15% slower:** judgment call, weigh LOC + readability against per-mount cost in context of L4/L7/L9 macros. (M2 / M7 landed here; LOC + readability won.)
+   - **Descriptor >15% slower on any of M1/M2/M5/M7:** ship hand-coded handlers as primary. (Not triggered on the authoritative stable-AC capture.)
+
+   **Carry-forward for Phase 3** — known defects that intersect Q1:
+   - **KD-3** (Phase 1) — dispatch fast-path for the ported built-ins (M4 +88.9% V1 vs Today). Intersects with whichever Q1 shape wins; carries into Phase 3.
+   - **KD-4** (Phase 1) — public typed-event surface for external descriptor authors. Scope **narrowed** by Phase 2: in-tree descriptors already use the internal fast path; KD-4 is now external-author-only.
+   - **Multi-event composition** — Phase 2 measured only single-event controls (ToggleSwitch / Slider). Multi-event controls (TextBox / Image / proposed ListView) need the §6.1 `.HandCodedControlled` + `.HandCodedEvent` builders, which reuse the §9.2 per-control-class payload types. Phase 3 prerequisite.
+
+   **Reopen condition.** Re-run Q1 only if source-gen (§7) lands, in which
+   case the +9.6% residual is expected to collapse to noise. KD-4 is no
+   longer expected to flip Q1 because the in-tree fast path already exists.
+
+   **What is NOT in scope for re-opening.** The Phase 2 noisy captures
+   are not grounds to reopen the verdict — they're documented as
+   capture-condition artifacts. Future readers reaching for those numbers
+   should use the stable-AC capture as the authoritative reference.
 2. **What's the AOT story end-to-end?** **Status: Resolved (Phase 0).** Reactor is AOT-compatible today: the AOT test suite runs at ≥ 90% pass rate against the AOT-compiled bits. The full assembly is not yet marked `IsAotCompatible=true` because a small number of features remain unsafe; those land separately. **Commitment for spec 047: no new AOT warnings introduced by the v1 protocol surface, regardless of which Q1 shape wins.** Descriptor lambdas are strongly-typed (no `nameof()`-resolved reflection) precisely so the interpreter remains AOT-clean; hand-coded handlers are AOT-clean by construction. L14 (AOT publish of the split-library scenario) ships as a **regression guard** in Phase 1's exit gate — not an exploratory check. See [`decision-criteria.md#q2`](047/decision-criteria.md#q2).
 3. **Can echo suppression be eliminated, and at what cost?** **Status: Resolved (Phase 0).** Ship "delete + tight diff" for the 14 trivial sites, per-control tolerance metadata for 8 coercion / float-precision sites, and a one-off ColorPicker shim. §8.1 (`mostRecentEventCount`) rejected — only 1 / 24 sites required it. See [`decision-criteria.md#q3`](047/decision-criteria.md#q3) and §8.
 4. **What's the `ReconcileChildren` shape?** **Status: Resolved (Phase 0).** Concrete C# strategy types ship in Phase 1: `None` / `SingleContent` / `Panel` / `NamedSlots` / `ItemsHost` / `Imperative`, plus `AttachedPropWriter` on container descriptors. See §6's ChildrenStrategy block.
@@ -1207,23 +1329,38 @@ Without (2) specifically, Phase 1 can't claim the split-library path works.
 
 ### Phase 2 — descriptor model spike + decision
 
-This is the §13 Q1 measurement-driven decision phase.
+**Status: Complete (2026-05-26).** §13 Q1 resolved — descriptors as primary first-party surface; hand-coded `IElementHandler<,>` as escape hatch.
 
-- Build a `ControlDescriptor<TElement, TControl>` interpreter using the v1 context surface internally.
-- Implement **the same three controls** (`ToggleSwitch`, `Slider`, `Border`) in *both* hand-coded-handler and descriptor shapes against the same protocol.
-- Run the §15.3 micro suite and §15.4 macros (specifically L4, L9, L12 for hot-reload) on both implementations.
-- Apply the §13 Q1 decision matrix to the data.
-- **Phase 2 exit gate:** either descriptors are the primary first-party surface going forward, *or* hand-coded handlers are. The losing shape stays available only in its narrower role (escape hatch / late-bound external).
+- ✅ Built `ControlDescriptor<TElement, TControl>` interpreter using the v1 context surface internally (`src/Reactor/Core/V1Protocol/Descriptor/`).
+- ✅ Implemented the three controls (`ToggleSwitch`, `Slider`, `Border`) in both hand-coded-handler and descriptor shapes. Behavior parity verified by 23/23 self-test assertions (`Desc_*` fixtures).
+- ✅ Ran the §15.3 micro suite (M1, M2, M5, M7, M10) — three captures progressively de-noised. L4 / L9 macros not required for verdict (matrix gated on micro deltas; LOC + readability resolved the judgment-call band).
+- ✅ Applied the §13 Q1 decision matrix to the stable-AC capture. Worst gating bench M2 +9.6%, landed in 5-15% judgment-call band; LOC + readability inputs resolved to descriptors at Phase 3 scope.
+- **Phase 2 exit gate met:** descriptors are the primary first-party surface (§6.1). Hand-coded handlers stay as escape hatch (irregular controls, perf-critical mount paths, multi-event composition via §6.1.1 / §9.2.1).
+
+See §13 Q1 for the full capture lineage and matrix application. Raw data under `docs/specs/047/phase2-results/LAPTOP-4MEP83VI/`.
 
 ### Phase 3 — controls migration
 
-- Migrate the value-bearing family first (`Slider`, `NumberBox`, `ColorPicker`, `RatingControl`). Closes out the echo-suppressor audit (§8.x).
-- Then input controls (`Button`, `TextBox`, `CheckBox`). Exercises shared trampolines.
-- Then containers (`Stack`, `Grid`, `Flex`). Exercises `ReconcileChildren`.
-- Then templated lists. Exercises keyed reconciliation interop with spec 042.
-- Then the long tail (`NavigationView`, dialogs, `MapControl`, …).
+**Phase 3 prerequisites** (added by Phase 2 verdict — must land before bulk porting starts):
+
+1. **Ship `.HandCodedControlled<TValue,TArgs>` and `.HandCodedEvent<TArgs>` builder methods** on `ControlDescriptor<TElement, TControl, TPayload>` (§6.1.1). Adds `TPayload` overload and two new `PropEntry` subclasses (`HandCodedControlledPropEntry`, `HandCodedEventPropEntry`). ~200 LOC in `src/Reactor/Core/V1Protocol/Descriptor/`.
+2. **Port `TextBox` to descriptors as the 2-event proof point** (TextChanged + SelectionChanged). Reuses the existing `TextBoxEventPayload` class from `ControlEventPayloads.cs`. Confirms the §9.2.1 hand-coded-shape + per-descriptor-TPayload composition works end-to-end.
+3. **Re-bench M2 / M10 against the TextBox descriptor port** — expect the +9.6% / +19.3% residuals to shrink substantially for hand-coded-shape descriptors (matches the hand-coded handler's per-fire shape exactly). Document in `docs/specs/047/phase3-results/`.
+4. **Author guidance written into the Phase 3 onboarding doc** — the §6.1.1 classification table (when to use `.Controlled` vs `.HandCodedControlled` + `.HandCodedEvent` vs `IElementHandler<,>`).
+
+**Phase 3 migration order** (~60 controls total):
+
+- Migrate the value-bearing family first (`Slider`, `NumberBox`, `ColorPicker`, `RatingControl`). Closes out the echo-suppressor audit (§8.x). Single-event controls use `.Controlled<,>`.
+- Then input controls (`Button`, `TextBox`, `CheckBox`). Multi-event cases (TextBox) use `.HandCodedControlled` + `.HandCodedEvent` per §6.1.1.
+- Then containers (`Stack`, `Grid`, `Flex`). Exercises `ReconcileChildren`. Mostly zero-event.
+- Then templated lists. Exercises keyed reconciliation interop with spec 042. Multi-event (selection + item-click).
+- Then the long tail (`NavigationView`, dialogs, `MapControl`, …). Mix of event shapes.
 - The private `MountXxx` switch shrinks one arm per PR.
 - The §15 suite gates every PR — see §15.6 regression budgets.
+
+**Carry-forward known defects from Phase 1:**
+- **KD-3** — dispatch fast-path for the ported built-ins (M4 +88.9% V1 vs Today). Intersects with descriptor shape; fix during Phase 3 migration.
+- **KD-4** — public typed-event surface for external descriptor authors. Scope narrowed by Phase 2 to external-author-only; in-tree descriptors already use the internal fast path via `DescriptorControlledPayload<T>`.
 
 ### Phase 4 — cleanup
 

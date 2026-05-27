@@ -1100,6 +1100,11 @@ internal static class SelfTestFixtureRegistry
         "V1_Border_SingleContent",
         "V1_ListView_MountSelect",
 
+        // Spec 047 §14 Phase 2 (Q1 spike) — descriptor-vs-handler behavior parity.
+        "Desc_ToggleSwitch_MountUpdate",
+        "Desc_Slider_CoercionTolerance",
+        "Desc_Border_SingleContent",
+
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
         // Reactor.External.TestControl, references Reactor as a regular
@@ -2176,6 +2181,11 @@ internal static class SelfTestFixtureRegistry
         "V1_TextBox_Controlled" => new Spec047V1ProtocolFixtures.V1TextBoxControlled(harness),
         "V1_Border_SingleContent" => new Spec047V1ProtocolFixtures.V1BorderSingleContent(harness),
         "V1_ListView_MountSelect" => new Spec047V1ProtocolFixtures.V1ListViewMountSelect(harness),
+
+        // Spec 047 §14 Phase 2 (Q1 spike) — descriptor-vs-handler behavior parity.
+        "Desc_ToggleSwitch_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescToggleSwitchMountUpdate(harness),
+        "Desc_Slider_CoercionTolerance" => new Spec047V1ProtocolDescriptorFixtures.DescSliderCoercionTolerance(harness),
+        "Desc_Border_SingleContent" => new Spec047V1ProtocolDescriptorFixtures.DescBorderSingleContent(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),
