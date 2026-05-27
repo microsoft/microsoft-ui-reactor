@@ -495,6 +495,31 @@ shrink lands after V1 ships ON by default.
         rather than a string label) not expressed by `ButtonDescriptor` —
         descriptor handles the string-Content fast path only; nested
         element content falls through to the legacy arm.
+- [x] **Batch 5** — `RichEditBox`, `PasswordBox`, `RadioButtons` (plural
+      group control; the singular `RadioButton` was Batch 1). Value-bearing
+      input ports: `.HandCodedControlled<...EventPayload, TValue, TDelegate>`
+      for the controlled DP + change event. Three new payload types added
+      to ControlEventPayloads.cs (`RichEditBoxEventPayload`,
+      `PasswordBoxEventPayload`, `RadioButtonsEventPayload`).
+      PasswordBox trampoline keeps the manual
+      `ChangeEchoSuppressor.ShouldSuppress` gate (mirrors legacy) so even
+      author-driven suppressor tokens (e.g. from a future coercing setter)
+      still gate the user-vs-engine echo on top of HandCodedControlled's
+      WriteSuppressed wrap.
+      Fixtures: `Desc_RichEditBox_MountUpdate`, `Desc_PasswordBox_MountUpdate`,
+      `Desc_RadioButtons_MountUpdate` — all pass under V1 ON and V1 OFF.
+      **Known gaps:**
+      - `RichEditBoxDescriptor.Text` write is gated on
+        `!IsNullOrEmpty` (mirrors the legacy mount guard) — programmatic
+        clears via `Text=""` on Update are NOT propagated; authors who
+        need a fully-controlled empty document stay on the legacy arm.
+        No symmetric snap-back, same pattern as `TextBoxDescriptor`.
+      - `RadioButtonsDescriptor.Items` uses Clear+Add when the new array
+        differs by sequence — no keyed reconciliation. Suitable for the
+        typical 3–7 fixed-option case; large dynamic item lists fall
+        through to the legacy arm.
+      - `RadioButtonsElement` only carries a `string[]`; Element-typed
+        items (icon-rich radios) are not in scope this batch.
 - [ ] Batch 3-followup — `NumberBox` (needs Immediate-mode keystroke
       handling + `NumberFormatter` reference-equality semantics that the
       descriptor builders don't yet express — likely needs a new entry

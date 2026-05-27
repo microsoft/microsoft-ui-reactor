@@ -107,6 +107,32 @@ internal sealed class SplitButtonEventPayload
     public global::Windows.Foundation.TypedEventHandler<Microsoft.UI.Xaml.Controls.SplitButton, Microsoft.UI.Xaml.Controls.SplitButtonClickEventArgs>? ClickTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3 batch 5 — RichEditBox TextChanged payload.
+/// Round-trips <c>Document.GetText</c> into <c>OnTextChanged(string)</c>.
+/// RichEditBox's <c>TextChanged</c> uses <see cref="Microsoft.UI.Xaml.RoutedEventHandler"/>
+/// (unlike the plain TextBox's typed <c>TextChangedEventHandler</c>).</summary>
+internal sealed class RichEditBoxEventPayload
+{
+    public Microsoft.UI.Xaml.RoutedEventHandler? TextChangedTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 batch 5 — PasswordBox PasswordChanged payload.
+/// Round-trips <c>Password</c> into <c>OnPasswordChanged(string)</c> with
+/// the manual <c>ChangeEchoSuppressor.ShouldSuppress</c> gate that the
+/// hand-coded mount/update arms use.</summary>
+internal sealed class PasswordBoxEventPayload
+{
+    public Microsoft.UI.Xaml.RoutedEventHandler? PasswordChangedTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 batch 5 — RadioButtons SelectionChanged
+/// payload. Round-trips <c>SelectedIndex</c> into
+/// <c>OnSelectedIndexChanged(int)</c>.</summary>
+internal sealed class RadioButtonsEventPayload
+{
+    public Microsoft.UI.Xaml.Controls.SelectionChangedEventHandler? SelectionChangedTrampoline;
+}
+
 /// <summary>
 /// Spec 047 §9.2 — open-ended anchor for delegates registered via
 /// <see cref="ReactorBinding{TElement}.OnCustomEvent{TArgs}"/>. Holds a

@@ -130,6 +130,19 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<SplitButtonElement, WinUI.SplitButton>(
                 SplitButtonDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3 (batch 5) — Value-bearing input ports.
+        rec.RegisterHandler<RichEditBoxElement, WinUI.RichEditBox>(
+            new DescriptorHandler<RichEditBoxElement, WinUI.RichEditBox>(
+                RichEditBoxDescriptor.Descriptor));
+
+        rec.RegisterHandler<PasswordBoxElement, WinUI.PasswordBox>(
+            new DescriptorHandler<PasswordBoxElement, WinUI.PasswordBox>(
+                PasswordBoxDescriptor.Descriptor));
+
+        rec.RegisterHandler<RadioButtonsElement, WinUI.RadioButtons>(
+            new DescriptorHandler<RadioButtonsElement, WinUI.RadioButtons>(
+                RadioButtonsDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;

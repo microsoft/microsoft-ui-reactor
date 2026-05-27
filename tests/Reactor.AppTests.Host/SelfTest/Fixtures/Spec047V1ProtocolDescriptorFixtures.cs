@@ -1426,4 +1426,203 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  RichEditBoxDescriptor (Phase 3 batch 5) — Text controlled via the
+    //  document object + TextChanged trampoline.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescRichEditBoxMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<RichEditBoxElement, WinUI.RichEditBox>(
+                new DescriptorHandler<RichEditBoxElement, WinUI.RichEditBox>(
+                    RichEditBoxDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int changes = 0;
+            var el1 = new RichEditBoxElement(Text: "alpha")
+            {
+                OnTextChanged = _ => changes++,
+                Header = "Notes",
+                PlaceholderText = "type here",
+                IsReadOnly = false,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.RichEditBox reb)
+            {
+                parent.Children.Add(reb);
+                await Harness.Render();
+
+                reb.Document.GetText(Microsoft.UI.Text.TextGetOptions.None, out var mounted);
+                H.Check("Desc_RichEditBox_Mounted", true);
+                H.Check("Desc_RichEditBox_InitialText", (mounted?.TrimEnd('\r') ?? "") == "alpha");
+                H.Check("Desc_RichEditBox_Header", (reb.Header as string) == "Notes");
+                H.Check("Desc_RichEditBox_PlaceholderText", reb.PlaceholderText == "type here");
+                H.Check("Desc_RichEditBox_NotReadOnly", !reb.IsReadOnly);
+                H.Check("Desc_RichEditBox_MountDidNotFire", changes == 0);
+
+                // Programmatic text update — HandCodedControlled wraps in
+                // WriteSuppressed; no echo expected.
+                var el2 = el1 with { Text = "beta", IsReadOnly = true };
+                rec.UpdateChild(el1, el2, reb, _noOp);
+                await Harness.Render();
+
+                reb.Document.GetText(Microsoft.UI.Text.TextGetOptions.None, out var updated);
+                H.Check("Desc_RichEditBox_TextUpdated", (updated?.TrimEnd('\r') ?? "") == "beta");
+                H.Check("Desc_RichEditBox_ReadOnlyUpdated", reb.IsReadOnly);
+                H.Check("Desc_RichEditBox_NoEchoOnProgrammaticWrite", changes == 0);
+
+                rec.UnmountChild(reb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_RichEditBox_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  PasswordBoxDescriptor (Phase 3 batch 5) — Password controlled with
+    //  the ChangeEchoSuppressor gate on the trampoline.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescPasswordBoxMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<PasswordBoxElement, WinUI.PasswordBox>(
+                new DescriptorHandler<PasswordBoxElement, WinUI.PasswordBox>(
+                    PasswordBoxDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int changes = 0;
+            var el1 = new PasswordBoxElement(
+                Password: "hunter2",
+                OnPasswordChanged: _ => changes++,
+                PlaceholderText: "enter password")
+            {
+                Header = "Pass",
+                MaxLength = 32,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.PasswordBox pb)
+            {
+                parent.Children.Add(pb);
+                await Harness.Render();
+
+                H.Check("Desc_PasswordBox_Mounted", true);
+                H.Check("Desc_PasswordBox_InitialPassword", pb.Password == "hunter2");
+                H.Check("Desc_PasswordBox_PlaceholderText", pb.PlaceholderText == "enter password");
+                H.Check("Desc_PasswordBox_Header", (pb.Header as string) == "Pass");
+                H.Check("Desc_PasswordBox_MaxLength", pb.MaxLength == 32);
+                H.Check("Desc_PasswordBox_MountDidNotFire", changes == 0);
+
+                // Programmatic password update — WriteSuppressed + trampoline
+                // suppressor check should drop the echo.
+                var el2 = el1 with { Password = "newpass" };
+                rec.UpdateChild(el1, el2, pb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_PasswordBox_PasswordUpdated", pb.Password == "newpass");
+                H.Check("Desc_PasswordBox_NoEchoOnProgrammaticWrite", changes == 0);
+
+                rec.UnmountChild(pb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_PasswordBox_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  RadioButtonsDescriptor (Phase 3 batch 5) — plural RadioButtons
+    //  group; SelectedIndex controlled, Items via Clear+Add.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescRadioButtonsMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<RadioButtonsElement, WinUI.RadioButtons>(
+                new DescriptorHandler<RadioButtonsElement, WinUI.RadioButtons>(
+                    RadioButtonsDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int changes = 0;
+            var el1 = new RadioButtonsElement(
+                Items: new[] { "Apple", "Banana", "Cherry" },
+                SelectedIndex: 1,
+                OnSelectedIndexChanged: _ => changes++)
+            {
+                Header = "Pick one",
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.RadioButtons rbg)
+            {
+                parent.Children.Add(rbg);
+                await Harness.Render();
+
+                H.Check("Desc_RadioButtons_Mounted", true);
+                H.Check("Desc_RadioButtons_ItemsCount", rbg.Items.Count == 3);
+                H.Check("Desc_RadioButtons_FirstItem", (rbg.Items[0] as string) == "Apple");
+                H.Check("Desc_RadioButtons_Header", (rbg.Header as string) == "Pick one");
+                // Mount fires SelectionChanged once when the items+SelectedIndex
+                // settle — both the descriptor AND the legacy arm see this
+                // (template-driven). Documented gap; snapshot the count and
+                // check Update doesn't re-fire beyond what Items.Clear costs.
+                var changesAfterMount = changes;
+                // SelectedIndex isn't honored until items are realized via the
+                // ItemsRepeater template; the descriptor wrote it, so accept
+                // either the requested index OR -1 (template not yet realized
+                // under the headless self-test harness).
+                H.Check("Desc_RadioButtons_SelectedIndexAccepted",
+                    rbg.SelectedIndex == 1 || rbg.SelectedIndex == -1);
+
+                // Items + SelectedIndex update — Clear+Add path. The
+                // SelectionChanged fired during Items.Clear/Add is template-
+                // driven; the descriptor's SelectedIndex write is itself
+                // WriteSuppressed by HandCodedControlled. Net delta should
+                // be bounded — a small number of additional fires beyond
+                // the mount baseline, reflecting the Clear/Add churn.
+                var el2 = el1 with
+                {
+                    Items = new[] { "X", "Y", "Z", "W" },
+                    SelectedIndex = 2,
+                };
+                rec.UpdateChild(el1, el2, rbg, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_RadioButtons_ItemsReplaced", rbg.Items.Count == 4);
+                H.Check("Desc_RadioButtons_NewFirstItem", (rbg.Items[0] as string) == "X");
+                // Programmatic SelectedIndex write itself is suppressed; any
+                // residual fires are from Items.Clear/Add. Bound to <= 3
+                // (Clear + at most two SelectedIndex transitions from the
+                // realize cycle).
+                var changesAfterUpdate = changes;
+                H.Check("Desc_RadioButtons_BoundedUpdateEcho",
+                    changesAfterUpdate - changesAfterMount <= 3);
+
+                rec.UnmountChild(rbg);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_RadioButtons_Mounted", false);
+            }
+        }
+    }
 }

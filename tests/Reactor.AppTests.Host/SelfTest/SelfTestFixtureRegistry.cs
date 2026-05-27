@@ -1133,6 +1133,10 @@ internal static class SelfTestFixtureRegistry
         "Desc_ToggleButton_MountUpdate",
         "Desc_DropDownButton_MountUpdate",
         "Desc_SplitButton_MountUpdate",
+        // Spec 047 §14 Phase 3 (batch 5) — Value-bearing input ports.
+        "Desc_RichEditBox_MountUpdate",
+        "Desc_PasswordBox_MountUpdate",
+        "Desc_RadioButtons_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2242,6 +2246,9 @@ internal static class SelfTestFixtureRegistry
         "Desc_ToggleButton_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescToggleButtonMountUpdate(harness),
         "Desc_DropDownButton_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescDropDownButtonMountUpdate(harness),
         "Desc_SplitButton_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescSplitButtonMountUpdate(harness),
+        "Desc_RichEditBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRichEditBoxMountUpdate(harness),
+        "Desc_PasswordBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescPasswordBoxMountUpdate(harness),
+        "Desc_RadioButtons_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRadioButtonsMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),
