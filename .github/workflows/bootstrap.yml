@@ -164,8 +164,14 @@ jobs:
       - name: Build TestApp (default WindowsAppSDKSelfContained=true)
         shell: pwsh
         run: |
+          # WindowsAppSDKSelfContained=true (inherited from
+          # Directory.Build.props) requires a concrete arch to embed the
+          # runtime under — AnyCPU is rejected by the SelfContained
+          # target. Pass the host arch explicitly.
+          $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
           dotnet build TestProjects/TestApp/TestApp.csproj `
               -c Release `
+              "-p:Platform=$arch" `
               --nologo -v:m
           if ($LASTEXITCODE -ne 0) { throw "TestApp build exited $LASTEXITCODE" }
 
