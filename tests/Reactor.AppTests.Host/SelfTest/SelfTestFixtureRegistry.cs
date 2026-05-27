@@ -1119,6 +1119,13 @@ internal static class SelfTestFixtureRegistry
         "Desc_CalendarDatePicker_MountUpdate",
         "Desc_DatePicker_MountUpdate",
         "Desc_TimePicker_MountUpdate",
+        // Spec 047 §14 Phase 3 (batch 3) — Display family zero-event ports.
+        "Desc_TextBlock_MountUpdate",
+        "Desc_Image_MountUpdate",
+        "Desc_PersonPicture_MountUpdate",
+        "Desc_ProgressBar_MountUpdate",
+        "Desc_ProgressRing_MountUpdate",
+        "Desc_InfoBadge_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2214,6 +2221,13 @@ internal static class SelfTestFixtureRegistry
         "Desc_CalendarDatePicker_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescCalendarDatePickerMountUpdate(harness),
         "Desc_DatePicker_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescDatePickerMountUpdate(harness),
         "Desc_TimePicker_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescTimePickerMountUpdate(harness),
+        // Spec 047 §14 Phase 3 (batch 3) — Display family zero-event ports.
+        "Desc_TextBlock_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescTextBlockMountUpdate(harness),
+        "Desc_Image_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescImageMountUpdate(harness),
+        "Desc_PersonPicture_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescPersonPictureMountUpdate(harness),
+        "Desc_ProgressBar_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescProgressBarMountUpdate(harness),
+        "Desc_ProgressRing_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescProgressRingMountUpdate(harness),
+        "Desc_InfoBadge_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescInfoBadgeMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

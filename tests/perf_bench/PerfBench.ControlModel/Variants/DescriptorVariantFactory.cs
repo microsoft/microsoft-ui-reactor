@@ -80,6 +80,31 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<TimePickerElement, WinUI.TimePicker>(
                 TimePickerDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3 (batch 3) — Display family zero-event ports.
+        rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+            new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                TextBlockDescriptor.Descriptor));
+
+        rec.RegisterHandler<ImageElement, WinUI.Image>(
+            new DescriptorHandler<ImageElement, WinUI.Image>(
+                ImageDescriptor.Descriptor));
+
+        rec.RegisterHandler<PersonPictureElement, WinUI.PersonPicture>(
+            new DescriptorHandler<PersonPictureElement, WinUI.PersonPicture>(
+                PersonPictureDescriptor.Descriptor));
+
+        rec.RegisterHandler<ProgressElement, WinUI.ProgressBar>(
+            new DescriptorHandler<ProgressElement, WinUI.ProgressBar>(
+                ProgressBarDescriptor.Descriptor));
+
+        rec.RegisterHandler<ProgressRingElement, WinUI.ProgressRing>(
+            new DescriptorHandler<ProgressRingElement, WinUI.ProgressRing>(
+                ProgressRingDescriptor.Descriptor));
+
+        rec.RegisterHandler<InfoBadgeElement, WinUI.InfoBadge>(
+            new DescriptorHandler<InfoBadgeElement, WinUI.InfoBadge>(
+                InfoBadgeDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;

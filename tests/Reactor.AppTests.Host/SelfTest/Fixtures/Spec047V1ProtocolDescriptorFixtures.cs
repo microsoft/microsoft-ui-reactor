@@ -807,4 +807,301 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  TextBlockDescriptor (Phase 3 batch 3) — zero-event display leaf.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescTextBlockMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new TextBlockElement("hello")
+            {
+                FontSize = 14,
+                TextWrapping = TextWrapping.Wrap,
+                MaxLines = 2,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.TextBlock tb)
+            {
+                parent.Children.Add(tb);
+                await Harness.Render();
+
+                H.Check("Desc_TextBlock_Mounted", true);
+                H.Check("Desc_TextBlock_InitialText", tb.Text == "hello");
+                H.Check("Desc_TextBlock_FontSize", Math.Abs(tb.FontSize - 14) < 1e-9);
+                H.Check("Desc_TextBlock_TextWrapping", tb.TextWrapping == TextWrapping.Wrap);
+                H.Check("Desc_TextBlock_MaxLines", tb.MaxLines == 2);
+
+                var el2 = el1 with { Content = "world", FontSize = 16 };
+                rec.UpdateChild(el1, el2, tb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_TextBlock_UpdatedText", tb.Text == "world");
+                H.Check("Desc_TextBlock_UpdatedFontSize", Math.Abs(tb.FontSize - 16) < 1e-9);
+
+                rec.UnmountChild(tb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_TextBlock_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  ImageDescriptor (Phase 3 batch 3) — zero-event display leaf.
+    //  Note: ImageOpened/ImageFailed events are a documented gap (see
+    //  ImageDescriptor xmldoc); fixture only asserts Source / size props.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescImageMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ImageElement, WinUI.Image>(
+                new DescriptorHandler<ImageElement, WinUI.Image>(
+                    ImageDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new ImageElement("https://example.com/a.png")
+            {
+                Width = 100,
+                Height = 50,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.Image img)
+            {
+                parent.Children.Add(img);
+                await Harness.Render();
+
+                H.Check("Desc_Image_Mounted", true);
+                H.Check("Desc_Image_SourceAssigned", img.Source is not null);
+                H.Check("Desc_Image_Width", Math.Abs(img.Width - 100) < 1e-9);
+                H.Check("Desc_Image_Height", Math.Abs(img.Height - 50) < 1e-9);
+
+                var el2 = el1 with { Source = "https://example.com/b.svg", Width = 200 };
+                rec.UpdateChild(el1, el2, img, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Image_UpdatedSource", img.Source is not null);
+                H.Check("Desc_Image_UpdatedWidth", Math.Abs(img.Width - 200) < 1e-9);
+
+                rec.UnmountChild(img);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Image_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  PersonPictureDescriptor (Phase 3 batch 3) — zero-event display leaf.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescPersonPictureMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<PersonPictureElement, WinUI.PersonPicture>(
+                new DescriptorHandler<PersonPictureElement, WinUI.PersonPicture>(
+                    PersonPictureDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new PersonPictureElement
+            {
+                DisplayName = "Ada Lovelace",
+                Initials = "AL",
+                BadgeNumber = 3,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.PersonPicture pp)
+            {
+                parent.Children.Add(pp);
+                await Harness.Render();
+
+                H.Check("Desc_PersonPicture_Mounted", true);
+                H.Check("Desc_PersonPicture_DisplayName", pp.DisplayName == "Ada Lovelace");
+                H.Check("Desc_PersonPicture_Initials", pp.Initials == "AL");
+                H.Check("Desc_PersonPicture_BadgeNumber", pp.BadgeNumber == 3);
+
+                var el2 = el1 with { DisplayName = "Grace Hopper", BadgeNumber = 0 };
+                rec.UpdateChild(el1, el2, pp, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_PersonPicture_UpdatedDisplayName", pp.DisplayName == "Grace Hopper");
+                H.Check("Desc_PersonPicture_UpdatedBadgeNumber", pp.BadgeNumber == 0);
+
+                rec.UnmountChild(pp);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_PersonPicture_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  ProgressBarDescriptor (Phase 3 batch 3) — zero-event display leaf.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescProgressBarMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ProgressElement, WinUI.ProgressBar>(
+                new DescriptorHandler<ProgressElement, WinUI.ProgressBar>(
+                    ProgressBarDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new ProgressElement(Value: 25)
+            {
+                Minimum = 0,
+                Maximum = 100,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ProgressBar pb)
+            {
+                parent.Children.Add(pb);
+                await Harness.Render();
+
+                H.Check("Desc_ProgressBar_Mounted", true);
+                H.Check("Desc_ProgressBar_InitialValue", Math.Abs(pb.Value - 25) < 1e-9);
+                H.Check("Desc_ProgressBar_Minimum", Math.Abs(pb.Minimum - 0) < 1e-9);
+                H.Check("Desc_ProgressBar_Maximum", Math.Abs(pb.Maximum - 100) < 1e-9);
+                H.Check("Desc_ProgressBar_NotIndeterminate", !pb.IsIndeterminate);
+
+                var el2 = el1 with { Value = 75 };
+                rec.UpdateChild(el1, el2, pb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_ProgressBar_UpdatedValue", Math.Abs(pb.Value - 75) < 1e-9);
+
+                // Indeterminate flip — Value=null sets IsIndeterminate=true.
+                var el3 = el2 with { Value = null };
+                rec.UpdateChild(el2, el3, pb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_ProgressBar_BecameIndeterminate", pb.IsIndeterminate);
+
+                rec.UnmountChild(pb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ProgressBar_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  ProgressRingDescriptor (Phase 3 batch 3) — zero-event display leaf.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescProgressRingMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ProgressRingElement, WinUI.ProgressRing>(
+                new DescriptorHandler<ProgressRingElement, WinUI.ProgressRing>(
+                    ProgressRingDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new ProgressRingElement(Value: 50)
+            {
+                IsActive = true,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ProgressRing pr)
+            {
+                parent.Children.Add(pr);
+                await Harness.Render();
+
+                H.Check("Desc_ProgressRing_Mounted", true);
+                H.Check("Desc_ProgressRing_InitialValue", Math.Abs(pr.Value - 50) < 1e-9);
+                H.Check("Desc_ProgressRing_IsActive", pr.IsActive);
+                H.Check("Desc_ProgressRing_NotIndeterminate", !pr.IsIndeterminate);
+
+                var el2 = el1 with { Value = 80 };
+                rec.UpdateChild(el1, el2, pr, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_ProgressRing_UpdatedValue", Math.Abs(pr.Value - 80) < 1e-9);
+
+                rec.UnmountChild(pr);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ProgressRing_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  InfoBadgeDescriptor (Phase 3 batch 3) — zero-event display leaf.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescInfoBadgeMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<InfoBadgeElement, WinUI.InfoBadge>(
+                new DescriptorHandler<InfoBadgeElement, WinUI.InfoBadge>(
+                    InfoBadgeDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new InfoBadgeElement { Value = 7 };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.InfoBadge ib)
+            {
+                parent.Children.Add(ib);
+                await Harness.Render();
+
+                H.Check("Desc_InfoBadge_Mounted", true);
+                H.Check("Desc_InfoBadge_InitialValue", ib.Value == 7);
+
+                var el2 = el1 with { Value = 42 };
+                rec.UpdateChild(el1, el2, ib, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_InfoBadge_UpdatedValue", ib.Value == 42);
+
+                rec.UnmountChild(ib);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_InfoBadge_Mounted", false);
+            }
+        }
+    }
 }

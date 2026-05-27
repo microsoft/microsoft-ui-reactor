@@ -449,11 +449,32 @@ shrink lands after V1 ships ON by default.
       `MaxDate` / format props on subsequent renders; the descriptor's
       `OneWayConditional` entries do (positive divergence — element
       changes flow through).
-- [ ] Batch 3 — `NumberBox` (needs Immediate-mode keystroke handling +
-      `NumberFormatter` reference-equality semantics that the descriptor
-      builders don't yet express — likely needs a new entry shape or a
-      `HandCoded*` path). Remaining value-bearing leaves
-      (`PersonPicture`, etc.) to follow.
+- [x] **Batch 3** — `TextBlock`, `Image`, `PersonPicture`, `ProgressBar`,
+      `ProgressRing`, `InfoBadge`. All `.OneWay` / `.OneWayConditional`
+      zero-event ports under the Display family. Fixtures:
+      `Desc_TextBlock_MountUpdate`, `Desc_Image_MountUpdate`,
+      `Desc_PersonPicture_MountUpdate`, `Desc_ProgressBar_MountUpdate`,
+      `Desc_ProgressRing_MountUpdate`, `Desc_InfoBadge_MountUpdate` —
+      all pass under V1 ON and V1 OFF.
+      **Known gaps:**
+      - `RichTextBlock` was *not* ported — its
+        `MountRichTextBlock`/`UpdateRichTextBlock` arms build a stateful
+        `Paragraphs/Inlines` tree and the `Update` path does incremental
+        per-paragraph inline diffing that doesn't fit a `.OneWay` lambda
+        without regressing the fast paths. Escape-hatched; legacy arm
+        continues to serve V1 OFF authors and V1 ON falls through.
+      - `ImageDescriptor` does not subscribe to `ImageOpened` /
+        `ImageFailed` (Batch 3 is zero-event only). The legacy arm
+        continues to fire `OnImageOpened` / `OnImageFailed` callbacks;
+        descriptor authors who need image-load events fall through.
+      - `InfoBadgeDescriptor` does not write `Icon` (the legacy arm
+        doesn't either — mirrored gap, not regressed).
+- [ ] Batch 3-followup — `NumberBox` (needs Immediate-mode keystroke
+      handling + `NumberFormatter` reference-equality semantics that the
+      descriptor builders don't yet express — likely needs a new entry
+      shape or a `HandCoded*` path). `RichTextBlock` (incremental
+      paragraph/inline diffing — needs a child-strategy or new entry
+      shape).
 
 **Carry-forward known defects** (from Phase 1):
 
