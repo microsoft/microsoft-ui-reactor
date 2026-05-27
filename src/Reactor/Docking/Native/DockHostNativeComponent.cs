@@ -475,23 +475,19 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 (double)(req.CursorScreenPhys.X - req.PressOffsetPhys.X) / req.SourceScale,
                 (double)(req.CursorScreenPhys.Y - req.PressOffsetPhys.Y) / req.SourceScale);
 
-            ReactorWindow floatingWindow;
-            try
-            {
-                floatingWindow = DockFloatingWindow.Open(
-                    pane,
-                    manager: manager,
-                    opacity: 0.5,
-                    noActivate: true,
-                    ignorePointerInput: true,
-                    initialPosition: initialTopLeft);
-            }
-            catch
-            {
-                // Failure → no mutation should be visible. We didn't
-                // StoreOverride yet so the layout is still intact.
-                return null;
-            }
+            // DockFloatingWindow.Open is a normal-code-flow call: its
+            // failure modes are bugs (WinUI window-creation refusal,
+            // pre-condition violations) that we want to surface, not
+            // swallow. The layout mutation (StoreOverride) is deferred
+            // until after Open returns so a throw here leaves
+            // effectiveLayout intact.
+            var floatingWindow = DockFloatingWindow.Open(
+                pane,
+                manager: manager,
+                opacity: 0.5,
+                noActivate: true,
+                ignorePointerInput: true,
+                initialPosition: initialTopLeft);
 
             StoreOverride(afterRemove);
             manager.OnContentFloated?.Invoke(new DockContentFloatedEventArgs { Content = pane });
@@ -576,30 +572,25 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 // breaks WinUI's dispatcher (see the spike doc's
                 // "render-time cleanup" gotcha). One queued tick is
                 // enough to let the host's pending re-render flush.
+                // ReactorWindow.Close is idempotent (no-op after _disposed)
+                // and internally swallows the COMException teardown-reentry
+                // set, so calling it once per branch — enqueued OR sync
+                // fallback, never both — is safe without an outer catch.
                 var dq = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-                bool enqueued = dq is not null && dq.TryEnqueue(() =>
-                {
-                    try { floatingWindow.Close(); }
-                    catch { /* window may already be tearing down */ }
-                });
-                if (!enqueued)
-                {
-                    try { floatingWindow.Close(); } catch { }
-                }
+                bool enqueued = dq is not null && dq.TryEnqueue(floatingWindow.Close);
+                if (!enqueued) floatingWindow.Close();
                 return;
             }
 
             // No target hit (drop-outside / cancel). Strip the
             // drag-only window styles so the floating window becomes a
-            // real, interactive floating pane.
-            try
-            {
-                floatingWindow.SetIgnorePointerInput(false);
-                floatingWindow.SetOpacity(1.0);
-                floatingWindow.SetNoActivate(false);
-                floatingWindow.Activate();
-            }
-            catch { }
+            // real, interactive floating pane. All four ReactorWindow
+            // mutators are no-op on _disposed and internally narrow the
+            // teardown COMException set, so no outer catch is needed.
+            floatingWindow.SetIgnorePointerInput(false);
+            floatingWindow.SetOpacity(1.0);
+            floatingWindow.SetNoActivate(false);
+            floatingWindow.Activate();
 
             session?.End();
             setDragActive(false);

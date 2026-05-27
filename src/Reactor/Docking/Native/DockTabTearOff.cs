@@ -547,18 +547,22 @@ internal static class DockTabTearOffTracker
         var cursorPhys = DockTabTearOff.TryGetCursorPhys();
         var x = cursorPhys.X - active.OffsetPhys.X;
         var y = cursorPhys.Y - active.OffsetPhys.Y;
-        try
-        {
-            // Bypass ReactorWindow.SetPosition's DIP→physical roundtrip
-            // (which uses the window's _dpi — unreliable for a fresh
-            // NoActivate window). Drive AppWindow.Move with absolute
-            // screen-physical coords directly. Same coordinate system
-            // as GetCursorPos returns, so the cursor and the window
-            // top-left stay locked together exactly.
-            active.FloatingWindow.AppWindow.Move(
-                new global::Windows.Graphics.PointInt32(x, y));
-        }
-        catch { /* window may have been closed externally */ }
+        // Bypass ReactorWindow.SetPosition's DIP→physical roundtrip
+        // (which uses the window's _dpi — unreliable for a fresh
+        // NoActivate window). Drive AppWindow.Move with absolute
+        // screen-physical coords directly. Same coordinate system
+        // as GetCursorPos returns, so the cursor and the window
+        // top-left stay locked together exactly.
+        //
+        // Ordering guarantee: every path that closes the floating window
+        // (FinalizeInternal, ForceCancel, host-unmount UseEffect cleanup)
+        // calls Stop() FIRST, which detaches the Tick handler and clears
+        // s_active. PositionFloating is only invoked from OnTick (timer
+        // disabled after Stop) and synchronously from Start (window is
+        // fresh). No path leaves a live tracker pointing at a closed
+        // window, so AppWindow.Move always targets a live AppWindow.
+        active.FloatingWindow.AppWindow.Move(
+            new global::Windows.Graphics.PointInt32(x, y));
     }
 
     private static void FinalizeInternal(bool commit)
