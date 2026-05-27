@@ -2,7 +2,12 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <!-- TFM is plain net10.0 (no -windows suffix) so PackAsTool produces a
+         valid global-tool nupkg — `PackAsTool` rejects TargetPlatformIdentifier
+         (NETSDK1146). The CLI doesn't use WinUI APIs directly; the
+         SignaturesGen ProjectReference brings WindowsAppSDK in at build-time
+         only (ReferenceOutputAssembly=false). -->
+    <TargetFramework>net10.0</TargetFramework>
     <Platforms>x64;ARM64</Platforms>
     <AssemblyName>mur</AssemblyName>
     <RootNamespace>Microsoft.UI.Reactor.Cli</RootNamespace>
@@ -15,6 +20,24 @@
          layout via a self-contained `dotnet publish`. -->
   </PropertyGroup>
 
+  <!-- Pack `mur` as a dotnet global tool. `bootstrap.ps1` installs the produced
+       nupkg via `dotnet tool install -g`, which puts `mur` on PATH cross-shell
+       without arch-specific PATH munging. The mirror-to-bin/<arch>/ Target
+       below remains for legacy PATH-based installs. -->
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>mur</ToolCommandName>
+    <PackageId>Microsoft.UI.Reactor.Cli</PackageId>
+    <Description>Microsoft.UI.Reactor CLI — scaffolding, doc pipeline, find, check, localization, devtools supervisor, and Roslyn analyzer host.</Description>
+    <Authors>Microsoft</Authors>
+    <Company>Microsoft</Company>
+    <PackageProjectUrl>https://github.com/microsoft/microsoft-ui-reactor</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RollForward>LatestMajor</RollForward>
+    <!-- IsPackable defaults to true with PackAsTool; explicit for clarity. -->
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
   <!-- Resolve the effective architecture from Platform or RuntimeIdentifier
        so the bin/<arch> mirror layout stays consistent with the skill kit. -->
   <PropertyGroup>
@@ -23,6 +46,16 @@
     <_ReactorArch Condition="'$(_ReactorArch)' == '' and '$(RuntimeIdentifier)' == 'win-arm64'">arm64</_ReactorArch>
     <ReactorBinDir Condition="'$(_ReactorArch)' != ''">$(MSBuildThisFileDirectory)..\..\bin\$(_ReactorArch)</ReactorBinDir>
   </PropertyGroup>
+
+  <!-- Declare the assembly Windows-only at the metadata level. Dropping the
+       `-windows` TFM (required for PackAsTool) otherwise causes CA1416 to fire
+       on System.Drawing usage in Docs/ImageProcessor.cs. Reactor itself is
+       Windows-only by virtue of WinUI, so this is semantically accurate. -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatform">
+      <_Parameter1>windows</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Reactor.Tests" />
@@ -71,15 +104,18 @@
     <_SignaturesGenPlatform Condition="'$(_SignaturesGenPlatform)' == ''">x64</_SignaturesGenPlatform>
   </PropertyGroup>
 
-  <!-- Build-order only: ensures the signatures generator runs (and writes
-       skills/reactor.api.txt) before this project embeds it. The generator
-       isn't a runtime dependency of mur. -->
-  <ItemGroup>
-    <ProjectReference Include="..\..\tools\Reactor.SignaturesGen\Reactor.SignaturesGen.csproj"
-                      ReferenceOutputAssembly="false"
-                      Private="false"
-                      SetPlatform="Platform=$(_SignaturesGenPlatform)" />
-  </ItemGroup>
+  <!-- Build-order only: invoke SignaturesGen via Exec rather than ProjectReference.
+       The CLI targets plain net10.0 (required by PackAsTool); SignaturesGen
+       targets net10.0-windows10.0.22621.0. A ProjectReference across that TFM
+       boundary fails NuGet asset resolution at pack time, so we shell out
+       instead — SignaturesGen runs its own AfterBuild step that writes
+       skills/reactor.api.txt, which this csproj then embeds as a resource. -->
+  <Target Name="RunSignaturesGen" BeforeTargets="BeforeBuild"
+          Condition="'$(SkipSignaturesGen)' != 'true'">
+    <Exec Command="dotnet build &quot;$(MSBuildThisFileDirectory)..\..\tools\Reactor.SignaturesGen\Reactor.SignaturesGen.csproj&quot; -c $(Configuration) -p:Platform=$(_SignaturesGenPlatform) --nologo -v:q"
+          ConsoleToMSBuild="true"
+          ContinueOnError="false" />
+  </Target>
 
   <!-- After build, mirror the CLI output to <repo>/bin/<arch>/ so it matches
        the deployed skill-kit layout. Add that directory to your PATH once and

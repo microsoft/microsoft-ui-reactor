@@ -84,6 +84,16 @@ if (arg == "clean-local")
     return Microsoft.UI.Reactor.Cli.Pack.CleanLocalCommand.Run(args.Skip(1).ToArray());
 }
 
+if (arg == "doctor")
+{
+    return Microsoft.UI.Reactor.Cli.Doctor.DoctorCommand.Run(args.Skip(1).ToArray());
+}
+
+if (arg == "upgrade")
+{
+    return Microsoft.UI.Reactor.Cli.Upgrade.UpgradeCommand.Run(args.Skip(1).ToArray());
+}
+
 Console.Error.WriteLine($"Unknown option: {args[0]}");
 Console.Error.WriteLine();
 ShowHelp();
@@ -118,6 +128,8 @@ void ShowHelp()
     Console.WriteLine("  check [path]     Build and emit one-line diagnostics with skill-file pointers");
     Console.WriteLine("  pack-local       Pack the in-source framework to <repo>/local-nupkgs/ as 0.0.0-local");
     Console.WriteLine("  clean-local      Remove local packages, NuGet cache entries, and templates");
+    Console.WriteLine("  doctor           Verify the install (SDK, mur, local feed, template, plugin)");
+    Console.WriteLine("  upgrade          Re-pack framework + templates and refresh plugin after `git pull`");
 }
 
 int ShowSkill()
@@ -153,20 +165,24 @@ int ShowApi()
 
 int RegenApi()
 {
-    // Walk up from the running mur binary to find the repo root (the dir that
-    // contains src/Reactor and tools/Reactor.SignaturesGen). Then invoke the
-    // generator project. Selfhost only — NuGet consumers don't have the source.
-    var dir = AppContext.BaseDirectory;
-    string? repoRoot = null;
-    for (var d = new DirectoryInfo(dir); d is not null; d = d.Parent)
+    // Walk up from CWD first (so a globally-installed `mur` still resolves the
+    // checkout the user is sitting in), then fall back to the running binary's
+    // location for the legacy bin/<arch>/mur.exe layout. Selfhost only — NuGet
+    // consumers don't have the source.
+    static string? FindGenRoot(string start)
     {
-        if (Directory.Exists(Path.Combine(d.FullName, "tools", "Reactor.SignaturesGen"))
-            && Directory.Exists(Path.Combine(d.FullName, "src", "Reactor")))
+        for (var d = new DirectoryInfo(start); d is not null; d = d.Parent)
         {
-            repoRoot = d.FullName;
-            break;
+            if (Directory.Exists(Path.Combine(d.FullName, "tools", "Reactor.SignaturesGen"))
+                && Directory.Exists(Path.Combine(d.FullName, "src", "Reactor")))
+            {
+                return d.FullName;
+            }
         }
+        return null;
     }
+    var repoRoot = FindGenRoot(Directory.GetCurrentDirectory())
+                ?? FindGenRoot(AppContext.BaseDirectory);
     if (repoRoot is null)
     {
         Console.Error.WriteLine("Error: --regen-api must be run from a Reactor source checkout (could not locate tools/Reactor.SignaturesGen).");
