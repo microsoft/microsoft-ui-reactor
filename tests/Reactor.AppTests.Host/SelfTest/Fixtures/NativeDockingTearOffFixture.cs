@@ -182,6 +182,7 @@ internal static class NativeDockingTearOffFixtures
         public override async Task RunAsync()
         {
             ResetAll(); PrepDeterministic();
+            ReactorWindow? previewWindow = null;
             try
             {
                 var host = H.CreateHost();
@@ -197,6 +198,7 @@ internal static class NativeDockingTearOffFixtures
                 DockTabTearOff.SimulatePressForTest(tv, item0, a, 0);
                 DockTabTearOff.SimulateMoveForTest(tv, 5.0, 5.0);
                 await Harness.Render();
+                previewWindow = DockTabTearOffTracker.ActiveForTest?.FloatingWindow;
 
                 H.Check("T04_TrackerActive", DockTabTearOffTracker.IsActiveForTest);
                 H.Check("T04_SessionActive",
@@ -214,13 +216,20 @@ internal static class NativeDockingTearOffFixtures
                 H.Check("T04_SourceTabsAreB_only",
                     headersAfter.Count == 1 && headersAfter[0] == "b");
 
-                // Cleanup: cancel the drag so the floating window closes.
+                // commit:false (Esc) ends the session but leaves the
+                // preview floating window open with drag styles stripped
+                // (spec §2.6). The fixture's finally closes it explicitly.
                 DockTabTearOffTracker.SimulateReleaseForTest(commit: false);
                 await Harness.Render();
                 host.Mount(_ => TextBlock("done"));
                 await Harness.Render();
             }
-            finally { ResetAll(); }
+            finally
+            {
+                if (previewWindow is not null) DockFloatingPaneRouter.Unregister(previewWindow);
+                previewWindow?.Close();
+                ResetAll();
+            }
         }
     }
 
@@ -318,6 +327,8 @@ internal static class NativeDockingTearOffFixtures
             ResetAll(); PrepDeterministic();
             var savedPolicy = ReactorApp.ShutdownPolicy;
             ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            ReactorWindow? firstFloating = null;
+            ReactorWindow? secondFloating = null;
             try
             {
                 var host = H.CreateHost();
@@ -337,7 +348,7 @@ internal static class NativeDockingTearOffFixtures
                 await Harness.Render();
                 H.Check("T07_FirstDragStarted", DockTabTearOffTracker.IsActive);
                 var firstActive = DockTabTearOffTracker.ActiveForTest;
-                var firstFloating = firstActive?.FloatingWindow;
+                firstFloating = firstActive?.FloatingWindow;
 
                 // Second drag on the post-tear-off TabView. The stale
                 // first tracker should be force-cleaned; the second drag
@@ -358,17 +369,18 @@ internal static class NativeDockingTearOffFixtures
                 H.Check("T07_FirstFloatingDragStylesStripped",
                     firstFloating is not null && firstFloating.Spec.Opacity >= 0.99);
 
-                // Cleanup
+                secondFloating = DockTabTearOffTracker.ActiveForTest?.FloatingWindow;
                 DockTabTearOffTracker.SimulateReleaseForTest(commit: false);
-                await Harness.Render();
-                try { firstFloating?.Close(); } catch { }
-                try { DockTabTearOffTracker.ActiveForTest?.FloatingWindow.Close(); } catch { }
                 await Harness.Render();
                 host.Mount(_ => TextBlock("done"));
                 await Harness.Render();
             }
             finally
             {
+                if (firstFloating is not null) DockFloatingPaneRouter.Unregister(firstFloating);
+                if (secondFloating is not null) DockFloatingPaneRouter.Unregister(secondFloating);
+                firstFloating?.Close();
+                secondFloating?.Close();
                 ReactorApp.ShutdownPolicy = savedPolicy;
                 ResetAll();
             }
@@ -388,6 +400,7 @@ internal static class NativeDockingTearOffFixtures
             ResetAll(); PrepDeterministic();
             var savedPolicy = ReactorApp.ShutdownPolicy;
             ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            ReactorWindow? floatingWindow = null;
             try
             {
                 var host = H.CreateHost();
@@ -404,6 +417,7 @@ internal static class NativeDockingTearOffFixtures
                 DockTabTearOff.SimulateMoveForTest(tv, 5.0, 5.0);
                 await Harness.Render();
                 var active = DockTabTearOffTracker.ActiveForTest;
+                floatingWindow = active?.FloatingWindow;
                 H.Check("T08_TrackerHasActive", active is not null);
 
                 // No overlay has a hovered target — release-without-target
@@ -415,19 +429,17 @@ internal static class NativeDockingTearOffFixtures
                 H.Check("T08_SessionEnded",
                     DockDragSession.Current is null or { IsActive: false });
                 H.Check("T08_FloatingWindowStillOpen",
-                    active is not null && !IsClosed(active.FloatingWindow));
+                    floatingWindow is not null && !IsClosed(floatingWindow));
                 H.Check("T08_FloatingWindowOpacityRestored",
-                    active is not null && active.FloatingWindow.Spec.Opacity >= 0.99);
+                    floatingWindow is not null && floatingWindow.Spec.Opacity >= 0.99);
 
-                // Cleanup — close the floating window so it doesn't
-                // leak into the next fixture.
-                try { active?.FloatingWindow.Close(); } catch { }
-                await Harness.Render();
                 host.Mount(_ => TextBlock("done"));
                 await Harness.Render();
             }
             finally
             {
+                if (floatingWindow is not null) DockFloatingPaneRouter.Unregister(floatingWindow);
+                floatingWindow?.Close();
                 ReactorApp.ShutdownPolicy = savedPolicy;
                 ResetAll();
             }
@@ -448,6 +460,7 @@ internal static class NativeDockingTearOffFixtures
             ResetAll(); PrepDeterministic();
             var savedPolicy = ReactorApp.ShutdownPolicy;
             ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            ReactorWindow? floatingWindow = null;
             try
             {
                 var host = H.CreateHost();
@@ -464,6 +477,7 @@ internal static class NativeDockingTearOffFixtures
                 DockTabTearOff.SimulateMoveForTest(tv, 5.0, 5.0);
                 await Harness.Render();
                 var active = DockTabTearOffTracker.ActiveForTest;
+                floatingWindow = active?.FloatingWindow;
 
                 DockTabTearOffTracker.SimulateReleaseForTest(commit: false);
                 await Harness.Render();
@@ -472,15 +486,15 @@ internal static class NativeDockingTearOffFixtures
                 H.Check("T09_SessionEnded",
                     DockDragSession.Current is null or { IsActive: false });
                 H.Check("T09_FloatingWindowStillOpen",
-                    active is not null && !IsClosed(active.FloatingWindow));
+                    floatingWindow is not null && !IsClosed(floatingWindow));
 
-                try { active?.FloatingWindow.Close(); } catch { }
-                await Harness.Render();
                 host.Mount(_ => TextBlock("done"));
                 await Harness.Render();
             }
             finally
             {
+                if (floatingWindow is not null) DockFloatingPaneRouter.Unregister(floatingWindow);
+                floatingWindow?.Close();
                 ReactorApp.ShutdownPolicy = savedPolicy;
                 ResetAll();
             }
@@ -500,6 +514,7 @@ internal static class NativeDockingTearOffFixtures
             ResetAll(); PrepDeterministic();
             var savedPolicy = ReactorApp.ShutdownPolicy;
             ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            ReactorWindow? floatingWindow = null;
             try
             {
                 var host = H.CreateHost();
@@ -518,6 +533,7 @@ internal static class NativeDockingTearOffFixtures
                 H.Check("T10_TrackerActiveBeforeUnmount",
                     DockTabTearOffTracker.IsActiveForTest);
                 var active = DockTabTearOffTracker.ActiveForTest;
+                floatingWindow = active?.FloatingWindow;
 
                 // Swap the entire mounted root out — the DockHostNativeComponent
                 // unmounts and its UseEffect cleanup should fire.
@@ -528,12 +544,11 @@ internal static class NativeDockingTearOffFixtures
                     !DockTabTearOffTracker.IsActiveForTest);
                 H.Check("T10_SessionCancelledAfterUnmount",
                     DockDragSession.Current is null or { IsActive: false });
-
-                try { active?.FloatingWindow.Close(); } catch { }
-                await Harness.Render();
             }
             finally
             {
+                if (floatingWindow is not null) DockFloatingPaneRouter.Unregister(floatingWindow);
+                floatingWindow?.Close();
                 ReactorApp.ShutdownPolicy = savedPolicy;
                 ResetAll();
             }
