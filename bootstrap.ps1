@@ -63,7 +63,8 @@ Write-Step 'Pre-flight checks'
 
 $dotnetCmd = Get-Command dotnet -ErrorAction SilentlyContinue
 if (-not $dotnetCmd) {
-    Fail '`dotnet` not found on PATH. Install the .NET 10+ SDK: https://dotnet.microsoft.com/download'
+    winget install Microsoft.DotNet.SDK.10
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 $sdkOutput = & dotnet --list-sdks
 $has10OrLater = $false
