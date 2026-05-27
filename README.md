@@ -74,7 +74,9 @@ Reactor doesn't ship a signed NuGet yet, so you build the framework, the `mur` C
 ```powershell
 git clone https://github.com/microsoft/microsoft-ui-reactor.git
 cd microsoft-ui-reactor
-./bootstrap.ps1
+
+# calling the bootstrap system under the correct PowerShell version you're on
+& (Get-Process -Id $PID).Path -ExecutionPolicy Bypass -File .\bootstrap.ps1
 
 dotnet new reactorapp -n MyApp
 cd MyApp
