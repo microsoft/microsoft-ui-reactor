@@ -881,7 +881,7 @@ public sealed class ReactorHost : IDisposable
     /// RenderLoop callbacks and Low-priority re-renders all complete before returning.
     /// Used by test harnesses to replace blind Task.Delay waits.
     /// </summary>
-    public Task WaitForIdleAsync(int maxYields = 10)
+    public Task WaitForIdleAsync(int maxYields = 50)
     {
         if (_disposed) return Task.CompletedTask;
         if (_renderPending == 0 && !_isRendering && !_needsRerender)
@@ -891,15 +891,28 @@ public sealed class ReactorHost : IDisposable
         int yields = 0;
         void CheckIdle()
         {
-            if (_disposed || ++yields > maxYields ||
-                (_renderPending == 0 && !_isRendering && !_needsRerender))
+            if (_disposed)
             {
                 tcs.TrySetResult();
+                return;
             }
-            else
+            if (_renderPending == 0 && !_isRendering && !_needsRerender)
             {
-                _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, CheckIdle);
+                tcs.TrySetResult();
+                return;
             }
+            if (++yields > maxYields)
+            {
+                // Returning early here is the classic flake source: callers
+                // (e.g. selftest Harness.Render) move on against a half-settled
+                // tree. Log so the next flake is greppable instead of silent.
+                Debug.WriteLine(
+                    $"[Reactor.WaitForIdle] yield cap hit ({maxYields}); " +
+                    $"renderPending={_renderPending} isRendering={_isRendering} needsRerender={_needsRerender}");
+                tcs.TrySetResult();
+                return;
+            }
+            _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, CheckIdle);
         }
         _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, CheckIdle);
         return tcs.Task;
