@@ -39,6 +39,17 @@ internal static class HResults
     public const int ERROR_ACCESS_DENIED = unchecked((int)0x80070005);
 
     /// <summary>
+    /// HRESULT_FROM_WIN32(ERROR_INVALID_OPERATION_ID=4317) — "The operation
+    /// identifier is not valid." Thrown by the WinUI <see cref="Microsoft.UI.Xaml.Window"/>
+    /// projection when properties are accessed on a Window whose underlying
+    /// COM proxy has been disconnected by <c>Close</c> → <c>Dispose</c>.
+    /// Distinct from the standard teardown set (RPC_E_DISCONNECTED / E_HANDLE
+    /// / CO_E_OBJNOTCONNECTED / RPC_E_SERVERFAULT) — surfaces specifically
+    /// when reading <c>Window.Content</c> across a Close boundary.
+    /// </summary>
+    public const int ERROR_INVALID_OPERATION_ID = unchecked((int)0x800710DD);
+
+    /// <summary>
     /// True if <paramref name="hr"/> is one of the WinUI / COM teardown-reentry
     /// HRESULTs — the standard "your proxy is gone, your handle is gone, your
     /// out-of-proc server is gone" surface that <c>AppWindow</c> / <c>Window</c>

@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
@@ -542,11 +543,29 @@ internal sealed class DockFloatingWindowComponent : Component<DockFloatingWindow
             // Capture the source XamlRoot BEFORE RemoveLocal might close
             // ownWindow (single-tab case → its only pane is the one we're
             // tearing off, panes goes to empty, ownWindow.Close()).
-            // ownWindow was just retrieved from holder[0] inside this
-            // synchronous handler, so its Window/Content/XamlRoot are
-            // alive; the `?.` chain handles the not-yet-mounted edge
-            // case where Content is null.
-            var sourceXamlRoot = ownWindow.NativeWindow?.Content?.XamlRoot;
+            //
+            // Cross-render teardown race exercised by selftest T14
+            // (stuck-state recovery: defensive ForceCancel + retry on a
+            // TabView whose host Window was closed by the prior tear-off).
+            // `holder[0]` survives across renders, so the second
+            // BeginFloatingTearOff invocation reads `ownWindow` as a
+            // disposed `ReactorWindow`. `NativeWindow` is a raw field
+            // accessor (no `_disposed` guard) → `.Content` is a WinRT
+            // projection call into the disconnected COM proxy → throws
+            // COMException with HResult 0x800710DD
+            // (HRESULT_FROM_WIN32(ERROR_INVALID_OPERATION_ID), surface
+            // text "The operation identifier is not valid.").
+            //
+            // Narrow to exactly that HResult. Any other COM failure here
+            // is a real bug we want to surface. The `xr ??= ...` fallback
+            // below picks up the freshly-opened dragged preview's
+            // XamlRoot when sourceXamlRoot stays null.
+            XamlRoot? sourceXamlRoot = null;
+            try { sourceXamlRoot = ownWindow.NativeWindow?.Content?.XamlRoot; }
+            catch (COMException ex) when (ex.HResult == Core.Diagnostics.HResults.ERROR_INVALID_OPERATION_ID)
+            {
+                // Source window closed by prior tear-off — fall through to fallback.
+            }
 
             // Whether this tear-off will leave ownWindow with no remaining
             // panes (→ RemoveLocal closes it). Drives the Z-order strategy
