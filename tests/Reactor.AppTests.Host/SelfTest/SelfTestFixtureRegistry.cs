@@ -1145,6 +1145,12 @@ internal static class SelfTestFixtureRegistry
         "Desc_Expander_MountUpdate",
         "Desc_ScrollViewer_MountUpdate",
         "Desc_ScrollView_MountUpdate",
+        // Spec 047 §14 Phase 3 (batch 8) — Panel container ports.
+        "Desc_StackPanel_MountUpdate",
+        "Desc_Grid_MountUpdate",
+        "Desc_Canvas_MountUpdate",
+        "Desc_FlexPanel_MountUpdate",
+        "Desc_RelativePanel_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2264,6 +2270,12 @@ internal static class SelfTestFixtureRegistry
         "Desc_Expander_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescExpanderMountUpdate(harness),
         "Desc_ScrollViewer_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescScrollViewerMountUpdate(harness),
         "Desc_ScrollView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescScrollViewMountUpdate(harness),
+        // Spec 047 §14 Phase 3 (batch 8) — Panel container ports.
+        "Desc_StackPanel_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescStackPanelMountUpdate(harness),
+        "Desc_Grid_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescGridMountUpdate(harness),
+        "Desc_Canvas_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescCanvasMountUpdate(harness),
+        "Desc_FlexPanel_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescFlexPanelMountUpdate(harness),
+        "Desc_RelativePanel_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRelativePanelMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

@@ -169,6 +169,27 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<ScrollViewElement, WinUI.ScrollView>(
                 ScrollViewDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3 (batch 8) — Panel container ports.
+        rec.RegisterHandler<StackElement, WinUI.StackPanel>(
+            new DescriptorHandler<StackElement, WinUI.StackPanel>(
+                StackPanelDescriptor.Descriptor));
+
+        rec.RegisterHandler<GridElement, WinUI.Grid>(
+            new DescriptorHandler<GridElement, WinUI.Grid>(
+                GridDescriptor.Descriptor));
+
+        rec.RegisterHandler<CanvasElement, WinUI.Canvas>(
+            new DescriptorHandler<CanvasElement, WinUI.Canvas>(
+                CanvasDescriptor.Descriptor));
+
+        rec.RegisterHandler<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel>(
+            new DescriptorHandler<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel>(
+                FlexPanelDescriptor.Descriptor));
+
+        rec.RegisterHandler<RelativePanelElement, WinUI.RelativePanel>(
+            new DescriptorHandler<RelativePanelElement, WinUI.RelativePanel>(
+                RelativePanelDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;

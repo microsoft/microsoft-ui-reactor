@@ -578,6 +578,40 @@ shrink lands after V1 ships ON by default.
         (legacy arm reconciles `HeaderTemplate` via `ReconcileChild`).
       - `ExpanderDescriptor.ContentTransitions` is not surfaced
         (same reason — escape-hatched via setter when needed).
+- [x] **Batch 8** — `StackPanel`, `Grid`, `Canvas`, `FlexPanel`,
+      `RelativePanel`. First panel container ports — all zero-event, all
+      use the `Panel<TElement, TControl>` children strategy from
+      `ChildrenStrategy.cs`. Each descriptor wires container-level
+      one-way props through `.OneWay` / `.OneWayConditional`. `Grid` ports
+      the imperative `RowDefinitions` / `ColumnDefinitions` rebuild as a
+      single `.OneWay<GridDefinition>` whose set lambda clears + rebuilds
+      both collections through `Reconciler.ParseRowDef` /
+      `ParseColumnDef`; the comparer is reference-equality so the rebuild
+      only fires when the element's `Definition` instance changes
+      (mirrors the legacy `!ReferenceEquals(o.Definition, n.Definition)`
+      gate). No new payload types.
+      Fixtures: `Desc_StackPanel_MountUpdate`, `Desc_Grid_MountUpdate`,
+      `Desc_Canvas_MountUpdate`, `Desc_FlexPanel_MountUpdate`,
+      `Desc_RelativePanel_MountUpdate` — all pass under V1 ON and V1 OFF.
+      **Known gaps:**
+      - **Per-child attached properties are not applied** on
+        descriptor-mounted children for any panel. The legacy hand-coded
+        path applies `GridAttached` (Row/Column/RowSpan/ColumnSpan),
+        `CanvasAttached` (Left/Top), `FlexAttached` (Grow/Shrink/Basis
+        etc.), `RelativePanelAttached` (the two-pass name-map for
+        RightOf/Below/AlignWithPanel), and `WrapGridAttached` (RowSpan /
+        ColumnSpan) as a post-children-mount step. The Panel strategy in
+        `V1HandlerAdapter` doesn't surface a per-child post-mount hook
+        yet — descriptor-mounted children stack at the panel origin /
+        Row 0 / default Yoga config. Authors who depend on attached
+        positioning stay on V1 OFF (legacy arm). Container-level layout
+        (spacing, orientation, definitions) has full parity.
+      - **`WrapGridElement` (VariableSizedWrapGrid) is escape-hatched** —
+        the legacy element is hand-coded only. WrapGrid's primary use is
+        items-positioned (RowSpan / ColumnSpan per child via
+        `WrapGridAttached`), so without the per-child post-mount hook a
+        descriptor port has no meaningful coverage. Re-evaluate when the
+        Panel strategy grows an attached-props hook.
 - [ ] Batch 3-followup — `NumberBox` (needs Immediate-mode keystroke
       handling + `NumberFormatter` reference-equality semantics that the
       descriptor builders don't yet express — likely needs a new entry

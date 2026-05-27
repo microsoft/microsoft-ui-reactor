@@ -2080,4 +2080,310 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Spec 047 §14 Phase 3 (batch 8) — Panel container descriptors.
+    //  All zero-event, all use the Panel<TElement,TControl> children
+    //  strategy. Fixtures cover: mount with N children, verify N children,
+    //  update with M children, verify M children + one prop change.
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class DescStackPanelMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<StackElement, WinUI.StackPanel>(
+                new DescriptorHandler<StackElement, WinUI.StackPanel>(
+                    StackPanelDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new StackElement(
+                Orientation: Orientation.Vertical,
+                Children: new Element[] { TextBlock("a"), TextBlock("b") })
+            {
+                Spacing = 4,
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.StackPanel sp)
+            {
+                parent.Children.Add(sp);
+                await Harness.Render();
+
+                H.Check("Desc_StackPanel_Mounted", true);
+                H.Check("Desc_StackPanel_ChildCount2", sp.Children.Count == 2);
+                H.Check("Desc_StackPanel_OrientationVertical",
+                    sp.Orientation == Orientation.Vertical);
+                H.Check("Desc_StackPanel_Spacing", Math.Abs(sp.Spacing - 4) < 1e-9);
+                H.Check("Desc_StackPanel_HorizontalAlignmentCenter",
+                    sp.HorizontalAlignment == HorizontalAlignment.Center);
+
+                var el2 = el1 with
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 12,
+                    Children = new Element[] { TextBlock("a"), TextBlock("b"), TextBlock("c") },
+                };
+                rec.UpdateChild(el1, el2, sp, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_StackPanel_ChildCount3AfterUpdate", sp.Children.Count == 3);
+                H.Check("Desc_StackPanel_OrientationHorizontal",
+                    sp.Orientation == Orientation.Horizontal);
+                H.Check("Desc_StackPanel_SpacingUpdated",
+                    Math.Abs(sp.Spacing - 12) < 1e-9);
+
+                rec.UnmountChild(sp);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_StackPanel_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescGridMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<GridElement, WinUI.Grid>(
+                new DescriptorHandler<GridElement, WinUI.Grid>(
+                    GridDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var def1 = new GridDefinition(new[] { "*", "Auto" }, new[] { "Auto", "*" });
+            var el1 = new GridElement(
+                Definition: def1,
+                Children: new Element[] { TextBlock("a"), TextBlock("b") })
+            {
+                RowSpacing = 4,
+                ColumnSpacing = 6,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.Grid g)
+            {
+                parent.Children.Add(g);
+                await Harness.Render();
+
+                H.Check("Desc_Grid_Mounted", true);
+                H.Check("Desc_Grid_ChildCount2", g.Children.Count == 2);
+                H.Check("Desc_Grid_RowSpacing", Math.Abs(g.RowSpacing - 4) < 1e-9);
+                H.Check("Desc_Grid_ColumnSpacing", Math.Abs(g.ColumnSpacing - 6) < 1e-9);
+                H.Check("Desc_Grid_ColumnDefsCount", g.ColumnDefinitions.Count == 2);
+                H.Check("Desc_Grid_RowDefsCount", g.RowDefinitions.Count == 2);
+
+                // Same Definition reference → no rebuild path, but column count stays.
+                var def2 = new GridDefinition(new[] { "*", "*", "Auto" }, new[] { "Auto" });
+                var el2 = el1 with
+                {
+                    Definition = def2,
+                    Children = new Element[] { TextBlock("a"), TextBlock("b"), TextBlock("c") },
+                    RowSpacing = 8,
+                };
+                rec.UpdateChild(el1, el2, g, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Grid_ChildCount3AfterUpdate", g.Children.Count == 3);
+                H.Check("Desc_Grid_RowSpacingUpdated",
+                    Math.Abs(g.RowSpacing - 8) < 1e-9);
+                H.Check("Desc_Grid_ColumnDefsRebuilt", g.ColumnDefinitions.Count == 3);
+                H.Check("Desc_Grid_RowDefsRebuilt", g.RowDefinitions.Count == 1);
+
+                rec.UnmountChild(g);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Grid_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescCanvasMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<CanvasElement, WinUI.Canvas>(
+                new DescriptorHandler<CanvasElement, WinUI.Canvas>(
+                    CanvasDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new CanvasElement(
+                Children: new Element[] { TextBlock("a"), TextBlock("b") })
+            {
+                Width = 200,
+                Height = 100,
+                Background = new SolidColorBrush(Colors.LightGray),
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.Canvas cv)
+            {
+                parent.Children.Add(cv);
+                await Harness.Render();
+
+                H.Check("Desc_Canvas_Mounted", true);
+                H.Check("Desc_Canvas_ChildCount2", cv.Children.Count == 2);
+                H.Check("Desc_Canvas_Width", Math.Abs(cv.Width - 200) < 1e-9);
+                H.Check("Desc_Canvas_Height", Math.Abs(cv.Height - 100) < 1e-9);
+                H.Check("Desc_Canvas_Background", cv.Background is SolidColorBrush);
+
+                var el2 = el1 with
+                {
+                    Width = 320,
+                    Children = new Element[] { TextBlock("a"), TextBlock("b"), TextBlock("c") },
+                };
+                rec.UpdateChild(el1, el2, cv, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Canvas_ChildCount3AfterUpdate", cv.Children.Count == 3);
+                H.Check("Desc_Canvas_WidthUpdated",
+                    Math.Abs(cv.Width - 320) < 1e-9);
+
+                rec.UnmountChild(cv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Canvas_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescFlexPanelMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel>(
+                new DescriptorHandler<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel>(
+                    FlexPanelDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new FlexElement(
+                Children: new Element[] { TextBlock("a"), TextBlock("b") })
+            {
+                Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Row,
+                JustifyContent = Microsoft.UI.Reactor.Layout.FlexJustify.Center,
+                AlignItems = Microsoft.UI.Reactor.Layout.FlexAlign.Stretch,
+                ColumnGap = 4,
+                RowGap = 8,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is Microsoft.UI.Reactor.Layout.FlexPanel fp)
+            {
+                parent.Children.Add(fp);
+                await Harness.Render();
+
+                H.Check("Desc_FlexPanel_Mounted", true);
+                H.Check("Desc_FlexPanel_ChildCount2", fp.Children.Count == 2);
+                H.Check("Desc_FlexPanel_DirectionRow",
+                    fp.Direction == Microsoft.UI.Reactor.Layout.FlexDirection.Row);
+                H.Check("Desc_FlexPanel_JustifyCenter",
+                    fp.JustifyContent == Microsoft.UI.Reactor.Layout.FlexJustify.Center);
+                H.Check("Desc_FlexPanel_ColumnGap",
+                    Math.Abs(fp.ColumnGap - 4) < 1e-9);
+
+                var el2 = el1 with
+                {
+                    Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Column,
+                    Children = new Element[] { TextBlock("a"), TextBlock("b"), TextBlock("c") },
+                };
+                rec.UpdateChild(el1, el2, fp, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_FlexPanel_ChildCount3AfterUpdate", fp.Children.Count == 3);
+                H.Check("Desc_FlexPanel_DirectionUpdated",
+                    fp.Direction == Microsoft.UI.Reactor.Layout.FlexDirection.Column);
+
+                rec.UnmountChild(fp);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_FlexPanel_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescRelativePanelMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<RelativePanelElement, WinUI.RelativePanel>(
+                new DescriptorHandler<RelativePanelElement, WinUI.RelativePanel>(
+                    RelativePanelDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new RelativePanelElement(
+                Children: new Element[] { TextBlock("a"), TextBlock("b") });
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.RelativePanel rp)
+            {
+                parent.Children.Add(rp);
+                await Harness.Render();
+
+                H.Check("Desc_RelativePanel_Mounted", true);
+                H.Check("Desc_RelativePanel_ChildCount2", rp.Children.Count == 2);
+
+                var el2 = el1 with
+                {
+                    Children = new Element[]
+                    {
+                        TextBlock("a"), TextBlock("b"), TextBlock("c"),
+                    },
+                };
+                rec.UpdateChild(el1, el2, rp, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_RelativePanel_ChildCount3AfterUpdate", rp.Children.Count == 3);
+
+                // Shrink to verify removal also works.
+                var el3 = el2 with
+                {
+                    Children = new Element[] { TextBlock("only") },
+                };
+                rec.UpdateChild(el2, el3, rp, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_RelativePanel_ChildCount1AfterShrink", rp.Children.Count == 1);
+
+                rec.UnmountChild(rp);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_RelativePanel_Mounted", false);
+            }
+        }
+    }
 }
