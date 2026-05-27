@@ -133,7 +133,13 @@ jobs:
           $rc = $LASTEXITCODE
           Write-Host $listing
           if ($rc -ne 0) { throw "dotnet new list reactorapp exited $rc" }
-          if ($listing -notmatch 'reactorapp') {
+          # `dotnet new list` writes a multi-line table; PowerShell stores the
+          # output as a [string[]]. -match / -notmatch against an array filter
+          # element-wise, so `-notmatch 'reactorapp'` returns the non-matching
+          # lines (header, separator) which evaluates truthy even when the
+          # template is present. Join + match to do a whole-output substring
+          # check instead.
+          if (($listing -join "`n") -notmatch 'reactorapp') {
               throw "reactorapp template not found in `dotnet new list` output"
           }
 
