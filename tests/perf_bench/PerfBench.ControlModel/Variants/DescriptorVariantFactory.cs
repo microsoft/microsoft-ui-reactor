@@ -152,6 +152,23 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<ComboBoxElement, WinUI.ComboBox>(
                 ComboBoxDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3 (batch 7) — Single-content container ports.
+        rec.RegisterHandler<ViewboxElement, WinUI.Viewbox>(
+            new DescriptorHandler<ViewboxElement, WinUI.Viewbox>(
+                ViewboxDescriptor.Descriptor));
+
+        rec.RegisterHandler<ExpanderElement, WinUI.Expander>(
+            new DescriptorHandler<ExpanderElement, WinUI.Expander>(
+                ExpanderDescriptor.Descriptor));
+
+        rec.RegisterHandler<ScrollViewerElement, WinUI.ScrollViewer>(
+            new DescriptorHandler<ScrollViewerElement, WinUI.ScrollViewer>(
+                ScrollViewerDescriptor.Descriptor));
+
+        rec.RegisterHandler<ScrollViewElement, WinUI.ScrollView>(
+            new DescriptorHandler<ScrollViewElement, WinUI.ScrollView>(
+                ScrollViewDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;

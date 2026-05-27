@@ -168,6 +168,24 @@ internal sealed class ComboBoxEventPayload
     public global::System.EventHandler<object>? DropDownClosedTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3 batch 7 — Expander IsExpanded round-trip
+/// payload. Two trampoline slots because the legacy arm wires both
+/// <c>Expanding</c> (fires on transition to expanded) and <c>Collapsed</c>
+/// (fires on transition to collapsed). The descriptor uses
+/// <c>HandCodedControlled</c> for Expanding (the DP round-trip with
+/// <c>OnIsExpandedChanged(true)</c>) and <c>HandCodedEvent</c> for
+/// Collapsed (fire-only with <c>OnIsExpandedChanged(false)</c>) — both
+/// fire the same element callback with the corresponding bool.</summary>
+internal sealed class ExpanderEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.Expander,
+        Microsoft.UI.Xaml.Controls.ExpanderExpandingEventArgs>? ExpandingTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.Expander,
+        Microsoft.UI.Xaml.Controls.ExpanderCollapsedEventArgs>? CollapsedTrampoline;
+}
+
 /// <summary>
 /// Spec 047 §9.2 — open-ended anchor for delegates registered via
 /// <see cref="ReactorBinding{TElement}.OnCustomEvent{TArgs}"/>. Holds a

@@ -552,6 +552,32 @@ shrink lands after V1 ships ON by default.
         mount guard's `Length > 0` gate).
       - `ComboBoxElement.IsDropDownOpen` is not exposed on the element
         record itself; descriptor doesn't surface it. (Legacy parity.)
+- [x] **Batch 7** — `Viewbox`, `Expander`, `ScrollViewer`, `ScrollView`.
+      First single-content container ports — all use the
+      `SingleContent<TElement, TControl>` children strategy for the
+      primary child slot. Viewbox is pure data (zero events, two
+      `.OneWayConditional` enum props); Expander adds a
+      `.HandCodedControlled` for `IsExpanded` paired with a
+      `.HandCodedEvent` for `Collapsed` on a new
+      `ExpanderEventPayload` (two `TypedEventHandler` slots, one per
+      direction); ScrollViewer + ScrollView add a single
+      `.HandCodedEvent` for `ViewChanged` on the pre-existing
+      `ScrollViewerEventPayload` / `ScrollViewEventPayload`. One new
+      payload type added to ControlEventPayloads.cs
+      (`ExpanderEventPayload`).
+      Fixtures: `Desc_Viewbox_MountUpdate`, `Desc_Expander_MountUpdate`,
+      `Desc_ScrollViewer_MountUpdate`, `Desc_ScrollView_MountUpdate` —
+      all pass under V1 ON and V1 OFF.
+      **Known gaps:**
+      - `ExpanderDescriptor.HeaderTemplate` (Element-typed header) is
+        not surfaced. Mounting an Element into a non-primary slot
+        requires reconciler context the descriptor builders can't yet
+        express (no NamedSlots for a single Element slot that also
+        coexists with a string fallback). The string `Header` path is
+        fully supported. Authors with Element headers stay on V1 OFF
+        (legacy arm reconciles `HeaderTemplate` via `ReconcileChild`).
+      - `ExpanderDescriptor.ContentTransitions` is not surfaced
+        (same reason — escape-hatched via setter when needed).
 - [ ] Batch 3-followup — `NumberBox` (needs Immediate-mode keystroke
       handling + `NumberFormatter` reference-equality semantics that the
       descriptor builders don't yet express — likely needs a new entry

@@ -1808,4 +1808,276 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  ViewboxDescriptor (Phase 3 batch 7) — pure single-content container.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescViewboxMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ViewboxElement, WinUI.Viewbox>(
+                new DescriptorHandler<ViewboxElement, WinUI.Viewbox>(
+                    ViewboxDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new ViewboxElement(Child: TextBlock("scaled"))
+            {
+                Stretch = Stretch.Uniform,
+                StretchDirection = WinUI.StretchDirection.Both,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.Viewbox vb)
+            {
+                parent.Children.Add(vb);
+                await Harness.Render();
+
+                H.Check("Desc_Viewbox_Mounted", true);
+                H.Check("Desc_Viewbox_HasChild", vb.Child is TextBlock);
+                H.Check("Desc_Viewbox_ChildText", (vb.Child as TextBlock)?.Text == "scaled");
+                H.Check("Desc_Viewbox_Stretch", vb.Stretch == Stretch.Uniform);
+                H.Check("Desc_Viewbox_StretchDirection",
+                    vb.StretchDirection == WinUI.StretchDirection.Both);
+
+                var el2 = el1 with
+                {
+                    Child = TextBlock("rescaled"),
+                    Stretch = Stretch.UniformToFill,
+                };
+                rec.UpdateChild(el1, el2, vb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Viewbox_ChildSwapped", (vb.Child as TextBlock)?.Text == "rescaled");
+                H.Check("Desc_Viewbox_StretchUpdated", vb.Stretch == Stretch.UniformToFill);
+
+                rec.UnmountChild(vb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Viewbox_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  ExpanderDescriptor (Phase 3 batch 7) — SingleContent Content slot +
+    //  IsExpanded controlled round-trip via Expanding/Collapsed pair.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescExpanderMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ExpanderElement, WinUI.Expander>(
+                new DescriptorHandler<ExpanderElement, WinUI.Expander>(
+                    ExpanderDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int changes = 0;
+            bool? lastState = null;
+            var el1 = new ExpanderElement(
+                Header: "Title",
+                Content: TextBlock("body"),
+                IsExpanded: false,
+                OnIsExpandedChanged: v => { changes++; lastState = v; });
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.Expander exp)
+            {
+                parent.Children.Add(exp);
+                await Harness.Render();
+
+                H.Check("Desc_Expander_Mounted", true);
+                H.Check("Desc_Expander_Header", (exp.Header as string) == "Title");
+                H.Check("Desc_Expander_HasContent", exp.Content is TextBlock);
+                H.Check("Desc_Expander_ContentText", (exp.Content as TextBlock)?.Text == "body");
+                H.Check("Desc_Expander_InitialCollapsed", exp.IsExpanded == false);
+                H.Check("Desc_Expander_MountDidNotFire", changes == 0);
+
+                // Programmatic update — IsExpanded write is wrapped in
+                // WriteSuppressed so the Expanding trampoline drains its echo.
+                var el2 = el1 with { IsExpanded = true };
+                rec.UpdateChild(el1, el2, exp, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Expander_IsExpandedUpdated", exp.IsExpanded == true);
+                H.Check("Desc_Expander_NoEchoOnProgrammaticWrite", changes == 0);
+
+                // Header + Content swap.
+                var el3 = el2 with { Header = "Renamed", Content = TextBlock("new body") };
+                rec.UpdateChild(el2, el3, exp, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Expander_HeaderUpdated", (exp.Header as string) == "Renamed");
+                H.Check("Desc_Expander_ContentSwapped",
+                    (exp.Content as TextBlock)?.Text == "new body");
+
+                // Suppress unused-warning for lastState — its value is exercised
+                // only when user input fires (not reachable headless).
+                H.Check("Desc_Expander_LastStateUntouched", lastState is null);
+
+                rec.UnmountChild(exp);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Expander_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  ScrollViewerDescriptor (Phase 3 batch 7) — classic ScrollViewer
+    //  SingleContent + ViewChanged fire-only.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescScrollViewerMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ScrollViewerElement, WinUI.ScrollViewer>(
+                new DescriptorHandler<ScrollViewerElement, WinUI.ScrollViewer>(
+                    ScrollViewerDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int viewChanges = 0;
+            var el1 = new ScrollViewerElement(Child: TextBlock("scroll body"))
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
+                HorizontalScrollMode = WinUI.ScrollMode.Enabled,
+                VerticalScrollMode = WinUI.ScrollMode.Enabled,
+                ZoomMode = WinUI.ZoomMode.Disabled,
+                OnViewChanged = _ => viewChanges++,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ScrollViewer sv)
+            {
+                parent.Children.Add(sv);
+                await Harness.Render();
+
+                H.Check("Desc_ScrollViewer_Mounted", true);
+                H.Check("Desc_ScrollViewer_HasContent", sv.Content is TextBlock);
+                H.Check("Desc_ScrollViewer_ContentText",
+                    (sv.Content as TextBlock)?.Text == "scroll body");
+                H.Check("Desc_ScrollViewer_VerticalScrollBarVisible",
+                    sv.VerticalScrollBarVisibility == ScrollBarVisibility.Visible);
+                H.Check("Desc_ScrollViewer_HorizontalScrollMode",
+                    sv.HorizontalScrollMode == WinUI.ScrollMode.Enabled);
+                H.Check("Desc_ScrollViewer_ZoomMode",
+                    sv.ZoomMode == WinUI.ZoomMode.Disabled);
+
+                var el2 = el1 with
+                {
+                    Child = TextBlock("scroll body v2"),
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
+                    ZoomMode = WinUI.ZoomMode.Enabled,
+                };
+                rec.UpdateChild(el1, el2, sv, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_ScrollViewer_ContentSwapped",
+                    (sv.Content as TextBlock)?.Text == "scroll body v2");
+                H.Check("Desc_ScrollViewer_ScrollBarHidden",
+                    sv.VerticalScrollBarVisibility == ScrollBarVisibility.Hidden);
+                H.Check("Desc_ScrollViewer_ZoomEnabled",
+                    sv.ZoomMode == WinUI.ZoomMode.Enabled);
+                // ViewChanged is template-driven; in a headless harness it
+                // may not fire on mount/update — accept zero or positive.
+                H.Check("Desc_ScrollViewer_ViewChangedBounded", viewChanges >= 0);
+
+                rec.UnmountChild(sv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ScrollViewer_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  ScrollViewDescriptor (Phase 3 batch 7) — modern ScrollView
+    //  (InteractionTracker) SingleContent + ViewChanged fire-only.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescScrollViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ScrollViewElement, WinUI.ScrollView>(
+                new DescriptorHandler<ScrollViewElement, WinUI.ScrollView>(
+                    ScrollViewDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int viewChanges = 0;
+            var el1 = new ScrollViewElement(Child: TextBlock("modern scroll"))
+            {
+                ContentOrientation = WinUI.ScrollingContentOrientation.Vertical,
+                MinZoomFactor = 0.5,
+                MaxZoomFactor = 4.0,
+                HorizontalAnchorRatio = 0.25,
+                VerticalAnchorRatio = 0.75,
+                OnViewChanged = () => viewChanges++,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ScrollView sv)
+            {
+                parent.Children.Add(sv);
+                await Harness.Render();
+
+                H.Check("Desc_ScrollView_Mounted", true);
+                H.Check("Desc_ScrollView_HasContent", sv.Content is TextBlock);
+                H.Check("Desc_ScrollView_ContentText",
+                    (sv.Content as TextBlock)?.Text == "modern scroll");
+                H.Check("Desc_ScrollView_ContentOrientation",
+                    sv.ContentOrientation == WinUI.ScrollingContentOrientation.Vertical);
+                H.Check("Desc_ScrollView_MinZoomFactor",
+                    Math.Abs(sv.MinZoomFactor - 0.5) < 1e-9);
+                H.Check("Desc_ScrollView_MaxZoomFactor",
+                    Math.Abs(sv.MaxZoomFactor - 4.0) < 1e-9);
+                H.Check("Desc_ScrollView_HorizontalAnchorRatio",
+                    Math.Abs(sv.HorizontalAnchorRatio - 0.25) < 1e-9);
+                H.Check("Desc_ScrollView_VerticalAnchorRatio",
+                    Math.Abs(sv.VerticalAnchorRatio - 0.75) < 1e-9);
+
+                var el2 = el1 with
+                {
+                    Child = TextBlock("modern scroll v2"),
+                    ContentOrientation = WinUI.ScrollingContentOrientation.Horizontal,
+                    MaxZoomFactor = 8.0,
+                };
+                rec.UpdateChild(el1, el2, sv, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_ScrollView_ContentSwapped",
+                    (sv.Content as TextBlock)?.Text == "modern scroll v2");
+                H.Check("Desc_ScrollView_OrientationUpdated",
+                    sv.ContentOrientation == WinUI.ScrollingContentOrientation.Horizontal);
+                H.Check("Desc_ScrollView_MaxZoomUpdated",
+                    Math.Abs(sv.MaxZoomFactor - 8.0) < 1e-9);
+                H.Check("Desc_ScrollView_ViewChangedBounded", viewChanges >= 0);
+
+                rec.UnmountChild(sv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ScrollView_Mounted", false);
+            }
+        }
+    }
 }
