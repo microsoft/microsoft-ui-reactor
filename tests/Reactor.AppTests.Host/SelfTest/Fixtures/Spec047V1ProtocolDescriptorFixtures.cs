@@ -161,6 +161,175 @@ internal static class Spec047V1ProtocolDescriptorFixtures
     }
 
     // ────────────────────────────────────────────────────────────────────
+    //  TextBoxDescriptor — 2-event proof (Phase 3 prereq 3.0.2).
+    //  Exercises HandCodedControlled (Text/TextChanged) +
+    //  HandCodedEvent (SelectionChanged) on the same shared payload.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescTextBoxMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<TextBoxElement, WinUI.TextBox>(
+                new DescriptorHandler<TextBoxElement, WinUI.TextBox>(
+                    TextBoxDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int changedCount = 0;
+            var el1 = new TextBoxElement(Value: "hello", OnChanged: _ => changedCount++)
+            {
+                Header = "Name",
+                PlaceholderText = "type here",
+                IsReadOnly = false,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.TextBox tb1)
+            {
+                parent.Children.Add(tb1);
+                await Harness.Render();
+
+                H.Check("Desc_TextBox_Mounted", true);
+                H.Check("Desc_TextBox_InitialText", tb1.Text == "hello");
+                H.Check("Desc_TextBox_PlaceholderText", tb1.PlaceholderText == "type here");
+                H.Check("Desc_TextBox_Header", (tb1.Header as string) == "Name");
+                H.Check("Desc_TextBox_MountDidNotFire", changedCount == 0);
+
+                // Programmatic Update of Text — HandCodedControlled wraps in
+                // WriteSuppressed; the trampoline drains the echo so the
+                // OnChanged callback must NOT fire.
+                var el2 = el1 with { Value = "world" };
+                rec.UpdateChild(el1, el2, tb1, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_TextBox_TextUpdated", tb1.Text == "world");
+                H.Check("Desc_TextBox_NoEchoOnProgrammaticWrite", changedCount == 0);
+
+                // Header transition stays on (descriptor's OneWayConditional —
+                // matches Phase 2 Border behavior; clearing on null transition
+                // is a documented gap vs. the hand-coded handler).
+                var el3 = el2 with { Header = "Renamed" };
+                rec.UpdateChild(el2, el3, tb1, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TextBox_HeaderUpdated", (tb1.Header as string) == "Renamed");
+
+                rec.UnmountChild(tb1);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_TextBox_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescTextBoxTwoEventSubscription(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<TextBoxElement, WinUI.TextBox>(
+                new DescriptorHandler<TextBoxElement, WinUI.TextBox>(
+                    TextBoxDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int changedCount = 0;
+            int selectionCount = 0;
+            var el = new TextBoxElement(Value: "abc", OnChanged: _ => changedCount++)
+            {
+                OnSelectionChanged = (_, _, _) => selectionCount++,
+            };
+
+            // Both callbacks set → both HandCoded entries must subscribe.
+            // Verify by raising the events through reflection-free public
+            // surface: TextChanged fires when Text is set programmatically
+            // (and is echo-suppressed), SelectionChanged fires when we
+            // adjust selection. We measure via the count fields.
+            var ui = rec.Mount(el, _noOp);
+            if (ui is WinUI.TextBox tb)
+            {
+                parent.Children.Add(tb);
+                await Harness.Render();
+
+                H.Check("Desc_TextBox_TwoEvent_Mounted", true);
+                H.Check("Desc_TextBox_TwoEvent_InitialChangedZero", changedCount == 0);
+                H.Check("Desc_TextBox_TwoEvent_InitialSelectionZero", selectionCount == 0);
+
+                // Drive SelectionChanged via SelectionStart/Length writes
+                // (these synthesize the event on a focused/unfocused box).
+                tb.Focus(FocusState.Programmatic);
+                tb.SelectionStart = 1;
+                tb.SelectionLength = 1;
+                await Harness.Render();
+
+                // SelectionChanged may have fired 1+ times from those writes;
+                // the proof point is that the subscription is live (count > 0).
+                H.Check("Desc_TextBox_TwoEvent_SelectionFired", selectionCount >= 1);
+
+                // Echo-suppression still works for the controlled Text entry
+                // even with both subscriptions active.
+                int changedBefore = changedCount;
+                var elNext = el with { Value = "xyz" };
+                rec.UpdateChild(el, elNext, tb, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TextBox_TwoEvent_TextUpdated", tb.Text == "xyz");
+                H.Check("Desc_TextBox_TwoEvent_NoEchoOnControlledWrite", changedCount == changedBefore);
+
+                rec.UnmountChild(tb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_TextBox_TwoEvent_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescTextBoxCallbackGate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<TextBoxElement, WinUI.TextBox>(
+                new DescriptorHandler<TextBoxElement, WinUI.TextBox>(
+                    TextBoxDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            // No callbacks at all — descriptor should mount without subscribing
+            // either event (gate). Update should still apply DP writes.
+            var el1 = new TextBoxElement(Value: "first") { Header = "h1" };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.TextBox tb)
+            {
+                parent.Children.Add(tb);
+                await Harness.Render();
+
+                H.Check("Desc_TextBox_Gate_Mounted", true);
+                H.Check("Desc_TextBox_Gate_InitialText", tb.Text == "first");
+                H.Check("Desc_TextBox_Gate_Header", (tb.Header as string) == "h1");
+
+                var el2 = el1 with { Value = "second" };
+                rec.UpdateChild(el1, el2, tb, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TextBox_Gate_UpdatedText", tb.Text == "second");
+
+                rec.UnmountChild(tb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_TextBox_Gate_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     //  BorderDescriptor — SingleContent child reconcile parity.
     // ────────────────────────────────────────────────────────────────────
 

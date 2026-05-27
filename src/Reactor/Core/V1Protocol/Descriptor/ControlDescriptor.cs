@@ -134,6 +134,72 @@ public sealed class ControlDescriptor<TElement, TControl>
         return this;
     }
 
+    /// <summary>§14 Phase 3 (3.0.1) — escape-hatch builder for controlled
+    /// (two-way) props on a control that needs a hand-authored trampoline
+    /// against a user-supplied per-control event payload
+    /// (<typeparamref name="TPayload"/>). Required for multi-event controls
+    /// (e.g. <c>TextBox.Text</c> alongside <c>SelectionChanged</c>) where
+    /// the single-event fast-path <c>DescriptorControlledPayload</c> would
+    /// collide if two controlled entries shared the same closed generic.
+    ///
+    /// <para>The payload type is typically reused from
+    /// <c>ControlEventPayloads.cs</c> (e.g. <c>TextBoxEventPayload</c>)
+    /// which already has a slot per event.
+    /// <paramref name="slotIsNull"/> + <paramref name="setSlot"/> address
+    /// the specific slot on the payload this entry owns;
+    /// <paramref name="subscribe"/> wires the user-supplied native
+    /// <typeparamref name="TDelegate"/> directly to the control's event
+    /// (no <c>EventHandler&lt;TArgs&gt;</c> bridge closure).</para>
+    ///
+    /// <para>Mount/Update prop-write semantics are identical to
+    /// <see cref="Controlled{TValue,TArgs}"/>: bare initial write,
+    /// suppressed write on element-change OR control-drift. Subscription is
+    /// gated on <paramref name="callback"/> returning non-null on the
+    /// mounted element.</para></summary>
+    public ControlDescriptor<TElement, TControl> HandCodedControlled<TPayload, TValue, TDelegate>(
+        Func<TElement, TValue> get,
+        Action<TControl, TValue> set,
+        Func<TControl, TValue> readBack,
+        Action<TControl, TDelegate> subscribe,
+        Func<TElement, Action<TValue>?> callback,
+        TDelegate trampoline,
+        Func<TPayload, bool> slotIsNull,
+        Action<TPayload, TDelegate> setSlot,
+        IEqualityComparer<TValue>? comparer = null)
+        where TPayload : class, new()
+        where TDelegate : Delegate
+    {
+        _properties.Add(new HandCodedControlledPropEntry<TElement, TControl, TPayload, TValue, TDelegate>(
+            get, set, readBack, subscribe, callback, trampoline, slotIsNull, setSlot, comparer));
+        return this;
+    }
+
+    /// <summary>§14 Phase 3 (3.0.1) — escape-hatch builder for
+    /// fire-and-forget control-intrinsic events that do not round-trip a DP
+    /// (e.g. <c>TextBox.SelectionChanged</c>, <c>Image.ImageOpened</c>).
+    /// Authors supply a per-control payload type and a native trampoline
+    /// delegate; the entry wires subscription with the same payload-slot
+    /// gating shape as <see cref="HandCodedControlled{TPayload,TValue,TDelegate}"/>
+    /// but performs no Mount/Update prop writes.
+    ///
+    /// <para>Subscription is gated on <paramref name="callbackPresent"/>
+    /// returning non-null — the element's callback shape can be anything
+    /// (e.g. <c>Action&lt;string, int, int&gt;</c>) so the gate is checked
+    /// against the untyped <c>Delegate</c>.</para></summary>
+    public ControlDescriptor<TElement, TControl> HandCodedEvent<TPayload, TDelegate>(
+        Action<TControl, TDelegate> subscribe,
+        Func<TElement, Delegate?> callbackPresent,
+        TDelegate trampoline,
+        Func<TPayload, bool> slotIsNull,
+        Action<TPayload, TDelegate> setSlot)
+        where TPayload : class, new()
+        where TDelegate : Delegate
+    {
+        _properties.Add(new HandCodedEventPropEntry<TElement, TControl, TPayload, TDelegate>(
+            subscribe, callbackPresent, trampoline, slotIsNull, setSlot));
+        return this;
+    }
+
     /// <summary>Add a one-way property whose write may coerce a sibling
     /// controlled prop's value (e.g. <c>Slider.Minimum</c> coercing
     /// <c>Slider.Value</c>). When <paramref name="coercesController"/>

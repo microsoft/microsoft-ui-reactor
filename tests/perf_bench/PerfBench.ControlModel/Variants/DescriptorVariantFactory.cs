@@ -14,10 +14,11 @@ namespace PerfBench.ControlModel.Variants;
 /// <para>The reconciler runs with the V1 flag ON but skips the automatic
 /// Phase 1 handler registration (via the internal ctor flag), then registers
 /// <see cref="DescriptorHandler{TElement,TControl}"/> instances for the
-/// three Q1 head-to-head ports — ToggleSwitch, Slider, Border. The remaining
-/// ports (TextBox, ListView) keep their hand-coded Phase 1 handlers so every
-/// bench still has a working dispatch for every control type; M1 / M2 / M5
-/// / M7 / M10 land directly on the contested controls so the descriptor
+/// four ported controls — ToggleSwitch, Slider, Border (Q1 spike baseline)
+/// and TextBox (Phase 3 prereq 3.0.2 — first multi-event descriptor port
+/// using HandCodedControlled + HandCodedEvent). ListView keeps its Phase 1
+/// hand-coded handler so every bench still has a working dispatch; M1 / M2 /
+/// M5 / M7 / M10 land directly on the contested controls so the descriptor
 /// tax is exposed where it matters.</para>
 /// </summary>
 internal static class DescriptorVariantFactory
@@ -25,8 +26,8 @@ internal static class DescriptorVariantFactory
     public static Reconciler Create()
     {
         // Internal ctor: V1 ON but no auto-register, so we can plug
-        // descriptor handlers in for the Q1 head-to-head ports while leaving
-        // the remaining Phase 1 ports on hand-coded handlers.
+        // descriptor handlers in for the ported controls while leaving the
+        // remaining Phase 1 ports on hand-coded handlers.
         var rec = new Reconciler(logger: null, useV1Protocol: true, registerBuiltinHandlers: false);
 
         rec.RegisterHandler<ToggleSwitchElement, WinUI.ToggleSwitch>(
@@ -41,9 +42,10 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<BorderElement, WinUI.Border>(
                 BorderDescriptor.Descriptor));
 
-        // Non-contested ports keep their Phase 1 hand-coded handlers — every
-        // bench still has a working dispatch for every control.
-        rec.RegisterHandler<TextBoxElement, WinUI.TextBox>(new TextBoxHandler());
+        rec.RegisterHandler<TextBoxElement, WinUI.TextBox>(
+            new DescriptorHandler<TextBoxElement, WinUI.TextBox>(
+                TextBoxDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;

@@ -285,6 +285,156 @@ internal sealed class DescriptorControlledPayload<TElement, TControl, TValue, TA
     public Func<TElement, Action<TValue>?>? GetCallback;
 }
 
+/// <summary>§14 Phase 3 (3.0.1) — <c>Prop.Controlled</c> escape-hatch entry
+/// whose change-event trampoline is hand-authored on a user-supplied
+/// <typeparamref name="TPayload"/> rather than the fast-path
+/// <see cref="DescriptorControlledPayload{TElement,TControl,TValue,TArgs}"/>.
+///
+/// <para><b>When to use:</b> multi-event controls (e.g. <c>TextBox</c> with
+/// both <c>TextChanged</c> and <c>SelectionChanged</c>, <c>NumberBox</c>
+/// with <c>ValueChanged</c> + <c>GotFocus/LostFocus</c>) cannot share the
+/// single-event fast-path payload — two controlled entries on the same
+/// control would collide on the closed-generic
+/// <c>DescriptorControlledPayload</c>. The descriptor author reuses an
+/// existing per-control payload from <c>ControlEventPayloads.cs</c> (e.g.
+/// <c>TextBoxEventPayload</c>) which already has 1+ slots per event, hands
+/// the entry a slot-is-null predicate / set-slot setter pair to address
+/// the right slot, and passes a native-typed trampoline delegate (matching
+/// the control's event signature directly — no
+/// <c>EventHandler&lt;TArgs&gt;</c> bridge closure).</para>
+///
+/// <para><b>Mount / Update writes:</b> identical to
+/// <see cref="ControlledPropEntry{TElement,TControl,TValue,TArgs}"/> — bare
+/// at Mount, <see cref="ReactorBinding.WriteSuppressed(UIElement,Action)"/>
+/// at Update on element-change OR control-drift.</para>
+///
+/// <para><b>Subscription gate:</b> if the element's callback selector
+/// returns null, no subscription happens. On non-null, the entry calls
+/// <see cref="Reconciler.GetOrCreateControlEventPayload{T}"/> for the
+/// user's payload type, checks the slot-is-null predicate, and (if empty)
+/// stuffs the trampoline into the payload slot and subscribes — exactly
+/// once per control lifetime. Subsequent rents of the same control hit
+/// the non-null-slot fast path with zero allocations.</para></summary>
+internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload, TValue, TDelegate> : PropEntry<TElement, TControl>
+    where TElement : Element
+    where TControl : FrameworkElement
+    where TPayload : class, new()
+    where TDelegate : Delegate
+{
+    private readonly Func<TElement, TValue> _get;
+    private readonly Action<TControl, TValue> _set;
+    private readonly Func<TControl, TValue> _readBack;
+    private readonly Action<TControl, TDelegate> _subscribe;
+    private readonly Func<TElement, Action<TValue>?> _getCallback;
+    private readonly TDelegate _trampoline;
+    private readonly Func<TPayload, bool> _slotIsNull;
+    private readonly Action<TPayload, TDelegate> _setSlot;
+    private readonly IEqualityComparer<TValue> _comparer;
+
+    public HandCodedControlledPropEntry(
+        Func<TElement, TValue> get,
+        Action<TControl, TValue> set,
+        Func<TControl, TValue> readBack,
+        Action<TControl, TDelegate> subscribe,
+        Func<TElement, Action<TValue>?> callback,
+        TDelegate trampoline,
+        Func<TPayload, bool> slotIsNull,
+        Action<TPayload, TDelegate> setSlot,
+        IEqualityComparer<TValue>? comparer = null)
+    {
+        _get = get;
+        _set = set;
+        _readBack = readBack;
+        _subscribe = subscribe;
+        _getCallback = callback;
+        _trampoline = trampoline;
+        _slotIsNull = slotIsNull;
+        _setSlot = setSlot;
+        _comparer = comparer ?? EqualityComparer<TValue>.Default;
+    }
+
+    public override void Mount(TControl ctrl, TElement el)
+    {
+        var v = _get(el);
+        if (!_comparer.Equals(_readBack(ctrl), v))
+            _set(ctrl, v);
+    }
+
+    public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
+    {
+        var nv = _get(newEl);
+        var ov = _get(oldEl);
+        var current = _readBack(ctrl);
+        if (!_comparer.Equals(ov, nv) || !_comparer.Equals(current, nv))
+            ReactorBinding.WriteSuppressed(ctrl, () => _set(ctrl, nv));
+    }
+
+    public override void EnsureSubscribed(
+        ReactorBinding<TElement> binding,
+        TControl ctrl,
+        TElement el)
+    {
+        if (_getCallback(el) is null) return;
+        var payload = Reconciler.GetOrCreateControlEventPayload<TPayload>(ctrl);
+        if (!_slotIsNull(payload)) return;
+        _setSlot(payload, _trampoline);
+        _subscribe(ctrl, _trampoline);
+    }
+}
+
+/// <summary>§14 Phase 3 (3.0.1) — <c>Prop.HandCodedEvent</c> escape-hatch
+/// entry for control-intrinsic events that do not have a DP round-trip
+/// (e.g. <c>TextBox.SelectionChanged</c>, <c>Image.ImageOpened</c>). No
+/// Mount/Update writes — purely event subscription with the same payload-
+/// slot gating shape as
+/// <see cref="HandCodedControlledPropEntry{TElement,TControl,TPayload,TValue,TDelegate}"/>.
+///
+/// <para>The element's callback-presence selector drives the subscription
+/// gate — null callback ⇒ no subscription cost. Trampoline lives once per
+/// control lifetime.</para></summary>
+internal sealed class HandCodedEventPropEntry<TElement, TControl, TPayload, TDelegate> : PropEntry<TElement, TControl>
+    where TElement : Element
+    where TControl : FrameworkElement
+    where TPayload : class, new()
+    where TDelegate : Delegate
+{
+    private readonly Action<TControl, TDelegate> _subscribe;
+    private readonly Func<TElement, Delegate?> _callbackPresent;
+    private readonly TDelegate _trampoline;
+    private readonly Func<TPayload, bool> _slotIsNull;
+    private readonly Action<TPayload, TDelegate> _setSlot;
+
+    public HandCodedEventPropEntry(
+        Action<TControl, TDelegate> subscribe,
+        Func<TElement, Delegate?> callbackPresent,
+        TDelegate trampoline,
+        Func<TPayload, bool> slotIsNull,
+        Action<TPayload, TDelegate> setSlot)
+    {
+        _subscribe = subscribe;
+        _callbackPresent = callbackPresent;
+        _trampoline = trampoline;
+        _slotIsNull = slotIsNull;
+        _setSlot = setSlot;
+    }
+
+    public override void Mount(TControl ctrl, TElement el) { /* no DP write */ }
+
+    public override void Update(TControl ctrl, TElement oldEl, TElement newEl) { /* no DP write */ }
+
+    public override void EnsureSubscribed(
+        ReactorBinding<TElement> binding,
+        TControl ctrl,
+        TElement el)
+    {
+        if (_callbackPresent(el) is null) return;
+        var payload = Reconciler.GetOrCreateControlEventPayload<TPayload>(ctrl);
+        if (!_slotIsNull(payload)) return;
+        _setSlot(payload, _trampoline);
+        _subscribe(ctrl, _trampoline);
+    }
+}
+
 /// <summary>§8 / Slider audit — a <c>Prop.OneWay</c> whose write may coerce
 /// a sibling <see cref="ControlledPropEntry{TElement,TControl,TValue,TArgs}"/>
 /// on the same control (e.g. <c>Slider.Minimum</c> raising Value).
