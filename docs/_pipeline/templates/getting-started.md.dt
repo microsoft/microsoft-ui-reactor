@@ -30,11 +30,11 @@ the rest of the docset elaborates.
 > **Prerequisites:** .NET 10+ and the Windows App SDK.
 <!-- /ai:lock -->
 
-> **Heads up — manual setup required today.** Reactor does not yet ship a
-> signed NuGet package or a one-click installer. Until those land you build the
-> framework, the `mur` CLI, and the project template from source. The steps
-> below take ~3 minutes and only need to be run once per machine. The signed
-> distribution is tracked in [spec 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md).
+> **Heads up — no signed NuGet yet.** Reactor doesn't ship a signed NuGet
+> package today, so you build the framework, the `mur` CLI, and the project
+> template from source. `bootstrap.ps1` automates all of that — one command,
+> ~3 minutes per machine. The signed distribution is tracked in
+> [spec 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md).
 
 Reactor is a declarative UI framework for building native Windows apps in pure C#.
 No XAML, no data binding, no view models. You describe your UI as a function of
@@ -42,75 +42,75 @@ state and Reactor keeps the screen in sync.
 
 ## Setup (one-time)
 
-Clone the framework, build the CLI, pack the local NuGets, and install the
-project template. From an admin or regular PowerShell:
-
 ```powershell
-# 1. Clone the framework
 git clone https://github.com/microsoft/microsoft-ui-reactor.git
 cd microsoft-ui-reactor
-
-# 2. Build mur — the build auto-mirrors mur.exe to bin/<arch>/
-dotnet build src/Reactor.Cli/Reactor.Cli.csproj -c Release
-
-# 3. Put mur on your user PATH (one-time; takes effect in new shells)
-$arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
-$murBin = (Resolve-Path "bin/$arch").Path
-$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-if (($userPath -split ';') -notcontains $murBin) {
-    [Environment]::SetEnvironmentVariable('Path', "$murBin;$userPath", 'User')
-}
-
-# 4. Open a new shell so `mur` resolves, then pack the local NuGets
-mur pack-local
-# Produces local-nupkgs/Microsoft.UI.Reactor.0.0.0-local.nupkg
-# and       local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg
-
-# 5. Install the project template so `dotnet new reactorapp` works anywhere
-dotnet new install local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg
+./bootstrap.ps1
 ```
 
-Then install the agent kit so Claude / Copilot can author Reactor code with
-the right factories, hooks, and patterns:
+That's it. `bootstrap.ps1` packs and installs `mur` as a `dotnet tool` global
+install (so it's on PATH cross-shell with no manual `$env:Path` edits), runs
+`mur pack-local` to produce `local-nupkgs/Microsoft.UI.Reactor.0.0.0-local.nupkg`
+and the matching `ProjectTemplates` nupkg, registers the `dotnet new reactorapp`
+template, and drops the Reactor agent plugin under `~/.claude/plugins/reactor`
+(symlink when allowed, copy otherwise).
+
+When it finishes you can immediately run:
 
 ```powershell
-# 6. Install the Reactor agent skills
-#    Source clone — point your agent at the in-repo plugin folder:
-$pluginDir = (Resolve-Path "plugins/reactor").Path
-# Claude Code: copy or symlink to ~/.claude/plugins/reactor
-New-Item -ItemType SymbolicLink `
-    -Path "$env:USERPROFILE\.claude\plugins\reactor" `
-    -Target $pluginDir -Force | Out-Null
-#    (For Copilot CLI / other agents, follow your tool's plugin-install path
-#     and point it at <repo>/plugins/reactor.)
+dotnet new reactorapp -n MyApp
+cd MyApp
+dotnet run
 ```
 
-> **What this gets you.** `mur` builds local-NuGet snapshots of the framework
-> so apps in any folder can `<PackageReference Include="Microsoft.UI.Reactor"
-> Version="0.0.0-local" />` against your clone. The agent skills give AI
-> assistants the up-to-date API surface (`mur --skill` / `mur --api` print the
-> same content) so generated code targets the real factories rather than
-> hallucinated XAML-shaped APIs. Re-run `mur pack-local` whenever you pull new
-> framework changes.
+### After `git pull`
 
-> **Already have a signed package?** Skip steps 1–4. Reference the published
-> `Microsoft.UI.Reactor` package directly and run the consumer-side
-> `install-skill-kit.ps1` shipped in the release archive (covered in [spec
-> 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md) §4.4). Until that release
-> ships, the steps above are the supported path.
+The framework changes — your local NuGet snapshot and `dotnet new` template do
+not, unless you repack them. Two options:
+
+```powershell
+mur upgrade           # repacks the framework + templates and refreshes plugin
+./bootstrap.ps1       # same, plus updates the `mur` global tool itself
+```
+
+`mur upgrade` is the lightweight path. Re-run `bootstrap.ps1` when you want to
+pick up CLI changes (a `mur` process can't replace its own binary mid-run).
+
+### Verify the install
+
+```powershell
+mur doctor
+```
+
+Lists every dependency the rest of this guide assumes — .NET 10+ SDK, `mur` on
+PATH, current `local-nupkgs/` feed, the `reactorapp` template registration, and
+the optional Claude plugin. Each line is PASS / WARN / FAIL with a one-line
+remediation for anything broken.
+
+> **What this gets you.** A globally-resolvable `mur` (via `~/.dotnet/tools`),
+> a local NuGet feed at `<repo>/local-nupkgs/` that apps in any folder can
+> consume via `<PackageReference Include="Microsoft.UI.Reactor"
+> Version="0.0.0-local" />`, and an agent plugin so AI assistants generate
+> against the real factories (`mur --skill` / `mur --api` print the same
+> content). Run `mur upgrade` whenever you pull new framework changes.
+
+> **Already have a signed package?** Skip the bootstrap. Reference the
+> published `Microsoft.UI.Reactor` package directly and run the consumer-side
+> `install-skill-kit.ps1` shipped in the release archive (covered in
+> [spec 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md) §4.4).
+> Until that release ships, the bootstrap above is the supported path.
 
 <!-- ai:caveat -->
-The `mur pack-local` + `dotnet new install` flow is the supported developer
-path *only* until the signed public NuGet ships under spec 022. If you skip
-step 4 (`mur pack-local`) but try `dotnet new reactorapp` anyway, the template
-installer fails with `NU1101: Unable to find package
+The bootstrap is the supported developer path *only* until the signed public
+NuGet ships under spec 022. If you skip `bootstrap.ps1` and try `dotnet new
+reactorapp` anyway, the scaffolder fails with `NU1101: Unable to find package
 Microsoft.UI.Reactor.ProjectTemplates` because nothing has produced
 `local-nupkgs/` yet — `dotnet` looks at the configured feeds and the package
-isn't on nuget.org. The fix is to re-run `mur pack-local` after every pull;
-the snapshot is regenerated from the current branch, not cached. The template
-installer also caches by package id, so if you bump the local version you
-must `dotnet new uninstall Microsoft.UI.Reactor.ProjectTemplates` first or
-the old template wins.
+isn't on nuget.org. The fix is to re-run `bootstrap.ps1` (or `mur upgrade`)
+after every `git pull`; the snapshot is regenerated from the current branch,
+not cached. The template installer caches by package id, so a same-version
+repack can lose to the cached copy — `mur upgrade` handles this by running
+`dotnet new uninstall` first.
 <!-- /ai:caveat -->
 
 ## Creating a Project
