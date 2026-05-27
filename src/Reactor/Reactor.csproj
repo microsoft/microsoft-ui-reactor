@@ -102,10 +102,24 @@
        against the framework itself), so their build outputs must already
        exist before pack — verified by the AssertAnalyzerDllsExist target
        below. -->
+  <!-- Resolve the per-build output dir of the analyzer ProjectReferences.
+       MSBuild propagates $(Platform) to transitive builds: with no
+       -p:Platform (e.g. plain `dotnet build`), the analyzer lands at
+       bin\$(Configuration)\netstandard2.0\; with -p:Platform=x64/ARM64
+       (e.g. `mur pack-local`), it lands at bin\$(Platform)\$(Configuration)\
+       netstandard2.0\ because <AppendPlatformToOutputPath> defaults to
+       true. Compute the path accordingly so pack finds the DLL in either
+       layout — without this, pack-local on a clean machine fails with
+       NU3168/CS2012 because the platform-less path has nothing in it. -->
+  <PropertyGroup>
+    <_ReactorAnalyzerBinDir Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">bin\$(Configuration)\netstandard2.0</_ReactorAnalyzerBinDir>
+    <_ReactorAnalyzerBinDir Condition="'$(_ReactorAnalyzerBinDir)' == ''">bin\$(Platform)\$(Configuration)\netstandard2.0</_ReactorAnalyzerBinDir>
+  </PropertyGroup>
+
   <ItemGroup>
-    <None Include="..\Reactor.Analyzers\bin\$(Configuration)\netstandard2.0\Reactor.Analyzers.dll"
+    <None Include="..\Reactor.Analyzers\$(_ReactorAnalyzerBinDir)\Reactor.Analyzers.dll"
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-    <None Include="..\Reactor.Localization.Generator\bin\$(Configuration)\netstandard2.0\Reactor.Localization.Generator.dll"
+    <None Include="..\Reactor.Localization.Generator\$(_ReactorAnalyzerBinDir)\Reactor.Localization.Generator.dll"
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
     <!-- Agent kit packed into the NuGet at `agentkit/`: SKILL.md, every
