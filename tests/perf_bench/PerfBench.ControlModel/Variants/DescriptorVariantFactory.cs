@@ -190,6 +190,19 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<RelativePanelElement, WinUI.RelativePanel>(
                 RelativePanelDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3 (batch 9) — Named-slot container ports.
+        rec.RegisterHandler<SplitViewElement, WinUI.SplitView>(
+            new DescriptorHandler<SplitViewElement, WinUI.SplitView>(
+                SplitViewDescriptor.Descriptor));
+
+        rec.RegisterHandler<InfoBarElement, WinUI.InfoBar>(
+            new DescriptorHandler<InfoBarElement, WinUI.InfoBar>(
+                InfoBarDescriptor.Descriptor));
+
+        rec.RegisterHandler<TeachingTipElement, WinUI.TeachingTip>(
+            new DescriptorHandler<TeachingTipElement, WinUI.TeachingTip>(
+                TeachingTipDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;

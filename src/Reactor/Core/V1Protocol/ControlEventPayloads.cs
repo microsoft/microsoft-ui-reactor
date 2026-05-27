@@ -186,6 +186,50 @@ internal sealed class ExpanderEventPayload
         Microsoft.UI.Xaml.Controls.ExpanderCollapsedEventArgs>? CollapsedTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3 batch 9 — SplitView named-slot container
+/// payload. <c>IsPaneOpen</c> round-trips through <c>PaneOpening</c>
+/// (controlled trampoline that gates on
+/// <see cref="ChangeEchoSuppressor"/> to drain the WriteSuppressed echo);
+/// <c>PaneClosing</c> is a fire-only trampoline reporting the close.
+/// Both fire the same element callback (<c>OnPaneOpenChanged</c>) with the
+/// corresponding bool — mirrors the legacy arm's twin-wire pattern.</summary>
+internal sealed class SplitViewEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.SplitView,
+        object>? PaneOpeningTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.SplitView,
+        Microsoft.UI.Xaml.Controls.SplitViewPaneClosingEventArgs>? PaneClosingTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 batch 9 — InfoBar named-slot container
+/// payload. <c>IsOpen</c> round-trips through <c>Closed</c>
+/// (controlled trampoline gated on
+/// <see cref="ChangeEchoSuppressor"/>). The legacy arm has no "Opened"
+/// event to pair with, so the controlled side is single-trampoline:
+/// programmatic <c>IsOpen</c> writes drain the echo; user dismissal fires
+/// <c>OnClosed</c>.</summary>
+internal sealed class InfoBarEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.InfoBar,
+        Microsoft.UI.Xaml.Controls.InfoBarClosedEventArgs>? ClosedTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 batch 9 — TeachingTip named-slot container
+/// payload. <c>IsOpen</c> round-trips through <c>Closed</c> with echo
+/// suppression. <c>ActionButtonClick</c> is a fire-only trampoline.</summary>
+internal sealed class TeachingTipEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.TeachingTip,
+        Microsoft.UI.Xaml.Controls.TeachingTipClosedEventArgs>? ClosedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.TeachingTip,
+        object>? ActionButtonClickTrampoline;
+}
+
 /// <summary>
 /// Spec 047 §9.2 — open-ended anchor for delegates registered via
 /// <see cref="ReactorBinding{TElement}.OnCustomEvent{TArgs}"/>. Holds a

@@ -612,6 +612,47 @@ shrink lands after V1 ships ON by default.
         `WrapGridAttached`), so without the per-child post-mount hook a
         descriptor port has no meaningful coverage. Re-evaluate when the
         Panel strategy grows an attached-props hook.
+- [x] **Batch 9** — `SplitView`, `InfoBar`, `TeachingTip`. First named-slot
+      container ports — all use the
+      `NamedSlots<TElement, TControl>` children strategy. SplitView
+      surfaces two Element slots (Pane + Content) with `GetCurrentChild`
+      for structural reconciliation, plus twin `.HandCodedEvent` entries
+      on `PaneOpening` / `PaneClosing` that dispatch the same
+      `OnPaneOpenChanged(bool)` callback with the corresponding direction
+      (legacy parity — no echo suppression; the WinUI events fire on both
+      user and programmatic transitions, matching the hand-coded arm).
+      InfoBar has a single Content slot plus a `.HandCodedEvent` on
+      `Closed`; TeachingTip has two named slots (Content + HeroContent)
+      plus two `.HandCodedEvent` entries (`ActionButtonClick` and
+      `Closed`). Three new payload types: `SplitViewEventPayload` (two
+      typed slots), `InfoBarEventPayload` (one slot), `TeachingTipEventPayload`
+      (two slots). IconSource on InfoBar / TeachingTip routes through
+      `Reconciler.ResolveIconSource` via `.OneWayConditional` with a
+      private reference-equality comparer (mirrors the legacy
+      `!ReferenceEquals` gate).
+      Fixtures: `Desc_SplitView_MountUpdate`, `Desc_InfoBar_MountUpdate`,
+      `Desc_TeachingTip_MountUpdate` — all pass under V1 ON and V1 OFF.
+      **Known gaps:**
+      - **InfoBar `ActionButtonContent` + `OnActionButtonClick` is
+        escape-hatched.** The legacy arm constructs an inner `Button`
+        dynamically inside the InfoBar's `ActionButton` slot when
+        `ActionButtonContent` is non-null, then wires `Click` on that
+        dynamically-created child. The descriptor framework binds events
+        to the primary control, not to a sub-control created during
+        mount, so this asymmetric pattern doesn't fit. Authors who need
+        the action button stay on V1 OFF (legacy arm), or use a `.Set`
+        imperative setter to construct the button themselves.
+      - **TeachingTip `Target` / `PlacementTarget` is escape-hatched.**
+        `TeachingTip.Target` is a `FrameworkElement` reference pointing
+        at a sibling control the tip is anchored to (not a child the tip
+        mounts). The descriptor framework can't express "reference
+        another element's mounted control"; legacy authors set `Target`
+        directly via a `.Set` imperative setter and the descriptor
+        follows the same escape.
+      - **TeachingTip `HeroContent`** uses the standard NamedSlot
+        reconciliation path, which preserves descendant state across
+        re-renders (the legacy arm re-mounts wholesale on every swap).
+        Strictly an improvement, documented for parity audit visibility.
 - [ ] Batch 3-followup — `NumberBox` (needs Immediate-mode keystroke
       handling + `NumberFormatter` reference-equality semantics that the
       descriptor builders don't yet express — likely needs a new entry

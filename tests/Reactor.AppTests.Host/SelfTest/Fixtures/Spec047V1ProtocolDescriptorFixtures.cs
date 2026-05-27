@@ -2386,4 +2386,235 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Spec 047 §14 Phase 3 (batch 9) — Named-slot container descriptors.
+    //  SplitView, InfoBar, TeachingTip. All use NamedSlots<…> children.
+    //  Events are HandCodedEvent (no echo suppression — legacy parity).
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class DescSplitViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<SplitViewElement, WinUI.SplitView>(
+                new DescriptorHandler<SplitViewElement, WinUI.SplitView>(
+                    SplitViewDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new SplitViewElement(
+                Pane: TextBlock("pane"),
+                Content: TextBlock("body"))
+            {
+                IsPaneOpen = true,
+                OpenPaneLength = 200,
+                CompactPaneLength = 40,
+                DisplayMode = SplitViewDisplayMode.CompactOverlay,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.SplitView sv)
+            {
+                parent.Children.Add(sv);
+                await Harness.Render();
+
+                H.Check("Desc_SplitView_Mounted", true);
+                H.Check("Desc_SplitView_HasPane", sv.Pane is WinUI.TextBlock);
+                H.Check("Desc_SplitView_PaneText",
+                    (sv.Pane as WinUI.TextBlock)?.Text == "pane");
+                H.Check("Desc_SplitView_HasContent", sv.Content is WinUI.TextBlock);
+                H.Check("Desc_SplitView_ContentText",
+                    (sv.Content as WinUI.TextBlock)?.Text == "body");
+                H.Check("Desc_SplitView_IsPaneOpen", sv.IsPaneOpen == true);
+                H.Check("Desc_SplitView_OpenPaneLength",
+                    global::System.Math.Abs(sv.OpenPaneLength - 200) < 1e-9);
+                H.Check("Desc_SplitView_CompactPaneLength",
+                    global::System.Math.Abs(sv.CompactPaneLength - 40) < 1e-9);
+                H.Check("Desc_SplitView_DisplayMode",
+                    sv.DisplayMode == SplitViewDisplayMode.CompactOverlay);
+
+                var el2 = el1 with
+                {
+                    Pane = TextBlock("pane2"),
+                    Content = TextBlock("body2"),
+                    IsPaneOpen = false,
+                    OpenPaneLength = 320,
+                };
+                rec.UpdateChild(el1, el2, sv, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_SplitView_PaneUpdated",
+                    (sv.Pane as WinUI.TextBlock)?.Text == "pane2");
+                H.Check("Desc_SplitView_ContentUpdated",
+                    (sv.Content as WinUI.TextBlock)?.Text == "body2");
+                H.Check("Desc_SplitView_IsPaneOpenUpdated", sv.IsPaneOpen == false);
+                H.Check("Desc_SplitView_OpenPaneLengthUpdated",
+                    global::System.Math.Abs(sv.OpenPaneLength - 320) < 1e-9);
+
+                rec.UnmountChild(sv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_SplitView_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescInfoBarMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<InfoBarElement, WinUI.InfoBar>(
+                new DescriptorHandler<InfoBarElement, WinUI.InfoBar>(
+                    InfoBarDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int closedCount = 0;
+            var el1 = new InfoBarElement(Title: "Heads up", Message: "Action required")
+            {
+                Severity = WinUI.InfoBarSeverity.Warning,
+                IsOpen = true,
+                IsClosable = true,
+                Content = TextBlock("details"),
+                OnClosed = () => closedCount++,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.InfoBar ib)
+            {
+                parent.Children.Add(ib);
+                await Harness.Render();
+
+                H.Check("Desc_InfoBar_Mounted", true);
+                H.Check("Desc_InfoBar_Title", ib.Title == "Heads up");
+                H.Check("Desc_InfoBar_Message", ib.Message == "Action required");
+                H.Check("Desc_InfoBar_Severity",
+                    ib.Severity == WinUI.InfoBarSeverity.Warning);
+                H.Check("Desc_InfoBar_IsOpen", ib.IsOpen == true);
+                H.Check("Desc_InfoBar_IsClosable", ib.IsClosable == true);
+                H.Check("Desc_InfoBar_HasContent", ib.Content is WinUI.TextBlock);
+                H.Check("Desc_InfoBar_ContentText",
+                    (ib.Content as WinUI.TextBlock)?.Text == "details");
+                H.Check("Desc_InfoBar_MountDidNotFireClosed", closedCount == 0);
+
+                var el2 = el1 with
+                {
+                    Title = "Updated",
+                    Message = "Done",
+                    Severity = WinUI.InfoBarSeverity.Success,
+                    IsClosable = false,
+                    Content = TextBlock("more details"),
+                };
+                rec.UpdateChild(el1, el2, ib, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_InfoBar_TitleUpdated", ib.Title == "Updated");
+                H.Check("Desc_InfoBar_MessageUpdated", ib.Message == "Done");
+                H.Check("Desc_InfoBar_SeverityUpdated",
+                    ib.Severity == WinUI.InfoBarSeverity.Success);
+                H.Check("Desc_InfoBar_IsClosableUpdated", ib.IsClosable == false);
+                H.Check("Desc_InfoBar_ContentUpdated",
+                    (ib.Content as WinUI.TextBlock)?.Text == "more details");
+
+                rec.UnmountChild(ib);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_InfoBar_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescTeachingTipMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<TeachingTipElement, WinUI.TeachingTip>(
+                new DescriptorHandler<TeachingTipElement, WinUI.TeachingTip>(
+                    TeachingTipDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int actionClicks = 0;
+            int closedCount = 0;
+            var el1 = new TeachingTipElement(Title: "Welcome", Subtitle: "First tip")
+            {
+                IsOpen = false,
+                Content = TextBlock("body"),
+                HeroContent = TextBlock("hero"),
+                ActionButtonContent = "Got it",
+                CloseButtonContent = "Close",
+                PreferredPlacement = WinUI.TeachingTipPlacementMode.Top,
+                OnActionButtonClick = () => actionClicks++,
+                OnClosed = () => closedCount++,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.TeachingTip tip)
+            {
+                parent.Children.Add(tip);
+                await Harness.Render();
+
+                H.Check("Desc_TeachingTip_Mounted", true);
+                H.Check("Desc_TeachingTip_Title", tip.Title == "Welcome");
+                H.Check("Desc_TeachingTip_Subtitle", tip.Subtitle == "First tip");
+                H.Check("Desc_TeachingTip_IsOpenInitial", tip.IsOpen == false);
+                H.Check("Desc_TeachingTip_HasContent", tip.Content is WinUI.TextBlock);
+                H.Check("Desc_TeachingTip_ContentText",
+                    (tip.Content as WinUI.TextBlock)?.Text == "body");
+                H.Check("Desc_TeachingTip_HasHero",
+                    tip.HeroContent is WinUI.TextBlock);
+                H.Check("Desc_TeachingTip_HeroText",
+                    (tip.HeroContent as WinUI.TextBlock)?.Text == "hero");
+                H.Check("Desc_TeachingTip_ActionButtonContent",
+                    (tip.ActionButtonContent as string) == "Got it");
+                H.Check("Desc_TeachingTip_CloseButtonContent",
+                    (tip.CloseButtonContent as string) == "Close");
+                H.Check("Desc_TeachingTip_PreferredPlacement",
+                    tip.PreferredPlacement == WinUI.TeachingTipPlacementMode.Top);
+                H.Check("Desc_TeachingTip_MountDidNotFire",
+                    actionClicks == 0 && closedCount == 0);
+
+                var el2 = el1 with
+                {
+                    Title = "Welcome v2",
+                    Subtitle = "Second tip",
+                    Content = TextBlock("body2"),
+                    ActionButtonContent = "Continue",
+                };
+                rec.UpdateChild(el1, el2, tip, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_TeachingTip_TitleUpdated", tip.Title == "Welcome v2");
+                H.Check("Desc_TeachingTip_SubtitleUpdated", tip.Subtitle == "Second tip");
+                H.Check("Desc_TeachingTip_ContentUpdated",
+                    (tip.Content as WinUI.TextBlock)?.Text == "body2");
+                H.Check("Desc_TeachingTip_ActionContentUpdated",
+                    (tip.ActionButtonContent as string) == "Continue");
+
+                rec.UnmountChild(tip);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_TeachingTip_Mounted", false);
+            }
+        }
+    }
 }
