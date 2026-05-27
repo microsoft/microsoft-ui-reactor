@@ -146,8 +146,14 @@ Write-Ok ".NET SDK present"
 
 function Test-WindowsAppRuntime20 {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { return $true }  # nothing we can check without winget
-    & winget list --id Microsoft.WindowsAppRuntime.2.0 --exact 2>$null | Out-Null
-    return ($LASTEXITCODE -eq 0)
+    # --accept-source-agreements is needed even for `list` on a winget that
+    # hasn't been used before (e.g. a fresh CI runner). Without it, winget
+    # prompts for msstore terms and fails on a non-interactive shell with
+    # exit -1978335166.
+    & winget list --id Microsoft.WindowsAppRuntime.2.0 --exact --accept-source-agreements 2>$null | Out-Null
+    $rc = $LASTEXITCODE
+    $global:LASTEXITCODE = 0  # don't let winget's status leak out of the probe
+    return ($rc -eq 0)
 }
 
 if (-not (Test-WindowsAppRuntime20)) {

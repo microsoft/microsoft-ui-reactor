@@ -47,6 +47,10 @@ jobs:
       - name: Pre-flight — show toolchain baseline
         shell: pwsh
         run: |
+          # Diagnostic-only step. Reset $LASTEXITCODE on exit so a non-zero
+          # winget status (which is common — "not installed" returns
+          # -1978335166) doesn't fail the workflow before bootstrap.ps1 even
+          # starts.
           Write-Host "=== dotnet --list-sdks ==="
           if (Get-Command dotnet -ErrorAction SilentlyContinue) {
               dotnet --list-sdks
@@ -58,8 +62,12 @@ jobs:
           winget --version
           Write-Host ""
           Write-Host "=== Windows App Runtime 2.0 (winget list) ==="
-          winget list --id Microsoft.WindowsAppRuntime.2.0 --exact 2>$null
+          # --accept-source-agreements: a fresh runner hasn't accepted the
+          # msstore source terms. Without it, winget prompts and fails on a
+          # non-interactive shell.
+          winget list --id Microsoft.WindowsAppRuntime.2.0 --exact --accept-source-agreements 2>&1
           Write-Host "exit=$LASTEXITCODE"
+          $global:LASTEXITCODE = 0
 
       - name: Run bootstrap.ps1 (non-interactive)
         shell: pwsh
