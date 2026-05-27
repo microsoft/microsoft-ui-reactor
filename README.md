@@ -69,9 +69,21 @@ Many of the experiments in this repo — the charting stack, accessibility valid
 
 ## Quick start
 
-See **[docs/guide/getting-started.md](docs/guide/getting-started.md)** for the full walkthrough — prerequisites, building the framework and `mur` CLI from source, scaffolding your first app, and running through hello-world, a todo list, and a calculator with screenshots at each step.
+Reactor doesn't ship a signed NuGet yet, so you build the framework, the `mur` CLI, and the project template from source. `bootstrap.ps1` collapses that into a single command — ~3 minutes per machine.
 
+```powershell
+git clone https://github.com/microsoft/microsoft-ui-reactor.git
+cd microsoft-ui-reactor
+./bootstrap.ps1
 
+dotnet new reactorapp -n MyApp
+cd MyApp
+dotnet run
+```
+
+`bootstrap.ps1` packs `mur` as a `dotnet tool` global install (cross-shell PATH, no per-arch `$env:Path` edits), packs the framework + project templates into `local-nupkgs/`, registers the `dotnet new reactorapp` template, and installs the Reactor agent plugin under `~/.claude/plugins/reactor`. Re-run it (or `mur upgrade` for a lighter refresh) after `git pull`. Verify a working install with `mur doctor`.
+
+Prefer to wire it up by hand? **[docs/guide/getting-started.md](docs/guide/getting-started.md#manual-setup)** has a no-magic walkthrough of the exact `dotnet pack` / `dotnet tool install` / `dotnet new install` calls `bootstrap.ps1` makes, plus the full hello-world → todo → calculator tour.
 
 ---
 
