@@ -703,6 +703,23 @@ internal static class SelfTestFixtureRegistry
         "CovBoost2_DataGridSearchSort",
         "CovBoost2_FocusTrapExercise",
 
+        // Accessibility — SemanticPanel automation peer + UseFocusTrap hook
+        "A11y_SemanticPanel_RangeValueProvider",
+        "A11y_SemanticPanel_ValueProvider",
+        "A11y_SemanticPanel_RangeSetValueRespectsReadOnly",
+        "A11y_SemanticPanel_ValueSetValueRespectsReadOnly",
+        "A11y_SemanticPanel_HidesRangePatternWhenNoRange",
+        "A11y_SemanticPanel_HidesValuePatternWhenNoValue",
+        "A11y_SemanticPanel_ControlTypeMapping",
+        "A11y_SemanticPanel_UpdatePathRefreshesPanel",
+        "A11y_Semantics_FluentModifierBuildsRecord",
+        "A11y_FocusTrap_HookReturnsStableHandle",
+        "A11y_FocusTrap_HookIsActiveTracksHookArg",
+        "A11y_FocusTrap_ModifierAttachesContainer",
+        "A11y_FocusTrap_ModifierChainsExistingOnMount",
+        "A11y_FocusTrap_HandleAttachDetachIdempotent",
+        "A11y_FocusTrap_HandleSetContainerSwaps",
+
         // Input modifiers — spec 027 Tier 1
         "PointerMod_DoubleTappedAutoEnables",
         "PointerMod_RightTappedAutoEnables",
@@ -1817,6 +1834,38 @@ internal static class SelfTestFixtureRegistry
         "CovBoost2_ElementPoolInteractiveReset" => new CoverageBoostFixtures2.ElementPoolInteractiveReset(harness),
         "CovBoost2_DataGridSearchSort" => new CoverageBoostFixtures2.DataGridSearchSort(harness),
         "CovBoost2_FocusTrapExercise" => new CoverageBoostFixtures2.SplitViewExercise(harness),
+
+        // Accessibility — SemanticPanel automation peer + UseFocusTrap hook
+        "A11y_SemanticPanel_RangeValueProvider"
+            => new AccessibilityFixtures.SemanticPanelRangeValueProvider(harness),
+        "A11y_SemanticPanel_ValueProvider"
+            => new AccessibilityFixtures.SemanticPanelValueProvider(harness),
+        "A11y_SemanticPanel_RangeSetValueRespectsReadOnly"
+            => new AccessibilityFixtures.SemanticPanelRangeSetValueRespectsReadOnly(harness),
+        "A11y_SemanticPanel_ValueSetValueRespectsReadOnly"
+            => new AccessibilityFixtures.SemanticPanelValueSetValueRespectsReadOnly(harness),
+        "A11y_SemanticPanel_HidesRangePatternWhenNoRange"
+            => new AccessibilityFixtures.SemanticPanelHidesRangePatternWhenNoRange(harness),
+        "A11y_SemanticPanel_HidesValuePatternWhenNoValue"
+            => new AccessibilityFixtures.SemanticPanelHidesValuePatternWhenNoValue(harness),
+        "A11y_SemanticPanel_ControlTypeMapping"
+            => new AccessibilityFixtures.SemanticPanelControlTypeMapping(harness),
+        "A11y_SemanticPanel_UpdatePathRefreshesPanel"
+            => new AccessibilityFixtures.SemanticElementUpdatePathRefreshesPanel(harness),
+        "A11y_Semantics_FluentModifierBuildsRecord"
+            => new AccessibilityFixtures.SemanticsFluentModifierBuildsRecord(harness),
+        "A11y_FocusTrap_HookReturnsStableHandle"
+            => new AccessibilityFixtures.FocusTrapHookReturnsStableHandle(harness),
+        "A11y_FocusTrap_HookIsActiveTracksHookArg"
+            => new AccessibilityFixtures.FocusTrapHookIsActiveTracksHookArg(harness),
+        "A11y_FocusTrap_ModifierAttachesContainer"
+            => new AccessibilityFixtures.FocusTrapModifierAttachesContainer(harness),
+        "A11y_FocusTrap_ModifierChainsExistingOnMount"
+            => new AccessibilityFixtures.FocusTrapModifierChainsExistingOnMount(harness),
+        "A11y_FocusTrap_HandleAttachDetachIdempotent"
+            => new AccessibilityFixtures.FocusTrapHandleAttachDetachIdempotent(harness),
+        "A11y_FocusTrap_HandleSetContainerSwaps"
+            => new AccessibilityFixtures.FocusTrapHandleSetContainerSwaps(harness),
 
         // Input modifiers — spec 027 Tier 1
         "PointerMod_DoubleTappedAutoEnables" => new PointerModifierFixtures.DoubleTappedAutoEnables(harness),

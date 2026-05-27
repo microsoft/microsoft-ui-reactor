@@ -1124,6 +1124,29 @@ public static class ReactorApp
     }
 
     /// <summary>
+    /// Test-only reset for the once-per-process DIP behavior notice flag.
+    /// Mirrors <see cref="ResetDeprecationWarningForTests"/> so the unit-test
+    /// suite can drive <see cref="EmitDipBehaviorChangeNoticeOnce"/> through
+    /// both branches deterministically.
+    /// </summary>
+    internal static void ResetDipBehaviorChangeNoticeForTests()
+    {
+        Interlocked.Exchange(ref _dipBehaviorChangeNoticeEmitted, 0);
+    }
+
+    /// <summary>
+    /// Test-only reset for the registered XAML metadata provider list. Lets
+    /// <see cref="RegisterControlAssembly(IXamlMetadataProvider)"/> tests run
+    /// independently regardless of other tests' (or production code's)
+    /// registrations.
+    /// </summary>
+    internal static void ResetRegisteredControlAssembliesForTests()
+    {
+        lock (_registeredXamlMetadataProvidersLock)
+            Volatile.Write(ref _registeredXamlMetadataProviders, []);
+    }
+
+    /// <summary>
     /// Sentinel exit code consumed by the `mur devtools` supervisor to mean
     /// "rebuild and respawn". Any other exit code propagates.
     /// </summary>
