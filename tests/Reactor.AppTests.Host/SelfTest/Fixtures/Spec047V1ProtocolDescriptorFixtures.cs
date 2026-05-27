@@ -2617,4 +2617,305 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Spec 047 §14 Phase 3 (batch 10) — Shape + display-leaf ports.
+    //  All zero-event leaves with no children. Pure .OneWay /
+    //  .OneWayConditional surfaces.
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class DescRectangleMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<RectangleElement, Microsoft.UI.Xaml.Shapes.Rectangle>(
+                new DescriptorHandler<RectangleElement, Microsoft.UI.Xaml.Shapes.Rectangle>(
+                    RectangleDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var fill = new SolidColorBrush(Colors.Red);
+            var stroke = new SolidColorBrush(Colors.Black);
+            // RectangleElement.ShallowEquals only compares Setters reference —
+            // use distinct Setters arrays so the Update fast-path doesn't
+            // short-circuit when we want to assert prop diffs. (Same pre-
+            // existing fast-path applies to the legacy arm under V1 OFF.)
+            var setters1 = new global::System.Action<Microsoft.UI.Xaml.Shapes.Rectangle>[]
+                { static c => c.Tag = "v1" };
+            var setters2 = new global::System.Action<Microsoft.UI.Xaml.Shapes.Rectangle>[]
+                { static c => c.Tag = "v2" };
+            var el1 = new RectangleElement
+            {
+                Fill = fill,
+                Stroke = stroke,
+                StrokeThickness = 2,
+                RadiusX = 4,
+                RadiusY = 4,
+                Setters = setters1,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is Microsoft.UI.Xaml.Shapes.Rectangle r)
+            {
+                parent.Children.Add(r);
+                await Harness.Render();
+
+                H.Check("Desc_Rectangle_Mounted", true);
+                H.Check("Desc_Rectangle_Fill",
+                    (r.Fill as SolidColorBrush)?.Color == Colors.Red);
+                H.Check("Desc_Rectangle_Stroke",
+                    (r.Stroke as SolidColorBrush)?.Color == Colors.Black);
+                H.Check("Desc_Rectangle_StrokeThickness", Math.Abs(r.StrokeThickness - 2) < 1e-9);
+                H.Check("Desc_Rectangle_RadiusX", Math.Abs(r.RadiusX - 4) < 1e-9);
+                H.Check("Desc_Rectangle_RadiusY", Math.Abs(r.RadiusY - 4) < 1e-9);
+
+                var newFill = new SolidColorBrush(Colors.Blue);
+                var el2 = el1 with { Fill = newFill, StrokeThickness = 5, RadiusX = 8, Setters = setters2 };
+                rec.UpdateChild(el1, el2, r, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Rectangle_UpdatedFill",
+                    (r.Fill as SolidColorBrush)?.Color == Colors.Blue);
+                H.Check("Desc_Rectangle_UpdatedStrokeThickness", Math.Abs(r.StrokeThickness - 5) < 1e-9);
+                H.Check("Desc_Rectangle_UpdatedRadiusX", Math.Abs(r.RadiusX - 8) < 1e-9);
+
+                rec.UnmountChild(r);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Rectangle_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescEllipseMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<EllipseElement, Microsoft.UI.Xaml.Shapes.Ellipse>(
+                new DescriptorHandler<EllipseElement, Microsoft.UI.Xaml.Shapes.Ellipse>(
+                    EllipseDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var fill = new SolidColorBrush(Colors.Green);
+            var stroke = new SolidColorBrush(Colors.Black);
+            // EllipseElement.ShallowEquals only compares Setters reference —
+            // use distinct Setters arrays so the Update fast-path doesn't
+            // short-circuit when we want to assert prop diffs. (Same pre-
+            // existing fast-path applies to the legacy arm under V1 OFF.)
+            var setters1 = new global::System.Action<Microsoft.UI.Xaml.Shapes.Ellipse>[]
+                { static c => c.Tag = "v1" };
+            var setters2 = new global::System.Action<Microsoft.UI.Xaml.Shapes.Ellipse>[]
+                { static c => c.Tag = "v2" };
+            var el1 = new EllipseElement
+            {
+                Fill = fill,
+                Stroke = stroke,
+                StrokeThickness = 3,
+                Setters = setters1,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is Microsoft.UI.Xaml.Shapes.Ellipse e)
+            {
+                parent.Children.Add(e);
+                await Harness.Render();
+
+                H.Check("Desc_Ellipse_Mounted", true);
+                H.Check("Desc_Ellipse_Fill",
+                    (e.Fill as SolidColorBrush)?.Color == Colors.Green);
+                H.Check("Desc_Ellipse_Stroke",
+                    (e.Stroke as SolidColorBrush)?.Color == Colors.Black);
+                H.Check("Desc_Ellipse_StrokeThickness", Math.Abs(e.StrokeThickness - 3) < 1e-9);
+
+                var newFill = new SolidColorBrush(Colors.Yellow);
+                var el2 = el1 with { Fill = newFill, StrokeThickness = 7, Setters = setters2 };
+                rec.UpdateChild(el1, el2, e, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Ellipse_UpdatedFill",
+                    (e.Fill as SolidColorBrush)?.Color == Colors.Yellow);
+                H.Check("Desc_Ellipse_UpdatedStrokeThickness", Math.Abs(e.StrokeThickness - 7) < 1e-9);
+
+                rec.UnmountChild(e);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Ellipse_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescLineMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<LineElement, Microsoft.UI.Xaml.Shapes.Line>(
+                new DescriptorHandler<LineElement, Microsoft.UI.Xaml.Shapes.Line>(
+                    LineDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var stroke = new SolidColorBrush(Colors.Black);
+            var el1 = new LineElement
+            {
+                X1 = 0,
+                Y1 = 0,
+                X2 = 100,
+                Y2 = 50,
+                Stroke = stroke,
+                StrokeThickness = 2,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is Microsoft.UI.Xaml.Shapes.Line ln)
+            {
+                parent.Children.Add(ln);
+                await Harness.Render();
+
+                H.Check("Desc_Line_Mounted", true);
+                H.Check("Desc_Line_X1", Math.Abs(ln.X1 - 0) < 1e-9);
+                H.Check("Desc_Line_Y1", Math.Abs(ln.Y1 - 0) < 1e-9);
+                H.Check("Desc_Line_X2", Math.Abs(ln.X2 - 100) < 1e-9);
+                H.Check("Desc_Line_Y2", Math.Abs(ln.Y2 - 50) < 1e-9);
+                H.Check("Desc_Line_Stroke", ReferenceEquals(ln.Stroke, stroke));
+                H.Check("Desc_Line_StrokeThickness", Math.Abs(ln.StrokeThickness - 2) < 1e-9);
+
+                var el2 = el1 with { X2 = 200, Y2 = 75, StrokeThickness = 4 };
+                rec.UpdateChild(el1, el2, ln, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Line_UpdatedX2", Math.Abs(ln.X2 - 200) < 1e-9);
+                H.Check("Desc_Line_UpdatedY2", Math.Abs(ln.Y2 - 75) < 1e-9);
+                H.Check("Desc_Line_UpdatedStrokeThickness", Math.Abs(ln.StrokeThickness - 4) < 1e-9);
+
+                rec.UnmountChild(ln);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Line_Mounted", false);
+            }
+        }
+    }
+
+    // Path: Data/PathDataString is a documented escape-hatch (see PathDescriptor
+    // xmldoc) — fixture validates the styling/stroke props the descriptor
+    // does cover.
+    internal class DescPathMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<PathElement, Microsoft.UI.Xaml.Shapes.Path>(
+                new DescriptorHandler<PathElement, Microsoft.UI.Xaml.Shapes.Path>(
+                    PathDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var fill = new SolidColorBrush(Colors.Red);
+            var stroke = new SolidColorBrush(Colors.Black);
+            var el1 = new PathElement
+            {
+                Fill = fill,
+                Stroke = stroke,
+                StrokeThickness = 2,
+                StrokeStartLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Round,
+                StrokeEndLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Round,
+                StrokeLineJoin = Microsoft.UI.Xaml.Media.PenLineJoin.Round,
+                StrokeMiterLimit = 4,
+                StrokeDashOffset = 3,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is Microsoft.UI.Xaml.Shapes.Path p)
+            {
+                parent.Children.Add(p);
+                await Harness.Render();
+
+                H.Check("Desc_Path_Mounted", true);
+                H.Check("Desc_Path_Fill", ReferenceEquals(p.Fill, fill));
+                H.Check("Desc_Path_Stroke", ReferenceEquals(p.Stroke, stroke));
+                H.Check("Desc_Path_StrokeThickness", Math.Abs(p.StrokeThickness - 2) < 1e-9);
+                H.Check("Desc_Path_StartLineCap",
+                    p.StrokeStartLineCap == Microsoft.UI.Xaml.Media.PenLineCap.Round);
+                H.Check("Desc_Path_EndLineCap",
+                    p.StrokeEndLineCap == Microsoft.UI.Xaml.Media.PenLineCap.Round);
+                H.Check("Desc_Path_LineJoin",
+                    p.StrokeLineJoin == Microsoft.UI.Xaml.Media.PenLineJoin.Round);
+                H.Check("Desc_Path_MiterLimit", Math.Abs(p.StrokeMiterLimit - 4) < 1e-9);
+                H.Check("Desc_Path_DashOffset", Math.Abs(p.StrokeDashOffset - 3) < 1e-9);
+
+                var newFill = new SolidColorBrush(Colors.Blue);
+                var el2 = el1 with { Fill = newFill, StrokeThickness = 5, StrokeMiterLimit = 8 };
+                rec.UpdateChild(el1, el2, p, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Path_UpdatedFill", ReferenceEquals(p.Fill, newFill));
+                H.Check("Desc_Path_UpdatedStrokeThickness", Math.Abs(p.StrokeThickness - 5) < 1e-9);
+                H.Check("Desc_Path_UpdatedMiterLimit", Math.Abs(p.StrokeMiterLimit - 8) < 1e-9);
+
+                rec.UnmountChild(p);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Path_Mounted", false);
+            }
+        }
+    }
+
+    // AnimatedIcon: Source is shape-checked at descriptor set; the fixture
+    // exercises FallbackIconSource (a concrete IconSource) and the no-op
+    // path for a non-IAnimatedVisualSource2 Source value.
+    internal class DescAnimatedIconMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<AnimatedIconElement, WinUI.AnimatedIcon>(
+                new DescriptorHandler<AnimatedIconElement, WinUI.AnimatedIcon>(
+                    AnimatedIconDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var fallback = new WinUI.SymbolIconSource { Symbol = Symbol.Accept };
+            var el1 = new AnimatedIconElement
+            {
+                FallbackIconSource = fallback,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.AnimatedIcon ai)
+            {
+                parent.Children.Add(ai);
+                await Harness.Render();
+
+                H.Check("Desc_AnimatedIcon_Mounted", true);
+                H.Check("Desc_AnimatedIcon_FallbackAssigned",
+                    ReferenceEquals(ai.FallbackIconSource, fallback));
+
+                var fallback2 = new WinUI.SymbolIconSource { Symbol = Symbol.Cancel };
+                var el2 = el1 with { FallbackIconSource = fallback2 };
+                rec.UpdateChild(el1, el2, ai, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_AnimatedIcon_UpdatedFallback",
+                    ReferenceEquals(ai.FallbackIconSource, fallback2));
+
+                rec.UnmountChild(ai);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_AnimatedIcon_Mounted", false);
+            }
+        }
+    }
 }

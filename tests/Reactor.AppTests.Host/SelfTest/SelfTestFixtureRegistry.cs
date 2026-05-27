@@ -1155,6 +1155,12 @@ internal static class SelfTestFixtureRegistry
         "Desc_SplitView_MountUpdate",
         "Desc_InfoBar_MountUpdate",
         "Desc_TeachingTip_MountUpdate",
+        // Spec 047 §14 Phase 3 (batch 10) — Shape + display-leaf ports.
+        "Desc_Rectangle_MountUpdate",
+        "Desc_Ellipse_MountUpdate",
+        "Desc_Line_MountUpdate",
+        "Desc_Path_MountUpdate",
+        "Desc_AnimatedIcon_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2284,6 +2290,12 @@ internal static class SelfTestFixtureRegistry
         "Desc_SplitView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescSplitViewMountUpdate(harness),
         "Desc_InfoBar_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescInfoBarMountUpdate(harness),
         "Desc_TeachingTip_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescTeachingTipMountUpdate(harness),
+        // Spec 047 §14 Phase 3 (batch 10) — Shape + display-leaf ports.
+        "Desc_Rectangle_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRectangleMountUpdate(harness),
+        "Desc_Ellipse_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescEllipseMountUpdate(harness),
+        "Desc_Line_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescLineMountUpdate(harness),
+        "Desc_Path_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescPathMountUpdate(harness),
+        "Desc_AnimatedIcon_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescAnimatedIconMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

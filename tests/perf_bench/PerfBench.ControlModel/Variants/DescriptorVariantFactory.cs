@@ -203,6 +203,27 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<TeachingTipElement, WinUI.TeachingTip>(
                 TeachingTipDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3 (batch 10) — Shape + display-leaf ports.
+        rec.RegisterHandler<RectangleElement, Microsoft.UI.Xaml.Shapes.Rectangle>(
+            new DescriptorHandler<RectangleElement, Microsoft.UI.Xaml.Shapes.Rectangle>(
+                RectangleDescriptor.Descriptor));
+
+        rec.RegisterHandler<EllipseElement, Microsoft.UI.Xaml.Shapes.Ellipse>(
+            new DescriptorHandler<EllipseElement, Microsoft.UI.Xaml.Shapes.Ellipse>(
+                EllipseDescriptor.Descriptor));
+
+        rec.RegisterHandler<LineElement, Microsoft.UI.Xaml.Shapes.Line>(
+            new DescriptorHandler<LineElement, Microsoft.UI.Xaml.Shapes.Line>(
+                LineDescriptor.Descriptor));
+
+        rec.RegisterHandler<PathElement, Microsoft.UI.Xaml.Shapes.Path>(
+            new DescriptorHandler<PathElement, Microsoft.UI.Xaml.Shapes.Path>(
+                PathDescriptor.Descriptor));
+
+        rec.RegisterHandler<AnimatedIconElement, WinUI.AnimatedIcon>(
+            new DescriptorHandler<AnimatedIconElement, WinUI.AnimatedIcon>(
+                AnimatedIconDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;

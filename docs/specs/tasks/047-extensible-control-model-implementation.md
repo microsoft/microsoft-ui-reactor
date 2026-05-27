@@ -653,6 +653,53 @@ shrink lands after V1 ships ON by default.
         reconciliation path, which preserves descendant state across
         re-renders (the legacy arm re-mounts wholesale on every swap).
         Strictly an improvement, documented for parity audit visibility.
+- [x] **Batch 10** — `Rectangle`, `Ellipse`, `Line`, `Path`, `AnimatedIcon`.
+      Five zero-event leaves with no children — pure
+      `.OneWay` / `.OneWayConditional`. Shape descriptors live under the
+      `WinShapes = Microsoft.UI.Xaml.Shapes` alias.
+      Fixtures: `Desc_Rectangle_MountUpdate`, `Desc_Ellipse_MountUpdate`,
+      `Desc_Line_MountUpdate`, `Desc_Path_MountUpdate`,
+      `Desc_AnimatedIcon_MountUpdate` — all pass under V1 ON and V1 OFF.
+      **Known gaps:**
+      - **`PathElement.Data` / `PathDataString` is escape-hatched.** The
+        legacy `MountPath` branches across three strategies (XamlReader
+        load of a constructed `<Path Data="…"/>`, pre-built
+        `Geometry` assignment with structured error reporting, and a
+        `PathDataParser.Parse` fallback) and the legacy `UpdatePath` gates
+        the Data write on a string-diff of `PathDataString` (the parser
+        creates fresh COM `PathGeometry` instances per call, so reference
+        equality is never true). None of these compose with a plain
+        `.OneWay` setter — the engine's per-prop comparer can't replicate
+        the string-diff-against-old-element trick. Authors who need
+        `Path.Data` stay on V1 OFF. The descriptor still covers the bulk
+        of the Path styling surface (Fill / Stroke / dash / cap / join /
+        transform), which is the per-render write pressure for D3 charts.
+      - **`PathElement.FillRule` is escape-hatched** — the legacy handler
+        propagates `FillRule` onto the inner `PathGeometry`, but the
+        descriptor doesn't own that `PathGeometry` (Data is escape-hatched
+        above).
+      - **`IconElement` is escape-hatched (not ported).** The legacy
+        `MountIcon` is polymorphic — it dispatches the `IconData` subtype
+        through `ResolveIcon` to construct one of `FontIcon` /
+        `SymbolIcon` / `PathIcon` / `BitmapIcon` (different `IconElement`
+        subtypes). `ControlDescriptor<TElement, TControl>` is single-`TControl`
+        by construction, so a single descriptor can't carry the dispatch.
+        Worse, `UpdateIcon` can swap the entire native control when the
+        `IconData` subtype changes (returning a replacement `UIElement`),
+        a path the descriptor framework's update protocol doesn't
+        currently express. Authors stay on V1 OFF.
+      - **`AnimatedIcon.Source` is shape-checked** in the descriptor's
+        `set` lambda (mirrors legacy behavior — non-`IAnimatedVisualSource2`
+        values silently no-op). The descriptor doesn't expose a typed
+        Source slot because `AnimatedIconElement.Source` is `object?` on
+        the element record.
+      - **Shape mount-time `> 0` gates** — the legacy `Mount*` arms write
+        `StrokeThickness` / `RadiusX` / `RadiusY` only when `> 0`; the
+        legacy `Update*` arms write them unconditionally. The descriptors
+        mirror the update path (plain `.OneWay`), which lines up with
+        every `Update*` write and the element's default zero values; the
+        visible output is the same for callers who never set them. No
+        behavior delta for non-zero callers.
 - [ ] Batch 3-followup — `NumberBox` (needs Immediate-mode keystroke
       handling + `NumberFormatter` reference-equality semantics that the
       descriptor builders don't yet express — likely needs a new entry
