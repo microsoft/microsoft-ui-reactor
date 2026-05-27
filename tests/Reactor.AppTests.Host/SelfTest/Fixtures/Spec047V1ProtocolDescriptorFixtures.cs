@@ -1104,4 +1104,326 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  ButtonDescriptor (Phase 3 batch 4) — Click via HandCodedEvent +
+    //  IsEnabled / IsDisabledFocusable focusable-disabled treatment.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescButtonMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ButtonElement, WinUI.Button>(
+                new DescriptorHandler<ButtonElement, WinUI.Button>(
+                    ButtonDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int clicks = 0;
+            var el1 = new ButtonElement(Label: "Go", OnClick: () => clicks++)
+            {
+                IsEnabled = true,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.Button b)
+            {
+                parent.Children.Add(b);
+                await Harness.Render();
+
+                H.Check("Desc_Button_Mounted", true);
+                H.Check("Desc_Button_Label", (b.Content as string) == "Go");
+                H.Check("Desc_Button_IsEnabled", b.IsEnabled);
+                H.Check("Desc_Button_MountDidNotFire", clicks == 0);
+
+                // Label update.
+                var el2 = el1 with { Label = "Run" };
+                rec.UpdateChild(el1, el2, b, _noOp);
+                await Harness.Render();
+                H.Check("Desc_Button_LabelUpdated", (b.Content as string) == "Run");
+
+                // Enter focusable-disabled — IsEnabled forced true (mirrors
+                // legacy ApplyButtonEnabledState). Opacity write to 0.4 also
+                // fires but the visual VSM may animate over it; the descriptor
+                // contract is that IsEnabled stays true so Tab nav works.
+                var el3 = el2 with { IsDisabledFocusable = true };
+                rec.UpdateChild(el2, el3, b, _noOp);
+                await Harness.Render();
+                H.Check("Desc_Button_FocusableDisabled_StillEnabled", b.IsEnabled);
+
+                // Toggle plain IsEnabled while NOT in focusable-disabled mode —
+                // the OneWayConditional gate writes through.
+                var el4 = el2 with { IsEnabled = false };
+                rec.UpdateChild(el2, el4, b, _noOp);
+                await Harness.Render();
+                H.Check("Desc_Button_IsEnabledFalse", !b.IsEnabled);
+
+                var el5 = el4 with { IsEnabled = true };
+                rec.UpdateChild(el4, el5, b, _noOp);
+                await Harness.Render();
+                H.Check("Desc_Button_IsEnabledRestored", b.IsEnabled);
+
+                rec.UnmountChild(b);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Button_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  HyperlinkButtonDescriptor (Phase 3 batch 4).
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescHyperlinkButtonMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<HyperlinkButtonElement, WinUI.HyperlinkButton>(
+                new DescriptorHandler<HyperlinkButtonElement, WinUI.HyperlinkButton>(
+                    HyperlinkButtonDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int clicks = 0;
+            var uri1 = new Uri("https://example.com/a");
+            var el1 = new HyperlinkButtonElement(Content: "go", NavigateUri: uri1, OnClick: () => clicks++);
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.HyperlinkButton hb)
+            {
+                parent.Children.Add(hb);
+                await Harness.Render();
+
+                H.Check("Desc_HyperlinkButton_Mounted", true);
+                H.Check("Desc_HyperlinkButton_Content", (hb.Content as string) == "go");
+                H.Check("Desc_HyperlinkButton_NavigateUri", hb.NavigateUri == uri1);
+                H.Check("Desc_HyperlinkButton_MountDidNotFire", clicks == 0);
+
+                var uri2 = new Uri("https://example.com/b");
+                var el2 = el1 with { Content = "next", NavigateUri = uri2 };
+                rec.UpdateChild(el1, el2, hb, _noOp);
+                await Harness.Render();
+                H.Check("Desc_HyperlinkButton_ContentUpdated", (hb.Content as string) == "next");
+                H.Check("Desc_HyperlinkButton_NavigateUriUpdated", hb.NavigateUri == uri2);
+
+                // Transition NavigateUri to null — must clear.
+                var el3 = el2 with { NavigateUri = null };
+                rec.UpdateChild(el2, el3, hb, _noOp);
+                await Harness.Render();
+                H.Check("Desc_HyperlinkButton_NavigateUriCleared", hb.NavigateUri is null);
+
+                rec.UnmountChild(hb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_HyperlinkButton_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  RepeatButtonDescriptor (Phase 3 batch 4).
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescRepeatButtonMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<RepeatButtonElement, Microsoft.UI.Xaml.Controls.Primitives.RepeatButton>(
+                new DescriptorHandler<RepeatButtonElement, Microsoft.UI.Xaml.Controls.Primitives.RepeatButton>(
+                    RepeatButtonDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int clicks = 0;
+            var el1 = new RepeatButtonElement(Label: "Step", OnClick: () => clicks++)
+            {
+                Delay = 500,
+                Interval = 100,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is Microsoft.UI.Xaml.Controls.Primitives.RepeatButton rb)
+            {
+                parent.Children.Add(rb);
+                await Harness.Render();
+
+                H.Check("Desc_RepeatButton_Mounted", true);
+                H.Check("Desc_RepeatButton_Label", (rb.Content as string) == "Step");
+                H.Check("Desc_RepeatButton_Delay", rb.Delay == 500);
+                H.Check("Desc_RepeatButton_Interval", rb.Interval == 100);
+                H.Check("Desc_RepeatButton_MountDidNotFire", clicks == 0);
+
+                var el2 = el1 with { Label = "Next", Delay = 250, Interval = 50 };
+                rec.UpdateChild(el1, el2, rb, _noOp);
+                await Harness.Render();
+                H.Check("Desc_RepeatButton_LabelUpdated", (rb.Content as string) == "Next");
+                H.Check("Desc_RepeatButton_DelayUpdated", rb.Delay == 250);
+                H.Check("Desc_RepeatButton_IntervalUpdated", rb.Interval == 50);
+
+                rec.UnmountChild(rb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_RepeatButton_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  ToggleButtonDescriptor (Phase 3 batch 4) — Click trampoline fires
+    //  both OnIsCheckedChanged(bool) AND OnCheckedStateChanged(bool?).
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescToggleButtonMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ToggleButtonElement, Microsoft.UI.Xaml.Controls.Primitives.ToggleButton>(
+                new DescriptorHandler<ToggleButtonElement, Microsoft.UI.Xaml.Controls.Primitives.ToggleButton>(
+                    ToggleButtonDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int boolFires = 0;
+            int stateFires = 0;
+            var el1 = new ToggleButtonElement(
+                Label: "On",
+                IsChecked: false,
+                OnIsCheckedChanged: _ => boolFires++)
+            {
+                OnCheckedStateChanged = _ => stateFires++,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is Microsoft.UI.Xaml.Controls.Primitives.ToggleButton tb)
+            {
+                parent.Children.Add(tb);
+                await Harness.Render();
+
+                H.Check("Desc_ToggleButton_Mounted", true);
+                H.Check("Desc_ToggleButton_Label", (tb.Content as string) == "On");
+                H.Check("Desc_ToggleButton_InitialUnchecked", tb.IsChecked == false);
+                H.Check("Desc_ToggleButton_MountDidNotFire", boolFires == 0 && stateFires == 0);
+
+                // Programmatic update — Click trampoline doesn't fire on
+                // programmatic IsChecked writes, so no echo.
+                var el2 = el1 with { IsChecked = true };
+                rec.UpdateChild(el1, el2, tb, _noOp);
+                await Harness.Render();
+                H.Check("Desc_ToggleButton_UpdatedChecked", tb.IsChecked == true);
+                H.Check("Desc_ToggleButton_NoEchoOnProgrammaticFlip",
+                    boolFires == 0 && stateFires == 0);
+
+                // Flip back to false — verify Update is symmetric.
+                var el3 = el2 with { IsChecked = false };
+                rec.UpdateChild(el2, el3, tb, _noOp);
+                await Harness.Render();
+                H.Check("Desc_ToggleButton_FlippedBack", tb.IsChecked == false);
+
+                rec.UnmountChild(tb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ToggleButton_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  DropDownButtonDescriptor (Phase 3 batch 4) — Label only.
+    //  Flyout is escape-hatched (see descriptor xmldoc).
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescDropDownButtonMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<DropDownButtonElement, WinUI.DropDownButton>(
+                new DescriptorHandler<DropDownButtonElement, WinUI.DropDownButton>(
+                    DropDownButtonDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new DropDownButtonElement(Label: "Menu");
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.DropDownButton ddb)
+            {
+                parent.Children.Add(ddb);
+                await Harness.Render();
+
+                H.Check("Desc_DropDownButton_Mounted", true);
+                H.Check("Desc_DropDownButton_Label", (ddb.Content as string) == "Menu");
+
+                var el2 = el1 with { Label = "Options" };
+                rec.UpdateChild(el1, el2, ddb, _noOp);
+                await Harness.Render();
+                H.Check("Desc_DropDownButton_LabelUpdated", (ddb.Content as string) == "Options");
+
+                rec.UnmountChild(ddb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_DropDownButton_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  SplitButtonDescriptor (Phase 3 batch 4) — Click via HandCodedEvent.
+    //  Flyout escape-hatched (see descriptor xmldoc).
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescSplitButtonMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<SplitButtonElement, WinUI.SplitButton>(
+                new DescriptorHandler<SplitButtonElement, WinUI.SplitButton>(
+                    SplitButtonDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int clicks = 0;
+            var el1 = new SplitButtonElement(Label: "Run", OnClick: () => clicks++);
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.SplitButton sb)
+            {
+                parent.Children.Add(sb);
+                await Harness.Render();
+
+                H.Check("Desc_SplitButton_Mounted", true);
+                H.Check("Desc_SplitButton_Label", (sb.Content as string) == "Run");
+                H.Check("Desc_SplitButton_MountDidNotFire", clicks == 0);
+
+                var el2 = el1 with { Label = "Build" };
+                rec.UpdateChild(el1, el2, sb, _noOp);
+                await Harness.Render();
+                H.Check("Desc_SplitButton_LabelUpdated", (sb.Content as string) == "Build");
+
+                rec.UnmountChild(sb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_SplitButton_Mounted", false);
+            }
+        }
+    }
 }

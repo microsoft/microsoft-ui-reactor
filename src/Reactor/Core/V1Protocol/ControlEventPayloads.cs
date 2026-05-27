@@ -79,6 +79,34 @@ internal sealed class SliderEventPayload
     public Action<Element, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs>? CurrentValueChanged;
 }
 
+/// <summary>Spec 047 §14 Phase 3 batch 4 — HyperlinkButton Click payload.</summary>
+internal sealed class HyperlinkButtonEventPayload
+{
+    public Microsoft.UI.Xaml.RoutedEventHandler? ClickTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 batch 4 — RepeatButton Click payload.</summary>
+internal sealed class RepeatButtonEventPayload
+{
+    public Microsoft.UI.Xaml.RoutedEventHandler? ClickTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 batch 4 — ToggleButton Click payload.
+/// Click fires both OnIsCheckedChanged (bool) and OnCheckedStateChanged (bool?)
+/// — see <see cref="V1Protocol.Descriptor.Descriptors.ToggleButtonDescriptor"/>.</summary>
+internal sealed class ToggleButtonEventPayload
+{
+    public Microsoft.UI.Xaml.RoutedEventHandler? ClickTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 batch 4 — SplitButton Click payload.
+/// SplitButton's Click event is a <c>TypedEventHandler&lt;SplitButton,
+/// SplitButtonClickEventArgs&gt;</c>, not a plain RoutedEventHandler.</summary>
+internal sealed class SplitButtonEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<Microsoft.UI.Xaml.Controls.SplitButton, Microsoft.UI.Xaml.Controls.SplitButtonClickEventArgs>? ClickTrampoline;
+}
+
 /// <summary>
 /// Spec 047 §9.2 — open-ended anchor for delegates registered via
 /// <see cref="ReactorBinding{TElement}.OnCustomEvent{TArgs}"/>. Holds a

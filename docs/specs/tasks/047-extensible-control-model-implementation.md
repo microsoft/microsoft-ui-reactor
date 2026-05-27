@@ -469,6 +469,32 @@ shrink lands after V1 ships ON by default.
         descriptor authors who need image-load events fall through.
       - `InfoBadgeDescriptor` does not write `Icon` (the legacy arm
         doesn't either — mirrored gap, not regressed).
+- [x] **Batch 4** — `Button`, `HyperlinkButton`, `RepeatButton`,
+      `ToggleButton`, `DropDownButton`, `SplitButton`. Button-family
+      ports: `.HandCodedEvent<...EventPayload, RoutedEventHandler>` for
+      Click + `.OneWay` props. ToggleButton's Click handler fires both
+      `OnIsCheckedChanged` and `OnCheckedStateChanged` via the same
+      trampoline (mirrors legacy). Four new payload types added to
+      ControlEventPayloads.cs (`HyperlinkButtonEventPayload`,
+      `RepeatButtonEventPayload`, `ToggleButtonEventPayload`,
+      `SplitButtonEventPayload`); existing `ButtonEventPayload` reused
+      for `ButtonDescriptor`. `SplitButtonEventPayload.ClickTrampoline`
+      uses `TypedEventHandler<SplitButton, SplitButtonClickEventArgs>`
+      (SplitButton's Click signature is typed, not RoutedEventHandler).
+      Fixtures: `Desc_Button_MountUpdate`, `Desc_HyperlinkButton_MountUpdate`,
+      `Desc_RepeatButton_MountUpdate`, `Desc_ToggleButton_MountUpdate`,
+      `Desc_DropDownButton_MountUpdate`, `Desc_SplitButton_MountUpdate` —
+      all pass under V1 ON and V1 OFF.
+      **Known gaps:**
+      - `Flyout` on `DropDownButton` / `SplitButton` is escape-hatched
+        (requires `CreateFlyoutFromElement` engine-internal helper, not
+        expressible via the descriptor builders this session). Authors
+        needing a Flyout fall through to the legacy arm (V1 OFF) or wire
+        via setters chain.
+      - `ButtonElement.ContentElement` (Button hosting a child Element
+        rather than a string label) not expressed by `ButtonDescriptor` —
+        descriptor handles the string-Content fast path only; nested
+        element content falls through to the legacy arm.
 - [ ] Batch 3-followup — `NumberBox` (needs Immediate-mode keystroke
       handling + `NumberFormatter` reference-equality semantics that the
       descriptor builders don't yet express — likely needs a new entry

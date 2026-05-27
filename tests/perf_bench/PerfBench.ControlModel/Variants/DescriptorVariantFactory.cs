@@ -105,6 +105,31 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<InfoBadgeElement, WinUI.InfoBadge>(
                 InfoBadgeDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3 (batch 4) — Button family ports.
+        rec.RegisterHandler<ButtonElement, WinUI.Button>(
+            new DescriptorHandler<ButtonElement, WinUI.Button>(
+                ButtonDescriptor.Descriptor));
+
+        rec.RegisterHandler<HyperlinkButtonElement, WinUI.HyperlinkButton>(
+            new DescriptorHandler<HyperlinkButtonElement, WinUI.HyperlinkButton>(
+                HyperlinkButtonDescriptor.Descriptor));
+
+        rec.RegisterHandler<RepeatButtonElement, Microsoft.UI.Xaml.Controls.Primitives.RepeatButton>(
+            new DescriptorHandler<RepeatButtonElement, Microsoft.UI.Xaml.Controls.Primitives.RepeatButton>(
+                RepeatButtonDescriptor.Descriptor));
+
+        rec.RegisterHandler<ToggleButtonElement, Microsoft.UI.Xaml.Controls.Primitives.ToggleButton>(
+            new DescriptorHandler<ToggleButtonElement, Microsoft.UI.Xaml.Controls.Primitives.ToggleButton>(
+                ToggleButtonDescriptor.Descriptor));
+
+        rec.RegisterHandler<DropDownButtonElement, WinUI.DropDownButton>(
+            new DescriptorHandler<DropDownButtonElement, WinUI.DropDownButton>(
+                DropDownButtonDescriptor.Descriptor));
+
+        rec.RegisterHandler<SplitButtonElement, WinUI.SplitButton>(
+            new DescriptorHandler<SplitButtonElement, WinUI.SplitButton>(
+                SplitButtonDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;
