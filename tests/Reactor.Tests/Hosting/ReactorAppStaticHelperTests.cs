@@ -172,7 +172,7 @@ public class ReactorAppStaticHelperTests
         {
             ReactorApp.ResetDipBehaviorChangeNoticeForTests();
             var origErr = Console.Error;
-            var sw = new StringWriter();
+            using var sw = new StringWriter();
             Console.SetError(sw);
             try
             {
@@ -194,7 +194,7 @@ public class ReactorAppStaticHelperTests
             ReactorApp.EmitDipBehaviorChangeNoticeOnce(); // first call latches
 
             var origErr = Console.Error;
-            var sw = new StringWriter();
+            using var sw = new StringWriter();
             Console.SetError(sw);
             try
             {

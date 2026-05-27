@@ -53,10 +53,10 @@ internal static class AccessibilityFixtures
             var range = peer.GetPattern(PatternInterface.RangeValue) as IRangeValueProvider;
             H.Check("A11y_SemRange_PeerCreated", peer is not null);
             H.Check("A11y_SemRange_RangeProviderReturned", range is not null);
-            H.Check("A11y_SemRange_Min", range is not null && range.Minimum == 0);
-            H.Check("A11y_SemRange_Max", range is not null && range.Maximum == 100);
-            H.Check("A11y_SemRange_Value", range is not null && range.Value == 42);
-            H.Check("A11y_SemRange_SmallChange", range is not null && range.SmallChange == 1);
+            H.Check("A11y_SemRange_Min", range is not null && global::System.Math.Abs(range.Minimum - 0.0) < 1e-9);
+            H.Check("A11y_SemRange_Max", range is not null && global::System.Math.Abs(range.Maximum - 100.0) < 1e-9);
+            H.Check("A11y_SemRange_Value", range is not null && global::System.Math.Abs(range.Value - 42.0) < 1e-9);
+            H.Check("A11y_SemRange_SmallChange", range is not null && global::System.Math.Abs(range.SmallChange - 1.0) < 1e-9);
             H.Check("A11y_SemRange_LargeChange",
                 range is not null && global::System.Math.Abs(range.LargeChange - 10.0) < 1e-9);
             H.Check("A11y_SemRange_NotReadOnly", range is not null && !range.IsReadOnly);
@@ -106,14 +106,14 @@ internal static class AccessibilityFixtures
                 new SemanticDescription(Role: "slider",
                     RangeMin: 0, RangeMax: 10, RangeValue: 3, IsReadOnly: false)));
             await Harness.Render();
-            var panelE = H.FindControl<SemanticPanel>(p => p.RangeValue == 3);
+            var panelE = H.FindControl<SemanticPanel>(p => global::System.Math.Abs(p.RangeValue - 3.0) < 1e-9);
             H.Check("A11y_SemSetRange_EditableMount", panelE is not null);
             if (panelE is not null)
             {
                 var rp = FrameworkElementAutomationPeer.CreatePeerForElement(panelE)
                     .GetPattern(PatternInterface.RangeValue) as IRangeValueProvider;
                 rp?.SetValue(7);
-                H.Check("A11y_SemSetRange_EditableAccepted", panelE.RangeValue == 7);
+                H.Check("A11y_SemSetRange_EditableAccepted", global::System.Math.Abs(panelE.RangeValue - 7.0) < 1e-9);
             }
 
             // Read-only case
@@ -123,14 +123,14 @@ internal static class AccessibilityFixtures
                 new SemanticDescription(Role: "progressbar",
                     RangeMin: 0, RangeMax: 10, RangeValue: 3, IsReadOnly: true)));
             await Harness.Render();
-            var panelR = H.FindControl<SemanticPanel>(p => p.RangeValue == 3 && p.IsReadOnly);
+            var panelR = H.FindControl<SemanticPanel>(p => global::System.Math.Abs(p.RangeValue - 3.0) < 1e-9 && p.IsReadOnly);
             H.Check("A11y_SemSetRange_ReadOnlyMount", panelR is not null);
             if (panelR is not null)
             {
                 var rp = FrameworkElementAutomationPeer.CreatePeerForElement(panelR)
                     .GetPattern(PatternInterface.RangeValue) as IRangeValueProvider;
                 rp?.SetValue(9);
-                H.Check("A11y_SemSetRange_ReadOnlyIgnored", panelR.RangeValue == 3);
+                H.Check("A11y_SemSetRange_ReadOnlyIgnored", global::System.Math.Abs(panelR.RangeValue - 3.0) < 1e-9);
             }
         }
     }
@@ -344,8 +344,8 @@ internal static class AccessibilityFixtures
                 before is not null && after is not null && ReferenceEquals(before, after));
             H.Check("A11y_SemUpdate_RoleUpdated", after?.SemanticRole == "progressbar");
             H.Check("A11y_SemUpdate_ValueUpdated", after?.SemanticValue == "v1");
-            H.Check("A11y_SemUpdate_RangeMaxUpdated", after?.RangeMaximum == 200);
-            H.Check("A11y_SemUpdate_RangeValueUpdated", after?.RangeValue == 150);
+            H.Check("A11y_SemUpdate_RangeMaxUpdated", after is not null && global::System.Math.Abs(after.RangeMaximum - 200.0) < 1e-9);
+            H.Check("A11y_SemUpdate_RangeValueUpdated", after is not null && global::System.Math.Abs(after.RangeValue - 150.0) < 1e-9);
             H.Check("A11y_SemUpdate_IsReadOnlyUpdated", after?.IsReadOnly == true);
         }
     }
@@ -368,9 +368,9 @@ internal static class AccessibilityFixtures
             var se = (SemanticElement)wrapped;
             H.Check("A11y_Modifier_Role", se.Semantics.Role == "slider");
             H.Check("A11y_Modifier_Value", se.Semantics.Value == "n of m");
-            H.Check("A11y_Modifier_RangeMin", se.Semantics.RangeMin == 0);
-            H.Check("A11y_Modifier_RangeMax", se.Semantics.RangeMax == 5);
-            H.Check("A11y_Modifier_RangeValue", se.Semantics.RangeValue == 3);
+            H.Check("A11y_Modifier_RangeMin", se.Semantics.RangeMin is double rmin && global::System.Math.Abs(rmin - 0.0) < 1e-9);
+            H.Check("A11y_Modifier_RangeMax", se.Semantics.RangeMax is double rmax && global::System.Math.Abs(rmax - 5.0) < 1e-9);
+            H.Check("A11y_Modifier_RangeValue", se.Semantics.RangeValue is double rval && global::System.Math.Abs(rval - 3.0) < 1e-9);
             H.Check("A11y_Modifier_IsReadOnly", se.Semantics.IsReadOnly == false);
             H.Check("A11y_Modifier_ChildIsOriginal", se.Child is TextBlockElement);
         }
