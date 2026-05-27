@@ -58,7 +58,14 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 public class DockingTearOffE2ETests : AppTestBase
 {
     [ClassInitialize]
-    public static void StartAppSession(TestContext context) => TestSession.AssemblyInit(context);
+    public static void StartAppSession(TestContext context)
+    {
+        // Process-wide DPI awareness must be set before any WinAppDriver
+        // session opens, so that screen-coordinate math in Actions chains
+        // matches actual pixel positions on >100% scaled displays.
+        EnsureDpiAware();
+        TestSession.AssemblyInit(context);
+    }
 
     [ClassCleanup]
     public static void StopAppSession()
@@ -67,7 +74,8 @@ public class DockingTearOffE2ETests : AppTestBase
         // before WinAppDriver shuts down via TestSession cleanup.
         if (_desktopSession is not null)
         {
-            try { _desktopSession.Quit(); } catch { /* best-effort */ }
+            try { _desktopSession.Quit(); }
+            catch (WebDriverException) { /* driver already dead — best-effort */ }
             _desktopSession = null;
         }
         TestSession.AssemblyCleanup();
@@ -77,16 +85,31 @@ public class DockingTearOffE2ETests : AppTestBase
     // P/Invoke + DPI awareness
     // ───────────────────────────────────────────────────────────────────
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     private static extern int SetProcessDpiAwarenessContext(IntPtr dpiContext);
     private static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = (IntPtr)(-4);
-    private static int _dpiContextSet;
 
+    // Process-wide DPI context is set once from ClassInitialize, before any
+    // WinAppDriver session opens. Failure modes: missing API on older
+    // Windows (EntryPointNotFoundException / DllNotFoundException) or the
+    // context already being set by the host process — both are harmless
+    // for these tests' Actions-based screen-coordinate math, so we log
+    // and continue rather than fail the whole suite.
     private static void EnsureDpiAware()
     {
-        if (System.Threading.Interlocked.CompareExchange(ref _dpiContextSet, 1, 0) != 0) return;
-        try { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2); }
-        catch { /* older Windows / already set — both harmless */ }
+        try
+        {
+            if (SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) == 0)
+            {
+                Console.WriteLine(
+                    $"[DPI] SetProcessDpiAwarenessContext returned 0 (Win32 error " +
+                    $"{Marshal.GetLastWin32Error()}); continuing with process default.");
+            }
+        }
+        catch (Exception ex) when (ex is EntryPointNotFoundException or DllNotFoundException)
+        {
+            Console.WriteLine($"[DPI] API unavailable on this Windows build ({ex.GetType().Name}); continuing.");
+        }
     }
 
     // ───────────────────────────────────────────────────────────────────
@@ -99,6 +122,7 @@ public class DockingTearOffE2ETests : AppTestBase
     // ───────────────────────────────────────────────────────────────────
 
     private const string WinAppDriverUrl = "http://127.0.0.1:4723";
+    private static readonly TimeSpan DesktopSessionImplicitWait = TimeSpan.FromSeconds(2);
     private static WindowsDriver<WindowsElement>? _desktopSession;
     private static WindowsDriver<WindowsElement> DesktopSession
     {
@@ -109,7 +133,7 @@ public class DockingTearOffE2ETests : AppTestBase
             opts.AddAdditionalCapability("app", "Root");
             opts.AddAdditionalCapability("deviceName", "WindowsPC");
             _desktopSession = new WindowsDriver<WindowsElement>(new Uri(WinAppDriverUrl), opts);
-            _desktopSession.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(2);
+            _desktopSession.Manage().Timeouts().ImplicitWait = DesktopSessionImplicitWait;
             return _desktopSession;
         }
     }
@@ -133,24 +157,41 @@ public class DockingTearOffE2ETests : AppTestBase
     // Cross-window WaitForText — for UIA elements that live inside a
     // floating window's pane content (e.g. EditorA_State after A is
     // torn off). The host-bound Session can't see floating-window UIA.
+    //
+    // Implicit wait is suppressed for the duration of this poll so each
+    // FindElement returns/throws immediately and the 100 ms cadence
+    // actually fires; otherwise the driver's 2 s implicit wait dominates
+    // and a 5 s timeout would only get ~2 polls.
     private void WaitForTextAcrossWindows(string automationId, string expectedText, int timeoutMs = 5000)
     {
-        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-        string lastSeen = "<not found>";
-        while (DateTime.UtcNow < deadline)
+        // WinAppDriver doesn't expose GET /timeouts (W3C-only), so we
+        // can't read the current value back. Restore to the constant we
+        // initialized DesktopSession with.
+        var timeouts = DesktopSession.Manage().Timeouts();
+        timeouts.ImplicitWait = TimeSpan.Zero;
+        try
         {
-            try
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            string lastSeen = "<not found>";
+            while (DateTime.UtcNow < deadline)
             {
-                var el = DesktopSession.FindElement(MobileBy.AccessibilityId(automationId));
-                lastSeen = el.Text ?? "<null>";
-                if (lastSeen == expectedText) return;
+                try
+                {
+                    var el = DesktopSession.FindElement(MobileBy.AccessibilityId(automationId));
+                    lastSeen = el.Text ?? "<null>";
+                    if (lastSeen == expectedText) return;
+                }
+                catch (WebDriverException) { /* element may not exist yet */ }
+                Thread.Sleep(100);
             }
-            catch (WebDriverException) { /* element may not exist yet */ }
-            Thread.Sleep(100);
+            throw new WebDriverTimeoutException(
+                $"Timed out after {timeoutMs}ms waiting for AutomationId='{automationId}' " +
+                $"to have text '{expectedText}' (Desktop session). Last-seen: '{lastSeen}'.");
         }
-        throw new WebDriverTimeoutException(
-            $"Timed out after {timeoutMs}ms waiting for AutomationId='{automationId}' " +
-            $"to have text '{expectedText}' (Desktop session). Last-seen: '{lastSeen}'.");
+        finally
+        {
+            timeouts.ImplicitWait = DesktopSessionImplicitWait;
+        }
     }
 
     /// <summary>Dump the fixture's UIA-visible diagnostic surface
@@ -162,7 +203,7 @@ public class DockingTearOffE2ETests : AppTestBase
         string Read(string id)
         {
             try { return DesktopSession.FindElement(MobileBy.AccessibilityId(id)).Text ?? "<null>"; }
-            catch { return "<not found>"; }
+            catch (WebDriverException) { return "<not found>"; }
         }
         Console.WriteLine($"[{label}] summary='{Read("TearOff_Layout_Summary")}'");
         Console.WriteLine($"[{label}] counters='{Read("TearOff_Event_Counters")}'");
@@ -173,10 +214,11 @@ public class DockingTearOffE2ETests : AppTestBase
     // Drag helpers
     //
     // All drag scenarios in this suite are "source-stays-visible" —
-    // they're either dock→float drops on a drop-outside zone (E01),
-    // sequential tear-offs from the host (E02, E05), or in-host drags
-    // that don't cross window boundaries. WinAppDriver's Actions chain
-    // drives these reliably as long as we route via DesktopSession.
+    // they're dock→float drops on a drop-outside zone (E01, E02, E03,
+    // E04). The source tab's host window stays put throughout the drag,
+    // so WinAppDriver's session-bound input pipeline keeps tracking the
+    // cursor. Actions runs via DesktopSession so it can resolve elements
+    // from any top-level window.
     //
     // Float→host drags (the original E02/E04 scenarios from issue #419)
     // are blocked by a WinAppDriver limitation: the source floating
@@ -198,7 +240,6 @@ public class DockingTearOffE2ETests : AppTestBase
 
     private void DragFromToOffset(WindowsElement source, WindowsElement target, int targetXOffset, int targetYOffset)
     {
-        EnsureDpiAware();
         new Actions(DesktopSession)
             .MoveToElement(source)
             .ClickAndHold()
