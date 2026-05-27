@@ -526,10 +526,10 @@ internal static class NativeDockingReliabilityFixtures
         // 100 mount/unmount cycles × 2 Harness.Render() each = 200 renders + 200
         // reconcile passes. Locally this runs ~15s; CI VMs under contention have
         // been measured at 2-4× slower per INVESTIGATION.md Cluster T (i.e. up to
-        // ~60s on a heavy iteration). Prior 60s budget tripped the watchdog once
-        // in 500 stress iterations; 120s gives margin without turning a real hang
-        // into a long wait — the per-cycle heartbeat checks below make true hangs
-        // surface within a few seconds via the watchdog's per-check progress signal.
+        // ~60s on a heavy iteration). Prior 60s budget tripped the host-level
+        // HangWatchdogLoop once in 500 stress iterations; 120s gives margin and,
+        // under the new per-fixture watchdog rule (SelfTestRunner.HangSlack),
+        // automatically lifts that watchdog threshold to 150s.
         public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(120);
 
         public override async Task RunAsync()
@@ -579,8 +579,11 @@ internal static class NativeDockingReliabilityFixtures
                 await Harness.Render();
                 host.Mount(_ => TextBlock($"between-{i}"));
                 await Harness.Render();
-                // Heartbeat every 25 cycles so the watchdog sees forward progress
-                // (it only fires when no H.Check has printed `ok` for 60s).
+                // Heartbeat every 25 cycles. NOTE: this does NOT reset the
+                // host-level HangWatchdogLoop — that uses elapsed-since-fixture-
+                // start, not TAP output. These are log breadcrumbs only, so a
+                // future hang reveals which 25-cycle window it lived in
+                // (e.g. "Cycle25Progress: ok" printed but Cycle50 did not).
                 if ((i + 1) % 25 == 0)
                     H.Check($"Reliability_LeakBaseline_Cycle{i + 1}Progress", true);
             }

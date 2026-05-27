@@ -887,7 +887,11 @@ public sealed class ReactorHost : IDisposable
         if (_renderPending == 0 && !_isRendering && !_needsRerender)
             return Task.CompletedTask;
 
-        var tcs = new TaskCompletionSource();
+        // RunContinuationsAsynchronously: TrySetResult is called from a
+        // dispatcher callback, and without this flag any await continuation
+        // would run inline on the dispatcher at Low priority — re-entering
+        // UI logic inside the yield loop and partially defeating its purpose.
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         int yields = 0;
         void CheckIdle()
         {
@@ -912,9 +916,18 @@ public sealed class ReactorHost : IDisposable
                 tcs.TrySetResult();
                 return;
             }
-            _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, CheckIdle);
+            if (!_dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, CheckIdle))
+            {
+                // Queue refused enqueue (shutdown). Complete rather than
+                // hang the caller forever.
+                tcs.TrySetResult();
+            }
         }
-        _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, CheckIdle);
+        if (!_dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, CheckIdle))
+        {
+            // Same fallback for the initial enqueue.
+            tcs.TrySetResult();
+        }
         return tcs.Task;
     }
 

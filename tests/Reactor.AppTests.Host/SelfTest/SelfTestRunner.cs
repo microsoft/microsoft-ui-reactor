@@ -242,6 +242,14 @@ internal static class SelfTestRunner
                             continue;
                         }
 
+                        // Publish a baseline progress record *before* calling
+                        // Create() so the watchdog can attribute a hang even
+                        // if construction itself blocks. We'll upgrade the
+                        // threshold once we know the fixture's own timeout.
+                        var fixtureStart = Stopwatch.GetTimestamp();
+                        Volatile.Write(ref _currentFixture,
+                            new FixtureProgress(fixtureName, fixtureStart, HangTimeout));
+
                         int failuresBefore = harness.Failures;
                         bool crashed = false;
                         try
@@ -249,11 +257,6 @@ internal static class SelfTestRunner
                             var fixture = SelfTestFixtureRegistry.Create(fixtureName, harness);
                             if (fixture is null)
                             {
-                                // Publish a placeholder so the watchdog has a
-                                // name to report if anything goes wrong before
-                                // the next fixture starts.
-                                Volatile.Write(ref _currentFixture,
-                                    new FixtureProgress(fixtureName, Stopwatch.GetTimestamp(), HangTimeout));
                                 Console.WriteLine($"not ok {testIndex} {fixtureName} - fixture not found");
                                 harness.RecordFailure();
                                 crashed = true;
@@ -269,7 +272,7 @@ internal static class SelfTestRunner
                                 var perFixtureHang = timeout + HangSlack;
                                 if (perFixtureHang < HangTimeout) perFixtureHang = HangTimeout;
                                 Volatile.Write(ref _currentFixture,
-                                    new FixtureProgress(fixtureName, Stopwatch.GetTimestamp(), perFixtureHang));
+                                    new FixtureProgress(fixtureName, fixtureStart, perFixtureHang));
 
                                 Console.WriteLine($"# Running: {fixtureName}");
                                 // Flush so the parent harness can attribute a
