@@ -67,6 +67,14 @@ Many of the experiments in this repo — the charting stack, accessibility valid
 
 ---
 
+## Quick start
+
+See **[docs/guide/getting-started.md](docs/guide/getting-started.md)** for the full walkthrough — prerequisites, building the framework and `mur` CLI from source, scaffolding your first app, and running through hello-world, a todo list, and a calculator with screenshots at each step.
+
+
+
+---
+
 ## What's included
 
 Reactor spans a core framework and a set of higher-level features. Each area below is labeled by its current maturity — *Preview* is the most mature, then *Draft*, then *Early*. **All areas are pre-1.0 and the public API surface may change without notice while the project is labeled experimental.**
@@ -82,8 +90,12 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 | **Markdown** | Native md4c parser with `Markdown()` element builder | Preview |
 | **Navigation** | Type-safe declarative routing, GPU composition transitions, lifecycle guards, back-stack serialization | Draft |
 | **Accessibility** | `AutomationProperties` modifiers, WCAG 2.1 AA target, compile- and runtime-validation | Draft |
+| **Docking & windows** | Visual Studio-style docking — tab tear-off, cross-window dock-in, floating panes, splitters, reserved document area, layout serialization and migration | Draft |
 | **WinForms interop** | Simple hosting of WinUI content inside WinForms apps | Draft |
-| **Theming & styling** | `ThemeRef` tokens, dark / light / high-contrast, style caching, per-control overrides, Roslyn analyzers | Early |
+| **Shell integration** | Taskbar progress and overlays, jump lists, tray icons, thumbnail toolbars, layered-window hosting (opacity, no-activate, click-through) | Draft |
+| **DevTools & diagnostics** | In-process MCP server for AI agents, UIA tree inspection, layout-cost overlay, screenshot capture, structured log capture, ETW layout events | Draft |
+| **`mur` CLI & analyzers** | App scaffolding, doc pipeline, `mur find` sample catalogue, `mur check` did-you-mean linter, localization tooling, Roslyn analyzers (theming, pooling) | Draft |
+| **Theming & styling** | `ThemeRef` tokens, dark / light / high-contrast, style caching, per-control overrides | Early |
 | **Animation** | Compositor-layer transitions, keyframes, stagger, scroll-linked and connected animations | Early |
 | **Localization** | ICU message format, source generator, CLI tooling (extract, translate, validate), RTL/BiDi | Early |
 | **Lists & virtualization** | Virtualized `ListView`, `GridView`, `ItemsRepeater`, `LazyStack` with recycling | Early |
@@ -129,11 +141,6 @@ If you're building line-of-business applications:
 
 ---
 
-## Quick start
-
-See **[docs/guide/getting-started.md](docs/guide/getting-started.md)** for the full walkthrough — prerequisites, building the framework and `mur` CLI from source, scaffolding your first app, and running through hello-world, a todo list, and a calculator with screenshots at each step.
-
----
 
 ## Live preview
 
