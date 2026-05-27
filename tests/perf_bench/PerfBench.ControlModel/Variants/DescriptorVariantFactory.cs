@@ -143,6 +143,15 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<RadioButtonsElement, WinUI.RadioButtons>(
                 RadioButtonsDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3 (batch 6) — Multi-event input ports.
+        rec.RegisterHandler<AutoSuggestBoxElement, WinUI.AutoSuggestBox>(
+            new DescriptorHandler<AutoSuggestBoxElement, WinUI.AutoSuggestBox>(
+                AutoSuggestBoxDescriptor.Descriptor));
+
+        rec.RegisterHandler<ComboBoxElement, WinUI.ComboBox>(
+            new DescriptorHandler<ComboBoxElement, WinUI.ComboBox>(
+                ComboBoxDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;

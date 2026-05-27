@@ -2641,6 +2641,13 @@ public sealed partial class Reconciler
         }
     }
 
+    /// <summary>Descriptor-accessible bridge to <see cref="ResolveIcon"/>
+    /// for the icon-bearing controls ported in Phase 3 (e.g.
+    /// AutoSuggestBox.QueryIcon). Static so it can be invoked from a
+    /// descriptor lambda without a Reconciler instance.</summary>
+    internal static WinUI.IconElement? ResolveIconForDescriptor(IconData? iconData)
+        => ResolveIcon(iconData, null);
+
     private static WinUI.IconElement? ResolveIcon(IconData? iconData, string? iconSymbol)
     {
         if (iconData is not null)

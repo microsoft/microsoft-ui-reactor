@@ -520,6 +520,38 @@ shrink lands after V1 ships ON by default.
         through to the legacy arm.
       - `RadioButtonsElement` only carries a `string[]`; Element-typed
         items (icon-rich radios) are not in scope this batch.
+- [x] **Batch 6** — `AutoSuggestBox`, `ComboBox`. First multi-event
+      descriptor ports — each mixes one `.HandCodedControlled` round-trip
+      with two `.HandCodedEvent` fire-only subscriptions over a shared
+      per-control payload. Two new payload types added to
+      ControlEventPayloads.cs (`AutoSuggestBoxEventPayload`,
+      `ComboBoxEventPayload`), each with three trampoline slots.
+      `AutoSuggestBoxDescriptor.Text` trampoline filters on
+      `args.Reason == UserInput` (mirrors legacy) on top of the
+      `ChangeEchoSuppressor` gate from `HandCodedControlled`'s
+      `WriteSuppressed` wrap. `ComboBox.SelectedIndex` is gated by the
+      same suppressor pattern. Fixtures:
+      `Desc_AutoSuggestBox_MountUpdate`, `Desc_ComboBox_MountUpdate` —
+      both pass under V1 ON and V1 OFF.
+      **Known gaps:**
+      - `ComboBoxDescriptor.Items` is escape-hatched. ComboBox's items
+        collection requires the legacy mode-switch logic (string[] vs
+        Element[] keyed reconciliation against `requestRerender`), none
+        of which the descriptor builders can yet express. Authors who
+        need ComboBox items must run V1 OFF (legacy arm handles Items)
+        or populate `cb.Items` via a `.Set` setter (imperative escape).
+        The Batch 6 fixture exercises the setter route to prove
+        SelectedIndex coordinates with a populated list.
+      - `AutoSuggestBoxDescriptor.QueryIcon` is re-resolved each pass
+        when present (legacy arm gates on
+        `!ReferenceEquals(o.QueryIcon, n.QueryIcon)` — descriptor's
+        OneWay path can't see the previous element ref). Same visual
+        result, slightly more work per pass when QueryIcon is set.
+      - `AutoSuggestBoxDescriptor.Suggestions` transition to empty
+        does not clear the previous `ItemsSource` (mirrors the legacy
+        mount guard's `Length > 0` gate).
+      - `ComboBoxElement.IsDropDownOpen` is not exposed on the element
+        record itself; descriptor doesn't surface it. (Legacy parity.)
 - [ ] Batch 3-followup — `NumberBox` (needs Immediate-mode keystroke
       handling + `NumberFormatter` reference-equality semantics that the
       descriptor builders don't yet express — likely needs a new entry

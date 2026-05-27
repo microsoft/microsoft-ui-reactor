@@ -1137,6 +1137,9 @@ internal static class SelfTestFixtureRegistry
         "Desc_RichEditBox_MountUpdate",
         "Desc_PasswordBox_MountUpdate",
         "Desc_RadioButtons_MountUpdate",
+        // Spec 047 §14 Phase 3 (batch 6) — Multi-event input ports.
+        "Desc_AutoSuggestBox_MountUpdate",
+        "Desc_ComboBox_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2249,6 +2252,8 @@ internal static class SelfTestFixtureRegistry
         "Desc_RichEditBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRichEditBoxMountUpdate(harness),
         "Desc_PasswordBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescPasswordBoxMountUpdate(harness),
         "Desc_RadioButtons_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRadioButtonsMountUpdate(harness),
+        "Desc_AutoSuggestBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescAutoSuggestBoxMountUpdate(harness),
+        "Desc_ComboBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescComboBoxMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

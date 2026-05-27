@@ -133,6 +133,41 @@ internal sealed class RadioButtonsEventPayload
     public Microsoft.UI.Xaml.Controls.SelectionChangedEventHandler? SelectionChangedTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3 batch 6 — AutoSuggestBox multi-event
+/// payload. Three slots: <c>Text</c> round-trip (filtered to
+/// <c>UserInput</c>), <c>QuerySubmitted</c> fire-only, and
+/// <c>SuggestionChosen</c> fire-only. Each event uses its native
+/// <see cref="global::Windows.Foundation.TypedEventHandler{TSender,TArgs}"/>
+/// because <see cref="Microsoft.UI.Xaml.Controls.AutoSuggestBox"/> emits
+/// typed args (<c>AutoSuggestBoxTextChangedEventArgs</c> etc.) we need to
+/// inspect inside the trampolines (the TextChanged trampoline gates on
+/// <c>args.Reason == UserInput</c>).</summary>
+internal sealed class AutoSuggestBoxEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.AutoSuggestBox,
+        Microsoft.UI.Xaml.Controls.AutoSuggestBoxTextChangedEventArgs>? TextChangedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.AutoSuggestBox,
+        Microsoft.UI.Xaml.Controls.AutoSuggestBoxQuerySubmittedEventArgs>? QuerySubmittedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.AutoSuggestBox,
+        Microsoft.UI.Xaml.Controls.AutoSuggestBoxSuggestionChosenEventArgs>? SuggestionChosenTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 batch 6 — ComboBox multi-event payload.
+/// Three slots: <c>SelectedIndex</c> round-trip via SelectionChanged,
+/// <c>DropDownOpened</c> fire-only, <c>DropDownClosed</c> fire-only.
+/// The Items collection is escape-hatched (not surfaced by the
+/// descriptor); the legacy arm continues to handle Items reconciliation
+/// for authors who need it.</summary>
+internal sealed class ComboBoxEventPayload
+{
+    public Microsoft.UI.Xaml.Controls.SelectionChangedEventHandler? SelectionChangedTrampoline;
+    public global::System.EventHandler<object>? DropDownOpenedTrampoline;
+    public global::System.EventHandler<object>? DropDownClosedTrampoline;
+}
+
 /// <summary>
 /// Spec 047 §9.2 — open-ended anchor for delegates registered via
 /// <see cref="ReactorBinding{TElement}.OnCustomEvent{TArgs}"/>. Holds a
