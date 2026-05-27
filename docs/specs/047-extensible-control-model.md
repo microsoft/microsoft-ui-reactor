@@ -1361,12 +1361,24 @@ See §13 Q1 for the full capture lineage and matrix application. Raw data under 
 **Phase 3 progress** (see `docs/specs/tasks/047-extensible-control-model-implementation.md` for the live tracker):
 
 - Phase 3 prerequisites (`.HandCodedControlled` / `.HandCodedEvent` builders, `TextBoxDescriptor` 2-event proof, x64 advisory bench) — **landed** (PR #424).
-- Value-bearing batch 1 — `CheckBox`, `RadioButton`, `RatingControl`, `ToggleSplitButton` — **landed** (this PR). Documented gaps on `CheckBoxDescriptor` (three-state mode + `OnCheckedStateChanged`) and `ToggleSplitButtonDescriptor` (Flyout child) carried forward to follow-ups.
-- Value-bearing batch 2 — `ColorPicker`, `CalendarDatePicker`, `DatePicker`, `TimePicker` — **landed** (this PR). Date/time/color leaves with clean single-event shapes. `NumberBox` deferred — Immediate-mode keystroke handling and `NumberFormatter` reference-equality aren't expressible through the current builder surface.
+- Value-bearing batch 1 — `CheckBox`, `RadioButton`, `RatingControl`, `ToggleSplitButton` — **landed** (PR #428). Documented gaps on `CheckBoxDescriptor` (three-state mode + `OnCheckedStateChanged`) and `ToggleSplitButtonDescriptor` (Flyout child) carried forward to follow-ups.
+- Value-bearing batch 2 — `ColorPicker`, `CalendarDatePicker`, `DatePicker`, `TimePicker` — **landed** (PR #428). Date/time/color leaves with clean single-event shapes.
+- Batches 3–11 (bulk-port) — **landed** (PR #435). 38 descriptors across 9 batches:
+  - **Batch 3** (Display, `.OneWay`) — `TextBlock`, `Image`, `PersonPicture`, `ProgressBar`, `ProgressRing`, `InfoBadge`.
+  - **Batch 4** (Buttons, `.HandCodedEvent` Click) — `Button`, `HyperlinkButton`, `RepeatButton`, `ToggleButton`, `DropDownButton`, `SplitButton`.
+  - **Batch 5** (value-bearing inputs, `.HandCodedControlled` single-event) — `RichEditBox`, `PasswordBox`, `RadioButtons` (group control).
+  - **Batch 6** (multi-event inputs) — `AutoSuggestBox`, `ComboBox`. `.HandCodedControlled` + 2× `.HandCodedEvent` against per-control payloads with 3 trampoline slots each.
+  - **Batch 7** (single-content containers, `SingleContent`) — `Viewbox`, `Expander`, `ScrollViewer`, `ScrollView`.
+  - **Batch 8** (panels, `Panel` strategy) — `StackPanel`, `Grid`, `Canvas`, `FlexPanel`, `RelativePanel`. `WrapGrid` escape-hatched (needs per-child attached-prop hook).
+  - **Batch 9** (named-slot containers, `NamedSlots`) — `SplitView`, `InfoBar`, `TeachingTip`.
+  - **Batch 10** (shapes + display leaves, `.OneWay`) — `Rectangle`, `Ellipse`, `Line`, `Path`, `AnimatedIcon`. `Icon` escape-hatched (polymorphic mount).
+  - **Batch 11** (long-tail triage) — ported: `PipsPager`, `ListBox`, `SelectorBar`, `BreadcrumbBar`. Escape-hatched: `Frame` (imperative mount-only `Navigate`), `CalendarView` (`SelectedDates` `IObservableVector` with per-element echo).
+- Phase 3 follow-ups (need new builder/entry shapes — separate spec-reviewed PR): `NumberBox` (Immediate-mode keystroke + `NumberFormatter` ref-equality), `RichTextBlock` (incremental Paragraphs/Inlines diff), `FrameElement` (mount-only entry shape), `CalendarViewElement` (collection-diff with per-element echo). Within-control partial-port gaps (Flyout children, items collections, per-child attached props, IconSource, Path.Data) tracked in `docs/specs/tasks/047-extensible-control-model-implementation.md`. Templated lists (`ListView`, `GridView`, `TreeView`, `FlipView`, `TabView`, `Pivot`, `ItemsRepeater`) require spec-042 keyed reconciliation integrated into `ItemsHost`.
+- Phase 3 advisory perf — final x64 capture under `docs/specs/047/phase3-results/CPC-ander-YTZ3O-x64-advisory/2026-05-27-phase3-final-3x5/` (50 controls registered, 3×5 launches). V1 ON (descriptors) vs V1 OFF (today) headline: M1 +14.9%, M7 +7.4%, M8 +25.5%, M10 +8.7%, M11 +8.5%, M12 +20.9% — descriptor-interpreter Mount/Update overhead amortized over the larger registration table. M4 −21.2% / M5 −24.3% — dispatch wins from a fatter handler table (fewer fallthroughs to the legacy switch arm). Cloud-PC advisory only; ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` is deferred for the §14 ratification gate.
 
 **Carry-forward known defects from Phase 1:**
-- **KD-3** — dispatch fast-path for the ported built-ins (M4 +88.9% V1 vs Today). Intersects with descriptor shape; fix during Phase 3 migration.
-- **KD-4** — public typed-event surface for external descriptor authors. Scope narrowed by Phase 2 to external-author-only; in-tree descriptors already use the internal fast path via `DescriptorControlledPayload<T>`.
+- **KD-3** — dispatch fast-path for the ported built-ins (M4 was +88.9% V1 vs Today at Phase 1; final advisory shows M4 −21.2% / M5 −24.3% at amortized scope — KD-3 has materially closed at the batch-11 registration set).
+- **KD-4** — public typed-event surface for external descriptor authors. Scope narrowed by Phase 2 to external-author-only; in-tree descriptors already use the internal fast path via `DescriptorControlledPayload<T>` or `.HandCodedControlled`/`.HandCodedEvent` per-descriptor payload pattern.
 
 ### Phase 4 — cleanup
 
