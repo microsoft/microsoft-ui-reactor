@@ -1,17 +1,24 @@
 // `mur doctor` — diagnose a Reactor developer install.
 //
 // Verifies the prerequisites and post-bootstrap state that getting-started.md
-// depends on. Prints a one-line PASS / WARN / FAIL per check and exits 0 only
-// if every check passes. Designed to be the first thing a confused user runs
-// after `dotnet new reactorapp` fails — every failure should print a
-// copy-pasteable next step.
+// depends on. Prints a one-line PASS / WARN / FAIL per check and exits non-zero
+// only when there are FAILs — WARNs (e.g. missing-template-enumeration or a
+// stale-looking checkout) still exit 0 since the install is usable. Designed
+// to be the first thing a confused user runs after `dotnet new reactorapp`
+// fails — every FAIL prints a copy-pasteable next step.
 //
 // Checks (in order):
 //   1. .NET SDK >= 10
-//   2. `mur` itself: which install (global-tool / bin-mirror), version
-//   3. local-nupkgs/ feed present + Microsoft.UI.Reactor nupkg current
-//   4. dotnet new reactorapp template registered
-//   5. Claude plugin installed at ~/.claude/plugins/reactor (informational)
+//   2. `mur` itself: global-tool install or PATH-resolved bin-mirror; with
+//      --verbose, also the resolved version string
+//   3. Repo-checkout discovery (warns if not inside a Reactor source checkout,
+//      and skips the two `local-nupkgs/` checks below)
+//   4. local-nupkgs/Microsoft.UI.Reactor.<ver>.nupkg present (framework)
+//   5. local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.<ver>.nupkg present
+//   6. `dotnet new` template list includes `reactorapp` (always runs — does
+//      not depend on the repo checkout being found)
+//   7. Claude plugin at ~/.claude/plugins/reactor (informational only; not
+//      every developer uses Claude Code)
 
 using System.Diagnostics;
 using Microsoft.UI.Reactor.Cli.Pack;
@@ -77,7 +84,7 @@ public static class DoctorCommand
                     ?? RepoRootFinder.FindRepoRoot();
         if (repoRoot is null)
         {
-            Warn("repo checkout", "not running inside a Reactor source checkout — skipping local-feed and template checks");
+            Warn("repo checkout", "not running inside a Reactor source checkout — skipping local-feed checks (the `dotnet new` template check below still runs)");
             warnings++;
         }
         else

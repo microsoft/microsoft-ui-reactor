@@ -127,9 +127,30 @@ public static class UpgradeCommand
             WorkingDirectory = workingDirectory,
         };
         foreach (var a in arguments) psi.ArgumentList.Add(a);
-        using var proc = Process.Start(psi)!;
-        proc.WaitForExit();
-        return ignoreExitCode ? 0 : proc.ExitCode;
+
+        Process? proc;
+        try
+        {
+            proc = Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            if (ignoreExitCode) return 0;
+            Console.Error.WriteLine($"mur upgrade: failed to start `dotnet {string.Join(' ', arguments)}`: {ex.Message}");
+            Console.Error.WriteLine("  Verify .NET 10+ is installed and `dotnet` resolves on PATH.");
+            return 1;
+        }
+        if (proc is null)
+        {
+            if (ignoreExitCode) return 0;
+            Console.Error.WriteLine($"mur upgrade: `dotnet {string.Join(' ', arguments)}` did not start (Process.Start returned null).");
+            return 1;
+        }
+        using (proc)
+        {
+            proc.WaitForExit();
+            return ignoreExitCode ? 0 : proc.ExitCode;
+        }
     }
 
     static void CopyDirectory(string src, string dst)

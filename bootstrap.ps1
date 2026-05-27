@@ -73,10 +73,14 @@ foreach ($line in $sdkOutput) {
     }
 }
 if (-not $has10OrLater) {
-    Write-Host '    [warn] .NET 10 SDK not detected — Reactor requires 10+. https://dotnet.microsoft.com/download' -ForegroundColor Yellow
-} else {
-    Write-Ok ".NET SDK present"
+    Fail @"
+.NET 10+ SDK not detected — Reactor requires 10 or later.
+Installed SDKs:
+$($sdkOutput -join "`n")
+Install the latest .NET SDK from https://dotnet.microsoft.com/download and re-run ./bootstrap.ps1.
+"@
 }
+Write-Ok ".NET SDK present"
 
 # ---------------------------------------------------------------------------
 # 2. Pack `mur` as a global-tool nupkg
