@@ -9,6 +9,12 @@
     <IsRoslynComponent>true</IsRoslynComponent>
     <RootNamespace>Microsoft.UI.Reactor.Localization.Generator</RootNamespace>
     <AssemblyName>Reactor.Localization.Generator</AssemblyName>
+
+    <!-- See Reactor.Analyzers.csproj for the full rationale: Reactor.csproj's
+         <None Include="...\bin\$(Configuration)\netstandard2.0\..."> pack
+         glob has no $(Platform) segment, so this transitive source-generator
+         build must not append the inherited Platform to its OutputPath. -->
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
