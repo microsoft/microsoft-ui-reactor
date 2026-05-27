@@ -64,10 +64,10 @@ internal static class TeachingTipDescriptor
             new NamedSlot<TeachingTipElement, WinUI.TeachingTip>(
                 Name: "HeroContent",
                 GetChild: static e => e.HeroContent,
-                SetChild: static (c, ui) => c.HeroContent = ui),
-                // No GetCurrentChild — legacy re-mounts HeroContent wholesale
-                // on swap, so the descriptor falls back to remount when the
-                // element ref changes (matches legacy behavior).
+                SetChild: static (c, ui) => c.HeroContent = ui)
+            {
+                GetCurrentChild = static c => c.HeroContent as UIElement,
+            },
         });
 
     private static readonly TypedEventHandler<WinUI.TeachingTip, object>

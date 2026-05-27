@@ -112,6 +112,9 @@ internal static class SplitViewDescriptor
             slotIsNull:       static p => p.PaneClosingTrampoline is null,
             setSlot:          static (p, h) => p.PaneClosingTrampoline = h);
 
+    // Brush is a reference type (Microsoft.UI.Xaml.Media.Brush : DependencyObject);
+    // ReferenceEquals on Brush?/Brush? matches the legacy arm's
+    // !ReferenceEquals(o.PaneBackground, n.PaneBackground) gate exactly.
     private sealed class BrushReferenceComparer : IEqualityComparer<Brush?>
     {
         public static readonly BrushReferenceComparer Instance = new();

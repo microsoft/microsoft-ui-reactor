@@ -28,9 +28,9 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   replicate the string-diff-against-old-element trick, and the error
 ///   reporting needs both old + new + xaml-text + parser-text context.
 ///   Authors who need <c>Path.Data</c> stay on V1 OFF; the descriptor handles
-///   the rest of the surface (Fill / Stroke / dash / cap / join / transform /
-///   FillRule), which is the bulk of the per-render write pressure for a
-///   D3-style chart.</item>
+///   the rest of the surface (Fill / Stroke / dash / cap / join / transform),
+///   which is the bulk of the per-render write pressure for a D3-style
+///   chart.</item>
 ///   <item><b><c>FillRule</c> propagation</b> in the legacy handler writes
 ///   <c>FillRule</c> onto the inner <see cref="Microsoft.UI.Xaml.Media.PathGeometry"/>
 ///   (not the <see cref="WinShapes.Path"/> itself). Since the descriptor

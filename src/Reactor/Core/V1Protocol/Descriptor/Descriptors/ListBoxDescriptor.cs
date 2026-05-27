@@ -28,6 +28,8 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 [Experimental("REACTOR_V1_PREVIEW")]
 internal static class ListBoxDescriptor
 {
+    private static readonly global::System.Action<int> NoOpSelectedIndexChanged = static _ => { };
+
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>
     {
         var lb = (WinUI.ListBox)s!;
@@ -69,11 +71,13 @@ internal static class ListBoxDescriptor
             subscribe:   static (c, h) => c.SelectionChanged += h,
             // Gate is "either callback is present" — match the legacy
             // mount arm's HasCallbacks semantics so a ListBox with only the
-            // snapshot subscriber still wires.
+            // snapshot subscriber still wires. Cached no-op sentinel avoids
+            // a per-Update delegate allocation when only OnSelectionChanged
+            // is set (EnsureSubscribed runs every reconcile).
             callback:    static e =>
                 e.OnSelectedIndexChanged is not null
                     ? e.OnSelectedIndexChanged
-                    : (e.OnSelectionChanged is not null ? _ => { } : null),
+                    : (e.OnSelectionChanged is not null ? NoOpSelectedIndexChanged : null),
             trampoline:  SelectionChangedTrampoline,
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
             setSlot:     static (p, h) => p.SelectionChangedTrampoline = h);

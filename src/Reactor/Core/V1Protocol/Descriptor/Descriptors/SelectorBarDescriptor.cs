@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Xaml;
 using Windows.Foundation;
@@ -46,12 +47,14 @@ internal static class SelectorBarDescriptor
             GetSetters = static e => e.Setters,
         }
         // Items BEFORE SelectedIndex so SelectedIndex lands against a
-        // populated Items collection.
+        // populated Items collection. The engine gates this set on the
+        // element-pair comparer (SelectorBarItemsComparer below) so we only
+        // rebuild when the source array's Text or Icon actually changed —
+        // record equality on SelectorBarItemData covers both fields.
         .OneWay<SelectorBarItemData[]>(
             get: static e => e.Items,
             set: static (c, items) =>
             {
-                if (SelectorBarItemsEqual(c.Items, items)) return;
                 c.Items.Clear();
                 foreach (var item in items)
                 {
@@ -60,7 +63,8 @@ internal static class SelectorBarDescriptor
                         sbi.Icon = Reconciler.ResolveIconForDescriptor(new SymbolIconData(item.Icon));
                     c.Items.Add(sbi);
                 }
-            })
+            },
+            comparer: SelectorBarItemsComparer.Instance)
         .HandCodedControlled<SelectorBarEventPayload, int,
             TypedEventHandler<WinUI.SelectorBar, WinUI.SelectorBarSelectionChangedEventArgs>>(
             get:         static e => e.SelectedIndex,
@@ -80,20 +84,17 @@ internal static class SelectorBarDescriptor
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
             setSlot:     static (p, h) => p.SelectionChangedTrampoline = h);
 
-    private static bool SelectorBarItemsEqual(
-        global::System.Collections.Generic.IList<WinUI.SelectorBarItem> existing,
-        SelectorBarItemData[] incoming)
+    private sealed class SelectorBarItemsComparer : IEqualityComparer<SelectorBarItemData[]>
     {
-        if (existing.Count != incoming.Length) return false;
-        for (int i = 0; i < incoming.Length; i++)
+        public static readonly SelectorBarItemsComparer Instance = new();
+        public bool Equals(SelectorBarItemData[]? a, SelectorBarItemData[]? b)
         {
-            if (existing[i].Text != incoming[i].Text) return false;
-            // Icon equality: a populated incoming icon string requires a
-            // realized icon shell, which we approximate as "non-null".
-            var hadIcon = existing[i].Icon is not null;
-            var wantIcon = incoming[i].Icon is not null;
-            if (hadIcon != wantIcon) return false;
+            if (ReferenceEquals(a, b)) return true;
+            if (a is null || b is null || a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++)
+                if (!a[i].Equals(b[i])) return false;
+            return true;
         }
-        return true;
+        public int GetHashCode(SelectorBarItemData[] obj) => obj.Length;
     }
 }
