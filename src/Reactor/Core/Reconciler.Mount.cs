@@ -1369,7 +1369,7 @@ public sealed partial class Reconciler
         return panel;
     }
 
-    private WinUI.Grid MountNavigationHost(NavigationHostElement element, Action requestRerender)
+    internal WinUI.Grid MountNavigationHost(NavigationHostElement element, Action requestRerender)
     {
         var grid = new WinUI.Grid();
         var handle = (Navigation.INavigationHandle)element.NavigationHandle;

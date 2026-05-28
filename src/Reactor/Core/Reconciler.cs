@@ -327,10 +327,14 @@ public sealed partial class Reconciler : IDisposable
     ///   <c>MenuFlyoutElement</c>, <c>PopupElement</c>,
     ///   <c>CommandBarFlyoutElement</c>. Require decorator-style ports
     ///   (lifecycle, side-mount).</item>
-    ///   <item><b>Deferred stateful host</b> (follow-up PR) — <c>NavigationHostElement</c>.
-    ///   Per-instance route/cache/transition state is intercepted in
-    ///   <see cref="UnmountRecursive"/> before the V1 dispatch arm; needs a
-    ///   small refactor before it can route through V1.</item>
+    ///   <item><b>Stateful host — PORTED (§14 Phase 3 prelude)</b> —
+    ///   <c>NavigationHostElement</c> now routes through V1 via
+    ///   <see cref="V1Protocol.Handlers.NavigationHostHandler"/> (Path B
+    ///   delegate). Per-instance route/cache/transition state is still torn
+    ///   down by the flag-independent intercept in
+    ///   <see cref="UnmountRecursive"/> (fires before the V1 unmount arm), so
+    ///   unmount is byte-identical V1 ON ≡ V1 OFF.</item>
+    ///
     ///   <item><b>Deferred — descriptor with known docking gaps</b> (follow-up
     ///   PR) — <c>TabViewDescriptor</c>. Bisect of full V1 ON flakes (1–4
     ///   non-deterministic docking-text-find failures per run across
@@ -365,6 +369,9 @@ public sealed partial class Reconciler : IDisposable
         RegisterHandler<TextBoxElement, WinUI.TextBox>(new V1Protocol.Handlers.TextBoxHandler());
         RegisterHandler<BorderElement, WinUI.Border>(new V1Protocol.Handlers.BorderHandler());
         RegisterHandler<ListViewElement, WinUI.ListView>(new V1Protocol.Handlers.ListViewHandler());
+
+        // ── §14 Phase 3 prelude carve-closures (delegate to engine bodies) ──
+        RegisterHandler<NavigationHostElement, WinUI.Grid>(new V1Protocol.Handlers.NavigationHostHandler());
 
         // ── §14 Phase 3 base-derived (templated/lazy/items hosts) ────────
         // Each closed-T leaf routes through the same descriptor via the

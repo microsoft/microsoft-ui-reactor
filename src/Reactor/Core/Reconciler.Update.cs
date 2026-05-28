@@ -1507,7 +1507,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateNavigationHost(
+    internal UIElement? UpdateNavigationHost(
         NavigationHostElement oldEl, NavigationHostElement newEl,
         WinUI.Grid grid, Action requestRerender)
     {
