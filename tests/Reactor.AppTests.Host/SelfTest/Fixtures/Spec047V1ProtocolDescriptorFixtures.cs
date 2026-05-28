@@ -5896,7 +5896,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 new DescriptorHandler<SemanticZoomElement, WinUI.SemanticZoom>(
                     SemanticZoomDescriptor.Descriptor));
             rec.RegisterHandler<ListViewElement, WinUI.ListView>(
-                new DescriptorHandler<ListViewElement, WinUI.ListView>(ListViewDescriptor.Descriptor));
+                new Microsoft.UI.Reactor.Core.V1Protocol.Handlers.ListViewHandler());
 
             var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
             H.SetContent(parent);
