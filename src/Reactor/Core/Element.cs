@@ -3199,8 +3199,16 @@ public record TemplatedFlipViewElement<T>(
 /// <summary>
 /// Abstract base for virtualized lazy stacks. Non-generic so the reconciler
 /// can match on a single type in its switch expression.
+///
+/// <para>Spec 047 §14 Phase 3 finish — Port (6): also implements
+/// <see cref="Internal.IKeyedItemSource"/> and
+/// <see cref="IItemsRepeaterFactorySource"/> so the descriptor-driven
+/// G2 port (<c>LazyStackDescriptor</c>) can flow Lazy*Stack through
+/// <see cref="Reconciler.BindErasedKeyedItemsSource"/>'s ItemsRepeater
+/// arm — same realization plumbing as the hand-coded
+/// <c>MountLazyStack</c> / <c>UpdateLazyStack</c> bodies.</para>
 /// </summary>
-public abstract record LazyStackElementBase : Element
+public abstract record LazyStackElementBase : Element, Internal.IKeyedItemSource, IItemsRepeaterFactorySource
 {
     public abstract Orientation Orientation { get; }
     public abstract double Spacing { get; init; }
@@ -3214,6 +3222,18 @@ public abstract record LazyStackElementBase : Element
     /// string consumed by spec 042's keyed-list reconciliation pipeline.
     /// </summary>
     internal abstract string GetKeyAt(int index);
+    /// <summary>
+    /// §14 Phase 3 finish — Port (6): build the per-item Element subtree
+    /// for index N. Same shape as <c>TemplatedListElementBase.BuildItemView</c>;
+    /// the descriptor binder reads this through the
+    /// <see cref="Internal.IItemViewSource"/> contract (bridged via
+    /// <see cref="Internal.IKeyedItemSource"/>) when the factory realizes
+    /// a container.
+    /// </summary>
+    public abstract Element BuildItemView(int index);
+    // IKeyedItemSource explicit bridge — forward to the existing internal
+    // GetKeyAt without exposing it publicly.
+    string Internal.IKeyedItemSource.GetKeyAt(int index) => GetKeyAt(index);
     public abstract IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool);
     /// <summary>
     /// Update an existing factory's items and viewBuilder in place, avoiding
@@ -3228,11 +3248,39 @@ public abstract record LazyStackElementBase : Element
     /// index — keying by string makes the mapping reorder-stable.
     /// </summary>
     internal abstract void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState);
+    // IItemsRepeaterFactorySource bridge — same internal abstract surface
+    // is exposed under the interface contract so the descriptor binder
+    // (which only knows about the interface) can call it.
+    void IItemsRepeaterFactorySource.AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState)
+        => AttachListStateToFactory(factory, listState);
     /// <summary>
     /// After updating the factory in place, reconcile all realized items
     /// with the new viewBuilder output (property diffs only, no collection changes).
     /// </summary>
     public abstract void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater);
+    /// <summary>
+    /// §14 Phase 3 finish — Port (6): set <see cref="WinUI.ItemsRepeater.Layout"/>
+    /// to a <see cref="WinUI.StackLayout"/> with this element's
+    /// <see cref="Orientation"/> + <see cref="Spacing"/>. Mirrors the
+    /// inline assignment in legacy <c>MountLazyStack</c>
+    /// (Reconciler.Mount.cs ~:3148) plus the in-place Spacing update from
+    /// <c>UpdateLazyStack</c> (Reconciler.Update.cs ~:3109). Reuses the
+    /// existing <c>StackLayout</c> when both orientation and spacing match
+    /// — avoids re-allocating a Layout on every Update.
+    /// </summary>
+    void IItemsRepeaterFactorySource.ConfigureLayout(WinUI.ItemsRepeater repeater)
+    {
+        if (repeater.Layout is WinUI.StackLayout existing && existing.Orientation == Orientation)
+        {
+            if (existing.Spacing != Spacing) existing.Spacing = Spacing;
+            return;
+        }
+        repeater.Layout = new WinUI.StackLayout
+        {
+            Orientation = Orientation,
+            Spacing = Spacing,
+        };
+    }
     internal Action<WinUI.ScrollViewer>[] ScrollViewerSetters { get; init; } = [];
     internal Action<WinUI.ItemsRepeater>[] RepeaterSetters { get; init; } = [];
 }
@@ -3248,6 +3296,7 @@ public record LazyVStackElement<T>(
     public override double EstimatedItemSize { get; init; } = 40;
     public override int ItemCount => Items.Count;
     internal override string GetKeyAt(int index) => KeySelector(Items[index]);
+    public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
 
     public override object GetItemsSource() =>
         Enumerable.Range(0, Items.Count).ToList();
@@ -3283,6 +3332,7 @@ public record LazyHStackElement<T>(
     public override double EstimatedItemSize { get; init; } = 100;
     public override int ItemCount => Items.Count;
     internal override string GetKeyAt(int index) => KeySelector(Items[index]);
+    public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
 
     public override object GetItemsSource() =>
         Enumerable.Range(0, Items.Count).ToList();

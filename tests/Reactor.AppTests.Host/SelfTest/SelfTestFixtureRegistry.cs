@@ -1208,6 +1208,9 @@ internal static class SelfTestFixtureRegistry
         // Spec 047 §14 Phase 3 close-out — typed templated lists G2.
         "Desc_TemplatedListView_MountUpdate",
         "Desc_TemplatedGridView_MountUpdate",
+        // Spec 047 §14 Phase 3 finish — Port (6) Lazy*Stack G2.
+        "Desc_LazyVStack_MountUpdate",
+        "Desc_LazyHStack_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2406,6 +2409,10 @@ internal static class SelfTestFixtureRegistry
         // Spec 047 §14 Phase 3 close-out — typed templated lists G2.
         "Desc_TemplatedListView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescTemplatedListViewMountUpdate(harness),
         "Desc_TemplatedGridView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescTemplatedGridViewMountUpdate(harness),
+
+        // Spec 047 §14 Phase 3 finish — Port (6) Lazy*Stack G2.
+        "Desc_LazyVStack_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescLazyVStackMountUpdate(harness),
+        "Desc_LazyHStack_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescLazyHStackMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

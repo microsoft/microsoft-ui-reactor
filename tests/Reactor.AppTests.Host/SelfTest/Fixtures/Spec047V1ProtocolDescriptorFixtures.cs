@@ -4762,4 +4762,146 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Spec 047 §14 Phase 3 finish — Port (6) Lazy*Stack G2.
+    //  LazyVStack<T> / LazyHStack<T> via base-derived registration +
+    //  TemplatedItemsErased<> strategy. One descriptor on
+    //  LazyStackElementBase catches both orientations; items + keys flow
+    //  through the element's IKeyedItemSource implementation, factory +
+    //  layout knobs through its IItemsRepeaterFactorySource.
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class DescLazyVStackMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandlerForDerivedTypes<LazyStackElementBase, WinUI.ItemsRepeater>(
+                new DescriptorHandler<LazyStackElementBase, WinUI.ItemsRepeater>(
+                    LazyStackDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new LazyVStackElement<string>(
+                Items: new[] { "a", "b", "c" },
+                KeySelector: static s => s,
+                ViewBuilder: static (s, _) => new TextBlockElement(s))
+            {
+                Spacing = 12,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ItemsRepeater ir)
+            {
+                parent.Children.Add(ir);
+                await Harness.Render();
+
+                H.Check("Desc_LazyVStack_Mounted", true);
+                H.Check("Desc_LazyVStack_LayoutIsStack", ir.Layout is WinUI.StackLayout);
+                H.Check("Desc_LazyVStack_OrientationVertical",
+                    ir.Layout is WinUI.StackLayout l1 && l1.Orientation == Orientation.Vertical);
+                H.Check("Desc_LazyVStack_SpacingApplied",
+                    ir.Layout is WinUI.StackLayout l2 && l2.Spacing == 12);
+
+                var listState = Reconciler.GetListState(ir);
+                H.Check("Desc_LazyVStack_ListStateAttached", listState is not null);
+                H.Check("Desc_LazyVStack_ItemsSourceBound",
+                    listState is not null && ReferenceEquals(ir.ItemsSource, listState.Source));
+                H.Check("Desc_LazyVStack_ItemCount3", listState is not null && listState.Source.Count == 3);
+                H.Check("Desc_LazyVStack_KeysOk",
+                    listState is not null
+                        && listState.Source[0].Key == "a"
+                        && listState.Source[1].Key == "b"
+                        && listState.Source[2].Key == "c");
+                H.Check("Desc_LazyVStack_FactoryAttached", ir.ItemTemplate is not null);
+
+                // Keyed diff — insert in middle.
+                var el2 = el1 with
+                {
+                    Items = new[] { "a", "z", "b", "c" },
+                    Spacing = 16, // change spacing too — in-place layout update path
+                };
+                rec.UpdateChild(el1, el2, ir, _noOp);
+                await Harness.Render();
+
+                listState = Reconciler.GetListState(ir);
+                H.Check("Desc_LazyVStack_DiffApplied_Count4",
+                    listState is not null && listState.Source.Count == 4);
+                H.Check("Desc_LazyVStack_DiffApplied_KeysOk",
+                    listState is not null
+                        && listState.Source[0].Key == "a"
+                        && listState.Source[1].Key == "z"
+                        && listState.Source[2].Key == "b"
+                        && listState.Source[3].Key == "c");
+                H.Check("Desc_LazyVStack_LayoutReusedOnUpdate",
+                    ir.Layout is WinUI.StackLayout l3 && l3.Spacing == 16 && l3.Orientation == Orientation.Vertical);
+
+                // Same-ref idempotent.
+                rec.UpdateChild(el2, el2, ir, _noOp);
+                await Harness.Render();
+                listState = Reconciler.GetListState(ir);
+                H.Check("Desc_LazyVStack_SameRefIdempotent",
+                    listState is not null && listState.Source.Count == 4);
+
+                rec.UnmountChild(ir);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_LazyVStack_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescLazyHStackMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandlerForDerivedTypes<LazyStackElementBase, WinUI.ItemsRepeater>(
+                new DescriptorHandler<LazyStackElementBase, WinUI.ItemsRepeater>(
+                    LazyStackDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new LazyHStackElement<int>(
+                Items: new[] { 1, 2, 3 },
+                KeySelector: static i => i.ToString(),
+                ViewBuilder: static (i, _) => new TextBlockElement(i.ToString()));
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ItemsRepeater ir)
+            {
+                parent.Children.Add(ir);
+                await Harness.Render();
+
+                H.Check("Desc_LazyHStack_Mounted", true);
+                H.Check("Desc_LazyHStack_OrientationHorizontal",
+                    ir.Layout is WinUI.StackLayout l && l.Orientation == Orientation.Horizontal);
+
+                var listState = Reconciler.GetListState(ir);
+                H.Check("Desc_LazyHStack_KeysOk",
+                    listState is not null
+                        && listState.Source[0].Key == "1"
+                        && listState.Source[1].Key == "2"
+                        && listState.Source[2].Key == "3");
+
+                // Remove last.
+                var el2 = el1 with { Items = new[] { 1, 2 } };
+                rec.UpdateChild(el1, el2, ir, _noOp);
+                await Harness.Render();
+                listState = Reconciler.GetListState(ir);
+                H.Check("Desc_LazyHStack_DiffApplied_Count2",
+                    listState is not null && listState.Source.Count == 2);
+
+                rec.UnmountChild(ir);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_LazyHStack_Mounted", false);
+            }
+        }
+    }
 }
