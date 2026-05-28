@@ -47,11 +47,28 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
     /// and bench harnesses — not part of the steady-state author API.</summary>
     public ControlDescriptor<TElement, TControl> Descriptor => _descriptor;
 
-    public ChildrenStrategy<TElement, TControl>? Children => _descriptor.Children;
+    /// <summary>
+    /// Children strategy surfaced to <see cref="V1HandlerAdapter{TElement,TControl}"/>.
+    /// Returns the descriptor's strategy except when it's an
+    /// <see cref="ItemsHost{TElement,TControl}"/> — that one is dispatched
+    /// inline by <see cref="Mount"/> / <see cref="Update"/> before the prop
+    /// loop runs so initial writes like <c>SelectedIndex</c> land against a
+    /// populated collection (matches legacy mount ordering).
+    /// </summary>
+    public ChildrenStrategy<TElement, TControl>? Children =>
+        _descriptor.Children is ItemsHost<TElement, TControl> ? null : _descriptor.Children;
 
     public TControl Mount(MountContext ctx, TElement el)
     {
         var ctrl = ctx.RentControl(_descriptor.PoolPolicy, _descriptor.Factory);
+
+        // §14 Phase 3-final: when the descriptor declares an ItemsHost,
+        // populate the items collection BEFORE the prop loop. Initial writes
+        // for selection-tracking props (SelectedIndex/SelectedItem) need the
+        // collection populated first — WinUI silently clamps selection
+        // against an empty collection.
+        if (_descriptor.Children is ItemsHost<TElement, TControl> ih)
+            DispatchItemsHostMount(in ctx, el, ctrl, ih);
 
         // Phase 1: all bare initial writes (no echo possible — subscriptions
         // not yet live). §14 Phase 3-final: dispatch through the
@@ -75,6 +92,12 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
 
     public void Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl ctrl)
     {
+        // §14 Phase 3-final: ItemsHost diff BEFORE prop Update loop, same
+        // ordering rationale as Mount — selection-tracking writes need the
+        // collection in its post-diff shape first.
+        if (_descriptor.Children is ItemsHost<TElement, TControl> ih)
+            DispatchItemsHostUpdate(in ctx, oldEl, newEl, ctrl, ih);
+
         var props = _descriptor.Properties;
         for (int i = 0; i < props.Count; i++)
             props[i].Update(in ctx, ctrl, oldEl, newEl);
@@ -89,5 +112,67 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
         var getSetters = _descriptor.GetSetters;
         if (getSetters is not null)
             ctx.ApplySetters(getSetters(newEl), ctrl);
+    }
+
+    private static void DispatchItemsHostMount(
+        in MountContext ctx, TElement el, TControl ctrl,
+        ItemsHost<TElement, TControl> ih)
+    {
+        var newItems = ih.GetItems(el);
+        var collection = ih.GetCollection(ctrl);
+        if (collection.Count > 0) collection.Clear();
+        for (int i = 0; i < newItems.Count; i++)
+        {
+            var item = newItems[i];
+            if (item is Element childEl)
+            {
+                var mounted = ctx.MountChild(childEl);
+                if (mounted is not null) collection.Add(mounted);
+            }
+            else if (item is not null)
+                collection.Add(item);
+        }
+    }
+
+    private static void DispatchItemsHostUpdate(
+        in UpdateContext ctx, TElement oldEl, TElement newEl, TControl ctrl,
+        ItemsHost<TElement, TControl> ih)
+    {
+        var oldItems = ih.GetItems(oldEl);
+        var newItems = ih.GetItems(newEl);
+        if (ReferenceEquals(oldItems, newItems)) return;
+        var equals = ih.ItemEquals ?? object.Equals;
+        if (oldItems.Count == newItems.Count)
+        {
+            bool same = true;
+            for (int i = 0; i < newItems.Count; i++)
+            {
+                if (!equals(oldItems[i], newItems[i])) { same = false; break; }
+            }
+            if (same) return;
+        }
+        // Structural change — unmount Element items via the reconciler so
+        // any descendant component state is torn down, then rebuild flat.
+        // (Keyed reconcile lands separately for typed templated lists.)
+        var reconciler = ctx.Reconciler;
+        var rerender = ctx.RequestRerender;
+        for (int i = 0; i < oldItems.Count; i++)
+        {
+            if (oldItems[i] is Element oldChild)
+                reconciler.ReconcileV1Child(oldChild, null, null, rerender);
+        }
+        var collection = ih.GetCollection(ctrl);
+        if (collection.Count > 0) collection.Clear();
+        for (int i = 0; i < newItems.Count; i++)
+        {
+            var item = newItems[i];
+            if (item is Element childEl)
+            {
+                var mounted = ctx.MountChild(childEl);
+                if (mounted is not null) collection.Add(mounted);
+            }
+            else if (item is not null)
+                collection.Add(item);
+        }
     }
 }

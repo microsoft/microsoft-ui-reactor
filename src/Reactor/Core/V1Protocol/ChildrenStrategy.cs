@@ -135,7 +135,7 @@ public sealed record NamedSlot<TElement, TControl>(
 [Experimental("REACTOR_V1_PREVIEW")]
 public sealed record ItemsHost<TElement, TControl>(
     Func<TElement, IReadOnlyList<object>> GetItems,
-    Func<TControl, global::System.Collections.IList> GetCollection) : ChildrenStrategy<TElement, TControl>
+    Func<TControl, IList<object>> GetCollection) : ChildrenStrategy<TElement, TControl>
     where TElement : Element
     where TControl : UIElement
 {

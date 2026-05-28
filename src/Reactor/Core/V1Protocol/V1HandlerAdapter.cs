@@ -129,6 +129,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 // Typed templated lists (ListView<T>, GridView<T>, etc.) keep
                 // their own delegate-body handlers in Batch G2 with spec-042
                 // keyed reconciliation; ItemsHost is for the flat case only.
+                //
+                // Note: descriptors hit this only via hand-coded handlers —
+                // DescriptorHandler interleaves ItemsHost dispatch between
+                // RentControl and the prop loop so initial writes like
+                // SelectedIndex see a populated collection.
                 var newItems = ih.GetItems(element);
                 var collection = ih.GetCollection(control);
                 if (collection.Count > 0) collection.Clear();
