@@ -11,8 +11,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 using WinUI = Microsoft.UI.Xaml.Controls;
-using static Microsoft.UI.Reactor.Factories;
 using ReactorIconElement = Microsoft.UI.Reactor.Core.IconElement;
+using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -3971,7 +3971,6 @@ internal static class Spec047V1ProtocolDescriptorFixtures
     }
 
     // ────────────────────────────────────────────────────────────────────
-    // ────────────────────────────────────────────────────────────────────
     //  Decorator-style descriptors — polymorphic Icon + XAML interop.
     // ────────────────────────────────────────────────────────────────────
 
@@ -4076,6 +4075,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
     internal class DescXamlHostMounted(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -4153,7 +4153,39 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    internal class DescXamlPageMounted(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterDecoratorHandler<XamlPageElement>(XamlPageDescriptor.Handler);
 
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el = new XamlPageElement(typeof(Page));
+            var ui = rec.Mount(el, _noOp);
+            if (ui is WinUI.Frame frame)
+            {
+                parent.Children.Add(frame);
+                await Harness.Render();
+
+                H.Check("Desc_XamlPage_Mounted", true);
+                H.Check("Desc_XamlPage_NavigatedToTestPage", frame.Content is Page);
+                H.Check("Desc_XamlPage_Parameter", frame.CurrentSourcePageType == typeof(Page));
+
+                rec.UnmountChild(frame);
+                parent.Children.Clear();
+                H.Check("Desc_XamlPage_UnmountClearedContent", frame.Content is null);
+            }
+            else
+            {
+                H.Check("Desc_XamlPage_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     //  RichTextBlockDescriptor (Phase 3-final Batch B) — Paragraphs as a
     //  ReferenceEquality-gated OneWay rebuild.
     // ────────────────────────────────────────────────────────────────────
