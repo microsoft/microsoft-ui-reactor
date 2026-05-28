@@ -5761,6 +5761,47 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    internal class DescParallaxViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ParallaxViewElement, WinUI.ParallaxView>(
+                new DescriptorHandler<ParallaxViewElement, WinUI.ParallaxView>(
+                    ParallaxViewDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = ParallaxView(TextBlock("parallax"), verticalShift: 12, horizontalShift: 3);
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ParallaxView pv)
+            {
+                parent.Children.Add(pv);
+                await Harness.Render();
+
+                H.Check("Desc_ParallaxView_Mounted", true);
+                H.Check("Desc_ParallaxView_InitialVerticalShift", pv.VerticalShift == 12);
+                H.Check("Desc_ParallaxView_ChildMounted", pv.Child is WinUI.TextBlock tb && tb.Text == "parallax");
+
+                var el2 = ParallaxView(TextBlock("updated"), verticalShift: 24, horizontalShift: 6);
+                rec.UpdateChild(el1, el2, pv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_ParallaxView_UpdatedVerticalShift", pv.VerticalShift == 24);
+                H.Check("Desc_ParallaxView_ChildUpdated", pv.Child is WinUI.TextBlock tb2 && tb2.Text == "updated");
+
+                rec.UnmountChild(pv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ParallaxView_Mounted", false);
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  §14 Phase 3 finish — Port (11) Pivot via TabItemsHost (PivotItem container).
     // ────────────────────────────────────────────────────────────────────
