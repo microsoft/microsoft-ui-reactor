@@ -18,12 +18,14 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   gates on <c>ChangeEchoSuppressor.ShouldSuppress(c)</c> so programmatic
 ///   index writes don't echo through <c>OnSelectedIndexChanged</c>.</item>
 ///   <item><c>Header</c> — one-way conditional per the legacy guard.</item>
-///   <item><c>Items</c> — escape-hatched via a transparent <c>OneWay</c> entry
-///   that runs a Clear + Add cycle when the new array differs by reference
-///   OR by content. This matches the legacy <c>StringArrayEquals</c> guard
-///   but does NOT do keyed reconciliation — every item-change replaces the
-///   full list (acceptable for a RadioButtons control whose typical use is
-///   3–7 fixed options).</item>
+///   <item><c>Items</c> — declared via the
+///   <see cref="ItemsHost{TElement,TControl}"/> child strategy (Phase 3-final
+///   batch G1). The engine populates the items collection BEFORE the prop
+///   loop runs, so <c>SelectedIndex</c>'s initial write lands against a
+///   populated list (WinUI clamps SelectedIndex against an empty Items
+///   collection). Reconciliation is positional (clear + add on structural
+///   delta) — acceptable for a RadioButtons control whose typical use is
+///   3–7 fixed options.</item>
 /// </list></para>
 ///
 /// <para><b>Known gaps vs. hand-coded handler:</b>
@@ -48,30 +50,17 @@ internal static class RadioButtonsDescriptor
     public static readonly ControlDescriptor<RadioButtonsElement, WinUI.RadioButtons> Descriptor =
         new ControlDescriptor<RadioButtonsElement, WinUI.RadioButtons>
         {
-            Children = new None<RadioButtonsElement, WinUI.RadioButtons>(),
+            // §14 Phase 3-final batch G1: items declared as a child strategy.
+            // The engine dispatches ItemsHost BEFORE the prop loop so the
+            // initial SelectedIndex write lands against a populated list
+            // (WinUI clamps SelectedIndex against Items.Count). string[] ->
+            // IReadOnlyList<object> is valid via array reference covariance
+            // (reference element types only).
+            Children = new ItemsHost<RadioButtonsElement, WinUI.RadioButtons>(
+                GetItems:      static e => (global::System.Collections.Generic.IReadOnlyList<object>)e.Items,
+                GetCollection: static c => c.Items),
             GetSetters = static e => e.Setters,
         }
-        // Items BEFORE SelectedIndex so the index is honored against the
-        // populated list (WinUI clamps SelectedIndex against Items.Count).
-        // We pull the string array, populate eagerly each pass, and rely on
-        // .HandCodedControlled to gate the index write.
-        .OneWay<string[]>(
-            get: static e => e.Items,
-            set: static (c, items) =>
-            {
-                // Idempotent in steady state: if the existing items match
-                // by sequence we skip the rebuild. This mirrors the legacy
-                // StringArrayEquals guard without round-tripping through a
-                // separate compare in the descriptor framework.
-                if (RadioButtonsItemsEqual(c.Items, items)) return;
-                // RadioButtons.Items.Clear / Add raises SelectionChanged
-                // (template-driven SelectedIndex coercion) — both the
-                // descriptor and the legacy arm let this echo through to
-                // OnSelectedIndexChanged. Documented gap; the fixture
-                // bounds the count rather than asserting zero.
-                c.Items.Clear();
-                foreach (var item in items) c.Items.Add(item);
-            })
         .HandCodedControlled<RadioButtonsEventPayload, int, WinUI.SelectionChangedEventHandler>(
             get:         static e => e.SelectedIndex,
             set:         static (c, v) => c.SelectedIndex = v,
@@ -85,17 +74,4 @@ internal static class RadioButtonsDescriptor
             get:         static e => e.Header,
             set:         static (c, v) => c.Header = v,
             shouldWrite: static e => e.Header is not null);
-
-    private static bool RadioButtonsItemsEqual(
-        global::System.Collections.Generic.IList<object> existing, string[] incoming)
-    {
-        if (existing.Count != incoming.Length) return false;
-        for (int i = 0; i < incoming.Length; i++)
-        {
-            if (!ReferenceEquals(existing[i], incoming[i])
-                && existing[i] as string != incoming[i])
-                return false;
-        }
-        return true;
-    }
 }

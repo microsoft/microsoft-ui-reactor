@@ -1201,6 +1201,10 @@ internal static class SelfTestFixtureRegistry
         "Desc_Image_Events",
         "Desc_Path_Data",
         "Desc_InfoBar_ActionButton",
+        // Spec 047 §14 Phase 3-final Batch G1 — flat ItemsHost ports.
+        "Desc_ListBox_Items",
+        "Desc_ComboBox_Items",
+        "Desc_RadioButtons_Items",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2391,6 +2395,10 @@ internal static class SelfTestFixtureRegistry
         "Desc_Image_Events" => new Spec047V1ProtocolDescriptorFixtures.DescImageEvents(harness),
         "Desc_Path_Data" => new Spec047V1ProtocolDescriptorFixtures.DescPathData(harness),
         "Desc_InfoBar_ActionButton" => new Spec047V1ProtocolDescriptorFixtures.DescInfoBarActionButton(harness),
+        // Spec 047 §14 Phase 3-final Batch G1 — flat ItemsHost ports.
+        "Desc_ListBox_Items" => new Spec047V1ProtocolDescriptorFixtures.DescListBoxItemsHost(harness),
+        "Desc_ComboBox_Items" => new Spec047V1ProtocolDescriptorFixtures.DescComboBoxItemsHost(harness),
+        "Desc_RadioButtons_Items" => new Spec047V1ProtocolDescriptorFixtures.DescRadioButtonsItemsHost(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

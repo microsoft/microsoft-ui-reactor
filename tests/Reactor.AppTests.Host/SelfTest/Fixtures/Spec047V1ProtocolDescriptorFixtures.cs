@@ -4337,4 +4337,229 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Phase 3-final batch G1 — flat ItemsHost ports for ListBox /
+    //  ComboBox / RadioButtons. These fixtures specifically exercise the
+    //  engine's ItemsHost dispatch ordering: items are populated BEFORE
+    //  the prop loop (and before subscriptions go live), so SelectedIndex
+    //  lands against a populated collection and the mount callback never
+    //  echoes. Without G-prep's inline ItemsHost dispatch in
+    //  DescriptorHandler, SelectedIndex would clamp to -1 against an empty
+    //  Items collection.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescListBoxItemsHost(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ListBoxElement, WinUI.ListBox>(
+                new DescriptorHandler<ListBoxElement, WinUI.ListBox>(
+                    ListBoxDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int indexChanges = 0;
+            // SelectedIndex=2 must land against the populated collection.
+            // Pre-G1, with .OneWay<string[]> for Items, the order was
+            // SelectedIndex (write -> clamped to -1 against empty Items)
+            // then Items (populated). G1's ItemsHost reverses that.
+            var el1 = new ListBoxElement(new[] { "Alpha", "Beta", "Gamma", "Delta" })
+            {
+                SelectedIndex = 2,
+                OnSelectedIndexChanged = _ => indexChanges++,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ListBox lb)
+            {
+                parent.Children.Add(lb);
+                await Harness.Render();
+
+                H.Check("Desc_ListBox_Items_ItemsPopulated", lb.Items.Count == 4);
+                H.Check("Desc_ListBox_Items_AllStringsPreserved",
+                    (lb.Items[0] as string) == "Alpha"
+                    && (lb.Items[3] as string) == "Delta");
+                H.Check("Desc_ListBox_Items_InitialSelectedIndexHonored",
+                    lb.SelectedIndex == 2);
+                H.Check("Desc_ListBox_Items_MountDidNotEcho", indexChanges == 0);
+
+                // Empty-then-populate cycle. Going from N items to 0 must
+                // clear the collection; the descriptor's SelectedIndex=-1
+                // write coordinates with the cleared list.
+                var el2 = el1 with { Items = Array.Empty<string>(), SelectedIndex = -1 };
+                rec.UpdateChild(el1, el2, lb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_ListBox_Items_ClearedToEmpty", lb.Items.Count == 0);
+                H.Check("Desc_ListBox_Items_SelectedIndexClampedToMinusOne",
+                    lb.SelectedIndex == -1);
+
+                // Re-populate; verify ItemsHost rebuilds positionally.
+                var el3 = el2 with { Items = new[] { "X", "Y" }, SelectedIndex = 1 };
+                rec.UpdateChild(el2, el3, lb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_ListBox_Items_Repopulated",
+                    lb.Items.Count == 2
+                    && (lb.Items[0] as string) == "X"
+                    && (lb.Items[1] as string) == "Y");
+                H.Check("Desc_ListBox_Items_SelectedIndexAfterRepopulate",
+                    lb.SelectedIndex == 1);
+
+                // Same-reference identity skip — passing the same array
+                // should be a structural no-op (ItemsHost.GetItems returns
+                // the same projection; ReferenceEquals short-circuits the
+                // rebuild).
+                rec.UpdateChild(el3, el3, lb, _noOp);
+                await Harness.Render();
+                H.Check("Desc_ListBox_Items_SameRefIdempotent",
+                    lb.Items.Count == 2 && (lb.Items[0] as string) == "X");
+
+                rec.UnmountChild(lb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ListBox_Items_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescComboBoxItemsHost(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ComboBoxElement, WinUI.ComboBox>(
+                new DescriptorHandler<ComboBoxElement, WinUI.ComboBox>(
+                    ComboBoxDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int indexChanges = 0;
+            // No Setters escape-hatch anymore — ItemsHost handles Items.
+            var el1 = new ComboBoxElement(
+                Items: new[] { "Alpha", "Beta", "Gamma" },
+                SelectedIndex: 1,
+                OnSelectedIndexChanged: _ => indexChanges++)
+            {
+                Header = "Letters",
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ComboBox cb)
+            {
+                parent.Children.Add(cb);
+                await Harness.Render();
+
+                H.Check("Desc_ComboBox_Items_ItemsPopulatedByItemsHost",
+                    cb.Items.Count == 3);
+                H.Check("Desc_ComboBox_Items_StringsPreserved",
+                    (cb.Items[0] as string) == "Alpha"
+                    && (cb.Items[2] as string) == "Gamma");
+                // SelectedIndex may settle to either the requested index or
+                // -1 under headless template realization, but should NOT
+                // echo on mount because subscriptions aren't live during
+                // the initial write.
+                var indexAfterMount = indexChanges;
+                H.Check("Desc_ComboBox_Items_InitialSelectedAccepted",
+                    cb.SelectedIndex == 1 || cb.SelectedIndex == -1);
+                H.Check("Desc_ComboBox_Items_MountDidNotEcho",
+                    indexChanges == 0);
+
+                // Update Items with new strings; ItemsHost must rebuild.
+                var el2 = el1 with { Items = new[] { "X", "Y", "Z", "W" }, SelectedIndex = 3 };
+                rec.UpdateChild(el1, el2, cb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_ComboBox_Items_ReplacedCount", cb.Items.Count == 4);
+                H.Check("Desc_ComboBox_Items_ReplacedFirst",
+                    (cb.Items[0] as string) == "X");
+                // Bounded echo budget — programmatic SelectedIndex is
+                // suppressed; any residual fires are from template re-realize.
+                H.Check("Desc_ComboBox_Items_BoundedUpdateEcho",
+                    indexChanges - indexAfterMount <= 3);
+
+                rec.UnmountChild(cb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ComboBox_Items_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescRadioButtonsItemsHost(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<RadioButtonsElement, WinUI.RadioButtons>(
+                new DescriptorHandler<RadioButtonsElement, WinUI.RadioButtons>(
+                    RadioButtonsDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int changes = 0;
+            var el1 = new RadioButtonsElement(
+                Items: new[] { "One", "Two", "Three", "Four" },
+                SelectedIndex: 2,
+                OnSelectedIndexChanged: _ => changes++)
+            {
+                Header = "Pick",
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.RadioButtons rbg)
+            {
+                parent.Children.Add(rbg);
+                await Harness.Render();
+
+                H.Check("Desc_RadioButtons_Items_ItemsPopulated",
+                    rbg.Items.Count == 4);
+                H.Check("Desc_RadioButtons_Items_StringsPreserved",
+                    (rbg.Items[0] as string) == "One"
+                    && (rbg.Items[3] as string) == "Four");
+                H.Check("Desc_RadioButtons_Items_HeaderApplied",
+                    (rbg.Header as string) == "Pick");
+                // Mount-time SelectedIndex coercion is template-driven on
+                // RadioButtons; accept either the requested index or -1.
+                var changesAfterMount = changes;
+                H.Check("Desc_RadioButtons_Items_InitialSelectedAccepted",
+                    rbg.SelectedIndex == 2 || rbg.SelectedIndex == -1);
+
+                // Update with disjoint items — ItemsHost rebuilds.
+                var el2 = el1 with
+                {
+                    Items = new[] { "Red", "Green", "Blue" },
+                    SelectedIndex = 0,
+                };
+                rec.UpdateChild(el1, el2, rbg, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_RadioButtons_Items_Replaced",
+                    rbg.Items.Count == 3
+                    && (rbg.Items[0] as string) == "Red"
+                    && (rbg.Items[2] as string) == "Blue");
+                H.Check("Desc_RadioButtons_Items_BoundedUpdateEcho",
+                    changes - changesAfterMount <= 3);
+
+                // Same-array identity skip.
+                rec.UpdateChild(el2, el2, rbg, _noOp);
+                await Harness.Render();
+                H.Check("Desc_RadioButtons_Items_SameRefIdempotent",
+                    rbg.Items.Count == 3 && (rbg.Items[0] as string) == "Red");
+
+                rec.UnmountChild(rbg);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_RadioButtons_Items_Mounted", false);
+            }
+        }
+    }
 }

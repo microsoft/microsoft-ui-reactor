@@ -25,23 +25,16 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   conditional per the legacy guards.</item>
 /// </list></para>
 ///
-/// <para><b>Known gaps vs. hand-coded handler — Items collection
-/// escape-hatched:</b> the descriptor does NOT touch <c>cb.Items</c>.
-/// ComboBox's items collection requires the legacy arm's full
-/// mode-switch logic (string[] vs Element[] keyed reconciliation
-/// against <c>requestRerender</c>) — none of which the descriptor
-/// builders can yet express. Authors who need ComboBox items must
-/// either:
-/// <list type="bullet">
-///   <item>Run under V1 OFF (legacy arm handles Items + SelectedIndex
-///   together).</item>
-///   <item>Populate <c>cb.Items</c> via a <c>.Set</c> setter chain (the
-///   setter runs after the descriptor's prop writes and can append items
-///   directly — this trades reconciliation for an imperative escape).</item>
-/// </list>
-/// The fixture exercises SelectedIndex / Header / DropDownOpened/Closed
-/// only — items are pre-populated via the setter chain to prove the
-/// descriptor's SelectedIndex write coordinates with a populated list.</para>
+/// <para><b>Items handling (Phase 3-final batch G1):</b> declared via the
+/// <see cref="ItemsHost{TElement,TControl}"/> child strategy. The engine
+/// populates <c>cb.Items</c> BEFORE the prop loop so <c>SelectedIndex</c>'s
+/// initial write lands against a populated collection. Both string items
+/// (<see cref="ComboBoxElement.Items"/>) and <see cref="Element"/> items
+/// (<see cref="ComboBoxElement.ItemElements"/>) are supported — when
+/// <c>ItemElements</c> is non-null it takes precedence and the engine routes
+/// each child through the reconciler so descendant component state survives
+/// re-renders. Reconciliation is positional (clear + add on structural
+/// delta); keyed reconciliation for templated lists lands in batch G2.</para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 internal static class ComboBoxDescriptor
@@ -63,7 +56,18 @@ internal static class ComboBoxDescriptor
     public static readonly ControlDescriptor<ComboBoxElement, WinUI.ComboBox> Descriptor =
         new ControlDescriptor<ComboBoxElement, WinUI.ComboBox>
         {
-            Children = new None<ComboBoxElement, WinUI.ComboBox>(),
+            // §14 Phase 3-final batch G1: items declared as a child strategy.
+            // Engine dispatches BEFORE the prop loop so the initial
+            // SelectedIndex write lands against a populated collection.
+            // ItemElements takes precedence when non-null (typed Element
+            // items → engine routes through Reconciler.MountChild); otherwise
+            // the string[] items are used. Both casts are valid via array
+            // reference covariance (reference element types).
+            Children = new ItemsHost<ComboBoxElement, WinUI.ComboBox>(
+                GetItems: static e => e.ItemElements is not null
+                    ? (global::System.Collections.Generic.IReadOnlyList<object>)e.ItemElements
+                    : (global::System.Collections.Generic.IReadOnlyList<object>)e.Items,
+                GetCollection: static c => c.Items),
             GetSetters = static e => e.Setters,
         }
         .HandCodedControlled<ComboBoxEventPayload, int, WinUI.SelectionChangedEventHandler>(

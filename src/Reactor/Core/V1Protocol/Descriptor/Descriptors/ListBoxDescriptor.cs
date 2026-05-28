@@ -5,15 +5,17 @@ using WinUI = Microsoft.UI.Xaml.Controls;
 namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 
 /// <summary>
-/// Spec 047 §14 Phase 3 (batch 11) — descriptor variant of the hand-coded
-/// <c>MountListBox</c> / <c>UpdateListBox</c> arms in
-/// <see cref="Reconciler"/>.
+/// Spec 047 §14 Phase 3 (batch 11; revised in Phase 3-final batch G1) —
+/// descriptor variant of the hand-coded <c>MountListBox</c> /
+/// <c>UpdateListBox</c> arms in <see cref="Reconciler"/>.
 ///
 /// <para><b>Coverage:</b>
 /// <list type="bullet">
-///   <item><c>Items</c> — one-way Clear + Add cycle gated on a sequence
-///   compare (mirrors the legacy <c>StringArrayEquals</c> guard). Same
-///   non-keyed shape as <see cref="RadioButtonsDescriptor"/>.</item>
+///   <item><c>Items</c> — declared via the
+///   <see cref="ItemsHost{TElement,TControl}"/> child strategy. The engine
+///   populates the items collection BEFORE the prop loop runs (see
+///   <see cref="DescriptorHandler{TElement,TControl}"/>), so
+///   <c>SelectedIndex</c>'s initial write lands against a populated list.</item>
 ///   <item><c>SelectedIndex</c> — <see cref="ControlDescriptor{TElement,TControl}.HandCodedControlled{TPayload,TValue,TDelegate}"/>
 ///   with a typed <c>SelectionChanged</c> trampoline. The trampoline fires
 ///   BOTH <c>OnSelectedIndexChanged</c> and the multi-select snapshot
@@ -22,7 +24,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// </list></para>
 ///
 /// <para><b>Known gaps vs. hand-coded handler:</b> Items reconciliation is
-/// non-keyed (full rebuild on any sequence delta). Acceptable for short
+/// non-keyed (full rebuild on any structural delta). Acceptable for short
 /// ListBoxes (typical 3–15 options).</para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
@@ -51,19 +53,20 @@ internal static class ListBoxDescriptor
     public static readonly ControlDescriptor<ListBoxElement, WinUI.ListBox> Descriptor =
         new ControlDescriptor<ListBoxElement, WinUI.ListBox>
         {
-            Children = new None<ListBoxElement, WinUI.ListBox>(),
+            // §14 Phase 3-final batch G1: items declared as a child strategy.
+            // The engine dispatches ItemsHost BEFORE the prop loop, so
+            // SelectedIndex's initial write lands against the populated
+            // collection (WinUI clamps SelectedIndex against an empty
+            // Items collection).
+            //
+            // string[] -> IReadOnlyList<object> is valid via array reference
+            // covariance (reference element types only) — zero-alloc and the
+            // cast never throws at runtime for empty or non-empty arrays.
+            Children = new ItemsHost<ListBoxElement, WinUI.ListBox>(
+                GetItems:      static e => (global::System.Collections.Generic.IReadOnlyList<object>)e.Items,
+                GetCollection: static c => c.Items),
             GetSetters = static e => e.Setters,
         }
-        // Items BEFORE SelectedIndex so SelectedIndex lands against the
-        // populated collection.
-        .OneWay<string[]>(
-            get: static e => e.Items,
-            set: static (c, items) =>
-            {
-                if (ListBoxItemsEqual(c.Items, items)) return;
-                c.Items.Clear();
-                foreach (var item in items) c.Items.Add(item);
-            })
         .HandCodedControlled<ListBoxEventPayload, int, WinUI.SelectionChangedEventHandler>(
             get:         static e => e.SelectedIndex,
             set:         static (c, v) => c.SelectedIndex = v,
@@ -81,17 +84,4 @@ internal static class ListBoxDescriptor
             trampoline:  SelectionChangedTrampoline,
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
             setSlot:     static (p, h) => p.SelectionChangedTrampoline = h);
-
-    private static bool ListBoxItemsEqual(
-        global::Microsoft.UI.Xaml.Controls.ItemCollection existing, string[] incoming)
-    {
-        if (existing.Count != incoming.Length) return false;
-        for (int i = 0; i < incoming.Length; i++)
-        {
-            if (!ReferenceEquals(existing[i], incoming[i])
-                && existing[i] as string != incoming[i])
-                return false;
-        }
-        return true;
-    }
 }
