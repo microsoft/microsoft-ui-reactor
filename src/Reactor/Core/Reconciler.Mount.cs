@@ -137,6 +137,7 @@ public sealed partial class Reconciler
             MenuFlyoutElement mfEl => MountMenuFlyout(mfEl, requestRerender),
             TemplatedListElementBase tl => MountTemplatedList(tl, requestRerender),
             LazyStackElementBase lazy => MountLazyStack(lazy, requestRerender),
+            ItemsRepeaterElementBase ir => MountItemsRepeater(ir, requestRerender),
             ItemsViewElementBase iv => MountItemsView(iv, requestRerender),
             ItemContainerElement ic => MountItemContainer(ic, requestRerender),
             RectangleElement rect => MountRectangle(rect),
@@ -3139,6 +3140,41 @@ public sealed partial class Reconciler
         wrapper.Child = childControl;
         node.RenderedElement = childElement;
         return wrapper;
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 3 finish — Port (7). Legacy mount arm for
+    /// <see cref="ItemsRepeaterElement{T}"/> / <see cref="ItemsRepeaterElementBase"/>.
+    /// Mirrors <see cref="MountLazyStack"/> but without the
+    /// <see cref="WinUI.ScrollViewer"/> wrap and without imposing a
+    /// StackLayout — the element supplies its own <see cref="WinUI.Layout"/>
+    /// (or null, meaning "leave on the WinUI default").
+    /// </summary>
+    private WinUI.ItemsRepeater MountItemsRepeater(ItemsRepeaterElementBase ir, Action requestRerender)
+    {
+        var repeater = new WinUI.ItemsRepeater();
+        if (ir.Layout is not null) repeater.Layout = ir.Layout;
+
+        var listState = BuildListStateForItemsRepeater(ir);
+        SetListState(repeater, listState);
+        repeater.ItemsSource = listState.Source;
+        var factory = ir.CreateFactory(this, requestRerender, _pool);
+        ir.AttachListStateToFactory(factory, listState);
+        repeater.ItemTemplate = factory;
+        SetElementTag(repeater, ir);
+        ApplySetters(ir.RepeaterSetters, repeater);
+        return repeater;
+    }
+
+    private static Internal.ReactorListState BuildListStateForItemsRepeater(ItemsRepeaterElementBase ir)
+    {
+        var state = new Internal.ReactorListState();
+        int n = ir.ItemCount;
+        var seeded = new (int Index, string Key)[n];
+        for (int i = 0; i < n; i++)
+            seeded[i] = (i, ((Internal.IKeyedItemSource)ir).GetKeyAt(i) ?? $"__null_{i}");
+        state.Reset(seeded);
+        return state;
     }
 
     private UIElement MountLazyStack(LazyStackElementBase lazy, Action requestRerender)

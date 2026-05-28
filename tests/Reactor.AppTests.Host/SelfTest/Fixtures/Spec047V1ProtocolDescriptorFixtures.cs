@@ -4907,6 +4907,98 @@ internal static class Spec047V1ProtocolDescriptorFixtures
     }
 
     // ────────────────────────────────────────────────────────────────────
+    //  §14 Phase 3 finish — Port (7) ItemsRepeater<T> via Engine (1).
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescItemsRepeaterMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandlerForDerivedTypes<ItemsRepeaterElementBase, WinUI.ItemsRepeater>(
+                new DescriptorHandler<ItemsRepeaterElementBase, WinUI.ItemsRepeater>(
+                    ItemsRepeaterDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var customLayout = new WinUI.UniformGridLayout
+            {
+                MinRowSpacing = 4,
+                MinColumnSpacing = 4,
+            };
+            var el1 = new ItemsRepeaterElement<string>(
+                Items: new[] { "alpha", "beta", "gamma" },
+                KeySelector: static s => s,
+                ViewBuilder: static (s, _) => new TextBlockElement(s))
+            {
+                Layout = customLayout,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ItemsRepeater ir)
+            {
+                parent.Children.Add(ir);
+                await Harness.Render();
+                H.Check("Desc_ItemsRepeater_Mounted", true);
+                // Verify by layout shape rather than reference identity —
+                // WinRT projection can rewrap Layout across the ABI.
+                H.Check("Desc_ItemsRepeater_LayoutIsUniformGrid",
+                    ir.Layout is WinUI.UniformGridLayout ug && ug.MinRowSpacing == 4);
+
+                var listState = Reconciler.GetListState(ir);
+                H.Check("Desc_ItemsRepeater_ListStateAttached", listState is not null);
+                H.Check("Desc_ItemsRepeater_ItemsSourceBound",
+                    listState is not null && ReferenceEquals(ir.ItemsSource, listState.Source));
+                H.Check("Desc_ItemsRepeater_ItemCount3",
+                    listState is not null && listState.Source.Count == 3);
+                H.Check("Desc_ItemsRepeater_KeysOk",
+                    listState is not null
+                        && listState.Source[0].Key == "alpha"
+                        && listState.Source[1].Key == "beta"
+                        && listState.Source[2].Key == "gamma");
+                H.Check("Desc_ItemsRepeater_FactoryAttached", ir.ItemTemplate is not null);
+
+                // Keyed insert in middle, plus a new Layout instance to
+                // verify the engine swaps Layout by reference identity.
+                var newLayout = new WinUI.StackLayout { Spacing = 4 };
+                var el2 = el1 with
+                {
+                    Items = new[] { "alpha", "delta", "beta", "gamma" },
+                    Layout = newLayout,
+                };
+                rec.UpdateChild(el1, el2, ir, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_ItemsRepeater_LayoutSwapped",
+                    ir.Layout is WinUI.StackLayout sl && sl.Spacing == 4);
+                listState = Reconciler.GetListState(ir);
+                H.Check("Desc_ItemsRepeater_DiffApplied_Count4",
+                    listState is not null && listState.Source.Count == 4);
+                H.Check("Desc_ItemsRepeater_DiffApplied_KeysOk",
+                    listState is not null
+                        && listState.Source[0].Key == "alpha"
+                        && listState.Source[1].Key == "delta"
+                        && listState.Source[2].Key == "beta"
+                        && listState.Source[3].Key == "gamma");
+
+                // Same-ref idempotent update.
+                rec.UpdateChild(el2, el2, ir, _noOp);
+                await Harness.Render();
+                listState = Reconciler.GetListState(ir);
+                H.Check("Desc_ItemsRepeater_SameRefIdempotent",
+                    listState is not null && listState.Source.Count == 4);
+
+                rec.UnmountChild(ir);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ItemsRepeater_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     //  §14 Phase 3 finish — Port (8) TreeView via TreeChildren strategy.
     // ────────────────────────────────────────────────────────────────────
 

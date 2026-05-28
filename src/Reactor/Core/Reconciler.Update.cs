@@ -246,6 +246,8 @@ public sealed partial class Reconciler
                 => UpdateTemplatedFlipView(o, n, fv, requestRerender),
             (LazyStackElementBase, LazyStackElementBase n, WinUI.ScrollViewer sv)
                 => UpdateLazyStack(n, sv, requestRerender),
+            (ItemsRepeaterElementBase, ItemsRepeaterElementBase n, WinUI.ItemsRepeater rep)
+                => UpdateItemsRepeater(n, rep, requestRerender),
             (ItemsViewElementBase, ItemsViewElementBase n, WinUI.ItemsView iv)
                 => UpdateItemsView(n, iv, requestRerender),
             (ItemContainerElement o, ItemContainerElement n, WinUI.ItemContainer ic)
@@ -3071,6 +3073,89 @@ public sealed partial class Reconciler
         SetElementTag(fv, n);
         n.ApplyControlSetters(fv);
         return null;
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 3 finish — Port (7). Legacy update arm for
+    /// <see cref="ItemsRepeaterElementBase"/>. Same TryUpdateFactory + keyed
+    /// diff + RefreshRealizedItems pipeline as
+    /// <see cref="UpdateLazyStack"/>, but operates directly on the
+    /// bare <see cref="WinUI.ItemsRepeater"/> (no ScrollViewer host).
+    /// </summary>
+    private UIElement? UpdateItemsRepeater(ItemsRepeaterElementBase n, WinUI.ItemsRepeater repeater, Action requestRerender)
+    {
+        if (n.Layout is not null && !ReferenceEquals(repeater.Layout, n.Layout))
+            repeater.Layout = n.Layout;
+
+        if (repeater.ItemTemplate is IElementFactory existingFactory && n.TryUpdateFactory(existingFactory))
+        {
+            ApplyItemsRepeaterKeyedDiffOrFallback(repeater, n, existingFactory);
+            n.RefreshRealizedItems(existingFactory, repeater);
+        }
+        else
+        {
+            var fresh = BuildListStateFromItemsRepeater(n);
+            SetListState(repeater, fresh);
+            repeater.ItemsSource = fresh.Source;
+            var factory = n.CreateFactory(this, requestRerender, _pool);
+            n.AttachListStateToFactory(factory, fresh);
+            repeater.ItemTemplate = factory;
+        }
+        SetElementTag(repeater, n);
+        ApplySetters(n.RepeaterSetters, repeater);
+        return null;
+    }
+
+    private void ApplyItemsRepeaterKeyedDiffOrFallback(WinUI.ItemsRepeater repeater, ItemsRepeaterElementBase n, IElementFactory factory)
+    {
+        var state = GetListState(repeater);
+        if (state is null || !ReferenceEquals(repeater.ItemsSource, state.Source))
+        {
+            var fresh = BuildListStateFromItemsRepeater(n);
+            SetListState(repeater, fresh);
+            repeater.ItemsSource = fresh.Source;
+            n.AttachListStateToFactory(factory, fresh);
+            return;
+        }
+
+        var ambient = AnimationAmbient.Current;
+        var keyAdapter = new ItemsRepeaterKeyAdapter(n);
+        var stats = KeyedListDiff.Apply(
+            state,
+            keyAdapter,
+            static (k, _) => k.Key,
+            _logger,
+            repeater.GetType().Name,
+            ambient,
+            controlInstance: repeater);
+
+        if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
+            ApplyMoveAnimationsRepeater(repeater, movedRows, ambient.Kind);
+    }
+
+    private readonly struct ItemsRepeaterKeyAdapter : IReadOnlyList<ItemsRepeaterKeyAdapter.KeyOnly>
+    {
+        private readonly ItemsRepeaterElementBase _el;
+        public ItemsRepeaterKeyAdapter(ItemsRepeaterElementBase el) => _el = el;
+        public KeyOnly this[int index] => new(((Internal.IKeyedItemSource)_el).GetKeyAt(index) ?? $"__null_{index}");
+        public int Count => _el.ItemCount;
+        public IEnumerator<KeyOnly> GetEnumerator()
+        {
+            for (int i = 0; i < _el.ItemCount; i++) yield return this[i];
+        }
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        public readonly record struct KeyOnly(string Key);
+    }
+
+    private static Internal.ReactorListState BuildListStateFromItemsRepeater(ItemsRepeaterElementBase ir)
+    {
+        var state = new Internal.ReactorListState();
+        int n = ir.ItemCount;
+        var seeded = new (int Index, string Key)[n];
+        for (int i = 0; i < n; i++)
+            seeded[i] = (i, ((Internal.IKeyedItemSource)ir).GetKeyAt(i) ?? $"__null_{i}");
+        state.Reset(seeded);
+        return state;
     }
 
     private UIElement? UpdateLazyStack(LazyStackElementBase n, WinUI.ScrollViewer sv, Action requestRerender)

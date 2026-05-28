@@ -3358,6 +3358,112 @@ public record LazyHStackElement<T>(
 }
 
 // ════════════════════════════════════════════════════════════════════════
+//  ItemsRepeater<T>  (spec 047 §14 Phase 3 finish — Port (7))
+// ════════════════════════════════════════════════════════════════════════
+
+/// <summary>
+/// Spec 047 §14 Phase 3 finish — Port (7). Non-generic intermediate base
+/// for <see cref="ItemsRepeaterElement{T}"/>. Same role as
+/// <see cref="LazyStackElementBase"/>: lets the reconciler match on a
+/// single type AND lets the descriptor's
+/// <see cref="Reconciler.RegisterHandlerForDerivedTypes"/> registration
+/// catch every closed-T variant. Implements
+/// <see cref="Internal.IKeyedItemSource"/> +
+/// <see cref="IItemsRepeaterFactorySource"/> for the Engine (1)
+/// ItemsRepeater arm in <see cref="Reconciler.BindErasedKeyedItemsSource"/>.
+///
+/// <para><b>Distinct from <see cref="LazyStackElementBase"/>:</b> no
+/// hard-coded <see cref="WinUI.StackLayout"/>. The element exposes a
+/// nullable <see cref="Layout"/> property — the descriptor / legacy mount
+/// arm assigns it directly when non-null, otherwise leaves the
+/// ItemsRepeater on its default (Stack vertical). No
+/// <see cref="WinUI.ScrollViewer"/> wrapping either — the rendered
+/// <see cref="UIElement"/> is the bare <see cref="WinUI.ItemsRepeater"/>.
+/// Authors who need scrolling host the element inside their own
+/// <c>ScrollViewer</c> / <c>ScrollView</c> / <c>RefreshContainer</c>.</para>
+/// </summary>
+public abstract record ItemsRepeaterElementBase : Element, Internal.IKeyedItemSource, IItemsRepeaterFactorySource
+{
+    /// <summary>Total number of items in the source list.</summary>
+    public abstract int ItemCount { get; }
+    /// <summary>Per-index Element factory — same shape as
+    /// <see cref="LazyStackElementBase.BuildItemView"/>.</summary>
+    public abstract Element BuildItemView(int index);
+    /// <summary>Stable identity projection for spec 042's keyed-list diff.</summary>
+    internal abstract string GetKeyAt(int index);
+
+    string Internal.IKeyedItemSource.GetKeyAt(int index) => GetKeyAt(index);
+
+    /// <summary>Optional WinUI <see cref="WinUI.Layout"/>. Null = leave
+    /// the ItemsRepeater on its default layout (which itself defaults to
+    /// vertical <see cref="WinUI.StackLayout"/>). Authors typically pass
+    /// a <c>UniformGridLayout</c> or <c>LinedFlowLayout</c> instance
+    /// configured up-front; the engine reuses it across renders by
+    /// reference identity (no per-update Layout allocation).</summary>
+    public WinUI.Layout? Layout { get; init; }
+
+    internal Action<WinUI.ItemsRepeater>[] RepeaterSetters { get; init; } = [];
+
+    public abstract IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool);
+    public abstract bool TryUpdateFactory(IElementFactory existingFactory);
+    internal abstract void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState);
+    public abstract void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater);
+
+    void IItemsRepeaterFactorySource.AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState)
+        => AttachListStateToFactory(factory, listState);
+
+    /// <summary>Assign the author-supplied <see cref="Layout"/> when
+    /// non-null and not already in place; otherwise leave the
+    /// ItemsRepeater on whatever default layout it constructed
+    /// itself with (vertical StackLayout). Reference-equality reuse —
+    /// passing the same Layout instance every render is a no-op.</summary>
+    void IItemsRepeaterFactorySource.ConfigureLayout(WinUI.ItemsRepeater repeater)
+    {
+        if (Layout is null) return;
+        if (!ReferenceEquals(repeater.Layout, Layout))
+            repeater.Layout = Layout;
+    }
+}
+
+/// <summary>
+/// Spec 047 §14 Phase 3 finish — Port (7). Typed peer of
+/// <see cref="ItemsRepeaterElementBase"/>. The lambdas mirror the
+/// <see cref="LazyVStackElement{T}"/> / <see cref="LazyHStackElement{T}"/>
+/// shape (Items + KeySelector + ViewBuilder) so authors moving from
+/// Lazy*Stack to a custom-layout ItemsRepeater find the surface
+/// identical.
+/// </summary>
+public record ItemsRepeaterElement<T>(
+    IReadOnlyList<T> Items,
+    Func<T, string> KeySelector,
+    Func<T, int, Element> ViewBuilder
+) : ItemsRepeaterElementBase
+{
+    public override int ItemCount => Items.Count;
+    public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
+    internal override string GetKeyAt(int index) => KeySelector(Items[index]);
+
+    public override IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool) =>
+        new ElementFactory<T>(Items, ViewBuilder, reconciler, requestRerender, pool);
+
+    public override bool TryUpdateFactory(IElementFactory existingFactory)
+    {
+        if (existingFactory is ElementFactory<T> f) { f.UpdateInPlace(Items, ViewBuilder); return true; }
+        return false;
+    }
+
+    public override void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater)
+    {
+        if (factory is ElementFactory<T> f) f.RefreshRealizedItems(repeater);
+    }
+
+    internal override void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState)
+    {
+        if (factory is ElementFactory<T> f) f.AttachListState(listState);
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
 //  Shape elements
 // ════════════════════════════════════════════════════════════════════════
 

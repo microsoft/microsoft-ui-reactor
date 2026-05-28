@@ -1056,6 +1056,32 @@ public static partial class Factories
         Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
         new(items, static t => t.Key, viewBuilder);
 
+    /// <summary>
+    /// Creates a virtualized <see cref="ItemsRepeaterElement{T}"/> — a bare
+    /// <c>WinUI.ItemsRepeater</c> driven through the spec-042 keyed
+    /// realization pipeline (same machinery LazyVStack/LazyHStack use, but
+    /// without the implicit <c>ScrollViewer</c> wrap and with no hard-coded
+    /// <c>StackLayout</c>). Author supplies a <see cref="Microsoft.UI.Xaml.Controls.Layout"/>
+    /// instance via the <c>Layout</c> init-property (typically
+    /// <c>UniformGridLayout</c> or <c>LinedFlowLayout</c>); host the result
+    /// in a <c>ScrollViewer</c> / <c>ScrollView</c> / <c>RefreshContainer</c>
+    /// for scrolling. Spec 047 §14 Phase 3 finish — Port (7).
+    /// </summary>
+    public static ItemsRepeaterElement<T> ItemsRepeater<T>(
+        IReadOnlyList<T> items,
+        Func<T, string> keySelector,
+        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+
+    /// <summary>
+    /// <see cref="IReactorKeyed"/>-typed overload of
+    /// <see cref="ItemsRepeater{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>;
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c>.
+    /// </summary>
+    public static ItemsRepeaterElement<T> ItemsRepeater<T>(
+        IReadOnlyList<T> items,
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
+        new(items, static t => t.Key, viewBuilder);
+
     // ── Shapes ───────────────────────────────────────────────────────
 
     public static RectangleElement Rectangle() => new();

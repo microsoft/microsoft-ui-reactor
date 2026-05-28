@@ -1211,6 +1211,7 @@ internal static class SelfTestFixtureRegistry
         // Spec 047 §14 Phase 3 finish — Port (6) Lazy*Stack G2.
         "Desc_LazyVStack_MountUpdate",
         "Desc_LazyHStack_MountUpdate",
+        "Desc_ItemsRepeater_MountUpdate",
         "Desc_TreeView_MountUpdate",
         "Desc_FlipView_MountUpdate",
         "Desc_TabView_MountUpdate",
@@ -2417,6 +2418,9 @@ internal static class SelfTestFixtureRegistry
         // Spec 047 §14 Phase 3 finish — Port (6) Lazy*Stack G2.
         "Desc_LazyVStack_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescLazyVStackMountUpdate(harness),
         "Desc_LazyHStack_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescLazyHStackMountUpdate(harness),
+
+        // Spec 047 §14 Phase 3 finish — Port (7) ItemsRepeater<T>.
+        "Desc_ItemsRepeater_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescItemsRepeaterMountUpdate(harness),
 
         // Spec 047 §14 Phase 3 finish — Ports (8)+(9)+(10)+(11) G3 controls.
         "Desc_TreeView_MountUpdate"  => new Spec047V1ProtocolDescriptorFixtures.DescTreeViewMountUpdate(harness),
