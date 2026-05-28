@@ -5887,6 +5887,46 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    internal class DescSemanticZoomMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<SemanticZoomElement, WinUI.SemanticZoom>(
+                new DescriptorHandler<SemanticZoomElement, WinUI.SemanticZoom>(
+                    SemanticZoomDescriptor.Descriptor));
+            rec.RegisterHandler<ListViewElement, WinUI.ListView>(
+                new DescriptorHandler<ListViewElement, WinUI.ListView>(ListViewDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = SemanticZoom(new ListViewElement(["in-a"]), new ListViewElement(["out-a"]));
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.SemanticZoom sz)
+            {
+                parent.Children.Add(sz);
+                await Harness.Render();
+
+                H.Check("Desc_SemanticZoom_Mounted", true);
+                H.Check("Desc_SemanticZoom_InViewMounted", sz.ZoomedInView is WinUI.ListView inList && inList.Items.Count == 1);
+                H.Check("Desc_SemanticZoom_OutViewMounted", sz.ZoomedOutView is WinUI.ListView outList && outList.Items.Count == 1);
+
+                var el2 = SemanticZoom(new ListViewElement(["in-b", "in-c"]), new ListViewElement(["out-b"]));
+                rec.UpdateChild(el1, el2, sz, _noOp);
+                await Harness.Render();
+                H.Check("Desc_SemanticZoom_InViewUpdated", sz.ZoomedInView is WinUI.ListView inList2 && inList2.Items.Count == 2);
+
+                rec.UnmountChild(sz);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_SemanticZoom_Mounted", false);
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  §14 Phase 3 finish — Port (11) Pivot via TabItemsHost (PivotItem container).
     // ────────────────────────────────────────────────────────────────────
