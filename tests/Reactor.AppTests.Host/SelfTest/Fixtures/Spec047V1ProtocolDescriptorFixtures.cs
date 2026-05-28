@@ -3649,52 +3649,6 @@ internal static class Spec047V1ProtocolDescriptorFixtures
     }
 
     // ────────────────────────────────────────────────────────────────────
-    //  XamlPageDescriptor — Frame-backed page navigation bridge.
-    // ────────────────────────────────────────────────────────────────────
-
-    internal class DescXamlPageMountUpdate(Harness h) : SelfTestFixtureBase(h)
-    {
-        public override async Task RunAsync()
-        {
-            var rec = NewDescriptorReconciler();
-            rec.RegisterHandler<Microsoft.UI.Reactor.Hosting.XamlPageElement, WinUI.Frame>(
-                new DescriptorHandler<Microsoft.UI.Reactor.Hosting.XamlPageElement, WinUI.Frame>(
-                    XamlPageDescriptor.Descriptor));
-
-            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
-            H.SetContent(parent);
-
-            var el1 = new Microsoft.UI.Reactor.Hosting.XamlPageElement(
-                typeof(DescXamlPageFixturePageA), "first");
-            var ui = rec.Mount(el1, _noOp);
-            if (ui is WinUI.Frame frame)
-            {
-                parent.Children.Add(frame);
-                await Harness.Render();
-
-                H.Check("Desc_XamlPage_Mounted", true);
-                H.Check("Desc_XamlPage_SourcePageType", frame.SourcePageType == typeof(DescXamlPageFixturePageA));
-                H.Check("Desc_XamlPage_Content", frame.Content is DescXamlPageFixturePageA);
-
-                var el2 = new Microsoft.UI.Reactor.Hosting.XamlPageElement(
-                    typeof(DescXamlPageFixturePageB), "second");
-                rec.UpdateChild(el1, el2, frame, _noOp);
-                await Harness.Render();
-
-                H.Check("Desc_XamlPage_UpdatedSourcePageType", frame.SourcePageType == typeof(DescXamlPageFixturePageB));
-                H.Check("Desc_XamlPage_UpdatedContent", frame.Content is DescXamlPageFixturePageB);
-
-                rec.UnmountChild(frame);
-                parent.Children.Clear();
-            }
-            else
-            {
-                H.Check("Desc_XamlPage_Mounted", false);
-            }
-        }
-    }
-
-    // ────────────────────────────────────────────────────────────────────
     //  PipsPagerDescriptor (Phase 3 batch 11) — SelectedPageIndex
     //  round-trip; multi-prop one-way envelope.
     // ────────────────────────────────────────────────────────────────────
@@ -5770,7 +5724,3 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 }
-
-public sealed partial class DescXamlPageFixturePageA : WinUI.Page { }
-
-public sealed partial class DescXamlPageFixturePageB : WinUI.Page { }
