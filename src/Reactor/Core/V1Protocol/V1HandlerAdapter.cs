@@ -81,7 +81,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         // + per-control realization channel).
         if (strategy is IItemsBinderStrategy binder && control is FrameworkElement feBinder)
         {
-            binder.Bind(feBinder, element, ctx.Reconciler, ctx.RequestRerender, isMount: true);
+            binder.Bind(feBinder, oldElement: null, element, ctx.Reconciler, ctx.RequestRerender, isMount: true);
             return;
         }
         switch (strategy)
@@ -182,7 +182,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         // isMount: false so the bind runs the keyed-diff branch.
         if (strategy is IItemsBinderStrategy binder && control is FrameworkElement feBinder)
         {
-            binder.Bind(feBinder, newEl, reconciler, requestRerender, isMount: false);
+            binder.Bind(feBinder, oldEl, newEl, reconciler, requestRerender, isMount: false);
             return;
         }
         switch (strategy)

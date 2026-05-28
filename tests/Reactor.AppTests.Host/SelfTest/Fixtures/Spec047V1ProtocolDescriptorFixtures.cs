@@ -5117,6 +5117,160 @@ internal static class Spec047V1ProtocolDescriptorFixtures
     }
 
     // ────────────────────────────────────────────────────────────────────
+    //  §14 Phase 3 completion — TemplatedFlipView via PreMountedItems.
+    //  Engine-gap closer: the typed `TemplatedFlipViewElement<T>` peer
+    //  was previously legacy because FlipView has no
+    //  ContainerContentChanging. The new PreMountedItems<> strategy
+    //  pre-mounts items up-front via IItemViewSource and positionally
+    //  reconciles on Update through ReconcileV1Child.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescTemplatedFlipViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandlerForDerivedTypes<TemplatedFlipViewElementBase, WinUI.FlipView>(
+                new DescriptorHandler<TemplatedFlipViewElementBase, WinUI.FlipView>(
+                    TemplatedFlipViewDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int selectedFires = 0;
+            int lastSelected = -1;
+            var el1 = new TemplatedFlipViewElement<string>(
+                Items: new[] { "page-a", "page-b", "page-c" },
+                KeySelector: static s => s,
+                ViewBuilder: static (s, _) => new TextBlockElement(s))
+            {
+                SelectedIndex = 1,
+                OnSelectedIndexChanged = i => { selectedFires++; lastSelected = i; },
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.FlipView fv)
+            {
+                parent.Children.Add(fv);
+                await Harness.Render();
+
+                H.Check("Desc_TemplatedFlipView_Mounted", true);
+                H.Check("Desc_TemplatedFlipView_ItemsCount3", fv.Items.Count == 3);
+                H.Check("Desc_TemplatedFlipView_PreMounted_AllUIElements",
+                    fv.Items[0] is UIElement && fv.Items[1] is UIElement && fv.Items[2] is UIElement);
+                H.Check("Desc_TemplatedFlipView_InitialSelectedIndex1", fv.SelectedIndex == 1);
+                // Initial mount must not echo back through OnSelectedIndexChanged.
+                H.Check("Desc_TemplatedFlipView_MountDidNotFire", selectedFires == 0);
+
+                // ── Update SelectedIndex; programmatic write must be echo-suppressed.
+                var el2 = el1 with { SelectedIndex = 2 };
+                rec.UpdateChild(el1, el2, fv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TemplatedFlipView_SelectedIndexUpdated", fv.SelectedIndex == 2);
+                H.Check("Desc_TemplatedFlipView_NoEchoOnProgrammaticWrite", selectedFires == 0);
+
+                // ── Grow: append one item (positional shared loop + append tail).
+                var el3 = el2 with
+                {
+                    Items = new[] { "page-a", "page-b", "page-c", "page-d" },
+                };
+                rec.UpdateChild(el2, el3, fv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TemplatedFlipView_GrewToCount4", fv.Items.Count == 4);
+                H.Check("Desc_TemplatedFlipView_GrowAppendedSlot",
+                    fv.Items[3] is UIElement);
+
+                // ── Shrink: drop the last two (truncate-from-tail path).
+                var el4 = el3 with
+                {
+                    Items = new[] { "page-a", "page-b" },
+                    SelectedIndex = 0,
+                };
+                rec.UpdateChild(el3, el4, fv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TemplatedFlipView_ShrankToCount2", fv.Items.Count == 2);
+                H.Check("Desc_TemplatedFlipView_ShrinkClampedSelectedIndex", fv.SelectedIndex == 0);
+
+                // ── Same-ref Update: positional reconcile must be idempotent.
+                rec.UpdateChild(el4, el4, fv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TemplatedFlipView_SameRefIdempotent_Count2", fv.Items.Count == 2);
+
+                // ── Edit-in-place: same key, same length — CanUpdate path through
+                // ReconcileV1Child reuses each slot's UIElement.
+                var snapshotBeforeEdit = fv.Items[0];
+                var el5 = el4 with
+                {
+                    Items = new[] { "page-edited", "page-b" },
+                };
+                rec.UpdateChild(el4, el5, fv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TemplatedFlipView_EditReusedSlot",
+                    ReferenceEquals(fv.Items[0], snapshotBeforeEdit));
+
+                rec.UnmountChild(fv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_TemplatedFlipView_Mounted", false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// §14 Phase 3 completion — TemplatedFlipView descriptor with NO
+    /// OnSelectedIndexChanged callback: the `HasCallbacks`-gated
+    /// HandCodedControlled.callback probe must return null, so the
+    /// engine never subscribes the trampoline. Programmatic SelectedIndex
+    /// writes still must not fire because no callback exists, but the
+    /// trampoline-not-subscribed branch is the one we want to cover here.
+    /// </summary>
+    internal class DescTemplatedFlipViewNoCallbackDoesNotSubscribe(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandlerForDerivedTypes<TemplatedFlipViewElementBase, WinUI.FlipView>(
+                new DescriptorHandler<TemplatedFlipViewElementBase, WinUI.FlipView>(
+                    TemplatedFlipViewDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new TemplatedFlipViewElement<string>(
+                Items: new[] { "a", "b", "c" },
+                KeySelector: static s => s,
+                ViewBuilder: static (s, _) => new TextBlockElement(s))
+            {
+                SelectedIndex = 0,
+                // No OnSelectedIndexChanged — HasCallbacks => false.
+            };
+
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.FlipView fv)
+            {
+                parent.Children.Add(fv);
+                await Harness.Render();
+                H.Check("Desc_TemplatedFlipView_NoCallback_Mounted", true);
+                H.Check("Desc_TemplatedFlipView_NoCallback_ItemsCount3", fv.Items.Count == 3);
+                H.Check("Desc_TemplatedFlipView_NoCallback_InitialIndex0", fv.SelectedIndex == 0);
+
+                var el2 = el1 with { SelectedIndex = 2 };
+                rec.UpdateChild(el1, el2, fv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TemplatedFlipView_NoCallback_IndexUpdated", fv.SelectedIndex == 2);
+
+                rec.UnmountChild(fv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_TemplatedFlipView_NoCallback_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     //  §14 Phase 3 finish — Port (10) TabView via TabItemsHost.
     // ────────────────────────────────────────────────────────────────────
 

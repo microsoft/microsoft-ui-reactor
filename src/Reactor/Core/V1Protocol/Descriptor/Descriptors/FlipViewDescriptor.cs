@@ -8,9 +8,11 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <summary>
 /// Spec 047 §14 Phase 3 finish — Port (9). Descriptor variant of the
 /// hand-coded <c>MountFlipView</c> / <c>UpdateFlipView</c> arms for the
-/// simple <see cref="FlipViewElement"/> (the typed
-/// <c>TemplatedFlipViewElement&lt;T&gt;</c> stays carved as
-/// documented under §14 Phase 3 finish carry-forwards).
+/// simple <see cref="FlipViewElement"/>. The typed
+/// <c>TemplatedFlipViewElement&lt;T&gt;</c> peer is handled by
+/// <see cref="TemplatedFlipViewDescriptor"/> (Phase 3 completion's
+/// engine-gap closer, registered base-derived against
+/// <c>TemplatedFlipViewElementBase</c>).
 ///
 /// <para><b>Children:</b> reuses the existing
 /// <see cref="ItemsHost{TElement,TControl}"/> strategy — the engine

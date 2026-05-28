@@ -1214,6 +1214,8 @@ internal static class SelfTestFixtureRegistry
         "Desc_ItemsRepeater_MountUpdate",
         "Desc_TreeView_MountUpdate",
         "Desc_FlipView_MountUpdate",
+        "Desc_TemplatedFlipView_MountUpdate",
+        "Desc_TemplatedFlipView_NoCallback_DoesNotSubscribe",
         "Desc_TabView_MountUpdate",
         "Desc_Pivot_MountUpdate",
 
@@ -2425,6 +2427,8 @@ internal static class SelfTestFixtureRegistry
         // Spec 047 §14 Phase 3 finish — Ports (8)+(9)+(10)+(11) G3 controls.
         "Desc_TreeView_MountUpdate"  => new Spec047V1ProtocolDescriptorFixtures.DescTreeViewMountUpdate(harness),
         "Desc_FlipView_MountUpdate"  => new Spec047V1ProtocolDescriptorFixtures.DescFlipViewMountUpdate(harness),
+        "Desc_TemplatedFlipView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescTemplatedFlipViewMountUpdate(harness),
+        "Desc_TemplatedFlipView_NoCallback_DoesNotSubscribe" => new Spec047V1ProtocolDescriptorFixtures.DescTemplatedFlipViewNoCallbackDoesNotSubscribe(harness),
         "Desc_TabView_MountUpdate"   => new Spec047V1ProtocolDescriptorFixtures.DescTabViewMountUpdate(harness),
         "Desc_Pivot_MountUpdate"     => new Spec047V1ProtocolDescriptorFixtures.DescPivotMountUpdate(harness),
 

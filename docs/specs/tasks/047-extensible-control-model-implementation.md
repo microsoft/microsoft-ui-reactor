@@ -928,14 +928,11 @@ carve-outs:
 - [x] **G3 typed lists — `TreeView`, `FlipView`, `TabView`, `Pivot`** —
       closed by Phase 3 finish. **Note:** "FlipView" here is the
       simple non-templated `FlipViewElement` (Element[] items). The
-      typed `TemplatedFlipViewElement<T>` peer stays carved exactly
-      as documented at Phase 3 close-out — FlipView lacks
-      `ContainerContentChanging` so the realization pipeline used by
-      `TemplatedListView<T>` / `TemplatedGridView<T>` doesn't apply;
-      a `PreMountedItems` strategy would land it but no fixture
-      currently demands it. The intermediate marker base
-      `TemplatedFlipViewElementBase` is reserved in the element
-      hierarchy for that future port.
+      typed `TemplatedFlipViewElement<T>` peer was ported in Phase 3
+      completion via the new `PreMountedItems<>` strategy + base-derived
+      `TemplatedFlipViewDescriptor` registered on
+      `TemplatedFlipViewElementBase` — see the Phase 3 completion entry
+      below.
       - **TreeView** via new `TreeChildren<TElement, TControl>`
         strategy (hierarchical, positional rebuild on Update,
         recursive `ContentElement` mount).
@@ -959,10 +956,14 @@ Phase 3 descriptor — out of scope for the Phase 3 batch list, recorded
 here for a future Phase 3.5 / Phase 4 prelude). Cross-referenced from
 the audit at the end of `spec/047-phase3-finish`:
 
-- **Genuine engine gap:** `TemplatedFlipViewElement<T>` — close-out
-  carve. Needs a `PreMountedItems` ChildrenStrategy. The intermediate
-  base `TemplatedFlipViewElementBase` already exists for the
-  base-derived registration.
+- **Genuine engine gap (CLOSED — Phase 3 completion):**
+  `TemplatedFlipViewElement<T>` — ported via the new
+  `PreMountedItems<TElement, TControl>` ChildrenStrategy and
+  `TemplatedFlipViewDescriptor`, registered base-derived against
+  `TemplatedFlipViewElementBase`. The strategy pre-mounts every item
+  up-front into `FlipView.Items` (no `ContainerContentChanging` to
+  drive realization) and positionally reconciles via
+  `Reconciler.ReconcileV1Child` on Update.
 - **Untyped items hosts not ported:** `GridViewElement` (the plain
   Element[] variant — `ListViewElement` got a Phase 1 V1 handler,
   GridView did not), `ItemsViewElementBase` (the higher-level

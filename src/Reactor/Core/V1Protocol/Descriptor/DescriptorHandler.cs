@@ -84,7 +84,7 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
         // binder variant uses the same "bind before prop loop" ordering so
         // SelectedIndex initial writes land against a populated list.
         else if (_descriptor.Children is IItemsBinderStrategy binder && ctrl is FrameworkElement feBinder)
-            binder.Bind(feBinder, el, ctx.Reconciler, ctx.RequestRerender, isMount: true);
+            binder.Bind(feBinder, oldElement: null, el, ctx.Reconciler, ctx.RequestRerender, isMount: true);
 
         // Phase 1: all bare initial writes (no echo possible — subscriptions
         // not yet live). §14 Phase 3-final: dispatch through the
@@ -115,7 +115,7 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
             DispatchItemsHostUpdate(in ctx, oldEl, newEl, ctrl, ih);
         // §14 Phase 3 finish — consolidated dispatch arm.
         else if (_descriptor.Children is IItemsBinderStrategy binder && ctrl is FrameworkElement feBinder)
-            binder.Bind(feBinder, newEl, ctx.Reconciler, ctx.RequestRerender, isMount: false);
+            binder.Bind(feBinder, oldEl, newEl, ctx.Reconciler, ctx.RequestRerender, isMount: false);
 
         var props = _descriptor.Properties;
         for (int i = 0; i < props.Count; i++)

@@ -189,7 +189,17 @@ public sealed record ItemsHostOptions;
 /// site), but the dispatch path only walks the base.</para></summary>
 internal interface IItemsBinderStrategy
 {
-    void Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount);
+    /// <summary>
+    /// §14 Phase 3 completion — extended to accept the previous element
+    /// alongside the new one. <paramref name="oldElement"/> is null on
+    /// Mount and set on Update (where the v1 engine has it cheaply at
+    /// hand). Keyed-state binders (TemplatedItems / TemplatedItemsErased /
+    /// TreeChildren / TabItemsHost) ignore it and continue to read prior
+    /// state from the control. Positional binders (PreMountedItems) read
+    /// it to drive per-slot Element-aware reconcile via
+    /// <see cref="Reconciler.ReconcileV1Child"/>.
+    /// </summary>
+    void Bind(FrameworkElement control, Element? oldElement, Element element, Reconciler reconciler, Action requestRerender, bool isMount);
 }
 
 /// <summary>Non-generic marker the engine dispatcher uses to reach an
@@ -231,8 +241,9 @@ public sealed record TemplatedItemsErased<TElement, TControl>(
     where TElement : Element
     where TControl : FrameworkElement
 {
-    void IItemsBinderStrategy.Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
+    void IItemsBinderStrategy.Bind(FrameworkElement control, Element? oldElement, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
     {
+        _ = oldElement; // keyed-state binder reads prior state from the control
         var typedEl = (TElement)element;
         var typedCtrl = (TControl)control;
         var source = GetSource(typedEl);
@@ -275,8 +286,9 @@ public sealed record TemplatedItems<TItem, TElement, TControl>(
     where TElement : Element
     where TControl : FrameworkElement
 {
-    void IItemsBinderStrategy.Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
+    void IItemsBinderStrategy.Bind(FrameworkElement control, Element? oldElement, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
     {
+        _ = oldElement; // keyed-state binder reads prior state from the control
         var typedEl = (TElement)element;
         var typedCtrl = (TControl)control;
         var items = GetItems(typedEl);
@@ -301,10 +313,19 @@ public sealed record Imperative<TElement, TControl>(
 // single consolidated arm in V1HandlerAdapter / DescriptorHandler — same
 // shape as TemplatedItems / TemplatedItemsErased.
 //
-// FlipView does NOT need a new strategy — its flat IList<object> sink
-// shape is already covered by ItemsHost<>, with each Element item
-// pre-mounted by the existing ItemsHost dispatch body. FlipView
-// descriptor (Port (9)) uses ItemsHost<> directly.
+// FlipView in the simple (Element[]) case does NOT need a new strategy —
+// its flat IList<object> sink shape is already covered by ItemsHost<>,
+// with each Element item pre-mounted by the existing ItemsHost dispatch
+// body. The simple FlipView descriptor (Port (9)) uses ItemsHost<>
+// directly.
+//
+// The TEMPLATED FlipView (TemplatedFlipViewElement<T>) uses
+// PreMountedItems<> (added in Phase 3 completion at the end of this
+// file) because items come through IItemViewSource (int ItemCount;
+// Element BuildItemView(int)) rather than as a materialized
+// IReadOnlyList<object>, and the legacy MountTemplatedFlipView /
+// UpdateTemplatedFlipView pair runs positional Element-aware reconcile
+// per slot via CanUpdate.
 
 /// <summary>§14 Phase 3 finish — Port (8). Hierarchical children for
 /// <see cref="WinUI.TreeView"/>. The strategy declares only the data
@@ -326,8 +347,9 @@ public sealed record TreeChildren<TElement, TControl>(
     where TElement : Element
     where TControl : WinUI.TreeView
 {
-    void IItemsBinderStrategy.Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
+    void IItemsBinderStrategy.Bind(FrameworkElement control, Element? oldElement, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
     {
+        _ = oldElement; // positional rebuild reads only the new tree
         var tree = (TControl)control;
         var nodes = GetNodes((TElement)element);
         bool hasContentElements = HasAnyContentElement(nodes);
@@ -417,8 +439,9 @@ public sealed record TabItemsHost<TElement, TControl, TItem>(
     where TElement : Element
     where TControl : FrameworkElement
 {
-    void IItemsBinderStrategy.Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
+    void IItemsBinderStrategy.Bind(FrameworkElement control, Element? oldElement, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
     {
+        _ = oldElement; // positional rebuild reads only the new items list
         var typedCtrl = (TControl)control;
         var typedEl = (TElement)element;
         var items = GetItems(typedEl);
@@ -447,6 +470,142 @@ public sealed record TabItemsHost<TElement, TControl, TItem>(
             var mounted = content is null ? null : reconciler.Mount(content, requestRerender);
             var container = CreateContainer(item, mounted);
             collection.Add(container);
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  §14 Phase 3 completion — PreMountedItems (TemplatedFlipView)
+// ════════════════════════════════════════════════════════════════════════
+
+/// <summary>§14 Phase 3 completion — pre-mounted, Element-aware
+/// positional items host for templated controls whose host has no
+/// <c>ContainerContentChanging</c> (i.e. <see cref="WinUI.FlipView"/>
+/// templated peer). Items come from the element's
+/// <see cref="Microsoft.UI.Reactor.Core.Internal.IItemViewSource"/>
+/// implementation — <c>ItemCount</c> + <c>BuildItemView(int)</c> — and
+/// are pre-mounted up-front into the control's flat
+/// <c>IList&lt;object&gt;</c> sink (e.g. <c>FlipView.Items</c>). Closes
+/// the carry-forward from §14 Phase 3 finish where
+/// <c>TemplatedFlipViewElement&lt;T&gt;</c> stayed legacy because the
+/// FlipView host can't share the
+/// <see cref="TemplatedItemsErased{TElement,TControl}"/> realization
+/// pipeline used by ListView / GridView (those route through
+/// <see cref="Reconciler.BindKeyedItemsSource"/> which assumes
+/// <c>ContainerContentChanging</c>).
+///
+/// <para><b>Update semantics:</b> positional reconcile against the
+/// previous element. For each shared index, the engine helper
+/// <see cref="Reconciler.ReconcileV1Child"/> runs the standard
+/// CanUpdate-or-Mount-or-Unmount slot decision. Excess old slots are
+/// <c>UnmountChild</c>-ed and removed; surplus new slots are mounted
+/// and appended. Mirrors the legacy <c>UpdateTemplatedFlipView</c> arm
+/// 1:1.</para>
+///
+/// <para><b>Invariants asserted in Debug:</b> the dispatched old element
+/// is the same closed type as the new (the engine's <c>CanUpdate</c>
+/// gate guarantees this for Update arms); <c>items.Count</c> tracks
+/// the previous source's <c>ItemCount</c>. Release builds full-rebuild
+/// when an invariant is violated rather than indexing into a stale
+/// collection.</para></summary>
+[Experimental("REACTOR_V1_PREVIEW")]
+public sealed record PreMountedItems<TElement, TControl>(
+    Func<TElement, Microsoft.UI.Reactor.Core.Internal.IItemViewSource> GetSource,
+    Func<TControl, IList<object>> GetCollection)
+    : ChildrenStrategy<TElement, TControl>, IItemsBinderStrategy
+    where TElement : Element
+    where TControl : FrameworkElement
+{
+    void IItemsBinderStrategy.Bind(FrameworkElement control, Element? oldElement, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
+    {
+        var typedCtrl = (TControl)control;
+        var newSource = GetSource((TElement)element);
+        var items = GetCollection(typedCtrl);
+
+        if (isMount)
+        {
+            for (int i = 0; i < newSource.ItemCount; i++)
+            {
+                var itemElement = newSource.BuildItemView(i);
+                var ctrl = reconciler.Mount(itemElement, requestRerender);
+                if (ctrl is null)
+                    throw new global::System.InvalidOperationException(
+                        "PreMountedItems<>: item Element at index " + i + " mounted to a null UIElement. "
+                        + "Templated FlipView items must produce a visible control.");
+                items.Add(ctrl);
+            }
+            return;
+        }
+
+        // Update path — engine invariant: matching closed-T old element.
+        // CanUpdate gates Update arms on identical concrete types, so
+        // this Debug assert catches dispatcher / registry bugs only.
+        global::System.Diagnostics.Debug.Assert(
+            oldElement is TElement,
+            "PreMountedItems<>: oldElement is not the closed-T leaf; engine dispatcher invariant broken.");
+        if (oldElement is not TElement oldLeaf)
+        {
+            // Release fallback — full rebuild without assuming positional
+            // pairing with the existing UIElements.
+            for (int i = items.Count - 1; i >= 0; i--)
+            {
+                if (items[i] is UIElement orphan) reconciler.UnmountChild(orphan);
+                items.RemoveAt(i);
+            }
+            for (int i = 0; i < newSource.ItemCount; i++)
+            {
+                var fresh = reconciler.Mount(newSource.BuildItemView(i), requestRerender);
+                if (fresh is null)
+                    throw new global::System.InvalidOperationException(
+                        "PreMountedItems<>: item Element at index " + i + " mounted to a null UIElement.");
+                items.Add(fresh);
+            }
+            return;
+        }
+
+        var oldSource = GetSource(oldLeaf);
+        int oldCount = oldSource.ItemCount;
+        int newCount = newSource.ItemCount;
+
+        // Collection / source-count drift would corrupt positional pairing.
+        // Debug-assert; release falls through to the same rebuild path as
+        // the type-mismatch case via the count clamp below.
+        global::System.Diagnostics.Debug.Assert(
+            items.Count == oldCount,
+            "PreMountedItems<>: control items collection (" + items.Count
+            + ") drifted from previous source ItemCount (" + oldCount + ").");
+        if (items.Count != oldCount) oldCount = items.Count;
+
+        int shared = global::System.Math.Min(oldCount, newCount);
+        for (int i = 0; i < shared; i++)
+        {
+            var oldItem = oldSource.BuildItemView(i);
+            var newItem = newSource.BuildItemView(i);
+            var existing = items[i] as UIElement;
+            var next = reconciler.ReconcileV1Child(oldItem, newItem, existing, requestRerender);
+            if (next is null)
+                throw new global::System.InvalidOperationException(
+                    "PreMountedItems<>: item Element at index " + i + " reconciled to null. "
+                    + "Templated FlipView items must produce a visible control.");
+            if (!ReferenceEquals(existing, next))
+                items[i] = next;
+        }
+
+        // Truncate excess (highest-index first so removals don't shift).
+        for (int i = oldCount - 1; i >= shared; i--)
+        {
+            if (items[i] is UIElement old) reconciler.UnmountChild(old);
+            items.RemoveAt(i);
+        }
+
+        // Append new tail.
+        for (int i = shared; i < newCount; i++)
+        {
+            var ctrl = reconciler.Mount(newSource.BuildItemView(i), requestRerender);
+            if (ctrl is null)
+                throw new global::System.InvalidOperationException(
+                    "PreMountedItems<>: item Element at index " + i + " mounted to a null UIElement.");
+            items.Add(ctrl);
         }
     }
 }

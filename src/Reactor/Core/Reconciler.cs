@@ -307,6 +307,16 @@ public sealed partial class Reconciler : IDisposable
         RegisterHandler<TextBoxElement, Microsoft.UI.Xaml.Controls.TextBox>(new V1Protocol.Handlers.TextBoxHandler());
         RegisterHandler<BorderElement, Microsoft.UI.Xaml.Controls.Border>(new V1Protocol.Handlers.BorderHandler());
         RegisterHandler<ListViewElement, Microsoft.UI.Xaml.Controls.ListView>(new V1Protocol.Handlers.ListViewHandler());
+
+        // ── §14 Phase 3 completion — engine-gap closer ───────────────
+        // TemplatedFlipViewElement<T> port (PreMountedItems strategy).
+        // Registered base-derived against TemplatedFlipViewElementBase so
+        // every closed-T leaf routes to the same descriptor via the
+        // base-derived fallback walk. Phase 3 completion's full
+        // descriptor sweep extends this block.
+        RegisterHandlerForDerivedTypes<TemplatedFlipViewElementBase, Microsoft.UI.Xaml.Controls.FlipView>(
+            new V1Protocol.Descriptor.DescriptorHandler<TemplatedFlipViewElementBase, Microsoft.UI.Xaml.Controls.FlipView>(
+                V1Protocol.Descriptor.Descriptors.TemplatedFlipViewDescriptor.Descriptor));
     }
 
     /// <summary>
