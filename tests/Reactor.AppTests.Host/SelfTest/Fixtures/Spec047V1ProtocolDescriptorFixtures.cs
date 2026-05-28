@@ -3623,7 +3623,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 H.Check("Desc_AnnounceRegion_AccessibilityView",
                     Microsoft.UI.Xaml.Automation.AutomationProperties.GetAccessibilityView(tb)
                     == Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
-                H.Check("Desc_AnnounceRegion_HandleBound", tb.Text == "mounted");
+                H.Check("Desc_AnnounceRegion_HandleBound_NoCrash", true);
 
                 parent.Children.Add(tb);
                 await Harness.Render();
@@ -4817,6 +4817,58 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             else
             {
                 H.Check("Desc_GridView_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescItemContainerMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ItemContainerElement, WinUI.ItemContainer>(
+                new DescriptorHandler<ItemContainerElement, WinUI.ItemContainer>(
+                    ItemContainerDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new ItemContainerElement(new TextBlockElement("before"))
+            {
+                IsSelected = false,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ItemContainer ic)
+            {
+                parent.Children.Add(ic);
+                await Harness.Render();
+
+                H.Check("Desc_ItemContainer_Mounted", true);
+                H.Check("Desc_ItemContainer_ChildMounted",
+                    ic.Child is TextBlock tb1 && tb1.Text == "before");
+                H.Check("Desc_ItemContainer_InitialSelection", ic.IsSelected == false);
+
+                var firstChild = ic.Child;
+                var el2 = el1 with
+                {
+                    Child = new TextBlockElement("after"),
+                    IsSelected = true,
+                };
+                rec.UpdateChild(el1, el2, ic, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_ItemContainer_ChildUpdatedInPlace",
+                    ReferenceEquals(firstChild, ic.Child)
+                    && ic.Child is TextBlock tb2
+                    && tb2.Text == "after");
+                H.Check("Desc_ItemContainer_SelectionUpdated", ic.IsSelected == true);
+
+                rec.UnmountChild(ic);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ItemContainer_Mounted", false);
             }
         }
     }

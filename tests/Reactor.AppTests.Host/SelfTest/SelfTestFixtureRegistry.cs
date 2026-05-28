@@ -1209,6 +1209,7 @@ internal static class SelfTestFixtureRegistry
         "Desc_RadioButtons_Items",
         // Spec 047 §14 Phase 3 close-out — typed templated lists G2.
         "Desc_GridView_MountUpdate",
+        "Desc_ItemContainer_MountUpdate",
         "Desc_TemplatedListView_MountUpdate",
         "Desc_TemplatedGridView_MountUpdate",
         // Spec 047 §14 Phase 3 finish — Port (6) Lazy*Stack G2.
@@ -2420,6 +2421,7 @@ internal static class SelfTestFixtureRegistry
 
         // Spec 047 §14 Phase 3 close-out — typed templated lists G2.
         "Desc_GridView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescGridViewMountUpdate(harness),
+        "Desc_ItemContainer_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescItemContainerMountUpdate(harness),
         "Desc_TemplatedListView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescTemplatedListViewMountUpdate(harness),
         "Desc_TemplatedGridView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescTemplatedGridViewMountUpdate(harness),
 
