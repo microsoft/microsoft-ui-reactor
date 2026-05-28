@@ -964,10 +964,19 @@ the audit at the end of `spec/047-phase3-finish`:
   up-front into `FlipView.Items` (no `ContainerContentChanging` to
   drive realization) and positionally reconciles via
   `Reconciler.ReconcileV1Child` on Update.
-- **Untyped items hosts (CLOSED — Phase 3 completion):**
-  `GridViewElement` (plain Element[]), `ItemsViewElementBase`,
-  `ItemContainerElement` — all ported as standard descriptors and
-  registered in `RegisterV1BuiltInHandlers`.
+- **Untyped items hosts (CLOSED — Phase 3 completion, partial):**
+  `ItemsViewElementBase`, `ItemContainerElement` — ported as
+  standard descriptors and registered in `RegisterV1BuiltInHandlers`.
+  `GridViewElement` (plain Element[]) — descriptor authored
+  (`GridViewDescriptor`) but **carved during PR #440 CR**: the
+  descriptor's `ItemsHost<>` strategy pre-mounts every item into
+  `GridView.Items` (one container per item, no virtualization),
+  while the legacy `MountGridView` arm uses
+  `ItemsSource = Range(0..N) + ItemTemplate + ContainerContentChanging`
+  to realize containers lazily (matches Phase 1 `ListViewHandler`).
+  Closing this needs either a hand-coded `GridViewHandler` or a new
+  ChildrenStrategy variant wrapping CCC. Tracked alongside TabView /
+  overlays / NavigationHost gap-closure.
 - **Heavy / specialized controls (CLOSED — Phase 3 completion):**
   `WebView2Element`, `NavigationViewElement`, `TitleBarElement`,
   `MediaPlayerElementElement`, `AnimatedVisualPlayerElement`,
@@ -1010,6 +1019,19 @@ scoped carve list documented inline in `RegisterV1BuiltInHandlers`):**
   Closing them requires engine work (post-children mount-hook so
   `SelectionChanged` subscribes after children-add + an
   `ImperativeBridged` shape for the named tab strip slots).
+- **`GridViewDescriptor` (descriptor exists, registration carved
+  during PR #440 CR):** The descriptor's `ItemsHost<>` ChildrenStrategy
+  pre-mounts every item into `GridView.Items` (one container per item,
+  no virtualization). The legacy `MountGridView` arm uses
+  `ItemsSource = Range(0..N) + ItemTemplate + ContainerContentChanging`
+  to realize containers lazily — matching Phase 1
+  `ListViewHandler`. A|B tests pass either way (no fixture stresses
+  GridView scale), but production memory/lifecycle would silently
+  regress. Closing this needs either a hand-coded `GridViewHandler`
+  mirroring `ListViewHandler`'s CCC virtualization, or a new
+  ChildrenStrategy variant (e.g. `RecyclingItemsHost<>`) that wraps
+  the `ItemsSource` + `ContainerContentChanging` realization
+  contract.
 - **Interop bridges:** `XamlHostElement`, `XamlPageElement`. V1
   descriptors exist (`XamlHostDescriptor`, `XamlPageDescriptor`)
   but stay unregistered because `XamlInterop.Register(reconciler)`
@@ -1021,11 +1043,15 @@ scoped carve list documented inline in `RegisterV1BuiltInHandlers`):**
 protocol — Phase 4 cleanup keeps their legacy arms):**
 
 - `ComponentElement`, `FuncElement`, `MemoElement`,
-  `ErrorBoundaryElement`, `CommandHostElement`, `ModifiedElement`,
+  `ErrorBoundaryElement`, `CommandHostElement`,
   `Validation.FormFieldElement` /
   `ValidationVisualizerElement` / `ValidationRuleElement`. These
   orchestrate child reconciliation rather than wrap a single WinUI
   control, so the V1 handler protocol does not apply.
+  (`ModifiedElement` is intentionally NOT in this list — it's
+  unwrapped to its wrapped element BEFORE dispatch at the top of
+  `Reconciler.Mount`, so it never reaches the switch and does not
+  count as a carved arm.)
 
 **Phase 3 completion status (PR #440 — landed-pending-merge):**
 Every element type in the production codebase either (a) routes
@@ -1046,21 +1072,22 @@ follow-up PRs land.
 
 | Bucket | Arms | % of total |
 |---|---:|---:|
-| Routed through V1 (76 = 5 Phase 1 + 6 base-derived + 64 standard descriptors + 1 decorator) | 76 | 80% |
-| Reachable-but-deferred (overlays 7, NavigationHost 1, TabView 1, XamlHost/Page 2) | 11 | 11.6% |
+| Routed through V1 (75 = 5 Phase 1 + 6 base-derived + 63 standard descriptors + 1 decorator) | 75 | 79% |
+| Reachable-but-deferred (overlays 7, NavigationHost 1, TabView 1, GridView 1, XamlHost/Page 2) | 12 | 12.6% |
 | Intentionally above V1 (composition primitives — permanent carve) | 8 | 8.4% |
 | **Total `Reconciler.Mount.cs` switch arms** | **95** | **100%** |
 
-- **Coverage of V1-reachable surface (excludes 8 composition primitives):** 76 / 87 ≈ **87%**.
-- **Coverage of all switch arms:** 76 / 95 ≈ **80%**.
-- **Path to 100% reachable:** the follow-up PR closes the 11 deferred:
+- **Coverage of V1-reachable surface (excludes 8 composition primitives):** 75 / 87 ≈ **86%**.
+- **Coverage of all switch arms:** 75 / 95 ≈ **79%**.
+- **Path to 100% reachable:** the follow-up PR closes the 12 deferred:
   1. Port the 7 overlay descriptors (ContentDialog, Flyout, Popup, MenuBar, MenuFlyout, CommandBar, CommandBarFlyout) — needs a decorator strategy variant for modal lifecycle beyond `IDecoratorElementHandler`.
   2. Refactor `NavigationHostElement` cleanup path so V1 can own it (internal-expose `MountNavigationHost` / `UpdateNavigationHost`, duplicate cleanup logic in the V1 handler, remove the `UnmountRecursive` intercept).
   3. Close `TabViewDescriptor` gaps (engine post-children mount-hook + `ImperativeBridged` for named slots + port `BuildTabHeader` / `BuildPinButton` / `TryUpdatePinHeaderInPlace` + drag pipeline trampolines + conditional `SelectedIndex` write + in-place `CanUpdate`).
-  4. Unify `XamlInterop.Register` with V1 auto-registration so `XamlHostElement` / `XamlPageElement` descriptors can register without `EnsureRegistrableElementType` clash.
+  4. Close `GridViewDescriptor` lifecycle gap — either author a Phase 1 hand-coded `GridViewHandler` mirroring `ListViewHandler`'s CCC virtualization, or introduce a `RecyclingItemsHost<>` ChildrenStrategy variant.
+  5. Unify `XamlInterop.Register` with V1 auto-registration so `XamlHostElement` / `XamlPageElement` descriptors can register without `EnsureRegistrableElementType` clash.
 
 Phase 4 cleanup (deletion of legacy switch arms + `UseV1Protocol`
-flag) is unblocked for the 76 routed arms today; the remaining 11
+flag) is unblocked for the 75 routed arms today; the remaining 12
 arms unblock as the follow-up PR lands each closure.
 
 **Carry-forward known defects** (from Phase 1):

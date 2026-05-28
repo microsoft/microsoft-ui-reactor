@@ -1739,9 +1739,28 @@ public sealed partial class Reconciler
     private UIElement? UpdateNavigationView(NavigationViewElement o, NavigationViewElement n, WinUI.NavigationView nv, Action requestRerender)
     {
         nv.IsPaneOpen = n.IsPaneOpen; nv.IsBackEnabled = n.IsBackEnabled;
+        // Spec 047 §14 Phase 3 completion CR — match V1 NavigationViewDescriptor
+        // (PaneDisplayMode / IsSettingsVisible / PaneTitle / MenuItems / SelectedItem
+        // were previously update-only on the V1 path). Aligning the legacy arm so
+        // V1 ON ≡ V1 OFF for record-with updates that change any of these fields.
+        nv.PaneDisplayMode = n.PaneDisplayMode;
+        nv.IsSettingsVisible = n.IsSettingsVisible;
+        if (n.PaneTitle is not null && nv.PaneTitle != n.PaneTitle) nv.PaneTitle = n.PaneTitle;
         if (!double.IsNaN(n.OpenPaneLength) && nv.OpenPaneLength != n.OpenPaneLength) nv.OpenPaneLength = n.OpenPaneLength;
         if (!double.IsNaN(n.CompactModeThresholdWidth) && nv.CompactModeThresholdWidth != n.CompactModeThresholdWidth) nv.CompactModeThresholdWidth = n.CompactModeThresholdWidth;
         if (!double.IsNaN(n.ExpandedModeThresholdWidth) && nv.ExpandedModeThresholdWidth != n.ExpandedModeThresholdWidth) nv.ExpandedModeThresholdWidth = n.ExpandedModeThresholdWidth;
+
+        if (!ReferenceEquals(o.MenuItems, n.MenuItems))
+        {
+            nv.MenuItems.Clear();
+            foreach (var item in n.MenuItems)
+            {
+                if (item.IsHeader)
+                    nv.MenuItems.Add(new WinUI.NavigationViewItemHeader { Content = item.Content });
+                else
+                    nv.MenuItems.Add(CreateNavItem(item));
+            }
+        }
 
         // AutoSuggestBox / PaneFooter / PaneCustomContent reconcile in place
         // when possible so the controls keep focus / scroll state across re-renders.
@@ -1782,6 +1801,13 @@ public sealed partial class Reconciler
         }
 
         SetElementTag(nv, n);
+
+        // Spec 047 §14 Phase 3 completion CR — match V1 NavigationViewDescriptor:
+        // re-select when SelectedTag drifts OR MenuItems ref changes (the rebuild
+        // above can re-create the previously-selected container).
+        if (o.SelectedTag != n.SelectedTag || !ReferenceEquals(o.MenuItems, n.MenuItems))
+            nv.SelectedItem = FindNavItemByTag(nv.MenuItems, n.SelectedTag);
+
         if (o.OnSelectedTagChanged is null && n.OnSelectedTagChanged is not null)
             nv.SelectionChanged += (s, args) =>
             {
@@ -1791,6 +1817,21 @@ public sealed partial class Reconciler
         if (o.OnBackRequested is null && n.OnBackRequested is not null)
             nv.BackRequested += (s, _) => (GetElementTag((UIElement)s!) as NavigationViewElement)?.OnBackRequested?.Invoke();
         ApplySetters(n.Setters, nv);
+        return null;
+    }
+
+    private static object? FindNavItemByTag(global::System.Collections.IEnumerable items, string? selectedTag)
+    {
+        if (selectedTag is null) return null;
+        foreach (var item in items)
+        {
+            if (item is WinUI.NavigationViewItem nvi)
+            {
+                if ((nvi.Tag as string) == selectedTag) return nvi;
+                var child = FindNavItemByTag(nvi.MenuItems, selectedTag);
+                if (child is not null) return child;
+            }
+        }
         return null;
     }
 

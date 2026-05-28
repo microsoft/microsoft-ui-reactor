@@ -345,6 +345,16 @@ public sealed partial class Reconciler : IDisposable
     ///   (post-children mount-hook so SelectionChanged subscribes after
     ///   children-add, ImperativeBridged for the named tab strip slots)
     ///   tracked alongside the overlays + NavigationHost in the follow-up.</item>
+    ///   <item><b>Deferred — descriptor with lifecycle divergence from
+    ///   legacy</b> (follow-up PR) — <c>GridViewDescriptor</c>. The descriptor's
+    ///   <c>ItemsHost&lt;&gt;</c> strategy pre-mounts every item into
+    ///   <c>GridView.Items</c> (one container per item, no virtualization).
+    ///   The legacy <c>MountGridView</c> arm uses
+    ///   <c>ItemsSource = Range(0..N) + ItemTemplate + ContainerContentChanging</c>
+    ///   to realize containers lazily, matching the Phase 1
+    ///   <see cref="V1Protocol.Handlers.ListViewHandler"/> pattern. Closing
+    ///   this needs either a Phase 1 hand-coded <c>GridViewHandler</c> or a
+    ///   new ChildrenStrategy that wraps the CCC virtualization contract.</item>
     /// </list>
     /// </summary>
     private void RegisterV1BuiltInHandlers()
@@ -392,7 +402,23 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FlipViewDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FrameDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.GridDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.GridViewDescriptor.Descriptor);
+        // Spec 047 §14 Phase 3 completion CR (Copilot review on PR #440) —
+        // GridViewDescriptor stays carved. The descriptor's ItemsHost<>
+        // strategy pre-mounts every item into GridView.Items (one container
+        // per item, no virtualization, no recycle). The legacy MountGridView
+        // path uses ItemsSource = Range(0..N) + ItemTemplate +
+        // ContainerContentChanging to realize containers lazily (one per
+        // visible viewport item) and unmount on RecycleQueue entry — same
+        // pattern as the Phase 1 hand-coded ListViewHandler. Registering
+        // GridViewDescriptor would not break A|B tests (no fixture stresses
+        // GridView scale), but it would silently regress production memory
+        // and lifecycle (item Mount/Unmount fires for every item up-front
+        // instead of per-viewport, breaking the recycle contract). Closing
+        // this needs either a Phase 1 hand-coded GridViewHandler mirroring
+        // ListViewHandler, or a new ChildrenStrategy variant that wraps
+        // ItemsSource + CCC. Tracked alongside the TabView/overlay/NavigationHost
+        // gap-closure follow-up.
+        // RegisterDescriptor(V1Protocol.Descriptor.Descriptors.GridViewDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.HyperlinkButtonDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ImageDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.InfoBadgeDescriptor.Descriptor);

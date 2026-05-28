@@ -574,7 +574,28 @@ public sealed record PreMountedItems<TElement, TControl>(
             items.Count == oldCount,
             "PreMountedItems<>: control items collection (" + items.Count
             + ") drifted from previous source ItemCount (" + oldCount + ").");
-        if (items.Count != oldCount) oldCount = items.Count;
+        if (items.Count != oldCount)
+        {
+            // Release fallback for count drift — same shape as the
+            // type-mismatch rebuild above. Cannot continue positional
+            // reconciliation safely: if items.Count > oldSource.ItemCount
+            // we'd index past oldSource bounds; if smaller, stale source
+            // items would be skipped without element-aware teardown.
+            for (int i = items.Count - 1; i >= 0; i--)
+            {
+                if (items[i] is UIElement orphan) reconciler.UnmountChild(orphan);
+                items.RemoveAt(i);
+            }
+            for (int i = 0; i < newCount; i++)
+            {
+                var fresh = reconciler.Mount(newSource.BuildItemView(i), requestRerender);
+                if (fresh is null)
+                    throw new global::System.InvalidOperationException(
+                        "PreMountedItems<>: item Element at index " + i + " mounted to a null UIElement.");
+                items.Add(fresh);
+            }
+            return;
+        }
 
         int shared = global::System.Math.Min(oldCount, newCount);
         for (int i = 0; i < shared; i++)

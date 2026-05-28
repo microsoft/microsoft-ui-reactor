@@ -1439,14 +1439,14 @@ ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` remains deferred for the §14 ra
 
 | Bucket | Arms | Notes |
 |---|---:|---|
-| Routed through V1 (Phase 1 handler or Phase 3 descriptor) | 76 | Production dispatch path when V1 ON |
-| Reachable-but-deferred (overlays 7 + NavigationHost 1 + TabView 1 + XamlHost/Page 2) | 11 | Follow-up PR closes these |
+| Routed through V1 (Phase 1 handler or Phase 3 descriptor) | 75 | Production dispatch path when V1 ON |
+| Reachable-but-deferred (overlays 7 + NavigationHost 1 + TabView 1 + GridView 1 + XamlHost/Page 2) | 12 | Follow-up PR closes these |
 | Intentionally above V1 (Reactor composition primitives) | 8 | Permanent carve; Phase 4 keeps legacy arms |
 | **Total switch arms** | **95** | — |
 
-- **Coverage of V1-reachable surface:** 76 / 87 ≈ **87%** (excludes the 8 composition primitives that are permanently above the protocol).
-- **Coverage of all element-type switch arms:** 76 / 95 ≈ **80%**.
-- **Path to 100% reachable:** the next PR ports the 11 deferred (overlays, NavigationHost, TabView gap closure, XamlHost/Page unification). Phase 4 cleanup follows.
+- **Coverage of V1-reachable surface:** 75 / 87 ≈ **86%** (excludes the 8 composition primitives that are permanently above the protocol).
+- **Coverage of all element-type switch arms:** 75 / 95 ≈ **79%**.
+- **Path to 100% reachable:** the next PR ports the 12 deferred (overlays, NavigationHost, TabView gap closure, GridView CCC virtualization, XamlHost/Page unification). Phase 4 cleanup follows.
 
 **Phase 3 finish advisory perf** — Cloud PC x64 re-capture under `docs/specs/047/phase3-results/CPC-ander-YTZ3O-x64-advisory/2026-05-28-phase3-finish-3x5/` (n=15, 3 launches × 5 reps). V1 ON (descriptors) vs V1 OFF (today), against prior `2026-05-27-phase3-closeout-3x5/`:
 
