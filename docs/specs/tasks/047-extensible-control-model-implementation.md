@@ -916,12 +916,23 @@ carve-outs:
       exist today (only `ItemsViewElementBase` for the higher-level
       `ItemsView`). Engine arm proven by Port (6); shipping the
       element + DSL is a follow-up.
-- [ ] **G3 typed lists — `TreeView`, `FlipView`, `TabView`, `Pivot`** —
-      carried forward. Each needs a new `ChildrenStrategy` shape
-      implementing the consolidated `IItemsBinderStrategy` marker
-      from Phase 3 finish: `TreeChildren` (hierarchical), `PreMountedItems`
-      (FlipView), `TabItemsHost` (heterogeneous Header + Content,
-      reused for Pivot with `WinUI.PivotItem` container).
+- [x] **G3 typed lists — `TreeView`, `FlipView`, `TabView`, `Pivot`** —
+      closed by Phase 3 finish.
+      - **TreeView** via new `TreeChildren<TElement, TControl>`
+        strategy (hierarchical, positional rebuild on Update,
+        recursive `ContentElement` mount).
+      - **FlipView** reuses existing `ItemsHost<>` (alternative (b) —
+        no new strategy needed).
+      - **TabView + Pivot** share a new
+        `TabItemsHost<TElement, TControl, TItem>` strategy with a
+        per-descriptor `CreateContainer` lambda
+        (`TabViewItem` / `PivotItem`).
+      - TabView's `TabStripHeader` / `TabStripFooter` and spec 045
+        §2.4 docking drag pipeline + §2.2 pinnable headers stay on
+        the legacy arm; documented in the descriptor xmldoc.
+      - 29 new fixtures across the four descriptors (Desc_TreeView_*,
+        Desc_FlipView_*, Desc_TabView_*, Desc_Pivot_*). Total Desc_
+        baseline: 602 ok / 0 failures both V1 ON and V1 OFF.
 
 **Carry-forward known defects** (from Phase 1):
 
