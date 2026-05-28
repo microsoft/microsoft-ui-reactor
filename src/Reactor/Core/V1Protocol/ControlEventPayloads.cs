@@ -277,6 +277,17 @@ internal sealed class SelectorBarEventPayload
         Microsoft.UI.Xaml.Controls.SelectorBarSelectionChangedEventArgs>? SelectionChangedTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3-final Batch B — Frame multi-event payload.
+/// Three fire-only slots for Navigated / Navigating / NavigationFailed.
+/// Frame has NO controlled-prop round-trip (SourcePageType is .Initial /
+/// Navigate-on-mount only — see <c>FrameDescriptor</c>).</summary>
+internal sealed class FrameEventPayload
+{
+    public Microsoft.UI.Xaml.Navigation.NavigatedEventHandler? NavigatedTrampoline;
+    public Microsoft.UI.Xaml.Navigation.NavigatingCancelEventHandler? NavigatingTrampoline;
+    public Microsoft.UI.Xaml.Navigation.NavigationFailedEventHandler? NavigationFailedTrampoline;
+}
+
 /// <summary>Spec 047 §14 Phase 3 batch 11 — BreadcrumbBar ItemClicked
 /// fire-only payload. Trampoline maps <c>args.Index</c> back to the live
 /// element's <c>Items[idx]</c> data — mirrors the legacy arm.</summary>

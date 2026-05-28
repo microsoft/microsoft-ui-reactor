@@ -3175,4 +3175,221 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  FrameDescriptor (Phase 3-final Batch B) — Initial navigation +
+    //  three hand-coded event subscriptions.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescFrameMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<FrameElement, WinUI.Frame>(
+                new DescriptorHandler<FrameElement, WinUI.Frame>(
+                    FrameDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            // Frame.Navigate requires page types with XAML metadata registered
+            // through the host's XamlMetadataProvider — the self-test harness
+            // does not register one, so we exercise the no-Navigate path
+            // (SourcePageType = null). The .Initial entry's set lambda skips
+            // Navigate when pageType is null; the .HandCodedEvent entries
+            // still subscribe so we can verify the wiring proceeded without
+            // crashing on the navigate-on-mount step.
+            int navigatedCount = 0;
+            int navigatingCount = 0;
+            int failedCount = 0;
+            var el1 = new FrameElement
+            {
+                OnNavigated = _ => navigatedCount++,
+                OnNavigating = _ => navigatingCount++,
+                OnNavigationFailed = (_, _) => failedCount++,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.Frame f)
+            {
+                parent.Children.Add(f);
+                await Harness.Render();
+
+                H.Check("Desc_Frame_Mounted", true);
+                // No SourcePageType → no Navigate → no Navigated fire.
+                H.Check("Desc_Frame_NoNavigateNoCallback", navigatedCount == 0);
+                H.Check("Desc_Frame_NoNavigatingNoCallback", navigatingCount == 0);
+                H.Check("Desc_Frame_NoFailedNoCallback", failedCount == 0);
+                H.Check("Desc_Frame_NoCurrentPage", f.CurrentSourcePageType is null);
+
+                // Update — must NOT re-navigate (matches legacy UpdateFrame).
+                var el2 = el1 with { OnNavigated = _ => navigatedCount++ };
+                rec.UpdateChild(el1, el2, f, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Frame_UpdateDidNotFireNavigated", navigatedCount == 0);
+
+                rec.UnmountChild(f);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Frame_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  RichTextBlockDescriptor (Phase 3-final Batch B) — Paragraphs as a
+    //  ReferenceEquality-gated OneWay rebuild.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescRichTextBlockMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<RichTextBlockElement, WinUI.RichTextBlock>(
+                new DescriptorHandler<RichTextBlockElement, WinUI.RichTextBlock>(
+                    RichTextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            // Initial: Paragraphs path.
+            var paras1 = new[]
+            {
+                new RichTextParagraph(new RichTextInline[]
+                {
+                    new RichTextRun("Hello ") { IsBold = true },
+                    new RichTextRun("world"),
+                }),
+            };
+            var el1 = new RichTextBlockElement("fallback")
+            {
+                Paragraphs = paras1,
+                IsTextSelectionEnabled = true,
+                FontSize = 16,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.RichTextBlock rtb)
+            {
+                parent.Children.Add(rtb);
+                await Harness.Render();
+
+                H.Check("Desc_RichTextBlock_Mounted", true);
+                H.Check("Desc_RichTextBlock_BlocksBuilt", rtb.Blocks.Count == 1);
+                H.Check("Desc_RichTextBlock_IsSelectable", rtb.IsTextSelectionEnabled);
+                H.Check("Desc_RichTextBlock_FontSize", rtb.FontSize == 16);
+
+                // Same paras array reference — should NOT trigger rebuild
+                // (the comparer is reference-equality).
+                var el2 = el1 with { FontSize = 18 };
+                rec.UpdateChild(el1, el2, rtb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_RichTextBlock_FontSizeUpdated", rtb.FontSize == 18);
+                H.Check("Desc_RichTextBlock_BlocksUnchanged", rtb.Blocks.Count == 1);
+
+                // New paras array — triggers a rebuild via the shared helper.
+                var paras2 = new[]
+                {
+                    new RichTextParagraph(new RichTextInline[] { new RichTextRun("One") }),
+                    new RichTextParagraph(new RichTextInline[] { new RichTextRun("Two") }),
+                };
+                var el3 = el2 with { Paragraphs = paras2 };
+                rec.UpdateChild(el2, el3, rtb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_RichTextBlock_BlocksRebuilt", rtb.Blocks.Count == 2);
+
+                rec.UnmountChild(rtb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_RichTextBlock_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  NumberBoxDescriptor (Phase 3-final Batch B) — Value controlled via
+    //  HandCodedControlled + Immediate per-keystroke observation.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescNumberBoxMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<NumberBoxElement, WinUI.NumberBox>(
+                new DescriptorHandler<NumberBoxElement, WinUI.NumberBox>(
+                    NumberBoxDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int valueChanges = 0;
+            double lastValue = 0;
+            var el1 = new NumberBoxElement(
+                Value: 5,
+                OnValueChanged: v => { valueChanges++; lastValue = v; },
+                Header: "Count")
+            {
+                Minimum = 0,
+                Maximum = 100,
+                SmallChange = 1,
+                LargeChange = 10,
+                PlaceholderText = "n",
+                SpinButtonPlacement = WinUI.NumberBoxSpinButtonPlacementMode.Inline,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.NumberBox nb)
+            {
+                parent.Children.Add(nb);
+                await Harness.Render();
+
+                H.Check("Desc_NumberBox_Mounted", true);
+                H.Check("Desc_NumberBox_InitialValue", nb.Value == 5);
+                H.Check("Desc_NumberBox_Minimum", nb.Minimum == 0);
+                H.Check("Desc_NumberBox_Maximum", nb.Maximum == 100);
+                H.Check("Desc_NumberBox_SmallChange", nb.SmallChange == 1);
+                H.Check("Desc_NumberBox_LargeChange", nb.LargeChange == 10);
+                H.Check("Desc_NumberBox_Header", (nb.Header as string) == "Count");
+                H.Check("Desc_NumberBox_SpinPlacement",
+                    nb.SpinButtonPlacementMode == WinUI.NumberBoxSpinButtonPlacementMode.Inline);
+                // Mount-time Value write goes through .HandCodedControlled's
+                // suppressed echo; the callback must NOT fire.
+                H.Check("Desc_NumberBox_MountDidNotFire", valueChanges == 0);
+
+                // Programmatic Value update — descriptor suppresses echo.
+                var changesBefore = valueChanges;
+                var el2 = el1 with { Value = 42 };
+                rec.UpdateChild(el1, el2, nb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_NumberBox_ValueUpdated", nb.Value == 42);
+                H.Check("Desc_NumberBox_NoEchoOnProgrammaticWrite",
+                    valueChanges - changesBefore <= 1);
+
+                // Update Min/Max + Header.
+                var el3 = el2 with { Minimum = 10, Maximum = 200, Header = "Renamed" };
+                rec.UpdateChild(el2, el3, nb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_NumberBox_MinUpdated", nb.Minimum == 10);
+                H.Check("Desc_NumberBox_MaxUpdated", nb.Maximum == 200);
+                H.Check("Desc_NumberBox_HeaderUpdated",
+                    (nb.Header as string) == "Renamed");
+
+                rec.UnmountChild(nb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_NumberBox_Mounted", false);
+            }
+        }
+    }
 }

@@ -285,46 +285,11 @@ public sealed partial class Reconciler
         var rtb = _pool.TryRent(typeof(WinUI.RichTextBlock)) as WinUI.RichTextBlock ?? new WinUI.RichTextBlock();
         rtb.IsTextSelectionEnabled = richText.IsTextSelectionEnabled;
         if (richText.TextWrapping.HasValue) rtb.TextWrapping = richText.TextWrapping.Value;
-        if (richText.Paragraphs is not null)
-        {
-            foreach (var para in richText.Paragraphs)
-            {
-                var p = new Microsoft.UI.Xaml.Documents.Paragraph();
-                foreach (var inline in para.Inlines)
-                {
-                    switch (inline)
-                    {
-                        case RichTextRun run:
-                            var r = new Microsoft.UI.Xaml.Documents.Run { Text = run.Text };
-                            if (run.IsBold) r.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
-                            if (run.IsItalic) r.FontStyle = global::Windows.UI.Text.FontStyle.Italic;
-                            if (run.IsStrikethrough) r.TextDecorations = global::Windows.UI.Text.TextDecorations.Strikethrough;
-                            if (run.FontSize.HasValue) r.FontSize = run.FontSize.Value;
-                            if (run.FontFamily is not null) r.FontFamily = WinRTCache.GetFontFamily(run.FontFamily);
-                            if (run.Foreground is not null) r.Foreground = run.Foreground;
-                            p.Inlines.Add(r);
-                            break;
-                        case RichTextHyperlink link:
-                            var hl = new Microsoft.UI.Xaml.Documents.Hyperlink();
-                            try { hl.NavigateUri = link.NavigateUri; }
-                            catch { hl.NavigateUri = new Uri("about:error"); }
-                            hl.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = link.Text });
-                            p.Inlines.Add(hl);
-                            break;
-                        case RichTextLineBreak:
-                            p.Inlines.Add(new Microsoft.UI.Xaml.Documents.LineBreak());
-                            break;
-                    }
-                }
-                rtb.Blocks.Add(p);
-            }
-        }
-        else
-        {
-            var paragraph = new Microsoft.UI.Xaml.Documents.Paragraph();
-            paragraph.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = richText.Text });
-            rtb.Blocks.Add(paragraph);
-        }
+        // Shared helper with the V1 descriptor — clears Blocks then rebuilds
+        // from Paragraphs or falls back to a single Run with .Text. Extracted
+        // (Phase 3-final Batch B) so RichTextBlockDescriptor's .OneWay set
+        // lambda can call the same code path.
+        RebuildRichTextBlocks(richText, rtb);
         if (richText.FontSize.HasValue) rtb.FontSize = richText.FontSize.Value;
         if (richText.MaxLines > 0) rtb.MaxLines = richText.MaxLines;
         if (richText.LineHeight.HasValue) rtb.LineHeight = richText.LineHeight.Value;
@@ -618,21 +583,24 @@ public sealed partial class Reconciler
         return numBox;
     }
 
-    private static readonly Microsoft.UI.Xaml.DependencyPropertyChangedCallback NumberBoxImmediateTextChanged =
+    // Spec 047 §14 Phase 3-final Batch B — widened to internal static so
+    // NumberBoxDescriptor can register the same captured-free trampolines
+    // via the .Immediate entry shape.
+    internal static readonly Microsoft.UI.Xaml.DependencyPropertyChangedCallback NumberBoxImmediateTextChanged =
         (sender, _) =>
         {
             if (sender is not WinUI.NumberBox box) return;
             HandleNumberBoxImmediateTextChanged(box, box.Text);
         };
 
-    private static void NumberBoxLoadedEnsureImmediateTextBox(object sender, RoutedEventArgs _)
+    internal static void NumberBoxLoadedEnsureImmediateTextBox(object sender, RoutedEventArgs _)
     {
         if (sender is not WinUI.NumberBox box) return;
         if (EnsureNumberBoxImmediateTextBoxWiring(box))
             box.Loaded -= NumberBoxLoadedEnsureImmediateTextBox;
     }
 
-    private static bool EnsureNumberBoxImmediateTextBoxWiring(WinUI.NumberBox box)
+    internal static bool EnsureNumberBoxImmediateTextBoxWiring(WinUI.NumberBox box)
     {
         var events = GetOrCreateEventState(box);
         if (events.NumberBoxInnerTextChanged) return true;
@@ -646,7 +614,7 @@ public sealed partial class Reconciler
         return true;
     }
 
-    private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
+    internal static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
     {
         int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
         for (int i = 0; i < count; i++)
@@ -659,7 +627,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private static void HandleNumberBoxImmediateTextChanged(WinUI.NumberBox box, string text)
+    internal static void HandleNumberBoxImmediateTextChanged(WinUI.NumberBox box, string text)
     {
         if (GetElementTag(box) is not NumberBoxElement el) return;
         if (el.OnValueChanged is null) return;

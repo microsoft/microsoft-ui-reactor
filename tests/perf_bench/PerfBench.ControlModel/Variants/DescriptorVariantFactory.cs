@@ -241,6 +241,19 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<BreadcrumbBarElement, WinUI.BreadcrumbBar>(
                 BreadcrumbBarDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3-final Batch B — Frame + RichTextBlock + NumberBox.
+        rec.RegisterHandler<FrameElement, WinUI.Frame>(
+            new DescriptorHandler<FrameElement, WinUI.Frame>(
+                FrameDescriptor.Descriptor));
+
+        rec.RegisterHandler<RichTextBlockElement, WinUI.RichTextBlock>(
+            new DescriptorHandler<RichTextBlockElement, WinUI.RichTextBlock>(
+                RichTextBlockDescriptor.Descriptor));
+
+        rec.RegisterHandler<NumberBoxElement, WinUI.NumberBox>(
+            new DescriptorHandler<NumberBoxElement, WinUI.NumberBox>(
+                NumberBoxDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;

@@ -658,7 +658,10 @@ public sealed partial class Reconciler
         return p;
     }
 
-    private static void RebuildRichTextBlocks(RichTextBlockElement n, WinUI.RichTextBlock rtb)
+    // Spec 047 §14 Phase 3-final Batch B — widened to internal static so the
+    // legacy MountRichTextBlock arm AND RichTextBlockDescriptor's .OneWay set
+    // lambda call the same rebuild path.
+    internal static void RebuildRichTextBlocks(RichTextBlockElement n, WinUI.RichTextBlock rtb)
     {
         rtb.Blocks.Clear();
         if (n.Paragraphs is not null)
