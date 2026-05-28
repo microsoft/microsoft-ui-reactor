@@ -266,6 +266,16 @@ internal sealed class ListBoxEventPayload
     public Microsoft.UI.Xaml.Controls.SelectionChangedEventHandler? SelectionChangedTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3 completion — GridView selected-index and
+/// item-click payload. SelectionChanged fires both single-index and
+/// multi-select snapshot callbacks; ItemClick maps the clicked item back to
+/// the flat ItemsHost collection index.</summary>
+internal sealed class GridViewEventPayload
+{
+    public Microsoft.UI.Xaml.Controls.SelectionChangedEventHandler? SelectionChangedTrampoline;
+    public Microsoft.UI.Xaml.Controls.ItemClickEventHandler? ItemClickTrampoline;
+}
+
 /// <summary>Spec 047 §14 Phase 3 batch 11 — SelectorBar SelectedIndex
 /// round-trip payload. <c>SelectionChanged</c> trampoline reads the live
 /// SelectedItem reference and converts back to the index via

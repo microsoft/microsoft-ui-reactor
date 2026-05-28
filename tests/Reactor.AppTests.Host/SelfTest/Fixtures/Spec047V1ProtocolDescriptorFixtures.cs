@@ -3592,6 +3592,63 @@ internal static class Spec047V1ProtocolDescriptorFixtures
     }
 
     // ────────────────────────────────────────────────────────────────────
+    //  AnnounceRegionDescriptor — hidden UIA live-region anchor.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescAnnounceRegionMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<Microsoft.UI.Reactor.Hooks.AnnounceRegionElement, WinUI.TextBlock>(
+                new DescriptorHandler<Microsoft.UI.Reactor.Hooks.AnnounceRegionElement, WinUI.TextBlock>(
+                    AnnounceRegionDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var handle = new Microsoft.UI.Reactor.Hooks.AnnounceHandle();
+            var el1 = (Microsoft.UI.Reactor.Hooks.AnnounceRegionElement)handle.Region;
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.TextBlock tb)
+            {
+                handle.Announce("mounted");
+
+                H.Check("Desc_AnnounceRegion_Mounted", true);
+                H.Check("Desc_AnnounceRegion_Hidden",
+                    tb.Width == 0 && tb.Height == 0 && tb.Opacity == 0 && tb.IsHitTestVisible == false && tb.IsTabStop == false);
+                H.Check("Desc_AnnounceRegion_LiveSetting",
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetLiveSetting(tb)
+                    == Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+                H.Check("Desc_AnnounceRegion_AccessibilityView",
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAccessibilityView(tb)
+                    == Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+                H.Check("Desc_AnnounceRegion_HandleBound", tb.Text == "mounted");
+
+                parent.Children.Add(tb);
+                await Harness.Render();
+
+                var el2 = el1 with { };
+                rec.UpdateChild(el1, el2, tb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_AnnounceRegion_UpdateKeepsHidden",
+                    tb.Width == 0 && tb.Height == 0 && tb.Opacity == 0 && tb.IsHitTestVisible == false && tb.IsTabStop == false);
+                H.Check("Desc_AnnounceRegion_UpdateKeepsLiveSetting",
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetLiveSetting(tb)
+                    == Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+
+                rec.UnmountChild(tb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_AnnounceRegion_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     //  PipsPagerDescriptor (Phase 3 batch 11) — SelectedPageIndex
     //  round-trip; multi-prop one-way envelope.
     // ────────────────────────────────────────────────────────────────────
