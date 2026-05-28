@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
@@ -17,13 +18,16 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   ToggleSplitButton's <c>IsChecked</c> is non-nullable <c>bool</c>,
 ///   so no null-coalesce is needed in read-back.</item>
 ///   <item><c>Label</c> — one-way (Content).</item>
+///   <item><c>Flyout</c> — <c>.OneWayBridged&lt;Element?&gt;</c> entry whose
+///   set lambda calls <c>Reconciler.CreateFlyoutForDescriptor(v, rr)</c>
+///   to produce a <c>FlyoutBase?</c> and assign it to
+///   <c>ToggleSplitButton.Flyout</c>. Mirrors the legacy mount arm's
+///   flyout construction path. Comparer is
+///   <see cref="ElementReferenceComparer"/> (reference identity over
+///   <c>Element?</c>) — matches the <c>GridDescriptor</c> definition-rebuild
+///   pattern, so the flyout is only torn down + rebuilt when the
+///   Flyout element reference actually changes.</item>
 /// </list></para>
-///
-/// <para><b>Known gap vs. hand-coded handler:</b> the <c>Flyout</c> child
-/// is not yet expressible through the descriptor — descriptor authors
-/// pursue flyouts via the setters chain. The legacy arm constructs the
-/// flyout in Mount; the descriptor leaves this on the follow-up to the
-/// container family port (see §14).</para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 internal static class ToggleSplitButtonDescriptor
@@ -44,5 +48,20 @@ internal static class ToggleSplitButtonDescriptor
             readBack:    static c => c.IsChecked)
         .OneWay(
             get: static e => e.Label,
-            set: static (c, v) => c.Content = v);
+            set: static (c, v) => c.Content = v)
+        .OneWayBridged<Element?>(
+            get:         static e => e.Flyout,
+            set:         static (c, v, rec, rr) => c.Flyout = rec.CreateFlyoutForDescriptor(v, rr),
+            shouldWrite: static e => e.Flyout is not null,
+            comparer:    ElementReferenceComparer.Instance);
+
+    /// <summary>Reference-identity comparer over <c>Element?</c> — matches the
+    /// pattern used by <c>GridDescriptor</c> for its
+    /// <c>GridDefinition</c> rebuild gate.</summary>
+    private sealed class ElementReferenceComparer : IEqualityComparer<Element?>
+    {
+        public static readonly ElementReferenceComparer Instance = new();
+        public bool Equals(Element? x, Element? y) => ReferenceEquals(x, y);
+        public int GetHashCode(Element obj) => global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+    }
 }

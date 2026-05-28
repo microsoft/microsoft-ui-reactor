@@ -541,6 +541,75 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    // Spec 047 §14 Phase 3-final Batch D — Flyout via .OneWayBridged.
+    internal class DescToggleSplitButtonFlyout(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<ToggleSplitButtonElement, WinUI.ToggleSplitButton>(
+                new DescriptorHandler<ToggleSplitButtonElement, WinUI.ToggleSplitButton>(
+                    ToggleSplitButtonDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            // (a) Attached: mount with a ContentFlyoutElement carrying a TextBlock.
+            var flyoutA = new ContentFlyoutElement(new TextBlockElement("A"));
+            var elA = new ToggleSplitButtonElement(Label: "Run") { Flyout = flyoutA };
+            var uiA = rec.Mount(elA, _noOp);
+            if (uiA is WinUI.ToggleSplitButton tsbA)
+            {
+                parent.Children.Add(tsbA);
+                await Harness.Render();
+                H.Check("Desc_ToggleSplitButton_FlyoutAttached", tsbA.Flyout is WinUI.Flyout f
+                    && f.Content is WinUI.TextBlock t && t.Text == "A");
+
+                // (c) Swap: new Flyout Element instance → rebuild fires.
+                var flyoutB = new ContentFlyoutElement(new TextBlockElement("B"));
+                var elA2 = elA with { Flyout = flyoutB };
+                rec.UpdateChild(elA, elA2, tsbA, _noOp);
+                await Harness.Render();
+                H.Check("Desc_ToggleSplitButton_FlyoutSwappedOnReconcile",
+                    tsbA.Flyout is WinUI.Flyout f2 && f2.Content is WinUI.TextBlock t2 && t2.Text == "B");
+
+                // (d) Same-ref: reconcile with the SAME Flyout reference → no rebuild.
+                var sameRefFlyout = tsbA.Flyout;
+                var elA3 = elA2 with { Flyout = flyoutB }; // same flyoutB reference
+                rec.UpdateChild(elA2, elA3, tsbA, _noOp);
+                await Harness.Render();
+                H.Check("Desc_ToggleSplitButton_FlyoutPreservedOnSameRef",
+                    ReferenceEquals(tsbA.Flyout, sameRefFlyout));
+
+                rec.UnmountChild(tsbA);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ToggleSplitButton_FlyoutAttached", false);
+            }
+
+            // (b) Null input: mount without a flyout → c.Flyout is null.
+            var elNull = new ToggleSplitButtonElement(Label: "Run");
+            var uiNull = rec.Mount(elNull, _noOp);
+            if (uiNull is WinUI.ToggleSplitButton tsbNull)
+            {
+                parent.Children.Add(tsbNull);
+                await Harness.Render();
+                H.Check("Desc_ToggleSplitButton_FlyoutNullOnNullInput", tsbNull.Flyout is null);
+                rec.UnmountChild(tsbNull);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ToggleSplitButton_FlyoutNullOnNullInput", false);
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  ColorPickerDescriptor (Phase 3 batch 2).
     // ────────────────────────────────────────────────────────────────────
@@ -1383,6 +1452,75 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    // Spec 047 §14 Phase 3-final Batch D — Flyout via .OneWayBridged.
+    internal class DescDropDownButtonFlyout(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<DropDownButtonElement, WinUI.DropDownButton>(
+                new DescriptorHandler<DropDownButtonElement, WinUI.DropDownButton>(
+                    DropDownButtonDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            // (a) Attached: mount with a ContentFlyoutElement carrying a TextBlock.
+            var flyoutA = new ContentFlyoutElement(new TextBlockElement("A"));
+            var elA = new DropDownButtonElement(Label: "Menu") { Flyout = flyoutA };
+            var uiA = rec.Mount(elA, _noOp);
+            if (uiA is WinUI.DropDownButton ddbA)
+            {
+                parent.Children.Add(ddbA);
+                await Harness.Render();
+                H.Check("Desc_DropDownButton_FlyoutAttached", ddbA.Flyout is WinUI.Flyout f
+                    && f.Content is WinUI.TextBlock t && t.Text == "A");
+
+                // (c) Swap: new Flyout Element instance → rebuild fires.
+                var flyoutB = new ContentFlyoutElement(new TextBlockElement("B"));
+                var elA2 = elA with { Flyout = flyoutB };
+                rec.UpdateChild(elA, elA2, ddbA, _noOp);
+                await Harness.Render();
+                H.Check("Desc_DropDownButton_FlyoutSwappedOnReconcile",
+                    ddbA.Flyout is WinUI.Flyout f2 && f2.Content is WinUI.TextBlock t2 && t2.Text == "B");
+
+                // (d) Same-ref: reconcile with the SAME Flyout reference → no rebuild.
+                var sameRefFlyout = ddbA.Flyout;
+                var elA3 = elA2 with { Flyout = flyoutB }; // same flyoutB reference
+                rec.UpdateChild(elA2, elA3, ddbA, _noOp);
+                await Harness.Render();
+                H.Check("Desc_DropDownButton_FlyoutPreservedOnSameRef",
+                    ReferenceEquals(ddbA.Flyout, sameRefFlyout));
+
+                rec.UnmountChild(ddbA);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_DropDownButton_FlyoutAttached", false);
+            }
+
+            // (b) Null input: mount without a flyout → c.Flyout is null.
+            var elNull = new DropDownButtonElement(Label: "Menu");
+            var uiNull = rec.Mount(elNull, _noOp);
+            if (uiNull is WinUI.DropDownButton ddbNull)
+            {
+                parent.Children.Add(ddbNull);
+                await Harness.Render();
+                H.Check("Desc_DropDownButton_FlyoutNullOnNullInput", ddbNull.Flyout is null);
+                rec.UnmountChild(ddbNull);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_DropDownButton_FlyoutNullOnNullInput", false);
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  SplitButtonDescriptor (Phase 3 batch 4) — Click via HandCodedEvent.
     //  Flyout escape-hatched (see descriptor xmldoc).
@@ -1423,6 +1561,75 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             else
             {
                 H.Check("Desc_SplitButton_Mounted", false);
+            }
+        }
+    }
+
+    // Spec 047 §14 Phase 3-final Batch D — Flyout via .OneWayBridged.
+    internal class DescSplitButtonFlyout(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<SplitButtonElement, WinUI.SplitButton>(
+                new DescriptorHandler<SplitButtonElement, WinUI.SplitButton>(
+                    SplitButtonDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            // (a) Attached: mount with a ContentFlyoutElement carrying a TextBlock.
+            var flyoutA = new ContentFlyoutElement(new TextBlockElement("A"));
+            var elA = new SplitButtonElement(Label: "Run") { Flyout = flyoutA };
+            var uiA = rec.Mount(elA, _noOp);
+            if (uiA is WinUI.SplitButton sbA)
+            {
+                parent.Children.Add(sbA);
+                await Harness.Render();
+                H.Check("Desc_SplitButton_FlyoutAttached", sbA.Flyout is WinUI.Flyout f
+                    && f.Content is WinUI.TextBlock t && t.Text == "A");
+
+                // (c) Swap: new Flyout Element instance → rebuild fires.
+                var flyoutB = new ContentFlyoutElement(new TextBlockElement("B"));
+                var elA2 = elA with { Flyout = flyoutB };
+                rec.UpdateChild(elA, elA2, sbA, _noOp);
+                await Harness.Render();
+                H.Check("Desc_SplitButton_FlyoutSwappedOnReconcile",
+                    sbA.Flyout is WinUI.Flyout f2 && f2.Content is WinUI.TextBlock t2 && t2.Text == "B");
+
+                // (d) Same-ref: reconcile with the SAME Flyout reference → no rebuild.
+                var sameRefFlyout = sbA.Flyout;
+                var elA3 = elA2 with { Flyout = flyoutB }; // same flyoutB reference
+                rec.UpdateChild(elA2, elA3, sbA, _noOp);
+                await Harness.Render();
+                H.Check("Desc_SplitButton_FlyoutPreservedOnSameRef",
+                    ReferenceEquals(sbA.Flyout, sameRefFlyout));
+
+                rec.UnmountChild(sbA);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_SplitButton_FlyoutAttached", false);
+            }
+
+            // (b) Null input: mount without a flyout → c.Flyout is null.
+            var elNull = new SplitButtonElement(Label: "Run");
+            var uiNull = rec.Mount(elNull, _noOp);
+            if (uiNull is WinUI.SplitButton sbNull)
+            {
+                parent.Children.Add(sbNull);
+                await Harness.Render();
+                H.Check("Desc_SplitButton_FlyoutNullOnNullInput", sbNull.Flyout is null);
+                rec.UnmountChild(sbNull);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_SplitButton_FlyoutNullOnNullInput", false);
             }
         }
     }

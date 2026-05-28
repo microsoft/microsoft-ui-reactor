@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
@@ -8,14 +9,25 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>MountDropDownButton</c> / <c>UpdateDropDownButton</c> arms in
 /// <see cref="Reconciler"/>.
 ///
-/// <para><b>Coverage:</b> <c>Label</c> one-way (Content). DropDownButton's
-/// legacy arm has no <c>Click</c> event subscription.</para>
-///
-/// <para><b>Known gap vs. hand-coded handler:</b> <c>Flyout</c> is
-/// escape-hatched — it requires the engine-internal
-/// <c>CreateFlyoutFromElement</c> helper which the descriptor builders
-/// don't yet expose. Authors needing a Flyout fall through to the
-/// legacy arm (V1 OFF) or use setters chain.</para>
+/// <para><b>Coverage:</b>
+/// <list type="bullet">
+///   <item><c>Label</c> — one-way (Content). DropDownButton's legacy arm
+///   has no <c>Click</c> event subscription.</item>
+///   <item><c>Flyout</c> — <c>.OneWayBridged&lt;Element?&gt;</c> entry whose
+///   set lambda calls <c>Reconciler.CreateFlyoutForDescriptor(v, rr)</c>
+///   to produce a <c>FlyoutBase?</c> and assign it to
+///   <c>DropDownButton.Flyout</c>. Mirrors the legacy mount arm's flyout
+///   construction path (which feeds the same engine-internal
+///   <c>CreateFlyoutFromElement</c> helper via the null-tolerant sibling
+///   <c>CreateFlyoutForDescriptor</c>). Comparer is
+///   <see cref="ElementReferenceComparer"/> (reference identity over
+///   <c>Element?</c>) — matches the <c>GridDescriptor</c> definition-rebuild
+///   pattern, so the flyout is only torn down + rebuilt when the
+///   Flyout element reference actually changes. The default
+///   <c>EqualityComparer&lt;Element?&gt;.Default</c> would do record-style
+///   structural equality and could miss a Flyout content swap that
+///   produced a structurally-equal Element.</item>
+/// </list></para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 internal static class DropDownButtonDescriptor
@@ -28,5 +40,24 @@ internal static class DropDownButtonDescriptor
         }
         .OneWay(
             get: static e => e.Label,
-            set: static (c, v) => c.Content = v);
+            set: static (c, v) => c.Content = v)
+        .OneWayBridged<Element?>(
+            get:         static e => e.Flyout,
+            set:         static (c, v, rec, rr) => c.Flyout = rec.CreateFlyoutForDescriptor(v, rr),
+            shouldWrite: static e => e.Flyout is not null,
+            comparer:    ElementReferenceComparer.Instance);
+
+    /// <summary>Reference-identity comparer over <c>Element?</c> — matches the
+    /// pattern used by <c>GridDescriptor</c> for its
+    /// <c>GridDefinition</c> rebuild gate. The bridged Flyout entry uses
+    /// this so the WinUI <c>FlyoutBase</c> is only rebuilt when the Flyout
+    /// Element reference actually changes (record-style structural
+    /// equality from the default comparer would miss content swaps that
+    /// produced a structurally-equal Element).</summary>
+    private sealed class ElementReferenceComparer : IEqualityComparer<Element?>
+    {
+        public static readonly ElementReferenceComparer Instance = new();
+        public bool Equals(Element? x, Element? y) => ReferenceEquals(x, y);
+        public int GetHashCode(Element obj) => global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+    }
 }

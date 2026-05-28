@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Windows.Foundation;
 using WinUI = Microsoft.UI.Xaml.Controls;
@@ -9,16 +10,23 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>MountSplitButton</c> / <c>UpdateSplitButton</c> arms in
 /// <see cref="Reconciler"/>.
 ///
-/// <para><b>Coverage:</b> <c>Label</c> one-way (Content), <c>Click</c>
-/// via <see cref="ControlDescriptor{TElement,TControl}.HandCodedEvent{TPayload,TDelegate}"/>
-/// using a <c>TypedEventHandler&lt;SplitButton, SplitButtonClickEventArgs&gt;</c>
-/// (the WinUI SplitButton.Click event signature).</para>
-///
-/// <para><b>Known gap vs. hand-coded handler:</b> <c>Flyout</c> is
-/// escape-hatched — it requires the engine-internal
-/// <c>CreateFlyoutFromElement</c> helper which the descriptor builders
-/// don't yet expose. Authors needing a Flyout fall through to the
-/// legacy arm (V1 OFF) or use setters chain.</para>
+/// <para><b>Coverage:</b>
+/// <list type="bullet">
+///   <item><c>Label</c> — one-way (Content).</item>
+///   <item><c>Click</c> via
+///   <see cref="ControlDescriptor{TElement,TControl}.HandCodedEvent{TPayload,TDelegate}"/>
+///   using a <c>TypedEventHandler&lt;SplitButton, SplitButtonClickEventArgs&gt;</c>
+///   (the WinUI SplitButton.Click event signature).</item>
+///   <item><c>Flyout</c> — <c>.OneWayBridged&lt;Element?&gt;</c> entry whose
+///   set lambda calls <c>Reconciler.CreateFlyoutForDescriptor(v, rr)</c>
+///   to produce a <c>FlyoutBase?</c> and assign it to
+///   <c>SplitButton.Flyout</c>. Mirrors the legacy mount arm's flyout
+///   construction path. Comparer is
+///   <see cref="ElementReferenceComparer"/> (reference identity over
+///   <c>Element?</c>) — matches the <c>GridDescriptor</c> definition-rebuild
+///   pattern, so the flyout is only torn down + rebuilt when the
+///   Flyout element reference actually changes.</item>
+/// </list></para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 internal static class SplitButtonDescriptor
@@ -40,5 +48,20 @@ internal static class SplitButtonDescriptor
             callbackPresent:  static e => e.OnClick,
             trampoline:       ClickTrampoline,
             slotIsNull:       static p => p.ClickTrampoline is null,
-            setSlot:          static (p, h) => p.ClickTrampoline = h);
+            setSlot:          static (p, h) => p.ClickTrampoline = h)
+        .OneWayBridged<Element?>(
+            get:         static e => e.Flyout,
+            set:         static (c, v, rec, rr) => c.Flyout = rec.CreateFlyoutForDescriptor(v, rr),
+            shouldWrite: static e => e.Flyout is not null,
+            comparer:    ElementReferenceComparer.Instance);
+
+    /// <summary>Reference-identity comparer over <c>Element?</c> — matches the
+    /// pattern used by <c>GridDescriptor</c> for its
+    /// <c>GridDefinition</c> rebuild gate.</summary>
+    private sealed class ElementReferenceComparer : IEqualityComparer<Element?>
+    {
+        public static readonly ElementReferenceComparer Instance = new();
+        public bool Equals(Element? x, Element? y) => ReferenceEquals(x, y);
+        public int GetHashCode(Element obj) => global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+    }
 }
