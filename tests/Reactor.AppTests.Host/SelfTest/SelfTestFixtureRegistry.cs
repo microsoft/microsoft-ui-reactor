@@ -1195,6 +1195,10 @@ internal static class SelfTestFixtureRegistry
         "Desc_BreadcrumbBar_MountUpdate",
         // Spec 047 §14 Phase 3-final Batch B — Frame + RichTextBlock + NumberBox.
         "Desc_Frame_MountUpdate",
+        // Spec 047 §14 Phase 3 completion — decorator-style polymorphic/interop ports.
+        "Desc_Icon_Mounted_Symbol",
+        "Desc_Icon_AfterUpdate_SymbolChange",
+        "Desc_Icon_TypeSwap_ReplacesControl",
         "Desc_RichTextBlock_MountUpdate",
         "Desc_NumberBox_MountUpdate",
         // Spec 047 §14 Phase 3-final Batch C — CalendarView.
@@ -2419,6 +2423,10 @@ internal static class SelfTestFixtureRegistry
         "Desc_BreadcrumbBar_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescBreadcrumbBarMountUpdate(harness),
         // Spec 047 §14 Phase 3-final Batch B — Frame + RichTextBlock + NumberBox.
         "Desc_Frame_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescFrameMountUpdate(harness),
+        // Spec 047 §14 Phase 3 completion — decorator-style polymorphic/interop ports.
+        "Desc_Icon_Mounted_Symbol" => new Spec047V1ProtocolDescriptorFixtures.DescIconMountedSymbol(harness),
+        "Desc_Icon_AfterUpdate_SymbolChange" => new Spec047V1ProtocolDescriptorFixtures.DescIconAfterUpdateSymbolChange(harness),
+        "Desc_Icon_TypeSwap_ReplacesControl" => new Spec047V1ProtocolDescriptorFixtures.DescIconTypeSwapReplacesControl(harness),
         "Desc_RichTextBlock_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRichTextBlockMountUpdate(harness),
         "Desc_NumberBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescNumberBoxMountUpdate(harness),
         // Spec 047 §14 Phase 3-final Batch C — CalendarView.

@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 using WinUI = Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
+using ReactorIconElement = Microsoft.UI.Reactor.Core.IconElement;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -3969,6 +3970,112 @@ internal static class Spec047V1ProtocolDescriptorFixtures
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // ────────────────────────────────────────────────────────────────────
+    //  Decorator-style descriptors — polymorphic Icon + XAML interop.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescIconMountedSymbol(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterDecoratorHandler<ReactorIconElement>(IconDescriptor.Handler);
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el = new ReactorIconElement(new SymbolIconData("Accept"));
+            var ui = rec.Mount(el, _noOp);
+            if (ui is WinUI.SymbolIcon si)
+            {
+                parent.Children.Add(si);
+                await Harness.Render();
+
+                H.Check("Desc_Icon_Mounted_Symbol", true);
+                H.Check("Desc_Icon_Mounted_SymbolValue", si.Symbol == Symbol.Accept);
+
+                rec.UnmountChild(si);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Icon_Mounted_Symbol", false);
+            }
+        }
+    }
+
+    internal class DescIconAfterUpdateSymbolChange(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterDecoratorHandler<ReactorIconElement>(IconDescriptor.Handler);
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new ReactorIconElement(new SymbolIconData("Accept"));
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.SymbolIcon si)
+            {
+                parent.Children.Add(si);
+                await Harness.Render();
+
+                var el2 = el1 with { Data = new SymbolIconData("Cancel") };
+                var next = rec.UpdateChild(el1, el2, si, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Icon_AfterUpdate_SymbolChange", next is null || ReferenceEquals(next, si));
+                H.Check("Desc_Icon_AfterUpdate_SymbolValue", si.Symbol == Symbol.Cancel);
+
+                rec.UnmountChild(si);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Icon_AfterUpdate_SymbolChange", false);
+            }
+        }
+    }
+
+    internal class DescIconTypeSwapReplacesControl(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterDecoratorHandler<ReactorIconElement>(IconDescriptor.Handler);
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new ReactorIconElement(new SymbolIconData("Accept"));
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.SymbolIcon si)
+            {
+                parent.Children.Add(si);
+                await Harness.Render();
+
+                var el2 = el1 with { Data = new FontIconData("E10B") };
+                var next = rec.UpdateChild(el1, el2, si, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Icon_TypeSwap_ReplacesControl",
+                    next is WinUI.FontIcon && !ReferenceEquals(next, si));
+                H.Check("Desc_Icon_TypeSwap_Glyph",
+                    next is WinUI.FontIcon fi && fi.Glyph == "E10B");
+
+                rec.UnmountChild(si);
+                if (next is UIElement nextUi)
+                    rec.UnmountChild(nextUi);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Icon_TypeSwap_ReplacesControl", false);
+            }
+        }
+    }
+
     //  RichTextBlockDescriptor (Phase 3-final Batch B) — Paragraphs as a
     //  ReferenceEquality-gated OneWay rebuild.
     // ────────────────────────────────────────────────────────────────────
