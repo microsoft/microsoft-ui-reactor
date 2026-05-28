@@ -33,14 +33,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///
 /// <para><b>Known gaps vs. hand-coded handler:</b>
 /// <list type="bullet">
-///   <item>Min/Max coercion suppression — the legacy
-///   <c>UpdateNumberBox</c> arm runs <c>ChangeEchoSuppressor.BeginSuppress</c>
-///   when the Value-into-new-range coercion is about to fire ValueChanged.
-///   The descriptor's plain <c>.OneWay</c> Min/Max entries do not — coercion
-///   echoes through <c>OnValueChanged</c>. Acceptable for now (matches the
-///   broader §14 thesis that coercion-tolerance is a hand-coded nuance);
-///   the <c>.CoercingOneWay</c> entry shape ships separately for callers
-///   that need it.</item>
 ///   <item>Immediate-mode "skip Value write when typed text is non-canonical"
 ///   — the legacy <c>UpdateNumberBox</c> arm preserves in-progress text like
 ///   "1." or "2.0". The descriptor's <c>.HandCodedControlled</c> Value entry
@@ -69,12 +61,22 @@ internal static class NumberBoxDescriptor
         }
         // Min/Max BEFORE Value so a fresh in-range Value isn't coerced by a
         // stale range. Matches the hand-coded arm's ordering invariant.
-        .OneWay(
-            get: static e => e.Minimum,
-            set: static (c, v) => c.Minimum = v)
-        .OneWay(
-            get: static e => e.Maximum,
-            set: static (c, v) => c.Maximum = v)
+        //
+        // §14 Phase 3 finish — Engine (5) port. CoercingOneWay wraps the
+        // write in WriteSuppressed when the new Min/Max would coerce the
+        // live Value, matching `UpdateNumberBox`'s
+        // `if (nb.Value < n.Minimum) ChangeEchoSuppressor.BeginSuppress(nb)`
+        // pattern verbatim — coercion-driven ValueChanged echoes are
+        // dropped without the descriptor author writing the suppression
+        // by hand.
+        .CoercingOneWay(
+            get:               static e => e.Minimum,
+            set:               static (c, v) => c.Minimum = v,
+            coercesController: static (c, newMin) => c.Value < newMin)
+        .CoercingOneWay(
+            get:               static e => e.Maximum,
+            set:               static (c, v) => c.Maximum = v,
+            coercesController: static (c, newMax) => c.Value > newMax)
         .HandCodedControlled<NumberBoxEventPayload, double,
             TypedEventHandler<WinUI.NumberBox, WinUI.NumberBoxValueChangedEventArgs>>(
             get:         static e => e.Value,
