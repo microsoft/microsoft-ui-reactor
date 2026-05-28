@@ -1228,6 +1228,7 @@ internal static class SelfTestFixtureRegistry
         "Desc_AnnotatedScrollBar_MountUpdate",
         "Desc_MapControl_MountUpdate",
         "Desc_ParallaxView_MountUpdate",
+        "Desc_RefreshContainer_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2452,6 +2453,7 @@ internal static class SelfTestFixtureRegistry
         "Desc_AnnotatedScrollBar_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescAnnotatedScrollBarMountUpdate(harness),
         "Desc_MapControl_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescMapControlMountUpdate(harness),
         "Desc_ParallaxView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescParallaxViewMountUpdate(harness),
+        "Desc_RefreshContainer_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRefreshContainerMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

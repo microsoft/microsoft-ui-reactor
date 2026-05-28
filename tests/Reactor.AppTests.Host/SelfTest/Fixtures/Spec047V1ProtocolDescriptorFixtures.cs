@@ -5802,6 +5802,48 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    internal class DescRefreshContainerMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<RefreshContainerElement, WinUI.RefreshContainer>(
+                new DescriptorHandler<RefreshContainerElement, WinUI.RefreshContainer>(
+                    RefreshContainerDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = RefreshContainer(TextBlock("refresh"), onRefreshRequested: _noOp);
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.RefreshContainer rc)
+            {
+                parent.Children.Add(rc);
+                await Harness.Render();
+
+                H.Check("Desc_RefreshContainer_Mounted", true);
+                H.Check("Desc_RefreshContainer_InitialDirection", rc.PullDirection == WinUI.RefreshPullDirection.TopToBottom);
+                H.Check("Desc_RefreshContainer_ContentMounted", rc.Content is WinUI.TextBlock tb && tb.Text == "refresh");
+
+                var el2 = RefreshContainer(TextBlock("updated"), onRefreshRequested: _noOp)
+                    .PullDirection(WinUI.RefreshPullDirection.BottomToTop);
+                rec.UpdateChild(el1, el2, rc, _noOp);
+                await Harness.Render();
+                H.Check("Desc_RefreshContainer_UpdatedDirection", rc.PullDirection == WinUI.RefreshPullDirection.BottomToTop);
+                H.Check("Desc_RefreshContainer_ContentUpdated", rc.Content is WinUI.TextBlock tb2 && tb2.Text == "updated");
+
+                rec.UnmountChild(rc);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_RefreshContainer_Mounted", false);
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  §14 Phase 3 finish — Port (11) Pivot via TabItemsHost (PivotItem container).
     // ────────────────────────────────────────────────────────────────────

@@ -369,6 +369,14 @@ internal sealed class BreadcrumbBarEventPayload
         Microsoft.UI.Xaml.Controls.BreadcrumbBarItemClickedEventArgs>? ItemClickedTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3 deferred controls — RefreshContainer RefreshRequested payload.</summary>
+internal sealed class RefreshContainerEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.RefreshContainer,
+        Microsoft.UI.Xaml.Controls.RefreshRequestedEventArgs>? RefreshRequestedTrampoline;
+}
+
 /// <summary>
 /// Spec 047 §9.2 — open-ended anchor for delegates registered via
 /// <see cref="ReactorBinding{TElement}.OnCustomEvent{TArgs}"/>. Holds a
