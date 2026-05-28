@@ -14,6 +14,7 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using WinUI = Microsoft.UI.Xaml.Controls;
 using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
+using WinShapes = Microsoft.UI.Xaml.Shapes;
 
 namespace Microsoft.UI.Reactor.Core;
 
@@ -296,28 +297,199 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Spec 047 §14 Phase 1 (1.11–1.15) — register the five Phase 1 built-in
-    /// control ports into <see cref="V1HandlerRegistry"/>. Built-in handler
-    /// types stay internal; this method is the sole registration site.
+    /// Spec 047 §14 Phase 3 completion — register all built-in V1 handlers
+    /// (Phase 1 hand-coded handlers + Phase 3 descriptor-driven ports) into
+    /// <see cref="V1HandlerRegistry"/>. Sole registration site; built-in
+    /// handler / descriptor types stay internal.
+    ///
+    /// <para>Carved (not registered here — kept on the legacy
+    /// <see cref="Mount(Element, Action)"/> switch by design):</para>
+    /// <list type="bullet">
+    ///   <item><b>Composition primitives</b> — <see cref="ComponentElement"/>,
+    ///   <see cref="FuncElement"/>, <see cref="MemoElement"/>,
+    ///   <see cref="ErrorBoundaryElement"/>, <c>CommandHostElement</c>,
+    ///   <see cref="Controls.Validation.FormFieldElement"/>,
+    ///   <see cref="Controls.Validation.ValidationVisualizerElement"/>,
+    ///   <see cref="Controls.Validation.ValidationRuleElement"/>. These sit
+    ///   <i>above</i> the V1 handler protocol (they orchestrate child
+    ///   reconciliation rather than wrap a single WinUI control), so Phase 4
+    ///   cleanup keeps their legacy arms.</item>
+    ///   <item><b>Interop bridges</b> — <see cref="Hosting.XamlHostElement"/>,
+    ///   <see cref="Hosting.XamlPageElement"/>. V1 descriptors exist
+    ///   (<c>XamlHostDescriptor</c>, <c>XamlPageDescriptor</c>) but stay
+    ///   unregistered because <see cref="Hosting.XamlInterop.Register(Reconciler)"/>
+    ///   populates the external <c>_typeRegistry</c> during app startup;
+    ///   auto-registering V1 would clash via
+    ///   <see cref="EnsureRegistrableElementType"/>. Unification is Phase 4
+    ///   follow-up.</item>
+    ///   <item><b>Deferred overlays</b> (follow-up PR) — <c>ContentDialogElement</c>,
+    ///   <c>FlyoutElement</c>, <c>MenuBarElement</c>, <c>CommandBarElement</c>,
+    ///   <c>MenuFlyoutElement</c>, <c>PopupElement</c>,
+    ///   <c>CommandBarFlyoutElement</c>. Require decorator-style ports
+    ///   (lifecycle, side-mount).</item>
+    ///   <item><b>Deferred stateful host</b> (follow-up PR) — <c>NavigationHostElement</c>.
+    ///   Per-instance route/cache/transition state is intercepted in
+    ///   <see cref="UnmountRecursive"/> before the V1 dispatch arm; needs a
+    ///   small refactor before it can route through V1.</item>
+    ///   <item><b>Deferred — descriptor with known docking gaps</b> (follow-up
+    ///   PR) — <c>TabViewDescriptor</c>. Bisect of full V1 ON flakes (1–4
+    ///   non-deterministic docking-text-find failures per run across
+    ///   DockHooks / PixDoc / RoleAware / Composition / FloatRoot fixtures,
+    ///   versus a clean V1 OFF baseline) ratifies the descriptor's documented
+    ///   gaps — missing spec 045 §2.4 drag pipeline trampolines, §2.2 pinnable
+    ///   tab headers (BuildTabHeader / BuildPinButton / in-place
+    ///   TryUpdatePinHeaderInPlace), in-place CanUpdate for tab content
+    ///   (preserves focus/state on re-renders), conditional SelectedIndex
+    ///   write, and TabStripHeader / TabStripFooter Element slots — are hot
+    ///   in the docking suite. Closing them requires engine work
+    ///   (post-children mount-hook so SelectionChanged subscribes after
+    ///   children-add, ImperativeBridged for the named tab strip slots)
+    ///   tracked alongside the overlays + NavigationHost in the follow-up.</item>
+    /// </list>
     /// </summary>
     private void RegisterV1BuiltInHandlers()
     {
-        RegisterHandler<ToggleSwitchElement, Microsoft.UI.Xaml.Controls.ToggleSwitch>(new V1Protocol.Handlers.ToggleSwitchHandler());
-        RegisterHandler<SliderElement, Microsoft.UI.Xaml.Controls.Slider>(new V1Protocol.Handlers.SliderHandler());
-        RegisterHandler<TextBoxElement, Microsoft.UI.Xaml.Controls.TextBox>(new V1Protocol.Handlers.TextBoxHandler());
-        RegisterHandler<BorderElement, Microsoft.UI.Xaml.Controls.Border>(new V1Protocol.Handlers.BorderHandler());
-        RegisterHandler<ListViewElement, Microsoft.UI.Xaml.Controls.ListView>(new V1Protocol.Handlers.ListViewHandler());
+        // ── Phase 1 hand-coded handlers (battle-tested, hot-path tuned) ──
+        RegisterHandler<ToggleSwitchElement, WinUI.ToggleSwitch>(new V1Protocol.Handlers.ToggleSwitchHandler());
+        RegisterHandler<SliderElement, WinUI.Slider>(new V1Protocol.Handlers.SliderHandler());
+        RegisterHandler<TextBoxElement, WinUI.TextBox>(new V1Protocol.Handlers.TextBoxHandler());
+        RegisterHandler<BorderElement, WinUI.Border>(new V1Protocol.Handlers.BorderHandler());
+        RegisterHandler<ListViewElement, WinUI.ListView>(new V1Protocol.Handlers.ListViewHandler());
 
-        // ── §14 Phase 3 completion — engine-gap closer ───────────────
-        // TemplatedFlipViewElement<T> port (PreMountedItems strategy).
-        // Registered base-derived against TemplatedFlipViewElementBase so
-        // every closed-T leaf routes to the same descriptor via the
-        // base-derived fallback walk. Phase 3 completion's full
-        // descriptor sweep extends this block.
-        RegisterHandlerForDerivedTypes<TemplatedFlipViewElementBase, Microsoft.UI.Xaml.Controls.FlipView>(
-            new V1Protocol.Descriptor.DescriptorHandler<TemplatedFlipViewElementBase, Microsoft.UI.Xaml.Controls.FlipView>(
-                V1Protocol.Descriptor.Descriptors.TemplatedFlipViewDescriptor.Descriptor));
+        // ── §14 Phase 3 base-derived (templated/lazy/items hosts) ────────
+        // Each closed-T leaf routes through the same descriptor via the
+        // base-derived fallback walk (matches the legacy switch's erasure
+        // pattern). Parallel implementations: TemplatedListView/GridView
+        // overlap with the Phase 1 ListViewHandler — exact-type wins, so
+        // ListView itself uses ListViewHandler; only typed templated
+        // variants route through these base-derived registrations.
+        RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.TemplatedListViewDescriptor.Descriptor);
+        RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.TemplatedGridViewDescriptor.Descriptor);
+        RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.TemplatedFlipViewDescriptor.Descriptor);
+        RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.LazyStackDescriptor.Descriptor);
+        RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.ItemsRepeaterDescriptor.Descriptor);
+        RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.ItemsViewDescriptor.Descriptor);
+
+        // ── §14 Phase 3 standard concrete descriptors (alphabetical) ────
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AnimatedIconDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AnimatedVisualPlayerDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AnnotatedScrollBarDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AnnounceRegionDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AutoSuggestBoxDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.BreadcrumbBarDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ButtonDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarDatePickerDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarViewDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CanvasDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CheckBoxDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ColorPickerDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ComboBoxDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.DatePickerDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.DropDownButtonDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.EllipseDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ExpanderDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FlexPanelDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FlipViewDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FrameDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.GridDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.GridViewDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.HyperlinkButtonDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ImageDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.InfoBadgeDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.InfoBarDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ItemContainerDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.LineDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ListBoxDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.MapControlDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.MediaPlayerElementDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.NavigationViewDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.NumberBoxDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ParallaxViewDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.PasswordBoxDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.PathDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.PersonPictureDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.PipsPagerDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.PivotDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ProgressBarDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ProgressRingDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RadioButtonDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RadioButtonsDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RatingControlDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RectangleDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RefreshContainerDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RelativePanelDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RepeatButtonDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RichEditBoxDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RichTextBlockDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ScrollViewDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ScrollViewerDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SelectorBarDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SemanticDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SemanticZoomDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SplitButtonDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SplitViewDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.StackPanelDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SwipeControlDescriptor.Descriptor);
+        // Spec 047 §14 Phase 3 completion — TabViewDescriptor stays carved.
+        // Bisect (3× clean V1 ON full selftest with this single line removed,
+        // matching V1 OFF's 4410-ok baseline; with it registered, 1–4 random
+        // docking-text-find checks fail per run across DockHooks / PixDoc /
+        // RoleAware / Composition / FloatRoot fixtures) proves the gap
+        // documented on TabViewDescriptor — missing spec 045 §2.4 drag
+        // pipeline (OnTabDragStarting / OnTabDragCompleted), §2.2 IsPinnable
+        // header rendering (BuildTabHeader + BuildPinButton + in-place
+        // TryUpdatePinHeaderInPlace on update), in-place CanUpdate for tab
+        // content (preserves focus/state across re-renders), conditional
+        // SelectedIndex write, and TabStripHeader / TabStripFooter Element
+        // slots — is hot in the docking suite. Closing those gaps requires
+        // engine work (post-children mount-hook so SelectionChanged subscribes
+        // after children-add, ImperativeBridged for the tab strip named
+        // slots) tracked as the follow-up that takes Phase 3 the rest of
+        // the way to "every element routes through V1." This PR registers
+        // every other Phase 3 descriptor safely.
+        // RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TabViewDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TeachingTipDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TextBlockDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TimePickerDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TitleBarDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ToggleButtonDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ToggleSplitButtonDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TreeViewDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ViewboxDescriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.WebView2Descriptor.Descriptor);
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.WrapGridDescriptor.Descriptor);
+
+        // ── §14 Phase 3 completion decorator-style handlers ──────────────
+        RegisterDecoratorHandler<IconElement>(V1Protocol.Descriptor.Descriptors.IconDescriptor.Handler);
     }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 3 completion — sugar wrapper around
+    /// <see cref="RegisterHandler{TElement,TControl}"/> for built-in
+    /// descriptor-driven ports. Keeps <see cref="RegisterV1BuiltInHandlers"/>
+    /// readable as a flat list of descriptors.
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    private void RegisterDescriptor<TElement, TControl>(
+        V1Protocol.Descriptor.ControlDescriptor<TElement, TControl> descriptor)
+        where TElement : Element
+        where TControl : FrameworkElement, new()
+        => RegisterHandler<TElement, TControl>(
+            new V1Protocol.Descriptor.DescriptorHandler<TElement, TControl>(descriptor));
+
+    /// <summary>
+    /// Spec 047 §14 Phase 3 completion — sugar wrapper around
+    /// <see cref="RegisterHandlerForDerivedTypes{TBase,TControl}"/> for
+    /// base-derived descriptor ports (typed templated lists, lazy stacks,
+    /// items hosts).
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    private void RegisterDescriptorForDerivedTypes<TBase, TControl>(
+        V1Protocol.Descriptor.ControlDescriptor<TBase, TControl> descriptor)
+        where TBase : Element
+        where TControl : FrameworkElement, new()
+        => RegisterHandlerForDerivedTypes<TBase, TControl>(
+            new V1Protocol.Descriptor.DescriptorHandler<TBase, TControl>(descriptor));
 
     /// <summary>
     /// Spec 047 §14 Phase 1 — v1 protocol feature flag (Q1.1). When true,
