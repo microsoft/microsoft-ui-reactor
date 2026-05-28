@@ -1803,7 +1803,7 @@ public sealed partial class Reconciler
         return listView;
     }
 
-    private WinUI.GridView MountGridView(GridViewElement gv, Action requestRerender)
+    internal WinUI.GridView MountGridView(GridViewElement gv, Action requestRerender)
     {
         var gridView = new WinUI.GridView
         {

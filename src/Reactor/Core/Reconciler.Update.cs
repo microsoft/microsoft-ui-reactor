@@ -2853,7 +2853,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateGridView(GridViewElement o, GridViewElement n, WinUI.GridView gv, Action requestRerender)
+    internal UIElement? UpdateGridView(GridViewElement o, GridViewElement n, WinUI.GridView gv, Action requestRerender)
     {
         gv.SelectionMode = n.SelectionMode;
         gv.IsItemClickEnabled = n.OnItemClick is not null;
