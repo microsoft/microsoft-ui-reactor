@@ -2295,7 +2295,7 @@ public sealed partial class Reconciler
         return ib;
     }
 
-    private UIElement MountContentDialog(ContentDialogElement cdEl, Action requestRerender)
+    internal UIElement MountContentDialog(ContentDialogElement cdEl, Action requestRerender)
     {
         var placeholder = new WinUI.StackPanel { Visibility = Visibility.Collapsed };
         SetElementTag(placeholder, cdEl);
@@ -2350,7 +2350,7 @@ public sealed partial class Reconciler
         cdEl.OnClosed?.Invoke(winUiResult);
     }
 
-    private UIElement? MountFlyout(FlyoutElement flyEl, Action requestRerender)
+    internal UIElement? MountFlyout(FlyoutElement flyEl, Action requestRerender)
     {
         var target = Mount(flyEl.Target, requestRerender);
         if (target is FrameworkElement targetFe)
@@ -2411,7 +2411,7 @@ public sealed partial class Reconciler
         return tip;
     }
 
-    private WinUI.MenuBar MountMenuBar(MenuBarElement mbEl)
+    internal WinUI.MenuBar MountMenuBar(MenuBarElement mbEl)
     {
         var menuBar = new WinUI.MenuBar();
         foreach (var menuItem in mbEl.Items)
@@ -2488,7 +2488,7 @@ public sealed partial class Reconciler
         return false;
     }
 
-    private WinUI.CommandBar MountCommandBar(CommandBarElement cmdEl, Action requestRerender)
+    internal WinUI.CommandBar MountCommandBar(CommandBarElement cmdEl, Action requestRerender)
     {
         var commandBar = new WinUI.CommandBar
         {
@@ -2543,7 +2543,7 @@ public sealed partial class Reconciler
         }
     }
 
-    private UIElement? MountMenuFlyout(MenuFlyoutElement mfEl, Action requestRerender)
+    internal UIElement? MountMenuFlyout(MenuFlyoutElement mfEl, Action requestRerender)
     {
         var target = Mount(mfEl.Target, requestRerender);
         if (target is FrameworkElement targetFe)
@@ -3680,7 +3680,7 @@ public sealed partial class Reconciler
 
     // ── Popup ───────────────────────────────────────────────────────────
 
-    private UIElement MountPopup(PopupElement popup, Action requestRerender)
+    internal UIElement MountPopup(PopupElement popup, Action requestRerender)
     {
         // Popup is not a UIElement child, so we wrap it in a StackPanel
         var wrapper = new WinUI.StackPanel();
@@ -3719,7 +3719,7 @@ public sealed partial class Reconciler
 
     // ── CommandBarFlyout ────────────────────────────────────────────────
 
-    private UIElement? MountCommandBarFlyout(CommandBarFlyoutElement cbf, Action requestRerender)
+    internal UIElement? MountCommandBarFlyout(CommandBarFlyoutElement cbf, Action requestRerender)
     {
         var target = Mount(cbf.Target, requestRerender);
         if (target is FrameworkElement targetFe)

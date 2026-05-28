@@ -2410,7 +2410,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdatePopup(PopupElement o, PopupElement n, WinUI.StackPanel wrapper, Action requestRerender)
+    internal UIElement? UpdatePopup(PopupElement o, PopupElement n, WinUI.StackPanel wrapper, Action requestRerender)
     {
         // The popup itself is the wrapper's first child. Update its scalar
         // props and reconcile the hosted Child in place so transient popup
@@ -2462,7 +2462,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateCommandBarFlyout(CommandBarFlyoutElement o, CommandBarFlyoutElement n, UIElement targetControl, Action requestRerender)
+    internal UIElement? UpdateCommandBarFlyout(CommandBarFlyoutElement o, CommandBarFlyoutElement n, UIElement targetControl, Action requestRerender)
     {
         // Reconcile the target in place and reuse the attached flyout when
         // possible — re-attaching a brand-new flyout on every update would
@@ -2515,7 +2515,7 @@ public sealed partial class Reconciler
         return updated == targetControl ? null : updated;
     }
 
-    private UIElement? UpdateMenuFlyout(MenuFlyoutElement o, MenuFlyoutElement n, UIElement targetControl, Action requestRerender)
+    internal UIElement? UpdateMenuFlyout(MenuFlyoutElement o, MenuFlyoutElement n, UIElement targetControl, Action requestRerender)
     {
         UIElement? updated = targetControl;
         if (CanUpdate(o.Target, n.Target))
@@ -2556,7 +2556,7 @@ public sealed partial class Reconciler
         return updated == targetControl ? null : updated;
     }
 
-    private UIElement? UpdateFlyoutElement(FlyoutElement o, FlyoutElement n, UIElement targetControl, Action requestRerender)
+    internal UIElement? UpdateFlyoutElement(FlyoutElement o, FlyoutElement n, UIElement targetControl, Action requestRerender)
     {
         UIElement? updated = targetControl;
         if (CanUpdate(o.Target, n.Target))
@@ -2778,7 +2778,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateContentDialog(ContentDialogElement o, ContentDialogElement n, FrameworkElement fe, Action requestRerender)
+    internal UIElement? UpdateContentDialog(ContentDialogElement o, ContentDialogElement n, FrameworkElement fe, Action requestRerender)
     {
         if (n.IsOpen && !o.IsOpen) ShowContentDialog(n, fe, requestRerender);
         SetElementTag(fe, n);
@@ -3563,7 +3563,7 @@ public sealed partial class Reconciler
         visual.ImplicitAnimations = coll;
     }
 
-    private UIElement? UpdateMenuBar(MenuBarElement o, MenuBarElement n, WinUI.MenuBar mb)
+    internal UIElement? UpdateMenuBar(MenuBarElement o, MenuBarElement n, WinUI.MenuBar mb)
     {
         int oldCount = o.Items.Length;
         int newCount = n.Items.Length;
@@ -3687,7 +3687,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateCommandBar(CommandBarElement o, CommandBarElement n, WinUI.CommandBar cb, Action requestRerender)
+    internal UIElement? UpdateCommandBar(CommandBarElement o, CommandBarElement n, WinUI.CommandBar cb, Action requestRerender)
     {
         cb.DefaultLabelPosition = n.DefaultLabelPosition;
         cb.IsOpen = n.IsOpen;

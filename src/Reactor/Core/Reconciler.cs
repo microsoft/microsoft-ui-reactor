@@ -322,11 +322,18 @@ public sealed partial class Reconciler : IDisposable
     ///   auto-registering V1 would clash via
     ///   <see cref="EnsureRegistrableElementType"/>. Unification is Phase 4
     ///   follow-up.</item>
-    ///   <item><b>Deferred overlays</b> (follow-up PR) — <c>ContentDialogElement</c>,
-    ///   <c>FlyoutElement</c>, <c>MenuBarElement</c>, <c>CommandBarElement</c>,
+    ///   <item><b>Overlays — PORTED (§14 Phase 3 prelude)</b> —
+    ///   <c>ContentDialogElement</c>, <c>FlyoutElement</c>,
+    ///   <c>MenuBarElement</c>, <c>CommandBarElement</c>,
     ///   <c>MenuFlyoutElement</c>, <c>PopupElement</c>,
-    ///   <c>CommandBarFlyoutElement</c>. Require decorator-style ports
-    ///   (lifecycle, side-mount).</item>
+    ///   <c>CommandBarFlyoutElement</c> now route through V1 via
+    ///   decorator-style handlers in <c>V1Protocol.Handlers</c> that delegate
+    ///   to the legacy <c>MountXxx</c>/<c>UpdateXxx</c> bodies and return
+    ///   <see cref="V1Protocol.V1UnmountDisposition.ContinueDefaultTraversal"/>
+    ///   on unmount — so the engine falls through to the same
+    ///   <see cref="UnmountRecursive"/> type-based recursion that runs when
+    ///   the flag is OFF, making mount/update/unmount byte-identical
+    ///   V1 ON ≡ V1 OFF.</item>
     ///   <item><b>Stateful host — PORTED (§14 Phase 3 prelude)</b> —
     ///   <c>NavigationHostElement</c> now routes through V1 via
     ///   <see cref="V1Protocol.Handlers.NavigationHostHandler"/> (Path B
@@ -371,6 +378,18 @@ public sealed partial class Reconciler : IDisposable
         // ── §14 Phase 3 prelude carve-closures (delegate to engine bodies) ──
         RegisterHandler<NavigationHostElement, WinUI.Grid>(new V1Protocol.Handlers.NavigationHostHandler());
         RegisterHandler<GridViewElement, WinUI.GridView>(new V1Protocol.Handlers.GridViewHandler());
+
+        // Overlays — decorator-style ports. Each delegates to the legacy
+        // MountXxx/UpdateXxx body and returns ContinueDefaultTraversal on
+        // unmount, so the V1 ON path is byte-identical to V1 OFF (which skips
+        // the V1 arm and runs the same UnmountRecursive type-based recursion).
+        RegisterDecoratorHandler<ContentDialogElement>(new V1Protocol.Handlers.ContentDialogHandler());
+        RegisterDecoratorHandler<FlyoutElement>(new V1Protocol.Handlers.FlyoutHandler());
+        RegisterDecoratorHandler<MenuBarElement>(new V1Protocol.Handlers.MenuBarHandler());
+        RegisterDecoratorHandler<CommandBarElement>(new V1Protocol.Handlers.CommandBarHandler());
+        RegisterDecoratorHandler<MenuFlyoutElement>(new V1Protocol.Handlers.MenuFlyoutHandler());
+        RegisterDecoratorHandler<PopupElement>(new V1Protocol.Handlers.PopupHandler());
+        RegisterDecoratorHandler<CommandBarFlyoutElement>(new V1Protocol.Handlers.CommandBarFlyoutHandler());
 
         // ── §14 Phase 3 base-derived (templated/lazy/items hosts) ────────
         // Each closed-T leaf routes through the same descriptor via the
