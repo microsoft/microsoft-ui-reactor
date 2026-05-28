@@ -23,18 +23,22 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <item><c>Header</c> (string slot) — plain one-way write.</item>
 /// </list></para>
 ///
+/// <para><b>§14 Phase 3 finish addition:</b> <c>HeaderTemplate</c>
+/// ports via the Engine (2) <c>.ImperativeBridged</c> entry shape — the
+/// entry's Update lambda calls
+/// <c>ctx.Reconciler.ReconcileV1Child(o.HeaderTemplate, n.HeaderTemplate, ...)</c>
+/// to preserve descendant component state across re-renders. The string
+/// <c>Header</c> entry is gated on <c>HeaderTemplate is null</c>, so the
+/// Element header wins when both are set — mirrors the legacy
+/// "Element header overrides string slot" semantics in
+/// <c>UpdateExpander</c>.</para>
+///
 /// <para><b>Known gap vs. hand-coded handler:</b>
 /// <list type="bullet">
-///   <item><c>HeaderTemplate</c> (an Element-typed header) is NOT
-///   surfaced by the descriptor. Mounting an Element into a non-primary
-///   slot requires reconciler context the descriptor builders can't yet
-///   express. Authors who need an Element header stay on V1 OFF (legacy
-///   arm reconciles HeaderTemplate via <c>ReconcileChild</c>). The string
-///   <c>Header</c> path is fully supported.</item>
-///   <item><c>ContentTransitions</c> is not surfaced — same constraint
-///   (writing a <c>TransitionCollection</c> with the legacy guard is
-///   declarative-compatible but the test fixture exercises only the
-///   common case; escape-hatched via setter when needed).</item>
+///   <item><c>ContentTransitions</c> is not surfaced (writing a
+///   <c>TransitionCollection</c> with the legacy guard is declarative-
+///   compatible but the test fixture exercises only the common case;
+///   escape-hatched via setter when needed).</item>
 /// </list></para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
@@ -76,9 +80,33 @@ internal static class ExpanderDescriptor
         .OneWay(
             get: static e => e.ExpandDirection,
             set: static (c, v) => c.ExpandDirection = v)
-        .OneWay(
-            get: static e => e.Header ?? string.Empty,
-            set: static (c, v) => c.Header = v)
+        // §14 Phase 3 finish — Engine (2) port. HeaderTemplate (Element)
+        // takes precedence over the string slot. ImperativeBridged so the
+        // Update path can call ReconcileV1Child to preserve descendant
+        // component state across re-renders. The sibling string-Header
+        // entry below is gated on HeaderTemplate-null so this entry's
+        // write is never overwritten.
+        .ImperativeBridged(
+            mount: static (ctx, c, e) =>
+            {
+                if (e.HeaderTemplate is null) return;
+                var mounted = ctx.MountChild(e.HeaderTemplate);
+                if (mounted is not null) c.Header = mounted;
+            },
+            update: static (ctx, c, oldEl, newEl) =>
+            {
+                if (oldEl.HeaderTemplate is null && newEl.HeaderTemplate is null) return;
+                var existing = c.Header as UIElement;
+                var next = ctx.Reconciler.ReconcileV1Child(
+                    oldEl.HeaderTemplate, newEl.HeaderTemplate, existing, ctx.RequestRerender);
+                if (!ReferenceEquals(existing, next))
+                    c.Header = next; // null clears the slot so the string-Header gate can write.
+            })
+        .OneWayConditional(
+            get:         static e => e.Header ?? string.Empty,
+            set:         static (c, v) => c.Header = v,
+            // Element header wins — skip when HeaderTemplate is set.
+            shouldWrite: static e => e.HeaderTemplate is null)
         .HandCodedControlled<ExpanderEventPayload, bool,
             TypedEventHandler<WinUI.Expander, WinUI.ExpanderExpandingEventArgs>>(
             get:         static e => e.IsExpanded,
