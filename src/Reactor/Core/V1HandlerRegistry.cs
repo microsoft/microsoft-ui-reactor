@@ -35,11 +35,40 @@ internal interface IV1HandlerEntry
 internal sealed class V1HandlerRegistry
 {
     private readonly Dictionary<Type, IV1HandlerEntry> _entries = new();
+    // §14 Phase 3 close-out — base-derived entries catch any element whose
+    // concrete runtime type derives from the registered base. Used by the
+    // typed templated-list descriptor ports (TemplatedListViewElement<T>
+    // family) so a single descriptor registration on a non-generic
+    // intermediate base routes every closed-T variant — same T-erasure
+    // model the legacy Reconciler.Mount switch uses.
+    private readonly Dictionary<Type, IV1HandlerEntry> _baseEntries = new();
+    // Cache resolved base lookups so the walk is O(1) in steady state.
+    // Null marker means "checked and no base match" so we don't re-walk.
+    private readonly Dictionary<Type, IV1HandlerEntry?> _baseCache = new();
 
     public bool TryGet(Type elementType, out IV1HandlerEntry entry)
-        => _entries.TryGetValue(elementType, out entry!);
+    {
+        if (_entries.TryGetValue(elementType, out entry!)) return true;
+        if (_baseEntries.Count == 0) { entry = null!; return false; }
+        if (_baseCache.TryGetValue(elementType, out var cached))
+        {
+            entry = cached!;
+            return cached is not null;
+        }
+        for (var t = elementType.BaseType; t is not null && t != typeof(object); t = t.BaseType)
+        {
+            if (_baseEntries.TryGetValue(t, out entry!))
+            {
+                _baseCache[elementType] = entry;
+                return true;
+            }
+        }
+        _baseCache[elementType] = null;
+        entry = null!;
+        return false;
+    }
 
-    public bool ContainsKey(Type elementType) => _entries.ContainsKey(elementType);
+    public bool ContainsKey(Type elementType) => _entries.ContainsKey(elementType) || _baseEntries.ContainsKey(elementType);
 
     /// <summary>
     /// Adds a handler for the given element type. Throws on duplicate per
@@ -54,5 +83,25 @@ internal sealed class V1HandlerRegistry
                 "Duplicate registration is forbidden in v1 (spec 047 §13 Q17).");
         }
         _entries.Add(elementType, entry);
+    }
+
+    /// <summary>
+    /// §14 Phase 3 close-out — register a handler that catches every
+    /// closed runtime type whose type chain reaches <paramref name="baseType"/>.
+    /// Exact-type entries in <see cref="Add"/> always take precedence, so
+    /// a derived type registered explicitly stays distinct. Throws on
+    /// duplicate base-type registration. Invalidates the resolution cache.
+    /// </summary>
+    public void AddForDerivedTypes(Type baseType, IV1HandlerEntry entry)
+    {
+        if (_baseEntries.ContainsKey(baseType))
+        {
+            throw new InvalidOperationException(
+                $"V1 handler already registered for derived types of '{baseType.FullName}'. " +
+                "Duplicate registration is forbidden in v1 (spec 047 §13 Q17).");
+        }
+        _baseEntries.Add(baseType, entry);
+        // A previously-cached miss may now resolve via this base — invalidate.
+        if (_baseCache.Count > 0) _baseCache.Clear();
     }
 }

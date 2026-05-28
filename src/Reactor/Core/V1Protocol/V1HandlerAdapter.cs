@@ -83,6 +83,13 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
             templated.Bind(fe, element, ctx.Reconciler, ctx.RequestRerender, isMount: true);
             return;
         }
+        // §14 Phase 3 close-out: erased variant — same dispatch contract
+        // but the per-item type lives on the element, not the strategy.
+        if (strategy is IErasedTemplatedItemsStrategy erased && control is FrameworkElement feErased)
+        {
+            erased.Bind(feErased, element, ctx.Reconciler, ctx.RequestRerender, isMount: true);
+            return;
+        }
         switch (strategy)
         {
             case None<TElement, TControl>:
@@ -181,6 +188,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         if (strategy is ITemplatedItemsStrategy templated && control is FrameworkElement feUpd)
         {
             templated.Bind(feUpd, newEl, reconciler, requestRerender, isMount: false);
+            return;
+        }
+        if (strategy is IErasedTemplatedItemsStrategy erased && control is FrameworkElement feErasedUpd)
+        {
+            erased.Bind(feErasedUpd, newEl, reconciler, requestRerender, isMount: false);
             return;
         }
         switch (strategy)

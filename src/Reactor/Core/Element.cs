@@ -2988,7 +2988,7 @@ public enum TemplatedControlKind { ListView, GridView, FlipView }
 /// Abstract base for data-driven items controls. Non-generic so the reconciler
 /// can match on a single type in its switch expression (same pattern as LazyStackElementBase).
 /// </summary>
-public abstract record TemplatedListElementBase : Element, global::Microsoft.UI.Reactor.Core.Internal.IItemViewSource
+public abstract record TemplatedListElementBase : Element, global::Microsoft.UI.Reactor.Core.Internal.IItemViewSource, global::Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource
 {
     public abstract TemplatedControlKind ControlKind { get; }
     public abstract int ItemCount { get; }
@@ -3005,6 +3005,11 @@ public abstract record TemplatedListElementBase : Element, global::Microsoft.UI.
     /// pre-mounts so it does not participate.
     /// </summary>
     internal abstract string GetKeyAt(int index);
+    // §14 Phase 3 close-out — bridge the internal abstract to the public
+    // IKeyedItemSource contract via explicit interface implementation so
+    // the abstract stays internal (spec 042 decision) while descriptor
+    // ports can still read keys through the IKeyedItemSource handle.
+    string global::Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource.GetKeyAt(int index) => GetKeyAt(index);
     public abstract void InvokeSelectionChanged(int index);
     public abstract void InvokeItemClick(int index);
     public abstract void ApplyControlSetters(object control);
@@ -3030,11 +3035,46 @@ public abstract record TemplatedListElementBase : Element, global::Microsoft.UI.
     internal virtual bool HasMultiSelectionCallback => false;
 }
 
+/// <summary>
+/// Spec 047 §14 Phase 3 close-out — empty marker intermediate that lets
+/// the v1 handler registry route every closed
+/// <c>TemplatedListViewElement&lt;T&gt;</c> through a single base-derived
+/// descriptor registration without an open-generic resolver. Adds no
+/// fields and no overrides, so record equality on the leaf type
+/// <c>TemplatedListViewElement&lt;T&gt;</c> is unchanged.
+/// </summary>
+public abstract record TemplatedListViewElementBase : TemplatedListElementBase
+{
+    public sealed override TemplatedControlKind ControlKind => TemplatedControlKind.ListView;
+}
+
+/// <summary>
+/// Spec 047 §14 Phase 3 close-out — see
+/// <see cref="TemplatedListViewElementBase"/>.
+/// </summary>
+public abstract record TemplatedGridViewElementBase : TemplatedListElementBase
+{
+    public sealed override TemplatedControlKind ControlKind => TemplatedControlKind.GridView;
+}
+
+/// <summary>
+/// Spec 047 §14 Phase 3 close-out — see
+/// <see cref="TemplatedListViewElementBase"/>. FlipView descriptor port
+/// is carved to Phase 4 because FlipView does not support
+/// <c>ContainerContentChanging</c> (pre-mounts items via a different
+/// shape); the marker is reserved so the symmetry is visible in the
+/// element hierarchy.
+/// </summary>
+public abstract record TemplatedFlipViewElementBase : TemplatedListElementBase
+{
+    public sealed override TemplatedControlKind ControlKind => TemplatedControlKind.FlipView;
+}
+
 public record TemplatedListViewElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : TemplatedListElementBase
+) : TemplatedListViewElementBase
 {
     public int SelectedIndex { get; init; } = -1;
     public Action<int>? OnSelectedIndexChanged { get; init; }
@@ -3049,7 +3089,6 @@ public record TemplatedListViewElement<T>(
     public Action<IReadOnlyList<T>>? OnSelectionChanged { get; init; }
     internal Action<WinUI.ListView>[] Setters { get; init; } = [];
 
-    public override TemplatedControlKind ControlKind => TemplatedControlKind.ListView;
     public override int ItemCount => Items.Count;
     public override int GetSelectedIndex() => SelectedIndex;
     public override ListViewSelectionMode GetSelectionMode() => SelectionMode;
@@ -3081,7 +3120,7 @@ public record TemplatedGridViewElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : TemplatedListElementBase
+) : TemplatedGridViewElementBase
 {
     public int SelectedIndex { get; init; } = -1;
     public Action<int>? OnSelectedIndexChanged { get; init; }
@@ -3095,7 +3134,6 @@ public record TemplatedGridViewElement<T>(
     public Action<IReadOnlyList<T>>? OnSelectionChanged { get; init; }
     internal Action<WinUI.GridView>[] Setters { get; init; } = [];
 
-    public override TemplatedControlKind ControlKind => TemplatedControlKind.GridView;
     public override int ItemCount => Items.Count;
     public override int GetSelectedIndex() => SelectedIndex;
     public override ListViewSelectionMode GetSelectionMode() => SelectionMode;
@@ -3127,13 +3165,12 @@ public record TemplatedFlipViewElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : TemplatedListElementBase
+) : TemplatedFlipViewElementBase
 {
     public int SelectedIndex { get; init; } = 0;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.FlipView>[] Setters { get; init; } = [];
 
-    public override TemplatedControlKind ControlKind => TemplatedControlKind.FlipView;
     public override int ItemCount => Items.Count;
     public override int GetSelectedIndex() => SelectedIndex;
     public override ListViewSelectionMode GetSelectionMode() => ListViewSelectionMode.Single;

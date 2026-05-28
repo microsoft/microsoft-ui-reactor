@@ -56,7 +56,17 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
     /// populated collection (matches legacy mount ordering).
     /// </summary>
     public ChildrenStrategy<TElement, TControl>? Children =>
-        _descriptor.Children is ItemsHost<TElement, TControl> ? null : _descriptor.Children;
+        _descriptor.Children switch
+        {
+            ItemsHost<TElement, TControl> => null,
+            // §14 Phase 3 close-out — templated items strategies need the
+            // same "bind-before-props" ordering as ItemsHost (SelectedIndex
+            // initial writes need a populated ItemsSource; otherwise WinUI
+            // silently clamps against the empty collection).
+            ITemplatedItemsStrategy => null,
+            IErasedTemplatedItemsStrategy => null,
+            _ => _descriptor.Children,
+        };
 
     public TControl Mount(MountContext ctx, TElement el)
     {
@@ -69,6 +79,13 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
         // against an empty collection.
         if (_descriptor.Children is ItemsHost<TElement, TControl> ih)
             DispatchItemsHostMount(in ctx, el, ctrl, ih);
+        // §14 Phase 3 close-out: templated items strategies use the same
+        // ordering rationale — bind ItemsSource before the prop loop so
+        // SelectedIndex initial writes land against a populated list.
+        else if (_descriptor.Children is ITemplatedItemsStrategy templated && ctrl is FrameworkElement feTI)
+            templated.Bind(feTI, el, ctx.Reconciler, ctx.RequestRerender, isMount: true);
+        else if (_descriptor.Children is IErasedTemplatedItemsStrategy erased && ctrl is FrameworkElement feErased)
+            erased.Bind(feErased, el, ctx.Reconciler, ctx.RequestRerender, isMount: true);
 
         // Phase 1: all bare initial writes (no echo possible — subscriptions
         // not yet live). §14 Phase 3-final: dispatch through the
@@ -97,6 +114,10 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
         // collection in its post-diff shape first.
         if (_descriptor.Children is ItemsHost<TElement, TControl> ih)
             DispatchItemsHostUpdate(in ctx, oldEl, newEl, ctrl, ih);
+        else if (_descriptor.Children is ITemplatedItemsStrategy templated && ctrl is FrameworkElement feTI)
+            templated.Bind(feTI, newEl, ctx.Reconciler, ctx.RequestRerender, isMount: false);
+        else if (_descriptor.Children is IErasedTemplatedItemsStrategy erased && ctrl is FrameworkElement feErased)
+            erased.Bind(feErased, newEl, ctx.Reconciler, ctx.RequestRerender, isMount: false);
 
         var props = _descriptor.Properties;
         for (int i = 0; i < props.Count; i++)

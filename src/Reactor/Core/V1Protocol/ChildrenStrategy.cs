@@ -182,6 +182,51 @@ internal interface ITemplatedItemsStrategy
     void Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount);
 }
 
+/// <summary>§14 Phase 3 close-out — non-generic marker for the
+/// T-erased templated-items strategy. <see cref="TemplatedItemsErased{TElement,TControl}"/>
+/// projects items through the element's <see cref="Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource"/>
+/// implementation rather than carrying TItem at the strategy level —
+/// matching the legacy <see cref="TemplatedListElementBase"/> erasure
+/// model so a single descriptor registration on a non-generic base
+/// catches every closed-T variant.</summary>
+internal interface IErasedTemplatedItemsStrategy
+{
+    void Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount);
+}
+
+/// <summary>§14 Phase 3 close-out — keyed templated-items host that
+/// erases the per-item type at the strategy level by reading items
+/// through the element's <see cref="Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource"/>
+/// implementation. The element is the carrier of T; the descriptor is
+/// non-generic in TItem.
+///
+/// <para>This is the shape used to port the existing
+/// <c>TemplatedListViewElement&lt;T&gt;</c> / <c>TemplatedGridViewElement&lt;T&gt;</c>
+/// family — registered once on a non-generic intermediate base
+/// (<see cref="TemplatedListViewElementBase"/> / <see cref="TemplatedGridViewElementBase"/>)
+/// via <see cref="Reconciler.RegisterHandlerForDerivedTypes"/>; the
+/// engine's base-derived registry walk routes every closed-T variant to
+/// the same descriptor. Same realization plumbing as
+/// <see cref="TemplatedItems{TItem,TElement,TControl}"/>:
+/// <see cref="Reconciler.BindKeyedItemsSource"/> owns the
+/// <c>ReactorListState</c> + <c>KeyedListDiff</c> + container-realization
+/// pipeline.</para></summary>
+[Experimental("REACTOR_V1_PREVIEW")]
+public sealed record TemplatedItemsErased<TElement, TControl>(
+    Func<TElement, Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource> GetSource)
+    : ChildrenStrategy<TElement, TControl>, IErasedTemplatedItemsStrategy
+    where TElement : Element
+    where TControl : FrameworkElement
+{
+    void IErasedTemplatedItemsStrategy.Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
+    {
+        var typedEl = (TElement)element;
+        var typedCtrl = (TControl)control;
+        var source = GetSource(typedEl);
+        reconciler.BindErasedKeyedItemsSource(typedCtrl, source, requestRerender, isMount);
+    }
+}
+
 /// <summary>Keyed templated-items host for descriptor-driven typed lists
 /// (<c>ListView&lt;T&gt;</c>, <c>GridView&lt;T&gt;</c>, future
 /// <c>LazyVStack&lt;T&gt;</c> / <c>LazyHStack&lt;T&gt;</c> /

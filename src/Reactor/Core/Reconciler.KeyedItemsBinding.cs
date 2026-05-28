@@ -93,6 +93,181 @@ public sealed partial class Reconciler
         }
     }
 
+    /// <summary>
+    /// §14 Phase 3 close-out — erased variant. Same realization plumbing
+    /// as <see cref="BindKeyedItemsSource"/> but reads items + keys
+    /// through an <see cref="IKeyedItemSource"/> (the element itself, in
+    /// practice) so the strategy declaration does not carry TItem. Used
+    /// by <see cref="V1Protocol.TemplatedItemsErased{TElement,TControl}"/>
+    /// to port the existing typed templated-list peers
+    /// (<c>TemplatedListViewElement&lt;T&gt;</c>, <c>TemplatedGridViewElement&lt;T&gt;</c>).
+    /// </summary>
+    internal void BindErasedKeyedItemsSource(
+        FrameworkElement control,
+        IKeyedItemSource source,
+        Action requestRerender,
+        bool isMount)
+    {
+        ArgumentNullException.ThrowIfNull(control);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(requestRerender);
+
+        // Same stash contract as BindKeyedItemsSource — the CCC handler
+        // pulls the live view source from here on every container realize.
+        SetItemViewSource(control, source);
+
+        switch (control)
+        {
+            case WinUI.ListViewBase lvb:
+                BindListViewBaseErasedKeyedItems(lvb, source, requestRerender, isMount);
+                return;
+            default:
+                throw new InvalidOperationException(
+                    $"TemplatedItemsErased<> binder does not yet support {control.GetType().FullName}. " +
+                    "Supported on Mount/Update: WinUI.ListViewBase (ListView, GridView). " +
+                    "FlipView / ItemsRepeater / Lazy*Stack stay carved to Phase 4.");
+        }
+    }
+
+    private void BindListViewBaseErasedKeyedItems(
+        WinUI.ListViewBase lvb,
+        IKeyedItemSource source,
+        Action requestRerender,
+        bool isMount)
+    {
+        if (isMount)
+        {
+            lvb.ItemTemplate = SharedContentControlTemplate.Value;
+            lvb.ContainerContentChanging += (sender, args) =>
+                HandleTemplatedContainerContentChanging(sender, args, requestRerender);
+
+            // §14 Phase 3 close-out: SelectionChanged + ItemClick wired
+            // here once on Mount. Trampolines re-fetch the live element on
+            // each fire via GetElementTag, so Update doesn't need to
+            // re-subscribe. Mirrors the legacy MountTemplatedListView body
+            // verbatim (ReactorRow.Index translation under the OC delta
+            // path; int fallback for legacy non-OC consumers).
+            lvb.SelectionChanged += (s, _) =>
+            {
+                var c = (WinUI.ListViewBase)s!;
+                if (GetElementTag(c) is not TemplatedListElementBase tel) return;
+                tel.InvokeSelectionChanged(c.SelectedIndex);
+                if (tel.HasMultiSelectionCallback)
+                {
+                    var snapshot = new List<int>(c.SelectedItems.Count);
+                    foreach (var item in c.SelectedItems)
+                    {
+                        if (item is ReactorRow row) snapshot.Add(row.Index);
+                        else if (item is int i) snapshot.Add(i);
+                    }
+                    tel.InvokeMultiSelectionChanged(snapshot);
+                }
+            };
+            // ItemClick is on Selector via the per-type events. ListView
+            // and GridView expose it as a typed event; cast and subscribe
+            // through the typed handler. ListViewBase itself doesn't carry
+            // the click event so we split per concrete type.
+            switch (lvb)
+            {
+                case WinUI.ListView lv:
+                    lv.ItemClick += (s, args) =>
+                    {
+                        var l = (WinUI.ListView)s!;
+                        int? idx = args.ClickedItem switch
+                        {
+                            ReactorRow row => row.Index,
+                            int i => i,
+                            _ => null,
+                        };
+                        if (idx is int v)
+                            (GetElementTag(l) as TemplatedListElementBase)?.InvokeItemClick(v);
+                    };
+                    break;
+                case WinUI.GridView gv:
+                    gv.ItemClick += (s, args) =>
+                    {
+                        var g = (WinUI.GridView)s!;
+                        int? idx = args.ClickedItem switch
+                        {
+                            ReactorRow row => row.Index,
+                            int i => i,
+                            _ => null,
+                        };
+                        if (idx is int v)
+                            (GetElementTag(g) as TemplatedListElementBase)?.InvokeItemClick(v);
+                    };
+                    break;
+            }
+
+            var state = BuildListStateForKeyedSource(source);
+            SetListState(lvb, state);
+            lvb.ItemsSource = state.Source;
+            return;
+        }
+
+        var existing = GetListState(lvb);
+        if (existing is null || !ReferenceEquals(lvb.ItemsSource, existing.Source))
+        {
+            var fresh = BuildListStateForKeyedSource(source);
+            SetListState(lvb, fresh);
+            lvb.ItemsSource = fresh.Source;
+        }
+        else
+        {
+            var ambient = AnimationAmbient.Current;
+            var keyAdapter = new KeyedSourceKeyAdapter(source);
+            var stats = KeyedListDiff.Apply(
+                existing,
+                keyAdapter,
+                static (k, _) => k,
+                _logger,
+                lvb.GetType().Name,
+                ambient,
+                controlInstance: lvb);
+
+            if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
+            {
+                for (int i = 0; i < movedRows.Count; i++)
+                {
+                    var container = lvb.ContainerFromIndex(movedRows[i].Index) as UIElement;
+                    if (container is not null)
+                        ApplyAmbientEnterAnimation(container, ambient.Kind);
+                }
+            }
+        }
+
+        RefreshRealizedContainers(lvb, source, requestRerender);
+    }
+
+    private static ReactorListState BuildListStateForKeyedSource(IKeyedItemSource source)
+    {
+        var state = new ReactorListState();
+        int n = source.ItemCount;
+        var seeded = new (int Index, string Key)[n];
+        for (int i = 0; i < n; i++)
+            seeded[i] = (i, source.GetKeyAt(i) ?? $"__null_{i}");
+        state.Reset(seeded);
+        return state;
+    }
+
+    /// <summary>
+    /// Projects <see cref="IKeyedItemSource"/> as an <c>IReadOnlyList&lt;string&gt;</c>
+    /// of keys so the keyed diff (which is generic on T) can consume it
+    /// without materializing an array.
+    /// </summary>
+    private readonly struct KeyedSourceKeyAdapter : IReadOnlyList<string>
+    {
+        private readonly IKeyedItemSource _source;
+        public KeyedSourceKeyAdapter(IKeyedItemSource source) => _source = source;
+        public string this[int index] => _source.GetKeyAt(index);
+        public int Count => _source.ItemCount;
+        public IEnumerator<string> GetEnumerator()
+        {
+            for (int i = 0; i < _source.ItemCount; i++) yield return _source.GetKeyAt(i);
+        }
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     private void BindListViewBaseKeyedItems<TItem>(
         WinUI.ListViewBase lvb,
         IReadOnlyList<TItem> items,

@@ -4613,4 +4613,153 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Spec 047 §14 Phase 3 close-out — typed templated lists G2.
+    //  TemplatedListView<T> / TemplatedGridView<T> via base-derived
+    //  registration + TemplatedItemsErased<> strategy. The base
+    //  registration catches every closed-T variant; items + keys flow
+    //  through the element's IKeyedItemSource implementation.
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class DescTemplatedListViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            // Single base-derived registration catches TemplatedListViewElement<int>,
+            // TemplatedListViewElement<string>, etc. — no per-T registration.
+            rec.RegisterHandlerForDerivedTypes<TemplatedListViewElementBase, WinUI.ListView>(
+                new DescriptorHandler<TemplatedListViewElementBase, WinUI.ListView>(
+                    TemplatedListViewDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new TemplatedListViewElement<string>(
+                Items: new[] { "a", "b", "c" },
+                KeySelector: static s => s,
+                ViewBuilder: static (s, _) => new TextBlockElement(s))
+            {
+                SelectedIndex = 1,
+                Header = "TheHeader",
+                SelectionMode = ListViewSelectionMode.Single,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ListView lv)
+            {
+                parent.Children.Add(lv);
+                await Harness.Render();
+
+                H.Check("Desc_TemplatedListView_Mounted", true);
+                H.Check("Desc_TemplatedListView_HeaderApplied", (lv.Header as string) == "TheHeader");
+                H.Check("Desc_TemplatedListView_SelectionMode",
+                    lv.SelectionMode == ListViewSelectionMode.Single);
+                // ItemsSource is the OC<ReactorRow> via the binder + spec-042 state.
+                var listState = Reconciler.GetListState(lv);
+                H.Check("Desc_TemplatedListView_ListStateAttached", listState is not null);
+                H.Check("Desc_TemplatedListView_ItemsSourceBound",
+                    listState is not null && ReferenceEquals(lv.ItemsSource, listState.Source));
+                H.Check("Desc_TemplatedListView_ItemCount3", listState is not null && listState.Source.Count == 3);
+                H.Check("Desc_TemplatedListView_KeysOk",
+                    listState is not null
+                        && listState.Source[0].Key == "a"
+                        && listState.Source[1].Key == "b"
+                        && listState.Source[2].Key == "c");
+                H.Check("Desc_TemplatedListView_InitialSelectedIndexApplied", lv.SelectedIndex == 1);
+
+                // Keyed diff — insert one in the middle, remove one from end.
+                var el2 = el1 with
+                {
+                    Items = new[] { "a", "z", "b" },
+                };
+                rec.UpdateChild(el1, el2, lv, _noOp);
+                await Harness.Render();
+
+                listState = Reconciler.GetListState(lv);
+                H.Check("Desc_TemplatedListView_DiffApplied_Count3",
+                    listState is not null && listState.Source.Count == 3);
+                H.Check("Desc_TemplatedListView_DiffApplied_KeysOk",
+                    listState is not null
+                        && listState.Source[0].Key == "a"
+                        && listState.Source[1].Key == "z"
+                        && listState.Source[2].Key == "b");
+
+                // Same-ref idempotent.
+                rec.UpdateChild(el2, el2, lv, _noOp);
+                await Harness.Render();
+                listState = Reconciler.GetListState(lv);
+                H.Check("Desc_TemplatedListView_SameRefIdempotent",
+                    listState is not null && listState.Source.Count == 3);
+
+                rec.UnmountChild(lv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_TemplatedListView_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescTemplatedGridViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandlerForDerivedTypes<TemplatedGridViewElementBase, WinUI.GridView>(
+                new DescriptorHandler<TemplatedGridViewElementBase, WinUI.GridView>(
+                    TemplatedGridViewDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new TemplatedGridViewElement<int>(
+                Items: new[] { 10, 20, 30 },
+                KeySelector: static i => i.ToString(),
+                ViewBuilder: static (i, _) => new TextBlockElement(i.ToString()))
+            {
+                SelectionMode = ListViewSelectionMode.Multiple,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.GridView gv)
+            {
+                parent.Children.Add(gv);
+                await Harness.Render();
+
+                H.Check("Desc_TemplatedGridView_Mounted", true);
+                H.Check("Desc_TemplatedGridView_SelectionMode",
+                    gv.SelectionMode == ListViewSelectionMode.Multiple);
+                var state = Reconciler.GetListState(gv);
+                H.Check("Desc_TemplatedGridView_ListStateAttached", state is not null);
+                H.Check("Desc_TemplatedGridView_Keys",
+                    state is not null
+                        && state.Source[0].Key == "10"
+                        && state.Source[1].Key == "20"
+                        && state.Source[2].Key == "30");
+
+                var el2 = el1 with
+                {
+                    Items = new[] { 10, 30 }, // remove middle
+                };
+                rec.UpdateChild(el1, el2, gv, _noOp);
+                await Harness.Render();
+
+                state = Reconciler.GetListState(gv);
+                H.Check("Desc_TemplatedGridView_DiffApplied_Count2",
+                    state is not null && state.Source.Count == 2);
+                H.Check("Desc_TemplatedGridView_DiffApplied_KeysOk",
+                    state is not null
+                        && state.Source[0].Key == "10"
+                        && state.Source[1].Key == "30");
+
+                rec.UnmountChild(gv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_TemplatedGridView_Mounted", false);
+            }
+        }
+    }
 }

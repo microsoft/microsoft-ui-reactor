@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Microsoft.UI.Reactor.Core.Internal;
 
 /// <summary>
@@ -24,8 +26,24 @@ namespace Microsoft.UI.Reactor.Core.Internal;
 /// legacy <c>TemplatedListElementBase</c> path so descriptor-driven
 /// controls don't need to inherit from the legacy abstract base.</para>
 /// </summary>
-internal interface IItemViewSource
+[Experimental("REACTOR_V1_PREVIEW")]
+public interface IItemViewSource
 {
     int ItemCount { get; }
     Element BuildItemView(int index);
+}
+
+/// <summary>
+/// Spec 047 §14 Phase 3 close-out — extends <see cref="IItemViewSource"/>
+/// with the keyed-identity projection consumed by spec 042's
+/// <c>KeyedListDiff</c>. Implemented by
+/// <see cref="TemplatedListElementBase"/> (the legacy element-based
+/// templated-list path) and by the closure-backed adapter the descriptor
+/// erased binder builds when running on top of
+/// <c>TemplatedItemsErased&lt;TElement,TControl&gt;</c>.
+/// </summary>
+[Experimental("REACTOR_V1_PREVIEW")]
+public interface IKeyedItemSource : IItemViewSource
+{
+    string GetKeyAt(int index);
 }
