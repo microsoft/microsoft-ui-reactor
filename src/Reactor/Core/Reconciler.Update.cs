@@ -2862,7 +2862,7 @@ public sealed partial class Reconciler
     /// most as null. Children of the realized panel IS the realized set, so
     /// iterating it is O(realized) instead of O(total).
     /// </summary>
-    private void RefreshRealizedContainers(WinUI.ListViewBase listViewBase, TemplatedListElementBase newEl, Action requestRerender)
+    private void RefreshRealizedContainers(WinUI.ListViewBase listViewBase, Internal.IItemViewSource viewSource, Action requestRerender)
     {
         var panel = listViewBase.ItemsPanelRoot;
         if (panel is null) return;
@@ -2882,10 +2882,10 @@ public sealed partial class Reconciler
             if (container.ContentTemplateRoot is not ContentControl cc) continue;
 
             var index = listViewBase.IndexFromContainer(container);
-            if (index < 0 || index >= newEl.ItemCount) continue;
+            if (index < 0 || index >= viewSource.ItemCount) continue;
 
             var oldItemElement = GetElementTag(cc);
-            var newItemElement = newEl.BuildItemView(index);
+            var newItemElement = viewSource.BuildItemView(index);
 
             if (oldItemElement is not null && cc.Content is UIElement existingCtrl && CanUpdate(oldItemElement, newItemElement))
             {

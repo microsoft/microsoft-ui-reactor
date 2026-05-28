@@ -390,6 +390,15 @@ public sealed partial class Reconciler : IDisposable
         // re-realization.
         public Internal.ReactorListState? ListState;
 
+        // Spec 047 §14 Phase 3 close-out — descriptor-side per-index view
+        // source. Populated by Reconciler.BindKeyedItemsSource when a
+        // TemplatedItems<TItem,TElement,TControl> strategy is in effect.
+        // HandleTemplatedContainerContentChanging and RefreshRealizedContainers
+        // prefer this over the legacy TemplatedListElementBase fallback so
+        // descriptor-driven controls never need to inherit from the legacy
+        // abstract base.
+        public Internal.IItemViewSource? ItemViewSource;
+
         // Spec 047 §9.2 / §14 Phase 1 (1.7) — per-control event payload box.
         // Holds a strongly-typed payload struct (e.g. ToggleSwitchEventPayload)
         // discriminated by HandlerType. Only populated for ported V1 controls
@@ -481,6 +490,27 @@ public sealed partial class Reconciler : IDisposable
             return;
         }
         state = new ReactorState { ListState = listState };
+        control.SetValue(ReactorAttached.StateProperty, state);
+    }
+
+    // ── §14 Phase 3 close-out: per-control descriptor view source ──────
+
+    internal static Internal.IItemViewSource? GetItemViewSource(DependencyObject control)
+    {
+        if (control is FrameworkElement fe
+            && fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+            return state.ItemViewSource;
+        return null;
+    }
+
+    internal static void SetItemViewSource(FrameworkElement control, Internal.IItemViewSource viewSource)
+    {
+        if (control.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+        {
+            state.ItemViewSource = viewSource;
+            return;
+        }
+        state = new ReactorState { ItemViewSource = viewSource };
         control.SetValue(ReactorAttached.StateProperty, state);
     }
 

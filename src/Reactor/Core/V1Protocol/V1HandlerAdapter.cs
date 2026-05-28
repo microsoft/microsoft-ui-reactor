@@ -73,6 +73,16 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         ChildrenStrategy<TElement, TControl> strategy,
         MountContext ctx, TElement element, TControl control)
     {
+        // §14 Phase 3 close-out: TemplatedItems<TItem,TElement,TControl>
+        // erases TItem behind ITemplatedItemsStrategy so we can reach the
+        // strategy's `Bind` from the closed-(TElement,TControl) adapter.
+        // Reconciler.BindKeyedItemsSource owns the realization plumbing
+        // (ReactorListState + KeyedListDiff + ContainerContentChanging).
+        if (strategy is ITemplatedItemsStrategy templated && control is FrameworkElement fe)
+        {
+            templated.Bind(fe, element, ctx.Reconciler, ctx.RequestRerender, isMount: true);
+            return;
+        }
         switch (strategy)
         {
             case None<TElement, TControl>:
@@ -164,6 +174,15 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         Reconciler reconciler, Action requestRerender,
         TElement oldEl, TElement newEl, TControl control)
     {
+        // §14 Phase 3 close-out: TemplatedItems<> dispatch is type-erased
+        // via ITemplatedItemsStrategy — same arm shape as the Mount path
+        // but with isMount: false so BindKeyedItemsSource runs the
+        // keyed-diff branch.
+        if (strategy is ITemplatedItemsStrategy templated && control is FrameworkElement feUpd)
+        {
+            templated.Bind(feUpd, newEl, reconciler, requestRerender, isMount: false);
+            return;
+        }
         switch (strategy)
         {
             case None<TElement, TControl>:

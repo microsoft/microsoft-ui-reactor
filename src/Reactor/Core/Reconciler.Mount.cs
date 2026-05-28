@@ -2016,11 +2016,16 @@ public sealed partial class Reconciler
         }
 
         args.Handled = true;
-        var currentEl = GetElementTag((UIElement)sender!) as TemplatedListElementBase;
-        if (currentEl is not null && args.ItemIndex >= 0 && args.ItemIndex < currentEl.ItemCount
+        // §14 Phase 3 close-out: prefer the descriptor-stashed view source
+        // (TemplatedItems<> strategy path) over the legacy element-based
+        // fallback. The two implementations are interchangeable through
+        // IItemViewSource — only the resolution order matters here.
+        Internal.IItemViewSource? viewSource = GetItemViewSource((UIElement)sender!)
+            ?? GetElementTag((UIElement)sender!) as TemplatedListElementBase;
+        if (viewSource is not null && args.ItemIndex >= 0 && args.ItemIndex < viewSource.ItemCount
             && args.ItemContainer.ContentTemplateRoot is ContentControl cc)
         {
-            var itemElement = currentEl.BuildItemView(args.ItemIndex);
+            var itemElement = viewSource.BuildItemView(args.ItemIndex);
             var ctrl = Mount(itemElement, requestRerender);
             cc.Content = ctrl;
             SetElementTag(cc, itemElement); // Store for later reconciliation

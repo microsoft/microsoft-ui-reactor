@@ -2988,7 +2988,7 @@ public enum TemplatedControlKind { ListView, GridView, FlipView }
 /// Abstract base for data-driven items controls. Non-generic so the reconciler
 /// can match on a single type in its switch expression (same pattern as LazyStackElementBase).
 /// </summary>
-public abstract record TemplatedListElementBase : Element
+public abstract record TemplatedListElementBase : Element, global::Microsoft.UI.Reactor.Core.Internal.IItemViewSource
 {
     public abstract TemplatedControlKind ControlKind { get; }
     public abstract int ItemCount { get; }

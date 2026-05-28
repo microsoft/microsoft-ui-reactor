@@ -173,6 +173,59 @@ public sealed record ItemsHost<TElement, TControl>(
 [Experimental("REACTOR_V1_PREVIEW")]
 public sealed record ItemsHostOptions;
 
+/// <summary>Non-generic marker the engine dispatcher uses to reach an
+/// open-<c>TItem</c> templated-items strategy from the closed
+/// <c>(TElement, TControl)</c> adapter. Implemented by every
+/// <see cref="TemplatedItems{TItem,TElement,TControl}"/> instance.</summary>
+internal interface ITemplatedItemsStrategy
+{
+    void Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount);
+}
+
+/// <summary>Keyed templated-items host for descriptor-driven typed lists
+/// (<c>ListView&lt;T&gt;</c>, <c>GridView&lt;T&gt;</c>, future
+/// <c>LazyVStack&lt;T&gt;</c> / <c>LazyHStack&lt;T&gt;</c> /
+/// <c>ItemsRepeater&lt;T&gt;</c>). The strategy declares only the data
+/// shape; the engine partial <see cref="Reconciler.BindKeyedItemsSource"/>
+/// owns the realization plumbing (spec-042 <c>ReactorListState</c> +
+/// <c>KeyedListDiff</c>, the shared <c>ContainerContentChanging</c>
+/// handler, the per-control <c>ItemsSource</c> binding).
+///
+/// <para><b>Lifecycle:</b> Mount runs once on first render; Update runs on
+/// every subsequent render with the same control instance. Both go
+/// through <see cref="Reconciler.BindKeyedItemsSource"/>; the boolean
+/// <c>isMount</c> parameter selects between fresh-state construction
+/// (Mount) and keyed-diff application (Update).</para>
+///
+/// <para><b>Key contract:</b> <see cref="KeySelector"/> must produce
+/// stable, non-null, non-duplicate strings across renders for any given
+/// user item. Null / duplicate keys trigger the same <see cref="P:KeyedListDiff.DiffStats.Bailout"/>
+/// path the legacy element-based binder uses — correctness preserved,
+/// animation degraded for that diff.</para>
+///
+/// <para><b>Per-item Element:</b> <see cref="BuildItemView"/> is called
+/// lazily by the realization machinery as containers materialize, so
+/// large lists never realize all items up front. The returned
+/// <see cref="Element"/> is reconciled into the container's
+/// <c>ContentControl</c>.</para></summary>
+[Experimental("REACTOR_V1_PREVIEW")]
+public sealed record TemplatedItems<TItem, TElement, TControl>(
+    Func<TElement, IReadOnlyList<TItem>> GetItems,
+    Func<TItem, int, string> KeySelector,
+    Func<TItem, int, Element> BuildItemView)
+    : ChildrenStrategy<TElement, TControl>, ITemplatedItemsStrategy
+    where TElement : Element
+    where TControl : FrameworkElement
+{
+    void ITemplatedItemsStrategy.Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
+    {
+        var typedEl = (TElement)element;
+        var typedCtrl = (TControl)control;
+        var items = GetItems(typedEl);
+        reconciler.BindKeyedItemsSource(typedCtrl, items, KeySelector, BuildItemView, requestRerender, isMount);
+    }
+}
+
 /// <summary>Escape hatch — the handler drives child reconciliation
 /// imperatively via <see cref="Reconcile"/>. Use sparingly; the typed
 /// strategies above cover the 95% case.</summary>
