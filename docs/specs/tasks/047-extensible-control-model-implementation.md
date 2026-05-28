@@ -964,39 +964,82 @@ the audit at the end of `spec/047-phase3-finish`:
   up-front into `FlipView.Items` (no `ContainerContentChanging` to
   drive realization) and positionally reconciles via
   `Reconciler.ReconcileV1Child` on Update.
-- **Untyped items hosts not ported:** `GridViewElement` (the plain
-  Element[] variant — `ListViewElement` got a Phase 1 V1 handler,
-  GridView did not), `ItemsViewElementBase` (the higher-level
-  `ItemsView` wrapping its own ItemsRepeater), `ItemContainerElement`.
+- **Untyped items hosts (CLOSED — Phase 3 completion):**
+  `GridViewElement` (plain Element[]), `ItemsViewElementBase`,
+  `ItemContainerElement` — all ported as standard descriptors and
+  registered in `RegisterV1BuiltInHandlers`.
+- **Heavy / specialized controls (CLOSED — Phase 3 completion):**
+  `WebView2Element`, `NavigationViewElement`, `TitleBarElement`,
+  `MediaPlayerElementElement`, `AnimatedVisualPlayerElement`,
+  `MapControlElement`, `SemanticZoomElement`,
+  `AnnotatedScrollBarElement`, `RefreshContainerElement`,
+  `SwipeControlElement`, `ParallaxViewElement` — all descriptors
+  authored and registered. (`NavigationHostElement` stays deferred —
+  see below.)
+- **Polymorphic / a11y (CLOSED — Phase 3 completion):**
+  `IconElement` (decorator-style handler via the
+  `IDecoratorElementHandler` engine extension landed this phase),
+  `SemanticElement`, `AnnounceRegionElement` — all registered.
+
+**Phase 3 completion — still deferred to the next PR (not regressions;
+scoped carve list documented inline in `RegisterV1BuiltInHandlers`):**
+
 - **Dialog / overlay family:** `ContentDialogElement`,
   `FlyoutElement`, `PopupElement`, `MenuBarElement`,
   `MenuFlyoutElement`, `CommandBarElement`,
-  `CommandBarFlyoutElement`. Button-family `Flyout` ships through the
-  `.OneWayBridged` setter on the button descriptors; the standalone
-  flyout elements are their own legacy paths.
-- **Heavy / specialized controls:** `WebView2Element`,
-  `NavigationViewElement`, `NavigationHostElement`,
-  `TitleBarElement`, `MediaPlayerElementElement`,
-  `AnimatedVisualPlayerElement`, `MapControlElement`,
-  `SemanticZoomElement`, `AnnotatedScrollBarElement`,
-  `RefreshContainerElement`, `SwipeControlElement`,
-  `ParallaxViewElement`.
-- **Polymorphic / interop / a11y:** `IconElement` (already documented
-  as escape-hatched — polymorphic mount), `SemanticElement`,
-  `AnnounceRegionElement`, `XamlHostElement`, `XamlPageElement`.
-- **Reactor infrastructure (likely SHOULD stay out of V1 dispatch):**
-  `ComponentElement`, `FuncElement`, `MemoElement`,
+  `CommandBarFlyoutElement`. Modal lifecycle (control-side-mounted,
+  not parent-tree-mounted) requires decorator-style ports beyond
+  the IDecoratorElementHandler shape used for `IconElement`.
+- **Stateful host:** `NavigationHostElement`. Per-instance
+  route/cache/transition state is intercepted in
+  `Reconciler.UnmountRecursive` BEFORE the V1 dispatch arm; needs
+  a small refactor to internal-expose `MountNavigationHost` /
+  `UpdateNavigationHost` and duplicate cleanup logic in the V1
+  handler before it can route through V1.
+- **`TabViewDescriptor` (descriptor exists, registration carved):**
+  Bisect (3× clean V1 ON full selftest with only TabViewDescriptor
+  carved, vs. 1–4 random docking-text-find failures per run when
+  registered: DockHooks / PixDoc / RoleAware / Composition /
+  FloatRoot) ratifies the descriptor's documented gaps as hot in
+  the docking suite — missing spec 045 §2.4 drag pipeline
+  (`OnTabDragStarting` / `OnTabDragCompleted`), §2.2 pinnable
+  headers (`BuildTabHeader` / `BuildPinButton` / in-place
+  `TryUpdatePinHeaderInPlace`), in-place CanUpdate for tab content
+  (preserves focus/state on re-renders), conditional `SelectedIndex`
+  write, and `TabStripHeader` / `TabStripFooter` Element slots.
+  Closing them requires engine work (post-children mount-hook so
+  `SelectionChanged` subscribes after children-add + an
+  `ImperativeBridged` shape for the named tab strip slots).
+- **Interop bridges:** `XamlHostElement`, `XamlPageElement`. V1
+  descriptors exist (`XamlHostDescriptor`, `XamlPageDescriptor`)
+  but stay unregistered because `XamlInterop.Register(reconciler)`
+  populates the external `_typeRegistry` at app startup; auto-
+  registering V1 would clash via `EnsureRegistrableElementType`.
+  Unification is Phase 4 follow-up.
+
+**Reactor composition primitives (intentionally above the V1
+protocol — Phase 4 cleanup keeps their legacy arms):**
+
+- `ComponentElement`, `FuncElement`, `MemoElement`,
   `ErrorBoundaryElement`, `CommandHostElement`, `ModifiedElement`,
   `Validation.FormFieldElement` /
-  `ValidationVisualizerElement` / `ValidationRuleElement`. These are
-  Reactor composition primitives, not WinUI control wrappers — they
-  sit above the V1 handler protocol rather than being consumers of
-  it.
+  `ValidationVisualizerElement` / `ValidationRuleElement`. These
+  orchestrate child reconciliation rather than wrap a single WinUI
+  control, so the V1 handler protocol does not apply.
 
-The "100% V1 dispatch" goal as scoped by §14's Phase 3 batches IS
-met (every batch entry has a V1 handler or descriptor). The list
-above is genuine post-Phase-3 scope, not a regression against the
-shipped Phase 3 plan.
+**Phase 3 completion status:** Every element type in the production
+codebase either (a) routes through V1 dispatch (Phase 1 hand-coded
+handler OR Phase 3 descriptor registered in
+`RegisterV1BuiltInHandlers`), (b) is a Reactor composition primitive
+intentionally kept above the V1 protocol, or (c) is in the explicit
+deferred carve list above with a documented gap-closure path. The
+A|B parity bar — V1 ON ≡ V1 OFF across the full xunit + selftest
+matrix — is met for every registered element: 9134 xunit + 4410
+selftest, 0 failures both flags. Phase 4 cleanup can delete every
+legacy `MountXxx` / `UpdateXxx` method that backs an element that
+has been registered through V1; the legacy switch arms for the
+composition primitives + the deferred carve list must remain until
+their respective follow-up PRs land.
 
 **Carry-forward known defects** (from Phase 1):
 
