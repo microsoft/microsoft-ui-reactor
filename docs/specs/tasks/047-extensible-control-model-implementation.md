@@ -1027,19 +1027,41 @@ protocol — Phase 4 cleanup keeps their legacy arms):**
   orchestrate child reconciliation rather than wrap a single WinUI
   control, so the V1 handler protocol does not apply.
 
-**Phase 3 completion status:** Every element type in the production
-codebase either (a) routes through V1 dispatch (Phase 1 hand-coded
-handler OR Phase 3 descriptor registered in
-`RegisterV1BuiltInHandlers`), (b) is a Reactor composition primitive
-intentionally kept above the V1 protocol, or (c) is in the explicit
-deferred carve list above with a documented gap-closure path. The
-A|B parity bar — V1 ON ≡ V1 OFF across the full xunit + selftest
-matrix — is met for every registered element: 9134 xunit + 4410
-selftest, 0 failures both flags. Phase 4 cleanup can delete every
-legacy `MountXxx` / `UpdateXxx` method that backs an element that
-has been registered through V1; the legacy switch arms for the
-composition primitives + the deferred carve list must remain until
-their respective follow-up PRs land.
+**Phase 3 completion status (PR #440 — landed-pending-merge):**
+Every element type in the production codebase either (a) routes
+through V1 dispatch (Phase 1 hand-coded handler OR Phase 3
+descriptor registered in `RegisterV1BuiltInHandlers`), (b) is a
+Reactor composition primitive intentionally kept above the V1
+protocol, or (c) is in the explicit deferred carve list above with
+a documented gap-closure path. The A|B parity bar — V1 ON ≡ V1 OFF
+across the full xunit + selftest matrix — is met for every
+registered element: 9134 xunit + 4410 selftest, 0 failures both
+flags. Phase 4 cleanup can delete every legacy `MountXxx` /
+`UpdateXxx` method that backs an element that has been registered
+through V1; the legacy switch arms for the composition primitives
++ the deferred carve list must remain until their respective
+follow-up PRs land.
+
+**Quantified V1 dispatch coverage (post-PR #440):**
+
+| Bucket | Arms | % of total |
+|---|---:|---:|
+| Routed through V1 (76 = 5 Phase 1 + 6 base-derived + 64 standard descriptors + 1 decorator) | 76 | 80% |
+| Reachable-but-deferred (overlays 7, NavigationHost 1, TabView 1, XamlHost/Page 2) | 11 | 11.6% |
+| Intentionally above V1 (composition primitives — permanent carve) | 8 | 8.4% |
+| **Total `Reconciler.Mount.cs` switch arms** | **95** | **100%** |
+
+- **Coverage of V1-reachable surface (excludes 8 composition primitives):** 76 / 87 ≈ **87%**.
+- **Coverage of all switch arms:** 76 / 95 ≈ **80%**.
+- **Path to 100% reachable:** the follow-up PR closes the 11 deferred:
+  1. Port the 7 overlay descriptors (ContentDialog, Flyout, Popup, MenuBar, MenuFlyout, CommandBar, CommandBarFlyout) — needs a decorator strategy variant for modal lifecycle beyond `IDecoratorElementHandler`.
+  2. Refactor `NavigationHostElement` cleanup path so V1 can own it (internal-expose `MountNavigationHost` / `UpdateNavigationHost`, duplicate cleanup logic in the V1 handler, remove the `UnmountRecursive` intercept).
+  3. Close `TabViewDescriptor` gaps (engine post-children mount-hook + `ImperativeBridged` for named slots + port `BuildTabHeader` / `BuildPinButton` / `TryUpdatePinHeaderInPlace` + drag pipeline trampolines + conditional `SelectedIndex` write + in-place `CanUpdate`).
+  4. Unify `XamlInterop.Register` with V1 auto-registration so `XamlHostElement` / `XamlPageElement` descriptors can register without `EnsureRegistrableElementType` clash.
+
+Phase 4 cleanup (deletion of legacy switch arms + `UseV1Protocol`
+flag) is unblocked for the 76 routed arms today; the remaining 11
+arms unblock as the follow-up PR lands each closure.
 
 **Carry-forward known defects** (from Phase 1):
 
