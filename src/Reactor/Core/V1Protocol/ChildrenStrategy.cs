@@ -173,14 +173,29 @@ public sealed record ItemsHost<TElement, TControl>(
 [Experimental("REACTOR_V1_PREVIEW")]
 public sealed record ItemsHostOptions;
 
+/// <summary>§14 Phase 3 finish — single dispatch marker for every
+/// items-binder strategy variant. The engine probes this base interface
+/// ONCE at the top of <c>V1HandlerAdapter.DispatchChildrenMount</c> /
+/// <c>DispatchChildrenUpdate</c> and <c>DescriptorHandler.Mount</c> /
+/// <c>Update</c> instead of running an <c>is</c>-check per concrete
+/// strategy type. Keeps the M1 dispatch cost constant as new strategies
+/// (templated/erased today; tree/tab/pivot to come) implement the base.
+///
+/// <para>The two existing variants <see cref="ITemplatedItemsStrategy"/>
+/// and <see cref="IErasedTemplatedItemsStrategy"/> stay as named handles
+/// for the implementing strategy types (so the type system still tells
+/// the closed-TItem vs erased-TItem story at the strategy declaration
+/// site), but the dispatch path only walks the base.</para></summary>
+internal interface IItemsBinderStrategy
+{
+    void Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount);
+}
+
 /// <summary>Non-generic marker the engine dispatcher uses to reach an
 /// open-<c>TItem</c> templated-items strategy from the closed
 /// <c>(TElement, TControl)</c> adapter. Implemented by every
 /// <see cref="TemplatedItems{TItem,TElement,TControl}"/> instance.</summary>
-internal interface ITemplatedItemsStrategy
-{
-    void Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount);
-}
+internal interface ITemplatedItemsStrategy : IItemsBinderStrategy { }
 
 /// <summary>§14 Phase 3 close-out — non-generic marker for the
 /// T-erased templated-items strategy. <see cref="TemplatedItemsErased{TElement,TControl}"/>
@@ -189,10 +204,7 @@ internal interface ITemplatedItemsStrategy
 /// matching the legacy <see cref="TemplatedListElementBase"/> erasure
 /// model so a single descriptor registration on a non-generic base
 /// catches every closed-T variant.</summary>
-internal interface IErasedTemplatedItemsStrategy
-{
-    void Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount);
-}
+internal interface IErasedTemplatedItemsStrategy : IItemsBinderStrategy { }
 
 /// <summary>§14 Phase 3 close-out — keyed templated-items host that
 /// erases the per-item type at the strategy level by reading items
@@ -218,7 +230,7 @@ public sealed record TemplatedItemsErased<TElement, TControl>(
     where TElement : Element
     where TControl : FrameworkElement
 {
-    void IErasedTemplatedItemsStrategy.Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
+    void IItemsBinderStrategy.Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
     {
         var typedEl = (TElement)element;
         var typedCtrl = (TControl)control;
@@ -262,7 +274,7 @@ public sealed record TemplatedItems<TItem, TElement, TControl>(
     where TElement : Element
     where TControl : FrameworkElement
 {
-    void ITemplatedItemsStrategy.Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
+    void IItemsBinderStrategy.Bind(FrameworkElement control, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
     {
         var typedEl = (TElement)element;
         var typedCtrl = (TControl)control;

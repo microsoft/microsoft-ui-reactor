@@ -59,12 +59,13 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
         _descriptor.Children switch
         {
             ItemsHost<TElement, TControl> => null,
-            // §14 Phase 3 close-out — templated items strategies need the
-            // same "bind-before-props" ordering as ItemsHost (SelectedIndex
-            // initial writes need a populated ItemsSource; otherwise WinUI
-            // silently clamps against the empty collection).
-            ITemplatedItemsStrategy => null,
-            IErasedTemplatedItemsStrategy => null,
+            // §14 Phase 3 finish — every items-binder strategy (templated /
+            // erased today; tree / tab / pivot when they arrive) implements
+            // IItemsBinderStrategy and needs the same "bind-before-props"
+            // ordering as ItemsHost — SelectedIndex initial writes need a
+            // populated ItemsSource; otherwise WinUI silently clamps against
+            // the empty collection.
+            IItemsBinderStrategy => null,
             _ => _descriptor.Children,
         };
 
@@ -79,13 +80,11 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
         // against an empty collection.
         if (_descriptor.Children is ItemsHost<TElement, TControl> ih)
             DispatchItemsHostMount(in ctx, el, ctrl, ih);
-        // §14 Phase 3 close-out: templated items strategies use the same
-        // ordering rationale — bind ItemsSource before the prop loop so
+        // §14 Phase 3 finish — consolidated dispatch arm: every items-
+        // binder variant uses the same "bind before prop loop" ordering so
         // SelectedIndex initial writes land against a populated list.
-        else if (_descriptor.Children is ITemplatedItemsStrategy templated && ctrl is FrameworkElement feTI)
-            templated.Bind(feTI, el, ctx.Reconciler, ctx.RequestRerender, isMount: true);
-        else if (_descriptor.Children is IErasedTemplatedItemsStrategy erased && ctrl is FrameworkElement feErased)
-            erased.Bind(feErased, el, ctx.Reconciler, ctx.RequestRerender, isMount: true);
+        else if (_descriptor.Children is IItemsBinderStrategy binder && ctrl is FrameworkElement feBinder)
+            binder.Bind(feBinder, el, ctx.Reconciler, ctx.RequestRerender, isMount: true);
 
         // Phase 1: all bare initial writes (no echo possible — subscriptions
         // not yet live). §14 Phase 3-final: dispatch through the
@@ -114,10 +113,9 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
         // collection in its post-diff shape first.
         if (_descriptor.Children is ItemsHost<TElement, TControl> ih)
             DispatchItemsHostUpdate(in ctx, oldEl, newEl, ctrl, ih);
-        else if (_descriptor.Children is ITemplatedItemsStrategy templated && ctrl is FrameworkElement feTI)
-            templated.Bind(feTI, newEl, ctx.Reconciler, ctx.RequestRerender, isMount: false);
-        else if (_descriptor.Children is IErasedTemplatedItemsStrategy erased && ctrl is FrameworkElement feErased)
-            erased.Bind(feErased, newEl, ctx.Reconciler, ctx.RequestRerender, isMount: false);
+        // §14 Phase 3 finish — consolidated dispatch arm.
+        else if (_descriptor.Children is IItemsBinderStrategy binder && ctrl is FrameworkElement feBinder)
+            binder.Bind(feBinder, newEl, ctx.Reconciler, ctx.RequestRerender, isMount: false);
 
         var props = _descriptor.Properties;
         for (int i = 0; i < props.Count; i++)

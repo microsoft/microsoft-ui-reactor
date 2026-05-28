@@ -73,21 +73,15 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         ChildrenStrategy<TElement, TControl> strategy,
         MountContext ctx, TElement element, TControl control)
     {
-        // §14 Phase 3 close-out: TemplatedItems<TItem,TElement,TControl>
-        // erases TItem behind ITemplatedItemsStrategy so we can reach the
-        // strategy's `Bind` from the closed-(TElement,TControl) adapter.
-        // Reconciler.BindKeyedItemsSource owns the realization plumbing
-        // (ReactorListState + KeyedListDiff + ContainerContentChanging).
-        if (strategy is ITemplatedItemsStrategy templated && control is FrameworkElement fe)
+        // §14 Phase 3 finish — consolidated dispatch arm. Every items-
+        // binder strategy variant (templated/erased today; tree/tab/pivot
+        // when they arrive) implements IItemsBinderStrategy, so the cost
+        // here is one is-check + one interface call. Reconciler.BindKeyed*
+        // owns the realization plumbing (ReactorListState + KeyedListDiff
+        // + per-control realization channel).
+        if (strategy is IItemsBinderStrategy binder && control is FrameworkElement feBinder)
         {
-            templated.Bind(fe, element, ctx.Reconciler, ctx.RequestRerender, isMount: true);
-            return;
-        }
-        // §14 Phase 3 close-out: erased variant — same dispatch contract
-        // but the per-item type lives on the element, not the strategy.
-        if (strategy is IErasedTemplatedItemsStrategy erased && control is FrameworkElement feErased)
-        {
-            erased.Bind(feErased, element, ctx.Reconciler, ctx.RequestRerender, isMount: true);
+            binder.Bind(feBinder, element, ctx.Reconciler, ctx.RequestRerender, isMount: true);
             return;
         }
         switch (strategy)
@@ -181,18 +175,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         Reconciler reconciler, Action requestRerender,
         TElement oldEl, TElement newEl, TControl control)
     {
-        // §14 Phase 3 close-out: TemplatedItems<> dispatch is type-erased
-        // via ITemplatedItemsStrategy — same arm shape as the Mount path
-        // but with isMount: false so BindKeyedItemsSource runs the
-        // keyed-diff branch.
-        if (strategy is ITemplatedItemsStrategy templated && control is FrameworkElement feUpd)
+        // §14 Phase 3 finish — consolidated dispatch arm (see Mount path).
+        // isMount: false so the bind runs the keyed-diff branch.
+        if (strategy is IItemsBinderStrategy binder && control is FrameworkElement feBinder)
         {
-            templated.Bind(feUpd, newEl, reconciler, requestRerender, isMount: false);
-            return;
-        }
-        if (strategy is IErasedTemplatedItemsStrategy erased && control is FrameworkElement feErasedUpd)
-        {
-            erased.Bind(feErasedUpd, newEl, reconciler, requestRerender, isMount: false);
+            binder.Bind(feBinder, newEl, reconciler, requestRerender, isMount: false);
             return;
         }
         switch (strategy)
