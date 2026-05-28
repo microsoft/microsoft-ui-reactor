@@ -238,7 +238,7 @@ class IdeApp : Component
 
             Element FileRow(ProjectFile f, int indent) =>
                 HyperlinkButton($"📄 {f.Name}", onClick: () => openFile(f))
-                    .Margin(indent * 14, 0, 0, 0);
+                    .Margin(indent * 14.0, 0, 0, 0);
 
             var srcFiles = new[] { ProjectFiles.AppCs, ProjectFiles.MainView, ProjectFiles.MainViewModel }
                 .Where(Matches)
