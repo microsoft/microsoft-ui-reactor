@@ -27,17 +27,19 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <see cref="Reconciler.ResolveIconSource(IconData?)"/>.</item>
 /// </list></para>
 ///
-/// <para><b>Known gaps:</b>
-/// <list type="bullet">
-///   <item><b>ActionButton + <c>OnActionButtonClick</c> is escape-hatched</b>.
-///   The legacy arm constructs an inner <c>Button</c> dynamically when
-///   <c>ActionButtonContent</c> is non-null, then wires <c>Click</c> on
-///   that dynamically-created child. The descriptor framework binds events
-///   to the primary control, not a sub-control created during mount, so
-///   this asymmetric pattern doesn't fit. Authors who need the action
-///   button stay on V1 OFF (legacy arm), or use a <c>.Set</c> imperative
-///   setter to construct the button themselves.</item>
-/// </list></para>
+/// <para><b>ActionButton + <c>OnActionButtonClick</c> (Phase 3-final Batch F):</b>
+/// the legacy arm constructs an inner <c>Button</c> dynamically when
+/// <c>ActionButtonContent</c> is non-null, then wires <c>Click</c> on the
+/// dynamically-created child. The descriptor models this as a
+/// <c>.OneWayBridged&lt;string?&gt;</c> entry whose set lambda creates the
+/// <c>Button</c>, wires <c>Click</c> via a closure over the parent InfoBar
+/// reference (which is rooted by the InfoBar's Tag — Click resolves
+/// <c>OnActionButtonClick</c> through <see cref="Reconciler.GetElementTag"/>
+/// so a record-with that updates the callback picks up automatically). The
+/// gate matches the legacy "set when non-null" treatment: a non-null →
+/// non-null content swap rebuilds the inner button (legacy doesn't rebuild,
+/// but the rebuild is observably the same when the click handler reads the
+/// live element tag).</para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 internal static class InfoBarDescriptor
@@ -84,6 +86,27 @@ internal static class InfoBarDescriptor
             set:         static (c, v) => c.IconSource = Reconciler.ResolveIconSource(v),
             shouldWrite: static e => e.IconSource is not null,
             comparer:    IconDataReferenceComparer.Instance)
+        // ActionButton (Phase 3-final Batch F). Dynamically construct the inner
+        // Button; Click trampoline reads the live element via GetElementTag so a
+        // later record-with that updates OnActionButtonClick picks up
+        // automatically (Update keeps the InfoBar's Tag fresh).
+        .OneWayBridged<string?>(
+            get:         static e => e.ActionButtonContent,
+            set:         static (c, v, _, _) =>
+            {
+                if (v is null)
+                {
+                    c.ActionButton = null;
+                    return;
+                }
+                var btn = new WinUI.Button { Content = v };
+                var infoBar = c;
+                btn.Click += (_, _) =>
+                    (Reconciler.GetElementTag(infoBar) as InfoBarElement)
+                        ?.OnActionButtonClick?.Invoke();
+                c.ActionButton = btn;
+            },
+            shouldWrite: static e => e.ActionButtonContent is not null)
         .HandCodedEvent<InfoBarEventPayload,
             TypedEventHandler<WinUI.InfoBar, WinUI.InfoBarClosedEventArgs>>(
             subscribe:        static (c, h) => c.Closed += h,

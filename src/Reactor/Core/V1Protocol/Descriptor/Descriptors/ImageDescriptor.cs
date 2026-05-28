@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Imaging;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
@@ -12,23 +13,21 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <para><b>Coverage:</b> a display leaf with a single complex prop
 /// (<c>Source</c> — string parsed to <see cref="Uri"/>, then to either
 /// <see cref="BitmapImage"/> or <see cref="SvgImageSource"/>) plus three
-/// optional layout props.</para>
+/// optional layout props, plus <c>ImageOpened</c> / <c>ImageFailed</c> as
+/// fire-only <see cref="ControlDescriptor{TElement,TControl}.HandCodedEvent{TPayload,TDelegate}"/>
+/// entries (Phase 3-final Batch F).</para>
 ///
-/// <para><b>Phase 1 parity note:</b> the legacy arm threads the element
-/// through <c>EnsureImageWiring</c> trampolines so <c>ImageOpened</c> /
-/// <c>ImageFailed</c> can route back to the element callbacks. The
-/// descriptor relies on the V1 handler adapter to set the element tag (it
-/// already does before invoking the descriptor) — but the descriptor never
-/// calls <c>EnsureImageWiring</c>, so <c>ImageOpened</c> /
-/// <c>ImageFailed</c> events ARE NOT fired by the descriptor path.</para>
+/// <para><b>Behavior parity vs. legacy:</b> the legacy <c>MountImage</c> arm
+/// threads the element through <c>EnsureImageWiring</c> trampolines so
+/// <c>ImageOpened</c>/<c>ImageFailed</c> route back to the element
+/// callbacks. The descriptor reuses <see cref="ImageEventPayload"/> with the
+/// established slot-gating shape; trampolines read the live element via
+/// <see cref="Reconciler.GetElementTag"/> and fire the corresponding
+/// callback only when it's wired — mirrors the
+/// "always subscribe, read latest callback per fire" pattern.</para>
 ///
-/// <para><b>Known gaps vs. hand-coded handler:</b>
+/// <para><b>Known nuances vs. hand-coded handler:</b>
 /// <list type="bullet">
-///   <item><b><c>OnImageOpened</c> / <c>OnImageFailed</c> callbacks:</b> not
-///   fired by the descriptor — Batch 3 covers zero-event props only (no
-///   <c>Controlled</c> / <c>HandCoded*</c>). Authors who need image-load
-///   notifications must continue to use the legacy arm (V1-OFF) until the
-///   descriptor is extended.</item>
 ///   <item><b><c>Source</c> diffing:</b> the legacy arm reassigns
 ///   <c>image.Source</c> only when the source string changes
 ///   (<c>o.Source != n.Source</c>). The descriptor's per-prop comparer
@@ -36,16 +35,42 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <item><b>Malformed URI:</b> the legacy <c>MountImage</c> swallows
 ///   <see cref="UriFormatException"/> at construction time. The descriptor
 ///   mirrors this exactly in its <c>set</c> lambda.</item>
+///   <item><b>Mount-time event ordering:</b> the legacy arm wires
+///   ImageOpened/ImageFailed BEFORE assigning Source so a cached-image
+///   synchronous fire still routes. The V1 handler adapter wires
+///   <c>.HandCodedEvent</c> entries in the order the descriptor declares
+///   them — the event entries are declared BEFORE the Source <c>.OneWay</c>
+///   entry below, so the same synchronous-fire path is preserved.</item>
 /// </list></para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 internal static class ImageDescriptor
 {
+    private static readonly RoutedEventHandler ImageOpenedTrampoline = (s, _) =>
+        (Reconciler.GetElementTag((UIElement)s!) as ImageElement)?.OnImageOpened?.Invoke();
+
+    private static readonly ExceptionRoutedEventHandler ImageFailedTrampoline = (s, args) =>
+        (Reconciler.GetElementTag((UIElement)s!) as ImageElement)?.OnImageFailed?.Invoke(args.ErrorMessage);
+
     public static readonly ControlDescriptor<ImageElement, WinUI.Image> Descriptor =
         new ControlDescriptor<ImageElement, WinUI.Image>
         {
             GetSetters = static e => e.Setters,
         }
+        // Event entries first so subscriptions land BEFORE the Source write
+        // (cached images can synchronously fire ImageOpened during the assign).
+        .HandCodedEvent<ImageEventPayload, RoutedEventHandler>(
+            subscribe:        static (c, h) => c.ImageOpened += h,
+            callbackPresent:  static e => e.OnImageOpened,
+            trampoline:       ImageOpenedTrampoline,
+            slotIsNull:       static p => p.ImageOpenedTrampoline is null,
+            setSlot:          static (p, h) => p.ImageOpenedTrampoline = h)
+        .HandCodedEvent<ImageEventPayload, ExceptionRoutedEventHandler>(
+            subscribe:        static (c, h) => c.ImageFailed += h,
+            callbackPresent:  static e => e.OnImageFailed,
+            trampoline:       ImageFailedTrampoline,
+            slotIsNull:       static p => p.ImageFailedTrampoline is null,
+            setSlot:          static (p, h) => p.ImageFailedTrampoline = h)
         .OneWay(
             get: static e => e.Source,
             set: static (c, v) =>

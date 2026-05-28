@@ -1197,6 +1197,10 @@ internal static class SelfTestFixtureRegistry
         "Desc_NumberBox_MountUpdate",
         // Spec 047 §14 Phase 3-final Batch C — CalendarView.
         "Desc_CalendarView_MountUpdate",
+        // Spec 047 §14 Phase 3-final Batch F — Image events, Path Data, InfoBar ActionButton.
+        "Desc_Image_Events",
+        "Desc_Path_Data",
+        "Desc_InfoBar_ActionButton",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2383,6 +2387,10 @@ internal static class SelfTestFixtureRegistry
         "Desc_NumberBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescNumberBoxMountUpdate(harness),
         // Spec 047 §14 Phase 3-final Batch C — CalendarView.
         "Desc_CalendarView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescCalendarViewMountUpdate(harness),
+        // Spec 047 §14 Phase 3-final Batch F — Image events, Path Data, InfoBar ActionButton.
+        "Desc_Image_Events" => new Spec047V1ProtocolDescriptorFixtures.DescImageEvents(harness),
+        "Desc_Path_Data" => new Spec047V1ProtocolDescriptorFixtures.DescPathData(harness),
+        "Desc_InfoBar_ActionButton" => new Spec047V1ProtocolDescriptorFixtures.DescInfoBarActionButton(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),
