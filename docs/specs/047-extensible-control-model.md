@@ -1403,7 +1403,14 @@ See §13 Q1 for the full capture lineage and matrix application. Raw data under 
 - **`Lazy*Stack<T>` + `ItemsRepeater<T>` G2 ports** — backed by `WinUI.ItemsRepeater` driven through `IElementFactory` / `ElementFactory<T>` rather than `ListViewBase` + `ContainerContentChanging`. Carries a fresh engine arm + factory-routing helper. Strategy shape (`TemplatedItemsErased<>`) doesn't change; only `BindErasedKeyedItemsSource` gains a new `case WinUI.ItemsRepeater` arm.
 - **G3 typed lists — `TreeView`, `FlipView`, `TabView`, `Pivot`** — heterogeneous, none share the `ListViewBase` realization pipeline. `TreeView` is hierarchical (`TreeViewNode` / `TreeViewNodeData`); `FlipView` pre-mounts items; `TabView` and `Pivot` keyed item-sources aren't routed today. Each needs a bespoke descriptor.
 
-ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` remains deferred for the §14 ratification gate. Cloud PC x64 advisory re-capture with the close-out scope (54 registered descriptors — +2 from `2026-05-27-phase3-final-3x5/`'s 50) under `docs/specs/047/phase3-results/CPC-ander-YTZ3O-x64-advisory/2026-05-27-phase3-closeout-3x5/`.
+**Phase 3 close-out advisory perf** — Cloud PC x64 re-capture with the close-out scope (52 registered descriptors — +2 from `2026-05-27-phase3-final-3x5/`'s 50) under `docs/specs/047/phase3-results/CPC-ander-YTZ3O-x64-advisory/2026-05-27-phase3-closeout-3x5/`. Median of n=15 (3 launches × 5 reps) V1 ON (descriptors) vs V1 OFF (today):
+
+- **Held:** M4 −20.8% / M5 −23.9% (dispatch wins persist with the wider registration table). M12 +18.5% (descriptor-interpreter pool-rent overhead from prior, unchanged).
+- **Improved vs prior `phase3-final-3x5/`:** M8 Update_OneLeafChanged +18.9% (down from +25.5%, −6.6pp) — `DescriptorHandler.Children` switch refactor adds inline-binding arms for templated-items strategies so the non-ItemsHost Update path is shorter. M10 −1.7% (down from +8.7%, volatile but real on this run).
+- **Regressed vs prior:** M1 Mount_Leaf_NoCallback +21.2% (up from +14.9%, +6.3pp) — two new `is`-checks in `V1HandlerAdapter.DispatchChildrenMount` for the templated-items markers fire ahead of the pattern switch on every Mount. Worth folding into the `case` switch in a Phase 4 perf-tuning pass; not load-bearing for correctness.
+- **Net headline:** the M1/M12 regressions persist on advisory and the M8 improvement is a structural win. No deltas exceed the §13 Q1 reopen threshold (gated on source-gen, not advisory perf).
+
+ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` remains deferred for the §14 ratification gate.
 
 **Carry-forward known defects from Phase 1:**
 - **KD-3** — dispatch fast-path for the ported built-ins (M4 was +88.9% V1 vs Today at Phase 1; final advisory shows M4 −21.2% / M5 −24.3% at amortized scope — KD-3 has materially closed at the batch-11 registration set).
