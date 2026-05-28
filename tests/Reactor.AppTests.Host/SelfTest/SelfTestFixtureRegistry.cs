@@ -1188,6 +1188,7 @@ internal static class SelfTestFixtureRegistry
         "Desc_AnimatedIcon_MountUpdate",
         "Desc_Semantic_MountUpdate",
         "Desc_AnnounceRegion_MountUpdate",
+        "Desc_XamlPage_MountUpdate",
         // Spec 047 §14 Phase 3 (batch 11) — Long-tail ports.
         "Desc_PipsPager_MountUpdate",
         "Desc_ListBox_MountUpdate",
@@ -2400,6 +2401,7 @@ internal static class SelfTestFixtureRegistry
         "Desc_AnimatedIcon_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescAnimatedIconMountUpdate(harness),
         "Desc_Semantic_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescSemanticMountUpdate(harness),
         "Desc_AnnounceRegion_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescAnnounceRegionMountUpdate(harness),
+        "Desc_XamlPage_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescXamlPageMountUpdate(harness),
         // Spec 047 §14 Phase 3 (batch 11) — Long-tail ports.
         "Desc_PipsPager_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescPipsPagerMountUpdate(harness),
         "Desc_ListBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescListBoxMountUpdate(harness),

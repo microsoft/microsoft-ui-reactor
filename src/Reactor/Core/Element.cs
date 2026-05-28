@@ -3831,8 +3831,12 @@ public enum ItemsViewLayoutKind
 /// shape: virtual hooks for factory creation, in-place update,
 /// per-row reconcile, and event callback dispatch.
 /// </summary>
-public abstract record ItemsViewElementBase : Element
+public abstract record ItemsViewElementBase : Element, global::Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource
 {
+    int global::Microsoft.UI.Reactor.Core.Internal.IItemViewSource.ItemCount => ItemCount;
+    Element global::Microsoft.UI.Reactor.Core.Internal.IItemViewSource.BuildItemView(int index) => BuildItemViewAt(index);
+    string global::Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource.GetKeyAt(int index) => GetKeyAt(index);
+
     public ItemsViewLayoutKind LayoutKind { get; init; } = ItemsViewLayoutKind.StackLayout;
     public ItemsViewSelectionMode SelectionMode { get; init; } = ItemsViewSelectionMode.Single;
     public bool IsItemInvokedEnabled { get; init; }
@@ -3844,6 +3848,7 @@ public abstract record ItemsViewElementBase : Element
     public abstract bool TryUpdateFactory(IElementFactory existingFactory);
     public abstract void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater);
     internal abstract void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState);
+    internal abstract Element BuildItemViewAt(int index);
     /// <summary>Dispatch an <c>ItemInvoked</c> event to the typed callback.</summary>
     public abstract void InvokeItemInvoked(int index);
     /// <summary>Dispatch a <c>SelectionChanged</c> snapshot to the typed callback.</summary>
@@ -3909,6 +3914,8 @@ public record ItemsViewElement<T>(
         // Just invoke the guard; any non-container root throws.
         _ = GuardedViewBuilder(Items[0], 0);
     }
+
+    internal override Element BuildItemViewAt(int index) => GuardedViewBuilder(Items[index], index);
 
     public override IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool) =>
         new ElementFactory<T>(Items, GuardedViewBuilder, reconciler, requestRerender, pool);

@@ -124,12 +124,15 @@ public sealed partial class Reconciler
             case WinUI.ItemsRepeater ir:
                 BindItemsRepeaterErasedKeyedItems(ir, source, requestRerender, isMount);
                 return;
+            case WinUI.ItemsView iv:
+                BindItemsViewErasedKeyedItems(iv, source, requestRerender, isMount);
+                return;
             default:
                 throw new InvalidOperationException(
                     $"TemplatedItemsErased<> binder does not yet support {control.GetType().FullName}. " +
                     "Supported on Mount/Update: WinUI.ListViewBase (ListView, GridView), " +
-                    "WinUI.ItemsRepeater (LazyVStack<T>, LazyHStack<T>, ItemsRepeater<T>). " +
-                    "FlipView stays carved.");
+                    "WinUI.ItemsRepeater (LazyVStack<T>, LazyHStack<T>, ItemsRepeater<T>), " +
+                    "and WinUI.ItemsView. FlipView stays carved.");
         }
     }
 
@@ -238,6 +241,79 @@ public sealed partial class Reconciler
 
         if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
             ApplyMoveAnimationsRepeater(ir, movedRows, ambient.Kind);
+    }
+
+    private void BindItemsViewErasedKeyedItems(
+        WinUI.ItemsView iv,
+        IKeyedItemSource source,
+        Action requestRerender,
+        bool isMount)
+    {
+        if (source is not ItemsViewElementBase itemsViewSource)
+            throw new InvalidOperationException(
+                $"TemplatedItemsErased<> on ItemsView requires {nameof(ItemsViewElementBase)} as the source. " +
+                $"Got: {source.GetType().FullName}.");
+
+        itemsViewSource.PreflightFirstItem();
+
+        if (isMount)
+        {
+            var state = BuildListStateForKeyedSource(source);
+            SetListState(iv, state);
+            iv.ItemsSource = state.Source;
+            var factory = itemsViewSource.CreateFactory(this, requestRerender, _pool);
+            itemsViewSource.AttachListStateToFactory(factory, state);
+            iv.ItemTemplate = factory;
+            return;
+        }
+
+        var repeater = iv.ScrollView?.Content as WinUI.ItemsRepeater;
+        if (repeater is not null
+            && repeater.ItemTemplate is IElementFactory existingFactory
+            && itemsViewSource.TryUpdateFactory(existingFactory))
+        {
+            ApplyItemsViewErasedKeyedDiffOrFallback(iv, repeater, source, itemsViewSource, existingFactory);
+            itemsViewSource.RefreshRealizedItems(existingFactory, repeater);
+            return;
+        }
+
+        var fresh = BuildListStateForKeyedSource(source);
+        SetListState(iv, fresh);
+        iv.ItemsSource = fresh.Source;
+        var replacementFactory = itemsViewSource.CreateFactory(this, requestRerender, _pool);
+        itemsViewSource.AttachListStateToFactory(replacementFactory, fresh);
+        iv.ItemTemplate = replacementFactory;
+    }
+
+    private void ApplyItemsViewErasedKeyedDiffOrFallback(
+        WinUI.ItemsView iv,
+        WinUI.ItemsRepeater repeater,
+        IKeyedItemSource source,
+        ItemsViewElementBase itemsViewSource,
+        IElementFactory factory)
+    {
+        var state = GetListState(iv);
+        if (state is null || !ReferenceEquals(iv.ItemsSource, state.Source))
+        {
+            var fresh = BuildListStateForKeyedSource(source);
+            SetListState(iv, fresh);
+            iv.ItemsSource = fresh.Source;
+            itemsViewSource.AttachListStateToFactory(factory, fresh);
+            return;
+        }
+
+        var ambient = AnimationAmbient.Current;
+        var stats = KeyedListDiff.Apply(
+            state,
+            new KeyedSourceKeyAdapter(source),
+            static (item, _) => item,
+            _logger,
+            iv.GetType().Name,
+            ambient,
+            controlInstance: repeater);
+
+        if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
+            ApplyMoveAnimationsRepeater(repeater, movedRows, ambient.Kind);
     }
 
     private void BindListViewBaseErasedKeyedItems(

@@ -276,6 +276,19 @@ internal sealed class GridViewEventPayload
     public Microsoft.UI.Xaml.Controls.ItemClickEventHandler? ItemClickTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3 completion — ItemsView item-invoked and
+/// selection-changed payload. Trampolines translate ReactorRow payloads back
+/// to the user's typed item indices through ItemsViewElementBase.</summary>
+internal sealed class ItemsViewEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.ItemsView,
+        Microsoft.UI.Xaml.Controls.ItemsViewItemInvokedEventArgs>? ItemInvokedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.ItemsView,
+        Microsoft.UI.Xaml.Controls.ItemsViewSelectionChangedEventArgs>? SelectionChangedTrampoline;
+}
+
 /// <summary>Spec 047 §14 Phase 3 batch 11 — SelectorBar SelectedIndex
 /// round-trip payload. <c>SelectionChanged</c> trampoline reads the live
 /// SelectedItem reference and converts back to the index via
