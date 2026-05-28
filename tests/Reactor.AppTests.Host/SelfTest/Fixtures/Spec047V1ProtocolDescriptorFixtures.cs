@@ -2934,6 +2934,57 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             {
                 H.Check("Desc_RelativePanel_Mounted", false);
             }
+
+            // §14 Phase 3 close-out: PerChildAttachedAfterAll exercise.
+            // Two named children where B.RightOf = "A". After mount the
+            // descriptor's two-pass callback must have populated WinUI's
+            // RelativePanel.RightOf attached DP on uiB pointing at uiA.
+            var childA = TextBlock("RP_A") with
+            {
+                Attached = new global::System.Collections.Generic.Dictionary<global::System.Type, object>
+                {
+                    [typeof(RelativePanelAttached)] = new RelativePanelAttached("ItemA")
+                    {
+                        AlignLeftWithPanel = true,
+                        AlignTopWithPanel = true,
+                    },
+                },
+            };
+            var childB = TextBlock("RP_B") with
+            {
+                Attached = new global::System.Collections.Generic.Dictionary<global::System.Type, object>
+                {
+                    [typeof(RelativePanelAttached)] = new RelativePanelAttached("ItemB")
+                    {
+                        RightOf = "ItemA",
+                    },
+                },
+            };
+            var elTwoPass = new RelativePanelElement(Children: new Element[] { childA, childB });
+            var uiTwoPass = rec.Mount(elTwoPass, _noOp);
+            if (uiTwoPass is WinUI.RelativePanel rp2)
+            {
+                parent.Children.Add(rp2);
+                await Harness.Render();
+
+                var uiA = rp2.Children.Count > 0 ? rp2.Children[0] as FrameworkElement : null;
+                var uiB = rp2.Children.Count > 1 ? rp2.Children[1] as FrameworkElement : null;
+                H.Check("Desc_RelativePanel_TwoPass_BothMounted", uiA is not null && uiB is not null);
+                H.Check("Desc_RelativePanel_TwoPass_NameA", uiA?.Name == "ItemA");
+                H.Check("Desc_RelativePanel_TwoPass_NameB", uiB?.Name == "ItemB");
+                var resolvedRightOf = uiB is null ? null : WinUI.RelativePanel.GetRightOf(uiB) as UIElement;
+                H.Check("Desc_RelativePanel_TwoPass_RightOfResolved",
+                    resolvedRightOf is not null && ReferenceEquals(resolvedRightOf, uiA));
+                H.Check("Desc_RelativePanel_TwoPass_AlignLeftWithPanel",
+                    uiA is not null && WinUI.RelativePanel.GetAlignLeftWithPanel(uiA));
+
+                rec.UnmountChild(rp2);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_RelativePanel_TwoPass_BothMounted", false);
+            }
         }
     }
 
