@@ -2419,6 +2419,349 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    // Spec 047 §14 Phase 3-final Batch E — per-child attached-prop placement
+    // via Panel<>.PerChildAttached. Mount writes Grid.Row/Column from
+    // GridAttached hints; Update re-applies after the child reconcile so
+    // reordered attached props land on the surviving FrameworkElement.
+    internal class DescGridAttachedRowColumn(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<GridElement, WinUI.Grid>(
+                new DescriptorHandler<GridElement, WinUI.Grid>(
+                    GridDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var def = new GridDefinition(new[] { "*", "*" }, new[] { "Auto", "Auto" });
+            var el1 = new GridElement(
+                Definition: def,
+                Children: new Element[]
+                {
+                    TextBlock("a").Grid(row: 0, column: 1),
+                    TextBlock("b").Grid(row: 1, column: 0, rowSpan: 2, columnSpan: 2),
+                });
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.Grid g)
+            {
+                parent.Children.Add(g);
+                await Harness.Render();
+
+                H.Check("Desc_Grid_AttachedRowColumn_Mounted", g.Children.Count == 2);
+                if (g.Children[0] is FrameworkElement c0a && g.Children[1] is FrameworkElement c1a)
+                {
+                    H.Check("Desc_Grid_AttachedRowColumn_C0Row", WinUI.Grid.GetRow(c0a) == 0);
+                    H.Check("Desc_Grid_AttachedRowColumn_C0Col", WinUI.Grid.GetColumn(c0a) == 1);
+                    H.Check("Desc_Grid_AttachedRowColumn_C1Row", WinUI.Grid.GetRow(c1a) == 1);
+                    H.Check("Desc_Grid_AttachedRowColumn_C1Col", WinUI.Grid.GetColumn(c1a) == 0);
+                    H.Check("Desc_Grid_AttachedRowColumn_C1RowSpan", WinUI.Grid.GetRowSpan(c1a) == 2);
+                    H.Check("Desc_Grid_AttachedRowColumn_C1ColSpan", WinUI.Grid.GetColumnSpan(c1a) == 2);
+                }
+                else
+                {
+                    H.Check("Desc_Grid_AttachedRowColumn_ChildrenAreFE", false);
+                }
+
+                // Update — swap row/col hints on the existing two children. The
+                // V1HandlerAdapter Update path re-fires PerChildAttached even
+                // when the UIElement survives the reconcile, so the new hints
+                // must land on the same FrameworkElement instances.
+                var el2 = el1 with
+                {
+                    Children = new Element[]
+                    {
+                        TextBlock("a").Grid(row: 1, column: 1),
+                        TextBlock("b").Grid(row: 0, column: 0),
+                    },
+                };
+                rec.UpdateChild(el1, el2, g, _noOp);
+                await Harness.Render();
+
+                if (g.Children[0] is FrameworkElement c0b && g.Children[1] is FrameworkElement c1b)
+                {
+                    H.Check("Desc_Grid_AttachedRowColumn_C0RowAfterUpdate", WinUI.Grid.GetRow(c0b) == 1);
+                    H.Check("Desc_Grid_AttachedRowColumn_C0ColAfterUpdate", WinUI.Grid.GetColumn(c0b) == 1);
+                    H.Check("Desc_Grid_AttachedRowColumn_C1RowAfterUpdate", WinUI.Grid.GetRow(c1b) == 0);
+                    H.Check("Desc_Grid_AttachedRowColumn_C1ColAfterUpdate", WinUI.Grid.GetColumn(c1b) == 0);
+                    // Spans reset when the new attached has default 1 — verifies
+                    // the ClearValue branch in the PerChildAttached callback.
+                    H.Check("Desc_Grid_AttachedRowColumn_C1RowSpanReset", WinUI.Grid.GetRowSpan(c1b) == 1);
+                    H.Check("Desc_Grid_AttachedRowColumn_C1ColSpanReset", WinUI.Grid.GetColumnSpan(c1b) == 1);
+                }
+                else
+                {
+                    H.Check("Desc_Grid_AttachedRowColumn_ChildrenAreFEAfterUpdate", false);
+                }
+
+                rec.UnmountChild(g);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Grid_AttachedRowColumn_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescCanvasAttachedLeftTop(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<CanvasElement, WinUI.Canvas>(
+                new DescriptorHandler<CanvasElement, WinUI.Canvas>(
+                    CanvasDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new CanvasElement(
+                Children: new Element[]
+                {
+                    TextBlock("a").Canvas(left: 10, top: 20),
+                    TextBlock("b").Canvas(left: 30, top: 40),
+                })
+            {
+                Width = 200,
+                Height = 100,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.Canvas cv)
+            {
+                parent.Children.Add(cv);
+                await Harness.Render();
+
+                H.Check("Desc_Canvas_AttachedLeftTop_Mounted", cv.Children.Count == 2);
+                if (cv.Children[0] is FrameworkElement c0a && cv.Children[1] is FrameworkElement c1a)
+                {
+                    H.Check("Desc_Canvas_AttachedLeftTop_C0Left", Math.Abs(WinUI.Canvas.GetLeft(c0a) - 10) < 1e-9);
+                    H.Check("Desc_Canvas_AttachedLeftTop_C0Top", Math.Abs(WinUI.Canvas.GetTop(c0a) - 20) < 1e-9);
+                    H.Check("Desc_Canvas_AttachedLeftTop_C1Left", Math.Abs(WinUI.Canvas.GetLeft(c1a) - 30) < 1e-9);
+                    H.Check("Desc_Canvas_AttachedLeftTop_C1Top", Math.Abs(WinUI.Canvas.GetTop(c1a) - 40) < 1e-9);
+                }
+                else
+                {
+                    H.Check("Desc_Canvas_AttachedLeftTop_ChildrenAreFE", false);
+                }
+
+                var el2 = el1 with
+                {
+                    Children = new Element[]
+                    {
+                        TextBlock("a").Canvas(left: 50, top: 60),
+                        TextBlock("b").Canvas(left: 70, top: 80),
+                    },
+                };
+                rec.UpdateChild(el1, el2, cv, _noOp);
+                await Harness.Render();
+
+                if (cv.Children[0] is FrameworkElement c0b && cv.Children[1] is FrameworkElement c1b)
+                {
+                    H.Check("Desc_Canvas_AttachedLeftTop_C0LeftAfterUpdate", Math.Abs(WinUI.Canvas.GetLeft(c0b) - 50) < 1e-9);
+                    H.Check("Desc_Canvas_AttachedLeftTop_C0TopAfterUpdate", Math.Abs(WinUI.Canvas.GetTop(c0b) - 60) < 1e-9);
+                    H.Check("Desc_Canvas_AttachedLeftTop_C1LeftAfterUpdate", Math.Abs(WinUI.Canvas.GetLeft(c1b) - 70) < 1e-9);
+                    H.Check("Desc_Canvas_AttachedLeftTop_C1TopAfterUpdate", Math.Abs(WinUI.Canvas.GetTop(c1b) - 80) < 1e-9);
+                }
+                else
+                {
+                    H.Check("Desc_Canvas_AttachedLeftTop_ChildrenAreFEAfterUpdate", false);
+                }
+
+                rec.UnmountChild(cv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Canvas_AttachedLeftTop_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescFlexPanelAttachedFlexProps(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel>(
+                new DescriptorHandler<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel>(
+                    FlexPanelDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new FlexElement(
+                Children: new Element[]
+                {
+                    TextBlock("a").Flex(grow: 1, shrink: 0),
+                    TextBlock("b").Flex(grow: 2, shrink: 1, basis: 50),
+                })
+            {
+                Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Row,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is Microsoft.UI.Reactor.Layout.FlexPanel fp)
+            {
+                parent.Children.Add(fp);
+                await Harness.Render();
+
+                H.Check("Desc_FlexPanel_AttachedFlexProps_Mounted", fp.Children.Count == 2);
+                if (fp.Children[0] is UIElement c0a && fp.Children[1] is UIElement c1a)
+                {
+                    H.Check("Desc_FlexPanel_AttachedFlexProps_C0Grow",
+                        Math.Abs(Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(c0a) - 1) < 1e-9);
+                    H.Check("Desc_FlexPanel_AttachedFlexProps_C0Shrink",
+                        Math.Abs(Microsoft.UI.Reactor.Layout.FlexPanel.GetShrink(c0a) - 0) < 1e-9);
+                    H.Check("Desc_FlexPanel_AttachedFlexProps_C1Grow",
+                        Math.Abs(Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(c1a) - 2) < 1e-9);
+                    H.Check("Desc_FlexPanel_AttachedFlexProps_C1Basis",
+                        Math.Abs(Microsoft.UI.Reactor.Layout.FlexPanel.GetBasis(c1a) - 50) < 1e-9);
+                }
+                else
+                {
+                    H.Check("Desc_FlexPanel_AttachedFlexProps_ChildrenPresent", false);
+                }
+
+                // Update — swap flex props on the surviving children.
+                var el2 = el1 with
+                {
+                    Children = new Element[]
+                    {
+                        TextBlock("a").Flex(grow: 3, shrink: 2),
+                        TextBlock("b").Flex(grow: 0, shrink: 1),
+                    },
+                };
+                rec.UpdateChild(el1, el2, fp, _noOp);
+                await Harness.Render();
+
+                if (fp.Children[0] is UIElement c0b && fp.Children[1] is UIElement c1b)
+                {
+                    H.Check("Desc_FlexPanel_AttachedFlexProps_C0GrowAfterUpdate",
+                        Math.Abs(Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(c0b) - 3) < 1e-9);
+                    H.Check("Desc_FlexPanel_AttachedFlexProps_C0ShrinkAfterUpdate",
+                        Math.Abs(Microsoft.UI.Reactor.Layout.FlexPanel.GetShrink(c0b) - 2) < 1e-9);
+                    H.Check("Desc_FlexPanel_AttachedFlexProps_C1GrowAfterUpdate",
+                        Math.Abs(Microsoft.UI.Reactor.Layout.FlexPanel.GetGrow(c1b) - 0) < 1e-9);
+                }
+
+                rec.UnmountChild(fp);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_FlexPanel_AttachedFlexProps_Mounted", false);
+            }
+        }
+    }
+
+    // Spec 047 §14 Phase 3-final Batch E — closes the WrapGrid escape-hatch
+    // from Phase 3 batch 8. Verifies container props + per-child
+    // WrapGridAttached (RowSpan / ColumnSpan) writes on Mount and Update.
+    internal class DescWrapGridMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<WrapGridElement, WinUI.VariableSizedWrapGrid>(
+                new DescriptorHandler<WrapGridElement, WinUI.VariableSizedWrapGrid>(
+                    WrapGridDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(
+                    TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new WrapGridElement(
+                Children: new Element[]
+                {
+                    TextBlock("a").WrapGridColumnSpan(2),
+                    TextBlock("b").WrapGridRowSpan(2),
+                })
+            {
+                Orientation = Orientation.Horizontal,
+                MaximumRowsOrColumns = 4,
+                ItemWidth = 30,
+                ItemHeight = 40,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.VariableSizedWrapGrid wg)
+            {
+                parent.Children.Add(wg);
+                await Harness.Render();
+
+                H.Check("Desc_WrapGrid_Mounted", true);
+                H.Check("Desc_WrapGrid_ChildCount2", wg.Children.Count == 2);
+                H.Check("Desc_WrapGrid_Orientation", wg.Orientation == Orientation.Horizontal);
+                H.Check("Desc_WrapGrid_MaximumRowsOrColumns", wg.MaximumRowsOrColumns == 4);
+                H.Check("Desc_WrapGrid_ItemWidth", Math.Abs(wg.ItemWidth - 30) < 1e-9);
+                H.Check("Desc_WrapGrid_ItemHeight", Math.Abs(wg.ItemHeight - 40) < 1e-9);
+                if (wg.Children[0] is FrameworkElement c0a && wg.Children[1] is FrameworkElement c1a)
+                {
+                    H.Check("Desc_WrapGrid_C0ColumnSpan",
+                        WinUI.VariableSizedWrapGrid.GetColumnSpan(c0a) == 2);
+                    H.Check("Desc_WrapGrid_C1RowSpan",
+                        WinUI.VariableSizedWrapGrid.GetRowSpan(c1a) == 2);
+                }
+                else
+                {
+                    H.Check("Desc_WrapGrid_ChildrenAreFE", false);
+                }
+
+                var el2 = el1 with
+                {
+                    ItemWidth = 50,
+                    Children = new Element[]
+                    {
+                        TextBlock("a"),                          // no attached → both spans reset to 1
+                        TextBlock("b").WrapGridColumnSpan(3),
+                        TextBlock("c").WrapGridRowSpan(2).WrapGridColumnSpan(2),
+                    },
+                };
+                rec.UpdateChild(el1, el2, wg, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_WrapGrid_ChildCount3AfterUpdate", wg.Children.Count == 3);
+                H.Check("Desc_WrapGrid_ItemWidthUpdated", Math.Abs(wg.ItemWidth - 50) < 1e-9);
+                if (wg.Children[0] is FrameworkElement c0b)
+                {
+                    H.Check("Desc_WrapGrid_C0ColumnSpanResetAfterUpdate",
+                        WinUI.VariableSizedWrapGrid.GetColumnSpan(c0b) == 1);
+                    H.Check("Desc_WrapGrid_C0RowSpanResetAfterUpdate",
+                        WinUI.VariableSizedWrapGrid.GetRowSpan(c0b) == 1);
+                }
+                if (wg.Children[1] is FrameworkElement c1b)
+                {
+                    H.Check("Desc_WrapGrid_C1ColumnSpanAfterUpdate",
+                        WinUI.VariableSizedWrapGrid.GetColumnSpan(c1b) == 3);
+                }
+                if (wg.Children[2] is FrameworkElement c2b)
+                {
+                    H.Check("Desc_WrapGrid_C2BothSpansAfterUpdate",
+                        WinUI.VariableSizedWrapGrid.GetRowSpan(c2b) == 2
+                        && WinUI.VariableSizedWrapGrid.GetColumnSpan(c2b) == 2);
+                }
+
+                rec.UnmountChild(wg);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_WrapGrid_Mounted", false);
+            }
+        }
+    }
+
     internal class DescCanvasMountUpdate(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

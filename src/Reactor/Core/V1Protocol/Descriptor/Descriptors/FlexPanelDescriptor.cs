@@ -15,13 +15,14 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// (<c>FlexPanel : Panel</c>, so <c>Children</c> is the standard
 /// <c>UIElementCollection</c>).</para>
 ///
-/// <para><b>Known gaps:</b> the legacy hand-coded path applies
-/// <see cref="FlexAttached"/> per child after children mount (Grow / Shrink /
-/// Basis / Order / AlignSelf / margins). The Panel strategy in
-/// V1HandlerAdapter doesn't surface a per-child post-mount hook, so flex
-/// children stay at default Yoga node config. Authors who need per-child
-/// flex tuning stay on V1 OFF (legacy arm). Container-level layout has
-/// parity.</para>
+/// <para><b>§14 Phase 3-final Batch E:</b> per-child
+/// <see cref="FlexAttached"/> (Grow / Shrink / Basis / MinWidth / MinHeight
+/// / AlignSelf / Position / Left / Top / Right / Bottom) is now applied via
+/// <see cref="Panel{TElement,TControl}.PerChildAttached"/>. The callback
+/// delegates to <see cref="Reconciler.ApplyFlexAttached"/> so descriptor
+/// children share the same "always apply — reset to defaults when no hint"
+/// semantics as the legacy <c>MountFlex</c> arm (the reset is required for
+/// pool-rented controls that could otherwise inherit stale Yoga config).</para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 internal static class FlexPanelDescriptor
@@ -29,7 +30,11 @@ internal static class FlexPanelDescriptor
     private static readonly Panel<FlexElement, FlexPanel> ChildrenStrategy =
         new Panel<FlexElement, FlexPanel>(
             GetChildren: static e => e.Children,
-            GetCollection: static c => c.Children);
+            GetCollection: static c => c.Children)
+        {
+            PerChildAttached = static (panel, ui, childEl) =>
+                Microsoft.UI.Reactor.Core.Reconciler.ApplyFlexAttached(childEl, ui),
+        };
 
     public static readonly ControlDescriptor<FlexElement, FlexPanel> Descriptor =
         new ControlDescriptor<FlexElement, FlexPanel>

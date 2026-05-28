@@ -190,6 +190,12 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<RelativePanelElement, WinUI.RelativePanel>(
                 RelativePanelDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3-final Batch E — WrapGrid (escape-hatch
+        // closed by Panel<>.PerChildAttached).
+        rec.RegisterHandler<WrapGridElement, WinUI.VariableSizedWrapGrid>(
+            new DescriptorHandler<WrapGridElement, WinUI.VariableSizedWrapGrid>(
+                WrapGridDescriptor.Descriptor));
+
         // Spec 047 §14 Phase 3 (batch 9) — Named-slot container ports.
         rec.RegisterHandler<SplitViewElement, WinUI.SplitView>(
             new DescriptorHandler<SplitViewElement, WinUI.SplitView>(

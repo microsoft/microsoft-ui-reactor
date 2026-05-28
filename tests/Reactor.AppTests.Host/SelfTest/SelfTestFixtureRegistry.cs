@@ -1171,6 +1171,11 @@ internal static class SelfTestFixtureRegistry
         "Desc_Canvas_MountUpdate",
         "Desc_FlexPanel_MountUpdate",
         "Desc_RelativePanel_MountUpdate",
+        // Spec 047 §14 Phase 3-final Batch E — per-child attached props + WrapGrid.
+        "Desc_Grid_AttachedRowColumn",
+        "Desc_Canvas_AttachedLeftTop",
+        "Desc_FlexPanel_AttachedFlexProps",
+        "Desc_WrapGrid_MountUpdate",
         // Spec 047 §14 Phase 3 (batch 9) — Named-slot container ports.
         "Desc_SplitView_MountUpdate",
         "Desc_InfoBar_MountUpdate",
@@ -2352,6 +2357,11 @@ internal static class SelfTestFixtureRegistry
         "Desc_Canvas_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescCanvasMountUpdate(harness),
         "Desc_FlexPanel_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescFlexPanelMountUpdate(harness),
         "Desc_RelativePanel_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRelativePanelMountUpdate(harness),
+        // Spec 047 §14 Phase 3-final Batch E — per-child attached props + WrapGrid.
+        "Desc_Grid_AttachedRowColumn" => new Spec047V1ProtocolDescriptorFixtures.DescGridAttachedRowColumn(harness),
+        "Desc_Canvas_AttachedLeftTop" => new Spec047V1ProtocolDescriptorFixtures.DescCanvasAttachedLeftTop(harness),
+        "Desc_FlexPanel_AttachedFlexProps" => new Spec047V1ProtocolDescriptorFixtures.DescFlexPanelAttachedFlexProps(harness),
+        "Desc_WrapGrid_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescWrapGridMountUpdate(harness),
         // Spec 047 §14 Phase 3 (batch 9) — Named-slot container ports.
         "Desc_SplitView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescSplitViewMountUpdate(harness),
         "Desc_InfoBar_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescInfoBarMountUpdate(harness),

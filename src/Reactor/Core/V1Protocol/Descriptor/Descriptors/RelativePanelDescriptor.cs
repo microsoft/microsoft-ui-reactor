@@ -13,14 +13,20 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>Setters</c>. Children are dispatched through the
 /// <see cref="Panel{TElement,TControl}"/> strategy.</para>
 ///
-/// <para><b>Known gaps:</b> the legacy hand-coded path executes a two-pass
-/// resolution to apply <see cref="RelativePanelAttached"/> attached
-/// properties (RightOf / Below / AlignLeftWith / AlignWithPanel etc.) using
-/// a name → control map. The Panel strategy in V1HandlerAdapter doesn't
-/// surface a per-child post-mount hook, so descriptor-mounted children
-/// stack at the panel origin without relative wiring. Authors who depend on
-/// <c>RelativePanelAttached</c> stay on V1 OFF (legacy arm). Pure-children
-/// scenarios have parity.</para>
+/// <para><b>Known gap — carved to Phase 4:</b> the legacy hand-coded path
+/// executes a two-pass resolution to apply
+/// <see cref="RelativePanelAttached"/> attached properties (RightOf / Below
+/// / AlignLeftWith / AlignWithPanel etc.) using a name → control map built
+/// up across all children. Phase 3-final Batch A's
+/// <see cref="Panel{TElement,TControl}.PerChildAttached"/> hook fires
+/// per-child sequentially — at the moment any given child's callback
+/// fires, later siblings haven't been mounted yet, so name references
+/// like <c>RightOf="foo"</c> can't resolve. A correct port requires
+/// either a post-loop second-pass shape on <see cref="Panel{TElement,TControl}"/>
+/// or a dedicated <c>NamedRelativePanel&lt;…&gt;</c> strategy; both are
+/// out of Batch E's scope. Pure-children scenarios remain at parity;
+/// authors who depend on <c>RelativePanelAttached</c> stay on V1 OFF
+/// (legacy arm) until the Phase 4 follow-up.</para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 internal static class RelativePanelDescriptor

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.UI.Xaml;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
@@ -20,13 +21,13 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// gate). Children are dispatched through the
 /// <see cref="Panel{TElement,TControl}"/> strategy.</para>
 ///
-/// <para><b>Known gaps:</b> the legacy hand-coded path applies
-/// <see cref="GridAttached"/> (Row / Column / RowSpan / ColumnSpan) per
-/// child after children mount. The Panel strategy in V1HandlerAdapter
-/// doesn't surface a per-child post-mount hook yet, so descriptor-mounted
-/// children stack at row 0 / column 0. Authors who need
-/// <c>Grid.SetRow</c> / <c>Grid.SetColumn</c> stay on V1 OFF (legacy arm).
-/// Container-level spacing and definitions have parity.</para>
+/// <para><b>§14 Phase 3-final Batch E:</b> per-child
+/// <see cref="GridAttached"/> (Row / Column / RowSpan / ColumnSpan) is now
+/// applied via <see cref="Panel{TElement,TControl}.PerChildAttached"/>,
+/// which the V1HandlerAdapter fires after each child Mount and after each
+/// child Update. Mirrors the legacy <c>MountGrid</c> arm —
+/// <c>Grid.SetRow</c> / <c>Grid.SetColumn</c> always set; <c>SetRowSpan</c>
+/// / <c>SetColumnSpan</c> only when the hint is &gt; 1 (default).</para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 internal static class GridDescriptor
@@ -34,7 +35,30 @@ internal static class GridDescriptor
     private static readonly Panel<GridElement, WinUI.Grid> ChildrenStrategy =
         new Panel<GridElement, WinUI.Grid>(
             GetChildren: static e => e.Children,
-            GetCollection: static c => c.Children);
+            GetCollection: static c => c.Children)
+        {
+            PerChildAttached = static (grid, ui, childEl) =>
+            {
+                if (ui is not FrameworkElement fe) return;
+                var ga = childEl.GetAttached<GridAttached>();
+                if (ga is null)
+                {
+                    // Reset to defaults so pool-rented / reused controls don't
+                    // inherit stale positioning from a prior parent.
+                    fe.ClearValue(WinUI.Grid.RowProperty);
+                    fe.ClearValue(WinUI.Grid.ColumnProperty);
+                    fe.ClearValue(WinUI.Grid.RowSpanProperty);
+                    fe.ClearValue(WinUI.Grid.ColumnSpanProperty);
+                    return;
+                }
+                WinUI.Grid.SetRow(fe, ga.Row);
+                WinUI.Grid.SetColumn(fe, ga.Column);
+                if (ga.RowSpan > 1) WinUI.Grid.SetRowSpan(fe, ga.RowSpan);
+                else fe.ClearValue(WinUI.Grid.RowSpanProperty);
+                if (ga.ColumnSpan > 1) WinUI.Grid.SetColumnSpan(fe, ga.ColumnSpan);
+                else fe.ClearValue(WinUI.Grid.ColumnSpanProperty);
+            },
+        };
 
     public static readonly ControlDescriptor<GridElement, WinUI.Grid> Descriptor =
         new ControlDescriptor<GridElement, WinUI.Grid>

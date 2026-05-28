@@ -3775,7 +3775,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private static void ApplyFlexAttached(Element child, Microsoft.UI.Xaml.UIElement ctrl)
+    internal static void ApplyFlexAttached(Element child, Microsoft.UI.Xaml.UIElement ctrl)
     {
         var fa = child.GetAttached<FlexAttached>();
         // Always apply — reset to defaults when no FlexAttached, so stale values

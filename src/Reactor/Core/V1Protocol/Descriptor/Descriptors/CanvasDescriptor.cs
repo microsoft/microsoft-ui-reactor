@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.UI.Xaml;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
@@ -12,13 +13,13 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// Children are dispatched through the
 /// <see cref="Panel{TElement,TControl}"/> strategy.</para>
 ///
-/// <para><b>Known gaps:</b> the legacy hand-coded path applies
-/// <see cref="CanvasAttached"/> (Canvas.Left / Canvas.Top) per child after
-/// children mount. The Panel strategy in V1HandlerAdapter doesn't surface a
-/// per-child post-mount hook yet, so descriptor-mounted children stay at
-/// the panel origin. Authors who need <c>Canvas.SetLeft</c> /
-/// <c>Canvas.SetTop</c> stay on V1 OFF (legacy arm). Pure-children scenarios
-/// have parity.</para>
+/// <para><b>§14 Phase 3-final Batch E:</b> per-child
+/// <see cref="CanvasAttached"/> (Canvas.Left / Canvas.Top, plus the
+/// AnchorX / AnchorY post-layout offset) is now applied via
+/// <see cref="Panel{TElement,TControl}.PerChildAttached"/>. The callback
+/// delegates to <see cref="Reconciler.ApplyCanvasPosition"/> so descriptor
+/// children share the same anchor-state ConditionalWeakTable + size-change
+/// subscription used by the legacy <c>MountCanvas</c> arm.</para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 internal static class CanvasDescriptor
@@ -26,7 +27,21 @@ internal static class CanvasDescriptor
     private static readonly Panel<CanvasElement, WinUI.Canvas> ChildrenStrategy =
         new Panel<CanvasElement, WinUI.Canvas>(
             GetChildren: static e => e.Children,
-            GetCollection: static c => c.Children);
+            GetCollection: static c => c.Children)
+        {
+            PerChildAttached = static (canvas, ui, childEl) =>
+            {
+                if (ui is not FrameworkElement fe) return;
+                var ca = childEl.GetAttached<CanvasAttached>();
+                if (ca is null)
+                {
+                    fe.ClearValue(WinUI.Canvas.LeftProperty);
+                    fe.ClearValue(WinUI.Canvas.TopProperty);
+                    return;
+                }
+                Reconciler.ApplyCanvasPosition(fe, ca);
+            },
+        };
 
     public static readonly ControlDescriptor<CanvasElement, WinUI.Canvas> Descriptor =
         new ControlDescriptor<CanvasElement, WinUI.Canvas>
