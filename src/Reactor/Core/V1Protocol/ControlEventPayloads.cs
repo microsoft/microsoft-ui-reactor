@@ -377,6 +377,23 @@ internal sealed class RefreshContainerEventPayload
         Microsoft.UI.Xaml.Controls.RefreshRequestedEventArgs>? RefreshRequestedTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3 deferred controls — WebView2 event payload.</summary>
+internal sealed class WebView2EventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.WebView2,
+        Microsoft.Web.WebView2.Core.CoreWebView2NavigationStartingEventArgs>? NavigationStartingTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.WebView2,
+        Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? NavigationCompletedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.WebView2,
+        Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs>? WebMessageReceivedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.WebView2,
+        Microsoft.UI.Xaml.Controls.CoreWebView2InitializedEventArgs>? CoreInitializedTrampoline;
+}
+
 /// <summary>
 /// Spec 047 §9.2 — open-ended anchor for delegates registered via
 /// <see cref="ReactorBinding{TElement}.OnCustomEvent{TArgs}"/>. Holds a

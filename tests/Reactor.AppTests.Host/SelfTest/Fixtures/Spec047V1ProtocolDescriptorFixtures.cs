@@ -5967,6 +5967,43 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    internal class DescWebView2MountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<WebView2Element, WinUI.WebView2>(
+                new DescriptorHandler<WebView2Element, WinUI.WebView2>(WebView2Descriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            // No Source: avoids async CoreWebView2 initialization in selftest.
+            var el1 = WebView2().Set(c => c.Width = 320);
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.WebView2 wv)
+            {
+                parent.Children.Add(wv);
+                await Harness.Render();
+
+                H.Check("Desc_WebView2_Mounted", true);
+                H.Check("Desc_WebView2_InitialWidth", wv.Width == 320);
+
+                var el2 = WebView2().Set(c => c.Width = 480);
+                rec.UpdateChild(el1, el2, wv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_WebView2_UpdatedWidth", wv.Width == 480);
+
+                rec.UnmountChild(wv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_WebView2_Mounted", false);
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  §14 Phase 3 finish — Port (11) Pivot via TabItemsHost (PivotItem container).
     // ────────────────────────────────────────────────────────────────────

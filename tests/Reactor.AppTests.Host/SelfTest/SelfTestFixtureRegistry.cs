@@ -1232,6 +1232,7 @@ internal static class SelfTestFixtureRegistry
         "Desc_SwipeControl_MountUpdate",
         "Desc_SemanticZoom_MountUpdate",
         "Desc_MediaPlayerElement_MountUpdate",
+        "Desc_WebView2_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2460,6 +2461,7 @@ internal static class SelfTestFixtureRegistry
         "Desc_SwipeControl_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescSwipeControlMountUpdate(harness),
         "Desc_SemanticZoom_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescSemanticZoomMountUpdate(harness),
         "Desc_MediaPlayerElement_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescMediaPlayerElementMountUpdate(harness),
+        "Desc_WebView2_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescWebView2MountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),
