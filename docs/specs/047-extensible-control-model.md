@@ -1434,7 +1434,12 @@ ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` remains deferred for the §14 ra
 - **Port (10) `TabView`** — needs a `TabItemsHost<TElement, TControl>` ChildrenStrategy. Heterogeneous items (`TabViewItemData` with Header + Content + IsClosable). Positional first; keyed reconcile as a follow-up if needed.
 - **Port (11) `Pivot`** — reuses Port (10)'s `TabItemsHost` shape with `WinUI.PivotItem` as the container.
 
-**Phase 3 finish advisory perf** — Cloud PC x64 re-capture under `docs/specs/047/phase3-results/CPC-ander-YTZ3O-x64-advisory/2026-05-28-phase3-finish-3x5/`. Headline expected vs prior `2026-05-27-phase3-closeout-3x5/`: **M1 should improve** (dispatch consolidation collapsed two `is`-checks into one); other cells track with the close-out matrix. Capture appended once the run completes.
+**Phase 3 finish advisory perf** — Cloud PC x64 re-capture under `docs/specs/047/phase3-results/CPC-ander-YTZ3O-x64-advisory/2026-05-28-phase3-finish-3x5/` (n=15, 3 launches × 5 reps). V1 ON (descriptors) vs V1 OFF (today), against prior `2026-05-27-phase3-closeout-3x5/`:
+
+- **Held:** M4 −20.2% / M5 −17.8% (dispatch wins persist with +1 base-derived descriptor registration). M7 +6.4% / M11 +10.7% within prior band.
+- **M1 Mount_Leaf_NoCallback +20.7%** — close-out's +21.2% essentially unchanged. The dispatch consolidation's structural fold (two markers into the `IItemsBinderStrategy` base) reduces instruction count but didn't recover the +6.3pp the close-out added on this Cloud-PC run; a genuine M1 fix likely needs a Phase 4 perf-tuning pass that folds the binder check into the existing pattern switch's `case` arm rather than a leading `if`-block.
+- **New regressions vs close-out:** M8 +21.8% (+2.9pp — Lazy*Stack base-derived registration's added is-check in the Update path), M12 +30.7% (+12.2pp — Cloud-PC volatile; M12 has trended ±15pp across the last three captures and should be confirmed on stable AC).
+- **Net headline:** no bench exceeds the §13 Q1 reopen threshold. The structural wins (dispatch consolidation, single `IItemsBinderStrategy` arm) are in place; the absolute Cloud-PC numbers track the close-out baseline.
 
 **ARM64 stable-AC ratification gate** — pending. The Phase 3 finish §14 close-out is gated on either (a) a re-capture on `LAPTOP-4MEP83VI` landing under `docs/specs/047/phase3-results/`, or (b) a tracking issue with a named owner + target date filed and referenced here. *Owner / date assignment to be appended once filed.*
 
