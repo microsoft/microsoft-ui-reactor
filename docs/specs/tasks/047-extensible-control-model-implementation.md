@@ -920,10 +920,22 @@ carve-outs:
       added (the element type is new — there was no legacy arm before).
       DSL surface: `ItemsRepeater<T>` factory in `Dsl.cs`. Single
       base-derived `ItemsRepeaterDescriptor` catches every closed-T
-      variant. 11 new fixtures (Desc_ItemsRepeater_*). 100% V1 dispatch
-      coverage now reached.
+      variant. 11 new fixtures (Desc_ItemsRepeater_*). Every typed-items
+      host family scoped in Phase 3 now has a V1 descriptor (the
+      precise close-out claim — the broader "every Element type"
+      audit is captured under the "Phase 3 deferred / not-attempted"
+      section below).
 - [x] **G3 typed lists — `TreeView`, `FlipView`, `TabView`, `Pivot`** —
-      closed by Phase 3 finish.
+      closed by Phase 3 finish. **Note:** "FlipView" here is the
+      simple non-templated `FlipViewElement` (Element[] items). The
+      typed `TemplatedFlipViewElement<T>` peer stays carved exactly
+      as documented at Phase 3 close-out — FlipView lacks
+      `ContainerContentChanging` so the realization pipeline used by
+      `TemplatedListView<T>` / `TemplatedGridView<T>` doesn't apply;
+      a `PreMountedItems` strategy would land it but no fixture
+      currently demands it. The intermediate marker base
+      `TemplatedFlipViewElementBase` is reserved in the element
+      hierarchy for that future port.
       - **TreeView** via new `TreeChildren<TElement, TControl>`
         strategy (hierarchical, positional rebuild on Update,
         recursive `ContentElement` mount).
@@ -939,6 +951,51 @@ carve-outs:
       - 29 new fixtures across the four descriptors (Desc_TreeView_*,
         Desc_FlipView_*, Desc_TabView_*, Desc_Pivot_*). Total Desc_
         baseline: 602 ok / 0 failures both V1 ON and V1 OFF.
+        (Total grows to 613 after Port (7) ItemsRepeater<T> above.)
+
+**Phase 3 deferred / not-attempted** (element types in the legacy
+`Reconciler.Mount` switch that have neither a Phase 1 V1 handler nor a
+Phase 3 descriptor — out of scope for the Phase 3 batch list, recorded
+here for a future Phase 3.5 / Phase 4 prelude). Cross-referenced from
+the audit at the end of `spec/047-phase3-finish`:
+
+- **Genuine engine gap:** `TemplatedFlipViewElement<T>` — close-out
+  carve. Needs a `PreMountedItems` ChildrenStrategy. The intermediate
+  base `TemplatedFlipViewElementBase` already exists for the
+  base-derived registration.
+- **Untyped items hosts not ported:** `GridViewElement` (the plain
+  Element[] variant — `ListViewElement` got a Phase 1 V1 handler,
+  GridView did not), `ItemsViewElementBase` (the higher-level
+  `ItemsView` wrapping its own ItemsRepeater), `ItemContainerElement`.
+- **Dialog / overlay family:** `ContentDialogElement`,
+  `FlyoutElement`, `PopupElement`, `MenuBarElement`,
+  `MenuFlyoutElement`, `CommandBarElement`,
+  `CommandBarFlyoutElement`. Button-family `Flyout` ships through the
+  `.OneWayBridged` setter on the button descriptors; the standalone
+  flyout elements are their own legacy paths.
+- **Heavy / specialized controls:** `WebView2Element`,
+  `NavigationViewElement`, `NavigationHostElement`,
+  `TitleBarElement`, `MediaPlayerElementElement`,
+  `AnimatedVisualPlayerElement`, `MapControlElement`,
+  `SemanticZoomElement`, `AnnotatedScrollBarElement`,
+  `RefreshContainerElement`, `SwipeControlElement`,
+  `ParallaxViewElement`.
+- **Polymorphic / interop / a11y:** `IconElement` (already documented
+  as escape-hatched — polymorphic mount), `SemanticElement`,
+  `AnnounceRegionElement`, `XamlHostElement`, `XamlPageElement`.
+- **Reactor infrastructure (likely SHOULD stay out of V1 dispatch):**
+  `ComponentElement`, `FuncElement`, `MemoElement`,
+  `ErrorBoundaryElement`, `CommandHostElement`, `ModifiedElement`,
+  `Validation.FormFieldElement` /
+  `ValidationVisualizerElement` / `ValidationRuleElement`. These are
+  Reactor composition primitives, not WinUI control wrappers — they
+  sit above the V1 handler protocol rather than being consumers of
+  it.
+
+The "100% V1 dispatch" goal as scoped by §14's Phase 3 batches IS
+met (every batch entry has a V1 handler or descriptor). The list
+above is genuine post-Phase-3 scope, not a regression against the
+shipped Phase 3 plan.
 
 **Carry-forward known defects** (from Phase 1):
 
