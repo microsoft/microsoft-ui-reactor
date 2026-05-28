@@ -790,6 +790,28 @@ public sealed partial class Reconciler : IDisposable
         _v1Handlers.AddForDerivedTypes(typeof(TBase), new V1Protocol.V1HandlerAdapter<TBase, TControl>(handler));
     }
 
+    /// <summary>
+    /// Spec 047 §14 Phase 3 completion — register a decorator-style V1
+    /// handler for elements whose returned <see cref="UIElement"/>
+    /// identity may change on update or whose unmount disposition
+    /// diverges from the standard pool-return. See
+    /// <see cref="V1Protocol.IDecoratorElementHandler{TElement}"/> for
+    /// the use cases (target-wrapping flyouts, modal lifecycle wrappers,
+    /// polymorphic mounts, interop bridges).
+    ///
+    /// <para>This registration sits on the same dispatch table as
+    /// <see cref="RegisterHandler{TElement,TControl}"/> — collisions
+    /// throw via <see cref="EnsureRegistrableElementType"/>.</para>
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    internal void RegisterDecoratorHandler<TElement>(V1Protocol.IDecoratorElementHandler<TElement> handler)
+        where TElement : Element
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        EnsureRegistrableElementType(typeof(TElement), typeof(UIElement), "RegisterDecoratorHandler");
+        _v1Handlers.Add(typeof(TElement), new V1Protocol.V1DecoratorHandlerAdapter<TElement>(handler));
+    }
+
     // ════════════════════════════════════════════════════════════════════
     //  Pool rent / return — public author-facing surface (spec 047 §13 Q18)
     // ════════════════════════════════════════════════════════════════════
@@ -1601,12 +1623,19 @@ public sealed partial class Reconciler : IDisposable
 
         // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount dispatch. Only
         // active when the feature flag is ON for this reconciler instance.
+        // Standard handlers return CollectSelf (terminate the traversal —
+        // children already torn down by the handler). Phase 3 completion
+        // decorator handlers may return ContinueDefaultTraversal to let
+        // the engine recurse into the wrapped child whose control they
+        // returned (e.g., FlyoutElement returns the Target's mounted
+        // control; the Target's children still need their own unmount).
         if (UseV1Protocol
             && control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
             && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
-            v1Entry.Unmount(control, this);
-            return;
+            var v1Disposition = v1Entry.Unmount(control, this);
+            if (v1Disposition != V1Protocol.V1UnmountDisposition.ContinueDefaultTraversal)
+                return;
         }
 
         // Check registered type unmount handlers via the attached element
@@ -1866,17 +1895,29 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount on the
-        // UnmountAndCollect path. Mirrors the legacy registry behavior:
-        // run the handler's Unmount then collect the host control for
-        // pooling without recursing into children.
+        // UnmountAndCollect path. Standard handlers return CollectSelf
+        // (mirrors the legacy registry behavior: pool the control, no
+        // recursion). Phase 3 completion decorator handlers may opt out
+        // of pooling (SkipPool — handler-managed teardown) or fall back
+        // to the default child traversal (ContinueDefaultTraversal —
+        // wrapped child owns the control identity, default recursion
+        // reaches the wrapped element's own unmount).
         if (UseV1Protocol
             && control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
             && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
-            v1Entry.Unmount(control, this);
-            if (control is FrameworkElement v1Pool)
-                toPool.Add(v1Pool);
-            return;
+            var v1Disposition = v1Entry.Unmount(control, this);
+            switch (v1Disposition)
+            {
+                case V1Protocol.V1UnmountDisposition.CollectSelf:
+                    if (control is FrameworkElement v1Pool)
+                        toPool.Add(v1Pool);
+                    return;
+                case V1Protocol.V1UnmountDisposition.SkipPool:
+                    return;
+                case V1Protocol.V1UnmountDisposition.ContinueDefaultTraversal:
+                    break;
+            }
         }
 
         if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl

@@ -44,7 +44,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         return control;
     }
 
-    public void Update(Element oldEl, Element newEl, UIElement control, Action requestRerender, Reconciler reconciler)
+    public UIElement Update(Element oldEl, Element newEl, UIElement control, Action requestRerender, Reconciler reconciler)
     {
         var typedOld = (TElement)oldEl;
         var typedNew = (TElement)newEl;
@@ -58,13 +58,20 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         var strategy = _handler.Children;
         if (strategy is not null)
             DispatchChildrenUpdate(strategy, reconciler, requestRerender, typedOld, typedNew, typedControl);
+
+        // §13 Q12 — standard handlers never substitute the control on
+        // update; identity is preserved across updates.
+        return control;
     }
 
-    public void Unmount(UIElement control, Reconciler reconciler)
+    public V1UnmountDisposition Unmount(UIElement control, Reconciler reconciler)
     {
         var typedControl = (TControl)control;
         var ctx = new UnmountContext(reconciler);
         _handler.Unmount(ctx, typedControl);
+        // Standard handlers always opt into pool collection — matches
+        // the pre-Phase-3-completion behavior.
+        return V1UnmountDisposition.CollectSelf;
     }
 
     // ── Strategy dispatch ────────────────────────────────────────────

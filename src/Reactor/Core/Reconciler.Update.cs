@@ -105,13 +105,17 @@ public sealed partial class Reconciler
         {
 
         // Spec 047 §14 Phase 1 (1.1) — V1 handler registry dispatch.
-        // V1 Update returns void (substitution forbidden — §13 Q12); the
-        // control identity is preserved across updates, so `result` stays
-        // null (= keep existing control). Skipped when the flag is OFF.
+        // V1 Update returns the UIElement to install in the parent's
+        // slot. Standard handlers always return `control` unchanged
+        // (§13 Q12 — no substitution on the public author surface);
+        // decorator-style handlers (§14 Phase 3 completion) may return
+        // a different instance (target-wrapping decorators whose
+        // Target changed type). When the returned instance equals
+        // `control`, set `result` to null so callers preserve identity.
         if (UseV1Protocol && _v1Handlers.TryGet(newEl.GetType(), out var v1Entry))
         {
-            v1Entry.Update(oldEl, newEl, control, requestRerender, this);
-            result = null;
+            var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
+            result = ReferenceEquals(v1Result, control) ? null : v1Result;
         }
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(newEl.GetType(), out var reg))

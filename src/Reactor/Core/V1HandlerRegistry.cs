@@ -15,14 +15,34 @@ namespace Microsoft.UI.Reactor.Core;
 
 /// <summary>
 /// Dispatch shape consumed by Reconciler when UseV1Protocol is ON. The
-/// concrete implementation is <see cref="V1Protocol.V1HandlerAdapter{TElement,TControl}"/>,
-/// which closes over a public <c>IElementHandler&lt;TElement, TControl&gt;</c>.
+/// concrete implementations are:
+/// <list type="bullet">
+///   <item><see cref="V1Protocol.V1HandlerAdapter{TElement,TControl}"/>
+///   — standard adapter wrapping an <c>IElementHandler&lt;TElement,TControl&gt;</c>.</item>
+///   <item><see cref="V1Protocol.V1DecoratorHandlerAdapter{TElement}"/>
+///   — Phase 3 completion adapter wrapping an
+///   <c>IDecoratorElementHandler&lt;TElement&gt;</c> for decorator /
+///   modal / polymorphic / interop cases that need control substitution
+///   on update and/or non-default unmount disposition.</item>
+/// </list>
 /// </summary>
 internal interface IV1HandlerEntry
 {
     UIElement Mount(Element element, Action requestRerender, Reconciler reconciler);
-    void Update(Element oldEl, Element newEl, UIElement control, Action requestRerender, Reconciler reconciler);
-    void Unmount(UIElement control, Reconciler reconciler);
+    /// <summary>Update returns the <see cref="UIElement"/> that should
+    /// occupy the parent's slot after the update. Standard handlers
+    /// always return <paramref name="control"/> unchanged (the
+    /// §13 Q12 "no substitution" invariant). Decorator-style handlers
+    /// (<see cref="V1Protocol.IDecoratorElementHandler{TElement}"/>)
+    /// may return a different instance when the wrapped target's
+    /// element type changed.</summary>
+    UIElement Update(Element oldEl, Element newEl, UIElement control, Action requestRerender, Reconciler reconciler);
+    /// <summary>Unmount returns the engine's post-unmount disposition
+    /// for the control. Standard handlers always return
+    /// <see cref="V1Protocol.V1UnmountDisposition.CollectSelf"/>;
+    /// decorator-style handlers may opt out of pool return / let the
+    /// engine continue the default traversal into wrapped children.</summary>
+    V1Protocol.V1UnmountDisposition Unmount(UIElement control, Reconciler reconciler);
     bool HasUnmount { get; }
 }
 
