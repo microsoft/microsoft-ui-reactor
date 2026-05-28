@@ -911,11 +911,17 @@ carve-outs:
       base-derived descriptor catches every closed-T variant. Behavior
       diff: descriptor's TControl is `WinUI.ItemsRepeater` directly
       (no auto-`ScrollViewer` wrapping).
-- [ ] **`ItemsRepeater<T>` G2 port** — carried forward. Requires a new
-      `ItemsRepeaterElement<T>` element + DSL surface that doesn't
-      exist today (only `ItemsViewElementBase` for the higher-level
-      `ItemsView`). Engine arm proven by Port (6); shipping the
-      element + DSL is a follow-up.
+- [x] **`ItemsRepeater<T>` G2 port** — closed by Phase 3 finish. New
+      `ItemsRepeaterElementBase` + `ItemsRepeaterElement<T>` records
+      (Element.cs) model on `LazyStackElementBase` and implement
+      `IKeyedItemSource` + `IItemsRepeaterFactorySource`, so dispatch
+      flows through Engine (1)'s ItemsRepeater arm with no new engine
+      work. Legacy `MountItemsRepeater` / `UpdateItemsRepeater` arms
+      added (the element type is new — there was no legacy arm before).
+      DSL surface: `ItemsRepeater<T>` factory in `Dsl.cs`. Single
+      base-derived `ItemsRepeaterDescriptor` catches every closed-T
+      variant. 11 new fixtures (Desc_ItemsRepeater_*). 100% V1 dispatch
+      coverage now reached.
 - [x] **G3 typed lists — `TreeView`, `FlipView`, `TabView`, `Pivot`** —
       closed by Phase 3 finish.
       - **TreeView** via new `TreeChildren<TElement, TControl>`
