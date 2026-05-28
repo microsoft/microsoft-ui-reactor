@@ -1199,6 +1199,8 @@ internal static class SelfTestFixtureRegistry
         "Desc_Icon_Mounted_Symbol",
         "Desc_Icon_AfterUpdate_SymbolChange",
         "Desc_Icon_TypeSwap_ReplacesControl",
+        "Desc_XamlHost_Mounted",
+        "Desc_XamlHost_UpdaterRuns",
         "Desc_RichTextBlock_MountUpdate",
         "Desc_NumberBox_MountUpdate",
         // Spec 047 §14 Phase 3-final Batch C — CalendarView.
@@ -2428,6 +2430,8 @@ internal static class SelfTestFixtureRegistry
         "Desc_Icon_AfterUpdate_SymbolChange" => new Spec047V1ProtocolDescriptorFixtures.DescIconAfterUpdateSymbolChange(harness),
         "Desc_Icon_TypeSwap_ReplacesControl" => new Spec047V1ProtocolDescriptorFixtures.DescIconTypeSwapReplacesControl(harness),
         "Desc_RichTextBlock_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRichTextBlockMountUpdate(harness),
+        "Desc_XamlHost_Mounted" => new Spec047V1ProtocolDescriptorFixtures.DescXamlHostMounted(harness),
+        "Desc_XamlHost_UpdaterRuns" => new Spec047V1ProtocolDescriptorFixtures.DescXamlHostUpdaterRuns(harness),
         "Desc_NumberBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescNumberBoxMountUpdate(harness),
         // Spec 047 §14 Phase 3-final Batch C — CalendarView.
         "Desc_CalendarView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescCalendarViewMountUpdate(harness),

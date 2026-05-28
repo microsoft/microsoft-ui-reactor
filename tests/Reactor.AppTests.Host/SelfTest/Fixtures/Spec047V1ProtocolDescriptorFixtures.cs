@@ -4,6 +4,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -4075,6 +4076,83 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+    internal class DescXamlHostMounted(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterDecoratorHandler<XamlHostElement>(XamlHostDescriptor.Handler);
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var hosted = new TextBlock { Text = "hosted" };
+            var el = new XamlHostElement(() => hosted);
+            var ui = rec.Mount(el, _noOp);
+            if (ui is TextBlock tb)
+            {
+                parent.Children.Add(tb);
+                await Harness.Render();
+
+                H.Check("Desc_XamlHost_Mounted", ReferenceEquals(tb, hosted));
+                H.Check("Desc_XamlHost_FactoryText", tb.Text == "hosted");
+
+                rec.UnmountChild(tb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_XamlHost_Mounted", false);
+            }
+        }
+    }
+
+    internal class DescXamlHostUpdaterRuns(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterDecoratorHandler<XamlHostElement>(XamlHostDescriptor.Handler);
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int updateCount = 0;
+            var el1 = new XamlHostElement(
+                () => new TextBlock(),
+                fe => ((TextBlock)fe).Text = "one");
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is TextBlock tb)
+            {
+                parent.Children.Add(tb);
+                await Harness.Render();
+                H.Check("Desc_XamlHost_UpdaterMount", tb.Text == "one");
+
+                var el2 = el1 with
+                {
+                    Updater = fe =>
+                    {
+                        updateCount++;
+                        ((TextBlock)fe).Text = "two";
+                    },
+                };
+                var next = rec.UpdateChild(el1, el2, tb, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_XamlHost_UpdaterRuns", updateCount == 1);
+                H.Check("Desc_XamlHost_UpdaterInPlace", next is null || ReferenceEquals(next, tb));
+                H.Check("Desc_XamlHost_UpdaterText", tb.Text == "two");
+
+                rec.UnmountChild(tb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_XamlHost_UpdaterRuns", false);
+            }
+        }
+    }
+
 
     //  RichTextBlockDescriptor (Phase 3-final Batch B) — Paragraphs as a
     //  ReferenceEquality-gated OneWay rebuild.
