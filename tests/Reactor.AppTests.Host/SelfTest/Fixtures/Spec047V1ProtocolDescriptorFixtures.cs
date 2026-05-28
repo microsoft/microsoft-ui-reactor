@@ -5663,6 +5663,47 @@ internal static class Spec047V1ProtocolDescriptorFixtures
     }
 
     // ────────────────────────────────────────────────────────────────────
+    //  §14 Phase 3 deferred specialized controls.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescAnimatedVisualPlayerMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<AnimatedVisualPlayerElement, WinUI.AnimatedVisualPlayer>(
+                new DescriptorHandler<AnimatedVisualPlayerElement, WinUI.AnimatedVisualPlayer>(
+                    AnimatedVisualPlayerDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new AnimatedVisualPlayerElement { AutoPlay = false };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.AnimatedVisualPlayer avp)
+            {
+                parent.Children.Add(avp);
+                await Harness.Render();
+
+                H.Check("Desc_AnimatedVisualPlayer_Mounted", true);
+                H.Check("Desc_AnimatedVisualPlayer_InitialAutoPlayFalse", avp.AutoPlay == false);
+
+                var el2 = el1 with { AutoPlay = true };
+                rec.UpdateChild(el1, el2, avp, _noOp);
+                await Harness.Render();
+                H.Check("Desc_AnimatedVisualPlayer_UpdatedAutoPlayTrue", avp.AutoPlay == true);
+
+                rec.UnmountChild(avp);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_AnimatedVisualPlayer_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     //  §14 Phase 3 finish — Port (11) Pivot via TabItemsHost (PivotItem container).
     // ────────────────────────────────────────────────────────────────────
 

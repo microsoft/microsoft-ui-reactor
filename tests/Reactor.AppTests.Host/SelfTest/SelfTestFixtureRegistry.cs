@@ -1223,6 +1223,8 @@ internal static class SelfTestFixtureRegistry
         "Desc_TemplatedFlipView_NoCallback_DoesNotSubscribe",
         "Desc_TabView_MountUpdate",
         "Desc_Pivot_MountUpdate",
+        // Spec 047 §14 Phase 3 deferred specialized controls.
+        "Desc_AnimatedVisualPlayer_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2441,6 +2443,9 @@ internal static class SelfTestFixtureRegistry
         "Desc_TemplatedFlipView_NoCallback_DoesNotSubscribe" => new Spec047V1ProtocolDescriptorFixtures.DescTemplatedFlipViewNoCallbackDoesNotSubscribe(harness),
         "Desc_TabView_MountUpdate"   => new Spec047V1ProtocolDescriptorFixtures.DescTabViewMountUpdate(harness),
         "Desc_Pivot_MountUpdate"     => new Spec047V1ProtocolDescriptorFixtures.DescPivotMountUpdate(harness),
+
+        // Spec 047 §14 Phase 3 deferred specialized controls.
+        "Desc_AnimatedVisualPlayer_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescAnimatedVisualPlayerMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),
