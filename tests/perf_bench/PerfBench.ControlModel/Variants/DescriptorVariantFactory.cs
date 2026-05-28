@@ -269,6 +269,16 @@ internal static class DescriptorVariantFactory
 
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
+        // Spec 047 §14 Phase 3 close-out — typed templated lists G2.
+        // Base-derived registration catches every closed-T variant.
+        rec.RegisterHandlerForDerivedTypes<TemplatedListViewElementBase, WinUI.ListView>(
+            new DescriptorHandler<TemplatedListViewElementBase, WinUI.ListView>(
+                TemplatedListViewDescriptor.Descriptor));
+
+        rec.RegisterHandlerForDerivedTypes<TemplatedGridViewElementBase, WinUI.GridView>(
+            new DescriptorHandler<TemplatedGridViewElementBase, WinUI.GridView>(
+                TemplatedGridViewDescriptor.Descriptor));
+
         return rec;
     }
 }

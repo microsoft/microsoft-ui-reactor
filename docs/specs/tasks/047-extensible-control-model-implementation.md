@@ -813,31 +813,106 @@ plus within-control partial-port gaps from PR #435 batches 3–11):
       `MountChild`. Fixtures: `Desc_ListBox_Items`, `Desc_ComboBox_Items`,
       `Desc_RadioButtons_Items`.
 
-**Phase 3-final carve-outs to Phase 4** (cannot be expressed inside the
-current engine shape; explicit reasons):
+**Phase 3 close-out** (`spec/047-phase3-close-out` branch, off PR #436
+HEAD) — engine shapes + ports that close the largest Phase 3-final
+carve-outs:
 
-- [ ] **Expander.HeaderTemplate** — needs `NamedSlots` but conflicts with
-      the existing `SingleContent` strategy; one Children strategy per
-      descriptor today.
-- [ ] **RelativePanel per-child attached** — sequential `PerChildAttached`
-      callbacks can't resolve sibling name references that haven't been
-      mounted yet. Needs a two-pass shape on `Panel<>` or a dedicated
-      `NamedRelativePanel` strategy.
+- [x] **Engine (1) — `Panel<>.PerChildAttachedAfterAll`.** Two-pass
+      shape: optional `Action<TControl, IReadOnlyList<(UIElement,Element)>>?`
+      callback fired once after every child has been mounted (Mount
+      path) or reconciled (Update path) with the full ordered pair
+      list. Distinct from `PerChildAttached` (which fires per-child
+      mid-pass and cannot see siblings that haven't mounted yet). Pair
+      list allocated lazily — `null` consumers pay no overhead. Existing
+      `Grid`/`Canvas`/`FlexPanel`/`WrapGrid` unchanged.
+- [x] **Engine (2) — `TemplatedItems<>` strategy +
+      `Reconciler.BindKeyedItemsSource`.** New record
+      `TemplatedItems<TItem, TElement, TControl>` (open in TItem;
+      descriptor authors of new typed templated lists declare items,
+      key selector, view builder). Engine binder
+      `BindKeyedItemsSource<TItem>` wires `ReactorListState` +
+      shared `ContainerContentChanging` + spec-042 `KeyedListDiff.Apply`
+      against a new `IItemViewSource` stash on `ReactorState`.
+      MVP supports `WinUI.ListViewBase`; `ItemsRepeater` / `Lazy*Stack`
+      surface a descriptive `InvalidOperationException` at the
+      dispatch switch (purely additive to add).
+- [x] **Port (4) — `RelativePanel` via `PerChildAttachedAfterAll`.**
+      Closes the Phase-4 carve-out documented on
+      `RelativePanelDescriptor`. The descriptor's after-all callback
+      builds a name → control map across mounted children, assigns
+      `FrameworkElement.Name`, then writes
+      `RelativePanel.SetRightOf` / `SetBelow` / `SetAlignLeftWith` /
+      etc. against sibling references. Body lifted from legacy
+      `MountRelativePanel`. Fixture: `Desc_RelativePanel_MountUpdate`
+      (now includes 5 sibling-named two-pass assertions).
+- [x] **Port (5) G2 — `TemplatedListView<T>` / `TemplatedGridView<T>`
+      via base-derived registration + `TemplatedItemsErased<>`.**
+      The handoff prompt assumed each closed T would need its own
+      registration. The realistic shape mirrors what the legacy
+      `Reconciler.Mount` switch does: T-erasure at a non-generic
+      abstract base. Engine extensions:
+      - `V1HandlerRegistry.AddForDerivedTypes` + cached base-walk
+        in `TryGet`. Exact-type registrations always win; base-derived
+        entries catch every closed-T variant via the runtime type's
+        base chain.
+      - `Reconciler.RegisterHandlerForDerivedTypes<TBase,TControl>`
+        surfaces the registry capability on the public v1 API.
+      - New empty intermediate bases `TemplatedListViewElementBase`,
+        `TemplatedGridViewElementBase`, `TemplatedFlipViewElementBase`
+        under `TemplatedListElementBase`. No fields, seal
+        `ControlKind`; leaf record equality unchanged because the
+        leaf type still owns its `EqualityContract`.
+      - `TemplatedItemsErased<TElement,TControl>` strategy +
+        non-generic `IErasedTemplatedItemsStrategy` dispatch marker.
+        Strategy is non-generic in TItem; items + keys read through
+        the element's `IKeyedItemSource` implementation.
+      - `Reconciler.BindErasedKeyedItemsSource` — companion to the
+        TItem-carrying binder. Same realization pipeline; selection
+        + click event wiring inlined so the descriptor needs no new
+        `ControlEventState` payload box.
+      - Two descriptors register on the intermediate bases; the
+        registry walk routes every closed-T variant to the same
+        descriptor. `TemplatedFlipView<T>` intentionally not ported
+        (FlipView pre-mounts items; no `ContainerContentChanging`,
+        no OC delta channel).
+      Fixtures: `Desc_TemplatedListView_MountUpdate`,
+      `Desc_TemplatedGridView_MountUpdate` (17 assertions covering
+      Mount, keyed insert/remove diff, same-ref idempotency).
+- [x] **Selftest baselines (Cloud PC x64, post close-out).**
+      V1 ON `Desc_`: 556 ok / 0 failures.
+      V1 OFF `Desc_`: 556 ok / 0 failures (parity preserved).
+      Legacy `KLR_` keyed-list fixtures: 73 ok / 0 failures (engine
+      refactor of `RefreshRealizedContainers` + the shared CCC
+      handler is behavior-neutral for the legacy path).
+
+**Phase 3 close-out carve-outs to Phase 4** (cannot be expressed inside
+the current engine shape; explicit reasons):
+
+- [ ] **Expander.HeaderTemplate** — needs `NamedSlots` overlaid on
+      `SingleContent`; one Children strategy per descriptor today.
 - [ ] **TeachingTip.Target** — cross-element reference resolution to
       another element's mounted native control; descriptor framework
       cannot reference another element's resolved control.
 - [ ] **Path.PathDataString** — legacy `XamlReader`/`PathDataParser`
       strategy needs string-diff against the old element + multi-source
       error context the engine's per-prop comparer can't express.
-- [ ] **NumberBox coercion** — `.CoercingOneWay` thread for `Minimum` /
+- [ ] **NumberBox coercion** — `.CoercingOneWay` thread for `Minimum`/
       `Maximum`.
-- [ ] **Templated lists (G2/G3)** — `ListView<T>`, `GridView<T>`,
-      `LazyVStack<T>`, `LazyHStack<T>`, `ItemsRepeater<T>`, `TreeView`,
-      `FlipView`, `TabView`, `Pivot` need a new `TemplatedItems<T,TControl>`
-      (or equivalent) strategy with spec-042 `ReactorListState` +
-      `KeyedListDiff` integration plus a `Reconciler.BindKeyedItemsSource`
-      helper lifting the legacy realization-hook setup. Substantial engine
-      design work; deferred to a follow-up batch.
+- [ ] **`Lazy*Stack<T>` + `ItemsRepeater<T>` G2 ports** — different
+      realization machinery from `ListViewBase`. `Lazy*Stack` is
+      backed by `WinUI.ItemsRepeater` driven through
+      `IElementFactory` / `ElementFactory<T>` with the spec-042
+      `ReactorListState` attached to the factory (see
+      `LazyStackElementBase.AttachListStateToFactory`); the
+      `BindErasedKeyedItemsSource` `WinUI.ListViewBase` arm doesn't
+      cover them. Carries a fresh engine arm + new factory-routing
+      helper. Substantial work; deferred.
+- [ ] **G3 typed lists — `TreeView`, `FlipView`, `TabView`, `Pivot`.**
+      Heterogeneous, none share the `ListViewBase` + CCC pipeline:
+      `TreeView` is hierarchical via `TreeViewNode` / `TreeViewNodeData`
+      (non-flat, non-keyed in legacy); `FlipView` pre-mounts items;
+      `TabView` and `Pivot` keyed item-sources aren't routed today.
+      Each needs a bespoke descriptor.
 
 **Carry-forward known defects** (from Phase 1):
 

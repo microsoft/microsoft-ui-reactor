@@ -1387,16 +1387,23 @@ See §13 Q1 for the full capture lineage and matrix application. Raw data under 
 - **Batch G-prep — engine ordering fix.** `ItemsHost.GetCollection` retyped from `System.Collections.IList` to `IList<object>` (WinUI `ItemCollection` does not implement the non-generic projection under CsWinRT). `DescriptorHandler` now dispatches `ItemsHost` inline between `RentControl` and the prop loop on Mount, and before the prop loop on Update, so selection-tracking initial writes (`SelectedIndex`/`SelectedItem`) land against a populated collection. Strategy shape unchanged for hand-coded handlers (V1HandlerAdapter dispatch path kept).
 - **Batch G1 — flat `ItemsHost` ports.** `ListBoxElement`, `ComboBoxElement`, `RadioButtonsElement` migrate from `.OneWay<string[]>` items entries to `Children = new ItemsHost<...>(...)`. `ComboBoxElement.ItemElements` (`Element[]?`) supported alongside `Items` (`string[]`); the engine routes `Element` items through `MountChild`.
 
-**Phase 3-final carve-outs to Phase 4** (cannot be expressed inside the current engine shape; explicit reasons):
+**Phase 3 close-out** (`spec/047-phase3-close-out` branch, off PR #436 HEAD) — closes the largest Phase 3-final carve-outs:
 
-- **Expander.HeaderTemplate** — needs `NamedSlots` but conflicts with the existing `SingleContent` strategy; one Children strategy per descriptor today.
-- **RelativePanel per-child attached** — sequential `PerChildAttached` callbacks can't resolve sibling name references that haven't been mounted yet. Needs a two-pass shape on `Panel<>` or a dedicated `NamedRelativePanel` strategy.
-- **TeachingTip.Target** — cross-element reference resolution to another element's mounted native control; descriptor framework cannot reference another element's resolved control.
-- **PathElement.PathDataString** — legacy `XamlReader`/`PathDataParser` strategy needs string-diff against the old element + multi-source error context the engine's per-prop comparer can't express.
-- **NumberBox coercion** — `Minimum`/`Maximum` ship as plain `.OneWay`; `.CoercingOneWay` could be wired later.
-- **Templated lists (G2/G3)** — `ListView<T>`, `GridView<T>`, `LazyVStack<T>`, `LazyHStack<T>`, `ItemsRepeater<T>`, `TreeView`, `FlipView`, `TabView`, `Pivot` need a new `TemplatedItems<T,TControl>` (or equivalent) strategy with spec-042 `ReactorListState` + `KeyedListDiff` integration plus a `Reconciler.BindKeyedItemsSource` helper lifting the legacy realization-hook setup. Substantial engine design work; deferred to a follow-up batch.
+- **Engine (1)** — `Panel<>.PerChildAttachedAfterAll`. Two-pass callback fired once after every child mount/reconcile with the full ordered `(UIElement, Element)` pair list. Distinct from per-child `PerChildAttached` (cannot see un-mounted siblings). Lazy allocation; existing `Grid`/`Canvas`/`FlexPanel`/`WrapGrid` unaffected.
+- **Engine (2)** — `TemplatedItems<TItem, TElement, TControl>` strategy + `Reconciler.BindKeyedItemsSource` binder. Wires `ReactorListState` + shared `ContainerContentChanging` + spec-042 `KeyedListDiff.Apply`. MVP on `WinUI.ListViewBase`. Companion T-erased shape (`TemplatedItemsErased<>` + `BindErasedKeyedItemsSource`) reads items/keys through `IKeyedItemSource` so the descriptor doesn't carry TItem — matches the legacy `TemplatedListElementBase` erasure model used by `Reconciler.Mount`.
+- **Port (4)** — `RelativePanel` via the new after-all callback. The descriptor builds a name → control map across mounted children, then writes the sibling-referencing attached DPs (`SetRightOf`, `SetBelow`, `SetAlignLeftWith`, …). Closes the Batch E `RelativePanel per-child attached` carve-out.
+- **Port (5) G2** — `TemplatedListView<T>` / `TemplatedGridView<T>` via base-derived registration. New empty intermediate marker bases (`TemplatedListViewElementBase`, `TemplatedGridViewElementBase`) catch every closed-T variant through `V1HandlerRegistry.AddForDerivedTypes`. Surfaced on the public v1 API as `Reconciler.RegisterHandlerForDerivedTypes<TBase, TControl>`. Erased strategy + binder reads items + keys through `IKeyedItemSource` on the live element. Selection / item-click event wiring inlined in `BindErasedKeyedItemsSource` so the descriptor needs no new `ControlEventState` payload box.
 
-ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` remains deferred for the §14 ratification gate.
+**Phase 3 close-out carve-outs to Phase 4** (engine surface insufficient; explicit reasons):
+
+- **Expander.HeaderTemplate** — needs `NamedSlots` overlaid on `SingleContent`; one Children strategy per descriptor today.
+- **TeachingTip.Target** — cross-element reference resolution to another element's mounted native control.
+- **PathElement.PathDataString** — legacy `XamlReader`/`PathDataParser` strategy needs string-diff with multi-source error context the engine's per-prop comparer can't express.
+- **NumberBox coercion** — `.CoercingOneWay` thread for `Minimum`/`Maximum`.
+- **`Lazy*Stack<T>` + `ItemsRepeater<T>` G2 ports** — backed by `WinUI.ItemsRepeater` driven through `IElementFactory` / `ElementFactory<T>` rather than `ListViewBase` + `ContainerContentChanging`. Carries a fresh engine arm + factory-routing helper. Strategy shape (`TemplatedItemsErased<>`) doesn't change; only `BindErasedKeyedItemsSource` gains a new `case WinUI.ItemsRepeater` arm.
+- **G3 typed lists — `TreeView`, `FlipView`, `TabView`, `Pivot`** — heterogeneous, none share the `ListViewBase` realization pipeline. `TreeView` is hierarchical (`TreeViewNode` / `TreeViewNodeData`); `FlipView` pre-mounts items; `TabView` and `Pivot` keyed item-sources aren't routed today. Each needs a bespoke descriptor.
+
+ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` remains deferred for the §14 ratification gate. Cloud PC x64 advisory re-capture with the close-out scope (54 registered descriptors — +2 from `2026-05-27-phase3-final-3x5/`'s 50) under `docs/specs/047/phase3-results/CPC-ander-YTZ3O-x64-advisory/2026-05-27-phase3-closeout-3x5/`.
 
 **Carry-forward known defects from Phase 1:**
 - **KD-3** — dispatch fast-path for the ported built-ins (M4 was +88.9% V1 vs Today at Phase 1; final advisory shows M4 −21.2% / M5 −24.3% at amortized scope — KD-3 has materially closed at the batch-11 registration set).
