@@ -45,6 +45,11 @@ internal static class PivotDescriptor
                 {
                     Header = item.Header,
                     Content = mounted,
+                },
+                UpdateContainer: static (oldItem, newItem, container) =>
+                {
+                    if (container is WinUI.PivotItem pi && pi.Header as string != newItem.Header)
+                        pi.Header = newItem.Header;
                 }),
             GetSetters = static e => e.Setters,
         }

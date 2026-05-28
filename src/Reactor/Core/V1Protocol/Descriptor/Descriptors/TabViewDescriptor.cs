@@ -74,6 +74,14 @@ internal static class TabViewDescriptor
                     };
                     if (item.Icon is not null) tvi.IconSource = Reconciler.ResolveIconSource(item.Icon);
                     return tvi;
+                },
+                UpdateContainer: static (oldItem, newItem, container) =>
+                {
+                    if (container is not WinUI.TabViewItem tvi) return;
+                    if (tvi.Header as string != newItem.Header) tvi.Header = newItem.Header;
+                    if (tvi.IsClosable != newItem.IsClosable) tvi.IsClosable = newItem.IsClosable;
+                    if (!Equals(newItem.Icon, oldItem.Icon))
+                        tvi.IconSource = newItem.Icon is null ? null : Reconciler.ResolveIconSource(newItem.Icon);
                 }),
             GetSetters = static e => e.Setters,
         }

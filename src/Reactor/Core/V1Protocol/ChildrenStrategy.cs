@@ -424,53 +424,116 @@ public sealed record TreeChildren<TElement, TControl>(
 /// builds the per-control container (e.g. <c>WinUI.TabViewItem</c>),
 /// and adds it to the host's items sink.
 ///
-/// <para><b>MVP scope:</b> positional rebuild on Update — every container
-/// is unmounted + remounted. No keyed reconcile (descendant component
-/// state inside the per-item Content is lost across renders that touch
-/// the tab set). Matches the legacy <c>UpdateTabView</c> / <c>UpdatePivot</c>
-/// rebuild semantics for the common case.</para></summary>
+/// <para><b>Update semantics:</b> in-place positional reconcile against the
+/// previous element. For each shared index the existing container is kept
+/// and its <c>Content</c> reconciled through
+/// <see cref="Reconciler.ReconcileV1Child"/> (CanUpdate-or-mount-or-unmount);
+/// the container's own metadata (header / icon / closable) is refreshed via
+/// the optional <see cref="UpdateContainer"/> callback. Excess containers
+/// are unmounted + removed; surplus new items are created + appended.
+/// Containers (and the mounted Content subtree underneath them) therefore
+/// survive renders that don't change the tab/pivot set — re-adding every
+/// <c>TabViewItem</c> / <c>PivotItem</c> would re-trigger the tab-strip
+/// entrance animation and steal focus from descendant controls. Mirrors the
+/// legacy <c>UpdateTabView</c> / <c>UpdatePivot</c> in-place arms.</para>
+///
+/// <para><b>Not covered (still legacy-only):</b> keyed reorder, pinnable tab
+/// headers, and the docking drag pipeline. Index-keyed pairing assumes the
+/// item at index <c>i</c> in the old list corresponds to index <c>i</c> in
+/// the new list.</para></summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 public sealed record TabItemsHost<TElement, TControl, TItem>(
     Func<TElement, IReadOnlyList<TItem>> GetItems,
     Func<TControl, IList<object>> GetCollection,
     Func<TItem, Element> GetContent,
-    Func<TItem, UIElement?, object> CreateContainer)
+    Func<TItem, UIElement?, object> CreateContainer,
+    Action<TItem, TItem, object>? UpdateContainer = null)
     : ChildrenStrategy<TElement, TControl>, IItemsBinderStrategy
     where TElement : Element
     where TControl : FrameworkElement
 {
     void IItemsBinderStrategy.Bind(FrameworkElement control, Element? oldElement, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
     {
-        _ = oldElement; // positional rebuild reads only the new items list
         var typedCtrl = (TControl)control;
         var typedEl = (TElement)element;
         var items = GetItems(typedEl);
         var collection = GetCollection(typedCtrl);
 
-        if (!isMount && collection.Count > 0)
+        if (isMount)
         {
-            // Tear down each existing container's mounted content. Each
-            // container is a per-host concrete WinUI type (TabViewItem /
-            // PivotItem) — the engine doesn't know its shape, but both
-            // have a Content property holding the previously-mounted
-            // UIElement. Reflection-free walk: cast to ContentControl
-            // (both inherit from it) and read Content.
-            for (int i = 0; i < collection.Count; i++)
-            {
-                if (collection[i] is WinUI.ContentControl cc && cc.Content is UIElement ui)
-                    reconciler.UnmountChild(ui);
-            }
-            collection.Clear();
+            for (int i = 0; i < items.Count; i++)
+                collection.Add(CreateContainer(items[i], MountContent(items[i], reconciler, requestRerender)));
+            return;
         }
 
-        for (int i = 0; i < items.Count; i++)
+        // Update path. Positional reconcile keyed by index against the
+        // previous items list so containers are preserved in place.
+        var oldItems = oldElement is TElement oldTyped ? GetItems(oldTyped) : null;
+
+        // Engine-invariant break (no previous element) or collection drift
+        // from the previous items count — fall back to a full rebuild rather
+        // than index into a mismatched collection.
+        if (oldItems is null || collection.Count != oldItems.Count)
         {
-            var item = items[i];
-            var content = GetContent(item);
-            var mounted = content is null ? null : reconciler.Mount(content, requestRerender);
-            var container = CreateContainer(item, mounted);
-            collection.Add(container);
+            RebuildAll(items, collection, reconciler, requestRerender);
+            return;
         }
+
+        int shared = global::System.Math.Min(oldItems.Count, items.Count);
+        for (int i = 0; i < shared; i++)
+        {
+            var oldItem = oldItems[i];
+            var newItem = items[i];
+            var container = collection[i];
+
+            // Reconcile the per-item Content in place. Only reassign when the
+            // realized control actually changed — re-assigning the same
+            // UIElement triggers WinUI's logical-tree detach→reattach on the
+            // whole subtree, which drops setState queued by descendant
+            // handlers before it lands.
+            if (container is WinUI.ContentControl cc)
+            {
+                var existing = cc.Content as UIElement;
+                var next = reconciler.ReconcileV1Child(GetContent(oldItem), GetContent(newItem), existing, requestRerender);
+                if (!ReferenceEquals(existing, next))
+                    cc.Content = next;
+            }
+
+            UpdateContainer?.Invoke(oldItem, newItem, container);
+        }
+
+        // Remove excess containers (highest index first so removals don't shift).
+        for (int i = collection.Count - 1; i >= shared; i--)
+        {
+            if (collection[i] is WinUI.ContentControl cc && cc.Content is UIElement ui)
+                reconciler.UnmountChild(ui);
+            collection.RemoveAt(i);
+        }
+
+        // Append surplus new items.
+        for (int i = shared; i < items.Count; i++)
+            collection.Add(CreateContainer(items[i], MountContent(items[i], reconciler, requestRerender)));
+    }
+
+    private UIElement? MountContent(TItem item, Reconciler reconciler, Action requestRerender)
+    {
+        var content = GetContent(item);
+        return content is null ? null : reconciler.Mount(content, requestRerender);
+    }
+
+    private void RebuildAll(IReadOnlyList<TItem> items, IList<object> collection, Reconciler reconciler, Action requestRerender)
+    {
+        // Tear down each existing container's mounted content. Both
+        // TabViewItem and PivotItem inherit ContentControl, so the engine
+        // can reach the previously-mounted UIElement reflection-free.
+        for (int i = collection.Count - 1; i >= 0; i--)
+        {
+            if (collection[i] is WinUI.ContentControl cc && cc.Content is UIElement ui)
+                reconciler.UnmountChild(ui);
+            collection.RemoveAt(i);
+        }
+        for (int i = 0; i < items.Count; i++)
+            collection.Add(CreateContainer(items[i], MountContent(items[i], reconciler, requestRerender)));
     }
 }
 

@@ -5853,8 +5853,35 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 H.Check("Desc_TabView_AddButtonVisible", tv.IsAddTabButtonVisible == true);
                 H.Check("Desc_TabView_SelectedIndex0", tv.SelectedIndex == 0);
 
-                // Update — rebuild with different tab set.
-                var el2 = el1 with
+                // In-place reconcile — a same-count update must preserve the
+                // existing TabViewItem containers AND their mounted content
+                // subtree. Re-creating them re-triggers the tab-strip entrance
+                // animation and steals focus from descendant controls.
+                var keptTab0 = tv.TabItems[0];
+                var keptTabContent0 = (tv.TabItems[0] as WinUI.TabViewItem)?.Content;
+                var elSame = el1 with
+                {
+                    Tabs = new[]
+                    {
+                        new TabViewItemData("tab-a2", new TextBlockElement("content-a")),
+                        new TabViewItemData("tab-b", new TextBlockElement("content-b")) { IsClosable = false },
+                    },
+                };
+                rec.UpdateChild(el1, elSame, tv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TabView_SameShape_Count2", tv.TabItems.Count == 2);
+                H.Check("Desc_TabView_SameShape_ContainerPreserved",
+                    ReferenceEquals(tv.TabItems[0], keptTab0));
+                H.Check("Desc_TabView_SameShape_ContentPreserved",
+                    keptTabContent0 is not null
+                    && ReferenceEquals((tv.TabItems[0] as WinUI.TabViewItem)?.Content, keptTabContent0));
+                H.Check("Desc_TabView_SameShape_HeaderUpdatedInPlace",
+                    (tv.TabItems[0] as WinUI.TabViewItem)?.Header as string == "tab-a2");
+                H.Check("Desc_TabView_SameShape_ClosablePreserved",
+                    (tv.TabItems[1] as WinUI.TabViewItem)?.IsClosable == false);
+
+                // Update — shrink the tab set (positional truncate tail).
+                var el2 = elSame with
                 {
                     Tabs = new[]
                     {
@@ -5862,7 +5889,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                     },
                     IsAddTabButtonVisible = false,
                 };
-                rec.UpdateChild(el1, el2, tv, _noOp);
+                rec.UpdateChild(elSame, el2, tv, _noOp);
                 await Harness.Render();
                 H.Check("Desc_TabView_AfterUpdate_Count1", tv.TabItems.Count == 1);
                 H.Check("Desc_TabView_AfterUpdate_HeaderX",
@@ -6367,8 +6394,33 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 H.Check("Desc_Pivot_TitleSet", (pv.Title as string) == "My Pivot");
                 H.Check("Desc_Pivot_SelectedIndex0", pv.SelectedIndex == 0);
 
-                // Update — different items.
-                var el2 = el1 with
+                // In-place reconcile — a same-count update must preserve the
+                // existing PivotItem containers AND their mounted content
+                // subtree. Re-creating them re-triggers the pivot entrance
+                // animation and steals focus from descendant controls.
+                var keptPivotItem0 = pv.Items[0];
+                var keptPivotContent0 = (pv.Items[0] as WinUI.PivotItem)?.Content;
+                var elSame = el1 with
+                {
+                    Items = new[]
+                    {
+                        new PivotItemData("pivot-a2", new TextBlockElement("body-a")),
+                        new PivotItemData("pivot-b", new TextBlockElement("body-b")),
+                    },
+                };
+                rec.UpdateChild(el1, elSame, pv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_Pivot_SameShape_Count2", pv.Items.Count == 2);
+                H.Check("Desc_Pivot_SameShape_ContainerPreserved",
+                    ReferenceEquals(pv.Items[0], keptPivotItem0));
+                H.Check("Desc_Pivot_SameShape_ContentPreserved",
+                    keptPivotContent0 is not null
+                    && ReferenceEquals((pv.Items[0] as WinUI.PivotItem)?.Content, keptPivotContent0));
+                H.Check("Desc_Pivot_SameShape_HeaderUpdatedInPlace",
+                    (pv.Items[0] as WinUI.PivotItem)?.Header as string == "pivot-a2");
+
+                // Update — grow the item set (positional add tail).
+                var el2 = elSame with
                 {
                     Items = new[]
                     {
@@ -6377,7 +6429,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                         new PivotItemData("pivot-z", new TextBlockElement("body-z")),
                     },
                 };
-                rec.UpdateChild(el1, el2, pv, _noOp);
+                rec.UpdateChild(elSame, el2, pv, _noOp);
                 await Harness.Render();
                 H.Check("Desc_Pivot_AfterUpdate_Count3", pv.Items.Count == 3);
                 H.Check("Desc_Pivot_AfterUpdate_FirstHeader",
