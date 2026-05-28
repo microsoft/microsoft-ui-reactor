@@ -1225,6 +1225,7 @@ internal static class SelfTestFixtureRegistry
         "Desc_Pivot_MountUpdate",
         // Spec 047 §14 Phase 3 deferred specialized controls.
         "Desc_AnimatedVisualPlayer_MountUpdate",
+        "Desc_AnnotatedScrollBar_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2446,6 +2447,7 @@ internal static class SelfTestFixtureRegistry
 
         // Spec 047 §14 Phase 3 deferred specialized controls.
         "Desc_AnimatedVisualPlayer_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescAnimatedVisualPlayerMountUpdate(harness),
+        "Desc_AnnotatedScrollBar_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescAnnotatedScrollBarMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

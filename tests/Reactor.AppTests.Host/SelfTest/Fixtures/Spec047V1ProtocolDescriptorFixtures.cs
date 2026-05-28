@@ -5703,6 +5703,43 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    internal class DescAnnotatedScrollBarMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<AnnotatedScrollBarElement, WinUI.AnnotatedScrollBar>(
+                new DescriptorHandler<AnnotatedScrollBarElement, WinUI.AnnotatedScrollBar>(
+                    AnnotatedScrollBarDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = AnnotatedScrollBar().Set(c => c.Width = 48);
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.AnnotatedScrollBar asb)
+            {
+                parent.Children.Add(asb);
+                await Harness.Render();
+
+                H.Check("Desc_AnnotatedScrollBar_Mounted", true);
+                H.Check("Desc_AnnotatedScrollBar_InitialWidth", asb.Width == 48);
+
+                var el2 = AnnotatedScrollBar().Set(c => c.Width = 72);
+                rec.UpdateChild(el1, el2, asb, _noOp);
+                await Harness.Render();
+                H.Check("Desc_AnnotatedScrollBar_UpdatedWidth", asb.Width == 72);
+
+                rec.UnmountChild(asb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_AnnotatedScrollBar_Mounted", false);
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  §14 Phase 3 finish — Port (11) Pivot via TabItemsHost (PivotItem container).
     // ────────────────────────────────────────────────────────────────────
