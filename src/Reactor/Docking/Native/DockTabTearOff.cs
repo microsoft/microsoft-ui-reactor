@@ -292,7 +292,23 @@ internal static class DockTabTearOff
 
         public void OnReleased(object sender, PointerRoutedEventArgs e)
         {
-            if (CandidatePane is not null) Trace("Release w/ candidate → clear");
+            // A surviving candidate at release time means the press never
+            // crossed the tear-off threshold — this was a plain click, not a
+            // drag (MoveCore clears the candidate the instant it tears off).
+            // The pointer capture we grabbed in OnPressed (to keep tracking a
+            // possible drag) routes the release to the TabView instead of the
+            // pressed TabViewItem, so WinUI never commits the tab selection.
+            // Commit it ourselves so click-to-switch works in multi-tab
+            // groups. Latent until now because single-tab groups never
+            // exercised tab selection. Setting SelectedIndex to the value it
+            // already holds is a no-op, so this is safe even when WinUI did
+            // manage to select.
+            if (CandidatePane is not null && CandidateItem is not null)
+            {
+                var sel = TabView.TabItems.IndexOf(CandidateItem);
+                Trace($"Release w/ candidate idx={CandidateIndex} → click-select {sel}");
+                if (sel >= 0 && TabView.SelectedIndex != sel) TabView.SelectedIndex = sel;
+            }
             ClearCandidate();
         }
 

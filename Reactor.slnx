@@ -227,8 +227,8 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
-  <Folder Name="/samples/apps/dock-showcase/">
-    <Project Path="samples/apps/dock-showcase/DockShowcase.csproj">
+  <Folder Name="/samples/apps/reactor-ide/">
+    <Project Path="samples/apps/reactor-ide/ReactorIde.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
