@@ -6004,6 +6004,57 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    internal class DescTitleBarMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<TitleBarElement, WinUI.TitleBar>(
+                new DescriptorHandler<TitleBarElement, WinUI.TitleBar>(TitleBarDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = TitleBar("App")
+                .Subtitle("One")
+                .BackButtonVisible(true)
+                .BackButtonEnabled(false)
+                .Content(TextBlock("center"));
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.TitleBar tb)
+            {
+                parent.Children.Add(tb);
+                await Harness.Render();
+
+                H.Check("Desc_TitleBar_Mounted", true);
+                H.Check("Desc_TitleBar_InitialTitle", tb.Title == "App");
+                H.Check("Desc_TitleBar_InitialSubtitle", tb.Subtitle == "One");
+                H.Check("Desc_TitleBar_ContentMounted", tb.Content is WinUI.TextBlock text && text.Text == "center");
+
+                var el2 = TitleBar("Renamed")
+                    .Subtitle("Two")
+                    .BackButtonVisible(true)
+                    .BackButtonEnabled(true)
+                    .Content(TextBlock("updated"));
+                rec.UpdateChild(el1, el2, tb, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TitleBar_UpdatedTitle", tb.Title == "Renamed");
+                H.Check("Desc_TitleBar_UpdatedSubtitle", tb.Subtitle == "Two");
+                H.Check("Desc_TitleBar_UpdatedBackEnabled", tb.IsBackButtonEnabled == true);
+                H.Check("Desc_TitleBar_ContentUpdated", tb.Content is WinUI.TextBlock text2 && text2.Text == "updated");
+
+                rec.UnmountChild(tb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_TitleBar_Mounted", false);
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  §14 Phase 3 finish — Port (11) Pivot via TabItemsHost (PivotItem container).
     // ────────────────────────────────────────────────────────────────────
