@@ -751,15 +751,93 @@ shrink lands after V1 ships ON by default.
         echo per element or require a custom collection-aware entry
         shape. Authors who need declarative multi-date selection stay
         on V1 OFF.
-- [ ] Batch 3-followup — `NumberBox` (needs Immediate-mode keystroke
-      handling + `NumberFormatter` reference-equality semantics that the
-      descriptor builders don't yet express — likely needs a new entry
-      shape or a `HandCoded*` path). `RichTextBlock` (incremental
-      paragraph/inline diffing — needs a child-strategy or new entry
-      shape). `FrameElement` (needs a Mount-only entry shape for
-      imperative `Navigate` calls — see Batch 11). `CalendarViewElement`
-      (needs a collection-diff entry shape with per-element echo
-      suppression — see Batch 11).
+- [x] Batch 3-followup — addressed by Phase 3-final Batch B (`Frame`,
+      `RichTextBlock`, `NumberBox`) and Batch C (`CalendarView`). Engine
+      shapes (`.Immediate`, `.OneWayBridged`, `.CollectionDiffControlled`)
+      added in Phase 3-final Batch A. Documented residual carve-outs
+      retained — see Phase 3-final batch entries below.
+
+**Phase 3-final descriptor scale-out** (delivers the Phase 3 follow-ups
+plus within-control partial-port gaps from PR #435 batches 3–11):
+
+- [x] **Batch A — engine shapes.** Added `.OneWayBridged<TValue>` (set
+      lambda gets `(TControl, TValue, Reconciler, Action requestRerender)`
+      — for dynamically-constructed child controls), `.Immediate<TPayload>`
+      (pure subscription wiring), `.CollectionDiffControlled` (`IList<T>`
+      two-way with hash-set diff under `BeginSuppress`),
+      `Panel<>.PerChildAttached`, `ItemsHost<TElement,TControl>` (flat),
+      and `Reconciler.CreateFlyoutForDescriptor`. Engine-only commit —
+      no controls.
+- [x] **Batch B** — `Frame`, `RichTextBlock`, `NumberBox`.
+      - **Frame** — three `.HandCodedEvent` subscriptions
+        (`Navigated`/`Navigating`/`NavigationFailed`) gate on
+        callback-at-mount. Legacy `MountFrame` subscribes unconditionally
+        so late-attached callbacks fire through. Common case covered;
+        authors who attach callbacks after Mount stay on V1 OFF.
+      - **RichTextBlock** — `Paragraphs` rebuild via reference-equality.
+        Legacy `UpdateRichTextBlock` does incremental per-paragraph diff;
+        authors needing the incremental shape stay on V1 OFF.
+      - **NumberBox** — plain `.OneWay` `Minimum`/`Maximum` (no coercion
+        suppression). `.CoercingOneWay` could be wired later.
+- [x] **Batch C** — `CalendarView` via `.CollectionDiffControlled`.
+      Null `SelectedDates` is treated as empty list (descriptor clears
+      the vector); legacy treats null as uncontrolled (preserves user
+      picks). Call sites must pass a list whenever selection is
+      controlled.
+- [x] **Batch D** — `DropDownButton`/`SplitButton`/`ToggleSplitButton`
+      Flyout child via `.OneWayBridged` + `Reconciler.CreateFlyoutForDescriptor`.
+      Closes the Batch 4 Flyout escape-hatch.
+- [x] **Batch E** — `Grid`/`Canvas`/`FlexPanel` per-child attached props
+      via `Panel.PerChildAttached`; `WrapGrid` ported with a tailored
+      panel shape. Closes the Batch 8 per-child attached gap (except
+      `RelativePanel` — see carve-outs).
+- [x] **Batch F** — `Image` events (`ImageOpened`/`ImageFailed` via
+      `.HandCodedEvent` over the existing `ImageEventPayload`),
+      `Path.Data` (pre-built `Geometry` via `.OneWayConditional` gated
+      on `PathDataString` being null), `InfoBar.ActionButton` (via
+      `.OneWayBridged` with a Click trampoline).
+- [x] **Batch G-prep — engine ordering fix.**
+      `ItemsHost.GetCollection` retyped from `System.Collections.IList`
+      to `IList<object>` (WinUI `ItemCollection` does not implement the
+      non-generic projection under CsWinRT). `DescriptorHandler` now
+      dispatches `ItemsHost` inline between `RentControl` and the prop
+      loop on Mount, and before the prop Update loop on Update, so
+      selection-tracking initial writes (`SelectedIndex`/`SelectedItem`)
+      land against a populated collection. Strategy shape unchanged for
+      hand-coded handlers — V1HandlerAdapter dispatch path is preserved.
+- [x] **Batch G1 — flat `ItemsHost` ports.** `ListBox`, `ComboBox`,
+      `RadioButtons` migrate from `.OneWay<string[]>` items entries to
+      `Children = new ItemsHost<...>(GetItems: e => (IReadOnlyList<object>)e.Items, GetCollection: c => c.Items)`.
+      `ComboBox.ItemElements` (`Element[]?`) supported alongside `Items`
+      (`string[]`); the engine routes `Element` items through
+      `MountChild`. Fixtures: `Desc_ListBox_Items`, `Desc_ComboBox_Items`,
+      `Desc_RadioButtons_Items`.
+
+**Phase 3-final carve-outs to Phase 4** (cannot be expressed inside the
+current engine shape; explicit reasons):
+
+- [ ] **Expander.HeaderTemplate** — needs `NamedSlots` but conflicts with
+      the existing `SingleContent` strategy; one Children strategy per
+      descriptor today.
+- [ ] **RelativePanel per-child attached** — sequential `PerChildAttached`
+      callbacks can't resolve sibling name references that haven't been
+      mounted yet. Needs a two-pass shape on `Panel<>` or a dedicated
+      `NamedRelativePanel` strategy.
+- [ ] **TeachingTip.Target** — cross-element reference resolution to
+      another element's mounted native control; descriptor framework
+      cannot reference another element's resolved control.
+- [ ] **Path.PathDataString** — legacy `XamlReader`/`PathDataParser`
+      strategy needs string-diff against the old element + multi-source
+      error context the engine's per-prop comparer can't express.
+- [ ] **NumberBox coercion** — `.CoercingOneWay` thread for `Minimum` /
+      `Maximum`.
+- [ ] **Templated lists (G2/G3)** — `ListView<T>`, `GridView<T>`,
+      `LazyVStack<T>`, `LazyHStack<T>`, `ItemsRepeater<T>`, `TreeView`,
+      `FlipView`, `TabView`, `Pivot` need a new `TemplatedItems<T,TControl>`
+      (or equivalent) strategy with spec-042 `ReactorListState` +
+      `KeyedListDiff` integration plus a `Reconciler.BindKeyedItemsSource`
+      helper lifting the legacy realization-hook setup. Substantial engine
+      design work; deferred to a follow-up batch.
 
 **Carry-forward known defects** (from Phase 1):
 
