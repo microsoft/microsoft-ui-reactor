@@ -109,9 +109,21 @@
        targets net10.0-windows10.0.22621.0. A ProjectReference across that TFM
        boundary fails NuGet asset resolution at pack time, so we shell out
        instead — SignaturesGen runs its own AfterBuild step that writes
-       skills/reactor.api.txt, which this csproj then embeds as a resource. -->
+       skills/reactor.api.txt, which this csproj then embeds as a resource.
+
+       Skip in CI ('$(CI)' = 'true' is set by GitHub Actions). The nested
+       `dotnet build` spawns its own VBCSCompiler instance that doesn't
+       coordinate with the outer build — when an outer test/build target
+       (e.g. `dotnet test tests/Reactor.Tests`, which itself ProjectReferences
+       Reactor.Localization.Generator) is already producing
+       obj/<plat>/<cfg>/<tfm>/Reactor.Localization.Generator.dll, the nested
+       SignaturesGen build races on the same output file and the second
+       writer loses with CSC error CS2012. The committed
+       skills/reactor.api.txt is what pack + embed consume (both via
+       Condition="Exists(...)"), so the regen is a dev-machine convenience —
+       CI never needs to run it. -->
   <Target Name="RunSignaturesGen" BeforeTargets="BeforeBuild"
-          Condition="'$(SkipSignaturesGen)' != 'true'">
+          Condition="'$(SkipSignaturesGen)' != 'true' and '$(CI)' != 'true'">
     <Exec Command="dotnet build &quot;$(MSBuildThisFileDirectory)..\..\tools\Reactor.SignaturesGen\Reactor.SignaturesGen.csproj&quot; -c $(Configuration) -p:Platform=$(_SignaturesGenPlatform) --nologo -v:q"
           ConsoleToMSBuild="true"
           ContinueOnError="false" />
