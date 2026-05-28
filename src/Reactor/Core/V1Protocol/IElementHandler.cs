@@ -51,4 +51,17 @@ public interface IElementHandler<TElement, TControl>
     /// otherwise the handler is a leaf for the purposes of child
     /// reconciliation.</summary>
     ChildrenStrategy<TElement, TControl>? Children => null;
+
+    /// <summary>Spec 047 §14 Phase 3 prelude (Engine A1) — optional hook the
+    /// engine invokes from <see cref="V1HandlerAdapter{TElement,TControl}"/>
+    /// after the <see cref="Children"/> strategy has mounted/bound every child
+    /// (and after any items-binder strategy the handler dispatched inline).
+    /// Default no-op.
+    ///
+    /// <para>Override this to wire events whose subscription must happen
+    /// strictly after children-add — e.g. <c>TabView.SelectionChanged</c>,
+    /// which WinUI fires spuriously while the first tab is being added if the
+    /// handler subscribes during the prop-apply phase. Subscribing here side-
+    /// steps that first-add echo.</para></summary>
+    void AfterChildrenMount(MountContext ctx, TElement element, TControl control) { }
 }

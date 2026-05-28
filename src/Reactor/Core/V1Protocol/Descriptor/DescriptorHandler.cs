@@ -106,6 +106,12 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
         return ctrl;
     }
 
+    /// <summary>§14 Phase 3 prelude (Engine A1) — forwards to the descriptor's
+    /// optional <see cref="ControlDescriptor{TElement,TControl}.AfterChildrenMount"/>
+    /// callback. The adapter invokes this after every child has mounted.</summary>
+    public void AfterChildrenMount(MountContext ctx, TElement element, TControl control)
+        => _descriptor.AfterChildrenMount?.Invoke(in ctx, element, control);
+
     public void Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl ctrl)
     {
         // §14 Phase 3-final: ItemsHost diff BEFORE prop Update loop, same

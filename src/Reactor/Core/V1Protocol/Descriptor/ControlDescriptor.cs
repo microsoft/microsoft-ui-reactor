@@ -4,6 +4,21 @@ using Microsoft.UI.Xaml;
 namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 
 /// <summary>
+/// Spec 047 §14 Phase 3 prelude (Engine A1) — post-children mount callback
+/// signature for <see cref="ControlDescriptor{TElement,TControl}.AfterChildrenMount"/>.
+/// Invoked by <see cref="V1HandlerAdapter{TElement,TControl}"/> after the
+/// descriptor's children strategy has mounted/bound every child, so a
+/// descriptor can wire events that must subscribe strictly after children-add
+/// (e.g. <c>TabView.SelectionChanged</c>). Takes <see cref="MountContext"/> by
+/// <c>in</c> to preserve the allocation-free ref-struct contract.
+/// </summary>
+[Experimental("REACTOR_V1_PREVIEW")]
+public delegate void AfterChildrenMountCallback<TElement, TControl>(
+    in MountContext ctx, TElement element, TControl control)
+    where TElement : Element
+    where TControl : FrameworkElement;
+
+/// <summary>
 /// Spec 047 §6 / §14 Phase 2 (Q1 spike) — declarative control description.
 ///
 /// <para>A descriptor is the data-driven alternative to a hand-coded
@@ -56,6 +71,14 @@ public sealed class ControlDescriptor<TElement, TControl>
     /// Update body returns. Defaults to <c>null</c> (treated as
     /// <see cref="None{TElement,TControl}"/> by the adapter).</summary>
     public ChildrenStrategy<TElement, TControl>? Children { get; init; }
+
+    /// <summary>Spec 047 §14 Phase 3 prelude (Engine A1) — optional post-children
+    /// mount hook. The interpreter (<see cref="DescriptorHandler{TElement,TControl}"/>)
+    /// surfaces it through <see cref="IElementHandler{TElement,TControl}.AfterChildrenMount"/>,
+    /// which the adapter invokes after every child has mounted. Use for events
+    /// that must subscribe after children-add (TabView SelectionChanged).
+    /// Defaults to <c>null</c> (no hook).</summary>
+    public AfterChildrenMountCallback<TElement, TControl>? AfterChildrenMount { get; init; }
 
     /// <summary><c>Setters</c> selector — the descriptor needs an opaque way
     /// to pull the element's <c>Action&lt;TControl&gt;[]</c> setters chain
