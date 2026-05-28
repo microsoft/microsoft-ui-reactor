@@ -223,6 +223,35 @@ public sealed class ControlDescriptor<TElement, TControl>
         return this;
     }
 
+    /// <summary>§14 Phase 3 finish — Engine (4). Escape hatch entry that
+    /// receives <paramref name="mount"/>+(<paramref name="update"/> with
+    /// BOTH old and new TElement, so the entry can express a diff the
+    /// per-value get/set lambdas of <see cref="OneWayConditional{TValue}"/>
+    /// can't: comparing one element field while writing a derived value
+    /// elsewhere, or multi-source error context like
+    /// <c>Path.PathDataString</c>'s XamlReader/PathDataParser branches.
+    ///
+    /// <para><b>When to reach for it:</b> only when the standard entries
+    /// can't express the diff or the write. Imperative entries skip the
+    /// engine's value-comparer fast-path, so a misused Imperative entry
+    /// re-runs on every render. The other entry shapes
+    /// (<see cref="OneWay{TValue}"/>, <see cref="OneWayConditional{TValue}"/>,
+    /// <see cref="CoercingOneWay{TValue}"/>, <see cref="HandCodedControlled"/>)
+    /// still cover the 95% case.</para>
+    ///
+    /// <para><b>Distinct from</b>
+    /// <see cref="Imperative{TElement,TControl}"/> (a
+    /// <see cref="ChildrenStrategy{TElement,TControl}"/> that drives the
+    /// whole CHILD subtree imperatively) — this is a property-level escape
+    /// hatch that participates in the normal prop loop.</para></summary>
+    public ControlDescriptor<TElement, TControl> Imperative(
+        Action<TControl, TElement> mount,
+        Action<TControl, TElement, TElement> update)
+    {
+        _properties.Add(new ImperativePropEntry<TElement, TControl>(mount, update));
+        return this;
+    }
+
     /// <summary>§14 Phase 3-final — engine-bridged one-way property. Same
     /// diff-and-write contract as <see cref="OneWayConditional{TValue}"/>,
     /// but the set lambda receives the <see cref="Reconciler"/> and the
