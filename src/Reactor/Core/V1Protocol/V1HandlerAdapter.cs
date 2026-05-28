@@ -118,8 +118,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                         pairs?.Add((mounted, childEl));
                     }
                 }
-                if (afterAll is not null && pairs is not null)
-                    afterAll(control, pairs);
+                // pairs is non-null exactly when afterAll is non-null (see
+                // the conditional allocation above), so the afterAll guard
+                // alone is sufficient.
+                if (afterAll is not null)
+                    afterAll(control, pairs!);
                 return;
             }
 
@@ -282,8 +285,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                         pairs?.Add((mounted, newChildren[i]));
                     }
                 }
-                if (afterAll is not null && pairs is not null)
-                    afterAll(control, pairs);
+                // pairs is non-null exactly when afterAll is non-null (see
+                // the conditional allocation above), so the afterAll guard
+                // alone is sufficient.
+                if (afterAll is not null)
+                    afterAll(control, pairs!);
                 return;
             }
 

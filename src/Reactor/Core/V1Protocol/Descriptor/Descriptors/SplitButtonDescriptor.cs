@@ -55,13 +55,4 @@ internal static class SplitButtonDescriptor
             shouldWrite: static e => e.Flyout is not null,
             comparer:    ElementReferenceComparer.Instance);
 
-    /// <summary>Reference-identity comparer over <c>Element?</c> — matches the
-    /// pattern used by <c>GridDescriptor</c> for its
-    /// <c>GridDefinition</c> rebuild gate.</summary>
-    private sealed class ElementReferenceComparer : IEqualityComparer<Element?>
-    {
-        public static readonly ElementReferenceComparer Instance = new();
-        public bool Equals(Element? x, Element? y) => ReferenceEquals(x, y);
-        public int GetHashCode(Element obj) => global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
-    }
 }

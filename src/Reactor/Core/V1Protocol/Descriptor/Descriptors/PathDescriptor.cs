@@ -67,19 +67,20 @@ internal static class PathDescriptor
                 if (!pathChanged) return;
                 WriteData(c, newEl);
             })
-        // FillRule propagation onto the inner PathGeometry (only meaningful
-        // when the descriptor wrote a PathGeometry above; non-EvenOdd writes
-        // on a non-PathGeometry are a no-op). Mirrors the legacy arm's
-        // <c>p.Data is PathGeometry pg => pg.FillRule = n.FillRule</c>.
-        // No PathDataString gate needed — the predicate inspects the live
-        // c.Data at write time, just like the legacy arm.
-        .OneWayConditional(
-            get:         static e => e.FillRule,
-            set:         static (c, v) =>
+        // FillRule propagation onto the inner PathGeometry. Mirrors the legacy
+        // arm's `p.Data is PathGeometry pg => pg.FillRule = n.FillRule` —
+        // gating on the LIVE control's resolved Data, not the element field,
+        // so the PathDataString surface (where e.Data is null but XamlReader/
+        // PathDataParser produces a PathGeometry on c.Data) propagates too.
+        // Use `.OneWay` so the entry runs on every Mount and on every change
+        // to e.FillRule; the set lambda's `c.Data is PathGeometry` check is
+        // the actual gate (no-op when c.Data isn't a PathGeometry).
+        .OneWay(
+            get: static e => e.FillRule,
+            set: static (c, v) =>
             {
                 if (c.Data is PathGeometry pg && pg.FillRule != v) pg.FillRule = v;
-            },
-            shouldWrite: static e => e.Data is PathGeometry)
+            })
         .OneWayConditional(
             get:         static e => e.Fill,
             set:         static (c, v) => c.Fill = v,

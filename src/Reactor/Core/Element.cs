@@ -3272,7 +3272,10 @@ public abstract record LazyStackElementBase : Element, Internal.IKeyedItemSource
     {
         if (repeater.Layout is WinUI.StackLayout existing && existing.Orientation == Orientation)
         {
-            if (existing.Spacing != Spacing) existing.Spacing = Spacing;
+            // Epsilon compare per the spec-047 Phase 3-final fixture
+            // convention (b0910016) — CodeQL flags `!=` on double, and the
+            // engine never needs to react to sub-nanometer Spacing changes.
+            if (Math.Abs(existing.Spacing - Spacing) > 1e-9) existing.Spacing = Spacing;
             return;
         }
         repeater.Layout = new WinUI.StackLayout

@@ -4803,7 +4803,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 H.Check("Desc_LazyVStack_OrientationVertical",
                     ir.Layout is WinUI.StackLayout l1 && l1.Orientation == Orientation.Vertical);
                 H.Check("Desc_LazyVStack_SpacingApplied",
-                    ir.Layout is WinUI.StackLayout l2 && l2.Spacing == 12);
+                    ir.Layout is WinUI.StackLayout l2 && Math.Abs(l2.Spacing - 12d) < 1e-9);
 
                 var listState = Reconciler.GetListState(ir);
                 H.Check("Desc_LazyVStack_ListStateAttached", listState is not null);
@@ -4836,7 +4836,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                         && listState.Source[2].Key == "b"
                         && listState.Source[3].Key == "c");
                 H.Check("Desc_LazyVStack_LayoutReusedOnUpdate",
-                    ir.Layout is WinUI.StackLayout l3 && l3.Spacing == 16 && l3.Orientation == Orientation.Vertical);
+                    ir.Layout is WinUI.StackLayout l3 && Math.Abs(l3.Spacing - 16d) < 1e-9 && l3.Orientation == Orientation.Vertical);
 
                 // Same-ref idempotent.
                 rec.UpdateChild(el2, el2, ir, _noOp);
@@ -4943,7 +4943,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 // Verify by layout shape rather than reference identity —
                 // WinRT projection can rewrap Layout across the ABI.
                 H.Check("Desc_ItemsRepeater_LayoutIsUniformGrid",
-                    ir.Layout is WinUI.UniformGridLayout ug && ug.MinRowSpacing == 4);
+                    ir.Layout is WinUI.UniformGridLayout ug && Math.Abs(ug.MinRowSpacing - 4d) < 1e-9);
 
                 var listState = Reconciler.GetListState(ir);
                 H.Check("Desc_ItemsRepeater_ListStateAttached", listState is not null);
@@ -4970,7 +4970,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 await Harness.Render();
 
                 H.Check("Desc_ItemsRepeater_LayoutSwapped",
-                    ir.Layout is WinUI.StackLayout sl && sl.Spacing == 4);
+                    ir.Layout is WinUI.StackLayout sl && Math.Abs(sl.Spacing - 4d) < 1e-9);
                 listState = Reconciler.GetListState(ir);
                 H.Check("Desc_ItemsRepeater_DiffApplied_Count4",
                     listState is not null && listState.Source.Count == 4);

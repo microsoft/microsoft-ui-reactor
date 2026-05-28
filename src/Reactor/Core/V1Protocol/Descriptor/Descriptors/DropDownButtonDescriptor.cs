@@ -47,17 +47,4 @@ internal static class DropDownButtonDescriptor
             shouldWrite: static e => e.Flyout is not null,
             comparer:    ElementReferenceComparer.Instance);
 
-    /// <summary>Reference-identity comparer over <c>Element?</c> — matches the
-    /// pattern used by <c>GridDescriptor</c> for its
-    /// <c>GridDefinition</c> rebuild gate. The bridged Flyout entry uses
-    /// this so the WinUI <c>FlyoutBase</c> is only rebuilt when the Flyout
-    /// Element reference actually changes (record-style structural
-    /// equality from the default comparer would miss content swaps that
-    /// produced a structurally-equal Element).</summary>
-    private sealed class ElementReferenceComparer : IEqualityComparer<Element?>
-    {
-        public static readonly ElementReferenceComparer Instance = new();
-        public bool Equals(Element? x, Element? y) => ReferenceEquals(x, y);
-        public int GetHashCode(Element obj) => global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
-    }
 }
