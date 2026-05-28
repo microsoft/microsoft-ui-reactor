@@ -4873,6 +4873,84 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    internal class DescItemsViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandlerForDerivedTypes<ItemsViewElementBase, WinUI.ItemsView>(
+                new DescriptorHandler<ItemsViewElementBase, WinUI.ItemsView>(
+                    ItemsViewDescriptor.Descriptor));
+            rec.RegisterHandler<ItemContainerElement, WinUI.ItemContainer>(
+                new DescriptorHandler<ItemContainerElement, WinUI.ItemContainer>(
+                    ItemContainerDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new ItemsViewElement<string>(
+                Items: new[] { "one", "two", "three" },
+                KeySelector: static s => s,
+                ViewBuilder: static (s, _) => new ItemContainerElement(new TextBlockElement(s)))
+            {
+                LayoutKind = ItemsViewLayoutKind.StackLayout,
+                SelectionMode = ItemsViewSelectionMode.Multiple,
+                IsItemInvokedEnabled = true,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.ItemsView iv)
+            {
+                parent.Children.Add(iv);
+                await Harness.Render();
+
+                H.Check("Desc_ItemsView_Mounted", true);
+                H.Check("Desc_ItemsView_LayoutStack", iv.Layout is WinUI.StackLayout);
+                H.Check("Desc_ItemsView_SelectionMode", iv.SelectionMode == ItemsViewSelectionMode.Multiple);
+                H.Check("Desc_ItemsView_InvokeEnabled", iv.IsItemInvokedEnabled == true);
+                var listState = Reconciler.GetListState(iv);
+                H.Check("Desc_ItemsView_ListStateAttached", listState is not null);
+                H.Check("Desc_ItemsView_ItemsSourceBound",
+                    listState is not null && ReferenceEquals(iv.ItemsSource, listState.Source));
+                H.Check("Desc_ItemsView_KeysOk",
+                    listState is not null
+                        && listState.Source[0].Key == "one"
+                        && listState.Source[1].Key == "two"
+                        && listState.Source[2].Key == "three");
+                H.Check("Desc_ItemsView_ItemTemplateAttached", iv.ItemTemplate is not null);
+
+                var el2 = el1 with
+                {
+                    Items = new[] { "one", "two", "four", "three" },
+                    LayoutKind = ItemsViewLayoutKind.UniformGridLayout,
+                    SelectionMode = ItemsViewSelectionMode.Single,
+                    IsItemInvokedEnabled = false,
+                };
+                rec.UpdateChild(el1, el2, iv, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_ItemsView_LayoutUpdated", iv.Layout is WinUI.UniformGridLayout);
+                H.Check("Desc_ItemsView_SelectionModeUpdated", iv.SelectionMode == ItemsViewSelectionMode.Single);
+                H.Check("Desc_ItemsView_InvokeDisabled", iv.IsItemInvokedEnabled == false);
+                listState = Reconciler.GetListState(iv);
+                H.Check("Desc_ItemsView_DiffApplied_Count4",
+                    listState is not null && listState.Source.Count == 4);
+                H.Check("Desc_ItemsView_DiffApplied_KeysOk",
+                    listState is not null
+                        && listState.Source[0].Key == "one"
+                        && listState.Source[1].Key == "two"
+                        && listState.Source[2].Key == "four"
+                        && listState.Source[3].Key == "three");
+
+                rec.UnmountChild(iv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_ItemsView_Mounted", false);
+            }
+        }
+    }
+
     internal class DescTemplatedListViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
