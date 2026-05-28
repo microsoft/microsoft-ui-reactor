@@ -288,6 +288,17 @@ internal sealed class FrameEventPayload
     public Microsoft.UI.Xaml.Navigation.NavigationFailedEventHandler? NavigationFailedTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3-final Batch C — CalendarView SelectedDates
+/// two-way payload. Single slot for the <c>SelectedDatesChanged</c>
+/// trampoline wired by the <c>.CollectionDiffControlled</c> entry on the
+/// element's <c>SelectedDates</c> <c>IObservableVector&lt;DateTimeOffset&gt;</c>.</summary>
+internal sealed class CalendarViewEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.CalendarView,
+        Microsoft.UI.Xaml.Controls.CalendarViewSelectedDatesChangedEventArgs>? SelectedDatesChangedTrampoline;
+}
+
 /// <summary>Spec 047 §14 Phase 3 batch 11 — BreadcrumbBar ItemClicked
 /// fire-only payload. Trampoline maps <c>args.Index</c> back to the live
 /// element's <c>Items[idx]</c> data — mirrors the legacy arm.</summary>

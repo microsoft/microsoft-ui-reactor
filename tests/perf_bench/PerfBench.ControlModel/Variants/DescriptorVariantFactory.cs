@@ -254,6 +254,13 @@ internal static class DescriptorVariantFactory
             new DescriptorHandler<NumberBoxElement, WinUI.NumberBox>(
                 NumberBoxDescriptor.Descriptor));
 
+        // Spec 047 §14 Phase 3-final Batch C — CalendarView via
+        // .CollectionDiffControlled (proof point for Batch A's new
+        // IObservableVector two-way entry shape).
+        rec.RegisterHandler<CalendarViewElement, WinUI.CalendarView>(
+            new DescriptorHandler<CalendarViewElement, WinUI.CalendarView>(
+                CalendarViewDescriptor.Descriptor));
+
         rec.RegisterHandler<ListViewElement, WinUI.ListView>(new ListViewHandler());
 
         return rec;

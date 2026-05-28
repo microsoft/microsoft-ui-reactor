@@ -3392,4 +3392,128 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  CalendarViewDescriptor (Phase 3-final Batch C) — proof point for the
+    //  .CollectionDiffControlled<TPayload, TItem, TKey, TDelegate> entry.
+    //  Mount fills the SelectedDates vector bare; Update applies a
+    //  UtcTicks-keyed hash-set diff inside one BeginSuppress so per-mutation
+    //  echo can't reach OnSelectedDatesChanged. The trampoline only fires
+    //  when the user (or, here, a test driver) mutates SelectedDates
+    //  OUTSIDE the suppress window.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescCalendarViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<CalendarViewElement, WinUI.CalendarView>(
+                new DescriptorHandler<CalendarViewElement, WinUI.CalendarView>(
+                    CalendarViewDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            int lastSnapshotCount = -1;
+            DateTimeOffset[]? lastSnapshot = null;
+            var dateA = new DateTimeOffset(2026, 1, 5, 0, 0, 0, TimeSpan.Zero);
+            var dateB = new DateTimeOffset(2026, 1, 6, 0, 0, 0, TimeSpan.Zero);
+            var dateC = new DateTimeOffset(2026, 1, 7, 0, 0, 0, TimeSpan.Zero);
+            var dateD = new DateTimeOffset(2026, 1, 8, 0, 0, 0, TimeSpan.Zero);
+
+            var el1 = new CalendarViewElement
+            {
+                SelectionMode = WinUI.CalendarViewSelectionMode.Multiple,
+                IsGroupLabelVisible = true,
+                IsOutOfScopeEnabled = true,
+                NumberOfWeeksInView = 4,
+                DisplayMode = WinUI.CalendarViewDisplayMode.Month,
+                SelectedDates = new[] { dateA, dateB },
+                OnSelectedDatesChanged = snap =>
+                {
+                    fireCount++;
+                    lastSnapshotCount = snap.Count;
+                    lastSnapshot = snap is DateTimeOffset[] arr ? arr : global::System.Linq.Enumerable.ToArray(snap);
+                },
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.CalendarView cv)
+            {
+                parent.Children.Add(cv);
+                await Harness.Render();
+
+                H.Check("Desc_CalendarView_Mounted", true);
+                H.Check("Desc_CalendarView_SelectionMode",
+                    cv.SelectionMode == WinUI.CalendarViewSelectionMode.Multiple);
+                H.Check("Desc_CalendarView_NumberOfWeeksInView",
+                    cv.NumberOfWeeksInView == 4);
+                H.Check("Desc_CalendarView_DisplayMode",
+                    cv.DisplayMode == WinUI.CalendarViewDisplayMode.Month);
+                H.Check("Desc_CalendarView_InitialSelectedDates",
+                    cv.SelectedDates.Count == 2
+                    && cv.SelectedDates.Contains(dateA)
+                    && cv.SelectedDates.Contains(dateB));
+                // Mount fills the vector before subscription wires; even if
+                // subscription happens during EnsureSubscribed, the entry
+                // doesn't replay existing items, so the callback must not
+                // fire on mount.
+                H.Check("Desc_CalendarView_MountDidNotFire", fireCount == 0);
+
+                // Programmatic update — descriptor wraps per-item Add/Remove
+                // in one BeginSuppress; the trampoline's ShouldSuppress gate
+                // must keep OnSelectedDatesChanged silent on Update writes.
+                var firesBefore = fireCount;
+                var el2 = el1 with { SelectedDates = new[] { dateA, dateB, dateC } };
+                rec.UpdateChild(el1, el2, cv, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_CalendarView_AddDate_VectorUpdated",
+                    cv.SelectedDates.Count == 3
+                    && cv.SelectedDates.Contains(dateC));
+                H.Check("Desc_CalendarView_NoEchoOnProgrammaticWrite",
+                    fireCount == firesBefore);
+
+                // User-driven mutation — simulate by mutating the vector
+                // outside any suppress window. The trampoline should fire
+                // and snapshot the full SelectedDates.
+                firesBefore = fireCount;
+                cv.SelectedDates.Add(dateD);
+                await Harness.Render();
+
+                H.Check("Desc_CalendarView_UserAdd_FiresCallback",
+                    fireCount == firesBefore + 1);
+                H.Check("Desc_CalendarView_UserAdd_SnapshotCount",
+                    lastSnapshotCount == 4);
+                H.Check("Desc_CalendarView_UserAdd_SnapshotContainsNewDate",
+                    lastSnapshot is not null
+                    && global::System.Array.IndexOf(lastSnapshot, dateD) >= 0);
+
+                // Diff parity — survivor preservation. Start state is
+                // [A,B,C,D] (after the user add); reconcile to [A,C,D]
+                // (remove B). Final state should drop B and keep the rest.
+                firesBefore = fireCount;
+                var el3 = el2 with { SelectedDates = new[] { dateA, dateC, dateD } };
+                rec.UpdateChild(el2, el3, cv, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_CalendarView_DiffPreservesSurvivors",
+                    cv.SelectedDates.Count == 3
+                    && cv.SelectedDates.Contains(dateA)
+                    && !cv.SelectedDates.Contains(dateB)
+                    && cv.SelectedDates.Contains(dateC)
+                    && cv.SelectedDates.Contains(dateD));
+                H.Check("Desc_CalendarView_DiffNoEcho",
+                    fireCount == firesBefore);
+
+                rec.UnmountChild(cv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_CalendarView_Mounted", false);
+            }
+        }
+    }
 }

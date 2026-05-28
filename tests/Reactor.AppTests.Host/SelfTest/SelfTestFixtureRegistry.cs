@@ -1187,6 +1187,8 @@ internal static class SelfTestFixtureRegistry
         "Desc_Frame_MountUpdate",
         "Desc_RichTextBlock_MountUpdate",
         "Desc_NumberBox_MountUpdate",
+        // Spec 047 §14 Phase 3-final Batch C — CalendarView.
+        "Desc_CalendarView_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2363,6 +2365,8 @@ internal static class SelfTestFixtureRegistry
         "Desc_Frame_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescFrameMountUpdate(harness),
         "Desc_RichTextBlock_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRichTextBlockMountUpdate(harness),
         "Desc_NumberBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescNumberBoxMountUpdate(harness),
+        // Spec 047 §14 Phase 3-final Batch C — CalendarView.
+        "Desc_CalendarView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescCalendarViewMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),
