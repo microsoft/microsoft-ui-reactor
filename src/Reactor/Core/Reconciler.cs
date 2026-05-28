@@ -344,6 +344,20 @@ public sealed partial class Reconciler : IDisposable
             "<ContentControl HorizontalContentAlignment='Stretch' VerticalContentAlignment='Stretch'/>" +
             "</DataTemplate>"));
 
+    /// <summary>
+    /// Spec 047 §14 Phase 3 finish — text-bound TreeView item template
+    /// shared between the legacy <c>MountTreeView</c> arm and the
+    /// <see cref="V1Protocol.TreeChildren{TElement,TControl}"/> strategy.
+    /// In node mode the template's DataContext is <c>TreeViewNode</c>, so
+    /// <c>{Binding Content.Content}</c> resolves <c>TreeViewNode.Content</c>
+    /// (a <c>TreeViewNodeData</c>) → its <c>Content</c> (the display string).
+    /// </summary>
+    internal static readonly Lazy<DataTemplate> TreeViewTextItemTemplate = new(() =>
+        (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(
+            "<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>" +
+            "<TextBlock Text='{Binding Content.Content}'/>" +
+            "</DataTemplate>"));
+
     // ════════════════════════════════════════════════════════════════════
     //  ReactorAttached.StateProperty  (ReactorState)
     // ════════════════════════════════════════════════════════════════════

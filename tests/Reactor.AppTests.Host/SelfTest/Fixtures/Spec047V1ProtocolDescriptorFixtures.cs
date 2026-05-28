@@ -4905,4 +4905,248 @@ internal static class Spec047V1ProtocolDescriptorFixtures
             }
         }
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  §14 Phase 3 finish — Port (8) TreeView via TreeChildren strategy.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescTreeViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<TreeViewElement, WinUI.TreeView>(
+                new DescriptorHandler<TreeViewElement, WinUI.TreeView>(TreeViewDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new TreeViewElement(new[]
+            {
+                new TreeViewNodeData("root1", Children: new[]
+                {
+                    new TreeViewNodeData("child1a"),
+                    new TreeViewNodeData("child1b"),
+                }),
+                new TreeViewNodeData("root2"),
+            });
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.TreeView tv)
+            {
+                parent.Children.Add(tv);
+                await Harness.Render();
+                H.Check("Desc_TreeView_Mounted", true);
+                H.Check("Desc_TreeView_RootCount2", tv.RootNodes.Count == 2);
+                H.Check("Desc_TreeView_FirstNodeContent",
+                    tv.RootNodes[0].Content is TreeViewNodeData d1 && d1.Content == "root1");
+                H.Check("Desc_TreeView_FirstNodeChildCount2", tv.RootNodes[0].Children.Count == 2);
+                H.Check("Desc_TreeView_NestedChildContent",
+                    tv.RootNodes[0].Children[0].Content is TreeViewNodeData d2 && d2.Content == "child1a");
+
+                // Update — different tree shape (positional rebuild).
+                var el2 = el1 with
+                {
+                    Nodes = new[]
+                    {
+                        new TreeViewNodeData("rootA"),
+                        new TreeViewNodeData("rootB"),
+                        new TreeViewNodeData("rootC"),
+                    }
+                };
+                rec.UpdateChild(el1, el2, tv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TreeView_AfterUpdate_Count3", tv.RootNodes.Count == 3);
+                H.Check("Desc_TreeView_AfterUpdate_FirstContent",
+                    tv.RootNodes[0].Content is TreeViewNodeData d3 && d3.Content == "rootA");
+
+                rec.UnmountChild(tv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_TreeView_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  §14 Phase 3 finish — Port (9) FlipView via ItemsHost reuse.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescFlipViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<FlipViewElement, WinUI.FlipView>(
+                new DescriptorHandler<FlipViewElement, WinUI.FlipView>(FlipViewDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int selectedFires = 0;
+            int lastSelected = -1;
+            var el1 = new FlipViewElement(new Element[]
+            {
+                new TextBlockElement("page-a"),
+                new TextBlockElement("page-b"),
+                new TextBlockElement("page-c"),
+            })
+            {
+                SelectedIndex = 1,
+                OnSelectedIndexChanged = i => { selectedFires++; lastSelected = i; },
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.FlipView fv)
+            {
+                parent.Children.Add(fv);
+                await Harness.Render();
+                H.Check("Desc_FlipView_Mounted", true);
+                H.Check("Desc_FlipView_ItemsCount3", fv.Items.Count == 3);
+                H.Check("Desc_FlipView_SelectedIndex1", fv.SelectedIndex == 1);
+                H.Check("Desc_FlipView_MountDidNotFire", selectedFires == 0);
+
+                // Update SelectedIndex; descriptor uses .HandCodedControlled
+                // so the programmatic write is suppressed against echo.
+                var el2 = el1 with { SelectedIndex = 2 };
+                rec.UpdateChild(el1, el2, fv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_FlipView_SelectedIndexUpdated", fv.SelectedIndex == 2);
+                H.Check("Desc_FlipView_NoEchoOnProgrammaticWrite", selectedFires == 0);
+
+                rec.UnmountChild(fv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_FlipView_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  §14 Phase 3 finish — Port (10) TabView via TabItemsHost.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescTabViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<TabViewElement, WinUI.TabView>(
+                new DescriptorHandler<TabViewElement, WinUI.TabView>(TabViewDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new TabViewElement(new[]
+            {
+                new TabViewItemData("tab-a", new TextBlockElement("content-a")),
+                new TabViewItemData("tab-b", new TextBlockElement("content-b")) { IsClosable = false },
+            })
+            {
+                SelectedIndex = 0,
+                IsAddTabButtonVisible = true,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.TabView tv)
+            {
+                parent.Children.Add(tv);
+                await Harness.Render();
+                H.Check("Desc_TabView_Mounted", true);
+                H.Check("Desc_TabView_TabCount2", tv.TabItems.Count == 2);
+                H.Check("Desc_TabView_FirstTabHeader",
+                    tv.TabItems[0] is WinUI.TabViewItem tvi0 && (tvi0.Header as string) == "tab-a");
+                H.Check("Desc_TabView_SecondTabClosable",
+                    tv.TabItems[1] is WinUI.TabViewItem tvi1 && tvi1.IsClosable == false);
+                H.Check("Desc_TabView_AddButtonVisible", tv.IsAddTabButtonVisible == true);
+                H.Check("Desc_TabView_SelectedIndex0", tv.SelectedIndex == 0);
+
+                // Update — rebuild with different tab set.
+                var el2 = el1 with
+                {
+                    Tabs = new[]
+                    {
+                        new TabViewItemData("tab-x", new TextBlockElement("content-x")),
+                    },
+                    IsAddTabButtonVisible = false,
+                };
+                rec.UpdateChild(el1, el2, tv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_TabView_AfterUpdate_Count1", tv.TabItems.Count == 1);
+                H.Check("Desc_TabView_AfterUpdate_HeaderX",
+                    tv.TabItems[0] is WinUI.TabViewItem tvi2 && (tvi2.Header as string) == "tab-x");
+                H.Check("Desc_TabView_AfterUpdate_AddButtonHidden", tv.IsAddTabButtonVisible == false);
+
+                rec.UnmountChild(tv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_TabView_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  §14 Phase 3 finish — Port (11) Pivot via TabItemsHost (PivotItem container).
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescPivotMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<PivotElement, WinUI.Pivot>(
+                new DescriptorHandler<PivotElement, WinUI.Pivot>(PivotDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new PivotElement(new[]
+            {
+                new PivotItemData("pivot-a", new TextBlockElement("body-a")),
+                new PivotItemData("pivot-b", new TextBlockElement("body-b")),
+            })
+            {
+                SelectedIndex = 0,
+                Title = "My Pivot",
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.Pivot pv)
+            {
+                parent.Children.Add(pv);
+                await Harness.Render();
+                H.Check("Desc_Pivot_Mounted", true);
+                H.Check("Desc_Pivot_ItemsCount2", pv.Items.Count == 2);
+                H.Check("Desc_Pivot_FirstItemHeader",
+                    pv.Items[0] is WinUI.PivotItem pi0 && (pi0.Header as string) == "pivot-a");
+                H.Check("Desc_Pivot_TitleSet", (pv.Title as string) == "My Pivot");
+                H.Check("Desc_Pivot_SelectedIndex0", pv.SelectedIndex == 0);
+
+                // Update — different items.
+                var el2 = el1 with
+                {
+                    Items = new[]
+                    {
+                        new PivotItemData("pivot-x", new TextBlockElement("body-x")),
+                        new PivotItemData("pivot-y", new TextBlockElement("body-y")),
+                        new PivotItemData("pivot-z", new TextBlockElement("body-z")),
+                    },
+                };
+                rec.UpdateChild(el1, el2, pv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_Pivot_AfterUpdate_Count3", pv.Items.Count == 3);
+                H.Check("Desc_Pivot_AfterUpdate_FirstHeader",
+                    pv.Items[0] is WinUI.PivotItem pi2 && (pi2.Header as string) == "pivot-x");
+
+                rec.UnmountChild(pv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Pivot_Mounted", false);
+            }
+        }
+    }
 }

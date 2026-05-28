@@ -277,6 +277,43 @@ internal sealed class SelectorBarEventPayload
         Microsoft.UI.Xaml.Controls.SelectorBarSelectionChangedEventArgs>? SelectionChangedTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3 finish — Port (8). TreeView event
+/// trampoline payload. Both events are fire-only (no programmatic
+/// echo to suppress): ItemInvoked carries the invoked
+/// <see cref="TreeViewNodeData"/>; Expanding fires as a node opens.</summary>
+internal sealed class TreeViewEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.TreeView,
+        Microsoft.UI.Xaml.Controls.TreeViewItemInvokedEventArgs>? ItemInvokedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.TreeView,
+        Microsoft.UI.Xaml.Controls.TreeViewExpandingEventArgs>? ExpandingTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 finish — Port (9). FlipView
+/// <c>SelectionChanged</c> trampoline payload. Mirrors the simple
+/// SelectedIndex round-trip used by ListBox / PipsPager.</summary>
+internal sealed class FlipViewEventPayload
+{
+    public Microsoft.UI.Xaml.Controls.SelectionChangedEventHandler? SelectionChangedTrampoline;
+}
+
+/// <summary>Spec 047 §14 Phase 3 finish — Ports (10) + (11). TabView /
+/// Pivot event trampoline payload. SelectionChanged is the primary
+/// round-trip; TabCloseRequested + AddTabButtonClick are TabView-only
+/// fire-only events. Pivot only uses the SelectionChanged slot.</summary>
+internal sealed class TabViewEventPayload
+{
+    public Microsoft.UI.Xaml.Controls.SelectionChangedEventHandler? SelectionChangedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.TabView,
+        Microsoft.UI.Xaml.Controls.TabViewTabCloseRequestedEventArgs>? TabCloseRequestedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.TabView,
+        object>? AddTabButtonClickTrampoline;
+}
+
 /// <summary>Spec 047 §14 Phase 3-final Batch B — Frame multi-event payload.
 /// Three fire-only slots for Navigated / Navigating / NavigationFailed.
 /// Frame has NO controlled-prop round-trip (SourcePageType is .Initial /

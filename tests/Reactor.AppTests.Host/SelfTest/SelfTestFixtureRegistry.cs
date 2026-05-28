@@ -1211,6 +1211,10 @@ internal static class SelfTestFixtureRegistry
         // Spec 047 §14 Phase 3 finish — Port (6) Lazy*Stack G2.
         "Desc_LazyVStack_MountUpdate",
         "Desc_LazyHStack_MountUpdate",
+        "Desc_TreeView_MountUpdate",
+        "Desc_FlipView_MountUpdate",
+        "Desc_TabView_MountUpdate",
+        "Desc_Pivot_MountUpdate",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2413,6 +2417,12 @@ internal static class SelfTestFixtureRegistry
         // Spec 047 §14 Phase 3 finish — Port (6) Lazy*Stack G2.
         "Desc_LazyVStack_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescLazyVStackMountUpdate(harness),
         "Desc_LazyHStack_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescLazyHStackMountUpdate(harness),
+
+        // Spec 047 §14 Phase 3 finish — Ports (8)+(9)+(10)+(11) G3 controls.
+        "Desc_TreeView_MountUpdate"  => new Spec047V1ProtocolDescriptorFixtures.DescTreeViewMountUpdate(harness),
+        "Desc_FlipView_MountUpdate"  => new Spec047V1ProtocolDescriptorFixtures.DescFlipViewMountUpdate(harness),
+        "Desc_TabView_MountUpdate"   => new Spec047V1ProtocolDescriptorFixtures.DescTabViewMountUpdate(harness),
+        "Desc_Pivot_MountUpdate"     => new Spec047V1ProtocolDescriptorFixtures.DescPivotMountUpdate(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),
