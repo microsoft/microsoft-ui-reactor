@@ -885,34 +885,43 @@ carve-outs:
       refactor of `RefreshRealizedContainers` + the shared CCC
       handler is behavior-neutral for the legacy path).
 
-**Phase 3 close-out carve-outs to Phase 4** (cannot be expressed inside
-the current engine shape; explicit reasons):
+**Phase 3 close-out carve-outs — status after Phase 3 finish:**
 
-- [ ] **Expander.HeaderTemplate** — needs `NamedSlots` overlaid on
-      `SingleContent`; one Children strategy per descriptor today.
-- [ ] **TeachingTip.Target** — cross-element reference resolution to
-      another element's mounted native control; descriptor framework
-      cannot reference another element's resolved control.
-- [ ] **Path.PathDataString** — legacy `XamlReader`/`PathDataParser`
-      strategy needs string-diff against the old element + multi-source
-      error context the engine's per-prop comparer can't express.
-- [ ] **NumberBox coercion** — `.CoercingOneWay` thread for `Minimum`/
-      `Maximum`.
-- [ ] **`Lazy*Stack<T>` + `ItemsRepeater<T>` G2 ports** — different
-      realization machinery from `ListViewBase`. `Lazy*Stack` is
-      backed by `WinUI.ItemsRepeater` driven through
-      `IElementFactory` / `ElementFactory<T>` with the spec-042
-      `ReactorListState` attached to the factory (see
-      `LazyStackElementBase.AttachListStateToFactory`); the
-      `BindErasedKeyedItemsSource` `WinUI.ListViewBase` arm doesn't
-      cover them. Carries a fresh engine arm + new factory-routing
-      helper. Substantial work; deferred.
-- [ ] **G3 typed lists — `TreeView`, `FlipView`, `TabView`, `Pivot`.**
-      Heterogeneous, none share the `ListViewBase` + CCC pipeline:
-      `TreeView` is hierarchical via `TreeViewNode` / `TreeViewNodeData`
-      (non-flat, non-keyed in legacy); `FlipView` pre-mounts items;
-      `TabView` and `Pivot` keyed item-sources aren't routed today.
-      Each needs a bespoke descriptor.
+- [x] **Expander.HeaderTemplate** — closed by Phase 3 finish via
+      Engine (2) `.ImperativeBridged`; two-strategy composition
+      resolved at the property level (`Children` stays as
+      `SingleContent`).
+- [x] **TeachingTip.Target** — closed by Engine (3) audit. Legacy
+      doesn't set Target either; setter escape is the contract in
+      both paths. Declarative deferred-resolution shape is future
+      polish, not a Phase 3 gate.
+- [x] **Path.PathDataString** — closed by Phase 3 finish via
+      Engine (4) `.Imperative`. Single entry drives all three legacy
+      strategies (XamlReader.Load → pre-built Geometry →
+      PathDataParser.Parse) end-to-end with the same multi-source
+      `ArgumentException` rethrow path.
+- [x] **NumberBox coercion** — closed by Engine (5) audit; existing
+      `.CoercingOneWay` already matched `UpdateNumberBox`'s
+      suppression pattern line-for-line. NumberBoxDescriptor.Min/Max
+      ported through.
+- [x] **`Lazy*Stack<T>` G2 port** — closed by Phase 3 finish (Port (6)).
+      `BindErasedKeyedItemsSource` gained a `case WinUI.ItemsRepeater`
+      arm; `LazyStackElementBase` implements both `IKeyedItemSource`
+      and a new internal `IItemsRepeaterFactorySource`. Single
+      base-derived descriptor catches every closed-T variant. Behavior
+      diff: descriptor's TControl is `WinUI.ItemsRepeater` directly
+      (no auto-`ScrollViewer` wrapping).
+- [ ] **`ItemsRepeater<T>` G2 port** — carried forward. Requires a new
+      `ItemsRepeaterElement<T>` element + DSL surface that doesn't
+      exist today (only `ItemsViewElementBase` for the higher-level
+      `ItemsView`). Engine arm proven by Port (6); shipping the
+      element + DSL is a follow-up.
+- [ ] **G3 typed lists — `TreeView`, `FlipView`, `TabView`, `Pivot`** —
+      carried forward. Each needs a new `ChildrenStrategy` shape
+      implementing the consolidated `IItemsBinderStrategy` marker
+      from Phase 3 finish: `TreeChildren` (hierarchical), `PreMountedItems`
+      (FlipView), `TabItemsHost` (heterogeneous Header + Content,
+      reused for Pivot with `WinUI.PivotItem` container).
 
 **Carry-forward known defects** (from Phase 1):
 
