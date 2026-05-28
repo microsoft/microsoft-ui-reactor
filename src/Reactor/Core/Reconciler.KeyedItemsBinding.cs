@@ -121,12 +121,123 @@ public sealed partial class Reconciler
             case WinUI.ListViewBase lvb:
                 BindListViewBaseErasedKeyedItems(lvb, source, requestRerender, isMount);
                 return;
+            case WinUI.ItemsRepeater ir:
+                BindItemsRepeaterErasedKeyedItems(ir, source, requestRerender, isMount);
+                return;
             default:
                 throw new InvalidOperationException(
                     $"TemplatedItemsErased<> binder does not yet support {control.GetType().FullName}. " +
-                    "Supported on Mount/Update: WinUI.ListViewBase (ListView, GridView). " +
-                    "FlipView / ItemsRepeater / Lazy*Stack stay carved to Phase 4.");
+                    "Supported on Mount/Update: WinUI.ListViewBase (ListView, GridView), " +
+                    "WinUI.ItemsRepeater (LazyVStack<T>, LazyHStack<T>, ItemsRepeater<T>). " +
+                    "FlipView stays carved.");
         }
+    }
+
+    // ── ItemsRepeater arm ─────────────────────────────────────────────────
+    //
+    // Spec 047 §14 Phase 3 finish — Engine (1).
+    //
+    // ItemsRepeater realizes through `IElementFactory.GetElement` /
+    // `RecycleElement` rather than ContainerContentChanging, so this arm
+    // does NOT install the shared CCC trampoline used by the ListViewBase
+    // path. Instead it pulls a factory closure off the source object via
+    // `IItemsRepeaterFactorySource`, sets `ir.ItemTemplate = factory`,
+    // then drives Mount/Update through the same `ReactorListState` +
+    // `KeyedListDiff` pipeline used by the lazy-stack path in
+    // Reconciler.Update.cs (~3080).
+    //
+    // The source object MUST implement both IKeyedItemSource (read by the
+    // shared `BuildListStateForKeyedSource` + `KeyedSourceKeyAdapter`
+    // helpers) and IItemsRepeaterFactorySource (factory + layout knobs).
+    // In practice it's the same element instance — `LazyStackElementBase`
+    // for the descriptor port, the per-strategy closure adapter for a
+    // future `ItemsRepeater<T>` descriptor that erases TItem at the
+    // strategy level.
+    private void BindItemsRepeaterErasedKeyedItems(
+        WinUI.ItemsRepeater ir,
+        IKeyedItemSource source,
+        Action requestRerender,
+        bool isMount)
+    {
+        if (source is not IItemsRepeaterFactorySource factorySource)
+            throw new InvalidOperationException(
+                $"TemplatedItemsErased<> on ItemsRepeater requires the source object to also implement {nameof(IItemsRepeaterFactorySource)}. " +
+                $"Got: {source.GetType().FullName}. Lazy*Stack descriptor bases implement both interfaces; " +
+                "a custom source needs the factory + layout-knob contract too.");
+
+        factorySource.ConfigureLayout(ir);
+
+        if (isMount)
+        {
+            var state = BuildListStateForKeyedSource(source);
+            SetListState(ir, state);
+            ir.ItemsSource = state.Source;
+            var factory = factorySource.CreateFactory(this, requestRerender, _pool);
+            factorySource.AttachListStateToFactory(factory, state);
+            ir.ItemTemplate = factory;
+            return;
+        }
+
+        // Update — match the legacy `Reconciler.Update.cs` lazy-stack
+        // ordering: try to update the existing factory in place (avoids
+        // re-realizing every visible row), then apply the keyed diff
+        // through the host's stable list state, then refresh realized
+        // containers against the new viewBuilder closure.
+        if (ir.ItemTemplate is IElementFactory existingFactory && factorySource.TryUpdateFactory(existingFactory))
+        {
+            ApplyErasedKeyedDiffOrFallback(ir, source, factorySource, existingFactory);
+            factorySource.RefreshRealizedItems(existingFactory, ir);
+        }
+        else
+        {
+            // Factory type mismatch (rare — only when the strategy's
+            // erased-TItem changed under us) — full replacement.
+            var fresh = BuildListStateForKeyedSource(source);
+            SetListState(ir, fresh);
+            ir.ItemsSource = fresh.Source;
+            var factory = factorySource.CreateFactory(this, requestRerender, _pool);
+            factorySource.AttachListStateToFactory(factory, fresh);
+            ir.ItemTemplate = factory;
+        }
+    }
+
+    /// <summary>
+    /// Mirrors `ApplyLazyKeyedDiffOrFallback` from Reconciler.Update.cs
+    /// but reads keys through the erased `IKeyedItemSource` instead of
+    /// `LazyStackElementBase.GetKeyAt`. Bailout / fallback semantics are
+    /// identical — `KeyedListDiff.Apply` resets `state.Source` in place
+    /// on a duplicate/null-key bailout, so the existing ItemsSource
+    /// binding stays valid.
+    /// </summary>
+    private void ApplyErasedKeyedDiffOrFallback(
+        WinUI.ItemsRepeater ir,
+        IKeyedItemSource source,
+        IItemsRepeaterFactorySource factorySource,
+        IElementFactory factory)
+    {
+        var state = GetListState(ir);
+        if (state is null || !ReferenceEquals(ir.ItemsSource, state.Source))
+        {
+            var fresh = BuildListStateForKeyedSource(source);
+            SetListState(ir, fresh);
+            ir.ItemsSource = fresh.Source;
+            factorySource.AttachListStateToFactory(factory, fresh);
+            return;
+        }
+
+        var ambient = AnimationAmbient.Current;
+        var keyAdapter = new KeyedSourceKeyAdapter(source);
+        var stats = KeyedListDiff.Apply(
+            state,
+            keyAdapter,
+            static (k, _) => k,
+            _logger,
+            ir.GetType().Name,
+            ambient,
+            controlInstance: ir);
+
+        if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
+            ApplyMoveAnimationsRepeater(ir, movedRows, ambient.Kind);
     }
 
     private void BindListViewBaseErasedKeyedItems(
