@@ -61,6 +61,18 @@ public sealed record SingleContent<TElement, TControl>(
 /// can write WinUI attached DPs (e.g. <c>Grid.SetRow</c>,
 /// <c>Canvas.SetLeft</c>) based on attached-prop hints carried on the
 /// child element. No-op by default.</para>
+///
+/// <para><b>§14 Phase 3 close-out addition:</b>
+/// <see cref="PerChildAttachedAfterAll"/> — optional two-pass callback
+/// invoked once after every child has been mounted (Mount path) or
+/// reconciled (Update path). Receives the full <c>(UIElement, Element)</c>
+/// pair list in collection order so the descriptor can apply attached
+/// DPs that reference OTHER children by name (e.g.
+/// <c>RelativePanel.SetRightOf(b, a)</c>). Distinct from
+/// <see cref="PerChildAttached"/>, which fires per-child mid-pass and
+/// cannot see siblings that haven't mounted yet. Most descriptors set
+/// only one of the two; <c>RelativePanel</c> is the canonical consumer
+/// of the after-all shape.</para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 public sealed record Panel<TElement, TControl>(
@@ -78,6 +90,14 @@ public sealed record Panel<TElement, TControl>(
     /// containers that don't carry per-child attached props
     /// (e.g. <c>StackPanel</c>).</summary>
     public Action<TControl, UIElement, Element>? PerChildAttached { get; init; }
+
+    /// <summary>Optional two-pass callback fired once after every child has
+    /// been mounted/reconciled, receiving the full ordered list of
+    /// <c>(UIElement, Element)</c> pairs. Use for attached DPs that
+    /// reference siblings by name — e.g. <c>RelativePanel.SetRightOf</c>.
+    /// Defaults to <c>null</c>; only RelativePanel-shaped descriptors set
+    /// it.</summary>
+    public Action<TControl, IReadOnlyList<(UIElement Mounted, Element ChildElement)>>? PerChildAttachedAfterAll { get; init; }
 }
 
 /// <summary>Named-slot host (SplitView with Pane + Content, NavigationView

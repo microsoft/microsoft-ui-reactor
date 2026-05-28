@@ -91,6 +91,10 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 var collection = panel.GetCollection(control);
                 var children = panel.GetChildren(element);
                 var attached = panel.PerChildAttached;
+                var afterAll = panel.PerChildAttachedAfterAll;
+                var pairs = afterAll is null
+                    ? null
+                    : new List<(UIElement, Element)>(children.Count);
                 // Phase 1: append-only (no keyed reconcile). Phase 3 integrates with spec-042.
                 for (int i = 0; i < children.Count; i++)
                 {
@@ -100,8 +104,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                     {
                         collection.Add(mounted);
                         attached?.Invoke(control, mounted, childEl);
+                        pairs?.Add((mounted, childEl));
                     }
                 }
+                if (afterAll is not null && pairs is not null)
+                    afterAll(control, pairs);
                 return;
             }
 
@@ -198,6 +205,10 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 var newChildren = panel.GetChildren(newEl);
                 var oldChildren = panel.GetChildren(oldEl);
                 var attached = panel.PerChildAttached;
+                var afterAll = panel.PerChildAttachedAfterAll;
+                var pairs = afterAll is null
+                    ? null
+                    : new List<(UIElement, Element)>(newChildren.Count);
                 int oldCount = oldChildren.Count;
                 int newCount = newChildren.Count;
                 int common = global::System.Math.Min(oldCount, newCount);
@@ -214,12 +225,14 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                     {
                         collection.Insert(slot, next);
                         attached?.Invoke(control, next, newChildren[i]);
+                        pairs?.Add((next, newChildren[i]));
                         slot++;
                     }
                     else if (!ReferenceEquals(existing, next))
                     {
                         collection[slot] = next;
                         attached?.Invoke(control, next, newChildren[i]);
+                        pairs?.Add((next, newChildren[i]));
                         slot++;
                     }
                     else
@@ -228,6 +241,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                         // props in case the child element's hints changed
                         // (e.g. Grid.Row swapped between two existing rows).
                         attached?.Invoke(control, next, newChildren[i]);
+                        pairs?.Add((next, newChildren[i]));
                         slot++;
                     }
                 }
@@ -247,8 +261,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                     {
                         collection.Add(mounted);
                         attached?.Invoke(control, mounted, newChildren[i]);
+                        pairs?.Add((mounted, newChildren[i]));
                     }
                 }
+                if (afterAll is not null && pairs is not null)
+                    afterAll(control, pairs);
                 return;
             }
 
