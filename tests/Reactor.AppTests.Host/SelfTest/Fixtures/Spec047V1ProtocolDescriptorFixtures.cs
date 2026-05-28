@@ -6055,6 +6055,65 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    internal class DescNavigationViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<NavigationViewElement, WinUI.NavigationView>(
+                new DescriptorHandler<NavigationViewElement, WinUI.NavigationView>(NavigationViewDescriptor.Descriptor));
+            rec.RegisterHandler<TextBlockElement, WinUI.TextBlock>(
+                new DescriptorHandler<TextBlockElement, WinUI.TextBlock>(TextBlockDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = NavigationView(
+                [new NavigationViewItemData("Home", Tag: "home"), new NavigationViewItemData("Settings", Tag: "settings")],
+                TextBlock("home-content")) with
+            {
+                SelectedTag = "home",
+                PaneTitle = "Main",
+                IsBackEnabled = false,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.NavigationView nv)
+            {
+                parent.Children.Add(nv);
+                await Harness.Render();
+
+                H.Check("Desc_NavigationView_Mounted", true);
+                H.Check("Desc_NavigationView_MenuCount", nv.MenuItems.Count == 2);
+                H.Check("Desc_NavigationView_PaneTitle", nv.PaneTitle == "Main");
+                H.Check("Desc_NavigationView_SelectedHome", nv.SelectedItem is WinUI.NavigationViewItem home && (home.Tag as string) == "home");
+                H.Check("Desc_NavigationView_ContentMounted", nv.Content is WinUI.TextBlock tb && tb.Text == "home-content");
+
+                var el2 = NavigationView(
+                    [new NavigationViewItemData("Home", Tag: "home"), new NavigationViewItemData("Settings", Tag: "settings"), new NavigationViewItemData("About", Tag: "about")],
+                    TextBlock("settings-content")) with
+                {
+                    SelectedTag = "settings",
+                    PaneTitle = "Updated",
+                    IsBackEnabled = true,
+                };
+                rec.UpdateChild(el1, el2, nv, _noOp);
+                await Harness.Render();
+                H.Check("Desc_NavigationView_MenuUpdated", nv.MenuItems.Count == 3);
+                H.Check("Desc_NavigationView_TitleUpdated", nv.PaneTitle == "Updated");
+                H.Check("Desc_NavigationView_BackUpdated", nv.IsBackEnabled == true);
+                H.Check("Desc_NavigationView_SelectedSettings", nv.SelectedItem is WinUI.NavigationViewItem settings && (settings.Tag as string) == "settings");
+                H.Check("Desc_NavigationView_ContentUpdated", nv.Content is WinUI.TextBlock tb2 && tb2.Text == "settings-content");
+
+                rec.UnmountChild(nv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_NavigationView_Mounted", false);
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  §14 Phase 3 finish — Port (11) Pivot via TabItemsHost (PivotItem container).
     // ────────────────────────────────────────────────────────────────────

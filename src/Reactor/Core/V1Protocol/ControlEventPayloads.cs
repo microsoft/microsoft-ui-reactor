@@ -401,6 +401,17 @@ internal sealed class TitleBarEventPayload
     public global::Windows.Foundation.TypedEventHandler<Microsoft.UI.Xaml.Controls.TitleBar, object>? PaneToggleRequestedTrampoline;
 }
 
+/// <summary>Spec 047 §14 Phase 3 deferred controls — NavigationView event payload.</summary>
+internal sealed class NavigationViewEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.NavigationView,
+        Microsoft.UI.Xaml.Controls.NavigationViewSelectionChangedEventArgs>? SelectionChangedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.NavigationView,
+        Microsoft.UI.Xaml.Controls.NavigationViewBackRequestedEventArgs>? BackRequestedTrampoline;
+}
+
 /// <summary>
 /// Spec 047 §9.2 — open-ended anchor for delegates registered via
 /// <see cref="ReactorBinding{TElement}.OnCustomEvent{TArgs}"/>. Holds a
