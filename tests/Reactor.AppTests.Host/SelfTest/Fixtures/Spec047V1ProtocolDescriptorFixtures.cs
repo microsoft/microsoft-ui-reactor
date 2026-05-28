@@ -5927,6 +5927,46 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    internal class DescMediaPlayerElementMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<MediaPlayerElementElement, WinUI.MediaPlayerElement>(
+                new DescriptorHandler<MediaPlayerElementElement, WinUI.MediaPlayerElement>(
+                    MediaPlayerElementDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            // No media source: selftest validates construction + scalar lifecycle only.
+            var el1 = MediaPlayerElement() with { AreTransportControlsEnabled = true, AutoPlay = false };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.MediaPlayerElement mpe)
+            {
+                parent.Children.Add(mpe);
+                await Harness.Render();
+
+                H.Check("Desc_MediaPlayerElement_Mounted", true);
+                H.Check("Desc_MediaPlayerElement_InitialTransport", mpe.AreTransportControlsEnabled == true);
+                H.Check("Desc_MediaPlayerElement_InitialAutoPlay", mpe.AutoPlay == false);
+
+                var el2 = MediaPlayerElement() with { AreTransportControlsEnabled = false, AutoPlay = true };
+                rec.UpdateChild(el1, el2, mpe, _noOp);
+                await Harness.Render();
+                H.Check("Desc_MediaPlayerElement_UpdatedTransport", mpe.AreTransportControlsEnabled == false);
+                H.Check("Desc_MediaPlayerElement_UpdatedAutoPlay", mpe.AutoPlay == true);
+
+                rec.UnmountChild(mpe);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_MediaPlayerElement_Mounted", false);
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  §14 Phase 3 finish — Port (11) Pivot via TabItemsHost (PivotItem container).
     // ────────────────────────────────────────────────────────────────────
