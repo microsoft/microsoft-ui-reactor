@@ -3830,7 +3830,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 H.Check("Desc_RichTextBlock_Mounted", true);
                 H.Check("Desc_RichTextBlock_BlocksBuilt", rtb.Blocks.Count == 1);
                 H.Check("Desc_RichTextBlock_IsSelectable", rtb.IsTextSelectionEnabled);
-                H.Check("Desc_RichTextBlock_FontSize", rtb.FontSize == 16);
+                H.Check("Desc_RichTextBlock_FontSize", Math.Abs(rtb.FontSize - 16d) < 1e-9);
 
                 // Same paras array reference — should NOT trigger rebuild
                 // (the comparer is reference-equality).
@@ -3838,7 +3838,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 rec.UpdateChild(el1, el2, rtb, _noOp);
                 await Harness.Render();
 
-                H.Check("Desc_RichTextBlock_FontSizeUpdated", rtb.FontSize == 18);
+                H.Check("Desc_RichTextBlock_FontSizeUpdated", Math.Abs(rtb.FontSize - 18d) < 1e-9);
                 H.Check("Desc_RichTextBlock_BlocksUnchanged", rtb.Blocks.Count == 1);
 
                 // New paras array — triggers a rebuild via the shared helper.
@@ -3901,11 +3901,11 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 await Harness.Render();
 
                 H.Check("Desc_NumberBox_Mounted", true);
-                H.Check("Desc_NumberBox_InitialValue", nb.Value == 5);
-                H.Check("Desc_NumberBox_Minimum", nb.Minimum == 0);
-                H.Check("Desc_NumberBox_Maximum", nb.Maximum == 100);
-                H.Check("Desc_NumberBox_SmallChange", nb.SmallChange == 1);
-                H.Check("Desc_NumberBox_LargeChange", nb.LargeChange == 10);
+                H.Check("Desc_NumberBox_InitialValue", Math.Abs(nb.Value - 5d) < 1e-9);
+                H.Check("Desc_NumberBox_Minimum", Math.Abs(nb.Minimum - 0d) < 1e-9);
+                H.Check("Desc_NumberBox_Maximum", Math.Abs(nb.Maximum - 100d) < 1e-9);
+                H.Check("Desc_NumberBox_SmallChange", Math.Abs(nb.SmallChange - 1d) < 1e-9);
+                H.Check("Desc_NumberBox_LargeChange", Math.Abs(nb.LargeChange - 10d) < 1e-9);
                 H.Check("Desc_NumberBox_Header", (nb.Header as string) == "Count");
                 H.Check("Desc_NumberBox_SpinPlacement",
                     nb.SpinButtonPlacementMode == WinUI.NumberBoxSpinButtonPlacementMode.Inline);
@@ -3919,7 +3919,7 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 rec.UpdateChild(el1, el2, nb, _noOp);
                 await Harness.Render();
 
-                H.Check("Desc_NumberBox_ValueUpdated", nb.Value == 42);
+                H.Check("Desc_NumberBox_ValueUpdated", Math.Abs(nb.Value - 42d) < 1e-9);
                 H.Check("Desc_NumberBox_NoEchoOnProgrammaticWrite",
                     valueChanges - changesBefore <= 1);
 
@@ -3928,8 +3928,8 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 rec.UpdateChild(el2, el3, nb, _noOp);
                 await Harness.Render();
 
-                H.Check("Desc_NumberBox_MinUpdated", nb.Minimum == 10);
-                H.Check("Desc_NumberBox_MaxUpdated", nb.Maximum == 200);
+                H.Check("Desc_NumberBox_MinUpdated", Math.Abs(nb.Minimum - 10d) < 1e-9);
+                H.Check("Desc_NumberBox_MaxUpdated", Math.Abs(nb.Maximum - 200d) < 1e-9);
                 H.Check("Desc_NumberBox_HeaderUpdated",
                     (nb.Header as string) == "Renamed");
 
