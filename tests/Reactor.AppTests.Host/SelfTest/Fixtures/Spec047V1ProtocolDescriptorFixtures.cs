@@ -5740,6 +5740,27 @@ internal static class Spec047V1ProtocolDescriptorFixtures
         }
     }
 
+    internal class DescMapControlMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<MapControlElement, WinUI.MapControl>(
+                new DescriptorHandler<MapControlElement, WinUI.MapControl>(
+                    MapControlDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            // MapControl can process-terminate the selftest host on machines
+            // without a Maps runtime/token. Keep this fixture descriptor-only;
+            // E2E owns real MapControl construction/lifecycle validation.
+            _ = parent;
+            await Harness.Render();
+            H.Check("Desc_MapControl_DescriptorAvailable", MapControlDescriptor.Descriptor.Properties.Count == 2);
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  §14 Phase 3 finish — Port (11) Pivot via TabItemsHost (PivotItem container).
     // ────────────────────────────────────────────────────────────────────
