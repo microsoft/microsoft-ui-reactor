@@ -4277,20 +4277,21 @@ internal static class Spec047V1ProtocolDescriptorFixtures
                 H.Check("Desc_Path_Data_OtherPropsStillUpdate",
                     Math.Abs(p.StrokeThickness - 3) < 1e-9);
 
-                // PathDataString gate — when PathDataString is non-null the
-                // descriptor must NOT write Data (legacy XamlReader /
-                // parser path owns it). We can't easily verify the negative
-                // here without the legacy arm, but we can assert the gate
-                // by setting a fresh element with PathDataString and a
-                // non-null Data — Data write should be skipped, leaving
-                // the prior p.Data untouched.
+                // PathDataString surface — §14 Phase 3 finish Carve (14)
+                // ports PathDataString into the descriptor via the Engine (4)
+                // `.Imperative` entry. When PathDataString is non-null the
+                // descriptor MUST drive Data from the string (XamlReader
+                // strategy preferred, then PathDataParser fallback). Verify
+                // the prior p.Data reference was replaced and the new Data
+                // is a Geometry (XamlReader produces a PathGeometry for the
+                // simple "M0,0 L1,1" input).
                 var geometry3 = new Microsoft.UI.Xaml.Media.PathGeometry();
                 var el4 = el3 with { Data = geometry3, PathDataString = "M0,0 L1,1" };
                 rec.UpdateChild(el3, el4, p, _noOp);
                 await Harness.Render();
 
-                H.Check("Desc_Path_Data_PathDataStringGate",
-                    ReferenceEquals(p.Data, geometry2));
+                H.Check("Desc_Path_Data_PathDataStringPorted",
+                    p.Data is not null && !ReferenceEquals(p.Data, geometry2));
 
                 rec.UnmountChild(p);
                 parent.Children.Clear();
