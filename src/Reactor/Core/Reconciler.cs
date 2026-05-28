@@ -4096,6 +4096,18 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    /// <summary>
+    /// Spec 047 §14 Phase 3-final — descriptor-facing sibling of
+    /// <see cref="CreateFlyoutFromElement"/>. Same shape as
+    /// <see cref="ResolveIconForDescriptor"/>: a thin forwarder that tolerates
+    /// <see langword="null"/> input so a <c>.OneWayBridged</c> entry on a
+    /// button-family descriptor can wire
+    /// <c>(c, v, rec, rr) =&gt; c.Flyout = rec.CreateFlyoutForDescriptor(v, rr)</c>
+    /// without an upstream null guard.
+    /// </summary>
+    internal WinPrim.FlyoutBase? CreateFlyoutForDescriptor(Element? flyoutEl, Action requestRerender)
+        => flyoutEl is null ? null : CreateFlyoutFromElement(flyoutEl, requestRerender);
+
     // ── Enum conversions removed — Reactor now uses WinUI types directly ──
 
     internal static Symbol ParseSymbol(string name)

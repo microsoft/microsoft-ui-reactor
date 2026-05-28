@@ -222,4 +222,68 @@ public sealed class ControlDescriptor<TElement, TControl>
         _properties.Add(new CoercingOneWayPropEntry<TElement, TControl, TValue>(get, set, coercesController, comparer));
         return this;
     }
+
+    /// <summary>§14 Phase 3-final — engine-bridged one-way property. Same
+    /// diff-and-write contract as <see cref="OneWayConditional{TValue}"/>,
+    /// but the set lambda receives the <see cref="Reconciler"/> and the
+    /// rerender callback so it can call engine-internal helpers like
+    /// <c>Reconciler.CreateFlyoutForDescriptor</c>. Used by the
+    /// button-family Flyout port.</summary>
+    public ControlDescriptor<TElement, TControl> OneWayBridged<TValue>(
+        Func<TElement, TValue> get,
+        OneWayBridgedSetter<TControl, TValue> set,
+        Func<TElement, bool> shouldWrite,
+        IEqualityComparer<TValue>? comparer = null)
+    {
+        _properties.Add(new OneWayBridgedPropEntry<TElement, TControl, TValue>(get, set, shouldWrite, comparer));
+        return this;
+    }
+
+    /// <summary>§14 Phase 3-final — <c>.Immediate</c> entry. Pure subscription
+    /// wiring for the "observed-DP callback + Loaded → inner template-part
+    /// trampoline" pattern. The control's primary DP round-trip stays on a
+    /// sibling <c>.HandCodedControlled</c> entry. See
+    /// <see cref="ImmediatePropEntry{TElement,TControl,TPayload}"/> for the
+    /// shape contract (NumberBox is the canonical proof point).</summary>
+    public ControlDescriptor<TElement, TControl> Immediate<TPayload>(
+        Func<TElement, Delegate?> callbackGate,
+        Microsoft.UI.Xaml.DependencyProperty observeProperty,
+        Microsoft.UI.Xaml.DependencyPropertyChangedCallback observeCallback,
+        Func<TPayload, bool> observeSlotIsNull,
+        Action<TPayload, Microsoft.UI.Xaml.DependencyPropertyChangedCallback> setObserveSlot,
+        Microsoft.UI.Xaml.RoutedEventHandler loadedHook)
+        where TPayload : class, new()
+    {
+        _properties.Add(new ImmediatePropEntry<TElement, TControl, TPayload>(
+            callbackGate, observeProperty, observeCallback,
+            observeSlotIsNull, setObserveSlot, loadedHook));
+        return this;
+    }
+
+    /// <summary>§14 Phase 3-final — <c>.CollectionDiffControlled</c>. Two-way
+    /// bound prop whose value is an <see cref="IReadOnlyList{TItem}"/> on the
+    /// element side and an <c>IList&lt;TItem&gt;</c> on the control side.
+    /// Each Update applies a keyed hash-set diff and emits per-element
+    /// <c>Add</c>/<c>Remove</c> ops inside
+    /// <c>ChangeEchoSuppressor.BeginSuppress</c>. Used by CalendarView for
+    /// <c>SelectedDates</c>; reusable for any control with a typed
+    /// <c>IObservableVector&lt;T&gt;</c> two-way slot.</summary>
+    public ControlDescriptor<TElement, TControl> CollectionDiffControlled<TPayload, TItem, TKey, TDelegate>(
+        Func<TElement, IReadOnlyList<TItem>> get,
+        Func<TControl, IList<TItem>> getVector,
+        Func<TItem, TKey> key,
+        Action<TControl, TDelegate> subscribe,
+        Func<TElement, Delegate?> callbackPresent,
+        TDelegate trampoline,
+        Func<TPayload, bool> slotIsNull,
+        Action<TPayload, TDelegate> setSlot,
+        IEqualityComparer<TKey>? keyComparer = null)
+        where TPayload : class, new()
+        where TKey : notnull
+        where TDelegate : Delegate
+    {
+        _properties.Add(new CollectionDiffControlledPropEntry<TElement, TControl, TPayload, TItem, TKey, TDelegate>(
+            get, getVector, key, subscribe, callbackPresent, trampoline, slotIsNull, setSlot, keyComparer));
+        return this;
+    }
 }

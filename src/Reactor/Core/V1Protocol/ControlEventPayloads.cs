@@ -67,6 +67,23 @@ internal sealed class NumberBoxEventPayload
 {
     public global::Windows.Foundation.TypedEventHandler<Microsoft.UI.Xaml.Controls.NumberBox, Microsoft.UI.Xaml.Controls.NumberBoxValueChangedEventArgs>? ValueChangedTrampoline;
     public Action<Element, Microsoft.UI.Xaml.Controls.NumberBoxValueChangedEventArgs>? CurrentValueChanged;
+
+    /// <summary>Spec 047 §14 Phase 3-final — <c>.Immediate</c> entry's
+    /// per-keystroke trampoline against the NumberBox's <c>TextProperty</c>
+    /// change callback. Lives once per control lifetime alongside the
+    /// commit-mode <see cref="ValueChangedTrampoline"/>.</summary>
+    public Microsoft.UI.Xaml.DependencyPropertyChangedCallback? ImmediateTextChangedCallback;
+
+    /// <summary>Spec 047 §14 Phase 3-final — inner <c>TextBox</c> template-part
+    /// trampoline for per-keystroke observation BEFORE NumberBox's
+    /// <c>TextProperty</c> sync (matches the legacy
+    /// <c>EnsureNumberBoxImmediateTextBoxWiring</c> flow).</summary>
+    public Microsoft.UI.Xaml.Controls.TextChangedEventHandler? ImmediateInnerTextChangedTrampoline;
+
+    /// <summary>Idempotency flag — once the inner template-part has been
+    /// found and wired this flips to <c>true</c> so the <c>Loaded</c> hook
+    /// stops re-walking the visual tree on subsequent renders.</summary>
+    public bool ImmediateInnerWired;
 }
 
 /// <summary>Spec 047 §9.2 typed payload — Slider was missed in the original

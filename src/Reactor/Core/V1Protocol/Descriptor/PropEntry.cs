@@ -41,6 +41,21 @@ public abstract class PropEntry<TElement, TControl>
     /// entries write through <c>ReactorBinding.WriteSuppressed</c>.</summary>
     public abstract void Update(TControl ctrl, TElement oldEl, TElement newEl);
 
+    /// <summary>Spec 047 §14 Phase 3-final — context-carrying Mount overload.
+    /// Default implementation forwards to the parameterless
+    /// <see cref="Mount(TControl,TElement)"/>; entry types that need
+    /// reconciler/rerender access (e.g.
+    /// <see cref="OneWayBridgedPropEntry{TElement,TControl,TValue}"/> for
+    /// Flyout descriptor bridging) override this overload instead.</summary>
+    public virtual void Mount(in MountContext ctx, TControl ctrl, TElement el)
+        => Mount(ctrl, el);
+
+    /// <summary>Spec 047 §14 Phase 3-final — context-carrying Update overload.
+    /// Same forwarding contract as
+    /// <see cref="Mount(in MountContext, TControl, TElement)"/>.</summary>
+    public virtual void Update(in UpdateContext ctx, TControl ctrl, TElement oldEl, TElement newEl)
+        => Update(ctrl, oldEl, newEl);
+
     /// <summary>Event subscription hook. Default = no-op (one-way / initial
     /// entries do not subscribe to events). Controlled entries override.
     ///
@@ -483,5 +498,272 @@ internal sealed class CoercingOneWayPropEntry<TElement, TControl, TValue> : Prop
             ReactorBinding.WriteSuppressed(ctrl, () => _set(ctrl, nv));
         else
             _set(ctrl, nv);
+    }
+}
+
+/// <summary>Spec 047 §14 Phase 3-final — <c>.OneWayBridged</c> entry. Same
+/// diff-and-write contract as
+/// <see cref="OneWayConditionalPropEntry{TElement,TControl,TValue}"/>, but
+/// the set lambda receives the <see cref="MountContext"/> / <see cref="UpdateContext"/>
+/// so it can reach engine-internal helpers — primarily
+/// <c>Reconciler.CreateFlyoutForDescriptor</c> for the button-family
+/// Flyout port, but reusable for any future bridged transform that needs
+/// reconciler / rerender access.
+///
+/// <para><b>Why a separate entry shape:</b> the parameterless set lambda on
+/// <c>.OneWay</c> / <c>.OneWayConditional</c> cannot call
+/// <c>ctx.Reconciler.CreateFlyoutForDescriptor(v, ctx.RequestRerender)</c>
+/// because it has no context. Threading a thread-static <c>Reconciler.Current</c>
+/// would work but makes the bridge contract undiscoverable from the
+/// descriptor surface. This entry surfaces it explicitly.</para></summary>
+internal sealed class OneWayBridgedPropEntry<TElement, TControl, TValue> : PropEntry<TElement, TControl>
+    where TElement : Element
+    where TControl : UIElement
+{
+    private readonly Func<TElement, TValue> _get;
+    private readonly OneWayBridgedSetter<TControl, TValue> _set;
+    private readonly Func<TElement, bool> _shouldWrite;
+    private readonly IEqualityComparer<TValue> _comparer;
+
+    public OneWayBridgedPropEntry(
+        Func<TElement, TValue> get,
+        OneWayBridgedSetter<TControl, TValue> set,
+        Func<TElement, bool> shouldWrite,
+        IEqualityComparer<TValue>? comparer = null)
+    {
+        _get = get;
+        _set = set;
+        _shouldWrite = shouldWrite;
+        _comparer = comparer ?? EqualityComparer<TValue>.Default;
+    }
+
+    // Parameterless overloads — unreachable; the bridged entry only goes
+    // through the context-carrying overloads. Throw on misuse rather than
+    // silently no-op so a missed dispatch path surfaces immediately.
+    public override void Mount(TControl ctrl, TElement el)
+        => throw new InvalidOperationException(
+            "OneWayBridged entry requires MountContext — descriptor dispatch must use the context-carrying overload.");
+    public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
+        => throw new InvalidOperationException(
+            "OneWayBridged entry requires UpdateContext — descriptor dispatch must use the context-carrying overload.");
+
+    public override void Mount(in MountContext ctx, TControl ctrl, TElement el)
+    {
+        if (!_shouldWrite(el)) return;
+        _set(ctrl, _get(el), ctx.Reconciler, ctx.RequestRerender);
+    }
+
+    public override void Update(in UpdateContext ctx, TControl ctrl, TElement oldEl, TElement newEl)
+    {
+        if (!_shouldWrite(newEl)) return;
+        var nv = _get(newEl);
+        if (!_shouldWrite(oldEl) || !_comparer.Equals(_get(oldEl), nv))
+            _set(ctrl, nv, ctx.Reconciler, ctx.RequestRerender);
+    }
+}
+
+/// <summary>Spec 047 §14 Phase 3-final — set-lambda signature for
+/// <see cref="OneWayBridgedPropEntry{TElement,TControl,TValue}"/>. Named
+/// delegate type (not <c>Action&lt;...&gt;</c>) so the
+/// <see cref="MountContext"/> / <see cref="UpdateContext"/> doesn't need
+/// to be passed — the entry projects the two pieces a bridge typically
+/// needs (the <see cref="Reconciler"/> and the rerender callback).</summary>
+[Experimental("REACTOR_V1_PREVIEW")]
+public delegate void OneWayBridgedSetter<in TControl, in TValue>(
+    TControl ctrl, TValue value, Reconciler reconciler, Action requestRerender)
+    where TControl : UIElement;
+
+/// <summary>Spec 047 §14 Phase 3-final — <c>.Immediate</c> entry. Pure
+/// subscription wiring for the "observed-DP callback + Loaded → inner
+/// template-part trampoline" pattern. The control's primary commit-mode
+/// DP round-trip stays on a sibling <c>.HandCodedControlled</c> entry —
+/// this entry only manages the two extra subscription slots needed for
+/// per-keystroke observation.
+///
+/// <para><b>Why a separate entry shape:</b> the legacy <c>MountNumberBox</c>
+/// arm does this manually with <c>RegisterPropertyChangedCallback</c> +
+/// <c>Loaded → ApplyTemplate → FindDescendant&lt;TextBox&gt;</c>. The
+/// descriptor port reuses this entry by supplying captured-free static
+/// trampolines for the property-changed callback and the
+/// Loaded-hook-driven inner subscription, matching the
+/// <see cref="HandCodedEventPropEntry{TElement,TControl,TPayload,TDelegate}"/>
+/// model.</para>
+///
+/// <para><b>What the author supplies (see ctor params):</b>
+/// <list type="bullet">
+///   <item><c>observeProperty</c> + <c>observeCallback</c> — the DP and
+///   the captured-free property-changed callback (reads the live element
+///   via <c>Reconciler.GetElementTag</c>).</item>
+///   <item><c>loadedHook</c> — captured-free
+///   <see cref="RoutedEventHandler"/> registered against the control's
+///   <c>Loaded</c> event. Author's hook walks the visual tree, finds the
+///   inner template part, subscribes its event, and flips an idempotency
+///   flag on the payload so subsequent Loaded fires skip the walk.</item>
+///   <item><c>callbackGate</c> — entry skips registration when the
+///   element's callback is null (mirrors the <c>EnsureXxxWiring</c>
+///   gate).</item>
+/// </list></para>
+///
+/// <para><b>Mount/Update writes:</b> none. The sibling
+/// <c>.HandCodedControlled</c> (or <c>.OneWay</c>) entry on the same
+/// descriptor handles the DP write.</para></summary>
+internal sealed class ImmediatePropEntry<TElement, TControl, TPayload> : PropEntry<TElement, TControl>
+    where TElement : Element
+    where TControl : FrameworkElement
+    where TPayload : class, new()
+{
+    private readonly Func<TElement, Delegate?> _callbackGate;
+    private readonly Microsoft.UI.Xaml.DependencyProperty _observeProperty;
+    private readonly Microsoft.UI.Xaml.DependencyPropertyChangedCallback _observeCallback;
+    private readonly Func<TPayload, bool> _observeSlotIsNull;
+    private readonly Action<TPayload, Microsoft.UI.Xaml.DependencyPropertyChangedCallback> _setObserveSlot;
+    private readonly Microsoft.UI.Xaml.RoutedEventHandler _loadedHook;
+
+    public ImmediatePropEntry(
+        Func<TElement, Delegate?> callbackGate,
+        Microsoft.UI.Xaml.DependencyProperty observeProperty,
+        Microsoft.UI.Xaml.DependencyPropertyChangedCallback observeCallback,
+        Func<TPayload, bool> observeSlotIsNull,
+        Action<TPayload, Microsoft.UI.Xaml.DependencyPropertyChangedCallback> setObserveSlot,
+        Microsoft.UI.Xaml.RoutedEventHandler loadedHook)
+    {
+        _callbackGate = callbackGate;
+        _observeProperty = observeProperty;
+        _observeCallback = observeCallback;
+        _observeSlotIsNull = observeSlotIsNull;
+        _setObserveSlot = setObserveSlot;
+        _loadedHook = loadedHook;
+    }
+
+    public override void Mount(TControl ctrl, TElement el) { /* no DP write */ }
+    public override void Update(TControl ctrl, TElement oldEl, TElement newEl) { /* no DP write */ }
+
+    public override void EnsureSubscribed(
+        ReactorBinding<TElement> binding,
+        TControl ctrl,
+        TElement el)
+    {
+        if (_callbackGate(el) is null) return;
+        var payload = Reconciler.GetOrCreateControlEventPayload<TPayload>(ctrl);
+        if (!_observeSlotIsNull(payload)) return;
+        _setObserveSlot(payload, _observeCallback);
+        ctrl.RegisterPropertyChangedCallback(_observeProperty, _observeCallback);
+        // Loaded fires on each attach; the author's hook is responsible for
+        // its own idempotency (typically by flipping a flag on the payload
+        // and self-unsubscribing). The entry doesn't track that.
+        ctrl.Loaded += _loadedHook;
+    }
+}
+
+/// <summary>Spec 047 §14 Phase 3-final — <c>.CollectionDiffControlled</c>
+/// entry. Two-way bound prop whose value is an
+/// <see cref="IReadOnlyList{TItem}"/> on the element side and an
+/// <c>IList&lt;TItem&gt;</c> (typically a WinUI
+/// <c>IObservableVector&lt;T&gt;</c>) on the control side. Each Update
+/// applies a keyed hash-set diff and emits per-element
+/// <c>Add</c> / <c>Remove</c> ops inside
+/// <see cref="ChangeEchoSuppressor.BeginSuppress"/> so the per-mutation
+/// echo doesn't fire back through the user's callback.
+///
+/// <para><b>Why a separate entry shape:</b>
+/// <c>CalendarView.SelectedDates</c> is the canonical case — an
+/// <c>IObservableVector&lt;DateTime&gt;</c> that fires
+/// <c>SelectedDatesChanged</c> per mutation. The legacy arm clears + re-adds
+/// inside one <c>BeginSuppress</c>; this entry preserves item identity
+/// across reorder so animations and selection state survive incremental
+/// updates. Reusable for any future control with a typed
+/// <c>IObservableVector&lt;T&gt;</c> two-way slot.</para></summary>
+internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPayload, TItem, TKey, TDelegate> : PropEntry<TElement, TControl>
+    where TElement : Element
+    where TControl : FrameworkElement
+    where TPayload : class, new()
+    where TKey : notnull
+    where TDelegate : Delegate
+{
+    private readonly Func<TElement, IReadOnlyList<TItem>> _get;
+    private readonly Func<TControl, IList<TItem>> _getVector;
+    private readonly Func<TItem, TKey> _key;
+    private readonly Action<TControl, TDelegate> _subscribe;
+    private readonly Func<TElement, Delegate?> _callbackPresent;
+    private readonly TDelegate _trampoline;
+    private readonly Func<TPayload, bool> _slotIsNull;
+    private readonly Action<TPayload, TDelegate> _setSlot;
+    private readonly IEqualityComparer<TKey> _keyComparer;
+
+    public CollectionDiffControlledPropEntry(
+        Func<TElement, IReadOnlyList<TItem>> get,
+        Func<TControl, IList<TItem>> getVector,
+        Func<TItem, TKey> key,
+        Action<TControl, TDelegate> subscribe,
+        Func<TElement, Delegate?> callbackPresent,
+        TDelegate trampoline,
+        Func<TPayload, bool> slotIsNull,
+        Action<TPayload, TDelegate> setSlot,
+        IEqualityComparer<TKey>? keyComparer = null)
+    {
+        _get = get;
+        _getVector = getVector;
+        _key = key;
+        _subscribe = subscribe;
+        _callbackPresent = callbackPresent;
+        _trampoline = trampoline;
+        _slotIsNull = slotIsNull;
+        _setSlot = setSlot;
+        _keyComparer = keyComparer ?? EqualityComparer<TKey>.Default;
+    }
+
+    public override void Mount(TControl ctrl, TElement el)
+    {
+        var items = _get(el);
+        var vec = _getVector(ctrl);
+        // Initial fill — sibling subscriptions are not yet live, so the
+        // per-mutation echo cannot fire. Skip the suppress block.
+        if (vec.Count > 0) vec.Clear();
+        for (int i = 0; i < items.Count; i++) vec.Add(items[i]);
+    }
+
+    public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
+    {
+        var oldItems = _get(oldEl);
+        var newItems = _get(newEl);
+
+        // Fast path: same items, no work.
+        if (ReferenceEquals(oldItems, newItems)) return;
+
+        // Build new key set; track which old indices are still present.
+        var newKeys = new HashSet<TKey>(newItems.Count, _keyComparer);
+        for (int i = 0; i < newItems.Count; i++) newKeys.Add(_key(newItems[i]));
+
+        var vec = _getVector(ctrl);
+        ChangeEchoSuppressor.BeginSuppress(ctrl);
+
+        // Remove items not in newKeys, in descending index order so earlier
+        // indices stay stable.
+        for (int i = vec.Count - 1; i >= 0; i--)
+        {
+            if (!newKeys.Contains(_key(vec[i])))
+                vec.RemoveAt(i);
+        }
+
+        // Add items that aren't already present.
+        var presentKeys = new HashSet<TKey>(vec.Count, _keyComparer);
+        for (int i = 0; i < vec.Count; i++) presentKeys.Add(_key(vec[i]));
+        for (int i = 0; i < newItems.Count; i++)
+        {
+            var k = _key(newItems[i]);
+            if (presentKeys.Add(k)) vec.Add(newItems[i]);
+        }
+    }
+
+    public override void EnsureSubscribed(
+        ReactorBinding<TElement> binding,
+        TControl ctrl,
+        TElement el)
+    {
+        if (_callbackPresent(el) is null) return;
+        var payload = Reconciler.GetOrCreateControlEventPayload<TPayload>(ctrl);
+        if (!_slotIsNull(payload)) return;
+        _setSlot(payload, _trampoline);
+        _subscribe(ctrl, _trampoline);
     }
 }

@@ -22,12 +22,19 @@ public class ListViewPortTests
     }
 
     [Fact]
-    public void ListView_Handler_Declares_ItemsHost_Strategy()
+    public void ListView_Handler_Has_No_Children_Strategy()
     {
+        // §14 Phase 3-final: the legacy MountListView/UpdateListView delegate
+        // body owns all children dispatch (including spec-042 keyed
+        // reconcile via the internal realization hook). Declaring an
+        // ItemsHost strategy on top would double-handle. The new
+        // ItemsHost shape is reserved for descriptor authors of flat
+        // items-collection controls (ListBox / ComboBox.Items /
+        // RadioButtons.Items) and the typed ListView<T> descriptor port
+        // shipping with Batch G2.
         var handler = new ListViewHandler();
         var strategy = ((IElementHandler<ListViewElement, Microsoft.UI.Xaml.Controls.ListView>)handler).Children;
-        Assert.NotNull(strategy);
-        Assert.IsType<ItemsHost<ListViewElement, Microsoft.UI.Xaml.Controls.ListView>>(strategy);
+        Assert.Null(strategy);
     }
 
     [Fact(Skip = "Requires WinUI dispatcher + virtualized scrolling; covered in AppTests.Host SelfTest/Fixtures/Spec047V1ProtocolFixtures.cs (1.15)")]

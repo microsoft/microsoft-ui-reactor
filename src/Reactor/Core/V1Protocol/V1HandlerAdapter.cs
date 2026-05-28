@@ -90,12 +90,17 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
             {
                 var collection = panel.GetCollection(control);
                 var children = panel.GetChildren(element);
+                var attached = panel.PerChildAttached;
                 // Phase 1: append-only (no keyed reconcile). Phase 3 integrates with spec-042.
                 for (int i = 0; i < children.Count; i++)
                 {
-                    var mounted = ctx.MountChild(children[i]);
+                    var childEl = children[i];
+                    var mounted = ctx.MountChild(childEl);
                     if (mounted is not null)
+                    {
                         collection.Add(mounted);
+                        attached?.Invoke(control, mounted, childEl);
+                    }
                 }
                 return;
             }
@@ -116,12 +121,29 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 imp.Reconcile(ctx, element, element, control);
                 return;
 
-            case ItemsHost<TElement, TControl>:
-                // Spec 047 §6: ItemsHost in v1 is a thin shape wrapper. The
-                // actual reconciliation goes through ChildReconciler (spec
-                // 042); see the ListView port in 1.15. Strategy is for
-                // shape-binding only — no-op on mount.
+            case ItemsHost<TElement, TControl> ih:
+            {
+                // §14 Phase 3-final: ItemsHost dispatches a flat items
+                // collection rebuild for descriptor authors of items-host
+                // controls (ListBox / ComboBox.Items / RadioButtons items).
+                // Typed templated lists (ListView<T>, GridView<T>, etc.) keep
+                // their own delegate-body handlers in Batch G2 with spec-042
+                // keyed reconciliation; ItemsHost is for the flat case only.
+                var newItems = ih.GetItems(element);
+                var collection = ih.GetCollection(control);
+                if (collection.Count > 0) collection.Clear();
+                for (int i = 0; i < newItems.Count; i++)
+                {
+                    var item = newItems[i];
+                    if (item is Element childEl)
+                    {
+                        var mounted = ctx.MountChild(childEl);
+                        if (mounted is not null) collection.Add(mounted);
+                    }
+                    else collection.Add(item);
+                }
                 return;
+            }
         }
     }
 
@@ -170,6 +192,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 var collection = panel.GetCollection(control);
                 var newChildren = panel.GetChildren(newEl);
                 var oldChildren = panel.GetChildren(oldEl);
+                var attached = panel.PerChildAttached;
                 int oldCount = oldChildren.Count;
                 int newCount = newChildren.Count;
                 int common = global::System.Math.Min(oldCount, newCount);
@@ -185,14 +208,23 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                     else if (existing is null)
                     {
                         collection.Insert(slot, next);
+                        attached?.Invoke(control, next, newChildren[i]);
                         slot++;
                     }
                     else if (!ReferenceEquals(existing, next))
                     {
                         collection[slot] = next;
+                        attached?.Invoke(control, next, newChildren[i]);
                         slot++;
                     }
-                    else slot++;
+                    else
+                    {
+                        // Same UIElement instance survived — re-apply attached
+                        // props in case the child element's hints changed
+                        // (e.g. Grid.Row swapped between two existing rows).
+                        attached?.Invoke(control, next, newChildren[i]);
+                        slot++;
+                    }
                 }
                 // Trailing removals — reconcile against null newChild to
                 // route through the same Unmount path used by SingleContent.
@@ -206,7 +238,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 for (int i = common; i < newCount; i++)
                 {
                     var mounted = reconciler.Mount(newChildren[i], requestRerender);
-                    if (mounted is not null) collection.Add(mounted);
+                    if (mounted is not null)
+                    {
+                        collection.Add(mounted);
+                        attached?.Invoke(control, mounted, newChildren[i]);
+                    }
                 }
                 return;
             }
@@ -238,9 +274,45 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 imp.Reconcile(new MountContext(reconciler, requestRerender), oldEl, newEl, control);
                 return;
 
-            case ItemsHost<TElement, TControl>:
-                // No-op in Phase 1 (see DispatchChildrenMount).
+            case ItemsHost<TElement, TControl> ih:
+            {
+                // §14 Phase 3-final: positional rebuild gated by ItemEquals.
+                var oldItems = ih.GetItems(oldEl);
+                var newItems = ih.GetItems(newEl);
+                var equals = ih.ItemEquals ?? object.Equals;
+                if (ReferenceEquals(oldItems, newItems)) return;
+                if (oldItems.Count == newItems.Count)
+                {
+                    bool same = true;
+                    for (int i = 0; i < newItems.Count; i++)
+                    {
+                        if (!equals(oldItems[i], newItems[i])) { same = false; break; }
+                    }
+                    if (same) return;
+                }
+                // Structural change — rebuild. Element items are unmounted via
+                // the existing UnmountChild path (ReconcileV1Child(old, null, ...))
+                // walks them; strings are dropped directly.
+                var collection = ih.GetCollection(control);
+                var ctx = new MountContext(reconciler, requestRerender);
+                for (int i = 0; i < oldItems.Count; i++)
+                {
+                    if (oldItems[i] is Element oldChild)
+                        reconciler.ReconcileV1Child(oldChild, null, null, requestRerender);
+                }
+                if (collection.Count > 0) collection.Clear();
+                for (int i = 0; i < newItems.Count; i++)
+                {
+                    var item = newItems[i];
+                    if (item is Element childEl)
+                    {
+                        var mounted = ctx.MountChild(childEl);
+                        if (mounted is not null) collection.Add(mounted);
+                    }
+                    else collection.Add(item);
+                }
                 return;
+            }
         }
     }
 }

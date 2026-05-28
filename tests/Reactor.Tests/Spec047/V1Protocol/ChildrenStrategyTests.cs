@@ -83,14 +83,17 @@ public class ChildrenStrategyTests
     }
 
     [Fact]
-    public void ItemsHost_Strategy_Carries_Source_And_Container_Funcs()
+    public void ItemsHost_Strategy_Carries_GetItems_And_GetCollection()
     {
-        var items = new[] { 1, 2, 3 };
+        // §14 Phase 3-final shape: ItemsHost now projects a flat
+        // IReadOnlyList<object> + the control-side IList<object> sink.
+        var items = new object[] { "a", "b", "c" };
+        var sink = new global::System.Collections.Generic.List<object>();
         var strategy = new ItemsHost<TestEl, UIElement>(
-            GetItemsSource: el => items,
-            GetContainer: ctrl => ctrl,
-            Options: new ItemsHostOptions());
-        Assert.Same(items, strategy.GetItemsSource(new TestEl("p")));
+            GetItems: el => items,
+            GetCollection: ctrl => sink);
+        Assert.Same(items, strategy.GetItems(new TestEl("p")));
+        Assert.Same(sink, strategy.GetCollection(null!));
     }
 
     [Fact]

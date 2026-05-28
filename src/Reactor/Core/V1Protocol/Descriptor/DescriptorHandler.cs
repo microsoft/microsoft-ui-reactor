@@ -54,10 +54,13 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
         var ctrl = ctx.RentControl(_descriptor.PoolPolicy, _descriptor.Factory);
 
         // Phase 1: all bare initial writes (no echo possible — subscriptions
-        // not yet live).
+        // not yet live). §14 Phase 3-final: dispatch through the
+        // context-carrying overload so OneWayBridged entries can reach the
+        // reconciler/rerender helpers; existing entries forward to the
+        // parameterless overload via the virtual default on PropEntry.
         var props = _descriptor.Properties;
         for (int i = 0; i < props.Count; i++)
-            props[i].Mount(ctrl, el);
+            props[i].Mount(in ctx, ctrl, el);
 
         // Phase 2: subscribe controlled entries.
         var binding = ctx.BindFor(ctrl, el);
@@ -74,7 +77,7 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
     {
         var props = _descriptor.Properties;
         for (int i = 0; i < props.Count; i++)
-            props[i].Update(ctrl, oldEl, newEl);
+            props[i].Update(in ctx, ctrl, oldEl, newEl);
 
         // Late-wire on null→non-null callback transition — if the element
         // gained a callback since Mount, subscribe now. The per-entry CWT

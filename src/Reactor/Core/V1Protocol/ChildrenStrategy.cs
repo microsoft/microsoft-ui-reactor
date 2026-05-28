@@ -53,13 +53,32 @@ public sealed record SingleContent<TElement, TControl>(
 /// diff against the previous render goes through the host's child
 /// collection wholesale. Spec-042 keyed-reconcile integration is a
 /// Phase 3 follow-up.</para>
+///
+/// <para><b>§14 Phase 3-final addition:</b>
+/// <see cref="PerChildAttached"/> — optional callback invoked after each
+/// child mount AND after each child Update. Receives the mounted
+/// <see cref="UIElement"/> alongside the child element so the descriptor
+/// can write WinUI attached DPs (e.g. <c>Grid.SetRow</c>,
+/// <c>Canvas.SetLeft</c>) based on attached-prop hints carried on the
+/// child element. No-op by default.</para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 public sealed record Panel<TElement, TControl>(
     Func<TElement, IReadOnlyList<Element>> GetChildren,
     Func<TControl, UIElementCollection> GetCollection) : ChildrenStrategy<TElement, TControl>
     where TElement : Element
-    where TControl : UIElement;
+    where TControl : UIElement
+{
+    /// <summary>Optional per-child attached-prop writer. Called by the
+    /// engine after each child is mounted (Mount path) AND after each child
+    /// is reconciled (Update path). The descriptor reads attached-prop
+    /// hints off the child element (via <c>Element.GetAttached&lt;T&gt;()</c>
+    /// or similar) and writes the corresponding WinUI attached DPs onto
+    /// the mounted <see cref="UIElement"/>. Defaults to <c>null</c> for
+    /// containers that don't carry per-child attached props
+    /// (e.g. <c>StackPanel</c>).</summary>
+    public Action<TControl, UIElement, Element>? PerChildAttached { get; init; }
+}
 
 /// <summary>Named-slot host (SplitView with Pane + Content, NavigationView
 /// with Header + Content + PaneFooter, etc.). Each
@@ -86,22 +105,51 @@ public sealed record NamedSlot<TElement, TControl>(
     public Func<TControl, UIElement?>? GetCurrentChild { get; init; }
 }
 
-/// <summary>Templated items host (ListView, GridView, ItemsRepeater).
-/// Phase 1 ships shape only; the actual reconciliation flows through the
-/// existing <c>ChildReconciler</c> path (spec 042). The strategy is
-/// retained as a shape contract — the LISTVIEW port in 1.15 will refine
-/// what its lambdas hand back to the engine.</summary>
+/// <summary>Items host for controls whose items collection is a flat
+/// <c>IList&lt;object&gt;</c> sink the descriptor populates directly —
+/// <c>ListBox</c>, <c>ComboBox.Items</c>, <c>RadioButtons.Items</c>, and
+/// any future control with a non-virtualizing items collection.
+///
+/// <para><b>§14 Phase 3-final shape:</b>
+/// <list type="bullet">
+///   <item><see cref="GetItems"/> projects the element's items (typically
+///   <c>string[]</c> or <c>Element[]</c>) as an <c>IReadOnlyList&lt;object&gt;</c>.</item>
+///   <item><see cref="GetCollection"/> resolves the control's WinUI
+///   <c>ItemCollection</c> / <c>IList&lt;object&gt;</c> sink (e.g.
+///   <c>cb =&gt; cb.Items</c>).</item>
+///   <item><see cref="ItemEquals"/> optional per-item equality check used
+///   to short-circuit Mount/Update when the items collection hasn't
+///   structurally changed. Defaults to
+///   <see cref="object.Equals(object,object)"/>.</item>
+/// </list></para>
+///
+/// <para><b>Mount semantics:</b> Clear the collection and Add each item
+/// once. Element items are mounted through the reconciler first; string
+/// items are passed through.</para>
+///
+/// <para><b>Update semantics:</b> If <see cref="ItemEquals"/> reports the
+/// collections are positionally equal, no-op. Otherwise rebuild positionally
+/// (clear + add). Spec-042 keyed-reconcile integration for typed templated
+/// lists lands separately with the
+/// <c>ListView&lt;T&gt;</c>/<c>GridView&lt;T&gt;</c> ports in Batch G2.</para></summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 public sealed record ItemsHost<TElement, TControl>(
-    Func<TElement, global::System.Collections.IEnumerable> GetItemsSource,
-    Func<TControl, object> GetContainer,
-    ItemsHostOptions Options) : ChildrenStrategy<TElement, TControl>
+    Func<TElement, IReadOnlyList<object>> GetItems,
+    Func<TControl, global::System.Collections.IList> GetCollection) : ChildrenStrategy<TElement, TControl>
     where TElement : Element
-    where TControl : UIElement;
+    where TControl : UIElement
+{
+    /// <summary>Optional per-item equality predicate. When provided, an
+    /// Update that compares equal element-by-element skips the rebuild.
+    /// Default = reference + value equality via
+    /// <see cref="object.Equals(object,object)"/>.</summary>
+    public Func<object?, object?, bool>? ItemEquals { get; init; }
+}
 
 /// <summary>Placeholder for future ItemsHost options (virtualization mode,
 /// container template etc.). Phase 1 carries no fields — Phase 3 may add
-/// when more handler authors arrive.</summary>
+/// when more handler authors arrive. Retained for source compat with the
+/// Phase 1 ItemsHost shape.</summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 public sealed record ItemsHostOptions;
 
