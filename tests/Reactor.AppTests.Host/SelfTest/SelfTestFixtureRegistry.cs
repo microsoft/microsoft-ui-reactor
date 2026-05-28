@@ -1186,6 +1186,7 @@ internal static class SelfTestFixtureRegistry
         "Desc_Line_MountUpdate",
         "Desc_Path_MountUpdate",
         "Desc_AnimatedIcon_MountUpdate",
+        "Desc_Semantic_MountUpdate",
         // Spec 047 §14 Phase 3 (batch 11) — Long-tail ports.
         "Desc_PipsPager_MountUpdate",
         "Desc_ListBox_MountUpdate",
@@ -1206,6 +1207,7 @@ internal static class SelfTestFixtureRegistry
         "Desc_ComboBox_Items",
         "Desc_RadioButtons_Items",
         // Spec 047 §14 Phase 3 close-out — typed templated lists G2.
+        "Desc_GridView_MountUpdate",
         "Desc_TemplatedListView_MountUpdate",
         "Desc_TemplatedGridView_MountUpdate",
         // Spec 047 §14 Phase 3 finish — Port (6) Lazy*Stack G2.
@@ -2393,6 +2395,7 @@ internal static class SelfTestFixtureRegistry
         "Desc_Line_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescLineMountUpdate(harness),
         "Desc_Path_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescPathMountUpdate(harness),
         "Desc_AnimatedIcon_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescAnimatedIconMountUpdate(harness),
+        "Desc_Semantic_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescSemanticMountUpdate(harness),
         // Spec 047 §14 Phase 3 (batch 11) — Long-tail ports.
         "Desc_PipsPager_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescPipsPagerMountUpdate(harness),
         "Desc_ListBox_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescListBoxMountUpdate(harness),
@@ -2414,6 +2417,7 @@ internal static class SelfTestFixtureRegistry
         "Desc_RadioButtons_Items" => new Spec047V1ProtocolDescriptorFixtures.DescRadioButtonsItemsHost(harness),
 
         // Spec 047 §14 Phase 3 close-out — typed templated lists G2.
+        "Desc_GridView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescGridViewMountUpdate(harness),
         "Desc_TemplatedListView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescTemplatedListViewMountUpdate(harness),
         "Desc_TemplatedGridView_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescTemplatedGridViewMountUpdate(harness),
 

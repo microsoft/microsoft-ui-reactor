@@ -3521,6 +3521,77 @@ internal static class Spec047V1ProtocolDescriptorFixtures
     }
 
     // ────────────────────────────────────────────────────────────────────
+    //  SemanticDescriptor — accessibility wrapper with reconciled child.
+    // ────────────────────────────────────────────────────────────────────
+
+    internal class DescSemanticMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<SemanticElement, Microsoft.UI.Reactor.Accessibility.SemanticPanel>(
+                new DescriptorHandler<SemanticElement, Microsoft.UI.Reactor.Accessibility.SemanticPanel>(
+                    SemanticDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            var el1 = new SemanticElement(
+                TextBlock("score:3"),
+                new SemanticDescription(
+                    Role: "slider",
+                    Value: "3 of 5",
+                    RangeMin: 0,
+                    RangeMax: 5,
+                    RangeValue: 3,
+                    IsReadOnly: false));
+
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is Microsoft.UI.Reactor.Accessibility.SemanticPanel panel)
+            {
+                parent.Children.Add(panel);
+                await Harness.Render();
+
+                H.Check("Desc_Semantic_Mounted", true);
+                H.Check("Desc_Semantic_Role", panel.SemanticRole == "slider");
+                H.Check("Desc_Semantic_Value", panel.SemanticValue == "3 of 5");
+                H.Check("Desc_Semantic_Range", panel.RangeMinimum == 0 && panel.RangeMaximum == 5 && panel.RangeValue == 3);
+                H.Check("Desc_Semantic_IsReadOnly", panel.IsReadOnly == false);
+                H.Check("Desc_Semantic_ChildMounted",
+                    panel.Children.Count == 1 && panel.Children[0] is WinUI.TextBlock { Text: "score:3" });
+
+                var el2 = new SemanticElement(
+                    TextBlock("score:4"),
+                    new SemanticDescription(
+                        Role: "slider",
+                        Value: "4 of 5",
+                        RangeMin: 0,
+                        RangeMax: 5,
+                        RangeValue: 4,
+                        IsReadOnly: true));
+                var oldChild = panel.Children[0];
+                rec.UpdateChild(el1, el2, panel, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_Semantic_UpdatedValue", panel.SemanticValue == "4 of 5");
+                H.Check("Desc_Semantic_UpdatedRange", panel.RangeValue == 4);
+                H.Check("Desc_Semantic_UpdatedReadOnly", panel.IsReadOnly == true);
+                H.Check("Desc_Semantic_ChildReconciled",
+                    panel.Children.Count == 1
+                    && ReferenceEquals(panel.Children[0], oldChild)
+                    && panel.Children[0] is WinUI.TextBlock { Text: "score:4" });
+
+                rec.UnmountChild(panel);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_Semantic_Mounted", false);
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     //  PipsPagerDescriptor (Phase 3 batch 11) — SelectedPageIndex
     //  round-trip; multi-prop one-way envelope.
     // ────────────────────────────────────────────────────────────────────
@@ -4622,6 +4693,76 @@ internal static class Spec047V1ProtocolDescriptorFixtures
     //  registration catches every closed-T variant; items + keys flow
     //  through the element's IKeyedItemSource implementation.
     // ════════════════════════════════════════════════════════════════════
+
+    internal class DescGridViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = NewDescriptorReconciler();
+            rec.RegisterHandler<GridViewElement, WinUI.GridView>(
+                new DescriptorHandler<GridViewElement, WinUI.GridView>(
+                    GridViewDescriptor.Descriptor));
+
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int selectedFires = 0;
+            int multiFires = 0;
+            var el1 = new GridViewElement(new Element[]
+            {
+                new TextBlockElement("one"),
+                new TextBlockElement("two"),
+                new TextBlockElement("three"),
+            })
+            {
+                SelectedIndex = 1,
+                Header = "GridHeader",
+                SelectionMode = ListViewSelectionMode.Multiple,
+                OnSelectedIndexChanged = _ => selectedFires++,
+                OnSelectionChanged = _ => multiFires++,
+            };
+            var ui = rec.Mount(el1, _noOp);
+            if (ui is WinUI.GridView gv)
+            {
+                parent.Children.Add(gv);
+                await Harness.Render();
+
+                H.Check("Desc_GridView_Mounted", true);
+                H.Check("Desc_GridView_ItemsMounted", gv.Items.Count == 3 && gv.Items[0] is TextBlock);
+                H.Check("Desc_GridView_HeaderApplied", (gv.Header as string) == "GridHeader");
+                H.Check("Desc_GridView_SelectionMode", gv.SelectionMode == ListViewSelectionMode.Multiple);
+                H.Check("Desc_GridView_InitialSelectedIndex", gv.SelectedIndex == 1);
+
+                var firesAfterMount = selectedFires + multiFires;
+                var el2 = el1 with
+                {
+                    Items = new Element[]
+                    {
+                        new TextBlockElement("alpha"),
+                        new TextBlockElement("beta"),
+                    },
+                    SelectedIndex = 0,
+                    Header = "GridHeader2",
+                    SelectionMode = ListViewSelectionMode.Single,
+                };
+                rec.UpdateChild(el1, el2, gv, _noOp);
+                await Harness.Render();
+
+                H.Check("Desc_GridView_UpdateItems", gv.Items.Count == 2 && gv.Items[1] is TextBlock);
+                H.Check("Desc_GridView_UpdateHeader", (gv.Header as string) == "GridHeader2");
+                H.Check("Desc_GridView_UpdateSelectionMode", gv.SelectionMode == ListViewSelectionMode.Single);
+                H.Check("Desc_GridView_UpdateSelectedIndex", gv.SelectedIndex == 0);
+                H.Check("Desc_GridView_UpdateSelectionEventsBounded", selectedFires + multiFires - firesAfterMount <= 2);
+
+                rec.UnmountChild(gv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("Desc_GridView_Mounted", false);
+            }
+        }
+    }
 
     internal class DescTemplatedListViewMountUpdate(Harness h) : SelfTestFixtureBase(h)
     {
