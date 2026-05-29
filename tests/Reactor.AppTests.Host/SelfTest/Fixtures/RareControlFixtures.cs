@@ -117,6 +117,48 @@ internal static class RareControlFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════
+    //  GridView lazy container realization at scale (spec 047 §4.0.4)
+    //
+    //  Locks the CCC virtualization lifecycle that the small A|B fixtures
+    //  don't stress: a GridView fed hundreds of items in a height-bounded
+    //  viewport must realize only a small window of containers, not the
+    //  whole source. Guards against a regression to a pre-mount-everything
+    //  items host (e.g. the descriptor's non-virtualizing ItemsHost<>).
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class GridViewLazyRealization(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const int total = 500;
+            var host = H.CreateHost();
+            host.Mount(_ =>
+            {
+                var items = new Element[total];
+                for (var i = 0; i < total; i++)
+                    items[i] = TextBlock($"GVItem_{i}");
+                return GridView(items).Height(200);
+            });
+
+            await Harness.Render();
+
+            // The first item must be realized (proves the host actually mounts content).
+            H.Check("GridViewLazy_FirstItemRealized", H.FindText("GVItem_0") is not null);
+
+            // Only a small viewport window should be realized — far fewer than the
+            // 500 source items. If the host pre-mounted everything this count would
+            // be ~500 and the lazy contract would be silently broken.
+            var realized = H.FindAllControls<TextBlock>(
+                tb => tb.Text is not null && tb.Text.StartsWith("GVItem_")).Count;
+            H.Check($"GridViewLazy_RealizedCount={realized}_LessThanHalf",
+                realized > 0 && realized < total / 2);
+
+            // The far-tail item must NOT be realized at mount (outside the viewport).
+            H.Check("GridViewLazy_TailItemNotRealized", H.FindText($"GVItem_{total - 1}") is null);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     //  PersonPicture update
     // ════════════════════════════════════════════════════════════════════
 

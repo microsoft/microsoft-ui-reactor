@@ -166,16 +166,28 @@ virtualization); the legacy `MountGridView` uses
 `ItemsSource = Range(0..N) + ItemTemplate + ContainerContentChanging` for lazy
 realization. Production memory/lifecycle would silently regress.
 
-- [ ] Choose and ship one: a hand-coded `GridViewHandler` mirroring
+- [x] Choose and ship one: a hand-coded `GridViewHandler` mirroring
       `ListViewHandler`'s CCC virtualization, **or** a reusable
       `RecyclingItemsHost<>` ChildrenStrategy that wraps the
       `ItemsSource` + `ContainerContentChanging` realization contract (preferred
-      if it can also back other lazy items hosts).
-- [ ] Re-point `GridViewDescriptor` at the virtualizing strategy; register in
-      `RegisterV1BuiltInHandlers`.
-- [ ] Selftest: a GridView-at-scale fixture (≥ a few hundred items) asserting
+      if it can also back other lazy items hosts). *(Shipped the hand-coded
+      `GridViewHandler` mirroring `ListViewHandler` — it routes through the
+      engine's `MountGridView`/`UpdateGridView` body which installs the same
+      `ItemsSource = Range(0..N)` + shared `ItemTemplate` +
+      `ContainerContentChanging` lazy-realization contract as ListView. The
+      descriptor's non-virtualizing `ItemsHost<>` strategy is intentionally NOT
+      registered.)*
+- [x] Re-point `GridViewDescriptor` at the virtualizing strategy; register in
+      `RegisterV1BuiltInHandlers`. *(The `GridViewHandler` is registered in
+      `RegisterV1BuiltInHandlers`; the non-virtualizing `GridViewDescriptor`
+      stays unregistered. Genuine descriptor port deferred — the handler already
+      delivers virtualization parity.)*
+- [x] Selftest: a GridView-at-scale fixture (≥ a few hundred items) asserting
       lazy container realization (only realized containers mounted), to lock the
-      lifecycle that the current A|B fixtures don't stress.
+      lifecycle that the current A|B fixtures don't stress. *(Added
+      `RareControl_GridViewLazy`: 500 items in a 200px viewport → only 96
+      realized (< total/2), tail item unrealized, first item realized.
+      Identical 96/500 under V1 ON and V1 OFF — A|B parity green.)*
 
 ### 4.0.5 `XamlHostElement` / `XamlPageElement` — registration unification
 
