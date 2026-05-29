@@ -229,16 +229,31 @@ internal sealed class Harness
         {
             await host.WaitForIdleAsync();
         }
-        else
-        {
-            // No active host — yield once at Low priority as a fallback
-            var dq = DispatcherQueue.GetForCurrentThread();
-            var tcs = new TaskCompletionSource();
-            dq.TryEnqueue(DispatcherQueuePriority.Low, () => tcs.SetResult());
-            await tcs.Task;
-        }
 
-        // Force synchronous layout so ActualWidth/ActualHeight are ready
+        var dq = DispatcherQueue.GetForCurrentThread();
+
+        // Force synchronous layout so ActualWidth/ActualHeight are ready.
+        // This is also what triggers TabView's selected-tab content presenter
+        // to schedule its content-realization work onto the dispatcher.
+        (_currentWindow?.Content as UIElement)?.UpdateLayout();
+
+        // Yield once at Low priority AFTER UpdateLayout. WaitForIdleAsync
+        // short-circuits when Reactor reports idle; that left callers racing
+        // the WinUI side because TabView lazy-realizes the selected pane's
+        // body via Normal-priority dispatcher messages SCHEDULED BY the
+        // layout pass we just forced. A Low-priority yield here guarantees
+        // those messages have drained — without it, a 16ms wall-clock delay
+        // is enough on CI but flakes on contended local machines (visible
+        // in NativeDocking_* fixtures where the pane Memo subtree probes
+        // returned null ~30–60% of the time on local 10x sweeps).
+        var yieldTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!dq.TryEnqueue(DispatcherQueuePriority.Low, () => yieldTcs.SetResult()))
+            yieldTcs.SetResult();
+        await yieldTcs.Task;
+
+        // Re-run layout in case the just-realized content needs an arrangement
+        // pass (e.g. a Memo body that mounted during the yield needs to size
+        // its TextBlocks before FindText can match by exact-text).
         (_currentWindow?.Content as UIElement)?.UpdateLayout();
 
         // Small breathing room for the compositor to finish processing
