@@ -65,11 +65,28 @@ public abstract record Element
     }
 
     /// <summary>
+    /// Cross-cutting extras (attached properties, transitions, theme bindings,
+    /// animation configs, resource overrides, context values) bucketed into a
+    /// lazy sub-record (spec 047 §4.4). The common case — a leaf with none of
+    /// these — leaves this slot null, so the 14 fields below cost one reference
+    /// instead of 14 inline slots on every <see cref="Element"/>.
+    /// Set directly only in perf-critical paths; ordinary code uses the field
+    /// shim properties (Attached, ThemeBindings, AnimationConfig, …) below and
+    /// never observes this slot.
+    /// </summary>
+    /// <remarks>Spec 047 §4.4.</remarks>
+    public ElementExtras? Extensions { get; init; }
+
+    /// <summary>
     /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).
     /// Set via fluent extension methods: Text("hi").Grid(row: 1, column: 2)
     /// Stored as a type-keyed dictionary so each provider defines its own data record.
     /// </summary>
-    public IReadOnlyDictionary<Type, object>? Attached { get; init; }
+    public IReadOnlyDictionary<Type, object>? Attached
+    {
+        get => Extensions?.Attached;
+        init => Extensions = Extensions is null ? new ElementExtras { Attached = value } : Extensions with { Attached = value };
+    }
 
     /// <summary>
     /// Implicit transitions (opacity, scale, rotation, translation, background).
@@ -77,20 +94,32 @@ public abstract record Element
     /// Applied by the reconciler after mount/update, so they are always present when
     /// property values are set via .Set() callbacks.
     /// </summary>
-    public ImplicitTransitions? ImplicitTransitions { get; init; }
+    public ImplicitTransitions? ImplicitTransitions
+    {
+        get => Extensions?.ImplicitTransitions;
+        init => Extensions = Extensions is null ? new ElementExtras { ImplicitTransitions = value } : Extensions with { ImplicitTransitions = value };
+    }
 
     /// <summary>
     /// Theme transitions (children, item container).
     /// Set via fluent extension methods: VStack(children).WithThemeTransitions(...)
     /// </summary>
-    public ThemeTransitions? ThemeTransitions { get; init; }
+    public ThemeTransitions? ThemeTransitions
+    {
+        get => Extensions?.ThemeTransitions;
+        init => Extensions = Extensions is null ? new ElementExtras { ThemeTransitions = value } : Extensions with { ThemeTransitions = value };
+    }
 
     /// <summary>
     /// Theme-resource bindings for brush properties (Background, Foreground, BorderBrush).
     /// When set, the reconciler resolves from WinUI theme resources instead of using local values.
     /// Set via fluent extension methods: Text("hi").Background(Theme.Accent)
     /// </summary>
-    public IReadOnlyDictionary<string, ThemeRef>? ThemeBindings { get; init; }
+    public IReadOnlyDictionary<string, ThemeRef>? ThemeBindings
+    {
+        get => Extensions?.ThemeBindings;
+        init => Extensions = Extensions is null ? new ElementExtras { ThemeBindings = value } : Extensions with { ThemeBindings = value };
+    }
 
     /// <summary>
     /// Composition-layer layout animation configuration.
@@ -98,47 +127,75 @@ public abstract record Element
     /// so that layout-driven position (and optionally size) changes animate smoothly.
     /// Set via fluent extension methods: Border(child).LayoutAnimation()
     /// </summary>
-    public LayoutAnimationConfig? LayoutAnimation { get; init; }
+    public LayoutAnimationConfig? LayoutAnimation
+    {
+        get => Extensions?.LayoutAnimation;
+        init => Extensions = Extensions is null ? new ElementExtras { LayoutAnimation = value } : Extensions with { LayoutAnimation = value };
+    }
 
     /// <summary>
     /// Compositor property animation configuration (.Animate() modifier).
     /// When set, the reconciler creates ImplicitAnimationCollection entries on the
     /// element's Visual for Opacity/Scale/Rotation/Offset/CenterPoint.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig { get; init; }
+    public Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig
+    {
+        get => Extensions?.AnimationConfig;
+        init => Extensions = Extensions is null ? new ElementExtras { AnimationConfig = value } : Extensions with { AnimationConfig = value };
+    }
 
     /// <summary>
     /// Element enter/exit transition configuration (.Transition() modifier).
     /// When set, the reconciler animates mount (enter) and unmount (exit) with
     /// compositor animations, deferring removal until exit animation completes.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition { get; init; }
+    public Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition
+    {
+        get => Extensions?.ElementTransition;
+        init => Extensions = Extensions is null ? new ElementExtras { ElementTransition = value } : Extensions with { ElementTransition = value };
+    }
 
     /// <summary>
     /// Interaction states configuration (.InteractionStates() modifier).
     /// When set, the reconciler registers pointer event handlers that drive
     /// zero-reconcile visual state transitions (hover, pressed, focused).
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates { get; init; }
+    public Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates
+    {
+        get => Extensions?.InteractionStates;
+        init => Extensions = Extensions is null ? new ElementExtras { InteractionStates = value } : Extensions with { InteractionStates = value };
+    }
 
     /// <summary>
     /// Stagger configuration for container children (.Stagger() modifier).
     /// When set, child animations (enter, layout, property) have incrementing
     /// DelayTime = childIndex * staggerDelay.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig { get; init; }
+    public Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig
+    {
+        get => Extensions?.StaggerConfig;
+        init => Extensions = Extensions is null ? new ElementExtras { StaggerConfig = value } : Extensions with { StaggerConfig = value };
+    }
 
     /// <summary>
     /// Keyframe animation definitions (.Keyframes() modifier).
     /// Trigger-based: plays when the trigger value changes between renders.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations { get; init; }
+    public Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations
+    {
+        get => Extensions?.KeyframeAnimations;
+        init => Extensions = Extensions is null ? new ElementExtras { KeyframeAnimations = value } : Extensions with { KeyframeAnimations = value };
+    }
 
     /// <summary>
     /// Scroll-linked expression animation configuration (.ScrollLinked() modifier).
     /// Expression animations run on the compositor, driven by ScrollViewer position.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation { get; init; }
+    public Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation
+    {
+        get => Extensions?.ScrollAnimation;
+        init => Extensions = Extensions is null ? new ElementExtras { ScrollAnimation = value } : Extensions with { ScrollAnimation = value };
+    }
 
     /// <summary>
     /// Connected animation key for cross-container transitions.
@@ -147,7 +204,11 @@ public abstract record Element
     /// mount if a prepared animation with the same key exists.
     /// Set via fluent extension method: Border(child).ConnectedAnimation("hero")
     /// </summary>
-    public string? ConnectedAnimationKey { get; init; }
+    public string? ConnectedAnimationKey
+    {
+        get => Extensions?.ConnectedAnimationKey;
+        init => Extensions = Extensions is null ? new ElementExtras { ConnectedAnimationKey = value } : Extensions with { ConnectedAnimationKey = value };
+    }
 
     /// <summary>
     /// Per-control resource overrides (lightweight styling). When set, the reconciler
@@ -155,14 +216,22 @@ public abstract record Element
     /// VisualStateManager picks them up for hover/pressed/disabled states.
     /// Set via fluent extension: <c>Button("Go").Resources(r => r.Set("ButtonBackground", "#0078D4"))</c>
     /// </summary>
-    public Microsoft.UI.Reactor.Elements.ResourceOverrides? ResourceOverrides { get; init; }
+    public Microsoft.UI.Reactor.Elements.ResourceOverrides? ResourceOverrides
+    {
+        get => Extensions?.ResourceOverrides;
+        init => Extensions = Extensions is null ? new ElementExtras { ResourceOverrides = value } : Extensions with { ResourceOverrides = value };
+    }
 
     /// <summary>
     /// Context values provided to this element's subtree via .Provide().
     /// The reconciler pushes these onto the context scope when entering
     /// this element's subtree and pops them when leaving.
     /// </summary>
-    public IReadOnlyDictionary<ContextBase, object?>? ContextValues { get; init; }
+    public IReadOnlyDictionary<ContextBase, object?>? ContextValues
+    {
+        get => Extensions?.ContextValues;
+        init => Extensions = Extensions is null ? new ElementExtras { ContextValues = value } : Extensions with { ContextValues = value };
+    }
 
     /// <summary>
     /// Gets the attached property data of the specified type, or null if not set.
@@ -221,6 +290,10 @@ public abstract record Element
     /// and a change in callback *presence* must run Update so the lazy-wire path
     /// can subscribe to the WinRT event on a null→non-null transition.
     /// IMPORTANT: keep in sync with the ShallowEquals fast-path in Reconciler.Update().
+    /// Note: when both elements have a null <see cref="Extensions"/> bucket (spec 047
+    /// §4.4 — the common no-extras leaf), ShallowEquals skips the Attached /
+    /// ThemeBindings / ContextValues structural compares entirely, since all 14
+    /// bucketed fields are provably null on both sides.
     /// </summary>
     internal static bool CanSkipUpdate(Element oldEl, Element newEl)
         => ShallowEquals(oldEl, newEl)
@@ -238,9 +311,18 @@ public abstract record Element
         if (ReferenceEquals(a, b)) return true;
         if (a.GetType() != b.GetType()) return false;
         if (!ModifiersEqual(a.Modifiers, b.Modifiers)) return false;
-        if (!AttachedEqual(a.Attached, b.Attached)) return false;
-        if (!ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)) return false;
-        if (!ContextValuesEqual(a.ContextValues, b.ContextValues)) return false;
+
+        // Spec 047 §4.4 fast-path: when neither element carries an Extras bucket,
+        // all 14 bucketed fields (Attached, ThemeBindings, ContextValues, …) are
+        // provably null on both sides, so the three structural compares below are
+        // guaranteed to pass. Skip them (and their null-deref property GETs) for
+        // the common no-extras leaf.
+        if (!(a.Extensions is null && b.Extensions is null))
+        {
+            if (!AttachedEqual(a.Attached, b.Attached)) return false;
+            if (!ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)) return false;
+            if (!ContextValuesEqual(a.ContextValues, b.ContextValues)) return false;
+        }
 
         return (a, b) switch
         {
@@ -1031,6 +1113,122 @@ public record SemanticDescription(
 /// can't override OnCreateAutomationPeer().
 /// </summary>
 public record SemanticElement(Element Child, SemanticDescription Semantics) : Element;
+
+/// <summary>
+/// Cross-cutting "extras" bucket for <see cref="Element"/> (spec 047 §4.4).
+/// Holds the 14 rarely-set fields (attached properties, transitions, theme
+/// bindings, animation configs, resource overrides, context values) that used
+/// to sit inline on every element. Bucketing them into a lazy sub-record lets
+/// the common case (a leaf with none of these) pay one reference slot instead
+/// of 14. The fields are exposed on <see cref="Element"/> via get/init shim
+/// properties that read from / write into this record, so call sites see no
+/// API change. Value-equality (default record) so equality helpers and
+/// <c>with</c>-writers behave exactly as before. Unlike
+/// <see cref="ElementModifiers"/> nothing merges Extras, so there is no Merge.
+/// </summary>
+/// <remarks>Spec 047 §4.4.</remarks>
+public record ElementExtras
+{
+    /// <summary>
+    /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).
+    /// Set via fluent extension methods: Text("hi").Grid(row: 1, column: 2)
+    /// Stored as a type-keyed dictionary so each provider defines its own data record.
+    /// </summary>
+    public IReadOnlyDictionary<Type, object>? Attached { get; init; }
+
+    /// <summary>
+    /// Implicit transitions (opacity, scale, rotation, translation, background).
+    /// Set via fluent extension methods: Rectangle().WithOpacityTransition()
+    /// Applied by the reconciler after mount/update, so they are always present when
+    /// property values are set via .Set() callbacks.
+    /// </summary>
+    public ImplicitTransitions? ImplicitTransitions { get; init; }
+
+    /// <summary>
+    /// Theme transitions (children, item container).
+    /// Set via fluent extension methods: VStack(children).WithThemeTransitions(...)
+    /// </summary>
+    public ThemeTransitions? ThemeTransitions { get; init; }
+
+    /// <summary>
+    /// Theme-resource bindings for brush properties (Background, Foreground, BorderBrush).
+    /// When set, the reconciler resolves from WinUI theme resources instead of using local values.
+    /// Set via fluent extension methods: Text("hi").Background(Theme.Accent)
+    /// </summary>
+    public IReadOnlyDictionary<string, ThemeRef>? ThemeBindings { get; init; }
+
+    /// <summary>
+    /// Composition-layer layout animation configuration.
+    /// When set, the reconciler attaches implicit animations to the element's Visual
+    /// so that layout-driven position (and optionally size) changes animate smoothly.
+    /// Set via fluent extension methods: Border(child).LayoutAnimation()
+    /// </summary>
+    public LayoutAnimationConfig? LayoutAnimation { get; init; }
+
+    /// <summary>
+    /// Compositor property animation configuration (.Animate() modifier).
+    /// When set, the reconciler creates ImplicitAnimationCollection entries on the
+    /// element's Visual for Opacity/Scale/Rotation/Offset/CenterPoint.
+    /// </summary>
+    public Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig { get; init; }
+
+    /// <summary>
+    /// Element enter/exit transition configuration (.Transition() modifier).
+    /// When set, the reconciler animates mount (enter) and unmount (exit) with
+    /// compositor animations, deferring removal until exit animation completes.
+    /// </summary>
+    public Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition { get; init; }
+
+    /// <summary>
+    /// Interaction states configuration (.InteractionStates() modifier).
+    /// When set, the reconciler registers pointer event handlers that drive
+    /// zero-reconcile visual state transitions (hover, pressed, focused).
+    /// </summary>
+    public Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates { get; init; }
+
+    /// <summary>
+    /// Stagger configuration for container children (.Stagger() modifier).
+    /// When set, child animations (enter, layout, property) have incrementing
+    /// DelayTime = childIndex * staggerDelay.
+    /// </summary>
+    public Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig { get; init; }
+
+    /// <summary>
+    /// Keyframe animation definitions (.Keyframes() modifier).
+    /// Trigger-based: plays when the trigger value changes between renders.
+    /// </summary>
+    public Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations { get; init; }
+
+    /// <summary>
+    /// Scroll-linked expression animation configuration (.ScrollLinked() modifier).
+    /// Expression animations run on the compositor, driven by ScrollViewer position.
+    /// </summary>
+    public Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation { get; init; }
+
+    /// <summary>
+    /// Connected animation key for cross-container transitions.
+    /// When set, the reconciler automatically captures a visual snapshot on unmount
+    /// (via ConnectedAnimationService.PrepareToAnimate) and starts the animation on
+    /// mount if a prepared animation with the same key exists.
+    /// Set via fluent extension method: Border(child).ConnectedAnimation("hero")
+    /// </summary>
+    public string? ConnectedAnimationKey { get; init; }
+
+    /// <summary>
+    /// Per-control resource overrides (lightweight styling). When set, the reconciler
+    /// injects these into <see cref="FrameworkElement.Resources"/> so that the control's
+    /// VisualStateManager picks them up for hover/pressed/disabled states.
+    /// Set via fluent extension: <c>Button("Go").Resources(r => r.Set("ButtonBackground", "#0078D4"))</c>
+    /// </summary>
+    public Microsoft.UI.Reactor.Elements.ResourceOverrides? ResourceOverrides { get; init; }
+
+    /// <summary>
+    /// Context values provided to this element's subtree via .Provide().
+    /// The reconciler pushes these onto the context scope when entering
+    /// this element's subtree and pops them when leaving.
+    /// </summary>
+    public IReadOnlyDictionary<ContextBase, object?>? ContextValues { get; init; }
+}
 
 public record ElementModifiers
 {
