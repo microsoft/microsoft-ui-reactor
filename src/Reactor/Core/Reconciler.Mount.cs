@@ -351,22 +351,6 @@ public sealed partial class Reconciler
         return sb;
     }
 
-    private WinUI.ToggleSplitButton MountToggleSplitButton(ToggleSplitButtonElement tspBtn, Action requestRerender)
-    {
-        var tsb = new WinUI.ToggleSplitButton { Content = tspBtn.Label, IsChecked = tspBtn.IsChecked };
-        SetElementTag(tsb, tspBtn);
-        if (tspBtn.OnIsCheckedChanged is not null)
-            tsb.IsCheckedChanged += (s, _) =>
-            {
-                var t = (WinUI.ToggleSplitButton)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(t)) return;
-                (GetElementTag(t) as ToggleSplitButtonElement)?.OnIsCheckedChanged?.Invoke(t.IsChecked);
-            };
-        if (tspBtn.Flyout is not null)
-            tsb.Flyout = CreateFlyoutFromElement(tspBtn.Flyout, requestRerender);
-        ApplySetters(tspBtn.Setters, tsb);
-        return tsb;
-    }
 
 
     /// <summary>
@@ -376,89 +360,8 @@ public sealed partial class Reconciler
     /// transition). Dedupe through EventHandlerState (native-DO-keyed) so
     /// pool round-trips and RCW projection both share one trampoline.
     /// </summary>
-    internal static void EnsureTextBoxWiring(TextBox textBox, TextBoxElement textBoxElement, Action requestRerender)
-    {
-        if (textBoxElement.OnChanged is null && textBoxElement.OnSelectionChanged is null) return;
-        var state = GetOrCreateEventState(textBox);
-        if (textBoxElement.OnChanged is not null && state.TextBoxTextChangedTrampoline is null)
-        {
-            state.TextBoxTextChangedTrampoline = (_, _) =>
-            {
-                if (ChangeEchoSuppressor.ShouldSuppress(textBox)) return;
-                var tag = GetElementTag(textBox) as TextBoxElement;
-                tag?.OnChanged?.Invoke(textBox.Text);
-                // Controlled input: when onChange is wired, always request a
-                // re-render so UpdateTextBox can enforce the controlled value.
-                // Coalesces with any setState re-render (CAS gate).
-                // Without onChange the field is uncontrolled — no snap-back.
-                if (tag?.OnChanged is not null)
-                    requestRerender();
-            };
-            textBox.TextChanged += state.TextBoxTextChangedTrampoline;
-        }
-        if (textBoxElement.OnSelectionChanged is not null && state.TextBoxSelectionChangedTrampoline is null)
-        {
-            state.TextBoxSelectionChangedTrampoline = (_, _) =>
-                (GetElementTag(textBox) as TextBoxElement)?.OnSelectionChanged?.Invoke(
-                    textBox.SelectedText, textBox.SelectionStart, textBox.SelectionLength);
-            textBox.SelectionChanged += state.TextBoxSelectionChangedTrampoline;
-        }
-    }
 
-    private WinUI.PasswordBox MountPasswordBox(PasswordBoxElement pw)
-    {
-        var pb = new WinUI.PasswordBox
-        {
-            Password = pw.Password,
-            PlaceholderText = pw.PlaceholderText ?? "",
-            PasswordRevealMode = pw.PasswordRevealMode,
-        };
-        if (pw.Header is not null) pb.Header = pw.Header;
-        if (pw.MaxLength != 0) pb.MaxLength = pw.MaxLength;
-        if (pw.PasswordChar is not null) pb.PasswordChar = pw.PasswordChar;
-        SetElementTag(pb, pw);
-        if (pw.OnPasswordChanged is not null)
-            pb.PasswordChanged += (s, _) =>
-            {
-                var c = (UIElement)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
-                (GetElementTag(c) as PasswordBoxElement)?.OnPasswordChanged?.Invoke(((WinUI.PasswordBox)c).Password);
-            };
-        ApplySetters(pw.Setters, pb);
-        return pb;
-    }
 
-    private WinUI.NumberBox MountNumberBox(NumberBoxElement nb)
-    {
-        var numBox = new WinUI.NumberBox
-        {
-            Value = nb.Value, Minimum = nb.Minimum, Maximum = nb.Maximum,
-            SmallChange = nb.SmallChange, LargeChange = nb.LargeChange,
-            PlaceholderText = nb.PlaceholderText ?? "",
-            SpinButtonPlacementMode = nb.SpinButtonPlacement,
-            AcceptsExpression = nb.AcceptsExpression,
-            ValidationMode = nb.ValidationMode,
-        };
-        if (nb.NumberFormatter is not null) numBox.NumberFormatter = nb.NumberFormatter;
-        if (nb.Description is not null) numBox.Description = nb.Description;
-        if (nb.Header is not null) numBox.Header = nb.Header;
-        SetElementTag(numBox, nb);
-        if (nb.OnValueChanged is not null)
-            numBox.ValueChanged += (s, _) =>
-            {
-                var box = (WinUI.NumberBox)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(box)) return;
-                (GetElementTag(box) as NumberBoxElement)?.OnValueChanged?.Invoke(box.Value);
-            };
-        // Per-keystroke value fire for Immediate-mode controls. Registered
-        // unconditionally so that toggling .Immediate() between renders works
-        // without re-mounting — the handler re-checks the marker each fire.
-        numBox.RegisterPropertyChangedCallback(WinUI.NumberBox.TextProperty,
-            NumberBoxImmediateTextChanged);
-        numBox.Loaded += NumberBoxLoadedEnsureImmediateTextBox;
-        ApplySetters(nb.Setters, numBox);
-        return numBox;
-    }
 
     // Spec 047 §14 Phase 3-final Batch B — widened to internal static so
     // NumberBoxDescriptor can register the same captured-free trampolines
@@ -527,29 +430,6 @@ public sealed partial class Reconciler
         el.OnValueChanged.Invoke(parsed);
     }
 
-    private WinUI.AutoSuggestBox MountAutoSuggestBox(AutoSuggestBoxElement asb)
-    {
-        var box = new WinUI.AutoSuggestBox { Text = asb.Text, PlaceholderText = asb.PlaceholderText ?? "" };
-        if (asb.Suggestions.Length > 0) box.ItemsSource = asb.Suggestions;
-        if (asb.Header is not null) box.Header = asb.Header;
-        if (asb.QueryIcon is not null) box.QueryIcon = ResolveIcon(asb.QueryIcon, null);
-        if (asb.IsSuggestionListOpen) box.IsSuggestionListOpen = true;
-        SetElementTag(box, asb);
-        if (asb.OnTextChanged is not null)
-            box.TextChanged += (s, args) =>
-            {
-                if (args.Reason == WinUI.AutoSuggestionBoxTextChangeReason.UserInput)
-                    (GetElementTag((UIElement)s!) as AutoSuggestBoxElement)?.OnTextChanged?.Invoke(((WinUI.AutoSuggestBox)s!).Text);
-            };
-        if (asb.OnQuerySubmitted is not null)
-            box.QuerySubmitted += (s, args) =>
-                (GetElementTag((UIElement)s!) as AutoSuggestBoxElement)?.OnQuerySubmitted?.Invoke(args.QueryText);
-        if (asb.OnSuggestionChosen is not null)
-            box.SuggestionChosen += (s, args) =>
-                (GetElementTag((UIElement)s!) as AutoSuggestBoxElement)?.OnSuggestionChosen?.Invoke(args.SelectedItem?.ToString() ?? "");
-        ApplySetters(asb.Setters, box);
-        return box;
-    }
 
     internal WinUI.CheckBox MountCheckBox(CheckBoxElement cb)
     {
@@ -594,232 +474,20 @@ public sealed partial class Reconciler
         return checkBox;
     }
 
-    private WinUI.RadioButton MountRadioButton(RadioButtonElement rb)
-    {
-        var radio = new WinUI.RadioButton { Content = rb.Label, IsChecked = rb.IsChecked };
-        if (rb.GroupName is not null) radio.GroupName = rb.GroupName;
-        SetElementTag(radio, rb);
-        if (rb.OnIsCheckedChanged is not null)
-        {
-            radio.Checked += (s, _) =>
-            {
-                var c = (UIElement)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
-                (GetElementTag(c) as RadioButtonElement)?.OnIsCheckedChanged?.Invoke(true);
-            };
-            radio.Unchecked += (s, _) =>
-            {
-                var c = (UIElement)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
-                (GetElementTag(c) as RadioButtonElement)?.OnIsCheckedChanged?.Invoke(false);
-            };
-        }
-        ApplySetters(rb.Setters, radio);
-        return radio;
-    }
 
-    private WinUI.RadioButtons MountRadioButtons(RadioButtonsElement rbs)
-    {
-        var rbGroup = new WinUI.RadioButtons { SelectedIndex = rbs.SelectedIndex };
-        if (rbs.Header is not null) rbGroup.Header = rbs.Header;
-        foreach (var item in rbs.Items) rbGroup.Items.Add(item);
-        SetElementTag(rbGroup, rbs);
-        if (rbs.OnSelectedIndexChanged is not null)
-            rbGroup.SelectionChanged += (s, _) =>
-            {
-                var g = (WinUI.RadioButtons)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(g)) return;
-                (GetElementTag(g) as RadioButtonsElement)?.OnSelectedIndexChanged?.Invoke(g.SelectedIndex);
-            };
-        ApplySetters(rbs.Setters, rbGroup);
-        return rbGroup;
-    }
 
-    private WinUI.ComboBox MountComboBox(ComboBoxElement combo, Action requestRerender)
-    {
-        var cb = new WinUI.ComboBox
-        {
-            SelectedIndex = combo.SelectedIndex,
-            PlaceholderText = combo.PlaceholderText ?? "",
-            IsEditable = combo.IsEditable,
-        };
-        if (combo.Header is not null) cb.Header = combo.Header;
-        if (!double.IsNaN(combo.MaxDropDownHeight)) cb.MaxDropDownHeight = combo.MaxDropDownHeight;
-        if (combo.Description is not null) cb.Description = combo.Description;
-        if (combo.ItemElements is { } elements)
-            foreach (var el in elements) cb.Items.Add(Mount(el, requestRerender));
-        else
-            foreach (var item in combo.Items) cb.Items.Add(item);
-        SetElementTag(cb, combo);
-        if (combo.OnSelectedIndexChanged is not null)
-            cb.SelectionChanged += (s, _) =>
-            {
-                var c = (WinUI.ComboBox)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
-                (GetElementTag(c) as ComboBoxElement)?.OnSelectedIndexChanged?.Invoke(c.SelectedIndex);
-            };
-        if (combo.OnDropDownOpened is not null)
-            cb.DropDownOpened += (s, _) => (GetElementTag((UIElement)s!) as ComboBoxElement)?.OnDropDownOpened?.Invoke();
-        if (combo.OnDropDownClosed is not null)
-            cb.DropDownClosed += (s, _) => (GetElementTag((UIElement)s!) as ComboBoxElement)?.OnDropDownClosed?.Invoke();
-        ApplySetters(combo.Setters, cb);
-        return cb;
-    }
 
-    private WinUI.Slider MountSlider(SliderElement sl)
-    {
-        var slider = new WinUI.Slider
-        {
-            Value = sl.Value, Minimum = sl.Min, Maximum = sl.Max, StepFrequency = sl.StepFrequency,
-            Orientation = sl.Orientation,
-            TickFrequency = sl.TickFrequency,
-            TickPlacement = sl.TickPlacement,
-            SnapsTo = sl.SnapsTo,
-            IsThumbToolTipEnabled = sl.IsThumbToolTipEnabled,
-        };
-        if (sl.Header is not null) slider.Header = sl.Header;
-        SetElementTag(slider, sl);
-        if (sl.OnValueChanged is not null)
-            slider.ValueChanged += (_, args) =>
-            {
-                if (ChangeEchoSuppressor.ShouldSuppress(slider)) return;
-                (GetElementTag(slider) as SliderElement)?.OnValueChanged?.Invoke(args.NewValue);
-            };
-        ApplySetters(sl.Setters, slider);
-        return slider;
-    }
 
 
     // Dedupe via EventHandlerState (attached on ReactorAttached.StateProperty,
     // keyed by native DependencyObject identity). A plain CWT keyed by managed
     // RCW identity is unsafe — two RCWs over the same DO miss the dedupe and
     // double-subscribe, fanning one Toggled into multiple user-callback invocations.
-    internal static void EnsureToggleSwitchWiring(WinUI.ToggleSwitch toggle, ToggleSwitchElement ts)
-    {
-        if (ts.OnIsOnChanged is null) return;
-        var state = GetOrCreateEventState(toggle);
-        if (state.ToggleSwitchToggledTrampoline is not null) return;
-        state.ToggleSwitchToggledTrampoline = (s, _) =>
-        {
-            var t = (WinUI.ToggleSwitch)s!;
-            if (ChangeEchoSuppressor.ShouldSuppress(t)) return;
-            (GetElementTag(t) as ToggleSwitchElement)?.OnIsOnChanged?.Invoke(t.IsOn);
-        };
-        toggle.Toggled += state.ToggleSwitchToggledTrampoline;
-    }
 
-    private WinUI.RatingControl MountRatingControl(RatingControlElement rc)
-    {
-        var rating = new WinUI.RatingControl
-        {
-            Value = rc.Value,
-            MaxRating = rc.MaxRating,
-            IsReadOnly = rc.IsReadOnly,
-            Caption = rc.Caption ?? "",
-            PlaceholderValue = rc.PlaceholderValue,
-            InitialSetValue = rc.InitialSetValue,
-        };
-        SetElementTag(rating, rc);
-        if (rc.OnValueChanged is not null)
-            rating.ValueChanged += (s, _) =>
-            {
-                var r = (WinUI.RatingControl)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(r)) return;
-                (GetElementTag(r) as RatingControlElement)?.OnValueChanged?.Invoke(r.Value);
-            };
-        ApplySetters(rc.Setters, rating);
-        return rating;
-    }
 
-    private WinUI.ColorPicker MountColorPicker(ColorPickerElement cp)
-    {
-        var picker = new WinUI.ColorPicker
-        {
-            Color = cp.Color, IsAlphaEnabled = cp.IsAlphaEnabled, IsMoreButtonVisible = cp.IsMoreButtonVisible,
-            IsColorSpectrumVisible = cp.IsColorSpectrumVisible, IsColorSliderVisible = cp.IsColorSliderVisible,
-            IsColorChannelTextInputVisible = cp.IsColorChannelTextInputVisible, IsHexInputVisible = cp.IsHexInputVisible,
-            ColorSpectrumShape = cp.ColorSpectrumShape,
-            MinHue = cp.MinHue, MaxHue = cp.MaxHue,
-            MinSaturation = cp.MinSaturation, MaxSaturation = cp.MaxSaturation,
-            MinValue = cp.MinValue, MaxValue = cp.MaxValue,
-        };
-        SetElementTag(picker, cp);
-        if (cp.OnColorChanged is not null)
-            picker.ColorChanged += (s, args) =>
-            {
-                var c = (UIElement)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
-                (GetElementTag(c) as ColorPickerElement)?.OnColorChanged?.Invoke(args.NewColor);
-            };
-        ApplySetters(cp.Setters, picker);
-        return picker;
-    }
 
-    private WinUI.CalendarDatePicker MountCalendarDatePicker(CalendarDatePickerElement cdp)
-    {
-        var cal = new WinUI.CalendarDatePicker { Date = cdp.Date, PlaceholderText = cdp.PlaceholderText ?? "" };
-        if (cdp.Header is not null) cal.Header = cdp.Header;
-        if (cdp.MinDate.HasValue) cal.MinDate = cdp.MinDate.Value;
-        if (cdp.MaxDate.HasValue) cal.MaxDate = cdp.MaxDate.Value;
-        if (cdp.DateFormat is not null) cal.DateFormat = cdp.DateFormat;
-        cal.IsTodayHighlighted = cdp.IsTodayHighlighted;
-        cal.IsGroupLabelVisible = cdp.IsGroupLabelVisible;
-        if (cdp.IsCalendarOpen) cal.IsCalendarOpen = true;
-        SetElementTag(cal, cdp);
-        if (cdp.OnDateChanged is not null)
-            cal.DateChanged += (s, _) =>
-            {
-                var c = (WinUI.CalendarDatePicker)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
-                (GetElementTag(c) as CalendarDatePickerElement)?.OnDateChanged?.Invoke(c.Date);
-            };
-        ApplySetters(cdp.Setters, cal);
-        return cal;
-    }
 
-    private WinUI.DatePicker MountDatePicker(DatePickerElement dp)
-    {
-        var picker = new WinUI.DatePicker
-        {
-            Date = dp.Date,
-            DayVisible = dp.DayVisible,
-            MonthVisible = dp.MonthVisible,
-            YearVisible = dp.YearVisible,
-            Orientation = dp.Orientation,
-        };
-        if (dp.Header is not null) picker.Header = dp.Header;
-        if (dp.MinYear.HasValue) picker.MinYear = dp.MinYear.Value;
-        if (dp.MaxYear.HasValue) picker.MaxYear = dp.MaxYear.Value;
-        if (dp.DayFormat is not null) picker.DayFormat = dp.DayFormat;
-        if (dp.MonthFormat is not null) picker.MonthFormat = dp.MonthFormat;
-        if (dp.YearFormat is not null) picker.YearFormat = dp.YearFormat;
-        SetElementTag(picker, dp);
-        if (dp.OnDateChanged is not null)
-            picker.DateChanged += (s, args) =>
-            {
-                var c = (UIElement)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
-                (GetElementTag(c) as DatePickerElement)?.OnDateChanged?.Invoke(args.NewDate);
-            };
-        ApplySetters(dp.Setters, picker);
-        return picker;
-    }
 
-    private WinUI.TimePicker MountTimePicker(TimePickerElement tp)
-    {
-        var picker = new WinUI.TimePicker { Time = tp.Time, MinuteIncrement = tp.MinuteIncrement };
-        if (tp.Header is not null) picker.Header = tp.Header;
-        SetElementTag(picker, tp);
-        if (tp.OnTimeChanged is not null)
-            picker.TimeChanged += (s, args) =>
-            {
-                var c = (UIElement)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
-                (GetElementTag(c) as TimePickerElement)?.OnTimeChanged?.Invoke(args.NewTime);
-            };
-        ApplySetters(tp.Setters, picker);
-        return picker;
-    }
 
     private WinUI.ProgressBar MountProgress(ProgressElement prog)
     {
