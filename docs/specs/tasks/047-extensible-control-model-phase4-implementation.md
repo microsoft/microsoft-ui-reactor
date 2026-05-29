@@ -370,10 +370,12 @@ bucketed base landing.
       per §11.6 (`Target = min(Direct + 100, ReactorToday × 0.4)` — i.e. the
       measured ≤407 / ≤1520 / ≤19200, **not** the stale §14 ≤100/≤320/≤500
       estimates).
-- [ ] **Spec hygiene:** update spec §14 "Phase 4 — cleanup" to cite the measured
+- [x] **Spec hygiene:** update spec §14 "Phase 4 — cleanup" to cite the measured
       §11.6 targets instead of the stale `≤100 / ≤320 / ≤500`, and fix the
       §15.6 "Phase 5 cleanup" reference to read "Phase 4" (this spec has no
-      Phase 5).
+      Phase 5). *(Done — spec §14 cleanup bullet, §15.1 goal 1, the §15.6 hard-gate
+      sentence, and the §15.7 Phase 4 row now cite ≤407/≤1520/≤19200; the
+      "Phase 5 cleanup" reference now reads "Phase 4 cleanup".)*
 - [ ] **Validation.** M1/M2/M3 pass the hard gates on the baseline machine;
       L4/L5 working-set within the §15.6 budgets; M7 (no-change update) ≤ Today.
 

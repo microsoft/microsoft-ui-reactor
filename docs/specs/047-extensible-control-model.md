@@ -1466,7 +1466,10 @@ ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` remains deferred for the §14 ra
 - Delete the private switch.
 - Delete `ChangeEchoSuppressor` if §8 audit succeeded (or finalize the §8.1 round-trip implementation if that path won).
 - Split `EventHandlerState` per §9 — implement the per-control struct shapes from §9.2.
-- Land the §11.6 hard byte gates (V2 must hit ≤100 / ≤320 / ≤500).
+- Land the §11.6 hard byte gates (V2 must hit the measured §11.6 targets
+  `Target = min(Direct + 100, ReactorToday × 0.4)` → **≤ 407 / ≤ 1520 / ≤ 19200**
+  for no-callback / one-callback / three-callback; the stale `≤100 / ≤320 / ≤500`
+  estimates predate the Phase-0 baseline capture).
 - Document the final author-facing surface in `docs/guide/`.
 
 ### Future: source generation (deferred, no committed timeline)
@@ -1481,7 +1484,7 @@ Source-gen (§7) is revisited when one of the triggers in §7's status section f
 
 ### 15.1 Goals
 
-1. **Validate §11 byte targets** (≤100 / ≤320 / ≤500 per element by class) with measured allocations in real WinUI processes, not synthetic harness numbers.
+1. **Validate §11 byte targets** (measured §11.6 targets ≤ 407 / ≤ 1520 / ≤ 19200 per element by class) with measured allocations in real WinUI processes, not synthetic harness numbers.
 2. **Validate §12 dispatch claims** (~1% of mount cost) with directly comparable per-mount cost across all three implementation models.
 3. **Validate the §9.4 routed-event-rare hypothesis** by measuring `ModifierEventHandlerState`-allocation frequency across a representative app sample.
 4. **Establish a regression budget** so Phase 4 control migrations can be merged with confidence that each PR doesn't silently break a win earned in an earlier phase.
@@ -1596,7 +1599,7 @@ Regression budgets (block merge if exceeded):
 | GC pauses (L9) | Max pause and total pause time ≤ baseline. Allocation rate is the input we're optimizing. |
 | Heap stability (L11) | Slope of managed-heap-over-time within ±10% of baseline. |
 
-The §11.6 targets become **hard gates** at Phase 5 cleanup: if `ReactorV2` Mount_Leaf_NoCallback hasn't hit ≤100 B by then, the cleanup PR is blocked.
+The §11.6 targets become **hard gates** at Phase 4 cleanup: if `ReactorV2` Mount_Leaf_NoCallback hasn't hit the measured §11.6 target (≤ 407 B) by then, the cleanup PR is blocked.
 
 ### 15.7 Phase coupling — which tests gate which phases
 
@@ -1606,7 +1609,7 @@ The §11.6 targets become **hard gates** at Phase 5 cleanup: if `ReactorV2` Moun
 | Phase 1 (v1 protocol) | M1, M2, M5, M7, L1, L4, **L13** (split-library mixed tree ≤ +10% vs all-in-core), **L14** (AOT build clean) | M10, M11, L6 (data only — informs descriptor design) |
 | Phase 2 (descriptor decision) | M13 (setters correctness). Descriptor-vs-handler micro+macro head-to-head completes and produces a Phase-2 decision per §13 Q1 matrix. | L12 (observability only per Q15 — does not inform Q1) |
 | Phase 3 (controls migration, per-PR) | All Phase 1 gates + the §15.6 regression budgets — the suite is the merge gate, every PR. | — |
-| Phase 4 (cleanup) | §11.6 targets become hard gates: ≤100 B no-callback, ≤320 B one-callback, ≤500 B three-callback. M10 must show the §9 EHS-allocation drop. | — |
+| Phase 4 (cleanup) | §11.6 targets become hard gates: ≤ 407 B no-callback, ≤ 1520 B one-callback, ≤ 19200 B three-callback (measured §11.6 targets). M10 must show the §9 EHS-allocation drop. | — |
 | Future (source-gen, when revisited) | Must match or beat the Phase-4 hand-coded numbers across the entire suite. No regression on any §13 question already settled. | — |
 
 ### 15.8 Test surface for §13's open questions
