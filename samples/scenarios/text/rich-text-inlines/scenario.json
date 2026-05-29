@@ -1,0 +1,11 @@
+{
+  "id": "rich-text-inlines",
+  "category": "text",
+  "title": "Rich Text Inlines",
+  "intent": "rich text with bold, italic, and hyperlink runs",
+  "tags": ["rich-text", "inline", "bold", "italic", "hyperlink", "run"],
+  "factoryAnchors": ["RichTextBlock", "Paragraph", "Run", "Hyperlink"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}

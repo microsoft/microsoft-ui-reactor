@@ -1,0 +1,11 @@
+{
+  "id": "localized-text",
+  "category": "text",
+  "title": "Localized Text with LocaleProvider",
+  "intent": "localized text display using LocaleProvider",
+  "tags": ["localization", "locale", "i18n", "text"],
+  "factoryAnchors": ["LocaleProvider", "TextBlock"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}

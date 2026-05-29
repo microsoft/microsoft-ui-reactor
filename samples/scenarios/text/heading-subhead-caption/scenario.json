@@ -1,0 +1,11 @@
+{
+  "id": "heading-subhead-caption",
+  "category": "text",
+  "title": "Heading, Subtitle, and Caption",
+  "intent": "demonstrate the WinUI 3 type ramp (Heading, Subtitle, Caption)",
+  "tags": ["type-ramp", "heading", "subtitle", "caption", "typography"],
+  "factoryAnchors": ["Heading", "Subtitle", "Caption", "Title", "Body"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "text-wrap-truncate",
+  "category": "text",
+  "title": "Wrap and Truncate Text",
+  "intent": "text wrapping and trimming with ellipsis",
+  "tags": ["wrap", "truncate", "ellipsis", "maxlines", "overflow"],
+  "factoryAnchors": ["TextBlock"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}

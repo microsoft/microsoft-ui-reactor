@@ -1,0 +1,11 @@
+{
+  "id": "body-bodystrong",
+  "category": "text",
+  "title": "Body with BodyStrong Emphasis",
+  "intent": "body text with emphasis using BodyStrong",
+  "tags": ["body", "bodystrong", "emphasis", "paragraph"],
+  "factoryAnchors": ["Body", "BodyStrong"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}

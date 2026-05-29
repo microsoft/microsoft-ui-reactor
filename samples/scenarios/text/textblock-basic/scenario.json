@@ -1,0 +1,11 @@
+{
+  "id": "textblock-basic",
+  "category": "text",
+  "title": "Basic TextBlock",
+  "intent": "display a simple text label",
+  "tags": ["text", "textblock", "label", "display"],
+  "factoryAnchors": ["TextBlock"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}
