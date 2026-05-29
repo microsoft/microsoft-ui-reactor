@@ -1129,6 +1129,9 @@ internal static class SelfTestFixtureRegistry
         "ValueDiff_TextBox_Drift",
         "ValueDiff_TextBox_SnapBack",
         "ValueDiff_TextBox_Transition",
+        "ValueDiff_ComboBox_Drift",
+        "ValueDiff_ToggleSwitch_Drift",
+        "ValueDiff_GridView_GuardedNoOpStrand",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2251,6 +2254,9 @@ internal static class SelfTestFixtureRegistry
         "ValueDiff_TextBox_Drift" => new Spec047ValueDiffEchoFixtures.TextBoxProgrammaticDrift(harness),
         "ValueDiff_TextBox_SnapBack" => new Spec047ValueDiffEchoFixtures.TextBoxControlledSnapBack(harness),
         "ValueDiff_TextBox_Transition" => new Spec047ValueDiffEchoFixtures.TextBoxControlledTransitionDrift(harness),
+        "ValueDiff_ComboBox_Drift" => new Spec047ValueDiffEchoFixtures.ComboBoxProgrammaticDrift(harness),
+        "ValueDiff_ToggleSwitch_Drift" => new Spec047ValueDiffEchoFixtures.ToggleSwitchProgrammaticDrift(harness),
+        "ValueDiff_GridView_GuardedNoOpStrand" => new Spec047ValueDiffEchoFixtures.GridViewGuardedNoOpStrand(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

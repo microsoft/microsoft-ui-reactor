@@ -43,6 +43,28 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 >   core build 0 err; xunit 9128 pass/0 fail; PrivMount/Echo/NumberBox/CheckBox
 >   selftests 0 fail. Commit `8a67e34a`. *(This is part A of §4.2; the
 >   `ChangeEchoSuppressor` elimination itself — part B — is DEFERRED, see below.)*
+> - **§4.2 (part B′) — value-diff echo migration (HYBRID, NOT full elimination).**
+>   Rather than deleting `ChangeEchoSuppressor` wholesale (ruled NO-GO, below), a
+>   **value-diff** echo mechanism was introduced *alongside* the counter and the
+>   safe controlled round-trips migrated onto it. New shared arm
+>   `ReactorState.PendingEchoMatch` (one-shot `Func<object?,bool>?`, reset at the
+>   same 3 sites as the counter) + `ChangeEchoSuppressor.ArmExpectedEcho`/
+>   `ClearExpectedEcho`/`ShouldSuppressEcho` (counter/scope still wins first,
+>   draining a coincident matching arm; else consumes the value predicate).
+>   `HandCodedControlledPropEntry` gained an opt-in `valueDiffEcho` flag.
+>   **Migrated:** ComboBox, FlipView, GridView, ListBox, Pivot, PipsPager,
+>   RadioButtons, SelectorBar, TabView, TemplatedFlipView (+ `ToggleSwitchHandler`;
+>   `TextBoxHandler`/`ControlledPropEntry` already value-diff from the PoC).
+>   **Counter RETAINED** (intentional, documented in spec §8.3): Slider/NumberBox
+>   `double` values, NumberBox coercion, CalendarView collection, AutoSuggest/
+>   Password/RichEdit strings, Expander, CheckBox path-B, `ApplySetters` scope,
+>   public `WriteSuppressed`. Net: a **hybrid** with no `ReactorState` byte win
+>   (adds 1 ref field) — chosen for correctness/self-healing on the migrated
+>   paths (value-diff cannot strand-and-swallow a real event the way a mis-paired
+>   token can); per-control fall-back is to flip `valueDiffEcho` back off.
+>   Validation: core build 0 err; xunit 9128/0; Echo + ValueDiff + migrated-control
+>   (ToggleSwitch/ComboBox/Pivot/TabView/ListBox/RadioButtons/FlipView/GridView/
+>   SelectorBar/PipsPager) selftests 0 fail; DataGrid E2E PASS.
 > - **§4.7** — Public V1 author surface **graduated + locked**: removed all 157
 >   `[Experimental("REACTOR_V1_PREVIEW")]` attributes across 110 `src/Reactor`
 >   files and the dead `REACTOR_V1_PREVIEW` `NoWarn` from all six csprojs. KD-4
@@ -117,8 +139,12 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 > - Full solution build (`Reactor.slnx -p:Platform=x64`) = 0 errors.
 >
 > **🟡 Deferred — needs dedicated, spec-author-involved effort (NOT done):**
-> - **§4.2 (part B) — eliminate `ChangeEchoSuppressor`.** NO-GO as a single pass
->   (independent rubber-duck review concurred). The live surface is ~30 sites
+> > - **§4.2 (part B) — FULL elimination of `ChangeEchoSuppressor`.** Still NO-GO as
+>   a single pass (independent rubber-duck review concurred). *Partially addressed
+>   by part B′ above:* the value-diff mechanism now exists and the safe controlled
+>   round-trips are migrated, but the counter is **retained** for the sites
+>   value-comparison cannot model, so `ChangeEchoSuppressor.cs` is **not** deleted.
+>   The live surface is ~30 sites
 >   across ~20 descriptors + 3 handlers + `PropEntry` + the KD-1 `OnCustomEvent`
 >   drain + the live CheckBox/NumberBox-immediate/CalendarView bodies + the PUBLIC
 >   `ReactorBinding.WriteSuppressed` API + the `EchoSuppressScopeDepth` setter

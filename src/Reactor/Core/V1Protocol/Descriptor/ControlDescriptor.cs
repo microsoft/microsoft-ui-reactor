@@ -186,12 +186,13 @@ public sealed class ControlDescriptor<TElement, TControl>
         TDelegate trampoline,
         Func<TPayload, bool> slotIsNull,
         Action<TPayload, TDelegate> setSlot,
-        IEqualityComparer<TValue>? comparer = null)
+        IEqualityComparer<TValue>? comparer = null,
+        bool valueDiffEcho = false)
         where TPayload : class, new()
         where TDelegate : Delegate
     {
         _properties.Add(new HandCodedControlledPropEntry<TElement, TControl, TPayload, TValue, TDelegate>(
-            get, set, readBack, subscribe, callback, trampoline, slotIsNull, setSlot, comparer));
+            get, set, readBack, subscribe, callback, trampoline, slotIsNull, setSlot, comparer, valueDiffEcho));
         return this;
     }
 

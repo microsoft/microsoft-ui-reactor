@@ -584,6 +584,81 @@ A latent issue worth fixing as part of this work, called out in §13 Q8 below: `
 
 **Resolved** as a carve-out ahead of Phase 1 (per [`047/factoring-recommendation.md`](047/factoring-recommendation.md)). `ApplySetters` now enters a scope-based suppression mode on the control's `ReactorState` (a depth counter alongside the existing paired `EchoSuppressCount`) for the duration of the setter chain, so any change event raised by a setter-driven write is dropped without consuming a paired token. The M13 perf-bench check flips from `OnIsOnChangedFireCount = 1` to `0` on both `ReactorToday` and `ReactorV2`. Default behavior now matches declared props as called for above; an explicit raw-write opt-out (`Set.Raw(...)`) is still a future refinement should it become needed.
 
+### 8.3 Phase 4 implemented direction — value-diff for safe paths, counter retained (HYBRID)
+
+> **Supersedes the "delete `ChangeEchoSuppressor` entirely" plan in §8.** The
+> wholesale-deletion plan (14 trivial deletions + tolerance metadata for the
+> coercion/float sites + ColorPicker shim) was assessed in Phase 4 and ruled
+> **NO-GO** for the counter's elimination: ~30 live sites remain, the
+> causal-token mechanism models cases value-comparison cannot (the
+> `ApplySetters` scope and the public `WriteSuppressed` primitive carry **no
+> expected value**), and regression coverage for a like-for-like swap was
+> missing. Refreshed live-site inventory:
+> [`047/audits/echo-suppressor-phase4-live-sites.md`](047/audits/echo-suppressor-phase4-live-sites.md).
+
+Instead of deleting the suppressor, Phase 4 introduces a **value-diff** echo
+mechanism *alongside* the counter and migrates only the controlled
+round-trips that value-diff can model safely. The end state is an intentional
+**hybrid**:
+
+- **Value-diff arm** (`ReactorState.PendingEchoMatch`, a one-shot
+  `Func<object?,bool>?`). Before a programmatic controlled write the engine
+  *arms* a predicate that recognizes the synthesized echo by its **readback
+  value** (`ChangeEchoSuppressor.ArmExpectedEcho`), then writes **bare** (no
+  counter bump). The control's change-event trampoline calls
+  `ChangeEchoSuppressor.ShouldSuppressEcho(ctrl, readback)` as its first line;
+  the single matching echo is dropped, the arm consumed. A *mismatch* means a
+  real user change superseded the pending write, so the arm is cleared and the
+  event falls through to the user callback. This is value-keyed, not
+  count-keyed — it cannot mis-drain on a coincidental extra event the way the
+  counter can, and it self-heals on the next event rather than stranding.
+- **Counter** (`EchoSuppressCount` + setter-scope `EchoSuppressScopeDepth`) is
+  **retained unchanged** as the fallback for every site value-diff cannot
+  model. `ShouldSuppressEcho` lets the counter/scope win **first** (draining a
+  coincident matching arm so it cannot strand), then consumes the value-diff
+  predicate.
+
+**Migrated to value-diff** (synchronous change event, exact-comparable,
+single controlled value): `ComboBox`, `FlipView`, `GridView`, `ListBox`,
+`Pivot`, `PipsPager`, `RadioButtons`, `SelectorBar`, `TabView`,
+`TemplatedFlipView` (all via `HandCodedControlledPropEntry`'s opt-in
+`valueDiffEcho: true`), plus `ToggleSwitchHandler` and the live `TextBoxHandler`
+(`ControlledPropEntry` was already value-diff from the PoC).
+
+**Retained on the counter** (with rationale):
+
+| Site | Why value-diff is unsafe |
+|---|---|
+| `Slider.Value`, `NumberBox.Value` | `double` snapping / precision — exact readback comparison leaks echoes |
+| `NumberBox` Min/Max coercion (`CoercingOneWayPropEntry`) | post-write coerced value is not known a-priori at arm time |
+| `CalendarView.SelectedDates` (`CollectionDiffControlledPropEntry`) | collection batch — no single expected value |
+| `AutoSuggestBox.Text`, `PasswordBox`, `RichEditBox` | string + deferred/coercion semantics |
+| `Expander` (`Expanding`/`Collapsed`) | `IsExpanded` readback timing at event uncertain |
+| `CheckBox` path-B legacy trampoline | retained legacy path |
+| `ApplySetters` scope | engine cannot predict which DPs `.Set(...)` writes — no expected value |
+| public `ReactorBinding<T>.WriteSuppressed` | external callers supply no expected value |
+
+**Why hybrid (and not full migration):** because the counter is retained for
+the cases above, this migration yields **no byte-size win** on `ReactorState`
+(it *adds* one reference field, `PendingEchoMatch`). Its value is correctness
+and self-healing on the migrated paths — value-diff cannot strand-and-swallow a
+real user event the way a mis-paired counter token can. If a migrated control
+later proves problematic (e.g. an unforeseen coerced or asynchronous echo), the
+documented fall-back is to flip its `valueDiffEcho` opt-in back off and let the
+counter handle it.
+
+**Subscription-timing note (why this is simpler than TextBox):** WinUI
+selection (`SelectionChanged`) and `Toggled` events fire **synchronously**
+inside the property write. On a `null → non-null` callback transition where the
+trampoline is not yet subscribed (subscription happens after the write in the
+same `Update`), the synchronous event simply finds no trampoline and produces
+**no echo** — so no arm strands. `TextBox.TextChanged`, by contrast, is
+*deferred*, which is why its value-diff path must arm ahead of wiring and gate
+on the callback being present.
+
+The `WriteSuppressed` public primitive (§13 Q19) keeps its signature and
+counter-backed implementation throughout.
+
 ---
 
 ## §9 Simplification direction: per-control trampoline tables

@@ -29,7 +29,7 @@ internal static class PivotDescriptor
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>
     {
         var p = (WinUI.Pivot)s!;
-        if (ChangeEchoSuppressor.ShouldSuppress(p)) return;
+        if (ChangeEchoSuppressor.ShouldSuppressEcho(p, p.SelectedIndex)) return;
         (Reconciler.GetElementTag(p) as PivotElement)?.OnSelectedIndexChanged?.Invoke(p.SelectedIndex);
     };
 
@@ -64,5 +64,6 @@ internal static class PivotDescriptor
             callback:    static e => e.OnSelectedIndexChanged,
             trampoline:  SelectionChangedTrampoline,
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
-            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h);
+            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h,
+            valueDiffEcho: true);
 }

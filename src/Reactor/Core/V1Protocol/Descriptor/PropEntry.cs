@@ -436,6 +436,7 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
     private readonly Func<TPayload, bool> _slotIsNull;
     private readonly Action<TPayload, TDelegate> _setSlot;
     private readonly IEqualityComparer<TValue> _comparer;
+    private readonly bool _valueDiffEcho;
 
     public HandCodedControlledPropEntry(
         Func<TElement, TValue> get,
@@ -446,7 +447,8 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
         TDelegate trampoline,
         Func<TPayload, bool> slotIsNull,
         Action<TPayload, TDelegate> setSlot,
-        IEqualityComparer<TValue>? comparer = null)
+        IEqualityComparer<TValue>? comparer = null,
+        bool valueDiffEcho = false)
     {
         _get = get;
         _set = set;
@@ -457,10 +459,17 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
         _slotIsNull = slotIsNull;
         _setSlot = setSlot;
         _comparer = comparer ?? EqualityComparer<TValue>.Default;
+        _valueDiffEcho = valueDiffEcho;
     }
 
     public override void Mount(TControl ctrl, TElement el)
     {
+        // §8 value-diff: clear any stale arm left on a pooled control so it
+        // can't suppress this lifecycle's first real event. Mount writes are
+        // bare (subscription not yet wired), so no arming here.
+        if (_valueDiffEcho)
+            ChangeEchoSuppressor.ClearExpectedEcho(ctrl);
+
         var v = _get(el);
         if (!_comparer.Equals(_readBack(ctrl), v))
             _set(ctrl, v);
@@ -473,8 +482,37 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
         // Spec 047 §8: suppress-write only on real drift (see ControlledPropEntry).
         // The prior `oldEl != newEl` disjunct stranded the suppress token on the
         // standard controlled round-trip and swallowed the next real user event.
-        if (!_comparer.Equals(current, nv))
+        if (_comparer.Equals(current, nv))
+            return;
+
+        // §8 value-diff (opt-in via valueDiffEcho): arm the per-control expected
+        // echo instead of bumping the causal counter, then write bare. The
+        // hand-written trampoline drops the single synthesized echo whose
+        // readback matches via ShouldSuppressEcho. Arm only when a callback is
+        // present (otherwise nothing is subscribed to echo). The control's event
+        // fires synchronously inside _set, so a trampoline that is not yet wired
+        // (null→non-null callback transition) simply produces no echo — no strand.
+        if (_valueDiffEcho)
+        {
+            if (_getCallback(newEl) is not null)
+            {
+                var expected = nv;
+                var cmp = _comparer;
+                ChangeEchoSuppressor.ArmExpectedEcho(
+                    ctrl, rb => cmp.Equals(rb is TValue tv ? tv : default!, expected));
+            }
+            _set(ctrl, nv);
+            // If a guarded/coerced setter (e.g. `if (v >= 0) ...`, bounds checks)
+            // dropped the write, the synchronous echo never fired to consume the
+            // arm. Clear it so it can't strand and swallow a later real event
+            // whose readback happens to equal the never-applied value.
+            if (!_comparer.Equals(_readBack(ctrl), nv))
+                ChangeEchoSuppressor.ClearExpectedEcho(ctrl);
+        }
+        else
+        {
             ReactorBinding.WriteSuppressed(ctrl, () => _set(ctrl, nv));
+        }
     }
 
     public override void EnsureSubscribed(

@@ -45,7 +45,7 @@ internal static class TabViewDescriptor
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>
     {
         var t = (WinUI.TabView)s!;
-        if (ChangeEchoSuppressor.ShouldSuppress(t)) return;
+        if (ChangeEchoSuppressor.ShouldSuppressEcho(t, t.SelectedIndex)) return;
         (Reconciler.GetElementTag(t) as TabViewElement)?.OnSelectedIndexChanged?.Invoke(t.SelectedIndex);
     };
 
@@ -188,7 +188,8 @@ internal static class TabViewDescriptor
             callback:    static e => e.OnSelectedIndexChanged,
             trampoline:  SelectionChangedTrampoline,
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
-            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h)
+            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h,
+            valueDiffEcho: true)
         .HandCodedEvent<TabViewEventPayload,
             TypedEventHandler<WinUI.TabView, WinUI.TabViewTabCloseRequestedEventArgs>>(
             subscribe:        static (c, h) => c.TabCloseRequested += h,

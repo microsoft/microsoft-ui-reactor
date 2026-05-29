@@ -50,7 +50,7 @@ internal static class TemplatedFlipViewDescriptor
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>
     {
         var f = (WinUI.FlipView)s!;
-        if (ChangeEchoSuppressor.ShouldSuppress(f)) return;
+        if (ChangeEchoSuppressor.ShouldSuppressEcho(f, f.SelectedIndex)) return;
         (Reconciler.GetElementTag(f) as TemplatedFlipViewElementBase)?.InvokeSelectionChanged(f.SelectedIndex);
     };
 
@@ -80,5 +80,6 @@ internal static class TemplatedFlipViewDescriptor
                             : null,
             trampoline:  SelectionChangedTrampoline,
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
-            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h);
+            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h,
+            valueDiffEcho: true);
 }

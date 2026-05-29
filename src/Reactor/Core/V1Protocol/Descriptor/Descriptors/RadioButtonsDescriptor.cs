@@ -41,7 +41,7 @@ internal static class RadioButtonsDescriptor
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>
     {
         var g = (WinUI.RadioButtons)s!;
-        if (ChangeEchoSuppressor.ShouldSuppress(g)) return;
+        if (ChangeEchoSuppressor.ShouldSuppressEcho(g, g.SelectedIndex)) return;
         (Reconciler.GetElementTag(g) as RadioButtonsElement)
             ?.OnSelectedIndexChanged?.Invoke(g.SelectedIndex);
     };
@@ -68,7 +68,8 @@ internal static class RadioButtonsDescriptor
             callback:    static e => e.OnSelectedIndexChanged,
             trampoline:  SelectionChangedTrampoline,
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
-            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h)
+            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h,
+            valueDiffEcho: true)
         .OneWayConditional(
             get:         static e => e.Header,
             set:         static (c, v) => c.Header = v,

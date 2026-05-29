@@ -28,7 +28,7 @@ internal static class PipsPagerDescriptor
         SelectedIndexChangedTrampoline = (s, _) =>
         {
             var p = (WinUI.PipsPager)s!;
-            if (ChangeEchoSuppressor.ShouldSuppress(p)) return;
+            if (ChangeEchoSuppressor.ShouldSuppressEcho(p, p.SelectedPageIndex)) return;
             (Reconciler.GetElementTag(p) as PipsPagerElement)
                 ?.OnSelectedPageIndexChanged?.Invoke(p.SelectedPageIndex);
         };
@@ -54,7 +54,8 @@ internal static class PipsPagerDescriptor
             callback:    static e => e.OnSelectedPageIndexChanged,
             trampoline:  SelectedIndexChangedTrampoline,
             slotIsNull:  static p => p.SelectedIndexChangedTrampoline is null,
-            setSlot:     static (p, h) => p.SelectedIndexChangedTrampoline = h)
+            setSlot:     static (p, h) => p.SelectedIndexChangedTrampoline = h,
+            valueDiffEcho: true)
         .OneWay(
             get: static e => e.WrapMode,
             set: static (c, v) => c.WrapMode = v)

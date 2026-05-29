@@ -34,7 +34,7 @@ internal static class ListBoxDescriptor
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>
     {
         var lb = (WinUI.ListBox)s!;
-        if (ChangeEchoSuppressor.ShouldSuppress(lb)) return;
+        if (ChangeEchoSuppressor.ShouldSuppressEcho(lb, lb.SelectedIndex)) return;
         if (Reconciler.GetElementTag(lb) is not ListBoxElement el) return;
         el.OnSelectedIndexChanged?.Invoke(lb.SelectedIndex);
         if (el.OnSelectionChanged is { } h)
@@ -82,5 +82,6 @@ internal static class ListBoxDescriptor
                     : (e.OnSelectionChanged is not null ? NoOpSelectedIndexChanged : null),
             trampoline:  SelectionChangedTrampoline,
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
-            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h);
+            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h,
+            valueDiffEcho: true);
 }

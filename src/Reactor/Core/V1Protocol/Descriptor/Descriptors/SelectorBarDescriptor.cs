@@ -33,9 +33,9 @@ internal static class SelectorBarDescriptor
         SelectionChangedTrampoline = (s, _) =>
         {
             var bar = (WinUI.SelectorBar)s!;
-            if (ChangeEchoSuppressor.ShouldSuppress(bar)) return;
-            if (Reconciler.GetElementTag(bar) is not SelectorBarElement el) return;
             var idx = bar.Items.IndexOf(bar.SelectedItem);
+            if (ChangeEchoSuppressor.ShouldSuppressEcho(bar, idx)) return;
+            if (Reconciler.GetElementTag(bar) is not SelectorBarElement el) return;
             el.OnSelectedIndexChanged?.Invoke(idx);
         };
 
@@ -81,7 +81,8 @@ internal static class SelectorBarDescriptor
             callback:    static e => e.OnSelectedIndexChanged,
             trampoline:  SelectionChangedTrampoline,
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
-            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h);
+            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h,
+            valueDiffEcho: true);
 
     private sealed class SelectorBarItemsComparer : IEqualityComparer<SelectorBarItemData[]>
     {

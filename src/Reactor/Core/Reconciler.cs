@@ -604,6 +604,24 @@ public sealed partial class Reconciler : IDisposable
         // change event on this control is dropped without consuming a token
         // from EchoSuppressCount. See ApplySetters / ChangeEchoSuppressor.
         public int EchoSuppressScopeDepth;
+        // Spec 047 §8 value-diff echo suppression. A programmatic controlled
+        // write on a migrated single-value, exact-comparable, synchronous
+        // round-trip (e.g. ComboBox.SelectedIndex, ToggleSwitch.IsOn) arms this
+        // one-shot predicate with the value it just wrote; the change-event
+        // trampoline drops the single matching echo (readback satisfies the
+        // predicate) via ChangeEchoSuppressor.ShouldSuppressEcho, then clears it.
+        // Replaces the causal counter on those paths. The counter
+        // (EchoSuppressCount / EchoSuppressScopeDepth) is RETAINED as the
+        // fallback for paths value-diff cannot model: coercion (Slider/NumberBox
+        // Min/Max), collection batch (CalendarView), the setter scope, the public
+        // ReactorBinding.WriteSuppressed API, and double-valued controls.
+        //
+        // Single pending slot — correct only because migrated controls have
+        // exactly one controlled round-trip property whose event fires
+        // synchronously inside the write. Reset everywhere the counter is reset
+        // (pool return / ClearCurrentEventHandlers / DetachReactorState) so a
+        // stale arm can't suppress the first real event of a later lifecycle.
+        public Func<object?, bool>? PendingEchoMatch;
         // Spec 042 Phase 1 — keyed-list reconciliation state. Set when the
         // host element is a templated items control (ListView/GridView/
         // ItemsRepeater). The internal ObservableCollection<ReactorRow> in
@@ -762,6 +780,7 @@ public sealed partial class Reconciler : IDisposable
             state.Events?.ClearCurrentHandlers();
             state.EchoSuppressCount = 0;
             state.EchoSuppressScopeDepth = 0;
+            state.PendingEchoMatch = null;
         }
     }
 
@@ -787,6 +806,7 @@ public sealed partial class Reconciler : IDisposable
         state.Events = null;
         state.EchoSuppressCount = 0;
         state.EchoSuppressScopeDepth = 0;
+        state.PendingEchoMatch = null;
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -1096,6 +1116,7 @@ public sealed partial class Reconciler : IDisposable
                 // for OnCustomEvent; see Phase 1 task file KD-4).
                 rs.EchoSuppressCount = 0;
                 rs.EchoSuppressScopeDepth = 0;
+                rs.PendingEchoMatch = null;
                 rs.Element = null;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).

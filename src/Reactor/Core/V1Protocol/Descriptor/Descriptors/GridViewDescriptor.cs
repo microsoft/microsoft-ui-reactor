@@ -17,7 +17,7 @@ internal static class GridViewDescriptor
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>
     {
         var gv = (WinUI.GridView)s!;
-        if (ChangeEchoSuppressor.ShouldSuppress(gv)) return;
+        if (ChangeEchoSuppressor.ShouldSuppressEcho(gv, gv.SelectedIndex)) return;
         if (Reconciler.GetElementTag(gv) is not GridViewElement el) return;
 
         el.OnSelectedIndexChanged?.Invoke(gv.SelectedIndex);
@@ -71,7 +71,8 @@ internal static class GridViewDescriptor
                     : (e.OnSelectionChanged is not null ? NoOpSelectedIndexChanged : null),
             trampoline:  SelectionChangedTrampoline,
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
-            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h)
+            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h,
+            valueDiffEcho: true)
         .HandCodedEvent<GridViewEventPayload, WinUI.ItemClickEventHandler>(
             subscribe:        static (c, h) => c.ItemClick += h,
             callbackPresent:  static e => e.OnItemClick,

@@ -254,4 +254,160 @@ internal static class Spec047ValueDiffEchoFixtures
             }
         }
     }
+
+    /// <summary>ComboBox.SelectedIndex — hand-coded <c>HandCodedControlledPropEntry</c>
+    /// with the opt-in shared-arm value-diff path (<c>valueDiffEcho: true</c>, int
+    /// readback). Programmatic drift 0→1 must apply, must NOT echo, and a later real
+    /// selection must still fire. Locks the new shared <c>ReactorState.PendingEchoMatch</c>
+    /// arm for a synchronous-event selection control.</summary>
+    internal class ComboBoxProgrammaticDrift(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            int lastIdx = -99;
+            var el1 = new ComboBoxElement(
+                Items: new[] { "a", "b", "c" }, SelectedIndex: 0,
+                OnSelectedIndexChanged: i => { fireCount++; lastIdx = i; });
+
+            if (rec.Mount(el1, _noOp) is WinUI.ComboBox cb)
+            {
+                parent.Children.Add(cb);
+                await Harness.Render();
+                H.Check("ValueDiff_ComboBox_MountNoFire", fireCount == 0);
+                H.Check("ValueDiff_ComboBox_MountValue", cb.SelectedIndex == 0);
+
+                // Programmatic drift 0 -> 1: synchronous SelectionChanged is the
+                // echo of our own write (readback == armed value) and is dropped.
+                rec.UpdateChild(el1, el1 with { SelectedIndex = 1 }, cb, _noOp);
+                await Harness.Render();
+                H.Check("ValueDiff_ComboBox_UpdateAppliedValue", cb.SelectedIndex == 1);
+                H.Check("ValueDiff_ComboBox_NoEchoCall", fireCount == 0);
+
+                // Real user selection must still fire (one-shot arm consumed).
+                cb.SelectedIndex = 2;
+                await Harness.Render();
+                H.Check("ValueDiff_ComboBox_RealInputFires", fireCount == 1 && lastIdx == 2);
+
+                rec.UnmountChild(cb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("ValueDiff_ComboBox_Mounted", false);
+            }
+        }
+    }
+
+    /// <summary>ToggleSwitch.IsOn — hand-coded <c>ToggleSwitchHandler</c> value-diff
+    /// path (bool readback). Toggled fires synchronously inside the IsOn write, so
+    /// the programmatic drift false→true must apply, must NOT echo, and a later real
+    /// toggle must still fire.</summary>
+    internal class ToggleSwitchProgrammaticDrift(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            bool lastVal = false;
+            var el1 = new ToggleSwitchElement(
+                IsOn: false, OnIsOnChanged: v => { fireCount++; lastVal = v; });
+
+            if (rec.Mount(el1, _noOp) is WinUI.ToggleSwitch ts)
+            {
+                parent.Children.Add(ts);
+                await Harness.Render();
+                H.Check("ValueDiff_ToggleSwitch_MountNoFire", fireCount == 0);
+                H.Check("ValueDiff_ToggleSwitch_MountValue", ts.IsOn == false);
+
+                rec.UpdateChild(el1, el1 with { IsOn = true }, ts, _noOp);
+                await Harness.Render();
+                H.Check("ValueDiff_ToggleSwitch_UpdateAppliedValue", ts.IsOn == true);
+                H.Check("ValueDiff_ToggleSwitch_NoEchoCall", fireCount == 0);
+
+                ts.IsOn = false;
+                await Harness.Render();
+                H.Check("ValueDiff_ToggleSwitch_RealInputFires", fireCount == 1 && lastVal == false);
+
+                rec.UnmountChild(ts);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("ValueDiff_ToggleSwitch_Mounted", false);
+            }
+        }
+    }
+
+    /// <summary>Regression guard for the guarded-no-op arm strand (code-review
+    /// Issue 2). GridView's controlled setter is <c>if (v &gt;= 0) c.SelectedIndex
+    /// = v;</c>. Drifting the element to <c>SelectedIndex = -1</c> arms the expected
+    /// echo (-1) but the guard drops the write — so no synchronous echo fires to
+    /// consume the arm. The post-write readback check in
+    /// <c>HandCodedControlledPropEntry.Update</c> must clear the stranded arm;
+    /// otherwise a later genuine deselect (readback -1) would be swallowed. This
+    /// fixture asserts that genuine deselect still fires.</summary>
+    internal class GridViewGuardedNoOpStrand(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            int lastIdx = -99;
+            var items = new Element[]
+            {
+                new TextBlockElement("i0"), new TextBlockElement("i1"), new TextBlockElement("i2"),
+            };
+            var el1 = new GridViewElement(items)
+            {
+                SelectedIndex = 0,
+                OnSelectedIndexChanged = i => { fireCount++; lastIdx = i; },
+            };
+
+            if (rec.Mount(el1, _noOp) is WinUI.GridView gv)
+            {
+                parent.Children.Add(gv);
+                await Harness.Render();
+                H.Check("ValueDiff_GridViewStrand_MountValue", gv.SelectedIndex == 0);
+
+                // GridView's SelectionChanged is deferred to container realization
+                // (unlike ComboBox's synchronous event), so the bare mount-time
+                // SelectedIndex=0 write echoes once after the trampoline subscribes.
+                // That is pre-existing behavior (the counter model wrote mount bare
+                // too); baseline-reset so the strand assertions below are clean.
+                fireCount = 0;
+                lastIdx = -99;
+
+                // Drift element to -1; the `if (v >= 0)` setter guard drops the
+                // write so the control stays at 0 and no echo fires. The Update
+                // armed for -1 then must self-clear (post-write readback != -1).
+                rec.UpdateChild(el1, el1 with { SelectedIndex = -1 }, gv, _noOp);
+                await Harness.Render();
+                H.Check("ValueDiff_GridViewStrand_GuardBlockedWrite", gv.SelectedIndex == 0);
+                H.Check("ValueDiff_GridViewStrand_NoEchoCall", fireCount == 0);
+
+                // Genuine user deselect: must NOT be swallowed by a stranded arm.
+                gv.SelectedIndex = -1;
+                await Harness.Render();
+                H.Check("ValueDiff_GridViewStrand_RealDeselectFires", fireCount == 1 && lastIdx == -1);
+
+                rec.UnmountChild(gv);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("ValueDiff_GridViewStrand_Mounted", false);
+            }
+        }
+    }
 }

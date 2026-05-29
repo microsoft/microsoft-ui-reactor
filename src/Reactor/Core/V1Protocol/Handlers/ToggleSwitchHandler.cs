@@ -18,12 +18,13 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// the null-check fast path with zero allocations. Matches the legacy
 /// <c>EnsureToggleSwitchWiring</c> shape (Reconciler.Mount.cs).</para>
 ///
-/// <para><b>Echo handling:</b> the trampoline calls
-/// <see cref="ChangeEchoSuppressor.ShouldSuppress(UIElement)"/> as its
-/// first line so programmatic writes wrapped in
-/// <see cref="ReactorBinding{TElement}.WriteSuppressed"/> drain a token
-/// and short-circuit. Initial-value writes during Mount are bare —
-/// nothing is subscribed yet to echo from.</para>
+/// <para><b>Echo handling (§8 value-diff):</b> before a programmatic
+/// <c>IsOn</c> write the Update path arms an expected-echo predicate via
+/// <see cref="ChangeEchoSuppressor.ArmExpectedEcho"/>; the trampoline calls
+/// <see cref="ChangeEchoSuppressor.ShouldSuppressEcho(UIElement, object?)"/>
+/// as its first line and drops the single synchronous echo whose readback
+/// matches. Initial-value writes during Mount are bare — nothing is
+/// subscribed yet to echo from.</para>
 ///
 /// <para><b>§8.2 invariant:</b> <c>OnIsOnChangedFireCount = 0</c> for
 /// <c>Set(...)</c>-driven writes — the engine's <c>ApplySetters</c> scope
@@ -37,13 +38,16 @@ internal sealed class ToggleSwitchHandler : IElementHandler<ToggleSwitchElement,
     private static readonly RoutedEventHandler ToggledTrampoline = (s, _) =>
     {
         var ts = (WinUI.ToggleSwitch)s!;
-        if (ChangeEchoSuppressor.ShouldSuppress(ts)) return;
+        if (ChangeEchoSuppressor.ShouldSuppressEcho(ts, ts.IsOn)) return;
         (Reconciler.GetElementTag(ts) as ToggleSwitchElement)?.OnIsOnChanged?.Invoke(ts.IsOn);
     };
 
     public WinUI.ToggleSwitch Mount(MountContext ctx, ToggleSwitchElement el)
     {
         var ctrl = ctx.RentControl<WinUI.ToggleSwitch>();
+
+        // §8 value-diff: clear any stale arm left on a pooled control.
+        ChangeEchoSuppressor.ClearExpectedEcho(ctrl);
 
         // Bare initial-value writes — Toggled subscription happens after, so
         // the synchronous event has no trampoline to fire (no echo possible).
@@ -62,8 +66,19 @@ internal sealed class ToggleSwitchHandler : IElementHandler<ToggleSwitchElement,
         // V1HandlerAdapter refreshed ElementTag for us; the Toggled
         // subscription from Mount is still live and reads the new element
         // via GetElementTag.
+        // §8 value-diff: arm the expected echo then write bare. Toggled fires
+        // synchronously inside the IsOn write; the trampoline drops the single
+        // matching echo via ShouldSuppressEcho. Arm only when a callback is
+        // wired (else there is no trampoline to echo). Replaces the counter.
         if (ctrl.IsOn != newEl.IsOn)
-            ctx.BindFor(ctrl, newEl).WriteSuppressed(() => ctrl.IsOn = newEl.IsOn);
+        {
+            if (newEl.OnIsOnChanged is not null)
+            {
+                var target = newEl.IsOn;
+                ChangeEchoSuppressor.ArmExpectedEcho(ctrl, rb => rb is bool b && b == target);
+            }
+            ctrl.IsOn = newEl.IsOn;
+        }
         if (oldEl.OnContent != newEl.OnContent) ctrl.OnContent = newEl.OnContent;
         if (oldEl.OffContent != newEl.OffContent) ctrl.OffContent = newEl.OffContent;
         if (newEl.Header is not null && !ReferenceEquals(oldEl.Header, newEl.Header))

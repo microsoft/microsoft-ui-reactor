@@ -31,7 +31,7 @@ internal static class FlipViewDescriptor
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>
     {
         var f = (WinUI.FlipView)s!;
-        if (ChangeEchoSuppressor.ShouldSuppress(f)) return;
+        if (ChangeEchoSuppressor.ShouldSuppressEcho(f, f.SelectedIndex)) return;
         (Reconciler.GetElementTag(f) as FlipViewElement)?.OnSelectedIndexChanged?.Invoke(f.SelectedIndex);
     };
 
@@ -56,5 +56,6 @@ internal static class FlipViewDescriptor
             callback:    static e => e.OnSelectedIndexChanged,
             trampoline:  SelectionChangedTrampoline,
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
-            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h);
+            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h,
+            valueDiffEcho: true);
 }
