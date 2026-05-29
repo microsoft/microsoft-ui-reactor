@@ -1,0 +1,11 @@
+{
+  "id": "use-reducer-with-context",
+  "category": "hooks",
+  "title": "Reducer with shared context",
+  "intent": "combine reducer state and context so nested components can dispatch global actions",
+  "tags": ["reducer", "context", "global", "dispatch", "pattern"],
+  "factoryAnchors": ["UseReducer", "UseContext", "Provider"],
+  "notesKey": "UseContext",
+  "relatedIds": ["use-context-basic", "use-reducer-list"],
+  "priority": "P0"
+}

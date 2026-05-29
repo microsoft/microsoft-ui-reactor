@@ -1,0 +1,11 @@
+{
+  "id": "use-memo",
+  "category": "hooks",
+  "title": "Derived state with UseMemo",
+  "intent": "memoize a filtered view of data so derived state only recomputes when inputs change",
+  "tags": ["memo", "derived", "computed", "filter", "performance"],
+  "factoryAnchors": ["UseMemo", "UseState", "TextBox", "ForEach"],
+  "notesKey": "UseMemo",
+  "relatedIds": ["use-effect-deps"],
+  "priority": "P0"
+}

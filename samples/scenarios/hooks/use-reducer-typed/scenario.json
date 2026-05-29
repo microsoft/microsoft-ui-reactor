@@ -1,0 +1,11 @@
+{
+  "id": "use-reducer-typed",
+  "category": "hooks",
+  "title": "Typed reducer actions",
+  "intent": "use strongly typed action records and pattern matching in a reducer",
+  "tags": ["reducer", "typed-actions", "dispatch", "pattern-matching"],
+  "factoryAnchors": ["UseReducer", "Button", "VStack"],
+  "notesKey": "UseReducer",
+  "relatedIds": ["use-state-basic"],
+  "priority": "P0"
+}

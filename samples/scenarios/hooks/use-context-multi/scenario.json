@@ -1,0 +1,11 @@
+{
+  "id": "use-context-multi",
+  "category": "hooks",
+  "title": "Composed contexts",
+  "intent": "compose nested providers and consume multiple context values in one child",
+  "tags": ["context", "multi", "compose", "nested", "provider"],
+  "factoryAnchors": ["UseContext", "Provider", "VStack"],
+  "notesKey": "UseContext",
+  "relatedIds": ["use-context-basic"],
+  "priority": "P0"
+}

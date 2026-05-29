@@ -1,0 +1,11 @@
+{
+  "id": "use-ref-mutable",
+  "category": "hooks",
+  "title": "Mutable ref storage",
+  "intent": "store a previous value in a ref so it persists without triggering re-renders",
+  "tags": ["ref", "mutable", "previous", "persist"],
+  "factoryAnchors": ["UseRef", "UseState", "UseEffect", "VStack"],
+  "notesKey": "UseRef",
+  "relatedIds": ["use-ref-dom"],
+  "priority": "P0"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "custom-hook-pattern",
+  "category": "hooks",
+  "title": "Reusable custom hook",
+  "intent": "compose hooks into a reusable custom Use extension that debounces input",
+  "tags": ["custom", "hook", "extension", "reuse", "pattern", "naming"],
+  "factoryAnchors": ["UseState", "UseEffect"],
+  "notesKey": "UseState",
+  "relatedIds": ["use-effect-deps"],
+  "priority": "P0"
+}

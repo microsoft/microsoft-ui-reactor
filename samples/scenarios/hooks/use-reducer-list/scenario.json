@@ -1,0 +1,11 @@
+{
+  "id": "use-reducer-list",
+  "category": "hooks",
+  "title": "Todo list with UseReducer",
+  "intent": "manage list add delete and toggle operations through an immutable reducer",
+  "tags": ["reducer", "list", "add", "delete", "toggle", "immutable"],
+  "factoryAnchors": ["UseReducer", "ListView", "Button", "TextBox"],
+  "notesKey": "UseReducer",
+  "relatedIds": ["use-state-list-pitfall"],
+  "priority": "P0"
+}

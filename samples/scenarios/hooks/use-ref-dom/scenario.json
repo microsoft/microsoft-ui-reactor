@@ -1,0 +1,11 @@
+{
+  "id": "use-ref-dom",
+  "category": "hooks",
+  "title": "Native element ref",
+  "intent": "hand a mounted element reference to native APIs for focus and measurement",
+  "tags": ["ref", "dom", "element", "focus", "native"],
+  "factoryAnchors": ["UseRef", "UseEffect", "TextBox"],
+  "notesKey": "UseRef",
+  "relatedIds": ["use-ref-mutable"],
+  "priority": "P0"
+}

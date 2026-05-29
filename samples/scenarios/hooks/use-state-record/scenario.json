@@ -1,0 +1,11 @@
+{
+  "id": "use-state-record",
+  "category": "hooks",
+  "title": "Record state with UseState",
+  "intent": "update immutable record state with structural equality and with expressions",
+  "tags": ["state", "record", "immutable", "with-expression"],
+  "factoryAnchors": ["UseState", "ToggleSwitch", "Slider"],
+  "notesKey": "UseState",
+  "relatedIds": ["use-state-basic"],
+  "priority": "P0"
+}

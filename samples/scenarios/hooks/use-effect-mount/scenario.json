@@ -1,0 +1,11 @@
+{
+  "id": "use-effect-mount",
+  "category": "hooks",
+  "title": "Mount-only effect",
+  "intent": "run an effect once after mount by passing an empty dependency array",
+  "tags": ["effect", "mount", "once", "lifecycle"],
+  "factoryAnchors": ["UseEffect", "VStack", "TextBlock"],
+  "notesKey": "UseEffect",
+  "relatedIds": ["use-effect-cleanup", "use-effect-deps"],
+  "priority": "P0"
+}

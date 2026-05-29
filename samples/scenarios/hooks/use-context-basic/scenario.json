@@ -1,0 +1,11 @@
+{
+  "id": "use-context-basic",
+  "category": "hooks",
+  "title": "Basic context provider",
+  "intent": "provide a context value at the root and consume it in a nested child",
+  "tags": ["context", "provider", "consume", "share"],
+  "factoryAnchors": ["UseContext", "Provider", "VStack"],
+  "notesKey": "UseContext",
+  "relatedIds": ["use-context-multi", "use-reducer-with-context"],
+  "priority": "P0"
+}

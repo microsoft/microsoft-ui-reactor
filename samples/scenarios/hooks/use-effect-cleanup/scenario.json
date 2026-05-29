@@ -1,0 +1,11 @@
+{
+  "id": "use-effect-cleanup",
+  "category": "hooks",
+  "title": "Effect cleanup with timer",
+  "intent": "set up a timer in an effect and dispose it from the cleanup callback",
+  "tags": ["effect", "cleanup", "dispose", "timer", "subscription"],
+  "factoryAnchors": ["UseEffect", "UseState", "TextBlock"],
+  "notesKey": "UseEffect",
+  "relatedIds": ["use-effect-mount"],
+  "priority": "P0"
+}

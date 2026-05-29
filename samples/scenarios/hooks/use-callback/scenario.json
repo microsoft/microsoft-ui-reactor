@@ -1,0 +1,11 @@
+{
+  "id": "use-callback",
+  "category": "hooks",
+  "title": "Stable callback identity",
+  "intent": "memoize a callback so child props stay stable across unrelated parent re-renders",
+  "tags": ["callback", "memoize", "stable", "child", "performance"],
+  "factoryAnchors": ["UseCallback", "UseState", "Button"],
+  "notesKey": "UseCallback",
+  "relatedIds": ["use-memo"],
+  "priority": "P0"
+}

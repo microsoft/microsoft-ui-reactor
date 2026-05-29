@@ -1,0 +1,11 @@
+{
+  "id": "use-state-list-pitfall",
+  "category": "hooks",
+  "title": "List mutation anti-pattern",
+  "intent": "demonstrate why mutating a List in place does not trigger a UseState re-render",
+  "tags": ["state", "list", "anti-pattern", "pitfall"],
+  "factoryAnchors": ["UseState", "Button", "VStack"],
+  "notesKey": "UseState",
+  "relatedIds": ["use-reducer-list"],
+  "priority": "P0"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "use-effect-deps",
+  "category": "hooks",
+  "title": "Effect dependencies",
+  "intent": "rerun an effect when a dependency changes by watching the current search query",
+  "tags": ["effect", "deps", "dependency", "rerun"],
+  "factoryAnchors": ["UseEffect", "UseState", "TextBox", "VStack"],
+  "notesKey": "UseEffect",
+  "relatedIds": ["use-effect-mount"],
+  "priority": "P0"
+}
